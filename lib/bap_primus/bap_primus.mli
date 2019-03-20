@@ -1,56 +1,15 @@
+open Core_kernel
 open Monads.Std
-open Bap_future.Std
-open Bap_strings.Std
-
 open Bap_knowledge
 
-(** Primus - The Microexecution Framework.
+(** Primus - A non-deterministic interpreter.
 
 
-Primus is a microexecution framework that can be used to build CPU and
-full system emulators, symbolic executers, static fuzzers, policy
-checkers, tracers, quickcheck-like test suites, etc.
-
-The underlying idea is quite simple - Primus interprets a lifted
-program. The interpreter provides a set of extension points through
-which it is possible to observe what is happening inside the
-interpreter, and even to change the interpreter behavior. This
-extension points are called "observations" in Primus parlance. A
-simple publish/subscriber architecture is used to watch for the
-interpreter events, where subscribers are allowed to arbitrary change
-the interpreter state.
-
-A novel idea is that the interpreter is non-deterministic in the same
-sense as a non-deterministic Turing machine. That means that any
-computation may have more than one result. Every time there is a
-non-determinism in the computation the machine state is
-cloned. Different scheduling policies mixed with different
-non-deterministic startegies provide an analyst a vast selection of
-avenues to investigate.
-
-Primus is build around an idea of a component base linearly extensible
-interpreter. That means, that an analysis can be built from basic
-building blocks, with minimal coupling between them. The central
-component is the Machine itself. It evaluates a program and
-interacts with three other components:
-     - Linker
-     - Env
-     - Memory
-
-The Linker is responsible for linking code into the program
-abstraction. The [Env] component defines the environment behavior,
-i.e., variables. Finally, the [Memory] component is responsible for
-the memory representation.
-
-
- *)
+*)
 
 module Primus : sig
+  open Knowledge
   type 'a machine
-
-  type component
-
-  type knowledge = state
 
   (** The Machine Exception.
 
@@ -58,18 +17,8 @@ module Primus : sig
       usually register their own error constructors. *)
   type exn = ..
 
-  (** [an observation] of a value of type [an].*)
+  (** [an observation] of a value of type [a].*)
   type 'a observation
-
-  (** [a statement] is used to make an observation of type [a].    *)
-  type 'a statement
-
-  (** a result of computation  *)
-  type value [@@deriving bin_io, compare, sexp]
-
-
-  type word = Bitvec.t
-  type addr = word
 
   (** Machine exit status.
         A machine may terminate normally, or abnormally with the
@@ -78,849 +27,227 @@ module Primus : sig
     | Normal
     | Exn of exn
 
-  (** value generator  *)
-  type generator
-
-  (** Machine Observation.
-
-      The Primus Framework is built on top of the Machine
-      observation. The Machine components make their own
-      observations, based on observation made by other components.
-
-      A value of type ['a observation] is a first-class
-      representation of an event of type ['a]. While machine
-      components are functors, the values of type observation should
-      not depenend on the type of the functor.*)
-  module Observation : sig
-
-    (** An observation provider.
-
-        A provider facilitates introspection of the Primus Machine,
-        for the sake of debugging and dumping the effects. The
-        provider shoud not (and can't be) used for affecting the
-        behavior of a machine, or for the analysis, as its main
-        purpose is debugging, logging, and tracing the execution.*)
-    type provider
 
 
-    (** [provide ?inspect name] returns a pair of two handlers. The
-        first element is used to observe values, the second is used
-        to provide values for the observation.
+  (** the machine computation  *)
+  type 'a t = 'a machine
 
-        The [inspect] function may provide a sexp representation of
-        an observed value, that will be used for introspection and
-        pretty-printing (it is not required, and if it is provided, it
-        is not necessary to disclose everything *)
-    val provide : ?inspect:('a -> Base.Sexp.t) -> string -> 'a observation * 'a statement
+  type 'a state
 
+  type project
 
-    (** [name observation] is a name of the observed attribute.  *)
-    val name : 'a observation -> string
+  type component
 
 
-    (** [inspect observation value] returns a sexp representation of
-        an observed [value] *)
-    val inspect : 'a observation -> 'a -> Base.Sexp.t
 
-    (** enumerate all currently available observation providers  *)
-    val list_providers : unit -> provider list
+  (** Machine identifier type.   *)
+  type id = Monad.State.Multi.id
 
-
-    (** Data interface to the provider.
-
-        This interface provides access to the data stream of all
-        providers expresses as a stream of s-expressions.
-     *)
-    module Provider : sig
-      type t = provider
-
-      (** unique name of a provider *)
-      val name : t -> string
-
-      (** a total number of observers that subscribed to this provider  *)
-      val observers : t -> int
-
-      (** triggers a stream of occurences of this observation  *)
-      val triggers : t -> unit stream
-
-      (** a data stream from this observation *)
-      val data : t -> Base.Sexp.t stream
-    end
-  end
-
-  (** Primus Machine.
-
-      The Machine is the core of Primus Framework.  The Machine
-      behavior is extended/changed with Machine Components. A
-      component is a functor that takes a machine instance, and
-      registers reactions to different events, that can happen
-      during the machine evaluation. Events can be obtained from the
-      observations made by the core components of the Machine, such
-      as the Interpreter, or by other components, if their
-      implementors provide any observations.
-
-      A machine is usually instantiated and ran only once. For
-      example, the [run] analysis creates a machine parameterized by
-      the static model of a binary and runs a machine from the
-      specified entry point, until it terminates.
-
-      The user analysis is usually written in a form of a component,
-      and is registered with the [register_component] function.*)
-  module Machine : sig
-    (** the machine computation  *)
-    type 'a t = 'a machine
-
-    (** Machine identifier type.   *)
-    type id = Monad.State.Multi.id
-
-
-    (** [init] event occurs just after all components have been
-        initialized, and before the execution starts*)
-    val init : unit observation
-
-    (** The [finished] event occurs when the machine terminates.   *)
-    val finished : unit observation
-
-    (** [exn_raised exn] occurs every time an abnormal control flow
-        is initiated *)
-    val exn_raised : exn observation
-
-
-    (** [raise exn] raises the machine exception [exn], intiating
+  (** [raise exn] raises the machine exception [exn], intiating
         an abonormal control flow *)
-    val raise : exn -> 'a t
+  val raise : exn -> 'a t
 
 
-    (** [catch x f] creates a computation that is equal to [x] if
+  (** [catch x f] creates a computation that is equal to [x] if
         it terminates normally, and to [f e] if [x] terminates
         abnormally with the exception [e]. *)
-    val catch : 'a t -> (exn -> 'a t) -> 'a t
+  val catch : 'a t -> (exn -> 'a t) -> 'a t
+
+  val collect : ('a,'p) slot -> 'a obj -> 'p t
+  val provide : ('a,'p) slot -> 'a obj -> 'p -> unit t
+  val conflict : conflict -> 'a t
+
+  val project : project obj t
+
+  val die : id -> unit t
 
 
-    val collect : 'a content -> label -> 'a t
-    val provide : 'a content -> label -> 'a -> unit t
-    val conflict : conflict -> 'a t
+  (** [run system project init] runs the Primus system.
 
-    val die : id -> unit t
+      The [system], denoted with a list of Primus components,
+      is evaluated in order. Afterwards the project value is
+      returned.
 
-
-    val run : 'a t -> component list -> knowledge ->
-              (exit_status * knowledge, conflict) result
-
-
-    (** Machine State.
-
-          Any component can have its own state. In fact, components
-          can have a global state and a local state.
-
-          The Primus Machine is an implementation of the
-          Non-deterministic abstract machine, and thus can have more
-          than one state. Basically, every time a non-deterministic
-          event happens a machine can be forked (cloned). The [Global]
-          state is never replicated, and a machine can have only one
-          global state, that is shared across all clones of a machine,
-          and can be used as a communication channel between the
-          clones. The [local] state is duplicated at each clone. *)
-    module State : sig
+      The [project] parameter is a knowledge object that denotes the
+      current workspace which is used by different components to
+      accumulate the knowledge.
+  *)
+  val run : component list -> project obj -> unit knowledge
 
 
-      (** ['a t] is a type of state that holds a value of type
+
+  (** Computation State *)
+  module State : sig
+    (** ['a t] is a type of state that holds a value of type
             ['a], and can be constructed from the base context of type
             ['c]. *)
-      type 'a t
-
-      type 'a state = 'a t
-
-      (** a type that has no values *)
-      type void
-
-
-      (** [uuid] is a string literal representing an UUID.
-
-            It should have the form:
-
-            [XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX],
-
-            where [X] is a hex-digit, e.g.,
-
-            [53dcf68a-c7c8-4915-ae38-9f5b6f574201] *)
-      type uuid = (void,void,void) Caml.format
+    type 'a t = 'a state
+    type 'a state = 'a t
 
 
 
-      (** [declare ~inspect ~uuid ~name make] declares a state with
+    (** [declare ~inspect ~uuid ~name make] declares a state with
             the given [uuid] and [name]. The name is not required to be
             unique, while [uuid] is obviously required to be unique.
 
             See [uuid] type description for the uuid representation. A
             new [uuid] can be obtained in the Linux system is provided
             by the [uuidgen] command.*)
-      val declare :
-        ?inspect:('a -> Base.Sexp.t) ->
-        uuid:uuid ->
-        name:string ->
-        'a Knowledge.t -> 'a t
+    val declare :
+      ?inspect:('a -> Base.Sexp.t) ->
+      name:string ->
+      'a Knowledge.t -> 'a t
+
+    (** [inspect state value] introspects given [value] of the state.  *)
+    val inspect : 'a t -> 'a -> Base.Sexp.t
+
+    (** [name state] a state name that was given during the construction.  *)
+    val name : 'a t -> string
+  end
 
 
-      (** [inspect state value] introspects given [value] of the state.  *)
-      val inspect : 'a t -> 'a -> Base.Sexp.t
 
-
-      (** [name state] a state name that was given during the construction.  *)
-      val name : 'a t -> string
-    end
-
-
-    type 'a state = 'a State.t
-
-
-    (** An interface to the state.
+  (** An interface to the state.
 
           An interface gives an access to operations that query and
           modify machine state. *)
-    module type State = sig
-      type 'a m
-      type 'a t
+  module type State = sig
+    type 'a t
 
-      (** [get state] extracts the state.  *)
-      val get : 'a t -> 'a m
+    (** [get state] extracts the state.  *)
+    val get : 'a t -> 'a machine
 
-      (** [put state x] saves a machine state  *)
-      val put : 'a t -> 'a -> unit m
+    (** [put state x] saves a machine state  *)
+    val put : 'a t -> 'a -> unit machine
 
-      (** [update state ~f] updates a state using function [f]. *)
-      val update : 'a t -> f:('a -> 'a) -> unit m
-    end
-
-
-
-
-
-    (** Observations interface.  *)
-    module Observation : sig
-
-      (** [observe obs on_observation] subscribes to the given
-              observation [obs]. Every time the observation [obs] is
-              made a function [on_observation] is called. The
-              function can perform arbitrary computations in the
-              machine monad, e.g., make its own computations, or access
-              other components via their interfaces.  *)
-      val observe : 'a observation -> ('a -> unit t) -> unit t
-
-
-      val watch : Observation.provider -> (Base.Sexp.t -> unit t) -> unit t
-
-      (** [make observation event] make an [observation] of the
-              given [event].  *)
-      val make : 'a statement -> 'a -> unit t
-    end
-
-
-    (** Computation Syntax.*)
-    module Syntax : sig
-      include Monad.Syntax.S with type 'a t := 'a t
-
-
-      (** [event >>> action] is the same as
-              [Observation.observe event action] *)
-      val (>>>) : 'a observation -> ('a -> unit t) -> unit t
-    end
-
-
-
-    include Monad.State.Multi.S with type 'a t := 'a t
-                                 and type id := id
-                                 and module Syntax := Syntax
-
-    (** Local state of the machine.  *)
-    module Local  : State with type 'a m := 'a t
-                           and type 'a t := 'a state
-
-
-    (** Global state shared across all machine clones.  *)
-    module Global : State with type 'a m := 'a t
-                           and type 'a t := 'a state
-
-
-
-
-    (** Machine component interface.
-
-          A machine component is a functor, that is applied every time
-          the Machine is instantiated. The [init] function is called
-          when the Machine computation is started (the order in which
-          components are initialized is not specified, but since all
-          components store their state in the machine it doesn't
-          matter).
-
-          The [init] function can perform any computation in the
-          machine monad. But usually, it registers event
-          observations.*)
-
-    module Component : sig
-      type t = component
-
-      val name : t -> string
-      val desc : t -> string
-
-      val provide : ?desc:string -> name:string -> unit machine -> unit
-      val list : unit -> t list
-    end
+    (** [update state ~f] updates a state using function [f]. *)
+    val update : 'a t -> f:('a -> 'a) -> unit machine
   end
 
-  (** type abbreviation for the Machine.state  *)
-  type 'a state = 'a Machine.state
+  module Primitive : sig
+    type 'a t
 
+    val provide : ?desc:string -> ?package:string -> name:string -> 'a -> 'a t
 
-  (** A result of computation.
-
-        Each computation that terminates normally produces a machine
-        word that has a unique identifier. Basically, [value] is an
-        abstract pair, that consists of the [word] and an identifier.
-   *)
-  module Value : sig
-    type id [@@deriving bin_io, compare, sexp]
-    module Id : Base.Comparable.S with type t = id
-
-    type t = value [@@deriving bin_io, compare, sexp]
-
-
-
-    (** [id x] is a unique identifier of a value. Every
-            evaluation of non-trivial computation produces a value
-            with new identifier. Only seting and reading a variable
-            preserves value identifiers. Each new constaint or
-            arithmentic, or memory expression produces a value with a
-            new identifier.   *)
-    val id : t -> id
-
-    (** [to_word x] projects [x] to a machine [word]. Note, many
-            operations from the [Word] module are lifted into the
-            [Machine] monad by this functor, so this operation is not
-            usually necessary. *)
-    val to_word : t -> word
-
-
-
-    (** [to_string x] is the textual representation of [x].
-
-        The returned value could be fed to the [of_string] function
-        and [of_string (to_string x) = x]
-     *)
-    val to_string : t -> string
-
-
-    (** [of_string x] parses a value from its string representation.   *)
-    val of_string : string -> t
-
-
-    (** {3 Bitvector operations lifted into Machine}  *)
-
-
-
-    (** Abstract operation modulo m.  *)
-    type 'a m
-
-
-    (** provides modulus for an operation  *)
-    external (mod) : 'a m -> Bitvec.modulus -> 'a Machine.t = "%apply"
-
-    (** [word x] computes a fresh new value from [x]  *)
-    val word : word -> t machine
-
-    (** [of_bool x] creates a fresh new value from the boolean [x].  *)
-    val bool : bool -> t machine
-
-    (** [of_int x mod m] is [x] modulo [m] with a fresh new id. *)
-    val int : int -> t m
-
-    (** [int32 x mod m] is [x] modulo [m] with a fresh new id *)
-    val int32 : int32 -> t m
-
-    (** [int64 x] creates a fresh new value from [x]  *)
-    val int64 : int64 -> t m
-
-    (** [string s] computes a fresh new value from a textual
-        representation of a machine word [x]. See {!Bitvec.of_string}
-        module for more details.  *)
-    val string : string -> t Machine.t
-
-    (** [one] is [1] with a fresh new id   *)
-    val one : t machine
-
-    (** [zero] is [0] with a fresh new id  *)
-    val zero : t machine
-
-
-    (** [extracts ~hi ~lo x] computes an extraction [[hi:lo]] of [x] *)
-    val extract : hi:int -> lo:int -> t -> t machine
-
-    (** [append w1 w2 x y] computes a concatenation of [x] and [y]  *)
-    val append : int -> int -> t -> t -> t machine
-
-    (** [succ x mod m] is the successor of [x] modulo [m]  *)
-    val succ : t -> t m
-
-    (** [pred x mod m] is the predecessor of [x] modulo [m]  *)
-    val pred : t -> t m
-
-    (** [nsucc n x mod m] is the [n]th successor of [x] modulo [m] *)
-    val nsucc : t -> int -> t m
-
-    (** [npred n x mod m] is the [n]the predecessor of [x] modulo [m]  *)
-    val npred : t -> int -> t m
-
-    (** see {!Bitvec.abs}  *)
-    val abs : t -> t m
-
-    (** see {!Bitvec.neg}  *)
-    val neg : t -> t m
-
-    (** see {!Bitvec.add}  *)
-    val add : t -> t -> t m
-
-    (** see {!Bitvec.sub}  *)
-    val sub : t -> t -> t m
-
-    (** see {!Bitvec.mul}  *)
-    val mul : t -> t -> t m
-
-    (** see {!Bitvec.div}  *)
-    val div : t -> t -> t m
-
-    (** see {!Bitvec.sdiv}  *)
-    val sdiv : t -> t -> t m
-
-    (** see {!Bitvec.rem}  *)
-    val rem : t -> t -> t m
-
-    (** see {!Bitvec.srem}  *)
-    val srem : t -> t -> t m
-
-    (** see {!Bitvec.smod}  *)
-    val smod : t -> t -> t m
-
-    (** see {!Bitvec.lnot}  *)
-    val lnot : t -> t m
-
-    (** see {!Bitvec.logand}  *)
-    val logand : t -> t -> t m
-
-    (** see {!Bitvec.logor}  *)
-    val logor : t -> t -> t m
-
-    (** see {!Bitvec.logxor}  *)
-    val logxor : t -> t -> t m
-
-    (** see {!Bitvec.lshift}  *)
-    val lshift : t -> t -> t m
-
-    (** see {!Bitvec.rshift}  *)
-    val rshift : t -> t -> t m
-
-    (** see {!Bitvec.arshift}  *)
-    val arshift : t -> t -> t m
-
-
-    (** Int-like syntax.  *)
-    module Syntax : sig
-
-      (** see {!Bitvec.(~-)}  *)
-      val ( ~-) : t -> t m
-
-      (** see {!Bitvec.(+)}  *)
-      val ( + ) : t -> t -> t m
-
-      (** see {!Bitvec.(-)}  *)
-      val ( - ) : t -> t -> t m
-
-      (** see {!Bitvec.( * )}  *)
-      val ( * ) : t -> t -> t m
-
-      (** see {!Bitvec.(/)}  *)
-      val ( / ) : t -> t -> t m
-
-      (** see {!Bitvec.(rem)}  *)
-      val (%) : t -> t -> t m
-
-      (** see {!Bitvec.(smod)}  *)
-      val (%$) : t -> t -> t m
-
-      (** see {!Bitvec.(srem)}  *)
-      val (%^) : t -> t -> t m
-
-      (** see {!Bitvec.(lor)}  *)
-      val (lor) : t -> t -> t m
-
-      (** see {!Bitvec.(lsl)}  *)
-      val (lsl) : t -> t -> t m
-
-      (** see {!Bitvec.(lsr)}  *)
-      val (lsr) : t -> t -> t m
-
-      (** see {!Bitvec.(asr)}  *)
-      val (asr) : t -> t -> t m
-
-      (** see {!Bitvec.(lxor)}  *)
-      val (lxor) : t -> t -> t m
-
-      (** see {!Bitvec.(land)}  *)
-      val (land) : t -> t -> t m
-
-    end
-      (** Symbol Value Isomorphism.
-
-            A value can have a symbolic representation that is usefull
-            to embed analysis in the machine computation. We inject
-            symbols, represented with the [string] data type, into the
-            value, using interning, i.e., each symbol is mapped to its
-            index (see the Index module).
-
-            The relation between values and symbols is not bijective,
-            since not all values represent interned symbols, moreover
-            it depends on the order of statements, i.e., a symbol shall
-            be interned (with the [to_value] call) before it can be
-            translated back into a symbolic representation.
-
-            Implementors of Primus components are encouraged to use the
-            [Index] module and implement their own mapping with bijection
-            enforced by the abstraction.
-       *)
-      module Symbol : sig
-
-
-        (** [to_value sym] returns a value corresponding to the
-              provided symbolic representation.  *)
-        val to_value : string -> value Machine.t
-
-
-
-        (** [of_value v] returns a symbolic representation of the
-              value [v].
-
-              If the symbolic representation of a value wasn't
-              established, then returns an empty string. *)
-        val of_value : value -> string Machine.t
-      end
-
-    (** Indexing strings by values.   *)
-    module Index : sig
-
-      (** the width of keys in the index.   *)
-      val key_width : int
-      include Strings.Index.Persistent.S with type key := value
-    end
-
-    include Base.Comparable.S with type t := t
+    val invoke : 'a t -> ('a -> 'b machine) -> 'b machine
 
   end
 
+  (** Observations interface.
 
-  (** Machine Linker.
+      An observation is a named event, that can occur during the
+      program execution. Observations could be provided (usually
+      by components that are implementing a paricular primitive),
+      and observed (i.e., a component could be notified every time
+      an observation is made). In other word, the Observation module
+      provides a publish/subscribe service.
 
-      Linker associates program Labels with code fragments. In other words,
-      it maintains a [name -> code] mapping.
+      The observation system uses the continutation passing style to
+      enable polymorphic event system which doesn't rely on boxed
+      types, such as tuples and records, to deliver observation
+      (events) to subscribers.
+
+      Each observation is parametrized by a type of a function which
+      is used to provide the observation. For a concrete example,
+      let's take the [sum] observation, which occurs every time
+      a sum of two values is computed. This observation will have
+      three arguments (for simplicity let's assume that they have type
+      [int]) and (this is true for all observation types) will have
+      the return type [ok machine], so the final type of the [sum] is
+      [int -> int -> int -> ok machine].
+
+      {3 Providing Observations}
+
+      Observations are provided using the [Observation.provide]
+      function, which takes a function, that will be called with one
+      parameter, which is a function on itself and has type ['f]. We
+      call this function [observe], since it is actually the observer
+      which is being notified. Here is an example, using our [sum]
+      observation:
+
+      {[
+        Observation.make sum ~f:(fun observe ->
+            observe 1 2 3)
+      ]}
+
+
+      {3 Monitoring Observations}
+
+      It is possible to register a function, which will be called
+      every time an observation is made via the [provide] function.
+      The monitor has a little bit more complicated type, as beyond
+      the actual payload (arguments of the observation), it takes a
+      [ctrl] instance, which should be used to return from the
+      observation, via [Observation.continue] or [Observation.stop]
+      functions.
+
+
+
+
+
   *)
-  module Linker : sig
-
-    (** Call tracing.
-
-          Linker doesn't operate in terms of functions or subroutines,
-          but rather in terms of executable chunks of code. It is
-          convenient, though, to track called functions, i.e., there
-          are names and arguments (data-flow). Since a code in Primus
-          is an uniterpreted computation it is the responsibility of
-          the code provider to make corresponding observations, when a
-          subroutine is entered or left.
-
-          By default, the code is provided by the BIR Interpeter and
-          Primus Interpreter. Both care to provide corresponding
-          observations. However, the Primus Lisp Interpreter provides call
-          observations only when an externally visible function is
-          called, e.g., malloc, free.
-     *)
-    module Trace : sig
-
-      (** occurs when a subroutine is called.
-            Argument values are specified in the same order in which
-            corresponding input arguments of a corresponding subroutine
-            term are specified.
-
-            Example,
-
-            (call (malloc 4))
-       *)
-      val call : (string * value list) observation
-
-      (** occurs just before a subroutine returns.
-
-            Context-wise, an observation is made when the interpreter is
-            still in the subroutine. The argument list are in the same
-            order as arguments of a corresponding subroutine. Values of
-            all arguments are provided, including output and input
-            arguments.
-
-            Example,
-
-            (call-return (malloc 4 0xDEADBEEF))
-       *)
-      val return : (string * value list) observation
-
-      (** {3 Notification interface}
-
-            Use [Machine.Observation.make] function, where [Machine]
-            is a module implementing [Machine.S] interface, to provide
-            observations.
-       *)
-
-      (** the statement that makes [call] observations. *)
-      val call_entered : (string * value list) statement
-
-      (** the statement that makes [return] observations  *)
-      val call_returned : (string * value list) statement
-
-    end
-
-    (** The Linker error  *)
-    type exn += Unbound_name of Label.t
 
 
-    (** occurs before a piece of code is executed *)
-    val exec : Label.t observation
+  module Observation : sig
+    type 'f t = 'f observation
+    type info = Info.t
+    type ctrl
+    type void
 
-    (** occurs when an unresolved name is called, just before the
-            unresolved trap is signaled. Could be used to install the
-            trap handler.
-
-            @since 1.5 *)
-    val unresolved : Label.t observation
-
-    (** [unresolved_handler] is called instead of an unbound name.*)
-    val unresolved_handler : Label.t Machine.t
+    val declare :
+      ?inspect:((info -> unit machine) -> 'f) ->
+      ?package:string -> name:string ->
+      'f observation
 
 
-    (** [Make(Machine)] parametrize the [Linker] with the [Machine].
+    (** [provide obs f] provides the observation of [obs].
 
-          Note that the Linker, as well as all other Primus Machine
-          components, is stateless, i.e., the functor itself doesn't
-          contain any non-syntactic values and thus it is purely
-          functional. All the state is stored in the [Machine]
-          state. Thus it is absolutely safe, and correct, to create
-          multiple instances of components, as they needed. The
-          functor instatiation is totaly side-effect free.*)
+        The function [f] takes one argument a function,
+        which accepts
 
-    (** [link name code] associates [name] with the machine [code].
-        Any previous bindings are removed.*)
-    val link : Label.t -> unit machine -> unit machine
 
-    (** [unlink name] removes code linked with the provided [name].*)
-    val unlink : Label.t -> unit machine
-
-    (** [lookup name] returns code associated with the given [name].  *)
-    val lookup : Label.t -> unit machine option machine
-
-    (** [exec name] executes a code fragment associated with the
-        given name. If no code is associated with the provided code,
-        then the [unresolved] observation is made and the second attempt
-        is made. If it also fails (i.e., there is still no code associated
-        with the given name) then the code linked with [unresolved_handler]
-        is called. Finally, if the [unresolved_handler] is also not provided,
-        the machine exception [Unbound_name name] is raised.
     *)
-    val exec : Label.t -> unit machine
+    val provide : 'f observation -> f:('f -> void machine) -> unit machine
+    val monitor : 'f observation -> f:(ctrl -> 'f) -> unit machine
+    val inspect : 'f observation -> f:(info -> unit machine) -> unit machine
 
-
-    (** [is_linked name] computes to [true] if the [name] is
-        associated with some code. *)
-    val is_linked : Label.t -> bool machine
+    val continue : ctrl -> unit machine
+    val stop : ctrl -> unit machine
   end
 
 
-  (** Value generators *)
-  module Generator : sig
-    type t
-    val static : word -> t
-    val random : ?min:word -> ?max:word -> ?seed:word -> int -> t
-    val custom : min:word -> max:word -> int -> word Machine.t -> t
-    val next : t -> word Machine.t
-  end
+  (** [init] event occurs just after all components have been
+        initialized, and before the execution starts*)
+  val init : unit observation
 
-  (** Evaluation environemnt.
+  (** The [finished] event occurs when the machine terminates.   *)
+  val finished : unit observation
 
-        The Environment binds variables to values.*)
-  module Env : sig
-
-    (** A variable is undefined, if it was never [add]ed to the
-          environment.  *)
-    type exn += Undefined_var of Var.ident
+  (** [exn_raised exn] occurs every time an abnormal control flow
+        is initiated *)
+  val exn_raised : exn observation
 
 
-    (** [get var] returns a value associated with the variable.
-            Todo: it looks like that the interface doesn't allow
-            anyone to save bottom or memory values in the environemnt,
-            thus the [get] operation should not return the
-            [Bil.result].*)
-    val get : Var.ident -> value Machine.t
-
-    (** [set var value] binds a variable [var] to the given [value].  *)
-    val set : Var.ident -> value -> unit Machine.t
+  (** Computation Syntax.*)
+  module Syntax : sig
+    include Monad.Syntax.S with type 'a t := 'a t
 
 
-    (** [add var generator] adds a variable [var] to the
-            environment. If a variable is read before it was defined
-            with the [set] operation, then a value produces by the
-            generator will be automatically associated with the
-            variable and returned. *)
-    val add : Var.ident -> Generator.t -> unit Machine.t
-
-
-    (** [all] is a sequence of all variables defined in the
-            environment. Note, the word _defined_ doesn't mean
-            initialized.   *)
-    val all : Var.ident Base.Sequence.t Machine.t
+    (** [event >>> action] is the same as
+              [Observation.observe event action] *)
+    val (>>>) : 'a observation -> ('a -> unit t) -> unit t
   end
 
 
-  (** Machine Memory.
 
-        Provides storage facilities. A machine can have multiple memories,
-        e.g., RAM, ROM, HDD, cache, register files, etc. They are all accessed
-        via the unified memory inteface using [get] and [set]  primitives wich
-        read and store bytes from the current memory. The current memory could
-        be switched with the [switch] operation and its descriptor could be
-        queried using the [memory] operation.
+  include Monad.State.Multi.S with type 'a t := 'a t
+                               and type id := id
+                               and module Syntax := Syntax
 
-        Each memory device has an independent address space and address bus width
-        (which could be different from the virtual memory address size).
-        Each memory could be segmented and can have its own TLB, which is usually
-        implemented via the [pagefault] handlers.
-   *)
-  module Memory : sig
-    open Bigarray
+  (** Local state of the machine.  *)
+  module Local  : State with type 'a t := 'a state
 
 
-    (** abstract memory descriptor, see [Descriptor.t]  *)
-    type memory
-
-
-    type data = (char, int8_unsigned_elt, c_layout) Array1.t
-
-    (** Abstract memory descriptor.
-
-          A desciptor uniquely identifies a memory device by its name.
-          In addition, it holds meta information about memory address
-          and data bus sizes.
-
-     *)
-    module Descriptor : sig
-      type t = memory [@@deriving compare, sexp_of]
-
-      (** [create ~addr_size:m ~data_size:n name] constructs a
-            memory descriptor for a storage [name] with [m] lines in
-            the address bus, and [n] bits in data. *)
-      val create : addr_size:int -> data_size:int -> string -> memory
-
-
-      (** [unknown ~addr_size:m ~data_size:n] constructs a
-            memory descriptor for an arbitrary storage with [m] lines in
-            the address bus, and [n] bits in data. *)
-      val unknown : addr_size:int -> data_size:int -> memory
-
-
-      (** [name memory] returns [memory] identifier. *)
-      val name : memory -> string
-
-      include Base.Comparable.S with type t := t
-    end
-
-    (** occurs when a memory operation for the given addr cannot be satisfied. *)
-    type exn += Pagefault of addr
-
-
-
-    (** [switch memory] switches the memory module to [memory].
-
-        All consecutive operations until the next switch will affect
-        only this memory.  *)
-    val switch : memory -> unit Machine.t
-
-
-    (** [memory] a descriptor of currently active [memory]  *)
-    val memory : memory Machine.t
-
-    (** [get a] loads a byte from the address [a].
-
-            raises the [Pagefault] machine exception if [a] is not mapped.
-     *)
-    val get : addr -> value Machine.t
-
-
-    (** [set a x] stores the byte [x] at the address [a].
-
-            raises the [Pagefault] machine exception if [a] is not mapped,
-            or not writable.
-
-            Precondition: [Value.bitwidth x = 8].
-     *)
-    val set : addr -> value -> unit Machine.t
-
-    (** [load a] loads a byte from the given address [a].
-
-            Same as [get a >>= Value.to_word]
-     *)
-    val load : addr -> word Machine.t
-
-    (** [store a x] stores the byte [x] at the address [a].
-
-            Same as [Value.of_word x >>= set a].
-
-            Precondition: [Value.bitwidth x = 8].
-     *)
-    val store : addr -> word -> unit Machine.t
-
-    (** [add_text mem] maps a memory chunk [mem] as executable and
-            readonly segment of machine memory.*)
-    val add_text : addr -> data -> unit Machine.t
-
-    (** [add_data] maps a memory chunk [mem] as writable and
-            nonexecutable segment of machine memory.  *)
-    val add_data : addr -> data -> unit Machine.t
-
-
-    (** [allocate addr size] allocates a segment of the specified
-            [size]. An unitilialized reads from the segment will
-            produce values generated by a generator (defaults to a
-            [Generator.Random.Seeded.byte]).
-
-            If [init] is provided then the region is initialized.
-
-            An attempt to write to a readonly segment, or an attemp to
-            execute non-executable segment will generate a
-            segmentation fault. (TODO: provide more fine-granular traps).*)
-    val allocate :
-      ?executable:bool ->
-      ?readonly:bool ->
-      ?init:(addr -> word Machine.t) ->
-      ?generator:Generator.t ->
-      addr -> int -> unit Machine.t
-
-
-    (** [map mem] maps a memory chunk [mem] to a segment with the
-            given permissions. See also {!add_text} and {!add_data}. *)
-    val map :
-      ?executable:bool ->
-      ?readonly:bool ->
-      ?reversed:bool ->
-      addr -> data -> unit Machine.t
-
-
-    (** [is_mapped addr] a computation that evaluates to true,
-            when the value is mapped, i.e., it is readable.  *)
-    val is_mapped : addr -> bool Machine.t
-
-
-    (** [is_writable addr] is a computation that evaluates to
-            [true] if [addr] is writable.  *)
-    val is_writable : addr -> bool Machine.t
-  end
+  (** Global state shared across all machine clones.  *)
+  module Global : State with type 'a t := 'a state
 end
