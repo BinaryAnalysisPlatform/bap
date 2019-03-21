@@ -16,7 +16,7 @@ module Conflict = struct
 end
 
 module type Id = sig
-  type t [@@deriving sexp]
+  type t [@@deriving sexp, hash]
   val zero : t
   val pp : Format.formatter -> t -> unit
   val of_string : string -> t
@@ -709,13 +709,25 @@ module Knowledge = struct
       mutable promises : 'p promise list;
     }
 
+    type pack = Pack : ('a,'p) t -> pack
+    let repository = Hashtbl.create (module Cid)
+
+    let register slot =
+      Hashtbl.update repository slot.cls.id ~f:(function
+          | None -> [Pack slot]
+          | Some xs -> Pack slot :: xs)
+
+    let enum {Class.id} = Hashtbl.find_multi repository id
+
     let declare ?desc ?persistent ?package cls name (dom : 'a Domain.t) =
       let slot = Registry.add_slot ?desc ?package name in
       let name = string_of_fname slot in
       let key = Type_equal.Id.create ~name dom.inspect in
       Option.iter persistent (Record.register_persistent key);
       Record.register_domain key dom;
-      {cls; dom; key; name; desc; promises = []}
+      let slot = {cls; dom; key; name; desc; promises = []} in
+      register slot;
+      slot
   end
 
   type ('a,'p) slot = ('a,'p) Slot.t
@@ -1195,7 +1207,16 @@ module Knowledge = struct
   end
   include (Knowledge : S)
 
-  let get_value cls obj = objects cls >>| fun {Env.vals} ->
+
+  let compute_value cls obj =
+    Slot.enum cls |> List.iter ~f:(fun (Slot.Pack s) ->
+        collect s obj >>= fun v ->
+        provide s obj v)
+
+
+  let get_value cls obj =
+    compute_value cls obj >>= fun () ->
+    objects cls >>| fun {Env.vals} ->
     match Map.find vals obj with
     | None -> Value.empty cls
     | Some x -> Value.create cls x
