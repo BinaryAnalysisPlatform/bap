@@ -165,6 +165,15 @@ module Domain = struct
   let total ?inspect ~empty ~order name =
     define ?inspect ~empty name ~order:(partial_of_total order)
 
+  let flat ?inspect ~empty ~is_empty name =
+    define ?inspect ~empty name ~order:(fun x y ->
+        match is_empty x, is_empty y with
+        | true,true -> EQ
+        | true,false -> LT
+        | false,true -> GT
+        | false,false -> NC)
+
+
   let mapping (type k) (type o) ?(equal=(fun _ _ -> true))
       (module K : Comparator.S with type t = k
                                 and type comparator_witness = o)
@@ -184,17 +193,11 @@ module Domain = struct
       | _,_,_ -> NC in
     define ~inspect ~empty ~order name
 
-  let optional ?inspect ~order name =
+  let optional ?inspect name =
     let inspect = match inspect with
-      | None -> sexp_of_opaque
-      | Some sexp_of_elt -> sexp_of_option sexp_of_elt in
-    let order x y : Order.partial = match x, y with
-      | None,None -> EQ
-      | None,Some _ -> LT
-      | Some _,None -> GT
-      | Some x, Some y -> partial_of_total order x y in
-    let empty = None in
-    define ~inspect ~order ~empty name
+      | None -> None
+      | Some sexp_of_elt -> Some (sexp_of_option sexp_of_elt) in
+    flat ?inspect ~empty:None ~is_empty:Option.is_none name
 
   let string = define "string" ~empty:""
       ~inspect:sexp_of_string ~order:(fun x y ->
@@ -602,6 +605,17 @@ module Record = struct
   let t_of_sexp = opaque_of_sexp
 
   let inspect = sexp_of_t
+
+  let pp ppf x = Sexp.pp_hum ppf (inspect x)
+  let pp_slots slots ppf x =
+    let slots = Set.of_list (module String) slots in
+    match (inspect x : Sexp.t) with
+    | Atom _ -> assert false
+    | List xs ->
+      List.iter xs ~f:(function
+          | Sexp.List (Atom slot :: _ ) as data when Set.mem slots slot ->
+            Sexp.pp_hum ppf data
+          | _ -> ())
 end
 
 module Knowledge = struct
@@ -794,7 +808,8 @@ module Knowledge = struct
       end in
       (module R)
 
-
+    let pp ppf x = Record.pp ppf x.data
+    let pp_slots slots ppf x = Record.pp_slots slots ppf x.data
   end
 
   module Class = struct

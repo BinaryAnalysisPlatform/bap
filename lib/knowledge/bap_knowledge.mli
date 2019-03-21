@@ -313,6 +313,10 @@ module Knowledge : sig
     end
 
     val derive : 'a cls -> (module S with type t = 'a t and type comparator_witness = 'a ord)
+
+    val pp : Format.formatter -> 'a value -> unit
+
+    val pp_slots : string list -> Format.formatter -> 'a value -> unit
   end
 
 
@@ -326,7 +330,7 @@ module Knowledge : sig
       objects as "uninterned symbols". So that any object could be
       treated as a symbol.
 
-      To prevent name clashing, that introduce unwanted equalities,
+      To prevent name clashing, that introduces unwanted equalities,
       we employ the system of packages, where each symbol belongs
       to a package, called its home package. The large system design
       is leveraged due to the mechanism of symbol importing, where the
@@ -469,12 +473,18 @@ module Knowledge : sig
       empty:'a ->
       order:('a -> 'a -> Order.partial) -> string -> 'a domain
 
-
     val total :
       ?inspect:('a -> Base.Sexp.t) ->
       empty:'a ->
       order:('a -> 'a -> int) ->
       string -> 'a domain
+
+    val flat :
+      ?inspect:('a -> Base.Sexp.t) ->
+      empty:'a ->
+      is_empty:('a -> bool) ->
+      string -> 'a domain
+
 
     val mapping : ?equal:('d -> 'd -> bool) ->
       ('a,'e) Map.comparator ->
@@ -483,7 +493,6 @@ module Knowledge : sig
 
     val optional :
       ?inspect:('a -> Base.Sexp.t) ->
-      order:('a -> 'a -> int) ->
       string -> 'a option domain
 
     val string : string domain
