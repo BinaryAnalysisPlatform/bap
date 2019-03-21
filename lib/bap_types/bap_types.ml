@@ -57,6 +57,8 @@ module Std = struct
 
   module Eff = Bap_helpers.Eff
 
+  module Semantics = Bap_types_semantics
+
   module Bil = struct
     type t = Bap_bil.bil [@@deriving bin_io, compare, sexp]
     include (Bap_stmt.Stmts_pp : Printable.S with type t := t)
@@ -99,10 +101,10 @@ module Std = struct
     include Bap_bil_pass
     module Pass = Bap_bil_pass.Pass_pp
     include Bap_bil_optimizations
-    module Domain = Bap_types_domain
-    let exp = Domain.exp
-    let bil = Domain.bil
-    let semantics = Domain.semantics
+
+    let slot = Bap_stmt.slot
+    let domain = Bap_stmt.domain
+    let persistent = Bap_stmt.persistent
   end
 
   (** Types of BIL expressions  *)
@@ -145,6 +147,9 @@ module Std = struct
     let eval = Bap_expi.eval
     let simpl = Bap_helpers.Simpl.exp
     let pp_adt = Bap_bil_adt.pp_exp
+    let slot = Bap_exp.slot
+    let domain = Bap_exp.domain
+    let persistent = Bap_exp.persistent
   end
 
   (** [Regular] interface for BIL statements  *)

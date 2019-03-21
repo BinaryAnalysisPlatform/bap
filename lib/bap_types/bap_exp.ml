@@ -1,5 +1,6 @@
 open Core_kernel
 open Regular.Std
+open Bap_knowledge
 open Bap_common
 open Format
 open Bap_bil
@@ -10,6 +11,8 @@ module Size = Bap_size
 
 type binop = exp -> exp -> exp
 type unop = exp -> exp
+
+module Semantics = Bap_types_semantics
 
 module PP = struct
   open Bap_bil
@@ -56,21 +59,21 @@ module PP = struct
   type precendence = int
 
   let op_prec op = Binop.(match op with
-    | TIMES | DIVIDE | SDIVIDE | MOD| SMOD -> 8
-    | PLUS | MINUS -> 7
-    | LSHIFT | RSHIFT | ARSHIFT -> 6
-    | LT|LE|SLT|SLE -> 5
-    | EQ|NEQ -> 4
-    | AND -> 3
-    | XOR -> 2
-    | OR -> 1)
+      | TIMES | DIVIDE | SDIVIDE | MOD| SMOD -> 8
+      | PLUS | MINUS -> 7
+      | LSHIFT | RSHIFT | ARSHIFT -> 6
+      | LT|LE|SLT|SLE -> 5
+      | EQ|NEQ -> 4
+      | AND -> 3
+      | XOR -> 2
+      | OR -> 1)
 
   let prec x = Exp.(match x with
-    | Var _ | Int _ | Unknown _ -> 10
-    | Load _ | Cast _ | Extract _ -> 10
-    | UnOp _ -> 9
-    | BinOp (op,x,y) -> op_prec op
-    | Store _ | Let _ | Ite _ | Concat _ -> 0)
+      | Var _ | Int _ | Unknown _ -> 10
+      | Load _ | Cast _ | Extract _ -> 10
+      | UnOp _ -> 9
+      | BinOp (op,x,y) -> op_prec op
+      | Store _ | Let _ | Ite _ | Concat _ -> 0)
 
   let rec pp fmt exp =
     let open Bap_bil.Exp in
@@ -231,6 +234,23 @@ module Infix = struct
   (** Misc operations *)
   let ( ^ )    a b   = concat a b
 end
+
+let to_string = Format.asprintf "%a" PP.pp
+let domain = Knowledge.Domain.flat "exp"
+    ~empty:None
+    ~inspect:(function
+        | None -> Sexp.List []
+        | Some exp -> Sexp.Atom (to_string exp))
+    ~is_empty:Option.is_none
+
+let persistent = Knowledge.Persistent.of_binable (module struct
+    type t = Bap_bil.exp option [@@deriving bin_io]
+  end)
+
+let slot = Knowledge.Class.property ~package:"bap.std"
+    ~persistent Semantics.cls "exp" domain
+    ~desc:"semantics of expressions in BIL"
+
 
 
 include Regular.Make(struct

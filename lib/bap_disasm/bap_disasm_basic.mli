@@ -88,6 +88,7 @@ module Insn : sig
   val is : ('a,kinds) t -> kind -> bool
   val asm : (asm,'k) t -> string
   val ops  : ('a,'k) t -> op array
+  val slot : (Semantics.cls,full_insn option) Knowledge.slot
 end
 
 module Reg : sig
@@ -120,5 +121,3 @@ module Trie : sig
 end
 
 val available_backends : unit -> string list
-
-val decoder : (arch * mem * full_insn) option content

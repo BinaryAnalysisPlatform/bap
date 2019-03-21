@@ -1,8 +1,11 @@
 open Core_kernel
+open Bap_knowledge
 open Regular.Std
 open Bap_common
 open Format
 open Bap_bil
+
+module Semantics = Bap_types_semantics
 
 let rec pp fmt s =
   let open Stmt in match s with
@@ -90,3 +93,19 @@ module Stmts_data = struct
     set_default_writer "bin";
     set_default_reader "bin"
 end
+
+let domain = Knowledge.Domain.flat "bil"
+    ~empty:[]
+    ~inspect:(function
+        | [] -> Sexp.List []
+        | bil -> Sexp.Atom (Stmts_pp.to_string bil))
+    ~is_empty:List.is_empty
+
+
+let persistent = Knowledge.Persistent.of_binable (module struct
+    type t = stmt list [@@deriving bin_io]
+  end)
+
+let slot = Knowledge.Class.property ~package:"bap.std"
+    ~persistent Semantics.cls "bil" domain
+    ~desc:"semantics of statements in BIL"

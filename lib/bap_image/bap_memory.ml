@@ -1,8 +1,10 @@
 open Core_kernel
+open Bap_knowledge
 open Regular.Std
 open Bap_types.Std
 open Or_error
 open Image_common
+
 
 type 'a or_error = 'a Or_error.t
 
@@ -430,3 +432,8 @@ include Printable.Make(struct
   end)
 
 let hexdump t = Format.asprintf "%a" pp_hex t
+
+
+let domain = Knowledge.Domain.optional ~inspect:sexp_of_t "mem"
+let slot = Knowledge.Class.property ~package:"bap.std"
+    Semantics.cls "mem" domain

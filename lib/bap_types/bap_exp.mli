@@ -1,9 +1,12 @@
 (** Extends [exp] interface.  *)
 open Core_kernel
 open Regular.Std
+open Bap_knowledge
 open Bap_common
 open Bap_bil
 open Format
+
+module Semantics = Bap_types_semantics
 
 include Regular.S with type t := exp
 
@@ -99,3 +102,7 @@ module Infix : sig
   (** [a ^ b] contatenate [a] and [b]  *)
   val ( ^ )   : exp -> exp -> exp
 end
+
+val slot : (Semantics.cls,exp option) Knowledge.slot
+val domain : exp option Knowledge.domain
+val persistent : exp option Knowledge.persistent

@@ -1,3 +1,5 @@
+let package = "bap.std"
+
 open Core_kernel
 open Regular.Std
 open Bap_common
@@ -8,7 +10,7 @@ module Value = Bap_value
 module Dict = Value.Dict
 module Vec = Bap_vector
 module Var = Bap_var
-module Domain = Bap_types_domain
+module Semantics = Bap_types_semantics
 
 module Bil = struct
   include Bap_visitor
@@ -42,11 +44,11 @@ module Tid = struct
 
   let create =
     fun () ->
-      let last_tid = !Tid_generator.state in
-      Int63.incr last_tid;
-      if last_tid.contents = Int63.zero
-      then raise Overrun;
-      last_tid.contents
+    let last_tid = !Tid_generator.state in
+    Int63.incr last_tid;
+    if last_tid.contents = Int63.zero
+    then raise Overrun;
+    last_tid.contents
 
   let nil = Int63.zero
   module Tid = Regular.Make(struct
@@ -124,6 +126,8 @@ type jmp_kind =
 
 type intent = In | Out | Both [@@deriving bin_io, compare, sexp]
 
+
+type semantics = Semantics.t [@@deriving bin_io, compare, sexp]
 
 type jmp = semantics option * (semantics option * jmp_kind)
 [@@deriving bin_io, compare, sexp]
@@ -329,8 +333,12 @@ let program_t = {
   get = (fun _ -> assert false);
 }
 
+let unknown_semantics =
+  Knowledge.Value.empty Semantics.cls
+
 let nil_def : def term =
-  Leaf.make Tid.nil undefined_var Semantics.empty
+  Leaf.make Tid.nil undefined_var unknown_semantics
+
 
 let nil_phi : phi term =
   Leaf.make Tid.nil undefined_var Tid.Map.empty
@@ -342,7 +350,7 @@ let nil_blk : blk term =
   make_term Tid.nil {phis=[| |] ; defs = [| |] ; jmps = [| |] }
 
 let nil_arg : arg term =
-  make_term Tid.nil (undefined_var,Semantics.empty,None)
+  make_term Tid.nil (undefined_var,unknown_semantics,None)
 
 let nil_sub : sub term =
   make_term Tid.nil { name = "undefined"; blks = [| |] ; args = [| |]}
@@ -423,12 +431,12 @@ module Call = struct
 end
 
 module Sema = struct
-  let create x = Semantics.put Domain.exp Semantics.empty (Some x)
-  let get t sema = match Semantics.get Domain.exp sema with
+  let create x = Knowledge.Value.put Exp.slot unknown_semantics (Some x)
+  let get t sema = match Knowledge.Value.get Exp.slot sema with
     | Some exp -> exp
     | None -> Exp.unknown "value" t
   let to_bil var sema = get (Var.typ var) sema
-  let with_bil sema x = Semantics.put Domain.exp sema (Some x)
+  let with_bil sema x = Knowledge.Value.put Exp.slot sema (Some x)
   let map t sema ~f = with_bil sema (f (get t sema))
 end
 
@@ -527,7 +535,7 @@ module Ir_arg = struct
       let exp = Sema.to_bil var exp in
       Bap_exp.pp ppf exp)) ppf t
 
-  let pp_domains domains = term_pp (pp_self (Semantics.pp_domains domains))
+  let pp_slots slots = term_pp (pp_self (Knowledge.Value.pp_slots slots))
 
 
   module V2 = struct
@@ -605,12 +613,12 @@ module Ir_def = struct
       "%a := %a" Var.pp lhs Bap_exp.pp (bil_exp self)
 
 
-  let pp_self_domains domains ppf (lhs,rhs) =
+  let pp_self_slots slots ppf (lhs,rhs) =
     Format.fprintf ppf
-      "%a := %a" Var.pp lhs (Semantics.pp_domains domains) rhs
+      "%a := %a" Var.pp lhs (Knowledge.Value.pp_slots slots) rhs
 
   let pp = term_pp pp_self
-  let pp_domains ds = term_pp (pp_self_domains ds)
+  let pp_slots ds = term_pp (pp_self_slots ds)
 
   module V2 = struct
     type t = def term [@@deriving bin_io, compare, sexp]
@@ -676,16 +684,16 @@ module Ir_phi = struct
            Format.asprintf "[%a, %%%a]" Bap_exp.pp exp Tid.pp id)
          (Map.to_alist rhs))
 
-  let pp_self_domains ds ppf (lhs,rhs) =
+  let pp_self_slots ds ppf (lhs,rhs) =
     Format.fprintf ppf "%a := phi(%s)"
       Var.pp lhs
       (String.concat ~sep:", " @@
        List.map ~f:(fun (id,exp) ->
-           Format.asprintf "[%a, %%%a]" (Semantics.pp_domains ds) exp Tid.pp id)
+           Format.asprintf "[%a, %%%a]" (Knowledge.Value.pp_slots ds) exp Tid.pp id)
          (Map.to_alist rhs))
 
   let pp = term_pp pp_self
-  let pp_domains ds = term_pp (pp_self_domains ds)
+  let pp_slots ds = term_pp (pp_self_slots ds)
 
   module V1 : Data.S with type t = phi term = struct
     type t = phi term
@@ -871,7 +879,7 @@ module Ir_jmp = struct
     Format.fprintf ppf "%a%a" pp_cond (cond_of_sema lhs) pp_dst rhs
 
   let pp = term_pp pp_self
-  let pp_domains _ = pp
+  let pp_slots _ = pp
 
 
   module V2 = struct
@@ -1046,6 +1054,19 @@ module Term = struct
       ~name:"postcondition"
       ~uuid:"f248e4c1-9efc-4c70-a864-e34706e2082b"
 
+
+  let domain = Knowledge.Domain.flat ~is_empty:List.is_empty "bir"
+      ~empty:[] ~inspect:(fun blks -> Sexp.List (List.map blks ~f:(fun b ->
+          Sexp.Atom (name b))))
+
+  let persistent = Knowledge.Persistent.of_binable (module struct
+      type t = blk term list [@@deriving bin_io]
+    end)
+
+  let slot = Knowledge.Class.property ~package ~persistent
+      Semantics.cls "bir" domain
+
+
   let change t p tid f =
     Array.findi (t.get p.self) ~f:(fun _ x -> x.tid = tid) |> function
     | None -> Option.value_map (f None) ~f:(append t p) ~default:p
@@ -1189,16 +1210,16 @@ module Term = struct
     method leave_term : 't 'p. ('p,'t) cls -> 't term -> 'a -> 'a = fun _cls _t x -> x
     method visit_term : 't 'p. ('p,'t) cls -> 't term -> 'a -> 'a =
       fun cls t x ->
-        let x = self#enter_term cls t x in
-        switch cls t
-          ~program:(fun t -> self#run t x)
-          ~sub:(fun t -> self#visit_sub t x)
-          ~arg:(fun t -> self#visit_arg t x)
-          ~blk:(fun t -> self#visit_blk t x)
-          ~phi:(fun t -> self#visit_phi t x)
-          ~def:(fun t -> self#visit_def t x)
-          ~jmp:(fun t -> self#visit_jmp t x) |>
-        self#leave_term cls t
+      let x = self#enter_term cls t x in
+      switch cls t
+        ~program:(fun t -> self#run t x)
+        ~sub:(fun t -> self#visit_sub t x)
+        ~arg:(fun t -> self#visit_arg t x)
+        ~blk:(fun t -> self#visit_blk t x)
+        ~phi:(fun t -> self#visit_phi t x)
+        ~def:(fun t -> self#visit_def t x)
+        ~jmp:(fun t -> self#visit_jmp t x) |>
+      self#leave_term cls t
 
     method enter_program _p x = x
     method leave_program _p x = x
@@ -1474,13 +1495,13 @@ module Ir_blk = struct
       (Array.pp Ir_def.pp) self.defs
       (Array.pp Ir_jmp.pp) self.jmps
 
-  let pp_self_domains ds ppf self =
+  let pp_self_slots ds ppf self =
     Format.fprintf ppf "@[@.%a%a%a@]"
-      (Array.pp (Ir_phi.pp_domains ds)) self.phis
-      (Array.pp (Ir_def.pp_domains ds)) self.defs
-      (Array.pp (Ir_jmp.pp_domains ds)) self.jmps
+      (Array.pp (Ir_phi.pp_slots ds)) self.phis
+      (Array.pp (Ir_def.pp_slots ds)) self.defs
+      (Array.pp (Ir_jmp.pp_slots ds)) self.jmps
 
-  let pp_domains ds = term_pp (pp_self_domains ds)
+  let pp_slots ds = term_pp (pp_self_slots ds)
   let pp = term_pp pp_self
 
   include Regular.Make(struct
@@ -1618,17 +1639,17 @@ module Ir_sub = struct
       (Array.pp Ir_arg.pp) self.args
       (Array.pp Ir_blk.pp) self.blks
 
-  let pp_self_domains ds ppf self =
+  let pp_self_slots ds ppf self =
     Format.fprintf ppf "@[<v>sub %s(%s)@.%a%a@]"
       self.name
       (String.concat ~sep:", " @@
        Array.to_list @@
        Array.map self.args ~f:Ir_arg.name)
-      (Array.pp (Ir_arg.pp_domains ds)) self.args
-      (Array.pp (Ir_blk.pp_domains ds)) self.blks
+      (Array.pp (Ir_arg.pp_slots ds)) self.args
+      (Array.pp (Ir_blk.pp_slots ds)) self.blks
 
   let pp = term_pp pp_self
-  let pp_domains ds = term_pp (pp_self_domains ds)
+  let pp_slots ds = term_pp (pp_self_slots ds)
 
   include Regular.Make(struct
       type t = sub term [@@deriving bin_io, compare, sexp]
@@ -1750,11 +1771,11 @@ module Ir_program = struct
     Format.fprintf ppf "@[<v>program@.%a@]"
       (Array.pp Ir_sub.pp) self.subs
 
-  let pp_self_domains ds ppf self =
+  let pp_self_slots ds ppf self =
     Format.fprintf ppf "@[<v>program@.%a@]"
-      (Array.pp (Ir_sub.pp_domains ds)) self.subs
+      (Array.pp (Ir_sub.pp_slots ds)) self.subs
 
-  let pp_domains ds = term_pp (pp_self_domains ds)
+  let pp_slots ds = term_pp (pp_self_slots ds)
   let pp = term_pp pp_self
 
   include Regular.Make(struct

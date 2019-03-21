@@ -5,6 +5,7 @@ open Bap_types.Std
 open Bap_disasm_types
 
 module Insn = Bap_disasm_basic.Insn
+let package = "bap.std"
 
 type must = Must
 type may = May
@@ -47,6 +48,7 @@ module Props = struct
   include Binable.Of_stringable(Bits)
 end
 
+type semantics = Semantics.t [@@deriving bin_io, compare, sexp]
 
 type t = {
   code : int;
@@ -112,7 +114,7 @@ let of_basic ?bil insn =
   {
     code = Insn.code insn;
     name = Insn.name insn;
-    sema = Semantics.empty;
+    sema = Knowledge.Value.empty Semantics.cls;
     asm  = normalize_asm (Insn.asm insn);
     bil  = Option.value bil ~default:[Bil.special "unknown"];
     ops  = Insn.ops insn;
@@ -203,41 +205,28 @@ let () =
   add_writer ~desc:"Target assembly language" ~ver:"1.0" "asm";
   set_default_printer "asm"
 
-module Semantics = struct
-  module Domain = struct
-    let t = Semantics.declare
-        ~serializer:(module Semantics)
-        ~name:"insn-semantics" (module Semantics)
-    module IR = struct
-      open Bap_ir
-      type t = blk term list [@@deriving bin_io]
+module Slot = struct
+  let empty = "#undefined"
+  let text = Knowledge.Domain.flat "text"
+      ~inspect:sexp_of_string ~empty
+      ~is_empty:(String.equal empty)
 
-      let empty = []
+  let name = Knowledge.Class.property ~package:"bap.std"
+      ~persistent:Knowledge.Persistent.string
+      Semantics.cls "insn-opcode" text
 
-      let partial x y : Domain.Order.partial = match x,y with
-        | [],[] -> EQ
-        | [],_ -> LE
-        | _,[] -> GE
-        | _ -> NC
+  let asm = Knowledge.Class.property ~package:"bap.std"
+      ~persistent:Knowledge.Persistent.string
+      Semantics.cls "insn-asm" text
 
-      let inspect blks =
-        let names = List.map blks ~f:(fun b ->
-            Sexp.Atom (Term.name b)) in
-        Sexp.List names
-    end
-    let bir = Semantics.declare
-        ~serializer:(module IR)
-        ~name:"insn-ir" (module IR)
-  end
-  let t = Knowledge.declare
-      ~public:true
-      ~desc:"instruction semantics"
-      ~name:"edu.cmu.ece.bap/insn-semantics"
-      Domain.t
+  let ops_domain = Knowledge.Domain.optional "insn-ops"
+      ~inspect:(sexp_of_array sexp_of_op)
 
-  let bir = Knowledge.declare
-      ~public:true
-      ~desc:"IR representation of an instruction"
-      ~name:"edu.cmu.ece.bap/insn-bir"
-      Domain.bir
+  let ops_persistent = Knowledge.Persistent.of_binable (module struct
+      type t = op array option [@@deriving bin_io]
+    end)
+
+  let ops = Knowledge.Class.property ~package:"bap.std"
+      ~persistent:ops_persistent
+      Semantics.cls "insn-ops" ops_domain
 end

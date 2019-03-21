@@ -63,13 +63,17 @@ module IrBuilder = struct
       List.rev_append ys (append_def_only x y :: xs)
     | xs, ys -> List.rev_append ys xs
 
+
+  (* maybe we shouldn't compute the whole frame, but instead
+     circumscribe it to just the ir? *)
   let ir_of_insn insn =
     let open Knowledge.Syntax in
     let request =
-      Knowledge.provide Bil.semantics L.root (Insn.bil insn) >>= fun () ->
-      Knowledge.collect Insn.Semantics.bir L.root in
-    match Knowledge.run request Knowledge.empty with
-    | Ok (blks,_) -> blks
+      Knowledge.Object.create Semantics.cls >>= fun obj ->
+      Knowledge.provide Bil.slot obj (Insn.bil insn) >>| fun () ->
+      obj in
+    match Knowledge.run Semantics.cls request Knowledge.empty with
+    | Ok (r,_) -> Knowledge.Value.get Term.slot r
     | Error _ -> []
 
   let set_attributes ?mem insn blks =

@@ -1,6 +1,9 @@
 open Core_kernel
+open Bap_knowledge
 open Regular.Std
 open Bap_common
+
+module Semantics = Bap_types_semantics
 
 module T = struct
   open Arch
@@ -60,6 +63,16 @@ module T = struct
     | #arm | #thumb | #x86 | #aarch64 | #r600
     | #hexagon | #nvptx | #xcore -> LittleEndian
     | #ppc | #mips | #sparc | #systemz   -> BigEndian
+
+
+  let domain =
+    Knowledge.Domain.optional ~inspect:sexp_of_t "arch"
+
+  let slot = Knowledge.Class.property ~package:"bap.std"
+      Semantics.cls "arch" domain
+      ~persistent:(Knowledge.Persistent.of_binable (module struct
+                     type t = arch option [@@deriving bin_io]
+                   end))
 end
 
 include T

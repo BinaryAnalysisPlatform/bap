@@ -13,15 +13,12 @@ let link = Knowledge.Class.declare ~package "link" Link
 
 let word = Knowledge.Domain.optional "word"
     ~inspect:Bitvec_sexp.sexp_of_t
-    ~order:Bitvec_order.compare
 
 let string = Knowledge.Domain.optional "string"
     ~inspect:sexp_of_string
-    ~order:String.compare
 
 let int = Knowledge.Domain.optional "string"
     ~inspect:sexp_of_int
-    ~order:Int.compare
 
 let addr = Knowledge.Class.property ~package link "link-addr" word
 let name = Knowledge.Class.property ~package link "link-name" string

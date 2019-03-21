@@ -38,14 +38,10 @@ val should    : may  property -> t -> t
 val shouldn't : may  property -> t -> t
 
 
-module Semantics : sig
-  val t : semantics content
-  val bir : blk term list content
-
-  module Domain : sig
-    val t : semantics domain
-    val bir : blk term list domain
-  end
+module Slot : sig
+  val name : (Semantics.cls, string) Knowledge.slot
+  val asm : (Semantics.cls, string) Knowledge.slot
+  val ops : (Semantics.cls, op array option) Knowledge.slot
 end
 
 val semantics : t -> semantics

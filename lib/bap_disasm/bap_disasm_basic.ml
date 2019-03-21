@@ -318,6 +318,10 @@ module Insn = struct
     {code; name; asm; kinds; opers }
 
 
+  let domain =
+    Knowledge.Domain.optional ~inspect:sexp_of_t "insn"
+  let slot = Knowledge.Class.property ~package:"bap.std"
+      Semantics.cls "insn" domain
 end
 
 type ('a,'k) insn = ('a,'k) Insn.t
@@ -580,33 +584,3 @@ module Trie = struct
   module Normalized = Trie.Make(Normalized_key)
   include (Trie.Make(Key) : Trie with type key := key)
 end
-
-
-
-module Domain = struct
-  type t = (arch * mem * full_insn) option
-
-  let empty = None
-  let partial x y : Domain.Order.partial = match x,y with
-    | None,None -> EQ
-    | None,_ -> LE
-    | _,None -> GE
-    | Some (_,x,_), Some (_,y,_) ->
-      if Addr.equal (Mem.min_addr x) (Mem.min_addr y)
-      then EQ
-      else NC
-  let inspect = function
-    | None -> Sexp.List []
-    | Some (_,m,x) -> Sexp.List [
-        Atom (Addr.string_of_value (Mem.min_addr m));
-        Insn.sexp_of_t x;
-      ]
-end
-
-let insn = Semantics.declare ~name:"decoded-insn" (module Domain)
-
-let decoder = Knowledge.declare
-    ~public:true
-    ~desc:"instruction decoder"
-    ~name:"edu.cmu.ece.bap/basic-decoder"
-    insn

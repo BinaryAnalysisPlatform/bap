@@ -38,6 +38,7 @@ type error = [
   | `Failed_to_lift of mem * full_insn * Error.t
 ] [@@deriving sexp_of]
 
+type semantics = Semantics.t [@@deriving bin_io, compare, sexp]
 type maybe_insn = full_insn option * semantics [@@deriving sexp_of]
 type decoded = mem * maybe_insn [@@deriving sexp_of]
 
@@ -220,7 +221,7 @@ let ok_nil = function
   | Error _ -> []
 
 let to_bil s = match s with
-  | Ok s -> Ok (Semantics.get Bil.Domain.bil s)
+  | Ok s -> Ok (Knowledge.Value.get Bil.slot s)
   | Error err -> Error err
 
 let is_barrier s mem insn =
@@ -389,7 +390,7 @@ let stage2 dis stage1 =
   | Some addr -> loop addr addr >>= fun () ->
     let dis = Dis.store_asm dis in
     let dis = Dis.store_kinds dis in
-    let empty = Semantics.empty in
+    let empty = Knowledge.Value.empty Semantics.cls in
     let disasm mem =
       Dis.run dis mem
         ~init:[] ~return:ident ~stopped:(fun s _ ->
@@ -404,10 +405,10 @@ let stage2 dis stage1 =
                   | a, (`Cond | `Jump) -> a
                   | _ -> None) in
             let bil,sema = match stage1.lift mem ins with
-              | Ok sema -> Semantics.get Bil.Domain.bil sema,sema
+              | Ok sema -> Knowledge.Value.get Bil.slot sema,sema
               | _ -> [],empty in
             let bil = add_destinations bil dests in
-            mem, (insn, Semantics.put Bil.Domain.bil sema bil)) in
+            mem, (insn, Knowledge.Value.put Bil.slot sema bil)) in
     return {stage1; addrs; succs; preds; disasm}
 
 let stage3 s2 =
@@ -430,7 +431,7 @@ let stage3 s2 =
       s2.disasm mem |> List.filter_map ~f:(function
           | mem,(None,_) -> None
           | mem,(Some insn,sema) ->
-            let bil = Semantics.get Bil.Domain.bil sema in
+            let bil = Knowledge.Value.get Bil.slot sema in
             let insn =
               Insn.with_semantics (Insn.of_basic ~bil insn) sema in
             Some (mem, insn)) |> function
@@ -456,10 +457,13 @@ let stage3 s2 =
 
 let lifter arch mem insn =
   let open Knowledge.Syntax in
-  let sema =
-    Knowledge.provide Dis.decoder Label.root (Some (arch,mem,insn)) >>= fun () ->
-    Knowledge.collect Insn.Semantics.t Label.root in
-  match Knowledge.run sema Knowledge.empty with
+  let code =
+    Knowledge.Object.create Semantics.cls >>= fun code ->
+    Knowledge.provide Arch.slot code (Some arch) >>= fun () ->
+    Knowledge.provide Memory.slot code (Some mem) >>= fun () ->
+    Knowledge.provide Dis.Insn.slot code (Some insn) >>| fun () ->
+    code in
+  match Knowledge.run Semantics.cls code Knowledge.empty with
   | Ok (sema,_) -> Ok sema
   | Error _ -> errorf "conflict"
 

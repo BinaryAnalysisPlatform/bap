@@ -500,6 +500,13 @@ module Std : sig
 
   (** {1:api BAP API}  *)
 
+  module Semantics : sig
+    type cls
+    type t = cls Knowledge.value [@@deriving bin_io, compare, sexp]
+    val cls : cls Knowledge.cls
+    include Base.Comparable.S with type t := t
+  end
+
   (** Abstract integral type.
 
       This module describes an interface of an integral arithmetic
@@ -1885,14 +1892,9 @@ module Std : sig
     include Printable.S with type t := t
     include Data.S      with type t := t
 
-    val semantics : t content
-    module Domain : sig
-      val bil : t domain
-      val exp : exp option domain
-
-      module Bil : Domain.S
-      module Exp : Domain.S
-    end
+    val domain : stmt list Knowledge.domain
+    val persistent : stmt list Knowledge.persistent
+    val slot : (Semantics.cls, stmt list) Knowledge.slot
 
     (** [printf "%a" pp_binop op] prints a binary operation [op].  *)
     val pp_binop : binop printer
@@ -2478,7 +2480,7 @@ module Std : sig
   type exp   = Bil.exp     [@@deriving bin_io, compare, sexp]
   type stmt  = Bil.stmt    [@@deriving bin_io, compare, sexp]
   type unop  = Bil.unop    [@@deriving bin_io, compare, sexp]
-
+  type semantics = Semantics.t [@@deriving bin_io, compare, sexp]
   (** The type of a BIL expression.
 
       Each BIL expression is either an immediate value of a given
@@ -3243,6 +3245,10 @@ module Std : sig
   module Exp : sig
     type t = Bil.exp
 
+    val slot : (Semantics.cls, t option) Knowledge.slot
+    val domain : t option Knowledge.domain
+    val persistent : t option Knowledge.persistent
+
     (** All visitors provide some information about the current
         position of the visitor *)
     class state : object
@@ -3915,6 +3921,9 @@ module Std : sig
 
     (** [endian arch] returns a word endianness of the [arch]  *)
     val endian : t -> endian
+
+    val slot : (Semantics.cls, t option) Knowledge.slot
+
 
     (** [arch] type implements [Regular]  interface  *)
     include Regular.S with type t := t
@@ -4650,6 +4659,7 @@ module Std : sig
       addr ->
       Bigstring.t -> t Or_error.t
 
+    val slot : (Semantics.cls, mem option) Knowledge.slot
 
     (** [of_file endian start name] creates a memory region from file.
         Takes data stored in a file with the given [name] and maps it
@@ -5768,8 +5778,6 @@ module Std : sig
       (** abbreviate an instruction with full information.  *)
       type full_insn = (asm,kinds) insn [@@deriving compare, sexp_of]
 
-      val decoder : (arch * mem * full_insn) option content
-
       (** Disassembler.
 
           The ['a] and ['k] type variables specify disassembler modes
@@ -5952,6 +5960,8 @@ module Std : sig
 
         type ('a,'k) t = ('a,'k) insn
 
+        val slot : (Semantics.cls, full_insn option) Knowledge.slot
+
         (** [sexp_of_t insn] returns a sexp representation of [insn]  *)
         val sexp_of_t : ('a,'k) t -> Sexp.t
 
@@ -6086,14 +6096,10 @@ module Std : sig
 
     type t = insn [@@deriving bin_io, compare, sexp]
 
-    module Semantics : sig
-      val t : semantics content
-      val bir : blk term list content
-
-      module Domain : sig
-        val t : semantics domain
-        val bir : blk term list domain
-      end
+    module Slot : sig
+      val name : (Semantics.cls, string) Knowledge.slot
+      val asm : (Semantics.cls, string) Knowledge.slot
+      val ops : (Semantics.cls, op array option) Knowledge.slot
     end
 
 
@@ -7051,6 +7057,7 @@ module Std : sig
       ?jmp:(jmp term -> 'a) ->
       't term -> 'a
 
+    val slot : (Semantics.cls, blk term list) Knowledge.slot
   end
 
   (** Program in Intermediate representation.  *)
@@ -7092,7 +7099,7 @@ module Std : sig
       (** fixes the result  *)
       val result : t -> program term
     end
-    val pp_domains : string list -> Format.formatter -> t -> unit
+    val pp_slots : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
 
@@ -7222,7 +7229,7 @@ module Std : sig
       (** returns current result  *)
       val result : t -> sub term
     end
-    val pp_domains : string list -> Format.formatter -> t -> unit
+    val pp_slots : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
 
@@ -7427,7 +7434,7 @@ module Std : sig
       (** returns current result  *)
       val result  : t -> blk term
     end
-    val pp_domains : string list -> Format.formatter -> t -> unit
+    val pp_slots : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
 
@@ -7476,7 +7483,7 @@ module Std : sig
         for more information.  *)
     val free_vars : t -> Var.Set.t
 
-    val pp_domains : string list -> Format.formatter -> t -> unit
+    val pp_slots : string list -> Format.formatter -> t -> unit
 
     include Regular.S with type t := t
   end
@@ -7556,7 +7563,7 @@ module Std : sig
     (** updated jump's kind  *)
     val with_kind : t -> jmp_kind -> t
 
-    val pp_domains : string list -> Format.formatter -> t -> unit
+    val pp_slots : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
 
@@ -7624,7 +7631,7 @@ module Std : sig
     (** [remove def id] removes definition with a given [id]  *)
     val remove : t -> tid -> t
 
-    val pp_domains : string list -> Format.formatter -> t -> unit
+    val pp_slots : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
 
