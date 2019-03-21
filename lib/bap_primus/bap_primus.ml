@@ -44,6 +44,7 @@ module State = struct
     init : (unit -> unit) Knowledge.obj -> 'a knowledge;
     inspect : ('a -> Info.t);
   }
+  type 'a state = 'a t
 
   let declare ?(inspect=fun _ -> Info.of_string "<opaque>") ?
       (name="anonymous") init =
@@ -52,7 +53,7 @@ module State = struct
     {key; init; inspect}
 
   let inspect x = x.inspect
-  let name x = Type_equal.Id.name x
+  let name x = Type_equal.Id.name x.key
 end
 
 module Exception : sig
@@ -74,7 +75,7 @@ module Primus = struct
   let project = Knowledge.Class.declare ~package:"primus" "project" ()
 
 
-  type env = project Knowledge.obj
+  type env = unit
   type exn = Exception.t = ..
 
   let package = "primus"
@@ -92,13 +93,13 @@ module Primus = struct
     | Normal
     | Exn of Exception.t
 
-
+  type 'a state = 'a State.t
   type 'a t  = (('a,exn) result,PE.t sm) Monad.Cont.t
   and 'f observation = ('f, outcome t) Observation.t
   and 'f observer = ('f, outcome t) Observer.t
   and inspectors = outcome t Inspector.t list
-  and 'a sm  = ('a,state) SM.t
-  and state = {
+  and 'a sm  = ('a,machine_state) SM.t
+  and machine_state = {
     proj    : project Knowledge.obj;
     curr    : unit -> unit t;
     local   : Univ_map.t;
@@ -112,7 +113,7 @@ module Primus = struct
 
   type 'a c = 'a t
   type 'a m = 'a Knowledge.t
-  type 'a e = unit t -> project Knowledge.obj -> unit m
+  type 'a e = project Knowledge.obj -> unit m
 
 
   module C = Monad.Cont.Make(PE)(struct
@@ -141,8 +142,6 @@ module Primus = struct
   let exn_raised = Observation.declare ~package "machine-exception"
       ~inspect:(fun k exn ->
           k (Info.of_string (Exception.to_string exn)))
-
-
 
   let forked = Observation.declare ~package "machine-fork"
       ~inspect:(fun k pid cid ->
@@ -179,26 +178,27 @@ module Primus = struct
 
   let project = lifts (SM.gets @@ fun s -> s.proj)
 
+  type observed = outcome
   module Observation : sig
     type 'f t = 'f observation
     type info = Info.t
     type ctrl
-    type nonrec outcome = outcome
+    type observed = outcome
 
     val declare :
-      ?inspect:((info -> outcome machine) -> 'f) ->
+      ?inspect:((info -> observed machine) -> 'f) ->
       ?package:string -> string ->
       'f observation
-    val provide : 'f observation -> f:('f -> outcome machine) -> unit machine
+    val provide : 'f observation -> f:('f -> observed machine) -> unit machine
     val monitor : 'f observation -> f:(ctrl -> 'f) -> unit machine
-    val inspect : 'f observation -> f:(info -> outcome machine) -> unit machine
-    val continue : ctrl -> outcome machine
-    val stop : ctrl -> outcome machine
+    val inspect : 'f observation -> f:(info -> observed machine) -> unit machine
+    val continue : ctrl -> observed machine
+    val stop : ctrl -> observed machine
   end
   = struct
     type 'a m = 'a t
     type 'f t = 'f observation
-    type nonrec outcome = outcome
+    type observed = outcome
     type info = Info.t
     type ctrl = outcome -> outcome machine
 
@@ -299,10 +299,9 @@ module Primus = struct
   end
 
   module type State = sig
-    type 'a t
-    val get : 'a t -> 'a m
-    val put : 'a t -> 'a -> unit m
-    val update : 'a t -> f:('a -> 'a) -> unit m
+    val get : 'a state -> 'a machine
+    val put : 'a state -> 'a -> unit machine
+    val update : 'a state -> f:('a -> 'a) -> unit machine
   end
   module Make_state(S : sig
       val get : unit -> Univ_map.t t
@@ -310,7 +309,7 @@ module Primus = struct
       val typ : string
     end) = struct
     type 'a m = 'a t
-    let get {State.key; init} : 'a c =
+    let get : 'a state -> 'a machine = fun {State.key; init} ->
       S.get () >>= fun states ->
       match Univ_map.find states key with
       | Some s -> return s
@@ -318,7 +317,7 @@ module Primus = struct
         project >>= fun proj ->
         liftk (init proj)
 
-    let put {State.key} x =
+    let put {State.key} x  =
       S.get () >>= fun states ->
       S.set (Univ_map.set states key x)
 
@@ -341,7 +340,7 @@ module Primus = struct
   module State = State
 
   let get () = CM.return ()
-  let put () = CM.return ()
+  let put () : unit machine = CM.return ()
   let gets f = CM.return (f ())
   let update _ = CM.return ()
   let modify m _f = m
@@ -446,7 +445,7 @@ module Primus = struct
   let notify obs = Observation.provide obs ~f:(fun go -> go ())
 
 
-  let run : type a. a e = fun comp proj ->
+  let run : type a. a t -> a e = fun comp proj ->
     let finish = function
       | Ok _ -> SM.return (Ok ())
       | Error err -> SM.return (Error err) in
@@ -456,7 +455,9 @@ module Primus = struct
 
   module Syntax = struct
     include CM.Syntax
-    let (>>>) = Observation.monitor
+    let (-->) x p = collect p x
+    let (//)  c s = liftk @@ Knowledge.Object.read c s
+    let (>>>) x f = Observation.monitor x ~f
   end
 
   include (CM : Monad.S with type 'a t := 'a t

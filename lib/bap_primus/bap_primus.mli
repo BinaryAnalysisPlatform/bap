@@ -20,6 +20,9 @@ module Primus : sig
   (** [an observation] of a value of type [a].*)
   type 'a observation
 
+
+  type observed
+
   (** Machine exit status.
         A machine may terminate normally, or abnormally with the
         specified exception. *)
@@ -106,19 +109,17 @@ module Primus : sig
 
   (** An interface to the state.
 
-          An interface gives an access to operations that query and
-          modify machine state. *)
+      An interface gives an access to operations that query and
+      modify machine state. *)
   module type State = sig
-    type 'a t
-
     (** [get state] extracts the state.  *)
-    val get : 'a t -> 'a machine
+    val get : 'a state -> 'a machine
 
     (** [put state x] saves a machine state  *)
-    val put : 'a t -> 'a -> unit machine
+    val put : 'a state -> 'a -> unit machine
 
     (** [update state ~f] updates a state using function [f]. *)
-    val update : 'a t -> f:('a -> 'a) -> unit machine
+    val update : 'a state -> f:('a -> 'a) -> unit machine
   end
 
   (** Observations interface.
@@ -174,13 +175,11 @@ module Primus : sig
     type 'f t = 'f observation
     type info = Info.t
     type ctrl
-    type void
 
     val declare :
-      ?inspect:((info -> unit machine) -> 'f) ->
-      ?package:string -> name:string ->
+      ?inspect:((info -> observed machine) -> 'f) ->
+      ?package:string -> string ->
       'f observation
-
 
     (** [provide obs f] provides the observation of [obs].
 
@@ -189,17 +188,17 @@ module Primus : sig
 
 
     *)
-    val provide : 'f observation -> f:('f -> void machine) -> unit machine
+    val provide : 'f observation -> f:('f -> observed machine) -> unit machine
     val monitor : 'f observation -> f:(ctrl -> 'f) -> unit machine
-    val inspect : 'f observation -> f:(info -> unit machine) -> unit machine
+    val inspect : 'f observation -> f:(info -> observed machine) -> unit machine
 
-    val continue : ctrl -> unit machine
-    val stop : ctrl -> unit machine
+    val continue : ctrl -> observed machine
+    val stop : ctrl -> observed machine
   end
 
   (** [exn_raised exn] occurs every time an abnormal control flow
         is initiated *)
-  val exn_raised : exn observation
+  val exn_raised : (exn -> observed machine) observation
 
 
   (** Computation Syntax.*)
@@ -209,14 +208,12 @@ module Primus : sig
     (** [x-->p] is [collect p x] *)
     val (-->) : 'a obj -> ('a,'p) slot -> 'p t
 
-
-    (** [p <-- f] is [promise p f]  *)
-    val (<--) : ('a,'p) slot -> ('a obj -> 'p t) -> unit
-
+    (** [c // s] is [Object.read c s]  *)
+    val (//) : 'a cls -> string -> 'a obj t
 
     (** [event >>> action] is the same as
-              [Observation.observe event action] *)
-    val (>>>) : 'a observation -> ('a -> unit t) -> unit t
+        [Observation.monitor event action] *)
+    val (>>>) : 'f observation -> (Observation.ctrl -> 'f) -> unit t
   end
 
 
@@ -226,9 +223,9 @@ module Primus : sig
                                and module Syntax := Syntax
 
   (** Local state of the machine.  *)
-  module Local  : State with type 'a t := 'a state
+  module Local  : State
 
 
   (** Global state shared across all machine clones.  *)
-  module Global : State with type 'a t := 'a state
+  module Global : State
 end
