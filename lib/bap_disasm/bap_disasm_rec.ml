@@ -64,40 +64,43 @@ module Cfg = Graphlib.Make(Node)(Edge)
 type cfg = Cfg.t [@@deriving compare]
 
 module Visited = struct
-  type t = addr option Addr.Map.t
+
+  type entry = Unknown | Insn of {last : addr}
+  type t = entry Addr.Map.t
 
   let empty = Addr.Map.empty
-  let add t mem = Map.set t (Memory.min_addr mem) (Some (Memory.max_addr mem))
+  let add t mem =
+    Map.set t (Memory.min_addr mem) (Insn {last = Memory.max_addr mem})
 
-  let visit (t : t) addr =
+  let visit t addr =
     Map.update t addr ~f:(function
-        | None -> None
+        | None -> Unknown
         | Some x -> x)
 
   let find_insn t a = match Map.find t a with
-    | Some (Some tail) -> Some tail
+    | Some (Insn {last}) -> Some last
     | _ -> None
 
   let min = Map.min_elt
-  let tried = Map.mem
-  let remove_insn = Map.remove
+  let mem = Map.mem
+  let forget = Map.remove
 
-  let next t = Map.closest_key t `Greater_than
+  let upper_bound t = Map.closest_key t `Greater_than
 
   let rec next_insn t a =
-    match next t a with
+    match upper_bound t a with
     | None -> None
-    | Some (addr,Some tail) -> Some (addr,tail)
+    | Some (addr, Insn {last}) -> Some (addr,last)
     | Some (addr,_) -> next_insn t addr
 
   let min_insn t = match min t with
     | None -> None
-    | Some (addr, Some tail) -> Some (addr,tail)
+    | Some (addr, Insn {last}) -> Some (addr,last)
     | Some (addr,_) -> next_insn t addr
 
   let has_insn t a = match Map.find t a with
-    | None -> false
-    | Some x -> Option.is_some x
+    | Some (Insn _) -> true
+    | _ -> false
 
 end
 
@@ -177,7 +180,7 @@ let next dis s =
     | [] -> Dis.stop dis s
     | r :: roots when not(Memory.contains s.base r) ->
       loop {s with roots}
-    | r :: roots when Visited.tried s.visited r ->
+    | r :: roots when Visited.mem s.visited r ->
       loop {s with roots}
     | addr :: roots ->
       let mem = Memory.view ~from:addr s.base in
@@ -224,8 +227,8 @@ let update_intersections disasm brancher s =
     Map.fold s.visited ~init:Addr.Map.empty
       ~f:(fun ~key:addr ~data:tail inters ->
         match tail with
-        | None -> inters
-        | Some tail -> Map.add_multi inters tail addr) in
+        | Visited.Unknown -> inters
+        | Visited.Insn {last} -> Map.add_multi inters last addr) in
   Map.fold intersections ~init:(Ok ()) ~f:(fun ~key:_ ~data:addrs r ->
       r >>= fun () -> visit_intersections addrs) >>= fun () ->
   return s
@@ -343,7 +346,7 @@ let stage2 dis stage1 =
     Addrs.mem stage1.dests addr ||
     Set.mem stage1.inits (next max_addr) in
   let is_insn = Visited.has_insn stage1.visited in
-  let next_visited = Visited.next stage1.visited in
+  let next_visited = Visited.upper_bound stage1.visited in
   let create_block start addr max_addr =
     Memory.range stage1.base start max_addr >>= fun blk ->
     Addrs.add_exn addrs ~key:start ~data:blk;
@@ -365,7 +368,7 @@ let stage2 dis stage1 =
       match Visited.find_insn leftovers curr with
       | Some max_addr ->
         let insn = curr,max_addr in
-        let leftovers = Visited.remove_insn leftovers curr in
+        let leftovers = Visited.forget leftovers curr in
         if is_edge curr max_addr then Some (leftovers, start, insn)
         else loop leftovers (Some insn) start (next max_addr)
       | None -> match last with
@@ -383,7 +386,6 @@ let stage2 dis stage1 =
          else
            create_block start addr max_addr >>= fun () ->
            loop leftovers (next max_addr)
-      | None when Map.is_empty leftovers -> Ok ()
       | None -> match Visited.min_insn leftovers with
          | Some (addr,_) -> loop leftovers addr
          | _ -> Ok () in
