@@ -1,16 +1,32 @@
-FROM ocaml/opam:debian
+FROM ocaml/opam2:debian-stable
+
 MAINTAINER Ivan Gotovchits <ivg@ieee.org>
+
 RUN sudo apt-get -y update && sudo apt-get -y install \
-    llvm-3.8-dev \
+    build-essential \
+    curl \
     git \
-    libcurl4-gnutls-dev \
-    libgmp-dev \
-    zlib1g-dev \
-    binutils-multiarch \
-    clang
-RUN opam init --auto-setup --comp=4.05.0 --yes
+    libx11-dev \
+    m4 \
+    pkg-config \
+    python-pip \
+    software-properties-common \
+    sudo \
+    unzip \
+    wget \
+    libcap-dev \
+    gcc \
+    make \
+    libncurses5-dev
+
+RUN opam switch 4.05
+RUN eval "$(opam env)"
 RUN opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
-RUN LLVM_CONFIG=llvm-config-3.8 opam install conf-bap-llvm --yes
-RUN OPAMJOBS=16 opam install bap --yes
-RUN sudo apt-get install python-pip --yes
+RUN opam update
+RUN opam install depext --yes
+RUN OPAMJOBS=1 opam depext --install bap --yes
 RUN sudo pip install bap
+
+WORKDIR /home/opam
+
+ENTRYPOINT ["opam", "config", "exec", "--"]
