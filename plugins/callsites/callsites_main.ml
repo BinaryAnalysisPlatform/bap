@@ -42,8 +42,8 @@ let add_def intent blk def =
   then Term.prepend def_t blk def
   else Term.append  def_t blk def
 
-let defs_of_args call intent args : def term seq =
-  Seq.filter_map args ~f:(fun arg ->
+let defs_of_args call intent args =
+  List.filter_map args ~f:(fun arg ->
       require (intent_matches arg intent) >>= fun () ->
       def_of_arg arg >>| transfer_attrs call)
 
@@ -54,14 +54,27 @@ let target intent sub blk call =
     | _ -> None
   else Some blk
 
+let enum_args t =
+  let compare x y = match Arg.intent x, Arg.intent y with
+    | None, None -> 0
+    | None, Some _ -> -1
+    | Some _, None -> 1
+    | Some x, Some y -> match x,y with
+       | In, _ -> -1
+       | _, In -> 1
+       | Out, Both -> -1
+       | Both, Out -> 1
+       | _ -> 0 in
+  Term.enum arg_t t |> Seq.to_list |> List.stable_sort ~compare
+
 let insert_defs prog sub =
   let blk_with_def intent blk jmp sub : blk term option =
     call_of_jmp jmp >>= fun caller ->
     callee caller prog >>= fun callee ->
     target intent sub blk caller >>| fun blk ->
-    Term.enum arg_t callee |>
+    enum_args callee |>
     defs_of_args jmp intent |>
-    Seq.fold ~init:blk ~f:(add_def intent) in
+    List.fold ~init:blk ~f:(add_def intent) in
   let insert intent blk jmp sub =
     Option.value_map (blk_with_def intent blk jmp sub)
       ~default:sub ~f:(Term.update blk_t sub) in
