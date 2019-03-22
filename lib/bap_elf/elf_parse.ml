@@ -439,8 +439,8 @@ let split bits size : bitstring * bitstring =
       tl : -1       : bitstring|} -> hd,tl
 
 
-(* Bitlength needed that's why lsl 3 *)
-let bitstring_of_bytes b = b, 0, Bytes.length b lsl 3
+(* Bitlength needed that's why we multiply by 8 *)
+let bitstring_of_bytes b = b, 0, Bytes.length b * 8
 
 (** returns a sequence of table entries  *)
 let split_table ti ~pos ~len data : bitstring Sequence.t Or_error.t =
