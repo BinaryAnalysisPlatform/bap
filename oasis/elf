@@ -19,7 +19,7 @@ Library elf
 
 Library elf_loader_plugin
   Path:             plugins/elf_loader
-  Build$:           flag(elf)
+  Build$:           flag(everything) || flag(elf)
   FindlibName:      bap-plugin-elf_loader
   CompiledObject:   best
   BuildDepends:     bap, bap-elf, bap-dwarf
