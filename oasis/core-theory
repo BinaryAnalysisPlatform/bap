@@ -8,7 +8,7 @@ Library bap_core_theory
   FindlibName: bap-core-theory
   CompiledObject: best
   BuildDepends: bap-knowledge, core_kernel,
-                bitvec, bitvec-order
+                bitvec, bitvec-order, bitvec-sexp
   Modules: Bap_core_theory
   InternalModules:
         Bap_core_theory_basic,
