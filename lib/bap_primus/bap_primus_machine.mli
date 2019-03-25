@@ -1,25 +1,15 @@
 open Core_kernel
+open Bap.Std
 open Monads.Std
 open Bap_primus_types
 
+module type Component = Component
 module type S = Machine
 
 type id = Monad.State.Multi.id
-val exn_raised : exn observation
+type nonrec component = component
 
 module State = Bap_primus_state
-include S
-type 'a machine = 'a t
+module Make(M : Monad.S) : Machine with type 'a m := 'a M.t
 
-module Component : sig
-  type t = unit machine service
-
-  val name : t -> string
-  val desc : t -> string
-
-  val provide : ?desc:string -> name:string -> unit machine -> unit
-  val list : unit -> t list
-end
-
-val init : unit observation
-val finished : unit observation
+val exn_raised : exn observation

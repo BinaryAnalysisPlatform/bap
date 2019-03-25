@@ -1,114 +1,110 @@
 open Core_kernel
-open Bap_knowledge
+open Bap.Std
 
 open Bap_primus_types
-module Machine = Bap_primus_machine
-module Word = Bitvec.M64
+open Bap_primus_generator_types
 
-open Machine.Syntax
+module Iterator = Bap_primus_iterator
 
-type descr = {
-  width : int;
-  min : word;
-  max : word;
-}
 
-type state = {
-  states : word Int.Map.t;
-}
+let uniform_coverage ~total ~trials =
+  ~-.(Float.expm1 (float trials *. Float.log1p( ~-.(1. /. float total))))
 
-let generators = Bap_primus_machine.State.declare
+
+
+let generators : Univ_map.t state = Bap_primus_machine.State.declare
     ~name:"rng-states"
-    ~uuid:"7e81d5ae-46a2-42ff-918f-96c0c2dc95e3" @@
-  Knowledge.return {states = Int.Map.empty}
+    ~uuid:"7e81d5ae-46a2-42ff-918f-96c0c2dc95e3"
+    (fun _ -> Univ_map.empty)
 
 
+module States = Univ_map.With_default
+
+type 'a gen = {
+  state : 'a States.Key.t;
+  next : 'a -> 'a;
+  value : 'a -> int;
+  min : int;
+  max : int;
+}
 
 type t =
-  | Static of word
-  | Random of {
-      ident : int;
-      descr : descr;
-      seed :  word;
-    }
-  | Custom of {
-      next : word Machine.t;
-      descr : descr;
-    }
-
-let sexp_of_descr {min; max} = Sexp.List [
-    Sexp.Atom "random";
-    sexp_of_word min;
-    sexp_of_word max;
-  ]
+  | Gen : 'a gen -> t
+  | Wait : (int -> t) -> t
+  | Static : int -> t
 
 let rec sexp_of_t = function
-  | Static x -> Sexp.(List [Atom "static"; sexp_of_word x])
-  | Random {descr} | Custom {descr} -> sexp_of_descr descr
+  | Static x -> Sexp.(List [Atom "static"; sexp_of_int x])
+  | Gen {min;max} -> Sexp.List [
+      Sexp.Atom "interval";
+      sexp_of_int min;
+      sexp_of_int max;
+    ]
+  | Wait create -> Sexp.List [Sexp.Atom "project-0"; sexp_of_t (create 0)]
 
-module LCG : sig
-  val size : int
-  val next : word -> word
-  val seed : word
-end = struct
-  let a = Word.int64 2862933555777941757L
-  let c = Word.int64 3037000493L
-  let next x = Word.(a * x + c)
-  let size = 64
-  let seed = Word.int64 42L
-end
+let create (type rng)
+    (module Rng : Iterator.Infinite.S
+      with type t = rng and type dom = int) init =
+  let state = States.Key.create
+      ~default:init ~name:"rng-state" sexp_of_opaque in
+  Gen {state; next=Rng.next; value=Rng.value; min=Rng.min; max=Rng.max}
+
+let unfold (type gen)
+    ?(min=Int.min_value)
+    ?(max=Int.max_value)
+    ?(seed=0)
+    ~f init  =
+  let module Gen = struct
+    type t = gen * int
+    type dom = int
+    let min = min
+    let max = max
+    let next = f
+    let value = snd
+  end in
+  create (module Gen) (init,seed)
 
 let static value = Static value
-let custom ~min ~max width next = Custom {
-    next;
-    descr = {min; max; width}
-  }
 
-let random ?min ?max ?(seed=LCG.seed) width = Random {
-    ident = 0;
-    seed;
-    descr = {
-      min = Option.value min ~default:Word.zero;
-      max = Option.value max ~default:Bitvec.(ones mod modulus width);
-      width;
-    }
-  }
 
-type outcome = {
-  state : word;
-  value : word;
-}
+module Random = struct
+  open Bap_primus_random
 
-let random_word ~state ~width =
-  assert (width > 0);
-  let rec loop left state =
-    let state = LCG.next state in
-    let width = min LCG.size left in
-    let value = Bitvec.extract ~hi:(width-1) ~lo:0 state in
-    if left = width then {value; state}
-    else
-      let next = loop (left - width) state in {
-        value = Bitvec.append width (left - width) value next.value;
-        state
-      } in
-  loop width (Bitvec.extract ~hi:(LCG.size-1) ~lo:0 state)
+  let lcg ?(min=LCG.min) ?(max=LCG.max) seed =
+    let lcg = LCG.create seed in
+    unfold ~min ~max ~f:(fun (lcg,value) ->
+        let x = LCG.value lcg in
+        (LCG.next lcg, min + x mod (max-min+1))) lcg
 
-let rec next = function
-  | Static word -> Machine.return word
-  | Custom {next} -> next
-  | Random {seed; ident; descr={width; min=x; max=y}} ->
-    Machine.Local.get generators >>= fun {states} ->
-    let state = if ident = 0
-      then seed
-      else Map.find_exn states ident in
-    let {value; state} = random_word ~state ~width in
-    let m = Bitvec.modulus width in
-    let range = Bitvec.(succ ((y - x) mod m) mod m) in
-    let value = Bitvec.(((x + value) mod m % range) mod m) in
-    let ident = if ident <> 0 then ident
-      else match Map.max_elt states with
-        | None -> 1
-        | Some (k,_) -> k+1 in
-    let states = Map.set states ~key:ident ~data:state in
-    Machine.Local.put generators {states} >>| fun () ->
-    value
+  let byte seed = lcg ~min:0 ~max:255 seed
+
+  module Seeded = struct
+    let create make = Wait make
+    let lcg ?min ?max () = Wait (fun seed -> lcg ?min ?max seed)
+    let byte = Wait byte
+  end
+end
+
+module Make(Machine : Machine) = struct
+  open Machine.Syntax
+  let rec next = function
+    | Gen {state; next; value} ->
+      Machine.Local.get generators >>= fun states ->
+      let gen = States.find states state in
+      let states = States.set states state (next gen) in
+      Machine.Local.put generators states >>| fun () ->
+      value gen
+    | Wait create ->
+      Machine.current () >>= fun id ->
+      next (create (Machine.Id.hash id))
+    | Static n -> Machine.return n
+
+  let word gen width =
+    let word = Word.of_int ~width:8 in
+    assert (width > 0);
+    let rec loop x =
+      if Word.bitwidth x >= width
+      then Machine.return (Word.extract_exn ~hi:(width-1) x)
+      else next gen >>= fun y -> loop (Word.concat x (word y)) in
+    next gen >>| word >>= loop
+end

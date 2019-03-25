@@ -1,5 +1,5 @@
 open Core_kernel
-open Bap_knowledge
+open Bap.Std
 
 module Dict = Univ_map
 module Key = Dict.Key
@@ -8,7 +8,7 @@ type uuid = (void,void,void) format
 
 type 'a t = {
   key : 'a Key.t;
-  init : 'a knowledge;
+  init : project -> 'a;
   uuid : string;
 }
 
@@ -44,9 +44,9 @@ module Bag = struct
     match Map.find t.uids state.uuid with
     | None -> ()
     | Some uid when uid = Key.hash state.key -> ()
-    | Some _ ->
+    | Some other ->
       invalid_argf "State invariant is broken - \
-                    the same key witnesses different types.
+            the same key witnesses different types.
             Key %s with uuid %s was created several times.
             The key must be created only once, consider moving the
             creation function from the scope of a functor."

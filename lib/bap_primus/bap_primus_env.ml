@@ -1,43 +1,37 @@
 open Core_kernel
-open Bap_knowledge
-open Bap_core_theory
-
+open Bap.Std
 open Bap_primus_types
 open Format
 open Bap_primus_sexp
 
 module Observation = Bap_primus_observation
 module Generator = Bap_primus_generator
-module Machine = Bap_primus_machine
-module Value = Bap_primus_value
-module Seq = Sequence
 
-open Machine.Syntax
-
-type exn += Undefined_var of Var.ident
+type exn += Undefined_var of var
 
 let () = Exn.add_printer (function
     | Undefined_var v ->
-      Some (sprintf "undefined variable `%s'" (Var.Ident.to_string v))
+      Some (sprintf "undefined variable `%s'" (Var.name v))
     | _ -> None)
 
 type t = {
-  values : value Var.Ident.Map.t;
-  random : Generator.t Var.Ident.Map.t;
+  values : value Var.Map.t;
+  random : Generator.t Var.Map.t;
 }
 
 let sexp_of_values values =
   Sexp.List (Map.to_sequence values |> Seq.map ~f:(fun (v,{value}) ->
       Sexp.List [
         Sexp.Atom "set-var";
-        Sexp.Atom (Var.Ident.to_string v);
-        Sexp.Atom (Bitvec.to_string value)
+        Sexp.Atom (Var.name v);
+        Sexp.Atom (Type.to_string (Var.typ v));
+        Sexp.Atom (asprintf "%a" Word.pp_hex value)
       ]) |> Seq.to_list_rev)
 
 let sexp_of_random map =
   Sexp.List (Map.to_sequence map |> Seq.map ~f:(fun (v,gen) -> Sexp.List [
       Sexp.Atom "gen-var";
-      Sexp.Atom (Var.Ident.to_string v);
+      Sexp.Atom (Var.name v);
       Generator.sexp_of_t gen;
     ]) |> Seq.to_list_rev)
 
@@ -50,19 +44,20 @@ let sexp_of_env {values; random} = Sexp.List [
 let state = Bap_primus_machine.State.declare
     ~inspect:sexp_of_env
     ~uuid:"44b24ea4-48fa-47e8-927e-f7ba65202743"
-    ~name:"environment" @@ Knowledge.return {
-    values = Var.Ident.Map.empty;
-    random = Var.Ident.Map.empty;
-  }
+    ~name:"environment" (fun _ -> {
+          values = Var.Map.empty;
+          random = Var.Map.empty;
+        })
 
 let inspect_environment {values;random} =
   let keys =
     Set.union
-      (Var.Ident.Set.of_list (Map.keys values))
-      (Var.Ident.Set.of_list (Map.keys random)) in
+      (Var.Set.of_list (Map.keys values))
+      (Var.Set.of_list (Map.keys random)) in
   let sexp_of_var sexp_of_value var value = Sexp.(List [
-      Atom (Var.Ident.to_string var);
+      Atom (Var.name var);
       sexp_of_value value;
+      Atom (Type.to_string (Var.typ var))
     ]) in
   let sexp_of_policy = Generator.sexp_of_t in
   let bindings =
@@ -76,33 +71,43 @@ let inspect_environment {values;random} =
 
 
 
+module Make(Machine : Machine) = struct
+  open Machine.Syntax
 
-let add var policy =
-  Machine.Local.update state ~f:(fun s -> {
-        s with random = Map.set s.random ~key:var ~data:policy
-      })
+  module Generator = Bap_primus_generator.Make(Machine)
+  module Value = Bap_primus_value.Make(Machine)
 
-let set var x =
-  Machine.Local.update state ~f:(fun s -> {
-        s with values = Map.set s.values ~key:var ~data:x
-      })
+  let add var policy =
+    Machine.Local.update state ~f:(fun s -> {
+          s with random = Map.set s.random ~key:var ~data:policy
+        })
 
-let null = Value.zero
+  let set var x =
+    Machine.Local.update state ~f:(fun s -> {
+          s with values = Map.set s.values ~key:var ~data:x
+        })
 
-let get var =
-  Machine.Local.get state >>= fun t ->
-  match Map.find t.values var with
-  | Some res -> Machine.return res
-  | None -> match Map.find t.random var with
-    | None -> Machine.raise (Undefined_var var)
-    | Some gen -> Generator.next gen >>= Value.word
+  let null = Machine.get () >>| Project.arch >>| Arch.addr_size >>= fun s ->
+    Value.zero (Size.in_bits s)
 
-let has var =
-  Machine.Local.get state >>| fun t ->
-  Map.mem t.values var || Map.mem t.random var
+  let get var =
+    Machine.Local.get state >>= fun t ->
+    match Map.find t.values var with
+    | Some res -> Machine.return res
+    | None -> match Var.typ var with
+      | Type.Mem (_,_) -> null
+      | Type.Imm width -> match Map.find t.random var with
+        | None -> Machine.raise (Undefined_var var)
+        | Some gen -> Generator.word gen width >>= Value.of_word
 
-let keys dic = Map.to_sequence dic |> Seq.map ~f:fst
+  let has var =
+    Machine.Local.get state >>| fun t ->
+    Map.mem t.values var || Map.mem t.random var
 
-let all =
-  Machine.Local.get state >>| fun {values; random} ->
-  Seq.append (keys values) (keys random)
+  let keys dic = Map.to_sequence dic |> Seq.map ~f:fst
+
+  let all =
+    Machine.Local.get state >>| fun {values; random} ->
+    Seq.append (keys values) (keys random)
+
+end

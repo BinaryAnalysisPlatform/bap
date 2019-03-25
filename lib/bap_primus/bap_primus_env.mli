@@ -1,14 +1,14 @@
-open Core_kernel
-open Bap_core_theory
+open Bap.Std
 open Bap_primus_types
 
 module Generator = Bap_primus_generator
-module Machine = Bap_primus_machine
 
-type exn += Undefined_var of Var.ident
+type exn += Undefined_var of var
 
-val get : Var.ident -> value Machine.t
-val set : Var.ident -> value -> unit Machine.t
-val add : Var.ident -> Generator.t -> unit Machine.t
-val has : Var.ident -> bool Machine.t
-val all : Var.ident Sequence.t Machine.t
+module Make(Machine : Machine) : sig
+  val get : var -> value Machine.t
+  val set : var -> value -> unit Machine.t
+  val add : var -> Generator.t -> unit Machine.t
+  val has : var -> bool Machine.t
+  val all : var seq Machine.t
+end

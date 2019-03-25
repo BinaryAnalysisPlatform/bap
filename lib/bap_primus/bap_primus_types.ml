@@ -1,21 +1,14 @@
 open Core_kernel
+open Bap.Std
 open Monads.Std
 
-open Bap_knowledge
-open Bap_core_theory
+open Bap_primus_generator_types
 
 module Exn = Bap_primus_exn
+module Pos = Bap_primus_pos
 
-module Word = struct
-  include Bitvec_order
-  include Bitvec_binprot.Functions
-  include Bitvec_sexp.Functions
-end
-type word = Word.t [@@deriving bin_io, compare, sexp]
-type addr = Word.t [@@deriving bin_io, compare, sexp]
-
-type knowledge = state
 type exn = Exn.t = ..
+type pos = Pos.t [@@deriving sexp_of]
 type 'a observation = 'a Bap_primus_observation.t
 type provider = Bap_primus_observation.provider
 type 'a statement = 'a Bap_primus_observation.statement
@@ -23,6 +16,9 @@ type 'a state = 'a Bap_primus_state.t
 type exit_status =
   | Normal
   | Exn of exn
+
+type 'a effect =
+  project -> string array -> string array -> 'a
 
 module type State = sig
   type 'a m
@@ -40,26 +36,9 @@ type value = {
 
 type id = Monad.State.Multi.id
 
-
-type 'a service = {
-  init : 'a;
-  name : string;
-  desc : string;
-}
-
 module type Machine = sig
   type 'a t
   type 'a m
-
-  val collect : 'a content -> label -> 'a t
-  val provide : 'a content -> label -> 'a -> unit t
-  val conflict : conflict -> 'a t
-  val knowledge : 'a Knowledge.t -> 'a t
-
-  val raise : exn -> 'a t
-  val catch : 'a t -> (exn -> 'a t) -> 'a t
-
-  val die : id -> unit t
 
   module Observation : sig
     val observe : 'a observation -> ('a -> unit t) -> unit t
@@ -74,16 +53,27 @@ module type Machine = sig
 
   include Monad.State.Multi.S with type 'a t := 'a t
                                and type 'a m := 'a m
+                               and type env := project
                                and type id := id
                                and module Syntax := Syntax
-                               and type 'a e =
-                                     unit t service list ->
-                                     knowledge ->
-                                     (exit_status * knowledge, conflict) result
-
+                               and type 'a e = (exit_status * project) m effect
   module Local  : State with type 'a m := 'a t
                          and type 'a t := 'a state
   module Global : State with type 'a m := 'a t
                          and type 'a t := 'a state
 
+  val raise : exn -> 'a t
+  val catch : 'a t -> (exn -> 'a t) -> 'a t
+
+  val project : project t
+  val program : program term t
+  val arch : arch t
+  val args : string array t
+  val envp : string array t
 end
+
+module type Component = functor (Machine : Machine) -> sig
+  val init : unit -> unit Machine.t
+end
+
+type component = (module Component)

@@ -1,17 +1,17 @@
+open Core_kernel
+open Regular.Std
+open Bap.Std
 open Bap_strings.Std
 
 open Bap_primus_types
-module Machine = Bap_primus_machine
 
 type id [@@deriving bin_io, compare, sexp]
-module Id : Base.Comparable.S with type t = id
+module Id : Regular.S with type t = id
 
 type t = value [@@deriving bin_io, compare, sexp]
 
-val to_string : t -> string
-val of_string : string -> t
-val pp : Format.formatter -> t -> unit
 val to_word : t -> word
+val id : t -> id
 
 module Index : sig
   val key_width : int
@@ -19,63 +19,71 @@ module Index : sig
 end
 
 
-type 'a m = Bitvec.modulus -> 'a Machine.t
+module Make(Machine : Machine) : sig
+  type t = value
+  type 'a m = 'a Machine.t
+  val id : t -> id
+  val to_word : t -> word
+  val of_word : word -> t m
+  val of_string : string -> t m
+  val of_bool : bool -> t m
+  val of_int : width:int -> int -> t m
+  val of_int32 : ?width:int -> int32 -> t m
+  val of_int64 : ?width:int -> int64 -> t m
+  val b0 : t m
+  val b1 : t m
+  val one : int -> t m
+  val zero : int -> t m
+  val signed : t -> t m
+  val is_zero : t -> bool
+  val is_one : t -> bool
+  val is_positive : t -> bool
+  val is_negative : t -> bool
+  val is_non_positive : t -> bool
+  val is_non_negative : t -> bool
+  val bitwidth : t -> int
+  val extract : ?hi:int -> ?lo:int -> t -> t m
+  val concat : t -> t -> t m
+  val succ : t -> t m
+  val pred : t -> t m
+  val nsucc : t -> int -> t m
+  val npred : t -> int -> t m
+  val abs : t -> t m
+  val neg : t -> t m
+  val add : t -> t -> t m
+  val sub : t -> t -> t m
+  val mul : t -> t -> t m
+  val div : t -> t -> t m
+  val modulo : t -> t -> t m
+  val lnot : t -> t m
+  val logand : t -> t -> t m
+  val logor : t -> t -> t m
+  val logxor : t -> t -> t m
+  val lshift : t -> t -> t m
+  val rshift : t -> t -> t m
+  val arshift : t -> t -> t m
 
-external (mod) : 'a m -> Bitvec.modulus -> 'a Machine.t = "%apply"
+  module Syntax : sig
+    val ( ~-) : t -> t m
+    val ( + ) : t -> t -> t m
+    val ( - ) : t -> t -> t m
+    val ( * ) : t -> t -> t m
+    val ( / ) : t -> t -> t m
+    val (mod) : t -> t -> t m
+    val (lor) : t -> t -> t m
+    val (lsl) : t -> t -> t m
+    val (lsr) : t -> t -> t m
+    val (asr) : t -> t -> t m
+    val (lxor) : t -> t -> t m
+    val (land) : t -> t -> t m
+  end
 
-val id : t -> id
-val word : word -> t Machine.t
-val string : string -> t Machine.t
-val bool : bool -> t Machine.t
-val one : t Machine.t
-val zero : t Machine.t
-val int : int -> t m
-val int32 : int32 -> t m
-val int64 : int64 -> t m
-val extract : hi:int -> lo:int -> t -> t Machine.t
-val append : int -> int -> t -> t -> t Machine.t
-val succ : t -> t m
-val pred : t -> t m
-val nsucc : t -> int -> t m
-val npred : t -> int -> t m
-val abs : t -> t m
-val neg : t -> t m
-val add : t -> t -> t m
-val sub : t -> t -> t m
-val mul : t -> t -> t m
-val div : t -> t -> t m
-val sdiv : t -> t -> t m
-val rem : t -> t -> t m
-val srem : t -> t -> t m
-val smod : t -> t -> t m
-val lnot : t -> t m
-val logand : t -> t -> t m
-val logor : t -> t -> t m
-val logxor : t -> t -> t m
-val lshift : t -> t -> t m
-val rshift : t -> t -> t m
-val arshift : t -> t -> t m
+  module Symbol : sig
+    val to_value : string -> t m
+    val of_value : t -> string m
+  end
 
-module Syntax : sig
-  val ( ~-) : t -> t m
-  val ( + ) : t -> t -> t m
-  val ( - ) : t -> t -> t m
-  val ( * ) : t -> t -> t m
-  val ( / ) : t -> t -> t m
-  val ( % ) : t -> t -> t m
-  val ( %$ ) : t -> t -> t m
-  val ( %^ ) : t -> t -> t m
-  val (lor) : t -> t -> t m
-  val (lsl) : t -> t -> t m
-  val (lsr) : t -> t -> t m
-  val (asr) : t -> t -> t m
-  val (lxor) : t -> t -> t m
-  val (land) : t -> t -> t m
+  include Regular.S with type t := t
 end
 
-module Symbol : sig
-  val to_value : string -> t Machine.t
-  val of_value : t -> string Machine.t
-end
-
-include Base.Comparable.S with type t := t
+include Regular.S with type t := t
