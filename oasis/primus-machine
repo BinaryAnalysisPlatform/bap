@@ -1,0 +1,13 @@
+Flag primus_machine
+  Description: Build Primus Machine monad
+  Default: false
+
+Library bap_primus_machine
+  Build$: flag(everything) || flag(primus_machine)
+  XMETADescription: provides Primus Machine monad
+  XMETAExtraLines:  tags="primus"
+  Path: lib/bap_primus_machine
+  FindlibName: bap-primus-machine
+  CompiledObject: best
+  BuildDepends: bap-knowledge, core_kernel
+  Modules: Bap_primus_machine
