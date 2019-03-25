@@ -82,7 +82,7 @@ let extract_program subs secs proj =
 let print_bir subs secs sema ppf proj =
   let pp = match sema with
     | None -> Program.pp
-    | Some cs -> Program.pp_domains cs in
+    | Some cs -> Program.pp_slots cs in
   Text_tags.with_mode ppf "attr" ~f:(fun () ->
       pp ppf (extract_program subs secs proj))
 
@@ -241,34 +241,34 @@ let setup_tabs ppf =
   pp_print_as ppf 50 "";
   pp_set_tab ppf () [@ocaml.warning "-3"]
 
-let print_disasm pp_insn subs secs ppf proj =
-  let memory = Project.memory proj in
-  let syms = Project.symbols proj in
-  pp_open_tbox ppf () [@ocaml.warning "-3"];
-  setup_tabs ppf [@ocaml.warning "-3"];
-  Memmap.filter_map memory ~f:(Value.get Image.section) |>
-  Memmap.to_sequence |> Seq.iter ~f:(fun (mem,sec) ->
-      Symtab.intersecting syms mem |>
-      List.filter ~f:(fun (name,_,_) ->
-          should_print subs name) |> function
-      | [] -> ()
-      | _ when not(should_print secs sec) -> ()
-      | fns ->
-        fprintf ppf "@\nDisassembly of section %s@\n" sec;
-        List.iter fns ~f:(fun (name,entry,cfg) ->
-            fprintf ppf "@\n%a: <%s>@\n" pp_addr (Block.addr entry) name;
-            Graphlib.reverse_postorder_traverse (module Graphs.Cfg)
-              ~start:entry cfg |> Seq.iter ~f:(fun blk ->
-                  let mem = Block.memory blk in
-                  fprintf ppf "%a:@\n" pp_addr (Memory.min_addr mem);
-                  Block.insns blk |> List.iter ~f:(pp_insn ppf))));
-  pp_close_tbox ppf () [@ocaml.warning "-3"]
+    let print_disasm pp_insn subs secs ppf proj =
+      let memory = Project.memory proj in
+      let syms = Project.symbols proj in
+      pp_open_tbox ppf () [@ocaml.warning "-3"];
+      setup_tabs ppf [@ocaml.warning "-3"];
+      Memmap.filter_map memory ~f:(Value.get Image.section) |>
+      Memmap.to_sequence |> Seq.iter ~f:(fun (mem,sec) ->
+          Symtab.intersecting syms mem |>
+          List.filter ~f:(fun (name,_,_) ->
+              should_print subs name) |> function
+          | [] -> ()
+          | _ when not(should_print secs sec) -> ()
+          | fns ->
+            fprintf ppf "@\nDisassembly of section %s@\n" sec;
+            List.iter fns ~f:(fun (name,entry,cfg) ->
+                fprintf ppf "@\n%a: <%s>@\n" pp_addr (Block.addr entry) name;
+                Graphlib.reverse_postorder_traverse (module Graphs.Cfg)
+                  ~start:entry cfg |> Seq.iter ~f:(fun blk ->
+                      let mem = Block.memory blk in
+                      fprintf ppf "%a:@\n" pp_addr (Memory.min_addr mem);
+                      Block.insns blk |> List.iter ~f:(pp_insn ppf))));
+      pp_close_tbox ppf () [@ocaml.warning "-3"]
 
-let pp_bil fmt ppf (mem,insn) =
-  let pp_bil ppf = Bil.Io.print ~fmt ppf in
-  let addr = Memory.min_addr mem in
-  fprintf ppf "%a: %s@\n%a@\n" pp_addr addr (Insn.asm insn)
-    pp_bil (Insn.bil insn)
+        let pp_bil fmt ppf (mem,insn) =
+          let pp_bil ppf = Bil.Io.print ~fmt ppf in
+          let addr = Memory.min_addr mem in
+          fprintf ppf "%a: %s@\n%a@\n" pp_addr addr (Insn.asm insn)
+            pp_bil (Insn.bil insn)
 
 let pp_insn fmt ppf (mem,insn) =
   Memory.pp ppf mem;
