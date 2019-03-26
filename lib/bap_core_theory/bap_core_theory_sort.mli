@@ -9,10 +9,10 @@ module Sort : sig
   and param =
     | Sort of exp
     | Index of int
-  [@@deriving compare, sexp]
+  [@@deriving bin_io, compare, sexp]
 
   type 'a definition
-  type 'a t = ('a definition -> unit) Knowledge.Class.t
+  type 'a t = 'a definition Knowledge.Class.t
 
   val define : exp -> 'a -> 'a t
   val exp : 'a t -> exp

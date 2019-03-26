@@ -1,65 +1,63 @@
 open Core_kernel
 open Bap_knowledge
 
-type effects = Set.M(String).t
-type base = Effect
+type effects = Top | Set of Set.M(String).t
 type 'a spec = effects
+type +'a t = 'a spec Knowledge.Class.t
 type data = Data
 type ctrl = Ctrl
-type full = Full
-type 'a t = ('a spec -> unit) Knowledge.Class.t
-type 'a value = ('a spec -> unit) Knowledge.value knowledge
 
 let package = "core-theory"
 
-let base =
-  Knowledge.Class.abstract @@
-  Knowledge.Class.declare ~package "effect"
+let base : 'a spec Knowledge.Class.abstract Knowledge.Class.t =
+  Knowledge.Class.abstract ~package "effect"
     ~desc:"denotation of a result of effectful computation"
-    Effect
 
-let single = Set.singleton (module String)
-
-
+let single eff = Set (Set.singleton (module String) eff)
 let make name = Knowledge.Class.refine base (single name)
 
-
-let define name  _ =
+let define name =
   Knowledge.Class.refine base (single name)
 
 let data = Knowledge.Class.data
 
-let add x y =
-  Knowledge.Class.refine base @@
-  Set.union (data x) (data y)
+let both x y =
+  Knowledge.Class.refine base @@ match data x, data y with
+  | Top,_ | _,Top -> Top
+  | Set x, Set y -> Set (Set.union x y)
 
-let (+) = add
+let (&&) = both
 
-let refine name other : 'a t = make name + other
+let refine name other : 'a t = make name && other
 
-let unknown : 'a t = Knowledge.Class.refine base (Set.empty (module String))
+let top = Knowledge.Class.refine base Top
+let bot = Knowledge.Class.refine base (Set (Set.empty (module String)))
 
-let sum xs = List.reduce xs ~f:add |> function
+let union xs = List.reduce xs ~f:both |> function
   | Some x -> x
-  | None -> unknown
+  | None -> bot
 
-let join xs ys = sum xs + sum ys
+let join xs ys = union xs && union ys
 
 let order x y : Knowledge.Order.partial =
-  let x = data x and y = data y in if
-    Set.equal x y then EQ else if
-    Set.is_subset x ~of_:y then LT else if
-    Set.is_subset y ~of_:x then GT else NC
+  match data x, data y with
+  | Top,Top -> EQ
+  | Top,_ -> GT
+  | _,Top -> LT
+  | Set x, Set y ->
+    if
+      Set.equal x y then EQ else if
+      Set.is_subset x ~of_:y then LT else if
+      Set.is_subset y ~of_:x then GT else NC
 
-let rreg = define "rreg" Data
-let wreg = define "wreg" Data
-let rmem = define "rmem" Data
-let wmem = define "wmem" Data
-let barr = define "barr" Data
-let fall = define "fall" Ctrl
-let jump = define "jump" Ctrl
-let cjmp = define "cjmp" Ctrl
+let rreg = define "rreg"
+let wreg = define "wreg"
+let rmem = define "rmem"
+let wmem = define "wmem"
+let barr = define "barr"
+let fall = define "fall"
+let jump = define "jump"
+let cjmp = define "cjmp"
 
-let data = Data
-let ctrl = Ctrl
-let full = Full
+let data = make
+let ctrl = make

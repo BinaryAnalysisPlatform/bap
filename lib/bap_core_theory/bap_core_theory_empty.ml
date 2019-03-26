@@ -12,9 +12,9 @@ let sort x = x >>| Value.cls
 module Core : Core = struct
   type 'a t = 'a Knowledge.t
   let empty x = Knowledge.return @@ Value.empty x
-  let data  = Knowledge.return @@ Value.empty Effect.unknown
-  let ctrl  = Knowledge.return @@ Value.empty Effect.unknown
-  let unit  = Knowledge.return @@ Value.empty Effect.unknown
+  let data  = Knowledge.return @@ Value.empty Effect.bot
+  let ctrl  = Knowledge.return @@ Value.empty Effect.bot
+  let unit  = Knowledge.return @@ Value.empty Effect.bot
 
   let var v = empty (Var.sort v)
   let int s _ = empty s

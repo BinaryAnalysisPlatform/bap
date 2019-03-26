@@ -12,10 +12,10 @@ module Theory : sig
     and param =
       | Sort of exp
       | Index of int
-    [@@deriving compare, sexp]
+    [@@deriving bin_io, compare, sexp]
 
     type 'a definition
-    type 'a t = ('a definition -> unit) Knowledge.Class.t
+    type 'a t = 'a definition Knowledge.Class.t
 
     val define : exp -> 'a -> 'a t
     val exp : 'a t -> exp
@@ -24,25 +24,23 @@ module Theory : sig
   end
 
   module Effect : sig
-    type 'a spec
-    type data
-    type ctrl
-    type full
-    type 'a t = ('a spec -> unit) Knowledge.Class.t
+    type +'a spec
+    type data = private Data
+    type ctrl = private Ctrl
+    type +'a t = 'a spec Knowledge.Class.t
 
-    val data : data
-    val ctrl : ctrl
-    val full : full
+    val top : unit t
+    val bot : 'a t
 
-    val define : string -> 'a -> 'a t
-    val refine : string -> 'a t -> 'a t
+    val data : string -> data t
+    val ctrl : string -> ctrl t
 
-    val add : 'a t -> 'a t -> 'a t
-    val (+) : 'a t -> 'a t -> 'a t
-    val sum : 'a t list -> 'a t
-    val join : data t list -> ctrl t list -> full t
+    val both : 'a t -> 'a t -> 'a t
+    val (&&) : 'a t -> 'a t -> 'a t
+    val union : 'a t list -> 'a t
+    val join : 'a t list -> 'b t list -> unit t
 
-    val order : 'a t -> 'a t -> Knowledge.Order.partial
+    val order : 'a t -> 'b t -> Knowledge.Order.partial
 
 
     val rreg : data t
@@ -50,8 +48,6 @@ module Theory : sig
     val rmem : data t
     val wmem : data t
     val barr : data t
-
-
     val fall : ctrl t
     val jump : ctrl t
     val cjmp : ctrl t
@@ -111,8 +107,8 @@ module Theory : sig
 
   type 'a t = 'a Knowledge.value Knowledge.t
 
-  type 'a pure = ('a Sort.definition -> unit) t
-  type 'a eff = ('a Effect.spec -> unit) t
+  type 'a pure = 'a Sort.definition t
+  type 'a eff = 'a Effect.spec t
 
 
   type ('r,'s) format = ('r,'s) Float.format
@@ -145,13 +141,12 @@ module Theory : sig
 
   type data = Effect.data
   type ctrl = Effect.ctrl
-  type full = Effect.full
 
   type word = Bitvec.t
   type 'a var = 'a Var.t
 
   type link
-  type label = (link -> unit) Knowledge.Object.t
+  type label = link Knowledge.Object.t
 
 
   module type Init = sig
@@ -390,14 +385,17 @@ module Theory : sig
     end
   end
 
-
-
   module Link : sig
-    type t = link
-    val t : (t -> unit) Knowledge.cls
-    val addr : (t -> unit, Bitvec.t option) Knowledge.slot
-    val name : (t -> unit, string option) Knowledge.slot
-    val ivec : (t -> unit, int option) Knowledge.slot
+    type cls = link
+    type t = cls Knowledge.value [@@deriving bin_io, compare, sexp]
+    val cls : cls Knowledge.cls
+    val addr : (cls, Bitvec.t option) Knowledge.slot
+    val name : (cls, string option) Knowledge.slot
+    val ivec : (cls, int option) Knowledge.slot
+
+    include Knowledge.Value.S
+      with type t := t
+       and type comparator_witness = cls Knowledge.Value.ord
   end
 
   module Grammar : sig

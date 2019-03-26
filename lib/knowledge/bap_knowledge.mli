@@ -5,7 +5,7 @@ type 'a knowledge
 module Knowledge : sig
   type 'a t = 'a knowledge
 
-  type 'a cls
+  type +'a cls
   type 'a obj
   type 'a value
   type ('a,'p) slot
@@ -84,8 +84,8 @@ module Knowledge : sig
   end
 
   module Class : sig
-    type 'a t = 'a cls
-    type top = unit
+    type +'a t = 'a cls
+    type +'a abstract
     include Type_equal.Injective with type 'a t := 'a t
 
 
@@ -113,10 +113,11 @@ module Knowledge : sig
           end
         ]}
     *)
-    val declare : ?desc:string -> ?package:string -> string -> 'a ->
-      ('a -> top) cls
+    val declare : ?desc:string -> ?package:string -> string ->
+      'a -> 'a cls
 
-
+    val abstract : ?desc:string -> ?package:string -> string ->
+      'a abstract cls
 
     (** [derived name base data] derives a subclass.
 
@@ -132,62 +133,12 @@ module Knowledge : sig
           let signed : (signed -> top) cls = derived "signed-bitv" t Signed
         ]}
     *)
-    val derived : ?desc:string -> ?package:string -> string -> 'a cls -> 'b -> ('b -> 'a) cls
-
-
-    (** [abstract cls] forgets one level of class refinement.
-
-
-        The [abstract] operation drops the lowest level of refinement
-        of the class [cls] and forgets the corresponding static data
-        or construction witness. It is however still the same class,
-        with the same level of specificness, the goal is just to
-        abstract away the repesentation of the type index. Thus
-        following is always true:
-
-        - [same x (abstract x)];
-        - [order x (abstract x) = EQ]
-    *)
-    val abstract : (_ -> 'a) cls -> 'a cls
-
-
-    (** [refine cls data] refines class [cls] with [data].
-
-        This operation is dual to [abstract] but it refines the class
-        index back. Since it is essentially a down-casting operation
-        it may violate the type system rules (not of OCaml, but of the
-        Knowledge representation). The [refine] function doesn't check
-        anything, so if you have an instance of the target class a
-        safer version of dowcasting, based on the [equal] witness
-        could be used. See the {!equal} function for more information.
-
-        As well as with the [abstract] function, the [refine]
-        operation doesn't affect the identity of the class nor its
-        specificness, hence the following is always true:
-        - [same x (refine x)]
-        - [order x (refine x)]
-
-    *)
-    val refine : 'a cls -> 'b -> ('b -> 'a) cls
+    val refine : 'a abstract cls -> 'a -> 'a cls
 
 
     (** [same x y] is true if [x] and [y] are the same value,
         or share the common ancestor. *)
     val same : 'a cls -> 'b cls -> bool
-
-
-    (** [order x y] establishes the specificness of two classes.
-
-        If two classes are derived from the same class, then the class
-        with the most number of deriviations is the most specific. In
-        other words, the longer the deriviation chain of the given
-        class the more specific it is.
-
-        Note, [abstract] and [refine] operations do not affect the
-        class specificness, only the class parameter.
-    *)
-    val order : 'a cls -> 'b cls -> Order.partial
-
 
     (** [equal x y] constructs a type witness of classes equality.
 
@@ -240,8 +191,7 @@ module Knowledge : sig
     val package : 'a cls -> string
     val fullname : 'a cls -> string
 
-    val data : ('b -> 'a) cls -> 'b
-
+    val data : 'a cls -> 'a
   end
 
   module Object : sig

@@ -11,8 +11,8 @@ type 'a effect = 'a Effect.t
 
 type 'a t = 'a Knowledge.value Knowledge.t
 
-type 'a pure = ('a Sort.definition -> unit) t
-type 'a eff = ('a Effect.spec -> unit) t
+type 'a pure = 'a Sort.definition t
+type 'a eff = 'a Effect.spec t
 
 type bool = Bool.t pure
 type 'a bitv = 'a Bitv.t pure
@@ -22,14 +22,13 @@ type rmode = Rmode.t pure
 
 type data = Effect.data
 type ctrl = Effect.ctrl
-type full = Effect.full
 
 type ('r,'s) format = ('r,'s) Float.format
 
 type word = Bitvec.t
 type 'a var = 'a Var.t
-type link = Link.t
-type label = (link -> unit) Knowledge.Object.t
+type link = Link.cls
+type label = link Knowledge.Object.t
 
 
 
@@ -211,7 +210,6 @@ module type Trans = sig
   val acosh    : rmode -> 'f float -> 'f float
   val atanh    : rmode -> 'f float -> 'f float
 end
-
 
 module type Core = sig
   include Basic

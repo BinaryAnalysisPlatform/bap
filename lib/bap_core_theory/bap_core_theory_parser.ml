@@ -81,11 +81,9 @@ module Make(S : Core) = struct
     | None -> Var.Ident.of_string v
     | Some r -> r
 
-  let pass = perform Effect.unknown
-  let skip = perform Effect.unknown
-  let newlabel = Knowledge.Object.create Link.t
-
-
+  let pass = perform Effect.bot
+  let skip = perform Effect.bot
+  let newlabel = Knowledge.Object.create Link.cls
 
   let rec expw : type s b e r.
     context ->
@@ -484,13 +482,13 @@ module Make(S : Core) = struct
     context ->
     (e,r,s) parser -> string -> int -> e -> data eff =
     fun ctxt self v s x ->
-      set (Var.define (bits s) v) (expw ctxt self x)
+    set (Var.define (bits s) v) (expw ctxt self x)
 
   and set_mem : type e s r.
     context ->
     (e,r,s) parser -> string -> int -> int -> e -> data eff =
     fun ctxt self v ks vs x ->
-      set (Var.define (Mem.define (bits ks) (bits vs)) v) (expm ctxt self x)
+    set (Var.define (Mem.define (bits ks) (bits vs)) v) (expm ctxt self x)
 
   and set_ieee754 : type e s r.
     context ->

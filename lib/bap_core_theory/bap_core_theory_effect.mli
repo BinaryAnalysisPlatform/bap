@@ -1,26 +1,22 @@
 open Bap_knowledge
 
-type 'a spec
-type data
-type ctrl
-type full
-type 'a t = ('a spec -> unit) Knowledge.Class.t
+type +'a spec
+type data = private Data
+type ctrl = private Ctrl
+type +'a t = 'a spec Knowledge.Class.t
 
-val data : data
-val ctrl : ctrl
-val full : full
 
-val define : string -> 'a -> 'a t
-val refine : string -> 'a t -> 'a t
+val data : string -> data t
+val ctrl : string -> ctrl t
+val top : unit t
+val bot : 'a t
 
-val unknown : 'a t
+val both : 'a t -> 'a t -> 'a t
+val (&&) : 'a t -> 'a t -> 'a t
+val union : 'a t list -> 'a t
+val join : 'a t list -> 'b t list -> unit t
 
-val add : 'a t -> 'a t -> 'a t
-val (+) : 'a t -> 'a t -> 'a t
-val sum : 'a t list -> 'a t
-val join : data t list -> ctrl t list -> full t
-
-val order : 'a t -> 'a t -> Knowledge.Order.partial
+val order : 'a t -> 'b t -> Knowledge.Order.partial
 
 
 val rreg : data t

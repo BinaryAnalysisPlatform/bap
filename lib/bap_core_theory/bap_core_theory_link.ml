@@ -6,7 +6,7 @@ open Bap_knowledge
 
 let package = "core-theory"
 
-type t = Link
+type cls = Link
 
 let link = Knowledge.Class.declare ~package "link" Link
     ~desc:"a code reference"
@@ -23,4 +23,6 @@ let int = Knowledge.Domain.optional "string"
 let addr = Knowledge.Class.property ~package link "link-addr" word
 let name = Knowledge.Class.property ~package link "link-name" string
 let ivec = Knowledge.Class.property ~package link "link-ivec" int
-let t = link
+let cls = link
+
+include (val Knowledge.Value.derive cls)

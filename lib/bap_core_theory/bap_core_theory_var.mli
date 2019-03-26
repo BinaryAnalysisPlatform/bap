@@ -6,7 +6,7 @@ type 'a t
 type ord
 type ident [@@deriving bin_io, compare, sexp]
 
-type 'a pure = ('a Sort.definition -> unit) Knowledge.value knowledge
+type 'a pure = 'a Sort.definition Knowledge.value knowledge
 
 val define : 'a sort -> string -> 'a t
 val create : 'a sort -> ident -> 'a t

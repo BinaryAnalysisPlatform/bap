@@ -82,7 +82,7 @@ let fresh s =
   Knowledge.Object.create mut >>| fun v ->
   create s (Var {num = Knowledge.Object.id v; mut=true})
 
-type 'a pure = ('a Sort.definition -> unit) Knowledge.value knowledge
+type 'a pure = 'a Sort.definition Knowledge.value knowledge
 
 (* we're ensuring that a variable is immutable by constraining
    the scope computation to be pure. *)

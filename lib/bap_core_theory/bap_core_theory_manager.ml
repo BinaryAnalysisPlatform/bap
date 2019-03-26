@@ -154,23 +154,23 @@ module Theory : Core = struct
 
   let perform s = eff0 s @@ fun (module P) -> P.perform s
 
-  let set v x = eff1 x (fun _ -> !!Effect.unknown) @@ fun (module P) ->
+  let set v x = eff1 x (fun _ -> !!Effect.bot) @@ fun (module P) ->
     P.set v
 
   let let_ v x b = val2 x b (fun _ x -> sort x) @@ fun (module P) ->
     P.let_ v
 
-  let jmp d = eff1 d (fun _ -> !!Effect.unknown) @@ fun (module P) ->
+  let jmp d = eff1 d (fun _ -> !!Effect.bot) @@ fun (module P) ->
     P.jmp
 
-  let goto d = eff0 Effect.unknown @@ fun (module P) -> P.goto d
+  let goto d = eff0 Effect.bot @@ fun (module P) -> P.goto d
 
   let seq x y = eff2 x y (fun x _ -> effect x) @@ fun (module P) ->
     P.seq
-  let blk l x y = eff2 x y (fun _ _ -> !!Effect.unknown) @@ fun (module P) ->
+  let blk l x y = eff2 x y (fun _ _ -> !!Effect.bot) @@ fun (module P) ->
     P.blk l
 
-  let repeat b x = eff2 b x (fun _ _ -> !!Effect.unknown) @@ fun (module P) ->
+  let repeat b x = eff2 b x (fun _ _ -> !!Effect.bot) @@ fun (module P) ->
     P.repeat
 
   let branch b x y = eff3 b x y (fun _ x _ -> effect x) @@ fun (module P) ->

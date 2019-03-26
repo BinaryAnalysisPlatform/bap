@@ -1,7 +1,14 @@
 open Bap_knowledge
 
-type t
-val t : (t -> unit) Knowledge.cls
-val addr : (t -> unit, Bitvec.t option) Knowledge.slot
-val name : (t -> unit, string option) Knowledge.slot
-val ivec : (t -> unit, int option) Knowledge.slot
+type cls
+
+type t = cls Knowledge.value [@@deriving bin_io, compare, sexp]
+
+val cls : cls Knowledge.cls
+val addr : (cls, Bitvec.t option) Knowledge.slot
+val name : (cls, string option) Knowledge.slot
+val ivec : (cls, int option) Knowledge.slot
+
+include Knowledge.Value.S
+  with type t := t
+   and type comparator_witness = cls Knowledge.Value.ord

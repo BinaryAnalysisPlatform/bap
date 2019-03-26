@@ -18,8 +18,8 @@ module Theory = struct
 
   type 'a t = 'a Knowledge.value Knowledge.t
 
-  type 'a pure = ('a Sort.definition -> unit) t
-  type 'a eff = ('a Effect.spec -> unit) t
+  type 'a pure = 'a Sort.definition t
+  type 'a eff = 'a Effect.spec t
 
   type bool = Bool.t pure
   type 'a bitv = 'a Bitv.t pure
@@ -29,14 +29,13 @@ module Theory = struct
 
   type data = Effect.data
   type ctrl = Effect.ctrl
-  type full = Effect.full
 
   type ('r,'s) format = ('r,'s) Float.format
 
   type 'a var = 'a Var.t
   type word = Bitvec.t
-  type link = Link.t
-  type label = (link -> unit) Knowledge.Object.t
+  type link = Link.cls
+  type label = link Knowledge.Object.t
   module type Init = Bap_core_theory_definition.Init
   module type Bool = Bap_core_theory_definition.Bool
   module type Bitv = Bap_core_theory_definition.Bitv

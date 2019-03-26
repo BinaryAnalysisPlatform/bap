@@ -382,48 +382,36 @@ let split_name package s = match find_separator s with
     }
 
 module Class = struct
-  type top = unit
+  type top = Nothing.t
+  type +'a abstract = Abstract : 'a abstract
 
-  type 'a data =
-    | Top : top data
-    | Derive : 'a data * 'b -> ('b -> 'a) data
-
-
-  type 'a t = {
+  type +'a t = {
     id : Cid.t;
     name : fullname;
-    data : 'a data;
-    level : int;
+    data : 'a;
   }
 
   let classes = ref Cid.zero
 
-  let newclass ?desc ?package name data level =
+  let newclass ?desc ?package name data =
     Cid.incr classes;
     {
       id = !classes;
       name = Registry.add_class ?desc ?package name;
       data;
-      level;
     }
 
   let declare
-    : ?desc:string -> ?package:string -> string -> 'a -> ('a -> top) t =
+    : ?desc:string -> ?package:string -> string -> 'a -> 'a t =
     fun ?desc ?package name data ->
-    newclass ?desc ?package name (Derive (Top,data)) 0
+    newclass ?desc ?package name data
 
-  let derived
-    : ?desc:string -> ?package:string -> string -> 'a t -> 'b -> ('b -> 'a) t =
-    fun ?desc ?package name parent data ->
-    newclass ?desc ?package name (Derive (parent.data,data))
-      (parent.level + 1)
+  let abstract
+    : ?desc:string -> ?package:string -> string -> 'a t =
+    fun ?desc ?package name ->
+    newclass ?desc ?package name Abstract
 
-  let abstract : type a b. (b -> a) t -> a t = fun child -> match child with
-    | {data=Derive (base,_); id; name; level} -> {id; name; data=base; level}
-
-  let refine : type a b. a t -> b -> (b -> a) t =
-    fun {id; name; data; level} data' ->
-    {id; name; data=Derive (data,data'); level}
+  let refine {id; name; data = Abstract} data = {id; name; data}
 
   let same x y = Cid.equal x.id y.id
 
@@ -439,16 +427,9 @@ module Class = struct
         (string_of_fname y.name)
         ()
 
-  let order x y : Order.partial =
-    if same x y then match Int.compare x.level y.level with
-      | 0 -> EQ
-      | 1 -> GT
-      | _ -> LT
-    else NC
 
 
-  let data : type a b. (b -> a) t -> b = fun {data=Derive (_,data)} -> data
-
+  let data = fun {data} -> data
   let name {name={name}} = name
   let package {name={package}} = package
   let fullname {name} = string_of_fname name

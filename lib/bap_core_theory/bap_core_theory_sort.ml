@@ -18,7 +18,7 @@ module Sort
 
     type 'a definition
 
-    type 'a t = ('a definition -> unit) KB.cls
+    type 'a t = 'a definition KB.cls
 
     val define : exp -> 'a -> 'a t
 
@@ -35,19 +35,15 @@ module Sort
     | Index of int
   [@@deriving bin_io, compare, sexp]
 
-  type top = Top
   type 'a definition = exp
-  type 'a t = ('a definition -> unit) Knowledge.cls
+  type 'a t = 'a definition Knowledge.cls
 
   let base =
-    KB.Class.abstract @@
-    KB.Class.declare ~package "value"
+    KB.Class.abstract ~package "value"
       ~desc:"result of a computation"
-      Top
 
-  let define exp _witness : 'a t =
+  let define exp _ : 'a t =
     KB.Class.refine base exp
-
 
   let rec pp_exp ppf = function
     | Bool -> fprintf ppf "Bool"
