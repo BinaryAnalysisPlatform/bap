@@ -601,7 +601,7 @@ end
 
 module Knowledge = struct
 
-  type 'a value = {
+  type +'a value = {
     cls  : 'a Class.t;
     data : Record.t;
     time : Int63.t;
@@ -681,7 +681,7 @@ module Knowledge = struct
       pid : pid;
     }
 
-    type ('a,'p) t = {
+    type (+'a,'p) t = {
       cls : 'a Class.t;
       dom : 'p Domain.t;
       key : 'p Type_equal.Id.t;
@@ -711,10 +711,10 @@ module Knowledge = struct
       slot
   end
 
-  type ('a,'p) slot = ('a,'p) Slot.t
+  type (+'a,'p) slot = ('a,'p) Slot.t
 
   module Value = struct
-    type 'a t = 'a value
+    type +'a t = 'a value
 
     (* we could use an extension variant or create a new OCaml object
        instead of incrementing a second, but they are less reliable

@@ -6,9 +6,9 @@ module Knowledge : sig
   type 'a t = 'a knowledge
 
   type +'a cls
-  type 'a obj
-  type 'a value
-  type ('a,'p) slot
+  type +'a obj
+  type +'a value
+  type (+'a,'p) slot
   type 'p domain
   type 'a persistent
   type state
