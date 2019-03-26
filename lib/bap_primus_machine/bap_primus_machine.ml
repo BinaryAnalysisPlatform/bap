@@ -157,7 +157,7 @@ module Primus = struct
   let liftk x = CM.lift (C.lift (SM.lift x))
   (* lifts state monad to the outer monad *)
   let lifts x = CM.lift (C.lift x)
-  let decide = liftk
+  let fact = liftk
 
   let with_global_context (f : (unit -> 'a t)) =
     lifts (SM.current ())       >>= fun id ->

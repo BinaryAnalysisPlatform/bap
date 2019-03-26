@@ -62,18 +62,17 @@ module Primus : sig
   val conflict : conflict -> 'a t
 
 
-  (** [decide fact] make the fact determined in the current machine.
+  (** [fact x] make the fact [x] determined in the current machine.
 
       This is the [pure] function w.r.t. to the non-determinism, also
       known as lift, since it lifts the inner knowledge monad into the
       outer machine monad.
   *)
-  val decide : 'a knowledge -> 'a t
+  val fact : 'a knowledge -> 'a t
 
 
   (** [run comp project] runs the Primus system. *)
   val run : unit t -> project obj -> unit knowledge
-
 
 
   (** Computation State *)
