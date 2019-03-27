@@ -8,8 +8,8 @@ include Self()
 module BW = Bap_byteweight.Bytes
 module Sigs = Bap_byteweight_signatures
 
-let create_finder path length threshold arch  =
-  match Sigs.load ?path ~mode:"bytes" arch with
+let create_finder path length threshold arch comp =
+  match Sigs.load ?comp ?path ~mode:"bytes" arch with
   | Error `No_signatures ->
     info "signature database is not available";
     info "advice - use `bap-byteweight` to install signatures";
@@ -35,8 +35,8 @@ let create_finder path length threshold arch  =
 let sigs_exists path =
   Sys.file_exists (Option.value ~default:Sigs.default_path path)
 
-let main path length threshold =
-  let finder arch = create_finder path length threshold arch in
+let main path length threshold comp =
+  let finder arch = create_finder path length threshold arch comp in
   let find finder mem =
     Memmap.to_sequence mem |>
     Seq.fold ~init:Addr.Set.empty ~f:(fun roots (mem,v) ->
@@ -89,4 +89,8 @@ let () =
     let doc = "Path to the signature file. No needed by default, \
                usually it is enough to run `bap-byteweight update'." in
     Config.(param (some non_dir_file) "sigs" ~doc) in
-  Config.when_ready (fun {Config.get=(!)} -> main !sigsfile !length !threshold)
+  let compiler : string option Config.param =
+    let doc = "Assume the input file is compiled by $(docv)" in
+    Config.(param (some string) "comp" ~doc ~docv:"COMPILER") in
+  Config.when_ready (fun {Config.get=(!)} ->
+      main !sigsfile !length !threshold !compiler)
