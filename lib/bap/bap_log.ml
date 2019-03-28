@@ -67,10 +67,10 @@ let unlock lock =
 let open_log_channel user_dir =
   try
     let log_folder = log_folder user_dir in
-    mkdir log_folder;
     let file = log_folder / "log" in
     let lock = lock log_folder in
     protect ~f:(fun () ->
+        mkdir log_folder;
         if Sys.file_exists file
         then rotate max_logs file)
       ~finally:(fun () -> unlock lock);
