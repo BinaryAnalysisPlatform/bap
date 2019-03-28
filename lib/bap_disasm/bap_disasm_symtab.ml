@@ -12,6 +12,7 @@ module Insn = Bap_disasm_insn
 
 
 type block = Block.t [@@deriving compare, sexp_of]
+type edge  = Block.edge  [@@deriving compare, sexp_of]
 type cfg = Cfg.t [@@deriving compare]
 
 
@@ -24,9 +25,6 @@ module Fn = Opaque.Make(struct
     type t = fn [@@deriving compare]
     let hash x = String.hash (fst3 x)
   end)
-
-type edge = [`Jump | `Fall]
-[@@deriving sexp_of]
 
 type t = {
   addrs : fn Addr.Map.t;

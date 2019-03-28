@@ -71,9 +71,8 @@ let is_unresolved blk cfg =
   deg = 0 ||
   (deg = 1 && is_fall (Seq.hd_exn (Cfg.Node.outputs blk cfg)))
 
-let add_call symtab addr name = function
-  | `Cond -> symtab
-  | (`Jump | `Fall) as label -> Symtab.add_call symtab addr name label
+let add_call symtab blk name label =
+  Symtab.add_call symtab blk name label
 
 let add_unresolved syms name cfg blk =
   if is_unresolved blk cfg then
