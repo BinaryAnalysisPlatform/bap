@@ -60,11 +60,11 @@ let enum_args t =
     | None, Some _ -> -1
     | Some _, None -> 1
     | Some x, Some y -> match x,y with
-       | In, _ -> -1
-       | _, In -> 1
-       | Out, Both -> -1
-       | Both, Out -> 1
-       | _ -> 0 in
+      | In, _ -> -1
+      | _, In -> 1
+      | Out, Both -> -1
+      | Both, Out -> 1
+      | _ -> 0 in
   Term.enum arg_t t |> Seq.to_list |> List.stable_sort ~compare
 
 let insert_defs prog sub =
