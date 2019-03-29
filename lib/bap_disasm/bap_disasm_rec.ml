@@ -123,9 +123,9 @@ type stage1 = {
 
 type stage2 = {
   stage1 : stage1;
-  addrs : mem Addrs.t;   (* table of blocks *)
-  succs : dests Addrs.t;
-  preds : addr list Addrs.t;
+  addrs  : mem Addrs.t;   (* table of blocks *)
+  succs  : dests Addrs.t;
+  preds  : addr list Addrs.t;
   disasm : mem -> decoded list;
 }
 
@@ -161,14 +161,14 @@ let ok_nil = function
   | Ok xs -> xs
   | Error _ -> []
 
-let is_jump s mem insn =
+let is_terminator s mem insn =
   Dis.Insn.is insn `May_affect_control_flow ||
   has_jump (ok_nil (s.lift mem insn)) ||
   Set.mem s.inits (Addr.succ (Memory.max_addr mem))
 
 let update s mem insn dests : stage1 =
   let s = { s with visited = Visited.add_insn s.visited mem } in
-  if is_jump s mem insn then
+  if is_terminator s mem insn then
     let () = update_dests s mem dests in
     let roots = List.(filter_map ~f:fst dests |> rev_append s.roots) in
     { s with roots }
