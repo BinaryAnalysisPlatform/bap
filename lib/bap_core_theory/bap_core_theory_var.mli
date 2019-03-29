@@ -6,10 +6,13 @@ type 'a t
 type ord
 type ident [@@deriving bin_io, compare, sexp]
 
-type 'a pure = 'a Sort.definition Knowledge.value knowledge
+type 'a pure = 'a Sort.exp Knowledge.value knowledge
 
 val define : 'a sort -> string -> 'a t
 val create : 'a sort -> ident -> 'a t
+
+val version : 'a t -> int
+val versioned : 'a t -> int -> 'a t
 
 val ident : 'a t -> ident
 val name : 'a t -> string

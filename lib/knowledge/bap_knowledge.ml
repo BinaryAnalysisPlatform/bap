@@ -412,6 +412,7 @@ module Class = struct
     newclass ?desc ?package name Abstract
 
   let refine {id; name; data = Abstract} data = {id; name; data}
+  let forget cls = {cls with data = Abstract}
 
   let same x y = Cid.equal x.id y.id
 

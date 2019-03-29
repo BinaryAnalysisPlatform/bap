@@ -93,31 +93,14 @@ module Knowledge : sig
         the given [name].
 
         The [data] parameter could be used to attach some static
-        information about the class instances or to serve as a witness
-        constructor, so that only the module that has the access to
-        [data] could create or refine instances of that class. In the
-        latter case, the [abstract] operation should be used to erase
-        the type of witness from the parameter, so that it couldn't be
-        obtained using the [data] operation.
-
-        {4 Example}
-
-        {[
-          module Bitv : sig
-            (** [bitv m] a class of fixed bitvectors with width [m]  *)
-            val bitv : int -> (int -> top) cls
-          end = struct
-            type bitv = Bitv
-            let t : top cls = abstract @@ declare "bitv" Bitv
-            let bitv m : (int -> top) cls = refine t m
-          end
-        ]}
+        information about the class instances.
     *)
     val declare : ?desc:string -> ?package:string -> string ->
       'a -> 'a cls
 
     val abstract : ?desc:string -> ?package:string -> string ->
       'a abstract cls
+
 
     (** [derived name base data] derives a subclass.
 
@@ -134,6 +117,9 @@ module Knowledge : sig
         ]}
     *)
     val refine : 'a abstract cls -> 'a -> 'a cls
+
+
+    val forget : 'a cls -> 'a abstract cls
 
 
     (** [same x y] is true if [x] and [y] are the same value,

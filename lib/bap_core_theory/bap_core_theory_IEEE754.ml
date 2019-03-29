@@ -1,8 +1,11 @@
 open Core_kernel
 open Bap_core_theory_sort
 
+type 'a num = 'a Sort.num
+type 'a sym = 'a Sort.sym
+type witness
 
-type ('b,'e,'t) ieee754 = IEEE754 : ('b,'e,'s) ieee754
+type ('b,'e,'t) ieee754 = ('b num -> 'e num -> 't num -> witness sym)
 type ('b,'e,'t) t = ('b,'e,'t) ieee754
 
 (* see IEEE754 3.6 *)
@@ -89,19 +92,19 @@ let binary = function
   | k -> binary k
 
 module Sort = struct
-  let format {base; k} =
-    let base = if base = 2 then "Binary" else "Decimal" in
-    let exp = Sort.(Cons ("IEEE754", [Sort (Cons (base,[]))])) in
-    Float.Format.define exp IEEE754 (Bitv.define k)
+  let format {base; w; t=x; k} = Float.Format.define
+      Sort.(int base @-> int w @-> int x @-> sym "IEEE754")
+      (Bitv.define k)
 
-  let define p = Float.define (format p)
+  let define p : (('b,'e,'t) ieee754,'s) Float.format Float.t sort = Float.define (format p)
 
   let spec e =
     let fmt = Float.format e in
     let k = Bitv.size (Float.Format.bits fmt) in
-    match Float.Format.exp fmt with
-    | Sort.Cons ("IEEE754", [Sort (Cons ("Binary", []))])  -> binary k
-    | Sort.Cons ("IEEE754", [Sort (Cons ("Decimal", []))]) -> decimal k
+    let base = Sort.(value @@ hd (Float.Format.exp fmt)) in
+    match base with
+    | 2  -> binary k
+    | 10 -> decimal k
     | _ -> assert false
 
   let exps e =
@@ -116,6 +119,7 @@ module Sort = struct
     let {k} = spec e in
     Bitv.define k
 end
+
 
 let binary = function
   | 0  -> None

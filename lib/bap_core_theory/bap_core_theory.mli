@@ -3,31 +3,44 @@ open Caml.Format
 
 open Bap_knowledge
 
+module KB = Knowledge
 
 module Theory : sig
   module Sort : sig
-    type exp =
-      | Bool
-      | Cons of string * param list
-    and param =
-      | Sort of exp
-      | Index of int
-    [@@deriving bin_io, compare, sexp]
+    type +'a exp
+    type +'a sym
+    type +'a num
 
-    type 'a definition
-    type 'a t = 'a definition Knowledge.Class.t
+    type 'a t = 'a exp KB.cls
 
-    val define : exp -> 'a -> 'a t
-    val exp : 'a t -> exp
-    val pp_exp : formatter -> exp -> unit
+    val sym : string -> 'a sym exp
+    val int : int -> 'a num exp
+    val app : 'a exp -> 'b exp -> ('a -> 'b) exp
+    val (@->) : 'a exp -> 'b exp -> ('a -> 'b) exp
+
+    val t : 'a exp KB.Class.abstract KB.Class.t
+
+    val exp : 'a t -> 'a exp
+
+    val value : 'a num exp -> int
+    val name :  'a sym exp -> string
+
+    val hd : ('a -> 'b) exp -> 'a exp
+    val tl : ('a -> 'b) exp -> 'b exp
+
     val pp : formatter -> 'a t -> unit
+
+    module Magic : sig
+      val dump : 'a t -> string
+      val load : string -> 'a t
+    end
   end
 
   module Effect : sig
     type +'a spec
     type data = private Data
     type ctrl = private Ctrl
-    type +'a t = 'a spec Knowledge.Class.t
+    type +'a t = 'a spec KB.Class.t
 
     val top : unit t
     val bot : 'a t
@@ -40,7 +53,7 @@ module Theory : sig
     val union : 'a t list -> 'a t
     val join : 'a t list -> 'b t list -> unit t
 
-    val order : 'a t -> 'b t -> Knowledge.Order.partial
+    val order : 'a t -> 'b t -> KB.Order.partial
 
 
     val rreg : data t
@@ -58,9 +71,7 @@ module Theory : sig
 
   module Bool : sig
     type t
-    val t : t Sort.t
-    val parse : Sort.exp -> t sort option
-    val cast : 'a sort -> t sort option
+    val t : t sort
   end
 
 
@@ -68,8 +79,6 @@ module Theory : sig
     type 'a t
     val define : int -> 'a t sort
     val size : 'a t sort -> int
-    val parse : Sort.exp -> 'b t sort option
-    val cast : 'a sort -> 'b t sort option
   end
 
   module Mem : sig
@@ -77,25 +86,22 @@ module Theory : sig
     val define : 'a Bitv.t sort -> 'b Bitv.t sort -> ('a,'b) t sort
     val keys : ('a,'b) t sort -> 'a Bitv.t sort
     val vals : ('a,'b) t sort -> 'b Bitv.t sort
-    val parse : Sort.exp -> ('a,'b) t sort option
-    val cast : _ sort -> ('a,'b) t sort option
   end
 
   module Float : sig
-    type 'f t
-    type ('r,'s) format
-    val define : ('r,'s) format -> ('r,'s) format t sort
-    val format : ('r,'s) format t sort -> ('r,'s) format
-    val size : ('r,'s) format t sort -> 's Bitv.t sort
-    val parse : Sort.exp -> ('r,'s) format t sort option
-    val cast : _ sort -> ('r,'s) format t sort option
-
     module Format : sig
-      type ('r,'s) t = ('r,'s) format
-      val define : Sort.exp -> 'r -> 's Bitv.t sort -> ('r,'s) format
-      val exp : ('r,'s) format -> Sort.exp
-      val bits : ('r,'s) format -> 's Bitv.t sort
+      type ('r,'s) t
+      val define : 'r Sort.exp -> 's Bitv.t sort -> ('r,'s) t Sort.exp
+      val bits : ('r,'s) t Sort.exp -> 's Bitv.t sort
+      val exp : ('r,'s) t Sort.exp -> 'r Sort.exp
     end
+
+    type ('r,'s) format = ('r,'s) Format.t
+    type 'f t
+
+    val define : ('r,'s) format Sort.exp -> ('r,'s) format t sort
+    val format : ('r,'s) format t sort -> ('r,'s) format Sort.exp
+    val size : ('r,'s) format t sort -> 's Bitv.t sort
   end
 
   module Rmode : sig
@@ -103,11 +109,9 @@ module Theory : sig
     val t : t sort
   end
 
+  type 'a t = 'a KB.value KB.t
 
-
-  type 'a t = 'a Knowledge.value Knowledge.t
-
-  type 'a pure = 'a Sort.definition t
+  type 'a pure = 'a Sort.exp t
   type 'a eff = 'a Effect.spec t
 
 
@@ -121,6 +125,9 @@ module Theory : sig
     val define : 'a sort -> string -> 'a t
     val create : 'a sort -> ident -> 'a t
 
+    val versioned: 'a t -> int -> 'a t
+    val version : 'a t -> int
+
     val ident : 'a t -> ident
     val name : 'a t -> string
     val sort : 'a t -> 'a sort
@@ -129,8 +136,13 @@ module Theory : sig
     val fresh : 'a sort -> 'a t knowledge
     val scoped : 'a sort -> ('a t -> 'b pure) -> 'b pure
 
-    module Ident : Base.Comparable.S with type t = ident
-                                      and type comparator_witness = ord
+    module Ident : sig
+      type t = ident [@@deriving bin_io, compare, sexp]
+      include Stringable.S with type t := t
+      include Base.Comparable.S with type t := t
+                                 and type comparator_witness = ord
+    end
+
   end
 
   type bool = Bool.t pure
@@ -146,7 +158,7 @@ module Theory : sig
   type 'a var = 'a Var.t
 
   type link
-  type label = link Knowledge.Object.t
+  type label = link KB.Object.t
 
 
   module type Init = sig
@@ -387,15 +399,15 @@ module Theory : sig
 
   module Link : sig
     type cls = link
-    type t = cls Knowledge.value [@@deriving bin_io, compare, sexp]
-    val cls : cls Knowledge.cls
-    val addr : (cls, Bitvec.t option) Knowledge.slot
-    val name : (cls, string option) Knowledge.slot
-    val ivec : (cls, int option) Knowledge.slot
+    type t = cls KB.value [@@deriving bin_io, compare, sexp]
+    val cls : cls KB.cls
+    val addr : (cls, Bitvec.t option) KB.slot
+    val name : (cls, string option) KB.slot
+    val ivec : (cls, int option) KB.slot
 
-    include Knowledge.Value.S
+    include KB.Value.S
       with type t := t
-       and type comparator_witness = cls Knowledge.Value.ord
+       and type comparator_witness = cls KB.Value.ord
   end
 
   module Grammar : sig

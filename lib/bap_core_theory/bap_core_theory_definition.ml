@@ -11,7 +11,7 @@ type 'a effect = 'a Effect.t
 
 type 'a t = 'a Knowledge.value Knowledge.t
 
-type 'a pure = 'a Sort.definition t
+type 'a pure = 'a Sort.exp t
 type 'a eff = 'a Effect.spec t
 
 type bool = Bool.t pure
