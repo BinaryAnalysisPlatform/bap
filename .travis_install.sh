@@ -12,6 +12,7 @@ mkdir -p $HOME/save_opam/$OPAM_SWITCH/lib/bap
 cp -r $HOME/.opam/$OPAM_SWITCH/bin/ $HOME/save_opam/$OPAM_SWITCH/
 cp -r $HOME/.opam/$OPAM_SWITCH/share $HOME/save_opam/$OPAM_SWITCH/
 cp -r $HOME/.opam/$OPAM_SWITCH/lib/bap/*.plugin $HOME/save_opam/$OPAM_SWITCH/lib/bap
+cp $HOME/.opam/config $HOME/save_opam/$OPAM_SWITCH/
 
 opam remove bap-veri -y
 '
