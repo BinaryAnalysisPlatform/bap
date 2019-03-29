@@ -69,13 +69,14 @@ module Visited = struct
   type t = entry Addr.Map.t
 
   let empty = Addr.Map.empty
-  let add t mem =
+
+  let add_insn t mem =
     Map.set t (Memory.min_addr mem) (Insn {last = Memory.max_addr mem})
 
-  let visit t addr =
+  let touch t addr =
     Map.update t addr ~f:(function
         | None -> Unknown
-        | Some x -> x)
+        | Some known -> known)
 
   let find_insn t a = match Map.find t a with
     | Some (Insn {last}) -> Some last
@@ -166,7 +167,7 @@ let is_jump s mem insn =
   Set.mem s.inits (Addr.succ (Memory.max_addr mem))
 
 let update s mem insn dests : stage1 =
-  let s = { s with visited = Visited.add s.visited mem } in
+  let s = { s with visited = Visited.add_insn s.visited mem } in
   if is_jump s mem insn then
     let () = update_dests s mem dests in
     let roots = List.(filter_map ~f:fst dests |> rev_append s.roots) in
@@ -188,26 +189,25 @@ let next dis s =
       let mem = Result.map_error mem ~f:(fun err -> Error.tag err "next_root") in
       mem >>= fun mem ->
       Dis.jump dis mem {s with roots; addr} in
-  let s = {s with visited = Visited.visit s.visited s.addr } in
+  let s = {s with visited = Visited.touch s.visited s.addr } in
   loop s
 
 let stop_on = [`Valid]
 
-let has_common_destination dests addrs a =
-  let find_destinations a = match Addrs.find dests a with
-    | None -> Addr.Set.empty
-    | Some ds -> List.filter_map ~f:fst ds |> Addr.Set.of_list in
-  let ds = find_destinations a in
-  List.exists addrs ~f:(fun a' ->
-      Addr.(a <> a') && not Set.(is_empty @@ inter ds (find_destinations a')))
-
 let update_intersections disasm brancher s =
   let dests = Addr.Table.create () in
+  let find_destinations a =
+    Option.value (Addrs.find dests a) ~default:[] in
   let next dis = function
     | [] -> Dis.stop dis []
     | addr :: roots ->
       Memory.view ~from:addr s.base >>= fun mem ->
       Dis.jump dis mem roots in
+  let equal_dest x y = match x,y with
+    | (Some a, _), (Some a',_) -> Addr.(a = a')
+    | _ -> false in
+  let is_intersected ds ds' =
+    List.exists ds ~f:(fun d -> List.exists ds' ~f:(equal_dest d)) in
   let visit_intersections = function
     | [] | [_] -> Ok ()
     | (from :: roots) as intersections ->
@@ -219,17 +219,20 @@ let update_intersections disasm brancher s =
             Hashtbl.set dests (Memory.min_addr mem) ds;
             next d roots)
         ~stopped:next >>= fun _ ->
-      List.iter intersections ~f:(fun a -> match Addrs.find dests a with
-          | Some ds when has_common_destination dests intersections a ->
-            Addrs.set s.dests a ds
-          | _ -> ());
+      List.iter intersections ~f:(fun a ->
+          let ds = find_destinations a in
+          let has_common =
+            List.exists intersections ~f:(fun a' ->
+                Addr.(a <> a') && is_intersected ds (find_destinations a')) in
+          if has_common then
+            Addrs.set s.dests a ds);
       Ok () in
   let intersections =
     Map.fold s.visited ~init:Addr.Map.empty
       ~f:(fun ~key:addr ~data:tail inters ->
-        match tail with
-        | Visited.Unknown -> inters
-        | Visited.Insn {last} -> Map.add_multi inters last addr) in
+          match tail with
+          | Visited.Unknown -> inters
+          | Visited.Insn {last} -> Map.add_multi inters last addr) in
   Map.fold intersections ~init:(Ok ()) ~f:(fun ~key:_ ~data:addrs r ->
       r >>= fun () -> visit_intersections addrs) >>= fun () ->
   return s

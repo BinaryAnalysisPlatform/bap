@@ -26,5 +26,6 @@ val span : fn -> unit memmap
     [name] from the given block with [edge] *)
 val add_call : t -> block -> string -> edge -> t
 
-(** finds if there are any calls from the given block *)
+(** [enum_calls t addr] returns a list of calls from a block with
+    the given [addr] *)
 val enum_calls : t -> addr -> (string * edge) list

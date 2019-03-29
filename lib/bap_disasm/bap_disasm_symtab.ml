@@ -58,9 +58,9 @@ let filter_mem mem name entry =
   Memmap.filter mem ~f:(fun (n,e,_) ->
       not(String.(name = n) || Block.(entry = e)))
 
-let filter_callees name  =
-  let filter (name',_) = String.(name <> name') in
-  Map.map ~f:(List.filter ~f:filter)
+let filter_callees name callees =
+  Map.map callees
+    ~f:(List.filter ~f:(fun (name',_) -> String.(name <> name')))
 
 let remove t (name,entry,_) : t =
   if Map.mem t.addrs (Block.addr entry) then

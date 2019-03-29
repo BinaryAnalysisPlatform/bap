@@ -172,8 +172,9 @@ let fall_of_symtab symtab block =
       List.find_map calls
         ~f:(fun (n,e) -> Option.some_if (e = `Fall) n) >>= fun name ->
       Symtab.find_by_name symtab name >>= fun (_,entry,_) ->
-      Option.some_if Block.(block <> entry) entry >>= fun entry ->
-      let addr = Block.addr entry in
+      Option.some_if Block.(block <> entry) entry >>= fun callee ->
+      let addr = Block.addr callee in
+      Option.some_if (not (has_called block addr)) () >>= fun () ->
       let bldr = Ir_blk.Builder.create () in
       let call = Call.create ~target:(Label.indirect Bil.(int addr)) () in
       let () = Ir_blk.Builder.add_jmp bldr (Ir_jmp.create_call call) in
