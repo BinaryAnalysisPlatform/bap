@@ -5,6 +5,8 @@ mkdir -p $HOME/.opam/
 comp=`ls $HOME/save_opam`
 
 cp -r $HOME/save_opam/$comp $HOME/.opam/
+cp $HOME/save_opam/$comp/config $HOME/.opam/
+
 export PATH=$HOME/.opam/$comp/bin:$PATH
 
 bap --version
