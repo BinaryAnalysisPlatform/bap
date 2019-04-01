@@ -42,8 +42,8 @@ let add_def intent blk def =
   then Term.prepend def_t blk def
   else Term.append  def_t blk def
 
-let defs_of_args call intent args : def term seq =
-  Seq.filter_map args ~f:(fun arg ->
+let defs_of_args call intent args =
+  List.filter_map args ~f:(fun arg ->
       require (intent_matches arg intent) >>= fun () ->
       def_of_arg arg >>| transfer_attrs call)
 
@@ -54,14 +54,21 @@ let target intent sub blk call =
     | _ -> None
   else Some blk
 
+(* Note, that output arguments will be inserted in the reverse order, so
+   we sort all of them in a natural way to get the following order: In Both Out *)
+let enum_args t =
+  let compare x y =
+    Option.compare compare_intent (Arg.intent x) (Arg.intent y) in
+  Term.enum arg_t t |> Seq.to_list |> List.stable_sort ~compare
+
 let insert_defs prog sub =
   let blk_with_def intent blk jmp sub : blk term option =
     call_of_jmp jmp >>= fun caller ->
     callee caller prog >>= fun callee ->
     target intent sub blk caller >>| fun blk ->
-    Term.enum arg_t callee |>
+    enum_args callee |>
     defs_of_args jmp intent |>
-    Seq.fold ~init:blk ~f:(add_def intent) in
+    List.fold ~init:blk ~f:(add_def intent) in
   let insert intent blk jmp sub =
     Option.value_map (blk_with_def intent blk jmp sub)
       ~default:sub ~f:(Term.update blk_t sub) in
