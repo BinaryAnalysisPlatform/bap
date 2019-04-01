@@ -92,8 +92,9 @@ let binary = function
   | k -> binary k
 
 module Sort = struct
+  let ieee754 = Sort.Name.declare ~package:"core-theory" "IEEE754"
   let format {base; w; t=x; k} = Float.Format.define
-      Sort.(int base @-> int w @-> int x @-> sym "IEEE754")
+      Sort.(int base @-> int w @-> int x @-> sym ieee754)
       (Bitv.define k)
 
   let define p : (('b,'e,'t) ieee754,'s) Float.format Float.t sort = Float.define (format p)
