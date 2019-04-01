@@ -57,16 +57,8 @@ let target intent sub blk call =
 (* Note, that we intentionally invert compare for Both and Out
    arguments, since they will be inserted in reverted order later. *)
 let enum_args t =
-  let compare x y = match Arg.intent x, Arg.intent y with
-    | None, None -> 0
-    | None, Some _ -> -1
-    | Some _, None -> 1
-    | Some x, Some y -> match x,y with
-      | In, _ -> -1
-      | _, In -> 1
-      | Out, Both -> -1
-      | Both, Out -> 1
-      | _ -> 0 in
+  let compare x y =
+    Option.compare compare_intent (Arg.intent x) (Arg.intent y) in
   Term.enum arg_t t |> Seq.to_list |> List.stable_sort ~compare
 
 let insert_defs prog sub =
