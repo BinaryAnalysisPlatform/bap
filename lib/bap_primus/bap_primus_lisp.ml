@@ -300,10 +300,12 @@ module Interpreter(Machine : Machine) = struct
       let bs,frame_size = Vars.make_frame s.width bs in
       Eval.const Word.b0 >>= fun init ->
       notify_when is_external Trace.call_entered name args >>= fun () ->
+      notify_when is_external Trace.lisp_call_entered name args >>= fun () ->
       eval_advices Advice.Before init name args >>= fun _ ->
       Machine.Local.put state (Vars.push_frame bs s) >>= fun () ->
       eval_exp (Lisp.Def.Func.body fn) >>= fun r ->
       Machine.Local.update state ~f:(Vars.pop frame_size) >>= fun () ->
+      notify_when is_external Trace.lisp_call_returned name args >>= fun () ->
       notify_when is_external Trace.call_returned name (args @ [r]) >>= fun () ->
       eval_advices Advice.After r name args
 

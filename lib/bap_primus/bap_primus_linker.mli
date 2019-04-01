@@ -22,6 +22,10 @@ module Trace : sig
   val call_entered : (string * value list) statement
   val return : (string * value list) observation
   val call_returned : (string * value list) statement
+  val lisp_call : (string * value list) observation
+  val lisp_call_entered : (string * value list) statement
+  val lisp_call_return : (string * value list) observation
+  val lisp_call_returned : (string * value list) statement
 end
 module type Code = functor (Machine : Machine) -> sig
   val exec : unit Machine.t
