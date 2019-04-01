@@ -54,6 +54,8 @@ let target intent sub blk call =
     | _ -> None
   else Some blk
 
+(* Note, that we intentionally invert compare for Both and Out
+   arguments, since they will be inserted in reverted order later. *)
 let enum_args t =
   let compare x y = match Arg.intent x, Arg.intent y with
     | None, None -> 0
