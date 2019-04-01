@@ -13,6 +13,7 @@ module Disasm_expert = struct
   type nonrec lifter = lifter
   module Basic = Bap_disasm_basic
   module Recursive = Bap_disasm_rec
+  module SupersetDisasm = Bap_disasm_superset
   module Linear = Bap_disasm_linear_sweep
   module Kind = Bap_insn_kind
   module Insn = Bap_disasm_basic.Insn
