@@ -54,8 +54,8 @@ let target intent sub blk call =
     | _ -> None
   else Some blk
 
-(* Note, that we intentionally invert compare for Both and Out
-   arguments, since they will be inserted in reverted order later. *)
+(* Note, that output arguments will be inserted in the reverse order, so
+   we sort all of them in a natural way to get the following order: In Both Out *)
 let enum_args t =
   let compare x y =
     Option.compare compare_intent (Arg.intent x) (Arg.intent y) in
