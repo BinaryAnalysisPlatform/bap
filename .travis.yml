@@ -9,7 +9,6 @@ addons:
     packages:
     - camlp4
     - camlp4-extra
-    - clang
     - curl
     - libcurl4-gnutls-dev
     - libgmp-dev

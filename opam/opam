@@ -38,7 +38,6 @@ build: [
   [
     "./configure"
     "--prefix=%{prefix}%"
-    "--with-cxx=`which clang++`"
     "--with-llvm-version=%{conf-bap-llvm:package-version}%"
       {conf-bap-llvm:installed}
     "--with-llvm-config=%{conf-bap-llvm:config}%" {conf-bap-llvm:installed}
@@ -244,13 +243,11 @@ depexts: [
     "libcurl4-gnutls-dev"
     "llvm-3.8-dev"
     "time"
-    "clang"
     "llvm"
     "m4"
     "dejagnu"
   ] {os-distribution = "ubuntu"}
   [
-    "clang"
     "curl"
     "dejagnu"
     "gmp"
