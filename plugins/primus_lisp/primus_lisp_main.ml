@@ -42,7 +42,12 @@ module Documentation = struct
     let print =
       Doc.generate_index >>| fun index ->
       printf "%a@\n%!" pp_index index in
-    ignore (Main.run proj print)
+    match Main.run proj print with
+    | Normal, _ -> ()
+    | Exn e, _ ->
+       eprintf "Failed to generate documentation: %s\n"
+         (Primus.Exn.to_string e);
+       exit 1
 end
 
 module Signals(Machine : Primus.Machine.S) = struct
@@ -201,7 +206,7 @@ let () =
 
   Config.when_ready (fun {Config.get=(!)} ->
       if !documentation then
-        Project.register_pass' ~autorun:true Documentation.print;
+        Project.register_pass' ~deps:["api"] ~autorun:true Documentation.print;
       let paths = [Filename.current_dir_name] @ !libs @ [Lisp_config.library] in
       let features = "init" :: !features in
       Primus.Machine.add_component (module LispCore);
