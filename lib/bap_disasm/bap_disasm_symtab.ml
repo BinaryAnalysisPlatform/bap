@@ -12,6 +12,7 @@ module Insn = Bap_disasm_insn
 
 
 type block = Block.t [@@deriving compare, sexp_of]
+type edge  = Block.edge  [@@deriving compare, sexp_of]
 type cfg = Cfg.t [@@deriving compare]
 
 
@@ -29,9 +30,8 @@ type t = {
   addrs : fn Addr.Map.t;
   names : fn String.Map.t;
   memory : fn Memmap.t;
-  callnames : string Addr.Map.t;
+  callees : (string * edge) list Addr.Map.t;
 } [@@deriving sexp_of]
-
 
 
 let compare t1 t2 =
@@ -47,7 +47,7 @@ let empty = {
   addrs = Addr.Map.empty;
   names = String.Map.empty;
   memory = Memmap.empty;
-  callnames = Addr.Map.empty;
+  callees = Addr.Map.empty;
 }
 
 let merge m1 m2 =
@@ -58,8 +58,9 @@ let filter_mem mem name entry =
   Memmap.filter mem ~f:(fun (n,e,_) ->
       not(String.(name = n) || Block.(entry = e)))
 
-let filter_callnames name =
-  Map.filter ~f:( fun name' -> String.(name <> name'))
+let filter_callees name callees =
+  Map.map callees
+    ~f:(List.filter ~f:(fun (name',_) -> String.(name <> name')))
 
 let remove t (name,entry,_) : t =
   if Map.mem t.addrs (Block.addr entry) then
@@ -67,7 +68,7 @@ let remove t (name,entry,_) : t =
       names = Map.remove t.names name;
       addrs = Map.remove t.addrs (Block.addr entry);
       memory = filter_mem t.memory name entry;
-      callnames = filter_callnames name t.callnames
+      callees = filter_callees name t.callees;
     }
   else t
 
@@ -96,7 +97,10 @@ let name_of_fn = fst
 let entry_of_fn = snd
 let span fn = span fn |> Memmap.map ~f:(fun _ -> ())
 
-let add_call_name t b name =
-  { t with callnames = Map.set t.callnames (Block.addr b) name }
+let add_call t b name edge =
+  {t with callees = Map.add_multi t.callees (Block.addr b) (name,edge)}
 
-let find_call_name t addr = Map.find t.callnames addr
+let enum_calls t addr =
+  match Map.find t.callees addr with
+  | None -> []
+  | Some callees -> callees

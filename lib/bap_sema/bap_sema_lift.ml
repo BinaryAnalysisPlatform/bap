@@ -127,6 +127,7 @@ let linear_of_stmt ?addr return insn stmt : linear list =
       Label finish :: [] in
   linearize stmt
 
+
 let lift_insn ?addr fall init insn =
   List.fold (Insn.bil insn) ~init ~f:(fun init stmt ->
       List.fold (linear_of_stmt ?addr fall insn stmt) ~init
@@ -152,8 +153,39 @@ let is_conditional_jump jmp =
   Insn.(may affect_control_flow) jmp &&
   has_jump_under_condition (Insn.bil jmp)
 
-let blk cfg block : blk term list =
-  let fall_label = label_of_fall cfg block in
+let has_called block addr =
+  let finder =
+    object inherit [unit] Stmt.finder
+      method! enter_jmp e r =
+        match e with
+        | Bil.Int a when Addr.(a = addr) -> r.return (Some ())
+        | _ -> r
+    end in
+  Bil.exists finder (Insn.bil (Block.terminator block))
+
+let fall_of_symtab symtab block =
+  Option.(
+    symtab >>= fun symtab ->
+    match Symtab.enum_calls symtab (Block.addr block) with
+    | [] -> None
+    | calls ->
+      List.find_map calls
+        ~f:(fun (n,e) -> Option.some_if (e = `Fall) n) >>= fun name ->
+      Symtab.find_by_name symtab name >>= fun (_,entry,_) ->
+      Option.some_if Block.(block <> entry) entry >>= fun callee ->
+      let addr = Block.addr callee in
+      Option.some_if (not (has_called block addr)) () >>= fun () ->
+      let bldr = Ir_blk.Builder.create () in
+      let call = Call.create ~target:(Label.indirect Bil.(int addr)) () in
+      let () = Ir_blk.Builder.add_jmp bldr (Ir_jmp.create_call call) in
+      Some (Ir_blk.Builder.result bldr))
+
+let blk ?symtab cfg block : blk term list =
+  let fall_to_fn = fall_of_symtab symtab block in
+  let fall_label =
+    match label_of_fall cfg block, fall_to_fn with
+    | None, Some b -> Some (Label.direct (Term.tid b))
+    | fall_label,_ -> fall_label in
   List.fold (Block.insns block) ~init:([],Ir_blk.Builder.create ())
     ~f:(fun init (mem,insn) ->
         let addr = Memory.min_addr mem in
@@ -167,7 +199,10 @@ let blk cfg block : blk term list =
       | Some dst -> Some (`Jmp (Ir_jmp.create_goto dst)) in
   Option.iter fall ~f:(Ir_blk.Builder.add_elt b);
   let b = Ir_blk.Builder.result b in
-  List.rev (b::bs) |> function
+  let blocks = match fall_to_fn with
+    | None -> b :: bs
+    | Some b' -> b' :: b :: bs in
+  List.rev blocks |> function
   | [] -> assert false
   | b::bs -> Term.set_attr b address (Block.addr block) :: bs
 
@@ -214,14 +249,14 @@ let remove_false_jmps blk =
 
 let unbound _ = true
 
-let lift_sub entry cfg =
+let lift_sub ?symtab entry cfg =
   let addrs = Addr.Table.create () in
   let recons acc b =
     let addr = Block.addr b in
-    let blks = blk cfg b in
+    let blks = blk ?symtab cfg b in
     Option.iter (List.hd blks) ~f:(fun blk ->
         Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid blk));
-     acc @ blks in
+    acc @ blks in
   let blocks = Graphlib.reverse_postorder_traverse
       (module Cfg) ~start:entry cfg in
   let blks = Seq.fold blocks ~init:[] ~f:recons in
@@ -248,12 +283,11 @@ let indirect_target jmp =
 let is_indirect_call jmp = Option.is_some (indirect_target jmp)
 
 let with_address t ~f ~default =
-  match Term.get_attr t address with
-  | None -> default
-  | Some a -> f a
+  Option.value_map ~default ~f (Term.get_attr t address)
 
-let find_call_name symtab blk =
-  with_address blk ~default:None ~f:(Symtab.find_call_name symtab)
+let with_address_opt t ~f ~default =
+  let g a = Option.value (f a) ~default in
+  with_address t ~f:g ~default
 
 let update_unresolved symtab unresolved exts sub =
   let iter cls t ~f = Term.to_sequence cls t |> Seq.iter ~f in
@@ -261,10 +295,11 @@ let update_unresolved symtab unresolved exts sub =
     Option.is_some (Symtab.find_by_name symtab name) in
   let is_known a = Option.is_some (Symtab.find_by_start symtab a) in
   let is_unknown name = not (symbol_exists name) in
-  let add_external name =
-    Hashtbl.update exts name ~f:(function
-        | None -> create_synthetic name
-        | Some x -> x) in
+  let add_external (name,_) =
+    if is_unknown name then
+      Hashtbl.update exts name ~f:(function
+          | None -> create_synthetic name
+          | Some x -> x) in
   iter blk_t sub ~f:(fun blk ->
       iter jmp_t blk ~f:(fun jmp ->
           match indirect_target jmp with
@@ -273,24 +308,24 @@ let update_unresolved symtab unresolved exts sub =
           | _ ->
             with_address blk ~default:() ~f:(fun addr ->
                 Hash_set.add unresolved addr;
-                match Symtab.find_call_name symtab addr with
-                | Some name when is_unknown name -> add_external name
-                | _ -> ())))
+                Symtab.enum_calls symtab addr |>
+                List.iter ~f:add_external)))
 
 let resolve_indirect symtab exts blk jmp =
   let update_target tar =
+    Option.some @@
     match Ir_jmp.kind jmp with
     | Call c -> Ir_jmp.with_kind jmp (Call (Call.with_target c tar))
     | _ -> jmp in
-  match find_call_name symtab blk with
-  | None -> jmp
-  | Some name ->
+  let resolve_name (name,_) =
     match Symtab.find_by_name symtab name with
     | Some (_,b,_) -> update_target (Indirect (Int (Block.addr b)))
-    | None ->
-      match Hashtbl.find exts name with
+    | _ -> match Hashtbl.find exts name with
       | Some s -> update_target (Direct (Term.tid s))
-      | None -> jmp
+      | None -> None in
+  with_address_opt blk ~default:jmp ~f:(fun addr ->
+      Symtab.enum_calls symtab addr |>
+      List.find_map ~f:resolve_name)
 
 let program symtab =
   let b = Ir_program.Builder.create () in
@@ -299,7 +334,7 @@ let program symtab =
   let unresolved = Addr.Hash_set.create () in
   Seq.iter (Symtab.to_sequence symtab) ~f:(fun (name,entry,cfg) ->
       let addr = Block.addr entry in
-      let sub = lift_sub entry cfg in
+      let sub = lift_sub ~symtab entry cfg in
       Ir_program.Builder.add_sub b (Ir_sub.with_name sub name);
       Tid.set_name (Term.tid sub) name;
       Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid sub);
@@ -318,7 +353,8 @@ let program symtab =
                 else j in
               resolve_jmp ~local:false addrs j)))
 
-let sub = lift_sub
+let sub = lift_sub ?symtab:None
+let blk = blk ?symtab:None
 
 let insn insn =
   lift_insn None ([], Ir_blk.Builder.create ()) insn |>
