@@ -6,6 +6,7 @@ type t = [
   | `bad_kind of [`mem | `imm]
   | `bad_type of typ * typ
   | `bad_cast
+  | `unknown
 ] [@@deriving bin_io, compare, sexp]
 
 type type_error = t [@@deriving bin_io, compare, sexp]
@@ -16,6 +17,7 @@ let bad_mem  = `bad_kind `mem
 let bad_imm  = `bad_kind `imm
 let bad_cast = `bad_cast
 let bad_type ~exp ~got = `bad_type (exp,got)
+let unknown = `unknown
 
 let expect_mem () = raise (T (`bad_kind `mem))
 let expect_imm () = raise (T (`bad_kind `imm))
@@ -23,6 +25,7 @@ let wrong_cast () = raise (T (`bad_cast))
 let expect e ~got = raise (T (`bad_type (e,got)))
 
 let to_string : type_error -> string = function
+  | `unknown -> "a non-representable in BIL type"
   | `bad_kind `mem -> "expected storage, got immediate value"
   | `bad_kind `imm -> "expected immediate value, got storage"
   | `bad_cast -> "malformed cast arguments"

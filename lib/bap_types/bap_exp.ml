@@ -1,6 +1,7 @@
 open Core_kernel
 open Regular.Std
 open Bap_knowledge
+open Bap_core_theory
 open Bap_common
 open Format
 open Bap_bil
@@ -72,7 +73,7 @@ module PP = struct
       | Var _ | Int _ | Unknown _ -> 10
       | Load _ | Cast _ | Extract _ -> 10
       | UnOp _ -> 9
-      | BinOp (op,x,y) -> op_prec op
+      | BinOp (op,_,_) -> op_prec op
       | Store _ | Let _ | Ite _ | Concat _ -> 0)
 
   let rec pp fmt exp =
@@ -248,7 +249,7 @@ let persistent = Knowledge.Persistent.of_binable (module struct
   end)
 
 let slot = Knowledge.Class.property ~package:"bap.std"
-    ~persistent Semantics.cls "exp" domain
+    ~persistent Theory.Sort.t  "exp" domain
     ~desc:"semantics of expressions in BIL"
 
 

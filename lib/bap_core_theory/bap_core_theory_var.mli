@@ -10,6 +10,8 @@ type 'a pure = 'a Sort.exp Knowledge.value knowledge
 
 val define : 'a sort -> string -> 'a t
 val create : 'a sort -> ident -> 'a t
+val forget : 'a t -> unit t
+val resort : 'a t -> 'b sort -> 'b t
 
 val version : 'a t -> int
 val versioned : 'a t -> int -> 'a t
@@ -27,4 +29,9 @@ module Ident : sig
   include Stringable.S with type t := t
   include Base.Comparable.S with type t := t
                              and type comparator_witness = ord
+end
+
+module Top : sig
+  type nonrec t = unit t [@@deriving bin_io, compare, sexp]
+  include Base.Comparable.S with type t := t
 end

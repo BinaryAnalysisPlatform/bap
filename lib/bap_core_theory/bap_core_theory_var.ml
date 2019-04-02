@@ -15,7 +15,8 @@ type ident =
   | Var of {num : Int63.t; ver : int}
 [@@deriving bin_io, compare, hash, sexp]
 
-type 'a t = {sort : 'a sort; ident : ident}
+type 'a var = 'a sort * ident
+type 'a t = 'a var
 
 let valid_first_char = function
   | 'A'..'Z' | 'a'..'z' | '_' -> true
@@ -44,12 +45,15 @@ let validate_variable name =
   non_empty name;
   all_chars_valid name
 
-let define sort name =
+let define sort name : 'a var =
   validate_variable name;
   non_empty name;
-  {sort; ident = Reg {name; ver=0}}
+  sort, Reg {name; ver=0}
 
-let create sort ident = {sort; ident}
+let create sort ident = sort,ident
+
+let forget (s,v) = Sort.forget s,v
+let resort (_,v) s = s,v
 
 let pp_ver ppf = function
   | 0 -> ()
@@ -62,14 +66,13 @@ let pp_ident ppf ident = match ident with
   | Var {num; ver} ->
     Format.fprintf ppf "#%a%a" Int63.pp num pp_ver ver
 
-let name v = Format.asprintf "%a" pp_ident v.ident
-let ident v = v.ident
-
-let sort v = v.sort
-let is_virtual v = match v.ident with
+let name (_,v) = Format.asprintf "%a" pp_ident v
+let ident (_,v) = v
+let sort (s,_) = s
+let is_virtual v = match ident v with
   | Let _ | Var _ -> true
   | Reg _ -> false
-let is_mutable v = match v.ident with
+let is_mutable v = match ident v with
   | Let _ -> false
   | Reg _ | Var _ -> true
 
@@ -87,12 +90,12 @@ let const = Knowledge.Class.declare ~package "const-var" Const
 let mut = Knowledge.Class.declare ~package "mut-var" Mut
     ~desc:"temporary mutable variables"
 
-let versioned s ver = match s.ident with
-  | Let _ -> s
-  | Reg {name} -> {s with ident = Reg {name; ver}}
-  | Var {num} -> {s with ident = Var {num; ver}}
+let versioned (s,v) ver = match v with
+  | Let _ -> (s,v)
+  | Reg {name} -> s,Reg {name; ver}
+  | Var {num} -> s,Var {num; ver}
 
-let version s = match s.ident with
+let version v = match ident v with
   | Let _ -> 0
   | Reg {ver} | Var {ver} -> ver
 
@@ -142,3 +145,16 @@ module Ident = struct
 
 end
 type ord = Ident.comparator_witness
+
+module Top : sig
+  type t = unit var [@@deriving bin_io, compare, sexp]
+  include Base.Comparable.S with type t := t
+end = struct
+  type t = Sort.Top.t * ident [@@deriving bin_io, sexp]
+
+  include Base.Comparable.Inherit(Ident)(struct
+      type t = Sort.Top.t * ident
+      let sexp_of_t = sexp_of_t
+      let component = snd
+    end)
+end

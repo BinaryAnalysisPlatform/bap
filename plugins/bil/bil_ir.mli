@@ -4,7 +4,7 @@ open Bap_core_theory
 
 type t
 
-val t : t domain
+val slot : (Semantics.cls, t) Knowledge.slot
 
 val reify : t -> blk term list
 val init : unit -> unit

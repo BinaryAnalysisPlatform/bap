@@ -209,16 +209,17 @@ module Type = struct
   and binop op x y = match op with
     | LSHIFT|RSHIFT|ARSHIFT -> shift x y
     | _ -> match unify x y with
-      | Type.Mem _ -> Type_error.expect_imm ()
+      | Type.Mem _ | Type.Unk -> Type_error.expect_imm ()
       | Type.Imm _ as t -> match op with
         | LT|LE|EQ|NEQ|SLT|SLE -> Type.Imm 1
         | _ -> t
   and shift x y = match infer x, infer y with
-    | Type.Mem _,_ | _,Type.Mem _ -> Type_error.expect_imm ()
+    | Type.Mem _,_ | _,Type.Mem _
+    | Type.Unk,_ | _,Type.Unk -> Type_error.expect_imm ()
     | t, Type.Imm _ -> t
   and load m a r = match infer m, infer a with
-    | Type.Imm _,_ -> Type_error.expect_mem ()
-    | _,Type.Mem _ -> Type_error.expect_imm ()
+    | (Type.Imm _|Unk),_ -> Type_error.expect_mem ()
+    | _,(Type.Mem _|Unk) -> Type_error.expect_imm ()
     | Type.Mem (s,_),Type.Imm s' ->
       let s = Size.in_bits s in
       if s = s' then Type.Imm (Size.in_bits r)
@@ -237,12 +238,12 @@ module Type = struct
   and cast c s x =
     let t = Type.Imm s in
     match c,infer x with
-    | _,Type.Mem _ -> Type_error.expect_imm ()
+    | _,(Type.Mem _|Unk) -> Type_error.expect_imm ()
     | (UNSIGNED|SIGNED),_ -> t
     | (HIGH|LOW), Type.Imm s' ->
       if s' >= s then t else Type_error.wrong_cast ()
   and extract hi lo x = match infer x with
-    | Type.Mem _ -> Type_error.expect_imm ()
+    | Type.Mem _ | Unk -> Type_error.expect_imm ()
     | Type.Imm _ ->
       (* we don't really need a type of x, as the extract operation
          can both narrow and widen. Though it is a question whether it is
@@ -278,9 +279,9 @@ module Type = struct
     | Ok u -> Some (Type_error.bad_type ~exp:t ~got:u)
     | Error err -> Some err
   and jmp x = match infer x with
-    | Ok (Imm s) when Result.is_ok (Size.addr_of_int s) -> None
+    | Ok (Imm _)  -> None
     | Ok (Mem _) -> Some Type_error.bad_imm
-    | Ok (Imm _) -> Some Type_error.bad_cast
+    | Ok Unk -> Some Type_error.unknown
     | Error err -> Some err
   and cond x = match infer x with
     | Ok (Imm 1) -> None
@@ -325,7 +326,7 @@ module Eff = struct
 
   let width x = match Type.infer_exn x with
     | Type.Imm x -> x
-    | Type.Mem _ -> failwith "width is not for memory"
+    | _ -> failwith "expected an immediate type"
 
   (* approximates a number of non-zero bits in a bitvector.  *)
   module Nz = struct
@@ -503,7 +504,7 @@ module Simpl = struct
     and binop op x y =
       let width = match Type.infer_exn x with
         | Type.Imm s -> s
-        | Type.Mem _ -> failwith "binop" in
+        | _ -> failwith "binop" in
       let keep op x y = BinOp(op,x,y) in
       let int f = function Int x -> f x | _ -> false in
       let is0 = int is0 and is1 = int is1 and ism1 = int ism1 in
@@ -694,8 +695,9 @@ module Normalize = struct
       | Store (m,_,_,_,_) | Ite (_,m,_) | Let (_,_,m) -> infer m
       | _ -> invalid_arg "type error" in
     match infer exp with
-    | Type.Imm _ -> invalid_arg "type error"
     | Type.Mem (ks,vs) -> ks,vs
+    | _ -> invalid_arg "type error"
+
 
   let infer_addr_size x = fst (infer_storage_type x)
   let infer_value_size x = snd (infer_storage_type x)
@@ -770,10 +772,10 @@ module Normalize = struct
      BIL level.
 
      requires:
-       - generative-load-addr,
-       - generative-store-mem,
-       - generative-store-val,
-       - generative-let-value
+     - generative-load-addr,
+     - generative-store-mem,
+     - generative-store-val,
+     - generative-let-value
 
   *)
   let normalize_exp x = expand_memory x
@@ -1037,8 +1039,8 @@ module Normalize = struct
 
 
   (* ensures: all while conditions are free from:
-      - ite expressions;
-      - store operations.
+     - ite expressions;
+     - store operations.
 
      Note the latter sounds more strong then the implementation, but
      it is true, as in a well-typed program a conditional must has

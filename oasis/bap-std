@@ -17,6 +17,7 @@ Library bap
                    bap-future,
                    cmdliner,
                    bap-knowledge,
+                   bap-core-theory,
                    regular,
                    core_kernel,
                    ppx_jane
@@ -31,13 +32,14 @@ Library types
   FindlibName:     types
   CompiledObject:  best
   BuildDepends:    monads, zarith,
-                   bitvec, bitvec-order, bitvec-binprot, bitvec-sexp,
+                   bitvec,
                    uuidm,
                    bap.config,
                    regular,
                    graphlib,
                    ogre,
-                   bap-knowledge
+                   bap-knowledge,
+                   bap-core-theory
 
   InternalModules:
                    Bap_addr,

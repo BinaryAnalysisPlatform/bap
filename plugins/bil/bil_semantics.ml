@@ -6,13 +6,13 @@ open Bap_core_theory
 [@@@warning "-40"]
 
 
-let exp = Bil.Domain.exp
-let stmt = Bil.Domain.bil
+let exp = Exp.slot
+let stmt = Bil.slot
 
 let values = exp
 let effects = stmt
-let bool = Bool.t
-let bits = Bits.define
+let bool = Theory.Bool.t
+let bits = Theory.Bitv.define
 
 (* we need to recurse intelligently, only if optimization
    occured, that might open a new optimization opportunity,
@@ -113,6 +113,8 @@ end
 
 module Basic : Theory.Basic = struct
   open Knowledge.Syntax
+
+  module Value = Knowledge.Value
 
   module Base = struct
 
@@ -584,16 +586,16 @@ module FPEmulator = struct
     _ ->
     _ -> f float value t -> f float value t -> f float value t =
     fun op rm x y ->
-      x >>= fun x ->
-      y >>= fun y ->
-      let xs = Value.sort x in
-      match ieee754_of_sort xs with
-      | None -> BIL.unk xs
-      | Some ({IEEE754.k} as p) ->
-        let bs = Bits.define k in
-        let x = resort bs x and y = resort bs y in
-        let s = IEEE754.Sort.define p in
-        float xs (op s rm !!x !!y)
+    x >>= fun x ->
+    y >>= fun y ->
+    let xs = Value.sort x in
+    match ieee754_of_sort xs with
+    | None -> BIL.unk xs
+    | Some ({IEEE754.k} as p) ->
+      let bs = Bits.define k in
+      let x = resort bs x and y = resort bs y in
+      let s = IEEE754.Sort.define p in
+      float xs (op s rm !!x !!y)
 
   let fadd rm = fop FBil.fadd rm
   let fsub rm = fop FBil.fsub rm
@@ -604,15 +606,15 @@ module FPEmulator = struct
     _ ->
     _ -> f float value t -> f float value t =
     fun op rm x ->
-      x >>= fun x ->
-      let xs = Value.sort x in
-      match ieee754_of_sort xs with
-      | None -> BIL.unk xs
-      | Some ({IEEE754.k} as p) ->
-        let bs = Bits.define k in
-        let x = resort bs x in
-        let s = IEEE754.Sort.define p in
-        float xs (op s rm !!x)
+    x >>= fun x ->
+    let xs = Value.sort x in
+    match ieee754_of_sort xs with
+    | None -> BIL.unk xs
+    | Some ({IEEE754.k} as p) ->
+      let bs = Bits.define k in
+      let x = resort bs x in
+      let s = IEEE754.Sort.define p in
+      float xs (op s rm !!x)
 
   let fsqrt rm x = fuop FBil.fsqrt rm x
 

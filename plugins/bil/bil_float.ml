@@ -5,64 +5,14 @@ open Bap_knowledge
 open Bap_core_theory
 open Knowledge.Syntax
 
-type rounding =
-  | Nearest_even  (** round to nearest, ties to even *)
-  | Nearest_away  (** round to nearest, ties to away *)
-  | Towards_zero  (** round toward zero              *)
-  | Positive_inf  (** round toward positive infinity *)
-  | Negative_inf  (** round toward negative infinity *)
-[@@deriving sexp]
 
 type 'a t = 'a knowledge
 
-type ('b, 'e, 't, 's) fsort = (('b,'e,'t) IEEE754.t,'s) format float sort
+type ('b,'e,'t,'s) fsort = (('b,'e,'t) Theory.IEEE754.t,'s) Theory.format Theory.Float.t
 
-type ('b, 'e, 't, 's) unop =
-  (('b, 'e, 't, 's) fsort -> rmode value t -> 's bitv value t -> 's bitv value t)
+module Value = Knowledge.Value
 
-type ('b, 'e, 't, 's) binop =
-  (('b, 'e, 't, 's) fsort -> rmode value t -> 's bitv value t ->  's bitv value t -> 's bitv value t)
-
-module Rounding = struct
-
-  module Rounding_domain = struct
-    open Domain.Order
-
-    type t = rounding option
-
-    let empty = None
-
-    let partial x y : Domain.Order.partial = match x,y with
-      | None,None -> EQ
-      | None,_ -> LE
-      | _,None -> GE
-      | _ -> NC
-
-    let inspect _ = failwith "unimplemented"
-  end
-
-  let rounding = Semantics.declare ~name:"rounding" (module Rounding_domain)
-
-  module T = struct
-    let make t = !! (Value.put rounding (Value.empty Rmode.t) (Some t))
-
-    let rne = make Nearest_even
-    let rna = make Nearest_away
-    let rtp = make Towards_zero
-    let rtn = make Positive_inf
-    let rtz = make Negative_inf
-  end
-
-  let get rm =
-    rm >>= fun r ->
-    match Value.get rounding r with
-    | None -> !! Nearest_even
-    | Some r -> !! r
-end
-
-module Make(B : Theory.Basic) = struct
-
-  include Rounding.T
+module Make(B : Theory.Core) = struct
 
   open Knowledge.Syntax
 
@@ -73,13 +23,14 @@ module Make(B : Theory.Basic) = struct
     let ones s = not (zero s)
 
     let is_one x =
-      x >>= fun v -> eq x (one (Value.sort v))
+      x >>= fun v -> eq x (one (Value.cls v))
 
     let is_all_ones x =
-      x >>= fun v -> eq x (ones (Value.sort v))
+      x >>= fun v -> eq x (ones (Value.cls v))
 
     let of_int sort v =
-      int sort (Word.of_int ~width:(Bits.size sort) v)
+      let m = Bitvec.modulus (Theory.Bitv.size sort) in
+      int sort Bitvec.(int v mod m)
 
     let is_negative = B.msb
     let is_positive x = B.inv (B.msb x)
@@ -126,30 +77,33 @@ module Make(B : Theory.Basic) = struct
     let smin x y = ite (x <$ y) x y
 
     let leading_one sort =
-      one sort lsl (of_int sort Caml.(Bits.size sort - 1))
+      one sort lsl (of_int sort Caml.(Theory.Bitv.size sort - 1))
 
   end
 
   type 'a t = 'a knowledge
 
+  module Bits = Theory.Bitv
+  module IEEE754 = Theory.IEEE754
+
   let (>>->) x f =
     x >>= fun x ->
-    f (Value.sort x) x
+    f (Value.cls x) x
 
   let bind a body =
     a >>= fun a ->
-    let sort = Value.sort a in
-    Var.scoped sort @@ fun v ->
+    let sort = Value.cls a in
+    Theory.Var.scoped sort @@ fun v ->
     B.let_ v !!a (body (B.var v))
 
   let (>>>=) = bind
 
-  let exps = IEEE754.Sort.exps
+  let exps = Theory.IEEE754.Sort.exps
 
   let sigs fsort =
-    let open IEEE754 in
+    let open Theory.IEEE754 in
     let spec = Sort.spec fsort in
-    Bits.define spec.p
+    Theory.Bitv.define spec.p
 
   let floats fsort = exps fsort, sigs fsort
 
@@ -243,17 +197,17 @@ module Make(B : Theory.Basic) = struct
     let exps = IEEE754.Sort.exps fsort in
     pack fsort sign (B.ones exps) (B.zero (sigs fsort))
 
-  let is_inf fsort x =
+  let is_inf fsort x : Theory.bool =
     unpack fsort x @@ fun _ expn coef ->
     B.(and_ (is_zero coef) (is_all_ones expn))
 
   let is_pinf fsort x =
-    is_inf fsort x >>>= fun is_inf ->
-    B.(and_ is_inf (inv (msb x)))
+    is_inf fsort x >>>= fun inf ->
+    B.(and_ inf (inv (msb x)))
 
   let is_ninf fsort x =
-    is_inf fsort x >>>= fun is_inf ->
-    B.(and_ is_inf (msb x))
+    is_inf fsort x >>>= fun inf ->
+    B.(and_ inf (msb x))
 
   let is_qnan fsort x =
     let open B in
@@ -381,13 +335,12 @@ module Make(B : Theory.Basic) = struct
 
   let is_round_up rm sign last guard round sticky =
     let open B in
-    Rounding.get rm >>= fun rm ->
-    match rm with
-    | Positive_inf -> inv sign
-    | Negative_inf -> sign
-    | Nearest_away -> guard
-    | Nearest_even -> guard && (round || sticky || last)
-    | Towards_zero -> b0
+    let case m t f = ite (requal rm m) t f and default = ident in
+    case rtn (inv sign) @@
+    case rtz sign @@
+    case rna guard @@
+    case rne (guard && (round || sticky || last)) @@
+    default b0
 
   let guardbits loss lost_bits f =
     let open B in
@@ -500,7 +453,7 @@ module Make(B : Theory.Basic) = struct
       (xexpn = yexpn) --> zero sigs;
       (xexpn > yexpn) --> extract_last ycoef lost_bits;
       (xexpn < yexpn) --> extract_last xcoef lost_bits;
-      ] >>>= fun loss ->
+    ] >>>= fun loss ->
     ite (xexpn > yexpn) xcoef (xcoef lsr lost_bits) >>>= fun xcoef ->
     ite (yexpn > xexpn) ycoef (ycoef lsr lost_bits) >>>= fun ycoef ->
     xcoef + ycoef >>>= fun sum ->
@@ -605,11 +558,13 @@ module Make(B : Theory.Basic) = struct
       (xnan && (not ynan)) --> transform_to_quite fsort x;
       (ynan && (not xnan)) --> transform_to_quite fsort y;
       anything_else --> (transform_to_quite fsort x);
-      ]
+    ]
 
   let add_or_sub ~is_sub fsort rm x y =
+    is_finite fsort x >>>= fun is_x_fin ->
+    is_finite fsort y >>>= fun is_y_fin ->
     let open B in
-    ite (is_finite fsort x && is_finite fsort y)
+    ite (is_x_fin && is_y_fin)
       (add_or_sub_finite is_sub fsort rm x y)
       (fsum_special fsort is_sub x y)
 
@@ -694,13 +649,14 @@ module Make(B : Theory.Basic) = struct
       is_inf --> with_sign (xor xsign ysign) x;
       (xsnan || xqnan) --> transform_to_quite fsort x;
       anything_else --> (transform_to_quite fsort y);
-      ]
+    ]
 
   let fmul fsort rm x y =
-    let open B in
-    ite (is_finite fsort x && is_finite fsort y)
-      (fmul_finite fsort rm x y)
-      (fmul_special fsort x y)
+    is_finite fsort x >>>= fun is_x_fin ->
+    is_finite fsort y >>>= fun is_y_fin ->
+    B.(ite (is_x_fin && is_y_fin)
+         (fmul_finite fsort rm x y)
+         (fmul_special fsort x y))
 
   let mask_bit sort i =
     let uno = B.one sort in
@@ -723,7 +679,7 @@ module Make(B : Theory.Basic) = struct
           (nomin = denom) --> f coef lost_half;
           (nomin = zero sort) --> f coef lost_zero;
           anything_else --> (f coef lost_afew);
-          ]
+        ]
       else
         ite (nomin > denom) (mask_bit sort i) (zero sort) >>>= fun bit ->
         ite (nomin > denom) (nomin - denom) nomin >>>= fun next_nomin ->
@@ -797,7 +753,7 @@ module Make(B : Theory.Basic) = struct
       is_inf --> with_sign (xor xsign ysign) x;
       (xsnan || xqnan) --> transform_to_quite fsort x;
       anything_else --> (transform_to_quite fsort y);
-     ]
+    ]
 
   let fdiv fsort rm x y =
     let open B in
@@ -807,7 +763,7 @@ module Make(B : Theory.Basic) = struct
 
   let ftwo fsort =
     fone fsort B.b0 >>>= fun one ->
-    fadd fsort rne one one
+    fadd fsort B.rne one one
 
   (* pre: fsort ">=" fsort' *)
   let truncate fsort x rm fsort' =
@@ -849,11 +805,11 @@ module Make(B : Theory.Basic) = struct
     let d_bias = Caml.(bias fsort' - bias fsort) in
     unpack fsort x @@ fun sign expn coef ->
     match_ [
-        is_all_ones expn --> ones (exps fsort');
-        (expn = min_exponent (exps fsort)) --> min_exponent (exps fsort');
-        anything_else -->
-          (unsigned (exps fsort') expn + of_int (exps fsort') d_bias);
-      ] >>>= fun expn ->
+      is_all_ones expn --> ones (exps fsort');
+      (expn = min_exponent (exps fsort)) --> min_exponent (exps fsort');
+      anything_else -->
+      (unsigned (exps fsort') expn + of_int (exps fsort') d_bias);
+    ] >>>= fun expn ->
     unsigned (sigs fsort') coef >>>= fun coef ->
     (coef lsl (of_int (sigs fsort') d_sigs)) >>>= fun coef ->
     pack fsort' sign expn coef
@@ -929,11 +885,11 @@ module Make(B : Theory.Basic) = struct
     let top = of_int (exps fsort) Caml.(bias + 1) in
     unpack_raw fsort x @@ fun sign expn coef ->
     match_ [
-        (expn = top && non_zero coef) --> (expn - low);
-        (expn > top) --> (expn - low);
-        (expn = low || expn = top) --> zero (exps fsort);
-        (expn < low) --> (low - expn);
-      ] >>>= fun d_expn ->
+      (expn = top && non_zero coef) --> (expn - low);
+      (expn > top) --> (expn - low);
+      (expn = low || expn = top) --> zero (exps fsort);
+      (expn < low) --> (low - expn);
+    ] >>>= fun d_expn ->
     (expn >= low) >>>= fun increase ->
     ite (expn >= low) (expn - d_expn) (expn + d_expn) >>>= fun expn ->
     pack_raw fsort sign expn coef >>>= fun r -> f r d_expn increase
@@ -942,10 +898,11 @@ module Make(B : Theory.Basic) = struct
     let open IEEE754 in
     let fsort = Sort.define binary128 in
     B.int (bits fsort)
-      (Word.of_string "0x3fff6a09e667f3bcc908b2fb1366ea95:128u") >>>= fun x ->
-    convert fsort x rne fsort'
+      (Bitvec.of_string "0x3fff6a09e667f3bcc908b2fb1366ea95") >>>= fun x ->
+    convert fsort x B.rne fsort'
 
   let range_reconstruction fsort x d_expn clz increase =
+    let idiv = fdiv in
     let open B in
     sqrt2 fsort >>>= fun sqrt2 ->
     unpack_raw fsort x @@ fun sign expn coef ->
@@ -958,7 +915,7 @@ module Make(B : Theory.Basic) = struct
           (expn + d_expn / of_int (exps fsort) 2)
           (expn - d_expn / of_int (exps fsort) 2) >>>= fun expn ->
         pack_raw fsort sign expn coef >>>= fun r ->
-        ite is_odd (fdiv fsort rne r sqrt2) r)
+        ite is_odd (idiv fsort rne r sqrt2) r)
       ~else_:( (* for subnormals  *)
         unsigned (exps fsort) clz >>>= fun clz ->
         lsb clz >>>= fun is_odd ->
@@ -966,7 +923,7 @@ module Make(B : Theory.Basic) = struct
         clz / of_int (exps fsort) 2 >>>= fun clz ->
         expn - d_expn / of_int (exps fsort) 2 - clz >>>= fun expn ->
         pack_raw fsort sign expn coef >>>= fun r ->
-        ite is_odd (fdiv fsort rne r sqrt2) r)
+        ite is_odd (idiv fsort rne r sqrt2) r)
 
   let horner fsort x cfs =
     let open B in
@@ -975,9 +932,9 @@ module Make(B : Theory.Basic) = struct
     let rec sum y = function
       | [] -> y
       | c :: cs ->
-         x * y >>>= fun y ->
-         y + c >>>= fun y ->
-         sum y cs in
+        x * y >>>= fun y ->
+        y + c >>>= fun y ->
+        sum y cs in
     match cfs with
     | [] -> assert false
     | [c] -> c
@@ -991,55 +948,55 @@ module Make(B : Theory.Basic) = struct
 
   (* x + 1 for [0.0;1.0] and degree = 23 *)
   let coefs s =
-    List.map ~f:(fun x -> B.int s @@ Word.of_string x) [
-        "0x3fea283d1af5d3b8b0e9889579874140:128u";
-        "0xbfede2119c815a1d59de530775f68488:128u";
-        "0x3ff0766a0fd57550fbcaf5949c387bfb:128u";
-        "0xbff272ebd07e2237538440a72429c8d9:128u";
-        "0x3ff408b110927387f462771163341fec:128u";
-        "0xbff5242b7488a8af2abfbadce8148c9e:128u";
-        "0x3ff606758477172056f0e80bc6f46e09:128u";
-        "0xbff69084710b6e59fb3f53199edfb3dd:128u";
-        "0x3ff70e24e277a45deb05c37590719576:128u";
-        "0xbff74ec376fd27c8ac279836961f6025:128u";
-        "0x3ff78aabb74359ac28498e73a2e9989f:128u";
-        "0xbff7c74981d8ac6e123f062aee10b24c:128u";
-        "0x3ff805e10b3ea64c491b21abdb7f9796:128u";
-        "0xbff82fbf8642c69d9c901bcfcd18b8e1:128u";
-        "0x3ff8657a1d1b03f0f63a64018888f16c:128u";
-        "0xbff8acff29ed5e34f19ffa86dc9e5b9a:128u";
-        "0x3ff907fff45a4ee1cba42e6e42229c85:128u";
-        "0xbff94fffff0ee79b4a473fa1503182d5:128u";
-        "0x3ff9bffffff219963def0395eb8c25e4:128u";
-        "0xbffa3fffffffbb055e0eddae1c1de75f:128u";
-        "0x3ffafffffffffe5a8a7bc5d57eea900e:128u";
-        "0xbffbfffffffffffd5373ee69a938caf9:128u";
-        "0x3ffdffffffffffffff22a39a2a24d3f4:128u";
-        "0x3fff0000000000000000000000000000:128u";
-      ]
+    List.map ~f:(fun x -> B.int s @@ Bitvec.of_string x) [
+      "0x3fea283d1af5d3b8b0e9889579874140";
+      "0xbfede2119c815a1d59de530775f68488";
+      "0x3ff0766a0fd57550fbcaf5949c387bfb";
+      "0xbff272ebd07e2237538440a72429c8d9";
+      "0x3ff408b110927387f462771163341fec";
+      "0xbff5242b7488a8af2abfbadce8148c9e";
+      "0x3ff606758477172056f0e80bc6f46e09";
+      "0xbff69084710b6e59fb3f53199edfb3dd";
+      "0x3ff70e24e277a45deb05c37590719576";
+      "0xbff74ec376fd27c8ac279836961f6025";
+      "0x3ff78aabb74359ac28498e73a2e9989f";
+      "0xbff7c74981d8ac6e123f062aee10b24c";
+      "0x3ff805e10b3ea64c491b21abdb7f9796";
+      "0xbff82fbf8642c69d9c901bcfcd18b8e1";
+      "0x3ff8657a1d1b03f0f63a64018888f16c";
+      "0xbff8acff29ed5e34f19ffa86dc9e5b9a";
+      "0x3ff907fff45a4ee1cba42e6e42229c85";
+      "0xbff94fffff0ee79b4a473fa1503182d5";
+      "0x3ff9bffffff219963def0395eb8c25e4";
+      "0xbffa3fffffffbb055e0eddae1c1de75f";
+      "0x3ffafffffffffe5a8a7bc5d57eea900e";
+      "0xbffbfffffffffffd5373ee69a938caf9";
+      "0x3ffdffffffffffffff22a39a2a24d3f4";
+      "0x3fff0000000000000000000000000000";
+    ]
 
   let fsqrt fsort rm x =
     let fsort' = double_precision fsort in
     B.ite (is_zero x) (fzero fsort B.b0)
-    (normalize_subnormal fsort x @@ fun x clz ->
-    range_reduction fsort x @@ fun y d_expn increase ->
-    fone fsort B.b0 >>>= fun one ->
-    fsub fsort rm y one >>>= fun y ->
-    extend fsort y fsort' >>>= fun y ->
-    horner fsort' y (coefs (bits fsort')) >>>= fun y ->
-    B.unsigned (exps fsort') d_expn >>>= fun d_expn ->
-    range_reconstruction fsort' y d_expn clz increase >>>= fun r ->
-    truncate fsort' r rm fsort)
+      (normalize_subnormal fsort x @@ fun x clz ->
+       range_reduction fsort x @@ fun y d_expn increase ->
+       fone fsort B.b0 >>>= fun one ->
+       fsub fsort rm y one >>>= fun y ->
+       extend fsort y fsort' >>>= fun y ->
+       horner fsort' y (coefs (bits fsort')) >>>= fun y ->
+       B.unsigned (exps fsort') d_expn >>>= fun d_expn ->
+       range_reconstruction fsort' y d_expn clz increase >>>= fun r ->
+       truncate fsort' r rm fsort)
 
   let test fsort x =
     let fsort' = double_precision fsort in
     normalize_subnormal fsort x @@ fun x clz ->
     range_reduction fsort x @@ fun y d_expn increase ->
     fone fsort B.b0 >>>= fun one ->
-    fsub fsort rne y one >>>= fun y ->
+    fsub fsort B.rne y one >>>= fun y ->
     extend fsort y fsort' >>>= fun y ->
     horner fsort' y (coefs (bits fsort')) >>>= fun y ->
     B.unsigned (exps fsort') d_expn >>>= fun d_expn ->
     range_reconstruction fsort' y d_expn clz increase >>>= fun r ->
-    truncate fsort' r rne fsort
+    truncate fsort' r B.rne fsort
 end

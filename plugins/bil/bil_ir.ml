@@ -6,49 +6,48 @@ open Bap_knowledge
 open Bap_core_theory
 
 open Knowledge.Syntax
-open Link.Syntax
 
 type def = {
   name : string;
   virt : bool;
-  sort : Sort.exp;
+  sort : Theory.Sort.exp;
   sema : semantics;
 }
 
-type known = Label of Label.t | Addr of Addr.t | CpuExn of int
+type label = Theory.Link.t Knowledge.value
 
 type dst =
-  | Direct of known
+  | Direct of label
   | Indirect of semantics
 
 type jmp = {
-  cnd : bit value option;
+  cnd : Theory.Bool.t Knowledge.value option;
   dst : dst;
 }
 
 type blk = {
-  name : Label.t;
+  name : Theory.label;
   defs : def list;
   jmps : jmp list;
 }
 
 type cfg = {
   blks : blk list;
-  entry : Label.t;
+  entry : Theory.label;
 }
 
 type t = cfg
 
 module Graph = struct
-  type t = cfg
-  let partial _ _ = Domain.Order.NC
-  let empty = {blks=[]; entry = Label.root}
+  type t = cfg option
 
+  let empty = None
+  let pp_sema = Knowledge.Value.pp
 
-  let pp_jmp pp_sema ppf {cnd; dst} =
+  let pp_jmp ppf {cnd; dst} =
     let pp_cnd ppf =
       Option.iter cnd ~f:(fun bit ->
-          fprintf ppf "when %a " pp_sema (Value.semantics bit)) in
+          fprintf ppf "when %a " pp_sema bit) in
     match dst with
     | Indirect dst ->
       fprintf ppf "  %tjump %a@\n" pp_cnd pp_sema dst
@@ -84,13 +83,15 @@ module Graph = struct
     | {blks=[]} -> Sexp.List []
     | cfg -> Sexp.Atom (asprintf "%a" pp_bil cfg)
 
+  let domain = Knowledge.Domain.define
+
 end
 
 let graph = Semantics.declare
     ~name:"cfg"
     (module Graph)
 
-let t = graph
+let slot = graph
 
 module BIR = struct
   type t = blk term list

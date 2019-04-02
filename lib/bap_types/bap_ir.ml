@@ -1,6 +1,7 @@
 let package = "bap.std"
 
 open Core_kernel
+open Bap_core_theory
 open Regular.Std
 open Bap_common
 open Bap_bil
@@ -34,8 +35,9 @@ type dict = Dict.t [@@deriving bin_io, compare, sexp]
 type 'a vector = 'a Vec.t
 
 module Tid = struct
-  exception Overrun
   type t = Int63.t [@@deriving bin_io, compare, sexp]
+
+
 
   module Tid_generator = Bap_state.Make(struct
       type t = Int63.t ref
@@ -46,8 +48,6 @@ module Tid = struct
     fun () ->
     let last_tid = !Tid_generator.state in
     Int63.incr last_tid;
-    if last_tid.contents = Int63.zero
-    then raise Overrun;
     last_tid.contents
 
   let nil = Int63.zero
@@ -92,6 +92,13 @@ module Tid = struct
     | None -> Format.asprintf "%%%a" Tid.pp tid
     | Some name -> sprintf "@%s" name
 
+  let domain = KB.Domain.flat "tid"
+      ~inspect:(fun x -> Sexp.Atom (name x))
+      ~empty:nil ~is_empty:Int63.(equal nil)
+
+  let slot = KB.Class.property ~package
+      Theory.Link.cls "link-tid"  domain
+
   module State = struct
     let set_name_resolver resolver = names := resolver
   end
@@ -126,13 +133,117 @@ type jmp_kind =
 
 type intent = In | Out | Both [@@deriving bin_io, compare, sexp]
 
+module Rhs : sig
+  type top = unit Theory.Sort.exp Knowledge.Class.abstract
+  type t = top Knowledge.value [@@deriving bin_io, compare, sexp]
 
-type semantics = Semantics.t [@@deriving bin_io, compare, sexp]
+  val of_value : 'a Theory.Sort.exp KB.value -> t
+  val of_exp : exp -> t
+  val with_exp : exp -> t -> t
+  val exp : t -> exp
 
-type jmp = semantics option * (semantics option * jmp_kind)
-[@@deriving bin_io, compare, sexp]
-type def = (var * semantics) [@@deriving bin_io, compare, sexp]
-type phi = (var * semantics Tid.Map.t) [@@deriving bin_io, compare, sexp]
+  include Base.Comparable.S with type t := t
+end = struct
+  type top = unit Theory.Sort.exp KB.Class.abstract
+  let top : top KB.cls = Theory.Sort.t
+
+  let forget v =
+    let s = KB.Value.cls v in
+    KB.Value.clone (KB.Class.forget (Theory.Sort.forget s)) v
+
+  let of_value x = forget x
+  let of_exp exp =
+    KB.Value.put Exp.slot (KB.Value.empty top) (Some exp)
+
+  let with_exp exp x =
+    KB.Value.put Exp.slot x (Some exp)
+
+  let exp x = match KB.Value.get Exp.slot x with
+    | Some x -> x
+    | None -> Exp.unknown "unknown" Type.Unk
+  include (val KB.Value.derive top)
+end
+
+
+let to_var v = Theory.Var.create (Var.sort v) (Var.ident v)
+
+module Def : sig
+  type t = {
+    var : unit Theory.var;
+    rhs : unit Theory.Sort.exp KB.Class.abstract KB.value
+  } [@@deriving bin_io, compare, sexp]
+
+  val reify : 'a Theory.var -> 'a Theory.Sort.exp KB.value -> t
+
+  val of_bil : var -> exp -> t
+end = struct
+
+  type t = {
+    var : Theory.Var.Top.t;
+    rhs : Rhs.t;
+  } [@@deriving bin_io, compare, sexp]
+
+  let reify lhs rhs = {
+    var = Theory.Var.forget lhs;
+    rhs = Rhs.of_value rhs;
+  }
+
+  let of_bil var exp = {
+    var = to_var var;
+    rhs = Rhs.of_exp exp;
+  }
+end
+
+module Phi = struct
+  type t = {
+    var : Theory.Var.Top.t;
+    map : Rhs.t Tid.Map.t;
+  } [@@deriving bin_io, compare, sexp]
+end
+
+module Cnd : sig
+  type t = Theory.Bool.t Theory.Sort.exp KB.value
+  [@@deriving bin_io, compare, sexp]
+
+  val of_exp : exp -> t
+  val exp : t -> exp
+
+  include Base.Comparable.S with type t := t
+end = struct
+  let of_exp exp =
+    let empty = KB.Value.empty Theory.Sort.t in
+    KB.Value.clone Theory.Bool.t @@
+    KB.Value.put Exp.slot empty (Some exp)
+
+  let abstract v =
+    KB.Value.clone (KB.Class.forget (KB.Value.cls v)) v
+
+  let exp v = match KB.Value.get Exp.slot (abstract v) with
+    | None -> Exp.unknown "jmp-cond" (Type.Imm 1)
+    | Some exp -> exp
+
+  include (val KB.Value.derive Theory.Bool.t)
+end
+
+module Jmp = struct
+  type label =
+    | Resolved of Theory.Link.t
+    | Indirect of Rhs.t
+  [@@deriving bin_io, compare, sexp]
+
+
+  type t = {
+    cnd : Cnd.t option;
+    dst : Theory.Link.t;
+    alt : label option;
+  } [@@deriving bin_io, compare, sexp]
+
+
+end
+
+type jmp = Jmp.t [@@deriving bin_io, compare, sexp]
+type def = Def.t [@@deriving bin_io, compare, sexp]
+type phi = Phi.t [@@deriving bin_io, compare, sexp]
 
 type blk = {
   phis : phi term array;
@@ -140,7 +251,7 @@ type blk = {
   jmps : jmp term array;
 } [@@deriving bin_io, compare, fields, sexp]
 
-type arg = var * semantics * intent option
+type arg = Def.t
 [@@deriving bin_io, compare, sexp]
 
 type sub = {
@@ -333,24 +444,49 @@ let program_t = {
   get = (fun _ -> assert false);
 }
 
-let unknown_semantics =
-  Knowledge.Value.empty Semantics.cls
+module Void : sig
+  type t
+  val t : t Theory.sort
+end = struct
+  let unsorted = Theory.Sort.Name.declare ~package "Void"
+  type unsorted
+  type t = unsorted Theory.Sort.sym
+  let t = KB.Class.refine Theory.Sort.t @@
+    Theory.Sort.sym unsorted
+end
 
-let nil_def : def term =
-  Leaf.make Tid.nil undefined_var unknown_semantics
+let undefined_variable =
+  Theory.Var.(forget @@ define Void.t "undefined")
 
+let undefined_semantics =
+  Rhs.of_value (KB.Value.empty Void.t)
 
-let nil_phi : phi term =
-  Leaf.make Tid.nil undefined_var Tid.Map.empty
+let empty self = {
+  tid = Tid.nil;
+  dict = Value.Dict.empty;
+  self
+}
 
-let nil_jmp : jmp term =
-  Leaf.make Tid.nil None (None,Goto (Direct Tid.nil))
+let nil_def : def term = empty Def.{
+    var = undefined_variable;
+    rhs = undefined_semantics;
+  }
+
+let nil_phi : phi term = empty Phi.{
+    var = undefined_variable;
+    map = Map.empty (module Tid);
+  }
+
+let nil_jmp : jmp term = empty Jmp.{
+    cnd = None;
+    dst = KB.Value.empty Theory.Link.cls;
+    alt = None;
+  }
 
 let nil_blk : blk term =
-  make_term Tid.nil {phis=[| |] ; defs = [| |] ; jmps = [| |] }
+  make_term Tid.nil {phis= [| |] ; defs = [| |] ; jmps = [| |] }
 
-let nil_arg : arg term =
-  make_term Tid.nil (undefined_var,unknown_semantics,None)
+let nil_arg : arg term = nil_def
 
 let nil_sub : sub term =
   make_term Tid.nil { name = "undefined"; blks = [| |] ; args = [| |]}
@@ -430,35 +566,50 @@ module Call = struct
     end)
 end
 
-module Sema = struct
-  let create x = Knowledge.Value.put Exp.slot unknown_semantics (Some x)
-  let get t sema = match Knowledge.Value.get Exp.slot sema with
-    | Some exp -> exp
-    | None -> Exp.unknown "value" t
-  let to_bil var sema = get (Var.typ var) sema
-  let with_bil sema x = Knowledge.Value.put Exp.slot sema (Some x)
-  let map t sema ~f = with_bil sema (f (get t sema))
-end
+
 
 module Ir_arg = struct
   type t = arg term
-  let create ?(tid=Tid.create()) ?intent var exp : t =
-    make_term tid (var,Sema.create exp,intent)
 
-  let lhs    {self=(r,_,_)} = r
-  let sema   {self=(_,r,_)} = r
-  let rhs    {self=(v,r,_)} = Sema.to_bil v r
-  let intent {self=(_,_,r)} = r
-  let map3 (x,y,z) ~f = (x,y, f z)
-  let with_intent (t : t) intent : t = {
-    t with self = map3 t.self ~f:(fun _ -> Some intent)
+
+  module Intent = struct
+    module T = struct
+      type t = intent option [@@deriving bin_io]
+    end
+    let domain = KB.Domain.optional ~inspect:sexp_of_intent "intent"
+    let persistent = KB.Persistent.of_binable (module T)
+    let slot = KB.Class.property ~package ~persistent
+        Theory.Sort.t "arg-intent" domain
+    let set intent x = match intent with
+      | None -> x
+      | Some intent -> KB.Value.put slot x intent
+    let get x = KB.Value.get slot x
+  end
+
+  let set_intent ({self={Def.rhs} as self} as t) intent : t = {
+    t with self = {
+      self with rhs = Intent.set (Some intent) rhs
+    }
   }
-  let with_unknown_intent t : t = {
-    t with self = map3 t.self ~f:(fun _ -> None)
-  }
+
+  let with_intent arg intent = set_intent arg (Some intent)
+
+  let reify ?(tid=Tid.create()) ?intent lhs rhs =
+    set_intent (make_term tid @@ Def.reify lhs rhs) intent
+
+  let create ?(tid=Tid.create()) ?intent var exp : t =
+    set_intent (make_term tid @@ Def.of_bil var exp) intent
+  let lhs    {self={Def.var}} = Var.reify var
+  let rhs    {self={Def.rhs}} = Rhs.exp rhs
+  let intent {self={Def.rhs}} = KB.Value.get Intent.slot rhs
+
+  let with_unknown_intent t : t = set_intent t None
+
   let name arg = Var.name (lhs arg)
 
-  let with_rhs ({self=(v,_,i)} as t) x = {t with self=(v,x,i)}
+  let with_rhs ({self={Def.var}} as t) rhs = {
+    t with self = Def.{var; rhs}
+  }
 
   let string_of_intent = function
     | Some In -> "in "
@@ -486,54 +637,16 @@ module Ir_arg = struct
       ~name:"nonnull"
       ~uuid:"3c0a6181-9a9c-4cf4-aa37-8ceebd773952"
 
-  module V1 = struct
-    type t = arg term
-    module Repr = struct
-      type t = (var * exp * intent option) term [@@deriving bin_io, compare, sexp]
-      let pp_self ppf (var,exp,intent) =
-        Format.fprintf ppf "%s :: %s%a = %a"
-          (Var.name var)
-          (string_of_intent intent)
-          Bap_type.pp (Var.typ var)
-          Bap_exp.pp exp
-
-      let pp = term_pp pp_self
-
-      let of_v2 t = with_rhs t @@ Sema.to_bil (lhs t) (sema t)
-      let to_v2 t = with_rhs t @@ Sema.create (sema t)
-    end
-    module Data = struct
-      type t = arg term [@@deriving compare]
-      let version = "1.0.0"
-
-      let hash = hash_of_term
-      let pp ppf x = Repr.pp ppf (Repr.of_v2 x)
-      let module_name = None
-
-      include Binable.Of_binable(Repr)(struct
-          type t = arg term
-          let to_binable = Repr.of_v2
-          let of_binable = Repr.to_v2
-        end)
-      include Sexpable.Of_sexpable(Repr)(struct
-          type t = arg term
-          let to_sexpable = Repr.of_v2
-          let of_sexpable = Repr.to_v2
-        end)
-    end
-    include Regular.Make(Data)
-  end
-
-  let pp_self pp_exp ppf (var,exp,intent) =
+  let pp_self pp_rhs ppf {Def.var; rhs} =
     Format.fprintf ppf "%s :: %s%a = %a"
-      (Var.name var)
-      (string_of_intent intent)
-      Bap_type.pp (Var.typ var)
-      pp_exp exp
+      (Theory.Var.name var)
+      (string_of_intent @@ Intent.get rhs)
+      Theory.Sort.pp (Theory.Var.sort var)
+      pp_rhs rhs
 
-  let pp ppf ({self=(var,_,_)} as t) = term_pp (pp_self (fun ppf exp ->
-      let exp = Sema.to_bil var exp in
-      Bap_exp.pp ppf exp)) ppf t
+  let pp ppf arg = term_pp (pp_self (fun ppf rhs ->
+      let exp = Rhs.exp rhs in
+      Bap_exp.pp ppf exp)) ppf arg
 
   let pp_slots slots = term_pp (pp_self (Knowledge.Value.pp_slots slots))
 
@@ -552,70 +665,49 @@ end
 module Ir_def = struct
   type t = def term
 
-  open Leaf
+  let reify ?(tid=Tid.create()) lhs rhs =
+    make_term tid @@ Def.reify lhs rhs
 
-  let create ?tid var x = create ?tid var (Sema.create x)
-  let bil_exp (var,sema) = Sema.to_bil var sema
+  let create ?(tid=Tid.create ()) var exp =
+    make_term tid @@ Def.of_bil var exp
 
-  let lhs = Leaf.lhs
-  let with_lhs = Leaf.with_lhs
+  let var {self={Def.var}} = var
+  let value {self={Def.var; rhs}} =
+    let sort = Theory.Var.sort var in
+    KB.Value.clone sort rhs
 
-  (* in the future we should reflect the new semantics, using
-     the bil parser *)
-  let with_rhs def x =
-    with_rhs def (Sema.with_bil (rhs def) x)
+  let lhs {self={Def.var}} = Var.reify var
+  let rhs {self={Def.rhs}} = Rhs.exp rhs
 
-  let rhs {self} = bil_exp self
+  let with_lhs ({self={Def.rhs}} as t ) v = {
+    t with self = Def.{
+      var = to_var v;
+      rhs;
+    }
+  }
+
+  let with_rhs ({self={Def.var; rhs}} as t) exp = {
+    t with self = Def.{
+      var;
+      rhs = Rhs.with_exp exp rhs
+    }
+  }
 
   let map_exp def ~f : def term =
-    with_rhs def (f (bil_exp def.self))
+    with_rhs def (f (rhs def))
 
   let substitute def x y = map_exp def ~f:(Exp.substitute x y)
 
   let free_vars def = Exp.free_vars (rhs def)
 
-  module V1 = struct
-    type t = def term
-    module Repr = struct
-      type t = (var * exp) term [@@deriving bin_io, compare, sexp]
-      let pp_self ppf (lhs,rhs) =
-        Format.fprintf ppf "%a := %a" Var.pp lhs Bap_exp.pp rhs
-      let pp = term_pp pp_self
-
-      let of_v2 t = Leaf.with_rhs t (bil_exp t.self)
-      let to_v2 t = Leaf.with_rhs t @@ Sema.create (Leaf.rhs t)
-    end
-    module Data = struct
-      type t = def term [@@deriving compare]
-      let version = "1.0.0"
-
-      let hash = hash_of_term
-      let pp ppf x = Repr.pp ppf (Repr.of_v2 x)
-      let module_name = None
-
-      include Binable.Of_binable(Repr)(struct
-          type t = def term
-          let to_binable = Repr.of_v2
-          let of_binable = Repr.to_v2
-        end)
-      include Sexpable.Of_sexpable(Repr)(struct
-          type t = def term
-          let to_sexpable = Repr.of_v2
-          let of_sexpable = Repr.to_v2
-        end)
-    end
-
-    include Regular.Make(Data)
-  end
-
-  let pp_self ppf ((lhs,_) as self) =
+  let pp_self ppf ({Def.var; rhs} as self) =
     Format.fprintf ppf
-      "%a := %a" Var.pp lhs Bap_exp.pp (bil_exp self)
+      "%s := %a" (Theory.Var.name var) Bap_exp.pp (Rhs.exp rhs)
 
 
-  let pp_self_slots slots ppf (lhs,rhs) =
+  let pp_self_slots slots ppf {Def.var; rhs} =
     Format.fprintf ppf
-      "%a := %a" Var.pp lhs (Knowledge.Value.pp_slots slots) rhs
+      "%s := %a" (Theory.Var.name var) (Knowledge.Value.pp_slots slots) rhs
 
   let pp = term_pp pp_self
   let pp_slots ds = term_pp (pp_self_slots ds)
@@ -633,41 +725,60 @@ end
 
 module Ir_phi = struct
   type t = phi term
-  include Leaf
 
-  let of_list ?tid var bs : phi term =
-    let bs = List.map bs ~f:(fun (t,x) -> t, Sema.create x) in
-    create ?tid var (Tid.Map.of_alist_reduce bs ~f:(fun _ x ->
-        x))
+  let lhs {self={Phi.var}} = var
+
+  let with_lhs ({self} as t) lhs = {
+    t with self = Phi.{
+      self with var = to_var lhs;
+    }
+  }
+
+  let of_list ?(tid=Tid.create()) var bs : phi term =
+    let bs = List.map bs ~f:(fun (t,x) -> t, Rhs.of_exp x) in
+    make_term tid Phi.{
+        var = to_var var;
+        map = Map.of_alist_exn (module Tid) bs
+      }
 
   let create ?tid var src exp : phi term =
     of_list ?tid var [src,exp]
 
-  let values (phi : phi term) : (tid * exp) Seq.t =
-    let v = lhs phi in
-    Map.to_sequence (rhs phi) |>
-    Seq.map ~f:(fun (t,x) -> t, Sema.to_bil v x)
+  let values {self={Phi.map}} : (tid * exp) Seq.t =
+    Map.to_sequence map |>
+    Seq.map ~f:(fun (t,x) -> t, Rhs.exp x)
 
-  let update (phi : phi term) tid exp : phi term =
-    let exp = Sema.create exp in
-    with_rhs phi (Map.set (rhs phi) ~key:tid ~data:exp)
+  let update ({self={Phi.map; var}} as t) tid exp : phi term = {
+    t with self = Phi.{
+      var;
+      map = Map.set map ~key:tid ~data:(Rhs.of_exp exp)
+    }
+  }
 
-  let remove phi tid : phi term =
-    with_rhs phi (Map.remove (rhs phi) tid)
+  let remove ({self={Phi.map; var}} as t) tid : phi term = {
+    t with self = Phi.{
+      var;
+      map = Map.remove map tid
+    }
+  }
 
-  let select phi tid : exp option =
-    Option.map (Map.find (rhs phi) tid) ~f:(Sema.to_bil (lhs phi))
+  let select {self={Phi.map}} tid : exp option =
+    Option.map (Map.find map tid) ~f:Rhs.exp
 
   let select_or_unknown phi tid = match select phi tid with
     | Some thing -> thing
     | None ->
-      let name = Format.asprintf "no path from %a" Tid.pp tid in
-      Bap_exp.Exp.unknown name (Var.typ (lhs phi))
+      let name = Format.asprintf "unresolved-tid %a" Tid.pp tid in
+      let typ = Var.typ (Var.reify (lhs phi)) in
+      Exp.unknown name typ
 
-  let map_exp phi ~f : phi term =
-    let var = lhs phi in
-    with_rhs phi (Map.map (rhs phi) ~f:(fun sema ->
-        Sema.with_bil sema @@ f (Sema.to_bil var sema)))
+  let map_exp ({self={Phi.var; map}} as t) ~f : phi term = {
+    t with
+    self = {
+      var;
+      map = Map.map map ~f:(fun rhs -> Rhs.with_exp (f (Rhs.exp rhs)) rhs)
+    }
+  }
 
   let substitute phi x y = map_exp phi ~f:(Exp.substitute x y)
 
@@ -675,67 +786,25 @@ module Ir_phi = struct
     values phi |> Seq.fold ~init:Bap_var.Set.empty ~f:(fun vars (_,e) ->
         Set.union vars (Exp.free_vars e))
 
-  let pp_self ppf (lhs,rhs) =
-    Format.fprintf ppf "%a := phi(%s)"
-      Var.pp lhs
+  let pp_self ppf {Phi.var; map} =
+    Format.fprintf ppf "%s := phi(%s)"
+      (Theory.Var.name var)
       (String.concat ~sep:", " @@
        List.map ~f:(fun (id,exp) ->
-           let exp = Sema.to_bil lhs exp in
+           let exp = Rhs.exp exp in
            Format.asprintf "[%a, %%%a]" Bap_exp.pp exp Tid.pp id)
-         (Map.to_alist rhs))
+         (Map.to_alist map))
 
-  let pp_self_slots ds ppf (lhs,rhs) =
-    Format.fprintf ppf "%a := phi(%s)"
-      Var.pp lhs
+  let pp_self_slots ds ppf {Phi.var; map} =
+    Format.fprintf ppf "%s := phi(%s)"
+      (Theory.Var.name var)
       (String.concat ~sep:", " @@
        List.map ~f:(fun (id,exp) ->
            Format.asprintf "[%a, %%%a]" (Knowledge.Value.pp_slots ds) exp Tid.pp id)
-         (Map.to_alist rhs))
+         (Map.to_alist map))
 
   let pp = term_pp pp_self
   let pp_slots ds = term_pp (pp_self_slots ds)
-
-  module V1 : Data.S with type t = phi term = struct
-    type t = phi term
-    module Repr = struct
-      type t = (var * exp Tid.Map.t) term [@@deriving bin_io, compare, sexp]
-      let pp_self ppf (lhs,rhs) =
-        Format.fprintf ppf "%a := phi(%s)"
-          Var.pp lhs
-          (String.concat ~sep:", " @@
-           List.map ~f:(fun (id,exp) ->
-               let exp = Sema.to_bil lhs exp in
-               Format.asprintf "[%a, %%%a]" Bap_exp.pp exp Tid.pp id)
-             (Map.to_alist rhs))
-      let pp = term_pp pp_self
-
-      let of_v2 t =
-        let var = lhs t in
-        Leaf.with_rhs t @@ Map.map (rhs t) ~f:(Sema.to_bil var)
-      let to_v2 t = Leaf.with_rhs t @@ Map.map (rhs t) ~f:Sema.create
-    end
-    module Data = struct
-      type t = phi term [@@deriving compare]
-      let version = "1.0.0"
-
-      let hash = hash_of_term
-      let pp ppf x = pp ppf x
-      let module_name = None
-
-      include Binable.Of_binable(Repr)(struct
-          type t = phi term
-          let to_binable = Repr.of_v2
-          let of_binable = Repr.to_v2
-        end)
-      include Sexpable.Of_sexpable(Repr)(struct
-          type t = phi term
-          let to_sexpable = Repr.of_v2
-          let of_sexpable = Repr.to_v2
-        end)
-    end
-
-    include Regular.Make(Data)
-  end
 
   module V2 = struct
     type t = phi term [@@deriving bin_io, compare, sexp]
@@ -749,26 +818,31 @@ end
 
 module Ir_jmp = struct
   type t = jmp term
-  include Leaf
 
-  let sema_opt = Option.map ~f:Sema.create
+  let resolved link = Jmp.Resolved link
+  let indirect dest = Jmp.Indirect (Rhs.of_value dest)
+
+  let reify ?(tid=Tid.create ()) ?cnd ?alt dst = make_term tid Jmp.{
+      cnd;
+      dst;
+      alt;
+    }
+
   let of_label = function
-    | Direct _ -> None
-    | Indirect x -> Some (Sema.create x)
+    | Direct tid -> resolved @@
+      KB.Value.put Tid.slot (KB.Value.empty Theory.Link.cls) tid
+    | Indirect exp -> Jmp.Indirect (Rhs.of_exp exp)
 
-  let of_kind = function
-    | Goto lbl
-    | Call {target=lbl}
-    | Ret lbl -> of_label lbl
-    | Int (_,_) -> None
 
-  let with_kind (t:jmp term) k =
-    create ~tid:t.tid (lhs t) (of_kind k,k)
 
-  let create ?tid ?cond k =
-    create ?tid (sema_opt cond) (of_kind k,k)
+  let create_call ?tid ?cond call =
+    reify ?tid ?cnd:(Option.map cond ~f:Cnd.of_exp)
+      ~alt:(of_label (Call.target call)) @@ match Call.return call with
+    | None -> unreachable
+    | Some _ -> assert false
 
-  let create_call ?tid ?cond call = create ?tid ?cond (Call call)
+
+
   let create_goto ?tid ?cond dest = create ?tid ?cond (Goto dest)
   let create_ret  ?tid ?cond dest = create ?tid ?cond (Ret dest)
   let create_int  ?tid ?cond n t  = create ?tid ?cond (Int (n,t))
@@ -837,43 +911,6 @@ module Ir_jmp = struct
   let pp_cond ppf cond =
     if Exp.(cond <> always) then
       Format.fprintf ppf "when %a " Bap_exp.pp cond
-
-  module V1 : Data.S with type t = jmp term = struct
-    type t = jmp term
-    module Repr = struct
-      type t = (exp * jmp_kind) term [@@deriving bin_io, compare, sexp]
-      let pp_self ppf (lhs,rhs) =
-        Format.fprintf ppf "%a%a" pp_cond lhs pp_dst rhs
-      let pp = term_pp pp_self
-
-      let of_v2 ({self=(cnd,(_,kind))} as jmp) = {
-        jmp with self = (cond_of_sema cnd, kind)
-      }
-      let to_v2 t =
-        create ~tid:t.tid ~cond:(lhs t) (rhs t)
-    end
-
-    module Data = struct
-      type t = jmp term [@@deriving compare]
-      let version = "1.0.0"
-
-      let hash = hash_of_term
-      let pp ppf x = Repr.pp ppf (Repr.of_v2 x)
-      let module_name = None
-
-      include Binable.Of_binable(Repr)(struct
-          type t = jmp term
-          let to_binable = Repr.of_v2
-          let of_binable = Repr.to_v2
-        end)
-      include Sexpable.Of_sexpable(Repr)(struct
-          type t = jmp term
-          let to_sexpable = Repr.of_v2
-          let of_sexpable = Repr.to_v2
-        end)
-    end
-    include Regular.Make(Data)
-  end
 
   let pp_self ppf (lhs,(_,rhs)) =
     Format.fprintf ppf "%a%a" pp_cond (cond_of_sema lhs) pp_dst rhs

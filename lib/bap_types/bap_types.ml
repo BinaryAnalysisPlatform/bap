@@ -68,6 +68,7 @@ module Std = struct
       type typ = Type.t =
         | Imm of int
         | Mem of addr_size * size
+        | Unk
       [@@deriving bin_io, compare, sexp]
       include Bap_bil.Cast
       include Bap_bil.Binop

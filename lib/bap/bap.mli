@@ -6,6 +6,7 @@ open Regular.Std
 open Graphlib.Std
 open Bap_future.Std
 open Bap_knowledge
+open Bap_core_theory
 
 module Std : sig
   [@@@warning "-D"]
@@ -501,8 +502,8 @@ module Std : sig
   (** {1:api BAP API}  *)
 
   module Semantics : sig
-    type cls
-    type t = cls Knowledge.value [@@deriving bin_io, compare, sexp]
+    type cls = unit Theory.Effect.spec
+    type t = cls Knowledge.value
     val cls : cls Knowledge.cls
     include Base.Comparable.S with type t := t
   end
@@ -3245,7 +3246,7 @@ module Std : sig
   module Exp : sig
     type t = Bil.exp
 
-    val slot : (Semantics.cls, t option) Knowledge.slot
+    val slot : ('a Theory.Sort.definition KB.Class.abstract, exp option) KB.slot
     val domain : t option Knowledge.domain
     val persistent : t option Knowledge.persistent
 

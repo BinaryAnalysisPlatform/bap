@@ -1,5 +1,6 @@
 (** Extends [exp] interface.  *)
 open Core_kernel
+open Bap_core_theory
 open Regular.Std
 open Bap_knowledge
 open Bap_common
@@ -103,6 +104,6 @@ module Infix : sig
   val ( ^ )   : exp -> exp -> exp
 end
 
-val slot : (Semantics.cls,exp option) Knowledge.slot
+val slot : ('a Theory.Sort.exp KB.Class.abstract, exp option) Knowledge.slot
 val domain : exp option Knowledge.domain
 val persistent : exp option Knowledge.persistent
