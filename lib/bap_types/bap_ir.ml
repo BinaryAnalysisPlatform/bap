@@ -371,23 +371,6 @@ let pp_attr ppf attr =
 let pp_attrs ppf dict =
   Dict.data dict |> Seq.iter ~f:(pp_attr ppf)
 
-module Leaf = struct
-  let create ?(tid=Tid.create ()) lhs rhs = {
-    tid;
-    self = (lhs,rhs);
-    dict = Value.Dict.empty;
-  }
-
-  let make tid exp dst = {
-    tid; self = (exp,dst); dict = Value.Dict.empty;
-  }
-
-  let lhs {self=(x,_)} = x
-  let rhs {self=(_,x)} = x
-  let with_lhs def lhs = {def with self = (lhs, snd def.self)}
-  let with_rhs def rhs = {def with self = (fst def.self, rhs)}
-end
-
 type nil [@@deriving bin_io, compare, sexp]
 
 type _ typ =
@@ -700,7 +683,7 @@ module Ir_def = struct
 
   let free_vars def = Exp.free_vars (rhs def)
 
-  let pp_self ppf ({Def.var; rhs} as self) =
+  let pp_self ppf {Def.var; rhs} =
     Format.fprintf ppf
       "%s := %a" (Theory.Var.name var) Bap_exp.pp (Rhs.exp rhs)
 
@@ -720,13 +703,13 @@ module Ir_def = struct
     let pp = pp
   end
   include Regular.Make(V2)
-  module Semantics = Leaf
 end
 
 module Ir_phi = struct
   type t = phi term
 
-  let lhs {self={Phi.var}} = var
+  let var {self={Phi.var}} = var
+  let lhs phi = Var.reify (var phi)
 
   let with_lhs ({self} as t) lhs = {
     t with self = Phi.{
@@ -769,7 +752,7 @@ module Ir_phi = struct
     | Some thing -> thing
     | None ->
       let name = Format.asprintf "unresolved-tid %a" Tid.pp tid in
-      let typ = Var.typ (Var.reify (lhs phi)) in
+      let typ = Var.typ (lhs phi) in
       Exp.unknown name typ
 
   let map_exp ({self={Phi.var; map}} as t) ~f : phi term = {
@@ -1321,24 +1304,20 @@ module Term = struct
                          map jmp_t ~f:(self#map_term jmp_t)
 
 
+    method private map_assn ({self=Def.{var;rhs}} as t) = {
+      t with
+      self = Def.{
+          var = to_var (self#map_sym @@ Var.reify var);
+          rhs = Rhs.with_exp (self#map_exp (Rhs.exp rhs)) rhs;
+        }
+    }
 
-    method map_arg ({self=(var,sema,intent)} as arg) =
-      {
-        arg with
-        self = (
-          self#map_sym var,
-          Sema.map (Var.typ var) sema ~f:self#map_exp,
-          intent
-        )
-      }
+    method map_def = self#map_assn
+    method map_arg = self#map_assn
 
     method map_phi phi =
-      let phi = Ir_phi.(Leaf.with_lhs phi (self#map_sym (Leaf.lhs phi))) in
+      let phi = Ir_phi.with_lhs phi @@ self#map_sym (Ir_phi.lhs phi) in
       Ir_phi.map_exp phi ~f:self#map_exp
-
-    method map_def def =
-      let def = Ir_def.(Leaf.with_lhs def (self#map_sym (Leaf.lhs def))) in
-      Ir_def.map_exp def ~f:self#map_exp
 
     method map_jmp jmp = Ir_jmp.map_exp jmp ~f:self#map_exp
   end
@@ -1405,25 +1384,22 @@ module Term = struct
     method leave_jmp : jmp term -> 'a -> 'a = fident
 
     method visit_arg arg x =
-      let old = Ir_arg.V1.Repr.of_v2 arg in
       self#enter_arg arg x |>
-      self#visit_var (fst3 old.self) |>
-      self#visit_exp (snd3 old.self) |>
+      self#visit_var (Ir_arg.lhs arg) |>
+      self#visit_exp (Ir_arg.rhs arg) |>
       self#leave_arg arg
 
     method visit_phi phi x =
       self#enter_phi phi x |>
-      self#visit_var (fst phi.self) |> fun x ->
-      Map.fold (snd phi.self) ~init:x ~f:(fun ~key:_ ~data x ->
-          let data = Sema.to_bil (Leaf.lhs phi) data in
-          self#visit_exp data x) |>
+      self#visit_var (Ir_phi.lhs phi) |> fun x ->
+      Seq.fold (Ir_phi.values phi) ~init:x ~f:(fun data (_,x) ->
+          self#visit_exp x data) |>
       self#leave_phi phi
 
     method visit_def def x =
-      let old = Ir_def.V1.Repr.of_v2 def in
       self#enter_def def x |>
-      self#visit_var (fst old.self) |>
-      self#visit_exp (snd old.self) |>
+      self#visit_var (Ir_def.lhs def) |>
+      self#visit_exp (Ir_def.rhs def) |>
       self#leave_def def
 
     method visit_jmp jmp x =
@@ -1590,8 +1566,8 @@ module Ir_blk = struct
   let substitute ?skip blk x y =
     map_exp ?skip  blk ~f:(Exp.substitute x y)
 
-  let map_phi_lhs p ~f = Leaf.(with_lhs p (f (lhs p)))
-  let map_def_lhs d ~f = Leaf.(with_lhs d (f (lhs d)))
+  let map_phi_lhs p ~f = Ir_phi.with_lhs p (f (Ir_phi.lhs p))
+  let map_def_lhs d ~f = Ir_def.with_lhs d (f (Ir_def.lhs d))
 
   let map_lhs ?(skip=[]) blk ~f = {
     blk with self = {
@@ -1601,20 +1577,22 @@ module Ir_blk = struct
     }
   }
 
+  let has_lhs cls lhs blk x =
+    Term.to_sequence cls blk |>
+    Seq.exists ~f:(fun t -> Var.(lhs t = x))
+
   let defines_var blk x =
-    let exists t =
-      Term.to_sequence t blk |>
-      Seq.exists ~f:(fun y -> Var.(Leaf.lhs y = x)) in
-    exists phi_t || exists def_t
+    has_lhs phi_t Ir_phi.lhs blk x  ||
+    has_lhs def_t Ir_def.lhs blk x
 
   let free_vars blk =
     let (++) = Set.union and (--) = Set.diff in
     let init = Bap_var.Set.empty,Bap_var.Set.empty in
     fst @@ Seq.fold (elts blk) ~init ~f:(fun (vars,kill) -> function
-        | `Phi phi -> vars, Set.add kill (Leaf.lhs phi)
+        | `Phi phi -> vars, Set.add kill (Ir_phi.lhs phi)
         | `Def def ->
           Ir_def.free_vars def -- kill ++ vars,
-          Set.add kill (Leaf.lhs def)
+          Set.add kill (Ir_def.lhs def)
         | `Jmp jmp ->
           Ir_jmp.free_vars jmp -- kill ++ vars, kill)
 
@@ -1622,11 +1600,11 @@ module Ir_blk = struct
 
   let find_var blk var =
     Term.to_sequence def_t blk ~rev:true |>
-    Seq.find ~f:(fun d -> Leaf.lhs d = var) |> function
+    Seq.find ~f:(fun d -> Ir_def.lhs d = var) |> function
     | Some def -> Some (`Def def)
     | None ->
       Term.to_sequence phi_t blk |>
-      Seq.find ~f:(fun p -> Leaf.lhs p = var) |> function
+      Seq.find ~f:(fun p -> Ir_phi.lhs p = var) |> function
       | Some phi -> Some (`Phi phi)
       | None -> None
 
