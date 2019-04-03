@@ -1,5 +1,6 @@
 open Core_kernel
 open Regular.Std
+open Bap_core_theory
 open Bap_common
 open Bap_bil
 open Bap_value
@@ -18,8 +19,6 @@ type def [@@deriving bin_io, compare, sexp]
 type jmp [@@deriving bin_io, compare, sexp]
 type tid [@@deriving bin_io, compare, sexp]
 type call [@@deriving bin_io, compare, sexp]
-type semantics = Bap_types_semantics.t
-[@@deriving bin_io, compare, sexp]
 
 type label =
   | Direct of tid
@@ -288,11 +287,12 @@ end
 module Ir_def : sig
   type t = def term
 
-  module Semantics : sig
-    val create : ?tid:tid -> var -> semantics -> t
-    val with_rhs : t -> semantics -> t
-    val rhs : t -> semantics
-  end
+  val reify : ?tid:tid ->
+    'a Theory.var ->
+    'a Theory.Sort.exp KB.value -> t
+
+  val var : t -> unit Theory.var
+  val value : t -> unit Theory.Sort.exp KB.value
 
   val create : ?tid:tid -> var -> exp -> t
   val lhs : t -> var
@@ -305,16 +305,45 @@ module Ir_def : sig
   val pp_slots : string list -> Format.formatter -> t -> unit
 
   include Regular.S with type t := t
-  module V1 : Data.S with type t = def term
 end
 
 module Ir_jmp : sig
   type t = jmp term
+  type role
 
-  module Semantics : sig
-    val jump : ?tid:tid -> ?cond:semantics -> typ -> semantics -> t
-    val cond : t -> semantics option
-    val dest : t -> semantics option
+
+  val resolved : ?tid:tid ->
+    ?cnd:Theory.Bool.t Theory.Sort.exp KB.value ->
+    Theory.Link.t -> t
+
+  val indirect : ?tid:tid ->
+    ?cnd:Theory.Bool.t Theory.Sort.exp KB.value ->
+    'a Theory.Bitv.t Theory.Sort.exp KB.value ->
+    t
+
+  val cnd : t -> Theory.Bool.t Theory.Sort.exp KB.value option
+
+  val value : t -> unit Theory.Sort.exp KB.Class.abstract KB.value
+
+  val links : t -> Theory.Link.t list
+
+  val add_link : t -> Theory.Link.t -> t
+
+  module Role : sig
+    type t = role
+
+    val named : string -> role
+    val name : role -> string
+
+    val unknown : role
+    val local : role
+    val call : role
+    val ivec : role
+    val extern : role
+    val return : role
+    val shortcut : role
+
+    val slot : (Theory.Link.cls, role) KB.slot
   end
 
   val create      : ?tid:tid -> ?cond:exp -> jmp_kind -> t
@@ -331,11 +360,21 @@ module Ir_jmp : sig
   val substitute : t -> exp -> exp -> t
   val free_vars : t -> Bap_var.Set.t
   val pp_slots : string list -> Format.formatter -> t -> unit
+
   include Regular.S with type t := t
 end
 
 module Ir_phi : sig
   type t = phi term
+
+  val reify : ?tid:tid ->
+    'a Theory.var ->
+    (tid * 'a Theory.Sort.exp KB.value) list ->
+    t
+
+  val var : t -> unit Theory.var
+  val options : t -> (tid * unit Theory.Sort.exp KB.value) seq
+
   val create : ?tid:tid -> var -> tid -> exp -> t
   val of_list : ?tid:tid -> var -> (tid * exp) list -> t
   val lhs : t -> var
@@ -355,6 +394,13 @@ end
 module Ir_arg : sig
   type t = arg term
 
+  val reify : ?tid:tid -> ?intent:intent ->
+    'a Theory.var ->
+    'a Theory.Sort.exp KB.value -> t
+
+  val var : t -> unit Theory.var
+  val value : t -> unit Theory.Sort.exp KB.value
+
   val create : ?tid:tid -> ?intent:intent -> var -> exp -> t
   val lhs : t -> var
   val rhs : t -> exp
@@ -369,9 +415,11 @@ module Ir_arg : sig
   val nonnull : unit tag
   val pp_slots : string list -> Format.formatter -> t -> unit
 
-  include Regular.S with type t := t
+  module Intent : sig
+    val slot : ('a Theory.Sort.exp KB.Class.abstract, intent option) KB.slot
+  end
 
-  module V1 : Data.S with type t = arg term
+  include Regular.S with type t := t
 end
 
 module Call : sig

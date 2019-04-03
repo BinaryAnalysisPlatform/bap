@@ -554,7 +554,6 @@ end
 module Ir_arg = struct
   type t = arg term
 
-
   module Intent = struct
     module T = struct
       type t = intent option [@@deriving bin_io]
@@ -574,6 +573,11 @@ module Ir_arg = struct
       self with rhs = Intent.set (Some intent) rhs
     }
   }
+
+  let var {self={Def.var}} = var
+  let value {self={Def.var; rhs}} =
+    let sort = Theory.Var.sort var in
+    KB.Value.clone sort rhs
 
   let with_intent arg intent = set_intent arg (Some intent)
 
@@ -717,6 +721,13 @@ module Ir_phi = struct
     }
   }
 
+  let reify ?(tid=Tid.create ()) var bs =
+    let bs = List.map bs ~f:(fun (t,x) -> t, Rhs.of_value x) in
+    make_term tid Phi.{
+        var = Theory.Var.forget var;
+        map = Map.of_alist_exn (module Tid) bs
+      }
+
   let of_list ?(tid=Tid.create()) var bs : phi term =
     let bs = List.map bs ~f:(fun (t,x) -> t, Rhs.of_exp x) in
     make_term tid Phi.{
@@ -730,6 +741,12 @@ module Ir_phi = struct
   let values {self={Phi.map}} : (tid * exp) Seq.t =
     Map.to_sequence map |>
     Seq.map ~f:(fun (t,x) -> t, Rhs.exp x)
+
+  let options {self={Phi.map; var}} : (tid * _) Seq.t =
+    let sort = Theory.Var.sort var in
+    Map.to_sequence map |>
+    Seq.map ~f:(fun (t,x) -> t, KB.Value.clone sort x)
+
 
   let update ({self={Phi.map; var}} as t) tid exp : phi term = {
     t with self = Phi.{
@@ -813,6 +830,9 @@ module Ir_jmp = struct
     let return = ":return"
     let shortcut = ":shortcut"
 
+    let named = sprintf ":%s"
+    let name x = String.subo ~pos:1 x
+
 
     let domain = KB.Domain.flat ~empty:unknown
         ~is_empty:String.(equal unknown)
@@ -828,6 +848,7 @@ module Ir_jmp = struct
       KB.Value.put slot link role
   end
 
+  type role = Role.t
 
   let resolved ?(tid=Tid.create ()) ?cnd dst = make_term tid Jmp.{
       cnd;
@@ -838,14 +859,18 @@ module Ir_jmp = struct
   let indirect ?(tid=Tid.create()) ?cnd exp = make_term tid Jmp.{
       cnd;
       dst = [];
-      exp = exp;
+      exp = Rhs.of_value exp;
     }
 
-  let resolve t lnk = {
+  let add_link t lnk = {
     t with self = Jmp.{
       t.self with dst = lnk :: t.self.dst
     }
   }
+
+  let links {self={Jmp.dst}} = dst
+  let cnd {self={Jmp.cnd}} = cnd
+  let value {self={Jmp.exp}} = exp
 
   let empty_link = KB.Value.empty Theory.Link.cls
 
@@ -898,6 +923,7 @@ module Ir_jmp = struct
           dst = [Role.set Role.shortcut @@ link_of_tid ret]
         }
 
+  let create_call ?tid ?cond call = create ?tid ?cond (Call call)
   let create_goto ?tid ?cond dest = create ?tid ?cond (Goto dest)
   let create_ret  ?tid ?cond dest = create ?tid ?cond (Ret dest)
   let create_int  ?tid ?cond n t  = create ?tid ?cond (Int (n,t))
