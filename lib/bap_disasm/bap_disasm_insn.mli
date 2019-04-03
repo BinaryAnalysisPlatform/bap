@@ -5,7 +5,7 @@ open Bap_types.Std
 open Bap_disasm_types
 open Bap_ir
 
-type t [@@deriving bin_io, compare, sexp]
+type t = Semantics.t [@@deriving bin_io, compare, sexp]
 type op = Op.t [@@deriving bin_io, compare, sexp]
 
 val of_basic : ?bil:bil -> Basic.full_insn -> t
@@ -44,8 +44,6 @@ module Slot : sig
   val ops : (Semantics.cls, op array option) Knowledge.slot
 end
 
-val semantics : t -> semantics
-val with_semantics : t -> semantics -> t
 
 val pp_adt : Format.formatter -> t -> unit
 module Trie : sig

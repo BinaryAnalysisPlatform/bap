@@ -1,5 +1,5 @@
 open Core_kernel
-open Bap_knowledge
+open Bap_core_theory
 open Regular.Std
 open Bap_types.Std
 open Bap_disasm_types
@@ -14,6 +14,7 @@ type 'a property = Z.t * string
 let known_properties = ref []
 
 let new_property _ name : 'a property =
+  let name = sprintf ":%s" name in
   let bit = List.length !known_properties in
   let property = Z.shift_left Z.one bit, name in
   known_properties := !known_properties @ [property];
@@ -44,23 +45,54 @@ module Props = struct
     Z.logand flags flag = flag
   let set_if cond flag =
     if cond then fun flags -> flags + flag else ident
-  include Sexpable.Of_stringable(Bits)
-  include Binable.Of_stringable(Bits)
+
+  module T = struct
+    type t = Z.t
+    include Sexpable.Of_stringable(Bits)
+    include Binable.Of_stringable(Bits)
+  end
+
+  let domain = KB.Domain.flat "props"
+      ~empty:Z.zero ~is_empty:Z.(equal zero)
+
+  let persistent = KB.Persistent.of_binable (module T)
+
+  let slot = KB.Class.property ~package:"bap.std"
+      ~persistent
+      Semantics.cls "insn-properties" domain
 end
 
 type semantics = Semantics.t [@@deriving bin_io, compare, sexp]
 
-type t = {
-  code : int;
-  name : string;
-  sema : semantics; (* we keep both sema and bil cause the former *)
-  bil  : bil;       (* won't survive marshalizing, will fix it later *)
-  asm  : string;
-  ops  : Op.t array;
-  props : Props.t;
-} [@@deriving bin_io, fields, compare, sexp]
+type t = Semantics.t
 
-type op = Op.t [@@deriving bin_io, compare, sexp]
+
+module Slot = struct
+  let empty = "#undefined"
+  let text = KB.Domain.flat "text"
+      ~inspect:sexp_of_string ~empty
+      ~is_empty:(String.equal empty)
+
+  let name = KB.Class.property ~package:"bap.std"
+      ~persistent:KB.Persistent.string
+      Semantics.cls "insn-opcode" text
+
+  let asm = KB.Class.property ~package:"bap.std"
+      ~persistent:KB.Persistent.string
+      Semantics.cls "insn-asm" text
+
+  let ops_domain = KB.Domain.optional "insn-ops"
+      ~inspect:[%sexp_of: Op.t array]
+
+  let ops_persistent = KB.Persistent.of_binable (module struct
+      type t = Op.t array option [@@deriving bin_io]
+    end)
+
+  let ops = KB.Class.property ~package:"bap.std"
+      ~persistent:ops_persistent
+      Semantics.cls "insn-ops" ops_domain
+end
+
 
 let normalize_asm asm =
   String.substr_replace_all asm ~pattern:"\t"
@@ -84,7 +116,12 @@ let lookup_side_effects bil = (object
     `May_load :: acc
 end)#run bil []
 
-let of_basic ?bil insn =
+let (<--) slot value insn = KB.Value.put slot insn value
+
+let write init ops =
+  List.fold ~init ops ~f:(fun init f -> f init)
+
+let of_basic ?bil insn : t =
   let bil_kinds = match bil with
     | Some bil -> lookup_jumps bil @ lookup_side_effects bil
     | None -> [] in
@@ -111,26 +148,29 @@ let of_basic ?bil insn =
     Props.set_if may_affect_control_flow affect_control_flow |>
     Props.set_if may_load load                               |>
     Props.set_if may_store store in
-  {
-    code = Insn.code insn;
-    name = Insn.name insn;
-    sema = Knowledge.Value.empty Semantics.cls;
-    asm  = normalize_asm (Insn.asm insn);
-    bil  = Option.value bil ~default:[Bil.special "unknown"];
-    ops  = Insn.ops insn;
-    props;
-  }
+  write (KB.Value.empty Semantics.cls) Slot.[
+      Props.slot <-- props;
+      name <-- Insn.name insn;
+      asm <-- normalize_asm (Insn.asm insn);
+      Bil.slot <-- Option.value bil ~default:[Bil.special "unknown"];
+      ops <-- Some (Insn.ops insn);
+    ]
 
-let semantics insn = insn.sema
-let with_semantics insn s = {insn with sema = s}
-
-
-let is flag t = Props.has t.props flag
+let get = KB.Value.get Props.slot
+let put = KB.Value.put Props.slot
+let is flag t = Props.has (get t) flag
 let may = is
-let must flag insn = {insn with props = Props.(insn.props + flag) }
-let mustn't flag insn = {insn with props = Props.(insn.props - flag)}
+let must flag insn =  put insn Props.(get insn + flag)
+let mustn't flag insn = put insn Props.(get insn - flag)
 let should = must
 let shouldn't = mustn't
+
+let name = KB.Value.get Slot.name
+let asm = KB.Value.get Slot.asm
+let bil = KB.Value.get Bil.slot
+let ops s = match KB.Value.get Slot.ops s with
+  | None -> [||]
+  | Some ops -> ops
 
 module Adt = struct
   let pr fmt = Format.fprintf fmt
@@ -145,17 +185,21 @@ module Adt = struct
     List.map ~f:snd |>
     String.concat ~sep:", "
 
-  let pp ch insn = pr ch "%s(%a, Props(%s))"
-      (String.capitalize insn.name)
-      pp_ops (Array.to_list insn.ops)
-      (props insn)
+  let pp ppf insn =
+    let name = name insn in
+    if name = Slot.empty
+    then pr ppf "Undefined()"
+    else pr ppf "%s(%a, Props(%s))"
+        (String.capitalize name)
+        pp_ops (Array.to_list (ops insn))
+        (props insn)
 end
 
 let pp_adt = Adt.pp
 
 module Trie = struct
   module Key = struct
-    type token = int * Op.t array [@@deriving bin_io, compare, sexp]
+    type token = string * Op.t array [@@deriving bin_io, compare, sexp]
     type t = token array
 
     let length = Array.length
@@ -166,7 +210,7 @@ module Trie = struct
   module Normalized = Trie.Make(struct
       include Key
       let compare_token (x,xs) (y,ys) =
-        let r = compare_int x y in
+        let r = compare_string x y in
         if r = 0 then Op.Normalized.compare_ops xs ys else r
       let hash_ops = Array.fold ~init:0
           ~f:(fun h x -> h lxor Op.Normalized.hash x)
@@ -174,28 +218,31 @@ module Trie = struct
         x lxor hash_ops xs
     end)
 
-  let token_of_insn insn = insn.code, insn.ops
+  let token_of_insn insn = name insn, ops insn
   let key_of_insns = Array.of_list_map ~f:token_of_insn
 
   include Trie.Make(Key)
 end
 
 include Regular.Make(struct
-    type nonrec t = t [@@deriving sexp, bin_io, compare]
-    let hash t = t.code
+    type t = Semantics.t [@@deriving sexp, bin_io, compare]
+    let hash t = Hashtbl.hash t
     let module_name = Some "Bap.Std.Insn"
-    let version = "1.0.0"
+    let version = "2.0.0"
 
     let string_of_ops ops =
       Array.map ops ~f:Op.to_string |> Array.to_list |>
       String.concat ~sep:","
 
     let pp fmt insn =
-      Format.fprintf fmt "%s(%s)" insn.name (string_of_ops insn.ops)
+      let name = name insn in
+      if name = Slot.empty
+      then Format.fprintf fmt "%s" name
+      else Format.fprintf fmt "%s(%s)" name (string_of_ops (ops insn))
   end)
 
 let pp_asm ppf insn =
-  Format.fprintf ppf "%s" insn.asm
+  Format.fprintf ppf "%s" (asm insn)
 
 let () =
   Data.Write.create ~pp:Adt.pp () |>
@@ -204,29 +251,3 @@ let () =
   Data.Write.create ~pp:pp_asm () |>
   add_writer ~desc:"Target assembly language" ~ver:"1.0" "asm";
   set_default_printer "asm"
-
-module Slot = struct
-  let empty = "#undefined"
-  let text = Knowledge.Domain.flat "text"
-      ~inspect:sexp_of_string ~empty
-      ~is_empty:(String.equal empty)
-
-  let name = Knowledge.Class.property ~package:"bap.std"
-      ~persistent:Knowledge.Persistent.string
-      Semantics.cls "insn-opcode" text
-
-  let asm = Knowledge.Class.property ~package:"bap.std"
-      ~persistent:Knowledge.Persistent.string
-      Semantics.cls "insn-asm" text
-
-  let ops_domain = Knowledge.Domain.optional "insn-ops"
-      ~inspect:(sexp_of_array sexp_of_op)
-
-  let ops_persistent = Knowledge.Persistent.of_binable (module struct
-      type t = op array option [@@deriving bin_io]
-    end)
-
-  let ops = Knowledge.Class.property ~package:"bap.std"
-      ~persistent:ops_persistent
-      Semantics.cls "insn-ops" ops_domain
-end
