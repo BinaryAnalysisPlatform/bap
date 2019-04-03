@@ -92,9 +92,8 @@ module Tid = struct
     | None -> Format.asprintf "%%%a" Tid.pp tid
     | Some name -> sprintf "@%s" name
 
-  let domain = KB.Domain.flat "tid"
+  let domain = KB.Domain.optional "tid"
       ~inspect:(fun x -> Sexp.Atom (name x))
-      ~empty:nil ~is_empty:Int63.(equal nil)
 
   let slot = KB.Class.property ~package
       Theory.Link.cls "link-tid"  domain
@@ -137,6 +136,7 @@ module Rhs : sig
   type top = unit Theory.Sort.exp Knowledge.Class.abstract
   type t = top Knowledge.value [@@deriving bin_io, compare, sexp]
 
+  val empty : t
   val of_value : 'a Theory.Sort.exp KB.value -> t
   val of_exp : exp -> t
   val with_exp : exp -> t -> t
@@ -151,7 +151,11 @@ end = struct
     let s = KB.Value.cls v in
     KB.Value.clone (KB.Class.forget (Theory.Sort.forget s)) v
 
+
+  let empty = KB.Value.empty Theory.Sort.t
+
   let of_value x = forget x
+
   let of_exp exp =
     KB.Value.put Exp.slot (KB.Value.empty top) (Some exp)
 
@@ -226,16 +230,12 @@ end = struct
 end
 
 module Jmp = struct
-  type label =
-    | Resolved of Theory.Link.t
-    | Indirect of Rhs.t
-  [@@deriving bin_io, compare, sexp]
 
 
   type t = {
     cnd : Cnd.t option;
-    dst : Theory.Link.t;
-    alt : label option;
+    dst : Theory.Link.t list;
+    exp : Rhs.t;
   } [@@deriving bin_io, compare, sexp]
 
 
@@ -479,8 +479,8 @@ let nil_phi : phi term = empty Phi.{
 
 let nil_jmp : jmp term = empty Jmp.{
     cnd = None;
-    dst = KB.Value.empty Theory.Link.cls;
-    alt = None;
+    dst = [];
+    exp = Rhs.empty
   }
 
 let nil_blk : blk term =
@@ -819,42 +819,156 @@ end
 module Ir_jmp = struct
   type t = jmp term
 
-  let resolved link = Jmp.Resolved link
-  let indirect dest = Jmp.Indirect (Rhs.of_value dest)
+  module Role = struct
+    type t = string [@@deriving bin_io, compare, sexp]
 
-  let reify ?(tid=Tid.create ()) ?cnd ?alt dst = make_term tid Jmp.{
+    let unknown = ":unknown"
+    let local = ":local"
+    let call = ":call"
+    let ivec = ":ivec"
+    let extern = ":extern"
+    let return = ":return"
+    let shortcut = ":shortcut"
+
+
+    let domain = KB.Domain.flat ~empty:unknown
+        ~is_empty:String.(equal unknown)
+        ~inspect:sexp_of_t "role"
+
+    let slot = KB.Class.property ~package Theory.Link.cls
+        "link-role" domain
+
+    let equal = String.equal
+    let has role link =
+      equal (KB.Value.get slot link) role
+    let set role link =
+      KB.Value.put slot link role
+  end
+
+
+  let resolved ?(tid=Tid.create ()) ?cnd dst = make_term tid Jmp.{
       cnd;
-      dst;
-      alt;
+      dst = [dst];
+      exp = Rhs.empty;
     }
 
-  let of_label = function
-    | Direct tid -> resolved @@
-      KB.Value.put Tid.slot (KB.Value.empty Theory.Link.cls) tid
-    | Indirect exp -> Jmp.Indirect (Rhs.of_exp exp)
+  let indirect ?(tid=Tid.create()) ?cnd exp = make_term tid Jmp.{
+      cnd;
+      dst = [];
+      exp = exp;
+    }
 
+  let resolve t lnk = {
+    t with self = Jmp.{
+      t.self with dst = lnk :: t.self.dst
+    }
+  }
 
+  let empty_link = KB.Value.empty Theory.Link.cls
 
-  let create_call ?tid ?cond call =
-    reify ?tid ?cnd:(Option.map cond ~f:Cnd.of_exp)
-      ~alt:(of_label (Call.target call)) @@ match Call.return call with
-    | None -> unreachable
-    | Some _ -> assert false
+  let link_of_tid tid =
+    KB.Value.put Tid.slot empty_link (Some tid)
+  let link_of_int int =
+    KB.Value.put Theory.Link.ivec empty_link (Some int)
 
-
+  let create ?(tid=Tid.create()) ?(cond=always) kind =
+    let cnd = if cond = always then None else Some (Cnd.of_exp cond) in
+    make_term tid @@ match kind with
+    | Goto (Direct tid) -> Jmp.{
+        cnd; exp = Rhs.empty;
+        dst = [Role.set Role.local @@ link_of_tid tid];
+      }
+    | Goto (Indirect exp)
+    | Ret  (Indirect exp) -> Jmp.{
+        cnd; exp = Rhs.of_exp exp;
+        dst = [];
+      }
+    | Ret (Direct tid) -> Jmp.{
+        cnd; exp = Rhs.empty;
+        dst = [Role.set Role.return @@ link_of_tid tid];
+      }
+    | Int (int,tid) -> Jmp.{
+        cnd; exp = Rhs.empty;
+        dst = [
+          Role.set Role.ivec @@ link_of_int int;
+          Role.set Role.shortcut @@ link_of_tid tid;
+        ]
+      }
+    | Call call -> match Call.target call, Call.return call with
+      | Direct tid, (None | Some (Indirect _)) -> {
+          cnd; exp = Rhs.empty;
+          dst = [Role.set Role.call @@ link_of_tid tid]
+        }
+      | Indirect exp, (None|Some (Indirect _)) -> {
+          cnd; exp = Rhs.of_exp exp;
+          dst=[]
+        }
+      | Direct dst, Some (Direct ret) -> {
+          cnd; exp = Rhs.empty;
+          dst = [
+            Role.set Role.call @@ link_of_tid dst;
+            Role.set Role.shortcut @@ link_of_tid ret;
+          ]
+        }
+      | Indirect exp, Some (Direct ret) -> {
+          cnd; exp = Rhs.of_exp exp;
+          dst = [Role.set Role.shortcut @@ link_of_tid ret]
+        }
 
   let create_goto ?tid ?cond dest = create ?tid ?cond (Goto dest)
   let create_ret  ?tid ?cond dest = create ?tid ?cond (Ret dest)
   let create_int  ?tid ?cond n t  = create ?tid ?cond (Int (n,t))
 
-  let kind x = snd (rhs x)
 
-  let cond_of_sema = function
+  let kind_of_jmp {Jmp.dst; exp} =
+    let get role slot =
+      List.find dst ~f:(Role.has role) |> function
+      | None -> None
+      | Some lnk -> KB.Value.get slot lnk in
+    let open Theory.Link in
+    let tid = Tid.slot in
+    match get Role.ivec ivec, get Role.shortcut tid with
+    | Some dst, Some ret -> Int (dst,ret)
+    | _ -> match get Role.call tid,  get Role.shortcut tid with
+      | Some dst, Some ret -> Call {
+          target = Direct dst;
+          return = Some (Direct ret);
+        }
+      | Some dst, None -> Call {
+          target = Direct dst;
+          return = None;
+        }
+      | _ -> match get Role.return tid with
+        | Some dst -> Ret (Direct dst)
+        | None ->
+          List.find_map dst ~f:(fun lnk ->
+              KB.Value.get tid lnk) |> function
+          | Some dst -> Goto (Direct dst)
+          | None -> Goto (Indirect (Rhs.exp exp))
+
+
+  let kind : jmp term -> jmp_kind = fun t ->
+    kind_of_jmp t.self
+
+  let cond_of_jmp {Jmp.cnd} = match cnd with
     | None -> always
-    | Some x -> Sema.get (Type.Imm 1) x
+    | Some cnd ->
+      let cnd = KB.Value.clone Theory.Sort.t cnd in
+      match KB.Value.get Exp.slot cnd with
+      | None -> Exp.unknown "branch-condition" (Type.Imm 1)
+      | Some exp -> exp
 
-  let cond x = cond_of_sema (lhs x)
-  let with_cond (t : jmp term) x = with_lhs t (Some (Sema.create x))
+
+  let cond : jmp term -> exp = fun t -> cond_of_jmp t.self
+
+  let with_cond t cnd = {
+    t with self = Jmp.{
+      t.self with cnd = Some (Cnd.of_exp cnd)
+    }
+  }
+
+
+  let with_kind t kind = create ~tid:t.tid ~cond:(cond t) kind
 
   let exps (jmp : jmp term) : exp Sequence.t =
     let open Sequence.Generator in
@@ -912,8 +1026,10 @@ module Ir_jmp = struct
     if Exp.(cond <> always) then
       Format.fprintf ppf "when %a " Bap_exp.pp cond
 
-  let pp_self ppf (lhs,(_,rhs)) =
-    Format.fprintf ppf "%a%a" pp_cond (cond_of_sema lhs) pp_dst rhs
+  let pp_self ppf jmp =
+    Format.fprintf ppf "%a%a"
+      pp_cond (cond_of_jmp jmp)
+      pp_dst (kind_of_jmp jmp)
 
   let pp = term_pp pp_self
   let pp_slots _ = pp
@@ -927,15 +1043,7 @@ module Ir_jmp = struct
     let pp = pp
   end
 
-  module Semantics = struct
-    let jump ?tid ?cond typ dst : jmp term =
-      let exp = Sema.get typ dst in
-      Leaf.create ?tid cond (Some dst, Goto (Indirect exp))
-    let cond x = Leaf.lhs x
-    let dest x = fst (Leaf.rhs x)
-  end
   include Regular.Make(V2)
-
 end
 
 
