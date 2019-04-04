@@ -1,3 +1,31 @@
+1.6.0
+=====
+
+### Features
+
+#893  adds integration with ida 7
+#892  implements helper functions for creating and manipulating partitions
+#906  makes dead code elimination less conservative
+#914  preserves brancher information in the BIL code of an instruction
+#820  Jane Street 0.11.x library compatibility + minor fixes
+#922  few x86 enhancements
+#923  SSE XMM0 ABI
+#933  enables bap-elf
+#934  adds the compiler option to byteweight
+#932  enables memory sharing between instructions
+#938  removed upper bound for llvm version, compatibility with LLVM 8.0
+#926  enables functions with multiple entry
+
+### Bug fixes
+
+#907  fixes the free-vars-by-dominators computation algorithm
+#915  fixed building on travis
+#920  fix the i64 import error
+#927  fixes ADT printer
+#939  fixes the order of arguments in the callsites plugin
+#937  fixes TOCTOU bug in bap log
+#941  fixes a dependency bug in primus lisp docs
+
 1.5.0
 =====
 
