@@ -5,7 +5,10 @@ open Bap_common
 open Bap_bil
 open Bap_value
 open Bap_visitor
-open Bap_knowledge
+open Bap_core_theory
+
+type tid = unit Theory.Effect.spec KB.obj
+[@@deriving bin_io, compare, sexp]
 
 
 type 'a term [@@deriving bin_io, compare, sexp]
@@ -17,7 +20,6 @@ type blk [@@deriving bin_io, compare, sexp]
 type phi [@@deriving bin_io, compare, sexp]
 type def [@@deriving bin_io, compare, sexp]
 type jmp [@@deriving bin_io, compare, sexp]
-type tid [@@deriving bin_io, compare, sexp]
 type call [@@deriving bin_io, compare, sexp]
 
 type label =
@@ -57,8 +59,7 @@ module Tid : sig
   val from_string_exn : string -> tid
   val (!!) : string -> tid
   include Regular.S with type t := t
-  module Tid_generator : Bap_state.S
-  module Name_resolver : Bap_state.S
+  module State : Bap_state.S
 end
 
 module Term : sig
@@ -104,8 +105,6 @@ module Term : sig
   val precondition : exp tag
   val invariant : exp tag
   val postcondition : exp tag
-
-  val slot : (Bap_types_semantics.cls, blk term list) Knowledge.slot
 
   class mapper : object
     inherit exp_mapper
@@ -314,7 +313,7 @@ module Ir_jmp : sig
 
   val resolved : ?tid:tid ->
     ?cnd:Theory.Bool.t Theory.Sort.exp KB.value ->
-    Theory.Link.t -> t
+    Theory.label -> role -> t
 
   val indirect : ?tid:tid ->
     ?cnd:Theory.Bool.t Theory.Sort.exp KB.value ->
@@ -325,9 +324,9 @@ module Ir_jmp : sig
 
   val value : t -> unit Theory.Sort.exp KB.Class.abstract KB.value
 
-  val links : t -> Theory.Link.t list
+  val links : t -> (Theory.label * role) seq
 
-  val add_link : t -> Theory.Link.t -> t
+  val link : t -> Theory.label -> role -> t
 
   module Role : sig
     type t = role
@@ -338,12 +337,8 @@ module Ir_jmp : sig
     val unknown : role
     val local : role
     val call : role
-    val ivec : role
-    val extern : role
     val return : role
     val shortcut : role
-
-    val slot : (Theory.Link.cls, role) KB.slot
   end
 
   val create      : ?tid:tid -> ?cond:exp -> jmp_kind -> t

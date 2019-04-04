@@ -35,75 +35,139 @@ type dict = Dict.t [@@deriving bin_io, compare, sexp]
 type 'a vector = 'a Vec.t
 
 module Tid = struct
-  type t = Int63.t [@@deriving bin_io, compare, sexp]
+  open KB.Syntax
+  let package = "bap.std.private"
 
+  type t = Theory.Label.t [@@deriving bin_io, compare, sexp]
 
+  type gen = Generator
+  type resolver = Resolver
 
-  module Tid_generator = Bap_state.Make(struct
-      type t = Int63.t ref
-      let create () = ref (Int63.zero)
+  let generator = KB.Class.declare ~package "tid-generator" Generator
+  let resolver = KB.Class.declare ~package "tid-resolver" Resolver
+  let unit = KB.Class.declare ~package "unit" ()
+  let tid_t = KB.Domain.optional ~inspect:sexp_of_t "tid"
+  let last = KB.Class.property ~package generator "last-tid" tid_t
+  let name = KB.Class.property ~package resolver "name"
+      (KB.Domain.optional "name")
+  let repr = KB.Class.property ~package resolver "repr"
+      KB.Domain.string
+  let tid = KB.Class.property ~package resolver "tid" tid_t
+
+  let int_t = KB.Domain.optional "int_t"
+  let ivec = KB.Class.property ~package resolver "ivec" int_t
+
+  module State = Bap_state.Make(struct
+      type t = KB.state ref
+      let create () = ref KB.empty;;
     end)
 
-  let create =
-    fun () ->
-    let last_tid = !Tid_generator.state in
-    Int63.incr last_tid;
-    last_tid.contents
+  let run cls exp =
+    let state = !State.state in
+    match KB.run cls exp state.contents with
+    | Error _ -> assert false
+    | Ok (value,state') ->
+      state := state';
+      value
 
-  let nil = Int63.zero
-  module Tid = Regular.Make(struct
-      type nonrec t = Int63.t [@@deriving bin_io, compare, sexp]
-      let module_name = Some "Bap.Std.Tid"
-      let version = "1.0.0"
+  let fresh =
+    KB.Object.create Theory.Effect.top >>= fun obj ->
+    KB.Object.create generator >>= fun gen ->
+    KB.provide last gen (Some obj) >>| fun () ->
+    gen
 
-      let hash = Int63.hash
+  let set slot tid name =
+    ignore @@ run unit @@begin
+      KB.provide slot tid (Some name) >>= fun () ->
+      KB.Object.create unit
+    end
 
-      let pp ppf tid =
-        Format.fprintf ppf "%08Lx" (Int63.to_int64 tid)
+  let set_name = set Theory.Label.name
+  let set_ivec = set Theory.Label.ivec
 
-      let to_string tid = Format.asprintf "%a" pp tid
-    end)
+  let get_name tid =
+    let lookup =
+      KB.Object.create resolver >>= fun r ->
+      KB.collect Theory.Label.name tid >>= fun s ->
+      KB.provide name r s >>| fun () ->
+      r in
+    KB.Value.get name (run resolver lookup)
 
-  module Name_resolver = Bap_state.Make(struct
-      type t = string Tid.Table.t
-      let create () = Tid.Table.create ()
-    end)
+  let get_ivec tid =
+    let lookup =
+      KB.Object.create resolver >>= fun r ->
+      KB.collect Theory.Label.ivec tid >>= fun s ->
+      KB.provide ivec r s >>| fun () ->
+      r in
+    KB.Value.get ivec (run resolver lookup)
 
-  let names = Name_resolver.state
+  let intern name =
+    let program =
+      KB.Object.create resolver >>= fun r ->
+      KB.Symbol.intern name Theory.Effect.top >>= fun t ->
+      KB.provide Theory.Label.name t (Some name) >>= fun () ->
+      KB.provide tid r (Some t) >>| fun () ->
+      r in
+    match KB.Value.get tid (run resolver program) with
+    | None -> assert false
+    | Some x -> x
 
-  let rev_lookup name =
-    Hashtbl.to_alist !names |> List.find_map ~f:(fun (tid,x) ->
-        Option.some_if (x = name) tid) |> function
-    | None -> invalid_argf "unbound name: %s" name ()
+  let repr tid =
+    KB.Value.get repr @@ run resolver @@begin
+      KB.Object.repr Theory.Effect.top tid >>= fun s ->
+      KB.Object.create resolver >>= fun r ->
+      KB.provide repr r s >>| fun () ->
+      r
+    end
+
+  let read name =
+    let program =
+      KB.Object.create resolver >>= fun r ->
+      KB.Object.read Theory.Effect.top name >>= fun t ->
+      KB.provide Theory.Label.name t (Some name) >>= fun () ->
+      KB.provide tid r (Some t) >>| fun () ->
+      r in
+    match KB.Value.get tid (run resolver program) with
+    | None -> assert false
+    | Some x -> x
+
+
+  let create () = match KB.Value.get last (run generator fresh) with
+    | None -> assert false
+    | Some tid -> tid
+
+  let to_string : t -> string = fun tid ->
+    Format.asprintf "%%%08Lx" (Int63.to_int64 (KB.Object.id tid))
+
+  let of_string : string -> t = fun str ->
+    if String.is_empty str
+    then intern str
+    else match str.[0] with
+      | '%' -> read @@ sprintf "#<%s %s>"
+          (KB.Class.fullname Theory.Effect.top)
+          (String.subo ~pos:1 str)
+      | '@' -> intern (String.subo ~pos:1 str)
+      | _ -> intern str
+
+  let nil = create ()
+
+  let pp ppf tid = Format.fprintf ppf "%s" (to_string tid)
+
+  let name t = match get_name t with
+    | None -> to_string t
     | Some name -> name
 
-  let from_string_exn str = match str.[0] with
-    | '%' -> Scanf.sscanf str "%%%X" (Int63.of_int)
-    | '@' -> Scanf.sscanf str "@%s" rev_lookup
-    | _ -> invalid_arg "label should start from '%' or '@'"
-
-  let from_string str = Or_error.try_with ~backtrace:true (fun () ->
-      from_string_exn str)
-
-  let set_name tid name =
-    Hashtbl.set !names ~key:tid ~data:name
-
-  let name tid = match Hashtbl.find !names tid with
-    | None -> Format.asprintf "%%%a" Tid.pp tid
-    | Some name -> sprintf "@%s" name
-
-  let domain = KB.Domain.optional "tid"
-      ~inspect:(fun x -> Sexp.Atom (name x))
-
-  let slot = KB.Class.property ~package
-      Theory.Link.cls "link-tid"  domain
-
-  module State = struct
-    let set_name_resolver resolver = names := resolver
-  end
-
-  let (!!) = from_string_exn
-  include Tid
+  let from_string_exn = of_string
+  let from_string x = Ok (from_string_exn x)
+  let (!!) = of_string
+  include Regular.Make(struct
+      type t = Theory.Label.t [@@deriving bin_io, compare, sexp]
+      let module_name = Some "Bap.Std.Tid"
+      let version = "2.0.0"
+      let hash x = Int63.hash (KB.Object.id x)
+      let pp = pp
+      let to_string tid = Format.asprintf "%a" pp tid
+    end)
 end
 
 type tid = Tid.t [@@deriving bin_io, compare, sexp]
@@ -229,16 +293,37 @@ end = struct
   include (val KB.Value.derive Theory.Bool.t)
 end
 
+module Role = struct
+  type t = string [@@deriving bin_io, compare, sexp]
+
+  let unknown = ":unknown"
+  let local = ":local"
+  let call = ":call"
+  let ivec = ":ivec"
+  let extern = ":extern"
+  let return = ":return"
+  let shortcut = ":shortcut"
+
+  let named = sprintf ":%s"
+  let name x = String.subo ~pos:1 x
+
+
+  let domain = KB.Domain.flat ~empty:unknown
+      ~is_empty:String.(equal unknown)
+      ~inspect:sexp_of_t "role"
+
+
+  let equal = String.equal
+  include (String : Base.Comparable.S with type t := string)
+end
+
 module Jmp = struct
-
-
+  module Labels = Map.Make_binable_using_comparator(Theory.Label)
   type t = {
     cnd : Cnd.t option;
-    dst : Theory.Link.t list;
+    dst : Role.t Labels.t;
     exp : Rhs.t;
   } [@@deriving bin_io, compare, sexp]
-
-
 end
 
 type jmp = Jmp.t [@@deriving bin_io, compare, sexp]
@@ -462,7 +547,7 @@ let nil_phi : phi term = empty Phi.{
 
 let nil_jmp : jmp term = empty Jmp.{
     cnd = None;
-    dst = [];
+    dst = Map.empty (module Theory.Label);
     exp = Rhs.empty
   }
 
@@ -818,109 +903,75 @@ end
 
 module Ir_jmp = struct
   type t = jmp term
-
-  module Role = struct
-    type t = string [@@deriving bin_io, compare, sexp]
-
-    let unknown = ":unknown"
-    let local = ":local"
-    let call = ":call"
-    let ivec = ":ivec"
-    let extern = ":extern"
-    let return = ":return"
-    let shortcut = ":shortcut"
-
-    let named = sprintf ":%s"
-    let name x = String.subo ~pos:1 x
-
-
-    let domain = KB.Domain.flat ~empty:unknown
-        ~is_empty:String.(equal unknown)
-        ~inspect:sexp_of_t "role"
-
-    let slot = KB.Class.property ~package Theory.Link.cls
-        "link-role" domain
-
-    let equal = String.equal
-    let has role link =
-      equal (KB.Value.get slot link) role
-    let set role link =
-      KB.Value.put slot link role
-  end
-
   type role = Role.t
 
-  let resolved ?(tid=Tid.create ()) ?cnd dst = make_term tid Jmp.{
+  module Role = Role
+
+  let resolved ?(tid=Tid.create ()) ?cnd dst role = make_term tid Jmp.{
       cnd;
-      dst = [dst];
+      dst = Map.singleton (module Theory.Label) dst role;
       exp = Rhs.empty;
     }
 
   let indirect ?(tid=Tid.create()) ?cnd exp = make_term tid Jmp.{
       cnd;
-      dst = [];
+      dst = Map.empty (module Theory.Label);
       exp = Rhs.of_value exp;
     }
 
-  let add_link t lnk = {
+  let link t label role = {
     t with self = Jmp.{
-      t.self with dst = lnk :: t.self.dst
+      t.self with dst = Map.set t.self.dst ~key:label ~data:role
     }
   }
 
-  let links {self={Jmp.dst}} = dst
-  let cnd {self={Jmp.cnd}} = cnd
-  let value {self={Jmp.exp}} = exp
-
-  let empty_link = KB.Value.empty Theory.Link.cls
-
-  let link_of_tid tid =
-    KB.Value.put Tid.slot empty_link (Some tid)
-  let link_of_int int =
-    KB.Value.put Theory.Link.ivec empty_link (Some int)
+  let links xs = Map.of_alist_exn (module Theory.Label) xs
 
   let create ?(tid=Tid.create()) ?(cond=always) kind =
     let cnd = if cond = always then None else Some (Cnd.of_exp cond) in
     make_term tid @@ match kind with
     | Goto (Direct tid) -> Jmp.{
         cnd; exp = Rhs.empty;
-        dst = [Role.set Role.local @@ link_of_tid tid];
+        dst = links [tid, Role.local]
       }
     | Goto (Indirect exp)
     | Ret  (Indirect exp) -> Jmp.{
         cnd; exp = Rhs.of_exp exp;
-        dst = [];
+        dst = links [];
       }
     | Ret (Direct tid) -> Jmp.{
         cnd; exp = Rhs.empty;
-        dst = [Role.set Role.return @@ link_of_tid tid];
+        dst = links [tid, Role.return];
       }
-    | Int (int,tid) -> Jmp.{
+    | Int (int,ret) ->
+      let dst = Tid.create () in
+      Tid.set_ivec dst int;
+      Jmp.{
         cnd; exp = Rhs.empty;
-        dst = [
-          Role.set Role.ivec @@ link_of_int int;
-          Role.set Role.shortcut @@ link_of_tid tid;
-        ]
+        dst = links [
+            dst, Role.call;
+            ret, Role.shortcut;
+          ]
       }
     | Call call -> match Call.target call, Call.return call with
       | Direct tid, (None | Some (Indirect _)) -> {
           cnd; exp = Rhs.empty;
-          dst = [Role.set Role.call @@ link_of_tid tid]
+          dst = links [tid, Role.call]
         }
       | Indirect exp, (None|Some (Indirect _)) -> {
           cnd; exp = Rhs.of_exp exp;
-          dst=[]
+          dst = links []
         }
       | Direct dst, Some (Direct ret) -> {
           cnd; exp = Rhs.empty;
-          dst = [
-            Role.set Role.call @@ link_of_tid dst;
-            Role.set Role.shortcut @@ link_of_tid ret;
-          ]
+          dst = links [
+              dst, Role.call;
+              ret, Role.shortcut;
+            ]
         }
       | Indirect exp, Some (Direct ret) -> {
           cnd; exp = Rhs.of_exp exp;
-          dst = [Role.set Role.shortcut @@ link_of_tid ret]
+          dst = links [ret, Role.shortcut]
         }
 
   let create_call ?tid ?cond call = create ?tid ?cond (Call call)
@@ -928,14 +979,18 @@ module Ir_jmp = struct
   let create_ret  ?tid ?cond dest = create ?tid ?cond (Ret dest)
   let create_int  ?tid ?cond n t  = create ?tid ?cond (Int (n,t))
 
+  let links {self={Jmp.dst}} = Map.to_sequence dst
+  let cnd {self={Jmp.cnd}} = cnd
+  let value {self={Jmp.exp}} = exp
 
   let kind_of_jmp {Jmp.dst; exp} =
-    let get role slot =
-      List.find dst ~f:(Role.has role) |> function
-      | None -> None
-      | Some lnk -> KB.Value.get slot lnk in
-    let open Theory.Link in
-    let tid = Tid.slot in
+    let get role value =
+      Map.to_sequence dst |>
+      Seq.find_map ~f:(fun (lbl,r) ->
+          if Role.equal role r then value lbl
+          else None) in
+    let tid x = Some x in
+    let ivec x = Tid.get_ivec x in
     match get Role.ivec ivec, get Role.shortcut tid with
     | Some dst, Some ret -> Int (dst,ret)
     | _ -> match get Role.call tid,  get Role.shortcut tid with
@@ -949,12 +1004,9 @@ module Ir_jmp = struct
         }
       | _ -> match get Role.return tid with
         | Some dst -> Ret (Direct dst)
-        | None ->
-          List.find_map dst ~f:(fun lnk ->
-              KB.Value.get tid lnk) |> function
+        | None -> match get Role.local tid with
           | Some dst -> Goto (Direct dst)
           | None -> Goto (Indirect (Rhs.exp exp))
-
 
   let kind : jmp term -> jmp_kind = fun t ->
     kind_of_jmp t.self
