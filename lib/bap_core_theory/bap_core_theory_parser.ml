@@ -5,7 +5,7 @@ open Bap_core_theory_sort
 
 module Value = Knowledge.Value
 module Grammar = Bap_core_theory_grammar_definition
-module Link = Bap_core_theory_link
+module Label = Bap_core_theory_label
 module IEEE754 = Bap_core_theory_IEEE754
 
 open Knowledge.Syntax
@@ -83,7 +83,7 @@ module Make(S : Core) = struct
 
   let pass = perform Effect.bot
   let skip = perform Effect.bot
-  let newlabel = Knowledge.Object.create Link.cls
+  let newlabel = Knowledge.Object.create Effect.top
 
   let rec expw : type s b e r.
     context ->
@@ -418,7 +418,7 @@ module Make(S : Core) = struct
 
         let cpuexn n =
           newlabel >>= fun dst ->
-          Knowledge.provide Link.ivec dst (Some n) >>= fun () ->
+          Knowledge.provide Label.ivec dst (Some n) >>= fun () ->
           newlabel >>= fun lbl ->
           seq (blk lbl pass (goto dst)) (next xs)
 
@@ -442,7 +442,7 @@ module Make(S : Core) = struct
         let goto addr =
           newlabel >>= fun lbl ->
           newlabel >>= fun dst ->
-          Knowledge.provide Link.addr dst (Some addr) >>= fun () ->
+          Knowledge.provide Label.addr dst (Some addr) >>= fun () ->
           seq (blk lbl pass (goto dst)) (next xs)
 
         let move eff =

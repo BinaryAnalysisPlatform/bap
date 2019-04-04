@@ -180,8 +180,7 @@ module Theory : sig
   type word = Bitvec.t
   type 'a var = 'a Var.t
 
-  type link
-  type label = link KB.Object.t
+  type label = unit Effect.spec KB.Object.t
 
 
   module type Init = sig
@@ -420,17 +419,12 @@ module Theory : sig
     end
   end
 
-  module Link : sig
-    type cls = link
-    type t = cls KB.value [@@deriving bin_io, compare, sexp]
-    val cls : cls KB.cls
-    val addr : (cls, Bitvec.t option) KB.slot
-    val name : (cls, string option) KB.slot
-    val ivec : (cls, int option) KB.slot
-
-    include KB.Value.S
-      with type t := t
-       and type comparator_witness = cls KB.Value.ord
+  module Label : sig
+    type t = label
+    val addr : (unit Effect.spec, Bitvec.t option) KB.slot
+    val name : (unit Effect.spec, string option) KB.slot
+    val ivec : (unit Effect.spec, int option) KB.slot
+    include Knowledge.Object.S with type t := t
   end
 
   module Grammar : sig
