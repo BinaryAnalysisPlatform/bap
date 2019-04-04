@@ -216,9 +216,15 @@ module Knowledge : sig
 
     val id : 'a obj -> Int63.t
 
-    val comparator : 'a cls -> (module Base.Comparator.S
-                                 with type t = 'a obj
-                                  and type comparator_witness = 'a ord)
+    module type S = sig
+      type t [@@deriving sexp]
+      include Base.Comparable.S with type t := t
+      include Binable.S with type t := t
+    end
+
+    val derive : 'a cls -> (module S
+                             with type t = 'a obj
+                              and type comparator_witness = 'a ord)
   end
 
   module Value : sig
@@ -248,7 +254,9 @@ module Knowledge : sig
       include Binable.S with type t := t
     end
 
-    val derive : 'a cls -> (module S with type t = 'a t and type comparator_witness = 'a ord)
+    val derive : 'a cls -> (module S
+                             with type t = 'a t
+                              and type comparator_witness = 'a ord)
 
     val pp : Format.formatter -> 'a value -> unit
 
@@ -476,8 +484,15 @@ module Knowledge : sig
 
     val id : 'a obj -> Int63.t
 
-    val comparator : 'a cls -> (module Base.Comparator.S
-                                 with type t = 'a t
-                                  and type comparator_witness = 'a ord)
+
+    module type S = sig
+      type t [@@deriving sexp]
+      include Base.Comparable.S with type t := t
+      include Binable.S with type t := t
+    end
+
+    val derive : 'a cls -> (module S
+                             with type t = 'a t
+                              and type comparator_witness = 'a ord)
   end
 end

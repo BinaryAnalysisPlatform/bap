@@ -21,6 +21,7 @@ module type Id = sig
   val pp : Format.formatter -> t -> unit
   val of_string : string -> t
   include Base.Comparable.S with type t := t
+  include Binable.S with type t := t
 end
 
 (* static identifiers,
@@ -106,6 +107,7 @@ module type Tid = sig
 
   val untagged : t -> Int63.t
 end
+
 
 module Oid : Tid = struct
   include Int63
@@ -886,8 +888,6 @@ module Knowledge = struct
           | LT | EQ | NC -> Knowledge.return next) >>= fun max ->
     provide slot id max >>| fun () -> max
 
-
-
   module Object = struct
     type +'a t = 'a obj
     type 'a ord = Oid.comparator_witness
@@ -924,13 +924,11 @@ module Knowledge = struct
                 else Some {objs with vals})
         }
 
-
     let scoped cls scope =
       create cls >>= fun obj ->
       scope  obj >>= fun r ->
       delete cls obj >>| fun () ->
       r
-
 
     let do_intern =
       let is_public ~package name {Env.pubs} =
@@ -1000,10 +998,10 @@ module Knowledge = struct
 
 
     let read cls input =
-      if String.length input < 2 then
+      try
         Scanf.sscanf input "#<%s %s>" @@ fun _ obj ->
         Knowledge.return (Oid.of_string obj)
-      else
+      with _ ->
         get () >>= fun {Env.package} ->
         let {package; name} = split_name package input in
         do_intern ~package name cls
@@ -1013,14 +1011,31 @@ module Knowledge = struct
 
     let id x = Oid.untagged x
 
-    let comparator : type a. a cls ->
-      (module Comparator.S
+    module type S = sig
+      type t [@@deriving sexp]
+      include Base.Comparable.S with type t := t
+      include Binable.S with type t := t
+    end
+
+    let derive : type a. a cls ->
+      (module S
         with type t = a obj
          and type comparator_witness = a ord) = fun _ ->
-      let module R = struct
+      let module Comparator = struct
         type t = a obj
+        let sexp_of_t = Oid.sexp_of_t
+        let t_of_sexp = Oid.t_of_sexp
         type comparator_witness = a ord
         let comparator = Oid.comparator
+      end in
+      let module R = struct
+        include Comparator
+        include Binable.Of_binable(Oid)(struct
+            type t = a obj
+            let to_binable = ident
+            let of_binable = ident
+          end)
+        include Base.Comparable.Make_using_comparator(Comparator)
       end in
       (module R)
   end
@@ -1171,7 +1186,9 @@ module Knowledge = struct
         cons cell.car cell.cdr
 
     let id = Object.id
-    let comparator = Object.comparator
+
+    module type S = Object.S
+    let derive = Object.derive
   end
 
   module Syntax = struct
