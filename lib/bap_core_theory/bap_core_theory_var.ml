@@ -9,6 +9,15 @@ module Value = Knowledge.Value
 
 let package = "core-theory"
 
+type const = Const [@@deriving bin_io, compare, sexp]
+type mut = Mut [@@deriving bin_io, compare, sexp]
+
+let const = Knowledge.Class.declare ~package "const-var" Const
+    ~desc:"local immutable variables"
+
+let mut = Knowledge.Class.declare ~package "mut-var" Mut
+    ~desc:"temporary mutable variables"
+
 type ident =
   | Reg of {name : string; ver : int}
   | Let of {num : Int63.t}
@@ -80,15 +89,6 @@ let nat1 = Knowledge.Domain.total "nat1"
     ~empty:0
     ~inspect:sexp_of_int
     ~order:Int.compare
-
-type const = Const
-type mut = Mut
-
-let const = Knowledge.Class.declare ~package "const-var" Const
-    ~desc:"local immutable variables"
-
-let mut = Knowledge.Class.declare ~package "mut-var" Mut
-    ~desc:"temporary mutable variables"
 
 let versioned (s,v) ver = match v with
   | Let _ -> (s,v)

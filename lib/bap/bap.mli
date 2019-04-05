@@ -508,6 +508,7 @@ module Std : sig
     include Base.Comparable.S with type t := t
   end
 
+
   (** Abstract integral type.
 
       This module describes an interface of an integral arithmetic
@@ -1863,6 +1864,7 @@ module Std : sig
       and typ =
         | Imm of int                     (** [Imm n] - n-bit immediate   *)
         | Mem of addr_size * size        (** [Mem (a,t)] memory with a specifed addr_size *)
+        | Unk
       [@@deriving bin_io, compare, sexp]
 
       type stmt =
@@ -2503,6 +2505,7 @@ module Std : sig
     type t = Bil.typ =
       | Imm of int
       | Mem of addr_size * size
+      | Unk
     [@@deriving variants]
 
     (** type error   *)
@@ -3246,7 +3249,7 @@ module Std : sig
   module Exp : sig
     type t = Bil.exp
 
-    val slot : ('a Theory.Sort.definition KB.Class.abstract, exp option) KB.slot
+    val slot : ('a Theory.Sort.exp KB.Class.abstract, exp option) KB.slot
     val domain : t option Knowledge.domain
     val persistent : t option Knowledge.persistent
 
@@ -3924,7 +3927,6 @@ module Std : sig
     val endian : t -> endian
 
     val slot : (Semantics.cls, t option) Knowledge.slot
-
 
     (** [arch] type implements [Regular]  interface  *)
     include Regular.S with type t := t
@@ -5611,7 +5613,7 @@ module Std : sig
 
   (** values of type [insn] represents machine instructions decoded
       from the a given piece of memory *)
-  type insn [@@deriving bin_io, compare, sexp_of]
+  type insn = Semantics.t [@@deriving bin_io, compare, sexp_of]
 
   (** [block] is a region of memory that is believed to be a basic block
       of control flow graph to the best of our knowledge. *)
@@ -6095,7 +6097,7 @@ module Std : sig
   *)
   module Insn : sig
 
-    type t = insn [@@deriving bin_io, compare, sexp]
+    type t = Semantics.t [@@deriving bin_io, compare, sexp]
 
     module Slot : sig
       val name : (Semantics.cls, string) Knowledge.slot
@@ -6190,10 +6192,6 @@ module Std : sig
 
     (** [must property insn] postulate that [insn] shouldn't have the [property]  *)
     val shouldn't : may  property -> t -> t
-
-    val with_semantics : t -> semantics -> t
-
-    val semantics : t -> semantics
 
     (** [pp_adt] prints instruction in ADT format, suitable for reading
         by evaluating in many languages, e.g. Python, Js, etc *)
@@ -7450,11 +7448,14 @@ module Std : sig
 
     type t = def term
 
-    module Semantics : sig
-      val create : ?tid:tid -> var -> semantics -> t
-      val with_rhs : t -> semantics -> t
-      val rhs : t -> semantics
-    end
+    val reify : ?tid:tid ->
+                'a Theory.var ->
+                'a Theory.Sort.exp KB.value -> t
+
+    val var : t -> unit Theory.var
+
+    val value : t -> unit Theory.Sort.exp KB.value
+
 
     (** [create ?tid x exp] creates definition [x := exp]  *)
     val create : ?tid:tid -> var -> exp -> t
@@ -7513,11 +7514,25 @@ module Std : sig
 
     type t = jmp term
 
-    module Semantics : sig
-      val jump : ?tid:tid -> ?cond:semantics -> typ -> semantics -> t
-      val cond : t -> semantics option
-      val dest : t -> semantics option
-    end
+    type role
+
+    val resolved : ?tid:tid ->
+                   ?cnd:Theory.Bool.t Theory.Sort.exp KB.value ->
+                   Theory.label -> role -> t
+
+    val indirect : ?tid:tid ->
+                   ?cnd:Theory.Bool.t Theory.Sort.exp KB.value ->
+                   'a Theory.Bitv.t Theory.Sort.exp KB.value ->
+                   t
+
+
+    val cnd : t -> Theory.Bool.t Theory.Sort.exp KB.value option
+
+    val value : t -> unit Theory.Sort.exp KB.Class.abstract KB.value
+
+    val links : t -> (Theory.label * role) seq
+
+    val link : t -> Theory.label -> role -> t
 
     (** [create ?cond kind] creates a jump of a given kind  *)
     val create : ?tid:tid -> ?cond:exp -> jmp_kind -> t
@@ -7564,6 +7579,20 @@ module Std : sig
     (** updated jump's kind  *)
     val with_kind : t -> jmp_kind -> t
 
+
+    module Role : sig
+      type t = role
+
+      val named : string -> role
+      val name : role -> string
+
+      val unknown : role
+      val local : role
+      val call : role
+      val return : role
+      val shortcut : role
+    end
+
     val pp_slots : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
@@ -7579,6 +7608,15 @@ module Std : sig
         Each element of a phi-node corresponds to a particular
         incoming edge. *)
     type t = phi term
+
+    val reify : ?tid:tid ->
+                'a Theory.var ->
+                (tid * 'a Theory.Sort.exp KB.value) list ->
+                t
+
+    val var : t -> unit Theory.var
+    val options : t -> (tid * unit Theory.Sort.exp KB.value) seq
+
 
     (** [create var label exp] creates a phi-node that associates a
         variable [var] with an expression [exp]. This expression
@@ -7644,6 +7682,14 @@ module Std : sig
         purposes. *)
 
     type t = arg term
+
+    val reify : ?tid:tid -> ?intent:intent ->
+                'a Theory.var ->
+                'a Theory.Sort.exp KB.value -> t
+
+    val var : t -> unit Theory.var
+    val value : t -> unit Theory.Sort.exp KB.value
+
 
     (** [create ?intent var exp] creates an argument. If intent is
         not specified it is left unknown.   *)

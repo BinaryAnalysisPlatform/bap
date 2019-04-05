@@ -1,15 +1,15 @@
-open Bap_value
+open Bap_knowledge
 
-module type S = sig
-  type t
-  val fresh : unit -> t
-  val store : t -> unit
-end
+type t
 
-module Make(T : sig
-    type t
-    val create : unit -> t
-  end) : sig
-  include S with type t = T.t
-  val state : t ref
-end
+val t : t
+
+val run : 'a Knowledge.cls -> 'a Knowledge.obj Knowledge.t ->
+  ('a Knowledge.value, Knowledge.conflict) result
+
+val run_or_fail : 'a Knowledge.cls -> 'a Knowledge.obj Knowledge.t -> 'a Knowledge.value
+
+val reset : unit -> unit
+val set : t -> unit
+
+val current : unit -> Knowledge.state

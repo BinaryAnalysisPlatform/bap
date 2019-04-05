@@ -65,6 +65,7 @@ end
 type semantics = Semantics.t [@@deriving bin_io, compare, sexp]
 
 type t = Semantics.t
+type op = Op.t [@@deriving bin_io, compare, sexp]
 
 
 module Slot = struct

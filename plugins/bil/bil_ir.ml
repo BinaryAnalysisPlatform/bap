@@ -7,28 +7,10 @@ open Bap_core_theory
 
 open Knowledge.Syntax
 
-type def = {
-  name : string;
-  virt : bool;
-  sort : Theory.Sort.exp;
-  sema : semantics;
-}
-
-type label = Theory.Link.t Knowledge.value
-
-type dst =
-  | Direct of label
-  | Indirect of semantics
-
-type jmp = {
-  cnd : Theory.Bool.t Knowledge.value option;
-  dst : dst;
-}
-
 type blk = {
   name : Theory.label;
-  defs : def list;
-  jmps : jmp list;
+  defs : def term list;
+  jmps : jmp term list;
 }
 
 type cfg = {
@@ -255,12 +237,7 @@ module IR = struct
     fresh >>= fun entry ->
     data @@ {
       entry;
-      blks = [{name=entry; jmps=[]; defs=[{
-          name = Var.name v;
-          sort = Sort.exp (Var.sort v);
-          virt = Var.is_virtual v;
-          sema = Value.semantics x;
-        }]}]
+      blks = [{name=entry; jmps=[]; defs=[Def.reify v x]}]
     }
 
   (** reifies a [while (<cnd>) <body>] loop to

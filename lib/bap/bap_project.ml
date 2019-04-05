@@ -1,5 +1,6 @@
 open Core_kernel
 open Regular.Std
+open Bap_knowledge
 open Graphlib.Std
 open Bap_future.Std
 open Bap_types.Std
@@ -14,14 +15,7 @@ include Bap_self.Create()
 
 let find name = FileUtil.which name
 
-module State = struct
-  type t = {
-    tids : Tid.Tid_generator.t;
-    name : Tid.Name_resolver.t;
-    vars : Var.Id.t;
-  }
-end
-
+module State = Bap_state
 type state = State.t
 
 type t = {
@@ -174,11 +168,9 @@ let roots rooter = match rooter with
   | Some r -> Rooter.roots r |> Seq.to_list
 
 
-let fresh_state () = State.{
-    tids = Tid.Tid_generator.fresh ();
-    name = Tid.Name_resolver.fresh ();
-    vars = Var.Id.fresh ();
-  }
+let fresh_state () =
+  State.reset ();
+  State.t
 
 module MVar = struct
   type 'a t = {
@@ -334,9 +326,8 @@ let create
       create_exn
         ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input)
 
-let restore_state {state={State.tids; name}} =
-  Tid.Tid_generator.store tids;
-  Tid.Name_resolver.store name
+let restore_state {state} =
+  State.set state
 
 let with_memory = Field.fset Fields.memory
 let with_symbols = Field.fset Fields.symbols

@@ -57,18 +57,9 @@ module Tid = struct
   let int_t = KB.Domain.optional "int_t"
   let ivec = KB.Class.property ~package resolver "ivec" int_t
 
-  module State = Bap_state.Make(struct
-      type t = KB.state ref
-      let create () = ref KB.empty;;
-    end)
-
-  let run cls exp =
-    let state = !State.state in
-    match KB.run cls exp state.contents with
+  let run cls exp = match Bap_state.run cls exp with
     | Error _ -> assert false
-    | Ok (value,state') ->
-      state := state';
-      value
+    | Ok value -> value
 
   let fresh =
     KB.Object.create Theory.Effect.top >>= fun obj ->
@@ -1487,6 +1478,10 @@ module Term = struct
       self#leave_jmp jmp
   end
 
+  let blocks : blk term list KB.domain =
+    KB.Domain.flat ~empty:[] ~is_empty:List.is_empty
+      "ir-blocks"
+  let slot = KB.Class.property Semantics.cls "ir-graph" blocks
 end
 
 

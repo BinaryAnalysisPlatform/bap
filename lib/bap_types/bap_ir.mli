@@ -59,11 +59,13 @@ module Tid : sig
   val from_string_exn : string -> tid
   val (!!) : string -> tid
   include Regular.S with type t := t
-  module State : Bap_state.S
 end
 
 module Term : sig
   type 'a t = 'a term
+
+  val slot : (Bap_types_semantics.cls, blk term list) KB.slot
+
   val clone : 'a t -> 'a t
   val same : 'a t -> 'a t -> bool
   val name : 'a t -> string

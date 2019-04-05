@@ -4,7 +4,7 @@ open Bap_types.Std
 open Graphlib.Std
 open Bil.Types
 open Or_error
-open Bap_knowledge
+open Bap_core_theory
 open Bap_image_std
 
 module Targets = Bap_disasm_target_factory
@@ -221,7 +221,7 @@ let ok_nil = function
   | Error _ -> []
 
 let to_bil s = match s with
-  | Ok s -> Ok (Knowledge.Value.get Bil.slot s)
+  | Ok s -> Ok (KB.Value.get Bil.slot s)
   | Error err -> Error err
 
 let is_barrier s mem insn =
@@ -390,7 +390,7 @@ let stage2 dis stage1 =
   | Some addr -> loop addr addr >>= fun () ->
     let dis = Dis.store_asm dis in
     let dis = Dis.store_kinds dis in
-    let empty = Knowledge.Value.empty Semantics.cls in
+    let empty = KB.Value.empty Semantics.cls in
     let disasm mem =
       Dis.run dis mem
         ~init:[] ~return:ident ~stopped:(fun s _ ->
@@ -405,10 +405,10 @@ let stage2 dis stage1 =
                   | a, (`Cond | `Jump) -> a
                   | _ -> None) in
             let bil,sema = match stage1.lift mem ins with
-              | Ok sema -> Knowledge.Value.get Bil.slot sema,sema
+              | Ok sema -> KB.Value.get Bil.slot sema,sema
               | _ -> [],empty in
             let bil = add_destinations bil dests in
-            mem, (insn, Knowledge.Value.put Bil.slot sema bil)) in
+            mem, (insn, KB.Value.put Bil.slot sema bil)) in
     return {stage1; addrs; succs; preds; disasm}
 
 let stage3 s2 =
@@ -430,11 +430,7 @@ let stage3 s2 =
   Addrs.iteri s2.addrs ~f:(fun ~key:addr ~data:mem ->
       s2.disasm mem |> List.filter_map ~f:(function
           | mem,(None,_) -> None
-          | mem,(Some insn,sema) ->
-            let bil = Knowledge.Value.get Bil.slot sema in
-            let insn =
-              Insn.with_semantics (Insn.of_basic ~bil insn) sema in
-            Some (mem, insn)) |> function
+          | mem,(Some _,sema) -> Some (mem, sema)) |> function
       | [] -> ()
       | insns ->
         let node = Block.create mem insns in
@@ -456,15 +452,18 @@ let stage3 s2 =
 
 
 let lifter arch mem insn =
-  let open Knowledge.Syntax in
+  let open KB.Syntax in
   let code =
-    Knowledge.Object.create Semantics.cls >>= fun code ->
-    Knowledge.provide Arch.slot code (Some arch) >>= fun () ->
-    Knowledge.provide Memory.slot code (Some mem) >>= fun () ->
-    Knowledge.provide Dis.Insn.slot code (Some insn) >>| fun () ->
+    KB.Object.create Semantics.cls >>= fun code ->
+    KB.provide Arch.slot code (Some arch) >>= fun () ->
+    KB.provide Memory.slot code (Some mem) >>= fun () ->
+    KB.provide Dis.Insn.slot code (Some insn) >>| fun () ->
     code in
-  match Knowledge.run Semantics.cls code Knowledge.empty with
-  | Ok (sema,_) -> Ok sema
+  match KB.run Semantics.cls code KB.empty with
+  | Ok (sema,_) ->
+    let bil = KB.Value.get Bil.slot sema in
+    let sema' = Insn.of_basic ~bil insn in
+    Ok (KB.Value.merge sema' sema)
   | Error _ -> errorf "conflict"
 
 let run ?(backend="llvm") ?brancher ?rooter arch mem =

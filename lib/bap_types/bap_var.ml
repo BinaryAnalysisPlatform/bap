@@ -3,32 +3,6 @@ open Bap_core_theory
 open Regular.Std
 open Bap_common
 
-module Id = struct
-  include Bap_state.Make(struct
-      type t = Int63.t ref
-      let create () = ref @@ Int63.of_int64_exn 0xAAAA_AAAAL
-    end)
-  let create () =
-    let id = !state in
-    Int63.incr id;
-    !id
-end
-
-module V1 = struct
-  type t = {
-    var : string;
-    ind : int;
-    typ : typ;
-    vir : bool;
-  } [@@deriving sexp, bin_io, compare]
-
-  let hash v = String.hash v.var
-  let module_name = Some "Bap.Std.Var"
-  let version = "1.0.0"
-  let pp fmt v =
-    Format.fprintf fmt "%s%s" v.var
-      (if v.ind <> 0 then sprintf ".%d" v.ind else "" )
-end
 
 type var = Var : 'a Theory.Var.t -> var
 type t = var
@@ -81,12 +55,34 @@ let sort_of_typ t =
     ret @@ Theory.Mem.define ks vs
   | Type.Unk -> ret @@ unknown
 
+module Generator = struct
+  let empty = Theory.Var.Ident.of_string "nil"
+  let ident_t = KB.Domain.flat ~empty
+      ~inspect:Theory.Var.Ident.sexp_of_t
+      ~is_empty:(Theory.Var.Ident.equal empty)
+      "ident"
+  type generator = Gen
+  let generator =
+    KB.Class.declare ~package:"bap.std.internal" "var-generator" Gen
+
+  let ident = KB.Class.property ~package:"bap.std.internal"
+      generator "ident" ident_t
+
+  let fresh s =
+    KB.Value.get ident @@ Bap_state.run_or_fail generator @@
+    KB.Syntax.(begin
+        KB.Object.create generator >>= fun g ->
+        Theory.Var.fresh s >>= fun v ->
+        KB.provide ident g (Theory.Var.ident v) >>| fun () ->
+        g
+      end)
+end
+
 let create ?(is_virtual=false) ?(fresh=false) name typ =
   let sort = sort_of_typ typ in
   if is_virtual || fresh
   then
-    let name = sprintf "#%s" @@ Int63.to_string (Id.create ()) in
-    let iden = Theory.Var.Ident.of_string name in
+    let iden = Generator.fresh sort in
     Var (Theory.Var.create sort iden)
   else
     Var (Theory.Var.define sort name)
