@@ -4,11 +4,12 @@ open Bap_core_theory_sort
 
 module Var = Bap_core_theory_var
 module Effect = Bap_core_theory_effect
-module Label = Bap_core_theory_label
+module Program = Bap_core_theory_program
+module Label = Program.Label
 
 type 'a sort = 'a Sort.t
 type 'a effect = 'a Effect.t
-
+type program = Program.cls
 type 'a t = 'a Knowledge.value Knowledge.t
 
 type 'a pure = 'a Sort.exp t
@@ -27,7 +28,7 @@ type ('r,'s) format = ('r,'s) Float.format
 
 type word = Bitvec.t
 type 'a var = 'a Var.t
-type label = (unit Effect.spec) Knowledge.Object.t
+type label = program Knowledge.Object.t
 
 
 

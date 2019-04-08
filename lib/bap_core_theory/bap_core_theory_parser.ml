@@ -5,7 +5,8 @@ open Bap_core_theory_sort
 
 module Value = Knowledge.Value
 module Grammar = Bap_core_theory_grammar_definition
-module Label = Bap_core_theory_label
+module Program = Bap_core_theory_program
+module Label = Program.Label
 module IEEE754 = Bap_core_theory_IEEE754
 
 open Knowledge.Syntax
@@ -83,7 +84,7 @@ module Make(S : Core) = struct
 
   let pass = perform Effect.bot
   let skip = perform Effect.bot
-  let newlabel = Knowledge.Object.create Effect.top
+  let newlabel = Knowledge.Object.create Program.cls
 
   let rec expw : type s b e r.
     context ->

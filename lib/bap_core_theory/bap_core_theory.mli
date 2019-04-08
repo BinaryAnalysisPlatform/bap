@@ -180,7 +180,8 @@ module Theory : sig
   type word = Bitvec.t
   type 'a var = 'a Var.t
 
-  type label = unit Effect.spec KB.Object.t
+  type program
+  type label = program KB.Object.t
 
 
   module type Init = sig
@@ -419,11 +420,25 @@ module Theory : sig
     end
   end
 
+  module Program : sig
+    type t = program KB.value
+    val cls : program KB.cls
+    module Semantics : sig
+      type cls = unit Effect.spec
+      type t = cls KB.value
+      val cls : cls KB.cls
+      val slot : (program, t) KB.slot
+      include KB.Value.S with type t := t
+    end
+    include Knowledge.Value.S with type t := t
+  end
+
   module Label : sig
     type t = label
-    val addr : (unit Effect.spec, Bitvec.t option) KB.slot
-    val name : (unit Effect.spec, string option) KB.slot
-    val ivec : (unit Effect.spec, int option) KB.slot
+
+    val addr : (program, Bitvec.t option) KB.slot
+    val name : (program, string option) KB.slot
+    val ivec : (program, int option) KB.slot
     include Knowledge.Object.S with type t := t
   end
 

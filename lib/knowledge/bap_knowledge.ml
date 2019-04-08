@@ -762,6 +762,8 @@ module Knowledge = struct
 
     module type S = sig
       type t [@@deriving sexp]
+      val empty : t
+      val domain : t domain
       include Base.Comparable.S with type t := t
       include Binable.S with type t := t
     end
@@ -788,6 +790,8 @@ module Knowledge = struct
         type t = a value
         let sexp_of_t x = Record.sexp_of_t x.data
         let t_of_sexp = opaque_of_sexp
+        let empty = empty cls
+
         include Binable.Of_binable(Record)(struct
             type t = a value
             let to_binable : 'a value -> Record.t =
@@ -801,6 +805,9 @@ module Knowledge = struct
             let sexp_of_t = sexp_of_t
             include Comparator
           end)
+        let domain = Domain.flat ~empty ~is_empty:(equal empty)
+            ~inspect:sexp_of_t
+            (Class.name cls)
       end in
       (module R)
 

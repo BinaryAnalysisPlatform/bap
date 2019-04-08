@@ -250,6 +250,8 @@ module Knowledge : sig
 
     module type S = sig
       type t [@@deriving sexp]
+      val empty : t
+      val domain : t domain
       include Base.Comparable.S with type t := t
       include Binable.S with type t := t
     end

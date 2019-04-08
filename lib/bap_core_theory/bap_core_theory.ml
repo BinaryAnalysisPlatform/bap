@@ -11,7 +11,10 @@ module Theory = struct
   module Rmode = Bap_core_theory_sort.Rmode
   module Effect = Bap_core_theory_effect
   module Var = Bap_core_theory_var
-  module Label = Bap_core_theory_label
+  module Program = Bap_core_theory_program
+  module Label = Program.Label
+  type program = Program.cls
+
 
   type 'a sort = 'a Sort.t
   type 'a effect = 'a Effect.t
@@ -34,7 +37,7 @@ module Theory = struct
 
   type 'a var = 'a Var.t
   type word = Bitvec.t
-  type label = (unit Effect.spec) Knowledge.Object.t
+  type label = program Knowledge.Object.t
   module type Init = Bap_core_theory_definition.Init
   module type Bool = Bap_core_theory_definition.Bool
   module type Bitv = Bap_core_theory_definition.Bitv
