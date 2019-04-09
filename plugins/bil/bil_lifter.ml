@@ -182,7 +182,10 @@ module Lifter = Theory.Parser.Make(Theory.Manager)
 
 let provide_bir () =
   Knowledge.promise Term.slot @@ fun obj ->
-  KB.collect Bil_ir.slot obj >>| Bil_ir.reify
+  KB.collect Bil.slot obj >>= fun bil ->
+  Lifter.run BilParser.t bil >>| fun sema ->
+  Bil_ir.reify @@
+  KB.Value.get Bil_ir.slot sema
 
 let provide_lifter () =
   info "providing a lifter for all BIL lifters";
@@ -202,5 +205,6 @@ let provide_lifter () =
 
 
 let init () =
+  Bil_ir.init ();
   provide_lifter ();
   provide_bir ()

@@ -63,12 +63,17 @@ module BIR = struct
     | Some x, xs -> x :: xs
 end
 
+let pp_cfg ppf ir =
+  fprintf ppf "%a" (pp_print_list Blk.pp) (BIR.reify ir)
+
+let inspect cfg = Sexp.Atom (asprintf "%a" pp_cfg cfg)
+
 let null = KB.Symbol.intern "null" Theory.Program.cls
 let is_null x =
   null >>| fun null ->
   Theory.Label.equal null x
 
-let domain = KB.Domain.optional "graph"
+let domain = KB.Domain.optional ~inspect "graph"
 
 let graph = KB.Class.property Theory.Program.Semantics.cls "ir-graph" domain
 let slot = graph
