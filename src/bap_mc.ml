@@ -111,7 +111,7 @@ module Program(Conf : Mc_options.Provider) = struct
   let print arch mem code =
     let sema = lift arch mem code in
     let bil = bil_of_sema sema in
-    let insn = KB.Value.merge (Insn.of_basic ~bil code) sema in
+    let insn = KB.Value.merge ~on_conflict:`drop_right sema (Insn.of_basic ~bil code) in
     print_insn_size options.show_insn_size mem;
     print_insn options.insn_formats insn;
     print_bil insn;
