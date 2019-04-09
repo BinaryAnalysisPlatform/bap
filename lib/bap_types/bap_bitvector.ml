@@ -76,7 +76,7 @@ module Make(Size : Compare) = struct
   let bitwidth x = Z.(to_int (meta x asr 1)) [@@inline]
   let payload x =
     let m = Bitvec.modulus (bitwidth x) in
-    Bitvec.(bigint x mod m)
+    Bitvec.(bigint (z x) mod m)
 
   let is_signed x = Z.(is_odd x) [@@inline]
   let signed x = Z.(x lor one) [@@inline]
