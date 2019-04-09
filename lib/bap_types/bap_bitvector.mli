@@ -7,11 +7,15 @@ type t
 type endian =
   | LittleEndian
   | BigEndian
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 include Regular.S with type t := t
 include Bap_integer.S with type t := t
 module Mono : Comparable.S with type t := t
+
+val create : Bitvec.t -> int -> t
+val to_bitvec : t -> Bitvec.t
+
 val of_string : string -> t
 val of_bool  : bool -> t
 val of_int   : width:int -> int -> t

@@ -248,6 +248,8 @@ let to_int   = safe to_int_exn
 let to_int32 = safe to_int32_exn
 let to_int64 = safe to_int64_exn
 
+let create = (%:)
+let to_bitvec = payload
 
 let of_binary ?width endian num  =
   let num = match endian with

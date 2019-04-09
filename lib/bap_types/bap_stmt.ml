@@ -1,11 +1,10 @@
 open Core_kernel
+open Bap_core_theory
 open Bap_knowledge
 open Regular.Std
 open Bap_common
 open Format
 open Bap_bil
-
-module Semantics = Bap_types_semantics
 
 let rec pp fmt s =
   let open Stmt in match s with
@@ -107,5 +106,5 @@ let persistent = Knowledge.Persistent.of_binable (module struct
   end)
 
 let slot = Knowledge.Class.property ~package:"bap.std"
-    ~persistent Semantics.cls "bil" domain
+    ~persistent Theory.Program.Semantics.cls "bil" domain
     ~desc:"semantics of statements in BIL"

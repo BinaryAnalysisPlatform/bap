@@ -7,8 +7,6 @@ open Bap_common
 open Bap_bil
 open Format
 
-module Semantics = Bap_types_semantics
-
 include Regular.S with type t := exp
 
 module Cast : sig

@@ -7,7 +7,7 @@ open Bap_value
 open Bap_visitor
 open Bap_core_theory
 
-type tid = unit Theory.Effect.spec KB.obj
+type tid = Theory.Label.t
 [@@deriving bin_io, compare, sexp]
 
 
@@ -64,7 +64,7 @@ end
 module Term : sig
   type 'a t = 'a term
 
-  val slot : (Bap_types_semantics.cls, blk term list) KB.slot
+  val slot : (_ Theory.Program.Semantics.cls, blk term list) KB.slot
 
   val clone : 'a t -> 'a t
   val same : 'a t -> 'a t -> bool
@@ -322,13 +322,15 @@ module Ir_jmp : sig
     'a Theory.Bitv.t Theory.Sort.exp KB.value ->
     t
 
-  val cnd : t -> Theory.Bool.t Theory.Sort.exp KB.value option
+  val guard : t -> Theory.Bool.t Theory.Sort.exp KB.value option
 
   val value : t -> unit Theory.Sort.exp KB.Class.abstract KB.value
 
   val links : t -> (Theory.label * role) seq
 
   val link : t -> Theory.label -> role -> t
+
+  val with_guard : t -> Theory.Bool.t Theory.Sort.exp KB.value option -> t
 
   module Role : sig
     type t = role

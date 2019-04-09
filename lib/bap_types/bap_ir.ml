@@ -11,7 +11,6 @@ module Value = Bap_value
 module Dict = Value.Dict
 module Vec = Bap_vector
 module Var = Bap_var
-module Semantics = Bap_types_semantics
 
 module Bil = struct
   include Bap_visitor
@@ -62,7 +61,7 @@ module Tid = struct
     | Ok value -> value
 
   let fresh =
-    KB.Object.create Theory.Effect.top >>= fun obj ->
+    KB.Object.create Theory.Program.cls >>= fun obj ->
     KB.Object.create generator >>= fun gen ->
     KB.provide last gen (Some obj) >>| fun () ->
     gen
@@ -95,7 +94,7 @@ module Tid = struct
   let intern name =
     let program =
       KB.Object.create resolver >>= fun r ->
-      KB.Symbol.intern name Theory.Effect.top >>= fun t ->
+      KB.Symbol.intern name Theory.Program.cls >>= fun t ->
       KB.provide Theory.Label.name t (Some name) >>= fun () ->
       KB.provide tid r (Some t) >>| fun () ->
       r in
@@ -105,7 +104,7 @@ module Tid = struct
 
   let repr tid =
     KB.Value.get repr @@ run resolver @@begin
-      KB.Object.repr Theory.Effect.top tid >>= fun s ->
+      KB.Object.repr Theory.Program.cls tid >>= fun s ->
       KB.Object.create resolver >>= fun r ->
       KB.provide repr r s >>| fun () ->
       r
@@ -114,7 +113,7 @@ module Tid = struct
   let read name =
     let program =
       KB.Object.create resolver >>= fun r ->
-      KB.Object.read Theory.Effect.top name >>= fun t ->
+      KB.Object.read Theory.Program.cls name >>= fun t ->
       KB.provide Theory.Label.name t (Some name) >>= fun () ->
       KB.provide tid r (Some t) >>| fun () ->
       r in
@@ -135,7 +134,7 @@ module Tid = struct
     then intern str
     else match str.[0] with
       | '%' -> read @@ sprintf "#<%s %s>"
-          (KB.Class.fullname Theory.Effect.top)
+          (KB.Class.fullname Theory.Program.Semantics.cls)
           (String.subo ~pos:1 str)
       | '@' -> intern (String.subo ~pos:1 str)
       | _ -> intern str
@@ -971,8 +970,11 @@ module Ir_jmp = struct
   let create_int  ?tid ?cond n t  = create ?tid ?cond (Int (n,t))
 
   let links {self={Jmp.dst}} = Map.to_sequence dst
-  let cnd {self={Jmp.cnd}} = cnd
+  let guard {self={Jmp.cnd}} = cnd
   let value {self={Jmp.exp}} = exp
+  let with_guard jmp cnd = {jmp with self = Jmp.{
+      jmp.self with cnd
+    }}
 
   let kind_of_jmp {Jmp.dst; exp} =
     let get role value =
@@ -1261,7 +1263,7 @@ module Term = struct
     end)
 
   let slot = Knowledge.Class.property ~package ~persistent
-      Semantics.cls "bir" domain
+      Theory.Program.Semantics.cls "bir" domain
 
 
   let change t p tid f =
@@ -1478,10 +1480,6 @@ module Term = struct
       self#leave_jmp jmp
   end
 
-  let blocks : blk term list KB.domain =
-    KB.Domain.flat ~empty:[] ~is_empty:List.is_empty
-      "ir-blocks"
-  let slot = KB.Class.property Semantics.cls "ir-graph" blocks
 end
 
 

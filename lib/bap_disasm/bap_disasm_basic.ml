@@ -1,7 +1,7 @@
 open Core_kernel
 open Regular.Std
 open Bap_types.Std
-open Bap_knowledge
+open Bap_core_theory
 open Or_error
 
 module Kind = Bap_insn_kind
@@ -319,9 +319,9 @@ module Insn = struct
 
 
   let domain =
-    Knowledge.Domain.optional ~inspect:sexp_of_t "insn"
-  let slot = Knowledge.Class.property ~package:"bap.std"
-      Semantics.cls "insn" domain
+    KB.Domain.optional ~inspect:sexp_of_t "insn"
+  let slot = KB.Class.property ~package:"bap.std"
+      Theory.Program.cls "insn" domain
 end
 
 type ('a,'k) insn = ('a,'k) Insn.t

@@ -17,7 +17,7 @@ Library bap_core_theory
         Bap_core_theory_empty,
         Bap_core_theory_grammar_definition,
         Bap_core_theory_IEEE754,
-        Bap_core_theory_label,
+        Bap_core_theory_program,
         Bap_core_theory_manager,
         Bap_core_theory_parser,
         Bap_core_theory_sort,

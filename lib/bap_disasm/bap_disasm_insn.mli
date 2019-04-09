@@ -1,11 +1,11 @@
 open Core_kernel
-open Bap_knowledge
+open Bap_core_theory
 open Regular.Std
 open Bap_types.Std
 open Bap_disasm_types
 open Bap_ir
 
-type t = Semantics.t [@@deriving bin_io, compare, sexp]
+type t = Theory.Program.t [@@deriving bin_io, compare, sexp]
 type op = Op.t [@@deriving bin_io, compare, sexp]
 
 val of_basic : ?bil:bil -> Basic.full_insn -> t
@@ -39,9 +39,9 @@ val shouldn't : may  property -> t -> t
 
 
 module Slot : sig
-  val name : (Semantics.cls, string) Knowledge.slot
-  val asm : (Semantics.cls, string) Knowledge.slot
-  val ops : (Semantics.cls, op array option) Knowledge.slot
+  val name : (Theory.program, string) KB.slot
+  val asm : (Theory.program, string) KB.slot
+  val ops : (Theory.program, op array option) KB.slot
 end
 
 

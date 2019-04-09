@@ -59,12 +59,11 @@ module Props = struct
 
   let slot = KB.Class.property ~package:"bap.std"
       ~persistent
-      Semantics.cls "insn-properties" domain
+      Theory.Program.cls "insn-properties" domain
 end
 
-type semantics = Semantics.t [@@deriving bin_io, compare, sexp]
 
-type t = Semantics.t
+type t = Theory.Program.t
 type op = Op.t [@@deriving bin_io, compare, sexp]
 
 
@@ -76,11 +75,11 @@ module Slot = struct
 
   let name = KB.Class.property ~package:"bap.std"
       ~persistent:KB.Persistent.string
-      Semantics.cls "insn-opcode" text
+      Theory.Program.cls "insn-opcode" text
 
   let asm = KB.Class.property ~package:"bap.std"
       ~persistent:KB.Persistent.string
-      Semantics.cls "insn-asm" text
+      Theory.Program.cls "insn-asm" text
 
   let ops_domain = KB.Domain.optional "insn-ops"
       ~inspect:[%sexp_of: Op.t array]
@@ -91,7 +90,7 @@ module Slot = struct
 
   let ops = KB.Class.property ~package:"bap.std"
       ~persistent:ops_persistent
-      Semantics.cls "insn-ops" ops_domain
+      Theory.Program.cls "insn-ops" ops_domain
 end
 
 
@@ -139,6 +138,10 @@ let of_basic ?bil insn : t =
   let may_affect_control_flow = is `May_affect_control_flow in
   let may_load = is_bil `May_load in
   let may_store = is_bil `May_store in
+  let effect =
+    KB.Value.put Bil.slot
+      (KB.Value.empty Theory.Program.Semantics.cls)
+      (Option.value bil ~default:[]) in
   let props =
     Props.empty                                              |>
     Props.set_if is_jump jump                                |>
@@ -149,11 +152,11 @@ let of_basic ?bil insn : t =
     Props.set_if may_affect_control_flow affect_control_flow |>
     Props.set_if may_load load                               |>
     Props.set_if may_store store in
-  write (KB.Value.empty Semantics.cls) Slot.[
+  write (KB.Value.empty Theory.Program.cls) Slot.[
       Props.slot <-- props;
       name <-- Insn.name insn;
       asm <-- normalize_asm (Insn.asm insn);
-      Bil.slot <-- Option.value bil ~default:[Bil.special "unknown"];
+      Theory.Program.Semantics.slot <-- effect;
       ops <-- Some (Insn.ops insn);
     ]
 
@@ -168,7 +171,7 @@ let shouldn't = mustn't
 
 let name = KB.Value.get Slot.name
 let asm = KB.Value.get Slot.asm
-let bil = KB.Value.get Bil.slot
+let bil insn = KB.Value.get Bil.slot (KB.Value.get Theory.Program.Semantics.slot insn)
 let ops s = match KB.Value.get Slot.ops s with
   | None -> [||]
   | Some ops -> ops
@@ -226,7 +229,7 @@ module Trie = struct
 end
 
 include Regular.Make(struct
-    type t = Semantics.t [@@deriving sexp, bin_io, compare]
+    type t = Theory.Program.t [@@deriving sexp, bin_io, compare]
     let hash t = Hashtbl.hash t
     let module_name = Some "Bap.Std.Insn"
     let version = "2.0.0"

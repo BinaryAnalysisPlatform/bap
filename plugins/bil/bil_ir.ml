@@ -18,150 +18,17 @@ type cfg = {
   entry : Theory.label;
 }
 
-type t = cfg
-
-module Graph = struct
-  type t = cfg option
-
-  let empty = None
-  let pp_sema = Knowledge.Value.pp
-
-  let pp_jmp ppf {cnd; dst} =
-    let pp_cnd ppf =
-      Option.iter cnd ~f:(fun bit ->
-          fprintf ppf "when %a " pp_sema bit) in
-    match dst with
-    | Indirect dst ->
-      fprintf ppf "  %tjump %a@\n" pp_cnd pp_sema dst
-    | Direct (Label dst) ->
-      fprintf ppf "  %tgoto L%a@\n" pp_cnd Label.pp dst
-    | Direct (Addr dst) ->
-      fprintf ppf "  %tgoto L%a@\n" pp_cnd Addr.pp dst
-    | Direct (CpuExn dst) ->
-      fprintf ppf "  %tgoto L%a@\n" pp_cnd Int.pp dst
-
-
-  let pp_def pp_sema ppf {name; sema} =
-    fprintf ppf "  %s := %a@\n" name pp_sema sema
-
-  let pp_blk pp_sema ppf {name; defs; jmps} =
-    fprintf ppf "L%a:@\n" Label.pp name;
-    List.iter (List.rev defs) ~f:(pp_def pp_sema ppf);
-    List.iter (List.rev jmps) ~f:(pp_jmp pp_sema ppf)
-
-
-  let pp pp_sema ppf {entry; blks} =
-    fprintf ppf "start:@\n  goto L%a@\n" Label.pp entry;
-    List.iter (List.rev blks) ~f:(pp_blk pp_sema ppf)
-
-  let pp_bil_sema ppf v = match Semantics.get Bil.Domain.exp v with
-    | None -> fprintf ppf "<undefined>"
-    | Some exp -> Exp.pp ppf exp
-
-
-  let pp_bil = pp pp_bil_sema
-
-  let inspect = function
-    | {blks=[]} -> Sexp.List []
-    | cfg -> Sexp.Atom (asprintf "%a" pp_bil cfg)
-
-  let domain = Knowledge.Domain.define
-
-end
-
-let graph = Semantics.declare
-    ~name:"cfg"
-    (module Graph)
-
-let slot = graph
+type t = cfg option
 
 module BIR = struct
   type t = blk term list
-  module Tid = Bap.Std.Tid
-  module Var = Bap.Std.Var
 
-  let tid_of_label labels label =
-    Hashtbl.find_or_add labels label
-      ~default:(fun () -> Tid.create ())
-
-  let init_labels () = Label.Table.create ()
-
-  let add_def b {name; sema; virt} =
-    match Semantics.get Bil.Domain.exp sema with
-    | None -> ()
-    | Some exp ->
-      (* alternatively we can look into the sort *)
-      let typ = Type.infer_exn exp in
-      let var = Var.create ~is_virtual:virt name typ in
-      let def = Def.Semantics.create var sema in
-      Blk.Builder.add_def b def
-
-  let reify_cnd = function
-    | None -> Bil.int Word.b1
-    | Some s -> match Semantics.get Bil.Domain.exp s with
-      | None -> Bil.unknown "unrepresentable" bool_t
-      | Some x -> x
-
-  let add_indirect b cond dst = match Semantics.get Bil.Domain.exp dst with
-    | None -> ()
-    | Some exp ->
-      let typ = Type.infer_exn exp in
-      let jmp = Jmp.Semantics.jump ?cond typ dst in
-      Blk.Builder.add_jmp b jmp
-
-  (* later we will use the obtained knowledge to decide,
-     which is call, and which is not, but so far, just
-     let's create a goto *)
-  let add_direct labels b cond lbl =
-    let cond = reify_cnd cond in
-    Blk.Builder.add_jmp b @@ match lbl with
-    | Label lbl ->
-      Jmp.create_goto ~cond (Direct (tid_of_label labels lbl))
-    | Addr addr ->
-      Jmp.create_goto ~cond (Indirect Bil.(int addr))
-    | CpuExn n ->
-      let fall = Tid.create () in
-      Jmp.create_int ~cond n fall
-
-
-  let add_jmp labels b {cnd; dst} =
-    let cnd = Option.map cnd ~f:Value.semantics in
-    match dst with
-    | Indirect x -> add_indirect b cnd x
-    | Direct lbl -> add_direct labels b cnd lbl
-
-  module Expressible = struct
-    let check f x = Option.is_some (f Bil.Domain.exp x)
-
-    let def {sema} = check Semantics.get sema
-
-    let cnd = function
-      | None -> true
-      | Some v -> check Value.get v
-
-    let dst = function
-      | Direct _ -> true
-      | Indirect s -> check Semantics.get s
-
-    let jmp t = dst t.dst
-  end
-
-  let add_term is_expressible add (blks,b) t =
-    match is_expressible t with
-    | true -> add b t; (blks,b)
-    | false ->
-      let empty = Blk.create () in
-      let tid = Tid.create () in
-      let b' = Blk.Builder.create ~tid () in
-      let j1 = Jmp.create_goto (Direct (Term.tid empty)) in
-      let j2 = Jmp.create_goto (Direct tid) in
-      Blk.Builder.add_jmp b j1;
-      let empty = Term.append jmp_t empty j2 in
-      empty :: Blk.Builder.result b :: blks, b'
-
-  let add_terms terms expressible add (blks,b) =
+  let add_def = Blk.Builder.add_def
+  let add_jmp = Blk.Builder.add_jmp
+  let add_term add (blks,b) t = add b t; (blks,b)
+  let add_terms terms add (blks,b) =
     List.fold ~init:(blks,b) (List.rev terms)
-      ~f:(add_term expressible add)
+      ~f:(add_term add)
 
   (* creates a tid block from the IR block,
      expands non-representable terms into empty blocks.
@@ -169,12 +36,11 @@ module BIR = struct
      - the list is not empty;
      - the first element of the list, is the entry
   *)
-  let make_blk labels {name; defs; jmps} =
-    let tid = tid_of_label labels name in
-    let b = Blk.Builder.create ~tid () in
+  let make_blk {name; defs; jmps} =
+    let b = Blk.Builder.create ~tid:name () in
     ([],b) |>
-    add_terms defs Expressible.def add_def |>
-    add_terms jmps Expressible.jmp (add_jmp labels) |> fun (blks,b) ->
+    add_terms defs add_def |>
+    add_terms jmps add_jmp |> fun (blks,b) ->
     Blk.Builder.result b :: blks |>
     List.rev
 
@@ -185,13 +51,11 @@ module BIR = struct
      - the last block is the exit block
   *)
   let reify {entry; blks} =
-    let labels = init_labels () in
-    let start = tid_of_label labels entry in
     List.fold blks ~init:(None,[]) ~f:(fun (s,blks) b ->
-        match make_blk labels b with
+        match make_blk b with
         | [] -> assert false
         | blk::blks' ->
-          if Tid.equal start (Term.tid blk)
+          if Tid.equal entry (Term.tid blk)
           then (Some blk, List.rev_append blks' blks)
           else (s, List.rev_append (blk::blks') blks)) |> function
     | None,[] -> []
@@ -199,7 +63,15 @@ module BIR = struct
     | Some x, xs -> x :: xs
 end
 
-let is_null x = Label.equal Label.root x
+let null = KB.Symbol.intern "null" Theory.Program.cls
+let is_null x =
+  null >>| fun null ->
+  Theory.Label.equal null x
+
+let domain = KB.Domain.optional "graph"
+
+let graph = KB.Class.property Theory.Program.Semantics.cls "ir-graph" domain
+let slot = graph
 
 module IR = struct
   include Theory.Core.Empty
@@ -210,7 +82,7 @@ module IR = struct
 
   let def = (fun x -> x.defs), (fun x d -> {x with defs = d})
   let jmp = (fun x -> x.jmps), (fun x d -> match x.jmps with
-      | {cnd = None} :: _ -> x
+      | t :: _ when Option.is_none (Jmp.guard t) -> x
       | _ -> {x with jmps = d})
 
   let push_to_blk (get,put) blk elt =
@@ -222,15 +94,22 @@ module IR = struct
     | {blks=blk::blks} -> {
         cfg with blks = push_to_blk fld blk elt :: blks
       }
-  let fresh = Label.Generator.fresh
+
+  let fresh = KB.Object.create Theory.Program.cls
 
   let (++) b j = push_to_blk jmp b j
 
-  let reify x = Eff.get graph x
+  let reify x : cfg knowledge = match KB.Value.get graph x with
+    | Some g -> KB.return g
+    | None -> null >>| fun entry -> {
+        blks = [];
+        entry;
+      }
 
-  let ret kind cfg = !!(Eff.put graph (Eff.empty kind) cfg)
-  let data = ret Kind.data
-  let ctrl = ret Kind.ctrl
+  let empty = KB.Value.empty Theory.Program.Semantics.cls
+  let ret cfg = !!(KB.Value.put graph empty (Some cfg))
+  let data cfg = ret cfg
+  let ctrl cfg = ret cfg
 
   let set v x =
     x >>= fun x ->
@@ -239,6 +118,8 @@ module IR = struct
       entry;
       blks = [{name=entry; jmps=[]; defs=[Def.reify v x]}]
     }
+
+  let goto ?cnd dst = Jmp.resolved ?cnd dst Jmp.Role.local
 
   (** reifies a [while (<cnd>) <body>] loop to
 
@@ -262,31 +143,24 @@ module IR = struct
   *)
   let repeat cnd body =
     cnd >>= fun cnd ->
-    body >>| reify >>= function
+    body >>= reify >>= function
     | {blks=[]} ->
       fresh >>= fun head -> data {
         entry = head;
         blks = [{
             name = head;
             defs = [];
-            jmps = [{cnd = Some cnd; dst = Direct (Label head)}]
-          }]}
+            jmps = [goto ~cnd head]}]}
     | {entry=loop; blks=b::blks} ->
       fresh >>= fun head ->
       fresh >>= fun tail ->
-      let goto_tail = {cnd = None; dst = Direct (Label tail)} in
-      let goto_loop = {cnd = Some cnd; dst = Direct (Label loop)} in
       data {
         entry = head;
-        blks = blk tail ++ goto_loop ::
-               blk head ++ goto_tail ::
-               b ++ goto_tail ::
+        blks = blk tail ++ goto ~cnd loop ::
+               blk head ++ goto tail ::
+               b ++ goto tail ::
                blks
       }
-
-  let jump cnd dst = {cnd = Some cnd; dst = Direct (Label dst)}
-  let fall dst = {cnd = None; dst = Direct (Label dst)}
-
 
   let branch cnd yes nay =
     fresh >>= fun head ->
@@ -294,138 +168,127 @@ module IR = struct
     cnd >>= fun cnd ->
     yes >>= fun yes ->
     nay >>= fun nay ->
-    let return = ret (Eff.kind yes) in
-    let jump = jump cnd in
-    match reify yes, reify nay with
-    | {entry; blks=[{defs=[]; jmps=[j]} as blk]},{blks=[]} -> return {
+    reify yes >>= fun yes ->
+    reify nay >>= fun nay ->
+    let jump = goto ~cnd in
+    match yes, nay with
+    | {entry; blks=[{defs=[]; jmps=[j]} as blk]},{blks=[]} -> ret {
         entry;
-        blks = [{blk with defs=[]; jmps=[{j with cnd = Some cnd}]}]
+        blks = [{blk with defs=[]; jmps=[Jmp.with_guard j (Some cnd)]}]
       }
-    | {entry=lhs; blks=b::blks},{blks=[]} -> return {
+    | {entry=lhs; blks=b::blks},{blks=[]} -> ret {
         entry = head;
         blks =
           blk tail ::
-          blk head ++ jump lhs ++ fall tail ::
-          b ++ fall tail ::
+          blk head ++ jump lhs ++ goto tail ::
+          b ++ goto tail ::
           blks
       }
-    | {blks=[]}, {entry=rhs; blks=b::blks} -> return {
+    | {blks=[]}, {entry=rhs; blks=b::blks} -> ret {
         entry = head;
         blks =
           blk tail ::
-          blk head ++ jump tail ++ fall rhs ::
-          b ++ fall tail ::
+          blk head ++ jump tail ++ goto rhs ::
+          b ++ goto tail ::
           blks
       }
-    | {entry=lhs; blks=yes::ayes}, {entry=rhs; blks=nay::nays} -> return {
+    | {entry=lhs; blks=yes::ayes}, {entry=rhs; blks=nay::nays} -> ret {
         entry = head;
         blks =
           blk tail ::
-          blk head ++ jump lhs ++ fall rhs ::
-          yes ++ fall tail ::
-          nay ++ fall tail ::
+          blk head ++ jump lhs ++ goto rhs ::
+          yes ++ goto tail ::
+          nay ++ goto tail ::
           List.rev_append ayes nays
       }
-    | {blks=[]}, {blks=[]} -> return {
+    | {blks=[]}, {blks=[]} -> ret {
         entry = head;
         blks = [
           blk tail;
-          blk head ++ jump tail ++ fall tail
+          blk head ++ jump tail ++ goto tail
         ]
       }
-
-
 
   let jmp dst =
     fresh >>= fun entry ->
     dst >>= fun dst ->
-    let dst = Indirect (Value.semantics dst) in
     ctrl {
       entry;
-      blks = [blk entry ++ {dst; cnd=None}]
+      blks = [blk entry ++ Jmp.indirect dst]
     }
 
-
-  let resolve_dst dst =
-    resolve_addr dst >>= function
-    | Some known -> Knowledge.return (Addr known)
-    | None ->
-      resolve_ivec dst >>= function
-      | Some known -> Knowledge.return (CpuExn known)
-      | None -> Knowledge.return (Label dst)
-
-
-  let goto dst =
-    fresh >>= fun entry ->
-    resolve_dst dst >>= fun dst ->
-    ctrl {
-      entry;
-      blks = [blk entry ++ {dst=Direct dst; cnd=None}]
-    }
-
-  let appgraphs k fst snd =
-    let return = ret k in
+  let appgraphs fst snd =
     match fst, snd with
     | {entry; blks}, {blks=[]}
-    | {blks=[]}, {entry; blks} -> return {entry; blks}
-    | {entry; blks={jmps=[]} as x :: xs},{blks=[y]} -> return {
+    | {blks=[]}, {entry; blks} -> ret {entry; blks}
+    | {entry; blks={jmps=[]} as x :: xs},{blks=[y]} -> ret {
         entry;
         blks = {x with defs = y.defs @ x.defs; jmps = y.jmps} :: xs
       }
-    | {entry; blks=x::xs}, {entry=snd; blks=y::ys} -> return {
+    | {entry; blks=x::xs}, {entry=snd; blks=y::ys} -> ret {
         entry;
         blks =
           y ::
-          x ++ fall snd ::
+          x ++ goto snd ::
           List.rev_append xs ys
       }
 
+  let (>>->) x f = x >>= reify >>= f
+
   let seq fst snd =
-    fst >>= fun fst ->
-    snd >>= fun snd ->
-    appgraphs (Eff.kind fst) (reify fst) (reify snd)
+    fst >>-> fun fst ->
+    snd >>-> fun snd ->
+    appgraphs fst snd
 
 
   let unlabeled_blk defs jmps =
     match defs, jmps with
     | {blks=[]}, {entry; blks}
     | {entry; blks}, {blks=[]} -> {entry; blks}
-
     | _ -> assert false
 
+
+  let do_goto dst =
+    fresh >>= fun entry ->
+    ctrl {
+      entry;
+      blks = [blk entry ++ goto dst]
+    }
+
   let blk entry defs jmps =
-    defs >>| reify >>= fun defs ->
-    jmps >>| reify >>= fun jmps ->
-    if is_null entry then appgraphs Kind.unit defs jmps
-    else
-      let return = ret Kind.unit in
+    defs >>-> fun defs ->
+    jmps >>-> fun jmps ->
+    is_null entry  >>= function
+    | true -> appgraphs defs jmps
+    | false ->
       match defs, jmps with
-      | {blks=[]}, {blks=[]} ->
-        return {
+      | {blks=[]}, {blks=[]} -> ret {
           entry;
           blks = [blk entry]
         }
       | {blks=[]}, {entry=next; blks=b::blks}
-      | {entry=next; blks=b::blks}, {blks=[]} ->
-        return {
+      | {entry=next; blks=b::blks}, {blks=[]} -> ret {
           entry;
-          blks = b :: blk entry ++ fall next :: blks
+          blks = b :: blk entry ++ goto next :: blks
         }
       | {entry=fst; blks=x::xs},
         {entry=snd; blks=y::ys} ->
-        return {
+        ret {
           entry;
           blks =
             y ::
-            blk entry ++ fall fst ::
-            x ++ fall snd ::
+            blk entry ++ goto fst ::
+            x ++ goto snd ::
             List.rev_append xs ys
         }
+
+  let goto = do_goto
+
 end
 
-let reify = BIR.reify
-
-let pp = Graph.pp_bil
+let reify = function
+  | None -> []
+  | Some g -> BIR.reify g
 
 let init () =
   Theory.register

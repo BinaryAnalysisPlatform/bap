@@ -52,9 +52,6 @@ module Theory : sig
     type ctrl = private Ctrl
     type +'a t = 'a spec KB.Class.t
 
-    val top : unit t
-    val bot : 'a t
-
     val data : string -> data t
     val ctrl : string -> ctrl t
 
@@ -424,9 +421,9 @@ module Theory : sig
     type t = program KB.value
     val cls : program KB.cls
     module Semantics : sig
-      type cls = unit Effect.spec
-      type t = cls KB.value
-      val cls : cls KB.cls
+      type +'a cls = 'a Effect.spec
+      type t = unit cls KB.value
+      val cls : 'a cls KB.cls
       val slot : (program, t) KB.slot
       include KB.Value.S with type t := t
     end

@@ -1,10 +1,9 @@
 open Core_kernel
+open Bap_core_theory
 open Bap_knowledge
 open Regular.Std
 open Bap_common
 open Bap_bil
-
-module Semantics = Bap_types_semantics
 
 
 include Regular.S with type t := stmt
@@ -27,6 +26,6 @@ end
 module Stmts_pp : Printable.S with type t = stmt list
 module Stmts_data : Data.S with type t = stmt list
 
-val slot : (Semantics.cls, stmt list) Knowledge.slot
+val slot : (_ Theory.Program.Semantics.cls, stmt list) Knowledge.slot
 val domain : stmt list Knowledge.domain
 val persistent : stmt list Knowledge.persistent

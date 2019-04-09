@@ -6,6 +6,7 @@ open Bap_disasm_std
 open Bap_ir
 open Format
 module IRLabel = Label
+open Bap_core_theory
 open Bap_knowledge
 module L = Label
 module Label = IRLabel
@@ -68,11 +69,12 @@ module IrBuilder = struct
      circumscribe it to just the ir? *)
   let ir_of_insn insn =
     let open Knowledge.Syntax in
+    let cls = Theory.Program.Semantics.cls in
     let request =
-      Knowledge.Object.create Semantics.cls >>= fun obj ->
+      Knowledge.Object.create cls >>= fun obj ->
       Knowledge.provide Bil.slot obj (Insn.bil insn) >>| fun () ->
       obj in
-    match Knowledge.run Semantics.cls request Knowledge.empty with
+    match Knowledge.run cls request Knowledge.empty with
     | Ok (r,_) -> Knowledge.Value.get Term.slot r
     | Error _ -> []
 

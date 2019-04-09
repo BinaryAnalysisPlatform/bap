@@ -8,7 +8,8 @@ open Knowledge.Syntax
 
 type 'a t = 'a knowledge
 
-type ('b,'e,'t,'s) fsort = (('b,'e,'t) Theory.IEEE754.t,'s) Theory.format Theory.Float.t
+type ('b,'e,'t,'s) fsort = (('b,'e,'t) Theory.IEEE754.t,'s) Theory.format
+    Theory.Float.t Theory.sort
 
 module Value = Knowledge.Value
 
@@ -864,7 +865,7 @@ module Make(B : Theory.Core) = struct
     let bitv = ite sign (neg bitv) bitv in
     gen_cast_float fsort rmode sign bitv
 
-  let cast_int fsort outs bitv =
+  let cast_int (fsort : _ fsort) outs bitv =
     let open B in
     let open IEEE754 in
     let {p;bias} = Sort.spec fsort in

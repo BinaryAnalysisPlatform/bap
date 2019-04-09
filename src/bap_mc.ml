@@ -3,7 +3,7 @@ open Format
 open Bap.Std
 open Bap_plugins.Std
 open Mc_options
-open Bap_knowledge
+open Bap_core_theory
 include Self()
 
 exception Bad_user_input
@@ -65,13 +65,16 @@ module Program(Conf : Mc_options.Provider) = struct
     List.iter ~f:(printf "%a@." Sexp.pp)
 
   let lift arch mem insn =
-    let open Knowledge.Syntax in
+    let open KB.Syntax in
     let sema =
-      Knowledge.provide Dis.decoder Label.root (Some (arch,mem,insn)) >>= fun () ->
-      Knowledge.collect Insn.Semantics.t Label.root in
-    match Knowledge.run sema Knowledge.empty with
-    | Ok (sema,_) -> sema
-    | Error _ -> Semantics.empty
+      KB.Object.create Theory.Program.cls >>= fun code ->
+      KB.provide Arch.slot code (Some arch) >>= fun () ->
+      KB.provide Memory.slot code (Some mem) >>= fun () ->
+      KB.provide Dis.Insn.slot code (Some insn) >>| fun () ->
+      code in
+    match KB.run Theory.Program.cls sema KB.empty with
+    | Ok (code,_) -> code
+    | Error _ -> Theory.Program.empty
 
   let print_insn_size should_print mem =
     if should_print then
@@ -83,12 +86,14 @@ module Program(Conf : Mc_options.Provider) = struct
         Insn.with_printer fmt (fun () ->
             printf "%a@." Insn.pp insn))
 
-  let bil_of_sema sema = Semantics.get Bil.Domain.bil sema
+  let bil_of_sema sema =
+    KB.Value.get Bil.slot @@
+    KB.Value.get Theory.Program.Semantics.slot sema
 
   let print_bil insn =
     let bil = Insn.bil insn in
     List.iter options.bil_formats ~f:(fun fmt ->
-    printf "%s@." (Bytes.to_string @@ Bil.to_bytes ~fmt bil))
+        printf "%s@." (Bytes.to_string @@ Bil.to_bytes ~fmt bil))
 
   let print_bir insn =
     let bs = Blk.from_insn insn in
@@ -96,18 +101,17 @@ module Program(Conf : Mc_options.Provider) = struct
         printf "%s" @@ String.concat ~sep:"\n"
           (List.map bs ~f:(fun b -> Bytes.to_string @@ Blk.to_bytes ~fmt b)))
 
-  let print_sema insn =
-    let sema = Insn.semantics insn in
+  let print_sema sema =
     Option.iter options.semantics ~f:(function
-        | [] -> printf "%a@\n" Semantics.pp sema
+        | [] -> printf "%a@\n" KB.Value.pp sema
         | cs ->
-          let pp = Semantics.pp_domains cs in
+          let pp = KB.Value.pp_slots cs in
           printf "%a@\n" pp sema )
 
   let print arch mem code =
     let sema = lift arch mem code in
     let bil = bil_of_sema sema in
-    let insn = Insn.with_semantics (Insn.of_basic ~bil code) sema in
+    let insn = KB.Value.merge (Insn.of_basic ~bil code) sema in
     print_insn_size options.show_insn_size mem;
     print_insn options.insn_formats insn;
     print_bil insn;

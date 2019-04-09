@@ -501,13 +501,6 @@ module Std : sig
 
   (** {1:api BAP API}  *)
 
-  module Semantics : sig
-    type cls = unit Theory.Effect.spec
-    type t = cls Knowledge.value
-    val cls : cls Knowledge.cls
-    include Base.Comparable.S with type t := t
-  end
-
 
   (** Abstract integral type.
 
@@ -1193,6 +1186,10 @@ module Std : sig
 
     (** {2 Constructors} *)
 
+
+    (** [create v w] creates a word from bitvector [v] of width [w].*)
+    val create : Bitvec.t -> int -> t
+
     (** [of_string s] parses a bitvector from a string representation
         defined in section {!bv_string}.    *)
     val of_string : string -> t
@@ -1249,6 +1246,9 @@ module Std : sig
     val of_binary : ?width:int -> endian -> string -> t
 
     (** {2 Conversions to OCaml built in integer types }  *)
+
+    (** [to_bitvec x] returns a Bitvec represenation of [x]  *)
+    val to_bitvec : t -> Bitvec.t
 
     (** [to_int x] projects [x] in to OCaml [int].  *)
     val to_int   : t -> int   Or_error.t
@@ -1897,7 +1897,7 @@ module Std : sig
 
     val domain : stmt list Knowledge.domain
     val persistent : stmt list Knowledge.persistent
-    val slot : (Semantics.cls, stmt list) Knowledge.slot
+    val slot : (_ Theory.Program.Semantics.cls, stmt list) Knowledge.slot
 
     (** [printf "%a" pp_binop op] prints a binary operation [op].  *)
     val pp_binop : binop printer
@@ -2483,7 +2483,6 @@ module Std : sig
   type exp   = Bil.exp     [@@deriving bin_io, compare, sexp]
   type stmt  = Bil.stmt    [@@deriving bin_io, compare, sexp]
   type unop  = Bil.unop    [@@deriving bin_io, compare, sexp]
-  type semantics = Semantics.t [@@deriving bin_io, compare, sexp]
   (** The type of a BIL expression.
 
       Each BIL expression is either an immediate value of a given
@@ -2644,6 +2643,10 @@ module Std : sig
   module Var : sig
 
     type t = var
+
+    val reify : 'a Theory.var -> t
+    val ident : t -> Theory.Var.ident
+    val sort  : t -> Theory.Sort.top
 
     (** [create ?register ?fresh name typ] creates a variable with
         a given [name] and [typ]e.
@@ -3926,7 +3929,7 @@ module Std : sig
     (** [endian arch] returns a word endianness of the [arch]  *)
     val endian : t -> endian
 
-    val slot : (Semantics.cls, t option) Knowledge.slot
+    val slot : (Theory.program, t option) Knowledge.slot
 
     (** [arch] type implements [Regular]  interface  *)
     include Regular.S with type t := t
@@ -4362,7 +4365,7 @@ module Std : sig
   type jmp [@@deriving bin_io, compare, sexp]
   type nil [@@deriving bin_io, compare, sexp]
 
-  type tid [@@deriving bin_io, compare, sexp]
+  type tid = Theory.Label.t [@@deriving bin_io, compare, sexp]
   type call [@@deriving bin_io, compare, sexp]
 
   (** target of control transfer  *)
@@ -4662,7 +4665,7 @@ module Std : sig
       addr ->
       Bigstring.t -> t Or_error.t
 
-    val slot : (Semantics.cls, mem option) Knowledge.slot
+    val slot : (Theory.program, mem option) Knowledge.slot
 
     (** [of_file endian start name] creates a memory region from file.
         Takes data stored in a file with the given [name] and maps it
@@ -5612,8 +5615,8 @@ module Std : sig
   type disasm
 
   (** values of type [insn] represents machine instructions decoded
-      from the a given piece of memory *)
-  type insn = Semantics.t [@@deriving bin_io, compare, sexp_of]
+      from a given piece of memory *)
+  type insn = Theory.Program.t [@@deriving bin_io, compare, sexp]
 
   (** [block] is a region of memory that is believed to be a basic block
       of control flow graph to the best of our knowledge. *)
@@ -5963,7 +5966,7 @@ module Std : sig
 
         type ('a,'k) t = ('a,'k) insn
 
-        val slot : (Semantics.cls, full_insn option) Knowledge.slot
+        val slot : (Theory.program, full_insn option) Knowledge.slot
 
         (** [sexp_of_t insn] returns a sexp representation of [insn]  *)
         val sexp_of_t : ('a,'k) t -> Sexp.t
@@ -6097,14 +6100,13 @@ module Std : sig
   *)
   module Insn : sig
 
-    type t = Semantics.t [@@deriving bin_io, compare, sexp]
+    type t = Theory.Program.t [@@deriving bin_io, compare, sexp]
 
     module Slot : sig
-      val name : (Semantics.cls, string) Knowledge.slot
-      val asm : (Semantics.cls, string) Knowledge.slot
-      val ops : (Semantics.cls, op array option) Knowledge.slot
+      val name : (Theory.program, string) Knowledge.slot
+      val asm : (Theory.program, string) Knowledge.slot
+      val ops : (Theory.program, op array option) Knowledge.slot
     end
-
 
     (** {3 Creating}
         The following functions will create [insn] instances from a lower
@@ -7056,7 +7058,7 @@ module Std : sig
       ?jmp:(jmp term -> 'a) ->
       't term -> 'a
 
-    val slot : (Semantics.cls, blk term list) Knowledge.slot
+    val slot : ('a Theory.Program.Semantics.cls, blk term list) Knowledge.slot
   end
 
   (** Program in Intermediate representation.  *)
@@ -7526,7 +7528,9 @@ module Std : sig
                    t
 
 
-    val cnd : t -> Theory.Bool.t Theory.Sort.exp KB.value option
+    val guard : t -> Theory.Bool.t Theory.Sort.exp KB.value option
+
+    val with_guard : t -> Theory.Bool.t Theory.Sort.exp KB.value option -> t
 
     val value : t -> unit Theory.Sort.exp KB.Class.abstract KB.value
 

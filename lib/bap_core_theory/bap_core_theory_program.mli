@@ -7,9 +7,9 @@ type program = cls
 type t = cls Knowledge.value
 val cls : program Knowledge.cls
 module Semantics : sig
-  type cls = unit Effect.spec
-  type t = cls Knowledge.value
-  val cls : cls Knowledge.cls
+  type +'a cls = 'a Effect.spec
+  type t = unit cls Knowledge.value
+  val cls : 'a cls Knowledge.cls
   val slot : (program, t) Knowledge.slot
   include Knowledge.Value.S with type t := t
 end

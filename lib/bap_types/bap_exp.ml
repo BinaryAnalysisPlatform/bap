@@ -13,7 +13,6 @@ module Size = Bap_size
 type binop = exp -> exp -> exp
 type unop = exp -> exp
 
-module Semantics = Bap_types_semantics
 
 module PP = struct
   open Bap_bil

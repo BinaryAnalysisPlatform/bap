@@ -1,5 +1,5 @@
 open Core_kernel
-open Bap_knowledge
+open Bap_core_theory
 open Regular.Std
 open Bap_types.Std
 open Or_error
@@ -434,6 +434,6 @@ include Printable.Make(struct
 let hexdump t = Format.asprintf "%a" pp_hex t
 
 
-let domain = Knowledge.Domain.optional ~inspect:sexp_of_t "mem"
-let slot = Knowledge.Class.property ~package:"bap.std"
-    Semantics.cls "mem" domain
+let domain = KB.Domain.optional ~inspect:sexp_of_t "mem"
+let slot = KB.Class.property ~package:"bap.std"
+    Theory.Program.cls "mem" domain

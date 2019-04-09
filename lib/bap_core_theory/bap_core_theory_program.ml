@@ -27,11 +27,10 @@ module Label = struct
 end
 
 module Semantics = struct
-  type cls = unit Effect.spec
-  let cls = Effect.top
-  include (val Knowledge.Value.derive cls)
+  type +'a cls = 'a Effect.spec
+  let cls = Effect.bot
+  include (val Knowledge.Value.derive Effect.top)
   let slot = Knowledge.Class.property program "semantics" domain
-
 end
 
 include (val Knowledge.Value.derive cls)

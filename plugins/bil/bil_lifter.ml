@@ -5,9 +5,8 @@ open Bap_knowledge
 open Bap_core_theory
 
 open Knowledge.Syntax
-open Link.Syntax
 
-open Parser
+open Theory.Parser
 include Self()
 
 module BilParser = struct
@@ -68,7 +67,7 @@ module BilParser = struct
       | Load(m,k,e,s) ->
         S.load_word (Size.in_bits s) (is_big e) m k
       | Var v -> S.var (Var.name v) (bits_of_var v)
-      | Int x -> S.int x
+      | Int x -> S.int (Word.to_bitvec x) (Word.bitwidth x)
       | Let (v,y,z) when is_bit v -> S.let_bit (Var.name v) y z
       | Let (v,y,z) when is_reg v -> S.let_reg (Var.name v) y z
       | Let (v,y,z) when is_mem v -> S.let_mem (Var.name v) y z
@@ -83,7 +82,7 @@ module BilParser = struct
       | Let _
       | BinOp ((EQ|NEQ|LT|LE|SLT|SLE), _, _)
       | Store (_, _, _, _, _)
-      | Unknown (_, Mem _) as exp -> fail exp `Bitv; S.error
+      | Unknown (_, (Mem _|Unk)) as exp -> fail exp `Bitv; S.error
 
 
 
@@ -119,7 +118,7 @@ module BilParser = struct
   let bool : type t r. (t,exp,r) bool_parser =
     fun (module S) -> function
       | Var x -> S.var (Var.name x)
-      | Int x -> S.int x
+      | Int x -> S.int (Word.to_bitvec x)
       | Cast (HIGH,1,x) -> S.high x
       | Cast (LOW,1,x) -> S.low x
       | BinOp (EQ,x,y) -> S.eq x y
@@ -152,59 +151,54 @@ module BilParser = struct
 
   let stmt : type t r. (t,exp,r,stmt) stmt_parser =
     fun (module S) ->
-      let set v x =
-        let n = Var.name v in
-        match Var.typ v with
-        | Imm 1 -> S.set_bit n x
-        | Imm m -> S.set_reg n m x
-        | Mem (ks,vs) ->
-          S.set_mem n (Size.in_bits ks) (Size.in_bits vs) x in
-      let let_ v x =
-        let n = Var.name v in
-        match Var.typ v with
-        | Imm 1 -> S.tmp_bit n x
-        | Imm _ -> S.tmp_reg n x
-        | Mem _ -> S.tmp_mem n x in
-      function
-      | Move (v,x) when Var.is_physical v -> set v x
-      | Move (v,x) -> let_ v x
-      | Jmp (Int x) -> S.goto x
-      | Jmp x -> S.jmp x
-      | Special s -> S.special s
-      | While (c,xs) -> S.while_ c xs
-      | If (c,xs,ys) -> S.if_ c xs ys
-      | CpuExn n -> S.cpuexn n
+    let set v x =
+      let n = Var.name v in
+      match Var.typ v with
+      | Imm 1 -> S.set_bit n x
+      | Imm m -> S.set_reg n m x
+      | Mem (ks,vs) ->
+        S.set_mem n (Size.in_bits ks) (Size.in_bits vs) x in
+    let let_ v x =
+      let n = Var.name v in
+      match Var.typ v with
+      | Imm 1 -> S.tmp_bit n x
+      | Imm _ -> S.tmp_reg n x
+      | Mem _ -> S.tmp_mem n x in
+    function
+    | Move (v,x) when Var.is_physical v -> set v x
+    | Move (v,x) -> let_ v x
+    | Jmp (Int x) -> S.goto (Word.to_bitvec x)
+    | Jmp x -> S.jmp x
+    | Special s -> S.special s
+    | While (c,xs) -> S.while_ c xs
+    | If (c,xs,ys) -> S.if_ c xs ys
+    | CpuExn n -> S.cpuexn n
 
 
   let t = {bitv; mem; stmt; bool; float; rmode}
 end
 
-module Lifter = Parser.Make(Theory.Manager)
+module Lifter = Theory.Parser.Make(Theory.Manager)
 
 let provide_bir () =
-  let lifter label =
-    Knowledge.collect Bil.semantics label >>= fun bil ->
-    Lifter.run BilParser.t bil >>| fun eff ->
-    let graph = Eff.get Bil_ir.t eff in
-    Bil_ir.reify graph in
-  Knowledge.promise Insn.Semantics.bir lifter
-
+  Knowledge.promise Term.slot @@ fun obj ->
+  KB.collect Bil_ir.slot obj >>| Bil_ir.reify
 
 let provide_lifter () =
   info "providing a lifter for all BIL lifters";
-  let lifter label =
-    Knowledge.collect Insn.Semantics.t label >>= fun sema ->
-    Knowledge.collect Disasm_expert.Basic.decoder label >>= function
-    | None -> Knowledge.return sema
-    | Some (arch,mem,insn) ->
-      let module Target = (val target_of_arch arch) in
-      match Target.lift mem insn with
-      | Ok bil ->
-        Lifter.run BilParser.t bil >>|
-        Eff.semantics >>|
-        Semantics.merge sema
-      | Error _ -> Knowledge.return sema in
-  Knowledge.promise Insn.Semantics.t lifter
+  let empty = Theory.Program.Semantics.empty in
+  let (>>?) x f = x >>= function
+    | None -> KB.return empty
+    | Some x -> f x in
+  let lifter obj =
+    Knowledge.collect Arch.slot obj >>? fun arch ->
+    Knowledge.collect Memory.slot obj >>? fun mem ->
+    Knowledge.collect Disasm_expert.Basic.Insn.slot obj >>? fun insn ->
+    let module Target = (val target_of_arch arch) in
+    match Target.lift mem insn with
+    | Ok bil -> Lifter.run BilParser.t bil
+    | Error _ -> Knowledge.return Theory.Program.Semantics.empty in
+  Knowledge.promise Theory.Program.Semantics.slot lifter
 
 
 let init () =

@@ -38,8 +38,8 @@ type error = [
   | `Failed_to_lift of mem * full_insn * Error.t
 ] [@@deriving sexp_of]
 
-type semantics = Semantics.t [@@deriving bin_io, compare, sexp]
-type maybe_insn = full_insn option * semantics [@@deriving sexp_of]
+type code = Theory.Program.t [@@deriving bin_io, compare, sexp]
+type maybe_insn = full_insn option * code [@@deriving sexp_of]
 type decoded = mem * maybe_insn [@@deriving sexp_of]
 
 type dests = Brancher.dests
@@ -182,7 +182,7 @@ type stage1 = {
   inits : Addr.Set.t;
   dests : dests Addr.Table.t;
   errors : (addr * error) list;
-  lift : mem -> full_insn -> semantics Or_error.t;
+  lift : mem -> full_insn -> code Or_error.t;
 }
 
 type stage2 = {
@@ -221,8 +221,16 @@ let ok_nil = function
   | Error _ -> []
 
 let to_bil s = match s with
-  | Ok s -> Ok (KB.Value.get Bil.slot s)
   | Error err -> Error err
+  | Ok s ->
+    Result.return @@
+    KB.Value.get Bil.slot @@
+    KB.Value.get Theory.Program.Semantics.slot s
+
+let with_bil : code -> bil -> code = fun code bil ->
+  let slot = Theory.Program.Semantics.slot in
+  KB.Value.put Theory.Program.Semantics.slot code @@
+  KB.Value.put Bil.slot (KB.Value.get slot code) bil
 
 let is_barrier s mem insn =
   Dis.Insn.is insn `May_affect_control_flow ||
@@ -390,7 +398,7 @@ let stage2 dis stage1 =
   | Some addr -> loop addr addr >>= fun () ->
     let dis = Dis.store_asm dis in
     let dis = Dis.store_kinds dis in
-    let empty = KB.Value.empty Semantics.cls in
+    let empty = Theory.Program.empty in
     let disasm mem =
       Dis.run dis mem
         ~init:[] ~return:ident ~stopped:(fun s _ ->
@@ -405,10 +413,10 @@ let stage2 dis stage1 =
                   | a, (`Cond | `Jump) -> a
                   | _ -> None) in
             let bil,sema = match stage1.lift mem ins with
-              | Ok sema -> KB.Value.get Bil.slot sema,sema
-              | _ -> [],empty in
+              | Ok sema -> Insn.bil sema,sema
+              | _ -> [],Theory.Program.empty in
             let bil = add_destinations bil dests in
-            mem, (insn, KB.Value.put Bil.slot sema bil)) in
+            mem, (insn, with_bil sema bil)) in
     return {stage1; addrs; succs; preds; disasm}
 
 let stage3 s2 =
@@ -429,7 +437,7 @@ let stage3 s2 =
   let nodes = Addrs.create () in
   Addrs.iteri s2.addrs ~f:(fun ~key:addr ~data:mem ->
       s2.disasm mem |> List.filter_map ~f:(function
-          | mem,(None,_) -> None
+          | _,(None,_) -> None
           | mem,(Some _,sema) -> Some (mem, sema)) |> function
       | [] -> ()
       | insns ->
@@ -454,16 +462,16 @@ let stage3 s2 =
 let lifter arch mem insn =
   let open KB.Syntax in
   let code =
-    KB.Object.create Semantics.cls >>= fun code ->
+    KB.Object.create Theory.Program.cls >>= fun code ->
     KB.provide Arch.slot code (Some arch) >>= fun () ->
     KB.provide Memory.slot code (Some mem) >>= fun () ->
     KB.provide Dis.Insn.slot code (Some insn) >>| fun () ->
     code in
-  match KB.run Semantics.cls code KB.empty with
-  | Ok (sema,_) ->
-    let bil = KB.Value.get Bil.slot sema in
-    let sema' = Insn.of_basic ~bil insn in
-    Ok (KB.Value.merge sema' sema)
+  match KB.run Theory.Program.cls code KB.empty with
+  | Ok (prog,_) ->
+    let bil = Insn.bil prog in
+    let prog' = Insn.of_basic ~bil insn in
+    Ok (KB.Value.merge prog' prog)
   | Error _ -> errorf "conflict"
 
 let run ?(backend="llvm") ?brancher ?rooter arch mem =

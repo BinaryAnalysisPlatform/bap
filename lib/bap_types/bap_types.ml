@@ -57,9 +57,6 @@ module Std = struct
 
   module Eff = Bap_helpers.Eff
 
-  module Semantics = Bap_types_semantics
-  type semantics = Semantics.t [@@deriving bin_io, compare, sexp]
-
   module Bil = struct
     type t = Bap_bil.bil [@@deriving bin_io, compare, sexp]
     include (Bap_stmt.Stmts_pp : Printable.S with type t := t)

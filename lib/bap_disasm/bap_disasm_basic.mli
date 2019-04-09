@@ -1,7 +1,7 @@
 open Core_kernel
 open Regular.Std
 open Bap_types.Std
-open Bap_knowledge
+open Bap_core_theory
 
 type mem = Bap_memory.t [@@deriving sexp_of]
 type kind = Bap_insn_kind.t [@@deriving compare, sexp]
@@ -88,7 +88,7 @@ module Insn : sig
   val is : ('a,kinds) t -> kind -> bool
   val asm : (asm,'k) t -> string
   val ops  : ('a,'k) t -> op array
-  val slot : (Semantics.cls,full_insn option) Knowledge.slot
+  val slot : (Theory.program,full_insn option) KB.slot
 end
 
 module Reg : sig
