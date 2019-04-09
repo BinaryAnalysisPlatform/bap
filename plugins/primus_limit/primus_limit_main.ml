@@ -1,8 +1,7 @@
 open Core_kernel
 open Bap.Std
 open Monads.Std
-open Bap_knowledge
-open Bap_primus
+open Bap_primus.Std
 open Bap_future.Std
 include Self()
 
@@ -78,88 +77,90 @@ type state = {
 
 let state = Primus.Machine.State.declare
     ~name:"primus-limiter"
-    ~uuid:"b1b58dff-54de-4611-abf8-88ff8f6c7481" @@
-  Knowledge.return {
-    visited = Name.Map.empty;
-    length = 0;
-  }
-
-module Machine = Primus.Machine
-open Machine.Syntax
-module Eval = Primus.Interpreter.Make(Machine)
-
-let terminate reason =
-  Machine.current () >>= fun id ->
-  info
-    "terminating machine %a because a maximum number of %s has been reached"
-    Id.pp id reason;
-  Eval.halt >>=
-  never_returns
+    ~uuid:"b1b58dff-54de-4611-abf8-88ff8f6c7481"
+    (fun _ -> {
+         visited = Name.Map.empty;
+         length = 0;
+       })
 
 
-let string_of_counter = function
-  | Blk -> "blocks"
-  | Insn -> "instructions"
-  | Term -> "terms"
-  | Exp -> "expressions"
+module Main(Machine : Primus.Machine.S) = struct
+  open Machine.Syntax
+  module Eval = Primus.Interpreter.Make(Machine)
+
+  let terminate reason =
+    Machine.current () >>= fun id ->
+    info
+      "terminating machine %a because a maximum number of %s has been reached"
+      Id.pp id reason;
+    Eval.halt >>=
+    never_returns
 
 
-let check_bound _ = match get Cfg.max_length with
-  | None -> Machine.return ()
-  | Some {limit; counter} ->
+  let string_of_counter = function
+    | Blk -> "blocks"
+    | Insn -> "instructions"
+    | Term -> "terms"
+    | Exp -> "expressions"
+
+
+  let check_bound _ = match get Cfg.max_length with
+    | None -> Machine.return ()
+    | Some {limit; counter} ->
+      Machine.Local.get state >>= fun s ->
+      report_progress ~task:"limit max path length" ~stage:s.length ~total:limit ();
+      if s.length > limit
+      then terminate (string_of_counter counter)
+      else Machine.Local.put state {
+          s with length = s.length + 1;
+        }
+
+
+
+  let check_max_visits name visited = match get Cfg.max_visited with
+    | None -> Machine.return ()
+    | Some max_visited -> match Map.find visited name with
+      | Some visits ->
+        report_progress ~task:"limit max visits"
+          ~stage:visits ~total:max_visited ();
+        if visits > max_visited
+        then terminate
+            (sprintf "visits of the %s destination" (Tid.name name))
+        else Machine.return ()
+      | _ -> Machine.return ()
+
+  let on_blk blk =
+    let name = Term.tid blk in
     Machine.Local.get state >>= fun s ->
-    report_progress ~task:"limit max path length" ~stage:s.length ~total:limit ();
-    if s.length > limit
-    then terminate (string_of_counter counter)
-    else Machine.Local.put state {
-        s with length = s.length + 1;
-      }
+    check_max_visits name s.visited >>= fun () ->
+    Machine.Local.put state {
+      s with visited = Map.update s.visited name ~f:(function
+        | None -> 1
+        | Some n -> n + 1)
+    }
 
+  let register_counter =
+    let open Primus.Interpreter in
+    match get Cfg.max_length with
+    | None -> Machine.return ()
+    | Some {counter=Blk}  -> enter_blk >>> check_bound
+    | Some {counter=Insn} -> pc_change >>> check_bound
+    | Some {counter=Term} -> enter_term >>> check_bound
+    | Some {counter=Exp}  -> Machine.sequence [
+        loading >>> check_bound;
+        storing >>> check_bound;
+        binop >>> check_bound;
+        unop >>> check_bound;
+        Primus.Linker.exec >>> check_bound;
+      ]
 
-
-let check_max_visits name visited = match get Cfg.max_visited with
-  | None -> Machine.return ()
-  | Some max_visited -> match Map.find visited name with
-    | Some visits ->
-      report_progress ~task:"limit max visits"
-        ~stage:visits ~total:max_visited ();
-      if visits > max_visited
-      then terminate
-          (sprintf "visits of the %s destination" (Tid.name name))
-      else Machine.return ()
-    | _ -> Machine.return ()
-
-let on_blk blk =
-  let name = Term.tid blk in
-  Machine.Local.get state >>= fun s ->
-  check_max_visits name s.visited >>= fun () ->
-  Machine.Local.put state {
-    s with visited = Map.update s.visited name ~f:(function
-      | None -> 1
-      | Some n -> n + 1)
-  }
-
-let register_counter =
-  let open Primus.Interpreter in
-  match get Cfg.max_length with
-  | None -> Machine.return ()
-  | Some {counter=Blk}  -> enter_blk >>> check_bound
-  | Some {counter=Insn} -> pc_change >>> check_bound
-  | Some {counter=Term} -> enter_term >>> check_bound
-  | Some {counter=Exp}  -> Machine.sequence [
-      loading >>> check_bound;
-      storing >>> check_bound;
-      binop >>> check_bound;
-      unop >>> check_bound;
-      Primus.Linker.exec >>> check_bound;
+  let init () =
+    Machine.sequence [
+      Primus.Interpreter.enter_blk >>> on_blk;
+      register_counter;
     ]
 
-let init () =
-  Machine.sequence [
-    Primus.Interpreter.enter_blk >>> on_blk;
-    register_counter;
-  ]
-
+end
 
 
 let () = Config.when_ready (fun _ ->
