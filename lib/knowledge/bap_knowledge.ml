@@ -510,8 +510,8 @@ module Record = struct
               let pack v = Dict.Packed.T (k,v) in
               let dom = Hashtbl.find_exn domains name in
               match dom.order (pack x) (pack y) with
-              | EQ | LT -> Some x
-              | GT -> Some y
+              | EQ | LT -> Some y
+              | GT -> Some x
               | NC -> match on_conflict with
                 | `drop_both -> None
                 | `drop_left -> Some y
