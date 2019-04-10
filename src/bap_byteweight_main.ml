@@ -220,9 +220,9 @@ module Cmdline = struct
   let threshold : float Term.t =
     let doc = "Decide that sequence starts a function \
                if m / n > $(docv),  where n is the total \
-               number of occurences of a given sequence in \
+               number of occurrences of a given sequence in \
                the training set, and m is how many times \
-               it has occured at the function start position." in
+               it has occurred at the function start position." in
     Arg.(value & opt float 0.5 &
          info ["threshold"; "t"] ~doc ~docv:"THRESHOLD")
 

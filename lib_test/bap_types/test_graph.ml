@@ -95,7 +95,7 @@ module Test_algo(Gl : Graph_for_algo) = struct
 
     let parent t child = Map.find t.iparents child
 
-    (* computes a set of all descendands of a given parent
+    (* computes a set of all descendants of a given parent
        (transitive closure) *)
     let rec descendants t parent =
       (* according to [1] each node is descendant of itself. *)
@@ -518,7 +518,7 @@ module Test_IR = struct
     | [{node_label="one"}; {node_label="two"}] -> ()
     | [{node_label="one"}; {node_label=l}] -> assert_failure "bad out"
     | [{node_label=l}; {node_label="two"}] -> assert_failure "bad inc"
-    | [] | [_] -> assert_failure "egde(n1,n2) doesn't exist"
+    | [] | [_] -> assert_failure "edge(n1,n2) doesn't exist"
     | _ -> assert_failure "bad out and inc"
 
   let (++) g x = G.Node.(insert (create x) g)

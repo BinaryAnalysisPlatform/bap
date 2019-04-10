@@ -20,9 +20,9 @@ open Or_error
 open Bap_types.Std
 open Image_backend
 
-(* Accoding to llvm (ObjectFile.h line 186)
+(* According to llvm (ObjectFile.h line 186)
    symbols type can be debug or function.
-   Thats why we don't compare is_debug field *)
+   That's why we don't compare is_debug field *)
 module SS = Set.Make(
   struct
     include Symbol

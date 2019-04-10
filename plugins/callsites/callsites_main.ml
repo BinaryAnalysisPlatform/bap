@@ -88,7 +88,7 @@ let main proj =
 let () =
   Config.manpage [
     `S "DESCRIPTION";
-    `P "This pass will inject artifical definitions of a subroutine
+    `P "This pass will inject artificial definitions of a subroutine
       arguments at call sites. Consider function $(b,malloc) that has
       the following declaration in BIR:";
     `Pre "

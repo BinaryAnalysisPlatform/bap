@@ -30,7 +30,7 @@ include Self()
    denotes logical negation.
 
    However, we would require an SMT solver to find such contexts. So,
-   the intepreter requires a program to be in a trivial condition form
+   the interpreter requires a program to be in a trivial condition form
    (TCF). In TCF every jmp condition must be a single variable or a
    constant true.
 

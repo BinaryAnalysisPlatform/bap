@@ -23,7 +23,7 @@ let is_empty : 'a Sequence.t -> bool = length_is_bounded_by ~max:0
 let filter s ~f = filteri s ~f:(fun _ x -> f x)
 
 (* honestly stolen from newer core_kernel, to
-   get compatiblity with older library versions *)
+   get compatibility with older library versions *)
 let compare compare_a t1 t2 =
   with_return (fun r ->
       iter (zip_full t1 t2) ~f:(function

@@ -257,7 +257,7 @@ let stage1 ?(rooter=Rooter.empty) lift brancher disasm base =
 
    Returns three tables: leads, terms, and kinds. Leads is a mapping
    from leader to all predcessing terminators. Terms is a mapping from
-   terminators to all successing leaders. Kinds is a mapping from a
+   terminators to all successive leaders. Kinds is a mapping from a
    terminator addresses, to all outputs with each output including the
    kind annotation, e.g, Cond, Jump, etc. This also includes
    unresolved outputs.

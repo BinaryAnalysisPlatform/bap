@@ -5,7 +5,7 @@ open Format
 
 
 (* current representation has a very big overhead,
-   depending on a size of a payload it is minumum five words,
+   depending on a size of a payload it is minimum five words,
    For example, although Zarith stores a 32bit word on a 64 bit
    machine in one word and represent it as an unboxed int, we still
    take four more words on top of that, as bitvector is represented as

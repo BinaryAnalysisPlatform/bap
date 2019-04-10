@@ -50,7 +50,7 @@ manpage [
   `P "Ensures that all branching conditions are either a variable
 or a constant. We call such representation a Trivial Condition Form
 (TCF). During the translation all complex condition expressions are
-hoisted into the assignemnt section of a block.";
+hoisted into the assignment section of a block.";
 ];;
 
 

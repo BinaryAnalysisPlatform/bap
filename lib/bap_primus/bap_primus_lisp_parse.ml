@@ -656,7 +656,7 @@ let string_of_defkind = function
   | Meth -> "method"
   | Para -> "parameter"
   | Macro -> "macro"
-  | Const -> "contant"
+  | Const -> "constant"
   | Subst -> "substitution"
 
 

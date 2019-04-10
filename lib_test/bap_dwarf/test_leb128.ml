@@ -86,11 +86,11 @@ let size ~expect value t ctxt =
 
 
 let suite = "Leb128" >::: [
-    "unsinged int"   >:: rounds uints   @@ int   ~signed:false;
+    "unsigned int"   >:: rounds uints   @@ int   ~signed:false;
     "signed   int"   >:: rounds ints    @@ int   ~signed:true;
-    "unsinged int32" >:: rounds uints32 @@ int32 ~signed:false;
+    "unsigned int32" >:: rounds uints32 @@ int32 ~signed:false;
     "signed   int32" >:: rounds ints32  @@ int32 ~signed:true;
-    "unsinged int64" >:: rounds uints64 @@ int64 ~signed:false;
+    "unsigned int64" >:: rounds uints64 @@ int64 ~signed:false;
     "signed   int64" >:: rounds ints64  @@ int64 ~signed:true ;
     "int"            >:: rounds uints   @@ int   ~signed:true;
     "int32"          >:: rounds uints32 @@ int32 ~signed:true;

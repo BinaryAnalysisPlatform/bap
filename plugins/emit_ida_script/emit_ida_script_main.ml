@@ -21,7 +21,7 @@ let string_of_color c = Sexp.to_string (sexp_of_color c)
 (** Each function in this module should return a string that should be
     a valid piece of python code. Except for the prologue and epilogue
     all pieces should be independent of each other, so that they can
-    be emited to the script in an arbitrary order.
+    be emitted to the script in an arbitrary order.
 
     The emitted code can contain substitutions. Each substitution is a
     string starting with a percent sign followed immediately by an

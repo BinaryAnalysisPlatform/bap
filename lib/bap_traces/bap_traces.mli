@@ -224,7 +224,7 @@ module Std : sig
       (** [ignore_errors] filters good events and silently drops error events  *)
       val ignore_errors : t
       (** [warn_on_error on_error] same as [ignore_errors] but calls
-          [on_error] function when an error has occured *)
+          [on_error] function when an error has occurred *)
       val warn_on_error : (Error.t -> unit) -> t
 
       (** [fail_on_error] will fail with an [error] [Error.raise error] *)
@@ -233,7 +233,7 @@ module Std : sig
       (** [stop_on_error] will silently finish a stream in case of error.  *)
       val stop_on_error : t
 
-      (** [pack_errors pack] will transform any occured error into event
+      (** [pack_errors pack] will transform any occurred error into event
           using [pack] function.  *)
       val pack_errors : (Error.t -> event) -> t
 
@@ -352,7 +352,7 @@ module Std : sig
     type t = {
       name : string;            (** a name of linked module *)
       low : addr;               (** the lowest mapped address *)
-      high : addr;              (** the hightest mapped address *)
+      high : addr;              (** the highest mapped address *)
     } [@@deriving bin_io, compare, fields, sexp]
   end
 
@@ -394,16 +394,16 @@ module Std : sig
         thread (process) id. *)
     val context_switch : int tag
 
-    (** a system call has occured  *)
+    (** a system call has occurred  *)
     val syscall : syscall tag
 
-    (** a software exception has occured.  *)
+    (** a software exception has occurred.  *)
     val exn : exn tag
 
-    (** a control flow transfer from one procedure to another has occured  *)
+    (** a control flow transfer from one procedure to another has occurred  *)
     val call : call tag
 
-    (** a return from a call has occured  *)
+    (** a return from a call has occurred  *)
     val return : return tag
 
     (** a module (shared library) is dynamically linked into a host program. *)

@@ -24,7 +24,7 @@ module Std : sig
 
 
 
-  (** Program meta infromation.  *)
+  (** Program meta information.  *)
   module Manifest : sig
     type t = {
       name : string;            (** program name *)

@@ -8,7 +8,7 @@ type error = [
   | `Corrupted of string        (** Signature file is corrupted  *)
   | `No_signatures              (** Signature file is not found    *)
   | `No_entry of string         (** Corresponding entry not found  *)
-  | `Sys_error of string        (** System error has occured     *)
+  | `Sys_error of string        (** System error has occurred     *)
 ]
 
 
@@ -23,7 +23,7 @@ val save : ?comp:string -> mode:string -> path:string -> arch -> bytes ->
 
 
 (** [load ?comp ?path ~mode arch] finds a signature for the specified
-    [arch-comp-path] tripple. The [path] defaults to [default_path].*)
+    [arch-comp-path] triple. The [path] defaults to [default_path].*)
 val load : ?comp:string -> ?path:string -> mode:string -> arch ->
   (bytes,error) Result.t
 

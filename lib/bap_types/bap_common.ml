@@ -58,7 +58,7 @@ module Type = struct
   type t =
     (** [Imm n] - n-bit immediate   *)
     | Imm of nat1
-    (** [Mem (a,t)]memory with a specifed addr_size *)
+    (** [Mem (a,t)]memory with a specified addr_size *)
     | Mem of addr_size * size
     [@@deriving bin_io, compare, sexp, variants]
 end

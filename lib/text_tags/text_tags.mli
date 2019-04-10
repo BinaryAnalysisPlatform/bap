@@ -93,7 +93,7 @@ open Format
 
     {2 Blocks mode}
 
-    The blocks mode grammar is very similiar to html mode, as it also
+    The blocks mode grammar is very similar to html mode, as it also
     uses sexp syntax.
 
     {v tag := "(", "id", value, ")" | "(", "title", value, ")" v}
@@ -116,7 +116,7 @@ open Format
       v}
 
     If both [id] and [title] is specified, then only title will be
-    outputed. Otherwise, [id] and [title] has the same behavior.
+    outputted. Otherwise, [id] and [title] has the same behavior.
 *)
 
 (** A name of mode, by default the following modes ares supported

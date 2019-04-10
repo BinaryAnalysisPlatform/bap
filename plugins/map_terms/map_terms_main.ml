@@ -193,11 +193,11 @@ module Cmdline = struct
 
     let call =
       `I (sprintf "$(b,(call DST))",
-          sprintf "Is satisfied when call of $(b,DST) occures")
+          sprintf "Is satisfied when call of $(b,DST) occurs")
 
     let goto =
       `I (sprintf "$(b,(goto LABEL))",
-          sprintf "Is satisfied when goto $(b,LABEL) occures")
+          sprintf "Is satisfied when goto $(b,LABEL) occurs")
 
     let call_return =
       `I (sprintf "$(b,(return DST))",

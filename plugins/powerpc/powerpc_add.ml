@@ -16,7 +16,7 @@
     | 7d 62 5c 15 |addco. r11, r2, r11|rc=1,oe=1|  not recognized    |  ---          |
     --------------------------------------------------------------------------------
 
-    And so on. Basicly, instructions
+    And so on. Basically, instructions
     addo addco addeo addmeo addzeo addo. addco. addeo. addmeo. addzeo.
     doesn't recognized by llvm.
 

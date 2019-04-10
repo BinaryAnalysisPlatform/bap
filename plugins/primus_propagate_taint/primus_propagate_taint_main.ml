@@ -246,7 +246,7 @@ manpage [
     will track, if it was marked with the $(b,tainted-reg)
     attribute. If it was marked with the $(b,tainted-ptr) attribute
     then we dereference this pointer and taint the dereferenced
-    address. If the right hand side is an abritrary expression, then
+    address. If the right hand side is an arbitrary expression, then
     we assume that all variables that are used in this expression
     contain values that are referencing directly or indirectly the
     tainted object."

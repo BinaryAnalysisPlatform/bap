@@ -7,7 +7,7 @@
 ;;;   reported when the same memory region is released twice;
 ;;;   reported when a region that was never acquired is released;
 ;;; - (incident use-after-release acquire release use)
-;;;   reported when a memory access opeartion occurs on a memory
+;;;   reported when a memory access operation occurs on a memory
 ;;;   region that was released
 ;;;
 ;;; Attributes:
