@@ -467,8 +467,8 @@ let lifter arch mem insn =
     KB.provide Memory.slot code (Some mem) >>= fun () ->
     KB.provide Dis.Insn.slot code (Some insn) >>| fun () ->
     code in
-  match KB.run Theory.Program.cls code KB.empty with
-  | Ok (prog,_) ->
+  match Bap_state.run Theory.Program.cls code with
+  | Ok prog ->
     let bil = Insn.bil prog in
     let prog' = Insn.of_basic ~bil insn in
     Ok (KB.Value.merge prog' prog)

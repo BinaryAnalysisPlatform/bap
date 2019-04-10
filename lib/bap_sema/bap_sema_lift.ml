@@ -74,8 +74,8 @@ module IrBuilder = struct
       Knowledge.Object.create cls >>= fun obj ->
       Knowledge.provide Bil.slot obj (Insn.bil insn) >>| fun () ->
       obj in
-    match Knowledge.run cls request Knowledge.empty with
-    | Ok (r,_) -> Knowledge.Value.get Term.slot r
+    match Bap_state.run cls request with
+    | Ok r -> Knowledge.Value.get Term.slot r
     | Error _ -> []
 
   let set_attributes ?mem insn blks =

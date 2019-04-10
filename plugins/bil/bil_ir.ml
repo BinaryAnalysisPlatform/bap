@@ -23,6 +23,7 @@ type t = cfg option
 module BIR = struct
   type t = blk term list
 
+
   let add_def = Blk.Builder.add_def
   let add_jmp = Blk.Builder.add_jmp
   let add_term add (blks,b) t = add b t; (blks,b)
@@ -119,12 +120,14 @@ module IR = struct
   let set v x =
     x >>= fun x ->
     fresh >>= fun entry ->
+    fresh >>= fun tid ->
     data @@ {
       entry;
-      blks = [{name=entry; jmps=[]; defs=[Def.reify v x]}]
+      blks = [{name=entry; jmps=[]; defs=[Def.reify ~tid v x]}]
     }
 
-  let goto ?cnd dst = Jmp.resolved ?cnd dst Jmp.Role.local
+  let goto ?cnd ~tid dst =
+    Jmp.resolved ?cnd ~tid dst Jmp.Role.local
 
   (** reifies a [while (<cnd>) <body>] loop to
 
@@ -150,20 +153,25 @@ module IR = struct
     cnd >>= fun cnd ->
     body >>= reify >>= function
     | {blks=[]} ->
-      fresh >>= fun head -> data {
+      fresh >>= fun head ->
+      fresh >>= fun tid ->
+      data {
         entry = head;
         blks = [{
             name = head;
             defs = [];
-            jmps = [goto ~cnd head]}]}
+            jmps = [goto ~cnd ~tid head]}]}
     | {entry=loop; blks=b::blks} ->
       fresh >>= fun head ->
       fresh >>= fun tail ->
+      fresh >>= fun jmp1 ->
+      fresh >>= fun jmp2 ->
+      fresh >>= fun jmp3 ->
       data {
         entry = head;
-        blks = blk tail ++ goto ~cnd loop ::
-               blk head ++ goto tail ::
-               b ++ goto tail ::
+        blks = blk tail ++ goto ~tid:jmp1 ~cnd loop ::
+               blk head ++ goto ~tid:jmp2 tail ::
+               b ++ goto ~tid:jmp3 tail ::
                blks
       }
 
@@ -181,45 +189,68 @@ module IR = struct
         entry;
         blks = [{blk with defs=[]; jmps=[Jmp.with_guard j (Some cnd)]}]
       }
-    | {entry=lhs; blks=b::blks},{blks=[]} -> ret {
+    | {entry=lhs; blks=b::blks},{blks=[]} ->
+      fresh >>= fun jmp1 ->
+      fresh >>= fun jmp2 ->
+      fresh >>= fun jmp3 ->
+      ret {
         entry = head;
         blks =
           blk tail ::
-          blk head ++ jump lhs ++ goto tail ::
-          b ++ goto tail ::
+          blk head ++
+          jump ~tid:jmp1 lhs ++
+          goto ~tid:jmp2 tail ::
+          b ++ goto ~tid:jmp3 tail ::
           blks
       }
-    | {blks=[]}, {entry=rhs; blks=b::blks} -> ret {
+    | {blks=[]}, {entry=rhs; blks=b::blks} ->
+      fresh >>= fun jmp1 ->
+      fresh >>= fun jmp2 ->
+      fresh >>= fun jmp3 ->
+      ret {
         entry = head;
         blks =
           blk tail ::
-          blk head ++ jump tail ++ goto rhs ::
-          b ++ goto tail ::
+          blk head ++
+          jump ~tid:jmp1 tail ++
+          goto ~tid:jmp2 rhs ::
+          b ++ goto ~tid:jmp3 tail ::
           blks
       }
-    | {entry=lhs; blks=yes::ayes}, {entry=rhs; blks=nay::nays} -> ret {
+    | {entry=lhs; blks=yes::ayes}, {entry=rhs; blks=nay::nays} ->
+      fresh >>= fun jmp1 ->
+      fresh >>= fun jmp2 ->
+      fresh >>= fun jmp3 ->
+      fresh >>= fun jmp4 ->
+      ret {
         entry = head;
         blks =
           blk tail ::
-          blk head ++ jump lhs ++ goto rhs ::
-          yes ++ goto tail ::
-          nay ++ goto tail ::
+          blk head ++
+          jump ~tid:jmp1 lhs ++
+          goto ~tid:jmp2 rhs ::
+          yes ++ goto ~tid:jmp3 tail ::
+          nay ++ goto ~tid:jmp4 tail ::
           List.rev_append ayes nays
       }
-    | {blks=[]}, {blks=[]} -> ret {
+    | {blks=[]}, {blks=[]} ->
+      fresh >>= fun jmp1 ->
+      fresh >>= fun jmp2 ->
+      ret {
         entry = head;
         blks = [
           blk tail;
-          blk head ++ jump tail ++ goto tail
+          blk head ++ jump ~tid:jmp1 tail ++ goto ~tid:jmp2 tail
         ]
       }
 
   let jmp dst =
     fresh >>= fun entry ->
     dst >>= fun dst ->
+    fresh >>= fun tid ->
     ctrl {
       entry;
-      blks = [blk entry ++ Jmp.indirect dst]
+      blks = [blk entry ++ Jmp.indirect ~tid dst]
     }
 
   let appgraphs fst snd =
@@ -230,11 +261,12 @@ module IR = struct
         entry;
         blks = {x with defs = y.defs @ x.defs; jmps = y.jmps} :: xs
       }
-    | {entry; blks=x::xs}, {entry=snd; blks=y::ys} -> ret {
+    | {entry; blks=x::xs}, {entry=snd; blks=y::ys} ->
+      fresh >>= fun tid -> ret {
         entry;
         blks =
           y ::
-          x ++ goto snd ::
+          x ++ goto ~tid snd ::
           List.rev_append xs ys
       }
 
@@ -255,9 +287,10 @@ module IR = struct
 
   let do_goto dst =
     fresh >>= fun entry ->
+    fresh >>= fun tid ->
     ctrl {
       entry;
-      blks = [blk entry ++ goto dst]
+      blks = [blk entry ++ goto ~tid dst]
     }
 
   let blk entry defs jmps =
@@ -272,23 +305,25 @@ module IR = struct
           blks = [blk entry]
         }
       | {blks=[]}, {entry=next; blks=b::blks}
-      | {entry=next; blks=b::blks}, {blks=[]} -> ret {
+      | {entry=next; blks=b::blks}, {blks=[]} ->
+        fresh >>= fun tid ->
+        ret {
           entry;
-          blks = b :: blk entry ++ goto next :: blks
+          blks = b :: blk entry ++ goto ~tid next :: blks
         }
       | {entry=fst; blks=x::xs},
         {entry=snd; blks=y::ys} ->
+        fresh >>= fun jmp1 ->
+        fresh >>= fun jmp2 ->
         ret {
           entry;
           blks =
             y ::
-            blk entry ++ goto fst ::
-            x ++ goto snd ::
+            blk entry ++ goto ~tid:jmp1 fst ::
+            x ++ goto ~tid:jmp2 snd ::
             List.rev_append xs ys
         }
-
   let goto = do_goto
-
 end
 
 let reify = function
