@@ -608,7 +608,8 @@ module Std : sig
       (** [blit_to_string writeable buf value pos] copies a serialized
           representation of the [value] into existing string [buf],
           starting from the given position. It is undefined behavior,
-          if the [value] doesn't fit into the string [buf] *)
+          if the [value] doesn't fit into the string [buf].
+          @deprecated use the blit_to_bytes instead *)
       val blit_to_string : 'a t -> bytes -> 'a -> int -> unit
       [@@deprecated "[since 2018-11] use the blit_to_bytes instead"]
 
@@ -832,12 +833,16 @@ module Std : sig
     module From_string : Blit.S_distinct with type src := string with type dst := t
 
     module To_string  : sig
+
+      (** @deprecated use the Bytes.blit instead  *)
       val blit : (t, t) Blit.blit
       [@@deprecated "[since 2018-11] use the Bytes.blit instead"]
 
+      (** @deprecated use the Bytes.blito instead *)
       val blito : (t, t) Blit.blito
       [@@deprecated "[since 2018-11] use the Bytes.blito instead"]
 
+      (** @deprecated use the Bytes.unsafe_blit instead *)
       val unsafe_blit : (t, t) Blit.blit
       [@@deprecated "[since 2018-11] use the Bytes.unsafe_blit instead"]
 

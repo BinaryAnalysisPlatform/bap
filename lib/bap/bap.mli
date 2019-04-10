@@ -618,6 +618,8 @@ module Std : sig
     module Make(T : Base) : S with type t = T.t
   end
 
+  (**/**)
+
   (** Legacy
       @deprecated Definitions in this module are deprecated
    **)
