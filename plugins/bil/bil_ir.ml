@@ -279,14 +279,6 @@ module IR = struct
     snd >>-> fun snd ->
     appgraphs fst snd
 
-
-  let unlabeled_blk defs jmps =
-    match defs, jmps with
-    | {blks=[]}, {entry; blks}
-    | {entry; blks}, {blks=[]} -> {entry; blks}
-    | _ -> assert false
-
-
   let do_goto dst =
     fresh >>= fun entry ->
     fresh >>= fun tid ->
@@ -296,37 +288,34 @@ module IR = struct
     }
 
 
-
-  let blk entry defs jmps =
+  let blk _entry defs jmps =
     defs >>-> fun defs ->
     jmps >>-> fun jmps ->
-    is_null entry  >>= function
-    | true -> appgraphs defs jmps
-    | false ->
-      match defs, jmps with
-      | {blks=[]}, {blks=[]} -> ret {
-          entry;
-          blks = [blk entry]
-        }
-      | {blks=[]}, {entry=next; blks=b::blks}
-      | {entry=next; blks=b::blks}, {blks=[]} ->
-        fresh >>= fun tid ->
-        ret {
-          entry;
-          blks = b :: blk entry ++ goto ~tid next :: blks
-        }
-      | {entry=fst; blks=x::xs},
-        {entry=snd; blks=y::ys} ->
-        fresh >>= fun jmp1 ->
-        fresh >>= fun jmp2 ->
-        ret {
-          entry;
-          blks =
-            y ::
-            blk entry ++ goto ~tid:jmp1 fst ::
-            x ++ goto ~tid:jmp2 snd ::
-            List.rev_append xs ys
-        }
+    appgraphs defs jmps
+  (* match defs, jmps with
+   * | {blks=[]}, {blks=[]} -> ret {
+   *     entry;
+   *     blks = [blk entry]
+   *   }
+   * | {blks=[]}, {entry=next; blks=b::blks}
+   * | {entry=next; blks=b::blks}, {blks=[]} ->
+   *   fresh >>= fun tid ->
+   *   ret {
+   *     entry;
+   *     blks = b :: blk entry ++ goto ~tid next :: blks
+   *   }
+   * | {entry=fst; blks=x::xs},
+   *   {entry=snd; blks=y::ys} ->
+   *   fresh >>= fun jmp1 ->
+   *   fresh >>= fun jmp2 ->
+   *   ret {
+   *     entry;
+   *     blks =
+   *       y ::
+   *       blk entry ++ goto ~tid:jmp1 fst ::
+   *       x ++ goto ~tid:jmp2 snd ::
+   *       List.rev_append xs ys
+   *   } *)
   let goto = do_goto
 end
 

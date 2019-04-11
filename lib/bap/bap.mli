@@ -6694,6 +6694,11 @@ module Std : sig
     (** [create ()] creates a fresh newly term identifier  *)
     val create : unit -> t
 
+    val for_name : string -> t
+    val for_addr : addr -> t
+    val for_ivec : int -> t
+
+
     (** [set_name tid name] associates a [name] with a given
         term identifier [tid]. Any previous associations are
         overridden.*)

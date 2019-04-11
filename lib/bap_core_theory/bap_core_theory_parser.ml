@@ -418,8 +418,7 @@ module Make(S : Core) = struct
           seq (blk lbl pass skip) (next xs)
 
         let cpuexn n =
-          newlabel >>= fun dst ->
-          Knowledge.provide Label.ivec dst (Some n) >>= fun () ->
+          Label.for_ivec n >>= fun dst ->
           newlabel >>= fun lbl ->
           seq (blk lbl pass (goto dst)) (next xs)
 
@@ -442,8 +441,7 @@ module Make(S : Core) = struct
 
         let goto addr =
           newlabel >>= fun lbl ->
-          newlabel >>= fun dst ->
-          Knowledge.provide Label.addr dst (Some addr) >>= fun () ->
+          Label.for_addr addr >>= fun dst ->
           seq (blk lbl pass (goto dst)) (next xs)
 
         let move eff =

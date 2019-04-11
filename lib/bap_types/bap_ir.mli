@@ -52,6 +52,11 @@ val jmp_t : (blk, jmp) cls
 
 module Tid : sig
   type t = tid
+
+  val for_name : string -> t
+  val for_addr : addr -> t
+  val for_ivec : int -> t
+
   val create : unit -> t
   val set_name : t -> string -> unit
   val name : t -> string

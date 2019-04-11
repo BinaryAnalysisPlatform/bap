@@ -23,6 +23,23 @@ module Label = struct
   let addr = Knowledge.Class.property ~package cls "addr" word
   let name = Knowledge.Class.property ~package cls "name" string
   let ivec = Knowledge.Class.property ~package cls "ivec" int
+
+  open Knowledge.Syntax
+
+  let for_name s =
+    Knowledge.Symbol.intern ~package:"label" s cls >>= fun obj ->
+    Knowledge.provide name obj (Some s) >>| fun () -> obj
+
+  let for_addr x =
+    let s = Bitvec.to_string x in
+    Knowledge.Symbol.intern ~package:"label" s cls >>= fun obj ->
+    Knowledge.provide addr obj (Some x) >>| fun () -> obj
+
+  let for_ivec x =
+    let s = sprintf "int-%d" x in
+    Knowledge.Symbol.intern ~package:"label" s cls >>= fun obj ->
+    Knowledge.provide ivec obj (Some x) >>| fun () -> obj
+
   include (val Knowledge.Object.derive cls)
 end
 

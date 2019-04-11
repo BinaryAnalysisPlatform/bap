@@ -436,6 +436,11 @@ module Theory : sig
     val addr : (program, Bitvec.t option) KB.slot
     val name : (program, string option) KB.slot
     val ivec : (program, int option) KB.slot
+
+    val for_addr : Bitvec.t -> t knowledge
+    val for_name : string -> t knowledge
+    val for_ivec : int -> t knowledge
+
     include Knowledge.Object.S with type t := t
   end
 

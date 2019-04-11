@@ -66,6 +66,21 @@ module Tid = struct
     KB.provide last gen (Some obj) >>| fun () ->
     gen
 
+  let never_empty x = Option.value_exn x
+
+  let generate f x =
+    never_empty @@
+    KB.Value.get tid @@ run resolver @@begin
+      f x >>= fun obj ->
+      KB.Object.create resolver >>= fun r ->
+      KB.provide tid r (Some obj) >>| fun () -> r
+    end
+
+  let for_name s = generate Theory.Label.for_name s
+  let for_ivec s = generate Theory.Label.for_ivec s
+  let for_addr s = generate Theory.Label.for_addr @@
+    Bap_bitvector.to_bitvec s
+
   let set slot tid name =
     ignore @@ run unit @@begin
       KB.provide slot tid (Some name) >>= fun () ->
@@ -571,7 +586,11 @@ module Label = struct
       let hash = Hashtbl.hash
       let pp ppf = function
         | Indirect exp -> Bap_exp.pp ppf exp
-        | Direct tid -> Format.fprintf ppf "%s" @@ Tid.name tid
+        | Direct tid -> Format.fprintf ppf "%s" @@
+          match Tid.get_name tid with
+          | None -> Tid.to_string tid
+          | Some name -> name
+
     end)
 end
 

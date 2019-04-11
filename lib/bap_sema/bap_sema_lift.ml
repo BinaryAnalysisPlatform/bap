@@ -11,32 +11,6 @@ open Bap_knowledge
 module L = Label
 module Label = IRLabel
 
-(* A note about lifting call instructions.
-
-   We're labeling calls with an expected continuation, that should be
-   derived from the BIL. But instead we lift calls in a rather
-   speculative way, thus breaking the abstraction of the BIL, that
-   desugars calls into two pseudo instructions:
-
-   <update return address to next instruction>
-   <jump to target>
-
-   A correct way of doing things would be to find a live write to the
-   place that is used to store return address (ABI specific), and put
-   this expression as an expected return address (aka continuation).
-
-   But a short survey into existing instruction sets shows, that call
-   instructions doesn't allow to store something other then next
-   instruction, e.g., `call` in x86, `bl` in ARM, `jal` in MIPS,
-   `call` and `jumpl` in SPARC (althought the latter allows to choose
-   arbitrary register to store return address). That's all is not to
-   say, that it is impossible to encode a call with return address
-   different from a next instruction, that's why it is called a
-   speculation.
-*)
-
-
-
 let fall_of_block cfg block =
   Seq.find_map (Cfg.Node.outputs block cfg) ~f:(fun e ->
       match Cfg.Edge.label e with
@@ -45,7 +19,7 @@ let fall_of_block cfg block =
 
 let label_of_fall cfg block =
   Option.map (fall_of_block cfg block) ~f:(fun blk ->
-      Label.indirect Bil.(int (Block.addr blk)))
+      Label.direct @@ Tid.for_addr (Block.addr blk))
 
 module IrBuilder = struct
 
@@ -65,8 +39,6 @@ module IrBuilder = struct
     | xs, ys -> List.rev_append ys xs
 
 
-  (* maybe we shouldn't compute the whole frame, but instead
-     circumscribe it to just the ir? *)
   let ir_of_insn insn =
     let open Knowledge.Syntax in
     let cls = Theory.Program.Semantics.cls in
@@ -133,9 +105,10 @@ module IrBuilder = struct
 
   let blk cfg block : blk term list =
     let fall = label_of_fall cfg block in
+    let tid = Tid.for_addr (Block.addr block) in
     let blks =
       Block.insns block |>
-      List.fold  ~init:[Ir_blk.create ()] ~f:(fun blks (mem,insn) ->
+      List.fold  ~init:[Ir_blk.create ~tid ()] ~f:(fun blks (mem,insn) ->
           lift_insn ~mem insn blks) in
     let blks = with_landing_pads fall blks in
     with_first_blk_addressed (Block.addr block) @@
@@ -288,6 +261,54 @@ let resolve_indirect symtab exts blk jmp =
       match Hashtbl.find exts name with
       | Some s -> update_target (Direct (Term.tid s))
       | None -> jmp
+
+
+(* let equiv order resolve program =
+ *   Term.enum sub_t program |>
+ *   Seq.fold ~init:(Map.empty order) ~f:(fun reprs sub ->
+ *       Term.enum blk_t sub |>
+ *       Seq.fold ~init:reprs ~f:(fun (reprs) blk -> match resolve (Term.tid blk) with
+ *           | None -> reprs
+ *           | Some addr -> Map.add_exn reprs addr (Term.tid blk)))
+ *
+ * let unify resolve program =
+ *   let addrs =
+ *     Term.enum sub_t program |>
+ *     Seq.fold ~init:(Map.empty (module Bitvec_order)) ~f:(fun addrs sub ->
+ *         Term.enum blk_t sub |>
+ *         Seq.fold ~init:addrs ~f:(fun (addrs) blk -> match resolve (Term.tid blk) with
+ *             | None -> addrs
+ *             | Some addr -> Map.add_exn addrs addr (Term.tid blk))) in
+ *   Term.enum sub_t program |>
+ *   Seq.fold ~init:(Map.empty (module Tid)) ~f:(fun union sub ->
+ *       Term.enum blk_t sub |>
+ *       Seq.fold ~init:union ~f:(fun union blk ->
+ *           Term.enum jmp_t blk |>
+ *           Seq.fold ~init:union ~f:(fun union jmp ->
+ *               Ir_jmp.links jmp |>
+ *               Seq.fold ~init:union ~f:(fun union (tid,_) ->
+ *                   match resolve tid with
+ *                   | None -> union
+ *                   | Some addr -> match Map.find addrs addr with
+ *                     | None -> union
+ *                     | Some tid' -> Map.add_exn union tid tid'))))
+ *
+ * let resolve resolve program =
+ *   let union = unify resolve program in
+ *   Term.map sub_t program ~f:(fun sub ->
+ *       Term.map blk_t sub ~f:(fun blk ->
+ *           Term.map jmp_t blk ~f:(fun jmp ->
+ *               Ir_jmp.links jmp |>
+ *               Seq.fold ~init:jmp ~f:(fun jmp (tid,_) ->
+ *                   match Map.find union tid with
+ *                   | None -> jmp
+ *                   | Some tid ->
+ *                     let role =
+ *                       if Option.is_some (Term.find blk_t sub tid)
+ *                       then Ir_jmp.Role.local
+ *                       else Ir_jmp.Role.call in
+ *                     Ir_jmp.link jmp tid role)))) *)
+
 
 let program symtab =
   let b = Ir_program.Builder.create () in
