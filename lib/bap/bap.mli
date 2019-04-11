@@ -7516,27 +7516,23 @@ module Std : sig
 
     type t = jmp term
 
-    type role
+    type dst
 
-    val resolved : ?tid:tid ->
-                   ?cnd:Theory.Bool.t Theory.Sort.exp KB.value ->
-                   Theory.label -> role -> t
 
-    val indirect : ?tid:tid ->
-                   ?cnd:Theory.Bool.t Theory.Sort.exp KB.value ->
-                   'a Theory.Bitv.t Theory.Sort.exp KB.value ->
-                   t
+    val reify : ?tid:tid ->
+                ?cnd:Theory.Bool.t Theory.Sort.exp KB.value ->
+                ?alt:dst -> ?dst:dst -> unit -> t
 
 
     val guard : t -> Theory.Bool.t Theory.Sort.exp KB.value option
-
     val with_guard : t -> Theory.Bool.t Theory.Sort.exp KB.value option -> t
+    val dst : t -> dst option
+    val alt : t -> dst option
 
-    val value : t -> unit Theory.Sort.exp KB.Class.abstract KB.value
+    val resolved : tid -> dst
+    val indirect : 'a Theory.Bitv.t Theory.Sort.exp KB.value -> dst
+    val resolve : dst -> (tid,'a Theory.Bitv.t Theory.Sort.exp KB.value) Either.t
 
-    val links : t -> (Theory.label * role) seq
-
-    val link : t -> Theory.label -> role -> t
 
     (** [create ?cond kind] creates a jump of a given kind  *)
     val create : ?tid:tid -> ?cond:exp -> jmp_kind -> t
@@ -7582,20 +7578,6 @@ module Std : sig
 
     (** updated jump's kind  *)
     val with_kind : t -> jmp_kind -> t
-
-
-    module Role : sig
-      type t = role
-
-      val named : string -> role
-      val name : role -> string
-
-      val unknown : role
-      val local : role
-      val call : role
-      val return : role
-      val shortcut : role
-    end
 
     val pp_slots : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t

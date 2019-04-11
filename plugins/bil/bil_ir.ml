@@ -7,6 +7,8 @@ open Bap_core_theory
 
 open Knowledge.Syntax
 
+include Self()
+
 type blk = {
   name : Theory.label;
   defs : def term list;
@@ -121,13 +123,13 @@ module IR = struct
     x >>= fun x ->
     fresh >>= fun entry ->
     fresh >>= fun tid ->
-    data @@ {
+    data {
       entry;
       blks = [{name=entry; jmps=[]; defs=[Def.reify ~tid v x]}]
     }
 
   let goto ?cnd ~tid dst =
-    Jmp.resolved ?cnd ~tid dst Jmp.Role.local
+    Jmp.reify ?cnd ~tid ~dst:(Jmp.resolved dst) ()
 
   (** reifies a [while (<cnd>) <body>] loop to
 
@@ -250,7 +252,7 @@ module IR = struct
     fresh >>= fun tid ->
     ctrl {
       entry;
-      blks = [blk entry ++ Jmp.indirect ~tid dst]
+      blks = [blk entry ++ Jmp.reify ~tid ~dst:(Jmp.indirect dst) ()]
     }
 
   let appgraphs fst snd =
@@ -292,6 +294,8 @@ module IR = struct
       entry;
       blks = [blk entry ++ goto ~tid dst]
     }
+
+
 
   let blk entry defs jmps =
     defs >>-> fun defs ->

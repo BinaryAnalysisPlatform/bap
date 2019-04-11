@@ -310,40 +310,20 @@ end
 
 module Ir_jmp : sig
   type t = jmp term
-  type role
+  type dst
 
-
-  val resolved : ?tid:tid ->
+  val reify : ?tid:tid ->
     ?cnd:Theory.Bool.t Theory.Sort.exp KB.value ->
-    Theory.label -> role -> t
-
-  val indirect : ?tid:tid ->
-    ?cnd:Theory.Bool.t Theory.Sort.exp KB.value ->
-    'a Theory.Bitv.t Theory.Sort.exp KB.value ->
-    t
+    ?alt:dst -> ?dst:dst -> unit -> t
 
   val guard : t -> Theory.Bool.t Theory.Sort.exp KB.value option
-
-  val value : t -> unit Theory.Sort.exp KB.Class.abstract KB.value
-
-  val links : t -> (Theory.label * role) seq
-
-  val link : t -> Theory.label -> role -> t
-
   val with_guard : t -> Theory.Bool.t Theory.Sort.exp KB.value option -> t
+  val dst : t -> dst option
+  val alt : t -> dst option
 
-  module Role : sig
-    type t = role
-
-    val named : string -> role
-    val name : role -> string
-
-    val unknown : role
-    val local : role
-    val call : role
-    val return : role
-    val shortcut : role
-  end
+  val resolved : tid -> dst
+  val indirect : 'a Theory.Bitv.t Theory.Sort.exp KB.value -> dst
+  val resolve : dst -> (tid,'a Theory.Bitv.t Theory.Sort.exp KB.value) Either.t
 
   val create      : ?tid:tid -> ?cond:exp -> jmp_kind -> t
   val create_call : ?tid:tid -> ?cond:exp -> call -> t

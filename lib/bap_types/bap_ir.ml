@@ -283,36 +283,17 @@ end = struct
   include (val KB.Value.derive Theory.Bool.t)
 end
 
-module Role = struct
-  type t = string [@@deriving bin_io, compare, sexp]
-
-  let unknown = ":unknown"
-  let local = ":local"
-  let call = ":call"
-  let ivec = ":ivec"
-  let extern = ":extern"
-  let return = ":return"
-  let shortcut = ":shortcut"
-
-  let named = sprintf ":%s"
-  let name x = String.subo ~pos:1 x
-
-
-  let domain = KB.Domain.flat ~empty:unknown
-      ~is_empty:String.(equal unknown)
-      ~inspect:sexp_of_t "role"
-
-
-  let equal = String.equal
-  include (String : Base.Comparable.S with type t := string)
-end
-
 module Jmp = struct
-  module Labels = Map.Make_binable_using_comparator(Theory.Label)
+  type dst = Resolved of tid
+           | Indirect of {
+               vec : Rhs.t;
+               len : int;
+             }
+  [@@deriving bin_io, compare, sexp]
   type t = {
     cnd : Cnd.t option;
-    dst : Role.t Labels.t;
-    exp : Rhs.t;
+    dst : dst option;
+    alt : dst option;
   } [@@deriving bin_io, compare, sexp]
 end
 
@@ -537,8 +518,8 @@ let nil_phi : phi term = empty Phi.{
 
 let nil_jmp : jmp term = empty Jmp.{
     cnd = None;
-    dst = Map.empty (module Theory.Label);
-    exp = Rhs.empty
+    dst = None;
+    alt = None;
   }
 
 let nil_blk : blk term =
@@ -568,11 +549,9 @@ let term_pp pp_self ppf t =
   let attrs = Dict.data t.dict in
   Seq.iter attrs ~f:(fun attr ->
       pp_open_tag ppf (asprintf "%a" pp_attr attr));
-  fprintf ppf "@[%a: %a@]@." Tid.pp t.tid pp_self t.self;
+  fprintf ppf "@[%08Lx: %a@]@." (Int63.to_int64 (KB.Object.id t.tid))
+    pp_self t.self;
   Seq.iter attrs ~f:(fun _ -> pp_close_tag ppf ())
-
-
-
 
 module Label = struct
   type t = label
@@ -893,113 +872,93 @@ end
 
 module Ir_jmp = struct
   type t = jmp term
-  type role = Role.t
+  type dst = Jmp.dst
 
-  module Role = Role
-
-  let resolved ?(tid=Tid.create ()) ?cnd dst role = make_term tid Jmp.{
-      cnd;
-      dst = Map.singleton (module Theory.Label) dst role;
-      exp = Rhs.empty;
+  let resolved tid = Jmp.Resolved tid
+  let indirect dst = Jmp.Indirect {
+      vec = Rhs.of_value dst;
+      len = Theory.Bitv.size (KB.Value.cls dst);
     }
 
-  let indirect ?(tid=Tid.create()) ?cnd exp = make_term tid Jmp.{
-      cnd;
-      dst = Map.empty (module Theory.Label);
-      exp = Rhs.of_value exp;
-    }
+  let reify ?(tid=Tid.create ()) ?cnd ?alt ?dst () =
+    make_term tid Jmp.{cnd; dst; alt}
 
-  let link t label role = {
-    t with self = Jmp.{
-      t.self with dst = Map.set t.self.dst ~key:label ~data:role
-    }
-  }
+  let dst_of_lbl : label -> Jmp.dst option = function
+    | Direct tid -> Some (Resolved tid)
+    | Indirect exp -> match Bap_helpers.Type.infer_exn exp with
+      | Imm len -> Some (Indirect {vec = Rhs.of_exp exp; len})
+      | _ -> None
 
-  let links xs = Map.of_alist_exn (module Theory.Label) xs
+  let lbl_of_dst : Jmp.dst -> label = function
+    | Resolved tid -> Direct tid
+    | Indirect {vec} -> Indirect (Rhs.exp vec)
 
   let create ?(tid=Tid.create()) ?(cond=always) kind =
     let cnd = if cond = always then None else Some (Cnd.of_exp cond) in
     make_term tid @@ match kind with
-    | Goto (Direct tid) -> Jmp.{
-        cnd; exp = Rhs.empty;
-        dst = links [tid, Role.local]
+    | Goto lbl -> Jmp.{
+        cnd;
+        dst = dst_of_lbl lbl; alt = None;
       }
-    | Goto (Indirect exp)
-    | Ret  (Indirect exp) -> Jmp.{
-        cnd; exp = Rhs.of_exp exp;
-        dst = links [];
-      }
-    | Ret (Direct tid) -> Jmp.{
-        cnd; exp = Rhs.empty;
-        dst = links [tid, Role.return];
+    | Ret lbl -> Jmp.{
+        cnd;
+        dst = None; alt = dst_of_lbl lbl
       }
     | Int (int,ret) ->
-      let dst = Tid.create () in
-      Tid.set_ivec dst int;
+      let alt = Tid.create () in
+      Tid.set_ivec alt int;
       Jmp.{
-        cnd; exp = Rhs.empty;
-        dst = links [
-            dst, Role.call;
-            ret, Role.shortcut;
-          ]
+        cnd;
+        dst = Some (Resolved ret);
+        alt = Some (Resolved alt);
       }
-    | Call call -> match Call.target call, Call.return call with
-      | Direct tid, (None | Some (Indirect _)) -> {
-          cnd; exp = Rhs.empty;
-          dst = links [tid, Role.call]
-        }
-      | Indirect exp, (None|Some (Indirect _)) -> {
-          cnd; exp = Rhs.of_exp exp;
-          dst = links []
-        }
-      | Direct dst, Some (Direct ret) -> {
-          cnd; exp = Rhs.empty;
-          dst = links [
-              dst, Role.call;
-              ret, Role.shortcut;
-            ]
-        }
-      | Indirect exp, Some (Direct ret) -> {
-          cnd; exp = Rhs.of_exp exp;
-          dst = links [ret, Role.shortcut]
-        }
+    | Call t -> {
+        cnd;
+        dst = Option.bind ~f:dst_of_lbl (Call.return t);
+        alt = dst_of_lbl (Call.target t);
+      }
+
+  let ivec_of_dst : Jmp.dst -> int option = function
+    | Indirect _ -> None
+    | Resolved t -> Tid.get_ivec t
+
+  let kind_of_jmp {Jmp.dst; alt} =
+    match dst, alt with
+    | None, None -> Goto (Indirect (Exp.unknown "unknown" Unk))
+    | Some dst, None -> Goto (lbl_of_dst dst)
+    | None, Some alt -> Call (Call.create ~target:(lbl_of_dst alt) ())
+    | Some dst, Some alt -> match dst, ivec_of_dst alt  with
+      | Resolved dst, Some vec -> Int (vec,dst)
+      | _ -> Call (Call.create ()
+                     ~return:(lbl_of_dst dst)
+                     ~target:(lbl_of_dst alt))
 
   let create_call ?tid ?cond call = create ?tid ?cond (Call call)
   let create_goto ?tid ?cond dest = create ?tid ?cond (Goto dest)
   let create_ret  ?tid ?cond dest = create ?tid ?cond (Ret dest)
   let create_int  ?tid ?cond n t  = create ?tid ?cond (Int (n,t))
 
-  let links {self={Jmp.dst}} = Map.to_sequence dst
   let guard {self={Jmp.cnd}} = cnd
-  let value {self={Jmp.exp}} = exp
   let with_guard jmp cnd = {jmp with self = Jmp.{
       jmp.self with cnd
     }}
 
-  let kind_of_jmp {Jmp.dst; exp} =
-    let get role value =
-      Map.to_sequence dst |>
-      Seq.find_map ~f:(fun (lbl,r) ->
-          if Role.equal role r then value lbl
-          else None) in
-    let tid x = Some x in
-    let ivec x = Tid.get_ivec x in
-    match get Role.ivec ivec, get Role.shortcut tid with
-    | Some dst, Some ret -> Int (dst,ret)
-    | _ -> match get Role.call tid,  get Role.shortcut tid with
-      | Some dst, Some ret -> Call {
-          target = Direct dst;
-          return = Some (Direct ret);
-        }
-      | Some dst, None -> Call {
-          target = Direct dst;
-          return = None;
-        }
-      | _ -> match get Role.return tid with
-        | Some dst -> Ret (Direct dst)
-        | None -> match get Role.local tid with
-          | Some dst -> Goto (Direct dst)
-          | None -> Goto (Indirect (Rhs.exp exp))
+  let dst {self={Jmp.dst}} = dst
+  let alt {self={Jmp.alt}} = alt
+
+  let with_dst jmp dst = {jmp with self = Jmp.{
+      jmp.self with dst
+    }}
+
+  let with_alt jmp alt = {jmp with self = Jmp.{
+      jmp.self with alt
+    }}
+
+  let resolve = function
+    | Jmp.Resolved t -> Either.first t
+    | Jmp.Indirect {vec; len} ->
+      let s = Theory.Bitv.define len in
+      Either.second (KB.Value.clone s vec)
 
   let kind : jmp term -> jmp_kind = fun t ->
     kind_of_jmp t.self

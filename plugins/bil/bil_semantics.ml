@@ -5,6 +5,13 @@ open Bap_core_theory
 
 [@@@warning "-40"]
 
+type context = Context
+let package = "bil-plugin-internal"
+let cls = KB.Class.declare ~package "context" Context
+let context = KB.Symbol.intern ~package "context" cls
+let domain = KB.Domain.optional ~inspect:sexp_of_arch "arch"
+let arch = KB.Class.property cls "arch" domain
+
 
 let exp = Exp.slot
 let stmt = Bil.slot
@@ -15,7 +22,6 @@ let bool = Theory.Bool.t
 let bits = Theory.Bitv.define
 let size = Theory.Bitv.size
 let sort = KB.Value.cls
-
 (* we need to recurse intelligently, only if optimization
    occured, that might open a new optimization opportunity,
    and continue recursion only if we have progress.
@@ -509,14 +515,18 @@ module Basic : Theory.Basic = struct
       else extract s !!hi !!lo !!x
     | _ -> extract s !!hi !!lo !!x
 
+  let arch lbl =
+    KB.collect Arch.slot lbl >>= function
+    | Some _ as r -> !!r
+    | None -> context >>= KB.collect arch
 
   let goto lbl =
-    KB.collect Arch.slot lbl >>= fun arch ->
     KB.collect Theory.Label.addr lbl >>= fun dst ->
+    arch lbl >>= fun arch ->
     match dst, arch with
     | Some addr, Some arch ->
-      let size = Arch.addr_size arch in
-      let dst = Word.create addr (Size.in_bits size) in
+      let size = Size.in_bits (Arch.addr_size arch) in
+      let dst = Word.create addr size in
       ctrl Bil.[Jmp (Int dst)]
     | _ -> KB.collect Theory.Label.ivec lbl >>= function
       | Some ivec -> ctrl Bil.[CpuExn ivec]

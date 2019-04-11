@@ -12,6 +12,7 @@ module T = struct
 
 
   let pp fmt = function
+    | Unk -> fprintf fmt "unk"
     | Imm n -> fprintf fmt "u%u" n
     | Mem (idx, elm) ->
       fprintf fmt "%a?%a" Bap_size.pp (idx :> size) Bap_size.pp elm
