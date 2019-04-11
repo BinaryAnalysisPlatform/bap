@@ -75,6 +75,10 @@ module PP = struct
       | BinOp (op,_,_) -> op_prec op
       | Store _ | Let _ | Ite _ | Concat _ -> 0)
 
+  let msb x =
+    let m = Bitvec.modulus (Word.bitwidth x) in
+    Bitvec.(msb (Word.to_bitvec x) mod m)
+
   let rec pp fmt exp =
     let open Bap_bil.Exp in
     let open Bap_bil.Binop in
@@ -109,6 +113,8 @@ module PP = struct
       pr ("%a" ^^ pfmt p e) pp_unop Unop.NOT pp e
     | BinOp (EQ,Int x, e) as p when is_b0 x ->
       pr ("%a" ^^ pfmt p e) pp_unop Unop.NOT pp e
+    | BinOp (PLUS,le,(Int x as re)) as p when msb x ->
+      pr (pfmt p le ^^ " - " ^^ pfmt p re) pp le Word.pp (Word.neg x)
     | BinOp (op, le, re) as p ->
       pr (pfmt p le ^^ " %a " ^^ pfmt p re) pp le pp_binop op pp re
     | UnOp (op, exp) as p ->
