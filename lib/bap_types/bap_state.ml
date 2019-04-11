@@ -12,8 +12,6 @@ let current () = !state
 let is_locked () = locked.contents
 
 let lock () =
-  if is_locked ()
-  then failwith "Unable to lock the BAP runtime";
   locked := true
 
 let unlock () =
