@@ -255,13 +255,13 @@ let init redirections =
         def "channel-close"  (one int @-> int) (module Close)
           {|(channel-close DESCR) closes a channel that has the
             specified descriptor DESCR. If no such channel exists,
-            then retuns -1. Otherwise returns 0. The descriptor of the
+            then returns -1. Otherwise returns 0. The descriptor of the
             closed channel will be reused by the consequent calls
             to `channel-open'. If the channel had any data associated
             with it and not yet flushed, then the data is discarded. |};
         def "channel-flush"  (one int @-> int) (module Flush)
           {|(channel-flush DESCR) forces data that were written to a
-            channel that has the descriptor DESCR to be outputed to the
+            channel that has the descriptor DESCR to be outputted to the
             associated destination. Returns -1 if no such channel exists or
             if in case of an IO error.|};
         def "channel-input"  (one int @-> int) (module Input)

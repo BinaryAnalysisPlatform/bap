@@ -135,7 +135,7 @@ module Interface = struct
     `S "DESCRIPTION";
     `P
       "Provides a set of operations to store and manipulate interval
-    trees. The module provides a persistant storage for intervals,
+    trees. The module provides a persistent storage for intervals,
     denoted in the module as regions, since these intervals
     often represent memory regions. Intervals are stored in interval
     sets, that are implemented as efficient interval tree data

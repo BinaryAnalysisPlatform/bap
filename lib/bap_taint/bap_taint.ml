@@ -114,7 +114,7 @@ type relation_kind = Direct | Indirect [@@deriving sexp_of]
  *
  *  With the selector object it is possible to write a function that
  *  will be polymorphic across two fields of the tainter (sort of
- *  extremly boundned polymorphism).
+ *  extremely bounded polymorphism).
 *)
 type relation = Rel : {
     field : (tainter, ('k,objects,'c) Map.t) Field.t;
@@ -335,7 +335,7 @@ module Propagation = struct
   end
 end
 
-(* tracks live tainted objects, removes unecessary references.
+(* tracks live tainted objects, removes unnecessary references.
 
    A tainted object is live, if it is reachable either directly or
    indirectly in the tainted. The indirect references are dropped

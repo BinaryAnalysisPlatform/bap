@@ -48,7 +48,7 @@ module Std : sig
         other system error. *)
     val load : ?argv:string array -> t -> unit Or_error.t
 
-    (** loaded event happens when a pass is succesfully loaded  *)
+    (** loaded event happens when a pass is successfully loaded  *)
     val loaded : t -> unit future
 
     val argv : unit -> string array
@@ -75,7 +75,7 @@ module Std : sig
       function is called, events of type [Plugins.events] will start
       to fire. By default they are intercepted by a logger, and by the
       default handler (see {!Plugins.run} function description about
-      the default handler). The logger will write the infromation
+      the default handler). The logger will write the information
       about events, that is useful for debugging issues with plugins.
   *)
   module Plugins : sig

@@ -24,7 +24,7 @@ open Format
    But a short survey into existing instruction sets shows, that call
    instructions doesn't allow to store something other then next
    instruction, e.g., `call` in x86, `bl` in ARM, `jal` in MIPS,
-   `call` and `jumpl` in SPARC (althought the latter allows to choose
+   `call` and `jumpl` in SPARC (although the latter allows to choose
    arbitrary register to store return address). That's all is not to
    say, that it is impossible to encode a call with return address
    different from a next instruction, that's why it is called a

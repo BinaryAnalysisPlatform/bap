@@ -59,7 +59,7 @@ open Core_kernel
 
      - [(acquire SITE PTR LEN)] represents an allocation event, where
        SITE is an allocation site (i.e., an address of a program
-       instruction that perfroms an allocation), [PTR] is a pointer to
+       instruction that performs an allocation), [PTR] is a pointer to
        the allocated data, and [LEN] is the data size;
 
      - [(release SITE PTR LEN)] represents a memory deallocation
@@ -109,7 +109,7 @@ open Core_kernel
     A tuple is represented by an arbitrary S-expression. A variable is
     an atom that starts with the question mark. A special variable [?]
     (one question mark symbol) may occur on the left hand side of a
-    rule, and represents a freshly created variable. Every occurence
+    rule, and represents a freshly created variable. Every occurrence
     of the [?] symbol represents a different variable. Both sides of a
     rule may be empty (represented by the 0-tuple [()]).
 

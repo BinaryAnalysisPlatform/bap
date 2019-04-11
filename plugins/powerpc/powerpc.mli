@@ -283,7 +283,7 @@
       5   let rc = unsigned reg ops.(3) in
       6   let tm = signed var doubleword in
       7   let xv = unsigned const word 42 in
-      8   let sh = unsinged const byte 2 in
+      8   let sh = unsigned const byte 2 in
       9   RTL.[
      10        rt := ra + im;
      11        tm = cpu.load rt halfword + xv;
@@ -429,7 +429,7 @@ module Std : sig
     (** [x + y] - sum *)
     val ( + ) : exp -> exp -> exp
 
-    (** [x - y] - substraction *)
+    (** [x - y] - subtraction *)
     val ( - ) : exp -> exp -> exp
 
     (** [x * y] - multiplication *)

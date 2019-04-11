@@ -90,7 +90,7 @@ let create_symtab data endian elf  =
 
 (** @return
     [None] - if segment should be skipped as non interesting,
-    [Some error] - if an error has occured when we have tried
+    [Some error] - if an error has occurred when we have tried
                    to load segment,
     [Some (Ok segment)] - if we have loaded segment at the end.
 *)

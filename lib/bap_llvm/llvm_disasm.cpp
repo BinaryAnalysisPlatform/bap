@@ -202,7 +202,7 @@ public:
         llvm::Triple t(llvm::Triple::normalize(name));
         std::string triple = t.getTriple();
 
-        // returned value is not allocted
+        // returned value is not allocated
         const llvm::Target *target =
             llvm::TargetRegistry::lookupTarget(name,t,error);;
 

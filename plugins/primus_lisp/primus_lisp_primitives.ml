@@ -82,7 +82,7 @@ module MemoryAllocate(Machine : Primus.Machine.S) = struct
       let gen = match gen with
         | []  -> Ok None
         | [x] -> make_static_generator (Value.to_word x)
-        | _ -> Or_error.errorf "memory-allocate requies two or three arguments" in
+        | _ -> Or_error.errorf "memory-allocate requires two or three arguments" in
       if Result.is_error n || Result.is_error gen
       then negone
       else
@@ -293,7 +293,7 @@ module Primitives(Machine : Primus.Machine.S) = struct
       def "is-negative" (all any @-> bool) (module IsNegative)
         "(is-negative X Y ...) returns true if all arguments are negative";
       def "word-width" (unit @-> int)  (module WordWidth)
-        "(word-width) returns machine word widht in bits";
+        "(word-width) returns machine word width in bits";
       def "exit-with" (one int @-> any) (module ExitWith)
         "(exit-with N) terminates program with the exit codeN";
       def "memory-read" (one int @-> byte) (module MemoryRead)

@@ -12,14 +12,14 @@ open Core_kernel
 open Bap_common
 val memref : ?disp:int -> ?index:int -> ?scale:size -> addr -> addr
 
-(** Address arithmetics  *)
+(** Address arithmetic  *)
 module type Arith = sig
   include Integer
   val create : addr -> t Or_error.t
 end
 
-(** Arithmetics on 32-bit addresses *)
+(** Arithmetic on 32-bit addresses *)
 module R32 : Arith with type t = int32
 
-(** Arithmetics on 64-bit addresses  *)
+(** Arithmetic on 64-bit addresses  *)
 module R64 : Arith with type t = int64

@@ -176,7 +176,7 @@ module Signals(Machine : Primus.Machine.S) = struct
   module Object = Taint.Object.Make(Machine)
   module Value = Primus.Value.Make(Machine)
 
-  let doc = "(taint-finalize T L) is emited when the taint T is finilized
+  let doc = "(taint-finalize T L) is emitted when the taint T is finilized
      while still live if L is true or dead if T is false."
 
   let init () = Machine.sequence [

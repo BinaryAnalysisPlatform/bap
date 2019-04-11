@@ -48,7 +48,7 @@
     values passed to that function doesn't have any taints of the
     specified kind.
 
-    Other than classical approaches to taint analysis, decribed above,
+    Other than classical approaches to taint analysis, described above,
     the framework could be used for checking liveness properties,
     lifetime analysis, and other analysis that requires tracking the
     flow of information.
@@ -206,7 +206,7 @@ module Std : sig
 
             The low-level interface defines three primitives in terms of
             which we can express a more convenient high-level
-            interface. It is recommened to get acquainted with these
+            interface. It is recommended to get acquainted with these
             three primitives, to understand how the tracker works,
             however it is better to use the high level interface,
             whenever it is possible.

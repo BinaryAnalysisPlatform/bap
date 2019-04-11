@@ -110,7 +110,7 @@ module Plugin = struct
 
   (** [load_entry plugin name] loads a compilation unit with the
       specified [name] required by [plugin]. The compilation unit
-      should not be alread linked to the main program. The unit is
+      should not be already linked to the main program. The unit is
       looked in the plugin bundle first and, if not found, looked in the
       system using the [Findlib] library. If the [findlib]
       infrastructure is not available (and a unit wasn't found in
@@ -298,7 +298,7 @@ module Plugins = struct
             List.map !events_backtrace ~f:(fun ev ->
                 Format.asprintf "%a" Sexp.pp
                   (Plugin.sexp_of_system_event ev)) in
-          Format.eprintf "An error has occured while loading `%s': %a\n
+          Format.eprintf "An error has occurred while loading `%s': %a\n
                           Events backtrace:\n%s\n
                           Aborting program ...\n%!"
             name Error.pp err backtrace;

@@ -78,7 +78,7 @@ module type S = sig
   (** [next decider ~length ~threshold data begin] returns an offset
       greater then [begin] of the next substring of the given
       [length], that is positively classified, with the given
-      [thresold].  *)
+      [threshold].  *)
   val next : t ->
     length:int ->
     threshold:float ->

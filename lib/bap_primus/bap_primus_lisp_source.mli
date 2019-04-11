@@ -64,7 +64,7 @@ val loc : t -> Id.t -> Loc.t
 val has_loc : t -> Id.t -> bool
 
 (** [filename source id] returns the name of a file from which an
-    identity with the given [id] is orginating.
+    identity with the given [id] is originating.
 
     If the identity is not known to the source code repository, then
     a bogus filename is returned. *)

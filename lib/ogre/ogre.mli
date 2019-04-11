@@ -72,7 +72,7 @@ type doc
 (** type information associated with an attribute  *)
 type ('a,'k) typeinfo constraint 'k = _ -> _
 
-(** a decriptor of an attribute.
+(** a descriptor of an attribute.
 
     Used to construct attribute values, and to query
     documents. Created with [declare] function.
@@ -137,7 +137,7 @@ val declare : name:string -> ('f -> 'a, 'k) scheme -> 'f -> ('a, 'k) typeinfo
 
 (** Ogre type system.
 
-    Ogre type system is extremly simple, it has only four types:
+    Ogre type system is extremely simple, it has only four types:
     1. boolean - a logical type that has only two values (true,false);
     2. int - an integral number that maps to OCaml's [int64];
     3. float - a real number that maps to OCaml's [float];
@@ -354,7 +354,7 @@ module Query : sig
       reason for this, is that the query used as a value that is
       passed to some command constructor, (e.g.,[foreach]), that can
       work with fields individually, e.g., the following is a complete
-      correspondance of the SQL's:
+      correspondence of the SQL's:
 
       {v SELECT name FROM students WHERE gpa > 3.5 v}
 
@@ -524,7 +524,7 @@ module Doc : sig
 
   (** [load chan] loads a document from a channel, returns an error if
       a document is not well-formed, raises an exception if a system error
-      has occured.  *)
+      has occurred.  *)
   val load : In_channel.t -> doc Or_error.t
 
 
@@ -535,7 +535,7 @@ module Doc : sig
 
   (** [from_file name] reads a document from a file with the given
       [name], returns an error, if a document is not well-formed, raises
-      an exception if a system error has occured. *)
+      an exception if a system error has occurred. *)
   val from_file : string -> doc Or_error.t
 
 
@@ -623,7 +623,7 @@ module type S = sig
   (** [foreach query ~f:action] applies an [action] for each value of
       an attributes specified in the query. The [query] value is built
       using a domain specific language embedded into OCaml. This
-      language is very similiar to SQL, and has join and where
+      language is very similar to SQL, and has join and where
       clauses, e.g.,
 
       {[
@@ -687,7 +687,7 @@ module type S = sig
 
   (** [eval property document] makes an inference of a [property] based
       on facts stored in a [document]. If all requirements are
-      satisfied and no errors occured the inferred result.
+      satisfied and no errors occurred the inferred result.
 
       For example, given the property [names_of_best_students],
       defined as,
@@ -710,7 +710,7 @@ module type S = sig
   *)
   val eval : 'a t -> doc -> 'a  Or_error.t m
 
-  (** [exec op doc] executes an operation [op] that, presumabely,
+  (** [exec op doc] executes an operation [op] that, presumably,
       updates the document [doc], returns an updated version.*)
   val exec : 'a t -> doc -> doc Or_error.t m
 

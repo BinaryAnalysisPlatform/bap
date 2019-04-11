@@ -124,7 +124,7 @@
   - MachO Kernel Bundles (LLVM 3.8+ only)
   - Plain object files
   - Shared libraries
-- PR#630 Enhancments in IDA plugin
+- PR#630 Enhancements in IDA plugin
 
 
 ### Bug fixes
@@ -167,7 +167,7 @@
 
 - A powerful plugin system
 - Split Bap.Std into several libraries.
-- The disassembler layer is severly rewritten
+- The disassembler layer is severely rewritten
 - Made project storable and loadable
 - Added new injection points
 - Added BIL interpreters
@@ -188,8 +188,8 @@
    `Graphlib` is a generic library that extends a well known
    OCamlGraph library. `Graphlib` uses its own, more reach and modern,
    `Graph` interface that is isomorphic to OCamlGraph's `Sigs.P`
-   signature for persistant graphs. This interface is developed
-   according to the Janestreet's style guidlines and depends on
+   signature for persistent graphs. This interface is developed
+   according to the Janestreet's style guidelines and depends on
    Core_kernel library.  Other than the new interface, `Graphlib`
    provides several graph implementations, and generic algorithms.  To
    make our algorithms polymorphic over chosen graph representation we
@@ -199,7 +199,7 @@
 2. Refined IR.
 
    phi and arg terms were refined. a phi term now is a discriminated
-   set of expressions, and arguments are made more like a defintions.
+   set of expressions, and arguments are made more like a definition.
 
 3. SSA form
 
@@ -306,7 +306,7 @@
 
    Complex hierarchy is now hidden under one umbrella `bap.mli`.
    `Bap_*` modules are marked as internal and is no more installable
-   and, thus, they do not polute the namespace. This will of course,
+   and, thus, they do not pollute the namespace. This will of course,
    break the code that used this internal modules. It is intended
    behavior.
 
@@ -496,7 +496,7 @@ traversing for you, allowing you to override default behavior. Some
 handy algorithms, that use visitors are provided in an internal
 Bap_helpers module, that is included into resulting Bil
 module. Several optimizations were added to bap-objdump utility, like
-constant propogation, inlining, pruning unused variables and resolving
+constant propagation, inlining, pruning unused variables and resolving
 addresses to symbols.
 
 5. Insn interface now provides predicates to query insn classes, this

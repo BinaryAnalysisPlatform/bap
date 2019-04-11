@@ -21,7 +21,7 @@ module type Registry = sig
 
   (** [register name value] register [value] with a given [name].
       If [name] was already associated with some other value, then
-      it will be superseeded with the new binding.   *)
+      it will be superseded with the new binding.   *)
   val register : string -> t -> unit
 
   (** [find name] find a value associated with the given [value]  *)

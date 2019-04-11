@@ -1021,7 +1021,7 @@ let parse_instr mode mem addr =
             | _, Ovec 2, _ -> Bil.binop RSHIFT, "psrl", lowbits2elemt b2, i
             | _, Ovec 6, _ -> Bil.binop LSHIFT, "psll", lowbits2elemt b2, i
             | _, Ovec 4, _ -> Bil.binop ARSHIFT, "psra", lowbits2elemt b2, i
-            (* The shift amount of next two elements are multipled by eight *)
+            (* The shift amount of next two elements are multiplied by eight *)
             | 0x73, Ovec 3, Oimm i when prefix.opsize_override -> Bil.binop RSHIFT, "psrldq", t, Oimm (Addr.(i * bi8))
             | 0x73, Ovec 7, Oimm i when prefix.opsize_override -> Bil.binop LSHIFT, "pslldq", t, Oimm (Addr.(i * bi8))
             | _, Oreg i, _ -> disfailwith (Printf.sprintf "invalid psrl/psll encoding b2=%#x r=%#x" b2 i)

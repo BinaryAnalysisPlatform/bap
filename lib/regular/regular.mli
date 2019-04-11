@@ -29,7 +29,7 @@ open Core_kernel
     {!Regular} interface, that each regular data type is expected to
     implement. This includes a full set of [Io] functions, that allows
     one to read, write and serialize values of the type (see {!Data}
-    interface). It also provides an inteface for creating different
+    interface). It also provides an interface for creating different
     collections from the values of that type, including trees,
     hashtables, maps, sets, etc. Also, it describes the whole algebra
     of comparison functions. For the opaque data types an interface
@@ -106,7 +106,7 @@ module Std : sig
 
       (** [str () t] is formatted output function that matches "%a"
           conversion format specifier in functions, that prints to string,
-          e.g., [sprintf], [failwithf], [errorf] and, suprisingly all
+          e.g., [sprintf], [failwithf], [errorf] and, surprisingly all
           [Lwt] printing function, including [Lwt_io.printf] and logging
           (or any other function with type ('a,unit,string,...)
           formatN`. Example:
@@ -383,7 +383,7 @@ module Std : sig
       (** Data cache.
 
           Store and retrieve data from cache. The cache can seen as a
-          persistant weak key-value storage. Data stored here can
+          persistent weak key-value storage. Data stored here can
           disappear at any time, but can survive for a long time
           (outliving the program). The library by itself doesn't provide
           a caching service for any type, only the interface. The
@@ -452,7 +452,7 @@ module Std : sig
       val default_reader : unit -> info
 
       (** [set_default_reader ?ver name] sets new default reader. If
-          version is not specifed then the latest available version is
+          version is not specified then the latest available version is
           used. Raises an exception if a reader with a given name doesn't
           exist.  *)
       val set_default_reader : ?ver:string -> string -> unit
@@ -470,7 +470,7 @@ module Std : sig
       val default_writer : unit -> info
 
       (** [set_default_writer ?ver name] sets new default writer. If
-          version is not specifed then the latest available version is
+          version is not specified then the latest available version is
           used. Raises an exception if a writer with a given name doesn't
           exist.  *)
       val set_default_writer : ?ver:string -> string -> unit
@@ -486,7 +486,7 @@ module Std : sig
       val default_printer : unit -> info option
 
       (** [set_default_printer ?ver name] sets new default printer. If
-          version is not specifed then the latest available version is
+          version is not specified then the latest available version is
           used. Raises an exception if a printer with a given name doesn't
           exist.  *)
       val set_default_printer : ?ver:string -> string -> unit

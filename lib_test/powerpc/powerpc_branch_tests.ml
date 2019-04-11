@@ -21,7 +21,7 @@ let check_pc name c expected =
     assert_bool (sprintf "%s fail: pc is not a word" name) false
 
 let check_jmp_absence name c =
-  assert_bool (sprintf "%s fail: jmp occured" name) (c#pc = Bil.Bot)
+  assert_bool (sprintf "%s fail: jmp occurred" name) (c#pc = Bil.Bot)
 
 let addr_of_arch = function
   | `ppc -> Word.of_int64 ~width:32 0xABCD42AAL
@@ -179,7 +179,7 @@ let bclrl = bcXrX "gBCLRL" 16 1 lr
 let bcctr = bcXrX "gBCCTR" 528 0 ctr
 let bcctrl = bcXrX "gBCCTRL" 528 1 ctr
 
-(* will add as soon bctar will apear in llvm  *)
+(* will add as soon bctar will appear in llvm  *)
 let bctar = bcXrX "bctar" 560 0 tar
 let bctarl = bcXrX "bctarl" 560 1 tar
 

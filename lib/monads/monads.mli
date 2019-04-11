@@ -616,7 +616,7 @@ module Std : sig
       (** [bind m f] passes the result of computation [m] to function [f] *)
       val bind : 'a t -> ('a -> 'b t) -> 'b t
 
-      (** [return x] creates a trivial compuation that results in [x]  *)
+      (** [return x] creates a trivial computation that results in [x]  *)
       val return : 'a -> 'a t
 
       (** map function can be derived from bind or provided explicitly  *)
@@ -642,7 +642,7 @@ module Std : sig
                 | `Custom of (('a, 'e) t -> f:('a -> 'b) -> ('b, 'e) t)
                 ]
 
-      (** [return x] creates a trivial compuation that results in [x]  *)
+      (** [return x] creates a trivial computation that results in [x]  *)
       val return : 'a -> ('a, _) t
 
     end
@@ -653,7 +653,7 @@ module Std : sig
         (containters) where functions return monadic computations
         instead of values.
 
-        As usuall, two interfaces are provided:
+        As usual, two interfaces are provided:
         -  {{!Std.Monad.Collection.S}Monad.Collection.S} for unary monad
         -  {{!Std.Monad.Collection.S2}Monad.Collection.S2} for binary monad
 
@@ -721,7 +721,7 @@ module Std : sig
         (** type of the container  *)
         type 'a t
 
-        (** [all cs] perfoms all computations in [cs] and returns a
+        (** [all cs] performs all computations in [cs] and returns a
             list of results in the same order. The order of
             evaluation is unspecified.  *)
         val all : ('a,'e) m t -> ('a t, 'e) m
@@ -810,7 +810,7 @@ module Std : sig
         val map_reduce : (module Monoid.S with type t = 'a) -> 'b t -> f:('b -> ('a,'e) m) -> ('a,'e) m
 
         (** [find xs ~f] returns the first element [x] of [xs] for
-            wich [f x] evaluates to [true].  *)
+            which [f x] evaluates to [true].  *)
         val find : 'a t -> f:('a -> (bool,'e) m) -> ('a option,'e) m
 
         (** [find_map xs ~f] returns the first computation [f x] for
@@ -838,7 +838,7 @@ module Std : sig
         (** type of the container  *)
         type 'a t
 
-        (** [all cs] perfoms all computations in [cs] and returns a
+        (** [all cs] performs all computations in [cs] and returns a
             list of results in the same order. The order of
             evaluation is unspecified.  *)
         val all : 'a m t -> 'a t m
@@ -925,7 +925,7 @@ module Std : sig
         val map_reduce : (module Monoid.S with type t = 'a) -> 'b t -> f:('b -> 'a m) -> 'a m
 
         (** [find xs ~f] returns the first element [x] of [xs] for
-            wich [f x] evaluates to [true].  *)
+            which [f x] evaluates to [true].  *)
         val find : 'a t -> f:('a -> bool m) -> 'a option m
 
         (** [find_map xs ~f] returns the first computation [f x] for
@@ -1355,7 +1355,7 @@ module Std : sig
         This monad can be used to denote partial computations or
         a limited form of non-deterministic computations where an
         absence of result, i.e., the bottom value, can be considered
-        as a posible outcome. *)
+        as a possible outcome. *)
     module Option : sig
 
       (** The unary option monad.  *)
@@ -1475,7 +1475,7 @@ module Std : sig
           include S
 
           (** [failf "<fmt>" <args> ()] constructs an error message
-              using the specified format descripton and returns a
+              using the specified format description and returns a
               computation that will result in the constructed
               error. *)
           val failf : ('a, Format.formatter, unit, unit -> 'b t) format4 -> 'a
@@ -1629,7 +1629,7 @@ module Std : sig
     module Writer : sig
       module type S = sig
 
-        (** type representing the system state (enironment)  *)
+        (** type representing the system state (environment)  *)
         type state
         include Trans.S
 
@@ -1686,12 +1686,12 @@ module Std : sig
         include Trans.S
         type env
 
-        (** [read ()] reads the environemnt  *)
+        (** [read ()] reads the environment  *)
         val read : unit -> env t
         include Monad with type 'a t := 'a t
       end
 
-      (** The reader monad interface with the environemnt type left
+      (** The reader monad interface with the environment type left
           variable.
 
           Note, although the type of the environment is variable it
@@ -1760,7 +1760,7 @@ module Std : sig
 
       (** an abstract type of stateful computations. The type variable
           ['a] denotes types of values and the type variable ['e] denotes a
-          type of the state (aka envionment, aka world).  *)
+          type of the state (aka environment, aka world).  *)
       type ('a,'e) state
 
       (** The State Monad interface with a fixed environment.   *)
