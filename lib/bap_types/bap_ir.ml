@@ -55,6 +55,8 @@ module Tid = struct
 
   let int_t = KB.Domain.optional "int_t"
   let ivec = KB.Class.property ~package resolver "ivec" int_t
+  let word_t = KB.Domain.optional ~inspect:sexp_of_word "word_t"
+  let addr = KB.Class.property ~package resolver "addr" word_t
 
   let run cls exp = match Bap_state.run cls exp with
     | Error _ -> assert false
@@ -87,24 +89,22 @@ module Tid = struct
       KB.Object.create unit
     end
 
+  let set_addr = set Theory.Label.addr
   let set_name = set Theory.Label.name
   let set_ivec = set Theory.Label.ivec
 
-  let get_name tid =
-    let lookup =
+  let get from slot tid =
+    KB.Value.get slot @@ run resolver @@begin
       KB.Object.create resolver >>= fun r ->
-      KB.collect Theory.Label.name tid >>= fun s ->
-      KB.provide name r s >>| fun () ->
-      r in
-    KB.Value.get name (run resolver lookup)
+      KB.collect from tid >>= fun s ->
+      KB.provide slot r s >>| fun () ->
+      r
+    end
 
-  let get_ivec tid =
-    let lookup =
-      KB.Object.create resolver >>= fun r ->
-      KB.collect Theory.Label.ivec tid >>= fun s ->
-      KB.provide ivec r s >>| fun () ->
-      r in
-    KB.Value.get ivec (run resolver lookup)
+  let get_name = get Theory.Label.name name
+  (* let get_addr = get Theory.Label.addr addr *)
+  let get_ivec = get Theory.Label.ivec ivec
+
 
   let intern name =
     let program =

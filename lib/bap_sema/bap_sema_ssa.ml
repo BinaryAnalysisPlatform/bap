@@ -54,7 +54,15 @@ let iterated_frontier f blks =
     if Set.equal idf idf' then idf' else fixpoint idf' in
   fixpoint Tid.Set.empty
 
-let blk_of_tid = Term.find_exn blk_t
+let blk_of_tid sub tid = match Term.find blk_t sub tid with
+  | Some blk -> blk
+  | None ->
+    failwithf
+      "Internal error. Broken invariant in subroutine %s: \
+       A term %a is missing" (Ir_sub.name sub) Tid.pps tid
+      ()
+
+
 let succs cfg sub tid =
   Cfg.Node.succs tid cfg |> Seq.map ~f:(blk_of_tid sub)
 
@@ -132,7 +140,7 @@ let rename t =
             | _ -> phi)) in
   let pop_defs blk =
     let pop v = Hashtbl.change vars (Var.base v) (function
-        | Some (x::xs) -> Some xs
+        | Some (_::xs) -> Some xs
         | xs -> xs) in
     Term.enum phi_t blk |>
     Seq.iter ~f:(fun phi -> pop (Ir_phi.lhs phi));

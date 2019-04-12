@@ -184,7 +184,7 @@ let remove_false_jmps blk =
     Seq.fold ~init:blk ~f:(Term.remove jmp_t)
 
 
-let lift_sub entry cfg =
+let lift_sub ?tid entry cfg =
   let addrs = Addr.Table.create () in
   let recons acc b =
     let addr = Block.addr b in
@@ -196,7 +196,7 @@ let lift_sub entry cfg =
       (module Cfg) ~start:entry cfg in
   let blks = Seq.fold blocks ~init:[] ~f:recons in
   let n = let n = List.length blks in Option.some_if (n > 0) n in
-  let sub = Ir_sub.Builder.create ?blks:n () in
+  let sub = Ir_sub.Builder.create ?tid ?blks:n () in
   List.iter blks ~f:(fun blk ->
       Ir_sub.Builder.add_blk sub
         (Term.map jmp_t blk ~f:(resolve_jmp ~local:true addrs)));
@@ -263,51 +263,28 @@ let resolve_indirect symtab exts blk jmp =
       | None -> jmp
 
 
-(* let equiv order resolve program =
- *   Term.enum sub_t program |>
- *   Seq.fold ~init:(Map.empty order) ~f:(fun reprs sub ->
- *       Term.enum blk_t sub |>
- *       Seq.fold ~init:reprs ~f:(fun (reprs) blk -> match resolve (Term.tid blk) with
- *           | None -> reprs
- *           | Some addr -> Map.add_exn reprs addr (Term.tid blk)))
- *
- * let unify resolve program =
- *   let addrs =
- *     Term.enum sub_t program |>
- *     Seq.fold ~init:(Map.empty (module Bitvec_order)) ~f:(fun addrs sub ->
- *         Term.enum blk_t sub |>
- *         Seq.fold ~init:addrs ~f:(fun (addrs) blk -> match resolve (Term.tid blk) with
- *             | None -> addrs
- *             | Some addr -> Map.add_exn addrs addr (Term.tid blk))) in
- *   Term.enum sub_t program |>
- *   Seq.fold ~init:(Map.empty (module Tid)) ~f:(fun union sub ->
- *       Term.enum blk_t sub |>
- *       Seq.fold ~init:union ~f:(fun union blk ->
- *           Term.enum jmp_t blk |>
- *           Seq.fold ~init:union ~f:(fun union jmp ->
- *               Ir_jmp.links jmp |>
- *               Seq.fold ~init:union ~f:(fun union (tid,_) ->
- *                   match resolve tid with
- *                   | None -> union
- *                   | Some addr -> match Map.find addrs addr with
- *                     | None -> union
- *                     | Some tid' -> Map.add_exn union tid tid'))))
- *
- * let resolve resolve program =
- *   let union = unify resolve program in
- *   Term.map sub_t program ~f:(fun sub ->
- *       Term.map blk_t sub ~f:(fun blk ->
- *           Term.map jmp_t blk ~f:(fun jmp ->
- *               Ir_jmp.links jmp |>
- *               Seq.fold ~init:jmp ~f:(fun jmp (tid,_) ->
- *                   match Map.find union tid with
- *                   | None -> jmp
- *                   | Some tid ->
- *                     let role =
- *                       if Option.is_some (Term.find blk_t sub tid)
- *                       then Ir_jmp.Role.local
- *                       else Ir_jmp.Role.call in
- *                     Ir_jmp.link jmp tid role)))) *)
+
+let rewire_call sub_of_blk jmp =
+  let sub_of_dst dst =
+    match dst jmp with
+    | None -> None
+    | Some dst -> match Ir_jmp.resolve dst with
+      | Second _ -> None
+      | First tid -> Hashtbl.find sub_of_blk tid in
+  match sub_of_dst Ir_jmp.dst, sub_of_dst Ir_jmp.alt with
+  | None, None -> jmp
+  | None, Some alt ->
+    Ir_jmp.reify ()
+      ~tid:(Term.tid jmp)
+      ?cnd:(Ir_jmp.guard jmp)
+      ?dst:(Ir_jmp.dst jmp)
+      ~alt:(Ir_jmp.resolved alt)
+  | Some dst, _ ->
+    Ir_jmp.reify ()
+      ~tid:(Term.tid jmp)
+      ?cnd:(Ir_jmp.guard jmp)
+      ?dst:None
+      ~alt:(Ir_jmp.resolved dst)
 
 
 let program symtab =
@@ -315,28 +292,35 @@ let program symtab =
   let addrs = Addr.Table.create () in
   let externals = String.Table.create () in
   let unresolved = Addr.Hash_set.create () in
+  let sub_of_blk = Hashtbl.create (module Tid) in
   Seq.iter (Symtab.to_sequence symtab) ~f:(fun (name,entry,cfg) ->
       let addr = Block.addr entry in
-      let sub = lift_sub entry cfg in
+      let blk_tid = Tid.for_addr addr in
+      let sub_tid = Tid.for_name name in
+      let sub = lift_sub ~tid:sub_tid entry cfg in
       Ir_program.Builder.add_sub b (Ir_sub.with_name sub name);
       Tid.set_name (Term.tid sub) name;
+      Hashtbl.add_exn sub_of_blk ~key:blk_tid ~data:sub_tid;
       Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid sub);
       update_unresolved symtab unresolved externals sub);
   Hashtbl.iter externals ~f:(Ir_program.Builder.add_sub b);
   let program = Ir_program.Builder.result b in
   let has_unresolved blk =
     with_address blk ~default:false ~f:(Hash_set.mem unresolved) in
-  Term.map sub_t program
-    ~f:(fun sub -> Term.map blk_t sub ~f:(fun blk ->
-        Term.map jmp_t (remove_false_jmps blk)
-          ~f:(fun j ->
-              let j =
-                if is_indirect_call j && has_unresolved blk then
-                  resolve_indirect symtab externals blk j
-                else j in
-              resolve_jmp ~local:false addrs j)))
+  let resolve_indirect blk jmp =
+    if is_indirect_call jmp && has_unresolved blk
+    then resolve_indirect symtab externals blk jmp
+    else jmp in
+  Term.map sub_t program ~f:(fun sub ->
+      Term.map blk_t sub ~f:(fun blk ->
+          remove_false_jmps blk |>
+          Term.map jmp_t ~f:(fun jmp ->
+              jmp |>
+              rewire_call sub_of_blk |>
+              resolve_indirect blk |>
+              resolve_jmp ~local:false addrs)))
 
-let sub = lift_sub
+let sub blk cfg = lift_sub blk cfg
 
 let insn insn =
   List.rev @@ IrBuilder.lift_insn insn [Ir_blk.create ()]
