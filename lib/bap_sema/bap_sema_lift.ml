@@ -273,12 +273,12 @@ let rewire_call sub_of_blk jmp =
       | First tid -> Hashtbl.find sub_of_blk tid in
   match sub_of_dst Ir_jmp.dst, sub_of_dst Ir_jmp.alt with
   | None, None -> jmp
-  | None, Some alt ->
+  | None, Some dst ->
     Ir_jmp.reify ()
       ~tid:(Term.tid jmp)
       ?cnd:(Ir_jmp.guard jmp)
       ?dst:(Ir_jmp.dst jmp)
-      ~alt:(Ir_jmp.resolved alt)
+      ~alt:(Ir_jmp.resolved dst)
   | Some dst, _ ->
     Ir_jmp.reify ()
       ~tid:(Term.tid jmp)
@@ -286,6 +286,19 @@ let rewire_call sub_of_blk jmp =
       ?dst:None
       ~alt:(Ir_jmp.resolved dst)
 
+let alternate_unknown sub jmp =
+  match Ir_jmp.dst jmp with
+  | None -> jmp
+  | Some dst -> match Ir_jmp.resolve dst with
+    | Second _ -> jmp
+    | First dst -> match Term.find blk_t sub dst with
+      | Some _ -> jmp
+      | None ->
+        Ir_jmp.reify ()
+          ~tid:(Term.tid jmp)
+          ?cnd:(Ir_jmp.guard jmp)
+          ?dst:None
+          ~alt:(Ir_jmp.resolved dst)
 
 let program symtab =
   let b = Ir_program.Builder.create () in
@@ -317,6 +330,7 @@ let program symtab =
           Term.map jmp_t ~f:(fun jmp ->
               jmp |>
               rewire_call sub_of_blk |>
+              alternate_unknown sub |>
               resolve_indirect blk |>
               resolve_jmp ~local:false addrs)))
 

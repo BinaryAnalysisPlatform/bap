@@ -72,13 +72,19 @@ module Make(Size : Compare) = struct
   let metamask = Z.(one lsl metasize - one)
 
   let meta x = Z.(x land metamask) [@@inline]
-  let z x = Z.(x asr metasize) [@@inline]
+  let is_signed x = Z.(is_odd x) [@@inline]
   let bitwidth x = Z.(to_int (meta x asr 1)) [@@inline]
+  let z x =
+    if is_signed x then
+      let w = bitwidth x in
+      Z.(signed_extract x metasize w)
+    else Z.(x asr metasize)
+  [@@inline]
+
   let payload x =
     let m = Bitvec.modulus (bitwidth x) in
     Bitvec.(bigint (z x) mod m)
 
-  let is_signed x = Z.(is_odd x) [@@inline]
   let signed x = Z.(x lor one) [@@inline]
 
   let pack x w =
@@ -202,6 +208,7 @@ module Make(Size : Compare) = struct
     if len <= 0
     then failwithf "Bitvector.extract: len %d is negative" len ();
     pack (Z.extract z lo len) len
+
 
   let sexp_of_t t = Sexp.Atom (to_string t)
   let t_of_sexp = function

@@ -28,8 +28,8 @@ type 'a var = 'a sort * ident
 type 'a t = 'a var
 
 let valid_first_char = function
-  | 'A'..'Z' | 'a'..'z' | '_' -> true
-  | _ -> false
+  | '0'..'9' | '#' | '$' -> false
+  | _ -> true
 
 let valid_char c =
   valid_first_char c || match c with

@@ -472,7 +472,8 @@ let lifter arch mem insn =
     let bil = Insn.bil prog in
     let prog' = Insn.of_basic ~bil insn in
     Ok (KB.Value.merge ~on_conflict:`drop_right prog prog')
-  | Error err -> raise (Conflict err)
+  | Error _ ->
+    Ok (KB.Value.empty Theory.Program.cls)
 
 let run ?(backend="llvm") ?brancher ?rooter arch mem =
   let b = Option.value brancher ~default:(Brancher.of_bil arch) in
