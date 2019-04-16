@@ -62,7 +62,7 @@ module Get = struct
 end
 
 module Put = struct
-  let tid = Tid.name
+  let tid = Tid.to_string
   let exp = Bil_piqi.piqi_of_exp
   let var = Bil_piqi.piqi_of_var
 
