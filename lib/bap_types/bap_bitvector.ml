@@ -215,16 +215,13 @@ let lsb x = Bitvec.(lsb (Packed.payload x) mod Packed.modulus x)
 let compare compare_size x y =
   let s = compare_size (bitwidth x) (bitwidth y) in
   if s <> 0 then s
-  else
-    let x_is_neg = is_signed x && msb x
-    and y_is_neg = is_signed y && msb y
-    and x = Packed.payload x
-    and y = Packed.payload y in
+  else if is_signed x || is_signed y then
+    let x_is_neg = msb x and y_is_neg = msb y in
     match x_is_neg, y_is_neg with
-    | false,false -> Bitvec.compare x y
-    | true,true  ->  Bitvec.compare y x
     | true,false -> -1
     | false,true -> 1
+    | _ -> Bitvec.compare (payload x) (payload y)
+  else Bitvec.compare (payload x) (payload y)
 
 let pp_full ppf = pp_generic ~suffix:`full ppf
 let pp = pp_full
