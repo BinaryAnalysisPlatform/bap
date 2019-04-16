@@ -203,7 +203,11 @@ let get_insn ?addr arch bytes =
   | Ok (mem, Some insn, _) ->
     let insn_name = Insn.(name @@ of_basic insn) in
     mem, insn, insn_name
-  | _ -> failwith "disasm failed"
+  | Ok (mem, None,_) ->
+    failwithf "Failed to find an instruction in: %a"
+      Memory.pps mem ()
+  | Error err ->
+    failwithf "Diassembler failed with: %s" (Error.to_string_hum err) ()
 
 let lookup_var c var = match c#lookup var with
   | None -> None
@@ -247,7 +251,7 @@ let check_gpr ?addr init bytes var expected arch _ctxt =
   | None -> assert_bool "var not found OR it's result not Imm" false
   | Some w ->
     if not (Word.equal w expected) ||
-        (Word.bitwidth w <> Word.bitwidth expected) then
+       (Word.bitwidth w <> Word.bitwidth expected) then
       printf "\n%s: check failed for %s: expected %s <> %s\n"
         insn_name
         (Var.name var)
@@ -279,7 +283,7 @@ let check_mem init bytes mem ~addr ~size expected ?(endian=BigEndian) arch _ctxt
   let bil = Or_error.ok_exn @@ to_bil arch memory insn in
   check_bil (init @ bil);
   let c = Stmt.eval (init @ bil) (new Bili.context) in
-   match load_word c mem addr endian size with
+  match load_word c mem addr endian size with
   | None -> assert_bool "word not found OR it's result not Imm" false
   | Some w ->
     if not (Word.equal w expected) then
