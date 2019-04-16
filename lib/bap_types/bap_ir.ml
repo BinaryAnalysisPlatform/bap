@@ -125,11 +125,10 @@ module Tid = struct
       r
     end
 
-  let read name =
+  let parse name =
     let program =
       KB.Object.create resolver >>= fun r ->
       KB.Object.read Theory.Program.cls name >>= fun t ->
-      KB.provide Theory.Label.name t (Some name) >>= fun () ->
       KB.provide tid r (Some t) >>| fun () ->
       r in
     match KB.Value.get tid (run resolver program) with
@@ -148,7 +147,7 @@ module Tid = struct
     if String.is_empty str
     then intern str
     else match str.[0] with
-      | '%' -> read @@ sprintf "#<%s %s>"
+      | '%' -> parse @@ sprintf "#<%s 0x%s>"
           (KB.Class.fullname Theory.Program.Semantics.cls)
           (String.subo ~pos:1 str)
       | '@' -> intern (String.subo ~pos:1 str)
@@ -171,7 +170,7 @@ module Tid = struct
       let version = "2.0.0"
       let hash x = Int63.hash (KB.Object.id x)
       let pp = pp
-      let to_string tid = Format.asprintf "%a" pp tid
+      let to_string tid = to_string tid
     end)
 end
 

@@ -106,6 +106,9 @@ module type Tid = sig
   val to_int : t -> int
 
   val untagged : t -> Int63.t
+  val atom_of_string : string -> t
+  val cell_of_string : string -> t
+  val number_of_string : string -> t
 end
 
 
@@ -122,6 +125,9 @@ module Oid : Tid = struct
     x land of_int 0b10 <> zero
   let is_cell x = x land of_int 0b11 = zero
   let to_int63 x = x
+  let number_of_string s = (of_string s lsl 1) lor of_int 1
+  let cell_of_string s = (of_string s lsl 2)
+  let atom_of_string s = (of_string s lsl 2) lor of_int 0b10
   let min_value = min_value asr 1
   let max_value = max_value asr 1
   let fits x =
@@ -134,10 +140,12 @@ module Oid : Tid = struct
   [@@inline]
   let of_int x = (of_int x lsl 1) + one [@@inline]
   let to_int x = to_int_trunc (x asr 1) [@@inline]
+
   (* ordinal of a value in the given category (atoms, cells, numbers) *)
   let untagged x =
     if is_number x then x asr 1 else x asr 2
   [@@inline]
+
 end
 
 module Cid : Sid = Int63
@@ -1006,8 +1014,8 @@ module Knowledge = struct
 
     let read cls input =
       try
-        Scanf.sscanf input "#<%s %s>" @@ fun _ obj ->
-        Knowledge.return (Oid.of_string obj)
+        Scanf.sscanf input "#<%s %s@>" @@ fun _ obj ->
+        Knowledge.return (Oid.atom_of_string obj)
       with _ ->
         get () >>= fun {Env.package} ->
         let {package; name} = split_name package input in
