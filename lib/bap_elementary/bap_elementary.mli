@@ -2,6 +2,7 @@ open Core_kernel
 open Bap.Std
 open Bap_knowledge
 open Bap_core_theory
+open Theory
 
 (** Elementary is a library that provides few primitives for
     approximations of floating point operations via table methods.  *)
@@ -23,12 +24,12 @@ module Elementary (Theory : Theory.Core) : sig
       rank of each coefficient. *)
   val approximate :
     rank : int ->
-    reduce : (('a,'s) format float value t -> 'r bitv value t) ->
-    extract : (int -> 'd bitv value t -> 's bitv value t) ->
-    coefs : ('r, 'd) mem var ->
-    ('a, 's) format float value t ->
-    rmode value t ->
-    ('a, 's) format float value t
+    reduce : (('a,'s) format float -> 'r bitv) ->
+    extract : (int -> 'd bitv -> 's bitv) ->
+    coefs : ('r, 'd) Mem.t var ->
+    ('a,'s) format float ->
+    rmode ->
+    ('a,'s) format float
 
   (** [tabulate op ~rank ~size x rmode] defines a subset of
       functions that can be created by [approximate], s.t.
@@ -41,16 +42,16 @@ module Elementary (Theory : Theory.Core) : sig
     string ->
     rank:int ->
     size:int ->
-    ('a, 's) format float value t ->
-    rmode value t ->
-    ('a, 's) format float value t
+    ('a,'s) format float ->
+    rmode ->
+    ('a,'s) format float
 
   (** [table operation sort rank] defines a naming scheme for
       approximation of [rank] of an [operation] for values of [sort].  *)
-  val table : string -> ('r, 's) format float sort -> int -> string
+  val table : string -> ('r, 's) format Float.t sort -> int -> string
 
   (** [is_table ident] returns true if [ident] is a table *)
-  val is_table  : Var.ident -> bool
+  val is_table  : Var.ident -> Base.bool
 
   (** [operation ident] returns the name of a function,
       which polynomial coefficients reside in a table

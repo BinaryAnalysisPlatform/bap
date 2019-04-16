@@ -5,20 +5,20 @@ open Bap_knowledge
 open Bap_core_theory
 open Knowledge.Syntax
 
-module Elementary (Theory : Theory.Core) = struct
-  open Theory
+module Elementary (Core : Theory.Core) = struct
+  open Core
 
   type 'a t = 'a knowledge
 
   exception Not_a_table
 
-  let bits fsort = Floats.(Format.bits (format fsort))
+  let bits fsort = Theory.Float.(Format.bits (format fsort))
 
   let name op sort rank =
-    String.concat ~sep:"/" [op; Sort.name sort; string_of_int rank]
+    String.concat ~sep:"/" [op; KB.Class.name sort; string_of_int rank]
 
   let scheme ident =
-    match String.split ~on:'/' (Var.Ident.to_string ident) with
+    match String.split ~on:'/' (Theory.Var.Ident.to_string ident) with
     | [name; sort; rank] -> Some (name, sort, rank)
     | _ -> None
 
@@ -31,53 +31,67 @@ module Elementary (Theory : Theory.Core) = struct
 
   let bind a body =
     a >>= fun a ->
-    let sort = Value.sort a in
-    Var.scoped sort @@ fun v ->
+    let sort = KB.Value.cls a in
+    Theory.Var.scoped sort @@ fun v ->
     let_ v !!a (body v)
 
   let (>>>=) = bind
 
   let (>>->) x f =
     x >>= fun x ->
-    f (Value.sort x) x
+    f (KB.Value.cls x) x
 
-  let approximate ~rank ~reduce ~extract ~coefs x rmode =
-    x >>-> fun fsort x ->
-    reduce !!x >>>= fun key ->
-    load (var coefs) (var key) >>>= fun value ->
-    let coef i = float fsort (extract i (var value)) in
-    let rec sum i y =
-      if i >= 0 then
-        fmul rmode !!x y >>>= fun y ->
-        coef i >>>= fun c ->
-        fadd rmode (var y) (var c) >>>= fun y ->
-        sum (i - 1) (var y)
-      else y in
-    coef rank >>>= fun cr ->
-    if rank = 0 then var cr
-    else sum (rank - 1) (var cr)
 
-  let of_int sort x = int sort (Word.of_int ~width:(Bits.size sort) x)
+  include struct open Theory
+    let approximate
+      : rank : int ->
+        reduce : (('a,'s) format float -> 'r bitv) ->
+        extract : (int -> 'd bitv -> 's bitv) ->
+        coefs : ('r, 'd) Mem.t var ->
+        ('a,'s) format float ->
+        rmode ->
+        ('a,'s) format float
+      = fun ~rank ~reduce ~extract ~coefs x rmode ->
+        x >>-> fun fsort x ->
+        reduce !!x >>>= fun key ->
+        load (var coefs) (var key) >>>= fun value ->
+        let coef i = float fsort (extract i (var value)) in
+        let rec sum i y =
+          if i >= 0 then
+            fmul rmode !!x y >>>= fun y ->
+            coef i >>>= fun c ->
+            fadd rmode (var y) (var c) >>>= fun y ->
+            sum (i - 1) (var y)
+          else y in
+        coef rank >>>= fun cr ->
+        if rank = 0 then var cr
+        else sum (rank - 1) (var cr)
+  end
+
+  let of_int sort x =
+    let m = Bitvec.modulus (Theory.Bitv.size sort)in
+    int sort Bitvec.(int x mod m)
 
   let nth fsort n bitv =
     bitv >>-> fun sort bitv ->
-    let index = of_int sort (n * Bits.size (bits fsort)) in
+    let index = of_int sort (n * Theory.Bitv.size (bits fsort)) in
     lshift !!bitv index >>>= fun bitv ->
     high (bits fsort) (var bitv)
 
   let tabulate op ~rank ~size x rmode =
     x >>-> fun fsort x ->
-    let keys = Bits.define size in
-    let values = Bits.define ((rank + 1) * Bits.size (bits fsort)) in
-    let mems = Mems.define keys values in
+    let keys = Theory.Bitv.define size in
+    let values = Theory.Bitv.define
+        ((rank + 1) * Theory.Bitv.size (bits fsort)) in
+    let mems = Theory.Mem.define keys values in
     let name = name op fsort rank in
-    let coefs = Var.define mems name in
+    let coefs = Theory.Var.define mems name in
     let reduce x = high keys (fbits x) in
     let extract = nth fsort in
     approximate ~rank ~coefs ~reduce ~extract !!x rmode
 
   module Scheme = struct
-    type 'a t = 'a sort -> int -> string
+    type 'a t = 'a Theory.sort -> int -> string
 
     let pow s = name "pow" s
     let powr s = name "powr" s
