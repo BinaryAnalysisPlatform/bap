@@ -697,11 +697,15 @@ module Ir_arg = struct
       ~name:"nonnull"
       ~uuid:"3c0a6181-9a9c-4cf4-aa37-8ceebd773952"
 
+  let pp_sort ppf var = match Var.typ (Var.reify var) with
+    | Unk -> Theory.Sort.pp ppf (Theory.Var.sort var)
+    | typ -> Bap_type.pp ppf typ
+
   let pp_self pp_rhs ppf {Def.var; rhs} =
     Format.fprintf ppf "%s :: %s%a = %a"
       (Theory.Var.name var)
       (string_of_intent @@ Intent.get rhs)
-      Theory.Sort.pp (Theory.Var.sort var)
+      pp_sort var
       pp_rhs rhs
 
   let pp ppf arg = term_pp (pp_self (fun ppf rhs ->
