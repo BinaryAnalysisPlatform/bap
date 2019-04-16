@@ -328,13 +328,11 @@ end
 
 
 
-(** [compare x y] establishes total order between [x] and [y]
-    that matches with the order of natural numbers that corresond
-    to [x] and [y], i.e.,
+(** [compare x y] compares [x] and [y] as unsigned integers,
+    i.e.,
     [compare x y] = [compare (to_nat x) (to_nat y)]
 *)
 val compare : t -> t -> int
-
 
 (** [equal x y] is true if [x] and [y] represent the same integers *)
 val equal : t -> t -> bool
@@ -459,6 +457,7 @@ val to_bigint : t -> Z.t
     [(x lsr lo) mod (hi-lo+1)]
 *)
 val extract : hi:int -> lo:int -> t -> t
+
 
 (** [select bits x] builds a bitvector from [bits] of [x].
 

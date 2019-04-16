@@ -32,38 +32,28 @@ type endian = LittleEndian | BigEndian
 [@@deriving bin_io, compare, sexp]
 
 
-module Bignum = struct
-  module Repr : Stringable with type t = Z.t = struct
-    type t = Z.t
-    let to_string = Z.to_bits
-    let of_string = Z.of_bits
-  end
-  include Z
-  include Binable.Of_stringable(Repr)
-end
 
-type bignum = Bignum.t
+module Packed : sig
+  type t [@@deriving bin_io, sexp]
 
-module type Compare = sig
-  val compare: int -> int -> int
-end
+  val create : ?signed:bool -> Z.t -> int -> t
+  val bitwidth : t -> int
+  val modulus : t -> Bitvec.modulus
+  val is_signed : t -> bool
+  val signed : t -> t
+  val unsigned : t -> t
+  val payload : t -> Bitvec.t
 
-module Size_poly = struct
-  let compare x y = Int.compare x y
-end
+  val hash : t -> int
 
-module Size_mono = struct
-  let compare x y =
-    if Int.(x <> y) then failwith "Non monomoprhic compare" else 0
-end
-
-(** internal representation *)
-module Make(Size : Compare) = struct
-  type t = Bignum.t [@@deriving bin_io]
-
-  let module_name = Some "Bap.Std.Bitvector"
-
-  let version = "2.0.0"
+  val lift1 : t -> (Bitvec.t -> Bitvec.t Bitvec.m) -> t
+  val lift2 : t -> t -> (Bitvec.t -> Bitvec.t -> Bitvec.t Bitvec.m) -> t
+  val lift3 : t -> t -> t -> (Bitvec.t -> Bitvec.t -> Bitvec.t -> Bitvec.t Bitvec.m) -> t
+end = struct
+  type packed = {packed : Z.t} [@@unboxed]
+  type meta = {meta : Z.t} [@@unboxed]
+  type data = {data : Z.t} [@@unboxed]
+  type t = packed
 
   let metasize = 15
   let lenoff   = 1
@@ -71,28 +61,44 @@ module Make(Size : Compare) = struct
   let maxlen   = 1 lsl lensize
   let metamask = Z.(one lsl metasize - one)
 
-  let meta x = Z.(x land metamask) [@@inline]
-  let is_signed x = Z.(is_odd x) [@@inline]
-  let bitwidth x = Z.(to_int (meta x asr 1)) [@@inline]
-  let z x =
-    if is_signed x then
-      let w = bitwidth x in
-      Z.(signed_extract x metasize w)
-    else Z.(x asr metasize)
+  let meta {packed} = {meta=Z.(packed land metamask)} [@@inline]
+  let bitwidth x =
+    let {meta} = meta x in
+    Z.(to_int (meta asr 1)) [@@inline]
+  let modulus x = Bitvec.modulus @@ bitwidth x [@@inline]
+
+  let data {packed} = {data=Z.(packed asr metasize)} [@@inline]
+  let hash x =
+    let {data} = data x in
+    Z.hash data
+  let payload x =
+    let m = modulus x in
+    let z = data x in
+    Bitvec.(bigint z.data mod m)
   [@@inline]
 
-  let payload x =
-    let m = Bitvec.modulus (bitwidth x) in
-    Bitvec.(bigint (z x) mod m)
+  let is_signed {packed=x} = Z.(is_odd x) [@@inline]
 
-  let signed x = Z.(x lor one) [@@inline]
+  let unsigned ({packed} as x) =
+    if is_signed x
+    then {packed=Z.((packed asr 1) lsl 1)}
+    else x
+
+
+  let mk_signed {packed=x} = {packed=Z.(x lor one)} [@@inline]
+  let signed x = mk_signed x [@@inline]
 
   let pack x w =
     let meta = Z.of_int (w lsl 1) in
-    Z.(x lsl metasize lor meta)
-  [@@inlined]
+    {packed=Z.(x lsl metasize lor meta)}
+  [@@inline]
 
-  let (%:) x w = pack (Bitvec.to_bigint x) w
+  let create ?(signed=false) x w =
+    let m = Bitvec.modulus w in
+    let x = Bitvec.(bigint x mod m) in
+    let r = pack (Bitvec.to_bigint x) w in
+    if signed then mk_signed r else r
+  [@@inline]
 
   let lift1 x f =
     let w = bitwidth x in
@@ -112,133 +118,158 @@ module Make(Size : Compare) = struct
     pack Bitvec.(to_bigint (f x y z mod modulus w)) w
   [@@inline]
 
-  let unsigned x = pack (z x) (bitwidth x)
-  let hash x = Z.hash x
-  let bits_of_z x = Z.to_bits (z x)
-  let unop op t = op (z t)
-  let binop op t1 t2 = op (z t1) (z t2)
+  module Stringable = struct
+    type t = packed
+    let to_string {packed} = Z.to_bits packed
+    let of_string s = {packed = Z.of_bits s}
+  end
 
-  let pp_generic
-      ?(case:[`lower|`upper]=`upper)
-      ?(prefix:[`auto|`base|`none|`this of string]=`auto)
-      ?(suffix:[`full|`none|`size]=`none)
-      ?(format:[`hex|`dec|`oct|`bin]=`hex) ppf x =
-    let width = bitwidth x in
-    let is_signed = is_signed x in
-    let is_negative = Z.compare (z x) Z.zero < 0 in
-    let x = Z.abs (z x) in
-    let word = Z.of_int in
-    let int  = Z.to_int in
-    let base = match format with
-      | `dec -> word 10
-      | `hex -> word 0x10
-      | `oct -> word 0o10
-      | `bin -> word 0b10 in
-    let pp_prefix ppf = match format with
-      | `dec -> ()
-      | `hex -> fprintf ppf "0x"
-      | `oct -> fprintf ppf "0o"
-      | `bin -> fprintf ppf "0b" in
-    if is_negative then fprintf ppf "-";
-    let () = match prefix with
-      | `none -> ()
-      | `this x -> fprintf ppf "%s" x
-      | `base -> pp_prefix ppf
-      | `auto ->
-        if Z.compare x (Z.min (word 10) base) >= 0
-        then pp_prefix ppf in
-    let fmt = format_of_string @@ match format, case with
-      | `hex,`upper -> "%X"
-      | `hex,`lower -> "%x"
-      | _ -> "%d" in
-    let rec print x =
-      let d = int Z.(x mod base) in
-      if x >= base
-      then print Z.(x / base);
-      fprintf ppf fmt d in
-    print x;
-    match suffix with
-    | `full -> fprintf ppf ":%d%c" width (if is_signed then 's' else 'u')
-    | `size -> fprintf ppf ":%d" width
-    | `none -> ()
-
-  let compare l r =
-    let s = Size.compare (bitwidth l) (bitwidth r) in
-    if s <> 0 then s
-    else match is_signed l, is_signed r with
-      | true,true | false,false -> Bignum.compare (z l) (z r)
-      | true,false -> Bignum.compare (z l) (z (signed r))
-      | false,true -> Bignum.compare (z (signed l)) (z r)
-
-  let pp_full ppf = pp_generic ~suffix:`full ppf
-  let pp = pp_full
-
-  let to_string x =
-    let z = z x in
-    match bitwidth x with
-    | 1 -> if Z.equal z Z.zero then "false" else "true"
-    | _ -> asprintf "%a" pp_full x
-
-  let of_suffixed stem suffix =
-    let z = Bignum.of_string stem in
-    let sl = String.length suffix in
-    if sl = 0
-    then invalid_arg "Bitvector.of_string: an empty suffix";
-    let chop x = String.subo ~len:(sl - 1) x in
-    match suffix.[sl-1] with
-    | 's' -> pack z (Int.of_string (chop suffix)) |> signed
-    | 'u' -> pack z (Int.of_string (chop suffix))
-    | x when Char.is_digit x -> pack z (Int.of_string suffix)
-    | _ -> invalid_arg "Bitvector.of_string: invalid prefix format"
-
-  let of_string = function
-    | "false" -> pack Z.zero 1
-    | "true"  -> pack Z.one  1
-    | s -> match String.split ~on:':' s with
-      | [z; n] -> of_suffixed z n
-      | _ -> failwithf "Bitvector.of_string: '%s'" s ()
-
-  let with_validation t ~f = Or_error.map ~f (Validate.result t)
-
-  let extract ?hi ?(lo=0) t =
-    let n = bitwidth t in
-    let z = z t in
-    let hi = Option.value ~default:(n-1) hi in
-    let len = hi-lo+1 in
-    if len <= 0
-    then failwithf "Bitvector.extract: len %d is negative" len ();
-    pack (Z.extract z lo len) len
-
-
-  let sexp_of_t t = Sexp.Atom (to_string t)
-  let t_of_sexp = function
-    | Sexp.Atom s -> of_string s
-    | _ -> invalid_argf
-             "Bitvector.of_sexp: expected an atom got a list" ()
+  include Binable.Of_stringable(Stringable)
+  include Sexpable.Of_stringable(Stringable)
 end
 
-(* About monomorphic comparison.
+let pack = Packed.create
+let payload = Packed.payload
+let lift1 = Packed.lift1
+let lift2 = Packed.lift2
+let lift3 = Packed.lift3
 
-   With monomorphic size comparison functions [hash] and [compare]
-   will not be coherent with each other, since we can't prohibit
-   someone to compare hashes from bitvectors with different sizes. For
-   example, it means, that we can't really guarantee that in a Table
-   all keys are bitvectors with the same size. So, as a consequence we
-   can't make bitvector a real value implementing [Identifiable]
-   interface. Since, monomorphic behaviour is rather specific and
-   unintuitive we will move it in a separate submodule and use size
-   polymorphic comparison by default.
-*)
-module T = Make(Size_poly)
-include T
+
+type t = Packed.t [@@deriving bin_io,sexp]
+
+module type Compare = sig
+  val compare: int -> int -> int
+end
+
+module Size_poly = struct
+  let compare x y = Int.compare x y
+end
+
+module Size_mono = struct
+  let compare x y =
+    if Int.(x <> y) then failwith "Non monomoprhic compare" else 0
+end
+
+let create x w = Packed.create (Bitvec.to_bigint x) w [@@inline]
+let to_bitvec x = Packed.payload x [@@inline]
+let unsigned x = x [@@inline]
+let signed x = Packed.signed x [@@inline]
+let hash x = Packed.hash x [@@inline]
+let bits_of_z x = Bitvec.to_binary (Packed.payload x)
+let unop op t = Packed.lift1 t op [@@inline]
+let binop op t1 t2 = Packed.lift2 t1 t2 op [@@inline]
+let bitwidth x = Packed.bitwidth x [@@inline]
+let is_signed x = Packed.is_signed x [@@inline]
+
+let pp_generic
+    ?(case:[`lower|`upper]=`upper)
+    ?(prefix:[`auto|`base|`none|`this of string]=`auto)
+    ?(suffix:[`full|`none|`size]=`none)
+    ?(format:[`hex|`dec|`oct|`bin]=`hex) ppf x =
+  let width = bitwidth x in
+  let m = Bitvec.modulus width in
+  let is_signed = is_signed x in
+  let x = Packed.payload x in
+  let is_negative = is_signed && Bitvec.(msb x mod m) in
+  let x = if is_negative then Bitvec.(abs x mod m) else x in
+  let x = Bitvec.to_bigint x in
+  let word x = Z.of_int x in
+  let int x  = Z.to_int x in
+  let base = match format with
+    | `dec -> word 10
+    | `hex -> word 0x10
+    | `oct -> word 0o10
+    | `bin -> word 0b10 in
+  let pp_prefix ppf = match format with
+    | `dec -> ()
+    | `hex -> fprintf ppf "0x"
+    | `oct -> fprintf ppf "0o"
+    | `bin -> fprintf ppf "0b" in
+  if is_negative then fprintf ppf "-";
+  let () = match prefix with
+    | `none -> ()
+    | `this x -> fprintf ppf "%s" x
+    | `base -> pp_prefix ppf
+    | `auto ->
+      if Bitvec_order.(x >= (min (word 10) base))
+      then pp_prefix ppf in
+  let fmt = format_of_string @@ match format, case with
+    | `hex,`upper -> "%X"
+    | `hex,`lower -> "%x"
+    | _ -> "%d" in
+  let rec print x =
+    let d = int Z.(x mod base) in
+    if Z.(x >= base)
+    then print Z.(x / base);
+    fprintf ppf fmt d in
+  print x;
+  match suffix with
+  | `full -> fprintf ppf ":%d%c" width (if is_signed then 's' else 'u')
+  | `size -> fprintf ppf ":%d" width
+  | `none -> ()
+
+let msb x = Bitvec.(msb (Packed.payload x) mod Packed.modulus x)
+let lsb x = Bitvec.(lsb (Packed.payload x) mod Packed.modulus x)
+
+
+let compare compare_size x y =
+  let s = compare_size (bitwidth x) (bitwidth y) in
+  if s <> 0 then s
+  else
+    let x_is_neg = is_signed x && msb x
+    and y_is_neg = is_signed y && msb y
+    and x = Packed.payload x
+    and y = Packed.payload y in
+    match x_is_neg, y_is_neg with
+    | false,false -> Bitvec.compare x y
+    | true,true  ->  Bitvec.compare y x
+    | true,false -> -1
+    | false,true -> 1
+
+let pp_full ppf = pp_generic ~suffix:`full ppf
+let pp = pp_full
+
+let string_of_word x = asprintf "%a" pp_full x
+
+let of_suffixed stem suffix =
+  let z = Z.of_string stem in
+  let sl = String.length suffix in
+  if sl = 0
+  then invalid_arg "Bitvector.of_string: an empty suffix";
+  let chop x = String.subo ~len:(sl - 1) x in
+  match suffix.[sl-1] with
+  | 's' -> pack ~signed:true z (Int.of_string (chop suffix))
+  | 'u' -> pack z (Int.of_string (chop suffix))
+  | x when Char.is_digit x -> pack z (Int.of_string suffix)
+  | _ -> invalid_arg "Bitvector.of_string: invalid prefix format"
+
+let word_of_string = function
+  | "false" -> pack Z.zero 1
+  | "true"  -> pack Z.one  1
+  | s -> match String.split ~on:':' s with
+    | [z; n] -> of_suffixed z n
+    | _ -> failwithf "Bitvector.of_string: '%s'" s ()
+
+let with_validation t ~f = Or_error.map ~f (Validate.result t)
+
+let extract ?hi ?(lo=0) t =
+  let n = bitwidth t in
+  let z = Bitvec.to_bigint (payload t) in
+  let hi = Option.value ~default:(n-1) hi in
+  let len = hi-lo+1 in
+  if len <= 0
+  then failwithf "Bitvector.extract: len %d is negative" len ();
+  if is_signed t && msb t
+  then pack Z.((minus_one lsl n) lor Z.extract z lo len) len
+  else pack (Z.extract z lo len) len
 
 module Cons = struct
-  let b0 = pack (Bignum.of_int 0) 1
-  let b1 = pack (Bignum.of_int 1) 1
+  let b0 = pack Z.zero 1
+  let b1 = pack Z.one 1
   let of_bool v = if v then b1 else b0
-  let of_int32 ?(width=32) n = pack (Bignum.of_int32 n) width
-  let of_int64 ?(width=64) n = pack (Bignum.of_int64 n) width
-  let of_int ~width v = pack (Bignum.of_int v) width
+  let of_int32 ?(width=32) n = pack (Z.of_int32 n) width
+  let of_int64 ?(width=64) n = pack (Z.of_int64 n) width
+  let of_int ~width v = pack (Z.of_int v) width
   let ones  n = of_int (-1) ~width:n
   let zeros n = of_int (0)  ~width:n
   let zero  n = of_int 0    ~width:n
@@ -248,33 +279,32 @@ include Cons
 
 let safe f t = try_with (fun () -> f t)
 
-let to_int_exn = unop Bignum.to_int
-let to_int32_exn = unop Bignum.to_int32
-let to_int64_exn = unop Bignum.to_int64
+let to_int_exn x = Bitvec.to_int (payload x)
+let to_int32_exn x = Bitvec.to_int32 (payload x)
+let to_int64_exn x = Bitvec.to_int64 (payload x)
 let to_int   = safe to_int_exn
 let to_int32 = safe to_int32_exn
 let to_int64 = safe to_int64_exn
-
-let create = (%:)
-let to_bitvec = payload
 
 let of_binary ?width endian num  =
   let num = match endian with
     | LittleEndian -> num
     | BigEndian -> String.rev num in
   let w = Option.value width ~default:(String.length num * 8) in
-  pack (Bignum.of_bits num) w
+  pack (Z.of_bits num) w
 
-let nsucc t n = lift1 t @@ fun t -> Bitvec.(nsucc t n)
-let npred t n = lift1 t @@ fun t -> Bitvec.(npred t n)
+let nsucc t n = Packed.lift1 t @@ fun t -> Bitvec.(nsucc t n)
+let npred t n = Packed.lift1 t @@ fun t -> Bitvec.(npred t n)
 
 let (++) t n = nsucc t n
 let (--) t n = npred t n
 let succ n = n ++ 1
 let pred n = n -- 1
 
-let gcd_exn x y = lift2 x y Bitvec.gcd
-let lcm_exn x y = lift2 x y Bitvec.lcm
+let (%:) x w = pack (Bitvec.to_bigint x) w
+
+let gcd_exn x y = Packed.lift2 x y Bitvec.gcd
+let lcm_exn x y = Packed.lift2 x y Bitvec.lcm
 let gcdext_exn x y =
   let w = bitwidth x in
   let m = Bitvec.modulus w in
@@ -300,7 +330,7 @@ let (@.) = concat
 
 module Unsafe = struct
   module Base = struct
-    type t = T.t
+    type t = Packed.t
     let one = Bitvec.one %: 1
     let zero = Bitvec.zero %: 1
     let succ = succ
@@ -407,7 +437,7 @@ end
 
 module Int_exn = struct
   module Base = struct
-    type t = T.t
+    type t = Packed.t
     let one = one 1
     let zero = zero 1
 
@@ -441,26 +471,25 @@ let extract_exn = extract
 let extract ?hi ?lo x = Or_error.try_with (fun () ->
     extract_exn ?hi ?lo x)
 
-let is_zero = unop Bignum.(equal zero)
-let is_one = unop Bignum.(equal one)
-let is_positive = unop Bignum.(fun z -> gt z zero)
+let is_zero x =  Bitvec.compare (payload x) Bitvec.zero = 0
+let is_one x = Bitvec.compare (payload x) Bitvec.one = 0
+let is_negative x = is_signed x && msb x
+let is_positive x =  not (is_zero x) && not (is_negative x)
 let is_non_positive  = Fn.non is_positive
-let is_negative = unop Bignum.(fun z -> lt z zero)
 let is_non_negative = Fn.non is_negative
-
 
 let validate check msg x =
   if check x then Validate.pass
   else Validate.fails msg x sexp_of_t
 
 let validate_positive =
-  validate is_positive "should be positive"
+  validate is_positive "expects a positive number"
 let validate_non_positive =
-  validate is_non_positive "should be non positive"
+  validate is_non_positive "expects a non positive number"
 let validate_negative =
-  validate is_negative "should be negative"
+  validate is_negative "expects a negative number"
 let validate_non_negative =
-  validate is_non_negative "should be non negative"
+  validate is_non_negative "expects a non negative number"
 
 let enum_chars t endian  =
   let open Sequence in
@@ -499,7 +528,12 @@ let bits_of_byte byte =
 let enum_bits bv endian =
   enum_chars bv endian |> Sequence.map ~f:bits_of_byte |> Sequence.concat
 
-module Mono = Comparable.Make(Make(Size_mono))
+module Mono = Comparable.Make(struct
+    type t = Packed.t [@@deriving sexp]
+    let compare = compare (fun m n ->
+        if Int.(m <> n) then failwith "Non monomorphic comparison"
+        else 0)
+  end)
 
 module Trie = struct
   module Common = struct
@@ -545,7 +579,14 @@ module Trie = struct
 end
 
 include Or_error.Monad_infix
-include Regular.Make(T)
+include Regular.Make(struct
+    type t = Packed.t [@@deriving bin_io, sexp]
+    let compare = compare (fun _ _ -> 0)
+    let version = "2.0.0"
+    let module_name = Some "Bap.Std.Word"
+    let pp ppf = pp_generic ppf
+    let hash = Packed.hash
+  end)
 module Int_err = Safe
 include (Unsafe : Bap_integer.S with type t := t)
 let one = Cons.one
@@ -590,39 +631,42 @@ end
 (* stable serialization protocol *)
 module Stable = struct
   module V1 = struct
-    type t = bignum
+    type t = Packed.t
     let compare = compare
 
     let of_legacy {V1.z; w; signed=s} =
       let x = pack z w in
-      if s then signed x else x
+      if s then Packed.signed x else x
 
     let to_legacy x = V1.{
-        z = z x;
+        z = Bitvec.to_bigint (payload x);
         w = bitwidth x;
         signed = is_signed x;
       }
 
     include Binable.Of_binable(V1)(struct
-        type t = bignum
+        type t = Packed.t
         let to_binable = to_legacy
         let of_binable = of_legacy
       end)
 
     include Sexpable.Of_sexpable(V1)(struct
-        type t = bignum
+        type t = Packed.t
         let to_sexpable = to_legacy
         let of_sexpable = of_legacy
       end)
   end
 
   module V2 = struct
-    type nonrec t = t [@@deriving bin_io, compare, sexp]
+    type t = Packed.t [@@deriving bin_io, sexp]
+    let compare = compare
   end
 end
 
 
 let pp = pp_hex
+let to_string = string_of_word
+let of_string = word_of_string
 
 let () =
   add_reader ~desc:"Janestreet Binary Protocol" ~ver:"1.0.0" "bin"
