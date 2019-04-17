@@ -194,23 +194,16 @@ let provide_lifter () =
     | None -> KB.return empty
     | Some x -> f x in
   let lifter obj =
-    info "a lifter was requested...";
     Knowledge.collect Arch.slot obj >>? fun arch ->
     Knowledge.collect Memory.slot obj >>? fun mem ->
     Knowledge.collect Disasm_expert.Basic.Insn.slot obj >>? fun insn ->
-    info "got everything needed, code is %a" Memory.pp mem;
     let module Target = (val target_of_arch arch) in
     match Target.lift mem insn with
     | Ok bil ->
-      info "Got the BIL code, running the parser";
       Bil_semantics.context >>= fun ctxt ->
       Knowledge.provide Bil_semantics.arch ctxt (Some arch) >>= fun () ->
-      Lifter.run BilParser.t bil >>= fun sema ->
-      let bil' = KB.Value.get Bil.slot sema in
-      info "<<<<<@\n%a@\n=====@\n%a@\n>>>>>>" Bil.pp bil Bil.pp bil';
-      KB.return sema
+      Lifter.run BilParser.t bil
     | Error _ ->
-      info "The lifter failed, no semantics";
       Knowledge.return Theory.Program.Semantics.empty in
   Knowledge.promise Theory.Program.Semantics.slot lifter
 
