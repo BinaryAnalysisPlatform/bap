@@ -428,7 +428,7 @@ module Knowledge : sig
     val flat :
       ?inspect:('a -> Base.Sexp.t) ->
       empty:'a ->
-      is_empty:('a -> bool) ->
+      equal:('a -> 'a -> bool) ->
       string -> 'a domain
 
 
@@ -439,6 +439,7 @@ module Knowledge : sig
 
     val optional :
       ?inspect:('a -> Base.Sexp.t) ->
+      equal:('a -> 'a -> bool) ->
       string -> 'a option domain
 
     val string : string domain

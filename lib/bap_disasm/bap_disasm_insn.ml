@@ -53,7 +53,7 @@ module Props = struct
   end
 
   let domain = KB.Domain.flat "props"
-      ~empty:Z.zero ~is_empty:Z.(equal zero)
+      ~empty:Z.zero ~equal:Z.equal
 
   let persistent = KB.Persistent.of_binable (module T)
 
@@ -71,7 +71,7 @@ module Slot = struct
   let empty = "#undefined"
   let text = KB.Domain.flat "text"
       ~inspect:sexp_of_string ~empty
-      ~is_empty:(String.equal empty)
+      ~equal:String.equal
 
   let name = KB.Class.property ~package:"bap.std"
       ~persistent:KB.Persistent.string
@@ -82,6 +82,7 @@ module Slot = struct
       Theory.Program.cls "insn-asm" text
 
   let ops_domain = KB.Domain.optional "insn-ops"
+      ~equal:[%compare.equal: Op.t array]
       ~inspect:[%sexp_of: Op.t array]
 
   let ops_persistent = KB.Persistent.of_binable (module struct

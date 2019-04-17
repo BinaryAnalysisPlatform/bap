@@ -435,5 +435,9 @@ let hexdump t = Format.asprintf "%a" pp_hex t
 
 
 let domain = KB.Domain.optional ~inspect:sexp_of_t "mem"
+    ~equal:(fun x y ->
+        Addr.equal x.addr y.addr &&
+        Int.equal x.size y.size)
+
 let slot = KB.Class.property ~package:"bap.std"
     Theory.Program.cls "mem" domain

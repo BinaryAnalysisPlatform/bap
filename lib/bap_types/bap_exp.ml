@@ -95,7 +95,7 @@ module PP = struct
       pr "%a[%a]" pp mem pp idx
     | Load (mem, idx, edn, s) ->
       pr "%a[%a, %a]:%a" pp mem pp idx pp_edn edn Bap_size.pp s
-    | Store (mem, idx, exp, edn, `r8) ->
+    | Store (mem, idx, exp, _, `r8) ->
       pr "@[<4>%a@;with [%a] <- %a@]"
         pp mem pp idx pp exp
     | Store (mem, idx, exp, edn, s) ->
@@ -241,13 +241,12 @@ module Infix = struct
   let ( ^ )    a b   = concat a b
 end
 
+
+
+let equal x y = compare_exp x y = 0
 let to_string = Format.asprintf "%a" PP.pp
-let domain = Knowledge.Domain.flat "exp"
-    ~empty:None
-    ~inspect:(function
-        | None -> Sexp.List []
-        | Some exp -> Sexp.Atom (to_string exp))
-    ~is_empty:Option.is_none
+let domain = Knowledge.Domain.optional "exp" ~equal
+    ~inspect:(fun exp -> Sexp.Atom (to_string exp))
 
 let persistent = Knowledge.Persistent.of_binable (module struct
     type t = Bap_bil.exp option [@@deriving bin_io]

@@ -45,17 +45,18 @@ module Tid = struct
   let generator = KB.Class.declare ~package "tid-generator" Generator
   let resolver = KB.Class.declare ~package "tid-resolver" Resolver
   let unit = KB.Class.declare ~package "unit" ()
-  let tid_t = KB.Domain.optional ~inspect:sexp_of_t "tid"
+  let tid_t = KB.Domain.optional ~equal:Theory.Label.equal ~inspect:sexp_of_t "tid"
   let last = KB.Class.property ~package generator "last-tid" tid_t
   let name = KB.Class.property ~package resolver "name"
-      (KB.Domain.optional "name")
+      (KB.Domain.optional ~equal:String.equal "name")
   let repr = KB.Class.property ~package resolver "repr"
       KB.Domain.string
   let tid = KB.Class.property ~package resolver "tid" tid_t
 
-  let int_t = KB.Domain.optional "int_t"
+  let int_t = KB.Domain.optional ~equal:Int.equal "int_t"
   let ivec = KB.Class.property ~package resolver "ivec" int_t
-  let word_t = KB.Domain.optional ~inspect:sexp_of_word "word_t"
+  let word_t = KB.Domain.optional
+      ~equal:Bap_bitvector.equal ~inspect:sexp_of_word "word_t"
   let addr = KB.Class.property ~package resolver "addr" word_t
 
   let run cls exp = match Bap_state.run cls exp with
@@ -630,7 +631,11 @@ module Ir_arg = struct
     module T = struct
       type t = intent option [@@deriving bin_io]
     end
-    let domain = KB.Domain.optional ~inspect:sexp_of_intent "intent"
+
+    let equal_intent x y = compare_intent x y  =  0
+
+    let domain =
+      KB.Domain.optional ~equal:equal_intent ~inspect:sexp_of_intent "intent"
     let persistent = KB.Persistent.of_binable (module T)
     let slot = KB.Class.property ~package ~persistent
         Theory.Sort.t "arg-intent" domain
@@ -1234,9 +1239,12 @@ module Term = struct
       ~name:"postcondition"
       ~uuid:"f248e4c1-9efc-4c70-a864-e34706e2082b"
 
+  let equal x y =
+    compare_term compare_blk x y = 0
 
-  let domain = Knowledge.Domain.flat ~is_empty:List.is_empty "bir"
-      ~empty:[] ~inspect:(fun blks -> Sexp.List (List.map blks ~f:(fun b ->
+  let domain = Knowledge.Domain.flat ~empty:[] "bir"
+      ~equal:(List.equal ~equal)
+      ~inspect:(fun blks -> Sexp.List (List.map blks ~f:(fun b ->
           Sexp.Atom (name b))))
 
   let persistent = Knowledge.Persistent.of_binable (module struct

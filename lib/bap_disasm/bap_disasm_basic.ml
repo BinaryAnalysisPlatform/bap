@@ -320,6 +320,7 @@ module Insn = struct
 
   let domain =
     KB.Domain.optional ~inspect:sexp_of_t "insn"
+      ~equal:(fun x y -> Int.equal x.code y.code)
   let slot = KB.Class.property ~package:"bap.std"
       Theory.Program.cls "insn" domain
 end

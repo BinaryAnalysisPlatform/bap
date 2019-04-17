@@ -98,7 +98,7 @@ let domain = Knowledge.Domain.flat "bil"
     ~inspect:(function
         | [] -> Sexp.List []
         | bil -> Sexp.Atom (Stmts_pp.to_string bil))
-    ~is_empty:List.is_empty
+    ~equal:(fun x y -> Int.(compare_bil x y = 0))
 
 
 let persistent = Knowledge.Persistent.of_binable (module struct

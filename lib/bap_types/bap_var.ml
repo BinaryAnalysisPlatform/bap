@@ -59,7 +59,7 @@ module Generator = struct
   let empty = Theory.Var.Ident.of_string "nil"
   let ident_t = KB.Domain.flat ~empty
       ~inspect:Theory.Var.Ident.sexp_of_t
-      ~is_empty:(Theory.Var.Ident.equal empty)
+      ~equal:Theory.Var.Ident.equal
       "ident"
   type generator = Gen
   let generator =

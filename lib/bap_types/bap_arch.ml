@@ -62,9 +62,11 @@ module T = struct
     | #hexagon | #nvptx | #xcore -> LittleEndian
     | #ppc | #mips | #sparc | #systemz   -> BigEndian
 
+  let equal x y = compare_arch x y = 0
 
   let domain =
-    KB.Domain.optional ~inspect:sexp_of_t "arch"
+    KB.Domain.optional ~equal ~inspect:sexp_of_t "arch"
+
 
   let slot = KB.Class.property ~package:"bap.std"
       Theory.Program.cls "arch" domain

@@ -77,6 +77,7 @@ let is_null x =
   Theory.Label.equal null x
 
 let domain = KB.Domain.optional ~inspect "graph"
+    ~equal:(fun x y -> Theory.Label.equal x.entry y.entry)
 
 let graph = KB.Class.property Theory.Program.Semantics.cls "ir-graph" domain
 let slot = graph

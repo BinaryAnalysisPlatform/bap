@@ -12,12 +12,15 @@ let program = cls
 
 module Label = struct
   let word = Knowledge.Domain.optional "word"
+      ~equal:Bitvec.equal
       ~inspect:Bitvec_sexp.sexp_of_t
 
   let string = Knowledge.Domain.optional "string"
+      ~equal:String.equal
       ~inspect:sexp_of_string
 
   let int = Knowledge.Domain.optional "string"
+      ~equal:Int.equal
       ~inspect:sexp_of_int
 
   let addr = Knowledge.Class.property ~package cls "addr" word

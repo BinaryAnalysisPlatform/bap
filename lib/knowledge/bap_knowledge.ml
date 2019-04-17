@@ -175,13 +175,13 @@ module Domain = struct
   let total ?inspect ~empty ~order name =
     define ?inspect ~empty name ~order:(partial_of_total order)
 
-  let flat ?inspect ~empty ~is_empty name =
+  let flat ?inspect ~empty ~equal name =
     define ?inspect ~empty name ~order:(fun x y ->
-        match is_empty x, is_empty y with
+        match equal empty x, equal empty y with
         | true,true -> EQ
         | true,false -> LT
         | false,true -> GT
-        | false,false -> NC)
+        | false,false -> if equal x y then EQ else NC)
 
 
   let mapping (type k) (type o) ?(equal=(fun _ _ -> true))
@@ -203,11 +203,11 @@ module Domain = struct
       | _,_,_ -> NC in
     define ~inspect ~empty ~order name
 
-  let optional ?inspect name =
+  let optional ?inspect ~equal name =
     let inspect = match inspect with
       | None -> None
       | Some sexp_of_elt -> Some (sexp_of_option sexp_of_elt) in
-    flat ?inspect ~empty:None ~is_empty:Option.is_none name
+    flat ?inspect ~empty:None ~equal:(Option.equal equal) name
 
   let string = define "string" ~empty:""
       ~inspect:sexp_of_string ~order:(fun x y ->
@@ -813,7 +813,7 @@ module Knowledge = struct
             let sexp_of_t = sexp_of_t
             include Comparator
           end)
-        let domain = Domain.flat ~empty ~is_empty:(equal empty)
+        let domain = Domain.flat ~empty ~equal
             ~inspect:sexp_of_t
             (Class.name cls)
       end in
