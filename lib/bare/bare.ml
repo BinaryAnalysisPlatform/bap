@@ -269,7 +269,7 @@ module Rule = struct
     | Unbound (v,r) ->
       fprintf ppf "%a:@\nError: Unbound variable %s@\n" pp_range r v
     | Wildcard r ->
-      fprintf ppf "%a:@\nError: Wilcards are not allowed on the right hand side@\n"
+      fprintf ppf "%a:@\nError: Wildcards are not allowed on the right hand side@\n"
         pp_range r
     | Not_a_sexp perr ->
       Parsexp.Parse_error.report ppf ~filename perr

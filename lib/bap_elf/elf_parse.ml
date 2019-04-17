@@ -438,6 +438,10 @@ let split bits size : bitstring * bitstring =
   | {|hd : size * 8 : bitstring;
       tl : -1       : bitstring|} -> hd,tl
 
+
+(* Bitlength needed that's why we multiply by 8 *)
+let bitstring_of_bytes b = b, 0, Bytes.length b * 8
+
 (** returns a sequence of table entries  *)
 let split_table ti ~pos ~len data : bitstring Sequence.t Or_error.t =
   let open Or_error in
@@ -445,10 +449,10 @@ let split_table ti ~pos ~len data : bitstring Sequence.t Or_error.t =
   int_of_int64 ti.table_offset >>= fun offset ->
   validate_offsets "table" ~pos ~len ~offset ~size:table_size
   >>= fun () ->
-  let bits = String.create table_size in
-  Bigstring.To_string.blit
+  let bits = Bytes.create table_size in
+  Bigstring.To_bytes.blit
     ~src:data ~src_pos:(pos + offset) ~dst:bits ~dst_pos:0 ~len:table_size;
-  let t = Sequence.unfold ~init:(bitstring_of_string bits)
+  let t = Sequence.unfold ~init:(bitstring_of_bytes bits)
       ~f:(fun bits -> Some (split bits ti.entry_size)) in
   return (Sequence.take t ti.entry_num)
 
@@ -467,12 +471,12 @@ let from_bigstring_exn ?(pos=0) ?len data =
   let data_len = Bigstring.length data in
   let len = Option.value len ~default:data_len in
   validate_bounds ~pos ~len ~data_len >>= fun () ->
-  let header = String.create elf_max_header_size in
-  Bigstring.To_string.blit
+  let header = Bytes.create elf_max_header_size in
+  Bigstring.To_bytes.blit
     ~src:data ~src_pos:pos ~dst:header ~dst_pos:0
     ~len:elf_max_header_size;
   let (elf, seg_ti, sec_ti) =
-    parse_elf_hdr (bitstring_of_string header) in
+    parse_elf_hdr (bitstring_of_bytes header) in
   let endian = endian_of elf.e_data in
   split_table seg_ti ~pos ~len data >>= fun ph ->
   split_table sec_ti ~pos ~len data >>= fun sh ->

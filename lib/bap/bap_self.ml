@@ -139,7 +139,7 @@ module Create() = struct
     let conf_file_options : (string, string) List.Assoc.t =
       let conf_filename =
         let (/) = Filename.concat in
-        Bap_config.confdir / "config" in
+        confdir / "config" in
       let string_splitter str =
         let str = String.strip str in
         match String.split str ~on:'=' with

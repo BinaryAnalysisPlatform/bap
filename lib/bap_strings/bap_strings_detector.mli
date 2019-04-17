@@ -4,7 +4,7 @@
     The detector uses maximum aposteriori likelihood estimator (MAP)
     to detect code that operates with textual data.
 
-    We define textual data as a contigious blocks of characters from
+    We define textual data as a contiguous blocks of characters from
     a specified alphabet.
 
     In our model a code is a sequence of instructions. Each
@@ -14,7 +14,7 @@
     produced by unknown values that are used during the
     computation. Some of these values are textual data. Any particular
     instruction either works with data produced by textual values or
-    not. Moreover, we're looking for contigious sequences of
+    not. Moreover, we're looking for contiguous sequences of
     instructions that work with textual value.
 
     The detector doesn't depend on a particular instruction
@@ -80,7 +80,7 @@ val create :
 
 
 (** [run detector trace] runs a [detector] on a sequence on a [trace]
-    represented as a sequence of bytes accessed during an exection.
+    represented as a sequence of bytes accessed during an execution.
     Returns a sequence of char sequences, where each subsequence is
     represented as a string and contains characters that were assumed
     to belong to the textual data.

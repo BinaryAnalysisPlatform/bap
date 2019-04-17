@@ -42,7 +42,12 @@ module Documentation = struct
     let print =
       Doc.generate_index >>| fun index ->
       printf "%a@\n%!" pp_index index in
-    ignore (Main.run proj print)
+    match Main.run proj print with
+    | Normal, _ -> ()
+    | Exn e, _ ->
+       eprintf "Failed to generate documentation: %s\n"
+         (Primus.Exn.to_string e);
+       exit 1
 end
 
 module Signals(Machine : Primus.Machine.S) = struct
@@ -81,29 +86,29 @@ module Signals(Machine : Primus.Machine.S) = struct
 
   let init = Machine.sequence Primus.Interpreter.[
       signal loaded (value,value) pair
-        {|(loaded A X) is emited when X is loaded from A|};
+        {|(loaded A X) is emitted when X is loaded from A|};
       signal stored (value,value) pair
-        {|(stored A X) is emited when X is stored to A|};
+        {|(stored A X) is emitted when X is stored to A|};
       signal read  (var,value) pair
-        {|(read V X) is emited when X is read from V|};
+        {|(read V X) is emitted when X is read from V|};
       signal written (var,value) pair
-        {|(written V X) is emited when X is written to V|};
+        {|(written V X) is emitted when X is written to V|};
       signal pc_change word one
-        {|(pc-change PC) is emited when PC is updated|};
+        {|(pc-change PC) is emitted when PC is updated|};
       signal eval_cond value one
         {|(eval_cond V) is emitted after evaluating a conditional to V|};
       signal jumping (value,value) pair
-        {|(jumping C D) is emited before jump to D occurs under the
+        {|(jumping C D) is emitted before jump to D occurs under the
           condition C|};
       signal Primus.Linker.Trace.call parameters call
-        {|(call NAME X Y ...) is emited when a call to a function with the
+        {|(call NAME X Y ...) is emitted when a call to a function with the
           symbolic NAME occurs with the specified list of arguments X,Y,...|};
       signal Primus.Linker.Trace.return parameters call
-        {|(call-return NAME X Y ... R) is emited when a call to a function with the
+        {|(call-return NAME X Y ... R) is emitted when a call to a function with the
           symbolic NAME returns with the specified list of arguments
           X,Y,... and return value R.|};
       signal interrupt int one
-        {|(interrupt N) is emited when the hardware interrupt N occurs|};
+        {|(interrupt N) is emitted when the hardware interrupt N occurs|};
       Lisp.signal Primus.Machine.init (fun () -> Machine.return [])
         ~doc:{|(init) occurs when the Primus Machine is initialized|};
       Lisp.signal Primus.Machine.finished (fun () -> Machine.return [])
@@ -201,7 +206,7 @@ let () =
 
   Config.when_ready (fun {Config.get=(!)} ->
       if !documentation then
-        Project.register_pass' ~autorun:true Documentation.print;
+        Project.register_pass' ~deps:["api"] ~autorun:true Documentation.print;
       let paths = [Filename.current_dir_name] @ !libs @ [Lisp_config.library] in
       let features = "init" :: !features in
       Primus.Machine.add_component (module LispCore);

@@ -21,7 +21,7 @@ open Bap_c_type
     Override [enter_T] if an element shouldn't be morphed. The
     combination of [enter_t], [leave_T] allows to perform different
     visiting strategies. If mapping is needed then a [map_T] method
-    should be overriden. A usual pattern would be:
+    should be overridden. A usual pattern would be:
 
     {[
       class my_mapper = object(self)

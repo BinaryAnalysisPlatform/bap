@@ -75,7 +75,7 @@ val map : 'a t -> f:('a -> 'b) -> 'b t
 
 (** [mapi m f] the same as [map], but [f] is called with two
     arguments: [mem] and [tag], where [mem] is a memory region,
-    and [tag] is a [tag] assosiated with that region. *)
+    and [tag] is a [tag] associated with that region. *)
 val mapi : 'a t -> f:(mem -> 'a -> 'b) -> 'b t
 
 val filter : 'a t -> f:('a -> bool) -> 'a t
@@ -86,7 +86,7 @@ val filter : 'a t -> f:('a -> bool) -> 'a t
 val filter_map : 'a t -> f:('a -> 'b option) -> 'b t
 
 (** [filter_mapi] is like [filter_map] but use function also accepts
-    would assosiated memory region *)
+    would associated memory region *)
 val filter_mapi : 'a t -> f:(mem -> 'a -> 'b option) -> 'b t
 
 (** [remove map mem] removes all bindings to [mem]  *)

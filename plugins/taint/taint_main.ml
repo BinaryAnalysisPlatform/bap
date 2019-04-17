@@ -137,7 +137,7 @@ specified address. If a variable is passed, the the definition is
 tainted if it defines a variable with the given name. Finally, if tid
 is specified, then a definition must have the specified tid to be
 tainted. If several strains are specified, then all conditions must be
-satisfied. Consider ther following examples, |};
+satisfied. Consider the following examples, |};
     `Pre {|
      --taint-reg=0xBAD
      --taint-ptr=strcpy_dst

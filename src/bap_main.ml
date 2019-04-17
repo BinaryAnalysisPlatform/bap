@@ -148,7 +148,7 @@ let program_info =
       $(mname) [PLUGIN OPTION]... --$(i,PLUGIN)-help
       $(mname) $(i,FILE) [PLUGIN OPTION]... [OPTION]...";
     `S "DESCRIPTION";
-    `P "A frontend to the Binary Analysis Platfrom library.
+    `P "A frontend to the Binary Analysis Platform library.
       The tool allows you to inspect binary programs by printing them
       in different representations including assembly, BIL, BIR,
       XML, HTML, JSON, Graphviz dot graphs and so on.";

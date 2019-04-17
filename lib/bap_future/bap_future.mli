@@ -228,7 +228,7 @@ module Std : sig
       (** [('f,'r) t] is a list of arguments, where ['f] defines the
           arrow type of the arguments, and ['r] is the return type.
           C.f., ['f] and ['r] with the first and last parameter of
-          the [format] type constuctor.
+          the [format] type constructor.
       *)
       type ('f,'r) t
 
@@ -372,7 +372,7 @@ module Std : sig
     module Variadic : Variadic.S with type 'a arg = 'a t
 
 
-    (** [create ()] retuns a stream and a signal handler that is used
+    (** [create ()] returns a stream and a signal handler that is used
         to feed the stream. Every time a value is signaled, it will
         occur in the stream. *)
     val create : unit -> 'a t * 'a signal
@@ -534,7 +534,7 @@ module Std : sig
     (** [concat_merge xs ~f] builds a stream, that will 
         produce elements from the input list and applies [f] to all 
         consecutive elements. The ordering of the input list does not 
-        mandate the ordering of elemenets in the output stream, and is
+        mandate the ordering of elements in the output stream, and is
         undefined. See [concat] for more information.*)
     val concat_merge : 'a t list -> f:('a -> 'a -> 'a) -> 'a t
 

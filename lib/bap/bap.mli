@@ -69,7 +69,7 @@ module Std : sig
       The standard library tries to be as extensible as possible. We
       are aware, that there are not good solutions for some problems, so
       we don't want to force our way of doing things. In short, we're
-      trying to provide mechanisms, not policies. We achive this by
+      trying to provide mechanisms, not policies. We achieve this by
       employing the dependency injection principle. By inversing the
       dependency we allow the library to depend on a user code. For
       example, a user code can teach the library how to disassemble
@@ -621,6 +621,8 @@ module Std : sig
     module Make(T : Base) : S with type t = T.t
   end
 
+  (**/**)
+
   (** Legacy
       @deprecated Definitions in this module are deprecated
    **)
@@ -1154,7 +1156,7 @@ module Std : sig
       Examples:
       [0x5D:32s, 0b0101:16u, 5:64, +5:8, +0x5D:16].
 
-      If [base] is omitted base-10 is assumed. If the kind is ommited,
+      If [base] is omitted base-10 is assumed. If the kind is omitted,
       then the usigned kind is assumed. The output format is always in
       a hex representation with a full prefix.  . *)
   module Bitvector : sig
@@ -1702,7 +1704,7 @@ module Std : sig
     *)
     module Int_exn : Integer.S with type t = t
 
-    (** Arithmentic operations that doesn't check the widths.*)
+    (** Arithmetic operations that doesn't check the widths.*)
     module Unsafe  : Integer.S with type t = t
 
     (** Stable marshaling interface.  *)
@@ -2159,7 +2161,7 @@ module Std : sig
     val is_referenced : var -> stmt list -> bool
 
     (** [is_assigned x p] is [true] if there exists such [Move]
-        statement, that [x] occures on the left side of it. If
+        statement, that [x] occurs on the left side of it. If
         [strict] is true, then only unconditional assignments are
         accounted. By default, [strict] is [false] *)
     val is_assigned : ?strict:bool -> var -> stmt list -> bool
@@ -2201,7 +2203,7 @@ module Std : sig
         order is to recall the sed's [s/in/out] syntax. *)
     val substitute : exp -> exp -> stmt list -> stmt list
 
-    (** [substitute_var x y p] substitutes all free occurences of
+    (** [substitute_var x y p] substitutes all free occurrences of
         variable [x] in program [p] by expression [y]. A variable is
         free if it is not bounded in a preceding statement or not bound
         with let expression.  *)
@@ -2270,7 +2272,7 @@ module Std : sig
         consistency and efficiency bytes are still reprented with
         bitvectors.
 
-        Storages should not take care of aliasing or endiannes, as they
+        Storages should not take care of aliasing or endianness, as they
         are byte addressable. All memory operations are normalized by
         Bili.
 
@@ -2418,7 +2420,7 @@ module Std : sig
         names and immediate values. Depending on your context it may be
         find or not. For example, two [SP] variables may compare as different
         if one of them was obtained from different compilation (and met
-        the other one through some persistant storage, e.g., file on hard
+        the other one through some persistent storage, e.g., file on hard
         disk). Moreover, BIL obtained from different lifters will have
         different names for the same registers. All this issues are
         addressed in normalized [Trie]. *)
@@ -2426,7 +2428,7 @@ module Std : sig
       type normalized_bil
 
       (** [normalize ?subst bil] normalize BIL. If [subst] is provided,
-          then substitute each occurence of the fst expression to the
+          then substitute each occurrence of the fst expression to the
           snd expression before the normalization. The effect of
           normalization is the following:
 
@@ -2628,7 +2630,7 @@ module Std : sig
       BIL variables are regular values. Variables can have
       indices. Usually the index is used to represent the same
       variable but at different time or space (control flow path).
-      This is particulary useful for representing variables in SSA
+      This is particularly useful for representing variables in SSA
       form.
 
       By default, comparison function takes indices into account. In
@@ -2663,10 +2665,10 @@ module Std : sig
     *)
     val create : ?is_virtual:bool -> ?fresh:bool -> string -> typ -> t
 
-    (** [name var] returns a name assosiated with variable  *)
+    (** [name var] returns a name associated with variable  *)
     val name : t -> string
 
-    (** [typ var] returns a type assosiated with variable  *)
+    (** [typ var] returns a type associated with variable  *)
     val typ : t -> typ
 
     (** [is_physical v] is [true] if [v] represents a contents of a
@@ -2745,7 +2747,7 @@ module Std : sig
       types for Expi, Bili, and Biri.
 
       Note, this is a low-level interface that can be used if you want
-      to build your own evaluators (interpeters). If you want to use
+      to build your own evaluators (interpreters). If you want to use
       already existing interpreter without drastically changing the
       semantics of BIL consider using the Primus Framework.
 
@@ -3065,7 +3067,7 @@ module Std : sig
 
         (** {2 Error conditions}  *)
 
-        (** a given typing error has occured  *)
+        (** a given typing error has occurred  *)
         method type_error : type_error -> 'a r
 
         (** we can't do this!  *)
@@ -3234,7 +3236,7 @@ module Std : sig
         possible for the expression to have this effect.
 
         The analysis applies a simple abstract interpretation to
-        approximate arithmetics and prove an absence of the division
+        approximate arithmetic and prove an absence of the division
         by zero. The load/store/read analysis is more precise than
         the division by zero, as the only source of the imprecision
         is a presence of conditional expressions.
@@ -3260,7 +3262,7 @@ module Std : sig
         position of the visitor *)
     class state : object
 
-      (** a stack of expr, that are parents for the currenly visiting
+      (** a stack of expr, that are parents for the currently visiting
           expression *)
       val exps_stack  : exp  list
 
@@ -3436,7 +3438,7 @@ module Std : sig
         something. See also {!Bil.exists} and {Stmt.exists}  *)
     val exists : unit #finder -> t -> bool
 
-    (** [substitute pat rep x] subsitutes each occurence of an
+    (** [substitute pat rep x] subsitutes each occurrence of an
         expression [pat] in [x] with an expression [rep] *)
     val substitute : exp -> exp -> exp -> exp
 
@@ -3473,7 +3475,7 @@ module Std : sig
         computation, e.g., [1 + 2 -> 3]
 
         - neutral element elimination: binary operations with one of
-        the operands being known to be neutral, are subtituted with
+        the operands being known to be neutral, are substituted with
         the other operand, e.g., [x * 1 -> x]
 
         - zero element propagation: binary operations applied to a
@@ -3496,7 +3498,7 @@ module Std : sig
         to the unary negation, e.g., [0 - x -> -x]
 
         - exclusive disjunction reduction: reduces an exclusive
-        disjunction of syntactically equal expresions to zero, e.g,
+        disjunction of syntactically equal expressions to zero, e.g,
         [42 ^ 42 -> 0]. Note, by default a read from a register is
         considered as a (co)effect, thus [xor eax eax] is not
         reduced, consider passing [~ignore:[Eff.reads]] if you want
@@ -3742,11 +3744,11 @@ module Std : sig
 
         - Memory load expressions can be only applied to a memory. This
         effectively disallows creation of temporary memory regions,
-        and requires all store operations to be commited via the
-        assignemnt operation. Also, this provides a guarantee, that
-        store expressions will not occur in integer assigments, jmp
+        and requires all store operations to be committed via the
+        assignment operation. Also, this provides a guarantee, that
+        store expressions will not occur in integer assignments, jmp
         destinations, and conditional expressions, leaving them valid
-        only in an assignment statment where the rhs has type mem_t.
+        only in an assignment statement where the rhs has type mem_t.
         This is effectively the same as make the [Load] constructor to
         have type ([Load (var,exp,endian,size)]).
 
@@ -3763,7 +3765,7 @@ module Std : sig
         the Move instruction.
 
         - All memory operations have sizes equal to one byte. Thus the
-        size and endiannes can be ignored in analysis. During the
+        size and endianness can be ignored in analysis. During the
         normalization, the following rewrites are performed
         {v
        let x = <expr> in ... x ... => ... <expr> ...
@@ -4292,7 +4294,7 @@ module Std : sig
 
     (** [create ?capacity default] creates an empty vector with a a given
         [capacity]. It is guaranteed that the default value will never
-        be seen by the user unless he put it into the vector explicitely
+        be seen by the user unless he put it into the vector explicitly
         with [append] or [set].
     *)
     val create : ?capacity:int -> 'a -> 'a t
@@ -4316,7 +4318,7 @@ module Std : sig
         [Container.S1] interface *)
     val map_to_array : 'a t -> f:('a -> 'b) -> 'b array
 
-    (** [findi xs ~f] retuns an index [i] and a value [x] of the first
+    (** [findi xs ~f] returns an index [i] and a value [x] of the first
         element of [xs], for which [f i x] is [true].  *)
     val findi : 'a t -> f:(int -> 'a -> bool) -> (int * 'a) option
 
@@ -4787,7 +4789,7 @@ module Std : sig
       val int64  : word reader
     end
 
-    (** {2 Printing and outputing}  *)
+    (** {2 Printing and outputting}  *)
     include Printable.S with type t := t
 
     (** [hexdump t out] outputs hexdump (as per [hexdump -C]) of the
@@ -4851,7 +4853,7 @@ module Std : sig
   (** Table.
 
       Tables are used to partition memory region into a set of
-      non-intersecting areas. Each area is assosiated with arbitrary
+      non-intersecting areas. Each area is associated with arbitrary
       value of type ['a] bound to the type of the table.
 
       All operations over tables are purely applicative, i.e. there is
@@ -4994,7 +4996,7 @@ module Std : sig
     (** [rev_map arity t tab] creates a reverse mapping from values of
         typeclass [t] stored in table [tab] to memory regions.
 
-        Note. not every mapping is reversable, for example, trying to obtain
+        Note. not every mapping is reversible, for example, trying to obtain
         a reverse of surjective mapping as a one-to-one mapping will
         result in an error. But surjective mappings can be reversed
         using [~one_to:many] mapping. A particular example of surjective
@@ -5217,7 +5219,7 @@ module Std : sig
     (** {2 Constructing}  *)
 
     (** constructing an image can result in actual image and a set
-        (hopefully empty) of errors occured in a process of decoding an
+        (hopefully empty) of errors occurred in a process of decoding an
         image, that do not prevent us from actually creating an image. So,
         this information messages can be considered as warnings. *)
     type result = (t * Error.t list) Or_error.t
@@ -5226,7 +5228,7 @@ module Std : sig
         specified by the [filename]. If [backend] is equal to "auto", then
         all backends are tried in order. If only one backend can read this
         file (i.e., there is no ambiguity), then image is returned. If
-        [backend] is not specifed, then the LLVM backend is used. *)
+        [backend] is not specified, then the LLVM backend is used. *)
     val create : ?backend:string -> path -> result
 
     (** [of_string ?backend ~data] creates an image from the specified
@@ -5561,7 +5563,7 @@ module Std : sig
 
     (** [mapi m f] the same as [map], but [f] is called with two
         arguments: [mem] and [tag], where [mem] is a memory region,
-        and [tag] is a [tag] assosiated with that region. *)
+        and [tag] is a [tag] associated with that region. *)
     val mapi : 'a t -> f:(mem -> 'a -> 'b) -> 'b t
 
     (** [filter map f] returns a map that contains only those elements
@@ -5574,7 +5576,7 @@ module Std : sig
     val filter_map : 'a t -> f:('a -> 'b option) -> 'b t
 
     (** [filter_mapi] is like [filter_map] but use function also accepts
-        would assosiated memory region *)
+        would associated memory region *)
     val filter_mapi : 'a t -> f:(mem -> 'a -> 'b option) -> 'b t
 
     (** [remove map mem] removes all bindings to [mem]  *)
@@ -5831,7 +5833,7 @@ module Std : sig
           disassembler for the specified [target]. All parameters are
           backend specific, consult the concrete backend for more
           information. In general, the greater [debug_level] is, the
-          more debug information will be outputed by a backend. To
+          more debug information will be outputted by a backend. To
           silent backend set it [0]. This is a default value. Example:
 
           [create ~debug_level:3 ~backend:"llvm" "x86_64" ~f:process]
@@ -5895,7 +5897,7 @@ module Std : sig
           valid instruction), it defaults to [step], i.e., to skipping.
 
           [hit state mem insn data] is called when one of the predicates
-          specifed by a user was hit. [insn] is actually the instruction
+          specified by a user was hit. [insn] is actually the instruction
           that satisfies the predicate. [mem] is a memory region spanned by
           the instruction. [data] is a user data. [insn] can be queried for
           assembly string and kinds even if the corresponding modes are
@@ -5910,7 +5912,7 @@ module Std : sig
         return:('s -> 'r) ->
         init:'s -> mem -> 'r
 
-      (** [insn_of_mem dis mem] performes a disassembly of one instruction
+      (** [insn_of_mem dis mem] performs a disassembly of one instruction
           from the a given memory region [mem]. Returns a tuple
           [imem,insn,`left over] where [imem] stands for a piece of memory
           consumed in a process of disassembly, [insn] can be [Some ins] if
@@ -6180,7 +6182,7 @@ module Std : sig
     (** [is property insn] is [true] if [insn] has [property]  *)
     val is  : must property -> t -> bool
 
-    (** [may propery insn] is [true] if [insn] has [property]  *)
+    (** [may property insn] is [true] if [insn] has [property]  *)
     val may : may  property -> t -> bool
 
     (** [must property insn] postulate that [insn] must have the [property]  *)
@@ -6683,7 +6685,7 @@ module Std : sig
   val target_of_arch : arch -> (module Target)
 
   (** Register new target architecture. If target for the given arch
-      already exists, then it will be superseeded by the new
+      already exists, then it will be superseded by the new
       target.  *)
   val register_target : arch -> (module Target) -> unit
 
@@ -6854,7 +6856,7 @@ module Std : sig
         [id], if such exists.  *)
     val next : ('a,'b) cls -> 'a t -> tid -> 'b t option
 
-    (** [prev t p id] returns a term that preceeds a term with a given
+    (** [prev t p id] returns a term that precedes a term with a given
         [id], if such exists.  *)
     val prev : ('a,'b) cls -> 'a t -> tid -> 'b t option
 
@@ -6866,7 +6868,7 @@ module Std : sig
     val after : ('a,'b) cls -> ?rev:bool -> 'a t -> tid -> 'b t seq
 
     (** [before t ?rev p tid] returns all term that occurs before
-        defintion with a given [tid] in blk. If there is no such
+        definition with a given [tid] in blk. If there is no such
         definition, then the sequence will be empty.  @param rev has
         the same meaning as in {!after}.  *)
     val before : ('a,'b) cls -> ?rev:bool -> 'a t -> tid -> 'b t seq
@@ -6953,7 +6955,7 @@ module Std : sig
 
     (** {2 Higher order mapping}  *)
 
-    (** Mapper perfoms deep identity term mapping. If you override any
+    (** Mapper performs deep identity term mapping. If you override any
         method make sure that you didn't forget to invoke parent's
         method, as OCaml will not call it for you.  *)
     class mapper : object
@@ -7809,7 +7811,7 @@ module Std : sig
 
         (** [register name cons] registers a method that creates a given
             source of information. If a method with the given name already
-            exists, then it will be superceeded by a new one.  *)
+            exists, then it will be superseded by a new one.  *)
         val register : string -> t source -> unit
       end
 
@@ -7933,7 +7935,7 @@ module Std : sig
           dependency - the consistency with BIR and BIL. Consider, BIL's
           [if] statement or BIR's conditional jump. If we will start to
           propagate taint from condition in [ite] expression, then we should
-          also propagate it in BIL's and BIR's conditionals. Unfortunatelly
+          also propagate it in BIL's and BIR's conditionals. Unfortunately
           the latter is not possible.
 
       *)
@@ -8413,7 +8415,7 @@ module Std : sig
         during the project reconstruction. See {!Project.create}
         function for more information on the reconstruction process. *)
     module Info : sig
-      (** occurs everytime a new file is opened. The value is a filename  *)
+      (** occurs every time a new file is opened. The value is a filename  *)
       val file : string stream
 
       (** occurs once input architecture is known  *)
@@ -8425,10 +8427,10 @@ module Std : sig
       (** occurs once code segment is discovered  *)
       val code : value memmap stream
 
-      (** occurs everytime a whole program control flow graph is changed  *)
+      (** occurs every time a whole program control flow graph is changed  *)
       val cfg : cfg stream
 
-      (** occurs everytime a symbol table is changed  *)
+      (** occurs every time a symbol table is changed  *)
       val symtab : symtab stream
 
       (** occurs every time a program term is changed during the
@@ -8593,7 +8595,7 @@ module Std : sig
       scope.
 
       It is designed to be used inside a plugin, but can be used in
-      a standalone program as well (this is usefull, for debugging
+      a standalone program as well (this is useful, for debugging
       plugins, by running them as a standalone applications).
 
       If run in a standalone mode, then field [name] would be set to
@@ -8655,10 +8657,10 @@ module Std : sig
         the total number of stages [s']. The note [n] may provide an
         additional textual explanation of the current stage. The report
         doesn't mean that the stage is finished, but rather that it is
-        entered. Thus for [s'] stages we expect to recieve [s'-1]
+        entered. Thus for [s'] stages we expect to receive [s'-1]
         reports. (This approach works fine with functional programming
         and iterating - as in functional programming it is more
-        convinient to report before computation, and during the indexed
+        convenient to report before computation, and during the indexed
         iteration the index of the last element is one less than the
         total number of elements).
 
@@ -8982,7 +8984,7 @@ module Std : sig
 
         A file named [log] is created in the [logdir] folder. If such
         file already exists in this folder, then the log rotation is
-        initated - the existing [log] file is renamed to [log~1],
+        initiated - the existing [log] file is renamed to [log~1],
         [log~1] to [log~2] and so on until there are no more files to
         rename, or the [log~99] is reached which is discarded
         (unlinked).

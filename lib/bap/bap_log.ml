@@ -54,13 +54,30 @@ let print_message ppf msg =
   | Error -> eprintf "%s@\n%!" msg.message
   | _ -> ()
 
+let lock_filename logdir =
+  let digest = Md5.digest_string logdir in
+  let name = sprintf "bap-%s.lock" (Md5.to_hex digest) in
+  Filename.get_temp_dir_name () / name
+
+let lock file =
+  let lock = Unix.openfile file Unix.[O_RDWR; O_CREAT] 0o666 in
+  Unix.lockf lock Unix.F_LOCK 0;
+  lock
+
+let unlock lock =
+  Unix.lockf lock Unix.F_ULOCK 0;
+  Unix.close lock
+
 let open_log_channel user_dir =
   try
     let log_folder = log_folder user_dir in
-    mkdir log_folder;
     let file = log_folder / "log" in
-    if Sys.file_exists file
-    then rotate max_logs file;
+    let lock = lock (lock_filename log_folder) in
+    protect ~f:(fun () ->
+        mkdir log_folder;
+        if Sys.file_exists file
+        then rotate max_logs file)
+      ~finally:(fun () -> unlock lock);
     let ch = Out_channel.create file in
     formatter_of_out_channel ch
   with exn ->

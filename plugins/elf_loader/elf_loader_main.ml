@@ -44,11 +44,11 @@ let section_data  data s : string Or_error.t =
   int_of_int64 s.sh_size >>= fun size ->
   int_of_int64 s.sh_offset >>= fun offset ->
   try
-    let dst = String.create size in
-    Bigstring.To_string.blit
+    let dst = Bytes.create size in
+    Bigstring.To_bytes.blit
       ~src:data ~src_pos:offset
       ~dst ~dst_pos:0 ~len:size;
-    return dst
+    return (Bytes.to_string dst)
   with exn -> of_exn exn
 
 let create_symtab data endian elf  =
@@ -90,7 +90,7 @@ let create_symtab data endian elf  =
 
 (** @return
     [None] - if segment should be skipped as non interesting,
-    [Some error] - if an error has occured when we have tried
+    [Some error] - if an error has occurred when we have tried
                    to load segment,
     [Some (Ok segment)] - if we have loaded segment at the end.
 *)

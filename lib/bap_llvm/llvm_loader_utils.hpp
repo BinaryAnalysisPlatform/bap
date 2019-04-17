@@ -25,7 +25,7 @@ std::string escape(const std::string &src) {
 
 // ogre doc
 // makes it easy to brew an ogre document.
-// It's recomended to use it in the folowing ways:
+// It's recommended to use it in the following ways:
 // ...
 // doc.entry("entry-name") << 42 << false;
 // ...

@@ -24,8 +24,8 @@
     means, that a definition (i.e., a meaning of a name) can have
     multiple implementation (represented with different
     formulae). This is made by specifying a context of applicapibility
-    of a definiton. During the compile time the most suitable
-    definition is used (i.e., a defintion that is applicable and is
+    of a definition. During the compile time the most suitable
+    definition is used (i.e., a definition that is applicable and is
     the most specific from the set of all applicable definitions).
 
     The property of being most suitable is defined by the partial
@@ -69,7 +69,7 @@
     The idea is that it defines a new class of observations, that are
     derived from three other classes: memcheck-acquire,
     memcheck-release, and memcheck-violate. An additional constraint
-    is that the `?ptr` field of these threee events should be equal.
+    is that the `?ptr` field of these three events should be equal.
 
     The class above is represented as the following BARE rule:
 
@@ -118,7 +118,7 @@
 
     v}
 
-    This is, however, requres each slot of an observation class to be
+    This is, however, requires each slot of an observation class to be
     a value, not a symbol. So, we need to think more about it, maybe
     slots that are values, should be defined differently.
 
@@ -126,7 +126,7 @@
     {2 Method combination or super notation}
 
     The idea of the subtyping polymorphism is to provide a mechanism
-    for extensible refinement of a defintion. I.e., we start with a
+    for extensible refinement of a definition. I.e., we start with a
     generic definition and then extend it (without modification) in
     some more specific context. However, currently, there is no
     mechanisms to access a more general definition from a context of

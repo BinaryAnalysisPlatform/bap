@@ -4,7 +4,7 @@
 (defconstant nil false "nil is another name for false")
 
 (defmacro when (cnd body)
-  "(when CND BODY) if CND is true then evalutes BODY and returns the
+  "(when CND BODY) if CND is true then evaluates BODY and returns the
    value of last expression in BODY, otherwise returns false."
   (if cnd (prog body) ()))
 

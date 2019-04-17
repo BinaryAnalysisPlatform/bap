@@ -1,3 +1,31 @@
+1.6.0
+=====
+
+### Features
+
+#893  adds integration with ida 7
+#892  implements helper functions for creating and manipulating partitions
+#906  makes dead code elimination less conservative
+#914  preserves brancher information in the BIL code of an instruction
+#820  Jane Street 0.11.x library compatibility + minor fixes
+#922  few x86 enhancements
+#923  SSE XMM0 ABI
+#933  enables bap-elf
+#934  adds the compiler option to byteweight
+#932  enables memory sharing between instructions
+#938  removed upper bound for llvm version, compatibility with LLVM 8.0
+#926  enables functions with multiple entry
+
+### Bug fixes
+
+#907  fixes the free-vars-by-dominators computation algorithm
+#915  fixed building on travis
+#920  fix the i64 import error
+#927  fixes ADT printer
+#939  fixes the order of arguments in the callsites plugin
+#937  fixes TOCTOU bug in bap log
+#941  fixes a dependency bug in primus lisp docs
+
 1.5.0
 =====
 
@@ -96,7 +124,7 @@
   - MachO Kernel Bundles (LLVM 3.8+ only)
   - Plain object files
   - Shared libraries
-- PR#630 Enhancments in IDA plugin
+- PR#630 Enhancements in IDA plugin
 
 
 ### Bug fixes
@@ -139,7 +167,7 @@
 
 - A powerful plugin system
 - Split Bap.Std into several libraries.
-- The disassembler layer is severly rewritten
+- The disassembler layer is severely rewritten
 - Made project storable and loadable
 - Added new injection points
 - Added BIL interpreters
@@ -160,8 +188,8 @@
    `Graphlib` is a generic library that extends a well known
    OCamlGraph library. `Graphlib` uses its own, more reach and modern,
    `Graph` interface that is isomorphic to OCamlGraph's `Sigs.P`
-   signature for persistant graphs. This interface is developed
-   according to the Janestreet's style guidlines and depends on
+   signature for persistent graphs. This interface is developed
+   according to the Janestreet's style guidelines and depends on
    Core_kernel library.  Other than the new interface, `Graphlib`
    provides several graph implementations, and generic algorithms.  To
    make our algorithms polymorphic over chosen graph representation we
@@ -171,7 +199,7 @@
 2. Refined IR.
 
    phi and arg terms were refined. a phi term now is a discriminated
-   set of expressions, and arguments are made more like a defintions.
+   set of expressions, and arguments are made more like a definition.
 
 3. SSA form
 
@@ -278,7 +306,7 @@
 
    Complex hierarchy is now hidden under one umbrella `bap.mli`.
    `Bap_*` modules are marked as internal and is no more installable
-   and, thus, they do not polute the namespace. This will of course,
+   and, thus, they do not pollute the namespace. This will of course,
    break the code that used this internal modules. It is intended
    behavior.
 
@@ -468,7 +496,7 @@ traversing for you, allowing you to override default behavior. Some
 handy algorithms, that use visitors are provided in an internal
 Bap_helpers module, that is included into resulting Bil
 module. Several optimizations were added to bap-objdump utility, like
-constant propogation, inlining, pruning unused variables and resolving
+constant propagation, inlining, pruning unused variables and resolving
 addresses to symbols.
 
 5. Insn interface now provides predicates to query insn classes, this

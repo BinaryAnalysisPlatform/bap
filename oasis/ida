@@ -1,7 +1,7 @@
 ########### Bap_ida Library #############################
 
 Flag ida
-  Description: Build IDA intergration library
+  Description: Build IDA integration library
   Default: false
 
 Library bap_ida

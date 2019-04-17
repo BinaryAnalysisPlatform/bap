@@ -29,7 +29,7 @@ open Bap_primus.Std
     if an address size is 4 bytes, then SP+4 will point to the first
     argument (program name), SP+8 to the first specified command line
     argument, and so on. A null will follow the last argument. After
-    that the same null terminated table of environemnt variables will
+    that the same null terminated table of environment variables will
     follow. (It can be easy accessed via the [environ] symbol
 
     Note: the layout of the main function stack frame is not

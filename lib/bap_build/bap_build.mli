@@ -1,4 +1,4 @@
-(** bapbuild implentation library *)
+(** bapbuild implementation library *)
 
 
 (** bapbuild support library.

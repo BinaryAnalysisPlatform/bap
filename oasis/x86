@@ -28,6 +28,7 @@ Library x86_plugin
                    X86_cdq,
                    X86_cmpxchg,
                    X86_disasm,
+                   X86_endbr,
                    X86_lifter,
                    X86_main,
                    X86_mov,

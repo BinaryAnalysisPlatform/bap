@@ -19,31 +19,39 @@ let ignored = [
 module BW = Bap_byteweight.Bytes
 module Sigs = Bap_byteweight_signatures
 
-let train_on_file meth length db path : (unit,'a) Result.t =
-  Image.create path >>= fun (img,warns) ->
+let load ?comp meth db arch =
+  if not (Sys.file_exists db) then Ok (BW.create ())
+  else match Sigs.load ?comp ~mode:"bytes" ~path:db arch with
+       | Ok s -> if meth = `update
+          then Ok (Binable.of_string (module BW) (Bytes.to_string s))
+          else Ok (BW.create ())
+    | Error (`No_entry _) -> Ok (BW.create ())
+    | Error e ->
+      Or_error.errorf "can't update entry, because %s"
+        (Sigs.string_of_error e)
+
+let train_on_file comp meth length db path : (unit,'a) Result.t =
+  Image.create path >>= fun (img,_warns) ->
   let arch = Image.arch img in
   let symtab = Addr.Table.create () in
   Table.iteri (Image.symbols img) ~f:(fun mem _ ->
       Addr.Table.add_exn symtab ~key:(Memory.min_addr mem) ~data:());
   let test mem = Addr.Table.mem symtab (Memory.min_addr mem) in
-  let bw = if not (Sys.file_exists db) then Ok (BW.create ())
-    else match Sigs.load ~mode:"bytes" ~path:db arch with
-      | Ok s -> if meth = `update
-        then Ok (Binable.of_string (module BW) (Bytes.to_string s))
-        else Ok (BW.create ())
-      | Error _ when meth = `rewrite -> Ok (BW.create ())
-      | Error e ->
-        Or_error.errorf "can't update entry, because %s"
-          (Sigs.string_of_error e)  in
-  bw >>= fun bw ->
-  Table.iteri (Image.segments img) ~f:(fun mem sec ->
-      if Image.Segment.is_executable sec then
-        BW.train bw ~max_length:length test mem);
-  let data = Binable.to_string (module BW) bw in
-  Sigs.save ~mode:"bytes" ~path:db arch (Bytes.of_string data) |>
+  let bws =
+    let default = load meth db arch, None in
+    match comp with
+    | None -> [default]
+    | Some comp -> [default; load ~comp meth db arch, Some comp] in
+  List.map bws ~f:(fun (bw,comp) ->
+      bw >>= fun bw ->
+      Table.iteri (Image.segments img) ~f:(fun mem sec ->
+          if Image.Segment.is_executable sec then
+            BW.train bw ~max_length:length test mem);
+      let data = Binable.to_string (module BW) bw in
+      Sigs.save ?comp ~mode:"bytes" ~path:db arch (Bytes.of_string data) |>
   Result.map_error ~f:(fun e ->
       Error.createf "signatures are not updated: %s" @@
-      Sigs.string_of_error e)
+      Sigs.string_of_error e)) |> Result.all_unit
 
 let matching =
   let open FileUtil in
@@ -66,7 +74,7 @@ let train meth length comp db paths =
   let errors = ref 0 in
   List.iteri files ~f:(fun n path ->
       printf "[%3d / %3d] %-66s%!" (n+1) total path;
-      let r = match train_on_file meth length db path with
+      let r = match train_on_file comp meth length db path with
         | Ok () -> "OK"
         | Error err ->
           eprintf "Error: %a\n%!" Error.pp err;
@@ -77,9 +85,9 @@ let train meth length comp db paths =
   printf "Signatures are stored in %s\n%!" db;
   Ok ()
 
-let create_bw img path =
+let create_bw comp img path =
   let arch = Image.arch img in
-  Sigs.load ?path ~mode:"bytes" arch |>
+  Sigs.load ?comp ?path ~mode:"bytes" arch |>
   Result.map_error ~f:(fun e ->
       Error.createf "failed to read signatures from a database: %s"
         (Sigs.string_of_error e)) >>| fun data ->
@@ -87,7 +95,7 @@ let create_bw img path =
 
 let find threshold length comp path input =
   Image.create input >>= fun (img,_warns) ->
-  create_bw img path >>= fun bw ->
+  create_bw comp img path >>= fun bw ->
   Table.iteri (Image.segments img) ~f:(fun mem sec ->
       if Image.Segment.is_executable sec then
         let start = Memory.min_addr mem in
@@ -109,11 +117,11 @@ let symbols print_name print_size input =
       printf "%a %s%s\n" Addr.pp addr size name);
   printf "Outputted %d symbols\n" (Table.length syms)
 
-let dump info length threshold path (input : string) =
+let dump comp info length threshold path (input : string) =
   Image.create input >>= fun (img, _warns) ->
   match info with
   | `BW ->
-    create_bw img path >>= fun bw ->
+    create_bw comp img path >>= fun bw ->
     let fs_set = Table.foldi (Image.segments img) ~init:Addr.Set.empty
         ~f:(fun mem sec fs_s ->
             if Image.Segment.is_executable sec then
@@ -151,7 +159,7 @@ let fetch fname url =
   printf "Successfully downloaded to %s\n" fname
 
 let fetch fname url = try Ok (fetch fname url) with
-  | Curl.CurlException (err,n,_) ->
+  | Curl.CurlException (err,_n,_) ->
     Or_error.errorf "failed to fetch: %s" (Curl.strerror err)
   | exn -> Or_error.of_exn ~backtrace:`Get exn
 
@@ -212,9 +220,9 @@ module Cmdline = struct
   let threshold : float Term.t =
     let doc = "Decide that sequence starts a function \
                if m / n > $(docv),  where n is the total \
-               number of occurences of a given sequence in \
+               number of occurrences of a given sequence in \
                the training set, and m is how many times \
-               it has occured at the function start position." in
+               it has occurred at the function start position." in
     Arg.(value & opt float 0.5 &
          info ["threshold"; "t"] ~doc ~docv:"THRESHOLD")
 
@@ -251,7 +259,7 @@ module Cmdline = struct
 
   let dump =
     let doc = "Dump the function starts in a given executable by given tool" in
-    Term.(pure dump $tool $length $threshold $database_in $filename),
+    Term.(pure dump $compiler $tool $length $threshold $database_in $filename),
     Term.info "dump" ~doc
 
   let train =

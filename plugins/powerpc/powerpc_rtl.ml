@@ -172,7 +172,7 @@ module Exp = struct
     { sign = Unsigned; width; body = Vars (var, []); }
 
   let of_vars vars = match vars with
-    | [] -> ppc_fail "can't constuct an expression from empty var list"
+    | [] -> ppc_fail "can't construct an expression from empty var list"
     | v :: vars ->
       let width = width_of_vars (v::vars) in
       { sign = Unsigned; width; body = Vars (v, vars); }

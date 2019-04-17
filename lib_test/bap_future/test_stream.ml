@@ -173,7 +173,7 @@ let has_subscribers ctxt =
   let assert_no_subscribers ss = 
     assert_false "no subscribers" (Stream.has_subscribers ss) in
   let assert_exists_subscribers ss =
-    assert_bool "exisits subsribers" (Stream.has_subscribers ss) in
+    assert_bool "exists subscribers" (Stream.has_subscribers ss) in
   let ss, _, _ = Stream.of_list values in  
   let f x = () in
   assert_no_subscribers ss; 

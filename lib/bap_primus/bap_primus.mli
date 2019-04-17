@@ -28,7 +28,7 @@ module Std : sig
       means that any computation may have more than one result. Every
       time there is a non-determinism in the computation the machine
       state is cloned. Different scheduling policies mixed with
-      different non-deterministic startegies provide an analyst a vast
+      different non-deterministic strategies provide an analyst a vast
       selection of avenues to investigate.
 
       Primus is build around an idea of a component base linearly
@@ -107,7 +107,7 @@ module Std : sig
       (** An observation provider.
           A provider facilitates introspection of the Primus Machine,
           for the sake of debugging and dumping the effects. The
-          provider shoud not (and can't be) used for affecting the
+          provider should not (and can't be) used for affecting the
           behavior of a machine, or for the analysis, as its main
           purpose is debugging, logging, and tracing the execution.*)
       type provider
@@ -150,7 +150,7 @@ module Std : sig
         (** a total number of observers that subscribed to this provider  *)
         val observers : t -> int
 
-        (** triggers a stream of occurences of this observation  *)
+        (** triggers a stream of occurrences of this observation  *)
         val triggers : t -> unit stream
 
         (** a data stream from this observation *)
@@ -534,9 +534,9 @@ module Std : sig
 
         (** [id x] is a unique identifier of a value. Every
             evaluation of non-trivial computation produces a value
-            with new identifier. Only seting and reading a variable
+            with new identifier. Only setting and reading a variable
             preserves value identifiers. Each new constaint or
-            arithmentic, or memory expression produces a value with a
+            arithmetic, or memory expression produces a value with a
             new identifier.   *)
         val id : t -> id
 
@@ -709,7 +709,7 @@ module Std : sig
 
         (** Symbol Value Isomorphism.
 
-            A value can have a symbolic representation that is usefull
+            A value can have a symbolic representation that is useful
             to embed analysis in the machine computation. We inject
             symbols, represented with the [string] data type, into the
             value, using interning, i.e., each symbol is mapped to its
@@ -761,13 +761,13 @@ module Std : sig
 
     (** The Interpreter.
 
-        The Interpreter is the core componet of the Primus Machine. It
+        The Interpreter is the core component of the Primus Machine. It
         provides lots of observations, giving other components an
         ability to track every event that happens during the program
         evaluation. The components can affect the results of
         evaluation in a limited way, by affecting the state of the
         components that are used by the Interpreter, name the
-        Environemnt and the Memory.
+        Environment and the Memory.
 
         Note: we the [observation (x,y,z)] notation in the
         documentation to denote an observation of a value represented
@@ -809,7 +809,7 @@ module Std : sig
       (** [writing v] happens before a value is written to the variable [v]  *)
       val writing : var observation
 
-      (** [written (v,x)] happens after [x] is assinged to [v]  *)
+      (** [written (v,x)] happens after [x] is assigned to [v]  *)
       val written : (var * value) observation
 
 
@@ -951,7 +951,7 @@ module Std : sig
       (** [pagefault_hanlder] is a trap handler that is invoked when the [Pagefault]
           exception is raised by the machine memory component. If the handler is
           provided via the Linker, then it is invoked, otherwise a segmentation
-          fault is raised. If the hanlder returns normally then the faulty operation is
+          fault is raised. If the handler returns normally then the faulty operation is
           repeated.
 
           Note, page faults are usually handled together with the [pagefault]
@@ -1083,7 +1083,7 @@ module Std : sig
           the code provider to make corresponding observations, when a
           subroutine is entered or left.
 
-          By default, the code is provided by the BIR Interpeter and
+          By default, the code is provided by the BIR Interpreter and
           Primus Interpreter. Both care to provide corresponding
           observations. However, the Primus Lisp Interpreter provides call
           observations only when an externally visible function is
@@ -1186,7 +1186,7 @@ module Std : sig
             fragment into the Machine. The code can be invoked by one
             of the provided identifier. If no idetifiers were
             provided, then apparently code will not be ever invoked. If
-            an identifier was alread bound to some other code
+            an identifier was already bound to some other code
             fragment, then the old binding will be substituted by the new
             one.  *)
         val link :
@@ -1278,7 +1278,7 @@ module Std : sig
       end
 
 
-      (** Inifinite iterators produces infinite sequences.  *)
+      (** Infinite iterators produces infinite sequences.  *)
       module type Infinite = sig
         include Base
 
@@ -1369,7 +1369,7 @@ module Std : sig
       end
     end
 
-    (** Evaluation environemnt.
+    (** Evaluation environment.
 
         The Environment binds variables to values.*)
     module Env : sig
@@ -1384,7 +1384,7 @@ module Std : sig
 
         (** [get var] returns a value associated with the variable.
             Todo: it looks like that the interface doesn't allow
-            anyone to save bottom or memory values in the environemnt,
+            anyone to save bottom or memory values in the environment,
             thus the [get] operation should not return the
             [Bil.result].*)
         val get : var -> value Machine.t
@@ -1523,7 +1523,7 @@ module Std : sig
 
             If [init] is provided then the region is initialized.
 
-            An attempt to write to a readonly segment, or an attemp to
+            An attempt to write to a readonly segment, or an attempt to
             execute non-executable segment will generate a
             segmentation fault. (TODO: provide more fine-granular traps).*)
         val allocate :
@@ -1574,7 +1574,7 @@ module Std : sig
         language as possible. In that sense Primus Lisp can be seen as
         an assembler, except that it can't really assemble binaries,
         as it operates over already existing and assembled
-        program. Primus Lisp, however is still quite powerfull, as the
+        program. Primus Lisp, however is still quite powerful, as the
         absence of suitable abstractions is compensated with powerful
         and versatile meta-programming system.
 
@@ -2181,7 +2181,7 @@ module Std : sig
             (msg "malloc($0) was called" arg)))
         v}
 
-        The [defmethod] form follows the general definiton template,
+        The [defmethod] form follows the general definition template,
         i.e., it can contain a docstring and declaration section, and
         selection and resolution rules are applicable to
         methods. Methods of the same signal are invoked in an
@@ -2445,7 +2445,7 @@ ident ::= ?any atom that is not recognized as a <word>?
 
 
           (** [var x] type variable [x]. All variables with the same
-              name in the scope of a definiton are unified.  *)
+              name in the scope of a definition are unified.  *)
           val var : string -> t
 
           (** [sym] symbol type.  *)

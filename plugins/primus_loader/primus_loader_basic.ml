@@ -34,7 +34,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
      Note: bottom is usually depicted at the top of the stack
      structure, and it is the highest address.
      Note: memory beyond top is readable, as it is the place,
-     where kernel should put argc, argv, and other infor to a
+     where kernel should put argc, argv, and other info to a
      user process *)
   let setup_stack () =
     target >>= fun (module Target) ->

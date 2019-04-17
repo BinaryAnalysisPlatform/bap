@@ -33,7 +33,7 @@
 // else (external symbol).
 // So, our task is to resolve this case, i.e. to find a mapping from this offset to something sensible.
 //
-// First of all we should use absoulute offset, i.e. file offsets to make every mapping unique.
+// First of all we should use absolute offset, i.e. file offsets to make every mapping unique.
 // So full offset in example above will be computed as section offset + 0x31. And it is a place
 // where relocation should be applied.
 //
@@ -174,7 +174,7 @@ error_or<int64_t> symbol_address(const ELFObjectFile<T> &obj, const SymbolRef &s
 }
 
 // [symbol_reference obj relocation section doc] - provide information for [relocation]
-// that refered to [section]
+// that referred to [section]
 template <typename T>
 void symbol_reference(const ELFObjectFile<T> &obj, const RelocationRef &rel, section_iterator sec, ogre_doc &s) {
     auto it = rel.getSymbol();
@@ -208,7 +208,7 @@ void symbol_entry(const ELFObjectFile<T> &obj, const SymbolRef &sym, ogre_doc &s
 }
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8          \
-    || LLVM_VERSION_MAJOR >= 4 && LLVM_VERSION_MAJOR < 8
+    || LLVM_VERSION_MAJOR >= 4
 
 template <typename T>
 uint64_t base_address(const ELFObjectFile<T> &obj) {

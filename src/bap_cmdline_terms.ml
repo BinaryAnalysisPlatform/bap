@@ -172,7 +172,7 @@ let source_type : source Term.t =
             `project`, then the input file must be project data
             serialized with some format available for project data
             type. The format can be encoded in the extension. If
-            needed, then a version number can be specifed, separated
+            needed, then a version number can be specified, separated
             from the format by a dash, e.g., `myproj.marshal`,
             `myproj.sexp-1.0', etc. If the format is not specified,
             then the default reader will be used." in
@@ -257,10 +257,10 @@ let recipe_doc = [
     "The $(b,option) command requires one mandatory parameter, the
     option name, and an arbitrary number of arguments that will be
     passed to the corresponding command line option. If there are more
-    than one argument then they will be concatenated with the comman
+    than one argument then they will be concatenated with the comma
     symbol, e.g., $(b,(option opt a b c d)) will be translated to
     $(b,--opt=a,b,c,d). Option arguments may contain substitution
-    symbols. A subsitution symbol starts with the dollar sign, that is
+    symbols. A substitution symbol starts with the dollar sign, that is
     followed by a named (optionally delimited with curly braces, to
     disambiguate it from the rest of the argument). There is one built
     in parameter called $(b,prefix), that is substituted with the path

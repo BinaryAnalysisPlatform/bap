@@ -92,6 +92,8 @@ module Adt = struct
   let pp_var ppf = Var.Io.print ~fmt:"adt" ppf
   let pp_exp ppf = Exp.Io.print ~fmt:"adt" ppf
 
+  let pp_word ppf = Word.pp_generic ~prefix:`base ~format:`hex ppf
+
   module Tid = struct
     let pp ppf tid = pr ppf "Tid(0x%a, %S)" Tid.pp tid (Tid.name tid)
   end
@@ -197,8 +199,8 @@ module Adt = struct
                        | Some name -> Some (name,mem)
                        | None -> None) in
     let pp_section ppf (name,mem) =
-      fprintf ppf {|Section(%S, %s, "|}
-        name (Addr.string_of_value (Memory.min_addr mem));
+      fprintf ppf {|Section(%S, %a, "|}
+        name pp_word (Memory.min_addr mem);
       Memory.iter ~word_size:`r8 mem ~f:(fun byte ->
           fprintf ppf "%a" pp_byte byte);
       fprintf ppf {|")|} in
@@ -206,9 +208,9 @@ module Adt = struct
 
   let pp_memmap ppf memmap =
     let pp_region ppf mem =
-      pr ppf "Region(%s,%s)"
-        (Addr.string_of_value (Memory.min_addr mem))
-        (Addr.string_of_value (Memory.max_addr mem)) in
+      pr ppf "Region(%a,%a)"
+        pp_word (Memory.min_addr mem)
+        pp_word (Memory.max_addr mem) in
     let pp_binding ppf (mem,attr) =
       pr ppf "Annotation(%a,@ %a)"
         pp_region mem pp_attr attr in

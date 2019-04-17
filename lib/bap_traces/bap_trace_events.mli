@@ -51,16 +51,16 @@ val code_exec : chunk tag
     thread (process) id. *)
 val context_switch : int tag
 
-(** a system call has occured  *)
+(** a system call has occurred  *)
 val syscall : syscall tag
 
-(** a software exception has occured.  *)
+(** a software exception has occurred.  *)
 val exn : exn tag
 
-(** a control flow transfer from one procedure to another has occured  *)
+(** a control flow transfer from one procedure to another has occurred  *)
 val call : call tag
 
-(** a return from a call has occured  *)
+(** a return from a call has occurred  *)
 val return : return tag
 
 (** represent an executable module being loaded *)

@@ -1,4 +1,4 @@
-;; pointer arithmetics
+;; pointer arithmetic
 
 (require types)
 

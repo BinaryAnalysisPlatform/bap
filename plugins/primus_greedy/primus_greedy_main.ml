@@ -84,7 +84,7 @@ manpage [
      are explored";
 
   `P
-    "The greedy scheduler will attempt to reschedule everytime a basic
+    "The greedy scheduler will attempt to reschedule every time a basic
     block is evaluated."
 ];;
 

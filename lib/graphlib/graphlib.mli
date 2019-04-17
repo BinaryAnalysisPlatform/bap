@@ -7,7 +7,7 @@ open Regular.Std
       {!Graphlib} is a generic library that extends a well known
       OCamlGraph library. {!Graphlib} uses its own, more reach,
       {!Graph} interface that is isomorphic to OCamlGraph's [Sigs.P]
-      signature for persistant graphs. Two functors witness the
+      signature for persistent graphs. Two functors witness the
       isomorphism of the interfaces:
       {!Graphlib.To_ocamlgraph} and {!Graphlib.Of_ocamlgraph}. Thanks
       to these functors, any algorithm written for OCamlGraph can be
@@ -93,16 +93,16 @@ module Std : sig
         [node] in a a given [graph] *)
     val preds : t -> graph -> t seq
 
-    (** [inputs node graph] is incomming edges of a [node] in [graph]  *)
+    (** [inputs node graph] is incoming edges of a [node] in [graph]  *)
     val inputs : t -> graph -> edge seq
 
     (** [outputs node graph] is outcomming edges of a [node] in [graph]  *)
     val outputs : t -> graph -> edge seq
 
     (** [degree ?dir n] when [in_or_out] is [`In] then returns
-        the amount of incomming edges, otherwise returns the amount of
+        the amount of incoming edges, otherwise returns the amount of
         outcomming edges. If parameter [dir] is left absent, then
-        return the amount of adjacent nodes (i.e., a sum of incomming
+        return the amount of adjacent nodes (i.e., a sum of incoming
         and outcomming edges).  *)
     val degree : ?dir:[`In | `Out] -> t -> graph -> int
 
@@ -484,7 +484,7 @@ module Std : sig
       role of «representative element». Depending on the nature of
       partitioning, this role can have different semantics.
 
-      This data structure is used to represent results of partioning of
+      This data structure is used to represent results of partitioning of
       a graph into groups of nodes, for example, to strongly connected
       components.*)
   module Partition : sig
@@ -586,7 +586,7 @@ module Std : sig
   end
 
   (** [Isomorphism] is a bijection between type [s] and [t].
-      Usefull for creating graph views and mapping graphs.
+      Useful for creating graph views and mapping graphs.
       See {!Graphlib.view} and {!Graphlib.Mapper}.
   *)
   module type Isomorphism = sig
@@ -1152,7 +1152,7 @@ module Std : sig
              and type Edge.label = EL.t
 
     (** [fixpoint ~equal ~init ~merge ~f g] computes a solution for a
-        system of equations denoted by graph [g], using the inital
+        system of equations denoted by graph [g], using the initial
         approximation [init] (obtained either with [Solution.create] or
         from the previous calls to [fixpoint]).
 
@@ -1215,7 +1215,7 @@ module Std : sig
 
         {4 Introduction}
 
-        The data domain is a set of values equiped with a partial
+        The data domain is a set of values equipped with a partial
         ordering operation [(L,<=)], also know as a lattice or a
         poset. We assume, that the lattice is complete, i.e., there
         are two special elements of a set that are called [top] and
@@ -1231,7 +1231,7 @@ module Std : sig
         information, the partial ordering between two pieces of
         information [a] and [b], e.g., [a <= b], tells us that [a]
         contains no more information than [b]. Therefore the [top]
-        value contans all the information, representable in the
+        value contains all the information, representable in the
         lattice, correspondingly the [bot] value represents an absence
         of information. Thus, we will consider the bottom value as an
         over approximation (or a lower approximation in terms of the
@@ -1340,7 +1340,7 @@ module Std : sig
         allows a user to choose the direction of approximation
         (ascending vs. descending) and how to accelerate the
         convergence in case of tall lattices by applying narrowing and
-        widening. The implentation fixes the iteration strategy (by
+        widening. The implementation fixes the iteration strategy (by
         always using the topological ordering). In case if you need a
         fixed point solver, that allows you to use different iteration
         strategies, the [fixpoint][1] library provides a descent
@@ -1394,7 +1394,7 @@ module Std : sig
         fixpoint, that will lead to an over-approximation of the
         ground truth, that is safe, but still looses
         precision. Therefore, it is necessary to apply widening as
-        rarely as possible. Unfortunatelly, a question where and when
+        rarely as possible. Unfortunately, a question where and when
         to apply widening is undecidable by itself, that's why
         heuristics are used. The [fixpoint] function, provides a
         limited capabilities to control widening via the [step i n x

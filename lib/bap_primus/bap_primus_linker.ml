@@ -79,6 +79,13 @@ module Trace = struct
 
   let return,call_returned =
     Observation.provide ~inspect:sexp_of_call "call-return"
+
+  let lisp_call,lisp_call_entered =
+    Observation.provide ~inspect:sexp_of_call "list-call"
+
+  let lisp_call_return,lisp_call_returned =
+    Observation.provide ~inspect:sexp_of_call "lisp-call-return"
+
 end
 include Trace
 

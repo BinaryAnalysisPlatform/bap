@@ -31,7 +31,7 @@ type 'a language
 
 (** [register arch name f] registers an abi function [f] for abi with
     the given [name] and [arch]. If an abi for the given pair is
-    already registered, then it will be overriden. *)
+    already registered, then it will be overridden. *)
 
 type 'a t = 'a language -> sub term -> sub term
 val register : 'a language -> arch -> string -> 'a t -> unit

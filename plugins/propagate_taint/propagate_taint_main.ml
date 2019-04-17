@@ -203,7 +203,7 @@ module Cmdline = struct
     `S "DESCRIPTION";
 
     `P "A taint propagation framework, that uses microexecution to
-    propagate the taint through a program. The execution is perfomed
+    propagate the taint through a program. The execution is performed
     using the ConquEror Engine, that is short for Concrete Evaluation
     with Errors. This execution engine allows to run incomplete
     programs with an unspecified user input. Moreover, to increase the
@@ -268,7 +268,7 @@ module Cmdline = struct
                                       In this mode we will follow only \
                                       one execution path, without \
                                       backtracking, giving a more \
-                                      feasable result, but much less \
+                                      feasible result, but much less \
                                       coverage")
 
   let print_coverage = Config.(flag "print-coverage"

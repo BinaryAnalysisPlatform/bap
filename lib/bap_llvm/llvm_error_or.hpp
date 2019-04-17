@@ -46,7 +46,7 @@
 //     ...
 //     error_or<ints> x = make_positive(some_vector);
 //     if (!x)      // check if error exists
-//         std::cerr << "some error occured: "<< x.message() << std::endl;
+//         std::cerr << "some error occurred: "<< x.message() << std::endl;
 //     for (auto w : x.warnings())
 //         std::cout << "warning! " << w << std::endl;
 //     ...
@@ -64,7 +64,7 @@
 //     }
 //     ...
 //
-//  && operator works as usualy:
+//  && operator works as usually:
 //     ...
 //     error_or<int> x = foo();
 //     error_or<int> y = bar()

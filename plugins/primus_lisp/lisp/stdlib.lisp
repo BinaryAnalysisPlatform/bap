@@ -4,7 +4,7 @@
 (require simple-memory-allocator)
 
 (defun getenv (name)
-  "finds a value of an environemnt variable with the given name"
+  "finds a value of an environment variable with the given name"
   (declare (external "getenv"))
   (let ((p environ))
     (while (and (not (points-to-null p))

@@ -24,7 +24,7 @@ let find m reg =
   List.filter_map reg_searches ~f:(fun f -> f reg) |> function
   | [] -> Exp.of_word (Word.zero gpr_bitwidth)
   | hd::[] -> hd
-  | _ -> mips_fail "Register name %s is ambigous!!!" (Reg.name reg)
+  | _ -> mips_fail "Register name %s is ambiguous!!!" (Reg.name reg)
 
 let make_cpu addr_size endian memory =
   let (module M) = match addr_size with

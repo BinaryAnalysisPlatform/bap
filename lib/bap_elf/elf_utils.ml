@@ -8,10 +8,10 @@ let input_string0 ~pos data : string Or_error.t =
   | None -> errorf "string untermintated"
   | Some last ->
     let len = last - pos in
-    let dst = String.create len in
-    Bigstring.To_string.blit
+    let dst = Bytes.create len in
+    Bigstring.To_bytes.blit
       ~src:data ~src_pos:pos ~dst ~dst_pos:0 ~len;
-    return dst
+    return (Bytes.to_string dst)
 
 let section_name data elf section =
   match Sequence.nth elf.e_sections elf.e_shstrndx with
@@ -28,9 +28,9 @@ let string_of_section  data s : string Or_error.t =
   int_of_int64 s.sh_size >>= fun size ->
   int_of_int64 s.sh_offset >>= fun offset ->
   try
-    let dst = String.create size in
-    Bigstring.To_string.blit
+    let dst = Bytes.create size in
+    Bigstring.To_bytes.blit
       ~src:data ~src_pos:offset
       ~dst ~dst_pos:0 ~len:size;
-    return dst
+    return (Bytes.to_string dst)
   with exn -> of_exn exn

@@ -44,7 +44,7 @@
  *  2. registers names table
  *  3. memory region
  *
- *  Instructions and Registers tables are never changed throught the
+ *  Instructions and Registers tables are never changed through the
  *  life of a disassembler (they are indeed a function of the constructor
  *  parameters). Memory region can be changed after the disassembler was
  *  created, but since it is not changed in the disassembler step it can
@@ -133,7 +133,7 @@ int bap_disasm_backends_size(void);
  */
 const char* bap_disasm_backend_name(int i);
 
-/** assosiates memory region with a given disassembler. Current offset
+/** associates memory region with a given disassembler. Current offset
  * is automatically reset to 0.
  *
  * @pre memory region between (data+off) and (data+off+len-1)
@@ -232,7 +232,7 @@ int bap_disasm_offset(bap_disasm_type disasm);
  */
 void bap_disasm_run(bap_disasm_type disasm);
 
-/* clears instruction queue and all assosiated data
+/* clears instruction queue and all associated data
  * @pre none
  * @post instruction queue is empty
  */
@@ -242,7 +242,7 @@ void bap_disasm_insns_clear(bap_disasm_type disasm);
 int bap_disasm_insns_size(bap_disasm_type disasm);
 
 
-/* Quering instructions
+/* Querying instructions
  *
  * All functions below (if not stated otherwise) share the following
  * precondition:
@@ -293,7 +293,7 @@ int bap_disasm_insn_satisfies(bap_disasm_type disasm,
                               bap_disasm_insn_p_type p);
 
 
-/* Quering operands
+/* Querying operands
  *
  * All functions below share precondition that op is less than
  * ops_size and greater than zero

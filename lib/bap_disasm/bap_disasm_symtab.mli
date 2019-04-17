@@ -3,6 +3,7 @@ open Bap_types.Std
 open Image_internal_std
 
 type block = Bap_disasm_block.t
+type edge =  Bap_disasm_block.edge
 type cfg = Bap_disasm_rec.Cfg.t
 
 type t [@@deriving compare, sexp_of]
@@ -21,8 +22,10 @@ val intersecting : t -> mem -> fn list
 val to_sequence : t -> fn seq
 val span : fn -> unit memmap
 
-(* remembers a call to a function from the given block *)
-val add_call_name : t -> block -> string -> t
+(** [add_call symtab block name edge] remembers a call to a function
+    [name] from the given block with [edge] *)
+val add_call : t -> block -> string -> edge -> t
 
-(* finds if there are any calls from the given block *)
-val find_call_name : t -> addr -> string option
+(** [enum_calls t addr] returns a list of calls from a block with
+    the given [addr] *)
+val enum_calls : t -> addr -> (string * edge) list

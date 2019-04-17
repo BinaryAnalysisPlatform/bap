@@ -930,7 +930,7 @@ module Normalize = struct
      while-cond-hoisting
      ===================
 
-     a non-trivial while condition is a condition that contans an
+     a non-trivial while condition is a condition that contains an
      if-then-else expression, for example
 
         while (c ? x : y) prog;
@@ -973,16 +973,16 @@ module Normalize = struct
 
      We want to ensure that all load expressions refer to memory as a
      variable, not as arbitrary store expressions. This will
-     essentialy disallow memory operations that will not have any
+     essentially disallow memory operations that will not have any
      observable side effects, e.g., the [(mem [a] <- x)[a]]
      expression creates an anonymous memory storage on fly, stores a
-     value in it, and then discards it without commiting the effect of
-     writting.
+     value in it, and then discards it without committing the effect of
+     writing.
 
      The transformation will force the memory-commit operation, so
      that if there is any memory load with a non-trivial (i.e., not a
      variable) memory argument, then this argument is hoisted as a
-     seprate move instruction. This is not always correct, e.g.,
+     separate move instruction. This is not always correct, e.g.,
 
 
          z := (m[a]<-x)[a] + (m[a]<-y)[a]

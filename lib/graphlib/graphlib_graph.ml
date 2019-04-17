@@ -307,7 +307,7 @@ module Partition = struct
             (* By cases: if n < i or i < n < j then it is in one one
                of the original classes, otherwise n = i, then one
                should return i (as the class still contains these
-               elements) or n = j, in wich case these elements are now
+               elements) or n = j, in which case these elements are now
                in class i, or n > j, in which case we must left-shift them *)
             fun n -> if n < j then n
             else if n = j then i
@@ -558,7 +558,7 @@ module Of_ocamlgraph(G : Graph.Sig.P) = struct
          we can't rely that the order of iteration on edges and nodes
          will the same for otherwise equal graphs.
 
-         It is usually the same for persistant graphs, built from
+         It is usually the same for persistent graphs, built from
          maps. But in general we may not rely on this fact. So, we
          can't just compare using fold over set of edges and nodes,
          as in that case the following will not hold:

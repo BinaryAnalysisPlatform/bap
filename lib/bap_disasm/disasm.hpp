@@ -34,10 +34,10 @@ struct operand;
 // If current instruction is invalid, then results of all other calls
 // to disassembler, that involves the instruction are undefined.
 struct disassembler_interface {
-    // disassemble one instruction, starting from addres \a pc.
+    // disassemble one instruction, starting from address \a pc.
     virtual void step(uint64_t pc) = 0;
 
-    // directs disassembler to a specifed memory region
+    // directs disassembler to a specified memory region
     virtual void set_memory(memory) = 0;
 
     // table, containing all instruction names

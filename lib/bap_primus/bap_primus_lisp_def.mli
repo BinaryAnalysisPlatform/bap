@@ -55,7 +55,7 @@ module Macro : sig
   val body : macro t -> tree
   val bind : macro t -> tree list -> (int * (string * tree list) list) option
 
-  (** [apply m bs] returns the body of [m] where any occurence of a
+  (** [apply m bs] returns the body of [m] where any occurrence of a
       variable [x] is substituted with [y] if [x,[y]] is in the list
       of bindings [bs].
 

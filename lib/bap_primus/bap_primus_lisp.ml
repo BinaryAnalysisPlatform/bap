@@ -300,10 +300,12 @@ module Interpreter(Machine : Machine) = struct
       let bs,frame_size = Vars.make_frame s.width bs in
       Eval.const Word.b0 >>= fun init ->
       notify_when is_external Trace.call_entered name args >>= fun () ->
+      notify_when is_external Trace.lisp_call_entered name args >>= fun () ->
       eval_advices Advice.Before init name args >>= fun _ ->
       Machine.Local.put state (Vars.push_frame bs s) >>= fun () ->
       eval_exp (Lisp.Def.Func.body fn) >>= fun r ->
       Machine.Local.update state ~f:(Vars.pop frame_size) >>= fun () ->
+      notify_when is_external Trace.lisp_call_returned name args >>= fun () ->
       notify_when is_external Trace.call_returned name (args @ [r]) >>= fun () ->
       eval_advices Advice.After r name args
 
@@ -498,21 +500,23 @@ module Make(Machine : Machine) = struct
             (fun msg -> fun () -> Machine.raise (Runtime_error msg)) ppf
 
         let eval_args = Machine.List.map bs ~f:(fun (var,arg) ->
-            let open Bil.Types in
-            match Arg.rhs arg with
-            | Var v -> Eval.get v >>| fun w -> (var,w)
-            | Load (_,BinOp(op, Var sp, Int off),e,s) ->
-              Eval.get sp >>= fun sp ->
-              Eval.const off >>= fun off ->
-              Eval.binop op sp off >>= fun addr ->
-              Eval.load addr e s >>| fun w -> (var,w)
-            | _ -> failf "unsupported argument passing semantics" ())
+            Eval.exp (Arg.rhs arg) >>| fun w -> (var ,w))
+
+        let size_of_reg r = match Var.typ r with
+          | Imm x -> x
+          | _ -> assert false
 
         let eval_ret r = match ret with
           | None -> Machine.return ()
           | Some v -> match Arg.rhs v with
             | Bil.Var reg -> Eval.set reg r
-            | e -> failf "unknown return semantics: %a" Exp.pps e ()
+            | Bil.(Cast (LOW, rsize, Var reg)) ->
+            let vsize = size_of_reg reg in
+            Eval.get reg >>= fun lhs ->
+            Eval.extract ~hi:(vsize-1) ~lo:rsize lhs >>= fun high ->
+            Eval.concat high r >>= fun r ->
+            Eval.set reg r
+          | e -> failf "unknown return semantics: %a" Exp.pps e ()
 
         let exec =
           eval_args >>= fun bs ->
@@ -690,7 +694,6 @@ module Doc = struct
         else if x = y then x
         else sprintf "%s\nOR\n%s" x y) |>
     Map.to_alist
-
 
   let describe prog item =
     Lisp.Program.get prog item |> List.map ~f:(fun x ->
