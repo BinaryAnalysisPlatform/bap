@@ -22,10 +22,31 @@ val intersecting : t -> mem -> fn list
 val to_sequence : t -> fn seq
 val span : fn -> unit memmap
 
-(** [add_call symtab block name edge] remembers a call to a function
-    [name] from the given block with [edge] *)
-val add_call : t -> block -> string -> edge -> t
 
-(** [enum_calls t addr] returns a list of calls from a block with
-    the given [addr] *)
-val enum_calls : t -> addr -> (string * edge) list
+(** {2 Callgraph Interface}
+
+    In parallel to a collection of control flow graphs,
+    Symtab contains a callgraph.
+*)
+
+(** [insert_call ?implicit symtab callsite callee] remembers a call to a
+    function with name [callee] from a callsite, represented by the
+    [block].
+
+    If [implicit] is true (defaults to false) then the call is marked
+    as an implicit call. An implicit call is a call that is made via
+    a fallthrough edge.
+
+    Note, the callee is represented with a string not with an address,
+    since it is possible that [find_by_name callee = None], for
+    example, when we have a call to an external function out of our
+    address space. *)
+val insert_call : ?implicit:bool -> t -> block -> string -> t
+
+(** [explicit_callee symtab address] returns a callee which is
+    explicitly called from a  block with the given [address]. *)
+val explicit_callee : t -> addr -> string option
+
+(** [explicit_callee symtab address] returns a callee which is
+    implicitly called from a  block with the given [address]. *)
+val implicit_callee : t -> addr -> string option

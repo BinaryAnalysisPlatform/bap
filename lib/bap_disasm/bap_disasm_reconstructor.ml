@@ -71,13 +71,11 @@ let is_unresolved blk cfg =
   deg = 0 ||
   (deg = 1 && is_fall (Seq.hd_exn (Cfg.Node.outputs blk cfg)))
 
-let add_call symtab blk name label =
-  Symtab.add_call symtab blk name label
 
 let add_unresolved syms name cfg blk =
   if is_unresolved blk cfg then
     let call_addr = terminator_addr blk in
-    add_call syms blk (name call_addr) `Fall
+    Symtab.insert_call syms blk (name call_addr)
   else syms
 
 let collect name cfg roots =
@@ -119,7 +117,8 @@ let reconstruct name initial_roots prog =
     let name = name (Block.addr entry) in
     let syms = Symtab.add_symbol syms (name,entry,cfg) in
     Set.fold inputs ~init:syms ~f:(fun syms e ->
-        add_call syms (Cfg.Edge.src e) name (Cfg.Edge.label e)) in
+        let implicit = Cfg.Edge.label e = `Fall in
+        Symtab.insert_call ~implicit syms (Cfg.Edge.src e) name) in
   let remove_node cfg n = Cfg.Node.remove n cfg in
   let remove_reachable cfg from =
     let reachable = reachable cfg from in

@@ -26,11 +26,13 @@ module Fn = Opaque.Make(struct
     let hash x = String.hash (fst3 x)
   end)
 
+
 type t = {
   addrs : fn Addr.Map.t;
   names : fn String.Map.t;
   memory : fn Memmap.t;
-  callees : (string * edge) list Addr.Map.t;
+  ecalls : string Addr.Map.t;
+  icalls : string Addr.Map.t;
 } [@@deriving sexp_of]
 
 
@@ -47,7 +49,8 @@ let empty = {
   addrs = Addr.Map.empty;
   names = String.Map.empty;
   memory = Memmap.empty;
-  callees = Addr.Map.empty;
+  ecalls = Map.empty (module Addr);
+  icalls = Map.empty (module Addr);
 }
 
 let merge m1 m2 =
@@ -58,19 +61,20 @@ let filter_mem mem name entry =
   Memmap.filter mem ~f:(fun (n,e,_) ->
       not(String.(name = n) || Block.(entry = e)))
 
-let filter_callees name callees =
-  Map.map callees
-    ~f:(List.filter ~f:(fun (name',_) -> String.(name <> name')))
+let filter_calls name cfg calls =
+  let init = Map.filter calls ~f:(fun name' -> String.(name <> name')) in
+  Cfg.nodes cfg |>
+  Seq.fold ~init ~f:(fun calls node ->
+      Map.remove calls (Block.addr node))
 
-let remove t (name,entry,_) : t =
-  if Map.mem t.addrs (Block.addr entry) then
-    {
-      names = Map.remove t.names name;
-      addrs = Map.remove t.addrs (Block.addr entry);
-      memory = filter_mem t.memory name entry;
-      callees = filter_callees name t.callees;
-    }
-  else t
+let remove t (name,entry,cfg) : t =
+  if Map.mem t.addrs (Block.addr entry) then {
+    names = Map.remove t.names name;
+    addrs = Map.remove t.addrs (Block.addr entry);
+    memory = filter_mem t.memory name entry;
+    ecalls = filter_calls name cfg t.ecalls;
+    icalls = filter_calls name cfg t.icalls;
+  } else t
 
 let add_symbol t (name,entry,cfg) : t =
   let data = name,entry,cfg in
@@ -97,10 +101,16 @@ let name_of_fn = fst
 let entry_of_fn = snd
 let span fn = span fn |> Memmap.map ~f:(fun _ -> ())
 
-let add_call t b name edge =
-  {t with callees = Map.add_multi t.callees (Block.addr b) (name,edge)}
+let insert_call ?(implicit=false) symtab block data =
+  let key = Block.addr block in
+  if implicit then {
+    symtab with
+    icalls = Map.set symtab.icalls ~key ~data
+  } else {
+    symtab with
+    ecalls = Map.set symtab.ecalls ~key ~data
+  }
 
-let enum_calls t addr =
-  match Map.find t.callees addr with
-  | None -> []
-  | Some callees -> callees
+
+let explicit_callee {ecalls} = Map.find ecalls
+let implicit_callee {icalls} = Map.find icalls
