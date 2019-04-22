@@ -85,8 +85,12 @@ module Signals(Machine : Primus.Machine.S) = struct
     Machine.List.all (proj kind arg)
 
   let init = Machine.sequence Primus.Interpreter.[
+      signal loading value one
+        {|(loading A) is emitted before load from A occurs|};
       signal loaded (value,value) pair
         {|(loaded A X) is emitted when X is loaded from A|};
+      signal storing value one
+        {|(storing A) is emitted before store to A occurs|};
       signal stored (value,value) pair
         {|(stored A X) is emitted when X is stored to A|};
       signal read  (var,value) pair

@@ -1,5 +1,5 @@
 (defun check-null-pointer (ptr)
-  (when (and (not ptr) (all-static-constants ptr))
+  (when (and (not ptr) (all-static-constant ptr))
     (incident-report 'null-pointer-dereference (incident-location))))
 
 (defmethod loading (ptr)
