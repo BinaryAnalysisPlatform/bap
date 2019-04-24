@@ -12,6 +12,7 @@ type cpu = {
   jmp : exp -> rtl;
   cia : exp;
   word_width : exp;
+  delay : exp;
   word_bitwidth : bitwidth;
   reg : (op -> exp) ec;
   gpr : int -> exp;
@@ -19,4 +20,3 @@ type cpu = {
   hi : exp;
   lo : exp;
 }
-

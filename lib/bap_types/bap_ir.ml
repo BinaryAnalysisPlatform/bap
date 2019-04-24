@@ -160,7 +160,7 @@ module Tid = struct
 
   let name t = match get_name t with
     | None -> to_string t
-    | Some name -> name
+    | Some name -> sprintf "@%s" name
 
   let from_string_exn = of_string
   let from_string x = Ok (from_string_exn x)

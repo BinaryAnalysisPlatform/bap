@@ -6108,6 +6108,7 @@ module Std : sig
       val name : (Theory.program, string) Knowledge.slot
       val asm : (Theory.program, string) Knowledge.slot
       val ops : (Theory.program, op array option) Knowledge.slot
+      val delay : (Theory.program, int option) KB.slot
     end
 
     (** {3 Creating}

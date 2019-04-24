@@ -91,10 +91,9 @@ let selnez cpu ops =
   ]
 
 let () =
-  "SLT"   >> slt;
+  "SLT"  >> slt;
   "SLTi" >> slti;
   "SLTu"  >> sltu;
   "SLTiu" >> sltiu;
   "SELEQZ" >> seleqz;
   "SELNEQ" >> selnez;
-

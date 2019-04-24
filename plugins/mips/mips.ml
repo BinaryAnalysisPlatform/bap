@@ -1,5 +1,6 @@
 open Core_kernel
 open Bap.Std
+open Bap_core_theory
 
 (* This CPU model and instruction set is based on the
  * "MIPS Architecture For Programmers
@@ -36,7 +37,18 @@ module Std = struct
 
   let lifters = String.Table.create ()
 
-  let register name lifter =
+  let provide_delay name delay =
+    let provide obj =
+      let open KB.Syntax in
+      KB.collect Arch.slot obj >>= function
+      | Some #Arch.mips ->
+        KB.collect Insn.Slot.name obj >>| fun name' ->
+        Option.some_if (String.equal name name') delay
+      | _ -> KB.return None in
+    KB.promise Insn.Slot.delay provide
+
+  let register ?delay name lifter =
+    Option.iter delay ~f:(provide_delay name);
     String.Table.change lifters name ~f:(fun _ -> Some lifter)
 
   let (>>) = register

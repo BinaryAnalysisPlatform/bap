@@ -2,17 +2,12 @@ open Core_kernel
 open Regular.Std
 open Bap_types.Std
 open Graphlib.Std
-open Bil.Types
-open Or_error
 open Bap_core_theory
 open Bap_image_std
-
-module Targets = Bap_disasm_target_factory
 
 module Dis = Bap_disasm_basic
 module Brancher = Bap_disasm_brancher
 module Rooter = Bap_disasm_rooter
-module Addrs = Addr.Table
 module Block = Bap_disasm_block
 module Insn = Bap_disasm_insn
 
@@ -21,15 +16,7 @@ type insn = Insn.t [@@deriving sexp_of]
 type block = Block.t
 type edge = Block.edge [@@deriving compare, sexp]
 type jump = Block.jump [@@deriving compare, sexp]
-type lifter = Targets.lifter
-
-type dis = (Dis.empty, Dis.empty) Dis.t
-
-type dst = [
-  | `Jump of addr option
-  | `Cond of addr option
-  | `Fall of addr
-] [@@deriving sexp]
+type lifter = Bap_disasm_target_factory.lifter
 
 type error = [
   | `Failed_to_disasm of mem
@@ -65,92 +52,182 @@ module Cfg = Graphlib.Make(Node)(Edge)
 
 type cfg = Cfg.t [@@deriving compare]
 
-module Visited = struct
-
-  type entry = Unknown | Insn of {last : addr}
-  type t = entry Addr.Map.t
-
-  let empty = Addr.Map.empty
-
-  let add_insn t mem =
-    Map.set t (Memory.min_addr mem) (Insn {last = Memory.max_addr mem})
-
-  let touch t addr =
-    Map.update t addr ~f:(function
-        | None -> Unknown
-        | Some known -> known)
-
-  let find_insn t a = match Map.find t a with
-    | Some (Insn {last}) -> Some last
-    | _ -> None
-
-  let min = Map.min_elt
-  let mem = Map.mem
-  let forget = Map.remove
-
-  let upper_bound t = Map.closest_key t `Greater_than
-
-  let rec next_insn t a =
-    match upper_bound t a with
-    | None -> None
-    | Some (addr, Insn {last}) -> Some (addr,last)
-    | Some (addr,_) -> next_insn t addr
-
-  let min_insn t = match min t with
-    | None -> None
-    | Some (addr, Insn {last}) -> Some (addr,last)
-    | Some (addr,_) -> next_insn t addr
-
-  let has_insn t a = match Map.find t a with
-    | Some (Insn _) -> true
-    | _ -> false
-
-end
-
 type blk_dest = [
   | `Block of block * edge
   | `Unresolved of jump
 ]
 
-type stage1 = {
+(*
+   An address is a leader of a basic block if it is
+   an instruction, and any of the following is true:
+   - it is a root;
+   - it is a target of a jump instruction;
+   - it has more than one incoming edge;
+
+   An instruction is a terminator of a basic block if
+   any of the following is true:
+   - it is a jump instruction
+   - the next address after the isntruction is:
+     - a leader;
+     - points to data.
+*)
+module Stage1 : sig
+  type dsts = (addr option * [`Jump | `Cond | `Fall]) list
+  type task = private
+    | Dest of addr
+    | Fall of addr
+    | Jump of {src : addr; age: int; dsts : dsts}
+
+  type state = private {
+    stop : bool;
+    work : task list;           (* work list*)
+    addr : addr;                (* current address *)
+    begs : Set.M(Addr).t;       (* begins of basic blocks *)
+    jmps : dsts Map.M(Addr).t;  (* jumps  *)
+    code : Set.M(Addr).t;       (* all valid instructions *)
+    data : Set.M(Addr).t        (* all non-instructions *)
+  }
+
+  val start : mem -> addr seq -> f:(state -> mem -> state) -> state
+  val view : state -> mem -> f:(state -> mem -> state) -> state
+
+  val failed : state -> addr -> state
+  val jumped : state -> mem -> dsts -> int -> state
+  val stopped : state -> state
+  val moved  : state -> mem -> state
+  val is_ready : state -> bool
+end = struct
+  type dsts = (addr option * [`Jump | `Cond | `Fall]) list
+  type task =
+    | Dest of addr
+    | Fall of addr
+    | Jump of {src : addr; age: int; dsts : dsts}
+
+  type state = {
+    stop : bool;
+    work : task list;           (* work list*)
+    addr : addr;                (* current address *)
+    begs : Set.M(Addr).t;       (* begins of basic blocks *)
+    jmps : dsts Map.M(Addr).t;  (* jumps  *)
+    code : Set.M(Addr).t;       (* all valid instructions *)
+    data : Set.M(Addr).t        (* all non-instructions *)
+  }
+
+  let is_code s addr = Set.mem s.code addr
+  let is_data s addr = Set.mem s.data addr
+  let is_visited s addr = is_code s addr || is_data s addr
+  let is_ready s = s.stop
+
+  let rec step s = match s.work with
+    | [] ->
+      eprintf "This was the last one, stopping\n%!";
+      {s with stop = true}
+    | Dest next :: work ->
+      let s = {s with begs = Set.add s.begs next} in
+      eprintf "Marking %a as leader (jump dest)\n"
+        Addr.ppo next;
+      if is_visited s next then step {s with work}
+      else {s with work; addr=next}
+    | Fall next :: work ->
+      eprintf "processing the fall %a\n" Addr.ppo next;
+      if is_code s next
+      then step {s with begs = Set.add s.begs next; work}
+      else if is_data s next then step {s with work}
+      else {s with work; addr=next}
+    | Jump {src; dsts} :: ([] as work)
+    | Jump {src; dsts; age=0} :: work ->
+      eprintf "Jmp from %a is retired\n" Addr.ppo src;
+      let init = {s with jmps = Map.add_exn s.jmps src dsts; work} in
+      step @@
+      List.fold dsts ~init ~f:(fun s -> function
+          | Some next,(`Jump|`Cond) when not (is_visited s next) ->
+            eprintf "retire: pushing %a\n" Addr.ppo next;
+            {s with work = Dest next :: s.work}
+          | _ -> s)
+    | Jump jmp :: Fall next :: work ->
+      assert (jmp.age > 0);
+      eprintf "delaying jump...\n";
+      step {
+        s with
+        work = Fall next :: Jump {
+            jmp with age = jmp.age-1; src = next;
+          } :: work
+      }
+    | Jump jmp :: work ->
+      eprintf "Warning: control instruction in the delay slot\n%!";
+      step {
+        s with work = Jump {jmp with age=0} :: work
+      }
+
+  let decoded s mem =
+    eprintf "decoded %a\n" Memory.ppo mem;
+    {
+      s with code = Set.add s.code (Memory.min_addr mem)
+    }
+
+  let jumped s mem dsts delay =
+    let s = decoded s mem in
+    eprintf "jumped: pushing %a, Jump\n"
+      Addr.ppo ((Addr.succ (Memory.max_addr mem)));
+    let next = Fall (Addr.succ (Memory.max_addr mem)) in
+    let jump = Jump {src = Memory.min_addr mem; age=delay; dsts} in
+    step {s with work = jump :: next :: s.work }
+
+  let moved s mem =
+    let s = decoded s mem in
+    eprintf "moved: pushing %a\n" Addr.ppo (Addr.succ (Memory.max_addr mem));
+    step {
+      s with work = Fall (Addr.succ (Memory.max_addr mem)) :: s.work;
+    }
+
+  let failed s addr =
+    let work = if is_visited s (Addr.succ addr) then s.work
+      else Dest (Addr.succ addr) :: s.work in
+    step {
+      s with data = Set.add s.data addr; work
+    }
+
+  let stopped s = step s
+
+  let rec view s base ~f = match Memory.view ~from:s.addr base with
+    | Ok mem -> f s mem
+    | Error _ ->
+      let s = {
+        s with
+        begs = Set.remove s.begs s.addr;
+        jmps = Map.remove s.jmps s.addr;
+      } in
+      match s.work with
+      | [] ->
+        eprintf "view: no more tasks, stopping\n";
+        step s
+      | _  -> view (step s) base ~f
+
+  let start mem roots =
+    let roots = Seq.fold roots ~init:(Set.empty (module Addr)) ~f:Set.add in
+    let work =
+      Set.to_sequence ~order:`Decreasing roots |>
+      Seq.fold ~init:[] ~f:(fun work root -> Dest root :: work) in
+    let start = match Set.min_elt roots with
+      | Some start -> start
+      | None -> Memory.min_addr mem in
+    eprintf "staring, %d tasks in list\n" (List.length work);
+    view {
+      work;
+      addr = start;
+      stop = false;
+      begs = Set.empty (module Addr);
+      jmps = Map.empty (module Addr);
+      code = Set.empty (module Addr);
+      data = Set.empty (module Addr);
+    } mem
+end
+
+type t = {
+  cfg  : Cfg.t;
   base : mem;
-  addr : addr;
-  visited : Visited.t;
-  roots : addr list;
-  inits : Addr.Set.t;
-  dests : dests Addr.Table.t;
-  errors : (addr * error) list;
-  lift : mem -> full_insn -> code Or_error.t;
+  data : Set.M(Addr).t;
 }
-
-type stage2 = {
-  stage1 : stage1;
-  addrs  : mem Addrs.t;   (* table of blocks *)
-  succs  : dests Addrs.t;
-  preds  : addr list Addrs.t;
-  disasm : mem -> decoded list;
-}
-
-type stage3 = {
-  cfg : Cfg.t;
-  failures : (addr * error) list;
-}
-
-type t = stage3
-
-let errored s ty = {s with errors = (s.addr,ty) :: s.errors}
-
-let filter_dests base ds =
-  List.map ds ~f:(fun d -> match d with
-      | Some addr,_ when Memory.contains base addr -> d
-      | _,kind -> None, kind)
-
-let update_dests s mem ds =
-  let key = Memory.min_addr mem in
-  match filter_dests s.base ds with
-  | [] -> Addr.Table.add_exn s.dests ~key ~data:[]
-  | ds -> List.iter ds ~f:(fun data ->
-      Addr.Table.add_multi s.dests ~key ~data)
 
 let rec has_jump = function
   | [] -> false
@@ -159,302 +236,108 @@ let rec has_jump = function
   | Bil.While (_,b) :: xs -> has_jump b || has_jump xs
   | _ :: xs -> has_jump xs
 
-let ok_nil = function
-  | Ok xs -> xs
-  | Error _ -> []
 
-let bil_of_insn s =
-  KB.Value.get Bil.slot @@
-  KB.Value.get Theory.Program.Semantics.slot s
-
-
-let to_bil s = match s with
-  | Error err -> Error err
-  | Ok s -> Result.return @@ bil_of_insn s
-
-let with_bil : code -> bil -> code = fun code bil ->
-  let slot = Theory.Program.Semantics.slot in
-  KB.Value.put Theory.Program.Semantics.slot code @@
-  KB.Value.put Bil.slot (KB.Value.get slot code) bil
-
-let is_terminator s mem insn =
-  Dis.Insn.is insn `May_affect_control_flow ||
-  has_jump (ok_nil (to_bil (s.lift mem insn))) ||
-  Set.mem s.inits (Addr.succ (Memory.max_addr mem))
-
-let update s mem insn dests : stage1 =
-  let s = { s with visited = Visited.add_insn s.visited mem } in
-  if is_terminator s mem insn then
-    let () = update_dests s mem dests in
-    let roots = List.(filter_map ~f:fst dests |> rev_append s.roots) in
-    { s with roots }
-  else {
-    s with roots = Addr.succ (Memory.max_addr mem) :: s.roots
-  }
-
-(* switch to next root or finish if there're no roots *)
-let next dis s =
-  let rec loop s = match s.roots with
-    | [] -> Dis.stop dis s
-    | r :: roots when not(Memory.contains s.base r) ->
-      loop {s with roots}
-    | r :: roots when Visited.mem s.visited r ->
-      loop {s with roots}
-    | addr :: roots ->
-      let mem = Memory.view ~from:addr s.base in
-      let mem = Result.map_error mem ~f:(fun err -> Error.tag err "next_root") in
-      mem >>= fun mem ->
-      Dis.jump dis mem {s with roots; addr} in
-  let s = {s with visited = Visited.touch s.visited s.addr } in
-  loop s
+let delay insn = match KB.Value.get Insn.Slot.delay insn with
+  | None -> 0
+  | Some x -> x
 
 let stop_on = [`Valid]
 
-let update_intersections disasm brancher s =
-  let dests = Addr.Table.create () in
-  let find_destinations a =
-    Option.value (Addrs.find dests a) ~default:[] in
-  let next dis = function
-    | [] -> Dis.stop dis []
-    | addr :: roots ->
-      Memory.view ~from:addr s.base >>= fun mem ->
-      Dis.jump dis mem roots in
-  let equal_dest x y = match x,y with
-    | (Some a, _), (Some a',_) -> Addr.(a = a')
-    | _ -> false in
-  let is_intersected ds ds' =
-    List.exists ds ~f:(fun d -> List.exists ds' ~f:(equal_dest d)) in
-  let visit_intersections = function
-    | [] | [_] -> Ok ()
-    | (from :: roots) as intersections ->
-      Memory.view ~from s.base >>= fun mem ->
-      Dis.run disasm mem ~stop_on ~return
-        ~init:roots
-        ~hit:(fun d mem insn roots ->
-            let ds = filter_dests s.base (brancher mem insn) in
-            Hashtbl.set dests (Memory.min_addr mem) ds;
-            next d roots)
-        ~stopped:next >>= fun _ ->
-      List.iter intersections ~f:(fun a ->
-          let ds = find_destinations a in
-          let has_common =
-            List.exists intersections ~f:(fun a' ->
-                Addr.(a <> a') && is_intersected ds (find_destinations a')) in
-          if has_common then
-            Addrs.set s.dests a ds);
-      Ok () in
-  let intersections =
-    Map.fold s.visited ~init:Addr.Map.empty
-      ~f:(fun ~key:addr ~data:tail inters ->
-          match tail with
-          | Visited.Unknown -> inters
-          | Visited.Insn {last} -> Map.add_multi inters last addr) in
-  Map.fold intersections ~init:(Ok ()) ~f:(fun ~key:_ ~data:addrs r ->
-      r >>= fun () -> visit_intersections addrs) >>= fun () ->
-  return s
-
 let stage1 ?(rooter=Rooter.empty) lift brancher disasm base =
-  let roots =
-    Rooter.roots rooter |> Seq.filter ~f:(Memory.contains base) in
-  let addr,roots = match Seq.to_list roots with
-    | r :: rs -> r,rs
-    | [] -> Memory.min_addr base, [] in
-  let init = {base; addr; visited = Visited.empty;
-              roots; inits = Addr.Set.of_list roots;
-              dests = Addrs.create (); errors = []; lift} in
-  Memory.view ~from:addr base >>= fun mem ->
-  Dis.run disasm mem ~stop_on ~return ~init
-    ~hit:(fun d mem insn s ->
-        next d (update s mem insn (brancher mem insn)))
-    ~invalid:(fun d mem s -> next d (errored s (`Failed_to_disasm mem)))
-    ~stopped:next >>= update_intersections disasm brancher
+  let steps = ref 0 in
+  let step d s =
+    incr steps;
+    let {Stage1.work} = s in
+    eprintf "step %d: %d steps left\n" steps.contents
+      (List.length work);
+    if Stage1.is_ready s then s
+    else Stage1.view s base ~f:(fun s mem -> Dis.jump d mem s) in
+  Stage1.start base (Rooter.roots rooter) ~f:(fun init mem ->
+      Dis.run disasm mem ~stop_on ~return:ident ~init
+        ~stopped:(fun d s -> step d (Stage1.stopped s))
+        ~hit:(fun d mem insn s ->
+            step d @@
+            let code = lift mem insn in
+            if Insn.(may affect_control_flow) code ||
+               has_jump (Insn.bil code)
+            then
+              Stage1.jumped s mem (brancher mem insn) (delay code)
+            else Stage1.moved s mem)
+        ~invalid:(fun d _ s ->  step d (Stage1.failed s s.addr)))
 
-(* performs the initial markup.
+let reorder_insns delay insns =
+  let rec loop delayed result input =
+    let delayed,result = List.fold delayed
+        ~init:([],result) ~f:(fun (delayed,result) (delay,insn) ->
+            if delay = 0 then delayed, insn::result
+            else (delay-1,insn)::delayed, result) in
+    match input with
+    | x :: xs ->
+      let delay = delay x in
+      if delay = 0 then loop delayed (x::result)  xs
+      else loop ((delay,x)::delayed) result xs
+    | [] -> match delayed with
+      | [] -> List.rev result
+      | _ -> loop delayed result [] in
+  loop [] [] insns
 
-   Returns three tables: leads, terms, and kinds. Leads is a mapping
-   from leader to all predcessing terminators. Terms is a mapping from
-   terminators to all successive leaders. Kinds is a mapping from a
-   terminator addresses, to all outputs with each output including the
-   kind annotation, e.g, Cond, Jump, etc. This also includes
-   unresolved outputs.
-*)
-
-let sexp_of_addr addr =
-  Sexp.Atom (Addr.string_of_value addr)
-
-let create_indexes (dests : dests Addr.Table.t) =
-  let leads = Addrs.create () in
-  let terms = Addrs.create () in
-  let succs = Addrs.create () in
-  Addrs.iteri dests ~f:(fun ~key:src ~data:dests ->
-      List.iter dests ~f:(fun dest ->
-          Addrs.add_multi succs ~key:src ~data:dest;
-          match dest with
-          | None,_ -> ()
-          | Some dst,_ ->
-            Addrs.add_multi leads ~key:dst ~data:src;
-            Addrs.add_multi terms ~key:src ~data:dst));
-  leads, terms, succs
-
-let join_destinations ?default dests =
-  let jmp x = [ Bil.(jmp (int x)) ] in
-  let undecided x =
-    Bil.if_ (Bil.unknown "destination" (Type.Imm 1)) (jmp x) [] in
-  let init = match default with
-    | None -> []
-    | Some x -> jmp x in
-  Set.fold dests ~init ~f:(fun bil x -> undecided x :: bil)
-
-let make_switch x dests =
-  let case addr = Bil.(if_ (x = int addr) [jmp (int addr)] []) in
-  let default = Bil.jmp x in
-  Set.fold dests ~init:[default] ~f:(fun ds a -> case a :: ds)
-
-let dests_of_bil bil =
-  (object inherit [Addr.Set.t] Stmt.visitor
-    method! visit_jmp e dests = match e with
-      | Int w -> Set.add dests w
-      | _ -> dests
-  end)#run bil Addr.Set.empty
-
-let add_destinations bil = function
-  | [] -> bil
-  | dests ->
-    let d = dests_of_bil bil in
-    let d' = Addr.Set.of_list dests in
-    let n = Set.diff d' d in
-    if Set.is_empty n then bil
-    else
-    if has_jump bil then
-      (object inherit Stmt.mapper
-        method! map_jmp = function
-          | Int addr -> join_destinations ~default:addr n
-          | indirect -> make_switch indirect n
-      end)#run bil
-    else bil @ join_destinations n
-
-let disasm stage1 dis mem =
-  Dis.run dis mem
-    ~init:[] ~return:ident ~stopped:(fun s _ ->
-        Dis.stop s (Dis.insns s)) |>
-  List.map ~f:(function
-      | mem, None -> mem,(None,Theory.Program.empty)
-      | mem, (Some ins as insn) ->
-        let dests =
-          Addrs.find stage1.dests (Memory.min_addr mem) |>
-          Option.value ~default:[] |>
-          List.filter_map ~f:(function
-              | a, (`Cond | `Jump) -> a
-              | _ -> None) in
-        let bil,sema = match stage1.lift mem ins with
-          | Ok sema -> Insn.bil sema, sema
-          | _ -> [], Theory.Program.empty in
-        let bil = add_destinations bil dests in
-        mem, (insn, with_bil sema bil))
-
-let stage2 dis stage1 =
-  let dis = Dis.store_asm dis in
-  let dis = Dis.store_kinds dis in
-  let leads, terms, kinds = create_indexes stage1.dests in
-  let addrs = Addrs.create () in
-  let succs = Addrs.create () in
-  let preds = Addrs.create () in
-  let next = Addr.succ in
-  let is_edge addr max_addr =
-    Addrs.mem leads (next max_addr) ||
-    Addrs.mem kinds addr ||
-    Addrs.mem stage1.dests addr ||
-    Set.mem stage1.inits (next max_addr) in
-  let is_insn = Visited.has_insn stage1.visited in
-  let next_visited = Visited.upper_bound stage1.visited in
-  let create_block start addr max_addr =
-    Memory.range stage1.base start max_addr >>= fun blk ->
-    Addrs.add_exn addrs ~key:start ~data:blk;
-    let () = match Addrs.find terms addr with
-      | None -> ()
-      | Some leaders -> List.iter leaders ~f:(fun leader ->
-          Addrs.add_multi preds ~key:leader ~data:start) in
-    let dests = match Addrs.find kinds addr with
-      | Some dests -> dests
-      | None when Addrs.mem leads (next max_addr) &&
-                  not (Addrs.mem stage1.dests addr) ->
-        Addrs.add_multi preds ~key:(next max_addr) ~data:start;
-        [Some (next max_addr),`Fall]
-      | None -> [] in
-    Addrs.add_exn succs ~key:start ~data:dests;
-    return () in
-
-  let next_block leftovers start =
-    let rec loop leftovers last start curr =
-      match Visited.find_insn leftovers curr with
-      | Some max_addr ->
-        let insn = curr,max_addr in
-        let leftovers = Visited.forget leftovers curr in
-        if is_edge curr max_addr then Some (leftovers, start, insn)
-        else loop leftovers (Some insn) start (next max_addr)
-      | None -> match last with
-        | Some last when is_insn start -> Some (leftovers,start,last)
-        | _ -> match next_visited curr with
-          | Some (addr,_) -> loop leftovers None addr addr
-          | None -> None in
-    loop leftovers None start start in
-  let fetch_blocks () =
-    let rec loop leftovers start =
-      match next_block leftovers start with
-      | Some (leftovers,start,(addr, max_addr)) ->
-        if Hashtbl.mem addrs start then
-          loop leftovers (next max_addr)
-        else
-          create_block start addr max_addr >>= fun () ->
-          loop leftovers (next max_addr)
-      | None -> match Visited.min_insn leftovers with
-        | Some (addr,_) -> loop leftovers addr
-        | _ -> Ok () in
-    match Visited.min_insn stage1.visited with
-    | Some (addr,_) -> loop stage1.visited addr
-    | _ -> errorf "Provided memory doesn't contain a recognizable code" in
-  fetch_blocks () >>= fun () ->
-  return {stage1; addrs; succs; preds; disasm = disasm stage1 dis}
-
-let stage3 s2 =
-  let is_found addr = Addrs.mem s2.addrs addr in
-  let pred_is_found = is_found in
-  let succ_is_found = function
-    | None,_ -> true
-    | Some addr,_ -> is_found addr in
-  let filter bs ~f = Addrs.filter_map bs ~f:(fun ps ->
-      match List.filter ps ~f with
-      | [] -> None
-      | preds -> Some preds) in
-  let s2 = {
-    s2 with
-    succs = filter s2.succs ~f:succ_is_found;
-    preds = filter s2.preds ~f:pred_is_found;
-  } in
-  let nodes = Addrs.create () in
-  Addrs.iteri s2.addrs ~f:(fun ~key:addr ~data:mem ->
-      s2.disasm mem |> List.filter_map ~f:(function
-          | _,(None,_) -> None
-          | mem,(Some _,sema) -> Some (mem, sema)) |> function
-      | [] -> ()
-      | insns ->
-        let node = Block.create mem insns in
-        Addrs.set nodes ~key:addr ~data:node);
-  let cfg =
-    Addrs.fold nodes ~init:Cfg.empty ~f:(fun ~key:addr ~data:x cfg ->
-        match Addrs.find s2.succs addr with
-        | None -> Cfg.Node.insert x cfg
-        | Some dests ->
-          List.fold dests ~init:cfg ~f:(fun cfg dest -> match dest with
-              | None,_ -> Cfg.Node.insert x cfg
-              | Some d,e -> match Addrs.find nodes d with
-                | None -> Cfg.Node.insert x cfg
-                | Some y ->
-                  let edge = Cfg.Edge.create x y e in
-                  Cfg.Edge.insert edge cfg)) in
-  return {cfg; failures = s2.stage1.errors}
+let build_graph dis lift base {Stage1.begs; jmps; data} =
+  eprintf "Stage1 finished with %d blocks\n" (Set.length begs);
+  let blocks = Hashtbl.create (module Addr) in
+  let view ?len from = match Memory.view ?words:len ~from base with
+    | Ok mem -> mem
+    | Error _ ->
+      eprintf "Failed to create a view [%a:%s] from [%a:%d]\n"
+        Addr.ppo from (match len with None -> "" |
+            Some s -> string_of_int s)
+        Addr.ppo (Memory.min_addr base)
+        (Memory.length base);
+      assert false in
+  let rec build cfg beg = match Hashtbl.find blocks beg with
+    | Some block -> cfg,block
+    | None ->
+      let fin,len,insns =
+        Dis.run dis (view beg) ~stop_on ~init:(beg,0,[]) ~return:ident
+          ~hit:(fun dis mem insn (curr,len,insns) ->
+              let len = Memory.length mem + len in
+              let insn = mem,lift mem insn in
+              let last = Memory.max_addr mem in
+              let next = Addr.succ last in
+              if Set.mem begs next ||
+                 Map.mem jmps curr ||
+                 Set.mem data next ||
+                 Addr.equal last (Memory.max_addr base)
+              then (curr,len,insn::insns)
+              else Dis.jump dis (view next) (next,len,insn::insns)) in
+      let insns = reorder_insns (fun (_,x) -> delay x) (List.rev insns) in
+      let block = Block.create (view ~len beg) insns in
+      Hashtbl.add_exn blocks beg block;
+      match Map.find jmps fin with
+      | None -> Cfg.Node.insert block cfg,block
+      | Some dsts ->
+        List.fold dsts ~init:cfg ~f:(fun cfg -> function
+            | None,_ -> cfg
+            | Some dst,kind ->
+              let dst = match kind with
+                | `Fall ->
+                  Addr.succ (Memory.max_addr (Block.memory block))
+                | _ -> dst in
+              let cfg,dst = build cfg dst in
+              let edge = Cfg.Edge.create block dst kind in
+              Cfg.Edge.insert edge cfg),block  in
+  let cfg = Set.fold begs ~init:Cfg.empty ~f:(fun cfg beg ->
+      fst (build cfg beg)) in
+  eprintf "CFG reconstructed, got %d blocks out of %d expected\n"
+    (Cfg.number_of_nodes cfg)
+    (Set.length begs);
+  cfg
 
 
+let finish dis lifter base stage1 = Ok {
+    cfg = build_graph dis lifter base stage1;
+    base;
+    data = Set.empty (module Addr);
+  }
 
 let lifter arch mem insn =
   let open KB.Syntax in
@@ -462,21 +345,102 @@ let lifter arch mem insn =
     KB.Object.create Theory.Program.cls >>= fun code ->
     KB.provide Arch.slot code (Some arch) >>= fun () ->
     KB.provide Memory.slot code (Some mem) >>= fun () ->
+    KB.provide Insn.Slot.name code (Dis.Insn.name insn) >>= fun () ->
     KB.provide Dis.Insn.slot code (Some insn) >>| fun () ->
     code in
   match Bap_state.run Theory.Program.cls code with
   | Ok prog ->
     let bil = Insn.bil prog in
     let prog' = Insn.of_basic ~bil insn in
-    Ok (KB.Value.merge ~on_conflict:`drop_right prog prog')
+    KB.Value.merge ~on_conflict:`drop_right prog prog'
   | Error _ ->
-    Ok (KB.Value.empty Theory.Program.cls)
+    KB.Value.empty Theory.Program.cls
 
 let run ?(backend="llvm") ?brancher ?rooter arch mem =
   let b = Option.value brancher ~default:(Brancher.of_bil arch) in
   let brancher = Brancher.resolve b in
+  let lifter = lifter arch in
   Dis.with_disasm ~backend (Arch.to_string arch) ~f:(fun dis ->
-      stage1 ?rooter (lifter arch) brancher dis mem >>= stage2 dis >>= stage3)
+      finish dis lifter mem @@
+      stage1 ?rooter lifter brancher dis mem)
 
 let cfg t = t.cfg
-let errors s = List.map s.failures ~f:snd
+let errors s =
+  Set.fold s.data ~init:[] ~f:(fun errs addr ->
+      match Memory.view s.base ~from:addr ~words:1 with
+      | Error _ -> errs
+      | Ok mem -> `Failed_to_disasm mem :: errs)
+
+
+
+(* let with_bil : code -> bil -> code = fun code bil ->
+ *   let slot = Theory.Program.Semantics.slot in
+ *   KB.Value.put Theory.Program.Semantics.slot code @@
+ *   KB.Value.put Bil.slot (KB.Value.get slot code) bil *)
+
+(* let sexp_of_addr addr =
+ *   Sexp.Atom (Addr.string_of_value addr) *)
+(* a set of all known jump destinations *)
+(* let collect_dests (dests : dests Addr.Table.t) =
+ *   let addrs = Hash_set.create (module Addr) () in
+ *   Addrs.iter dests ~f:(List.iter ~f:(function
+ *       | Some dst,_  when not (Hashtbl.mem dests dst) ->
+ *         Hash_set.add addrs dst
+ *       | _ -> ()));
+ *   addrs
+ *
+ * let join_destinations ?default dests =
+ *   let jmp x = [ Bil.(jmp (int x)) ] in
+ *   let undecided x =
+ *     Bil.if_ (Bil.unknown "destination" (Type.Imm 1)) (jmp x) [] in
+ *   let init = match default with
+ *     | None -> []
+ *     | Some x -> jmp x in
+ *   Set.fold dests ~init ~f:(fun bil x -> undecided x :: bil)
+ *
+ * let make_switch x dests =
+ *   let case addr = Bil.(if_ (x = int addr) [jmp (int addr)] []) in
+ *   let default = Bil.jmp x in
+ *   Set.fold dests ~init:[default] ~f:(fun ds a -> case a :: ds)
+ *
+ * let dests_of_bil bil =
+ *   (object inherit [Addr.Set.t] Stmt.visitor
+ *     method! visit_jmp e dests = match e with
+ *       | Int w -> Set.add dests w
+ *       | _ -> dests
+ *   end)#run bil Addr.Set.empty
+ *
+ * let add_destinations bil = function
+ *   | [] -> bil
+ *   | dests ->
+ *     let d = dests_of_bil bil in
+ *     let d' = Addr.Set.of_list dests in
+ *     let n = Set.diff d' d in
+ *     if Set.is_empty n then bil
+ *     else
+ *     if has_jump bil then
+ *       (object inherit Stmt.mapper
+ *         method! map_jmp = function
+ *           | Int addr -> join_destinations ~default:addr n
+ *           | indirect -> make_switch indirect n
+ *       end)#run bil
+ *     else bil @ join_destinations n *)
+
+(* let disasm stage1 dis mem =
+ *   Dis.run dis mem
+ *     ~init:[] ~return:ident ~stopped:(fun s _ ->
+ *         Dis.stop s (Dis.insns s)) |>
+ *   List.map ~f:(function
+ *       | mem, None -> mem,(None,Theory.Program.empty)
+ *       | mem, (Some ins as insn) ->
+ *         (\* let dests =
+ *          *   Addrs.find stage1.dests (Memory.min_addr mem) |>
+ *          *   Option.value ~default:[] |>
+ *          *   List.filter_map ~f:(function
+ *          *       | a, (`Cond | `Jump) -> a
+ *          *       | _ -> None) in
+ *          * let bil,sema = match stage1.lift mem ins with
+ *          *   | Ok sema -> Insn.bil sema, sema
+ *          *   | _ -> [], Theory.Program.empty in
+ *          * let bil = add_destinations bil dests in *\)
+ *         mem, (insn, with_bil sema bil)) *)

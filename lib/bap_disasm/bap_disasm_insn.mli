@@ -40,8 +40,9 @@ val shouldn't : may  property -> t -> t
 
 module Slot : sig
   val name : (Theory.program, string) KB.slot
-  val asm : (Theory.program, string) KB.slot
-  val ops : (Theory.program, op array option) KB.slot
+  val asm :  (Theory.program, string) KB.slot
+  val ops :  (Theory.program, op array option) KB.slot
+  val delay : (Theory.program, int option) KB.slot
 end
 
 

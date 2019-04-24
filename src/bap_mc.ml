@@ -70,6 +70,7 @@ module Program(Conf : Mc_options.Provider) = struct
       KB.Object.create Theory.Program.cls >>= fun code ->
       KB.provide Arch.slot code (Some arch) >>= fun () ->
       KB.provide Memory.slot code (Some mem) >>= fun () ->
+      KB.provide Insn.Slot.name code (Dis.Insn.name insn) >>= fun () ->
       KB.provide Dis.Insn.slot code (Some insn) >>| fun () ->
       code in
     match KB.run Theory.Program.cls sema KB.empty with

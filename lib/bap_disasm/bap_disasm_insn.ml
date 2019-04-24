@@ -73,6 +73,11 @@ module Slot = struct
       ~inspect:sexp_of_string ~empty
       ~equal:String.equal
 
+  let delay_t = KB.Domain.optional "delay_t"
+      ~inspect:sexp_of_int
+      ~equal:Int.equal
+
+
   let name = KB.Class.property ~package:"bap.std"
       ~persistent:KB.Persistent.string
       Theory.Program.cls "insn-opcode" text
@@ -80,6 +85,7 @@ module Slot = struct
   let asm = KB.Class.property ~package:"bap.std"
       ~persistent:KB.Persistent.string
       Theory.Program.cls "insn-asm" text
+
 
   let ops_domain = KB.Domain.optional "insn-ops"
       ~equal:[%compare.equal: Op.t array]
@@ -92,6 +98,12 @@ module Slot = struct
   let ops = KB.Class.property ~package:"bap.std"
       ~persistent:ops_persistent
       Theory.Program.cls "insn-ops" ops_domain
+
+  let delay = KB.Class.property ~package:"bap.std"
+      Theory.Program.cls "insn-delay" delay_t
+      ~persistent:(KB.Persistent.of_binable (module struct
+                     type t = int option [@@deriving bin_io]
+                   end))
 end
 
 
