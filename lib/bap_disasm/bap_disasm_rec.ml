@@ -123,9 +123,12 @@ end = struct
       eprintf "This was the last one, stopping\n%!";
       {s with stop = true}
     | Dest next :: work ->
-      let s = {s with begs = Set.add s.begs next} in
-      eprintf "Marking %a as leader (jump dest)\n"
-        Addr.ppo next;
+      if not (is_data s next) then
+        eprintf "Marking %a as leader%s\n"
+          Addr.ppo next
+          (if is_visited s next then ", processing it" else "");
+      let s = if is_data s next then s
+        else {s with begs = Set.add s.begs next} in
       if is_visited s next then step {s with work}
       else {s with work; addr=next}
     | Fall next :: work ->
@@ -180,7 +183,15 @@ end = struct
       s with work = Fall (Addr.succ (Memory.max_addr mem)) :: s.work;
     }
 
+  let remove s addr = {
+    s with
+    begs = Set.remove s.begs s.addr;
+    jmps = Map.remove s.jmps s.addr;
+  }
+
   let failed s addr =
+    eprintf "failed on %a, removing it@\n" Addr.ppo addr;
+    let s = remove s addr in
     let work = if is_visited s (Addr.succ addr) then s.work
       else Dest (Addr.succ addr) :: s.work in
     step {
@@ -192,11 +203,9 @@ end = struct
   let rec view s base ~f = match Memory.view ~from:s.addr base with
     | Ok mem -> f s mem
     | Error _ ->
-      let s = {
-        s with
-        begs = Set.remove s.begs s.addr;
-        jmps = Map.remove s.jmps s.addr;
-      } in
+      eprintf "address %a is not mapped, removing it from begs and jmps\n"
+        Addr.ppo s.addr;
+      let s = remove s s.addr in
       match s.work with
       | [] ->
         eprintf "view: no more tasks, stopping\n";
@@ -263,7 +272,9 @@ let stage1 ?(rooter=Rooter.empty) lift brancher disasm base =
             then
               Stage1.jumped s mem (brancher mem insn) (delay code)
             else Stage1.moved s mem)
-        ~invalid:(fun d _ s ->  step d (Stage1.failed s s.addr)))
+        ~invalid:(fun d m ({Stage1.addr} as s) ->
+            eprintf "invalid at %a - %a\n" Addr.ppo addr Memory.ppo m;
+            step d (Stage1.failed s addr)))
 
 let reorder_insns delay insns =
   let rec loop delayed result input =
@@ -283,6 +294,8 @@ let reorder_insns delay insns =
 
 let build_graph dis lift base {Stage1.begs; jmps; data} =
   eprintf "Stage1 finished with %d blocks\n" (Set.length begs);
+  let decodable addr =
+    Memory.contains base addr && not (Set.mem data addr)in
   let blocks = Hashtbl.create (module Addr) in
   let view ?len from = match Memory.view ?words:len ~from base with
     | Ok mem -> mem
@@ -293,11 +306,19 @@ let build_graph dis lift base {Stage1.begs; jmps; data} =
         Addr.ppo (Memory.min_addr base)
         (Memory.length base);
       assert false in
-  let rec build cfg beg = match Hashtbl.find blocks beg with
+  let rec build cfg beg =
+    if not (Set.mem begs beg) then
+      eprintf "A rogue block at %a\n" Addr.ppo beg;
+    match Hashtbl.find blocks beg with
     | Some block -> cfg,block
     | None ->
       let fin,len,insns =
         Dis.run dis (view beg) ~stop_on ~init:(beg,0,[]) ~return:ident
+          ~stopped:(fun _ (beg,_,_)  ->
+              failwithf "Unexpected stop at %a" Addr.pps beg ())
+          ~invalid:(fun _ mem (beg,_,_) ->
+              failwithf "Unexpected data at %a\n%a\n" Addr.pps beg
+                Memory.pps mem ())
           ~hit:(fun dis mem insn (curr,len,insns) ->
               let len = Memory.length mem + len in
               let insn = mem,lift mem insn in
@@ -311,20 +332,28 @@ let build_graph dis lift base {Stage1.begs; jmps; data} =
               else Dis.jump dis (view next) (next,len,insn::insns)) in
       let insns = reorder_insns (fun (_,x) -> delay x) (List.rev insns) in
       let block = Block.create (view ~len beg) insns in
+      let fall = Addr.succ (Memory.max_addr (Block.memory block)) in
       Hashtbl.add_exn blocks beg block;
+      let cfg = Cfg.Node.insert block cfg in
       match Map.find jmps fin with
-      | None -> Cfg.Node.insert block cfg,block
+      | None when decodable fall ->
+        eprintf "Inserting an implicit fall to %a\n" Addr.ppo fall;
+        let cfg,dst = build cfg fall in
+        let edge = Cfg.Edge.create block dst `Fall in
+        Cfg.Edge.insert edge cfg, block
+      | None -> cfg,block
       | Some dsts ->
         List.fold dsts ~init:cfg ~f:(fun cfg -> function
             | None,_ -> cfg
             | Some dst,kind ->
-              let dst = match kind with
-                | `Fall ->
-                  Addr.succ (Memory.max_addr (Block.memory block))
-                | _ -> dst in
-              let cfg,dst = build cfg dst in
-              let edge = Cfg.Edge.create block dst kind in
-              Cfg.Edge.insert edge cfg),block  in
+              let dst = match kind with `Fall -> fall | _ -> dst in
+              if decodable dst then
+                let () = eprintf "creating a destination to %a\n"
+                    Addr.ppo dst in
+                let cfg,dst = build cfg dst in
+                let edge = Cfg.Edge.create block dst kind in
+                Cfg.Edge.insert edge cfg
+              else cfg),block  in
   let cfg = Set.fold begs ~init:Cfg.empty ~f:(fun cfg beg ->
       fst (build cfg beg)) in
   eprintf "CFG reconstructed, got %d blocks out of %d expected\n"
