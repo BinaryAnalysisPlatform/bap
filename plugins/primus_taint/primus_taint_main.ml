@@ -246,7 +246,7 @@ let collectors = [
   "conservative", true;
 ]
 
-let enable_gc = param (enum collectors) ~default:true "gc"
+let enable_gc = param (enum collectors) ~default:false "gc"
     ~doc:"Picks a taint garbage collector"
 
 let () = when_ready (fun {get=(!!)} ->
