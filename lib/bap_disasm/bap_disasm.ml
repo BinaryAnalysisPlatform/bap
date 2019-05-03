@@ -29,7 +29,7 @@ type error = [
 type mem_state =
   | Failed of error                (** failed to decode anything    *)
   | Decoded of insn * error option (** decoded with optional errors *)
-  [@@deriving sexp_of]
+[@@deriving sexp_of]
 
 type cfg = Rec.cfg [@@deriving compare]
 
@@ -103,6 +103,8 @@ module Disasm = struct
     let of_image ?backend ?brancher ?rooter image =
       of_image ?backend ?brancher ?rooter image |> ok_exn
   end
+
+  module Constrained_superset = Bap_disasm_constrained_superset
 
   let insn  = Value.Tag.register (module Insn)
       ~name:"insn"

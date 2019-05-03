@@ -121,6 +121,7 @@ Library disasm
                  Bap_disasm_basic,
                  Bap_disasm_block,
                  Bap_disasm_brancher,
+                 Bap_disasm_constrained_superset,
                  Bap_disasm_insn,
                  Bap_disasm_linear_sweep,
                  Bap_disasm_prim,

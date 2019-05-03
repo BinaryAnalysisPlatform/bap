@@ -23,35 +23,21 @@ module Rel = struct
 
   let external_symbols  =
     arch_width >>= fun width ->
-    Fact.collect Ogre.Query.(
-        select (from external_reference)) >>= fun s ->
+    Fact.collect
+      Ogre.Query.(select (from external_reference)) >>= fun s ->
     Fact.return
       (of_aseq @@ Seq.map s ~f:(fun (addr, data) ->
            Addr.of_int64 ~width addr, data))
 end
 
-let find start len exts =
-  Seq.find_map ~f:(Map.find exts) @@ Seq.init len ~f:(Addr.nsucc start)
-
-let create cfg exts =
-  let insns = Disasm.create cfg |> Disasm.insns in
-  Seq.fold insns ~init:Addr.Map.empty
-    ~f:(fun calls (m,_) ->
-        let min = Memory.min_addr m in
-        let len = Memory.length m in
-        match find min len exts with
-        | None -> calls
-        | Some name -> Map.set calls min name)
-
 let init () =
-  let open Project.Info in
-  Stream.Variadic.(apply (args cfg $ spec) ~f:(fun cfg spec ->
+  Symbolizer.Factory.register "relocatable" @@
+  Stream.map Project.Info.spec ~f:(fun spec ->
       let name =
         match Fact.eval Rel.external_symbols spec with
-        | Ok exts -> Map.find (create cfg exts)
+        | Ok exts -> Map.find exts
         | _ -> fun _ -> None in
-      Ok (Symbolizer.create name))) |>
-  Symbolizer.Factory.register "relocatable"
+      Ok (Symbolizer.create name))
 
 let () =
   Config.manpage [

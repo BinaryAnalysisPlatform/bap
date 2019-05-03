@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_knowledge
 open Bap_types.Std
 open Bap_image_std
 open Bap_disasm_source
@@ -9,6 +10,18 @@ type symbolizer = t
 
 let name_of_addr addr =
   sprintf "sub_%s" @@ Addr.string_of_value addr
+
+module Name = struct
+  let is_empty name =
+    String.is_prefix name ~prefix:"sub_"
+
+  let order x y : Knowledge.Order.partial =
+    match is_empty x, is_empty y with
+    | true,true -> EQ
+    | false,false -> if String.equal x y then EQ else NC
+    | true,false -> LT
+    | false,true -> GT
+end
 
 let create fn = Symbolizer fn
 
