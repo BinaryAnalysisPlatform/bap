@@ -3,15 +3,18 @@ open Bap_types.Std
 open Bap_core_theory
 open Bap_image_std
 
+open KB.Syntax
+
 module Dis = Bap_disasm_basic
 module Insn = Bap_disasm_insn
 
 type full_insn = Dis.full_insn [@@deriving sexp_of]
 type insn = Insn.t [@@deriving sexp_of]
-type edge = [`Jump | `Cond | `Fall]
+type edge = [`Jump | `Cond | `Fall] [@@deriving compare]
+
 
 module Machine : sig
-  type dsts = (addr option * [`Jump | `Cond | `Fall]) list
+  type dsts = addr list
   type task = private
     | Dest of {dst : addr; parent : task option}
     | Fall of {dst : addr; parent : task}
@@ -30,9 +33,16 @@ module Machine : sig
   }
 
   val start :
-    ?is_code:(addr -> bool option) ->
-    mem -> Set.M(Addr).t -> f:(state -> mem -> state) -> state
-  val view : state -> mem -> f:(state -> mem -> state) -> state
+    mem ->
+    code:Set.M(Addr).t ->
+    data:Set.M(Addr).t ->
+    init:Set.M(Addr).t ->
+    empty:(state -> 'a) ->
+    ready:(state -> mem -> 'a) -> 'a
+
+  val view : state -> mem ->
+    empty:(state -> 'a) ->
+    ready:(state -> mem -> 'a) -> 'a
 
   val failed : state -> addr -> state
   val jumped : state -> mem -> dsts -> int -> state
@@ -40,7 +50,7 @@ module Machine : sig
   val moved  : state -> mem -> state
   val is_ready : state -> bool
 end = struct
-  type dsts = (addr option * [`Jump | `Cond | `Fall]) list
+  type dsts = addr list
 
   type task =
     | Dest of {dst : addr; parent : task option}
@@ -79,9 +89,7 @@ end = struct
   }
 
   let count_valid s dsts =
-    List.count dsts ~f:(function
-        | Some dst,_ -> not (Set.mem s.data dst)
-        | None,_ -> true)
+    List.count dsts ~f:(fun dst -> not (Set.mem s.data dst))
 
   let rec cancel task s = match task with
     | Dest {parent=None} -> s
@@ -116,10 +124,11 @@ end = struct
     | (Jump {src; dsts; age=0} as jump) :: work ->
       let init = {s with jmps = Map.add_exn s.jmps src dsts; work} in
       step @@
-      List.fold dsts ~init ~f:(fun s -> function
-          | Some next,(`Jump|`Cond) when not (is_visited s next) ->
-            {s with work = Dest {dst=next; parent = Some jump} :: s.work}
-          | _ -> s)
+      List.fold dsts ~init ~f:(fun s next ->
+          if not (is_visited s next)
+          then {s with work = Dest {dst=next; parent = Some jump} ::
+                              s.work}
+          else s)
     | Jump jmp :: (Fall {dst=next} as fall) :: work -> step {
         s with
         work = fall :: Jump {
@@ -162,31 +171,20 @@ end = struct
 
   let stopped s = step @@ mark_data s s.addr
 
-  let rec view s base ~f = match Memory.view ~from:s.addr base with
-    | Ok mem -> f s mem
+  let rec view s base ~empty ~ready =
+    match Memory.view ~from:s.addr base with
+    | Ok mem -> ready s mem
     | Error _ -> match s.work with
-      | [] -> step s
-      | _  -> view (step s) base ~f
+      | [] -> empty (step s)
+      | _  -> view (step s) base ~empty ~ready
 
-  let start ?is_code mem roots =
-    let empty = Set.empty (module Addr) in
-    let usat,data = match is_code with
-      | None -> empty,empty
-      | Some is_code ->
-        let base = Memory.min_addr mem in
-        Seq.range 0 (Memory.length mem) |>
-        Seq.fold ~init:(empty,empty) ~f:(fun (code,data) off ->
-            let addr = Addr.(nsucc base off) in
-            match is_code addr with
-            | None -> code,data
-            | Some false -> code,Set.add data addr
-            | Some true -> Set.add code addr,data) in
-    let work = init_work roots in
-    let start = match Set.min_elt roots with
+  let start mem ~code ~data ~init =
+    let work = init_work init in
+    let start = match Set.min_elt init with
       | Some start -> start
       | None -> Memory.min_addr mem in
     view {
-      work; data; usat;
+      work; data; usat=code;
       addr = start;
       curr = Dest {dst = start; parent = None};
       stop = false;
@@ -197,38 +195,84 @@ end = struct
 end
 
 
-let rec has_jump = function
-  | [] -> false
-  | Bil.Jmp _ :: _ | Bil.CpuExn _ :: _ -> true
-  | Bil.If (_,y,n) :: xs -> has_jump y || has_jump n || has_jump xs
-  | Bil.While (_,b) :: xs -> has_jump b || has_jump xs
-  | _ :: xs -> has_jump xs
 
+let dests : (Theory.program, Set.M(Theory.Label).t option) KB.slot =
+  let data = KB.Domain.optional ~equal:Set.equal "label" in
+  KB.Class.property ~package:"bap.std" Theory.Program.cls
+    "dests" data
 
-let delay insn = match KB.Value.get Insn.Slot.delay insn with
+let new_insn arch mem insn =
+  KB.Object.create Theory.Program.cls >>= fun code ->
+  KB.provide Arch.slot code (Some arch) >>= fun () ->
+  KB.provide Memory.slot code (Some mem) >>= fun () ->
+  KB.provide Insn.Slot.name code (Dis.Insn.name insn) >>= fun () ->
+  KB.provide Dis.Insn.slot code (Some insn) >>| fun () ->
+  code
+
+let collect_dests arch mem insn =
+  let width = Size.in_bits (Arch.addr_size arch) in
+  let fall = Addr.to_bitvec (Addr.succ (Memory.max_addr mem)) in
+  new_insn arch mem insn >>= fun code ->
+  KB.collect dests code >>= function
+  | None -> KB.return []
+  | Some dests ->
+    Set.to_sequence dests |>
+    KB.Seq.filter_map ~f:(fun label ->
+        KB.collect Theory.Label.addr label >>| function
+        | Some d when Bitvec.(d <> fall) -> Some (Word.create d width)
+        | _ -> None) >>|
+    Seq.to_list_rev
+
+let delay arch mem insn =
+  new_insn arch mem insn >>= fun code ->
+  KB.collect Insn.Slot.delay code >>| function
   | None -> 0
   | Some x -> x
 
-let stop_on = [`Valid]
 
-let dests _ = []
+let attr name =
+  let bool_t = KB.Domain.optional ~equal:Bool.equal "bool" in
+  KB.Class.property ~package:"bap.std" Theory.Program.cls name bool_t
 
-let scan_mem ?is_code (roots : Addr.Set.t) lift disasm base =
+
+let is_valid = attr "is-valid"
+let is_subroutine = attr "is-subroutine"
+
+let classify_mem mem =
+  let empty = Set.empty (module Addr) in
+  let base = Memory.min_addr mem in
+  Seq.range 0 (Memory.length mem) |>
+  KB.Seq.fold ~init:(empty,empty,empty) ~f:(fun (code,data,root) off ->
+      let addr = Addr.(nsucc base off) in
+      Theory.Label.for_addr (Addr.to_bitvec addr) >>= fun label ->
+      KB.collect is_valid label >>= function
+      | Some false -> KB.return (code,Set.add data addr,root)
+      | r ->
+        let code = if Option.is_none r then code
+          else Set.add code addr in
+        KB.collect is_subroutine label >>| function
+        | Some true -> (code,data,Set.add root addr)
+        | _ -> (code,data,root))
+
+let scan_mem arch disasm base : Machine.state KB.t =
+  classify_mem base >>= fun (code,data,init) ->
   let step d s =
-    if Machine.is_ready s then s
-    else Machine.view s base ~f:(fun s mem -> Dis.jump d mem s) in
-  Machine.start ?is_code base roots ~f:(fun init mem ->
-      Dis.run disasm mem ~stop_on ~return:ident ~init
-        ~stopped:(fun d s -> step d (Machine.stopped s))
-        ~hit:(fun d mem insn s ->
-            step d @@
-            let code = lift mem insn in
-            if Insn.(may affect_control_flow) code ||
-               has_jump (Insn.bil code)
-            then
-              Machine.jumped s mem (dests code) (delay code)
-            else Machine.moved s mem)
-        ~invalid:(fun d _ s -> step d (Machine.failed s s.addr)))
+    if Machine.is_ready s then KB.return s
+    else Machine.view s base ~ready:(fun s mem -> Dis.jump d mem s)
+        ~empty:KB.return in
+  Machine.start base ~code ~data ~init
+    ~ready:(fun init mem ->
+        Dis.run disasm mem ~stop_on:[`Valid]
+          ~return:KB.return ~init
+          ~stopped:(fun d s -> step d (Machine.stopped s))
+          ~hit:(fun d mem insn s ->
+              collect_dests arch mem insn >>= function
+              | [] -> step d @@ Machine.moved s mem
+              | dests ->
+                delay arch mem insn >>= fun delay ->
+                step d @@ Machine.jumped s mem dests delay)
+          ~invalid:(fun d _ s -> step d (Machine.failed s s.addr)))
+    ~empty:KB.return
 
 type t = {
   dis : (Dis.empty, Dis.empty) Dis.t;
@@ -251,85 +295,82 @@ let create ?(backend="llvm") arch =
       mems = []
     }
 
-let lifter arch mem insn =
+let scan self mem =
   let open KB.Syntax in
-  let code =
-    KB.Object.create Theory.Program.cls >>= fun code ->
-    KB.provide Arch.slot code (Some arch) >>= fun () ->
-    KB.provide Memory.slot code (Some mem) >>= fun () ->
-    KB.provide Insn.Slot.name code (Dis.Insn.name insn) >>= fun () ->
-    KB.provide Dis.Insn.slot code (Some insn) >>| fun () ->
-    code in
-  match Bap_state.run Theory.Program.cls code with
-  | Ok prog ->
-    let bil = Insn.bil prog in
-    let prog' = Insn.of_basic ~bil insn in
-    KB.Value.merge ~on_conflict:`drop_right prog prog'
-  | Error _ ->
-    KB.Value.empty Theory.Program.cls
-
-
-let scan ?(entries=[]) ?is_code self mem =
-  let lifter = lifter self.arch in
-  let roots =
-    List.fold entries ~init:(Set.empty (module Addr)) ~f:Set.add in
-  let {Machine.begs; jmps; data} =
-    scan_mem ?is_code roots lifter self.dis mem in
+  scan_mem self.arch self.dis mem >>|
+  fun {Machine.begs; jmps; data} ->
   let jmps = Map.merge self.jmps jmps ~f:(fun ~key:_ -> function
       | `Left dsts | `Right dsts | `Both (_,dsts) -> Some dsts) in
   let begs = Set.union self.begs begs in
   let data = Set.union self.data data in
-  {
-    self with begs; data; jmps;
-              mems = mem :: self.mems;
-  }
+  {self with begs; data; jmps; mems = mem :: self.mems}
+
+
+type insns = (mem * Theory.Label.t) list
+
+let list_insns ?(rev=false) insns =
+  if rev then List.rev insns else insns
+
+let rec insert pos x xs =
+  if pos = 0 then x::xs else match xs with
+    | x' :: xs -> x' :: insert (pos-1) x xs
+    | [] -> [x]
+
+let execution_order ~delay stack =
+  KB.List.fold stack ~init:[] ~f:(fun insns (mem,insn) ->
+      delay insn >>| fun d -> insert d (mem,insn) insns)
+
+let always _ = KB.return true
 
 let explore
-    ?entry:start ?(follow=fun _ -> true) ~lift ~node ~edge ~init
-    {begs; jmps; data; dis; mems} =
+    ?entry:start ?(follow=always) ~block ~node ~edge ~init
+    {begs; jmps; data; dis; mems; arch} =
   let find_base addr =
     if Set.mem data addr then None
     else List.find mems ~f:(fun mem -> Memory.contains mem addr) in
   let blocks = Hashtbl.create (module Addr) in
-  let edge_insert cfg src dst kind =
-    Option.value_map dst ~default:cfg ~f:(fun dst ->
-        edge src dst kind cfg) in
+  let edge_insert cfg src dst = match dst with
+    | None -> KB.return cfg
+    | Some dst -> edge src dst cfg in
   let view ?len from mem = ok_exn (Memory.view ?words:len ~from mem) in
   let rec build cfg beg =
-    if not (follow beg) then cfg,None
-    else match Hashtbl.find blocks beg with
-      | Some block -> cfg, Some block
+    follow beg >>= function
+    | false -> KB.return (cfg,None)
+    | true -> match Hashtbl.find blocks beg with
+      | Some block -> KB.return (cfg, Some block)
       | None -> match find_base beg with
-        | None -> cfg,None
+        | None -> KB.return (cfg,None)
         | Some mem ->
-          let fin,len,insns =
-            Dis.run dis (view beg mem)
-              ~stop_on ~init:(beg,0,[]) ~return:ident
-              ~hit:(fun dis mem insn (curr,len,insns) ->
-                  let len = Memory.length mem + len in
-                  let last = Memory.max_addr mem in
-                  let next = Addr.succ last in
-                  if Set.mem begs next || Map.mem jmps curr
-                  then (curr,len,(mem,insn)::insns)
-                  else Dis.jump dis (view next mem)
-                      (next,len,(mem,insn)::insns)) in
+          Dis.run dis (view beg mem) ~stop_on:[`Valid]
+            ~init:(beg,0,[]) ~return:KB.return
+            ~hit:(fun s mem insn (curr,len,insns) ->
+                new_insn arch mem insn >>= fun insn ->
+                let len = Memory.length mem + len in
+                let last = Memory.max_addr mem in
+                let next = Addr.succ last in
+                if Set.mem begs next || Map.mem jmps curr
+                then KB.return (curr,len,(mem,insn)::insns)
+                else Dis.jump s (view next mem)
+                    (next,len,(mem,insn)::insns))
+          >>= fun (fin,len,insns) ->
           let mem = view ~len beg mem in
-          let block = lift mem (List.rev insns) in
+          block mem insns >>= fun block ->
           let fall = Addr.succ (Memory.max_addr mem) in
           Hashtbl.add_exn blocks beg block;
-          let cfg = node block cfg in
+          node block cfg >>= fun cfg ->
           match Map.find jmps fin with
           | None ->
-            let cfg,dst = build cfg fall in
-            edge_insert cfg block dst `Fall, Some block
+            build cfg fall >>= fun (cfg,dst) ->
+            edge_insert cfg block dst >>= fun cfg ->
+            KB.return (cfg, Some block)
           | Some dsts ->
-            List.fold dsts ~init:cfg ~f:(fun cfg -> function
-                | None,_ -> cfg
-                | Some dst,kind ->
-                  let dst = match kind with `Fall -> fall | _ -> dst in
-                  let cfg,dst = build cfg dst in
-                  edge_insert cfg block dst kind),Some block  in
+            KB.List.fold (fall::dsts) ~init:cfg ~f:(fun cfg dst ->
+                build cfg dst >>= fun (cfg,dst) ->
+                edge_insert cfg block dst) >>= fun cfg ->
+            KB.return (cfg,Some block)  in
   match start with
-  | None -> Set.fold begs ~init ~f:(fun cfg beg ->
-      fst (build cfg beg))
-  | Some start -> fst (build init start)
+  | None ->
+    Set.to_sequence begs |>
+    KB.Seq.fold ~init ~f:(fun cfg beg ->
+        build cfg beg >>| fst)
+  | Some start -> build init start >>| fst

@@ -1,23 +1,26 @@
 open Core_kernel
-open Graphlib.Std
 open Bap_types.Std
 open Bap_image_std
+open Bap_knowledge
+open Bap_core_theory
 
-module Dis = Bap_disasm_basic
 type t
-type edge = [`Jump | `Cond | `Fall]
 
 val create : ?backend:string -> arch -> t Or_error.t
-val scan :
-  ?entries:addr list ->
-  ?is_code:(addr -> bool option) ->
-  t -> mem -> t
+val scan : t -> mem -> t knowledge
+
+type insns
+
+val list_insns : ?rev:bool -> insns -> (mem * Theory.Label.t) list
+
+val execution_order : delay:(Theory.Label.t -> int knowledge) -> insns ->
+  (mem * Theory.Label.t) list knowledge
 
 val explore :
   ?entry:addr ->
-  ?follow:(addr -> bool) ->
-  lift:(mem -> (mem * Dis.full_insn) list -> 'n) ->
-  node:('n -> 'c -> 'c) ->
-  edge:('n -> 'n -> edge -> 'c -> 'c) ->
+  ?follow:(addr -> bool knowledge) ->
+  block:(mem -> insns -> 'n knowledge) ->
+  node:('n -> 'c -> 'c knowledge) ->
+  edge:('n -> 'n -> 'c -> 'c knowledge) ->
   init:'c ->
-  t -> 'c
+  t -> 'c knowledge
