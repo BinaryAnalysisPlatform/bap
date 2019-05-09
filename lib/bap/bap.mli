@@ -6105,10 +6105,14 @@ module Std : sig
     type t = Theory.Program.t [@@deriving bin_io, compare, sexp]
 
     module Slot : sig
-      val name : (Theory.program, string) Knowledge.slot
-      val asm : (Theory.program, string) Knowledge.slot
-      val ops : (Theory.program, op array option) Knowledge.slot
-      val delay : (Theory.program, int option) KB.slot
+      type 'a t = (Theory.program, 'a) KB.slot
+      val name : string t
+      val asm :  string t
+      val ops :  op array option t
+      val delay : int option t
+      val dests : Set.M(Theory.Label).t option t
+      val is_valid : bool option t
+      val is_subroutine : bool option t
     end
 
     (** {3 Creating}

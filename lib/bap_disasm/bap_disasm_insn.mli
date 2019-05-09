@@ -8,6 +8,9 @@ open Bap_ir
 type t = Theory.Program.t [@@deriving bin_io, compare, sexp]
 type op = Op.t [@@deriving bin_io, compare, sexp]
 
+val empty : t
+val create : Theory.Program.Semantics.t -> t
+
 val of_basic : ?bil:bil -> Basic.full_insn -> t
 
 val name : t -> string
@@ -39,10 +42,14 @@ val shouldn't : may  property -> t -> t
 
 
 module Slot : sig
-  val name : (Theory.program, string) KB.slot
-  val asm :  (Theory.program, string) KB.slot
-  val ops :  (Theory.program, op array option) KB.slot
-  val delay : (Theory.program, int option) KB.slot
+  type 'a t = (Theory.program, 'a) KB.slot
+  val name : string t
+  val asm :  string t
+  val ops :  op array option t
+  val delay : int option t
+  val dests : Set.M(Theory.Label).t option t
+  val is_valid : bool option t
+  val is_subroutine : bool option t
 end
 
 

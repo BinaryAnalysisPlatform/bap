@@ -68,6 +68,8 @@ type op = Op.t [@@deriving bin_io, compare, sexp]
 
 
 module Slot = struct
+  type 'a t = (Theory.program, 'a) KB.slot
+
   let empty = "#undefined"
   let text = KB.Domain.flat "text"
       ~inspect:sexp_of_string ~empty
@@ -104,6 +106,19 @@ module Slot = struct
       ~persistent:(KB.Persistent.of_binable (module struct
                      type t = int option [@@deriving bin_io]
                    end))
+
+  let dests : (Theory.program, Set.M(Theory.Label).t option) KB.slot =
+    let data = KB.Domain.optional ~equal:Set.equal "label" in
+    KB.Class.property ~package:"bap.std" Theory.Program.cls
+      "insn-dests" data
+
+  let attr name =
+    let bool_t = KB.Domain.optional ~equal:Bool.equal "bool" in
+    KB.Class.property ~package:"bap.std" Theory.Program.cls name bool_t
+
+
+  let is_valid = attr "is-valid"
+  let is_subroutine = attr "is-subroutine"
 end
 
 
@@ -188,6 +203,11 @@ let bil insn = KB.Value.get Bil.slot (KB.Value.get Theory.Program.Semantics.slot
 let ops s = match KB.Value.get Slot.ops s with
   | None -> [||]
   | Some ops -> ops
+
+let empty = KB.Value.empty Theory.Program.cls
+let create s =
+  KB.Value.put Theory.Program.Semantics.slot empty  s
+
 
 module Adt = struct
   let pr fmt = Format.fprintf fmt

@@ -207,8 +207,32 @@ let provide_lifter () =
       Knowledge.return Theory.Program.Semantics.empty in
   Knowledge.promise Theory.Program.Semantics.slot lifter
 
+let rec dests_of_bil bil =
+  let init = Set.empty (module Theory.Label) in
+  KB.List.fold bil ~init ~f:(fun dests -> function
+      | Bil.Jmp (Int dst) ->
+        Theory.Label.for_addr (Word.to_bitvec dst) >>|
+        Set.add dests
+      | Bil.CpuExn n ->
+        Theory.Label.for_ivec n >>| Set.add dests
+      | Bil.Jmp _ ->
+        KB.Object.create Theory.Program.cls >>|  Set.add dests
+      | Bil.Move _ | Bil.Special _ -> KB.return dests
+      | Bil.While (_,xs) -> dests_of_bil xs
+      | Bil.If (_,xs,ys) ->
+        dests_of_bil xs >>= fun xs ->
+        dests_of_bil ys >>= fun ys ->
+        KB.return (Set.union xs ys))
+
+let provide_dests () =
+  info "providing destinations computed from BIL";
+  KB.promise Insn.Slot.dests @@ fun label ->
+  KB.collect Theory.Program.Semantics.slot label >>= fun sema ->
+  dests_of_bil (KB.Value.get Bil.slot sema) >>| Option.some
+
 
 let init () =
   Bil_ir.init ();
   provide_lifter ();
-  provide_bir ()
+  provide_bir ();
+  provide_dests ()

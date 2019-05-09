@@ -5,13 +5,17 @@ open Graphlib.Std
 open Bap_core_theory
 open Bap_image_std
 
-module Dis = Bap_disasm_basic
+open KB.Syntax
+
+module Disasm = Bap_disasm_constrained_superset
 module Brancher = Bap_disasm_brancher
 module Rooter = Bap_disasm_rooter
 module Block = Bap_disasm_block
 module Insn = Bap_disasm_insn
+module State = Bap_state
+module Basic = Bap_disasm_basic
 
-type full_insn = Dis.full_insn [@@deriving sexp_of]
+type full_insn = Basic.full_insn [@@deriving sexp_of]
 type insn = Insn.t [@@deriving sexp_of]
 type block = Block.t
 type edge = Block.edge [@@deriving compare, sexp]
@@ -52,369 +56,87 @@ module Cfg = Graphlib.Make(Node)(Edge)
 
 type cfg = Cfg.t [@@deriving compare]
 
-type blk_dest = [
-  | `Block of block * edge
-  | `Unresolved of jump
-]
+type t = {cfg : Cfg.t}
 
-(*
-   An address is a leader of a basic block if it is
-   an instruction, and any of the following is true:
-   - it is a root;
-   - it is a target of a jump instruction;
-   - it has more than one incoming edge;
+let (>>=?) x f = x >>= function
+  | None -> KB.return None
+  | Some x -> f x
 
-   An instruction is a terminator of a basic block if
-   any of the following is true:
-   - it is a jump instruction
-   - the next address after the isntruction is:
-     - a leader;
-     - points to data.
-*)
-module Stage1 : sig
-  type dsts = (addr option * [`Jump | `Cond | `Fall]) list
-  type task = private
-    | Dest of addr
-    | Fall of addr
-    | Jump of {src : addr; age: int; dsts : dsts}
+let provide_dests brancher =
+  let init = Set.empty (module Theory.Label) in
+  KB.promise Insn.Slot.dests @@ fun label ->
+  KB.collect Memory.slot label >>=? fun mem ->
+  KB.collect Basic.Insn.slot label >>=? fun insn ->
+  Brancher.resolve brancher mem insn |>
+  KB.List.fold ~init ~f:(fun dsts dst ->
+      match dst with
+      | Some addr,_ ->
+        Theory.Label.for_addr (Word.to_bitvec addr) >>| fun dst ->
+        Set.add dsts dst
+      | None,_ -> KB.return dsts) >>|
+  Option.some
 
-  type state = private {
-    stop : bool;
-    work : task list;           (* work list*)
-    addr : addr;                (* current address *)
-    begs : Set.M(Addr).t;       (* begins of basic blocks *)
-    jmps : dsts Map.M(Addr).t;  (* jumps  *)
-    code : Set.M(Addr).t;       (* all valid instructions *)
-    data : Set.M(Addr).t        (* all non-instructions *)
-  }
+let provide_roots rooter =
+  Rooter.roots rooter |>
+  KB.Seq.iter ~f:(fun root ->
+      Theory.Label.for_addr (Word.to_bitvec root) >>= fun label ->
+      KB.provide Insn.Slot.is_valid label (Some true) >>= fun () ->
+      KB.provide Insn.Slot.is_subroutine label (Some true))
 
-  val start : mem -> addr seq -> f:(state -> mem -> state) -> state
-  val view : state -> mem -> f:(state -> mem -> state) -> state
-
-  val failed : state -> addr -> state
-  val jumped : state -> mem -> dsts -> int -> state
-  val stopped : state -> state
-  val moved  : state -> mem -> state
-  val is_ready : state -> bool
-end = struct
-  type dsts = (addr option * [`Jump | `Cond | `Fall]) list
-  type task =
-    | Dest of addr
-    | Fall of addr
-    | Jump of {src : addr; age: int; dsts : dsts}
-
-  type state = {
-    stop : bool;
-    work : task list;           (* work list*)
-    addr : addr;                (* current address *)
-    begs : Set.M(Addr).t;       (* begins of basic blocks *)
-    jmps : dsts Map.M(Addr).t;  (* jumps  *)
-    code : Set.M(Addr).t;       (* all valid instructions *)
-    data : Set.M(Addr).t        (* all non-instructions *)
-  }
-
-  let is_code s addr = Set.mem s.code addr
-  let is_data s addr = Set.mem s.data addr
-  let is_visited s addr = is_code s addr || is_data s addr
-  let is_ready s = s.stop
-
-  let rec step s = match s.work with
-    | [] -> {s with stop = true}
-    | Dest next :: work ->
-      let s = if is_data s next then s
-        else {s with begs = Set.add s.begs next} in
-      if is_visited s next then step {s with work}
-      else {s with work; addr=next}
-    | Fall next :: work ->
-      if is_code s next
-      then step {s with begs = Set.add s.begs next; work}
-      else if is_data s next then step {s with work}
-      else {s with work; addr=next}
-    | Jump {src; dsts} :: ([] as work)
-    | Jump {src; dsts; age=0} :: work ->
-      let init = {s with jmps = Map.add_exn s.jmps src dsts; work} in
-      step @@
-      List.fold dsts ~init ~f:(fun s -> function
-          | Some next,(`Jump|`Cond) when not (is_visited s next) ->
-            {s with work = Dest next :: s.work}
-          | _ -> s)
-    | Jump jmp :: Fall next :: work -> step {
-        s with
-        work = Fall next :: Jump {
-            jmp with age = jmp.age-1; src = next;
-          } :: work
-      }
-    | Jump jmp :: work -> step {
-        s with work = Jump {jmp with age=0} :: work
-      }
-
-  let decoded s mem = {
-    s with code = Set.add s.code (Memory.min_addr mem)
-  }
-
-  let jumped s mem dsts delay =
-    let s = decoded s mem in
-    let next = Fall (Addr.succ (Memory.max_addr mem)) in
-    let jump = Jump {src = Memory.min_addr mem; age=delay; dsts} in
-    step {s with work = jump :: next :: s.work }
-
-  let moved s mem =
-    step @@ decoded {
-      s with work = Fall (Addr.succ (Memory.max_addr mem)) :: s.work;
-    } mem
-
-  let remove s addr = {
-    s with
-    begs = Set.remove s.begs addr;
-    jmps = Map.remove s.jmps addr;
-  }
-
-  let failed s addr =
-    let s = remove s addr in
-    let work = if is_visited s (Addr.succ addr) then s.work
-      else Dest (Addr.succ addr) :: s.work in
-    step {
-      s with data = Set.add s.data addr; work
-    }
-
-  let stopped s =
-    step @@ remove {
-      s with data = Set.add s.data s.addr;
-    } s.addr
-
-  let rec view s base ~f = match Memory.view ~from:s.addr base with
-    | Ok mem -> f s mem
-    | Error _ ->
-      let s = remove s s.addr in
-      match s.work with
-      | [] -> step s
-      | _  -> view (step s) base ~f
-
-  let start mem roots =
-    let roots = Seq.fold roots ~init:(Set.empty (module Addr)) ~f:Set.add in
-    let work =
-      Set.to_sequence ~order:`Decreasing roots |>
-      Seq.fold ~init:[] ~f:(fun work root -> Dest root :: work) in
-    let start = match Set.min_elt roots with
-      | Some start -> start
-      | None -> Memory.min_addr mem in
-    view {
-      work;
-      addr = start;
-      stop = false;
-      begs = Set.empty (module Addr);
-      jmps = Map.empty (module Addr);
-      code = Set.empty (module Addr);
-      data = Set.empty (module Addr);
-    } mem
-end
-
-type t = {
-  cfg  : Cfg.t;
-  base : mem;
-  data : Set.M(Addr).t;
-}
-
-let rec has_jump = function
-  | [] -> false
-  | Bil.Jmp _ :: _ | Bil.CpuExn _ :: _ -> true
-  | Bil.If (_,y,n) :: xs -> has_jump y || has_jump n || has_jump xs
-  | Bil.While (_,b) :: xs -> has_jump b || has_jump xs
-  | _ :: xs -> has_jump xs
-
-
-let delay insn = match KB.Value.get Insn.Slot.delay insn with
-  | None -> 0
-  | Some x -> x
-
-let stop_on = [`Valid]
-
-let stage1 ?(rooter=Rooter.empty) lift brancher disasm base =
-  let step d s =
-    if Stage1.is_ready s then s
-    else Stage1.view s base ~f:(fun s mem -> Dis.jump d mem s) in
-  Stage1.start base (Rooter.roots rooter) ~f:(fun init mem ->
-      Dis.run disasm mem ~stop_on ~return:ident ~init
-        ~stopped:(fun d s -> step d (Stage1.stopped s))
-        ~hit:(fun d mem insn s ->
-            step d @@
-            let code = lift mem insn in
-            if Insn.(may affect_control_flow) code ||
-               has_jump (Insn.bil code)
-            then
-              Stage1.jumped s mem (brancher mem insn) (delay code)
-            else Stage1.moved s mem)
-        ~invalid:(fun d _ s -> step d (Stage1.failed s s.addr)))
-
-let reorder_insns delay insns =
-  let rec loop delayed result input =
-    let delayed,result = List.fold delayed
-        ~init:([],result) ~f:(fun (delayed,result) (delay,insn) ->
-            if delay = 0 then delayed, insn::result
-            else (delay-1,insn)::delayed, result) in
-    match input with
-    | x :: xs ->
-      let delay = delay x in
-      if delay = 0 then loop delayed (x::result)  xs
-      else loop ((delay,x)::delayed) result xs
-    | [] -> match delayed with
-      | [] -> List.rev result
-      | _ -> loop delayed result [] in
-  loop [] [] insns
-
-let build_graph dis lift base {Stage1.begs; jmps; data} =
-  let decodable addr =
-    Memory.contains base addr && not (Set.mem data addr)in
-  let blocks = Hashtbl.create (module Addr) in
-  let view ?len from = ok_exn (Memory.view ?words:len ~from base) in
-  let rec build cfg beg = match Hashtbl.find blocks beg with
-    | Some block -> cfg,block
-    | None ->
-      let fin,len,insns =
-        Dis.run dis (view beg) ~stop_on ~init:(beg,0,[]) ~return:ident
-          ~hit:(fun dis mem insn (curr,len,insns) ->
-              let len = Memory.length mem + len in
-              let insn = mem,lift mem insn in
-              let last = Memory.max_addr mem in
-              let next = Addr.succ last in
-              if Set.mem begs next ||
-                 Map.mem jmps curr ||
-                 Set.mem data next ||
-                 Addr.equal last (Memory.max_addr base)
-              then (curr,len,insn::insns)
-              else Dis.jump dis (view next) (next,len,insn::insns)) in
-      let insns = reorder_insns (fun (_,x) -> delay x) (List.rev insns) in
-      let block = Block.create (view ~len beg) insns in
-      let fall = Addr.succ (Memory.max_addr (Block.memory block)) in
-      Hashtbl.add_exn blocks beg block;
-      let cfg = Cfg.Node.insert block cfg in
-      match Map.find jmps fin with
-      | None when decodable fall ->
-        let cfg,dst = build cfg fall in
-        let edge = Cfg.Edge.create block dst `Fall in
-        Cfg.Edge.insert edge cfg, block
-      | None -> cfg,block
-      | Some dsts ->
-        List.fold dsts ~init:cfg ~f:(fun cfg -> function
-            | None,_ -> cfg
-            | Some dst,kind ->
-              let dst = match kind with `Fall -> fall | _ -> dst in
-              if decodable dst then
-                let cfg,dst = build cfg dst in
-                let edge = Cfg.Edge.create block dst kind in
-                Cfg.Edge.insert edge cfg
-              else cfg),block  in
-  Set.fold begs ~init:Cfg.empty ~f:(fun cfg beg ->
-      fst (build cfg beg))
-
-let finish dis lifter base stage1 = Ok {
-    cfg = build_graph dis lifter base stage1;
-    base;
-    data = Set.empty (module Addr);
-  }
-
-let lifter arch mem insn =
-  let open KB.Syntax in
-  let code =
-    KB.Object.create Theory.Program.cls >>= fun code ->
-    KB.provide Arch.slot code (Some arch) >>= fun () ->
-    KB.provide Memory.slot code (Some mem) >>= fun () ->
-    KB.provide Insn.Slot.name code (Dis.Insn.name insn) >>= fun () ->
-    KB.provide Dis.Insn.slot code (Some insn) >>| fun () ->
-    code in
-  match Bap_state.run Theory.Program.cls code with
-  | Ok prog ->
+let create_insn basic sema =
+  let prog = Insn.create sema in
+  match basic with
+  | None -> prog
+  | Some insn ->
     let bil = Insn.bil prog in
     let prog' = Insn.of_basic ~bil insn in
     KB.Value.merge ~on_conflict:`drop_right prog prog'
-  | Error _ ->
-    KB.Value.empty Theory.Program.cls
 
-let run ?(backend="llvm") ?brancher ?rooter arch mem =
-  let b = Option.value brancher ~default:(Brancher.of_bil arch) in
-  let brancher = Brancher.resolve b in
-  let lifter = lifter arch in
-  Dis.with_disasm ~backend (Arch.to_string arch) ~f:(fun dis ->
-      finish dis lifter mem @@
-      stage1 ?rooter lifter brancher dis mem)
+let follows_after m1 m2 = Addr.equal
+    (Addr.succ (Memory.max_addr m1))
+    (Memory.min_addr m2)
+
+let disassemble brancher rooter dis mem =
+  provide_dests brancher;
+  provide_roots rooter >>= fun () ->
+  Disasm.scan dis mem >>=
+  Disasm.explore
+    ~init:Cfg.empty
+    ~block:(fun mem insns ->
+        Disasm.execution_order insns >>=
+        KB.List.map ~f:(fun (mem,label) ->
+            KB.collect Basic.Insn.slot label >>= fun basic ->
+            KB.collect Theory.Program.Semantics.slot label >>| fun s ->
+            mem,create_insn basic s) >>| Block.create mem)
+    ~node:(fun node cfg ->
+        KB.return (Cfg.Node.insert node cfg))
+    ~edge:(fun src dst g ->
+        let k = if follows_after (Block.memory src) (Block.memory dst)
+          then `Fall
+          else `Jump in
+        let edge = Cfg.Edge.create src dst k in
+        KB.return @@ Cfg.Edge.insert edge g)
+
+type self = Reconstructor
+let package = "bap.std.private"
+let self = KB.Class.declare ~package "cfg-reconstructor" Reconstructor
+let dom = KB.Domain.flat ~empty:Cfg.empty ~equal:Cfg.equal "cfg"
+let cfg = KB.Class.property ~package self "cfg" dom
+
+
+let run ?backend ?brancher ?(rooter=Rooter.empty) arch mem =
+  let brancher = Brancher.empty in
+  match Disasm.create ?backend arch with
+  | Error err -> Error err
+  | Ok disasm ->
+    let reconstructor =
+      KB.Object.create self >>= fun obj ->
+      disassemble brancher rooter disasm mem >>= fun r ->
+      KB.provide cfg obj r >>| fun () ->
+      obj in
+    match Bap_state.run self reconstructor with
+    | Ok r -> Ok {cfg = KB.Value.get cfg r}
+    | Error _ -> Or_error.errorf "Some conflict"
 
 let cfg t = t.cfg
-let errors s =
-  Set.fold s.data ~init:[] ~f:(fun errs addr ->
-      match Memory.view s.base ~from:addr ~words:1 with
-      | Error _ -> errs
-      | Ok mem -> `Failed_to_disasm mem :: errs)
-
-
-
-(* let with_bil : code -> bil -> code = fun code bil ->
- *   let slot = Theory.Program.Semantics.slot in
- *   KB.Value.put Theory.Program.Semantics.slot code @@
- *   KB.Value.put Bil.slot (KB.Value.get slot code) bil *)
-
-(* let sexp_of_addr addr =
- *   Sexp.Atom (Addr.string_of_value addr) *)
-(* a set of all known jump destinations *)
-(* let collect_dests (dests : dests Addr.Table.t) =
- *   let addrs = Hash_set.create (module Addr) () in
- *   Addrs.iter dests ~f:(List.iter ~f:(function
- *       | Some dst,_  when not (Hashtbl.mem dests dst) ->
- *         Hash_set.add addrs dst
- *       | _ -> ()));
- *   addrs
- *
- * let join_destinations ?default dests =
- *   let jmp x = [ Bil.(jmp (int x)) ] in
- *   let undecided x =
- *     Bil.if_ (Bil.unknown "destination" (Type.Imm 1)) (jmp x) [] in
- *   let init = match default with
- *     | None -> []
- *     | Some x -> jmp x in
- *   Set.fold dests ~init ~f:(fun bil x -> undecided x :: bil)
- *
- * let make_switch x dests =
- *   let case addr = Bil.(if_ (x = int addr) [jmp (int addr)] []) in
- *   let default = Bil.jmp x in
- *   Set.fold dests ~init:[default] ~f:(fun ds a -> case a :: ds)
- *
- * let dests_of_bil bil =
- *   (object inherit [Addr.Set.t] Stmt.visitor
- *     method! visit_jmp e dests = match e with
- *       | Int w -> Set.add dests w
- *       | _ -> dests
- *   end)#run bil Addr.Set.empty
- *
- * let add_destinations bil = function
- *   | [] -> bil
- *   | dests ->
- *     let d = dests_of_bil bil in
- *     let d' = Addr.Set.of_list dests in
- *     let n = Set.diff d' d in
- *     if Set.is_empty n then bil
- *     else
- *     if has_jump bil then
- *       (object inherit Stmt.mapper
- *         method! map_jmp = function
- *           | Int addr -> join_destinations ~default:addr n
- *           | indirect -> make_switch indirect n
- *       end)#run bil
- *     else bil @ join_destinations n *)
-
-(* let disasm stage1 dis mem =
- *   Dis.run dis mem
- *     ~init:[] ~return:ident ~stopped:(fun s _ ->
- *         Dis.stop s (Dis.insns s)) |>
- *   List.map ~f:(function
- *       | mem, None -> mem,(None,Theory.Program.empty)
- *       | mem, (Some ins as insn) ->
- *         (\* let dests =
- *          *   Addrs.find stage1.dests (Memory.min_addr mem) |>
- *          *   Option.value ~default:[] |>
- *          *   List.filter_map ~f:(function
- *          *       | a, (`Cond | `Jump) -> a
- *          *       | _ -> None) in
- *          * let bil,sema = match stage1.lift mem ins with
- *          *   | Ok sema -> Insn.bil sema, sema
- *          *   | _ -> [], Theory.Program.empty in
- *          * let bil = add_destinations bil dests in *\)
- *         mem, (insn, with_bil sema bil)) *)
+let errors _ = []

@@ -13,8 +13,7 @@ type insns
 
 val list_insns : ?rev:bool -> insns -> (mem * Theory.Label.t) list
 
-val execution_order : delay:(Theory.Label.t -> int knowledge) -> insns ->
-  (mem * Theory.Label.t) list knowledge
+val execution_order : insns -> (mem * Theory.Label.t) list knowledge
 
 val explore :
   ?entry:addr ->
