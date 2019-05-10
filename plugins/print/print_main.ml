@@ -243,11 +243,22 @@ let setup_tabs ppf =
   pp_print_as ppf 50 "";
   pp_set_tab ppf ()
 
+let sorted_blocks nodes =
+  let init = Set.empty (module Block) in
+  Seq.fold nodes ~init ~f:Set.add |>
+  Set.to_sequence
+
+let sort_fns fns =
+  let fns = Array.of_list_rev fns in
+  Array.sort fns ~compare:(fun (_,b1,_) (_,b2,_) ->
+      Block.compare b1 b2);
+  Seq.of_array fns
+
 let print_disasm pp_insn subs secs ppf proj =
   let memory = Project.memory proj in
   let syms = Project.symbols proj in
-  pp_open_tbox ppf () [@ocaml.warning "-3"];
-  setup_tabs ppf [@ocaml.warning "-3"];
+  pp_open_tbox ppf ();
+  setup_tabs ppf;
   Memmap.filter_map memory ~f:(Value.get Image.section) |>
   Memmap.to_sequence |> Seq.iter ~f:(fun (mem,sec) ->
       Symtab.intersecting syms mem |>
@@ -257,9 +268,9 @@ let print_disasm pp_insn subs secs ppf proj =
       | _ when not(should_print secs sec) -> ()
       | fns ->
         fprintf ppf "@\nDisassembly of section %s@\n" sec;
-        List.iter fns ~f:(fun (name,entry,cfg) ->
+        Seq.iter (sort_fns fns) ~f:(fun (name,entry,cfg) ->
             fprintf ppf "@\n%a: <%s>@\n" pp_addr (Block.addr entry) name;
-            Graphs.Cfg.nodes cfg |> Seq.iter ~f:(fun blk ->
+            sorted_blocks (Graphs.Cfg.nodes cfg) |> Seq.iter ~f:(fun blk ->
                 let mem = Block.memory blk in
                 fprintf ppf "%a:@\n" pp_addr (Memory.min_addr mem);
                 Block.insns blk |> List.iter ~f:(pp_insn ppf))));
