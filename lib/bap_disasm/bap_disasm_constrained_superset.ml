@@ -21,10 +21,14 @@ type dsts = {
 
 
 module Machine : sig
+
   type task = private
     | Dest of {dst : addr; parent : task option}
-    | Fall of {dst : addr; parent : task}
+    | Fall of {dst : addr; parent : task; delay : slot}
     | Jump of {src : addr; age: int; dsts : dsts; parent : task}
+  and slot = private
+    | Ready of task option
+    | Delay
 
   type state = private {
     stop : bool;
@@ -59,8 +63,12 @@ end = struct
 
   type task =
     | Dest of {dst : addr; parent : task option}
-    | Fall of {dst : addr; parent : task}
+    | Fall of {dst : addr; parent : task; delay : slot}
     | Jump of {src : addr; age: int; dsts : dsts; parent : task}
+  and slot =
+    | Ready of task option
+    | Delay
+
 
   let init_work roots =
     Set.to_sequence ~order:`Decreasing roots |>
@@ -110,25 +118,64 @@ end = struct
       Format.fprintf ppf "Dest %a" Addr.pp dst
     | Fall {dst} ->
       Format.fprintf ppf "Fall %a" Addr.pp dst
-    | Jump {src} ->
-      Format.fprintf ppf "Delay %a" Addr.pp src
+    | Jump {src; age} ->
+      Format.fprintf ppf "Delay%d %a" age Addr.pp src
 
+  let check_invariant task s = match task with
+    | Dest {dst} | Fall {dst} | Jump {src=dst} ->
+      if not (Set.mem s.data dst)
+      then Format.eprintf
+          "Broken invariant: task %a is not retracted@\n%!"
+          pp_task task
+
+  let is_canceled s (Dest {dst} | Jump {src=dst} | Fall {dst}) =
+    Set.mem s.data dst
 
   let rec cancel task s =
+    Format.eprintf "canceling %a@\n" pp_task task;
+    check_invariant task s;
     match task with
     | Dest {parent=None} -> s
     | Dest {parent=Some parent} | Fall {parent} | Jump {parent} ->
       match parent with
-      | Dest {dst} | Fall {dst} -> cancel parent (mark_data s dst)
+      | Dest {dst} | Fall {dst} as self ->
+        Format.eprintf "canceling the parent %a, going up@\n" pp_task self;
+        cancel parent (mark_data s dst)
       | Jump {src; dsts} -> match task with
-        | Fall _ when has_valid s dsts -> s
-        | Fall _ -> cancel parent (mark_data s src)
-        | Dest _ | Jump _ -> cancel parent (mark_data s src)
+        | Fall {delay=(Ready (Some _) | Delay)} ->
+          Format.eprintf "canceling parent, as we're in its delay slot@\n";
+          cancel parent (mark_data s src)
+        | Fall _ when has_valid s dsts ->
+          Format.eprintf "keeping parent jump alive@\n";
+          s
+        | Fall _ ->
+          Format.eprintf "canceling the parent, as it has no valid dests@\n";
+          cancel parent (mark_data s src)
+        | Dest _ ->
+          Format.eprintf "canceling the parent which produced invalid dest@\n";
+          cancel parent (mark_data s src)
+        | Jump _ ->
+          Format.eprintf "Broken invariant: Jump to jump from %a@\n"
+            Addr.pp src;
+          assert false
 
-  let rec step s = match s.work with
+  let rec step s =
+    Format.eprintf "Step: %a => " pp_task s.curr;
+    let () = match List.hd s.work with
+      | None -> Format.eprintf "@\n"
+      | Some t -> Format.eprintf "%a@\n" pp_task t in
+    match s.work with
     | [] ->
-      if Set.is_empty s.usat then {s with stop = true}
-      else step {s with work = init_work s.usat}
+      Format.eprintf "Scan is done, checking unsats...@\n";
+      if Set.is_empty s.usat then begin
+        Format.eprintf "everyone is sat, stopping@\n";
+        {s with stop = true}
+      end
+      else begin
+        Format.eprintf "Having %d more roots to work on@\n"
+          (Set.length s.usat);
+        step {s with work = init_work s.usat}
+      end
     | Dest {dst=next} as curr :: work ->
       let s = if is_data s next
         then step @@ cancel curr {s with work}
@@ -145,8 +192,13 @@ end = struct
       if Set.mem s.data src then step @@ cancel jump {s with work}
       else
         let resolved = Set.filter dsts.resolved ~f:(fun dst ->
-            not (Set.mem s.data dst)) in
+            let is_data = Set.mem s.data dst in
+            if is_data then
+              Format.eprintf "Filtering out destination %a from %a@\n"
+                Addr.pp dst pp_task jump;
+            not is_data) in
         let dsts = {dsts with resolved} in
+        Format.eprintf "registering %a as jump@\n" Addr.pp src;
         let init = {s with jmps = Map.add_exn s.jmps src dsts; work} in
         step @@
         Set.fold resolved ~init ~f:(fun s next ->
@@ -154,9 +206,11 @@ end = struct
             then {s with work = Dest {dst=next; parent = Some jump} ::
                                 s.work}
             else s)
-    | Jump jmp :: (Fall {dst=next} as fall) :: work -> step {
+    | Jump jmp as self :: Fall ({dst=next} as slot) :: work ->
+      let delay = if jmp.age = 1 then Ready (Some self) else Delay in
+      step {
         s with
-        work = fall :: Jump {
+        work = Fall {slot with delay} :: Jump {
             jmp with age = jmp.age-1; src = next;
           } :: work
       }
@@ -165,7 +219,7 @@ end = struct
       }
 
   let decoded s mem =
-    let addr = (Memory.min_addr mem) in {
+    let addr = Memory.min_addr mem in {
       s with code = Set.add s.code addr;
              usat = Set.remove s.usat addr
     }
@@ -176,30 +230,50 @@ end = struct
     let src = Memory.min_addr mem in
     let jump = Jump {src; age=delay; dsts; parent} in
     let next = Addr.succ (Memory.max_addr mem) in
-    let next = Fall {dst=next; parent=jump} in
+    let next = Fall {dst=next; parent=jump; delay = Ready None} in
     step {s with work = jump :: next :: s.work }
 
+  let insert_delayed t = function
+    | x :: xs -> x :: t :: xs
+    | [] -> [t]
+
   let moved s mem =
-    step @@ decoded {
-      s with work = Fall {
+    let parent = match s.curr with
+      | Fall {delay=Ready (Some parent)} -> parent
+      | _ -> s.curr in
+    let next = Fall {
         dst = Addr.succ (Memory.max_addr mem);
-        parent = s.curr;
-      } :: s.work;
-    } mem
+        parent;
+        delay = Ready None;
+      } in
+    let work = match s.curr with
+      | Fall {delay = Delay} -> insert_delayed next s.work
+      | _ -> next :: s.work in
+    step @@ decoded {s with work} mem
 
 
   let failed s addr =
+    Format.eprintf "Failed on %a, canceling task %a@\n"
+      Addr.pp addr pp_task s.curr;
     let s = mark_data s addr in
     let work = if is_visited s (Addr.succ addr) then s.work
       else Dest {dst=Addr.succ addr; parent=None} :: s.work in
     step @@ cancel s.curr {s with work}
 
-  let stopped s = step @@ cancel s.curr @@ mark_data s s.addr
+  let stopped s =
+    Format.eprintf "Hit the end, cancelling task %a@\n" pp_task s.curr;
+    step @@ cancel s.curr @@ mark_data s s.addr
 
   let rec view s base ~empty ~ready =
     match Memory.view ~from:s.addr base with
     | Ok mem -> ready s mem
-    | Error _ -> match s.work with
+    | Error _ ->
+      let s = match s.curr with
+        | Fall _ as task ->
+          Format.eprintf "cancelling an out-of-memory fall@\n";
+          cancel task s
+        | _ -> s in
+      match s.work with
       | [] -> empty (step s)
       | _  -> view (step s) base ~empty ~ready
 
@@ -264,8 +338,9 @@ let classify_mem mem =
       KB.collect Insn.Slot.is_valid label >>= function
       | Some false -> KB.return (code,Set.add data addr,root)
       | r ->
-        let code = if Option.is_none r then code
-          else Set.add code addr in
+        (* let code = if Option.is_none r then code
+         *   else Set.add code addr in *)
+        let code = Set.add code addr in
         KB.collect Insn.Slot.is_subroutine label >>| function
         | Some true -> (code,data,Set.add root addr)
         | _ -> (code,data,root))
@@ -284,11 +359,15 @@ let scan_mem arch disasm base : Machine.state KB.t =
           ~hit:(fun d mem insn s ->
               collect_dests arch mem insn >>= fun dests ->
               if Set.is_empty dests.resolved &&
-                 not dests.indirect
-              then step d @@ Machine.moved s mem
-              else
+                 not dests.indirect then begin
+                Format.eprintf "%a is a move@\n" Addr.pp s.addr;
+                step d @@ Machine.moved s mem
+              end
+              else begin
+                Format.eprintf "%a is a jump@\n" Addr.pp s.addr;
                 delay arch mem insn >>= fun delay ->
-                step d @@ Machine.jumped s mem dests delay)
+                step d @@ Machine.jumped s mem dests delay
+              end)
           ~invalid:(fun d _ s -> step d (Machine.failed s s.addr)))
     ~empty:KB.return
 
@@ -316,7 +395,11 @@ let create ?(backend="llvm") arch =
 let scan self mem =
   let open KB.Syntax in
   scan_mem self.arch self.dis mem >>|
-  fun {Machine.begs; jmps; data} ->
+  fun {Machine.begs; jmps; data; code} ->
+  Format.eprintf "Finished scanning [%a:%d], got %d/%d@, %d->%d\n"
+    Addr.pp (Memory.min_addr mem) (Memory.length mem)
+    (Set.length code) (Set.length data)
+    (Map.length jmps) (Set.length begs);
   let jmps = Map.merge self.jmps jmps ~f:(fun ~key:_ -> function
       | `Left dsts | `Right dsts | `Both (_,dsts) -> Some dsts) in
   let begs = Set.union self.begs begs in
@@ -352,7 +435,15 @@ let explore
   let edge_insert cfg src dst = match dst with
     | None -> KB.return cfg
     | Some dst -> edge src dst cfg in
-  let view ?len from mem = ok_exn (Memory.view ?words:len ~from mem) in
+  let view ?len from mem = match Memory.view ?words:len ~from mem with
+    | Ok mem -> mem
+    | Error _ ->
+      Format.eprintf "can't create [%a:%s] view over [%a,%a]@\n%!"
+        Addr.pp from
+        (Option.value_map len ~default:"None" ~f:string_of_int)
+        Addr.pp (Memory.min_addr mem)
+        Addr.pp (Memory.max_addr mem);
+      assert false in
   let rec build cfg beg =
     if Set.mem data beg then KB.return (cfg,None)
     else follow beg >>= function
@@ -370,8 +461,13 @@ let explore
                   let last = Memory.max_addr mem in
                   let next = Addr.succ last in
                   if Set.mem data next && not (Map.mem jmps curr)
-                  then KB.return (curr,len,(mem,insn)::insns)
-                  else if Set.mem begs next || Map.mem jmps curr
+                  then begin
+                    Format.eprintf "Block %a hit data %a from %a@\n"
+                      Addr.pp beg Addr.pp next Addr.pp curr;
+                    KB.return (curr,len,(mem,insn)::insns)
+                  end
+                  else
+                  if Set.mem begs next || Map.mem jmps curr
                   then KB.return (curr,len,(mem,insn)::insns)
                   else Dis.jump s (view next base)
                       (next,len,(mem,insn)::insns))
