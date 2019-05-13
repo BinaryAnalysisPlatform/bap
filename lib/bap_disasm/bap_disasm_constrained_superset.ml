@@ -285,7 +285,9 @@ let classify_mem mem =
   Seq.range 0 (Memory.length mem) |>
   KB.Seq.fold ~init:(empty,empty,empty) ~f:(fun (code,data,root) off ->
       let addr = Addr.(nsucc base off) in
-      Theory.Label.for_addr (Addr.to_bitvec addr) >>= fun label ->
+      let slot = Some (Addr.to_bitvec addr) in
+      KB.Object.scoped Theory.Program.cls @@ fun label ->
+      KB.provide Theory.Label.addr label slot >>= fun () ->
       KB.collect Insn.Slot.is_valid label >>= function
       | Some false -> KB.return (code,Set.add data addr,root)
       | r ->

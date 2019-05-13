@@ -77,11 +77,18 @@ let provide_dests brancher =
   Option.some
 
 let provide_roots rooter =
-  Rooter.roots rooter |>
-  KB.Seq.iter ~f:(fun root ->
-      Theory.Label.for_addr (Word.to_bitvec root) >>= fun label ->
-      KB.provide Insn.Slot.is_valid label (Some true) >>= fun () ->
-      KB.provide Insn.Slot.is_subroutine label (Some true))
+  let init = Set.empty (module Bitvec_order) in
+  let roots =
+    Rooter.roots rooter |>
+    Seq.map ~f:Word.to_bitvec |>
+    Seq.fold ~init ~f:Set.add in
+  let promise prop =
+    KB.promise prop @@ fun label ->
+    KB.collect Theory.Label.addr label >>| function
+    | None -> None
+    | Some addr -> Option.some_if (Set.mem roots addr) true in
+  promise Insn.Slot.is_valid;
+  promise Insn.Slot.is_subroutine
 
 let create_insn basic sema =
   let prog = Insn.create sema in
@@ -98,7 +105,7 @@ let follows_after m1 m2 = Addr.equal
 
 let disassemble brancher rooter dis mem =
   provide_dests brancher;
-  provide_roots rooter >>= fun () ->
+  provide_roots rooter;
   Disasm.scan dis mem >>=
   Disasm.explore
     ~init:Cfg.empty
@@ -124,8 +131,7 @@ let dom = KB.Domain.flat ~empty:Cfg.empty ~equal:Cfg.equal "cfg"
 let cfg = KB.Class.property ~package self "cfg" dom
 
 
-let run ?backend ?brancher ?(rooter=Rooter.empty) arch mem =
-  let brancher = Brancher.empty in
+let run ?backend ?(brancher=Brancher.empty) ?(rooter=Rooter.empty) arch mem =
   match Disasm.create ?backend arch with
   | Error err -> Error err
   | Ok disasm ->
