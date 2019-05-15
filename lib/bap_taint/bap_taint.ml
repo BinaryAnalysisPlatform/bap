@@ -248,12 +248,6 @@ module Taint = struct
 
     exception Bad_object of Primus.value
 
-    let objects_of_kind {objects} k ts =
-      Set.filter ts ~f:(fun v ->
-          match Map.find objects v with
-          | None -> false
-          | Some k' -> Kind.(k = k'))
-
     let sanitize v r k =
       Machine.Local.get kinds >>= fun {objects} ->
       change v r ~f:(function
