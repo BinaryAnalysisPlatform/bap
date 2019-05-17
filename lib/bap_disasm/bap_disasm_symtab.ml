@@ -1,14 +1,20 @@
+open Bap_core_theory
+
 open Core_kernel
 open Regular.Std
 open Bap_types.Std
 open Image_internal_std
 open Or_error
 
+open KB.Syntax
 open Format
 
 module Block = Bap_disasm_block
 module Cfg = Bap_disasm_rec.Cfg
 module Insn = Bap_disasm_insn
+module Disasm = Bap_disasm_speculative
+module Callgraph = Bap_disasm_callgraph
+module Symbolizer = Bap_disasm_symbolizer
 
 
 type block = Block.t [@@deriving compare, sexp_of]
@@ -114,3 +120,72 @@ let insert_call ?(implicit=false) symtab block data =
 
 let explicit_callee {ecalls} = Map.find ecalls
 let implicit_callee {icalls} = Map.find icalls
+
+
+
+let (<--) = fun g f -> match g with
+  | None -> None
+  | Some (e,g) -> Some (e, f g)
+
+let build_cfg disasm calls entry =
+  Disasm.explore disasm ~entry ~init:None
+    ~follow:(fun dst ->
+        KB.return Addr.(Callgraph.entry calls dst = entry))
+    ~block:(fun mem insns ->
+        Disasm.execution_order insns >>= fun insns ->
+        KB.List.map insns ~f:(fun (mem,label) ->
+            KB.collect Theory.Program.Semantics.slot label >>| fun s ->
+            mem, Insn.create s) >>| fun insns ->
+        Block.create mem insns)
+    ~node:(fun n g ->
+        KB.return @@
+        if Addr.equal (Block.addr n) entry
+        then Some (n,Cfg.Node.insert n Cfg.empty)
+        else g <-- Cfg.Node.insert n)
+    ~edge:(fun src dst g ->
+        let msrc = Block.memory src
+        and mdst = Block.memory dst in
+        let next = Addr.succ (Memory.max_addr msrc) in
+        let kind = if Addr.equal next (Memory.min_addr mdst)
+          then `Fall else `Jump in
+        let edge = Cfg.Edge.create src dst kind in
+        KB.return (g <-- Cfg.Edge.insert edge))
+
+let get_name addr =
+  let data = Some (Word.to_bitvec addr) in
+  KB.Object.scoped Theory.Program.cls @@ fun label ->
+  KB.provide Theory.Label.addr label data >>= fun () ->
+  KB.collect Theory.Label.name label >>| function
+  | None -> Symbolizer.resolve Symbolizer.empty addr
+  | Some name -> name
+
+let build_symbol disasm calls start =
+  build_cfg disasm calls start >>= function
+  | None -> assert false
+  | Some (entry,graph) ->
+    get_name start >>| fun name ->
+    name,entry,graph
+
+let build disasm =
+  Callgraph.update Callgraph.empty disasm >>= fun calls ->
+  Callgraph.entries calls |>
+  Set.to_sequence |>
+  KB.Seq.fold ~init:empty ~f:(fun symtab entry ->
+      build_symbol disasm calls entry >>| fun fn ->
+      add_symbol symtab fn)
+
+type builer = Builder
+let package = "bap.std-internal"
+let builder = KB.Class.declare ~package "symtab-builder" Builder
+let symtab = KB.Domain.flat ~empty ~equal:(fun x y ->
+    compare x y = 0) "symtab"
+let result = KB.Class.property ~package builder "result" symtab
+
+let create disasm =
+  let query =
+    KB.Object.create builder >>= fun builder ->
+    build disasm >>= fun symtab ->
+    KB.provide result builder symtab >>| fun () ->
+    builder in
+  KB.Value.get result @@
+  Bap_state.run_or_fail builder query

@@ -6082,6 +6082,26 @@ module Std : sig
           unlifted instructions.  *)
       val errors : t -> error list
     end
+
+    module Speculative : sig
+      type t
+      type insns
+
+      val create : ?backend:string -> arch -> t Or_error.t
+      val scan : t -> mem -> t knowledge
+
+      val explore :
+        ?entry:addr ->
+        ?follow:(addr -> bool knowledge) ->
+        block:(mem -> insns -> 'n knowledge) ->
+        node:('n -> 'c -> 'c knowledge) ->
+        edge:('n -> 'n -> 'c -> 'c knowledge) ->
+        init:'c ->
+        t -> 'c knowledge
+
+      val list_insns : ?rev:bool -> insns -> (mem * Theory.Label.t) list
+      val execution_order : insns -> (mem * Theory.Label.t) list knowledge
+    end
   end
 
   (** Assembly instruction.

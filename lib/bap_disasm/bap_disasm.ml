@@ -104,7 +104,6 @@ module Disasm = struct
       of_image ?backend ?brancher ?rooter image |> ok_exn
   end
 
-  module Constrained_superset = Bap_disasm_constrained_superset
 
   let insn  = Value.Tag.register (module Insn)
       ~name:"insn"

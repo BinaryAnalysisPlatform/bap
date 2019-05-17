@@ -7,7 +7,7 @@ open Bap_image_std
 
 open KB.Syntax
 
-module Disasm = Bap_disasm_constrained_superset
+module Disasm = Bap_disasm_speculative
 module Brancher = Bap_disasm_brancher
 module Rooter = Bap_disasm_rooter
 module Block = Bap_disasm_block
@@ -56,39 +56,7 @@ module Cfg = Graphlib.Make(Node)(Edge)
 
 type cfg = Cfg.t [@@deriving compare]
 
-type t = {cfg : Cfg.t}
-
-let (>>=?) x f = x >>= function
-  | None -> KB.return None
-  | Some x -> f x
-
-let provide_dests brancher =
-  let init = Set.empty (module Theory.Label) in
-  KB.promise Insn.Slot.dests @@ fun label ->
-  KB.collect Memory.slot label >>=? fun mem ->
-  KB.collect Basic.Insn.slot label >>=? fun insn ->
-  Brancher.resolve brancher mem insn |>
-  KB.List.fold ~init ~f:(fun dsts dst ->
-      match dst with
-      | Some addr,_ ->
-        Theory.Label.for_addr (Word.to_bitvec addr) >>| fun dst ->
-        Set.add dsts dst
-      | None,_ -> KB.return dsts) >>|
-  Option.some
-
-let provide_roots rooter =
-  let init = Set.empty (module Bitvec_order) in
-  let roots =
-    Rooter.roots rooter |>
-    Seq.map ~f:Word.to_bitvec |>
-    Seq.fold ~init ~f:Set.add in
-  let promise prop =
-    KB.promise prop @@ fun label ->
-    KB.collect Theory.Label.addr label >>| function
-    | None -> None
-    | Some addr -> Option.some_if (Set.mem roots addr) true in
-  promise Insn.Slot.is_valid;
-  promise Insn.Slot.is_subroutine
+type t = Disasm.t KB.t
 
 let create_insn basic sema =
   let prog = Insn.create sema in
@@ -103,11 +71,8 @@ let follows_after m1 m2 = Addr.equal
     (Addr.succ (Memory.max_addr m1))
     (Memory.min_addr m2)
 
-let disassemble brancher rooter dis mem =
-  provide_dests brancher;
-  provide_roots rooter;
-  Disasm.scan dis mem >>=
-  Disasm.explore
+let global_cfg disasm =
+  Disasm.explore disasm
     ~init:Cfg.empty
     ~block:(fun mem insns ->
         Disasm.execution_order insns >>=
@@ -124,25 +89,31 @@ let disassemble brancher rooter dis mem =
         let edge = Cfg.Edge.create src dst k in
         KB.return @@ Cfg.Edge.insert edge g)
 
-type self = Reconstructor
+
+type self = CFG
 let package = "bap.std.private"
-let self = KB.Class.declare ~package "cfg-reconstructor" Reconstructor
+let self = KB.Class.declare ~package "cfg" CFG
 let dom = KB.Domain.flat ~empty:Cfg.empty ~equal:Cfg.equal "cfg"
 let cfg = KB.Class.property ~package self "cfg" dom
+
+let extract build disasm =
+  let analysis =
+    KB.Object.create self >>= fun obj ->
+    disasm >>= build >>= fun r ->
+    KB.provide cfg obj r >>| fun () ->
+    obj in
+  match Bap_state.run self analysis with
+  | Ok r -> KB.Value.get cfg r
+  | Error _ -> Cfg.empty
 
 
 let run ?backend ?(brancher=Brancher.empty) ?(rooter=Rooter.empty) arch mem =
   match Disasm.create ?backend arch with
   | Error err -> Error err
   | Ok disasm ->
-    let reconstructor =
-      KB.Object.create self >>= fun obj ->
-      disassemble brancher rooter disasm mem >>= fun r ->
-      KB.provide cfg obj r >>| fun () ->
-      obj in
-    match Bap_state.run self reconstructor with
-    | Ok r -> Ok {cfg = KB.Value.get cfg r}
-    | Error _ -> Or_error.errorf "Some conflict"
+    Brancher.provide brancher;
+    Rooter.provide rooter;
+    Ok (Disasm.scan disasm mem)
 
-let cfg t = t.cfg
+let cfg = extract global_cfg
 let errors _ = []

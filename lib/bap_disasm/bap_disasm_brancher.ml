@@ -1,7 +1,10 @@
+open Bap_core_theory
 open Core_kernel
 open Bap_types.Std
 open Bap_image_std
 open Monads.Std
+
+open KB.Syntax
 
 module Source = Bap_disasm_source
 module Targets = Bap_disasm_target_factory
@@ -151,3 +154,22 @@ let of_image img =
   create (dests_of_bil ~rel_info (Image.arch img))
 
 module Factory = Source.Factory.Make(struct type nonrec t = t end)
+
+let (>>=?) x f = x >>= function
+  | None -> KB.return None
+  | Some x -> f x
+
+
+let provide brancher =
+  let init = Set.empty (module Theory.Label) in
+  KB.promise Insn.Slot.dests @@ fun label ->
+  KB.collect Memory.slot label >>=? fun mem ->
+  KB.collect Dis.Insn.slot label >>=? fun insn ->
+  resolve brancher mem insn |>
+  KB.List.fold ~init ~f:(fun dsts dst ->
+      match dst with
+      | Some addr,_ ->
+        Theory.Label.for_addr (Word.to_bitvec addr) >>| fun dst ->
+        Set.add dsts dst
+      | None,_ -> KB.return dsts) >>|
+  Option.some

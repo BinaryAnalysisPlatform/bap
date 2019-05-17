@@ -41,7 +41,7 @@ let string_of_set ~sep pp_elt set =
 let empty_set (type a) (type cmp) map =
   let m : (module Comparator.S with type t = a
                                 and type comparator_witness = cmp)
-  = (module struct
+    = (module struct
       type t = a
       type comparator_witness = cmp
       let comparator = Map.comparator map
@@ -180,9 +180,9 @@ module Partition = struct
 
   (* takes a mapping from node to its root *)
   let create (type a) (type c)
-        (comparator : (module Comparator.S with type t = a
-                                            and type comparator_witness = c))
-        comps =
+      (comparator : (module Comparator.S with type t = a
+                                          and type comparator_witness = c))
+      comps =
     let roots,groups =
       Hashtbl.fold comps ~init:(Map.empty comparator)
         ~f:(fun ~key:node ~data:root map ->
@@ -1240,6 +1240,17 @@ module Fixpoint = struct
     match Map.find approx n with
     | None -> default
     | Some x -> x
+
+  let is_subset ~equal (Solution {approx=m1}) ~of_:s2 =
+    Map.for_alli m1 ~f:(fun ~key ~data -> equal (get s2 key) data)
+
+  let equal ~equal
+      (Solution {approx=m1; default=d1} as s1)
+      (Solution {approx=m2; default=d2} as s2) =
+    equal d1 d2 &&
+    Int.equal (Map.length m1) (Map.length m2) &&
+    is_subset ~equal s1 ~of_:s2 &&
+    is_subset ~equal s2 ~of_:s1
 
   let is_fixpoint (Solution {steps; iters}) = match steps with
     | None -> iters > 0
