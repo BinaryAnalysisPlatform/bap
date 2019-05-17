@@ -12,8 +12,8 @@ open Format
 module Block = Bap_disasm_block
 module Cfg = Bap_disasm_rec.Cfg
 module Insn = Bap_disasm_insn
-module Disasm = Bap_disasm_speculative
-module Callgraph = Bap_disasm_callgraph
+module Disasm = Bap_disasm_driver
+module Callgraph = Bap_disasm_calls
 module Symbolizer = Bap_disasm_symbolizer
 
 

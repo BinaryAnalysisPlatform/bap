@@ -5826,7 +5826,7 @@ module Std : sig
           applies function [f] to it. Once [f] is evaluated the
           disassembler is closed with [close] function.  *)
       val with_disasm :
-        ?debug_level:int -> ?cpu:string -> backend:string -> string ->
+        ?debug_level:int -> ?cpu:string -> ?backend:string -> string ->
         f:((empty, empty) t -> 'a Or_error.t) -> 'a Or_error.t
 
       (** [create ?debug_level ?cpu ~backend target] creates a
@@ -5838,7 +5838,7 @@ module Std : sig
 
           [create ~debug_level:3 ~backend:"llvm" "x86_64" ~f:process]
       *)
-      val create : ?debug_level:int -> ?cpu:string -> backend:string -> string ->
+      val create : ?debug_level:int -> ?cpu:string -> ?backend:string -> string ->
         (empty, empty) t Or_error.t
 
       (** [close d] closes a disassembler [d].   *)
@@ -6081,26 +6081,6 @@ module Std : sig
           happened during the disassembly (e.g., unknown opcodes and
           unlifted instructions.  *)
       val errors : t -> error list
-    end
-
-    module Speculative : sig
-      type t
-      type insns
-
-      val create : ?backend:string -> arch -> t Or_error.t
-      val scan : t -> mem -> t knowledge
-
-      val explore :
-        ?entry:addr ->
-        ?follow:(addr -> bool knowledge) ->
-        block:(mem -> insns -> 'n knowledge) ->
-        node:('n -> 'c -> 'c knowledge) ->
-        edge:('n -> 'n -> 'c -> 'c knowledge) ->
-        init:'c ->
-        t -> 'c knowledge
-
-      val list_insns : ?rev:bool -> insns -> (mem * Theory.Label.t) list
-      val execution_order : insns -> (mem * Theory.Label.t) list knowledge
     end
   end
 
@@ -6492,6 +6472,28 @@ module Std : sig
   (** Disassembled program.
       An interface for diassembling things. *)
   module Disasm : sig
+
+    module Driver : sig
+      type state
+      type insns
+
+      val init : state
+      val scan : mem -> state -> state knowledge
+
+      val explore :
+        ?entry:addr ->
+        ?follow:(addr -> bool knowledge) ->
+        block:(mem -> insns -> 'n knowledge) ->
+        node:('n -> 'c -> 'c knowledge) ->
+        edge:('n -> 'n -> 'c -> 'c knowledge) ->
+        init:'c ->
+        state -> 'c knowledge
+
+      val list_insns : ?rev:bool -> insns -> (mem * Theory.Label.t) list
+      val execution_order : insns -> (mem * Theory.Label.t) list knowledge
+    end
+
+
     type t = disasm
 
     (** [create cfg]   *)

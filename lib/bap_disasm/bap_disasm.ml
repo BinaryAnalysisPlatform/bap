@@ -62,6 +62,8 @@ let of_rec d = {
 
 
 module Disasm = struct
+  module Driver = Bap_disasm_driver
+
   type t = disasm
   type 'a disassembler = ?backend:string -> ?brancher:brancher -> ?rooter:rooter -> 'a
 
@@ -92,7 +94,7 @@ module Disasm = struct
           else return dis)
 
   let of_file ?backend ?brancher ?rooter ?loader filename =
-    Image.create ?backend:loader filename >>= fun (img,errs) ->
+    Image.create ?backend:loader filename >>= fun (img,_) ->
     of_image ?backend ?brancher ?rooter img
 
   module With_exn = struct

@@ -7,7 +7,7 @@ open Bap_image_std
 
 open KB.Syntax
 
-module Disasm = Bap_disasm_speculative
+module Driver = Bap_disasm_driver
 module Brancher = Bap_disasm_brancher
 module Rooter = Bap_disasm_rooter
 module Block = Bap_disasm_block
@@ -56,7 +56,7 @@ module Cfg = Graphlib.Make(Node)(Edge)
 
 type cfg = Cfg.t [@@deriving compare]
 
-type t = Disasm.t KB.t
+type t = Driver.state KB.t
 
 let create_insn basic sema =
   let prog = Insn.create sema in
@@ -72,10 +72,10 @@ let follows_after m1 m2 = Addr.equal
     (Memory.min_addr m2)
 
 let global_cfg disasm =
-  Disasm.explore disasm
+  Driver.explore disasm
     ~init:Cfg.empty
     ~block:(fun mem insns ->
-        Disasm.execution_order insns >>=
+        Driver.execution_order insns >>=
         KB.List.map ~f:(fun (mem,label) ->
             KB.collect Basic.Insn.slot label >>= fun basic ->
             KB.collect Theory.Program.Semantics.slot label >>| fun s ->
@@ -89,31 +89,38 @@ let global_cfg disasm =
         let edge = Cfg.Edge.create src dst k in
         KB.return @@ Cfg.Edge.insert edge g)
 
-
-type self = CFG
-let package = "bap.std.private"
-let self = KB.Class.declare ~package "cfg" CFG
-let dom = KB.Domain.flat ~empty:Cfg.empty ~equal:Cfg.equal "cfg"
-let cfg = KB.Class.property ~package self "cfg" dom
+type self = Builder
+let package = "bap.std-private"
+let builder = KB.Class.declare ~package "cfg-builder" Builder
+let cfg = KB.Domain.flat ~empty:Cfg.empty ~equal:Cfg.equal "cfg"
+let result = KB.Class.property ~package builder "result" cfg
 
 let extract build disasm =
   let analysis =
-    KB.Object.create self >>= fun obj ->
-    disasm >>= build >>= fun r ->
-    KB.provide cfg obj r >>| fun () ->
-    obj in
-  match Bap_state.run self analysis with
-  | Ok r -> KB.Value.get cfg r
-  | Error _ -> Cfg.empty
+    KB.Object.create builder >>= fun builder ->
+    disasm >>= build >>= fun cfg ->
+    KB.provide result builder cfg >>| fun () ->
+    builder in
+  KB.Value.get result @@
+  Bap_state.run_or_fail builder analysis
+
+
+let provide_arch arch mem =
+  let width = Size.in_bits (Arch.addr_size arch) in
+  KB.promise Arch.slot @@ fun label ->
+  KB.collect Theory.Label.addr label >>| function
+  | None -> None
+  | Some p ->
+    let p = Word.create p width in
+    if Memory.contains mem p then Some arch
+    else None
 
 
 let run ?backend ?(brancher=Brancher.empty) ?(rooter=Rooter.empty) arch mem =
-  match Disasm.create ?backend arch with
-  | Error err -> Error err
-  | Ok disasm ->
-    Brancher.provide brancher;
-    Rooter.provide rooter;
-    Ok (Disasm.scan disasm mem)
+  Brancher.provide brancher;
+  Rooter.provide rooter;
+  provide_arch arch mem;
+  Ok (Driver.scan mem Driver.init)
 
 let cfg = extract global_cfg
 let errors _ = []

@@ -14,7 +14,6 @@ module Disasm_expert = struct
   module Basic = Bap_disasm_basic
   module Recursive = Bap_disasm_rec
   module Linear = Bap_disasm_linear_sweep
-  module Speculative = Bap_disasm_speculative
   module Kind = Bap_insn_kind
   module Insn = Bap_disasm_basic.Insn
 end

@@ -4,7 +4,7 @@ open Core_kernel
 open Bap_types.Std
 open Image_internal_std
 
-module Disasm = Bap_disasm_speculative
+module Disasm = Bap_disasm_driver
 
 type block = Bap_disasm_block.t
 type edge =  Bap_disasm_block.edge
@@ -15,8 +15,8 @@ type symtab = t [@@deriving compare, sexp_of]
 type fn = string * block * cfg [@@deriving compare, sexp_of]
 
 
-val build : Disasm.t -> t KB.t
-val create : Disasm.t -> t
+val build : Disasm.state -> t KB.t
+val create : Disasm.state -> t
 
 val empty : t
 val add_symbol : t -> fn -> t

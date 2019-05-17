@@ -18,10 +18,7 @@ type dsts = {
   resolved : Set.M(Addr).t;
 }
 
-
-
 module Machine : sig
-
   type task = private
     | Dest of {dst : addr; parent : task option}
     | Fall of {dst : addr; parent : task; delay : slot}
@@ -319,39 +316,53 @@ let scan_mem arch disasm base : Machine.state KB.t =
           ~invalid:(fun d _ s -> step d (Machine.failed s s.addr)))
     ~empty:KB.return
 
-type t = {
-  dis : (Dis.empty, Dis.empty) Dis.t;
-  arch : arch;
+type insns = (mem * Theory.Label.t) list
+type state = {
   begs : Set.M(Addr).t;
   jmps : dsts Map.M(Addr).t;
   data : Set.M(Addr).t;
   mems : mem list;
 }
 
-let create ?(backend="llvm") arch =
-  match Dis.create ~backend (Arch.to_string arch) with
-  | Error err -> Error err
-  | Ok dis -> Ok {
-      dis;
-      arch;
-      begs = Set.empty (module Addr);
-      jmps = Map.empty (module Addr);
-      data = Set.empty (module Addr);
-      mems = []
-    }
+let init = {
+  begs = Set.empty (module Addr);
+  jmps = Map.empty (module Addr);
+  data = Set.empty (module Addr);
+  mems = []
+}
 
-let scan self mem =
+let query_arch addr =
+  KB.Object.scoped Theory.Program.cls @@ fun obj ->
+  KB.provide Theory.Label.addr obj (Some addr) >>= fun () ->
+  KB.collect Arch.slot obj
+
+let scan mem s =
   let open KB.Syntax in
-  scan_mem self.arch self.dis mem >>|
-  fun {Machine.begs; jmps; data} ->
-  let jmps = Map.merge self.jmps jmps ~f:(fun ~key:_ -> function
-      | `Left dsts | `Right dsts | `Both (_,dsts) -> Some dsts) in
-  let begs = Set.union self.begs begs in
-  let data = Set.union self.data data in
-  {self with begs; data; jmps; mems = mem :: self.mems}
+  let start = Word.to_bitvec (Memory.min_addr mem) in
+  query_arch start >>= function
+  | None -> KB.return s
+  | Some arch -> match Dis.create (Arch.to_string arch) with
+    | Error _ -> KB.return s
+    | Ok dis ->
+      scan_mem arch dis mem >>|
+      fun {Machine.begs; jmps; data} ->
+      let jmps = Map.merge s.jmps jmps ~f:(fun ~key:_ -> function
+          | `Left dsts | `Right dsts | `Both (_,dsts) -> Some dsts) in
+      let begs = Set.union s.begs begs in
+      let data = Set.union s.data data in
+      {begs; data; jmps; mems = mem :: s.mems}
 
-
-type insns = (mem * Theory.Label.t) list
+let merge t1 t2 = {
+  begs = Set.union t1.begs t2.begs;
+  data = Set.union t1.data t2.data;
+  mems = List.rev_append t2.mems t1.mems;
+  jmps = Map.merge t1.jmps t2.jmps ~f:(fun ~key:_ -> function
+      | `Left dsts | `Right dsts -> Some dsts
+      | `Both (d1,d2) -> Some {
+          indirect = d1.indirect || d2.indirect;
+          resolved = Set.union d1.resolved d2.resolved;
+        })
+}
 
 let list_insns ?(rev=false) insns =
   if rev then List.rev insns else insns
@@ -369,9 +380,17 @@ let execution_order stack =
 
 let always _ = KB.return true
 
+let with_disasm beg cfg f =
+  query_arch (Word.to_bitvec beg) >>= function
+  | None -> KB.return (cfg,None)
+  | Some arch ->
+    match Dis.create (Arch.to_string arch) with
+    | Error _ -> KB.return (cfg,None)
+    | Ok dis -> f arch dis
+
 let explore
     ?entry:start ?(follow=always) ~block ~node ~edge ~init
-    {begs; jmps; data; dis; mems; arch} =
+    {begs; jmps; data; mems} =
   let find_base addr =
     if Set.mem data addr then None
     else List.find mems ~f:(fun mem -> Memory.contains mem addr) in
@@ -384,7 +403,8 @@ let explore
     if Set.mem data beg then KB.return (cfg,None)
     else follow beg >>= function
       | false -> KB.return (cfg,None)
-      | true -> match Hashtbl.find blocks beg with
+      | true -> with_disasm beg cfg @@ fun arch dis ->
+        match Hashtbl.find blocks beg with
         | Some block -> KB.return (cfg, Some block)
         | None -> match find_base beg with
           | None -> KB.return (cfg,None)

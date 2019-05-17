@@ -72,19 +72,30 @@ module Table = struct
             Bytes.to_string dst)
 end
 
-type dis = {
+type disassembler = {
   dd : int;
   insn_table : Table.t;
   reg_table  : Table.t;
-  asm : bool;
-  kinds : bool;
-  mutable closed : bool;
+  mutable users : int;
 }
 
-let (!!) dis =
-  if dis.closed then
-    failwith "with_disasm: dis value leaked the scope";
-  dis.dd
+let last_id = ref 0
+let disassemblers = Hashtbl.create (module String)
+
+
+
+type dis = {
+  name : string;
+  asm : bool;
+  kinds : bool;
+}
+
+let get {name} = match Hashtbl.find disassemblers name with
+  | None ->
+    failwith "Trying to access a closed disassembler"
+  | Some d -> d
+
+let (!!) h = (get h).dd
 
 module Reg = struct
 
@@ -95,7 +106,7 @@ module Reg = struct
         if reg_code = 0 then "Nil"
         else
           let off = C.insn_op_reg_name !!dis ~insn ~oper in
-          (Table.lookup dis.reg_table off) in
+          (Table.lookup (get dis).reg_table off) in
       {reg_code; reg_name} in
     {insn; oper; data}
 
@@ -293,7 +304,7 @@ module Insn = struct
     let code = C.insn_code !!dis ~insn in
     let name =
       let off = C.insn_name !!dis ~insn in
-      Table.lookup dis.insn_table off in
+      Table.lookup (get dis).insn_table off in
     let asm =
       if asm then
         let data = Bytes.create (C.insn_asm_size !!dis ~insn) in
@@ -395,7 +406,7 @@ let insn_mem s ~insn : mem =
   ok_exn (Mem.view s.current.mem ~from ~words)
 
 
-let kinds s ~insn : kind list = []
+let kinds s ~insn:_ : kind list = []
 
 let set_memory dis p : unit =
   let open Bigsubstring in
@@ -489,28 +500,41 @@ let back s data =
     | x :: xs -> x,xs in
   step { s with current; history} data
 
-let create ?(debug_level=0) ?(cpu="") ~backend triple =
-  let dd = match C.create ~backend ~triple ~cpu ~debug_level with
-    | n when n >= 0 -> Ok n
-    | -2 -> errorf "Unknown backend: %s" backend
-    | -3 -> errorf "Unsupported target: %s %s" triple cpu
-    |  n -> errorf "Disasm.Basic: Unknown error %d" n in
-  dd >>= fun dd -> return {
-    dd;
-    insn_table = Table.create (C.insn_table dd);
-    reg_table = Table.create (C.reg_table dd);
-    asm = false;
-    kinds = false;
-    closed = false;
-  }
+let create ?(debug_level=0) ?(cpu="") ?(backend="llvm") triple =
+  let name = sprintf "%s:%s%s" backend triple cpu in
+  match Hashtbl.find disassemblers name with
+  | Some d ->
+    d.users <- d.users + 1;
+    Ok {name; asm=false; kinds=false}
+  | None ->
+    let dd = match C.create ~backend ~triple ~cpu ~debug_level with
+      | n when n >= 0 -> Ok n
+      | -2 -> errorf "Unknown backend: %s" backend
+      | -3 -> errorf "Unsupported target: %s %s" triple cpu
+      |  n -> errorf "Disasm.Basic: Unknown error %d" n in
+    dd >>= fun dd ->
+    let disassembler = {
+      dd;
+      insn_table = Table.create (C.insn_table dd);
+      reg_table = Table.create (C.reg_table dd);
+      users = 1;
+    } in
+    Hashtbl.add_exn disassemblers name disassembler;
+    Ok {name; asm = false; kinds = false}
 
 
 let close dis =
-  C.delete dis.dd;
-  dis.closed <- true
+  let disassembler = get dis in
+  disassembler.users <- disassembler.users - 1;
+  if disassembler.users = 0
+  then begin
+    Hashtbl.remove disassemblers dis.name;
+    C.delete disassembler.dd;
+  end
 
-let with_disasm ?debug_level ?cpu ~backend triple ~f =
-  create ?debug_level ?cpu ~backend triple >>= fun dis ->
+
+let with_disasm ?debug_level ?cpu ?backend triple ~f =
+  create ?debug_level ?cpu ?backend triple >>= fun dis ->
   f dis >>| fun res -> close dis; res
 
 type ('a,'k) t = dis
@@ -520,15 +544,14 @@ let run ?backlog ?(stop_on=[]) ?invalid ?stopped ?hit dis ~return ~init mem =
     create_state ?backlog ?invalid ?stopped ?hit ~return
       dis mem in
   let state = with_preds state stop_on in
+  C.store_asm_string !!dis dis.asm;
+  C.store_predicates !!dis dis.kinds;
   jump state (memory state) init
 
 let store_kinds d =
-  C.store_predicates !!d true;
   {d with kinds = true}
 
-
 let store_asm d =
-  C.store_asm_string !!d true;
   {d with asm = true}
 
 let insn_of_mem dis mem =
@@ -561,8 +584,8 @@ module Trie = struct
     let length = fst
     let nth_token (_, State s) i =
       match s.insns.(i) with
-      | (mem, None) -> 0, [| |]
-      | (mem, Some insn) -> Insn.(insn.code, insn.opers)
+      | (_, None) -> 0, [| |]
+      | (_, Some insn) -> Insn.(insn.code, insn.opers)
 
     let token_hash = Hashtbl.hash
   end

@@ -8,10 +8,10 @@ open Bap_image_std
 
 open KB.Syntax
 
-module Disasm = Bap_disasm_speculative
+module Disasm = Bap_disasm_driver
 module Insn = Bap_disasm_insn
 
-type input = Disasm.t
+type input = Disasm.state
 type output = {
   parents : (word, word) Solution.t;
   entries : Set.M(Addr).t;
