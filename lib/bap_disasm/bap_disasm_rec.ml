@@ -58,8 +58,7 @@ type cfg = Cfg.t [@@deriving compare]
 
 type t = Driver.state KB.t
 
-let create_insn basic sema =
-  let prog = Insn.create sema in
+let create_insn basic prog =
   match basic with
   | None -> prog
   | Some insn ->
@@ -76,10 +75,13 @@ let global_cfg disasm =
     ~init:Cfg.empty
     ~block:(fun mem insns ->
         Driver.execution_order insns >>=
-        KB.List.map ~f:(fun (mem,label) ->
+        KB.List.filter_map ~f:(fun label ->
             KB.collect Basic.Insn.slot label >>= fun basic ->
-            KB.collect Theory.Program.Semantics.slot label >>| fun s ->
-            mem,create_insn basic s) >>| Block.create mem)
+            KB.collect Theory.Program.Semantics.slot label >>= fun s ->
+            KB.collect Memory.slot label >>| function
+            | None -> None
+            | Some mem -> Some (mem,create_insn basic s)) >>|
+        Block.create mem)
     ~node:(fun node cfg ->
         KB.return (Cfg.Node.insert node cfg))
     ~edge:(fun src dst g ->

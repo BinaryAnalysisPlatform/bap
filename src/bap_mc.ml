@@ -64,18 +64,25 @@ module Program(Conf : Mc_options.Provider) = struct
     List.map ~f:sexp_of_kind |>
     List.iter ~f:(printf "%a@." Sexp.pp)
 
-  let lift arch mem insn =
+  let new_insn arch mem insn =
     let open KB.Syntax in
-    let sema =
-      KB.Object.create Theory.Program.cls >>= fun code ->
-      KB.provide Arch.slot code (Some arch) >>= fun () ->
-      KB.provide Memory.slot code (Some mem) >>= fun () ->
-      KB.provide Insn.Slot.name code (Dis.Insn.name insn) >>= fun () ->
-      KB.provide Dis.Insn.slot code (Some insn) >>| fun () ->
-      code in
-    match KB.run Theory.Program.cls sema KB.empty with
-    | Ok (code,_) -> code
-    | Error _ -> Theory.Program.empty
+    KB.Object.create Theory.Program.cls >>= fun code ->
+    KB.provide Arch.slot code (Some arch) >>= fun () ->
+    KB.provide Memory.slot code (Some mem) >>= fun () ->
+    KB.provide Dis.Insn.slot code (Some insn) >>= fun () ->
+    let (<--) slot data v = KB.Value.put slot v data in
+    let insn = List.fold ~init:Insn.empty ~f:(fun insn add -> add insn) [
+        Insn.Slot.asm <-- Dis.Insn.asm insn;
+        Insn.Slot.ops <-- Some (Dis.Insn.ops insn);
+        Insn.Slot.name <-- Dis.Insn.name insn;
+      ] in
+    KB.provide Theory.Program.Semantics.slot code insn >>| fun () ->
+    code
+
+  let lift arch mem insn =
+    match KB.run Theory.Program.cls (new_insn arch mem insn) KB.empty with
+    | Ok (code,_) -> KB.Value.get Theory.Program.Semantics.slot code
+    | Error _ -> Insn.empty
 
   let print_insn_size should_print mem =
     if should_print then
@@ -86,10 +93,6 @@ module Program(Conf : Mc_options.Provider) = struct
     List.iter insn_formats ~f:(fun fmt ->
         Insn.with_printer fmt (fun () ->
             printf "%a@." Insn.pp insn))
-
-  let bil_of_sema sema =
-    KB.Value.get Bil.slot @@
-    KB.Value.get Theory.Program.Semantics.slot sema
 
   let print_bil insn =
     let bil = Insn.bil insn in
@@ -111,7 +114,7 @@ module Program(Conf : Mc_options.Provider) = struct
 
   let print arch mem code =
     let sema = lift arch mem code in
-    let bil = bil_of_sema sema in
+    let bil = Insn.bil sema in
     let insn = KB.Value.merge ~on_conflict:`drop_right sema (Insn.of_basic ~bil code) in
     print_insn_size options.show_insn_size mem;
     print_insn options.insn_formats insn;

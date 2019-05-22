@@ -22,5 +22,5 @@ val explore :
   state -> 'c knowledge
 
 
-val list_insns : ?rev:bool -> insns -> (mem * Theory.Label.t) list
-val execution_order : insns -> (mem * Theory.Label.t) list knowledge
+val list_insns : ?rev:bool -> insns -> Theory.Label.t list
+val execution_order : insns -> Theory.Label.t list knowledge

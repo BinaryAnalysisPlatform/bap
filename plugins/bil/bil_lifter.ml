@@ -189,11 +189,11 @@ let provide_bir () =
 
 let provide_lifter () =
   info "providing a lifter for all BIL lifters";
-  let empty = Theory.Program.Semantics.empty in
-  let (>>?) x f = x >>= function
-    | None -> KB.return empty
-    | Some x -> f x in
   let lifter obj =
+    Knowledge.collect Theory.Program.Semantics.slot obj >>= fun sema ->
+    let (>>?) x f = x >>= function
+      | None -> KB.return sema
+      | Some x -> f x in
     Knowledge.collect Arch.slot obj >>? fun arch ->
     Knowledge.collect Memory.slot obj >>? fun mem ->
     Knowledge.collect Disasm_expert.Basic.Insn.slot obj >>? fun insn ->
@@ -202,10 +202,13 @@ let provide_lifter () =
     | Ok bil ->
       Bil_semantics.context >>= fun ctxt ->
       Knowledge.provide Bil_semantics.arch ctxt (Some arch) >>= fun () ->
-      Lifter.run BilParser.t bil
-    | Error _ ->
-      Knowledge.return Theory.Program.Semantics.empty in
+      let str = Int63.to_string (KB.Object.id obj) in
+      Format.eprintf "pushing semantics for %s\n" str;
+      Lifter.run BilParser.t bil >>|
+      KB.Value.merge ~on_conflict:`drop_left sema
+    | Error _ -> Knowledge.return sema in
   Knowledge.promise Theory.Program.Semantics.slot lifter
+
 
 let rec dests_of_bil bil =
   let init = Set.empty (module Theory.Label) in
@@ -226,9 +229,20 @@ let rec dests_of_bil bil =
 
 let provide_dests () =
   info "providing destinations computed from BIL";
-  KB.promise Insn.Slot.dests @@ fun label ->
+  KB.promise Theory.Program.Semantics.slot @@ fun label ->
   KB.collect Theory.Program.Semantics.slot label >>= fun sema ->
-  dests_of_bil (KB.Value.get Bil.slot sema) >>| Option.some
+  let str = Int63.to_string (KB.Object.id label) in
+  if Insn.equal sema Insn.empty
+  then Format.eprintf "%s is empty\n" str
+  else Format.eprintf "%s has semantics\n" str;
+  let bil = KB.Value.get Bil.slot sema in
+  dests_of_bil bil >>| fun our ->
+  let dests = match KB.Value.get Insn.Slot.dests sema with
+    | None -> our
+    | Some theirs -> Set.union our theirs in
+  Format.eprintf "Provided %d dests for %a\n"
+    (Set.length dests) Bil.pp bil;
+  KB.Value.put Insn.Slot.dests sema (Some dests)
 
 
 let init () =

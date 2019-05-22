@@ -1,3 +1,4 @@
+open Core_kernel
 open Bap_knowledge
 
 module Effect = Bap_core_theory_effect
@@ -20,7 +21,9 @@ module Label : sig
   type t = program Knowledge.obj
   val addr : (program, Bitvec.t option) Knowledge.slot
   val name : (program, string option) Knowledge.slot
-  val ivec : (program, int option) Knowledge.slot
+  val ivec : (program, Int.t option) Knowledge.slot
+  val is_valid : (program, bool option) Knowledge.slot
+  val is_subroutine : (program, bool option) Knowledge.slot
   val for_addr : Bitvec.t -> t knowledge
   val for_name : string -> t knowledge
   val for_ivec : int -> t knowledge

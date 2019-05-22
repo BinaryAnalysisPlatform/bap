@@ -5618,7 +5618,7 @@ module Std : sig
 
   (** values of type [insn] represents machine instructions decoded
       from a given piece of memory *)
-  type insn = Theory.Program.t [@@deriving bin_io, compare, sexp]
+  type insn = Theory.Program.Semantics.t [@@deriving bin_io, compare, sexp]
 
   (** [block] is a region of memory that is believed to be a basic block
       of control flow graph to the best of our knowledge. *)
@@ -6102,17 +6102,15 @@ module Std : sig
   *)
   module Insn : sig
 
-    type t = Theory.Program.t [@@deriving bin_io, compare, sexp]
+    type t = Theory.Program.Semantics.t [@@deriving bin_io, compare, sexp]
 
     module Slot : sig
-      type 'a t = (Theory.program, 'a) KB.slot
+      type 'a t = (unit Theory.Program.Semantics.cls, 'a) KB.slot
       val name : string t
       val asm :  string t
       val ops :  op array option t
       val delay : int option t
       val dests : Set.M(Theory.Label).t option t
-      val is_valid : bool option t
-      val is_subroutine : bool option t
     end
 
     (** {3 Creating}
@@ -6120,6 +6118,9 @@ module Std : sig
         level representation.
     *)
     val of_basic : ?bil:bil -> Disasm_expert.Basic.full_insn -> t
+
+    (** [empty] is an instruction with no known semantics  *)
+    val empty : t
 
     (** returns backend specific name of instruction *)
     val name : t -> string
@@ -6489,8 +6490,8 @@ module Std : sig
         init:'c ->
         state -> 'c knowledge
 
-      val list_insns : ?rev:bool -> insns -> (mem * Theory.Label.t) list
-      val execution_order : insns -> (mem * Theory.Label.t) list knowledge
+      val list_insns : ?rev:bool -> insns -> Theory.Label.t list
+      val execution_order : insns -> Theory.Label.t list knowledge
     end
 
 

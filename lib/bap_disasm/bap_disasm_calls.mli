@@ -1,14 +1,14 @@
 open Core_kernel
 open Bap_core_theory
+open Graphlib.Std
 open Bap_types.Std
-module Disasm = Bap_disasm_driver
+module Driver = Bap_disasm_driver
 
 type t
 
 val empty : t
 val equal : t -> t -> bool
-val update : t -> Disasm.state -> t KB.t
+val update : t -> Driver.state -> t KB.t
 val entry : t -> addr -> addr
 val entries : t -> Set.M(Addr).t
-
 val domain : t KB.domain

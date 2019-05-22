@@ -161,15 +161,7 @@ module Theory : sig
       type nonrec t = unit t [@@deriving bin_io, compare, sexp]
       include Base.Comparable.S with type t := t
     end
-
-
   end
-
-  type bool = Bool.t pure
-  type 'a bitv = 'a Bitv.t pure
-  type ('a,'b) mem = ('a,'b) Mem.t pure
-  type 'f float = 'f Float.t pure
-  type rmode = Rmode.t pure
 
   type data = Effect.data
   type ctrl = Effect.ctrl
@@ -180,6 +172,42 @@ module Theory : sig
   type program
   type label = program KB.Object.t
 
+  module Program : sig
+    type t = program KB.value
+    val cls : program KB.cls
+    module Semantics : sig
+      type +'a cls = 'a Effect.spec
+      type t = unit cls KB.value
+      val cls : 'a cls KB.cls
+      val slot : (program, t) KB.slot
+      include KB.Value.S with type t := t
+    end
+    include Knowledge.Value.S with type t := t
+  end
+
+  module Label : sig
+    type t = label
+
+    val addr : (program, Bitvec.t option) KB.slot
+    val name : (program, string option) KB.slot
+    val ivec : (program, int option) KB.slot
+
+    val is_valid : (program, bool option) KB.slot
+    val is_subroutine : (program, bool option) KB.slot
+
+    val for_addr : Bitvec.t -> t knowledge
+    val for_name : string -> t knowledge
+    val for_ivec : int -> t knowledge
+
+    include Knowledge.Object.S with type t := t
+  end
+
+
+  type bool = Bool.t pure
+  type 'a bitv = 'a Bitv.t pure
+  type ('a,'b) mem = ('a,'b) Mem.t pure
+  type 'f float = 'f Float.t pure
+  type rmode = Rmode.t pure
 
   module type Init = sig
     val var : 'a var -> 'a pure
@@ -417,32 +445,6 @@ module Theory : sig
     end
   end
 
-  module Program : sig
-    type t = program KB.value
-    val cls : program KB.cls
-    module Semantics : sig
-      type +'a cls = 'a Effect.spec
-      type t = unit cls KB.value
-      val cls : 'a cls KB.cls
-      val slot : (program, t) KB.slot
-      include KB.Value.S with type t := t
-    end
-    include Knowledge.Value.S with type t := t
-  end
-
-  module Label : sig
-    type t = label
-
-    val addr : (program, Bitvec.t option) KB.slot
-    val name : (program, string option) KB.slot
-    val ivec : (program, int option) KB.slot
-
-    val for_addr : Bitvec.t -> t knowledge
-    val for_name : string -> t knowledge
-    val for_ivec : int -> t knowledge
-
-    include Knowledge.Object.S with type t := t
-  end
 
   module Grammar : sig
     type ieee754 = IEEE754.parameters

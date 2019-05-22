@@ -133,9 +133,11 @@ let build_cfg disasm calls entry =
         KB.return Addr.(Callgraph.entry calls dst = entry))
     ~block:(fun mem insns ->
         Disasm.execution_order insns >>= fun insns ->
-        KB.List.map insns ~f:(fun (mem,label) ->
-            KB.collect Theory.Program.Semantics.slot label >>| fun s ->
-            mem, Insn.create s) >>| fun insns ->
+        KB.List.filter_map insns ~f:(fun label ->
+            KB.collect Theory.Program.Semantics.slot label >>= fun s ->
+            KB.collect Memory.slot label >>| function
+            | None -> None
+            | Some mem -> Some (mem, s)) >>| fun insns ->
         Block.create mem insns)
     ~node:(fun n g ->
         KB.return @@

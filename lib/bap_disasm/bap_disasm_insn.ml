@@ -59,17 +59,16 @@ module Props = struct
 
   let slot = KB.Class.property ~package:"bap.std"
       ~persistent
-      Theory.Program.cls "insn-properties" domain
+      Theory.Program.Semantics.cls "insn-properties" domain
 end
 
 
-type t = Theory.Program.t
+type t = Theory.Program.Semantics.t
 type op = Op.t [@@deriving bin_io, compare, sexp]
 
 
 module Slot = struct
-  type 'a t = (Theory.program, 'a) KB.slot
-
+  type 'a t = (unit Theory.Program.Semantics.cls, 'a) KB.slot
   let empty = "#undefined"
   let text = KB.Domain.flat "text"
       ~inspect:sexp_of_string ~empty
@@ -82,11 +81,11 @@ module Slot = struct
 
   let name = KB.Class.property ~package:"bap.std"
       ~persistent:KB.Persistent.string
-      Theory.Program.cls "insn-opcode" text
+      Theory.Program.Semantics.cls "insn-opcode" text
 
   let asm = KB.Class.property ~package:"bap.std"
       ~persistent:KB.Persistent.string
-      Theory.Program.cls "insn-asm" text
+      Theory.Program.Semantics.cls "insn-asm" text
 
 
   let ops_domain = KB.Domain.optional "insn-ops"
@@ -99,28 +98,20 @@ module Slot = struct
 
   let ops = KB.Class.property ~package:"bap.std"
       ~persistent:ops_persistent
-      Theory.Program.cls "insn-ops" ops_domain
+      Theory.Program.Semantics.cls "insn-ops" ops_domain
 
   let delay = KB.Class.property ~package:"bap.std"
-      Theory.Program.cls "insn-delay" delay_t
+      Theory.Program.Semantics.cls "insn-delay" delay_t
       ~persistent:(KB.Persistent.of_binable (module struct
                      type t = int option [@@deriving bin_io]
                    end))
 
-  let dests : (Theory.program, Set.M(Theory.Label).t option) KB.slot =
+  let dests =
     let data = KB.Domain.optional ~equal:Set.equal "label" in
-    KB.Class.property ~package:"bap.std" Theory.Program.cls
+    KB.Class.property ~package:"bap.std" Theory.Program.Semantics.cls
       "insn-dests" data
 
-  let attr name =
-    let bool_t = KB.Domain.optional ~equal:Bool.equal "bool" in
-    KB.Class.property ~package:"bap.std" Theory.Program.cls name bool_t
-
-
-  let is_valid = attr "is-valid"
-  let is_subroutine = attr "is-subroutine"
 end
-
 
 let normalize_asm asm =
   String.substr_replace_all asm ~pattern:"\t"
@@ -180,11 +171,10 @@ let of_basic ?bil insn : t =
     Props.set_if may_affect_control_flow affect_control_flow |>
     Props.set_if may_load load                               |>
     Props.set_if may_store store in
-  write (KB.Value.empty Theory.Program.cls) Slot.[
+  write effect Slot.[
       Props.slot <-- props;
       name <-- Insn.name insn;
       asm <-- normalize_asm (Insn.asm insn);
-      Theory.Program.Semantics.slot <-- effect;
       ops <-- Some (Insn.ops insn);
     ]
 
@@ -199,15 +189,12 @@ let shouldn't = mustn't
 
 let name = KB.Value.get Slot.name
 let asm = KB.Value.get Slot.asm
-let bil insn = KB.Value.get Bil.slot (KB.Value.get Theory.Program.Semantics.slot insn)
+let bil insn = KB.Value.get Bil.slot insn
 let ops s = match KB.Value.get Slot.ops s with
   | None -> [||]
   | Some ops -> ops
 
-let empty = KB.Value.empty Theory.Program.cls
-let create s =
-  KB.Value.put Theory.Program.Semantics.slot empty  s
-
+let empty = KB.Value.empty Theory.Program.Semantics.cls
 
 module Adt = struct
   let pr fmt = Format.fprintf fmt
@@ -262,7 +249,7 @@ module Trie = struct
 end
 
 include Regular.Make(struct
-    type t = Theory.Program.t [@@deriving sexp, bin_io, compare]
+    type t = Theory.Program.Semantics.t [@@deriving sexp, bin_io, compare]
     let hash t = Hashtbl.hash t
     let module_name = Some "Bap.Std.Insn"
     let version = "2.0.0"

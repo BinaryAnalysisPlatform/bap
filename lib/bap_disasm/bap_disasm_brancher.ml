@@ -156,13 +156,13 @@ let of_image img =
 module Factory = Source.Factory.Make(struct type nonrec t = t end)
 
 let (>>=?) x f = x >>= function
-  | None -> KB.return None
+  | None -> KB.return Insn.empty
   | Some x -> f x
 
 
 let provide brancher =
   let init = Set.empty (module Theory.Label) in
-  KB.promise Insn.Slot.dests @@ fun label ->
+  KB.promise Theory.Program.Semantics.slot @@ fun label ->
   KB.collect Memory.slot label >>=? fun mem ->
   KB.collect Dis.Insn.slot label >>=? fun insn ->
   resolve brancher mem insn |>
@@ -171,5 +171,5 @@ let provide brancher =
       | Some addr,_ ->
         Theory.Label.for_addr (Word.to_bitvec addr) >>| fun dst ->
         Set.add dsts dst
-      | None,_ -> KB.return dsts) >>|
-  Option.some
+      | None,_ -> KB.return dsts) >>| fun dests ->
+  KB.Value.put Insn.Slot.dests Insn.empty (Some dests)

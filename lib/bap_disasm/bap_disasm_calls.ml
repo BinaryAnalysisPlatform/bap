@@ -8,10 +8,10 @@ open Bap_image_std
 
 open KB.Syntax
 
-module Disasm = Bap_disasm_driver
+module Driver = Bap_disasm_driver
 module Insn = Bap_disasm_insn
 
-type input = Disasm.state
+type input = Driver.state
 type output = {
   parents : (word, word) Solution.t;
   entries : Set.M(Addr).t;
@@ -30,14 +30,14 @@ module Callgraph = struct
 end
 
 let of_disasm disasm =
-  Disasm.explore disasm ~init:Callgraph.empty
+  Driver.explore disasm ~init:Callgraph.empty
     ~block:(fun mem _ -> KB.return (Memory.min_addr mem))
     ~node:(fun n g ->
         let g = Callgraph.Node.insert n g in
         let addr = Some (Word.to_bitvec n) in
         KB.Object.scoped Theory.Program.cls @@ fun label ->
         KB.provide Theory.Label.addr label addr >>= fun () ->
-        KB.collect Insn.Slot.is_subroutine label >>| function
+        KB.collect Theory.Label.is_subroutine label >>| function
         | Some true -> Callgraph.mark_as_root n g
         | _ -> g)
     ~edge:(fun src dst g ->

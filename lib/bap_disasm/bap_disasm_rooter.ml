@@ -42,10 +42,14 @@ let provide rooter =
     roots rooter |>
     Seq.map ~f:Word.to_bitvec |>
     Seq.fold ~init ~f:Set.add in
+  Format.eprintf "Rooter: providing %d roots\n" (Set.length roots);
   let promise prop =
     KB.promise prop @@ fun label ->
     KB.collect Theory.Label.addr label >>| function
     | None -> None
-    | Some addr -> Option.some_if (Set.mem roots addr) true in
-  promise Insn.Slot.is_valid;
-  promise Insn.Slot.is_subroutine
+    | Some addr ->
+      Format.eprintf "Rooter: %a -> %b\n"
+        Bitvec.pp addr (Set.mem roots addr);
+      Option.some_if (Set.mem roots addr) true in
+  promise Theory.Label.is_valid;
+  promise Theory.Label.is_subroutine

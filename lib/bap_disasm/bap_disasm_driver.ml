@@ -180,6 +180,7 @@ end = struct
     }
 
   let jumped s mem dsts delay =
+    Format.eprintf "Jumps: %a@\n" Memory.pp mem;
     let s = decoded s mem in
     let parent = s.curr in
     let src = Memory.min_addr mem in
@@ -193,6 +194,7 @@ end = struct
     | [] -> [t]
 
   let moved s mem =
+    Format.eprintf "moves: %a\n" Memory.pp mem;
     let parent = match s.curr with
       | Fall {delay=Ready (Some parent)} -> parent
       | _ -> s.curr in
@@ -208,9 +210,11 @@ end = struct
 
 
   let failed s addr =
+    Format.eprintf "Fails: %a@\n" Addr.pp addr;
     step @@ cancel s.curr @@ mark_data s addr
 
   let stopped s =
+    Format.eprintf "Stops: %a@\n" Addr.pp s.addr;
     step @@ cancel s.curr @@ mark_data s s.addr
 
   let rec view s base ~empty ~ready =
@@ -245,8 +249,14 @@ let new_insn arch mem insn =
   KB.Object.create Theory.Program.cls >>= fun code ->
   KB.provide Arch.slot code (Some arch) >>= fun () ->
   KB.provide Memory.slot code (Some mem) >>= fun () ->
-  KB.provide Insn.Slot.name code (Dis.Insn.name insn) >>= fun () ->
-  KB.provide Dis.Insn.slot code (Some insn) >>| fun () ->
+  KB.provide Dis.Insn.slot code (Some insn) >>= fun () ->
+  let (<--) slot data v = KB.Value.put slot v data in
+  let insn = List.fold ~init:Insn.empty ~f:(fun insn add -> add insn) [
+      Insn.Slot.asm <-- Dis.Insn.asm insn;
+      Insn.Slot.ops <-- Some (Dis.Insn.ops insn);
+      Insn.Slot.name <-- Dis.Insn.name insn;
+    ] in
+  KB.provide Theory.Program.Semantics.slot code insn >>| fun () ->
   code
 
 let collect_dests arch mem insn =
@@ -255,24 +265,34 @@ let collect_dests arch mem insn =
   let init =
     {indirect = false; resolved = Set.empty (module Addr)} in
   new_insn arch mem insn >>= fun code ->
-  KB.collect Insn.Slot.dests code >>= function
-  | None -> KB.return init
+  KB.collect Theory.Program.Semantics.slot code >>= fun insn ->
+  KB.Value.get Insn.Slot.dests insn |> function
+  | None ->
+    Format.eprintf "No dests were provided for %s@\n"
+      (Int63.to_string (KB.Object.id code));
+    KB.return init
   | Some dests ->
     Set.to_sequence dests |>
     KB.Seq.fold ~init ~f:(fun {indirect;resolved} label ->
+        let s = Int63.to_string (KB.Object.id label) in
         KB.collect Theory.Label.addr label >>| function
         | Some d ->
+          Format.eprintf "%s resolvesd to %a, fall is %a@\n"
+            s Bitvec.pp d Bitvec.pp fall;
           if Bitvec.(d <> fall)
           then {
             indirect;
             resolved = Set.add resolved (Word.create d width)
           } else {indirect; resolved}
-        | None -> {indirect=true; resolved})
+        | None ->
+          Format.eprintf "%s is unresolved@\n" s;
+          {indirect=true; resolved})
 
 
 let delay arch mem insn =
   new_insn arch mem insn >>= fun code ->
-  KB.collect Insn.Slot.delay code >>| function
+  KB.collect Theory.Program.Semantics.slot code >>| fun insn ->
+  KB.Value.get Insn.Slot.delay insn |> function
   | None -> 0
   | Some x -> x
 
@@ -285,17 +305,21 @@ let classify_mem mem =
       let slot = Some (Addr.to_bitvec addr) in
       KB.Object.scoped Theory.Program.cls @@ fun label ->
       KB.provide Theory.Label.addr label slot >>= fun () ->
-      KB.collect Insn.Slot.is_valid label >>= function
+      KB.collect Theory.Label.is_valid label >>= function
       | Some false -> KB.return (code,Set.add data addr,root)
       | r ->
         let code = if Option.is_none r then code
           else Set.add code addr in
-        KB.collect Insn.Slot.is_subroutine label >>| function
+        KB.collect Theory.Label.is_subroutine label >>| function
         | Some true -> (code,data,Set.add root addr)
         | _ -> (code,data,root))
 
 let scan_mem arch disasm base : Machine.state KB.t =
   classify_mem base >>= fun (code,data,init) ->
+  Format.eprintf "Driver: input - %d/%d/%d\n"
+    (Set.length code)
+    (Set.length data)
+    (Set.length init);
   let step d s =
     if Machine.is_ready s then KB.return s
     else Machine.view s base ~ready:(fun s mem -> Dis.jump d mem s)
@@ -307,6 +331,9 @@ let scan_mem arch disasm base : Machine.state KB.t =
           ~stopped:(fun d s -> step d (Machine.stopped s))
           ~hit:(fun d mem insn s ->
               collect_dests arch mem insn >>= fun dests ->
+              Format.eprintf "Found %d resolved dests for %a\n"
+                (Set.length dests.resolved)
+                Addr.pp (Memory.min_addr mem);
               if Set.is_empty dests.resolved &&
                  not dests.indirect then
                 step d @@ Machine.moved s mem
@@ -316,7 +343,7 @@ let scan_mem arch disasm base : Machine.state KB.t =
           ~invalid:(fun d _ s -> step d (Machine.failed s s.addr)))
     ~empty:KB.return
 
-type insns = (mem * Theory.Label.t) list
+type insns = Theory.Label.t list
 type state = {
   begs : Set.M(Addr).t;
   jmps : dsts Map.M(Addr).t;
@@ -346,6 +373,10 @@ let scan mem s =
     | Ok dis ->
       scan_mem arch dis mem >>|
       fun {Machine.begs; jmps; data} ->
+      Format.eprintf "Driver: output - %d/%d, %d\n"
+        (Set.length begs)
+        (Map.length jmps)
+        (Set.length data);
       let jmps = Map.merge s.jmps jmps ~f:(fun ~key:_ -> function
           | `Left dsts | `Right dsts | `Both (_,dsts) -> Some dsts) in
       let begs = Set.union s.begs begs in
@@ -365,7 +396,7 @@ let merge t1 t2 = {
 }
 
 let list_insns ?(rev=false) insns =
-  if rev then List.rev insns else insns
+  if rev then insns else List.rev insns
 
 let rec insert pos x xs =
   if pos = 0 then x::xs else match xs with
@@ -373,10 +404,11 @@ let rec insert pos x xs =
     | [] -> [x]
 
 let execution_order stack =
-  KB.List.fold stack ~init:[] ~f:(fun insns (mem,insn) ->
-      KB.collect Insn.Slot.delay insn >>| function
-      | None -> (mem,insn)::insns
-      | Some d -> insert d (mem,insn) insns)
+  KB.List.fold stack ~init:[] ~f:(fun insns insn ->
+      KB.collect Theory.Program.Semantics.slot insn >>| fun s ->
+      match KB.Value.get Insn.Slot.delay s with
+      | None -> insn::insns
+      | Some d -> insert d insn insns)
 
 let always _ = KB.return true
 
@@ -420,9 +452,9 @@ let explore
                   then assert false
                   else
                   if Set.mem begs next || Map.mem jmps curr
-                  then KB.return (curr,len,(mem,insn)::insns)
+                  then KB.return (curr, len, insn::insns)
                   else Dis.jump s (view next base)
-                      (next,len,(mem,insn)::insns))
+                      (next, len, insn::insns))
             >>= fun (fin,len,insns) ->
             let mem = view ~len beg base in
             block mem insns >>= fun block ->

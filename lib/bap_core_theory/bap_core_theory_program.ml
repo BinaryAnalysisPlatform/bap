@@ -23,6 +23,15 @@ module Label = struct
       ~equal:Int.equal
       ~inspect:sexp_of_int
 
+  let attr name =
+    let bool_t = Knowledge.Domain.optional ~equal:Bool.equal "bool" in
+    Knowledge.Class.property ~package:"bap.std" cls name bool_t
+
+
+  let is_valid = attr "is-valid"
+  let is_subroutine = attr "is-subroutine"
+
+
   let addr = Knowledge.Class.property ~package cls "addr" word
   let name = Knowledge.Class.property ~package cls "name" string
   let ivec = Knowledge.Class.property ~package cls "ivec" int
