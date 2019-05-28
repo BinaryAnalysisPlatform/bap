@@ -3,8 +3,7 @@ FROM ocaml/opam2:alpine
 ENV HOME /home/opam
 WORKDIR $HOME
 
-RUN sudo apk update \
- && opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing \
+RUN opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing \
  && opam update \
  && opam depext --install bap --yes \
  && opam clean -acrs \
