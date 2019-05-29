@@ -544,18 +544,6 @@ module type S = sig
   module Factory : Bap_disasm_source.Factory with type t = t
 end
 
-let register x =
-  let module S = (val x : S) in
-  let stream =
-    Stream.map Info.img ~f:(fun img ->
-        Or_error.try_with (fun () -> S.of_image img)) in
-  S.Factory.register "internal" stream
-
-let () =
-  register (module Brancher);
-  register (module Rooter);
-  register (module Symbolizer)
-
 include Data.Make(struct
     type nonrec t = t
     let version = "1.0.0"

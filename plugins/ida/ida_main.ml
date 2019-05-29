@@ -19,9 +19,7 @@ module Symbols = Data.Make(struct
 module type Target = sig
   type t
   val of_blocks : (string * addr * addr) seq -> t
-  module Factory : sig
-    val register : string -> t source -> unit
-  end
+  val provide : t -> unit
 end
 
 let digest = Caml.Digest.file
@@ -59,12 +57,9 @@ let extract path arch =
   Seq.of_list
 
 let register_source (module T : Target) =
-  let source =
-    let open Project.Info in
-    let extract file arch = Or_error.try_with ~backtrace:true (fun () ->
-        extract file arch |> T.of_blocks) in
-    Stream.merge file arch ~f:extract in
-  T.Factory.register name source
+  let inputs = Stream.zip Project.Info.file Project.Info.arch in
+  Stream.observe inputs @@ fun (file,arch) ->
+  T.provide (T.of_blocks (extract file arch))
 
 
 type perm = [`code | `data] [@@deriving sexp]
@@ -217,16 +212,14 @@ let get_resolve_fun file arch =
   (IdaBrancher.resolve brancher)
 
 let register_brancher_source () =
-  let source =
-    let create_brancher file arch = Or_error.try_with (fun () ->
-        Brancher.create (get_resolve_fun file arch)) in
-    Project.Info.(Stream.merge file arch ~f:create_brancher) in
-  Brancher.Factory.register name source
+  let inputs =
+    Stream.zip Project.Info.file Project.Info.arch in
+  Stream.observe inputs @@ fun (file,arch) ->
+  Brancher.provide @@ Brancher.create (get_resolve_fun file arch)
 
 let main () =
   register_source (module Rooter);
   register_source (module Symbolizer);
-  register_source (module Reconstructor);
   register_brancher_source ();
   Project.Input.register_loader name loader
 
@@ -303,5 +296,5 @@ module Cmdline = struct
         match Info.create ida_path is_headless with
         | Ok info -> Bap_ida_service.register info !mode; main ()
         | Error e ->
-           error "%S. Service not registered." (Error.to_string_hum e))
+          error "%S. Service not registered." (Error.to_string_hum e))
 end

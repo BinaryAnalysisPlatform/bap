@@ -210,6 +210,52 @@ let provide_lifter () =
   Knowledge.promise Theory.Program.Semantics.slot lifter
 
 
+module Brancher : Theory.Core = struct
+  include Theory.Core.Empty
+
+  let pack kind dsts =
+    let r = KB.Value.put Insn.Slot.dests Insn.empty dsts in
+    KB.Value.clone kind r
+
+  let forget x = KB.Value.clone Theory.Program.Semantics.cls x
+  let get x = KB.Value.get Insn.Slot.dests (forget x)
+
+  let union k e1 e2 =
+    pack k @@ match get e1, get e2 with
+    | None,s|s,None -> s
+    | Some e1, Some e2 -> Some (Set.union e1 e2)
+
+  let ret kind dst =
+    let dsts = Set.singleton (module Theory.Label) dst in
+    KB.return @@ pack kind (Some dsts)
+
+  let goto dst = ret Theory.Effect.jump dst
+
+  let jmp _ =
+    KB.Object.create Theory.Program.cls >>= fun dst ->
+    ret Theory.Effect.jump dst
+
+  let seq x y =
+    x >>= fun x ->
+    y >>= fun y ->
+    let k = KB.Value.cls x in
+    KB.return (union k x y)
+
+  let blk _ data ctrl =
+    data >>= fun data ->
+    ctrl >>= fun ctrl ->
+    let k = Theory.Effect.join
+        [KB.Value.cls data]
+        [KB.Value.cls ctrl] in
+    KB.return (union k data ctrl)
+
+  let branch _cnd yes nay =
+    yes >>= fun yes ->
+    nay >>= fun nay ->
+    let k = KB.Value.cls yes in
+    KB.return (union k yes nay)
+end
+
 let rec dests_of_bil bil =
   let init = Set.empty (module Theory.Label) in
   KB.List.fold bil ~init ~f:(fun dests -> function
@@ -249,4 +295,7 @@ let init () =
   Bil_ir.init ();
   provide_lifter ();
   provide_bir ();
-  provide_dests ()
+  Theory.register
+    ~desc:"computes destinations"
+    ~name:"dests "
+    (module Brancher)

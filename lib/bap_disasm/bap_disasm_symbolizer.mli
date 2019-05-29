@@ -6,6 +6,8 @@ open Bap_disasm_source
 type t
 type symbolizer = t
 
+val provide : t -> unit
+
 val empty : t
 
 val create : (addr -> string option) -> t

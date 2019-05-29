@@ -7994,6 +7994,8 @@ module Std : sig
     (** symbolizer data type  *)
     type t = symbolizer
 
+    val provide : t -> unit
+
     (** [create fn] creates a symbolizer for a given function  *)
     val create : (addr -> string option) -> t
 
@@ -8016,14 +8018,16 @@ module Std : sig
     (** [empty] is a symbolizer that knows nothing.  *)
     val empty : t
 
-    (** A factory of symbolizers. Use it register and create
-        symbolizers.  *)
     module Factory : Source.Factory.S with type t = t
+    [@@deprecated "[since 2019-05] use [provide]"]
+
   end
 
   (** Rooter finds starts of functions in the binary. *)
   module Rooter : sig
     type t = rooter
+
+    val provide : t -> unit
 
     (** [create seq] creates a rooter from a given sequence of addresses  *)
     val create : addr seq -> t
@@ -8047,6 +8051,8 @@ module Std : sig
 
     (** A factory of rooters. Useful to register custom rooters  *)
     module Factory : Source.Factory.S with type t = t
+    [@@deprecated "[since 2019-05] use [provide]"]
+
   end
 
   (** Brancher is responsible for resolving destinations of branch
@@ -8073,7 +8079,10 @@ module Std : sig
         the instruction [insn], that occupies memory region [mem].  *)
     val resolve : t -> mem -> full_insn -> dests
 
+    val provide : t -> unit
+
     module Factory : Source.Factory.S with type t = t
+    [@@deprecated "[since 2019-05] use [provide]"]
 
   end
 

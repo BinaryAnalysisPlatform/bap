@@ -70,7 +70,7 @@ let popen cmd =
     info "command `%s' was terminated by a signal" cmd;
     None
 
-let run_objdump arch file =
+let provide_symbolizer arch file =
   let popen = fun cmd -> popen (cmd ^ " " ^ file) in
   let names = Addr.Table.create () in
   let width = Arch.addr_size arch |> Size.in_bits in
@@ -86,11 +86,13 @@ let run_objdump arch file =
             sec) |> ignore in
   if Hashtbl.length names = 0
   then warning "failed to obtain symbols";
-  Ok (Symbolizer.create (Hashtbl.find names))
+  let s = Symbolizer.create (Hashtbl.find names) in
+  Symbolizer.provide s
 
 let main () =
-  Stream.merge Project.Info.arch Project.Info.file ~f:run_objdump |>
-  Symbolizer.Factory.register name
+  let inputs = Stream.zip Project.Info.arch Project.Info.file in
+  Stream.observe inputs @@ fun (arch,file) ->
+  provide_symbolizer arch file
 
 let () =
   Config.manpage [

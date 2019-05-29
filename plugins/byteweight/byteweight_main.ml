@@ -20,7 +20,7 @@ let create_finder path length threshold arch comp =
     info "advice - delete signatures at `%s'" path;
     info "advice - use `bap-byteweight` to install signatures";
     Or_error.errorf "corrupted database"
-  | Error (`No_entry err) ->
+  | Error (`No_entry _) ->
     error "no signatures for specified compiler and architecture";
     info "advice - try to use default compiler entry";
     info "advice - create new entries with `bap-byteweight' tool";
@@ -51,14 +51,16 @@ let main path length threshold comp =
         info "advice - check your compiler's signatures";
         Ok (Rooter.create Seq.empty)
       | roots -> Ok (roots |> Set.to_sequence |> Rooter.create)  in
-  let rooter =
-    let open Project.Info in
-    Stream.Variadic.(apply (args arch $ code) ~f:find_roots) in
   if sigs_exists path then
-    Rooter.Factory.register name rooter
-  else
-    let () = warning "signature database is not available" in
+    let inputs = Stream.zip Project.Info.arch Project.Info.code in
+    Stream.observe inputs (fun (arch,mem) ->
+        match find_roots arch mem with
+        | Ok roots -> Rooter.provide roots
+        | Error _ -> ())
+  else begin
+    warning "signature database is not available";
     info "advice - use `bap-byteweight` to install signatures"
+  end
 
 
 let () =

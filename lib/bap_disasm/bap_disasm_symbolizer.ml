@@ -1,5 +1,5 @@
 open Core_kernel
-open Bap_knowledge
+open Bap_core_theory
 open Bap_types.Std
 open Bap_image_std
 open Bap_disasm_source
@@ -15,7 +15,7 @@ module Name = struct
   let is_empty name =
     String.is_prefix name ~prefix:"sub_"
 
-  let order x y : Knowledge.Order.partial =
+  let order x y : KB.Order.partial =
     match is_empty x, is_empty y with
     | true,true -> EQ
     | false,false -> if String.equal x y then EQ else NC
@@ -55,4 +55,13 @@ let of_blocks seq =
 
 module Factory = Factory.Make(struct type nonrec t = t end)
 
-let internal_image_symbolizer = (fun img -> Some (of_image img))
+let provide (Symbolizer name) =
+  let open KB.Syntax in
+  KB.promise Theory.Label.name @@ fun label ->
+  KB.collect Arch.slot label >>= fun arch ->
+  KB.collect Theory.Label.addr label >>| fun addr ->
+  match arch, addr with
+  | Some arch, Some addr ->
+    let width = Size.in_bits (Arch.addr_size arch) in
+    name (Addr.create addr width)
+  | _ -> None

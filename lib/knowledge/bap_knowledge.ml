@@ -32,6 +32,8 @@ module type Sid = sig
   val incr : t ref -> unit
 end
 
+module Uid = Type_equal.Id.Uid
+
 (* temporal identifiers
 
    Identifiers work like pointers in our runtime, and
@@ -642,7 +644,6 @@ module Knowledge = struct
   module Env = struct
     type objects = {
       vals : Record.t Map.M(Oid).t;
-      reqs : Set.M(Oid).t Map.M(Pid).t;
       objs : Oid.t Map.M(String).t Map.M(String).t;
       syms : fullname Map.M(Oid).t;
       pubs : Set.M(Oid).t Map.M(String).t;
@@ -652,7 +653,6 @@ module Knowledge = struct
 
     let empty_class = {
       vals = Map.empty (module Oid);
-      reqs = Map.empty (module Pid);
       objs = Map.empty (module String);
       syms = Map.empty (module Oid);
       pubs = Map.empty (module String);
@@ -660,7 +660,13 @@ module Knowledge = struct
       data = Map.empty (module Cell);
     }
 
+    type work = {
+      waiting : Set.M(Pid).t;
+      current : Set.M(Pid).t;
+    }
+
     type t = {
+      working : work Map.M(Oid).t Map.M(Uid).t;
       classes : objects Map.M(Cid).t;
       package : string;
     }
@@ -669,6 +675,7 @@ module Knowledge = struct
   type state = Env.t
   let empty : Env.t = {
     package = user_package;
+    working = Map.empty (module Uid);
     classes = Map.empty (module Cid);
   }
 
@@ -698,7 +705,7 @@ module Knowledge = struct
       key : 'p Type_equal.Id.t;
       name : string;
       desc : string option;
-      mutable promises : 'p promise list;
+      promises : (pid, 'p promise) Hashtbl.t;
     }
 
     type pack = Pack : ('a,'p) t -> pack
@@ -717,7 +724,8 @@ module Knowledge = struct
       let key = Type_equal.Id.create ~name dom.inspect in
       Option.iter persistent (Record.register_persistent key);
       Record.register_domain key dom;
-      let slot = {cls; dom; key; name; desc; promises = []} in
+      let promises = Hashtbl.create (module Pid) in
+      let slot = {cls; dom; key; name; desc; promises} in
       register slot;
       slot
   end
@@ -854,7 +862,7 @@ module Knowledge = struct
   let promise (s : _ slot) get =
     Pid.incr pids;
     let pid = !pids in
-    s.promises <- {get;pid} :: s.promises
+    Hashtbl.add_exn s.promises pid {get; pid}
 
   let is_active reqs pid id = match Map.find reqs pid with
     | None -> false
@@ -876,32 +884,143 @@ module Knowledge = struct
     | None -> Env.empty_class
     | Some objs -> objs
 
-  let update_reqs : _ slot -> _ = fun slot reqs ->
-    update @@ function {classes} as s -> {
-        s with classes = Map.update classes slot.cls.id ~f:(function
-        | None -> {Env.empty_class with reqs}
-        | Some objs -> {objs with reqs})
+  let pp_pids ppf reqs =
+    let reqs = Set.to_list reqs in
+    let sexp_of_pid pid =
+      Sexp.Atom (Format.asprintf "%a" Pid.pp pid) in
+    let reqs = sexp_of_list sexp_of_pid reqs in
+    Format.fprintf ppf "%a" Sexp.pp_hum reqs
+
+  let uid {Slot.key} = Type_equal.Id.uid key
+
+  let is_active
+    : ('a,_) slot -> 'a obj -> bool knowledge =
+    fun slot obj ->
+    gets @@ fun {working} ->
+    match Map.find working (uid slot) with
+    | None -> false
+    | Some objs -> Map.mem objs obj
+
+
+  let update_slot
+    : ('a,_) slot -> _ -> unit knowledge =
+    fun slot f ->
+    update @@ function {working} as s -> {
+        s with working = Map.change working (uid slot) ~f
       }
+
+  let enter_slot : ('a,_) slot -> 'a obj -> unit knowledge = fun s x ->
+    let nil = Set.empty (module Pid) in
+    let empty : Env.work = {waiting = nil; current = nil} in
+    update_slot s @@ function
+    | None -> Some (Map.singleton (module Oid) x empty)
+    | Some objs -> Some (Map.add_exn objs x empty)
+
+  let leave_slot : ('a,'p) slot -> 'a obj -> unit Knowledge.t = fun s x ->
+    update_slot s @@ function
+    | None -> assert false
+    | Some objs ->
+      let objs = Map.remove objs x in
+      if Map.is_empty objs then None
+      else Some objs
+
+  let update_work
+    : ('a,'p) slot -> 'a obj -> _ -> unit Knowledge.t = fun s x f ->
+    update_slot s @@ function
+    | None -> assert false
+    | Some objs -> Option.some @@ Map.update objs x ~f:(function
+        | None -> assert false
+        | Some w -> f w)
+
+  let enter_promise
+    : ('a,'p) slot -> 'a obj -> pid -> unit Knowledge.t = fun s x p ->
+    update_work s x @@
+    fun {waiting; current} ->
+    let current = Set.add current p in
+    Format.eprintf "(enter-promise %a %a %a)@\n" Pid.pp p
+      pp_pids waiting pp_pids current;
+    {waiting; current}
+
+  let leave_promise
+    : ('a,'p) slot -> 'a obj -> pid -> unit Knowledge.t = fun s x p ->
+    update_work s x @@ fun {waiting; current} ->
+    let current = Set.remove current p in
+    Format.eprintf "(leave-promise %a %a %a)@\n" Pid.pp p
+      pp_pids waiting pp_pids current;
+    {waiting; current}
+
+  let enqueue_promises
+    : ('a,'p) slot -> 'a obj -> unit Knowledge.t = fun s x ->
+    update_work s x @@ fun {waiting; current} ->
+    let res = Env.{
+        waiting = Set.union current waiting;
+        current
+      } in
+    Format.eprintf "(enqueue-promises %a %a)@\n"
+      pp_pids res.waiting pp_pids res.current;
+    res
+
+  let collect_waiting
+    : ('a,'p) slot -> 'a obj -> _ Knowledge.t = fun s x ->
+    gets @@ fun {Env.working} ->
+    Map.find_exn (Map.find_exn working (uid s)) x |> fun {Env.waiting} ->
+    Set.fold waiting ~init:[] ~f:(fun ps p ->
+        Hashtbl.find_exn s.Slot.promises p :: ps)
+
+  let dequeue_waiting s x = update_work s x @@ fun _ ->
+    let nil = Set.empty (module Pid) in
+    {current=nil; waiting=nil}
+
+
+  let initial_promises {Slot.promises} = Hashtbl.data promises
+
+  let current : type a p. (a,p) slot -> a obj -> p Knowledge.t =
+    fun slot id ->
+    objects slot.cls >>| fun {Env.vals} ->
+    match Map.find vals id with
+    | None -> slot.dom.empty
+    | Some v -> Record.get slot.key slot.dom v
+
+  let rec collect_inner
+    : ('a,'p) slot -> 'a obj -> _ -> _ =
+    fun slot obj promises ->
+    current slot obj >>= fun was ->
+    Knowledge.List.iter promises ~f:(fun {Slot.get; pid} ->
+        enter_promise slot obj pid >>= fun () ->
+        get obj >>= provide slot obj >>= fun () ->
+        leave_promise slot obj pid) >>= fun () ->
+    collect_waiting slot obj >>= fun waiting ->
+    dequeue_waiting slot obj >>= fun () ->
+    match waiting with
+    | [] -> Knowledge.return ()
+    | promises ->
+      current slot obj >>= fun now ->
+      match slot.dom.order now was with
+      | EQ | LT ->
+        let was = slot.dom.inspect was
+        and now = slot.dom.inspect now in
+        Format.eprintf "stopped progressing:@\n%a@\n=======@\n%a@\n"
+          Sexp.pp_hum was Sexp.pp_hum now;
+        Knowledge.return ()
+      | GT | NC ->
+        let was = slot.dom.inspect was
+        and now = slot.dom.inspect now in
+        Format.eprintf "having a progress:@\n%a@\n<<<<>>>>>@\n%a@\n"
+          Sexp.pp_hum was Sexp.pp_hum now;
+        collect_inner slot obj promises
 
   let collect : type a p. (a,p) slot -> a obj -> p Knowledge.t =
     fun slot id ->
-    objects slot.cls >>= fun {Env.vals} ->
-    let init = match Map.find vals id with
-      | None -> slot.dom.empty
-      | Some v -> Record.get slot.key slot.dom v in
-    slot.promises |>
-    Knowledge.List.fold ~init ~f:(fun curr req ->
-        objects slot.cls >>= fun {Env.reqs} ->
-        if is_active reqs req.pid id
-        then Knowledge.return curr
-        else
-          update_reqs slot (activate reqs req.pid id) >>= fun () ->
-          req.get id >>= fun next ->
-          update_reqs slot (deactivate reqs req.pid id) >>= fun () ->
-          match slot.dom.order curr next with
-          | GT -> Knowledge.return curr
-          | LT | EQ | NC -> Knowledge.return next) >>= fun max ->
-    provide slot id max >>| fun () -> max
+    is_active slot id >>= function
+    | true ->
+      enqueue_promises slot id >>= fun () ->
+      current slot id
+    | false ->
+      enter_slot slot id >>= fun () ->
+      collect_inner slot id (initial_promises slot) >>= fun () ->
+      leave_slot slot id >>= fun () ->
+      current slot id
+
 
   module Object = struct
     type +'a t = 'a obj

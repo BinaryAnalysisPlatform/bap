@@ -40,12 +40,15 @@ module Std = struct
   let provide_delay name delay =
     let provide obj =
       let open KB.Syntax in
-      KB.collect Arch.slot obj >>= function
+      KB.collect Theory.Program.Semantics.slot obj >>= fun insn ->
+      KB.collect Arch.slot obj >>| function
       | Some #Arch.mips ->
-        KB.collect Insn.Slot.name obj >>| fun name' ->
-        Option.some_if (String.equal name name') delay
-      | _ -> KB.return None in
-    KB.promise Insn.Slot.delay provide
+        let name' = KB.Value.get Insn.Slot.name insn in
+        if String.equal name name'
+        then KB.Value.put Insn.Slot.delay insn (Some delay)
+        else insn
+      | _ -> insn in
+    KB.promise Theory.Program.Semantics.slot provide
 
   let register ?delay name lifter =
     Option.iter delay ~f:(provide_delay name);

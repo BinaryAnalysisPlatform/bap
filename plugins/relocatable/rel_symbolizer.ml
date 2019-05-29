@@ -31,13 +31,11 @@ module Rel = struct
 end
 
 let init () =
-  Symbolizer.Factory.register "relocatable" @@
-  Stream.map Project.Info.spec ~f:(fun spec ->
-      let name =
-        match Fact.eval Rel.external_symbols spec with
-        | Ok exts -> Map.find exts
-        | _ -> fun _ -> None in
-      Ok (Symbolizer.create name))
+  Stream.observe Project.Info.spec @@ fun spec ->
+  let name = match Fact.eval Rel.external_symbols spec with
+    | Ok exts -> Map.find exts
+    | _ -> fun _ -> None in
+  Symbolizer.provide (Symbolizer.create name)
 
 let () =
   Config.manpage [

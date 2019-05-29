@@ -15,34 +15,6 @@ module Recipe = Bap_recipe
 exception Failed_to_create_project of Error.t [@@deriving sexp]
 exception Pass_not_found of string [@@deriving sexp]
 
-let find_source (type t) (module F : Source.Factory.S with type t = t)
-    field o = Option.(field o >>= F.find)
-
-let brancher = find_source (module Brancher.Factory) brancher
-let reconstructor =
-  find_source (module Reconstructor.Factory) reconstructor
-
-let merge_streams ss ~f : 'a Source.t =
-  Stream.concat_merge ss
-    ~f:(fun s s' -> match s, s' with
-        | Ok s, Ok s' -> Ok (f s s')
-        | Ok _, Error er
-        | Error er, Ok _ -> Error er
-        | Error er, Error er' ->
-          Error (Error.of_list [er; er']))
-
-let merge_sources create field (o : Bap_options.t) ~f =  match field o with
-  | [] -> None
-  | names -> match List.filter_map names ~f:create with
-    | [] -> assert false
-    | ss -> Some (merge_streams ss ~f)
-
-let symbolizer =
-  merge_sources Symbolizer.Factory.find symbolizers ~f:(fun s1 s2 ->
-      Symbolizer.chain [s1;s2])
-
-let rooter =
-  merge_sources Rooter.Factory.find rooters ~f:Rooter.union
 
 let print_formats_and_exit () =
   Bap_format_printer.run `writers (module Project);
@@ -115,12 +87,7 @@ let extract_format filename =
 
 let main o =
   let proj_of_input input =
-    let rooter = rooter o
-    and brancher = brancher o
-    and reconstructor = reconstructor o
-    and symbolizer = symbolizer o in
-    Project.create input ~disassembler:o.disassembler
-      ?brancher ?rooter ?symbolizer ?reconstructor  |> function
+    Project.create input ~disassembler:o.disassembler |> function
     | Error err -> raise (Failed_to_create_project err)
     | Ok project -> project in
   let proj_of_file ?ver ?fmt file =
@@ -195,11 +162,12 @@ let program_info =
       `P "$(b,bap-mc)(1), $(b,bap-byteweight)(1), $(b,bap)(3)"
     ] in
   Term.info "bap" ~version:Config.version ~doc ~man
+
 let program _source =
   let create
       passopt
-      _ _ a b c d e f g i j k = (Bap_options.Fields.create
-                                   a b c d e f g i j k []), passopt in
+      _ _ a b c d e f = (Bap_options.Fields.create
+                           a b c d e f []), passopt in
   let open Bap_cmdline_terms in
   let passopt : string list Term.t =
     let doc =
@@ -217,11 +185,7 @@ let program _source =
         $(loader ())
         $(dump_formats ())
         $source_type
-        $verbose
-        $(brancher ())
-        $(symbolizers ())
-        $(rooters ())
-        $(reconstructor ())),
+        $verbose),
   program_info
 
 let parse_source argv =
