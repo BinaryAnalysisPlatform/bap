@@ -9,10 +9,12 @@ module Order = struct
   end
 end
 
-type conflict = ..
+type conflict = exn = ..
 
 module Conflict = struct
   type t = conflict = ..
+  let pp = Exn.pp
+  let add_printer pr = Caml.Printexc.register_printer pr
 end
 
 module type Id = sig
@@ -162,11 +164,23 @@ module Domain = struct
     inspect : 'a -> Sexp.t;
     empty : 'a;
     order : 'a -> 'a -> Order.partial;
+    join : 'a -> 'a -> ('a,conflict) result;
     name : string;
   }
 
-  let define ?(inspect=sexp_of_opaque) ~empty ~order name = {
+  exception Join of string * Sexp.t * Sexp.t [@@deriving sexp_of]
+
+  let make_join name inspect order x y = match order x y with
+    | Order.GT -> Ok x
+    | EQ | LT -> Ok y
+    | NC -> Error (Join (name, inspect x, inspect y))
+
+
+  let define ?(inspect=sexp_of_opaque) ?join ~empty ~order name = {
     inspect; empty; order; name;
+    join = match join with
+      | Some f -> f
+      | None -> (make_join name inspect order)
   }
 
   let partial_of_total order x y : Order.partial = match order x y with
@@ -185,12 +199,23 @@ module Domain = struct
         | false,true -> GT
         | false,false -> if equal x y then EQ else NC)
 
-
-  let mapping (type k) (type o) ?(equal=(fun _ _ -> true))
+  let mapping (type k o d)
       (module K : Comparator.S with type t = k
                                 and type comparator_witness = o)
-      name =
+      ?(inspect=sexp_of_opaque)
+      ~equal name =
     let empty = Map.empty (module K) in
+    let join x y =
+      let module Join = struct exception Conflict of conflict end in
+      try Result.return @@ Map.merge x y ~f:(fun ~key:_ -> function
+          | `Left v | `Right v -> Some v
+          | `Both (x,y) ->
+            if equal x y then Some y
+            else
+              let x = inspect x and y = inspect y in
+              let failed = Join (name,x,y) in
+              raise (Join.Conflict failed))
+      with Join.Conflict err -> Error err in
     let inspect xs =
       Sexp.List (Map.keys xs |> List.map ~f:K.comparator.sexp_of_t) in
     let order x y =
@@ -203,13 +228,11 @@ module Domain = struct
       | 0,0,_ -> LT
       | _,0,0 -> GT
       | _,_,_ -> NC in
-    define ~inspect ~empty ~order name
+    define ~inspect ~join ~empty ~order name
 
-  let optional ?inspect ~equal name =
-    let inspect = match inspect with
-      | None -> None
-      | Some sexp_of_elt -> Some (sexp_of_option sexp_of_elt) in
-    flat ?inspect ~empty:None ~equal:(Option.equal equal) name
+  let optional ?(inspect=sexp_of_opaque) ~equal name =
+    let inspect = sexp_of_option inspect in
+    flat ~inspect ~empty:None ~equal:(Option.equal equal) name
 
   let string = define "string" ~empty:""
       ~inspect:sexp_of_string ~order:(fun x y ->
@@ -218,6 +241,8 @@ module Domain = struct
           | true,false -> GT
           | false,true -> LT
           | false,false -> partial_of_total String.compare x y)
+
+  let bool = optional ~inspect:sexp_of_bool ~equal:Bool.equal "bool"
 end
 
 module Persistent = struct
@@ -336,7 +361,7 @@ type 'a obj = Oid.t
 type fullname = {
   package : string;
   name : string;
-}
+} [@@deriving sexp_of]
 
 module Registry = struct
   let packages = Hash_set.create (module String) ()
@@ -471,7 +496,8 @@ module Record = struct
 
   type slot_domain = {
     inspect : univ -> Sexp.t;
-    order  : univ -> univ -> Order.partial;
+    order : univ -> univ -> Order.partial;
+    join : univ -> univ -> (univ,conflict) result;
     empty  : univ;
   }
 
@@ -500,15 +526,27 @@ module Record = struct
     | false,true  -> GT
     | false,false -> NC
 
+  let eq = Type_equal.Id.same_witness_exn
+
+  let commit (type p) (key : p Dict.Key.t) v x =
+    match Dict.find v key with
+    | None -> Ok (Dict.set v key x)
+    | Some y ->
+      let dom = Hashtbl.find_exn domains (Dict.Key.name key) in
+      let pack v = Dict.Packed.T (key,v) in
+      match dom.join (pack y) (pack x) with
+      | Ok (Dict.Packed.T (k,x)) ->
+        let Type_equal.T = eq key k in
+        Ok (Dict.set v key x)
+      | Error err -> Error err
 
   let put key v x = Dict.set v key x
+
   let get key {Domain.empty} data = match Dict.find data key with
     | None -> empty
     | Some x -> x
 
-  exception Merge_conflict of string * Sexp.t * Sexp.t
-
-  type conflict += Merge of string * Sexp.t * Sexp.t
+  exception Merge_conflict of conflict
 
   let merge ~on_conflict x y =
     Dict.to_alist x |>
@@ -519,21 +557,20 @@ module Record = struct
               let name = Dict.Key.name k in
               let pack v = Dict.Packed.T (k,v) in
               let dom = Hashtbl.find_exn domains name in
-              match dom.order (pack x) (pack y) with
-              | EQ | LT -> Some y
-              | GT -> Some x
-              | NC -> match on_conflict with
+              match dom.join (pack x) (pack y) with
+              | Ok (Dict.Packed.T (k',x)) ->
+                let Type_equal.T = eq k k' in
+                Some x
+              | Error err -> match on_conflict with
                 | `drop_both -> None
                 | `drop_left -> Some y
                 | `drop_right -> Some x
                 | `fail ->
-                  let x = dom.inspect (pack x)
-                  and y = dom.inspect (pack y) in
-                  raise (Merge_conflict (name,x,y))))
+                  raise (Merge_conflict err)))
 
   let join x y =
     try Ok (merge ~on_conflict:`fail x y)
-    with Merge_conflict (n,x,y) -> Error (Merge (n,x,y))
+    with Merge_conflict err -> Error err
 
   let register_persistent (type p)
       (key : p Dict.Key.t)
@@ -571,7 +608,6 @@ module Record = struct
     : type p. p Dict.Key.t -> p Domain.t -> unit =
     fun key dom ->
     let name = Dict.Key.name key in
-    let eq = Type_equal.Id.same_witness_exn in
     let order (Dict.Packed.T (kx,x)) (Dict.Packed.T (ky,y)) =
       let Type_equal.T = eq kx ky in
       let Type_equal.T = eq kx key in
@@ -580,10 +616,17 @@ module Record = struct
     let inspect (Dict.Packed.T(kx,x)) =
       let Type_equal.T = eq kx key in
       dom.inspect x in
+    let join (Dict.Packed.T (kx,x)) (Dict.Packed.T (ky,y)) =
+      let Type_equal.T = eq kx key in
+      let Type_equal.T = eq ky key in
+      match dom.join x y with
+      | Ok x -> Ok (Dict.Packed.T (key, x))
+      | Error err -> Error err in
     Hashtbl.add_exn domains ~key:name ~data:{
       inspect;
       empty;
       order;
+      join;
     }
 
   let sexp_of_t x =
@@ -844,18 +887,22 @@ module Knowledge = struct
   let gets f = Knowledge.lift (State.gets f)
   let update f = Knowledge.lift (State.update f)
 
+
   let provide : type a p. (a,p) slot -> a obj -> p -> unit Knowledge.t =
-    fun slot obj x -> update @@ function {classes} as s ->
-        let {Env.vals} as objs =
-          match Map.find classes slot.cls.id with
-          | None -> Env.empty_class
-          | Some objs -> objs in {
+    fun slot obj x ->
+    get () >>= function {classes} as s ->
+      let {Env.vals} as objs =
+        match Map.find classes slot.cls.id with
+        | None -> Env.empty_class
+        | Some objs -> objs in
+      try put {
           s with classes = Map.set classes ~key:slot.cls.id ~data:{
-            objs with vals = Map.update vals obj ~f:(function
-            | None -> Record.(put slot.key empty x)
-            | Some v -> Record.put slot.key v x)
-          }
-        }
+          objs with vals = Map.update vals obj ~f:(function
+          | None -> Record.(put slot.key empty x)
+          | Some v -> match Record.commit slot.key v x with
+            | Ok r -> r
+            | Error err -> raise (Record.Merge_conflict err))}}
+      with Record.Merge_conflict err -> Knowledge.fail err
 
   let pids = ref Pid.zero
 
@@ -935,30 +982,18 @@ module Knowledge = struct
   let enter_promise
     : ('a,'p) slot -> 'a obj -> pid -> unit Knowledge.t = fun s x p ->
     update_work s x @@
-    fun {waiting; current} ->
-    let current = Set.add current p in
-    Format.eprintf "(enter-promise %a %a %a)@\n" Pid.pp p
-      pp_pids waiting pp_pids current;
-    {waiting; current}
+    fun {waiting; current} -> {waiting; current = Set.add current p}
 
   let leave_promise
     : ('a,'p) slot -> 'a obj -> pid -> unit Knowledge.t = fun s x p ->
     update_work s x @@ fun {waiting; current} ->
-    let current = Set.remove current p in
-    Format.eprintf "(leave-promise %a %a %a)@\n" Pid.pp p
-      pp_pids waiting pp_pids current;
-    {waiting; current}
+    {waiting; current = Set.remove current p}
 
   let enqueue_promises
     : ('a,'p) slot -> 'a obj -> unit Knowledge.t = fun s x ->
-    update_work s x @@ fun {waiting; current} ->
-    let res = Env.{
-        waiting = Set.union current waiting;
-        current
-      } in
-    Format.eprintf "(enqueue-promises %a %a)@\n"
-      pp_pids res.waiting pp_pids res.current;
-    res
+    update_work s x @@
+    fun {waiting; current} ->
+    {waiting = Set.union current waiting; current}
 
   let collect_waiting
     : ('a,'p) slot -> 'a obj -> _ Knowledge.t = fun s x ->
@@ -996,18 +1031,8 @@ module Knowledge = struct
     | promises ->
       current slot obj >>= fun now ->
       match slot.dom.order now was with
-      | EQ | LT ->
-        let was = slot.dom.inspect was
-        and now = slot.dom.inspect now in
-        Format.eprintf "stopped progressing:@\n%a@\n=======@\n%a@\n"
-          Sexp.pp_hum was Sexp.pp_hum now;
-        Knowledge.return ()
-      | GT | NC ->
-        let was = slot.dom.inspect was
-        and now = slot.dom.inspect now in
-        Format.eprintf "having a progress:@\n%a@\n<<<<>>>>>@\n%a@\n"
-          Sexp.pp_hum was Sexp.pp_hum now;
-        collect_inner slot obj promises
+      | EQ | LT -> Knowledge.return ()
+      | GT | NC -> collect_inner slot obj promises
 
   let collect : type a p. (a,p) slot -> a obj -> p Knowledge.t =
     fun slot id ->
@@ -1200,7 +1225,7 @@ module Knowledge = struct
         r
 
 
-    type conflict += Import of fullname * fullname
+    exception Import of fullname * fullname [@@deriving sexp_of]
 
     let intern_symbol ~package name obj cls =
       Knowledge.return Env.{
@@ -1247,8 +1272,8 @@ module Knowledge = struct
         | Some names -> Map.mem names name)
 
 
-    type conflict += Not_a_package of string
-    type conflict += Not_a_symbol of fullname
+    exception Not_a_package of string [@@deriving sexp_of]
+    exception Not_a_symbol of fullname [@@deriving sexp_of]
 
     let check_name classes = function
       | `Pkg name -> if package_exists name classes
@@ -1359,6 +1384,8 @@ module Knowledge = struct
     | Ok x,s -> Ok (x,s)
     | Error err,_ -> Error err
 
+
+  module Conflict = Conflict
 end
 
 type 'a knowledge = 'a Knowledge.t

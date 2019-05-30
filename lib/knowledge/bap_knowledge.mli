@@ -416,6 +416,7 @@ module Knowledge : sig
     *)
     val define :
       ?inspect:('a -> Base.Sexp.t) ->
+      ?join:('a -> 'a -> ('a,conflict) result) ->
       empty:'a ->
       order:('a -> 'a -> Order.partial) -> string -> 'a domain
 
@@ -431,18 +432,20 @@ module Knowledge : sig
       equal:('a -> 'a -> bool) ->
       string -> 'a domain
 
-
-    val mapping : ?equal:('d -> 'd -> bool) ->
-      ('a,'e) Map.comparator ->
-      string ->
-      ('a,'d,'e) Map.t domain
-
     val optional :
       ?inspect:('a -> Base.Sexp.t) ->
       equal:('a -> 'a -> bool) ->
       string -> 'a option domain
 
+    val mapping :
+      ('a,'e) Map.comparator ->
+      ?inspect:('d -> Base.Sexp.t) ->
+      equal:('d -> 'd -> bool) ->
+      string ->
+      ('a,'d,'e) Map.t domain
+
     val string : string domain
+    val bool : bool option domain
 
     val obj : 'a cls -> 'a obj domain
   end
@@ -497,5 +500,9 @@ module Knowledge : sig
     val derive : 'a cls -> (module S
                              with type t = 'a t
                               and type comparator_witness = 'a ord)
+  end
+
+  module Conflict : sig
+    val pp : Format.formatter -> conflict -> unit
   end
 end
