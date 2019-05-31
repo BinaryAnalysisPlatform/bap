@@ -106,8 +106,22 @@ module Slot = struct
                      type t = int option [@@deriving bin_io]
                    end))
 
+  type KB.conflict += Barrier_with_dests
+
   let dests =
-    let data = KB.Domain.optional ~equal:Set.equal "label" in
+    let empty = Some (Set.empty (module Theory.Label)) in
+    let order x y : KB.Order.partial = match x,y with
+      | None,None -> EQ
+      | None,_ | _,None -> NC
+      | Some x, Some y ->
+        if Set.equal x y then EQ else
+        if Set.is_subset x y then LT else
+        if Set.is_subset y x then GT else NC in
+    let join x y = match x,y with
+      | None,None -> Ok None
+      | None,_ |Some _,None -> Error Barrier_with_dests
+      | Some x, Some y -> Ok (Some (Set.union x y)) in
+    let data = KB.Domain.define ~empty ~order ~join "dest-set" in
     KB.Class.property ~package:"bap.std" Theory.Program.Semantics.cls
       "insn-dests" data
 

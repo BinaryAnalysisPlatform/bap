@@ -59,9 +59,8 @@ module Tid = struct
       ~equal:Bap_bitvector.equal ~inspect:sexp_of_word "word_t"
   let addr = KB.Class.property ~package resolver "addr" word_t
 
-  let run cls exp = match Bap_state.run cls exp with
-    | Error _ -> assert false
-    | Ok value -> value
+
+  let run cls exp = Bap_state.run_or_fail cls exp
 
   let fresh =
     KB.Object.create Theory.Program.cls >>= fun obj ->

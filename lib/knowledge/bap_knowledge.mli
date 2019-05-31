@@ -233,6 +233,7 @@ module Knowledge : sig
     include Type_equal.Injective with type 'a t := 'a t
 
     val empty : 'a cls -> 'a value
+    val order : 'a value -> 'a value -> Order.partial
     val join : 'a value -> 'a value -> ('a value,conflict) result
     val merge : ?on_conflict:[
       | `drop_old
@@ -263,6 +264,15 @@ module Knowledge : sig
     val pp : Format.formatter -> 'a value -> unit
 
     val pp_slots : string list -> Format.formatter -> 'a value -> unit
+  end
+
+  module Slot : sig
+    type ('a,'p) t = ('a,'p) slot
+
+    val cls : ('a,'p) slot -> 'a cls
+    val domain : ('a,'p) slot -> 'p domain
+    val name : ('a,'p) slot -> string
+    val desc : ('a,'p) slot -> string
   end
 
 
@@ -448,6 +458,14 @@ module Knowledge : sig
     val bool : bool option domain
 
     val obj : 'a cls -> 'a obj domain
+
+
+    val empty : 'a t -> 'a
+    val is_empty : 'a t -> 'a -> bool
+    val order : 'a t -> 'a -> 'a -> Order.partial
+    val join  : 'a t -> 'a -> 'a -> ('a,conflict) result
+    val inspect : 'a t -> 'a -> Base.Sexp.t
+    val name : 'a t -> string
   end
 
   module Persistent : sig
@@ -503,6 +521,10 @@ module Knowledge : sig
   end
 
   module Conflict : sig
+    type t = conflict = ..
     val pp : Format.formatter -> conflict -> unit
+    val sexp_of_t : t -> Sexp.t
   end
+
+  val sexp_of_conflict : conflict -> Sexp.t
 end

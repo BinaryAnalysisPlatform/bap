@@ -187,26 +187,30 @@ let provide_bir () =
   Bil_ir.reify @@
   KB.Value.get Bil_ir.slot sema
 
+
+let has_bil insn =
+  let bil = KB.Value.get Bil.slot insn in
+  let dom = KB.Slot.domain Bil.slot in
+  not (KB.Domain.is_empty dom bil)
+
 let provide_lifter () =
   info "providing a lifter for all BIL lifters";
+  let unknown = Theory.Program.Semantics.empty in
+  let (>>?) x f = x >>= function
+    | None -> KB.return unknown
+    | Some x -> f x in
   let lifter obj =
-    Knowledge.collect Theory.Program.Semantics.slot obj >>= fun sema ->
-    let (>>?) x f = x >>= function
-      | None -> KB.return sema
-      | Some x -> f x in
     Knowledge.collect Arch.slot obj >>? fun arch ->
     Knowledge.collect Memory.slot obj >>? fun mem ->
     Knowledge.collect Disasm_expert.Basic.Insn.slot obj >>? fun insn ->
     let module Target = (val target_of_arch arch) in
     match Target.lift mem insn with
     | Ok bil ->
+      let obj = Int63.to_string (KB.Object.id obj) in
       Bil_semantics.context >>= fun ctxt ->
       Knowledge.provide Bil_semantics.arch ctxt (Some arch) >>= fun () ->
-      let str = Int63.to_string (KB.Object.id obj) in
-      Format.eprintf "pushing semantics for %s\n" str;
-      Lifter.run BilParser.t bil >>|
-      KB.Value.merge ~on_conflict:`drop_left sema
-    | Error _ -> Knowledge.return sema in
+      Lifter.run BilParser.t bil
+    | Error _ -> Knowledge.return unknown in
   Knowledge.promise Theory.Program.Semantics.slot lifter
 
 

@@ -13,6 +13,7 @@ exception Create_mem of Error.t
 exception No_input
 exception Unknown_arch
 exception Trailing_data of int
+exception Inconsistency of KB.conflict
 
 module Program(Conf : Mc_options.Provider) = struct
   open Conf
@@ -82,7 +83,8 @@ module Program(Conf : Mc_options.Provider) = struct
   let lift arch mem insn =
     match KB.run Theory.Program.cls (new_insn arch mem insn) KB.empty with
     | Ok (code,_) -> KB.Value.get Theory.Program.Semantics.slot code
-    | Error _ -> Insn.empty
+    | Error conflict -> raise (Inconsistency conflict)
+
 
   let print_insn_size should_print mem =
     if should_print then
@@ -293,6 +295,9 @@ let _main : unit =
     | Ok () -> exit 0
     | Error err -> exitf 64 "%s\n" Error.(to_string_hum err)
   with
+  | Inconsistency conflict ->
+    exitf 67 "Lifters failed with a conflict: %a"
+      KB.Conflict.pp conflict
   | Bad_user_input ->
     exitf 65 "Could not parse: malformed input"
   | No_input -> exitf 66 "Could not read from stdin"

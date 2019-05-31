@@ -267,26 +267,18 @@ let collect_dests arch mem insn =
   new_insn arch mem insn >>= fun code ->
   KB.collect Theory.Program.Semantics.slot code >>= fun insn ->
   KB.Value.get Insn.Slot.dests insn |> function
-  | None ->
-    Format.eprintf "No dests were provided for %s@\n"
-      (Int63.to_string (KB.Object.id code));
-    KB.return init
+  | None -> KB.return init
   | Some dests ->
     Set.to_sequence dests |>
     KB.Seq.fold ~init ~f:(fun {indirect;resolved} label ->
-        let s = Int63.to_string (KB.Object.id label) in
         KB.collect Theory.Label.addr label >>| function
         | Some d ->
-          Format.eprintf "%s resolvesd to %a, fall is %a@\n"
-            s Bitvec.pp d Bitvec.pp fall;
           if Bitvec.(d <> fall)
           then {
             indirect;
             resolved = Set.add resolved (Word.create d width)
           } else {indirect; resolved}
-        | None ->
-          Format.eprintf "%s is unresolved@\n" s;
-          {indirect=true; resolved})
+        | None -> {indirect=true; resolved})
 
 
 let delay arch mem insn =
@@ -316,10 +308,6 @@ let classify_mem mem =
 
 let scan_mem arch disasm base : Machine.state KB.t =
   classify_mem base >>= fun (code,data,init) ->
-  Format.eprintf "Driver: input - %d/%d/%d\n"
-    (Set.length code)
-    (Set.length data)
-    (Set.length init);
   let step d s =
     if Machine.is_ready s then KB.return s
     else Machine.view s base ~ready:(fun s mem -> Dis.jump d mem s)
@@ -331,9 +319,6 @@ let scan_mem arch disasm base : Machine.state KB.t =
           ~stopped:(fun d s -> step d (Machine.stopped s))
           ~hit:(fun d mem insn s ->
               collect_dests arch mem insn >>= fun dests ->
-              Format.eprintf "Found %d resolved dests for %a\n"
-                (Set.length dests.resolved)
-                Addr.pp (Memory.min_addr mem);
               if Set.is_empty dests.resolved &&
                  not dests.indirect then
                 step d @@ Machine.moved s mem

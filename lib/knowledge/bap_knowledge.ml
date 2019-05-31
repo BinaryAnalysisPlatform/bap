@@ -15,6 +15,7 @@ module Conflict = struct
   type t = conflict = ..
   let pp = Exn.pp
   let add_printer pr = Caml.Printexc.register_printer pr
+  let sexp_of_t = Exn.sexp_of_t
 end
 
 module type Id = sig
@@ -158,6 +159,12 @@ module Pid : Sid = Int63
 let user_package = "user"
 let keyword_package = "keyword"
 
+type slot_status =
+  | Sleep
+  | Awoke
+  | Ready
+
+
 
 module Domain = struct
   type 'a t = {
@@ -167,6 +174,14 @@ module Domain = struct
     join : 'a -> 'a -> ('a,conflict) result;
     name : string;
   }
+
+  let inspect d = d.inspect
+  let empty d = d.empty
+  let order d = d.order
+  let join d = d.join
+  let name d = d.name
+
+  let is_empty {empty; order} x = order empty x = EQ
 
   exception Join of string * Sexp.t * Sexp.t [@@deriving sexp_of]
 
@@ -541,10 +556,12 @@ module Record = struct
       | Error err -> Error err
 
   let put key v x = Dict.set v key x
-
   let get key {Domain.empty} data = match Dict.find data key with
     | None -> empty
     | Some x -> x
+
+  let find key v = Dict.find v key
+
 
   exception Merge_conflict of conflict
 
@@ -685,17 +702,25 @@ module Knowledge = struct
 
 
   module Env = struct
+    type workers = {
+      waiting : Set.M(Pid).t;
+      current : Set.M(Pid).t;
+    }
+    type work = Done | Work of workers
+
     type objects = {
       vals : Record.t Map.M(Oid).t;
-      objs : Oid.t Map.M(String).t Map.M(String).t;
+      comp : work Map.M(Uid).t Map.M(Oid).t;
       syms : fullname Map.M(Oid).t;
-      pubs : Set.M(Oid).t Map.M(String).t;
       heap : cell Map.M(Oid).t;
       data : Oid.t Map.M(Cell).t;
+      objs : Oid.t Map.M(String).t Map.M(String).t;
+      pubs : Set.M(Oid).t Map.M(String).t;
     }
 
     let empty_class = {
       vals = Map.empty (module Oid);
+      comp = Map.empty (module Oid);
       objs = Map.empty (module String);
       syms = Map.empty (module Oid);
       pubs = Map.empty (module String);
@@ -703,13 +728,7 @@ module Knowledge = struct
       data = Map.empty (module Cell);
     }
 
-    type work = {
-      waiting : Set.M(Pid).t;
-      current : Set.M(Pid).t;
-    }
-
     type t = {
-      working : work Map.M(Oid).t Map.M(Uid).t;
       classes : objects Map.M(Cid).t;
       package : string;
     }
@@ -718,7 +737,6 @@ module Knowledge = struct
   type state = Env.t
   let empty : Env.t = {
     package = user_package;
-    working = Map.empty (module Uid);
     classes = Map.empty (module Cid);
   }
 
@@ -771,6 +789,13 @@ module Knowledge = struct
       let slot = {cls; dom; key; name; desc; promises} in
       register slot;
       slot
+
+    let cls x = x.cls
+    let domain x = x.dom
+    let name x = x.name
+    let desc x = match x.desc with
+      | None -> "no description"
+      | Some s -> s
   end
 
   type (+'a,'p) slot = ('a,'p) Slot.t
@@ -787,6 +812,8 @@ module Knowledge = struct
 
     let empty cls =
       {cls; data=Record.empty; time = next_second ()}
+
+    let order {data=x} {data=y} = Record.order x y
 
     let clone cls {data; time} = {cls; data; time}
     let cls {cls} = cls
@@ -864,7 +891,7 @@ module Knowledge = struct
             let sexp_of_t = sexp_of_t
             include Comparator
           end)
-        let domain = Domain.flat ~empty ~equal
+        let domain = Domain.define ~empty ~order ~join
             ~inspect:sexp_of_t
             (Class.name cls)
       end in
@@ -887,22 +914,24 @@ module Knowledge = struct
   let gets f = Knowledge.lift (State.gets f)
   let update f = Knowledge.lift (State.update f)
 
+  exception Non_monotonic_update of string * Conflict.t [@@deriving sexp]
 
   let provide : type a p. (a,p) slot -> a obj -> p -> unit Knowledge.t =
     fun slot obj x ->
-    get () >>= function {classes} as s ->
-      let {Env.vals} as objs =
-        match Map.find classes slot.cls.id with
-        | None -> Env.empty_class
-        | Some objs -> objs in
-      try put {
-          s with classes = Map.set classes ~key:slot.cls.id ~data:{
-          objs with vals = Map.update vals obj ~f:(function
-          | None -> Record.(put slot.key empty x)
-          | Some v -> match Record.commit slot.key v x with
-            | Ok r -> r
-            | Error err -> raise (Record.Merge_conflict err))}}
-      with Record.Merge_conflict err -> Knowledge.fail err
+      get () >>= function {classes} as s ->
+        let {Env.vals} as objs =
+          match Map.find classes slot.cls.id with
+          | None -> Env.empty_class
+          | Some objs -> objs in
+        try put {
+            s with classes = Map.set classes ~key:slot.cls.id ~data:{
+            objs with vals = Map.update vals obj ~f:(function
+            | None -> Record.(put slot.key empty x)
+            | Some v -> match Record.commit slot.key v x with
+              | Ok r -> r
+              | Error err -> raise (Record.Merge_conflict err))}}
+        with Record.Merge_conflict err ->
+          Knowledge.fail (Non_monotonic_update (Slot.name slot, err))
 
   let pids = ref Pid.zero
 
@@ -911,19 +940,6 @@ module Knowledge = struct
     let pid = !pids in
     Hashtbl.add_exn s.promises pid {get; pid}
 
-  let is_active reqs pid id = match Map.find reqs pid with
-    | None -> false
-    | Some ids -> Set.mem ids id
-
-  let activate reqs pid id = Map.update reqs pid ~f:(function
-      | None -> Set.singleton (module Oid) id
-      | Some ids -> Set.add ids id)
-
-  let deactivate req pid id = Map.change req pid ~f:(function
-      | None -> None
-      | Some ids ->
-        let ids = Set.remove ids id in
-        if Set.is_empty ids then None else Some ids)
 
   let objects : _ cls -> _ = fun cls ->
     get () >>| fun {classes} ->
@@ -931,81 +947,76 @@ module Knowledge = struct
     | None -> Env.empty_class
     | Some objs -> objs
 
-  let pp_pids ppf reqs =
-    let reqs = Set.to_list reqs in
-    let sexp_of_pid pid =
-      Sexp.Atom (Format.asprintf "%a" Pid.pp pid) in
-    let reqs = sexp_of_list sexp_of_pid reqs in
-    Format.fprintf ppf "%a" Sexp.pp_hum reqs
-
   let uid {Slot.key} = Type_equal.Id.uid key
 
-  let is_active
-    : ('a,_) slot -> 'a obj -> bool knowledge =
+  let status
+    : ('a,_) slot -> 'a obj -> slot_status knowledge =
     fun slot obj ->
-    gets @@ fun {working} ->
-    match Map.find working (uid slot) with
-    | None -> false
-    | Some objs -> Map.mem objs obj
-
+    objects slot.cls >>| fun {comp} ->
+    match Map.find comp obj with
+    | None -> Sleep
+    | Some slots -> match Map.find slots (uid slot) with
+      | None -> Sleep
+      | Some Work _ -> Awoke
+      | Some Done -> Ready
 
   let update_slot
-    : ('a,_) slot -> _ -> unit knowledge =
-    fun slot f ->
-    update @@ function {working} as s -> {
-        s with working = Map.change working (uid slot) ~f
-      }
+    : ('a,_) slot -> 'a obj -> _ -> unit knowledge =
+    fun slot obj f ->
+    objects slot.cls >>= fun ({comp} as objs) ->
+    let comp = Map.update comp obj ~f:(fun slots ->
+        let slots = match slots with
+          | None -> Map.empty (module Uid)
+          | Some slots -> slots in
+        Map.update slots (uid slot) ~f) in
+    get () >>= fun s ->
+    let classes = Map.set s.classes slot.cls.id {objs with comp} in
+    put {s with classes}
 
   let enter_slot : ('a,_) slot -> 'a obj -> unit knowledge = fun s x ->
-    let nil = Set.empty (module Pid) in
-    let empty : Env.work = {waiting = nil; current = nil} in
-    update_slot s @@ function
-    | None -> Some (Map.singleton (module Oid) x empty)
-    | Some objs -> Some (Map.add_exn objs x empty)
+    update_slot s x @@ function
+    | Some _ -> assert false
+    | None ->  Work {
+        waiting = Set.empty (module Pid);
+        current = Set.empty (module Pid)
+      }
 
   let leave_slot : ('a,'p) slot -> 'a obj -> unit Knowledge.t = fun s x ->
-    update_slot s @@ function
-    | None -> assert false
-    | Some objs ->
-      let objs = Map.remove objs x in
-      if Map.is_empty objs then None
-      else Some objs
+    update_slot s x @@ function
+    | Some (Work _) -> Done
+    | _ -> assert false
 
-  let update_work
-    : ('a,'p) slot -> 'a obj -> _ -> unit Knowledge.t = fun s x f ->
-    update_slot s @@ function
-    | None -> assert false
-    | Some objs -> Option.some @@ Map.update objs x ~f:(function
-        | None -> assert false
-        | Some w -> f w)
+  let update_work s x f =
+    update_slot s x @@ function
+    | Some (Work w) -> f w
+    | _ -> assert false
 
-  let enter_promise
-    : ('a,'p) slot -> 'a obj -> pid -> unit Knowledge.t = fun s x p ->
-    update_work s x @@
-    fun {waiting; current} -> {waiting; current = Set.add current p}
-
-  let leave_promise
-    : ('a,'p) slot -> 'a obj -> pid -> unit Knowledge.t = fun s x p ->
+  let enter_promise s x p =
     update_work s x @@ fun {waiting; current} ->
-    {waiting; current = Set.remove current p}
+    Work {waiting; current = Set.add current p}
 
-  let enqueue_promises
-    : ('a,'p) slot -> 'a obj -> unit Knowledge.t = fun s x ->
-    update_work s x @@
-    fun {waiting; current} ->
-    {waiting = Set.union current waiting; current}
+  let leave_promise s x p =
+    update_work s x @@ fun {waiting; current} ->
+    Work {waiting; current = Set.remove current p}
+
+  let enqueue_promises s x =
+    update_work s x @@ fun {waiting; current} ->
+    Work {waiting = Set.union current waiting; current}
 
   let collect_waiting
     : ('a,'p) slot -> 'a obj -> _ Knowledge.t = fun s x ->
-    gets @@ fun {Env.working} ->
-    Map.find_exn (Map.find_exn working (uid s)) x |> fun {Env.waiting} ->
-    Set.fold waiting ~init:[] ~f:(fun ps p ->
-        Hashtbl.find_exn s.Slot.promises p :: ps)
+    objects s.cls >>| fun {comp} ->
+    Map.find_exn (Map.find_exn comp x) (uid s)  |> function
+    | Env.Done -> assert false
+    | Env.Work {waiting} ->
+      Set.fold waiting ~init:[] ~f:(fun ps p ->
+          Hashtbl.find_exn s.Slot.promises p :: ps)
 
   let dequeue_waiting s x = update_work s x @@ fun _ ->
-    let nil = Set.empty (module Pid) in
-    {current=nil; waiting=nil}
-
+    Work {
+      waiting = Set.empty (module Pid);
+      current = Set.empty (module Pid)
+    }
 
   let initial_promises {Slot.promises} = Hashtbl.data promises
 
@@ -1034,13 +1045,16 @@ module Knowledge = struct
       | EQ | LT -> Knowledge.return ()
       | GT | NC -> collect_inner slot obj promises
 
+
   let collect : type a p. (a,p) slot -> a obj -> p Knowledge.t =
     fun slot id ->
-    is_active slot id >>= function
-    | true ->
+    status slot id >>= function
+    | Ready ->
+      current slot id
+    | Awoke ->
       enqueue_promises slot id >>= fun () ->
       current slot id
-    | false ->
+    | Sleep ->
       enter_slot slot id >>= fun () ->
       collect_inner slot id (initial_promises slot) >>= fun () ->
       leave_slot slot id >>= fun () ->
@@ -1072,15 +1086,22 @@ module Knowledge = struct
       end >>| fun () ->
       obj
 
+    (* an interesting question, what we shall do if
+       1) an symbol is deleted
+       2) a data object is deleted?
+
+       So far we ignore both deletes.
+    *)
     let delete {Class.id} obj =
       update @@ function {classes} as s -> {
           s with
           classes = Map.change classes id ~f:(function
               | None -> None
-              | Some objs ->
-                let vals = Map.remove objs.vals obj in
-                if Map.is_empty vals then None
-                else Some {objs with vals})
+              | Some objs -> Some {
+                  objs with
+                  vals = Map.remove objs.vals obj;
+                  comp = Map.remove objs.comp obj;
+                })
         }
 
     let scoped cls scope =
@@ -1386,6 +1407,7 @@ module Knowledge = struct
 
 
   module Conflict = Conflict
+  let sexp_of_conflict = Conflict.sexp_of_t
 end
 
 type 'a knowledge = 'a Knowledge.t

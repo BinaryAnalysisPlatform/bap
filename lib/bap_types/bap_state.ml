@@ -27,9 +27,7 @@ let run cls exp =
       | Error err -> Error err)
 
 
-exception Internal_runtime_error of Knowledge.conflict
-
-
+exception Internal_runtime_error of Knowledge.conflict [@@deriving sexp]
 
 let run_or_fail cls exp =
   match run cls exp with
