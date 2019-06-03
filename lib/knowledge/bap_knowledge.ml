@@ -165,6 +165,183 @@ type slot_status =
   | Ready
 
 
+module Agent : sig
+  type t
+  type id
+  type reliability
+  type signs
+
+  val register :
+    ?desc:string ->
+    ?package:string ->
+    ?reliability:reliability -> string -> t
+
+  val registry : unit -> id list
+
+  val authorative : reliability
+  val reliable    : reliability
+  val trustworthy : reliability
+  val doubtful    : reliability
+  val unreliable  : reliability
+
+  val name : id -> string
+  val desc : id -> string
+  val reliability : id -> reliability
+
+  val set_reliability : id -> reliability -> unit
+
+  val pp : Format.formatter -> t -> unit
+  val pp_id : Format.formatter -> id -> unit
+  val pp_reliability : Format.formatter -> reliability -> unit
+
+  (* the private interface *)
+
+  val weight : t -> int
+  include Base.Comparable.S with type t := t
+end = struct
+  module Id = String
+  type t = Id.t
+  type agent = Id.t
+  type id = Id.t
+  type reliability = A | B | C | D | E [@@deriving sexp]
+  type info = {
+    name : string;
+    desc : string;
+    rcls : reliability;
+  }
+  type signs = Set.M(String).t
+
+  let agents : (agent,info) Hashtbl.t = Hashtbl.create (module String)
+
+  let authorative = A
+  let reliable = B
+  let trustworthy = C
+  let doubtful = D
+  let unreliable = E
+
+  let weight = function
+    | A -> 16
+    | B -> 8
+    | C -> 4
+    | D -> 2
+    | E -> 1
+
+  let register
+      ?(desc="no description provided")
+      ?(package="user")
+      ?(reliability=trustworthy) name =
+    let name = sprintf "%s:%s" package name in
+    let agent = Caml.Digest.string name in
+    if Hashtbl.mem agents agent then
+      failwithf "An agent with name `%s' already exists, \
+                 please choose another name" name ();
+    Hashtbl.add_exn agents agent {
+      desc; name; rcls = reliability
+    };
+    agent
+
+  let registry () = Hashtbl.keys agents
+
+  let info agent = Hashtbl.find_exn agents agent
+  let name agent = (info agent).name
+  let desc agent = (info agent).desc
+  let reliability agent = (info agent).rcls
+  let weight agent = weight (reliability agent)
+
+  let set_reliability agent rcls =
+    Hashtbl.update agents agent ~f:(function
+        | None -> assert false
+        | Some agent -> {agent with rcls})
+
+  let pp ppf agent = Format.pp_print_string ppf (name agent)
+
+  let pp_reliability ppf r =
+    Sexp.pp ppf (sexp_of_reliability r)
+
+  let pp_id ppf agent =
+    let {name; desc; rcls} = info agent in
+    Format.fprintf ppf "Class %a %s - %s"
+      pp_reliability rcls name desc
+
+  include (String : Base.Comparable.S with type t := t)
+end
+
+module Opinions : sig
+  type 'a t
+
+  val empty : equal:('a -> 'a -> bool) -> 'a t
+
+  val add : Agent.t -> 'a -> 'a t -> 'a t
+  val of_list : equal:('a -> 'a -> bool) -> (Agent.t,'a) List.Assoc.t -> 'a t
+  val choice : empty:'a -> 'a t -> 'a
+
+  val compare_votes : 'a t -> 'a t -> int
+  val join : 'a t -> 'a t -> 'a t
+end = struct
+  type 'a opinion = {
+    opinion : 'a;
+    votes   : Set.M(Agent).t;
+  }
+
+  type 'a t = {
+    opinions : 'a opinion list;
+    equal : 'a -> 'a -> bool;
+  }
+
+
+  let empty ~equal = {opinions=[]; equal}
+
+  let add_opinion op ({opinions; equal} as ops) =
+    let casted,opinions =
+      List.fold opinions ~init:(false,[])
+        ~f:(fun (casted,opinions) ({opinion; votes} as elt) ->
+            if not casted && equal opinion op.opinion
+            then true, {
+                opinion; votes = Set.union votes op.votes;
+              } :: opinions
+            else casted,elt :: opinions) in
+    if casted
+    then {ops with opinions}
+    else {
+      ops with opinions = op :: opinions
+    }
+
+  let add agent opinion = add_opinion {
+      opinion;
+      votes = Set.singleton (module Agent) agent;
+    }
+
+  let join x y =
+    List.fold y.opinions ~init:x ~f:(fun ops op -> add_opinion op ops)
+
+  let votes_sum =
+    Set.fold ~init:0 ~f:(fun sum agent -> sum + Agent.weight agent)
+
+  let count_votes {opinions} =
+    List.fold opinions ~init:0 ~f:(fun sum {votes} ->
+        sum + votes_sum votes)
+
+  let compare_votes x y =
+    compare (count_votes x) (count_votes y)
+
+  let of_list ~equal =
+    let init = empty ~equal in
+    List.fold ~init ~f:(fun opts (agent,data) ->
+        add agent data opts)
+
+  let compare x y =
+    let w1 = votes_sum x.votes
+    and w2 = votes_sum y.votes in
+    match Int.compare w1 w2 with
+    | 0 -> Set.compare_direct x.votes y.votes
+    | n -> n
+
+  let choice ~empty {opinions} =
+    List.max_elt opinions ~compare |> function
+    | Some {opinion} -> opinion
+    | None -> empty
+
+end
 
 module Domain = struct
   type 'a t = {
@@ -213,6 +390,24 @@ module Domain = struct
         | true,false -> LT
         | false,true -> GT
         | false,false -> if equal x y then EQ else NC)
+
+  let powerset (type t o)
+      (module S : Comparator.S with type t = t
+                                and type comparator_witness = o)
+      ?(inspect=sexp_of_opaque) name =
+    let empty = Set.empty (module S) in
+    let order x y : Order.partial =
+      if Set.equal x y then EQ else
+      if Set.is_subset x y then LT else
+      if Set.is_subset y x then GT else NC in
+    let join x y = Ok (Set.union x y) in
+    let module Inspectable = struct
+      include S
+      let sexp_of_t = inspect
+    end in
+    let inspect = [%sexp_of: Base.Set.M(Inspectable).t] in
+    define ~inspect ~empty ~order ~join name
+
 
   let mapping (type k o d)
       (module K : Comparator.S with type t = k
@@ -377,6 +572,7 @@ type fullname = {
   package : string;
   name : string;
 } [@@deriving sexp_of]
+
 
 module Registry = struct
   let packages = Hash_set.create (module String) ()

@@ -14,12 +14,79 @@ module Knowledge : sig
   type state
   type conflict = ..
 
+  type agent
+  type 'a opinions
+
+  (** state with no knowledge  *)
   val empty : state
 
 
+  (** [collect p x] collects the value of the property [p].
+
+      If the object [x] doesn't a value for the property [p]
+      and there are promises registered in the knowledge system,
+      to compute a value of the property [p] then they will
+      be invoked, otherwise the empty value of the property domain
+      is returned as the result.
+  *)
   val collect : ('a,'p) slot -> 'a obj -> 'p t
+
+
+  (** [resolve p x] resolves the multi-opinion property [p]
+
+      Finds a common resolution for the property [p] using
+      the current resolution strategy.
+
+      This function is the same as [collect] except it collects
+      a value from the opinions domain and computes the current
+      consensus.
+  *)
+  val resolve : ('a,'p opinions) slot -> 'a obj -> 'p t
+
+  (** [provide p x v] provides the value [v] for the property [p].
+
+      If the object [x] already had a value [v'] then the provided
+      value [v] then the result value of [p] is [join v v'] provided
+      such exists, where [join] is [Domain.join (Slot.domain p)].
+
+      If [join v v'] doesn't exist (i.e., it is [Error conflict])
+      then [provide p x v] diverges into a conflict.
+  *)
   val provide : ('a,'p) slot -> 'a obj -> 'p -> unit t
-  val promise : ('a,'p) slot -> ('a obj -> 'p t) -> unit
+
+
+  (** [suggest p a x v] suggests [v] as the value for the property [p].
+
+      The same as [provide] except the provided value is predicated by
+      the agent identity.
+  *)
+  val suggest : ('a,'p opinions) slot -> agent -> 'a obj -> 'p -> unit t
+
+  (** [promise p f] promises to compute the property [p].
+
+      If no knowledge exists about the property [p] of
+      an object [x], then [f x] is invoked to provide an
+      initial value.
+
+      If there are more than one promises, then they all must
+      provide a consistent answer. The function [f] may refer
+      to the property [p] directly or indirectly. In that case
+      the least fixed point solution of all functions [g] involved
+      in the property computation is computed.
+
+      If the [agent] property is provided, then it is used for
+      introspection during conflicts.
+  *)
+  val promise : ?agent:agent -> ('a,'p) slot -> ('a obj -> 'p t) -> unit
+
+  (** [propose p f] proposes the opinion computation.
+
+      The same as [promise] except that it promises a value for
+      an opinion based property.
+  *)
+  val propose : agent -> ('a, 'p opinions) slot -> ('a obj -> 'p t) -> unit
+
+
 
   val run : 'a cls -> 'a obj t -> state -> ('a value * state, conflict) result
 
@@ -42,9 +109,6 @@ module Knowledge : sig
 
   include Monad.S with type 'a t := 'a t
                    and module Syntax := Syntax
-  include Monad.Fail.S with type 'a t := 'a t
-                        and type 'a error = conflict
-
 
   (** Orders knowledge by information content.
 
@@ -401,6 +465,34 @@ module Knowledge : sig
     val import : ?strict:bool -> ?package:string -> string list -> unit knowledge
   end
 
+  module Agent : sig
+    type t = agent
+    type id
+    type reliability
+
+    val register :
+      ?desc:string ->
+      ?package:string ->
+      ?reliability:reliability -> string -> agent
+
+    val registry : unit -> id list
+
+    val name : id -> string
+    val desc : id -> string
+    val reliability : id -> reliability
+    val set_reliability : id -> reliability -> unit
+
+    val authorative : reliability
+    val reliable    : reliability
+    val trustworthy : reliability
+    val doubtful    : reliability
+    val unreliable  : reliability
+
+    val pp : Format.formatter -> t -> unit
+    val pp_id : Format.formatter -> id -> unit
+    val pp_reliability : Format.formatter -> reliability -> unit
+  end
+
   module Domain : sig
     type 'a t = 'a domain
 
@@ -453,6 +545,18 @@ module Knowledge : sig
       equal:('d -> 'd -> bool) ->
       string ->
       ('a,'d,'e) Map.t domain
+
+    val powerset : ('a,'e) Set.comparator ->
+      ?inspect:('a -> Sexp.t) ->
+      string ->
+      ('a,'e) Set.t domain
+
+    val opinions :
+      ?inspect:('a -> Sexp.t) ->
+      empty:'a ->
+      equal:('a -> 'a -> bool) ->
+      string ->
+      'a opinions domain
 
     val string : string domain
     val bool : bool option domain
