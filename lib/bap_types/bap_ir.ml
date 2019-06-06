@@ -48,24 +48,40 @@ module Tid = struct
     Toplevel.put last (f x);
     Toplevel.get last
 
-  let for_name s = generate Theory.Label.for_name s
   let for_ivec s = generate Theory.Label.for_ivec s
   let for_addr s = generate Theory.Label.for_addr @@
     Bap_bitvector.to_bitvec s
+
+
 
   let set slot tid name = Toplevel.exec begin
       KB.provide slot tid (Some name)
     end
 
   let set_addr = set Theory.Label.addr
-  let set_name = set Theory.Label.name
   let set_ivec = set Theory.Label.ivec
+
 
   let get slot tid = Toplevel.eval slot (Knowledge.return tid)
 
   let get_name = get Theory.Label.name
   (* let get_addr = get Theory.Label.addr addr *)
   let get_ivec = get Theory.Label.ivec
+
+  let add_name tid name = Toplevel.exec begin
+      KB.provide Theory.Label.aliases tid @@
+      Set.singleton (module String) name
+    end
+
+  let set_name tid name =
+    set Theory.Label.name tid name;
+    add_name tid name
+
+
+  let for_name s =
+    let t = generate Theory.Label.for_name s in
+    set_name t s;
+    t
 
   let intern n =
     Toplevel.put name begin
@@ -311,7 +327,8 @@ end = struct
   let mangle_sub s =
     let addr = Dict.find s.dict Bap_attributes.address in
     let name = mangle_name addr s.tid s.self.name in
-    Tid.set_name s.tid name;
+    Tid.add_name s.tid s.self.name;
+    Tid.add_name s.tid name;
     let self = {s.self with name} in
     {s with self}
 
@@ -1663,7 +1680,7 @@ module Ir_sub = struct
 
   let name sub = sub.self.name
   let with_name sub name =
-    Tid.set_name (Term.tid sub) name;
+    Tid.add_name (Term.tid sub) name;
     {sub with self = {sub.self with name}}
 
   module Enum(T : Bap_value.S) = struct

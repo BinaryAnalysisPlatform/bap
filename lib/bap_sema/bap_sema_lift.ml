@@ -179,10 +179,6 @@ let lift_sub ?tid entry cfg =
   let sub = Ir_sub.Builder.result sub in
   Term.set_attr sub address (Block.addr entry)
 
-let create_synthetic name =
-  let sub = Ir_sub.create ~name () in
-  Tid.set_name (Term.tid sub) name;
-  Term.(set_attr sub synthetic ())
 
 (* Rewires some intraprocedural jmps into interprocedural.
 
@@ -258,7 +254,6 @@ let program symtab =
       let sub_tid = Tid.for_name name in
       let sub = lift_sub ~tid:sub_tid entry cfg in
       Ir_program.Builder.add_sub b (Ir_sub.with_name sub name);
-      Tid.set_name (Term.tid sub) name;
       Hashtbl.add_exn sub_of_blk ~key:blk_tid ~data:sub_tid;);
   let program = Ir_program.Builder.result b in
   Term.map sub_t program ~f:(fun sub ->
