@@ -4148,8 +4148,14 @@ module Std : sig
           The returned value of type [T.t tag] is a special key that
           can be used with [create] and [get] functions to pack and
           unpack values of type [T.t] into [value]. *)
-      val register : name:literal -> uuid:literal ->
+      val register : name:string -> uuid:string ->
         (module S with type t = 'a) -> 'a tag
+
+
+      val register_slot : (Theory.program,'a option) KB.slot ->
+                          (module S with type t = 'a) -> 'a tag
+
+      val slot : 'a t -> (Theory.program, 'a option) KB.slot
 
       (** [name cons] returns a name of a constructor.  *)
       val name : 'a t -> string

@@ -51,42 +51,13 @@ end
 
 type color = Color.t [@@deriving bin_io, compare, sexp_poly]
 
-let comment = register (module String)
-    ~name:"comment"
-    ~uuid:"4b974ab3-bf3b-4a83-8c62-299bca70f02a"
-
-let python = register (module String)
-    ~name:"python"
-    ~uuid:"831a6268-0ca8-4c1b-b4d6-076995f49d84"
-
-let shell = register (module String)
-    ~name:"shell"
-    ~uuid:"8c2c459d-6f3e-42f7-bce7-bf5cfa280f24"
-
-let mark = register (module Unit)
-    ~name:"mark"
-    ~uuid:"8e9801dc-0c64-4943-acf4-bfd02347af91"
-
-let color = register (module Color)
-    ~name:"color"
-    ~uuid:"1938c44a-149d-4c71-832a-7f484be800cc"
-
-let weight = register (module Float)
-    ~name:"weight"
-    ~uuid:"657366ea-9a28-4e5e-8341-c545d861732b"
-
-let address = register (module Bap_bitvector)
-    ~name:"address"
-    ~uuid:"7bcef7c0-0b37-4167-887a-eba0d68891fe"
-
-let filename = register (module String)
-    ~name:"filename"
-    ~uuid:"9701d189-24e3-4348-8610-0dedf780d06b"
-
-let foreground = register (module Foreground)
-    ~name:"foreground"
-    ~uuid:"56b29739-2df4-4e6c-9f63-15e20edf1857"
-
-let background = register (module Background)
-    ~name:"background"
-    ~uuid:"9a80a9cc-4106-48fc-abf3-55d7b333e734"
+let comment = register (module String) ~name:"comment" ~uuid:"bap.std.attrs"
+let python = register (module String) ~name:"python" ~uuid:"bap.std.attrs"
+let shell = register (module String) ~name:"shell" ~uuid:"bap.std.attrs"
+let mark = register (module Unit) ~name:"mark" ~uuid:"bap.std.attrs"
+let color = register (module Color) ~name:"color" ~uuid:"bap.std.attrs"
+let weight = register (module Float) ~name:"weight" ~uuid:"bap.std.attrs"
+let address = register (module Bap_bitvector) ~name:"address" ~uuid:"bap.std.attrs"
+let filename = register (module String) ~name:"filename" ~uuid:"bap.std.attrs"
+let foreground = register (module Foreground) ~name:"foreground" ~uuid:"bap.std.attrs"
+let background = register (module Background) ~name:"background" ~uuid:"bap.std.attrs"
