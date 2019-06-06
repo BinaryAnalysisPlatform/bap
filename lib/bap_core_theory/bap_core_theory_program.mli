@@ -22,6 +22,7 @@ module Label : sig
   val addr : (program, Bitvec.t option) Knowledge.slot
   val name : (program, string option) Knowledge.slot
   val ivec : (program, Int.t option) Knowledge.slot
+  val aliases : (program, Set.M(String).t) Knowledge.slot
   val is_valid : (program, bool option) Knowledge.slot
   val is_subroutine : (program, bool option) Knowledge.slot
   val for_addr : Bitvec.t -> t knowledge

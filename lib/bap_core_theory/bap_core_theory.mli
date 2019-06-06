@@ -191,6 +191,7 @@ module Theory : sig
     val addr : (program, Bitvec.t option) KB.slot
     val name : (program, string option) KB.slot
     val ivec : (program, int option) KB.slot
+    val aliases : (program, Set.M(String).t) KB.slot
 
     val is_valid : (program, bool option) KB.slot
     val is_subroutine : (program, bool option) KB.slot

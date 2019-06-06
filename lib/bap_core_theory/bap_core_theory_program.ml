@@ -19,6 +19,10 @@ module Label = struct
       ~equal:String.equal
       ~inspect:sexp_of_string
 
+  let names = Knowledge.Domain.powerset (module String) "names"
+      ~inspect:sexp_of_string
+
+
   let int = Knowledge.Domain.optional "ivec"
       ~equal:Int.equal
       ~inspect:sexp_of_int
@@ -35,6 +39,7 @@ module Label = struct
   let addr = Knowledge.Class.property ~package cls "label-addr" word
   let name = Knowledge.Class.property ~package cls "label-name" name
   let ivec = Knowledge.Class.property ~package cls "label-ivec" int
+  let aliases = Knowledge.Class.property ~package cls "label-aliases" names
 
   open Knowledge.Syntax
 
