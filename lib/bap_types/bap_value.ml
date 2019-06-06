@@ -2,7 +2,24 @@ open Core_kernel
 open Regular.Std
 open Format
 
-module Typeid = String
+module Typeid : sig
+  type t [@@deriving bin_io, compare, sexp]
+  val of_string : string -> t
+  val to_string : t -> string
+  val pp : Format.formatter -> t -> unit
+  include Identifiable.S with type t := t
+end = struct
+  include String
+  let of_string s = match Uuidm.of_string s with
+    | None -> invalid_arg "Invalid UUID format"
+    | Some uuid -> Uuidm.to_bytes uuid
+
+  let to_string s = match Uuidm.of_bytes s with
+    | None -> assert false
+    | Some s -> Uuidm.to_string s
+
+  let pp ppf s = Format.pp_print_string ppf (to_string s)
+end
 
 module type S = sig
   type t [@@deriving bin_io, compare, sexp]
@@ -12,7 +29,7 @@ end
 type void
 type univ = Univ.t
 type literal = (void,void,void) format
-type typeid = String.t [@@deriving bin_io, compare, sexp]
+type typeid = Typeid.t [@@deriving bin_io, compare, sexp]
 
 type 'a tag = {
   tid : typeid;
@@ -34,16 +51,13 @@ type type_info = {
 }
 
 let types : (typeid, type_info) Hashtbl.t  =
-  Typeid.Table.create ~size:128 ()
+  Hashtbl.create ~size:128 (module Typeid)
 
 let register (type a) ~name ~uuid
     (typ : (module S with type t = a)) : a tag =
   let module S = (val typ) in
   match Hashtbl.find types uuid with
   | None ->
-    let uuid = match Uuidm.of_string uuid with
-      | None -> invalid_arg "Invalid UUID format"
-      | Some uuid -> Uuidm.to_bytes uuid in
     let key = Type_equal.Id.create name S.sexp_of_t in
     let pp ppf univ = S.pp ppf (Univ.match_exn univ key) in
     let of_string str =
@@ -72,14 +86,15 @@ let nil =
   (* to_string is it is called only in create, where it is guaranteed
      that the tag exists, in other words, to_string will be never
      called *)
-  let to_string x = assert false in
+  let to_string _ = assert false in
   let compare x y = Pervasives.compare x y in
   let info = {
     of_string;
     to_string;
     pp; compare
   } in
-  Hashtbl.add_exn types ~key:"" ~data:info;
+  let typeid = Typeid.of_string "00000000-0000-0000-0000-000000000000" in
+  Hashtbl.add_exn types ~key:typeid ~data:info;
   info
 
 let typeof v = match Hashtbl.find types v.uuid with
@@ -163,8 +178,9 @@ end
 
 
 module Dict = struct
+  module Self = Map.Make_binable_using_comparator(Typeid)
 
-  type t = value Typeid.Map.t [@@deriving bin_io, compare, sexp]
+  type t = value Self.t [@@deriving bin_io, compare, sexp]
 
   let uuid tag = tag.tid
 
