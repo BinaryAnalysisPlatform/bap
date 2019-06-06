@@ -15,8 +15,8 @@ include Bap_self.Create()
 
 let find name = FileUtil.which name
 
-module State = Bap_state
-type state = State.t
+module Toplevel = Bap_state
+type state = Toplevel.env
 
 type t = {
   arch    : arch;
@@ -169,8 +169,8 @@ let roots rooter = match rooter with
 
 
 let fresh_state () =
-  State.reset ();
-  State.t
+  Toplevel.reset ();
+  Toplevel.env
 
 module MVar = struct
   type 'a t = {
@@ -244,8 +244,6 @@ let create_exn
   let state = fresh_state () in
   let mrooter =
     MVar.from_optional_source ~default:Merge.rooter rooter in
-  let msymbolizer =
-    MVar.from_optional_source ~default:Merge.symbolizer symbolizer in
   let mbrancher = MVar.from_optional_source brancher in
   let mreconstructor = MVar.from_optional_source reconstructor in
   let cfg     = MVar.create ~compare:Cfg.compare Cfg.empty in
@@ -278,11 +276,8 @@ let create_exn
     let is_cfg_updated = phase_triggered Info.got_cfg cfg in
     let g = MVar.read cfg in
     let reconstruct () =
-      if is_cfg_updated || MVar.is_updated msymbolizer then
-        let symbolizer = match MVar.read msymbolizer with
-          | None -> Symbolizer.empty
-          | Some s -> s in
-        let name = Symbolizer.resolve symbolizer in
+      if is_cfg_updated then
+        let name = Symbolizer.Toplevel.get_name in
         let syms =
           let () = report_progress ~task ~stage:2 ~note:"reconstructing" () in
           Reconstructor.(run (default name (roots rooter)) g) in
@@ -290,7 +285,6 @@ let create_exn
     if is_cfg_updated || MVar.is_updated mreconstructor
     then match MVar.read mreconstructor with
       | Some r ->
-        MVar.ignore msymbolizer;
         report_progress ~task ~stage:2 ~note:"reconstructing" ();
         MVar.write symtab (Reconstructor.run r g)
       | None -> reconstruct ()
@@ -304,7 +298,6 @@ let create_exn
     let _ = phase_triggered Info.got_program program in
     if MVar.is_updated mrooter ||
        MVar.is_updated mbrancher ||
-       MVar.is_updated msymbolizer ||
        MVar.is_updated mreconstructor then loop ()
     else
       let disasm = Disasm.create g in

@@ -7,6 +7,7 @@ open Bap_common
 open Bap_bil
 open Bap_knowledge
 
+module Toplevel = Bap_state
 module Value = Bap_value
 module Dict = Value.Dict
 module Vec = Bap_vector
@@ -35,110 +36,60 @@ type 'a vector = 'a Vec.t
 
 module Tid = struct
   open KB.Syntax
-  let package = "bap.std.private"
-
   type t = Theory.Label.t [@@deriving bin_io, compare, sexp]
+  let last = Toplevel.var "last"
+  let name = Toplevel.var "name"
+  let repr = Toplevel.var "repr"
+  let ivec = Toplevel.var "ivec"
+  let addr = Toplevel.var "addr"
 
-  type gen = Generator
-  type resolver = Resolver
-
-  let generator = KB.Class.declare ~package "tid-generator" Generator
-  let resolver = KB.Class.declare ~package "tid-resolver" Resolver
-  let unit = KB.Class.declare ~package "unit" ()
-  let tid_t = KB.Domain.optional ~equal:Theory.Label.equal ~inspect:sexp_of_t "tid"
-  let last = KB.Class.property ~package generator "last-tid" tid_t
-  let name = KB.Class.property ~package resolver "name"
-      (KB.Domain.optional ~equal:String.equal "name")
-  let repr = KB.Class.property ~package resolver "repr"
-      KB.Domain.string
-  let tid = KB.Class.property ~package resolver "tid" tid_t
-
-  let int_t = KB.Domain.optional ~equal:Int.equal "int_t"
-  let ivec = KB.Class.property ~package resolver "ivec" int_t
-  let word_t = KB.Domain.optional
-      ~equal:Bap_bitvector.equal ~inspect:sexp_of_word "word_t"
-  let addr = KB.Class.property ~package resolver "addr" word_t
-
-
-  let run cls exp = Bap_state.run_or_fail cls exp
-
-  let fresh =
-    KB.Object.create Theory.Program.cls >>= fun obj ->
-    KB.Object.create generator >>= fun gen ->
-    KB.provide last gen (Some obj) >>| fun () ->
-    gen
-
-  let never_empty x = Option.value_exn x
 
   let generate f x =
-    never_empty @@
-    KB.Value.get tid @@ run resolver @@begin
-      f x >>= fun obj ->
-      KB.Object.create resolver >>= fun r ->
-      KB.provide tid r (Some obj) >>| fun () -> r
-    end
+    Toplevel.put last (f x);
+    Toplevel.get last
 
   let for_name s = generate Theory.Label.for_name s
   let for_ivec s = generate Theory.Label.for_ivec s
   let for_addr s = generate Theory.Label.for_addr @@
     Bap_bitvector.to_bitvec s
 
-  let set slot tid name =
-    ignore @@ run unit @@begin
-      KB.provide slot tid (Some name) >>= fun () ->
-      KB.Object.create unit
+  let set slot tid name = Toplevel.exec begin
+      KB.provide slot tid (Some name)
     end
 
   let set_addr = set Theory.Label.addr
   let set_name = set Theory.Label.name
   let set_ivec = set Theory.Label.ivec
 
-  let get from slot tid =
-    KB.Value.get slot @@ run resolver @@begin
-      KB.Object.create resolver >>= fun r ->
-      KB.collect from tid >>= fun s ->
-      KB.provide slot r s >>| fun () ->
-      r
-    end
+  let get slot tid = Toplevel.eval slot (Knowledge.return tid)
 
-  let get_name = get Theory.Label.name name
+  let get_name = get Theory.Label.name
   (* let get_addr = get Theory.Label.addr addr *)
-  let get_ivec = get Theory.Label.ivec ivec
+  let get_ivec = get Theory.Label.ivec
 
-
-  let intern name =
-    let program =
-      KB.Object.create resolver >>= fun r ->
-      KB.Symbol.intern name Theory.Program.cls >>= fun t ->
-      KB.provide Theory.Label.name t (Some name) >>= fun () ->
-      KB.provide tid r (Some t) >>| fun () ->
-      r in
-    match KB.Value.get tid (run resolver program) with
-    | None -> assert false
-    | Some x -> x
+  let intern n =
+    Toplevel.put name begin
+      KB.Symbol.intern n Theory.Program.cls >>= fun t ->
+      KB.provide Theory.Label.name t (Some n) >>| fun () ->
+      t
+    end;
+    Toplevel.get name
 
   let repr tid =
-    KB.Value.get repr @@ run resolver @@begin
-      KB.Object.repr Theory.Program.cls tid >>= fun s ->
-      KB.Object.create resolver >>= fun r ->
-      KB.provide repr r s >>| fun () ->
-      r
-    end
+    Toplevel.put repr (KB.Object.repr Theory.Program.cls tid);
+    Toplevel.get repr
 
   let parse name =
-    let program =
-      KB.Object.create resolver >>= fun r ->
-      KB.Object.read Theory.Program.cls name >>= fun t ->
-      KB.provide tid r (Some t) >>| fun () ->
-      r in
-    match KB.Value.get tid (run resolver program) with
-    | None -> assert false
-    | Some x -> x
+    Toplevel.put last begin
+      KB.Object.read Theory.Program.cls name
+    end;
+    Toplevel.get last
 
-
-  let create () = match KB.Value.get last (run generator fresh) with
-    | None -> assert false
-    | Some tid -> tid
+  let create () =
+    Toplevel.put last begin
+      KB.Object.create Theory.Program.cls
+    end;
+    Toplevel.get last
 
   let to_string : t -> string = fun tid ->
     Format.asprintf "%%%08Lx" (Int63.to_int64 (KB.Object.id tid))

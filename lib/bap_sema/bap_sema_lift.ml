@@ -11,6 +11,8 @@ open Bap_knowledge
 module L = Label
 module Label = IRLabel
 
+module Toplevel = Bap_state
+
 let update_jmp jmp ~f =
   f (Ir_jmp.dst jmp) (Ir_jmp.alt jmp) @@ fun ~dst ~alt ->
   Ir_jmp.reify
@@ -60,15 +62,13 @@ module IrBuilder = struct
     | xs, ys -> List.rev_append ys xs
 
   let ir_of_insn insn =
-    let open Knowledge.Syntax in
-    let cls = Theory.Program.Semantics.cls in
-    let request =
+    Toplevel.eval Term.slot begin
+      let open Knowledge.Syntax in
+      let cls = Theory.Program.Semantics.cls in
       Knowledge.Object.create cls >>= fun obj ->
       Knowledge.provide Bil.slot obj (Insn.bil insn) >>| fun () ->
-      obj in
-    match Bap_state.run cls request with
-    | Ok r -> Knowledge.Value.get Term.slot r
-    | Error _ -> []
+      obj
+    end
 
   let set_attributes ?mem insn blks =
     let addr = Option.map ~f:Memory.min_addr mem in

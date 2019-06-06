@@ -1,3 +1,4 @@
+open Bap_knowledge
 open Core_kernel
 open Regular.Std
 open Bap_future.Std
@@ -19,7 +20,7 @@ module Symbols = Data.Make(struct
 module type Target = sig
   type t
   val of_blocks : (string * addr * addr) seq -> t
-  val provide : t -> unit
+  val provide : Knowledge.agent -> t -> unit
 end
 
 let digest = Caml.Digest.file
@@ -56,10 +57,16 @@ let extract path arch =
   List.map syms ~f:(fun (n,s,e) -> n, addr s, addr e) |>
   Seq.of_list
 
+let ida_symbolizer =
+  let reliability = Knowledge.Agent.reliable in
+  Knowledge.Agent.register ~reliability
+    ~package:"bap.std" "ida-symbolizer"
+    ~desc:"Provides information from IDA Pro"
+
 let register_source (module T : Target) =
   let inputs = Stream.zip Project.Info.file Project.Info.arch in
   Stream.observe inputs @@ fun (file,arch) ->
-  T.provide (T.of_blocks (extract file arch))
+  T.provide ida_symbolizer (T.of_blocks (extract file arch))
 
 
 type perm = [`code | `data] [@@deriving sexp]
@@ -218,7 +225,9 @@ let register_brancher_source () =
   Brancher.provide @@ Brancher.create (get_resolve_fun file arch)
 
 let main () =
-  register_source (module Rooter);
+  register_source (module struct include Rooter
+    let provide _ data = provide data
+  end);
   register_source (module Symbolizer);
   register_brancher_source ();
   Project.Input.register_loader name loader

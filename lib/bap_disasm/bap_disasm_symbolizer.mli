@@ -1,4 +1,5 @@
 open Bap_knowledge
+open Bap_core_theory
 open Bap_types.Std
 open Bap_image_std
 open Bap_disasm_source
@@ -6,7 +7,13 @@ open Bap_disasm_source
 type t
 type symbolizer = t
 
-val provide : t -> unit
+val common_name : (Theory.program, string option KB.opinions) KB.slot
+val provide : Knowledge.agent -> t -> unit
+val get_name : addr -> string knowledge
+
+module Toplevel : sig
+  val get_name : addr -> string
+end
 
 val empty : t
 

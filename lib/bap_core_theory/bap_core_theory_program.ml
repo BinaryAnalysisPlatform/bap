@@ -15,36 +15,36 @@ module Label = struct
       ~equal:Bitvec.equal
       ~inspect:Bitvec_sexp.sexp_of_t
 
-  let string = Knowledge.Domain.optional "string"
+  let name = Knowledge.Domain.optional "name"
       ~equal:String.equal
       ~inspect:sexp_of_string
 
-  let int = Knowledge.Domain.optional "string"
+  let int = Knowledge.Domain.optional "ivec"
       ~equal:Int.equal
       ~inspect:sexp_of_int
 
   let attr name =
     let bool_t = Knowledge.Domain.optional ~equal:Bool.equal "bool" in
-    Knowledge.Class.property ~package:"bap.std" cls name bool_t
+    Knowledge.Class.property ~package cls name bool_t
 
 
   let is_valid = attr "is-valid"
   let is_subroutine = attr "is-subroutine"
 
 
-  let addr = Knowledge.Class.property ~package cls "addr" word
-  let name = Knowledge.Class.property ~package cls "name" string
-  let ivec = Knowledge.Class.property ~package cls "ivec" int
+  let addr = Knowledge.Class.property ~package cls "label-addr" word
+  let name = Knowledge.Class.property ~package cls "label-name" name
+  let ivec = Knowledge.Class.property ~package cls "label-ivec" int
 
   open Knowledge.Syntax
 
   let for_name s =
-    Knowledge.Symbol.intern ~package:"label" s cls >>= fun obj ->
+    Knowledge.Symbol.intern ~package s cls >>= fun obj ->
     Knowledge.provide name obj (Some s) >>| fun () -> obj
 
   let for_addr x =
     let s = Bitvec.to_string x in
-    Knowledge.Symbol.intern ~package:"label" s cls >>= fun obj ->
+    Knowledge.Symbol.intern ~package s cls >>= fun obj ->
     Knowledge.provide addr obj (Some x) >>| fun () -> obj
 
   let for_ivec x =

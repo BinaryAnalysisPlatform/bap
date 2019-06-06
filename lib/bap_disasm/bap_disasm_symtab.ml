@@ -9,6 +9,7 @@ open Or_error
 open KB.Syntax
 open Format
 
+module Toplevel = Bap_state
 module Block = Bap_disasm_block
 module Cfg = Bap_disasm_rec.Cfg
 module Insn = Bap_disasm_insn
@@ -153,19 +154,12 @@ let build_cfg disasm calls entry =
         let edge = Cfg.Edge.create src dst kind in
         KB.return (g <-- Cfg.Edge.insert edge))
 
-let get_name addr =
-  let data = Some (Word.to_bitvec addr) in
-  KB.Object.scoped Theory.Program.cls @@ fun label ->
-  KB.provide Theory.Label.addr label data >>= fun () ->
-  KB.collect Theory.Label.name label >>| function
-  | None -> Symbolizer.resolve Symbolizer.empty addr
-  | Some name -> name
 
 let build_symbol disasm calls start =
   build_cfg disasm calls start >>= function
   | None -> assert false
   | Some (entry,graph) ->
-    get_name start >>| fun name ->
+    Symbolizer.get_name start >>| fun name ->
     name,entry,graph
 
 let build disasm =
@@ -176,18 +170,8 @@ let build disasm =
       build_symbol disasm calls entry >>| fun fn ->
       add_symbol symtab fn)
 
-type builer = Builder
-let package = "bap.std-internal"
-let builder = KB.Class.declare ~package "symtab-builder" Builder
-let symtab = KB.Domain.flat ~empty ~equal:(fun x y ->
-    compare x y = 0) "symtab"
-let result = KB.Class.property ~package builder "result" symtab
+let result = Toplevel.var "symtab"
 
 let create disasm =
-  let query =
-    KB.Object.create builder >>= fun builder ->
-    build disasm >>= fun symtab ->
-    KB.provide result builder symtab >>| fun () ->
-    builder in
-  KB.Value.get result @@
-  Bap_state.run_or_fail builder query
+  Toplevel.put result (build disasm);
+  Toplevel.get result

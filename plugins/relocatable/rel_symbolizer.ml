@@ -1,3 +1,4 @@
+open Bap_knowledge
 open Core_kernel
 open Bap.Std
 open Bap_future.Std
@@ -30,12 +31,15 @@ module Rel = struct
            Addr.of_int64 ~width addr, data))
 end
 
+let agent = Knowledge.Agent.register
+    ~package:"bap.std" "relocation-symbolizer"
+
 let init () =
   Stream.observe Project.Info.spec @@ fun spec ->
   let name = match Fact.eval Rel.external_symbols spec with
     | Ok exts -> Map.find exts
     | _ -> fun _ -> None in
-  Symbolizer.provide (Symbolizer.create name)
+  Symbolizer.provide agent (Symbolizer.create name)
 
 let () =
   Config.manpage [

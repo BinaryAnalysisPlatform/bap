@@ -1,3 +1,5 @@
+open Bap_knowledge
+
 open Core_kernel
 open Regular.Std
 open Bap_future.Std
@@ -17,16 +19,24 @@ let extract name arch =
 module type Target = sig
   type t
   val of_blocks : (string * addr * addr) seq -> t
-  val provide : t -> unit
+  val provide : Knowledge.agent -> t -> unit
 end
+
+let agent =
+  let reliability = Knowledge.Agent.authorative in
+  Knowledge.Agent.register ~package:"bap.std"
+    ~reliability "user-symbolizer"
 
 let register syms =
   let provide (module T : Target) =
     Stream.observe Project.Info.arch (fun arch ->
         extract syms arch |>
         Seq.of_list |> T.of_blocks |>
-        T.provide) in
-  provide (module Rooter);
+        T.provide agent) in
+  provide (module struct
+    include Rooter
+    let provide _ s = provide s
+  end);
   provide (module Symbolizer)
 
 let () =

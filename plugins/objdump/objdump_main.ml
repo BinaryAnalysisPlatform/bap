@@ -1,3 +1,4 @@
+open Bap_knowledge
 open Core_kernel
 open Bap_future.Std
 open Bap.Std
@@ -70,6 +71,9 @@ let popen cmd =
     info "command `%s' was terminated by a signal" cmd;
     None
 
+let agent =
+  Knowledge.Agent.register ~package:"bap.std" "objdump-symbolizer"
+
 let provide_symbolizer arch file =
   let popen = fun cmd -> popen (cmd ^ " " ^ file) in
   let names = Addr.Table.create () in
@@ -87,7 +91,7 @@ let provide_symbolizer arch file =
   if Hashtbl.length names = 0
   then warning "failed to obtain symbols";
   let s = Symbolizer.create (Hashtbl.find names) in
-  Symbolizer.provide s
+  Symbolizer.provide agent s
 
 let main () =
   let inputs = Stream.zip Project.Info.arch Project.Info.file in

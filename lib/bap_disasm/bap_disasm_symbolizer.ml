@@ -3,9 +3,20 @@ open Bap_core_theory
 open Bap_types.Std
 open Bap_image_std
 open Bap_disasm_source
+open KB.Syntax
+
 
 type t = Symbolizer of (addr -> string option)
 type symbolizer = t
+
+let name_choices = KB.Domain.opinions ~empty:None
+    ~equal:(Option.equal String.equal)
+    ~inspect:(sexp_of_option sexp_of_string)
+    "name-choices"
+
+let common_name =
+  KB.Class.property ~package:"bap.std"
+    Theory.Program.cls "common-name" name_choices
 
 
 let name_of_addr addr =
@@ -55,9 +66,9 @@ let of_blocks seq =
 
 module Factory = Factory.Make(struct type nonrec t = t end)
 
-let provide (Symbolizer name) =
+let provide agent (Symbolizer name) =
   let open KB.Syntax in
-  KB.promise Theory.Label.name @@ fun label ->
+  KB.propose agent common_name @@ fun label ->
   KB.collect Arch.slot label >>= fun arch ->
   KB.collect Theory.Label.addr label >>| fun addr ->
   match arch, addr with
@@ -65,3 +76,35 @@ let provide (Symbolizer name) =
     let width = Size.in_bits (Arch.addr_size arch) in
     name (Addr.create addr width)
   | _ -> None
+
+
+let update_name_slot label name =
+  KB.collect Theory.Label.name label >>= function
+  | Some _ -> KB.return ()
+  | None ->
+    KB.provide Theory.Label.name label (Some name)
+
+let get_name addr =
+  let data = Some (Word.to_bitvec addr) in
+  KB.Object.scoped Theory.Program.cls @@ fun label ->
+  KB.provide Theory.Label.addr label data >>= fun () ->
+  KB.resolve common_name label >>= function
+  | Some name ->
+    Format.eprintf "Got the common name resolution: %s@\n"
+      name;
+    update_name_slot label name >>= fun () ->
+    KB.return name
+  | None ->
+    Format.eprintf "No names are provided, relying on whatever we have@\n";
+    KB.collect Theory.Label.name label >>| function
+    | Some name -> name
+    | None -> resolve empty addr
+
+module Toplevel = struct
+  module Toplevel = Bap_state
+  let name = Toplevel.var "symbol-name"
+
+  let get_name addr =
+    Toplevel.put name (get_name addr);
+    Toplevel.get name
+end

@@ -55,12 +55,12 @@ module Knowledge : sig
   val provide : ('a,'p) slot -> 'a obj -> 'p -> unit t
 
 
-  (** [suggest p a x v] suggests [v] as the value for the property [p].
+  (** [suggest a p x v] suggests [v] as the value for the property [p].
 
       The same as [provide] except the provided value is predicated by
       the agent identity.
   *)
-  val suggest : ('a,'p opinions) slot -> agent -> 'a obj -> 'p -> unit t
+  val suggest : agent -> ('a,'p opinions) slot -> 'a obj -> 'p -> unit t
 
   (** [promise p f] promises to compute the property [p].
 
@@ -73,11 +73,8 @@ module Knowledge : sig
       to the property [p] directly or indirectly. In that case
       the least fixed point solution of all functions [g] involved
       in the property computation is computed.
-
-      If the [agent] property is provided, then it is used for
-      introspection during conflicts.
   *)
-  val promise : ?agent:agent -> ('a,'p) slot -> ('a obj -> 'p t) -> unit
+  val promise : ('a,'p) slot -> ('a obj -> 'p t) -> unit
 
   (** [propose p f] proposes the opinion computation.
 
@@ -109,6 +106,9 @@ module Knowledge : sig
 
   include Monad.S with type 'a t := 'a t
                    and module Syntax := Syntax
+
+  include Monad.Fail.S with type 'a t := 'a t
+                        and type 'a error = conflict
 
   (** Orders knowledge by information content.
 

@@ -56,6 +56,9 @@ let sort_of_typ t =
   | Type.Unk -> ret @@ unknown
 
 module Generator = struct
+  module Toplevel = Bap_state
+  open KB.Syntax
+
   let empty = Theory.Var.Ident.of_string "nil"
   let ident_t = KB.Domain.flat ~empty
       ~inspect:Theory.Var.Ident.sexp_of_t
@@ -65,17 +68,13 @@ module Generator = struct
   let generator =
     KB.Class.declare ~package:"bap.std.internal" "var-generator" Gen
 
-  let ident = KB.Class.property ~package:"bap.std.internal"
-      generator "ident" ident_t
+  let ident = Toplevel.var "ident"
 
   let fresh s =
-    KB.Value.get ident @@ Bap_state.run_or_fail generator @@
-    KB.Syntax.(begin
-        KB.Object.create generator >>= fun g ->
-        Theory.Var.fresh s >>= fun v ->
-        KB.provide ident g (Theory.Var.ident v) >>| fun () ->
-        g
-      end)
+    Toplevel.put ident begin
+      Theory.Var.fresh s >>|  Theory.Var.ident
+    end;
+    Toplevel.get ident
 end
 
 let create ?(is_virtual=false) ?(fresh=false) name typ =

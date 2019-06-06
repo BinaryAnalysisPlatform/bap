@@ -7,6 +7,7 @@ open Bap_image_std
 
 open KB.Syntax
 
+module Toplevel = Bap_state
 module Driver = Bap_disasm_driver
 module Brancher = Bap_disasm_brancher
 module Rooter = Bap_disasm_rooter
@@ -91,20 +92,15 @@ let global_cfg disasm =
         let edge = Cfg.Edge.create src dst k in
         KB.return @@ Cfg.Edge.insert edge g)
 
-type self = Builder
-let package = "bap.std-private"
-let builder = KB.Class.declare ~package "cfg-builder" Builder
-let cfg = KB.Domain.flat ~empty:Cfg.empty ~equal:Cfg.equal "cfg"
-let result = KB.Class.property ~package builder "result" cfg
+
+
+let result = Toplevel.var "cfg"
 
 let extract build disasm =
-  let analysis =
-    KB.Object.create builder >>= fun builder ->
-    disasm >>= build >>= fun cfg ->
-    KB.provide result builder cfg >>| fun () ->
-    builder in
-  KB.Value.get result @@
-  Bap_state.run_or_fail builder analysis
+  Toplevel.put result begin
+    disasm >>= build
+  end;
+  Toplevel.get result
 
 
 let provide_arch arch mem =

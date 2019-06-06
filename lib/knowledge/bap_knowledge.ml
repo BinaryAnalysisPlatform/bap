@@ -269,11 +269,13 @@ end
 module Opinions : sig
   type 'a t
 
-  val empty : equal:('a -> 'a -> bool) -> 'a t
+  val empty : equal:('a -> 'a -> bool) -> 'a -> 'a t
+
+  val inspect : ('a -> Sexp.t) -> 'a t -> Sexp.t
 
   val add : Agent.t -> 'a -> 'a t -> 'a t
-  val of_list : equal:('a -> 'a -> bool) -> (Agent.t,'a) List.Assoc.t -> 'a t
-  val choice : empty:'a -> 'a t -> 'a
+  val of_list : equal:('a -> 'a -> bool) -> 'a -> (Agent.t,'a) List.Assoc.t -> 'a t
+  val choice : 'a t -> 'a
 
   val compare_votes : 'a t -> 'a t -> int
   val join : 'a t -> 'a t -> 'a t
@@ -286,10 +288,15 @@ end = struct
   type 'a t = {
     opinions : 'a opinion list;
     equal : 'a -> 'a -> bool;
+    empty : 'a;
   }
 
+  let empty ~equal empty = {opinions=[]; equal; empty}
 
-  let empty ~equal = {opinions=[]; equal}
+  let inspect sexp_of_opinion {opinions} =
+    Sexp.List (List.rev_map opinions ~f:(fun {opinion} ->
+        sexp_of_opinion opinion))
+
 
   let add_opinion op ({opinions; equal} as ops) =
     let casted,opinions =
@@ -324,8 +331,8 @@ end = struct
   let compare_votes x y =
     compare (count_votes x) (count_votes y)
 
-  let of_list ~equal =
-    let init = empty ~equal in
+  let of_list ~equal bot =
+    let init = empty ~equal bot in
     List.fold ~init ~f:(fun opts (agent,data) ->
         add agent data opts)
 
@@ -336,7 +343,7 @@ end = struct
     | 0 -> Set.compare_direct x.votes y.votes
     | n -> n
 
-  let choice ~empty {opinions} =
+  let choice {opinions; empty} =
     List.max_elt opinions ~compare |> function
     | Some {opinion} -> opinion
     | None -> empty
@@ -408,6 +415,11 @@ module Domain = struct
     let inspect = [%sexp_of: Base.Set.M(Inspectable).t] in
     define ~inspect ~empty ~order ~join name
 
+  let opinions ?(inspect=sexp_of_opaque) ~empty ~equal name =
+    let empty = Opinions.empty ~equal empty in
+    let order = partial_of_total (Opinions.compare_votes) in
+    let inspect = Opinions.inspect inspect in
+    define ~inspect ~empty ~order name
 
   let mapping (type k o d)
       (module K : Comparator.S with type t = k
@@ -952,7 +964,7 @@ module Knowledge = struct
 
   module Slot = struct
     type 'p promise = {
-      get : Oid.t -> 'p Knowledge.t;
+      run : Oid.t -> unit Knowledge.t;
       pid : pid;
     }
 
@@ -1131,11 +1143,14 @@ module Knowledge = struct
 
   let pids = ref Pid.zero
 
-  let promise (s : _ slot) get =
+  let register_promise (s : _ slot) run =
     Pid.incr pids;
     let pid = !pids in
-    Hashtbl.add_exn s.promises pid {get; pid}
+    Hashtbl.add_exn s.promises pid {run; pid}
 
+  let promise s get =
+    register_promise s @@ fun obj ->
+    get obj >>= provide s obj
 
   let objects : _ cls -> _ = fun cls ->
     get () >>| fun {classes} ->
@@ -1227,9 +1242,9 @@ module Knowledge = struct
     : ('a,'p) slot -> 'a obj -> _ -> _ =
     fun slot obj promises ->
     current slot obj >>= fun was ->
-    Knowledge.List.iter promises ~f:(fun {Slot.get; pid} ->
+    Knowledge.List.iter promises ~f:(fun {Slot.run; pid} ->
         enter_promise slot obj pid >>= fun () ->
-        get obj >>= provide slot obj >>= fun () ->
+        run obj >>= fun () ->
         leave_promise slot obj pid) >>= fun () ->
     collect_waiting slot obj >>= fun waiting ->
     dequeue_waiting slot obj >>= fun () ->
@@ -1256,6 +1271,17 @@ module Knowledge = struct
       leave_slot slot id >>= fun () ->
       current slot id
 
+
+  let resolve slot obj =
+    collect slot obj >>| Opinions.choice
+
+  let suggest agent slot obj x =
+    current slot obj >>= fun opinions ->
+    provide slot obj (Opinions.add agent x opinions)
+
+  let propose agent s get =
+    register_promise s @@ fun obj ->
+    get obj >>= suggest agent s obj
 
   module Object = struct
     type +'a t = 'a obj
@@ -1603,6 +1629,9 @@ module Knowledge = struct
 
 
   module Conflict = Conflict
+  module Agent = Agent
+  type 'a opinions = 'a Opinions.t
+  type agent = Agent.t
   let sexp_of_conflict = Conflict.sexp_of_t
 end
 

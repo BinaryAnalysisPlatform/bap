@@ -7994,7 +7994,7 @@ module Std : sig
     (** symbolizer data type  *)
     type t = symbolizer
 
-    val provide : t -> unit
+    val provide : Knowledge.agent -> t -> unit
 
     (** [create fn] creates a symbolizer for a given function  *)
     val create : (addr -> string option) -> t

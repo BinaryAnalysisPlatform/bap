@@ -1,15 +1,24 @@
 open Bap_knowledge
 
-type t
+type 'a t = 'a
+type env
+type main
+type 'p var
 
-val t : t
+val eval : ('a,'p) Knowledge.slot -> 'a Knowledge.obj knowledge -> 'p t
+val exec : unit knowledge -> unit t
 
-val run : 'a Knowledge.cls -> 'a Knowledge.obj Knowledge.t ->
-  ('a Knowledge.value, Knowledge.conflict) result
+val try_eval : ('a,'p) Knowledge.slot -> 'a Knowledge.obj knowledge ->
+  ('p,Knowledge.conflict) result t
 
-val run_or_fail : 'a Knowledge.cls -> 'a Knowledge.obj Knowledge.t -> 'a Knowledge.value
+val try_exec : unit knowledge -> (unit,Knowledge.conflict) result t
 
+val get : 'p var -> 'p t
+val put : 'p var -> 'p knowledge -> unit t
+val var : string -> 'p var
+
+
+val env : env
 val reset : unit -> unit
-val set : t -> unit
-
+val set : env -> unit
 val current : unit -> Knowledge.state
