@@ -15,8 +15,11 @@ type symtab = t [@@deriving compare, sexp_of]
 type fn = string * block * cfg [@@deriving compare, sexp_of]
 
 
-val build : Disasm.state -> t KB.t
-val create : Disasm.state -> t
+val create : Disasm.state -> t KB.t
+
+module Toplevel : sig
+  val create : Disasm.state -> t Toplevel.t
+end
 
 val empty : t
 val add_symbol : t -> fn -> t

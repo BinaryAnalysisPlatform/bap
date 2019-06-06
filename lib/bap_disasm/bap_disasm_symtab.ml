@@ -9,7 +9,6 @@ open Or_error
 open KB.Syntax
 open Format
 
-module Toplevel = Bap_toplevel
 module Block = Bap_disasm_block
 module Cfg = Bap_disasm_rec.Cfg
 module Insn = Bap_disasm_insn
@@ -162,7 +161,7 @@ let build_symbol disasm calls start =
     Symbolizer.get_name start >>| fun name ->
     name,entry,graph
 
-let build disasm =
+let create disasm =
   Callgraph.update Callgraph.empty disasm >>= fun calls ->
   Callgraph.entries calls |>
   Set.to_sequence |>
@@ -172,6 +171,8 @@ let build disasm =
 
 let result = Toplevel.var "symtab"
 
-let create disasm =
-  Toplevel.put result (build disasm);
-  Toplevel.get result
+module Toplevel = struct
+  let create disasm =
+    Toplevel.put result (create disasm);
+    Toplevel.get result
+end
