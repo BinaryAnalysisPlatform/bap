@@ -11,7 +11,6 @@ open Bap_knowledge
 module L = Label
 module Label = IRLabel
 
-module Toplevel = Bap_state
 
 let update_jmp jmp ~f =
   f (Ir_jmp.dst jmp) (Ir_jmp.alt jmp) @@ fun ~dst ~alt ->

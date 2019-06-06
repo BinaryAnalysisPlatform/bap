@@ -9,7 +9,7 @@ open Or_error
 open KB.Syntax
 open Format
 
-module Toplevel = Bap_state
+module Toplevel = Bap_toplevel
 module Block = Bap_disasm_block
 module Cfg = Bap_disasm_rec.Cfg
 module Insn = Bap_disasm_insn

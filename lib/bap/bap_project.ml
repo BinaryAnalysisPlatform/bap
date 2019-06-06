@@ -15,7 +15,7 @@ include Bap_self.Create()
 
 let find name = FileUtil.which name
 
-module Toplevel = Bap_state
+module Toplevel = Bap_toplevel
 type state = Toplevel.env
 
 type t = {
@@ -320,7 +320,7 @@ let create
         ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input)
 
 let restore_state {state} =
-  State.set state
+  Toplevel.set state
 
 let with_memory = Field.fset Fields.memory
 let with_symbols = Field.fset Fields.symbols

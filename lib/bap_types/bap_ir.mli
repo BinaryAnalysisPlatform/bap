@@ -10,7 +10,6 @@ open Bap_core_theory
 type tid = Theory.Label.t
 [@@deriving bin_io, compare, sexp]
 
-
 type 'a term [@@deriving bin_io, compare, sexp]
 type program [@@deriving bin_io, compare, sexp]
 type nil [@@deriving bin_io, compare, sexp]
@@ -53,13 +52,13 @@ val jmp_t : (blk, jmp) cls
 module Tid : sig
   type t = tid
 
-  val for_name : string -> t Bap_state.t
-  val for_addr : addr -> t Bap_state.t
-  val for_ivec : int -> t Bap_state.t
+  val for_name : string -> t Bap_toplevel.t
+  val for_addr : addr -> t Bap_toplevel.t
+  val for_ivec : int -> t Bap_toplevel.t
 
-  val create : unit -> t Bap_state.t
-  val set_name : t -> string -> unit Bap_state.t
-  val name : t -> string Bap_state.t
+  val create : unit -> t Bap_toplevel.t
+  val set_name : t -> string -> unit Bap_toplevel.t
+  val name : t -> string Bap_toplevel.t
   val from_string : string -> tid Or_error.t
   val from_string_exn : string -> tid
   val (!!) : string -> tid

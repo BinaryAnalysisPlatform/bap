@@ -7,7 +7,7 @@ open Bap_common
 open Bap_bil
 open Bap_knowledge
 
-module Toplevel = Bap_state
+module Toplevel = Bap_toplevel
 module Value = Bap_value
 module Dict = Value.Dict
 module Vec = Bap_vector

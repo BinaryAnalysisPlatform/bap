@@ -7,13 +7,12 @@ open Bap_image_std
 
 open KB.Syntax
 
-module Toplevel = Bap_state
+module Toplevel = Bap_toplevel
 module Driver = Bap_disasm_driver
 module Brancher = Bap_disasm_brancher
 module Rooter = Bap_disasm_rooter
 module Block = Bap_disasm_block
 module Insn = Bap_disasm_insn
-module State = Bap_state
 module Basic = Bap_disasm_basic
 
 type full_insn = Basic.full_insn [@@deriving sexp_of]

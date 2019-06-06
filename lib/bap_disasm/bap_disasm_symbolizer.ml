@@ -101,8 +101,7 @@ let get_name addr =
     | None -> resolve empty addr
 
 module Toplevel = struct
-  module Toplevel = Bap_state
-  let name = Toplevel.var "symbol-name"
+  let name = Bap_toplevel.var "symbol-name"
 
   let get_name addr =
     Toplevel.put name (get_name addr);

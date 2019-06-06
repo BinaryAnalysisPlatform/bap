@@ -56,7 +56,7 @@ let sort_of_typ t =
   | Type.Unk -> ret @@ unknown
 
 module Generator = struct
-  module Toplevel = Bap_state
+  module Toplevel = Bap_toplevel
   open KB.Syntax
 
   let empty = Theory.Var.Ident.of_string "nil"
