@@ -1,5 +1,7 @@
 open Bap_core_theory
 
+module OCamlGraph = Graph
+
 open Core_kernel
 open Graphlib.Std
 
@@ -21,6 +23,7 @@ type t = output
 module Callgraph = struct
   let entry = Word.b0
   let exit = Word.b1
+  let is_entry = Word.equal entry
   include Graphlib.Make(Addr)(Unit)
   let mark_as_root n g =
     if Word.equal n entry then g
@@ -28,6 +31,23 @@ module Callgraph = struct
       let e = Edge.create entry n () in
       Edge.insert e g
 end
+
+let string_of_node n =
+  sprintf "%S" @@ if Callgraph.is_entry n
+  then "entry"
+  else Addr.string_of_value n
+
+let pp_callgraph ppf graph =
+  Graphlib.to_dot (module Callgraph) graph
+    ~formatter:ppf
+    ~string_of_node
+
+
+let pp_roots ppf graph =
+  Graphlib.to_dot (module Callgraph) graph
+    ~formatter:ppf
+    ~string_of_node:(fun s ->
+        sprintf "%S" (Addr.string_of_value s))
 
 let of_disasm disasm =
   Driver.explore disasm ~init:Callgraph.empty
@@ -48,7 +68,13 @@ module Parent = struct
   let none = Word.b0
   let unknown = Word.b1
   let equal = Word.equal
-  let merge x y = if not (equal x y) then none else x
+  let is_root p = equal p none
+  let is_known p = not (equal p unknown)
+  let merge x y =
+    if equal x unknown then y else
+    if equal y unknown then x else
+    if equal x y then x else none
+
   let transfer self parent =
     if equal parent none then self else parent
 end
@@ -85,9 +111,19 @@ let parent parents addr =
 let entries graph parents =
   let init = Set.empty (module Addr) in
   Callgraph.nodes graph |> Seq.fold ~init ~f:(fun entries n ->
-      if Parent.equal (parent parents n) n
+      if not (Parent.is_root n) && Parent.equal (parent parents n) n
       then Set.add entries n
       else entries)
+
+
+let pp_calls ppf (parents,graph) =
+  Graphlib.to_dot (module Callgraph) graph
+    ~formatter:ppf
+    ~string_of_node
+    ~node_attrs:(fun n ->
+        if parent parents n = n
+        then [`Shape `Diamond; `Style `Filled]
+        else [])
 
 let update {parents} disasm =
   callgraph disasm >>| fun graph ->
@@ -97,7 +133,8 @@ let update {parents} disasm =
     ~equal:Parent.equal
     ~merge:Parent.merge
     ~f:Parent.transfer
-  |> fun parents -> {
+  |> fun parents ->
+  {
     parents;
     entries = entries graph parents;
   }

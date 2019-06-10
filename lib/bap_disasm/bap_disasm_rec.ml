@@ -112,6 +112,9 @@ let provide_arch arch mem =
     if Memory.contains mem p then Some arch
     else None
 
+let scan arch mem state =
+  provide_arch arch mem;
+  Driver.scan mem state
 
 let run ?backend ?(brancher=Brancher.empty) ?(rooter=Rooter.empty) arch mem =
   Brancher.provide brancher;
@@ -121,3 +124,6 @@ let run ?backend ?(brancher=Brancher.empty) ?(rooter=Rooter.empty) arch mem =
 
 let cfg = extract global_cfg
 let errors _ = []
+
+let create = KB.return
+let graph s = s >>= global_cfg

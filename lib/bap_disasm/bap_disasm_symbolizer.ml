@@ -90,12 +90,9 @@ let get_name addr =
   KB.provide Theory.Label.addr label data >>= fun () ->
   KB.resolve common_name label >>= function
   | Some name ->
-    Format.eprintf "Got the common name resolution: %s@\n"
-      name;
     update_name_slot label name >>= fun () ->
     KB.return name
   | None ->
-    Format.eprintf "No names are provided, relying on whatever we have@\n";
     KB.collect Theory.Label.name label >>| function
     | Some name -> name
     | None -> resolve empty addr

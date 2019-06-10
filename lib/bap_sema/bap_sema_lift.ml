@@ -1,16 +1,11 @@
+open Bap_core_theory
+
 open Core_kernel
 open Bap_types.Std
 open Graphlib.Std
 open Bap_image_std
 open Bap_disasm_std
 open Bap_ir
-open Format
-module IRLabel = Label
-open Bap_core_theory
-open Bap_knowledge
-module L = Label
-module Label = IRLabel
-
 
 let update_jmp jmp ~f =
   f (Ir_jmp.dst jmp) (Ir_jmp.alt jmp) @@ fun ~dst ~alt ->
@@ -62,10 +57,10 @@ module IrBuilder = struct
 
   let ir_of_insn insn =
     Toplevel.eval Term.slot begin
-      let open Knowledge.Syntax in
+      let open KB.Syntax in
       let cls = Theory.Program.Semantics.cls in
-      Knowledge.Object.create cls >>= fun obj ->
-      Knowledge.provide Bil.slot obj (Insn.bil insn) >>| fun () ->
+      KB.Object.create cls >>= fun obj ->
+      KB.provide Bil.slot obj (Insn.bil insn) >>| fun () ->
       obj
     end
 
@@ -137,6 +132,18 @@ module IrBuilder = struct
             Term.update jmp_t blk @@ jmp ~dst ~alt:(Some alt');
           ])
 
+  let is_last_jump_nonconditional blk =
+    match Term.last jmp_t blk with
+    | None -> false
+    | Some jmp -> match Ir_jmp.cond jmp with
+      | Bil.Int x -> Word.equal Word.b1 x
+      | _ -> false
+
+  let fall_if_possible blk fall =
+    if is_last_jump_nonconditional blk
+    then blk
+    else Term.append jmp_t blk fall
+
   let blk ?symtab cfg block : blk term list =
     let tid = Tid.for_addr (Block.addr block) in
     let blks =
@@ -151,7 +158,7 @@ module IrBuilder = struct
     | x::xs, Some _, true ->
       List.rev (turn_into_call fall x :: xs)
     | x::xs, Some dst, false ->
-      List.rev (Term.append jmp_t x (Ir_jmp.reify ~dst ()) :: xs)
+      List.rev (fall_if_possible x (Ir_jmp.reify ~dst ()) :: xs)
     | x::xs, None, is_call ->
       let x = if is_call then turn_into_call fall x else x in
       match inter_fall symtab block with
@@ -162,23 +169,14 @@ end
 let blk cfg block = IrBuilder.blk cfg block
 
 
-let lift_sub ?tid entry cfg =
-  let addrs = Addr.Table.create () in
-  let recons acc b =
-    let addr = Block.addr b in
-    let blks = blk cfg b in
-    Option.iter (List.hd blks) ~f:(fun blk ->
-        Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid blk));
-    acc @ blks in
-  let blocks = Graphlib.reverse_postorder_traverse
-      (module Cfg) ~start:entry cfg in
-  let blks = Seq.fold blocks ~init:[] ~f:recons in
-  let n = let n = List.length blks in Option.some_if (n > 0) n in
-  let sub = Ir_sub.Builder.create ?tid ?blks:n () in
-  List.iter blks ~f:(Ir_sub.Builder.add_blk sub);
+let lift_sub ?symtab ?tid entry cfg =
+  let sub = Ir_sub.Builder.create ?tid ~blks:32 () in
+  Graphlib.reverse_postorder_traverse (module Cfg) ~start:entry cfg |>
+  Seq.iter ~f:(fun block ->
+      let blks = IrBuilder.blk ?symtab cfg block in
+      List.iter blks ~f:(Ir_sub.Builder.add_blk sub));
   let sub = Ir_sub.Builder.result sub in
   Term.set_attr sub address (Block.addr entry)
-
 
 (* Rewires some intraprocedural jmps into interprocedural.
 
@@ -208,7 +206,7 @@ let alternate_nonlocal sub jmp =
    need to link all resolved calls to subroutines.
 
    The [sub_of_blk] mapping maps tids of entries (basic blocks) to
-   tids of their corresponding subroutines. If jmp intraprocedural
+   tids of their corresponding subroutines. If an intraprocedural
    edge points to an entry of a subroutine we relink it to that
    subroutine.
 
@@ -216,7 +214,7 @@ let alternate_nonlocal sub jmp =
    a subroutine we turn it into a tail call. This could be a real tail
    call, a self recursive call, or an error from the previous steps of
    lifting. In any case, it will guarantee that the entry block has
-   indegree zero.
+   the local indegree zero.
 
    Finally, if both jump edges are not pointing to the entries and
    the interprocedural edge is resolved, then we have a jump to an
@@ -252,7 +250,7 @@ let program symtab =
       let addr = Block.addr entry in
       let blk_tid = Tid.for_addr addr in
       let sub_tid = Tid.for_name name in
-      let sub = lift_sub ~tid:sub_tid entry cfg in
+      let sub = lift_sub ~symtab ~tid:sub_tid entry cfg in
       Ir_program.Builder.add_sub b (Ir_sub.with_name sub name);
       Hashtbl.add_exn sub_of_blk ~key:blk_tid ~data:sub_tid;);
   let program = Ir_program.Builder.result b in

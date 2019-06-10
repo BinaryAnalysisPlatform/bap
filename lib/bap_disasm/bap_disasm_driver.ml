@@ -180,7 +180,6 @@ end = struct
     }
 
   let jumped s mem dsts delay =
-    Format.eprintf "Jumps: %a@\n" Memory.pp mem;
     let s = decoded s mem in
     let parent = s.curr in
     let src = Memory.min_addr mem in
@@ -194,7 +193,6 @@ end = struct
     | [] -> [t]
 
   let moved s mem =
-    Format.eprintf "moves: %a\n" Memory.pp mem;
     let parent = match s.curr with
       | Fall {delay=Ready (Some parent)} -> parent
       | _ -> s.curr in
@@ -210,11 +208,9 @@ end = struct
 
 
   let failed s addr =
-    Format.eprintf "Fails: %a@\n" Addr.pp addr;
     step @@ cancel s.curr @@ mark_data s addr
 
   let stopped s =
-    Format.eprintf "Stops: %a@\n" Addr.pp s.addr;
     step @@ cancel s.curr @@ mark_data s s.addr
 
   let rec view s base ~empty ~ready =
@@ -250,12 +246,7 @@ let new_insn arch mem insn =
   KB.provide Arch.slot code (Some arch) >>= fun () ->
   KB.provide Memory.slot code (Some mem) >>= fun () ->
   KB.provide Dis.Insn.slot code (Some insn) >>= fun () ->
-  let (<--) slot data v = KB.Value.put slot v data in
-  let insn = List.fold ~init:Insn.empty ~f:(fun insn add -> add insn) [
-      Insn.Slot.asm <-- Dis.Insn.asm insn;
-      Insn.Slot.ops <-- Some (Dis.Insn.ops insn);
-      Insn.Slot.name <-- Dis.Insn.name insn;
-    ] in
+  let insn = Insn.of_basic insn in
   KB.provide Theory.Program.Semantics.slot code insn >>| fun () ->
   code
 
@@ -356,12 +347,7 @@ let scan mem s =
   | Some arch -> match Dis.create (Arch.to_string arch) with
     | Error _ -> KB.return s
     | Ok dis ->
-      scan_mem arch dis mem >>|
-      fun {Machine.begs; jmps; data} ->
-      Format.eprintf "Driver: output - %d/%d, %d\n"
-        (Set.length begs)
-        (Map.length jmps)
-        (Set.length data);
+      scan_mem arch dis mem >>| fun {Machine.begs; jmps; data} ->
       let jmps = Map.merge s.jmps jmps ~f:(fun ~key:_ -> function
           | `Left dsts | `Right dsts | `Both (_,dsts) -> Some dsts) in
       let begs = Set.union s.begs begs in

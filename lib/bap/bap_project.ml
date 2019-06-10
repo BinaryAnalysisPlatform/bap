@@ -1,6 +1,6 @@
 open Core_kernel
 open Regular.Std
-open Bap_knowledge
+open Bap_core_theory
 open Graphlib.Std
 open Bap_future.Std
 open Bap_types.Std
@@ -234,84 +234,76 @@ let union_memory m1 m2 =
   Memmap.to_sequence m2 |> Seq.fold ~init:m1 ~f:(fun m1 (mem,v) ->
       Memmap.add m1 mem v)
 
-let create_exn
-    ?disassembler:backend
-    ?brancher
-    ?symbolizer
-    ?rooter
-    ?reconstructor
-    (read : input)  =
+module Kernel = struct
+  open KB.Syntax
+  module Driver = Bap_disasm_driver
+  module Calls = Bap_disasm_calls
+  module Disasm = Disasm_expert.Recursive
+
+  type t = {
+    default : arch;
+    state : Driver.state;
+    calls : Calls.t;
+  }
+
+  let empty arch = {
+    default = arch;
+    state = Driver.init;
+    calls = Calls.empty;
+  }
+
+  let update self mem =
+    Disasm.scan self.default mem self.state >>= fun state ->
+    Calls.update self.calls state >>| fun calls ->
+    {self with state; calls}
+
+  let symtab {state; calls} = Symtab.create state calls
+  let disasm {state} =
+    Disasm_expert.Recursive.global_cfg state
+
+  module Toplevel = struct
+    let result = Toplevel.var "result"
+    let run k =
+      Toplevel.put result begin
+        k >>= fun k ->
+        disasm k >>= fun g ->
+        symtab k >>| fun s -> g,s,k
+      end;
+      Toplevel.get result
+  end
+
+end
+
+
+let build ~code ~data arch =
   let state = fresh_state () in
-  let mrooter =
-    MVar.from_optional_source ~default:Merge.rooter rooter in
-  let mbrancher = MVar.from_optional_source brancher in
-  let mreconstructor = MVar.from_optional_source reconstructor in
-  let cfg     = MVar.create ~compare:Cfg.compare Cfg.empty in
-  let symtab  = MVar.create ~compare:Symtab.compare Symtab.empty in
-  let program = MVar.create ~compare:Program.compare (Program.create ()) in
-  let task = "loading" in
-  report_progress ~task ~stage:0 ~total:5 ~note:"reading" ();
+  let init = Kernel.empty arch in
+  let kernel =
+    Memmap.to_sequence code |> KB.Seq.fold ~init ~f:(fun k (mem,_) ->
+        Kernel.update k mem) in
+  let cfg,symbols,_ = Kernel.Toplevel.run kernel in
+  {
+    disasm = Disasm.create cfg;
+    program = Program.lift symbols;
+    symbols;
+    arch; memory=union_memory code data;
+    storage = Dict.empty;
+    state; passes=[]
+  }
+
+let create_exn
+    ?disassembler:_
+    ?brancher:_
+    ?symbolizer:_
+    ?rooter:_
+    ?reconstructor:_
+    (read : input)  =
   let {Input.arch; data; code; file; finish} = read () in
   Signal.send Info.got_file file;
   Signal.send Info.got_arch arch;
   Signal.send Info.got_data data;
   Signal.send Info.got_code code;
-  let rec loop () =
-    let updated = MVar.is_updated mbrancher || MVar.is_updated mrooter in
-    let brancher = MVar.read mbrancher
-    and rooter   = MVar.read mrooter in
-    let disassemble () =
-      report_progress ~task ~stage:1 ~note:"disassembling" ();
-      let run mem =
-        let dis =
-          Disasm.With_exn.of_mem ?backend ?brancher ?rooter arch mem in
-        Disasm.errors dis |>
-        List.iter ~f:(fun e -> warning "%a" pp_disasm_error e);
-        Disasm.cfg dis in
-      Memmap.to_sequence code |>
-      Seq.fold ~init:Cfg.empty ~f:(fun cfg (mem,_) ->
-          Graphlib.union (module Cfg) cfg (run mem)) |>
-      MVar.write cfg  in
-    if updated then disassemble ();
-    let is_cfg_updated = phase_triggered Info.got_cfg cfg in
-    let g = MVar.read cfg in
-    let reconstruct () =
-      if is_cfg_updated then
-        let name = Symbolizer.Toplevel.get_name in
-        let syms =
-          let () = report_progress ~task ~stage:2 ~note:"reconstructing" () in
-          Reconstructor.(run (default name (roots rooter)) g) in
-        MVar.write symtab syms in
-    if is_cfg_updated || MVar.is_updated mreconstructor
-    then match MVar.read mreconstructor with
-      | Some r ->
-        report_progress ~task ~stage:2 ~note:"reconstructing" ();
-        MVar.write symtab (Reconstructor.run r g)
-      | None -> reconstruct ()
-    else reconstruct ();
-    let is_symtab_updated = phase_triggered Info.got_symtab symtab in
-    if is_symtab_updated
-    then begin
-      report_progress ~task ~stage:3 ~note:"lifting" ();
-      MVar.write program (Program.lift (MVar.read symtab))
-    end;
-    let _ = phase_triggered Info.got_program program in
-    if MVar.is_updated mrooter ||
-       MVar.is_updated mbrancher ||
-       MVar.is_updated mreconstructor then loop ()
-    else
-      let disasm = Disasm.create g in
-      let program = MVar.read program in
-      report_progress ~task ~stage:4 ~note:"finishing" ();
-      finish {
-        disasm;
-        program;
-        symbols = MVar.read symtab;
-        arch; memory=union_memory code data;
-        storage = Dict.set Dict.empty filename file;
-        state; passes=[]
-      } in
-  loop ()
+  finish @@ build ~code ~data arch
 
 let create
     ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input =

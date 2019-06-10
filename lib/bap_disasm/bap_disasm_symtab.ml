@@ -130,7 +130,8 @@ let (<--) = fun g f -> match g with
 let build_cfg disasm calls entry =
   Disasm.explore disasm ~entry ~init:None
     ~follow:(fun dst ->
-        KB.return Addr.(Callgraph.entry calls dst = entry))
+        let p = Callgraph.entry calls dst in
+        KB.return Addr.(p = entry))
     ~block:(fun mem insns ->
         Disasm.execution_order insns >>= fun insns ->
         KB.List.filter_map insns ~f:(fun label ->
@@ -161,8 +162,7 @@ let build_symbol disasm calls start =
     Symbolizer.get_name start >>| fun name ->
     name,entry,graph
 
-let create disasm =
-  Callgraph.update Callgraph.empty disasm >>= fun calls ->
+let create disasm calls =
   Callgraph.entries calls |>
   Set.to_sequence |>
   KB.Seq.fold ~init:empty ~f:(fun symtab entry ->
@@ -172,7 +172,7 @@ let create disasm =
 let result = Toplevel.var "symtab"
 
 module Toplevel = struct
-  let create disasm =
-    Toplevel.put result (create disasm);
+  let create disasm calls =
+    Toplevel.put result (create disasm calls);
     Toplevel.get result
 end

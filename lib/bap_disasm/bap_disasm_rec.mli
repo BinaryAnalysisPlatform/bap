@@ -9,6 +9,8 @@ open Bap_disasm_basic
 open Bap_disasm_brancher
 open Bap_disasm_rooter
 
+module Driver = Bap_disasm_driver
+
 type t
 
 type insn = Bap_disasm_insn.t
@@ -33,3 +35,6 @@ val run :
 val cfg : t -> Cfg.t
 
 val errors : t -> error list
+
+val scan : arch -> mem -> Driver.state -> Driver.state knowledge
+val global_cfg : Driver.state -> Cfg.t knowledge

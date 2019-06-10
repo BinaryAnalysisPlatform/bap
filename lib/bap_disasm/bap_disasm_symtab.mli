@@ -5,6 +5,7 @@ open Bap_types.Std
 open Image_internal_std
 
 module Disasm = Bap_disasm_driver
+module Callgraph = Bap_disasm_calls
 
 type block = Bap_disasm_block.t
 type edge =  Bap_disasm_block.edge
@@ -15,10 +16,10 @@ type symtab = t [@@deriving compare, sexp_of]
 type fn = string * block * cfg [@@deriving compare, sexp_of]
 
 
-val create : Disasm.state -> t KB.t
+val create : Disasm.state -> Callgraph.t -> t KB.t
 
 module Toplevel : sig
-  val create : Disasm.state -> t Toplevel.t
+  val create : Disasm.state -> Callgraph.t -> t Toplevel.t
 end
 
 val empty : t
