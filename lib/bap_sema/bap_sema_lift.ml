@@ -55,14 +55,7 @@ module IrBuilder = struct
       List.rev_append ys (append_def_only x y :: xs)
     | xs, ys -> List.rev_append ys xs
 
-  let ir_of_insn insn =
-    Toplevel.eval Term.slot begin
-      let open KB.Syntax in
-      let cls = Theory.Program.Semantics.cls in
-      KB.Object.create cls >>= fun obj ->
-      KB.provide Bil.slot obj (Insn.bil insn) >>| fun () ->
-      obj
-    end
+  let ir_of_insn insn = KB.Value.get Term.slot insn
 
   let set_attributes ?mem insn blks =
     let addr = Option.map ~f:Memory.min_addr mem in

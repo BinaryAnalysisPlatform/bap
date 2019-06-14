@@ -181,17 +181,21 @@ end
 module Lifter = Theory.Parser.Make(Theory.Manager)
 
 let provide_bir () =
-  Knowledge.promise Term.slot @@ fun obj ->
-  KB.collect Bil.slot obj >>= fun bil ->
-  Lifter.run BilParser.t bil >>| fun sema ->
-  Bil_ir.reify @@
-  KB.Value.get Bil_ir.slot sema
-
+  Knowledge.promise Theory.Program.Semantics.slot @@ fun obj ->
+  KB.collect Theory.Program.Semantics.slot obj >>| fun sema ->
+  let bir = Bil_ir.reify @@  KB.Value.get Bil_ir.slot sema in
+  KB.Value.put Term.slot sema bir
 
 let has_bil insn =
   let bil = KB.Value.get Bil.slot insn in
   let dom = KB.Slot.domain Bil.slot in
   not (KB.Domain.is_empty dom bil)
+
+let served = Hashtbl.create (module Addr)
+let serve mem =
+  Hashtbl.update served (Memory.min_addr mem) ~f:(function
+      | None -> 1
+      | Some n -> n + 1)
 
 let provide_lifter () =
   info "providing a lifter for all BIL lifters";
@@ -204,13 +208,15 @@ let provide_lifter () =
     Knowledge.collect Memory.slot obj >>? fun mem ->
     Knowledge.collect Disasm_expert.Basic.Insn.slot obj >>? fun insn ->
     let module Target = (val target_of_arch arch) in
+    serve mem;
     match Target.lift mem insn with
     | Ok bil ->
-      let obj = Int63.to_string (KB.Object.id obj) in
       Bil_semantics.context >>= fun ctxt ->
       Knowledge.provide Bil_semantics.arch ctxt (Some arch) >>= fun () ->
-      Lifter.run BilParser.t bil
-    | Error _ -> Knowledge.return unknown in
+      Lifter.run BilParser.t bil >>= fun sema ->
+      Knowledge.return sema
+    | Error _ ->
+      Knowledge.return unknown in
   Knowledge.promise Theory.Program.Semantics.slot lifter
 
 
@@ -259,41 +265,6 @@ module Brancher : Theory.Core = struct
     let k = KB.Value.cls yes in
     KB.return (union k yes nay)
 end
-
-let rec dests_of_bil bil =
-  let init = Set.empty (module Theory.Label) in
-  KB.List.fold bil ~init ~f:(fun dests -> function
-      | Bil.Jmp (Int dst) ->
-        Theory.Label.for_addr (Word.to_bitvec dst) >>|
-        Set.add dests
-      | Bil.CpuExn n ->
-        Theory.Label.for_ivec n >>| Set.add dests
-      | Bil.Jmp _ ->
-        KB.Object.create Theory.Program.cls >>|  Set.add dests
-      | Bil.Move _ | Bil.Special _ -> KB.return dests
-      | Bil.While (_,xs) -> dests_of_bil xs
-      | Bil.If (_,xs,ys) ->
-        dests_of_bil xs >>= fun xs ->
-        dests_of_bil ys >>= fun ys ->
-        KB.return (Set.union xs ys))
-
-let provide_dests () =
-  info "providing destinations computed from BIL";
-  KB.promise Theory.Program.Semantics.slot @@ fun label ->
-  KB.collect Theory.Program.Semantics.slot label >>= fun sema ->
-  let str = Int63.to_string (KB.Object.id label) in
-  if Insn.equal sema Insn.empty
-  then Format.eprintf "%s is empty\n" str
-  else Format.eprintf "%s has semantics\n" str;
-  let bil = KB.Value.get Bil.slot sema in
-  dests_of_bil bil >>| fun our ->
-  let dests = match KB.Value.get Insn.Slot.dests sema with
-    | None -> our
-    | Some theirs -> Set.union our theirs in
-  Format.eprintf "Provided %d dests for %a\n"
-    (Set.length dests) Bil.pp bil;
-  KB.Value.put Insn.Slot.dests sema (Some dests)
-
 
 let init () =
   Bil_ir.init ();
