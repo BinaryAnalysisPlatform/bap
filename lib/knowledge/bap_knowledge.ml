@@ -369,11 +369,11 @@ module Domain = struct
 
   exception Join of string * Sexp.t * Sexp.t [@@deriving sexp_of]
 
-  let make_join name inspect order x y = match order x y with
+  let make_join name inspect order x y =
+    match order x y with
     | Order.GT -> Ok x
     | EQ | LT -> Ok y
     | NC -> Error (Join (name, inspect x, inspect y))
-
 
   let define ?(inspect=sexp_of_opaque) ?join ~empty ~order name = {
     inspect; empty; order; name;
@@ -387,11 +387,11 @@ module Domain = struct
     | 1 -> GT
     | _ -> LT
 
-  let total ?inspect ~empty ~order name =
-    define ?inspect ~empty name ~order:(partial_of_total order)
+  let total ?inspect ?join ~empty ~order name =
+    define ?inspect ?join ~empty name ~order:(partial_of_total order)
 
-  let flat ?inspect ~empty ~equal name =
-    define ?inspect ~empty name ~order:(fun x y ->
+  let flat ?inspect ?join ~empty ~equal name =
+    define ?inspect ?join ~empty name ~order:(fun x y ->
         match equal empty x, equal empty y with
         | true,true -> EQ
         | true,false -> LT
@@ -452,9 +452,19 @@ module Domain = struct
       | _,_,_ -> NC in
     define ~inspect ~join ~empty ~order name
 
-  let optional ?(inspect=sexp_of_opaque) ~equal name =
+  let optional ?(inspect=sexp_of_opaque) ?join ~equal name =
+    let join_data = match join with
+      | Some join -> join
+      | None -> fun x y ->
+        if equal x y then Ok y
+        else Error (Join (name, inspect x, inspect y)) in
     let inspect = sexp_of_option inspect in
-    flat ~inspect ~empty:None ~equal:(Option.equal equal) name
+    let join x y = match x,y with
+      | None,x | x,None -> Ok x
+      | Some x, Some y -> match join_data x y with
+        | Ok x -> Ok (Some x)
+        | Error err -> Error err in
+    flat ~inspect ~join ~empty:None ~equal:(Option.equal equal) name
 
   let string = define "string" ~empty:""
       ~inspect:sexp_of_string ~order:(fun x y ->
@@ -698,8 +708,13 @@ module Class = struct
 end
 
 module Record = struct
-  module Dict = Univ_map
-  type  t = Dict.t
+  module Key = Type_equal.Id
+  module Uid = Type_equal.Id.Uid
+
+  type univ = Pack : 'a Key.t * 'a -> univ
+  type record = univ Map.M(Uid).t
+  type t = record
+
   module Repr = struct
     type entry = {
       name : string;
@@ -708,9 +723,6 @@ module Record = struct
 
     type t = entry list [@@deriving bin_io]
   end
-
-  type univ = Dict.Packed.t
-
 
   type slot_io = {
     reader : string -> univ;
@@ -730,17 +742,20 @@ module Record = struct
   let domains : slot_domain Hashtbl.M(String).t =
     Hashtbl.create (module String)
 
-  let empty = Dict.empty
+  let uid (Pack (k,_)) = Key.uid k
+  let name (Pack (k,_)) = Key.name k
+  let domain x = Hashtbl.find_exn domains (name x)
+  let eq = Type_equal.Id.same_witness_exn
 
-  let (<:=) x y =
-    Dict.to_alist x |> List.for_all ~f:(fun (Dict.Packed.T (k,_) as x) ->
-        match Dict.find y k with
-        | None -> false
-        | Some y ->
-          let dom = Hashtbl.find_exn domains (Dict.Key.name k) in
-          match dom.order x (Dict.Packed.T (k,y)) with
-          | LT | EQ -> true
-          | GT | NC -> false)
+
+  let empty = Map.empty (module Uid)
+
+  let (<:=) x y = Map.for_all x ~f:(fun x ->
+      match Map.find y (uid x) with
+      | None -> false
+      | Some y -> match (domain x).order x y with
+        | LT | EQ -> true
+        | GT | NC -> false)
 
   let order : t -> t -> Order.partial = fun x y ->
     match x <:= y, y <:= x with
@@ -749,43 +764,35 @@ module Record = struct
     | false,true  -> GT
     | false,false -> NC
 
-  let eq = Type_equal.Id.same_witness_exn
 
-  let commit (type p) (key : p Dict.Key.t) v x =
-    match Dict.find v key with
-    | None -> Ok (Dict.set v key x)
+  let commit (type p) (key : p Key.t) v x =
+    let x = Pack (key,x) in
+    let key = Key.uid key in
+    match Map.find v key with
+    | None -> Ok (Map.set v key x)
     | Some y ->
-      let dom = Hashtbl.find_exn domains (Dict.Key.name key) in
-      let pack v = Dict.Packed.T (key,v) in
-      match dom.join (pack y) (pack x) with
-      | Ok (Dict.Packed.T (k,x)) ->
-        let Type_equal.T = eq key k in
-        Ok (Dict.set v key x)
+      match (domain y).join y x with
+      | Ok x -> Ok (Map.set v key x)
       | Error err -> Error err
 
-  let put key v x = Dict.set v key x
-  let get key {Domain.empty} data = match Dict.find data key with
+  let put k v x = Map.set v (Key.uid k) (Pack (k,x))
+  let get
+    : type a. a Key.t -> a Domain.t -> record -> a =
+    fun k {Domain.empty} data ->
+    match Map.find data (Key.uid k) with
     | None -> empty
-    | Some x -> x
-
-  let find key v = Dict.find v key
-
+    | Some (Pack (kx,x)) ->
+      let Type_equal.T = eq kx k in
+      x
 
   exception Merge_conflict of conflict
 
   let merge ~on_conflict x y =
-    Dict.to_alist x |>
-    List.fold ~init:y ~f:(fun v (Dict.Packed.T (k,x)) ->
-        Dict.change v k ~f:(function
+    Map.fold x ~init:y ~f:(fun ~key ~data:x v ->
+        Map.change v key ~f:(function
             | None -> Some x
-            | Some y ->
-              let name = Dict.Key.name k in
-              let pack v = Dict.Packed.T (k,v) in
-              let dom = Hashtbl.find_exn domains name in
-              match dom.join (pack x) (pack y) with
-              | Ok (Dict.Packed.T (k',x)) ->
-                let Type_equal.T = eq k k' in
-                Some x
+            | Some y -> match (domain x).join x y with
+              | Ok x -> Some x
               | Error err -> match on_conflict with
                 | `drop_both -> None
                 | `drop_left -> Some y
@@ -798,54 +805,53 @@ module Record = struct
     with Merge_conflict err -> Error err
 
   let register_persistent (type p)
-      (key : p Dict.Key.t)
+      (key : p Key.t)
       (p : p Persistent.t) =
-    let slot = Dict.Key.name key in
-    let writer (Dict.Packed.T (k,x)) =
-      match Type_equal.Id.same_witness k key with
-      | Some Type_equal.T -> Persistent.to_string p x
-      | None -> assert false in
+    let slot = Key.name key in
+    let writer (Pack (k,x)) =
+      let Type_equal.T = eq k key in
+      Persistent.to_string p x in
     let reader s =
-      Dict.Packed.T (key,Persistent.of_string p s) in
+      Pack (key,Persistent.of_string p s) in
     Hashtbl.add_exn io ~key:slot ~data:{reader;writer}
 
   include Binable.Of_binable(Repr)(struct
-      type t = Dict.t
+      type t = record
       let to_binable s =
-        Dict.to_alist s |>
-        List.rev_filter_map ~f:(fun (Dict.Packed.T(k,_) as x) ->
-            let name = Dict.Key.name k in
+        Map.data s |>
+        List.rev_filter_map ~f:(fun (Pack (k,_) as x) ->
+            let name = Key.name k in
             match Hashtbl.find io name with
             | None -> None
             | Some {writer=to_string} ->
               Some Repr.{name; data = to_string x;})
 
       let of_binable entries =
-        List.fold entries ~init:Dict.empty ~f:(fun s {Repr.name; data} ->
+        List.fold entries ~init:empty ~f:(fun s {Repr.name; data} ->
             match Hashtbl.find io name with
             | None -> s
             | Some {reader=parse} ->
-              let Dict.Packed.T (key,data) = parse data in
-              Dict.set s key data)
+              let Pack (k,_) as data = parse data in
+              Map.set s (Key.uid k) data)
     end)
 
   let register_domain
-    : type p. p Dict.Key.t -> p Domain.t -> unit =
+    : type p. p Key.t -> p Domain.t -> unit =
     fun key dom ->
-    let name = Dict.Key.name key in
-    let order (Dict.Packed.T (kx,x)) (Dict.Packed.T (ky,y)) =
+    let name = Key.name key in
+    let order (Pack (kx,x)) (Pack (ky,y)) =
       let Type_equal.T = eq kx ky in
       let Type_equal.T = eq kx key in
       dom.order x y in
-    let empty = Dict.Packed.T(key, dom.empty) in
-    let inspect (Dict.Packed.T(kx,x)) =
+    let empty = Pack (key, dom.empty) in
+    let inspect (Pack (kx,x)) =
       let Type_equal.T = eq kx key in
       dom.inspect x in
-    let join (Dict.Packed.T (kx,x)) (Dict.Packed.T (ky,y)) =
+    let join (Pack (kx,x)) (Pack (ky,y)) =
       let Type_equal.T = eq kx key in
       let Type_equal.T = eq ky key in
       match dom.join x y with
-      | Ok x -> Ok (Dict.Packed.T (key, x))
+      | Ok x -> Ok (Pack (key, x))
       | Error err -> Error err in
     Hashtbl.add_exn domains ~key:name ~data:{
       inspect;
@@ -855,14 +861,11 @@ module Record = struct
     }
 
   let sexp_of_t x =
-    Sexp.List (Dict.to_alist x |> List.map ~f:(function
-          Dict.Packed.T (k,x) ->
-          let name = Dict.Key.name k in
-          let dom = Hashtbl.find_exn domains name in
-          Sexp.List [
-            Atom name;
-            dom.inspect (Dict.Packed.T(k,x));
-          ]))
+    Sexp.List (Map.data x |> List.map ~f:(fun x ->
+        Sexp.List [
+          Atom (name x);
+          (domain x).inspect x;
+        ]))
 
   let t_of_sexp = opaque_of_sexp
 
@@ -1270,7 +1273,6 @@ module Knowledge = struct
       collect_inner slot id (initial_promises slot) >>= fun () ->
       leave_slot slot id >>= fun () ->
       current slot id
-
 
   let resolve slot obj =
     collect slot obj >>| Opinions.choice

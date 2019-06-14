@@ -524,18 +524,21 @@ module Knowledge : sig
 
     val total :
       ?inspect:('a -> Base.Sexp.t) ->
+      ?join:('a -> 'a -> ('a,conflict) result) ->
       empty:'a ->
       order:('a -> 'a -> int) ->
       string -> 'a domain
 
     val flat :
       ?inspect:('a -> Base.Sexp.t) ->
+      ?join:('a -> 'a -> ('a,conflict) result) ->
       empty:'a ->
       equal:('a -> 'a -> bool) ->
       string -> 'a domain
 
     val optional :
       ?inspect:('a -> Base.Sexp.t) ->
+      ?join:('a -> 'a -> ('a,conflict) result) ->
       equal:('a -> 'a -> bool) ->
       string -> 'a option domain
 
