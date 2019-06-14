@@ -242,7 +242,8 @@ end = struct
 end
 
 let new_insn arch mem insn =
-  KB.Object.create Theory.Program.cls >>= fun code ->
+  let addr = Addr.to_bitvec (Memory.min_addr mem) in
+  Theory.Label.for_addr addr >>= fun code ->
   KB.provide Arch.slot code (Some arch) >>= fun () ->
   KB.provide Memory.slot code (Some mem) >>= fun () ->
   KB.provide Dis.Insn.slot code (Some insn) >>= fun () ->
@@ -269,7 +270,8 @@ let collect_dests arch mem insn =
             indirect;
             resolved = Set.add resolved (Word.create d width)
           } else {indirect; resolved}
-        | None -> {indirect=true; resolved})
+        | None -> {indirect=true; resolved}) >>= fun res ->
+    KB.return res
 
 
 let delay arch mem insn =
