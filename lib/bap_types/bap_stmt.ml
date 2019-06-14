@@ -93,12 +93,15 @@ module Stmts_data = struct
     set_default_reader "bin"
 end
 
+
 let domain = Knowledge.Domain.flat "bil"
     ~empty:[]
     ~inspect:(function
         | [] -> Sexp.List []
         | bil -> Sexp.Atom (Stmts_pp.to_string bil))
-    ~equal:(fun x y -> Int.(compare_bil x y = 0))
+    ~equal:(fun x y ->
+        phys_equal x y ||
+        Int.(compare_bil x y = 0))
 
 
 let persistent = Knowledge.Persistent.of_binable (module struct
