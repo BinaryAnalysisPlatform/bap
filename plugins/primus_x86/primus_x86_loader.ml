@@ -17,20 +17,24 @@ module Component(Machine : Primus.Machine.S) = struct
 
   let correct_sp sp addend _ =
     Env.get sp >>= fun x ->
-    Value.of_int ~width:(addend * 8) addend >>= fun addend ->
-    Interpreter.binop Bil.plus x addend >>= fun x ->
-    Env.set sp x
+    Interpreter.binop Bil.plus x addend >>= Env.set sp
 
   let correct_sp sp addend =
-    Primus.Linker.Trace.lisp_call_return >>> correct_sp sp addend
+    match Var.typ sp with
+    | Mem _ -> Machine.return ()
+    | Imm width ->
+       Value.of_int ~width addend >>= fun addend ->
+       Primus.Linker.Trace.lisp_call_return >>> correct_sp sp addend
 
   let seq = Machine.sequence
 
   let init () =
     Machine.get () >>= fun proj ->
     match Project.arch proj with
-    | `x86 -> seq [initialize_flags IA32.flags; correct_sp IA32.sp 4]
-    | `x86_64 -> seq [initialize_flags AMD64.flags; correct_sp AMD64.sp 8]
+    | `x86 ->
+       seq [initialize_flags IA32.flags; correct_sp IA32.sp 4]
+    | `x86_64 ->
+       seq [initialize_flags AMD64.flags; correct_sp AMD64.sp 8]
     | _ -> Machine.return ()
 
 end
