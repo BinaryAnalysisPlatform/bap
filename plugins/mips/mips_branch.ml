@@ -405,7 +405,6 @@ let () =
   "BGTZC" >> bgtzc;
   "BEQZC" >> beqzc;
   "BNEZC" >> bnezc;
-  "BGEZC" >> bgezc;
   "BGTZ" >> bgtz;
   "BGTZL" >> bgtzl;
   "J" >> jump;

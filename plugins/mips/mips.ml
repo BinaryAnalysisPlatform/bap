@@ -37,22 +37,12 @@ module Std = struct
 
   let lifters = String.Table.create ()
 
-  let provide_delay name delay =
-    let provide obj =
-      let open KB.Syntax in
-      KB.collect Theory.Program.Semantics.slot obj >>= fun insn ->
-      KB.collect Arch.slot obj >>| function
-      | Some #Arch.mips ->
-        let name' = KB.Value.get Insn.Slot.name insn in
-        if String.equal name name'
-        then KB.Value.put Insn.Slot.delay insn (Some delay)
-        else insn
-      | _ -> insn in
-    KB.promise Theory.Program.Semantics.slot provide
+
+  let delayed_opcodes = Hashtbl.create (module String)
 
   let register ?delay name lifter =
-    Option.iter delay ~f:(provide_delay name);
-    String.Table.change lifters name ~f:(fun _ -> Some lifter)
+    Option.iter delay ~f:(fun d -> Hashtbl.add_exn delayed_opcodes name d);
+    Hashtbl.add_exn lifters name lifter
 
   let (>>) = register
 
@@ -97,5 +87,18 @@ module Std = struct
   end
 
   include Model
-
 end
+
+let () =
+  let provide_delay obj =
+    let open KB.Syntax in
+    KB.collect Arch.slot obj >>= function
+    | Some #Arch.mips ->
+      KB.collect Theory.Program.Semantics.slot obj >>| fun insn ->
+      let name = KB.Value.get Insn.Slot.name insn in
+      Hashtbl.find_and_call Std.delayed_opcodes name
+        ~if_found:(fun delay ->
+            KB.Value.put Insn.Slot.delay insn (Some delay))
+        ~if_not_found:(fun _ -> insn)
+    | _ -> KB.return Insn.empty in
+  KB.promise Theory.Program.Semantics.slot provide_delay
