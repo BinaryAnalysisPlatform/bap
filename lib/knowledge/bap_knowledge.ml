@@ -707,6 +707,361 @@ module Class = struct
 
 end
 
+module Dict = struct
+  module Key = Type_equal.Id
+  module Uid = Key.Uid
+  type 'a key = 'a Key.t
+  type record =
+    | T0
+    | T1 : 'a key * 'a -> record
+    | T2 : 'a key * 'a *
+           'b key * 'b -> record
+    | T3 : 'a key * 'a *
+           'b key * 'b *
+           'c key * 'c -> record
+    | T4 : 'a key * 'a *
+           'b key * 'b *
+           'c key * 'c *
+           'd key * 'd -> record
+    | LL of record * record
+    | LR of record * record
+
+  (*
+     - LL (x,y) : h(x) = h(y) - 1, if balanced
+                | h(x) = h(y) - 2, otherwise
+     - LR (x,y) : h(x) = h(y), if balanced
+                | h(x) = h(y) + 1, otherwise
+ *)
+
+  let uid = Key.uid
+
+  let compare_keys k1 k2 =
+    let k1 = uid k1 and k2 = uid k2 in
+    Uid.compare k1 k2
+  [@@inline]
+
+  let (<$) k1 k2 =
+    let k1 = uid k1 and k2 = uid k2 in
+    Uid.(k1 < k2)
+  [@@inlined]
+
+  let make0 = T0 [@@inlined]
+  let make1 k a = T1 (k,a) [@@inlined]
+  let make2 ka a kb b = T2 (ka,a,kb,b) [@@inlined]
+  let make3 ka a kb b kc c = T3 (ka,a,kb,b,kc,c) [@@inlined]
+  let make4 ka a kb b kc c kd d =
+    T4 (ka,a, kb,b, kc,c, kd,d)
+  [@@inlined]
+  let make5 ka a kb b kc c kd d ke e =
+    LL (T2 (ka,a,kb,b),T3(kc,c,kd,d,ke,e))
+  [@@inlined]
+  let make6 ka a kb b kc c kd d ke e kf f =
+    LR (T3 (ka,a,kb,b,kc,c), T3 (kd,d,ke,e,kf,f))
+  [@@inlined]
+  let make7 ka a kb b kc c kd d ke e kf f kg g =
+    LL (T3 (ka,a,kb,b,kc,c), T4 (kd,d,ke,e,kf,f,kg,g))
+  [@@inlined]
+  let make8 ka a kb b kc c kd d ke e kf f kg g kh h =
+    LR (T4 (ka,a,kb,b,kc,c,kd,d), T4(ke,e,kf,f,kg,g,kh,h))
+  [@@inlined]
+
+  type ('b,'r) app = {
+    app : 'a. 'a key -> 'a -> 'b -> 'r;
+  }
+
+  let rec below k = function
+    | T0 -> assert false
+    | T1 (x,_) -> k <$ x
+    | T2 (x,_,_,_) -> k <$ x
+    | T3 (x,_,_,_,_,_) -> k <$ x
+    | T4 (x,_,_,_,_,_,_,_) -> k <$ x
+    | LL (x,_)
+    | LR (x,_) -> below k x
+
+  let rec above x k = match x with
+    | T0 -> assert false
+    | T1 (x,_) -> x <$ k
+    | T2 (_,_,x,_) -> x <$ k
+    | T3 (_,_,_,_,x,_) -> x <$ k
+    | T4 (_,_,_,_,_,_,x,_) -> x <$ k
+    | LL (_,x)
+    | LR (_,x) -> above x k
+
+
+  let grow x y = match x,y with
+    | T2 (ka,a,kb,b), T2 (kc,c,kd,d) ->
+      T4 (ka,a,kb,b,kc,c,kd,d)
+    | x,y -> LR (x,y)
+
+  (* pre:
+     - a is not in t;
+     - for all functions except [bal] t is balanced;
+     - for [bal] the input is t is disbalanced.
+
+     post:
+     - a is in t', and len t' = len t + 1
+     - t' depth is minimal
+     - t' is balanced
+  *)
+  let rec insert
+    : type a. a key -> a -> record -> record = fun ka a -> function
+    | T0 -> make1 ka a
+    | T1 (kb,b) -> if ka <$ kb
+      then make2 ka a kb b
+      else make2 kb b ka a
+    | T2 (kb,b, kc,c) -> if ka <$ kb
+      then make3 ka a kb b kc c else if ka <$ kc
+      then make3 kb b ka a kc c
+      else make3 kb b kc c ka a
+    | T3 (kb,b,kc,c,kd,d) -> if ka <$ kb
+      then make4 ka a kb b kc c kd d else if ka <$ kc
+      then make4 kb b ka a kc c kd d else if ka <$ kd
+      then make4 kb b kc c ka a kd d
+      else make4 kb b kc c kd d ka a
+    | T4 (kb,b,kc,c,kd,d,ke,e) -> if ka <$ kb
+      then make5 ka a kb b kc c kd d ke e else if ka <$ kc
+      then make5 kb b ka a kc c kd d ke e else if ka <$ kd
+      then make5 kb b kc c ka a kd d ke e else if ka <$ ke
+      then make5 kb b kc c kd d ka a ke e
+      else make5 kb b kc c kd d ke e ka a
+    | LL (b,c) ->
+      if below ka c
+      then LR (insert ka a b,c)
+      else bal (LL (b,insert ka a c))
+    | LR (b,c) ->
+      if below ka c
+      then bal (LR (insert ka a b,c))
+      else (LL (b,insert ka a c))
+  and bal : record -> record = function
+    | T0 | T1 _ | T2 _ | T3 _ | T4 _ -> assert false
+    | LL (T2 (ka,a,kb,b), T4 (kc,c,kd,d,ke,e,kf,f)) ->
+      make6 ka a kb b kc c kd d ke e kf f
+    | LL (T3 (ka,a,kb,b,kc,c),
+          LL (T2 (kd,d,ke,e), T3(kf,f,kg,g,kh,h))) ->
+      make8 ka a kb b kc c kd d ke e kf f kg g kh h
+    | LL (T4 (ka,a,kb,b,kc,c,kd,d),
+          LR (T3(ke,e,kf,f,kg,g),(T3 (kh,h,ki,i,kj,j)))) ->
+      LR (make5 ka a kb b kc c kd d ke e,
+          make5 kf f kg g kh h ki i kj j)
+    | LR (T4 (ka,a,kb,b,kc,c,kd,d),
+          T3(ke,e,kf,f,kg,g)) ->
+      make7 ka a kb b kc c kd d ke e kf f kg g
+    | LR (LL (T2 (ka,a,kb,b), T3 (kc,c,kd,d,ke,e)),
+          T4 (kf,f,kg,g,kh,h,ki,i)) ->
+      LL (make4 ka a kb b kc c kd d,
+          make5 ke e kf f kg g kh h ki i)
+    | LL (LL (T2 (ka,a, kb,b), T3 (kc,c, kd,d, ke,e)),
+          LL (T3 (kf,f, kg,g, kh,h), T4 (ki,i, kj,j, kk,k, kl,l))) ->
+      LR (make6 ka a kb b kc c kd d ke e kf f,
+          make6 kg g kh h ki i kj j kk k kl l)
+    | LL (x,y) -> pop_max y {app = fun ka a y -> LR (insert ka a x,y)}
+    | LR (x,y) -> pop_min x {app = fun ka a x -> LL (x,insert ka a y)}
+  and pop_max t f = match t with
+    | T0 | T1 _ -> assert false
+    | T2 (ka,a,kb,b) -> f.app ka a (T1 (kb,b))
+    | T3 (ka,a,kb,b,kc,c) -> f.app ka a (T2 (kb,b,kc,c))
+    | T4 (ka,a,kb,b,kc,c,kd,d) -> f.app ka a (T3 (kb,b,kc,c,kd,d))
+    | LL (T2 (ka,a,kb,b),T3(kc,c,kd,d,ke,e)) ->
+      f.app ka a (T4 (kb,b,kc,c,kd,d,ke,e))
+    | LR (x,y) -> pop_max x {app = fun ka a x -> f.app ka a (LL (x,y))}
+    | LL (x,y) -> pop_max x {app = fun ka a x -> f.app ka a (bal (LL (x,y)))}
+  and pop_min t f = match t with
+    | T0 | T1 _ -> assert false
+    | T2 (ka,a,kb,b) -> f.app kb b (T1 (ka,a))
+    | T3 (ka,a,kb,b,kc,c) -> f.app kc c (T2 (ka,a,kb,b))
+    | T4 (ka,a,kb,b,kc,c,kd,d) -> f.app kd d (T3 (ka,a,kb,b,kc,c))
+    | LL (T2 (ka,a,kb,b),T3(kc,c,kd,d,ke,e)) ->
+      f.app ke e (T4 (ka,a,kb,b,kc,c,kd,d))
+    | LL (x,y) -> pop_min y {app = fun ka a y -> f.app ka a (LR (x,y))}
+    | LR (x,y) -> pop_min y {app = fun ka a y -> f.app ka a (bal (LR (x,y)))}
+
+  let cmp x y = compare_keys x y [@@inlined]
+  let eq x y = compare_keys x y = 0 [@@inlined]
+
+  type 'a merge = {
+    app : 'b. 'b key -> 'b -> 'a -> 'a
+  }
+
+
+  let merge (type a) (ka : a key) f : a merge = {
+    app = fun (type b) (kb : b key) (b:b) (a:a) ->
+      let T = Type_equal.Id.same_witness_exn ka kb in
+      f (b:a) a
+  }
+
+  let rec upsert
+      ~update:ret
+      ~insert:add ka a t = match t with
+    | T0 -> add@@make1 ka a
+    | T1 (kb,b) -> if eq ka kb
+      then ret@@fun f -> make1 ka @@ f.app kb b a
+      else add@@insert ka a t
+    | T2 (kb,b,kc,c) -> if eq ka kb
+      then ret@@fun f -> make2 ka (f.app kb b a) kc c else if eq ka kc
+      then ret@@fun f -> make2 kb b ka (f.app kc c a)
+      else add@@insert ka a t
+    | T3 (kb,b,kc,c,kd,d) -> begin match cmp ka kc with
+        | 0 -> ret@@fun f -> make3 kb b ka (f.app kc c a) kd d
+        | 1 -> if eq ka kd
+          then ret@@fun f -> make3 kb b kc c ka (f.app kd d a)
+          else add@@insert ka a t
+        | _ -> if eq ka kb
+          then ret@@fun f -> make3 ka (f.app kb b a) kc c kd d
+          else add@@insert ka a t
+      end
+    | T4 (kb,b,kc,c,kd,d,ke,e) -> begin match cmp ka kd with
+        | 0 -> ret@@fun f ->
+          make4 kb b kc c ka (f.app kd d a) ke e
+        | 1 -> if eq ka ke
+          then ret@@fun f -> make4 kb b kc c kd d ka (f.app ke e a)
+          else add@@insert ka a t
+        | _ -> match cmp ka kc with
+          | 0 -> ret@@fun f ->
+            make4 kb b ka (f.app kc c a) kd d ke e
+          | 1 -> add@@insert ka a t
+          | _ -> if eq ka kb
+            then ret@@fun f ->
+              make4 ka (f.app kb b a) kc c kd d ke e
+            else add@@insert ka a t
+      end
+    | LL (x,y) -> if below ka y
+      then upsert ka a x
+          ~update:(fun k -> ret@@fun f -> LL (k f, y))
+          ~insert:(fun x -> add@@LR (x,y))
+      else upsert ka a y
+          ~update:(fun k -> ret@@fun f -> LL (x,k f))
+          ~insert:(fun y -> add@@bal@@LL (x,y))
+    | LR (x,y) -> if below ka y
+      then upsert ka a x
+          ~update:(fun k -> ret@@fun f -> LR (k f,y))
+          ~insert:(fun x -> add@@bal@@LR (x,y))
+      else upsert ka a y
+          ~update:(fun k -> ret@@fun f -> LR (x,k f))
+          ~insert:(fun y -> add@@LL (x,y))
+
+  let update f ka a x = upsert ka a x
+      ~update:(fun k -> k (merge ka f))
+      ~insert:(fun x -> x)
+
+  exception Field_not_found
+
+  let return (type a b) (k : a key) (ka : b key) (a : b) : a =
+    let T = Type_equal.Id.same_witness_exn k ka in
+    a
+  [@@inlined]
+
+  let rec get k = function
+    | T0 -> raise Field_not_found
+    | T1 (ka,a) -> if eq k ka then return k ka a
+      else raise Field_not_found
+    | T2 (ka,a,kb,b) -> begin match cmp k kb with
+        | 0 -> return k kb b
+        | 1 -> raise Field_not_found
+        | _ -> if eq k ka then return k ka a
+          else raise Field_not_found
+      end
+    | T3 (ka,a,kb,b,kc,c) -> begin match cmp k kb with
+        | 0 -> return k kb b
+        | 1 -> if eq k kc then return k kc c
+          else raise Field_not_found
+        | _ -> if eq k ka then return k ka a
+          else raise Field_not_found
+      end
+    | T4 (ka,a,kb,b,kc,c,kd,d) -> begin match cmp k kc with
+        | 0 -> return k kc c
+        | 1 -> if eq k kd then return k kd d
+          else raise Field_not_found
+        | _ -> match cmp k kb with
+          | 0 -> return k kb b
+          | 1 -> raise Field_not_found
+          | _ -> if eq k ka then return k ka a
+            else raise Field_not_found
+      end
+    | LL (x,y) | LR (x,y) ->
+      if below k y then get k x else get k y
+
+  let find k x = try Some (get k x) with
+    | Field_not_found -> None
+
+  let pp_field ppf (k,v) =
+    Format.fprintf ppf "%s : %a"
+      (Key.name k)
+      Sexp.pp_hum (Key.to_sexp k v)
+
+  let rec pp_fields ppf = function
+    | T0 -> ()
+    | T1 (ka,a) ->
+      Format.fprintf ppf "%a" pp_field (ka,a)
+    | T2 (ka,a,kb,b) ->
+      Format.fprintf ppf "%a;@ %a"
+        pp_field (ka,a)
+        pp_field (kb,b)
+    | T3 (ka,a,kb,b,kc,c) ->
+      Format.fprintf ppf "%a;@ %a;@ %a"
+        pp_field (ka,a)
+        pp_field (kb,b)
+        pp_field (kc,c)
+    | T4 (ka,a,kb,b,kc,c,kd,d) ->
+      Format.fprintf ppf "%a;@ %a;@ %a;@ %a"
+        pp_field (ka,a)
+        pp_field (kb,b)
+        pp_field (kc,c)
+        pp_field (kd,d)
+    | LR (x,y)
+    | LL (x,y) ->
+      Format.fprintf ppf "%a;@ %a"
+        pp_fields x pp_fields y
+
+  let pp ppf t =
+    Format.fprintf ppf "{@[<2>@,%a@]}" pp_fields t
+
+
+  let rec pp_tree ppf = function
+    | T0 -> Format.fprintf ppf "0"
+    | T1 _ -> Format.fprintf ppf "1"
+    | T2 _ -> Format.fprintf ppf "2"
+    | T3 _ -> Format.fprintf ppf "3"
+    | T4 _ -> Format.fprintf ppf "4"
+    | LR (x,y) ->
+      Format.fprintf ppf "(%a,%a)" pp_tree x pp_tree y
+    | LL (x,y) ->
+      Format.fprintf ppf "[%a,%a]" pp_tree x pp_tree y
+
+  type test = {
+    pos : int;
+    key : int key;
+    add : record -> record;
+    put : int -> record -> record;
+    get : record -> int;
+  }
+
+  let input n =
+    Sequence.range 0 n |>
+    Sequence.map ~f:(fun pos ->
+        let name = sprintf "f%d" pos in
+        let k = Key.create ~name sexp_of_int in
+        {
+          pos;
+          key = k;
+          add = insert k pos;
+          put = update (fun _ x -> x) k;
+          get = get k;
+        }) |>
+    Sequence.to_array
+
+  let test input =
+    let input = Array.copy input in
+    Array.permute input;
+    Array.fold input ~init:T0 ~f:(fun r {add} -> add r)
+
+
+  let pp_uid ppf uid =
+    Format.fprintf ppf "%a" Sexp.pp_hum (Uid.sexp_of_t uid)
+
+  ;;
+
+end
+
 module Record = struct
   module Key = Type_equal.Id
   module Uid = Type_equal.Id.Uid
@@ -788,17 +1143,15 @@ module Record = struct
   exception Merge_conflict of conflict
 
   let merge ~on_conflict x y =
-    Map.fold x ~init:y ~f:(fun ~key ~data:x v ->
-        Map.change v key ~f:(function
-            | None -> Some x
-            | Some y -> match (domain x).join x y with
-              | Ok x -> Some x
-              | Error err -> match on_conflict with
-                | `drop_both -> None
-                | `drop_left -> Some y
-                | `drop_right -> Some x
-                | `fail ->
-                  raise (Merge_conflict err)))
+    Map.merge x y ~f:(fun ~key:_ -> function
+        | `Left x | `Right x -> Some x
+        | `Both (x,y) -> match (domain x).join x y with
+          | Ok x -> Some x
+          | Error err -> match on_conflict with
+            | `drop_both -> None
+            | `drop_left -> Some y
+            | `drop_right -> Some x
+            | `fail -> raise (Merge_conflict err))
 
   let join x y =
     try Ok (merge ~on_conflict:`fail x y)
