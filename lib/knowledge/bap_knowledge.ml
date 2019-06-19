@@ -723,8 +723,8 @@ module Dict = struct
            'b key * 'b *
            'c key * 'c *
            'd key * 'd -> record
-    | LL of record * record
-    | LR of record * record
+    | LL : record * 'a key * 'a * record -> record
+    | LR : record * 'a key * 'a * record -> record
 
   type t = record
 
@@ -757,40 +757,44 @@ module Dict = struct
     T4 (ka,a, kb,b, kc,c, kd,d)
   [@@inlined]
   let make5 ka a kb b kc c kd d ke e =
-    LL (T2 (ka,a,kb,b),T3(kc,c,kd,d,ke,e))
+    LR (T2 (ka,a,kb,b),kc,c,T2(kd,d,ke,e))
   [@@inlined]
   let make6 ka a kb b kc c kd d ke e kf f =
-    LR (T3 (ka,a,kb,b,kc,c), T3 (kd,d,ke,e,kf,f))
+    LL (T2 (ka,a,kb,b),kc,c,T3 (kd,d,ke,e,kf,f))
   [@@inlined]
   let make7 ka a kb b kc c kd d ke e kf f kg g =
-    LL (T3 (ka,a,kb,b,kc,c), T4 (kd,d,ke,e,kf,f,kg,g))
+    LR (T3 (ka,a,kb,b,kc,c), kd,d, T3 (ke,e,kf,f,kg,g))
   [@@inlined]
   let make8 ka a kb b kc c kd d ke e kf f kg g kh h =
-    LR (T4 (ka,a,kb,b,kc,c,kd,d), T4(ke,e,kf,f,kg,g,kh,h))
+    LL (T3 (ka,a,kb,b,kc,c),kd,d, T4(ke,e,kf,f,kg,g,kh,h))
+  [@@inlined]
+  let make9 ka a kb b kc c kd d ke e kf f kg g kh h ki i =
+    LR (T4 (ka,a,kb,b,kc,c,kd,d),ke,e,T4(kf,f,kg,g,kh,h,ki,i))
   [@@inlined]
 
   type 'r visitor = {
     visit : 'a. 'a key -> 'a -> 'r -> 'r;
-  }
+  } [@@unboxed]
 
-  let rec below k = function
+  let below k = function
     | T0 -> assert false
     | T1 (x,_) -> k <$ x
     | T2 (x,_,_,_) -> k <$ x
     | T3 (x,_,_,_,_,_) -> k <$ x
     | T4 (x,_,_,_,_,_,_,_) -> k <$ x
-    | LL (x,_)
-    | LR (x,_) -> below k x
+    | LL (_,x,_,_) -> k <$ x
+    | LR (_,x,_,_) -> k <$ x
+  [@@inlined]
 
-  let rec above x k = match x with
+  let above x k = match x with
     | T0 -> assert false
     | T1 (x,_) -> x <$ k
     | T2 (_,_,x,_) -> x <$ k
     | T3 (_,_,_,_,x,_) -> x <$ k
     | T4 (_,_,_,_,_,_,x,_) -> x <$ k
-    | LL (_,x)
-    | LR (_,x) -> above x k
-
+    | LL (_,x,_,_) -> x <$ k
+    | LR (_,x,_,_) -> x <$ k
+  [@@inlined]
 
   let rec foreach x ~init f = match x with
     | T0 -> init
@@ -807,13 +811,16 @@ module Dict = struct
       f.visit kb b |>
       f.visit kc c |>
       f.visit kd d
-    | LL (x,y) | LR (x,y) ->
+    | LL (x,k,a,y) ->
+      let init = f.visit k a init in
+      foreach y ~init:(foreach x ~init f) f
+    | LR (x,k,a,y) ->
+      let init = f.visit k a init in
       foreach y ~init:(foreach x ~init f) f
 
   type ('b,'r) app = {
     app : 'a. 'a key -> 'a -> 'b -> 'r
-  }
-
+  } [@@unboxed]
 
   (* pre:
      - a is not in t;
@@ -846,56 +853,66 @@ module Dict = struct
       then make5 kb b kc c ka a kd d ke e else if ka <$ ke
       then make5 kb b kc c kd d ka a ke e
       else make5 kb b kc c kd d ke e ka a
-    | LL (b,c) ->
-      if below ka c
-      then LR (insert ka a b,c)
-      else bal (LL (b,insert ka a c))
-    | LR (b,c) ->
-      if below ka c
-      then bal (LR (insert ka a b,c))
-      else (LL (b,insert ka a c))
+    | LL (b,k,x,c) ->
+      if ka <$ k
+      then LR (insert ka a b,k,x,c)
+      else bal (LL (b,k,x,insert ka a c))
+    | LR (b,k,x,c) ->
+      if ka <$ k
+      then bal (LR (insert ka a b,k,x,c))
+      else (LL (b,k,x,insert ka a c))
   and bal : record -> record = function
     | T0 | T1 _ | T2 _ | T3 _ | T4 _ -> assert false
-    | LL (T2 (ka,a,kb,b), T4 (kc,c,kd,d,ke,e,kf,f)) ->
-      make6 ka a kb b kc c kd d ke e kf f
-    | LL (T3 (ka,a,kb,b,kc,c),
-          LL (T2 (kd,d,ke,e), T3(kf,f,kg,g,kh,h))) ->
-      make8 ka a kb b kc c kd d ke e kf f kg g kh h
-    | LL (T4 (ka,a,kb,b,kc,c,kd,d),
-          LR (T3(ke,e,kf,f,kg,g),(T3 (kh,h,ki,i,kj,j)))) ->
-      LR (make5 ka a kb b kc c kd d ke e,
-          make5 kf f kg g kh h ki i kj j)
-    | LR (T4 (ka,a,kb,b,kc,c,kd,d),
-          T3(ke,e,kf,f,kg,g)) ->
+    | LL (T2 (ka,a,kb,b), kc,c, T4 (kd,d,ke,e,kf,f,kg,g)) ->
       make7 ka a kb b kc c kd d ke e kf f kg g
-    | LR (LL (T2 (ka,a,kb,b), T3 (kc,c,kd,d,ke,e)),
-          T4 (kf,f,kg,g,kh,h,ki,i)) ->
+    | LL (T3 (ka,a,kb,b,kc,c),kd,d,
+          LR (T2 (ke,e,kf,f), kg,g, T2(kh,h,ki,i))) ->
+      make9 ka a kb b kc c kd d ke e kf f kg g kh h ki i
+    | LL (T4 (ka,a,kb,b,kc,c,kd,d),ke,e,
+          LL (T2(kf,f,kg,g),kh,h,(T3 (ki,i,kj,j,kk,k)))) ->
+      LR (make5 ka a kb b kc c kd d ke e,
+          kf,f,
+          make5 kg g kh h ki i kj j kk k)
+    | LR (T4 (ka,a,kb,b,kc,c,kd,d),ke,e,
+          T3 (kf,f,kg,g,kh,h)) ->
+      make8 ka a kb b kc c kd d ke e kf f kg g kh h
+    | LR (LR (T2 (ka,a,kb,b), kc,c, T2 (kd,d,ke,e)),
+          kf,f,
+          T4 (kg,g,kh,h,ki,i,kj,j)) ->
       LL (make4 ka a kb b kc c kd d,
-          make5 ke e kf f kg g kh h ki i)
-    | LL (LL (T2 (ka,a, kb,b), T3 (kc,c, kd,d, ke,e)),
-          LL (T3 (kf,f, kg,g, kh,h), T4 (ki,i, kj,j, kk,k, kl,l))) ->
+          ke,e,
+          make5 kf f kg g kh h ki i kj j)
+    | LL (LR (T2 (ka,a, kb,b), kc,c, T2 (kd,d, ke,e)),kf,f,
+          LR (T3 (kg,g,kh,h,ki,i),kj,j, T3 (kk,k, kl,l, km,m))) ->
       LR (make6 ka a kb b kc c kd d ke e kf f,
-          make6 kg g kh h ki i kj j kk k kl l)
-    | LL (x,y) -> pop_max y {app = fun ka a y -> LR (insert ka a x,y)}
-    | LR (x,y) -> pop_min x {app = fun ka a x -> LL (x,insert ka a y)}
+          kg,g,
+          make6 kh h ki i kj j kk k kl l km m)
+    | LL (x,ka,a,y) -> pop_max y {app = fun kb b y ->
+        LR (insert ka a x,kb,b,y)}
+    | LR (x,ka,a,y) -> pop_min x {app = fun kb b x ->
+        LL (x,kb,b,insert ka a y)}
   and pop_max t f = match t with
     | T0 | T1 _ -> assert false
     | T2 (ka,a,kb,b) -> f.app ka a (T1 (kb,b))
     | T3 (ka,a,kb,b,kc,c) -> f.app ka a (T2 (kb,b,kc,c))
     | T4 (ka,a,kb,b,kc,c,kd,d) -> f.app ka a (T3 (kb,b,kc,c,kd,d))
-    | LL (T2 (ka,a,kb,b),T3(kc,c,kd,d,ke,e)) ->
+    | LR (T2 (ka,a,kb,b),kc,c,T2(kd,d,ke,e)) ->
       f.app ka a (T4 (kb,b,kc,c,kd,d,ke,e))
-    | LR (x,y) -> pop_max x {app = fun ka a x -> f.app ka a (LL (x,y))}
-    | LL (x,y) -> pop_max x {app = fun ka a x -> f.app ka a (bal (LL (x,y)))}
+    | LR (x,kb,b,y) -> pop_max x {app = fun ka a x ->
+        f.app ka a (LL (x,kb,b,y))}
+    | LL (x,kb,b,y) -> pop_max x {app = fun ka a x ->
+        f.app ka a (bal (LL (x,kb,b,y)))}
   and pop_min t f = match t with
     | T0 | T1 _ -> assert false
     | T2 (ka,a,kb,b) -> f.app kb b (T1 (ka,a))
     | T3 (ka,a,kb,b,kc,c) -> f.app kc c (T2 (ka,a,kb,b))
     | T4 (ka,a,kb,b,kc,c,kd,d) -> f.app kd d (T3 (ka,a,kb,b,kc,c))
-    | LL (T2 (ka,a,kb,b),T3(kc,c,kd,d,ke,e)) ->
+    | LR (T2 (ka,a,kb,b),kc,c,T2(kd,d,ke,e)) ->
       f.app ke e (T4 (ka,a,kb,b,kc,c,kd,d))
-    | LL (x,y) -> pop_min y {app = fun ka a y -> f.app ka a (LR (x,y))}
-    | LR (x,y) -> pop_min y {app = fun ka a y -> f.app ka a (bal (LR (x,y)))}
+    | LL (x,kb,b,y) -> pop_min y {app = fun ka a y ->
+        f.app ka a (LR (x,kb,b,y))}
+    | LR (x,kb,b,y) -> pop_min y {app = fun ka a y ->
+        f.app ka a (bal (LR (x,kb,b,y)))}
 
   let cmp x y = compare_keys x y [@@inlined]
   let eq x y = compare_keys x y = 0 [@@inlined]
@@ -951,21 +968,25 @@ module Dict = struct
               make4 ka (app f ka kb b a) kc c kd d ke e
             else add@@insert ka a t
       end
-    | LL (x,y) -> if below ka y
-      then upsert ka a x
-          ~update:(fun k -> ret@@fun f -> LL (k f, y))
-          ~insert:(fun x -> add@@LR (x,y))
-      else upsert ka a y
-          ~update:(fun k -> ret@@fun f -> LL (x,k f))
-          ~insert:(fun y -> add@@bal@@LL (x,y))
-    | LR (x,y) -> if below ka y
-      then upsert ka a x
-          ~update:(fun k -> ret@@fun f -> LR (k f,y))
-          ~insert:(fun x -> add@@bal@@LR (x,y))
-      else upsert ka a y
-          ~update:(fun k -> ret@@fun f -> LR (x,k f))
-          ~insert:(fun y -> add@@LL (x,y))
-
+    | LL (x,kb,b,y) -> begin match cmp ka kb with
+        | 0 -> ret@@fun f -> LL (x,ka,app f ka kb b a,y)
+        | 1 -> upsert ka a y
+                 ~update:(fun k -> ret@@fun f -> LL (x,kb,b,k f))
+                 ~insert:(fun y -> add@@bal@@LL (x,kb,b,y))
+        | _ ->
+          upsert ka a x
+            ~update:(fun k -> ret@@fun f -> LL (k f,kb,b, y))
+            ~insert:(fun x -> add@@LR (x,kb,b,y))
+      end
+    | LR (x,kb,b,y) -> begin match cmp ka kb with
+        | 0 -> ret@@fun f -> LR (x,ka,app f ka kb b a,y)
+        | 1 -> upsert ka a y
+                 ~update:(fun k -> ret@@fun f -> LR (x,kb,b,k f))
+                 ~insert:(fun y -> add@@LL (x,kb,b,y))
+        | _ -> upsert ka a x
+                 ~update:(fun k -> ret@@fun f -> LR (k f,kb,b,y))
+                 ~insert:(fun x -> add@@bal@@LR (x,kb,b,y))
+      end
 
   let monomorphic_merge
     : type t. t key -> (t -> t -> t) -> merge =
@@ -1022,8 +1043,17 @@ module Dict = struct
           | _ -> if eq k ka then return k ka a
             else raise Field_not_found
       end
-    | LL (x,y) | LR (x,y) ->
-      if below k y then get k x else get k y
+    | LL (x,ka,a,y) -> begin match cmp k ka with
+        | 0 -> return k ka a
+        | 1 -> get k y
+        | _ -> get k x
+      end
+    | LR (x,ka,a,y) -> begin match cmp k ka with
+        | 0 -> return k ka a
+        | 1 -> get k y
+        | _ -> get k x
+      end
+
 
   let find k x = try Some (get k x) with
     | Field_not_found -> None
@@ -1062,10 +1092,12 @@ module Dict = struct
         pp_field (kb,b)
         pp_field (kc,c)
         pp_field (kd,d)
-    | LR (x,y)
-    | LL (x,y) ->
-      Format.fprintf ppf "%a;@ %a"
-        pp_fields x pp_fields y
+    | LR (x,ka,a,y) ->
+      Format.fprintf ppf "%a;@ %a;@ %a"
+        pp_fields x pp_field (ka,a) pp_fields y
+    | LL (x,ka,a,y) ->
+      Format.fprintf ppf "%a;@ %a;@ %a"
+        pp_fields x pp_field (ka,a) pp_fields y
 
   let pp ppf t =
     Format.fprintf ppf "{@[<2>@,%a@]}" pp_fields t
@@ -1077,10 +1109,10 @@ module Dict = struct
     | T2 _ -> Format.fprintf ppf "2"
     | T3 _ -> Format.fprintf ppf "3"
     | T4 _ -> Format.fprintf ppf "4"
-    | LR (x,y) ->
-      Format.fprintf ppf "(%a,%a)" pp_tree x pp_tree y
-    | LL (x,y) ->
-      Format.fprintf ppf "[%a,%a]" pp_tree x pp_tree y
+    | LR (x,_,_,y) ->
+      Format.fprintf ppf "(%a,1,%a)" pp_tree x pp_tree y
+    | LL (x,_,_,y) ->
+      Format.fprintf ppf "[%a,1,%a]" pp_tree x pp_tree y
 
   type test = {
     pos : int;
