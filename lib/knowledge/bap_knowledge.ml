@@ -726,6 +726,10 @@ module Dict = struct
     | LL of record * record
     | LR of record * record
 
+  type t = record
+
+  let empty = T0
+
   (*
      - LL (x,y) : h(x) = h(y) - 1, if balanced
                 | h(x) = h(y) - 2, otherwise
@@ -765,8 +769,8 @@ module Dict = struct
     LR (T4 (ka,a,kb,b,kc,c,kd,d), T4(ke,e,kf,f,kg,g,kh,h))
   [@@inlined]
 
-  type ('b,'r) app = {
-    app : 'a. 'a key -> 'a -> 'b -> 'r;
+  type 'r visitor = {
+    visit : 'a. 'a key -> 'a -> 'r -> 'r;
   }
 
   let rec below k = function
@@ -788,10 +792,28 @@ module Dict = struct
     | LR (_,x) -> above x k
 
 
-  let grow x y = match x,y with
-    | T2 (ka,a,kb,b), T2 (kc,c,kd,d) ->
-      T4 (ka,a,kb,b,kc,c,kd,d)
-    | x,y -> LR (x,y)
+  let rec foreach x ~init f = match x with
+    | T0 -> init
+    | T1 (ka,a) -> f.visit ka a init
+    | T2 (ka,a,kb,b) ->
+      f.visit ka a init |>
+      f.visit kb b
+    | T3 (ka,a,kb,b,kc,c) ->
+      f.visit ka a init |>
+      f.visit kb b |>
+      f.visit kc c
+    | T4 (ka,a,kb,b,kc,c,kd,d) ->
+      f.visit ka a init |>
+      f.visit kb b |>
+      f.visit kc c |>
+      f.visit kd d
+    | LL (x,y) | LR (x,y) ->
+      foreach y ~init:(foreach x ~init f) f
+
+  type ('b,'r) app = {
+    app : 'a. 'a key -> 'a -> 'b -> 'r
+  }
+
 
   (* pre:
      - a is not in t;
@@ -878,50 +900,55 @@ module Dict = struct
   let cmp x y = compare_keys x y [@@inlined]
   let eq x y = compare_keys x y = 0 [@@inlined]
 
-  type 'a merge = {
-    app : 'b. 'b key -> 'b -> 'a -> 'a
-  }
+  (* [merge k x y] *)
+  type merge = {
+    merge : 'a. 'a key -> 'a -> 'a -> 'a
+  } [@@unboxed]
+  (* we could use a GADT, but it couldn't be unboxed,
+     an since we could create merge functions a lot,
+     it is better not to allocate them.*)
 
-
-  let merge (type a) (ka : a key) f : a merge = {
-    app = fun (type b) (kb : b key) (b:b) (a:a) ->
+  let merge
+    : type a b. merge -> a key -> b key -> b -> a -> a =
+    fun {merge} ka kb b a ->
       let T = Type_equal.Id.same_witness_exn ka kb in
-      f (b:a) a
-  }
+      merge kb b a
 
-  let rec upsert
-      ~update:ret
-      ~insert:add ka a t = match t with
-    | T0 -> add@@make1 ka a
+
+  let app = merge
+
+  let rec upsert ~update:ret ~insert:add ka a t =
+    match t with
+    | T0 -> add (make1 ka a)
     | T1 (kb,b) -> if eq ka kb
-      then ret@@fun f -> make1 ka @@ f.app kb b a
-      else add@@insert ka a t
+      then ret (fun f -> make1 ka (app f ka kb b a))
+      else add (insert ka a t)
     | T2 (kb,b,kc,c) -> if eq ka kb
-      then ret@@fun f -> make2 ka (f.app kb b a) kc c else if eq ka kc
-      then ret@@fun f -> make2 kb b ka (f.app kc c a)
-      else add@@insert ka a t
+      then ret (fun f -> make2 ka (app f ka kb b a) kc c) else if eq ka kc
+      then ret (fun f -> make2 kb b ka (app f ka kc c a))
+      else add (insert ka a t)
     | T3 (kb,b,kc,c,kd,d) -> begin match cmp ka kc with
-        | 0 -> ret@@fun f -> make3 kb b ka (f.app kc c a) kd d
+        | 0 -> ret (fun f -> make3 kb b ka (app f ka kc c a) kd d)
         | 1 -> if eq ka kd
-          then ret@@fun f -> make3 kb b kc c ka (f.app kd d a)
-          else add@@insert ka a t
+          then ret (fun f -> make3 kb b kc c ka (app f ka kd d a))
+          else add (insert ka a t)
         | _ -> if eq ka kb
-          then ret@@fun f -> make3 ka (f.app kb b a) kc c kd d
+          then ret (fun f -> make3 ka (app f ka kb b a) kc c kd d)
           else add@@insert ka a t
       end
     | T4 (kb,b,kc,c,kd,d,ke,e) -> begin match cmp ka kd with
         | 0 -> ret@@fun f ->
-          make4 kb b kc c ka (f.app kd d a) ke e
+          make4 kb b kc c ka (app f ka kd d a) ke e
         | 1 -> if eq ka ke
-          then ret@@fun f -> make4 kb b kc c kd d ka (f.app ke e a)
+          then ret@@fun f -> make4 kb b kc c kd d ka (app f ka ke e a)
           else add@@insert ka a t
         | _ -> match cmp ka kc with
           | 0 -> ret@@fun f ->
-            make4 kb b ka (f.app kc c a) kd d ke e
+            make4 kb b ka (app f ka kc c a) kd d ke e
           | 1 -> add@@insert ka a t
           | _ -> if eq ka kb
             then ret@@fun f ->
-              make4 ka (f.app kb b a) kc c kd d ke e
+              make4 ka (app f ka kb b a) kc c kd d ke e
             else add@@insert ka a t
       end
     | LL (x,y) -> if below ka y
@@ -939,8 +966,26 @@ module Dict = struct
           ~update:(fun k -> ret@@fun f -> LR (x,k f))
           ~insert:(fun y -> add@@LL (x,y))
 
-  let update f ka a x = upsert ka a x
-      ~update:(fun k -> k (merge ka f))
+
+  let monomorphic_merge
+    : type t. t key -> (t -> t -> t) -> merge =
+    fun k f -> {
+        merge = fun (type a)
+          (kb : a key) (b : a) (a : a) : a ->
+          let T = Type_equal.Id.same_witness_exn k kb in
+          f b a
+      }
+
+  let update f ka a x =
+    let f = monomorphic_merge ka f in
+    upsert ka a x
+      ~update:(fun k -> k f)
+      ~insert:(fun x -> x)
+
+  let set ka a x =
+    let f = monomorphic_merge ka (fun _ x -> x) in
+    upsert ka a x
+      ~update:(fun k -> k f)
       ~insert:(fun x -> x)
 
   exception Field_not_found
@@ -982,6 +1027,16 @@ module Dict = struct
 
   let find k x = try Some (get k x) with
     | Field_not_found -> None
+
+  let merge (type a) m x y =
+    foreach y ~init:x {
+      visit = fun (type b c) (ka : b key) (a : b) x ->
+        upsert ka a x
+          ~insert:(fun x -> x)
+          ~update:(fun k -> k m)
+    }
+
+
 
   let pp_field ppf (k,v) =
     Format.fprintf ppf "%s : %a"
@@ -1063,12 +1118,12 @@ module Dict = struct
 end
 
 module Record = struct
-  module Key = Type_equal.Id
-  module Uid = Type_equal.Id.Uid
+  module Key = Dict.Key
+  module Uid = Dict.Uid
 
-  type univ = Pack : 'a Key.t * 'a -> univ
-  type record = univ Map.M(Uid).t
+  type record = Dict.t
   type t = record
+  type 'a key = 'a Dict.key
 
   module Repr = struct
     type entry = {
@@ -1079,38 +1134,36 @@ module Record = struct
     type t = entry list [@@deriving bin_io]
   end
 
-  type slot_io = {
-    reader : string -> univ;
-    writer : univ -> string;
+  type vtable = {
+    order   : 'a. 'a key -> 'a -> 'a -> Order.partial;
+    join    : 'a. 'a key -> 'a -> 'a -> ('a,conflict) result;
+    inspect : 'a. 'a key -> 'a -> Sexp.t;
   }
 
-  type slot_domain = {
-    inspect : univ -> Sexp.t;
-    order : univ -> univ -> Order.partial;
-    join : univ -> univ -> (univ,conflict) result;
-    empty  : univ;
+  type slot_io = {
+    reader : string -> record -> record;
+    writer : record -> string option;
   }
 
   let io : slot_io Hashtbl.M(String).t =
     Hashtbl.create (module String)
 
-  let domains : slot_domain Hashtbl.M(String).t =
-    Hashtbl.create (module String)
+  let vtables : vtable Hashtbl.M(Uid).t =
+    Hashtbl.create (module Uid)
 
-  let uid (Pack (k,_)) = Key.uid k
-  let name (Pack (k,_)) = Key.name k
-  let domain x = Hashtbl.find_exn domains (name x)
-  let eq = Type_equal.Id.same_witness_exn
+  let empty = Dict.empty
 
+  let uid = Key.uid
+  let domain k = Hashtbl.find_exn vtables (uid k)
 
-  let empty = Map.empty (module Uid)
-
-  let (<:=) x y = Map.for_all x ~f:(fun x ->
-      match Map.find y (uid x) with
-      | None -> false
-      | Some y -> match (domain x).order x y with
-        | LT | EQ -> true
-        | GT | NC -> false)
+  let (<:=) x y = Dict.foreach ~init:true x {
+      visit = fun k x yes ->
+        yes && match Dict.find k y with
+        | None -> false
+        | Some y -> match (domain k).order k x y with
+          | LT | EQ -> true
+          | GT | NC -> false
+    }
 
   let order : t -> t -> Order.partial = fun x y ->
     match x <:= y, y <:= x with
@@ -1120,105 +1173,106 @@ module Record = struct
     | false,false -> NC
 
 
-  let commit (type p) (key : p Key.t) v x =
-    let x = Pack (key,x) in
-    let key = Key.uid key in
-    match Map.find v key with
-    | None -> Ok (Map.set v key x)
-    | Some y ->
-      match (domain y).join y x with
-      | Ok x -> Ok (Map.set v key x)
+  let commit (type p) {Domain.join} (key : p Key.t) v x =
+    match Dict.find key v with
+    | None -> Ok (Dict.insert key x v)
+    | Some y -> match join y x with
+      | Ok x -> Ok (Dict.set key x v)
       | Error err -> Error err
 
-  let put k v x = Map.set v (Key.uid k) (Pack (k,x))
+  let put k v x = Dict.set k x v
   let get
     : type a. a Key.t -> a Domain.t -> record -> a =
     fun k {Domain.empty} data ->
-    match Map.find data (Key.uid k) with
+    match Dict.find k data with
     | None -> empty
-    | Some (Pack (kx,x)) ->
-      let Type_equal.T = eq kx k in
-      x
+    | Some x -> x
 
   exception Merge_conflict of conflict
 
-  let merge ~on_conflict x y =
-    Map.merge x y ~f:(fun ~key:_ -> function
-        | `Left x | `Right x -> Some x
-        | `Both (x,y) -> match (domain x).join x y with
-          | Ok x -> Some x
-          | Error err -> match on_conflict with
-            | `drop_both -> None
-            | `drop_left -> Some y
-            | `drop_right -> Some x
-            | `fail -> raise (Merge_conflict err))
+  let try_merge ~on_conflict old our =
+    Dict.foreach our ~init:(Ok old) {
+      visit = fun kb b out ->
+        match out with
+        | Error _ as err -> err
+        | Ok out -> match Dict.find kb old with
+          | None -> Ok (Dict.insert kb b out)
+          | Some a -> match (domain kb).join kb a b with
+            | Ok b -> Ok (Dict.set kb b out)
+            | Error err -> match on_conflict with
+              | `drop_both -> assert false
+              | `drop_left -> Ok (Dict.set kb b out)
+              | `drop_right -> Ok (Dict.set kb a out)
+              | `fail -> Error err
+    }
 
-  let join x y =
-    try Ok (merge ~on_conflict:`fail x y)
-    with Merge_conflict err -> Error err
+
+  let join x y = try_merge ~on_conflict:`fail x y
+
+  let eq = Type_equal.Id.same_witness_exn
 
   let register_persistent (type p)
       (key : p Key.t)
       (p : p Persistent.t) =
     let slot = Key.name key in
-    let writer (Pack (k,x)) =
-      let Type_equal.T = eq k key in
-      Persistent.to_string p x in
-    let reader s =
-      Pack (key,Persistent.of_string p s) in
-    Hashtbl.add_exn io ~key:slot ~data:{reader;writer}
+    Hashtbl.add_exn io ~key:slot ~data:{
+      reader = begin fun x dict ->
+        let x = Persistent.of_string p x in
+        Dict.insert key x dict
+      end;
+      writer = begin fun dict ->
+        match Dict.find key dict with
+        | None -> None
+        | Some s -> Some (Persistent.to_string p s)
+      end
+    }
 
   include Binable.Of_binable(Repr)(struct
       type t = record
       let to_binable s =
-        Map.data s |>
-        List.rev_filter_map ~f:(fun (Pack (k,_) as x) ->
+        Dict.foreach s ~init:[] {
+          visit = fun k _ xs ->
             let name = Key.name k in
             match Hashtbl.find io name with
-            | None -> None
-            | Some {writer=to_string} ->
-              Some Repr.{name; data = to_string x;})
+            | None -> xs
+            | Some {writer} ->
+              match writer s with
+              | None -> xs
+              | Some data -> Repr.{name; data} :: xs
+        }
 
       let of_binable entries =
         List.fold entries ~init:empty ~f:(fun s {Repr.name; data} ->
             match Hashtbl.find io name with
             | None -> s
-            | Some {reader=parse} ->
-              let Pack (k,_) as data = parse data in
-              Map.set s (Key.uid k) data)
+            | Some {reader} -> reader data s)
     end)
+
+  let eq = Type_equal.Id.same_witness_exn
 
   let register_domain
     : type p. p Key.t -> p Domain.t -> unit =
     fun key dom ->
-    let name = Key.name key in
-    let order (Pack (kx,x)) (Pack (ky,y)) =
-      let Type_equal.T = eq kx ky in
-      let Type_equal.T = eq kx key in
-      dom.order x y in
-    let empty = Pack (key, dom.empty) in
-    let inspect (Pack (kx,x)) =
-      let Type_equal.T = eq kx key in
-      dom.inspect x in
-    let join (Pack (kx,x)) (Pack (ky,y)) =
-      let Type_equal.T = eq kx key in
-      let Type_equal.T = eq ky key in
-      match dom.join x y with
-      | Ok x -> Ok (Pack (key, x))
-      | Error err -> Error err in
-    Hashtbl.add_exn domains ~key:name ~data:{
-      inspect;
-      empty;
-      order;
-      join;
-    }
+    let vtable = {
+      order = begin fun (type a) (k : a key) (x : a) (y : a) ->
+        let T = eq k key in
+        dom.order x y
+      end;
+      inspect = begin fun (type a) (k : a key) (x : a) ->
+        let T = eq k key in
+        dom.inspect x;
+      end;
+      join = begin fun (type a) (k : a key) (x : a) (y : a) :
+        (a,conflict) result ->
+        let T = eq k key in
+        dom.join x y
+      end;
+    } in
+    Hashtbl.add_exn vtables ~key:(uid key) ~data:vtable
 
   let sexp_of_t x =
-    Sexp.List (Map.data x |> List.map ~f:(fun x ->
-        Sexp.List [
-          Atom (name x);
-          (domain x).inspect x;
-        ]))
+    let s = Format.asprintf "%a" Dict.pp x in
+    Sexp.Atom s
 
   let t_of_sexp = opaque_of_sexp
 
@@ -1400,10 +1454,14 @@ module Knowledge = struct
         | `drop_new -> if Int63.(x.time < y.time)
           then `drop_right else `drop_left
         | #strategy as other -> other in
-      {
-        x with time = next_second ();
-               data = Record.merge ~on_conflict x.data y.data
-      }
+      match Record.try_merge ~on_conflict x.data y.data with
+      | Ok data -> {
+          x with time = next_second ();
+                 data;
+        }
+      | Error _ ->
+        (* try_merge fails only if `fail is passed *)
+        assert false
 
 
     let join x y = match Record.join x.data y.data with
@@ -1491,7 +1549,7 @@ module Knowledge = struct
             s with classes = Map.set classes ~key:slot.cls.id ~data:{
             objs with vals = Map.update vals obj ~f:(function
             | None -> Record.(put slot.key empty x)
-            | Some v -> match Record.commit slot.key v x with
+            | Some v -> match Record.commit slot.dom slot.key v x with
               | Ok r -> r
               | Error err -> raise (Record.Merge_conflict err))}}
         with Record.Merge_conflict err ->
