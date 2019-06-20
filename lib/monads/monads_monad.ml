@@ -40,9 +40,9 @@ module Monad = struct
 
 
     module Lift = struct
-      let nullary = return
-      let unary f a = a >>| f
-      let binary f a b = a >>= fun a -> b >>| fun b -> f a b
+      let nullary = return [@@inlined]
+      let unary f a = a >>| f [@@inlined]
+      let binary f a b = a >>= fun a -> b >>| fun b -> f a b [@@inlined]
       let ternary f a b c = a >>= fun a -> b >>= fun b -> c >>| fun c -> f a b c
       let quaternary f a b c d =
         a >>= fun a -> b >>= fun b -> c >>= fun c -> d >>| fun d ->
@@ -52,7 +52,7 @@ module Monad = struct
         f a b c d e
 
       module Syntax = struct
-        let (!!) = nullary
+        let (!!) x = nullary x [@@inlined]
         let (!$) = unary
         let (!$$) = binary
         let (!$$$) = ternary
@@ -64,23 +64,23 @@ module Monad = struct
     open Lift.Syntax
 
     module Fn = struct
-      let id = return
-      let nothing = return
-      let ignore m = m >>| ignore
-      let non f x = f x >>| not
+      let id x = return x [@@inlined]
+      let nothing x = return x [@@inlined]
+      let ignore m = m >>| ignore [@@inlined]
+      let non f x = f x >>| not [@@inlined]
       let apply_n_times ~n f x =
         let rec loop n x =
           if n <= 0 then return x
           else f x >>= loop (n-1) in
         loop n x
 
-      let compose f g x = g x >>= f
+      let compose f g x = g x >>= f [@@inlined]
     end
 
     module Syntax = struct
       include Monad_infix
       include Lift.Syntax
-      let (>=>) g f = Fn.compose f g
+      let (>=>) g f = Fn.compose f g [@@inlined]
     end
     open Syntax
 
@@ -224,9 +224,7 @@ module Monad = struct
         module Base = Eager_base(B)
         include Make(Base)
       end
-
     end
-
 
     module List = Collection.Delay(struct
         type 'a t = 'a list
@@ -245,8 +243,8 @@ module Monad = struct
         let fold xs ~init ~f finish =
           Sequence.delayed_fold xs ~init ~f:(fun a x ~k ->
             f a x k) ~finish
-        let zero () = Sequence.empty
-        let return = Sequence.return
+        let zero () = Sequence.empty [@@inlined]
+        let return x = Sequence.return x [@@inlined]
         let plus = Sequence.append
       end)
 
@@ -840,7 +838,7 @@ module Writer = struct
 
     let returnw x = M.return @@ writer x
     let write x = M.return @@  writer ((), x)
-    let read m = m >>= fun (Writer (x,e)) -> returnw (e,e)
+    let read m = m >>= fun (Writer (_,e)) -> returnw (e,e)
     let listen m = m >>= fun (Writer (x,e)) ->  returnw ((x,e),e)
     let run m = m >>| fun (Writer (x,e)) -> (x,e)
     let exec m = m >>| fun (Writer ((),e)) -> e
@@ -966,7 +964,7 @@ module State = struct
     s : 'b;
   }
 
-  type ('a,'e) state = State of ('e -> 'a)
+  type ('a,'e) state = State of ('e -> 'a) [@@unboxed]
 
 
   module Tp(T : T1)(M : Monad.S) = struct
@@ -988,22 +986,21 @@ module State = struct
     type 'a result = 'a M.t
     module Basic = struct
       include Tp(T)(M)
-      let return x = make @@ fun s -> M.return {x;s}
-      let bind m f = make @@ fun s -> m=>s >>= fun {x;s} -> f x => s
-      let map m ~f = make @@ fun s -> m=>s >>| fun {x;s} -> {x=f x;s}
+      let return x = make @@ fun s -> M.return {x;s} [@@inlined]
+      let bind m f = make @@ fun s -> m=>s >>= fun {x;s} -> f x => s [@@inlined]
+      let map m ~f = make @@ fun s -> m=>s >>| fun {x;s} -> {x=f x;s} [@@inlined]
       let map = `Custom map
     end
-    let put s    = make @@ fun _ -> M.return {x=();s}
-    let get ()   = make @@ fun s -> M.return {x=s;s}
-    let gets f   = make @@ fun s -> M.return {x=f s;s}
-    let update f = make @@ fun s -> M.return {x=();s = f s}
+    let put s    = make @@ fun _ -> M.return {x=();s} [@@inlined]
+    let get ()   = make @@ fun s -> M.return {x=s;s} [@@inlined]
+    let gets f   = make @@ fun s -> M.return {x=f s;s} [@@inlined]
+    let update f = make @@ fun s -> M.return {x=();s = f s} [@@inlined]
     let modify m f =
-      make @@ fun s -> m=>s >>= fun {x;s} -> M.return {x; s = f s}
+      make @@ fun s -> m=>s >>= fun {x;s} -> M.return {x; s = f s} [@@inlined]
     let run m s = M.(m => s >>| fun {x;s} -> (x,s))
     let eval m s = M.(run m s >>| fst)
     let exec m s = M.(run m s >>| snd)
-    let lift m = make @@ fun s ->
-      M.bind m (fun x -> M.return {x;s})
+    let lift m = make @@ fun s -> M.bind m (fun x -> M.return {x;s}) [@@inlined]
     include Basic
     include Monad.Make2(Basic)
   end
