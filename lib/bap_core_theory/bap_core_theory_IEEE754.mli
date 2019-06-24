@@ -1,5 +1,4 @@
-open Bap_core_theory_sort
-
+open Bap_core_theory_value
 type ('a,'e,'t) t
 type ('a,'e,'t) ieee754 = ('a,'e,'t) t
 

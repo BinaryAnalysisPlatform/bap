@@ -41,7 +41,7 @@ val shouldn't : may  property -> t -> t
 
 
 module Slot : sig
-  type 'a t = (unit Theory.Program.Semantics.cls, 'a) KB.slot
+  type 'a t = (Theory.Effect.cls, 'a) KB.slot
   val name : string t
   val asm :  string t
   val ops :  op array option t

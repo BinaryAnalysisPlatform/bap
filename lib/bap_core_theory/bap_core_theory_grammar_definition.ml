@@ -1,4 +1,4 @@
-open Bap_core_theory_sort
+open Bap_core_theory_value
 type word = Bitvec.t
 
 module IEEE754 = Bap_core_theory_IEEE754

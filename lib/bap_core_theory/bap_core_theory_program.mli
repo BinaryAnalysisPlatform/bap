@@ -5,12 +5,12 @@ module Effect = Bap_core_theory_effect
 
 type cls
 type program = cls
-type t = cls Knowledge.value
-val cls : program Knowledge.cls
+type t = (program,unit) Knowledge.cls Knowledge.value
+val cls : (program,unit) Knowledge.cls
 module Semantics : sig
-  type +'a cls = 'a Effect.spec
-  type t = unit cls Knowledge.value
-  val cls : 'a cls Knowledge.cls
+  type cls = Effect.cls
+  type t = unit Effect.t
+  val cls : (cls, unit Effect.sort) Knowledge.cls
   val slot : (program, t) Knowledge.slot
   include Knowledge.Value.S with type t := t
 end

@@ -1,7 +1,7 @@
 open Core_kernel
 open Bap_knowledge
 open Bap_core_theory_definition
-open Bap_core_theory_sort
+open Bap_core_theory_value
 
 module Value = Knowledge.Value
 module Grammar = Bap_core_theory_grammar_definition
@@ -61,7 +61,8 @@ let bool = Bool.t
 
 type Knowledge.conflict += Error
 
-let (>>->) x f = x >>= fun x -> f (Value.cls x) x
+let (>>->) x f =
+  x >>= fun x -> f (KB.Class.sort (Value.cls x)) x
 
 module Make(S : Core) = struct
   open S
@@ -82,8 +83,8 @@ module Make(S : Core) = struct
     | None -> Var.Ident.of_string v
     | Some r -> r
 
-  let pass = perform Effect.bot
-  let skip = perform Effect.bot
+  let pass = perform Effect.Sort.bot
+  let skip = perform Effect.Sort.bot
   let newlabel = Knowledge.Object.create Program.cls
 
   let rec expw : type s b e r.
@@ -142,7 +143,8 @@ module Make(S : Core) = struct
         let concat xs =
           Knowledge.List.fold ~init:([],0) xs ~f:(fun (xs,s) x ->
               expw x >>| fun x ->
-              !!x::xs, s + Bitv.size (Value.cls x)) >>= fun (xs,sz) ->
+              !!x::xs, s + Bitv.size (KB.Class.sort (Value.cls x)))
+          >>= fun (xs,sz) ->
           concat (bits sz) (List.rev xs)
 
         let let_bit v x y =

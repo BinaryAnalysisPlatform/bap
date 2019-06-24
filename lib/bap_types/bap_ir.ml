@@ -168,39 +168,34 @@ type jmp_kind =
 type intent = In | Out | Both [@@deriving bin_io, compare, sexp]
 
 module Rhs : sig
-  type top = unit Theory.Sort.exp Knowledge.Class.abstract
+  type top = (Theory.Value.cls, unit) KB.cls
   type t = top Knowledge.value [@@deriving bin_io, compare, sexp]
 
   val empty : t
-  val of_value : 'a Theory.Sort.exp KB.value -> t
+  val of_value : 'a Theory.value -> t
   val of_exp : exp -> t
   val with_exp : exp -> t -> t
   val exp : t -> exp
 
   include Base.Comparable.S with type t := t
 end = struct
-  type top = unit Theory.Sort.exp KB.Class.abstract
-  let top : top KB.cls = Theory.Sort.t
+  type top = (Theory.Value.cls, unit) KB.cls
+  let cls : top = Theory.Value.cls
 
-  let forget v =
-    let s = KB.Value.cls v in
-    KB.Value.clone (KB.Class.forget (Theory.Sort.forget s)) v
+  let forget v = KB.Value.refine v ()
 
-
-  let empty = KB.Value.empty Theory.Sort.t
+  let empty = KB.Value.empty cls
 
   let of_value x = forget x
 
   let of_exp exp =
-    KB.Value.put Exp.slot (KB.Value.empty top) (Some exp)
+    KB.Value.put Exp.slot empty exp
 
   let with_exp exp x =
-    KB.Value.put Exp.slot x (Some exp)
+    KB.Value.put Exp.slot x exp
 
-  let exp x = match KB.Value.get Exp.slot x with
-    | Some x -> x
-    | None -> Exp.unknown "unknown" Type.Unk
-  include (val KB.Value.derive top)
+  let exp x = KB.Value.get Exp.slot x [@@inlined]
+  include (val KB.Value.derive cls)
 end
 
 
@@ -209,10 +204,10 @@ let to_var v = Theory.Var.create (Var.sort v) (Var.ident v)
 module Def : sig
   type t = {
     var : unit Theory.var;
-    rhs : unit Theory.Sort.exp KB.Class.abstract KB.value
+    rhs : Rhs.t;
   } [@@deriving bin_io, compare, sexp]
 
-  val reify : 'a Theory.var -> 'a Theory.Sort.exp KB.value -> t
+  val reify : 'a Theory.var -> 'a Theory.value -> t
 
   val of_bil : var -> exp -> t
 end = struct
@@ -241,7 +236,7 @@ module Phi = struct
 end
 
 module Cnd : sig
-  type t = Theory.Bool.t Theory.Sort.exp KB.value
+  type t = Theory.Bool.t Theory.value
   [@@deriving bin_io, compare, sexp]
 
   val of_exp : exp -> t
@@ -249,19 +244,12 @@ module Cnd : sig
 
   include Base.Comparable.S with type t := t
 end = struct
-  let of_exp exp =
-    let empty = KB.Value.empty Theory.Sort.t in
-    KB.Value.clone Theory.Bool.t @@
-    KB.Value.put Exp.slot empty (Some exp)
 
-  let abstract v =
-    KB.Value.clone (KB.Class.forget (KB.Value.cls v)) v
-
-  let exp v = match KB.Value.get Exp.slot (abstract v) with
-    | None -> Exp.unknown "jmp-cond" (Type.Imm 1)
-    | Some exp -> exp
-
-  include (val KB.Value.derive Theory.Bool.t)
+  let empty = Theory.Value.empty Theory.Bool.t
+  let of_exp = KB.Value.put Exp.slot empty
+  let exp = KB.Value.get Exp.slot
+  let cls = KB.Class.refine Theory.Value.cls Theory.Bool.t
+  include (val KB.Value.derive cls)
 end
 
 module Jmp = struct
@@ -467,20 +455,19 @@ let program_t = {
 
 module Void : sig
   type t
-  val t : t Theory.sort
+  val t : t Theory.Value.sort
 end = struct
-  let unsorted = Theory.Sort.Name.declare ~package "Void"
+  let unsorted = Theory.Value.Sort.Name.declare ~package "Void"
   type unsorted
-  type t = unsorted Theory.Sort.sym
-  let t = KB.Class.refine Theory.Sort.t @@
-    Theory.Sort.sym unsorted
+  type t = unsorted Theory.Value.Sort.sym
+  let t = Theory.Value.Sort.sym unsorted
 end
 
 let undefined_variable =
   Theory.Var.(forget @@ define Void.t "undefined")
 
 let undefined_semantics =
-  Rhs.of_value (KB.Value.empty Void.t)
+  Rhs.of_value @@ Theory.Value.empty Void.t
 
 let empty self = {
   tid = Tid.nil;
@@ -605,7 +592,7 @@ module Ir_arg = struct
       KB.Domain.optional ~equal:equal_intent ~inspect:sexp_of_intent "intent"
     let persistent = KB.Persistent.of_binable (module T)
     let slot = KB.Class.property ~package ~persistent
-        Theory.Sort.t "arg-intent" domain
+        Theory.Value.cls "arg-intent" domain
     let set intent x = match intent with
       | None -> x
       | Some intent -> KB.Value.put slot x intent
@@ -621,7 +608,7 @@ module Ir_arg = struct
   let var {self={Def.var}} = var
   let value {self={Def.var; rhs}} =
     let sort = Theory.Var.sort var in
-    KB.Value.clone sort rhs
+    KB.Value.refine rhs sort
 
   let with_intent arg intent = set_intent arg (Some intent)
 
@@ -669,7 +656,7 @@ module Ir_arg = struct
       ~uuid:"3c0a6181-9a9c-4cf4-aa37-8ceebd773952"
 
   let pp_sort ppf var = match Var.typ (Var.reify var) with
-    | Unk -> Theory.Sort.pp ppf (Theory.Var.sort var)
+    | Unk -> Theory.Value.Sort.pp ppf (Theory.Var.sort var)
     | typ -> Bap_type.pp ppf typ
 
   let pp_self pp_rhs ppf {Def.var; rhs} =
@@ -709,7 +696,7 @@ module Ir_def = struct
   let var {self={Def.var}} = var
   let value {self={Def.var; rhs}} =
     let sort = Theory.Var.sort var in
-    KB.Value.clone sort rhs
+    KB.Value.refine rhs sort
 
   let lhs {self={Def.var}} = Var.reify var
   let rhs {self={Def.rhs}} = Rhs.exp rhs
@@ -793,7 +780,7 @@ module Ir_phi = struct
   let options {self={Phi.map; var}} : (tid * _) Seq.t =
     let sort = Theory.Var.sort var in
     Map.to_sequence map |>
-    Seq.map ~f:(fun (t,x) -> t, KB.Value.clone sort x)
+    Seq.map ~f:(fun (t,x) -> t, KB.Value.refine x sort)
 
 
   let update ({self={Phi.map; var}} as t) tid exp : phi term = {
@@ -871,7 +858,7 @@ module Ir_jmp = struct
   let resolved tid = Jmp.Resolved tid
   let indirect dst = Jmp.Indirect {
       vec = Rhs.of_value dst;
-      len = Theory.Bitv.size (KB.Value.cls dst);
+      len = Theory.Bitv.size (KB.Class.sort (KB.Value.cls dst));
     }
 
   let reify ?(tid=Tid.create ()) ?cnd ?alt ?dst () =
@@ -952,18 +939,14 @@ module Ir_jmp = struct
     | Jmp.Resolved t -> Either.first t
     | Jmp.Indirect {vec; len} ->
       let s = Theory.Bitv.define len in
-      Either.second (KB.Value.clone s vec)
+      Either.second (KB.Value.refine vec s)
 
   let kind : jmp term -> jmp_kind = fun t ->
     kind_of_jmp t.self
 
   let cond_of_jmp {Jmp.cnd} = match cnd with
     | None -> always
-    | Some cnd ->
-      let cnd = KB.Value.clone Theory.Sort.t cnd in
-      match KB.Value.get Exp.slot cnd with
-      | None -> Exp.unknown "branch-condition" (Type.Imm 1)
-      | Some exp -> exp
+    | Some cnd -> KB.Value.get Exp.slot cnd
 
 
   let cond : jmp term -> exp = fun t -> cond_of_jmp t.self

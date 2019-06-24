@@ -9,6 +9,23 @@ open Knowledge.Syntax
 open Theory.Parser
 include Self()
 
+let trace_leave,trace_enter =
+  let points = Hashtbl.create (module String) in
+  let leave point =
+    let time,hits,total = Hashtbl.find_exn points point in
+    let time_elapsed = Unix.gettimeofday () -. time in
+    let hits = hits+1 and total = total +. time_elapsed in
+    Hashtbl.set points point (0.0, hits,total);
+    Format.eprintf "%8g : %16d : %s@\n"
+      (Float.round (total *. 1e3)) hits point in
+  let enter point =
+    let time = Unix.gettimeofday () in
+    Hashtbl.update points point ~f:(function
+        | None -> (time,0,0.)
+        | Some (_,hits,total) -> (time,hits,total)) in
+  leave,enter
+
+
 module BilParser = struct
   type context = [`Bitv | `Bool | `Mem ] [@@deriving sexp]
   let fail exp ctx =
@@ -224,11 +241,9 @@ module Brancher : Theory.Core = struct
   include Theory.Core.Empty
 
   let pack kind dsts =
-    let r = KB.Value.put Insn.Slot.dests Insn.empty dsts in
-    KB.Value.clone kind r
+    KB.Value.put Insn.Slot.dests (Theory.Effect.empty kind) dsts
 
-  let forget x = KB.Value.clone Theory.Program.Semantics.cls x
-  let get x = KB.Value.get Insn.Slot.dests (forget x)
+  let get x = KB.Value.get Insn.Slot.dests x
 
   let union k e1 e2 =
     pack k @@ match get e1, get e2 with
@@ -239,30 +254,30 @@ module Brancher : Theory.Core = struct
     let dsts = Set.singleton (module Theory.Label) dst in
     KB.return @@ pack kind (Some dsts)
 
-  let goto dst = ret Theory.Effect.jump dst
+  let goto dst = ret Theory.Effect.Sort.jump dst
 
   let jmp _ =
     KB.Object.create Theory.Program.cls >>= fun dst ->
-    ret Theory.Effect.jump dst
+    ret Theory.Effect.Sort.jump dst
 
   let seq x y =
     x >>= fun x ->
     y >>= fun y ->
-    let k = KB.Value.cls x in
+    let k = Theory.Effect.sort x in
     KB.return (union k x y)
 
   let blk _ data ctrl =
     data >>= fun data ->
     ctrl >>= fun ctrl ->
-    let k = Theory.Effect.join
-        [KB.Value.cls data]
-        [KB.Value.cls ctrl] in
+    let k = Theory.Effect.Sort.join
+        [Theory.Effect.sort data]
+        [Theory.Effect.sort ctrl] in
     KB.return (union k data ctrl)
 
   let branch _cnd yes nay =
     yes >>= fun yes ->
     nay >>= fun nay ->
-    let k = KB.Value.cls yes in
+    let k = Theory.Effect.sort yes in
     KB.return (union k yes nay)
 end
 

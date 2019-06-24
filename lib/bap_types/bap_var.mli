@@ -8,7 +8,7 @@ include Regular.S with type t := t
 
 val reify : 'a Theory.var -> t
 val ident : t -> Theory.Var.ident
-val sort  : t -> Theory.Sort.top
+val sort  : t -> Theory.Value.Sort.Top.t
 
 (* Old interface  *)
 val create : ?is_virtual:bool -> ?fresh:bool -> string -> typ -> t

@@ -652,41 +652,35 @@ let split_name package s = match find_separator s with
     }
 
 module Class = struct
-  type top = Nothing.t
-  type +'a abstract = Abstract : 'a abstract
-
-  type +'a t = {
+  type +'s info = {
     id : Cid.t;
     name : fullname;
-    data : 'a;
+    sort : 's;
   }
+  let id {id} = id
+
+  type (+'a,+'s) t = 's info
 
   let classes = ref Cid.zero
 
-  let newclass ?desc ?package name data =
+  let newclass ?desc ?package name sort =
     Cid.incr classes;
     {
       id = !classes;
       name = Registry.add_class ?desc ?package name;
-      data;
+      sort;
     }
 
   let declare
-    : ?desc:string -> ?package:string -> string -> 'a -> 'a t =
+    : ?desc:string -> ?package:string -> string -> 's -> ('k,'s) t =
     fun ?desc ?package name data ->
     newclass ?desc ?package name data
 
-  let abstract
-    : ?desc:string -> ?package:string -> string -> 'a t =
-    fun ?desc ?package name ->
-    newclass ?desc ?package name Abstract
-
-  let refine {id; name; data = Abstract} data = {id; name; data}
-  let forget cls = {cls with data = Abstract}
+  let refine {id; name} sort = {id; name; sort}
 
   let same x y = Cid.equal x.id y.id
 
-  let equal : type a b. a t -> b t -> (a obj,b obj) Type_equal.t option =
+  let equal : type a b. (a,_) t -> (b,_) t -> (a obj,b obj) Type_equal.t option =
     fun x y -> Option.some_if (same x y) Type_equal.T
 
   let assert_equal x y = match equal x y with
@@ -700,7 +694,7 @@ module Class = struct
 
 
 
-  let data = fun {data} -> data
+  let sort = fun {sort} -> sort
   let name {name={name}} = name
   let package {name={package}} = package
   let fullname {name} = string_of_fname name
@@ -1325,11 +1319,11 @@ end
 module Knowledge = struct
 
   type +'a value = {
-    cls  : 'a Class.t;
+    cls  : 'a;
     data : Record.t;
     time : Int63.t;
   }
-  type 'a cls = 'a Class.t
+  type (+'a,+'s) cls = ('a,'s) Class.t
   type 'a obj = Oid.t
   type 'p domain = 'p Domain.t
   type 'a persistent = 'a Persistent.t
@@ -1411,7 +1405,7 @@ module Knowledge = struct
     }
 
     type (+'a,'p) t = {
-      cls : 'a Class.t;
+      cls : ('a,unit) cls;
       dom : 'p Domain.t;
       key : 'p Type_equal.Id.t;
       name : string;
@@ -1436,6 +1430,7 @@ module Knowledge = struct
       Option.iter persistent (Record.register_persistent key);
       Record.register_domain key dom;
       let promises = Hashtbl.create (module Pid) in
+      let cls = Class.refine cls () in
       let slot = {cls; dom; key; name; desc; promises} in
       register slot;
       slot
@@ -1465,7 +1460,9 @@ module Knowledge = struct
 
     let order {data=x} {data=y} = Record.order x y
 
-    let clone cls {data; time} = {cls; data; time}
+    let refine {data; cls; time} s=
+      {data; time; cls = Class.refine cls s}
+
     let cls {cls} = cls
     let create cls data = {cls; data; time = next_second ()}
     let put {Slot.key} v x = {
@@ -1523,17 +1520,18 @@ module Knowledge = struct
     type 'a ord = comparator_witness
 
     let derive
-      : type a. a cls ->
-        (module S with type t = a t and type comparator_witness = a ord) =
+      : type a b. (a,b) cls ->
+        (module S with type t = (a,b) cls t
+                   and type comparator_witness = (a,b) cls ord) =
       fun cls ->
       let module R = struct
-        type t = a value
+        type t = (a,b) cls value
         let sexp_of_t x = Record.sexp_of_t x.data
         let t_of_sexp = opaque_of_sexp
         let empty = empty cls
 
         include Binable.Of_binable(Record)(struct
-            type t = a value
+            type t = (a,b) cls value
             let to_binable : 'a value -> Record.t =
               fun {data} -> data
             let of_binable : Record.t -> 'a value =
@@ -1541,7 +1539,7 @@ module Knowledge = struct
           end)
         type comparator_witness = Comparator.comparator_witness
         include Base.Comparable.Make_using_comparator(struct
-            type t = a value
+            type t = (a,b) cls value
             let sexp_of_t = sexp_of_t
             include Comparator
           end)
@@ -1558,9 +1556,9 @@ module Knowledge = struct
   module Class = struct
     include Class
     let property = Slot.declare
-    let strip
-      : type a b. (a t, b t) Type_equal.t -> (a,b) Type_equal.t =
-      fun T -> T
+    module Abstract = struct
+      let property = Slot.declare
+    end
   end
 
   let get () = Knowledge.lift (State.get ())
@@ -1598,9 +1596,9 @@ module Knowledge = struct
     register_promise s @@ fun obj ->
     get obj >>= provide s obj
 
-  let objects : _ cls -> _ = fun cls ->
+  let objects {Class.id} =
     get () >>| fun {classes} ->
-    match Map.find classes cls.id with
+    match Map.find classes id with
     | None -> Env.empty_class
     | Some objs -> objs
 
@@ -1744,7 +1742,7 @@ module Knowledge = struct
           with vals = Map.add_exn objs.vals ~key ~data:Record.empty
         }
 
-    let create : 'a cls -> 'a obj Knowledge.t = fun cls ->
+    let create : ('a,_) cls -> 'a obj Knowledge.t = fun cls ->
       objects cls >>= fun objs ->
       with_new_object objs @@ fun obj objs ->
       update @@begin function {classes} as s -> {
@@ -1864,7 +1862,7 @@ module Knowledge = struct
       include Binable.S with type t := t
     end
 
-    let derive : type a. a cls ->
+    let derive : type a. (a,_) cls ->
       (module S
         with type t = a obj
          and type comparator_witness = a ord) = fun _ ->

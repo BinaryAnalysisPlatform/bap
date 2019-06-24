@@ -147,8 +147,6 @@ module Std = struct
     let simpl = Bap_helpers.Simpl.exp
     let pp_adt = Bap_bil_adt.pp_exp
     let slot = Bap_exp.slot
-    let domain = Bap_exp.domain
-    let persistent = Bap_exp.persistent
   end
 
   (** [Regular] interface for BIL statements  *)

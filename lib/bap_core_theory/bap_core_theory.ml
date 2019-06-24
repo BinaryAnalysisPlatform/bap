@@ -3,12 +3,12 @@ open Bap_knowledge
 module KB = Knowledge
 
 module Theory = struct
-  module Sort   = Bap_core_theory_sort.Sort
-  module Bool = Bap_core_theory_sort.Bool
-  module Bitv = Bap_core_theory_sort.Bitv
-  module Mem = Bap_core_theory_sort.Mem
-  module Float = Bap_core_theory_sort.Float
-  module Rmode = Bap_core_theory_sort.Rmode
+  module Value   = Bap_core_theory_value
+  module Bool = Value.Bool
+  module Bitv = Value.Bitv
+  module Mem = Value.Mem
+  module Float = Value.Float
+  module Rmode = Value.Rmode
   module Effect = Bap_core_theory_effect
   module Var = Bap_core_theory_var
   module Program = Bap_core_theory_program
@@ -16,13 +16,11 @@ module Theory = struct
   type program = Program.cls
 
 
-  type 'a sort = 'a Sort.t
+  type 'a value = 'a Value.t
   type 'a effect = 'a Effect.t
+  type 'a pure = 'a value knowledge
+  type 'a eff = 'a effect knowledge
 
-  type 'a t = 'a Knowledge.value Knowledge.t
-
-  type 'a pure = 'a Sort.exp t
-  type 'a eff = 'a Effect.spec t
 
   type bool = Bool.t pure
   type 'a bitv = 'a Bitv.t pure
@@ -30,8 +28,8 @@ module Theory = struct
   type 'f float = 'f Float.t pure
   type rmode = Rmode.t pure
 
-  type data = Effect.data
-  type ctrl = Effect.ctrl
+  type data = Effect.Sort.data
+  type ctrl = Effect.Sort.ctrl
 
   type ('r,'s) format = ('r,'s) Float.format
 

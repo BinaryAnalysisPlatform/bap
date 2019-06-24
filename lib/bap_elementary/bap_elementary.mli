@@ -48,7 +48,7 @@ module Elementary (Theory : Theory.Core) : sig
 
   (** [table operation sort rank] defines a naming scheme for
       approximation of [rank] of an [operation] for values of [sort].  *)
-  val table : string -> ('r, 's) format Float.t sort -> int -> string
+  val table : string -> ('r, 's) format Float.t Value.sort -> int -> string
 
   (** [is_table ident] returns true if [ident] is a table *)
   val is_table  : Var.ident -> Base.bool
@@ -62,7 +62,7 @@ module Elementary (Theory : Theory.Core) : sig
 
   (** module contains naming schemes for different math functions *)
   module Scheme : sig
-    type 'a t = 'a sort -> int -> string
+    type 'a t = 'a Value.sort -> int -> string
 
     val pow : 'a t
     val powr : 'a t

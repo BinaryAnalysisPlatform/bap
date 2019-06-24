@@ -9,7 +9,8 @@ type t = var
 
 let reify v = Var v
 let sort (Var v) =
-  Theory.Sort.forget (Theory.Var.sort v)
+  Theory.Value.Sort.forget (Theory.Var.sort v)
+
 
 let ident (Var v) = Theory.Var.ident v
 let name (Var v) = Theory.Var.name v
@@ -40,12 +41,12 @@ let is_virtual (Var v) = Theory.Var.is_virtual v
 let is_physical v = not (is_virtual v)
 
 let unknown =
-  let unknown = Theory.Sort.Name.declare ~package:"bap-std" "Unknown" in
-  Theory.Sort.sym unknown |>
-  KB.Class.refine Theory.Sort.t
+  let unknown =
+    Theory.Value.Sort.Name.declare ~package:"bap-std" "Unknown" in
+  Theory.Value.Sort.sym unknown
 
 let sort_of_typ t =
-  let ret = Theory.Sort.forget in
+  let ret = Theory.Value.Sort.forget in
   match t with
   | Type.Imm 1 -> ret Theory.Bool.t
   | Type.Imm m -> ret @@ Theory.Bitv.define m
@@ -93,7 +94,7 @@ module T = struct
   type t = var
 
   module Repr = struct
-    type t = {name : Theory.Var.ident; sort : Theory.Sort.Top.t}
+    type t = {name : Theory.Var.ident; sort : Theory.Value.Sort.Top.t}
     [@@deriving bin_io, compare, sexp]
 
     let of_var v = {

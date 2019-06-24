@@ -9,7 +9,7 @@ open Knowledge.Syntax
 type 'a t = 'a knowledge
 
 type ('b,'e,'t,'s) fsort = (('b,'e,'t) Theory.IEEE754.t,'s) Theory.format
-    Theory.Float.t Theory.sort
+    Theory.Float.t Theory.Value.sort
 
 module Value = Knowledge.Value
 
@@ -24,10 +24,10 @@ module Make(B : Theory.Core) = struct
     let ones s = not (zero s)
 
     let is_one x =
-      x >>= fun v -> eq x (one (Value.cls v))
+      x >>= fun v -> eq x (one (Theory.Value.sort v))
 
     let is_all_ones x =
-      x >>= fun v -> eq x (ones (Value.cls v))
+      x >>= fun v -> eq x (ones (Theory.Value.sort v))
 
     let of_int sort v =
       let m = Bitvec.modulus (Theory.Bitv.size sort) in
@@ -89,11 +89,11 @@ module Make(B : Theory.Core) = struct
 
   let (>>->) x f =
     x >>= fun x ->
-    f (Value.cls x) x
+    f (Theory.Value.sort x) x
 
   let bind a body =
     a >>= fun a ->
-    let sort = Value.cls a in
+    let sort = Theory.Value.sort a in
     Theory.Var.scoped sort @@ fun v ->
     B.let_ v !!a (body (B.var v))
 

@@ -1,5 +1,5 @@
 open Core_kernel
-open Bap_core_theory_sort
+open Bap_core_theory_value
 
 type 'a num = 'a Sort.num
 type 'a sym = 'a Sort.sym

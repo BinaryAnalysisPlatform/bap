@@ -5,7 +5,8 @@ type 'a knowledge
 module Knowledge : sig
   type 'a t = 'a knowledge
 
-  type +'a cls
+  type (+'k,+'s) cls
+
   type +'a obj
   type +'a value
   type (+'a,'p) slot
@@ -85,7 +86,7 @@ module Knowledge : sig
 
 
 
-  val run : 'a cls -> 'a obj t -> state -> ('a value * state, conflict) result
+  val run : ('k,'s) cls -> 'k obj t -> state -> (('k,'s) cls value * state, conflict) result
 
   module Syntax : sig
     include Monad.Syntax.S with type 'a t := 'a t
@@ -100,7 +101,7 @@ module Knowledge : sig
 
 
     (** [c // s] is [Object.read c s]  *)
-    val (//) : 'a cls -> string -> 'a obj t
+    val (//) : ('a,_) cls -> string -> 'a obj t
   end
 
 
@@ -147,48 +148,27 @@ module Knowledge : sig
     end
   end
 
+
+  (** Class is a collection of sorts.
+
+      A class [k] is denoted by an indexed type [(k,s) cls], where
+      [s] is a sort.
+  *)
   module Class : sig
-    type +'a t = 'a cls
-    type +'a abstract
-    include Type_equal.Injective with type 'a t := 'a t
+    type (+'k,'s) t = ('k,'s) cls
 
 
-    (** [declare ?desc ?package name data] declares a new class with
-        the given [name].
-
-        The [data] parameter could be used to attach some static
-        information about the class instances.
-    *)
+    (** [declare ?desc ?package name sort] declares a new
+        class with the given [name] and [sort] index. *)
     val declare : ?desc:string -> ?package:string -> string ->
-      'a -> 'a cls
-
-    val abstract : ?desc:string -> ?package:string -> string ->
-      'a abstract cls
+      's -> ('k,'s) cls
 
 
-    (** [derived name base data] derives a subclass.
+    (** [refine cls s] refines the [sort] of class ['k] to [s].   *)
+    val refine : ('k,_) cls -> 's -> ('k,'s) cls
 
-        Returns a new class which is the same as base, but is more
-        specific.
-
-        {4 Example}
-
-        {[
-          type bitv = Bitv
-          type signed = Signed
-          let t : top cls = abstract@@declare "bitv" Bitv
-          let signed : (signed -> top) cls = derived "signed-bitv" t Signed
-        ]}
-    *)
-    val refine : 'a abstract cls -> 'a -> 'a cls
-
-
-    val forget : 'a cls -> 'a abstract cls
-
-
-    (** [same x y] is true if [x] and [y] are the same value,
-        or share the common ancestor. *)
-    val same : 'a cls -> 'b cls -> bool
+    (** [same x y] is true if [x] and [y] denote the same class [k] *)
+    val same : ('a,_) cls -> ('b,_) cls -> bool
 
     (** [equal x y] constructs a type witness of classes equality.
 
@@ -204,7 +184,7 @@ module Knowledge : sig
         Note that the equality is reflexive, so the obtained witness
         could be used in both direction, for upcasting and downcasting.
     *)
-    val equal : 'a cls -> 'b cls -> ('a obj, 'b obj) Type_equal.t option
+    val equal : ('a,_) cls -> ('b,_) cls -> ('a obj, 'b obj) Type_equal.t option
 
 
     (** [assert_equal x y] asserts the equality of two classes.
@@ -221,27 +201,27 @@ module Knowledge : sig
             x + y (* where (+) has type [bitv obj -> bitv obj -> bit obj] *)
         ]}
     *)
-    val assert_equal : 'a cls -> 'b cls -> ('a obj, 'b obj) Type_equal.t
-
+    val assert_equal : ('a,_) cls -> ('b,_) cls -> ('a obj, 'b obj) Type_equal.t
 
 
     (** [property ?desc ?persistent ?package cls name dom] declares
-        a new property of class instances.
+        a new property of all instances of class [k].
 
-        Returns a slot, that is used to acess this property.
+        Returns a slot, that is used to access this property.
     *)
     val property :
       ?desc:string ->
       ?persistent:'p persistent ->
       ?package:string ->
-      'a cls -> string -> 'p domain -> ('a,'p) slot
+      ('k,_) cls -> string -> 'p domain -> ('k,'p) slot
+
+    val name : ('a,_) cls -> string
+    val package : ('a,_) cls -> string
+    val fullname : ('a,_) cls -> string
 
 
-    val name : 'a cls -> string
-    val package : 'a cls -> string
-    val fullname : 'a cls -> string
-
-    val data : 'a cls -> 'a
+    (** [sort cls] returns the sort index of the class [k].  *)
+    val sort : ('k,'s) cls -> 's
   end
 
   module Object : sig
@@ -249,19 +229,19 @@ module Knowledge : sig
     type 'a ord
 
     (** [create] is a fresh new object with an idefinite extent.  *)
-    val create : 'a cls -> 'a obj knowledge
+    val create : ('a,_) cls -> 'a obj knowledge
 
     (** [scoped scope] pass a fresh new object to [scope].
 
         The extent of the created object is limited with the extent
         of the function [scope].*)
-    val scoped : 'a cls -> ('a obj -> 'b knowledge) -> 'b knowledge
+    val scoped : ('a,_) cls -> ('a obj -> 'b knowledge) -> 'b knowledge
 
     (** [repr x] returns a textual representation of the object [x] *)
-    val repr : 'a cls -> 'a t -> string knowledge
+    val repr : ('a,_) cls -> 'a t -> string knowledge
 
     (** [read s] returns an object [x] such that [repr x = s].  *)
-    val read : 'a cls -> string -> 'a t knowledge
+    val read : ('a,_) cls -> string -> 'a t knowledge
 
 
     (** [cast class_equality x] changes the type of an object.
@@ -286,9 +266,9 @@ module Knowledge : sig
       include Binable.S with type t := t
     end
 
-    val derive : 'a cls -> (module S
-                             with type t = 'a obj
-                              and type comparator_witness = 'a ord)
+    val derive : ('a,'d) cls -> (module S
+                                  with type t = 'a obj
+                                   and type comparator_witness = 'a ord)
   end
 
   module Value : sig
@@ -296,7 +276,7 @@ module Knowledge : sig
     type 'a ord
     include Type_equal.Injective with type 'a t := 'a t
 
-    val empty : 'a cls -> 'a value
+    val empty : ('a,'b) cls -> ('a,'b) cls value
     val order : 'a value -> 'a value -> Order.partial
     val join : 'a value -> 'a value -> ('a value,conflict) result
     val merge : ?on_conflict:[
@@ -304,14 +284,16 @@ module Knowledge : sig
       | `drop_new
       | `drop_right
       | `drop_left
-      | `drop_both
     ] -> 'a value -> 'a value -> 'a value
 
-    val cls : 'a value -> 'a cls
-    val get : ('a,'p) slot -> 'a value -> 'p
-    val put : ('a,'p) slot -> 'a value -> 'p -> 'a value
 
-    val clone : 'a cls -> _ value -> 'a value
+    (** [cls x] is the class of [x]   *)
+    val cls : ('k,'s) cls value -> ('k,'s) cls
+    val get : ('k,'p) slot -> ('k,_) cls value -> 'p
+    val put : ('k,'p) slot -> ('k,'s) cls value -> 'p -> ('k,'s) cls value
+
+    (** [refine v s] refines the sort of [v] to [s].  *)
+    val refine : ('k,_) cls value -> 's -> ('k,'s) cls value
 
     module type S = sig
       type t [@@deriving sexp]
@@ -321,9 +303,10 @@ module Knowledge : sig
       include Binable.S with type t := t
     end
 
-    val derive : 'a cls -> (module S
-                             with type t = 'a t
-                              and type comparator_witness = 'a ord)
+    val derive : ('a,'s) cls ->
+      (module S
+        with type t = ('a,'s) cls t
+         and type comparator_witness = ('a,'s) cls ord)
 
     val pp : Format.formatter -> 'a value -> unit
 
@@ -333,8 +316,8 @@ module Knowledge : sig
   module Slot : sig
     type ('a,'p) t = ('a,'p) slot
 
-    val cls : ('a,'p) slot -> 'a cls
     val domain : ('a,'p) slot -> 'p domain
+    val cls : ('a,_) slot -> ('a, unit) cls
     val name : ('a,'p) slot -> string
     val desc : ('a,'p) slot -> string
   end
@@ -408,7 +391,7 @@ module Knowledge : sig
         treated as a package/name separator.
     *)
     val intern : ?public:bool -> ?desc:string -> ?package:string -> string ->
-      'a cls -> 'a obj knowledge
+      ('a,_) cls -> 'a obj knowledge
 
     (** [keyword = "keyword"] is the special name for the package
         that contains keywords. Basically, keywords are special kinds
@@ -564,7 +547,7 @@ module Knowledge : sig
     val string : string domain
     val bool : bool option domain
 
-    val obj : 'a cls -> 'a obj domain
+    val obj : ('a,_) cls -> 'a obj domain
 
 
     val empty : 'a t -> 'a
@@ -604,10 +587,10 @@ module Knowledge : sig
     type +'a t
     type 'a ord
 
-    val atom : 'a cls -> 'a obj -> 'a t knowledge
-    val cons : 'a cls -> 'a t -> 'a t -> 'a t knowledge
+    val atom : ('a,_) cls -> 'a obj -> 'a t knowledge
+    val cons : ('a,_) cls -> 'a t -> 'a t -> 'a t knowledge
 
-    val case : 'a cls -> 'a t ->
+    val case : ('a,_) cls -> 'a t ->
       null:'r knowledge ->
       atom:('a obj -> 'r knowledge) ->
       cons:('a t -> 'a t -> 'r knowledge) -> 'r knowledge
@@ -622,9 +605,9 @@ module Knowledge : sig
       include Binable.S with type t := t
     end
 
-    val derive : 'a cls -> (module S
-                             with type t = 'a t
-                              and type comparator_witness = 'a ord)
+    val derive : ('a,_) cls -> (module S
+                                 with type t = 'a t
+                                  and type comparator_witness = 'a ord)
   end
 
   module Conflict : sig

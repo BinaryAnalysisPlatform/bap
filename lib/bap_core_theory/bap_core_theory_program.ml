@@ -7,7 +7,7 @@ module Effect = Bap_core_theory_effect
 
 type cls = Program
 type program = cls
-let cls = Knowledge.Class.declare ~package "program" Program
+let (cls : (cls,unit) Knowledge.cls) = Knowledge.Class.declare ~package "program" ()
 let program = cls
 
 module Label = struct
@@ -61,9 +61,9 @@ module Label = struct
 end
 
 module Semantics = struct
-  type +'a cls = 'a Effect.spec
-  let cls = Effect.bot
-  include (val Knowledge.Value.derive Effect.top)
+  type cls = Effect.cls
+  let cls = Knowledge.Class.refine Effect.cls Effect.Sort.top
+  include (val Knowledge.Value.derive cls)
   let slot = Knowledge.Class.property program "semantics" domain
 end
 

@@ -1,19 +1,20 @@
 open Bap_knowledge
 
-open Bap_core_theory_sort
+open Bap_core_theory_value
 
 module Var = Bap_core_theory_var
+module Value = Bap_core_theory_value
 module Effect = Bap_core_theory_effect
 module Program = Bap_core_theory_program
 module Label = Program.Label
 
-type 'a sort = 'a Sort.t
+type 'a value = 'a Value.t
 type 'a effect = 'a Effect.t
 type program = Program.cls
-type 'a t = 'a Knowledge.value Knowledge.t
 
-type 'a pure = 'a Sort.exp t
-type 'a eff = 'a Effect.spec t
+
+type 'a pure = 'a value knowledge
+type 'a eff = 'a effect knowledge
 
 type bool = Bool.t pure
 type 'a bitv = 'a Bitv.t pure
@@ -21,8 +22,8 @@ type ('a,'b) mem = ('a,'b) Mem.t pure
 type 'f float = 'f Float.t pure
 type rmode = Rmode.t pure
 
-type data = Effect.data
-type ctrl = Effect.ctrl
+type data = Effect.Sort.data
+type ctrl = Effect.Sort.ctrl
 
 type ('r,'s) format = ('r,'s) Float.format
 
@@ -78,7 +79,7 @@ module type Memory = sig
 end
 
 module type Effect = sig
-  val perform : 'a effect -> 'a eff
+  val perform : 'a Effect.Sort.t -> 'a eff
   val set : 'a var -> 'a pure -> data eff
   val jmp  : _ bitv -> ctrl eff
   val goto : label -> ctrl eff

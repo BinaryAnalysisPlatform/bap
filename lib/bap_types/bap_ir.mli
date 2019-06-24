@@ -68,7 +68,7 @@ end
 module Term : sig
   type 'a t = 'a term
 
-  val slot : (_ Theory.Program.Semantics.cls, blk term list) KB.slot
+  val slot : (Theory.Program.Semantics.cls, blk term list) KB.slot
 
   val clone : 'a t -> 'a t
   val same : 'a t -> 'a t -> bool
@@ -292,12 +292,11 @@ end
 module Ir_def : sig
   type t = def term
 
-  val reify : ?tid:tid ->
-    'a Theory.var ->
-    'a Theory.Sort.exp KB.value -> t
+  val reify : ?tid:tid -> 'a Theory.var -> 'a Theory.value -> t
 
   val var : t -> unit Theory.var
-  val value : t -> unit Theory.Sort.exp KB.value
+  val value : t -> unit Theory.value
+
 
   val create : ?tid:tid -> var -> exp -> t
   val lhs : t -> var
@@ -317,17 +316,17 @@ module Ir_jmp : sig
   type dst
 
   val reify : ?tid:tid ->
-    ?cnd:Theory.Bool.t Theory.Sort.exp KB.value ->
+    ?cnd:Theory.Bool.t Theory.value ->
     ?alt:dst -> ?dst:dst -> unit -> t
 
-  val guard : t -> Theory.Bool.t Theory.Sort.exp KB.value option
-  val with_guard : t -> Theory.Bool.t Theory.Sort.exp KB.value option -> t
+  val guard : t -> Theory.Bool.t Theory.value option
+  val with_guard : t -> Theory.Bool.t Theory.value option -> t
   val dst : t -> dst option
   val alt : t -> dst option
 
   val resolved : tid -> dst
-  val indirect : 'a Theory.Bitv.t Theory.Sort.exp KB.value -> dst
-  val resolve : dst -> (tid,'a Theory.Bitv.t Theory.Sort.exp KB.value) Either.t
+  val indirect : 'a Theory.Bitv.t Theory.value -> dst
+  val resolve : dst -> (tid,'a Theory.Bitv.t Theory.value) Either.t
 
   val create      : ?tid:tid -> ?cond:exp -> jmp_kind -> t
   val create_call : ?tid:tid -> ?cond:exp -> call -> t
@@ -352,11 +351,11 @@ module Ir_phi : sig
 
   val reify : ?tid:tid ->
     'a Theory.var ->
-    (tid * 'a Theory.Sort.exp KB.value) list ->
+    (tid * 'a Theory.value) list ->
     t
 
   val var : t -> unit Theory.var
-  val options : t -> (tid * unit Theory.Sort.exp KB.value) seq
+  val options : t -> (tid * unit Theory.value) seq
 
   val create : ?tid:tid -> var -> tid -> exp -> t
   val of_list : ?tid:tid -> var -> (tid * exp) list -> t
@@ -379,10 +378,10 @@ module Ir_arg : sig
 
   val reify : ?tid:tid -> ?intent:intent ->
     'a Theory.var ->
-    'a Theory.Sort.exp KB.value -> t
+    'a Theory.value -> t
 
   val var : t -> unit Theory.var
-  val value : t -> unit Theory.Sort.exp KB.value
+  val value : t -> unit Theory.value
 
   val create : ?tid:tid -> ?intent:intent -> var -> exp -> t
   val lhs : t -> var
@@ -399,7 +398,7 @@ module Ir_arg : sig
   val pp_slots : string list -> Format.formatter -> t -> unit
 
   module Intent : sig
-    val slot : ('a Theory.Sort.exp KB.Class.abstract, intent option) KB.slot
+    val slot : (Theory.Value.cls, intent option) KB.slot
   end
 
   include Regular.S with type t := t

@@ -4,36 +4,42 @@ open Bap_knowledge
 
 module KB = Knowledge
 
+type +'a sort
+type cls
+
+type 'a t = (cls,'a sort) KB.cls KB.value
+val cls : (cls,unit) KB.cls
+
+val empty : 'a sort -> 'a t
+val sort : 'a t -> 'a sort
+
 module Sort : sig
-  type +'a exp
+  type +'a t = 'a sort
   type +'a sym
   type +'a num
   type name
+  type cls
 
-  type 'a t = 'a exp KB.cls
-  type top = unit t
+  val sym : name -> 'a sym sort
+  val int : int -> 'a num sort
+  val app : 'a sort -> 'b sort -> ('a -> 'b) sort
+  val (@->) : 'a sort -> 'b sort -> ('a -> 'b) sort
 
-  val sym : name -> 'a sym exp
-  val int : int -> 'a num exp
-  val app : 'a exp -> 'b exp -> ('a -> 'b) exp
-  val (@->) : 'a exp -> 'b exp -> ('a -> 'b) exp
+  val value : 'a num sort -> int
+  val name :  'a sym sort -> name
 
-  val t : 'a exp KB.Class.abstract KB.Class.t
+  val hd : ('a -> 'b) sort -> 'a sort
+  val tl : ('a -> 'b) sort -> 'b sort
 
-  val exp : 'a t -> 'a exp
 
-  val value : 'a num exp -> int
-  val name :  'a sym exp -> name
-
-  val hd : ('a -> 'b) exp -> 'a exp
-  val tl : ('a -> 'b) exp -> 'b exp
+  val forget : 'a t -> unit t
+  val refine : name -> unit sort -> 'a t option
+  val same : 'a t -> 'b t -> bool
 
   val pp : formatter -> 'a t -> unit
 
-  val forget : 'a t -> unit t
-
   module Top : sig
-    type t = top [@@deriving bin_io, compare, sexp]
+    type t = unit sort [@@deriving bin_io, compare, sexp]
     include Base.Comparable.S with type t := t
   end
 
@@ -43,8 +49,6 @@ module Sort : sig
     include Base.Comparable.S with type t := t
   end
 end
-
-type 'a sort = 'a Sort.t
 
 module Bool : sig
   type t
@@ -71,17 +75,17 @@ end
 module Float : sig
   module Format : sig
     type ('r,'s) t
-    val define : 'r Sort.exp -> 's Bitv.t sort -> ('r,'s) t Sort.exp
-    val bits : ('r,'s) t Sort.exp -> 's Bitv.t sort
-    val exp : ('r,'s) t Sort.exp -> 'r Sort.exp
+    val define : 'r Sort.t -> 's Bitv.t sort -> ('r,'s) t Sort.t
+    val bits : ('r,'s) t Sort.t -> 's Bitv.t sort
+    val exp : ('r,'s) t Sort.t -> 'r Sort.t
   end
 
   type ('r,'s) format = ('r,'s) Format.t
   type 'f t
 
-  val define : ('r,'s) format Sort.exp -> ('r,'s) format t sort
+  val define : ('r,'s) format Sort.t -> ('r,'s) format t sort
   val refine : unit sort -> ('r,'s) format t sort option
-  val format : ('r,'s) format t sort -> ('r,'s) format Sort.exp
+  val format : ('r,'s) format t sort -> ('r,'s) format Sort.t
   val size : ('r,'s) format t sort -> 's Bitv.t sort
 end
 

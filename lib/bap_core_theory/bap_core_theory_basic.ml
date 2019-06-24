@@ -2,7 +2,7 @@ open Core_kernel
 open Bap_knowledge
 
 open Bap_core_theory_definition
-open Bap_core_theory_sort
+open Bap_core_theory_value
 
 open Knowledge.Syntax
 
@@ -10,7 +10,7 @@ module Value = Knowledge.Value
 
 let size = Bitv.size
 let (>>->)
-  = fun x f -> x >>= fun x -> f (Value.cls x) x
+  = fun x f -> x >>= fun x -> f (KB.Class.sort (Value.cls x)) x
 
 
 module Make(L : Minimal) = struct
@@ -121,7 +121,7 @@ module Make(L : Minimal) = struct
   let extract s hi lo x =
     let n = succ (sub hi lo) in
     x >>= fun x ->
-    let t = Value.cls x in
+    let t = KB.Class.sort (Value.cls x) in
     let mask = lshift (not (zero t)) n in
     cast s b0 (logand (not mask) (shiftr b0 !!x lo))
   include L

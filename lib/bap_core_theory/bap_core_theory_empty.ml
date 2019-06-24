@@ -1,20 +1,28 @@
 open Bap_knowledge
 open Bap_core_theory_definition
-open Bap_core_theory_sort
+open Bap_core_theory_value
 
 open Knowledge.Syntax
 
 module Value = Knowledge.Value
 
 let bool = Bool.t
-let sort x = x >>| Value.cls
+let sort x = x >>| Value.cls >>| KB.Class.sort
 
 module Core : Core = struct
   type 'a t = 'a Knowledge.t
-  let empty x = Knowledge.return @@ Value.empty x
-  let data  = Knowledge.return @@ Value.empty Effect.bot
-  let ctrl  = Knowledge.return @@ Value.empty Effect.bot
-  let unit  = Knowledge.return @@ Value.empty Effect.bot
+
+  let empty x =
+    Knowledge.return @@
+    Value.empty (KB.Class.refine cls x)
+
+  let neweff eff =
+    Knowledge.return @@
+    Value.empty (KB.Class.refine Effect.cls eff)
+
+  let data  = neweff Effect.Sort.bot
+  let ctrl  = neweff Effect.Sort.bot
+  let unit  = neweff Effect.Sort.bot
 
   let var v = empty (Var.sort v)
   let int s _ = empty s
@@ -50,7 +58,7 @@ module Core : Core = struct
   let store m _ _ = sort m >>= empty
   let pass = data
   let skip = ctrl
-  let perform (eff : 'a effect) = Knowledge.return (Value.empty eff)
+  let perform eff = neweff eff
 
   let set _ _ = data
   let let_ _ _ x = sort x >>= empty

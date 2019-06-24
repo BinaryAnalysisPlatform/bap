@@ -6,126 +6,144 @@ open Bap_knowledge
 module KB = Knowledge
 
 module Theory : sig
-  module Sort : sig
-    type +'a exp
-    type +'a sym
-    type +'a num
-    type name
+  module Value : sig
+    type +'a sort
+    type cls
 
-    type 'a t = 'a exp KB.cls
-    type top = unit t
+    type 'a t = (cls,'a sort) KB.cls KB.value
+    val cls : (cls,unit) KB.cls
 
-    val sym : name -> 'a sym exp
-    val int : int -> 'a num exp
-    val app : 'a exp -> 'b exp -> ('a -> 'b) exp
-    val (@->) : 'a exp -> 'b exp -> ('a -> 'b) exp
+    val empty : 'a sort -> 'a t
+    val sort : 'a t -> 'a sort
 
-    val t : 'a exp KB.Class.abstract KB.Class.t
+    module Sort : sig
+      type +'a t = 'a sort
+      type +'a sym
+      type +'a num
+      type name
 
-    val exp : 'a t -> 'a exp
+      val sym : name -> 'a sym sort
+      val int : int -> 'a num sort
+      val app : 'a sort -> 'b sort -> ('a -> 'b) sort
+      val (@->) : 'a sort -> 'b sort -> ('a -> 'b) sort
 
-    val value : 'a num exp -> int
-    val name :  'a sym exp -> name
+      val value : 'a num sort -> int
+      val name :  'a sym sort -> name
 
-    val hd : ('a -> 'b) exp -> 'a exp
-    val tl : ('a -> 'b) exp -> 'b exp
+      val hd : ('a -> 'b) sort -> 'a sort
+      val tl : ('a -> 'b) sort -> 'b sort
 
-    val pp : formatter -> 'a t -> unit
+      val refine : name -> unit sort -> 'a t option
 
-    val forget : 'a t -> unit t
+      val forget : 'a t -> unit t
 
-    module Top : sig
-      type t = top [@@deriving bin_io, compare, sexp]
-      include Base.Comparable.S with type t := t
-    end
+      val same : 'a t -> 'b t -> bool
 
-    module Name : sig
-      type t
-      val declare : ?package:string -> string -> name
-      include Base.Comparable.S with type t := t
+      val pp : formatter -> 'a t -> unit
+
+      module Top : sig
+        type t = unit sort [@@deriving bin_io, compare, sexp]
+        include Base.Comparable.S with type t := t
+      end
+
+      module Name : sig
+        type t
+        val declare : ?package:string -> string -> name
+        include Base.Comparable.S with type t := t
+      end
     end
   end
 
   module Effect : sig
-    type +'a spec
-    type data = private Data
-    type ctrl = private Ctrl
-    type +'a t = 'a spec KB.Class.t
+    type +'a sort
+    type cls
 
-    val data : string -> data t
-    val ctrl : string -> ctrl t
+    type 'a t = (cls,'a sort) KB.cls KB.value
+    val cls : (cls,unit) KB.cls
 
-    val both : 'a t -> 'a t -> 'a t
-    val (&&) : 'a t -> 'a t -> 'a t
-    val union : 'a t list -> 'a t
-    val join : 'a t list -> 'b t list -> unit t
+    val empty : 'a sort -> 'a t
+    val sort : 'a t -> 'a sort
 
-    val order : 'a t -> 'b t -> KB.Order.partial
+    module Sort : sig
+      type +'a t = 'a sort
+      type data = private Data
+      type ctrl = private Ctrl
+
+      val data : string -> data t
+      val ctrl : string -> ctrl t
+
+      val top : unit t
+      val bot : 'a t
+
+      val both : 'a t -> 'a t -> 'a t
+      val (&&) : 'a t -> 'a t -> 'a t
+      val union : 'a t list -> 'a t
+      val join : 'a t list -> 'b t list -> unit t
+
+      val order : 'a t -> 'b t -> KB.Order.partial
 
 
-    val rreg : data t
-    val wreg : data t
-    val rmem : data t
-    val wmem : data t
-    val barr : data t
-    val fall : ctrl t
-    val jump : ctrl t
-    val cjmp : ctrl t
+      val rreg : data t
+      val wreg : data t
+      val rmem : data t
+      val wmem : data t
+      val barr : data t
+      val fall : ctrl t
+      val jump : ctrl t
+      val cjmp : ctrl t
+    end
   end
 
-  type 'a sort = 'a Sort.t
+  type 'a value = 'a Value.t
   type 'a effect = 'a Effect.t
 
   module Bool : sig
     type t
-    val t : t sort
-    val refine : unit sort -> t sort option
+    val t : t Value.sort
+    val refine : unit Value.sort -> t Value.sort option
   end
 
 
   module Bitv : sig
     type 'a t
-    val define : int -> 'a t sort
-    val refine : unit sort -> 'a t sort option
-    val size : 'a t sort -> int
+    val define : int -> 'a t Value.sort
+    val refine : unit Value.sort -> 'a t Value.sort option
+    val size : 'a t Value.sort -> int
   end
 
   module Mem : sig
     type ('a,'b) t
-    val define : 'a Bitv.t sort -> 'b Bitv.t sort -> ('a,'b) t sort
-    val refine : unit sort -> ('a,'b) t sort option
-    val keys : ('a,'b) t sort -> 'a Bitv.t sort
-    val vals : ('a,'b) t sort -> 'b Bitv.t sort
+    val define : 'a Bitv.t Value.sort -> 'b Bitv.t Value.sort -> ('a,'b) t Value.sort
+    val refine : unit Value.sort -> ('a,'b) t Value.sort option
+    val keys : ('a,'b) t Value.sort -> 'a Bitv.t Value.sort
+    val vals : ('a,'b) t Value.sort -> 'b Bitv.t Value.sort
   end
 
   module Float : sig
     module Format : sig
       type ('r,'s) t
-      val define : 'r Sort.exp -> 's Bitv.t sort -> ('r,'s) t Sort.exp
-      val bits : ('r,'s) t Sort.exp -> 's Bitv.t sort
-      val exp : ('r,'s) t Sort.exp -> 'r Sort.exp
+      val define : 'r Value.sort -> 's Bitv.t Value.sort -> ('r,'s) t Value.sort
+      val bits : ('r,'s) t Value.sort -> 's Bitv.t Value.sort
+      val exp : ('r,'s) t Value.sort -> 'r Value.sort
     end
 
     type ('r,'s) format = ('r,'s) Format.t
     type 'f t
 
-    val define : ('r,'s) format Sort.exp -> ('r,'s) format t sort
-    val refine : unit sort -> ('r,'s) format t sort option
-    val format : ('r,'s) format t sort -> ('r,'s) format Sort.exp
-    val size : ('r,'s) format t sort -> 's Bitv.t sort
+    val define : ('r,'s) format Value.sort -> ('r,'s) format t Value.sort
+    val refine : unit Value.sort -> ('r,'s) format t Value.sort option
+    val format : ('r,'s) format t Value.sort -> ('r,'s) format Value.sort
+    val size : ('r,'s) format t Value.sort -> 's Bitv.t Value.sort
   end
 
   module Rmode : sig
     type t
-    val t : t sort
-    val refine : unit sort -> t sort option
+    val t : t Value.sort
+    val refine : unit Value.sort -> t Value.sort option
   end
 
-  type 'a t = 'a KB.value KB.t
-
-  type 'a pure = 'a Sort.exp t
-  type 'a eff = 'a Effect.spec t
-
+  type 'a pure = 'a value knowledge
+  type 'a eff = 'a effect knowledge
 
   type ('r,'s) format = ('r,'s) Float.format
 
@@ -134,21 +152,21 @@ module Theory : sig
     type ident [@@deriving bin_io, compare, sexp]
     type ord
 
-    val define : 'a sort -> string -> 'a t
-    val create : 'a sort -> ident -> 'a t
+    val define : 'a Value.sort -> string -> 'a t
+    val create : 'a Value.sort -> ident -> 'a t
     val forget : 'a t -> unit t
-    val resort : 'a t -> 'b sort -> 'b t
+    val resort : 'a t -> 'b Value.sort -> 'b t
 
     val versioned: 'a t -> int -> 'a t
     val version : 'a t -> int
 
     val ident : 'a t -> ident
     val name : 'a t -> string
-    val sort : 'a t -> 'a sort
+    val sort : 'a t -> 'a Value.sort
     val is_virtual : 'a t -> bool
     val is_mutable : 'a t -> bool
-    val fresh : 'a sort -> 'a t knowledge
-    val scoped : 'a sort -> ('a t -> 'b pure) -> 'b pure
+    val fresh : 'a Value.sort -> 'a t knowledge
+    val scoped : 'a Value.sort -> ('a t -> 'b pure) -> 'b pure
 
     module Ident : sig
       type t = ident [@@deriving bin_io, compare, sexp]
@@ -163,8 +181,8 @@ module Theory : sig
     end
   end
 
-  type data = Effect.data
-  type ctrl = Effect.ctrl
+  type data = Effect.Sort.data
+  type ctrl = Effect.Sort.ctrl
 
   type word = Bitvec.t
   type 'a var = 'a Var.t
@@ -173,14 +191,14 @@ module Theory : sig
   type label = program KB.Object.t
 
   module Program : sig
-    type t = program KB.value
-    val cls : program KB.cls
+    type t = (program,unit) KB.cls KB.value
+    val cls : (program,unit) KB.cls
     module Semantics : sig
-      type +'a cls = 'a Effect.spec
-      type t = unit cls KB.value
-      val cls : 'a cls KB.cls
-      val slot : (program, t) KB.slot
-      include KB.Value.S with type t := t
+      type cls = Effect.cls
+      type t = unit Effect.t
+      val cls : (cls, unit Effect.sort) Knowledge.cls
+      val slot : (program, t) Knowledge.slot
+      include Knowledge.Value.S with type t := t
     end
     include Knowledge.Value.S with type t := t
   end
@@ -212,7 +230,7 @@ module Theory : sig
 
   module type Init = sig
     val var : 'a var -> 'a pure
-    val unk : 'a sort -> 'a pure
+    val unk : 'a Value.sort -> 'a pure
     val let_ : 'a var -> 'a pure -> 'b pure -> 'b pure
   end
 
@@ -225,7 +243,7 @@ module Theory : sig
   end
 
   module type Bitv = sig
-    val int : 'a Bitv.t sort -> word -> 'a bitv
+    val int : 'a Bitv.t Value.sort -> word -> 'a bitv
     val msb : 'a bitv -> bool
     val lsb : 'a bitv -> bool
     val neg  : 'a bitv -> 'a bitv
@@ -245,9 +263,9 @@ module Theory : sig
     val ite : bool -> 'a pure -> 'a pure -> 'a pure
     val sle : 'a bitv -> 'a bitv -> bool
     val ule : 'a bitv -> 'a bitv -> bool
-    val cast : 'a Bitv.t sort -> bool -> 'b bitv -> 'a bitv
-    val concat : 'a Bitv.t sort -> 'b bitv list -> 'a bitv
-    val append : 'a Bitv.t sort -> 'b bitv -> 'c bitv -> 'a bitv
+    val cast : 'a Bitv.t Value.sort -> bool -> 'b bitv -> 'a bitv
+    val concat : 'a Bitv.t Value.sort -> 'b bitv list -> 'a bitv
+    val append : 'a Bitv.t Value.sort -> 'b bitv -> 'c bitv -> 'a bitv
   end
 
   module type Memory = sig
@@ -256,7 +274,7 @@ module Theory : sig
   end
 
   module type Effect = sig
-    val perform : 'a effect -> 'a eff
+    val perform : 'a Effect.sort -> 'a eff
     val set : 'a var -> 'a pure -> data eff
     val jmp  : _ bitv -> ctrl eff
     val goto : label -> ctrl eff
@@ -277,19 +295,19 @@ module Theory : sig
 
   module type Basic = sig
     include Minimal
-    val zero : 'a Bitv.t sort -> 'a bitv
+    val zero : 'a Bitv.t Value.sort -> 'a bitv
     val is_zero  : 'a bitv -> bool
     val non_zero : 'a bitv -> bool
     val succ : 'a bitv -> 'a bitv
     val pred : 'a bitv -> 'a bitv
     val nsucc : 'a bitv -> int -> 'a bitv
     val npred : 'a bitv -> int -> 'a bitv
-    val high : 'a Bitv.t sort -> 'b bitv -> 'a bitv
-    val low  : 'a Bitv.t sort -> 'b bitv -> 'a bitv
-    val signed : 'a Bitv.t sort -> 'b bitv -> 'a bitv
-    val unsigned  : 'a Bitv.t sort -> 'b bitv -> 'a bitv
-    val extract : 'a Bitv.t sort -> 'b bitv -> 'b bitv -> _ bitv -> 'a bitv
-    val loadw : 'c Bitv.t sort -> bool -> ('a, _) mem -> 'a bitv -> 'c bitv
+    val high : 'a Bitv.t Value.sort -> 'b bitv -> 'a bitv
+    val low  : 'a Bitv.t Value.sort -> 'b bitv -> 'a bitv
+    val signed : 'a Bitv.t Value.sort -> 'b bitv -> 'a bitv
+    val unsigned  : 'a Bitv.t Value.sort -> 'b bitv -> 'a bitv
+    val extract : 'a Bitv.t Value.sort -> 'b bitv -> 'b bitv -> _ bitv -> 'a bitv
+    val loadw : 'c Bitv.t Value.sort -> bool -> ('a, _) mem -> 'a bitv -> 'c bitv
     val storew : bool -> ('a, 'b) mem -> 'a bitv -> 'c bitv -> ('a, 'b) mem
     val arshift : 'a bitv -> 'b bitv -> 'a bitv
     val rshift : 'a bitv -> 'b bitv -> 'a bitv
@@ -305,7 +323,7 @@ module Theory : sig
   end
 
   module type Fbasic = sig
-    val float : ('r,'s) format Float.t sort -> 's bitv -> ('r,'s) format float
+    val float : ('r,'s) format Float.t Value.sort -> 's bitv -> ('r,'s) format float
     val fbits : ('r,'s) format float -> 's bitv
 
 
@@ -323,10 +341,10 @@ module Theory : sig
     val rtz : rmode
     val requal : rmode -> rmode -> bool
 
-    val cast_float  : 'f Float.t sort  -> rmode -> 'a bitv -> 'f float
-    val cast_sfloat : 'f Float.t sort -> rmode -> 'a bitv -> 'f float
-    val cast_int    : 'a Bitv.t sort -> rmode -> 'f float -> 'a bitv
-    val cast_sint   : 'a Bitv.t sort -> rmode -> 'f float -> 'a bitv
+    val cast_float  : 'f Float.t Value.sort  -> rmode -> 'a bitv -> 'f float
+    val cast_sfloat : 'f Float.t Value.sort -> rmode -> 'a bitv -> 'f float
+    val cast_int    : 'a Bitv.t Value.sort -> rmode -> 'f float -> 'a bitv
+    val cast_sint   : 'a Bitv.t Value.sort -> rmode -> 'f float -> 'a bitv
 
     val fneg    : 'f float -> 'f float
     val fabs    : 'f float -> 'f float
@@ -340,7 +358,7 @@ module Theory : sig
     val fmad    : rmode -> 'f float -> 'f float -> 'f float -> 'f float
 
     val fround   : rmode -> 'f float -> 'f float
-    val fconvert : 'f Float.t sort ->  rmode -> _ float -> 'f float
+    val fconvert : 'f Float.t Value.sort ->  rmode -> _ float -> 'f float
 
     val fsucc  : 'f float -> 'f float
     val fpred  : 'f float -> 'f float
@@ -438,11 +456,11 @@ module Theory : sig
     val decimal : int -> parameters option
 
     module Sort : sig
-      val define : parameters -> (('b,'e,'t) ieee754,'s) format Float.t sort
-      val exps : (('b,'e,'t) ieee754,'s) format Float.t sort -> 'e Bitv.t sort
-      val sigs : (('b,'e,'t) ieee754,'s) format Float.t sort -> 't Bitv.t sort
-      val bits : (('b,'e,'t) ieee754,'s) format Float.t sort -> 's Bitv.t sort
-      val spec : (('b,'e,'t) ieee754,'s) format Float.t sort -> parameters
+      val define : parameters -> (('b,'e,'t) ieee754,'s) format Float.t Value.sort
+      val exps : (('b,'e,'t) ieee754,'s) format Float.t Value.sort -> 'e Bitv.t Value.sort
+      val sigs : (('b,'e,'t) ieee754,'s) format Float.t Value.sort -> 't Bitv.t Value.sort
+      val bits : (('b,'e,'t) ieee754,'s) format Float.t Value.sort -> 's Bitv.t Value.sort
+      val spec : (('b,'e,'t) ieee754,'s) format Float.t Value.sort -> parameters
     end
   end
 

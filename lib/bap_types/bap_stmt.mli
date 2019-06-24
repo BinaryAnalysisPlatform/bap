@@ -26,6 +26,6 @@ end
 module Stmts_pp : Printable.S with type t = stmt list
 module Stmts_data : Data.S with type t = stmt list
 
-val slot : (_ Theory.Program.Semantics.cls, stmt list) Knowledge.slot
+val slot : (Theory.Program.Semantics.cls, stmt list) Knowledge.slot
 val domain : stmt list Knowledge.domain
 val persistent : stmt list Knowledge.persistent

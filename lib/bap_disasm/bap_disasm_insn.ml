@@ -68,7 +68,7 @@ type op = Op.t [@@deriving bin_io, compare, sexp]
 
 
 module Slot = struct
-  type 'a t = (unit Theory.Program.Semantics.cls, 'a) KB.slot
+  type 'a t = (Theory.Effect.cls, 'a) KB.slot
   let empty = "#undefined"
   let text = KB.Domain.flat "text"
       ~inspect:sexp_of_string ~empty

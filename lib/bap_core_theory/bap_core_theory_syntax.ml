@@ -1,4 +1,5 @@
-open Bap_core_theory_sort
+
+open Bap_core_theory_value
 
 let bits n = Bits.define n
 let bool = Bool.t

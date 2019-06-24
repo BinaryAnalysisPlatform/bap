@@ -1,12 +1,13 @@
 open Core_kernel
 open Bap_knowledge
-open Bap_core_theory_sort
+open Bap_core_theory_value
+
 
 type 'a t
 type ord
 type ident [@@deriving bin_io, compare, sexp]
+type 'a pure = 'a Bap_core_theory_value.t knowledge
 
-type 'a pure = 'a Sort.exp Knowledge.value knowledge
 
 val define : 'a sort -> string -> 'a t
 val create : 'a sort -> ident -> 'a t

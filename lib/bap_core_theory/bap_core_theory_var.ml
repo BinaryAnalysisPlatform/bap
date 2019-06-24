@@ -2,7 +2,7 @@ open Core_kernel
 
 open Caml.Format
 open Bap_knowledge
-open Bap_core_theory_sort
+open Bap_core_theory_value
 open Knowledge.Syntax
 
 module Value = Knowledge.Value
@@ -103,7 +103,7 @@ let fresh s =
   Knowledge.Object.create mut >>| fun v ->
   create s (Var {num = Knowledge.Object.id v; ver=0})
 
-type 'a pure = 'a Sort.exp Knowledge.value knowledge
+type 'a pure = 'a Bap_core_theory_value.t knowledge
 
 (* we're ensuring that a variable is immutable by constraining
    the scope computation to be pure. *)

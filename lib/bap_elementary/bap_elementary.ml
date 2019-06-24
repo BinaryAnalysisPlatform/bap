@@ -15,7 +15,8 @@ module Elementary (Core : Theory.Core) = struct
   let bits fsort = Theory.Float.(Format.bits (format fsort))
 
   let name op sort rank =
-    String.concat ~sep:"/" [op; KB.Class.name sort; string_of_int rank]
+    let name = Format.asprintf "%a" Theory.Value.Sort.pp sort in
+    String.concat ~sep:"/" [op; name; string_of_int rank]
 
   let scheme ident =
     match String.split ~on:'/' (Theory.Var.Ident.to_string ident) with
@@ -31,7 +32,7 @@ module Elementary (Core : Theory.Core) = struct
 
   let bind a body =
     a >>= fun a ->
-    let sort = KB.Value.cls a in
+    let sort = Theory.Value.sort a in
     Theory.Var.scoped sort @@ fun v ->
     let_ v !!a (body v)
 
@@ -39,7 +40,7 @@ module Elementary (Core : Theory.Core) = struct
 
   let (>>->) x f =
     x >>= fun x ->
-    f (KB.Value.cls x) x
+    f (Theory.Value.sort x) x
 
 
   include struct open Theory
@@ -91,7 +92,7 @@ module Elementary (Core : Theory.Core) = struct
     approximate ~rank ~coefs ~reduce ~extract !!x rmode
 
   module Scheme = struct
-    type 'a t = 'a Theory.sort -> int -> string
+    type 'a t = 'a Theory.Value.sort -> int -> string
 
     let pow s = name "pow" s
     let powr s = name "powr" s

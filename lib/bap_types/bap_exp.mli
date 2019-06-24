@@ -102,6 +102,4 @@ module Infix : sig
   val ( ^ )   : exp -> exp -> exp
 end
 
-val slot : ('a Theory.Sort.exp KB.Class.abstract, exp option) Knowledge.slot
-val domain : exp option Knowledge.domain
-val persistent : exp option Knowledge.persistent
+val slot : (Theory.Value.cls, exp) Knowledge.slot

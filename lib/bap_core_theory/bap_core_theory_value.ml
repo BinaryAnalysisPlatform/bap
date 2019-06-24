@@ -6,23 +6,23 @@ module KB = Knowledge
 
 let package = "core-theory"
 
+
 module Sort : sig
   type +'a exp
   type +'a sym
   type +'a num
+  type +'a t = 'a exp
+  type cls
+
+  type top = unit t
   type name
 
-  type +'a t = 'a exp KB.cls
-  type top = unit t
+  val cls : (cls,unit) KB.cls
 
   val sym : name -> 'a sym exp
   val int : int -> 'a num exp
   val app : 'a exp -> 'b exp -> ('a -> 'b) exp
   val (@->) : 'a exp -> 'b exp -> ('a -> 'b) exp
-
-  val t : 'a exp KB.Class.abstract KB.Class.t
-
-  val exp : 'a t -> 'a exp
 
   val value : 'a num exp -> int
   val name :  'a sym exp -> name
@@ -32,8 +32,8 @@ module Sort : sig
 
   val pp : formatter -> 'a t -> unit
   val forget : 'a t -> top
-
   val refine : name -> top -> 'a t option
+  val same : 'a t -> 'b t -> bool
 
   module Top : sig
     type t = top [@@deriving bin_io, compare, sexp]
@@ -49,6 +49,7 @@ end
 = struct
   type +'a sym
   type +'a num
+  type cls = Values
 
   type name = {
     package : string;
@@ -64,6 +65,9 @@ end
     unique = Hash_set.create (module String) ();
     packages = Hashtbl.create (module String);
   }
+
+  let cls = KB.Class.declare ~package:"core-theory"
+      "value" ()
 
   module Name = struct
     type t = name [@@deriving bin_io, compare, sexp]
@@ -100,6 +104,8 @@ end
   open Exp
 
   type +'a exp = Exp.t
+  type +'a t = 'a exp
+  type top = unit t
 
   let app s p = match p with
     | App {args=xs; name} -> App {args=s::xs; name}
@@ -138,41 +144,34 @@ end
       fprintf ppf "%a(%a)" pp f
         (pp_print_list ~pp_sep pp) args
 
-  type 'a t = 'a exp Knowledge.cls
-  type top = unit exp Knowledge.cls
 
-  let base =
-    KB.Class.abstract ~package "value"
-      ~desc:"result of a computation"
-  let t = base
 
   let forget = ident
-  let refine witness t = match KB.Class.data t with
+  let refine witness t = match t with
     | App {name=Some name}
     | Sym name when name = witness -> Some t
     | _ -> None
 
-  let exp x = KB.Class.(data x)
-  let pp ppf x = pp ppf (exp x)
-
   let forget : 'a t -> unit t = ident
 
+  let same x y = Exp.compare x y = 0
+
   module Top = struct
-    type t = unit exp KB.cls
+    type t = top
     include Sexpable.Of_sexpable(Exp)(struct
-        type t = unit exp KB.cls
-        let to_sexpable x = exp x
-        let of_sexpable x = KB.Class.refine t x
+        type t = top
+        let to_sexpable x = x
+        let of_sexpable x = x
       end)
     include Binable.Of_binable(Exp)(struct
-        type t = unit exp KB.cls
-        let to_binable x = exp x
-        let of_binable x = KB.Class.refine t x
+        type t = top
+        let to_binable x = x
+        let of_binable x = x
       end)
     include Base.Comparable.Inherit(Exp)(struct
-        type t = unit exp KB.cls
-        let sexp_of_t x = Exp.sexp_of_t (exp x)
-        let component x = exp x
+        type t = top
+        let sexp_of_t x = Exp.sexp_of_t x
+        let component x = x
       end)
   end
 end
@@ -180,6 +179,11 @@ end
 type 'a sort = 'a Sort.t
 type 'a sym = 'a Sort.sym
 type 'a num = 'a Sort.num
+type cls = Sort.cls
+type 'a t = (cls,'a sort) KB.cls KB.value
+let cls = Sort.cls
+let empty s : 'a t = KB.Value.empty (KB.Class.refine cls s)
+let sort v : 'a sort = KB.Class.sort (KB.Value.cls v)
 
 
 module Bool : sig
@@ -189,7 +193,7 @@ module Bool : sig
 end = struct
   type bool and t = bool sym
   let bool = Sort.Name.declare ~package "Bool"
-  let t = KB.Class.refine Sort.t (Sort.sym bool)
+  let t = Sort.sym bool
   let refine x = Sort.refine bool x
 end
 
@@ -202,10 +206,9 @@ end = struct
   type bitv
   type 'a t = 'a num -> bitv sym
   let bitvec = Sort.Name.declare ~package "BitVec"
-  let define m : 'a t sort =
-    KB.Class.refine Sort.t Sort.(int m @-> sym bitvec)
+  let define m : 'a t sort = Sort.(int m @-> sym bitvec)
   let refine s = Sort.refine bitvec s
-  let size x = Sort.(value @@ hd (exp x))
+  let size x = Sort.(value @@ hd x)
 end
 
 module Mem : sig
@@ -219,10 +222,10 @@ end = struct
   type ('a,'b) t = 'a Bitv.t -> 'b Bitv.t -> mem sym
   let mem = Sort.Name.declare ~package "Mem"
   let define (ks : 'a Bitv.t sort) (vs : 'b Bitv.t sort) : ('a,'b) t sort =
-    KB.Class.refine Sort.t Sort.(exp ks @-> exp vs @-> sym mem)
+    Sort.(ks @-> vs @-> sym mem)
   let refine x = Sort.refine mem x
-  let keys x = KB.Class.refine Sort.t Sort.(hd (exp x))
-  let vals x = KB.Class.refine Sort.t Sort.(hd (tl (exp x)))
+  let keys x = Sort.(hd x)
+  let vals x = Sort.(hd (tl x))
 end
 
 
@@ -244,19 +247,17 @@ module Float : sig
 end = struct
   module Format = struct
     type ('r,'s) t = ('r -> 's Bitv.t)
-    let define repr bits = Sort.(repr @-> exp bits)
-    let bits x = KB.Class.refine Sort.t @@ Sort.(tl x)
+    let define repr bits = Sort.(repr @-> bits)
+    let bits x = Sort.(tl x)
     let exp x = Sort.(hd x)
   end
   type float
   type ('r,'s) format = ('r,'s) Format.t
   type 'f t = 'f -> float sym
   let float = Sort.Name.declare ~package "Float"
-  let define fmt =
-    KB.Class.refine Sort.t @@
-    Sort.(fmt @-> sym float)
+  let define fmt = Sort.(fmt @-> sym float)
   let refine x = Sort.refine float x
-  let format x = Sort.(hd (exp x))
+  let format x = Sort.(hd x)
   let size x = Format.bits (format x)
 end
 
@@ -269,6 +270,6 @@ end
   type rmode
   type t = rmode sym
   let rmode = Sort.Name.declare "Rmode"
-  let t = KB.Class.refine Sort.t Sort.(sym rmode)
+  let t = Sort.(sym rmode)
   let refine x = Sort.refine rmode x
 end

@@ -1899,7 +1899,7 @@ module Std : sig
 
     val domain : stmt list Knowledge.domain
     val persistent : stmt list Knowledge.persistent
-    val slot : (_ Theory.Program.Semantics.cls, stmt list) Knowledge.slot
+    val slot : (Theory.Program.Semantics.cls, stmt list) Knowledge.slot
 
     (** [printf "%a" pp_binop op] prints a binary operation [op].  *)
     val pp_binop : binop printer
@@ -2648,7 +2648,7 @@ module Std : sig
 
     val reify : 'a Theory.var -> t
     val ident : t -> Theory.Var.ident
-    val sort  : t -> Theory.Sort.top
+    val sort  : t -> Theory.Value.Sort.Top.t
 
     (** [create ?register ?fresh name typ] creates a variable with
         a given [name] and [typ]e.
@@ -3254,9 +3254,7 @@ module Std : sig
   module Exp : sig
     type t = Bil.exp
 
-    val slot : ('a Theory.Sort.exp KB.Class.abstract, exp option) KB.slot
-    val domain : t option Knowledge.domain
-    val persistent : t option Knowledge.persistent
+    val slot : (Theory.Value.cls, exp) KB.slot
 
     (** All visitors provide some information about the current
         position of the visitor *)
@@ -6111,7 +6109,7 @@ module Std : sig
     type t = Theory.Program.Semantics.t [@@deriving bin_io, compare, sexp]
 
     module Slot : sig
-      type 'a t = (unit Theory.Program.Semantics.cls, 'a) KB.slot
+      type 'a t = (Theory.Program.Semantics.cls, 'a) KB.slot
       val name : string t
       val asm :  string t
       val ops :  op array option t
@@ -7099,7 +7097,7 @@ module Std : sig
       ?jmp:(jmp term -> 'a) ->
       't term -> 'a
 
-    val slot : ('a Theory.Program.Semantics.cls, blk term list) Knowledge.slot
+    val slot : (Theory.Program.Semantics.cls, blk term list) Knowledge.slot
   end
 
   (** Program in Intermediate representation.  *)
@@ -7491,13 +7489,11 @@ module Std : sig
 
     type t = def term
 
-    val reify : ?tid:tid ->
-                'a Theory.var ->
-                'a Theory.Sort.exp KB.value -> t
+    val reify : ?tid:tid -> 'a Theory.var -> 'a Theory.value -> t
 
     val var : t -> unit Theory.var
 
-    val value : t -> unit Theory.Sort.exp KB.value
+    val value : t -> unit Theory.value
 
 
     (** [create ?tid x exp] creates definition [x := exp]  *)
@@ -7561,18 +7557,18 @@ module Std : sig
 
 
     val reify : ?tid:tid ->
-                ?cnd:Theory.Bool.t Theory.Sort.exp KB.value ->
+                ?cnd:Theory.Bool.t Theory.value ->
                 ?alt:dst -> ?dst:dst -> unit -> t
 
 
-    val guard : t -> Theory.Bool.t Theory.Sort.exp KB.value option
-    val with_guard : t -> Theory.Bool.t Theory.Sort.exp KB.value option -> t
+    val guard : t -> Theory.Bool.t Theory.value option
+    val with_guard : t -> Theory.Bool.t Theory.value option -> t
     val dst : t -> dst option
     val alt : t -> dst option
 
     val resolved : tid -> dst
-    val indirect : 'a Theory.Bitv.t Theory.Sort.exp KB.value -> dst
-    val resolve : dst -> (tid,'a Theory.Bitv.t Theory.Sort.exp KB.value) Either.t
+    val indirect : 'a Theory.Bitv.t Theory.value -> dst
+    val resolve : dst -> (tid,'a Theory.Bitv.t Theory.value) Either.t
 
 
     (** [create ?cond kind] creates a jump of a given kind  *)
@@ -7638,11 +7634,11 @@ module Std : sig
 
     val reify : ?tid:tid ->
                 'a Theory.var ->
-                (tid * 'a Theory.Sort.exp KB.value) list ->
+                (tid * 'a Theory.value) list ->
                 t
 
     val var : t -> unit Theory.var
-    val options : t -> (tid * unit Theory.Sort.exp KB.value) seq
+    val options : t -> (tid * unit Theory.value) seq
 
 
     (** [create var label exp] creates a phi-node that associates a
@@ -7712,10 +7708,10 @@ module Std : sig
 
     val reify : ?tid:tid -> ?intent:intent ->
                 'a Theory.var ->
-                'a Theory.Sort.exp KB.value -> t
+                'a Theory.value -> t
 
     val var : t -> unit Theory.var
-    val value : t -> unit Theory.Sort.exp KB.value
+    val value : t -> unit Theory.value
 
 
     (** [create ?intent var exp] creates an argument. If intent is

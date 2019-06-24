@@ -115,7 +115,7 @@ module IR = struct
         entry;
       }
 
-  let empty = KB.Value.empty Theory.Program.Semantics.cls
+  let empty = Theory.Effect.empty Theory.Effect.Sort.bot
   let ret cfg = !!(KB.Value.put graph empty (Some cfg))
   let data cfg = ret cfg
   let ctrl cfg = ret cfg

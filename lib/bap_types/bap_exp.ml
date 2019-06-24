@@ -245,15 +245,16 @@ end
 
 let equal x y = phys_equal x y || compare x y = 0
 let to_string = Format.asprintf "%a" PP.pp
-let domain = Knowledge.Domain.optional "exp" ~equal
+let domain = Knowledge.Domain.flat "exp" ~equal
+    ~empty:(Unknown ("empty",Unk))
     ~inspect:(fun exp -> Sexp.Atom (to_string exp))
 
 let persistent = Knowledge.Persistent.of_binable (module struct
-    type t = Bap_bil.exp option [@@deriving bin_io]
+    type t = Bap_bil.exp [@@deriving bin_io]
   end)
 
 let slot = Knowledge.Class.property ~package:"bap.std"
-    ~persistent Theory.Sort.t  "exp" domain
+    ~persistent Theory.Value.cls  "exp" domain
     ~desc:"semantics of expressions in BIL"
 
 include Regular.Make(struct
