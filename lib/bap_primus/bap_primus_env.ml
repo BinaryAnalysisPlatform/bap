@@ -108,7 +108,10 @@ module Make(Machine : Machine) = struct
       | Type.Mem (_,_) -> null
       | Type.Imm width -> match Map.find t.random var with
         | None -> Machine.raise (Undefined_var var)
-        | Some gen -> gen_word gen width >>= Value.of_word
+        | Some gen ->
+           gen_word gen width >>= Value.of_word >>= fun x ->
+           set var x >>= fun () ->
+           !!x
 
   let has var =
     Machine.Local.get state >>| fun t ->
