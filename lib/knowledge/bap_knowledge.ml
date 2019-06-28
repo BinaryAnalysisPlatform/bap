@@ -783,23 +783,24 @@ module Dict = struct
   let make1 k a = T1 (k,a) [@@inline]
   let make2 ka a kb b = T2 (ka,a,kb,b) [@@inline]
   let make3 ka a kb b kc c = T3 (ka,a,kb,b,kc,c) [@@inline]
-  let make4 ka a kb b kc c kd d =
-    T4 (ka,a, kb,b, kc,c, kd,d)
-  [@@inline]
+  let make4 ka a kb b kc c kd d = T4 (ka,a, kb,b, kc,c, kd,d) [@@inline]
   let make5 ka a kb b kc c kd d ke e =
-    LR (T2 (ka,a,kb,b),kc,c,T2(kd,d,ke,e))
+    LR (T0,ka,a,make4 kb b kc c kd d ke e)
   [@@inline]
   let make6 ka a kb b kc c kd d ke e kf f =
-    LL (T2 (ka,a,kb,b),kc,c,T3 (kd,d,ke,e,kf,f))
+    LR (T1 (ka,a),kb,b,T4(kc,c,kd,d,ke,e,kf,f))
   [@@inline]
   let make7 ka a kb b kc c kd d ke e kf f kg g =
-    LR (T3 (ka,a,kb,b,kc,c), kd,d, T3 (ke,e,kf,f,kg,g))
+    LR (T2 (ka,a,kb,b),kc,c, T4 (kd,d,ke,e,kf,f,kg,g))
   [@@inline]
   let make8 ka a kb b kc c kd d ke e kf f kg g kh h =
-    LL (T3 (ka,a,kb,b,kc,c),kd,d, T4(ke,e,kf,f,kg,g,kh,h))
+    LR (T3 (ka,a,kb,b,kc,c),kd,d, T4(ke,e,kf,f,kg,g,kh,h))
   [@@inline]
   let make9 ka a kb b kc c kd d ke e kf f kg g kh h ki i =
     LR (T4 (ka,a,kb,b,kc,c,kd,d),ke,e,T4(kf,f,kg,g,kh,h,ki,i))
+  [@@inline]
+  let make10 ka a kb b kc c kd d ke e kf f kg g kh h ki i kj j =
+    LL (make4 ka a kb b kc c kd d,ke,e, make5 kf f kg g kh h ki i kj j)
   [@@inline]
 
   type 'r visitor = {
@@ -807,7 +808,7 @@ module Dict = struct
   } [@@unboxed]
 
   let above x k = match x with
-    | T0 -> assert false
+    | T0 -> false
     | T1 (x,_) -> x <$ k
     | T2 (_,_,x,_) -> x <$ k
     | T3 (_,_,_,_,x,_) -> x <$ k
@@ -817,7 +818,7 @@ module Dict = struct
   [@@inline]
 
   let below k = function
-    | T0 -> assert false
+    | T0 -> true
     | T1 (x,_) -> k <$ x
     | T2 (x,_,_,_) -> k <$ x
     | T3 (x,_,_,_,_,_) -> k <$ x
@@ -855,6 +856,14 @@ module Dict = struct
   let cmp x y = compare_keys x y [@@inline]
   let eq x y = compare_keys x y = 0 [@@inline]
 
+  let has_slot = function
+    | T0 | T1 _ | T2 _ | T3 _
+    | LR ((T0 | T1 _ | T2 _ | T3 _),_,_,_)
+    | LR (_,_,_,(T0 | T1 _ | T2 _ | T3 _)) -> true
+    | _ -> false
+
+  exception Bal of record
+
   (* pre:
      - a is not in t;
      - for all functions except [bal] t is balanced;
@@ -867,22 +876,6 @@ module Dict = struct
   *)
   let rec insert
     : type a. a key -> a -> record -> record = fun ka a -> function
-    | LL (b,k,x,c) ->
-      if ka <$ k
-      then if above b ka
-        then bal (LL (b,ka,a,insert k x c))
-        else LR (insert ka a b,k,x,c)
-      else if below ka c
-      then LR (insert k x b,ka,a,c)
-      else bal (LL (b,k,x,insert ka a c))
-    | LR (b,k,x,c) ->
-      if ka <$ k
-      then if above b ka
-        then LL (b,ka,a,insert k x c)
-        else bal (LR (insert ka a b,k,x,c))
-      else if below ka c
-      then bal (LR (insert k x b,ka,a,c))
-      else (LL (b,k,x,insert ka a c))
     | T0 -> make1 ka a
     | T1 (kb,b) -> if ka <$ kb
       then make2 ka a kb b
@@ -902,58 +895,365 @@ module Dict = struct
       then make5 kb b kc c ka a kd d ke e else if ka <$ ke
       then make5 kb b kc c kd d ka a ke e
       else make5 kb b kc c kd d ke e ka a
+    | LR (T0,kb,b,T4(kc,c,kd,d,ke,e,kf,f)) ->
+      if ka <$ kd then
+        if ka <$ kc then
+          if ka <$ kb
+          then make6 ka a kb b kc c kd d ke e kf f
+          else make6 kb b ka a kc c kd d ke e kf f
+        else make6 kb b kc c ka a kd d ke e kf f
+      else
+      if ka <$ ke then
+        make6 kb b kc c kd d ka a ke e kf f
+      else if ka <$ kf
+      then make6 kb b kc c kd d ke e ka a kf f
+      else make6 kb b kc c kd d ke e kf f ka a
+    | LR (T1 (kb,b),kc,c,T4(kd,d,ke,e,kf,f,kg,g)) ->
+      if ka <$ kd then
+        if ka <$ kc then
+          if ka <$ kb
+          then make7 ka a kb b kc c kd d ke e kf f kg g
+          else make7 kb b ka a kc c kd d ke e kf f kg g
+        else make7 kb b kc c ka a kd d ke e kf f kg g
+      else
+      if ka <$ kf then
+        if ka <$ ke
+        then make7 kb b kc c kd d ka a ke e kf f kg g
+        else make7 kb b kc c kd d ke e ka a kf f kg g
+      else if ka <$ kg
+      then make7 kb b kc c kd d ke e kf f ka a kg g
+      else make7 kb b kc c kd d ke e kf f kg g ka a
+    | LR (T2 (kb,b,kc,c),kd,d,T4(ke,e,kf,f,kg,g,kh,h)) ->
+      if ka <$ ke then
+        if ka <$ kc then
+          if ka <$ kb
+          then make8 ka a kb b kc c kd d ke e kf f kg g kh h
+          else make8 kb b ka a kc c kd d ke e kf f kg g kh h
+        else
+        if ka <$ kd
+        then make8 kb b kc c ka a kd d ke e kf f kg g kh h
+        else make8 kb b kc c kd d ka a ke e kf f kg g kh h
+      else
+      if ka <$ kg then
+        if ka <$ kf
+        then make8 kb b kc c kd d ke e ka a kf f kg g kh h
+        else make8 kb b kc c kd d ke e kf f ka a kg g kh h
+      else if ka <$ kh
+      then make8 kb b kc c kd d ke e kf f kg g ka a kh h
+      else make8 kb b kc c kd d ke e kf f kg g kh h ka a
+    | LR (T3 (kb,b,kc,c,kd,d),ke,e,T4(kf,f,kg,g,kh,h,ki,i)) ->
+      if ka <$ ke then
+        if ka <$ kc then
+          if ka <$ kb
+          then make9 ka a kb b kc c kd d ke e kf f kg g kh h ki i
+          else make9 kb b ka a kc c kd d ke e kf f kg g kh h ki i
+        else
+        if ka <$ kd
+        then make9 kb b kc c ka a kd d ke e kf f kg g kh h ki i
+        else make9 kb b kc c kd d ka a ke e kf f kg g kh h ki i
+      else
+      if ka <$ kg then
+        if ka <$ kf
+        then make9 kb b kc c kd d ke e ka a kf f kg g kh h ki i
+        else make9 kb b kc c kd d ke e kf f ka a kg g kh h ki i
+      else if ka <$ kh
+      then make9 kb b kc c kd d ke e kf f kg g ka a kh h ki i
+      else if ka <$ ki then
+        make9 kb b kc c kd d ke e kf f kg g kh h ka a ki i
+      else
+        make9 kb b kc c kd d ke e kf f kg g kh h ki i ka a
+    | LR (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)) ->
+      if ka <$ kf then
+        if ka <$ kc then
+          if ka <$ kb
+          then make10 ka a kb b kc c kd d ke e kf f kg g kh h ki i kj j
+          else make10 kb b ka a kc c kd d ke e kf f kg g kh h ki i kj j
+        else
+        if ka <$ ke
+        then if ka <$ kd
+          then make10 kb b kc c ka a kd d ke e kf f kg g kh h ki i kj j
+          else make10 kb b kc c kd d ka a ke e kf f kg g kh h ki i kj j
+        else make10 kb b kc c kd d ke e ka a kf f kg g kh h ki i kj j
+      else
+      if ka <$ ki then
+        if ka <$ kh
+        then
+          if ka <$ kg
+          then make10 kb b kc c kd d ke e kf f ka a kg g kh h ki i kj j
+          else make10 kb b kc c kd d ke e kf f kg g ka a kh h ki i kj j
+        else make10 kb b kc c kd d ke e kf f kg g kh h ka a ki i kj j
+      else if ka <$ kj
+      then make10 kb b kc c kd d ke e kf f kg g kh h ki i ka a kj j
+      else make10 kb b kc c kd d ke e kf f kg g kh h ki i kj j ka a
+    | LL (b,k,x,c) ->
+      if ka <$ k
+      then if above b ka
+        then if has_slot c
+          then LL (b,ka,a,insert k x c)
+          else bal (LL (b,ka,a,insert k x c))
+        else if has_slot b
+        then LL (insert ka a b,k,x,c)
+        else LR (insert ka a b,k,x,c)
+      else if below ka c
+      then if has_slot b
+        then LL (insert k x b,ka,a,c)
+        else LR (insert k x b,ka,a,c)
+      else if has_slot c
+      then LL (b,k,x,insert ka a c)
+      else bal (LL (b,k,x,insert ka a c))
+    | LR (b,k,x,c) ->
+      if ka <$ k
+      then if above b ka
+        then if has_slot c
+          then LR (b,ka,a,insert k x c)
+          else LL (b,ka,a,insert k x c)
+        else if has_slot b
+        then  LR (insert ka a b,k,x,c)
+        else  bal (LR (insert ka a b,k,x,c))
+      else if below ka c
+      then if has_slot b
+        then LR (insert k x b,ka,a,c)
+        else bal (LR (insert k x b,ka,a,c))
+      else if has_slot c
+      then LR (b,k,x,insert ka a c)
+      else LL (b,k,x,insert ka a c)
+
   and bal : record -> record = function
-    | LL (T2 (ka,a,kb,b), kc,c, T4 (kd,d,ke,e,kf,f,kg,g)) ->
-      make7 ka a kb b kc c kd d ke e kf f kg g
-    | LL (T3 (ka,a,kb,b,kc,c),kd,d,
-          LR (T2 (ke,e,kf,f), kg,g, T2(kh,h,ki,i))) ->
-      make9 ka a kb b kc c kd d ke e kf f kg g kh h ki i
-    | LL (T4 (ka,a,kb,b,kc,c,kd,d),ke,e,
-          LL (T2(kf,f,kg,g),kh,h,(T3 (ki,i,kj,j,kk,k)))) ->
-      LR (make5 ka a kb b kc c kd d ke e,
-          kf,f,
-          make5 kg g kh h ki i kj j kk k)
-    | LL (LR (T2 (ka,a, kb,b), kc,c, T2 (kd,d, ke,e)),kf,f,
-          LR (T3 (kg,g,kh,h,ki,i),kj,j, T3 (kk,k, kl,l, km,m))) ->
-      LR (make6 ka a kb b kc c kd d ke e kf f,
-          kg,g,
-          make6 kh h ki i kj j kk k kl l km m)
-    | LR (T4 (ka,a,kb,b,kc,c,kd,d),ke,e,
-          T3 (kf,f,kg,g,kh,h)) ->
-      make8 ka a kb b kc c kd d ke e kf f kg g kh h
-    | LR (LR (T2 (ka,a,kb,b), kc,c, T2 (kd,d,ke,e)),
-          kf,f,
-          T4 (kg,g,kh,h,ki,i,kj,j)) ->
-      LL (make4 ka a kb b kc c kd d,
-          ke,e,
-          make5 kf f kg g kh h ki i kj j)
-    | LL (x,ka,a,y) -> pop_max y {app = fun kb b y ->
-        LR (insert ka a x,kb,b,y)}
-    | LR (x,ka,a,y) -> pop_min x {app = fun kb b x ->
-        LL (x,kb,b,insert ka a y)}
-    | _ -> assert false
-  and pop_max t f = match t with
-    | T2 (ka,a,kb,b) -> f.app ka a (T1 (kb,b))
-    | T3 (ka,a,kb,b,kc,c) -> f.app ka a (T2 (kb,b,kc,c))
-    | T4 (ka,a,kb,b,kc,c,kd,d) -> f.app ka a (T3 (kb,b,kc,c,kd,d))
-    | LR (T2 (ka,a,kb,b),kc,c,T2(kd,d,ke,e)) ->
-      f.app ka a (T4 (kb,b,kc,c,kd,d,ke,e))
-    | LR (x,kb,b,y) -> pop_max x {app = fun ka a x ->
-        f.app ka a (LL (x,kb,b,y))}
-    | LL (x,kb,b,y) -> pop_max x {app = fun ka a x ->
-        f.app ka a (bal (LL (x,kb,b,y)))}
-    | _ -> assert false
-  and pop_min t f = match t with
-    | LR (T2 (ka,a,kb,b),kc,c,T2(kd,d,ke,e)) ->
-      f.app ke e (T4 (ka,a,kb,b,kc,c,kd,d))
-    | LL (x,kb,b,y) -> pop_min y {app = fun ka a y ->
-        f.app ka a (LR (x,kb,b,y))}
-    | LR (x,kb,b,y) -> pop_min y {app = fun ka a y ->
-        f.app ka a (bal (LR (x,kb,b,y)))}
-    | T2 (ka,a,kb,b) -> f.app kb b (T1 (ka,a))
-    | T3 (ka,a,kb,b,kc,c) -> f.app kc c (T2 (ka,a,kb,b))
-    | T4 (ka,a,kb,b,kc,c,kd,d) -> f.app kd d (T3 (ka,a,kb,b,kc,c))
-    | _ -> assert false
+    | LL (x,ka,a,LL(y,kb,b,z)) ->
+      (*
+         h(x) = m
+         h(LL(y,b,z)) = m+2
+         h(y) = m
+         h(z) = m+1
+         -----------------
+         h(LR(x,a,y)) = m+1
+         h(LR (LR (x,a,y),b,z)) = m+2
+      *)
+      LL (LR (x,ka,a,y),kb,b,z)
+
+
+    | LL (w,ka,a,LR(LR(x,kb,b,y),kc,c,z)) ->
+      (*
+         h(w) = m
+         h(LR(LR(x,b,y),c,z)) = m+2
+         h(LR(x,b,y)) = m+1
+         h(z) = m+1
+         h(x) = m
+         h(y) = m
+         -----------------
+         h(LR(w,a,x) = m+1
+         h(LL(y,c,z) = m+2
+         h(LR(w,a,x),b,LL(y,c,z))=m+3
+      *)
+      LL (LR(w,ka,a,x),kb,b,LL(y,kc,c,z))
+
+    | LL (w,ka,a,LR(LL(x,kb,b,y),kc,c,z)) ->
+      (*
+         h(w) = m
+         h(LR(LL(x,b,y),c,z)) = m+2
+         h(z) = m+1
+         h(LL(x,b,y)) = m+1
+         h(y) = m
+         h(x) = m-1
+         -----------------------
+
+      *)
+      LL (bal(LR(w,ka,a,x)),kb,b,LL(y,kc,c,z))
+
+    | LL (x,ka,a,LR(y,kb,b,z)) ->
+      (*
+         h(x) = m
+         h(LR(y,b,z)) = m+2
+         h(y) = m+1
+         h(z) = m+1
+         -----------------
+         LR+(LL(x,a,y),b,z)
+*)
+
+      bal (LR (LL (x,ka,a,y),kb,b,z))
+
+
+    | LR(LL(w,ka,a,LL(x,kb,b,y)),kc,c,z) ->
+      (*
+         h(z) = m
+         h(LL(w,a,LL(x,b,y))) = m+1
+         h(LL(x,b,y)) = m
+         h(w) = m-1
+         h(x) = m-2
+         h(y) = m-1
+         --------------------------
+         LL(LR+(w,a,x),b,LL(y,c,z))
+      *)
+      LL(bal(LR(w,ka,a,x)),kb,b,LL(y,kc,c,z))
+
+
+    | LR(LL(w,ka,a,LR(x,kb,b,y)),kc,c,z) ->
+      (*
+         h(z) = m
+         h(LL(w,a,LR(x,b,y))) = m+1
+         h(LR(x,b,y)) = m
+         h(w) = m-1
+         h(x) = m-1
+         h(y) = m-1
+         --------------------------
+         LL(LR(w,a,x),b,LL(y,c,z))
+      *)
+      LL(LR(w,ka,a,x),kb,b,LL(y,kc,c,z))
+
+    | LR(LR(w,ka,a,LR(x,kb,b,y)),kc,c,z) ->
+      (*
+         h(z) = m
+         h(LR(w,a,LR(x,b,y))) = m+1
+         h(LR(x,b,y)) = m
+         h(w) = m
+         h(x) = m-1
+         h(y) = m-1
+         --------------------------
+         LR(LR+(w,a,x),b,LL(y,c,z))
+      *)
+      LR(bal(LR(w,ka,a,x)),kb,b,LL(y,kc,c,z))
+    | LR(LR(LR(w,ka,a,x),kb,b,y),kc,c,z) ->
+      (*
+         h(z) = m
+         h(LR(LR(w,a,x),b,y)) = m+1
+         h(y) = m
+         h(LR(w,a,x)) = m
+         h(w) = m-1
+         h(x) = m-1
+         --------------------------
+         LL(LR(w,a,x),b,LR(y,c,z))
+      *)
+      LL(LR(w,ka,a,x),kb,b,LR(y,kc,c,z))
+
+    | LR(LR(LL(w,ka,a,x),kb,b,y),kc,c,z) ->
+      (*
+         h(z) = m
+         h(LR(LL(w,a,x),b,y)) = m+1
+         h(y) = m
+         h(LL(w,a,x)) = m
+         h(w) = m-2
+         h(x) = m-1
+         --------------------------
+         LL(LL(w,a,x),b,LR(y,c,z))
+      *)
+      LL(LL(w,ka,a,x),kb,b,LR(y,kc,c,z))
+
+    | LR(LL(LR(w,ka,a,x),kb,b,y),kc,c,z) ->
+      (*
+         h(z) = m
+         h(LL(LR(w,a,x),b,y)) = m+1
+         h(y) = m
+         h(LR(w,a,x)) = m
+         h(w) = m-1
+         h(x) = m-1
+         --------------------------
+         LL(LR(w,a,x),b,LR(y,c,z))
+      *)
+      LL(LR(w,ka,a,x),kb,b,LR(y,kc,c,z))
+
+    | LR(LL(LL(w,ka,a,x),kb,b,y),kc,c,z) ->
+      (*
+         h(z) = m
+         h(LL(LL(w,a,x),b,y)) = m+1
+         h(y) = m
+         h(LL(w,a,x)) = m
+         h(w) = m-2
+         h(x) = m-1
+         --------------------------
+         LL(LL(w,a,x),b,LR(y,c,z))
+      *)
+      LL(LL(w,ka,a,x),kb,b,LR(y,kc,c,z))
+
+    | LR(LR(x,ka,a,y),kb,b,z) ->
+         (*
+         h(z) = m
+         h(LR(x,ka,a,y) = m+1
+         h(x) = m
+         h(y) = m
+         --------------
+         LL(x,a,LR(y,b,z))
+    *)
+      LL(x,ka,a,LR(y,kb,b,z))
+
+
+    (* first floor cases are handled manually *)
+    (* | LR(LR(T0,ka,a,T4 (kb,b,kc,c,kd,d,ke,e)),kf,f,T0) ->
+     *   make6 ka a kb b kc c kd d ke e kf f
+     * | LR(LR(T0,ka,a,T4 (kb,b,kc,c,kd,d,ke,e)),kf,f,T1 (kg,g)) ->
+     *   make7 ka a kb b kc c kd d ke e kf f kg g
+     * | LR(LR(T0,ka,a,T4 (kb,b,kc,c,kd,d,ke,e)),kf,f,T2 (kg,g,kh,h)) ->
+     *   make8 ka a kb b kc c kd d ke e kf f kg g kh h
+     * | LR(LR(T0,ka,a,T4 (kb,b,kc,c,kd,d,ke,e)),kf,f,T3 (kg,g,kh,h,ki,i)) ->
+     *   make9 ka a kb b kc c kd d ke e kf f kg g kh h ki i
+     * | LR(LR(T0,ka,a,T4 (kb,b,kc,c,kd,d,ke,e)),kf,f,T4 (kg,g,kh,h,ki,i,kj,j)) ->
+     *   make10 ka a kb b kc c kd d ke e kf f kg g kh h ki i kj j *)
+
+    (* | LR (LR (x,ka,a,y),kb,b,z) ->
+     *   assert false *)
+
+
+    | t -> raise (Bal t)
+
+
+
+  type test = {
+    pos : int;
+    key : int key;
+    add : record -> record;
+    (* put : int -> record -> record; *)
+    (* get : record -> int; *)
+    core_add : Univ_map.t -> Univ_map.t;
+    (* core_get : Univ_map.t -> int; *)
+  }
+
+  let input n =
+    Sequence.range 0 n |>
+    Sequence.map ~f:(fun pos ->
+        let name = sprintf "f%d" pos in
+        let k = Key.create ~name sexp_of_int in
+        let core_add r = Univ_map.add_exn r k.key pos in
+        (* let core_get r = Univ_map.find_exn r k.key in *)
+        {
+          pos;
+          key = k;
+          add = insert k pos;
+          (* add = update (fun _ x -> x) k pos; *)
+          (* put = update (fun _ x -> x) k; *)
+          (* get = get k; *)
+          core_add;
+          (* core_get; *)
+        }) |>
+    Sequence.to_array
+
+  let rec length = function
+    | T0 -> 0
+    | T1 _ -> 1
+    | T2 _ -> 2
+    | T3 _ -> 3
+    | T4 _ -> 4
+    | LR (x,_,_,y)
+    | LL (x,_,_,y) ->  length x + length y + 1
+
+  let test input =
+    let input = Array.copy input in
+    (* Array.permute input; *)
+    trace_enter "test/dict";
+    let x = Array.fold input ~init:T0 ~f:(fun r {add} -> add r) in
+    trace_leave "test/dict";
+    trace_enter "test/core";
+    let y = Array.fold input ~init:Univ_map.empty ~f:(fun r {core_add} ->
+        core_add r) in
+    trace_leave "test/core";
+    input,x,y
+
+  let r =
+    trace_reset ();
+    Format.eprintf "@\n%!";
+    let _,d,m = test (input 32) in
+    let size x = Obj.reachable_words (Obj.repr x) in
+    Format.eprintf "dict=%d vs. core=%d@\n%!" (size d) (size m);
+    if (length d <> List.length (Univ_map.to_alist m))
+    then failwith "the map is incomplete"
 
   (* [merge k x y] *)
   type merge = {
@@ -1163,76 +1463,20 @@ module Dict = struct
         pp_elt (kc,c)
         pp_elt (kd,d)
     | LR (x,k,a,y) ->
-      Format.fprintf ppf "[%a-%a-%a]"
+      Format.fprintf ppf "LR(%a,%a,%a)"
         pp_tree x pp_elt (k,a) pp_tree y
     | LL (x,k,a,y) ->
-      Format.fprintf ppf "[%a_%a-%a]"
+      Format.fprintf ppf "LL(%a,%a,%a)"
         pp_tree x pp_elt (k,a) pp_tree y
 
-  let rec length = function
-    | T0 -> 0
-    | T1 _ -> 1
-    | T2 _ -> 2
-    | T3 _ -> 3
-    | T4 _ -> 4
-    | LR (x,_,_,y)
-    | LL (x,_,_,y) ->  length x + length y + 1
-
-
-  type test = {
-    pos : int;
-    key : int key;
-    add : record -> record;
-    put : int -> record -> record;
-    get : record -> int;
-    core_add : Univ_map.t -> Univ_map.t;
-    core_get : Univ_map.t -> int;
-  }
-
-  let input n =
-    Sequence.range 0 n |>
-    Sequence.map ~f:(fun pos ->
-        let name = sprintf "f%d" pos in
-        let k = Key.create ~name sexp_of_int in
-        let core_add r = Univ_map.add_exn r k.key pos in
-        let core_get r = Univ_map.find_exn r k.key in
-        {
-          pos;
-          key = k;
-          add = insert k pos;
-          (* add = update (fun _ x -> x) k pos; *)
-          put = update (fun _ x -> x) k;
-          get = get k;
-          core_add;
-          core_get;
-        }) |>
-    Sequence.to_array
-
-  let test input =
-    let input = Array.copy input in
-    (* Array.permute input; *)
-    trace_enter "test/dict";
-    let x = Array.fold input ~init:T0 ~f:(fun r {add} -> add r) in
-    trace_leave "test/dict";
-    trace_enter "test/core";
-    let y = Array.fold input ~init:Univ_map.empty ~f:(fun r {core_add} ->
-        core_add r) in
-    trace_leave "test/core";
-    x,y
+  let pp_key ppf {Key.key} =
+    Format.fprintf ppf "%s" (Type_equal.Id.name key)
 
 
   let pp_uid ppf uid =
     Format.fprintf ppf "%a" Sexp.pp_hum (Uid.sexp_of_t uid)
 
 
-  let r =
-    trace_reset ();
-    Format.eprintf "@\n%!";
-    let d,m = test (input 1279) in
-    let size x = Obj.reachable_words (Obj.repr x) in
-    Format.eprintf "dict=%d vs. core=%d@\n%!" (size d) (size m);
-    assert (length d = List.length (Univ_map.to_alist m));
-    d
 
   ;;
 
