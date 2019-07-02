@@ -800,7 +800,7 @@ module Dict = struct
     LR (T4 (ka,a,kb,b,kc,c,kd,d),ke,e,T4(kf,f,kg,g,kh,h,ki,i))
   [@@inline]
   let make10 ka a kb b kc c kd d ke e kf f kg g kh h ki i kj j =
-    LL (make4 ka a kb b kc c kd d,ke,e, make5 kf f kg g kh h ki i kj j)
+    LL (T0,ka,a,make9 kb b kc c kd d ke e kf f kg g kh h ki i kj j)
   [@@inline]
 
   type 'r visitor = {
@@ -808,7 +808,7 @@ module Dict = struct
   } [@@unboxed]
 
   let above x k = match x with
-    | T0 -> false
+    | T0 -> false (* vacuous truth *)
     | T1 (x,_) -> x <$ k
     | T2 (_,_,x,_) -> x <$ k
     | T3 (_,_,_,_,x,_) -> x <$ k
@@ -818,7 +818,7 @@ module Dict = struct
   [@@inline]
 
   let below k = function
-    | T0 -> true
+    | T0 -> false                (* vacuous truth *)
     | T1 (x,_) -> k <$ x
     | T2 (x,_,_,_) -> k <$ x
     | T3 (x,_,_,_,_,_) -> k <$ x
@@ -856,13 +856,296 @@ module Dict = struct
   let cmp x y = compare_keys x y [@@inline]
   let eq x y = compare_keys x y = 0 [@@inline]
 
-  let has_slot = function
-    | T0 | T1 _ | T2 _ | T3 _
-    | LR ((T0 | T1 _ | T2 _ | T3 _),_,_,_)
-    | LR (_,_,_,(T0 | T1 _ | T2 _ | T3 _)) -> true
+  let rec has_slot = function
+    | T0 | T1 _ | T2 _ | T3 _ -> true
+    | LR (x,_,_,y) -> has_slot x || has_slot y
+    | LL (x,_,_,y) -> has_slot x || has_slot y
     | _ -> false
 
+
   exception Bal of record
+  exception LL_not_balanced of record * record
+  exception LR_not_balanced of record * record
+  exception LL_balanced of record * record
+  exception LR_balanced of record * record
+  exception Not_disbalanced of record
+  exception Not_balanced of record
+  exception Broken_bal of record * record
+  exception Broken_ins of record * record
+
+  let rec height = function
+    | T0 | T1 _ | T2 _ | T3 _ | T4 _ -> 1
+    | LL (x,_,_,y) ->
+      let h1 = height x
+      and h2 = height y in
+      if h1 = h2 - 1
+      then h2 + 1
+      else raise (LL_not_balanced (x,y))
+    | LR (x,_,_,y) ->
+      let h1 = height x
+      and h2 = height y in
+      if h1 = h2
+      then h2 + 1
+      else raise (LR_not_balanced (x,y))
+
+  let rec h = function
+    | T0 | T1 _ | T2 _ | T3 _ | T4 _ -> 1
+    | LL (x,_,_,y) -> max (h x) (h y) + 1
+    | LR (x,_,_,y) -> max (h x) (h y) + 1
+
+  let is_disbalanced t = match t with
+    | T0 | T1 _ | T2 _ | T3 _ | T4 _ -> false
+    | LL (x,_,_,y) -> height x = height y - 2
+    | LR (x,_,_,y) -> height x = height y + 1
+
+  let is_balanced t = match t with
+    | T0 | T1 _ | T2 _ | T3 _ | T4 _ -> true
+    | LL (x,_,_,y) -> height x = height y - 1
+    | LR (x,_,_,y) -> height x = height y
+
+  let rec bal : record -> record = function
+    (* first floor cases are handled manually *)
+    (* | LR(LR(T1 (ka,a),kb,b,T3 (kc,c,kd,d,ke,e)),kf,f,T0) ->
+     *   make6 ka a kb b kc c kd d ke e kf f
+     * | LR(LR(T0,ka,a,T4 (kb,b,kc,c,kd,d,ke,e)),kf,f,T0) ->
+     *   make6 ka a kb b kc c kd d ke e kf f
+     * | LR(LR(T0,ka,a,T4 (kb,b,kc,c,kd,d,ke,e)),kf,f,T1 (kg,g)) ->
+     *   make7 ka a kb b kc c kd d ke e kf f kg g
+     * | LR(LR(T0,ka,a,T4 (kb,b,kc,c,kd,d,ke,e)),kf,f,T2 (kg,g,kh,h)) ->
+     *   make8 ka a kb b kc c kd d ke e kf f kg g kh h
+     * | LR(LR(T0,ka,a,T4 (kb,b,kc,c,kd,d,ke,e)),kf,f,T3 (kg,g,kh,h,ki,i)) ->
+     *   make9 ka a kb b kc c kd d ke e kf f kg g kh h ki i
+     * | LR(LR(T0,ka,a,T4 (kb,b,kc,c,kd,d,ke,e)),kf,f,T4 (kg,g,kh,h,ki,i,kj,j)) ->
+     *   make10 ka a kb b kc c kd d ke e kf f kg g kh h ki i kj j *)
+
+
+    | LL (x,ka,a,LL(y,kb,b,z)) ->
+      (*
+         h(x) = m
+         h(LL(y,b,z)) = m+2
+         h(y) = m
+         h(z) = m+1
+         -----------------
+         h(LR(x,a,y)) = m+1
+         LR (LR(x,a,y),b,z)
+      *)
+      LR (LR (x,ka,a,y),kb,b,z)
+
+    | LL (w,ka,a,LR(LR(x,kb,b,y),kc,c,z)) ->
+      (*
+         h(w) = m
+         h(LR(LR(x,b,y),c,z)) = m+2
+         h(LR(x,b,y)) = m+1
+         h(z) = m+1
+         h(x) = m
+         h(y) = m
+         -----------------
+         h(LR(w,a,x) = m+1
+         h(LL(y,c,z) = m+2
+         h(LR(w,a,x),b,LL(y,c,z))=m+3
+      *)
+      LL (LR(w,ka,a,x),kb,b,LL(y,kc,c,z))
+
+    | LL (w,ka,a,LR(LL(x,kb,b,y),kc,c,z)) ->
+      (*
+         h(w) = m
+         h(LR(LL(x,b,y),c,z)) = m+2
+         h(z) = m+1
+         h(LL(x,b,y)) = m+1
+         h(y) = m
+         h(x) = m-1
+         -----------------------
+         h(LR+(w,a,x))=m+1
+         h(LL(y,c,z))=m+2
+         LL (LR+(w,a,x),b,LL(y,c,z))
+      *)
+      LL (bal(LR(w,ka,a,x)),kb,b,LL(y,kc,c,z))
+
+    | LL (x,ka,a,LR(y,kb,b,z)) ->
+      (*
+         h(x) = m
+         h(LR(y,b,z)) = m+2
+         h(y) = m+1
+         h(z) = m+1
+         -----------------
+         LR+(LL(x,a,y),b,z)
+*)
+
+      bal (LR (LL (x,ka,a,y),kb,b,z))
+
+    | LR(LL(w,ka,a,LL(x,kb,b,y)),kc,c,z) ->
+      (*
+         h(z) = m
+         h(LL(w,a,LL(x,b,y))) = m+1
+         h(LL(x,b,y)) = m
+         h(w) = m-1
+         h(x) = m-2
+         h(y) = m-1
+         --------------------------
+         h(LL(y,c,z)) = m+1
+         h(LR+(w,a,x)) = m
+         LL(LR+(w,a,x),b,LL(y,c,z))
+      *)
+      LL(bal(LR(w,ka,a,x)),kb,b,LL(y,kc,c,z))
+
+    | LR(LL(w,ka,a,LR(x,kb,b,y)),kc,c,z) ->
+      (*
+         h(z) = m
+         h(LL(w,a,LR(x,b,y))) = m+1
+         h(LR(x,b,y)) = m
+         h(w) = m-1
+         h(x) = m-1
+         h(y) = m-1
+         --------------------------
+         h(LR(w,a,x)) = m
+         LL(y,c,z) = m+1
+         LL(LR(w,a,x),b,LL(y,c,z))
+      *)
+      LL(LR(w,ka,a,x),kb,b,LL(y,kc,c,z))
+
+    | LR(LR(w,ka,a,LR(x,kb,b,y)),kc,c,z) ->
+      (*
+         h(z) = m
+         h(LR(w,a,LR(x,b,y))) = m+1
+         h(LR(x,b,y)) = m
+         h(w) = m
+         h(x) = m-1
+         h(y) = m-1
+         --------------------------
+         h(LR+(w,a,x)) = m+1
+         h(LL(y,c,z)) = m+1
+         LR(LR+(w,a,x),b,LL(y,c,z))
+      *)
+      LR(bal(LR(w,ka,a,x)),kb,b,LL(y,kc,c,z))
+
+    | LR(LR(LR(w,ka,a,x),kb,b,y),kc,c,z) ->
+      (*
+         h(z) = m
+         h(LR(LR(w,a,x),b,y)) = m+1
+         h(y) = m
+         h(LR(w,a,x)) = m
+         h(w) = m-1
+         h(x) = m-1
+         --------------------------
+         h(LR(w,a,x)) = m
+         h(LR(y,c,z) = m+1
+         LL(LR(w,a,x),b,LR(y,c,z))
+      *)
+      LL(LR(w,ka,a,x),kb,b,LR(y,kc,c,z))
+
+    | LR(LR(LL(w,ka,a,x),kb,b,y),kc,c,z) ->
+      (*
+         h(z) = m
+         h(LR(LL(w,a,x),b,y)) = m+1
+         h(y) = m
+         h(LL(w,a,x)) = m
+         h(w) = m-2
+         h(x) = m-1
+         --------------------------
+         h(LL(w,a,x)) = m
+         h(LR(y,c,z)) = m+1
+         LL(LL(w,a,x),b,LR(y,c,z))
+      *)
+      LL(LL(w,ka,a,x),kb,b,LR(y,kc,c,z))
+
+    | LR(LL(LR(w,ka,a,x),kb,b,y),kc,c,z) ->
+      (*
+         h(z) = m
+         h(LL(LR(w,a,x),b,y)) = m+1
+         h(y) = m
+         h(LR(w,a,x)) = m-1
+         h(w) = m-2
+         h(x) = m-2
+         --------------------------
+         h(LR(w,a,x))=m-1
+         h(LR(y,c,z))=m+1
+         LL+(LR(w,a,x),b,LR(y,c,z))
+      *)
+      bal(LL(LR(w,ka,a,x),kb,b,LR(y,kc,c,z)))
+
+    | LR(LL(LL(w,ka,a,x),kb,b,y),kc,c,z) ->
+      (*
+         h(z) = m
+         h(LL(LL(w,a,x),b,y)) = m+1
+         h(y) = m
+         h(LL(w,a,x)) = m-1
+         h(w) = m-3
+         h(x) = m-2
+         --------------------------
+         h(LL(w,ka,a,x)) = m-1
+         h(LR(y,c,z)) = m+1
+         LL+(LL(w,a,x),b,LR(y,c,z))
+      *)
+      bal (LL(LL(w,ka,a,x),kb,b,LR(y,kc,c,z)))
+
+    | LR(LR(x,ka,a,y),kb,b,z) ->
+         (*
+         h(z) = m
+         h(LR(x,ka,a,y) = m+1
+         h(x) = m
+         h(y) = m
+         --------------
+         h(LR(y,b,z)) = m+1
+         LL(x,a,LR(y,b,z))
+    *)
+      LL(x,ka,a,LR(y,kb,b,z))
+
+    (* | LR (LR (x,ka,a,y),kb,b,z) ->
+     *   assert false *)
+
+
+    | t -> raise (Bal t)
+
+
+  (*
+
+     h(LR(x,ka,a,y)) = m+1
+     h(z) = m
+     h(y) = m
+     h(x) = m
+     ---------------------
+     LR(y,b,z) = m+1
+     LL(x,a,LR(y,b,z))
+  *)
+
+  let rec ror = function
+    | LR (LR(x,ka,a,y),kb,b,z) ->
+      (* h(LR(x,ka,a,y)) = m+1
+       * h(z) = m
+       * h(y) = m
+       * h(x) = m
+       * ---------------------
+       * LR(y,b,z) = m+1
+       * LL(x,a,LR(y,b,z)) *)
+      LL(x,ka,a,LR(y,kb,b,z))
+    | LR (w,kb,b,z) ->
+      (* ror (LR (rol w,kb,b,z)):
+       * h(w=LL(x',a,y')) = m + 1
+       * h(z) = m
+       * h(x') = m-1
+       * h(y') = m
+       * rol(w) => LR+(x,ka,a,y)
+       * h(x) = h(x')+1 = m
+       * h(y) = h(y')-1 = m-1
+       * ror(LR+(x,a,y),b,z) => LL(x,a,LL(y,b,z))
+      *)
+      ror (LR (rol w,kb,b,z))
+  and rol = function
+    | _ -> assert false
+
+
+
+  let bal x =
+    if not (is_disbalanced x)
+    then raise (Not_disbalanced x);
+    let x' = bal x in
+    if not (is_balanced x')
+    then raise (Broken_bal (x,x'));
+    let h = h x and h' = h x' in
+    Format.eprintf "bal: %d => %d@\n%!" h h';
+
+    x'
+
 
   (* pre:
      - a is not in t;
@@ -871,7 +1154,7 @@ module Dict = struct
 
      post:
      - a is in t', and len t' = len t + 1
-     - t' depth is minimal
+     - h(t') >= h(t)
      - t' is balanced
   *)
   let rec insert
@@ -923,6 +1206,21 @@ module Dict = struct
       else if ka <$ kg
       then make7 kb b kc c kd d ke e kf f ka a kg g
       else make7 kb b kc c kd d ke e kf f kg g ka a
+    | LR (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T1(kg,g)) ->
+      if ka <$ kd then
+        if ka <$ kc then
+          if ka <$ kb
+          then make7 ka a kb b kc c kd d ke e kf f kg g
+          else make7 kb b ka a kc c kd d ke e kf f kg g
+        else make7 kb b kc c ka a kd d ke e kf f kg g
+      else
+      if ka <$ kf then
+        if ka <$ ke
+        then make7 kb b kc c kd d ka a ke e kf f kg g
+        else make7 kb b kc c kd d ke e ka a kf f kg g
+      else if ka <$ kg
+      then make7 kb b kc c kd d ke e kf f ka a kg g
+      else make7 kb b kc c kd d ke e kf f kg g ka a
     | LR (T2 (kb,b,kc,c),kd,d,T4(ke,e,kf,f,kg,g,kh,h)) ->
       if ka <$ ke then
         if ka <$ kc then
@@ -941,7 +1239,46 @@ module Dict = struct
       else if ka <$ kh
       then make8 kb b kc c kd d ke e kf f kg g ka a kh h
       else make8 kb b kc c kd d ke e kf f kg g kh h ka a
+    | LR (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T2(kg,g,kh,h)) ->
+      if ka <$ ke then
+        if ka <$ kc then
+          if ka <$ kb
+          then make8 ka a kb b kc c kd d ke e kf f kg g kh h
+          else make8 kb b ka a kc c kd d ke e kf f kg g kh h
+        else
+        if ka <$ kd
+        then make8 kb b kc c ka a kd d ke e kf f kg g kh h
+        else make8 kb b kc c kd d ka a ke e kf f kg g kh h
+      else
+      if ka <$ kg then
+        if ka <$ kf
+        then make8 kb b kc c kd d ke e ka a kf f kg g kh h
+        else make8 kb b kc c kd d ke e kf f ka a kg g kh h
+      else if ka <$ kh
+      then make8 kb b kc c kd d ke e kf f kg g ka a kh h
+      else make8 kb b kc c kd d ke e kf f kg g kh h ka a
     | LR (T3 (kb,b,kc,c,kd,d),ke,e,T4(kf,f,kg,g,kh,h,ki,i)) ->
+      if ka <$ ke then
+        if ka <$ kc then
+          if ka <$ kb
+          then make9 ka a kb b kc c kd d ke e kf f kg g kh h ki i
+          else make9 kb b ka a kc c kd d ke e kf f kg g kh h ki i
+        else
+        if ka <$ kd
+        then make9 kb b kc c ka a kd d ke e kf f kg g kh h ki i
+        else make9 kb b kc c kd d ka a ke e kf f kg g kh h ki i
+      else
+      if ka <$ kg then
+        if ka <$ kf
+        then make9 kb b kc c kd d ke e ka a kf f kg g kh h ki i
+        else make9 kb b kc c kd d ke e kf f ka a kg g kh h ki i
+      else if ka <$ kh
+      then make9 kb b kc c kd d ke e kf f kg g ka a kh h ki i
+      else if ka <$ ki then
+        make9 kb b kc c kd d ke e kf f kg g kh h ka a ki i
+      else
+        make9 kb b kc c kd d ke e kf f kg g kh h ki i ka a
+    | LR (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T3(kg,g,kh,h,ki,i)) ->
       if ka <$ ke then
         if ka <$ kc then
           if ka <$ kb
@@ -1018,183 +1355,13 @@ module Dict = struct
       then LR (b,k,x,insert ka a c)
       else LL (b,k,x,insert ka a c)
 
-  and bal : record -> record = function
-    | LL (x,ka,a,LL(y,kb,b,z)) ->
-      (*
-         h(x) = m
-         h(LL(y,b,z)) = m+2
-         h(y) = m
-         h(z) = m+1
-         -----------------
-         h(LR(x,a,y)) = m+1
-         h(LR (LR (x,a,y),b,z)) = m+2
-      *)
-      LL (LR (x,ka,a,y),kb,b,z)
-
-
-    | LL (w,ka,a,LR(LR(x,kb,b,y),kc,c,z)) ->
-      (*
-         h(w) = m
-         h(LR(LR(x,b,y),c,z)) = m+2
-         h(LR(x,b,y)) = m+1
-         h(z) = m+1
-         h(x) = m
-         h(y) = m
-         -----------------
-         h(LR(w,a,x) = m+1
-         h(LL(y,c,z) = m+2
-         h(LR(w,a,x),b,LL(y,c,z))=m+3
-      *)
-      LL (LR(w,ka,a,x),kb,b,LL(y,kc,c,z))
-
-    | LL (w,ka,a,LR(LL(x,kb,b,y),kc,c,z)) ->
-      (*
-         h(w) = m
-         h(LR(LL(x,b,y),c,z)) = m+2
-         h(z) = m+1
-         h(LL(x,b,y)) = m+1
-         h(y) = m
-         h(x) = m-1
-         -----------------------
-
-      *)
-      LL (bal(LR(w,ka,a,x)),kb,b,LL(y,kc,c,z))
-
-    | LL (x,ka,a,LR(y,kb,b,z)) ->
-      (*
-         h(x) = m
-         h(LR(y,b,z)) = m+2
-         h(y) = m+1
-         h(z) = m+1
-         -----------------
-         LR+(LL(x,a,y),b,z)
-*)
-
-      bal (LR (LL (x,ka,a,y),kb,b,z))
-
-
-    | LR(LL(w,ka,a,LL(x,kb,b,y)),kc,c,z) ->
-      (*
-         h(z) = m
-         h(LL(w,a,LL(x,b,y))) = m+1
-         h(LL(x,b,y)) = m
-         h(w) = m-1
-         h(x) = m-2
-         h(y) = m-1
-         --------------------------
-         LL(LR+(w,a,x),b,LL(y,c,z))
-      *)
-      LL(bal(LR(w,ka,a,x)),kb,b,LL(y,kc,c,z))
-
-
-    | LR(LL(w,ka,a,LR(x,kb,b,y)),kc,c,z) ->
-      (*
-         h(z) = m
-         h(LL(w,a,LR(x,b,y))) = m+1
-         h(LR(x,b,y)) = m
-         h(w) = m-1
-         h(x) = m-1
-         h(y) = m-1
-         --------------------------
-         LL(LR(w,a,x),b,LL(y,c,z))
-      *)
-      LL(LR(w,ka,a,x),kb,b,LL(y,kc,c,z))
-
-    | LR(LR(w,ka,a,LR(x,kb,b,y)),kc,c,z) ->
-      (*
-         h(z) = m
-         h(LR(w,a,LR(x,b,y))) = m+1
-         h(LR(x,b,y)) = m
-         h(w) = m
-         h(x) = m-1
-         h(y) = m-1
-         --------------------------
-         LR(LR+(w,a,x),b,LL(y,c,z))
-      *)
-      LR(bal(LR(w,ka,a,x)),kb,b,LL(y,kc,c,z))
-    | LR(LR(LR(w,ka,a,x),kb,b,y),kc,c,z) ->
-      (*
-         h(z) = m
-         h(LR(LR(w,a,x),b,y)) = m+1
-         h(y) = m
-         h(LR(w,a,x)) = m
-         h(w) = m-1
-         h(x) = m-1
-         --------------------------
-         LL(LR(w,a,x),b,LR(y,c,z))
-      *)
-      LL(LR(w,ka,a,x),kb,b,LR(y,kc,c,z))
-
-    | LR(LR(LL(w,ka,a,x),kb,b,y),kc,c,z) ->
-      (*
-         h(z) = m
-         h(LR(LL(w,a,x),b,y)) = m+1
-         h(y) = m
-         h(LL(w,a,x)) = m
-         h(w) = m-2
-         h(x) = m-1
-         --------------------------
-         LL(LL(w,a,x),b,LR(y,c,z))
-      *)
-      LL(LL(w,ka,a,x),kb,b,LR(y,kc,c,z))
-
-    | LR(LL(LR(w,ka,a,x),kb,b,y),kc,c,z) ->
-      (*
-         h(z) = m
-         h(LL(LR(w,a,x),b,y)) = m+1
-         h(y) = m
-         h(LR(w,a,x)) = m
-         h(w) = m-1
-         h(x) = m-1
-         --------------------------
-         LL(LR(w,a,x),b,LR(y,c,z))
-      *)
-      LL(LR(w,ka,a,x),kb,b,LR(y,kc,c,z))
-
-    | LR(LL(LL(w,ka,a,x),kb,b,y),kc,c,z) ->
-      (*
-         h(z) = m
-         h(LL(LL(w,a,x),b,y)) = m+1
-         h(y) = m
-         h(LL(w,a,x)) = m
-         h(w) = m-2
-         h(x) = m-1
-         --------------------------
-         LL(LL(w,a,x),b,LR(y,c,z))
-      *)
-      LL(LL(w,ka,a,x),kb,b,LR(y,kc,c,z))
-
-    | LR(LR(x,ka,a,y),kb,b,z) ->
-         (*
-         h(z) = m
-         h(LR(x,ka,a,y) = m+1
-         h(x) = m
-         h(y) = m
-         --------------
-         LL(x,a,LR(y,b,z))
-    *)
-      LL(x,ka,a,LR(y,kb,b,z))
-
-
-    (* first floor cases are handled manually *)
-    (* | LR(LR(T0,ka,a,T4 (kb,b,kc,c,kd,d,ke,e)),kf,f,T0) ->
-     *   make6 ka a kb b kc c kd d ke e kf f
-     * | LR(LR(T0,ka,a,T4 (kb,b,kc,c,kd,d,ke,e)),kf,f,T1 (kg,g)) ->
-     *   make7 ka a kb b kc c kd d ke e kf f kg g
-     * | LR(LR(T0,ka,a,T4 (kb,b,kc,c,kd,d,ke,e)),kf,f,T2 (kg,g,kh,h)) ->
-     *   make8 ka a kb b kc c kd d ke e kf f kg g kh h
-     * | LR(LR(T0,ka,a,T4 (kb,b,kc,c,kd,d,ke,e)),kf,f,T3 (kg,g,kh,h,ki,i)) ->
-     *   make9 ka a kb b kc c kd d ke e kf f kg g kh h ki i
-     * | LR(LR(T0,ka,a,T4 (kb,b,kc,c,kd,d,ke,e)),kf,f,T4 (kg,g,kh,h,ki,i,kj,j)) ->
-     *   make10 ka a kb b kc c kd d ke e kf f kg g kh h ki i kj j *)
-
-    (* | LR (LR (x,ka,a,y),kb,b,z) ->
-     *   assert false *)
-
-
-    | t -> raise (Bal t)
-
-
+  let insert k x t =
+    if not (is_balanced t)
+    then raise (Not_balanced t);
+    let t' = insert k x t in
+    if not (is_balanced t')
+    then raise (Broken_ins (t,t'));
+    t'
 
   type test = {
     pos : int;
@@ -1236,7 +1403,7 @@ module Dict = struct
 
   let test input =
     let input = Array.copy input in
-    (* Array.permute input; *)
+    Array.permute input;
     trace_enter "test/dict";
     let x = Array.fold input ~init:T0 ~f:(fun r {add} -> add r) in
     trace_leave "test/dict";
@@ -1249,11 +1416,11 @@ module Dict = struct
   let r =
     trace_reset ();
     Format.eprintf "@\n%!";
-    let _,d,m = test (input 32) in
+    let _,d,m = test (input 10000) in
     let size x = Obj.reachable_words (Obj.repr x) in
     Format.eprintf "dict=%d vs. core=%d@\n%!" (size d) (size m);
     if (length d <> List.length (Univ_map.to_alist m))
-    then failwith "the map is incomplete"
+    then failwith "the map is incomplete";;
 
   (* [merge k x y] *)
   type merge = {
