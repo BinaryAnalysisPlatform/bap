@@ -855,6 +855,37 @@ module Dict = struct
       Format.eprintf "balance = %d vs %d@\n%!" h1 h2;
       float h2 /. float h1
 
+  let print_balance_factor = function
+    | T0 | T1 _ | T2 _ | T3 _ | T4 _ -> ()
+    | LL (x,_,_,y)
+    | LR (x,_,_,y)
+    | EQ (x,_,_,y) ->
+      let hx = height x and hy = height y in
+      let h1 = max hx hy and h2 = min hx hy in
+      Format.eprintf "balance(%d/%d)=%g@\n%!" h2 h1
+        (float h2 /. float h1)
+
+
+  let rec pop_min t {app} = match t with
+    | T0 -> failwith "pop_min: empty"
+    | T1 (ka,a) -> app ka a T0
+    | T2 (ka,a,kb,b) -> app ka a (T1 (kb,b))
+    | T3 (ka,a,kb,b,kc,c) -> app ka a (T2 (kb,b,kc,c))
+    | T4 (ka,a,kb,b,kc,c,kd,d) -> app ka a (T3 (kb,b,kc,c,kd,d))
+    | LL (x,ka,a,y) -> pop_min x {app = fun kb b x -> app kb b (LL (x,ka,a,y))}
+    | EQ (x,ka,a,y) -> pop_min x {app = fun kb b x -> app kb b (EQ (x,ka,a,y))}
+    | LR (x,ka,a,y) -> pop_min x {app = fun kb b x -> app kb b (LR (x,ka,a,y))}
+
+  let rec pop_max t {app} = match t with
+    | T0 -> failwith "pop_max: empty"
+    | T1 (ka,a) -> app ka a T0
+    | T2 (ka,a,kb,b) -> app kb b (T1 (ka,a))
+    | T3 (ka,a,kb,b,kc,c) -> app kc c (T2 (ka,a,kb,b))
+    | T4 (ka,a,kb,b,kc,c,kd,d) -> app kd d (T3 (ka,a,kb,b,kc,c))
+    | LL (x,ka,a,y) -> pop_max y {app = fun kb b y -> app kb b (LL (x,ka,a,y))}
+    | EQ (x,ka,a,y) -> pop_max y {app = fun kb b y -> app kb b (EQ (x,ka,a,y))}
+    | LR (x,ka,a,y) -> pop_max y {app = fun kb b y -> app kb b (LR (x,ka,a,y))}
+
   let shake_left = function
     | LL (T0,ka,a,EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j))) ->
       LL (T1 (ka,a),kb,b,EQ (T3 (kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)))
@@ -863,8 +894,11 @@ module Dict = struct
     | LL (T2(kx,x,ky,y),ka,a,EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j))) ->
       LL (T3 (kx,x,ky,y,ka,a),kb,b,EQ (T3 (kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)))
     | LL (T3(kx,x,ky,y,kz,z),ka,a,EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j))) ->
-      LL (T4 (kx,x,ky,y,kz,z,ka,a),kb,b,EQ (T3 (kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)))
+      LL (T4 (kx,x,ky,y,kz,z,ka,a),kb,b, EQ (T3 (kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)))
     | _ -> assert false
+
+
+
 
   exception Rol_wrong_rank of record
   exception Ror_wrong_rank of record
@@ -1240,6 +1274,24 @@ module Dict = struct
       if ka <$ k
       then LL (insert ka a b,k,x,c)
       else insert ka a (shake_left t)
+    | LL (T4 _ as b,k,x,c) when ka <$ k ->
+      EQ (insert ka a b,k,x,c)
+    | EQ ((EQ (T4 _,_,_,T4 _) as b),k,_,(EQ (T4 _,_,_,T4 _) as c)) as t ->
+      if ka <$ k
+      then insert ka a b =+ t
+      else t += insert ka a c
+    | EQ (x,kb,b,(EQ (T4 _,_,_,T4 _) as y)) ->
+      if ka <$ kb
+      then EQ (insert ka a x,kb,b,y)
+      else pop_min y @@ {app = fun kc c y ->
+          EQ (insert kb b x,kc,c,insert ka a y)
+        }
+    | EQ ((EQ (T4 _,_,_,T4 _) as x),kb,b,y) ->
+      if ka <$ kb
+      then pop_max x @@ {app = fun kc c x ->
+          EQ (insert ka a x,kc,c,insert kb b y)
+        }
+      else EQ (x,kb,b,insert ka a y)
     | LL (b,k,_,c) as t ->
       if ka <$ k
       then insert ka a b =+ t
@@ -1336,20 +1388,33 @@ module Dict = struct
   let test input =
     let input = Array.copy input in
     Array.permute input;
+    Gc.compact ();
+    let was = Gc.allocated_bytes () in
     trace_enter "test/dict";
     let x = Array.fold input ~init:T0 ~f:(fun r {add} -> add r) in
     trace_leave "test/dict";
+    trace_enter "test/dict-compact";
+    let now = Gc.allocated_bytes () in
+    Format.eprintf "memory/dict: %g Mb" ((now-.was) /. 1e6);
+    Gc.compact ();
+    let was = Gc.allocated_bytes () in
+    trace_leave "test/dict-compact";
     trace_enter "test/core";
     let y = Array.fold input ~init:Univ_map.empty ~f:(fun r {core_add} ->
         core_add r) in
     trace_leave "test/core";
+    trace_enter "test/core-compact";
+    let now = Gc.allocated_bytes () in
+    Format.eprintf "memory/core: %g Mb" ((now-.was) /. 1e6);
+    Gc.compact ();
+    trace_leave "test/core-compact";
     input,x,y
 
   let r =
     trace_reset ();
     Format.eprintf "@\n%!";
     let _,d,m = test (input 1000_000) in
-    Format.eprintf "balance = %g@\n%!" (balance_factor d);
+    print_balance_factor d;
     if (length d <> List.length (Univ_map.to_alist m))
     then failwith "the map is incomplete";
     count empty_counter d;
