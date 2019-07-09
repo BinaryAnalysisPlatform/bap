@@ -753,18 +753,18 @@ module Dict = struct
            'b key * 'b *
            'c key * 'c *
            'd key * 'd -> record
-    | LL : record * 'a key * 'a * record -> record
-    | LR : record * 'a key * 'a * record -> record
+    | LL : record * 'a key * 'a * record -> record (* h(x) = h(y) - 1 *)
+    | EQ : record * 'a key * 'a * record -> record (* h(x) = h(y) *)
+    | LR : record * 'a key * 'a * record -> record (* h(x) = h(y) + 1 *)
 
   type t = record
 
   let empty = T0
 
   (*
-     - LL (x,y) : h(x) = h(y) - 1, if balanced
-                | h(x) = h(y) - 2, otherwise
-     - LR (x,y) : h(x) = h(y), if balanced
-                | h(x) = h(y) + 1, otherwise
+     - LL (x,y) : h(x) = h(y) - 1
+     - EQ (x,y) : h(x) = h(y)
+     - LR (x,y) : h(x) = h(y) + 1
  *)
 
   let uid = Key.uid
@@ -785,19 +785,19 @@ module Dict = struct
   let make3 ka a kb b kc c = T3 (ka,a,kb,b,kc,c) [@@inline]
   let make4 ka a kb b kc c kd d = T4 (ka,a, kb,b, kc,c, kd,d) [@@inline]
   let make5 ka a kb b kc c kd d ke e =
-    LR (T0,ka,a,make4 kb b kc c kd d ke e)
+    EQ (T0,ka,a,make4 kb b kc c kd d ke e)
   [@@inline]
   let make6 ka a kb b kc c kd d ke e kf f =
-    LR (T1 (ka,a),kb,b,T4(kc,c,kd,d,ke,e,kf,f))
+    EQ (T1 (ka,a),kb,b,T4(kc,c,kd,d,ke,e,kf,f))
   [@@inline]
   let make7 ka a kb b kc c kd d ke e kf f kg g =
-    LR (T2 (ka,a,kb,b),kc,c, T4 (kd,d,ke,e,kf,f,kg,g))
+    EQ (T2 (ka,a,kb,b),kc,c, T4 (kd,d,ke,e,kf,f,kg,g))
   [@@inline]
   let make8 ka a kb b kc c kd d ke e kf f kg g kh h =
-    LR (T3 (ka,a,kb,b,kc,c),kd,d, T4(ke,e,kf,f,kg,g,kh,h))
+    EQ (T3 (ka,a,kb,b,kc,c),kd,d, T4(ke,e,kf,f,kg,g,kh,h))
   [@@inline]
   let make9 ka a kb b kc c kd d ke e kf f kg g kh h ki i =
-    LR (T4 (ka,a,kb,b,kc,c,kd,d),ke,e,T4(kf,f,kg,g,kh,h,ki,i))
+    EQ (T4 (ka,a,kb,b,kc,c,kd,d),ke,e,T4(kf,f,kg,g,kh,h,ki,i))
   [@@inline]
   let make10 ka a kb b kc c kd d ke e kf f kg g kh h ki i kj j =
     LL (T0,ka,a,make9 kb b kc c kd d ke e kf f kg g kh h ki i kj j)
@@ -825,6 +825,9 @@ module Dict = struct
     | LL (x,k,a,y) ->
       let init = f.visit k a init in
       foreach y ~init:(foreach x ~init f) f
+    | EQ (x,k,a,y) ->
+      let init = f.visit k a init in
+      foreach y ~init:(foreach x ~init f) f
     | LR (x,k,a,y) ->
       let init = f.visit k a init in
       foreach y ~init:(foreach x ~init f) f
@@ -836,107 +839,176 @@ module Dict = struct
   let cmp x y = compare_keys x y [@@inline]
   let eq x y = compare_keys x y = 0 [@@inline]
 
-  exception Bal of record
-  exception LL_not_balanced of record * record
-  exception LR_not_balanced of record * record
-  exception LL_balanced of record * record
-  exception LR_balanced of record * record
-  exception Not_disbalanced of record
-  exception Not_balanced of record
-  exception Broken_bal of record * record
-  exception Broken_ins of record * record
-  exception Ror_input_is_balanced of record
-  exception Ror_output_is_not_balanced of record
-  exception Rol_input_is_balanced of record
-  exception Rol_output_is_not_balanced of record
-  exception Rank_increases_is_broken of bool * record * record * int * int
-
   let rec height = function
     | T0 | T1 _ | T2 _ | T3 _ | T4 _ -> 1
-    | LL (x,_,_,y) ->
-      let h1 = height x
-      and h2 = height y in
-      if h1 = h2 - 1
-      then h2 + 1
-      else raise (LL_not_balanced (x,y))
-    | LR (x,_,_,y) ->
-      let h1 = height x
-      and h2 = height y in
-      if h1 = h2
-      then h2 + 1
-      else raise (LR_not_balanced (x,y))
+    | LL (x,_,_,y)
+    | LR (x,_,_,y)
+    | EQ (x,_,_,y) -> max (height x) (height y) + 1
 
-  let rec h = function
-    | T0 | T1 _ | T2 _ | T3 _ | T4 _ -> 1
-    | LL (x,_,_,y) -> max (h x) (h y) + 1
-    | LR (x,_,_,y) -> max (h x) (h y) + 1
-
-  let is_disbalanced t = match t with
-    | T0 | T1 _ | T2 _ | T3 _ | T4 _ -> false
-    | LL (x,_,_,y) -> height x = height y - 2
-    | LR (x,_,_,y) -> height x = height y + 1
-
-  let is_balanced t = match t with
-    | T0 | T1 _ | T2 _ | T3 _ | T4 _ -> true
-    | LL (x,_,_,y) -> height x = height y - 1
-    | LR (x,_,_,y) -> height x = height y
+  let balance_factor = function
+    | T0 | T1 _ | T2 _ | T3 _ | T4 _ -> 1.
+    | LL (x,_,_,y)
+    | LR (x,_,_,y)
+    | EQ (x,_,_,y) ->
+      let hx = height x and hy = height y in
+      let h1 = max hx hy and h2 = min hx hy in
+      Format.eprintf "balance = %d vs %d@\n" h1 h2;
+      float h2 /. float h1
 
   let shake_left = function
-    | LL (T0,ka,a,LR (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j))) ->
-      LL (T1 (ka,a),kb,b,LR (T3 (kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)))
-    | LL (T1(kx,x),ka,a,LR (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j))) ->
-      LL (T2 (kx,x,ka,a),kb,b,LR (T3 (kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)))
-    | LL (T2(kx,x,ky,y),ka,a,LR (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j))) ->
-      LL (T3 (kx,x,ky,y,ka,a),kb,b,LR (T3 (kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)))
-    | LL (T3(kx,x,ky,y,kz,z),ka,a,LR (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j))) ->
-      LL (T4 (kx,x,ky,y,kz,z,ka,a),kb,b,LR (T3 (kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)))
+    | LL (T0,ka,a,EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j))) ->
+      LL (T1 (ka,a),kb,b,EQ (T3 (kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)))
+    | LL (T1(kx,x),ka,a,EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j))) ->
+      LL (T2 (kx,x,ka,a),kb,b,EQ (T3 (kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)))
+    | LL (T2(kx,x,ky,y),ka,a,EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j))) ->
+      LL (T3 (kx,x,ky,y,ka,a),kb,b,EQ (T3 (kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)))
+    | LL (T3(kx,x,ky,y,kz,z),ka,a,EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j))) ->
+      LL (T4 (kx,x,ky,y,kz,z,ka,a),kb,b,EQ (T3 (kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)))
     | _ -> assert false
-
 
   exception Rol_wrong_rank of record
   exception Ror_wrong_rank of record
 
   let rol = function
-    | LL (x,ka,a,LL (y,kb,b,z)) -> LR (LR(x,ka,a,y),kb,b,z)
+    | LL (x,ka,a,LL (y,kb,b,z)) ->
+      (*
+       * h(x) = m-2
+       * h(LL(y,b,z)=m
+       * h(y)=m-2
+       * h(z)=m-1
+       * ----------------
+       * h(EQ(x,a,y)) = m-1
+       * h(EQ(EQ(x,ka,a,y),b,z)) = m
+       *)
+      EQ (EQ(x,ka,a,y),kb,b,z)
+    | LL (x,ka,a,EQ (y,kb,b,z)) ->
+      (*
+       * h(x) = m-2
+       * h(EQ(y,b,z))=m
+       * h(y)=m-1
+       * h(z)=m-1
+       * ----------------
+       * h(LL(x,a,y)) = m
+       * h(LR(LL(x,a,y),b,z)) = m+1
+       *)
+      LR (LL(x,ka,a,y),kb,b,z)
+    | LL (w,ka,a,LR (LL(x,kb,b,y),kc,c,z)) ->
+      (*
+       * h(w) = m-2
+       * h(LR(LL(x,b,y),c,z))=m
+       * h(z)=m-2
+       * h(LL(x,b,y))=m-1
+       * h(y)=m-2
+       * h(x)=m-3
+       * ----------------
+       * h(LR(w,a,x))=m-1, h(x) < h(w)
+       * h(EQ(y,kc,c,z))=m-1, h(y) = h(z)
+       * h(EQ (LR(w,ka,a,x),kb,b,EQ(y,kc,c,z))) = m
+       *)
+      EQ (LR(w,ka,a,x),kb,b,EQ(y,kc,c,z))
+    | LL (w,ka,a,LR (EQ(x,kb,b,y),kc,c,z)) ->
+      (*
+       * h(w) = m-2
+       * h(LR(EQ(x,b,y),c,z))=m
+       * h(z)=m-2
+       * h(EQ(x,b,y))=m-1
+       * h(y)=m-2
+       * h(x)=m-2
+       * ----------------
+       * h(EQ(w,a,x))=m-1, h(x) = h(w)
+       * h(EQ(y,kc,c,z))=m-1, h(y) = h(z)
+       * h(EQ (EQ(w,ka,a,x),kb,b,EQ(y,kc,c,z))) = m
+       *)
+      EQ (EQ(w,ka,a,x),kb,b,EQ(y,kc,c,z))
+    | LL (w,ka,a,LR (LR(x,kb,b,y),kc,c,z)) ->
+      (*
+       * h(w) = m-2
+       * h(LR(LR(x,b,y),c,z))=m
+       * h(z)=m-2
+       * h(LR(x,b,y))=m-1
+       * h(y)=m-3
+       * h(x)=m-2
+       * ----------------
+       * h(EQ(w,a,x))=m-1, h(x) = h(w)
+       * h(LL(y,kc,c,z))=m-1, h(y) < h(z)
+       * h(EQ (EQ(w,ka,a,x),kb,b,LL(y,kc,c,z))) = m
+       *)
+      EQ (EQ(w,ka,a,x),kb,b,LL(y,kc,c,z))
     | r -> raise (Rol_wrong_rank r)
 
-  let rol x =
-    if is_balanced x
-    then raise (Rol_input_is_balanced x);
-    let x = rol x in
-    if not (is_balanced x)
-    then raise (Rol_output_is_not_balanced x);
-    x
 
   let ror = function
-    | LR (LL (w,ka,a, LR (x,kb,b,y)),kc,c,z) ->
-      LL (LR (w,ka,a,x),kb,b, LL(y,kc,c,z))
-    | LR (LL (LR (p,ka,a,q),kb,b, LL(r,kc,c,s)),kd,d,t) ->
-      LL (LL(p,ka,a,LR(q,kb,b,r)),kc,c,LL(s,kd,d,t))
+    | LR (LR(x,ka,a,y),kb,b,z) ->
+      (*
+       * h(z) = m-2
+       * h(LR(x,a,y))=m
+       * h(y)=m-2
+       * h(x)=m-1
+       * ------------------
+       * h(EQ(y,b,z))=m-1, h(y) = h(z)
+       * h(EQ (x,a,EQ(y,kb,b,z))) = m
+       *)
+      EQ (x,ka,a,EQ(y,kb,b,z))
+    | LR (EQ(x,ka,a,y),kb,b,z) ->
+      (*
+       * h(z) = m-2
+       * h(EQ(x,a,y))=m
+       * h(y)=m-1
+       * h(x)=m-1
+       * ------------------
+       * h(LR(y,b,z))=m, h(y) > h(z)
+       * h(LL (x,a,LR(y,b,z))) = m+1, h(x) < m
+       *)
+      LL (x,ka,a,LR(y,kb,b,z))
+    | LR (LL (w,ka,a,LR(x,kb,b,y)),kc,c,z) ->
+      (*
+       * h(z) = m-2
+       * h(LL (w,a,LR(x,b,y)))=m
+       * h(LR(x,b,y))=m-1
+       * h(w)=m-2
+       * h(x)=m-2
+       * h(y)=m-3
+       * -------------------------
+       * h(EQ(w,a,x)) = m-1, h(x) = h(w)
+       * h(LL(y,c,z)) = m-1, h(y) < h(z)
+       *)
+      EQ (EQ(w,ka,a,x), kb,b, LL(y,kc,c,z))
+    | LR (LL (w,ka,a,EQ(x,kb,b,y)),kc,c,z) ->
+      (*
+       * h(z) = m-2
+       * h(LL (w,a,EQ(x,b,y)))=m
+       * h(EQ(x,b,y))=m-1
+       * h(w)=m-2
+       * h(x)=m-2
+       * h(y)=m-2
+       * -------------------------
+       * h(EQ(w,a,x)) = m-1, h(x) = h(w)
+       * h(EQ(y,c,z)) = m-1, h(y) = h(z)
+       *)
+      EQ (EQ(w,ka,a,x), kb,b, EQ(y,kc,c,z))
+    | LR (LL (w,ka,a,LL(x,kb,b,y)),kc,c,z) ->
+      (*
+       * h(z) = m-2
+       * h(LL (w,a,LL(x,b,y)))=m
+       * h(LL(x,b,y))=m-1
+       * h(w)=m-2
+       * h(x)=m-3
+       * h(y)=m-2
+       * -------------------------
+       * h(LR(w,a,x)) = m-1, h(x) < h(w)
+       * h(EQ(y,c,z)) = m-1, h(y) = h(z)
+       *)
+      EQ (LR(w,ka,a,x), kb,b, EQ(y,kc,c,z))
     | r -> raise (Ror_wrong_rank r)
-
-  let ror x =
-    if is_balanced x
-    then raise (Ror_input_is_balanced x);
-    let x = ror x in
-    if not (is_balanced x)
-    then raise (Ror_output_is_not_balanced x);
-    x
 
 
   (* pre: rank was > 1 *)
   let rank_increases was now = match was,now with
     | LR _, LL _
+    | LL _, LR _ -> true
+    | T4 _, LL _
     | T4 _, LR _ -> true
     | _ -> false
-
-  let rank_increases was now =
-    let h1 = h was and h2 = h now in
-    let r = rank_increases was now in
-    match r,h1 < h2 with
-    | true,true -> r
-    | false,false -> r
-    | r,_ -> raise (Rank_increases_is_broken (r,was,now,h1,h2))
 
   (* [p += c] updates the right subtree of [p] with [c].
      pre: rank p > 1 /\ rank c > 1 *)
@@ -947,21 +1019,29 @@ module Dict = struct
       else LL (b,k,x,c')
     | LR (b,k,x,c) ->
       if rank_increases c c'
-      then LL (b,k,x,c')
+      then EQ (b,k,x,c')
       else LR (b,k,x,c')
+    | EQ (b,k,x,c) ->
+      if rank_increases c c'
+      then LL (b,k,x,c')
+      else EQ (b,k,x,c')
     | _ -> failwith "+=: rank < 2"
 
-  (* [c =+ p] updates the left subtree of [p] with [c].
-     pre: rank p > 1 /\ rank c > 1 *)
+  (* [b =+ p] updates the left subtree of [p] with [b].
+     pre: rank p > 1 /\ rank b > 1 *)
   let (=+) b' p = match p with
     | LL (b,k,x,c) ->
       if rank_increases b b'
-      then LR (b',k,x,c)
+      then EQ (b',k,x,c)
       else LL (b',k,x,c)
     | LR (b,k,x,c) ->
       if rank_increases b b'
       then ror (LR (b',k,x,c))
       else LR (b',k,x,c)
+    | EQ (b,k,x,c) ->
+      if rank_increases b b'
+      then LR (b',k,x,c)
+      else EQ (b',k,x,c)
     | _ -> failwith "=+: rank < 2"
 
   (* pre:
@@ -995,7 +1075,7 @@ module Dict = struct
       then make5 kb b kc c ka a kd d ke e else if ka <$ ke
       then make5 kb b kc c kd d ka a ke e
       else make5 kb b kc c kd d ke e ka a
-    | LR (T0,kb,b,T4(kc,c,kd,d,ke,e,kf,f)) ->
+    | EQ (T0,kb,b,T4(kc,c,kd,d,ke,e,kf,f)) ->
       if ka <$ kd then
         if ka <$ kc then
           if ka <$ kb
@@ -1008,7 +1088,7 @@ module Dict = struct
       else if ka <$ kf
       then make6 kb b kc c kd d ke e ka a kf f
       else make6 kb b kc c kd d ke e kf f ka a
-    | LR (T4(kb,b,kc,c,kd,d,ke,e),kf,f,T0) ->
+    | EQ (T4(kb,b,kc,c,kd,d,ke,e),kf,f,T0) ->
       if ka <$ kd then
         if ka <$ kc then
           if ka <$ kb
@@ -1021,7 +1101,7 @@ module Dict = struct
       else if ka <$ kf
       then make6 kb b kc c kd d ke e ka a kf f
       else make6 kb b kc c kd d ke e kf f ka a
-    | LR (T1 (kb,b),kc,c,T4(kd,d,ke,e,kf,f,kg,g)) ->
+    | EQ (T1 (kb,b),kc,c,T4(kd,d,ke,e,kf,f,kg,g)) ->
       if ka <$ kd then
         if ka <$ kc then
           if ka <$ kb
@@ -1036,7 +1116,7 @@ module Dict = struct
       else if ka <$ kg
       then make7 kb b kc c kd d ke e kf f ka a kg g
       else make7 kb b kc c kd d ke e kf f kg g ka a
-    | LR (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T1(kg,g)) ->
+    | EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T1(kg,g)) ->
       if ka <$ kd then
         if ka <$ kc then
           if ka <$ kb
@@ -1051,7 +1131,7 @@ module Dict = struct
       else if ka <$ kg
       then make7 kb b kc c kd d ke e kf f ka a kg g
       else make7 kb b kc c kd d ke e kf f kg g ka a
-    | LR (T2 (kb,b,kc,c),kd,d,T4(ke,e,kf,f,kg,g,kh,h)) ->
+    | EQ (T2 (kb,b,kc,c),kd,d,T4(ke,e,kf,f,kg,g,kh,h)) ->
       if ka <$ ke then
         if ka <$ kc then
           if ka <$ kb
@@ -1069,7 +1149,7 @@ module Dict = struct
       else if ka <$ kh
       then make8 kb b kc c kd d ke e kf f kg g ka a kh h
       else make8 kb b kc c kd d ke e kf f kg g kh h ka a
-    | LR (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T2(kg,g,kh,h)) ->
+    | EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T2(kg,g,kh,h)) ->
       if ka <$ ke then
         if ka <$ kc then
           if ka <$ kb
@@ -1087,7 +1167,7 @@ module Dict = struct
       else if ka <$ kh
       then make8 kb b kc c kd d ke e kf f kg g ka a kh h
       else make8 kb b kc c kd d ke e kf f kg g kh h ka a
-    | LR (T3 (kb,b,kc,c,kd,d),ke,e,T4(kf,f,kg,g,kh,h,ki,i)) ->
+    | EQ (T3 (kb,b,kc,c,kd,d),ke,e,T4(kf,f,kg,g,kh,h,ki,i)) ->
       if ka <$ ke then
         if ka <$ kc then
           if ka <$ kb
@@ -1108,7 +1188,7 @@ module Dict = struct
         make9 kb b kc c kd d ke e kf f kg g kh h ka a ki i
       else
         make9 kb b kc c kd d ke e kf f kg g kh h ki i ka a
-    | LR (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T3(kg,g,kh,h,ki,i)) ->
+    | EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T3(kg,g,kh,h,ki,i)) ->
       if ka <$ ke then
         if ka <$ kc then
           if ka <$ kb
@@ -1129,7 +1209,7 @@ module Dict = struct
         make9 kb b kc c kd d ke e kf f kg g kh h ka a ki i
       else
         make9 kb b kc c kd d ke e kf f kg g kh h ki i ka a
-    | LR (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)) ->
+    | EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)) ->
       if ka <$ kf then
         if ka <$ kc then
           if ka <$ kb
@@ -1153,28 +1233,24 @@ module Dict = struct
       then make10 kb b kc c kd d ke e kf f kg g kh h ki i ka a kj j
       else make10 kb b kc c kd d ke e kf f kg g kh h ki i kj j ka a
     | LL ((T0| T1 _ | T2 _ | T3 _ as b),k,x,
-          (LR (T4 _,_,_,T4 _) as c)) as t ->
+          (EQ (T4 _,_,_,T4 _) as c)) as t ->
       if ka <$ k
       then LL (insert ka a b,k,x,c)
       else insert ka a (shake_left t)
-    | LL (LR (T4 _,_,_,T4 _) as b,k,x,c) when ka <$ k ->
-      LR (insert ka a b,k,x,c)
+    | LL (EQ (T4 _,_,_,T4 _) as b,k,x,c) when ka <$ k ->
+      EQ (insert ka a b,k,x,c)
     | LL (b,k,_,c) as t ->
       if ka <$ k
       then insert ka a b =+ t
       else t += insert ka a c
-    | LR (b,k,_,c) as t->
+    | LR (b,k,_,c) as t ->
       if ka <$ k
       then insert ka a b =+ t
       else t += insert ka a c
-
-  let insert k x t =
-    if not (is_balanced t)
-    then raise (Not_balanced t);
-    let t' = insert k x t in
-    if not (is_balanced t')
-    then raise (Broken_ins (t,t'));
-    t'
+    | EQ (b,k,_,c) as t ->
+      if ka <$ k
+      then insert ka a b =+ t
+      else t += insert ka a c
 
   type test = {
     pos : int;
@@ -1212,7 +1288,9 @@ module Dict = struct
     | T3 _ -> 3
     | T4 _ -> 4
     | LR (x,_,_,y)
+    | EQ (x,_,_,y)
     | LL (x,_,_,y) ->  length x + length y + 1
+
 
   let test input =
     let input = Array.copy input in
@@ -1229,9 +1307,8 @@ module Dict = struct
   let r =
     trace_reset ();
     Format.eprintf "@\n%!";
-    let _,d,m = test (input 100) in
-    let size x = Obj.reachable_words (Obj.repr x) in
-    Format.eprintf "dict=%d vs. core=%d@\n%!" (size d) (size m);
+    let _,d,m = test (input 1000_000) in
+    Format.eprintf "balance = %g@\n%!" (balance_factor d);
     if (length d <> List.length (Univ_map.to_alist m))
     then failwith "the map is incomplete";;
 
@@ -1415,6 +1492,9 @@ module Dict = struct
     | LL (x,ka,a,y) ->
       Format.fprintf ppf "%a;@ %a;@ %a"
         pp_fields x pp_field (ka,a) pp_fields y
+    | EQ (x,ka,a,y) ->
+      Format.fprintf ppf "%a;@ %a;@ %a"
+        pp_fields x pp_field (ka,a) pp_fields y
 
   let pp ppf t =
     Format.fprintf ppf "{@[<2>@,%a@]}" pp_fields t
@@ -1447,6 +1527,9 @@ module Dict = struct
         pp_tree x pp_elt (k,a) pp_tree y
     | LL (x,k,a,y) ->
       Format.fprintf ppf "LL(%a,%a,%a)"
+        pp_tree x pp_elt (k,a) pp_tree y
+    | EQ (x,k,a,y) ->
+      Format.fprintf ppf "EQ(%a,%a,%a)"
         pp_tree x pp_elt (k,a) pp_tree y
 
   let pp_key ppf {Key.key} =
