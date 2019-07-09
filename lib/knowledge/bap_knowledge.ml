@@ -852,7 +852,7 @@ module Dict = struct
     | EQ (x,_,_,y) ->
       let hx = height x and hy = height y in
       let h1 = max hx hy and h2 = min hx hy in
-      Format.eprintf "balance = %d vs %d@\n" h1 h2;
+      Format.eprintf "balance = %d vs %d@\n%!" h1 h2;
       float h2 /. float h1
 
   let shake_left = function
@@ -1004,10 +1004,13 @@ module Dict = struct
 
   (* pre: rank was > 1 *)
   let rank_increases was now = match was,now with
+    | (T0 | T1 _ | T2 _ | T3 _ | T4 _), LR _
+    | (T0 | T1 _ | T2 _ | T3 _ | T4 _), EQ _
+    | (T0 | T1 _ | T2 _ | T3 _ | T4 _), LL _ -> true
+    | EQ _, LL _
+    | EQ _, LR _ -> true
     | LR _, LL _
-    | LL _, LR _ -> true
-    | T4 _, LL _
-    | T4 _, LR _ -> true
+    | LL _, LR _ -> false
     | _ -> false
 
   (* [p += c] updates the right subtree of [p] with [c].
@@ -1237,8 +1240,6 @@ module Dict = struct
       if ka <$ k
       then LL (insert ka a b,k,x,c)
       else insert ka a (shake_left t)
-    | LL (EQ (T4 _,_,_,T4 _) as b,k,x,c) when ka <$ k ->
-      EQ (insert ka a b,k,x,c)
     | LL (b,k,_,c) as t ->
       if ka <$ k
       then insert ka a b =+ t
@@ -1292,6 +1293,46 @@ module Dict = struct
     | LL (x,_,_,y) ->  length x + length y + 1
 
 
+  type counter = {
+    t0 : int;
+    t1 : int;
+    t2 : int;
+    t3 : int;
+    t4 : int;
+    lr : int;
+    eq : int;
+    ll : int;
+  }
+  let empty_counter = {
+    t0=0;
+    t1=0;
+    t2=0;
+    t3=0;
+    t4=0;
+    ll=0;
+    eq=0;
+    lr=0;
+  }
+
+  let rec count c = function
+    | T0   -> {c with t0 = c.t0+1}
+    | T1 _ -> {c with t1 = c.t1+1}
+    | T2 _ -> {c with t2 = c.t2+1}
+    | T3 _ -> {c with t3 = c.t3+1}
+    | T4 _ -> {c with t4 = c.t4+1}
+    | LR (x,_,_,y) ->
+      let c = {c with lr = c.lr + 1} in
+      count (count c x) y
+    | LL (x,_,_,y) ->
+      let c = {c with ll = c.ll + 1} in
+      count (count c x) y
+    | EQ (x,_,_,y) ->
+      let c = {c with eq = c.eq + 1} in
+      count (count c x) y
+
+
+
+
   let test input =
     let input = Array.copy input in
     Array.permute input;
@@ -1310,9 +1351,10 @@ module Dict = struct
     let _,d,m = test (input 1000_000) in
     Format.eprintf "balance = %g@\n%!" (balance_factor d);
     if (length d <> List.length (Univ_map.to_alist m))
-    then failwith "the map is incomplete";;
+    then failwith "the map is incomplete";
+    count empty_counter d;
 
-  (* [merge k x y] *)
+    (* [merge k x y] *)
   type merge = {
     merge : 'a. 'a key -> 'a -> 'a -> 'a
   } [@@unboxed]
