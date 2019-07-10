@@ -9,23 +9,6 @@ open Knowledge.Syntax
 open Theory.Parser
 include Self()
 
-let trace_leave,trace_enter =
-  let points = Hashtbl.create (module String) in
-  let leave point =
-    let time,hits,total = Hashtbl.find_exn points point in
-    let time_elapsed = Unix.gettimeofday () -. time in
-    let hits = hits+1 and total = total +. time_elapsed in
-    Hashtbl.set points point (0.0, hits,total);
-    Format.eprintf "%8g : %16d : %s@\n"
-      (Float.round (total *. 1e3)) hits point in
-  let enter point =
-    let time = Unix.gettimeofday () in
-    Hashtbl.update points point ~f:(function
-        | None -> (time,0,0.)
-        | Some (_,hits,total) -> (time,hits,total)) in
-  leave,enter
-
-
 module BilParser = struct
   type context = [`Bitv | `Bool | `Mem ] [@@deriving sexp]
   let fail exp ctx =
@@ -208,11 +191,22 @@ let has_bil insn =
   let dom = KB.Slot.domain Bil.slot in
   not (KB.Domain.is_empty dom bil)
 
-let served = Hashtbl.create (module Addr)
-let serve mem =
-  Hashtbl.update served (Memory.min_addr mem) ~f:(function
-      | None -> 1
-      | Some n -> n + 1)
+let cache = Hashtbl.create (module struct
+    let hash = Hashtbl.hash
+    include Bil
+  end)
+
+
+(* let () = at_exit @@ fun () ->
+ *   Format.eprintf "%d = %d + %d@\n%!"
+ *     !total_calls !cache_hits !cache_misses *)
+
+let with_fresh_env f x =
+  let old = Bap_toplevel.env in
+  Bap_toplevel.reset ();
+  let x = f x in
+  Bap_toplevel.set old;
+  x
 
 let provide_lifter () =
   info "providing a lifter for all BIL lifters";
@@ -225,15 +219,19 @@ let provide_lifter () =
     Knowledge.collect Memory.slot obj >>? fun mem ->
     Knowledge.collect Disasm_expert.Basic.Insn.slot obj >>? fun insn ->
     let module Target = (val target_of_arch arch) in
-    serve mem;
-    match Target.lift mem insn with
-    | Ok bil ->
-      Bil_semantics.context >>= fun ctxt ->
-      Knowledge.provide Bil_semantics.arch ctxt (Some arch) >>= fun () ->
-      Lifter.run BilParser.t bil >>= fun sema ->
-      Knowledge.return sema
+    match with_fresh_env (Target.lift mem) insn with
     | Error _ ->
-      Knowledge.return unknown in
+      Knowledge.return unknown
+    | Ok bil ->
+      match Hashtbl.find cache bil with
+      | None ->
+        Bil_semantics.context >>= fun ctxt ->
+        Knowledge.provide Bil_semantics.arch ctxt (Some arch) >>= fun () ->
+        Lifter.run BilParser.t bil >>= fun sema ->
+        Hashtbl.add_exn cache ~key:bil ~data:sema;
+        Knowledge.return sema
+      | Some sema ->
+        Knowledge.return sema in
   Knowledge.promise Theory.Program.Semantics.slot lifter
 
 
