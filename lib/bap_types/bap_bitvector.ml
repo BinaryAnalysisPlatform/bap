@@ -212,16 +212,21 @@ let msb x = Bitvec.(msb (Packed.payload x) mod Packed.modulus x)
 let lsb x = Bitvec.(lsb (Packed.payload x) mod Packed.modulus x)
 
 
-let compare compare_size x y =
-  let s = compare_size (bitwidth x) (bitwidth y) in
-  if s <> 0 then s
-  else if is_signed x || is_signed y then
+let compare_mono x y =
+  if is_signed x || is_signed y then
     let x_is_neg = msb x and y_is_neg = msb y in
     match x_is_neg, y_is_neg with
     | true,false -> -1
     | false,true -> 1
     | _ -> Bitvec.compare (payload x) (payload y)
   else Bitvec.compare (payload x) (payload y)
+
+let compare compare_size x y =
+  if phys_equal x y then 0
+  else
+    let s = compare_size (bitwidth x) (bitwidth y) in
+    if s <> 0 then s
+    else compare_mono x y
 
 let pp_full ppf = pp_generic ~suffix:`full ppf
 let pp = pp_full
@@ -527,9 +532,11 @@ let enum_bits bv endian =
 
 module Mono = Comparable.Make(struct
     type t = Packed.t [@@deriving sexp]
-    let compare = compare (fun m n ->
-        if Int.(m <> n) then failwith "Non monomorphic comparison"
-        else 0)
+    let compare x y =
+      if phys_equal x y then 0
+      else match Int.compare (bitwidth x) (bitwidth y) with
+        | 0 -> compare_mono x y
+        | _ -> failwith "Non monomorphic comparison"
   end)
 
 module Trie = struct
@@ -578,7 +585,10 @@ end
 include Or_error.Monad_infix
 include Regular.Make(struct
     type t = Packed.t [@@deriving bin_io, sexp]
-    let compare = compare (fun _ _ -> 0)
+    let compare x y =
+      if phys_equal x y then 0
+      else compare_mono x y
+    [@@inline]
     let version = "2.0.0"
     let module_name = Some "Bap.Std.Word"
     let pp ppf = pp_generic ppf

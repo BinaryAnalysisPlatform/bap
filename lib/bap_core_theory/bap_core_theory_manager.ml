@@ -34,13 +34,13 @@ let newval s =
   Knowledge.return @@
   Value.empty @@
   KB.Class.refine cls s
-[@@inlined]
+[@@inline]
 
 let neweff s =
   Knowledge.return @@
   Value.empty @@
   KB.Class.refine Effect.cls s
-[@@inlined]
+[@@inline]
 
 
 let foreach f init = Knowledge.List.fold !providers ~init ~f

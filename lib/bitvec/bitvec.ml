@@ -28,7 +28,7 @@ type t = Z.t
    representation:
 
    - some extra performance cost due to occasional calls to normalize
-   (it is usually just one instruction - logand)
+     (it is usually just one instruction - logand)
 
    - values with more than 62 significand bits will be stored in a
      boxed notation (we loose 1 bit wrt to the non-normalized)
@@ -75,8 +75,11 @@ let m32 = modulus 32
 let m64 = modulus 64
 
 
-let compare = Z.compare
-let hash = Z.hash
+let compare x y =
+  if x == y then 0 else Z.compare x y
+[@@inline]
+
+let hash x = Z.hash x [@@inline]
 
 let one = Z.one
 let zero = Z.zero
@@ -275,24 +278,24 @@ let signed_compare x y m = match msb x m, msb y m with
 
 module Syntax = struct
   let (!!) x m = int x m [@@inline]
-  let (~-) x m = neg x m [@@inline]
-  let (~~) x m = lnot x m [@@inline]
-  let (+) x y m = add x y m [@@inline]
-  let (-) x y m = sub x y m [@@inline]
-  let ( * ) x y m = mul x y m [@@inline]
-  let (/) x y m = div x y m [@@inline]
-  let (/$) x y m = sdiv x y m [@@inline]
-  let (%) x y m = rem x y m [@@inline]
-  let (%$) x y m = smod x y m [@@inline]
-  let (%^) x y m = srem x y m [@@inline]
-  let (land) x y m = logand x y m [@@inline]
-  let (lor) x y m = logor x y m [@@inline]
-  let (lxor) x y m = logxor x y m [@@inline]
-  let (lsl) x y m = lshift x y m [@@inline]
-  let (lsr) x y m = rshift x y m [@@inline]
-  let (asr) x y m = arshift x y m [@@inline]
-  let (++) x n m = nsucc x n m [@@inline]
-  let (--) x n m = npred x n m [@@inline]
+let (~-) x m = neg x m [@@inline]
+let (~~) x m = lnot x m [@@inline]
+let (+) x y m = add x y m [@@inline]
+let (-) x y m = sub x y m [@@inline]
+let ( * ) x y m = mul x y m [@@inline]
+let (/) x y m = div x y m [@@inline]
+let (/$) x y m = sdiv x y m [@@inline]
+let (%) x y m = rem x y m [@@inline]
+let (%$) x y m = smod x y m [@@inline]
+let (%^) x y m = srem x y m [@@inline]
+let (land) x y m = logand x y m [@@inline]
+let (lor) x y m = logor x y m [@@inline]
+let (lxor) x y m = logxor x y m [@@inline]
+let (lsl) x y m = lshift x y m [@@inline]
+let (lsr) x y m = rshift x y m [@@inline]
+let (asr) x y m = arshift x y m [@@inline]
+let (++) x n m = nsucc x n m [@@inline]
+let (--) x n m = npred x n m [@@inline]
 end
 
 module type S = sig

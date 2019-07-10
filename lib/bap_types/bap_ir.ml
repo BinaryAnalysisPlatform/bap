@@ -194,7 +194,7 @@ end = struct
   let with_exp exp x =
     KB.Value.put Exp.slot x exp
 
-  let exp x = KB.Value.get Exp.slot x [@@inlined]
+  let exp x = KB.Value.get Exp.slot x [@@inline]
   include (val KB.Value.derive cls)
 end
 
