@@ -1,25 +1,6 @@
 open Core_kernel
 open Monads.Std
 
-let trace_leave,trace_enter,trace_reset =
-  let points = Hashtbl.create (module String) in
-  let leave point =
-    let current = Unix.gettimeofday () in
-    let time,hits,total = Hashtbl.find_exn points point in
-    let time_elapsed = current -. time in
-    let hits = hits+1 and total = total +. time_elapsed in
-    Hashtbl.set points point (0.0, hits,total);
-    let us = Float.to_int64 @@ Float.round (total *. 1e6) in
-    Format.eprintf "%16Ld : %16d : %s@\n"
-      us hits point in
-  let enter point =
-    let time = Unix.gettimeofday () in
-    Hashtbl.update points point ~f:(function
-        | None -> (time,0,0.)
-        | Some (_,hits,total) -> (time,hits,total)) in
-  let reset () = Hashtbl.clear points in
-  leave,enter,reset
-
 module Order = struct
   type partial = LT | EQ | GT | NC
   module type S = sig
@@ -735,7 +716,12 @@ module Dict = struct
       incr last_id;
       {key; ord = !last_id}
 
-    let uid {ord} = ord
+    let uid {ord} = ord [@@inline]
+    let compare k1 k2 =
+      let k1 = uid k1 and k2 = uid k2 in
+      (Uid.compare [@inlined]) k1 k2
+    [@@inline]
+
     let name x = Type_equal.Id.name x.key
     let to_sexp x = Type_equal.Id.to_sexp x.key
     let same x y = Type_equal.Id.same_witness_exn x.key y.key
@@ -767,16 +753,9 @@ module Dict = struct
      - LR (x,y) : h(x) = h(y) + 1
  *)
 
-  let uid = Key.uid
-
-  let compare_keys k1 k2 =
-    let k1 = uid k1 and k2 = uid k2 in
-    Key.Uid.compare k1 k2
-  [@@inline]
-
   let (<$) k1 k2 =
-    let k1 = uid k1 and k2 = uid k2 in
-    Key.Uid.(k1 < k2)
+    let k1 = Key.uid k1 and k2 = Key.uid k2 in
+    (Key.Uid.(<)[@inlined]) k1 k2
   [@@inline]
 
   let make0 = T0 [@@inlined]
@@ -785,7 +764,7 @@ module Dict = struct
   let make3 ka a kb b kc c = T3 (ka,a,kb,b,kc,c) [@@inline]
   let make4 ka a kb b kc c kd d = T4 (ka,a, kb,b, kc,c, kd,d) [@@inline]
   let make5 ka a kb b kc c kd d ke e =
-    EQ (T0,ka,a,make4 kb b kc c kd d ke e)
+    EQ (make2 ka a kb b,kc,c,make2 kd d ke e)
   [@@inline]
   let make6 ka a kb b kc c kd d ke e kf f =
     EQ (T1 (ka,a),kb,b,T4(kc,c,kd,d,ke,e,kf,f))
@@ -800,7 +779,7 @@ module Dict = struct
     EQ (T4 (ka,a,kb,b,kc,c,kd,d),ke,e,T4(kf,f,kg,g,kh,h,ki,i))
   [@@inline]
   let make10 ka a kb b kc c kd d ke e kf f kg g kh h ki i kj j =
-    LL (T0,ka,a,make9 kb b kc c kd d ke e kf f kg g kh h ki i kj j)
+    LL (make4 ka a kb b kc c kd d, ke, e, make5 kf f kg g kh h ki i kj j)
   [@@inline]
 
   type 'r visitor = {
@@ -836,35 +815,8 @@ module Dict = struct
     app : 'a. 'a key -> 'a -> 'b -> 'r
   } [@@unboxed]
 
-  let cmp x y = compare_keys x y [@@inline]
-  let eq x y = compare_keys x y = 0 [@@inline]
-
-  let rec height = function
-    | T0 | T1 _ | T2 _ | T3 _ | T4 _ -> 1
-    | LL (x,_,_,y)
-    | LR (x,_,_,y)
-    | EQ (x,_,_,y) -> max (height x) (height y) + 1
-
-  let balance_factor = function
-    | T0 | T1 _ | T2 _ | T3 _ | T4 _ -> 1.
-    | LL (x,_,_,y)
-    | LR (x,_,_,y)
-    | EQ (x,_,_,y) ->
-      let hx = height x and hy = height y in
-      let h1 = max hx hy and h2 = min hx hy in
-      Format.eprintf "balance = %d vs %d@\n%!" h1 h2;
-      float h2 /. float h1
-
-  let print_balance_factor = function
-    | T0 | T1 _ | T2 _ | T3 _ | T4 _ -> ()
-    | LL (x,_,_,y)
-    | LR (x,_,_,y)
-    | EQ (x,_,_,y) ->
-      let hx = height x and hy = height y in
-      let h1 = max hx hy and h2 = min hx hy in
-      Format.eprintf "balance(%d/%d)=%g@\n%!" h2 h1
-        (float h2 /. float h1)
-
+  let cmp x y = Key.compare x y [@@inline]
+  let eq x y = Key.compare x y = 0 [@@inline]
 
   let rec pop_min t {app} = match t with
     | T0 -> failwith "pop_min: empty"
@@ -875,6 +827,7 @@ module Dict = struct
     | LL (x,ka,a,y) -> pop_min x {app = fun kb b x -> app kb b (LL (x,ka,a,y))}
     | EQ (x,ka,a,y) -> pop_min x {app = fun kb b x -> app kb b (EQ (x,ka,a,y))}
     | LR (x,ka,a,y) -> pop_min x {app = fun kb b x -> app kb b (LR (x,ka,a,y))}
+  [@@inline]
 
   let rec pop_max t {app} = match t with
     | T0 -> failwith "pop_max: empty"
@@ -885,6 +838,7 @@ module Dict = struct
     | LL (x,ka,a,y) -> pop_max y {app = fun kb b y -> app kb b (LL (x,ka,a,y))}
     | EQ (x,ka,a,y) -> pop_max y {app = fun kb b y -> app kb b (EQ (x,ka,a,y))}
     | LR (x,ka,a,y) -> pop_max y {app = fun kb b y -> app kb b (LR (x,ka,a,y))}
+  [@@inline]
 
   let shake_left = function
     | LL (T0,ka,a,EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j))) ->
@@ -896,9 +850,7 @@ module Dict = struct
     | LL (T3(kx,x,ky,y,kz,z),ka,a,EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j))) ->
       LL (T4 (kx,x,ky,y,kz,z,ka,a),kb,b, EQ (T3 (kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)))
     | _ -> assert false
-
-
-
+  [@@inline]
 
   exception Rol_wrong_rank of record
   exception Ror_wrong_rank of record
@@ -969,6 +921,7 @@ module Dict = struct
        *)
       EQ (EQ(w,ka,a,x),kb,b,LL(y,kc,c,z))
     | r -> raise (Rol_wrong_rank r)
+  [@@inline]
 
 
   let ror = function
@@ -1034,9 +987,8 @@ module Dict = struct
        *)
       EQ (LR(w,ka,a,x), kb,b, EQ(y,kc,c,z))
     | r -> raise (Ror_wrong_rank r)
+  [@@inline]
 
-
-  (* pre: rank was > 1 *)
   let rank_increases was now = match was,now with
     | (T0 | T1 _ | T2 _ | T3 _ | T4 _), LR _
     | (T0 | T1 _ | T2 _ | T3 _ | T4 _), EQ _
@@ -1046,6 +998,7 @@ module Dict = struct
     | LR _, LL _
     | LL _, LR _ -> false
     | _ -> false
+  [@@inline]
 
   (* [p += c] updates the right subtree of [p] with [c].
      pre: rank p > 1 /\ rank c > 1 *)
@@ -1063,6 +1016,7 @@ module Dict = struct
       then LL (b,k,x,c')
       else EQ (b,k,x,c')
     | _ -> failwith "+=: rank < 2"
+  [@@inline]
 
   (* [b =+ p] updates the left subtree of [p] with [b].
      pre: rank p > 1 /\ rank b > 1 *)
@@ -1080,6 +1034,7 @@ module Dict = struct
       then LR (b',k,x,c)
       else EQ (b',k,x,c)
     | _ -> failwith "=+: rank < 2"
+  [@@inline]
 
   (* pre:
      - a is not in t;
@@ -1097,19 +1052,26 @@ module Dict = struct
     | T1 (kb,b) -> if ka <$ kb
       then make2 ka a kb b
       else make2 kb b ka a
-    | T2 (kb,b, kc,c) -> if ka <$ kb
+    | T2 (kb,b,kc,c) -> if ka <$ kb
       then make3 ka a kb b kc c else if ka <$ kc
       then make3 kb b ka a kc c
       else make3 kb b kc c ka a
-    | T3 (kb,b,kc,c,kd,d) -> if ka <$ kb
-      then make4 ka a kb b kc c kd d else if ka <$ kc
-      then make4 kb b ka a kc c kd d else if ka <$ kd
+    | T3 (kb,b,kc,c,kd,d) ->
+      if ka <$ kc
+      then if ka <$ kb
+        then make4 ka a kb b kc c kd d
+        else make4 kb b ka a kc c kd d
+      else if ka <$ kd
       then make4 kb b kc c ka a kd d
       else make4 kb b kc c kd d ka a
-    | T4 (kb,b,kc,c,kd,d,ke,e) -> if ka <$ kb
-      then make5 ka a kb b kc c kd d ke e else if ka <$ kc
-      then make5 kb b ka a kc c kd d ke e else if ka <$ kd
-      then make5 kb b kc c ka a kd d ke e else if ka <$ ke
+    | T4 (kb,b,kc,c,kd,d,ke,e) ->
+      if ka <$ kd then
+        if ka <$ kc then
+          if ka <$ kb
+          then make5 ka a kb b kc c kd d ke e
+          else make5 kb b ka a kc c kd d ke e
+        else make5 kb b kc c ka a kd d ke e
+      else if ka <$ ke
       then make5 kb b kc c kd d ka a ke e
       else make5 kb b kc c kd d ke e ka a
     | EQ (T0,kb,b,T4(kc,c,kd,d,ke,e,kf,f)) ->
@@ -1269,13 +1231,18 @@ module Dict = struct
       else if ka <$ kj
       then make10 kb b kc c kd d ke e kf f kg g kh h ki i ka a kj j
       else make10 kb b kc c kd d ke e kf f kg g kh h ki i kj j ka a
+
     | LL ((T0| T1 _ | T2 _ | T3 _ as b),k,x,
           (EQ (T4 _,_,_,T4 _) as c)) as t ->
       if ka <$ k
       then LL (insert ka a b,k,x,c)
       else insert ka a (shake_left t)
-    | LL (T4 _ as b,k,x,c) when ka <$ k ->
+
+    | LL ((T4 _ as b),k,x,c) when ka <$ k ->
       EQ (insert ka a b,k,x,c)
+    | LR (b,k,x,(T4 _ as c)) when k <$ ka ->
+      EQ (b,k,x,insert ka a c)
+
     | EQ ((EQ (T4 _,_,_,T4 _) as b),k,_,(EQ (T4 _,_,_,T4 _) as c)) as t ->
       if ka <$ k
       then insert ka a b =+ t
@@ -1292,6 +1259,7 @@ module Dict = struct
           EQ (insert ka a x,kc,c,insert kb b y)
         }
       else EQ (x,kb,b,insert ka a y)
+
     | LL (b,k,_,c) as t ->
       if ka <$ k
       then insert ka a b =+ t
@@ -1305,121 +1273,7 @@ module Dict = struct
       then insert ka a b =+ t
       else t += insert ka a c
 
-  type test = {
-    pos : int;
-    key : int key;
-    add : record -> record;
-    (* put : int -> record -> record; *)
-    (* get : record -> int; *)
-    core_add : Univ_map.t -> Univ_map.t;
-    (* core_get : Univ_map.t -> int; *)
-  }
-
-  let input n =
-    Sequence.range 0 n |>
-    Sequence.map ~f:(fun pos ->
-        let name = sprintf "f%d" pos in
-        let k = Key.create ~name sexp_of_int in
-        let core_add r = Univ_map.add_exn r k.key pos in
-        (* let core_get r = Univ_map.find_exn r k.key in *)
-        {
-          pos;
-          key = k;
-          add = insert k pos;
-          (* add = update (fun _ x -> x) k pos; *)
-          (* put = update (fun _ x -> x) k; *)
-          (* get = get k; *)
-          core_add;
-          (* core_get; *)
-        }) |>
-    Sequence.to_array
-
-  let rec length = function
-    | T0 -> 0
-    | T1 _ -> 1
-    | T2 _ -> 2
-    | T3 _ -> 3
-    | T4 _ -> 4
-    | LR (x,_,_,y)
-    | EQ (x,_,_,y)
-    | LL (x,_,_,y) ->  length x + length y + 1
-
-
-  type counter = {
-    t0 : int;
-    t1 : int;
-    t2 : int;
-    t3 : int;
-    t4 : int;
-    lr : int;
-    eq : int;
-    ll : int;
-  }
-  let empty_counter = {
-    t0=0;
-    t1=0;
-    t2=0;
-    t3=0;
-    t4=0;
-    ll=0;
-    eq=0;
-    lr=0;
-  }
-
-  let rec count c = function
-    | T0   -> {c with t0 = c.t0+1}
-    | T1 _ -> {c with t1 = c.t1+1}
-    | T2 _ -> {c with t2 = c.t2+1}
-    | T3 _ -> {c with t3 = c.t3+1}
-    | T4 _ -> {c with t4 = c.t4+1}
-    | LR (x,_,_,y) ->
-      let c = {c with lr = c.lr + 1} in
-      count (count c x) y
-    | LL (x,_,_,y) ->
-      let c = {c with ll = c.ll + 1} in
-      count (count c x) y
-    | EQ (x,_,_,y) ->
-      let c = {c with eq = c.eq + 1} in
-      count (count c x) y
-
-
-
-
-  let test input =
-    let input = Array.copy input in
-    Array.permute input;
-    Gc.compact ();
-    let was = Gc.allocated_bytes () in
-    trace_enter "test/dict";
-    let x = Array.fold input ~init:T0 ~f:(fun r {add} -> add r) in
-    trace_leave "test/dict";
-    trace_enter "test/dict-compact";
-    let now = Gc.allocated_bytes () in
-    Format.eprintf "memory/dict: %g Mb" ((now-.was) /. 1e6);
-    Gc.compact ();
-    let was = Gc.allocated_bytes () in
-    trace_leave "test/dict-compact";
-    trace_enter "test/core";
-    let y = Array.fold input ~init:Univ_map.empty ~f:(fun r {core_add} ->
-        core_add r) in
-    trace_leave "test/core";
-    trace_enter "test/core-compact";
-    let now = Gc.allocated_bytes () in
-    Format.eprintf "memory/core: %g Mb" ((now-.was) /. 1e6);
-    Gc.compact ();
-    trace_leave "test/core-compact";
-    input,x,y
-
-  let r =
-    trace_reset ();
-    Format.eprintf "@\n%!";
-    let _,d,m = test (input 1000_000) in
-    print_balance_factor d;
-    if (length d <> List.length (Univ_map.to_alist m))
-    then failwith "the map is incomplete";
-    count empty_counter d;
-
-    (* [merge k x y] *)
+  (* [merge k x y] *)
   type merge = {
     merge : 'a. 'a key -> 'a -> 'a -> 'a
   } [@@unboxed]
@@ -1435,8 +1289,7 @@ module Dict = struct
 
   let app = merge
 
-  let rec upsert ~update:ret ~insert:add ka a t =
-    match t with
+  let rec upsert ~update:ret ~insert:add ka a t = match t with
     | T0 -> add (make1 ka a)
     | T1 (kb,b) -> if eq ka kb
       then ret (fun f -> make1 ka (app f ka kb b a))
@@ -1473,20 +1326,29 @@ module Dict = struct
         | 0 -> ret@@fun f -> LL (x,ka,app f ka kb b a,y)
         | 1 -> upsert ka a y
                  ~update:(fun k -> ret@@fun f -> LL (x,kb,b,k f))
-                 ~insert:(fun y -> add@@bal@@LL (x,kb,b,y))
+                 ~insert:(fun y -> add@@ t += y)
         | _ ->
           upsert ka a x
             ~update:(fun k -> ret@@fun f -> LL (k f,kb,b, y))
-            ~insert:(fun x -> add@@LR (x,kb,b,y))
+            ~insert:(fun x -> add@@ x =+ t)
+      end
+    | EQ (x,kb,b,y) -> begin match cmp ka kb with
+        | 0 -> ret@@fun f -> EQ (x,ka,app f ka kb b a,y)
+        | 1 -> upsert ka a y
+                 ~update:(fun k -> ret@@fun f -> EQ (x,kb,b,k f))
+                 ~insert:(fun y -> add@@ t += y)
+        | _ -> upsert ka a x
+                 ~update:(fun k -> ret@@fun f -> EQ (k f,kb,b,y))
+                 ~insert:(fun x -> add@@ x =+ t)
       end
     | LR (x,kb,b,y) -> begin match cmp ka kb with
         | 0 -> ret@@fun f -> LR (x,ka,app f ka kb b a,y)
         | 1 -> upsert ka a y
                  ~update:(fun k -> ret@@fun f -> LR (x,kb,b,k f))
-                 ~insert:(fun y -> add@@LL (x,kb,b,y))
+                 ~insert:(fun y -> add@@ t += y)
         | _ -> upsert ka a x
                  ~update:(fun k -> ret@@fun f -> LR (k f,kb,b,y))
-                 ~insert:(fun x -> add@@bal@@LR (x,kb,b,y))
+                 ~insert:(fun x -> add@@ x =+ t)
       end
 
   let monomorphic_merge
@@ -1545,6 +1407,11 @@ module Dict = struct
             else raise Field_not_found
       end
     | LL (x,ka,a,y) -> begin match cmp k ka with
+        | 0 -> return k ka a
+        | 1 -> get k y
+        | _ -> get k x
+      end
+    | EQ (x,ka,a,y) -> begin match cmp k ka with
         | 0 -> return k ka a
         | 1 -> get k y
         | _ -> get k x
@@ -1641,17 +1508,7 @@ module Dict = struct
 
   let pp_key ppf {Key.key} =
     Format.fprintf ppf "%s" (Type_equal.Id.name key)
-
-
-  let pp_uid ppf uid =
-    Format.fprintf ppf "%a" Sexp.pp_hum (Uid.sexp_of_t uid)
-
-
-
-  ;;
-
 end
-;;
 
 module Record = struct
   module Key = Dict.Key
@@ -2014,21 +1871,9 @@ module Knowledge = struct
     let merge ?on_conflict:_ x y =
       {x with data = Record.merge_or_keep x.data y.data}
 
-    let merge ?on_conflict x y =
-      trace_enter "value/merge";
-      let x = merge ?on_conflict x y in
-      trace_leave "value/merge";
-      x
-
     let join x y = match Record.join x.data y.data with
       | Ok data -> Ok {x with data; time = next_second ()}
       | Error c -> Error c
-
-    let join x y =
-      trace_enter "value/join";
-      let x = join x y in
-      trace_leave "value/join";
-      x
 
     module type S = sig
       type t [@@deriving sexp]
