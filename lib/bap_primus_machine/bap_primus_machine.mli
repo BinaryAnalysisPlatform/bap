@@ -208,7 +208,7 @@ module Primus : sig
     val (-->) : 'a obj -> ('a,'p) slot -> 'p t
 
     (** [c // s] is [Object.read c s]  *)
-    val (//) : 'a cls -> string -> 'a obj t
+    val (//) : ('a,_) cls -> string -> 'a obj t
 
     (** [event >>> action] is the same as
         [Observation.monitor event action] *)
