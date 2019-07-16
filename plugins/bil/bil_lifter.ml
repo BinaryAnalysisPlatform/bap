@@ -186,27 +186,6 @@ let provide_bir () =
   let bir = Bil_ir.reify @@  KB.Value.get Bil_ir.slot sema in
   KB.Value.put Term.slot sema bir
 
-let has_bil insn =
-  let bil = KB.Value.get Bil.slot insn in
-  let dom = KB.Slot.domain Bil.slot in
-  not (KB.Domain.is_empty dom bil)
-
-let cache = Hashtbl.create (module struct
-    let hash = Hashtbl.hash
-    include Bil
-  end)
-
-
-(* let () = at_exit @@ fun () ->
- *   Format.eprintf "%d = %d + %d@\n%!"
- *     !total_calls !cache_hits !cache_misses *)
-
-let with_fresh_env f x =
-  let old = Bap_toplevel.env in
-  Bap_toplevel.reset ();
-  let x = f x in
-  Bap_toplevel.set old;
-  x
 
 let provide_lifter () =
   info "providing a lifter for all BIL lifters";
@@ -219,19 +198,14 @@ let provide_lifter () =
     Knowledge.collect Memory.slot obj >>? fun mem ->
     Knowledge.collect Disasm_expert.Basic.Insn.slot obj >>? fun insn ->
     let module Target = (val target_of_arch arch) in
-    match with_fresh_env (Target.lift mem) insn with
+    match Target.lift mem insn with
     | Error _ ->
       Knowledge.return unknown
     | Ok bil ->
-      match Hashtbl.find cache bil with
-      | None ->
-        Bil_semantics.context >>= fun ctxt ->
-        Knowledge.provide Bil_semantics.arch ctxt (Some arch) >>= fun () ->
-        Lifter.run BilParser.t bil >>= fun sema ->
-        Hashtbl.add_exn cache ~key:bil ~data:sema;
-        Knowledge.return sema
-      | Some sema ->
-        Knowledge.return sema in
+      Bil_semantics.context >>= fun ctxt ->
+      Knowledge.provide Bil_semantics.arch ctxt (Some arch) >>= fun () ->
+      Lifter.run BilParser.t bil >>= fun sema ->
+      Knowledge.return sema in
   Knowledge.promise Theory.Program.Semantics.slot lifter
 
 
