@@ -35,7 +35,6 @@ module type Sid = sig
   val incr : t ref -> unit
 end
 
-module Uid = Type_equal.Id.Uid
 
 (* temporal identifiers
 
@@ -706,15 +705,34 @@ module Dict = struct
     module Uid = Int
     let last_id = ref 0
 
+    type 'a witness = ..
+
+    module type Witness = sig
+      type t
+      type _ witness += Id : t witness
+    end
+
+    type 'a typeid = (module Witness with type t = 'a)
+
     type 'a t = {
       ord : Uid.t;
-      key : 'a Type_equal.Id.t;
+      key : 'a typeid;
+      name : string;
+      show : 'a -> Sexp.t;
     }
 
-    let create ~name sexp_of_t =
-      let key = Type_equal.Id.create ~name sexp_of_t in
+    let newtype (type a) () : a typeid =
+      let module Type = struct
+        type t = a
+        type _ witness += Id : t witness
+      end in
+      (module Type)
+
+
+    let create ~name show =
+      let key = newtype () in
       incr last_id;
-      {key; ord = !last_id}
+      {key; ord = !last_id; name; show}
 
     let uid {ord} = ord [@@inline]
     let compare k1 k2 =
@@ -722,9 +740,18 @@ module Dict = struct
       (Uid.compare [@inlined]) k1 k2
     [@@inline]
 
-    let name x = Type_equal.Id.name x.key
-    let to_sexp x = Type_equal.Id.to_sexp x.key
-    let same x y = Type_equal.Id.same_witness_exn x.key y.key
+    let name x = x.name
+    let to_sexp x = x.show
+    let equal x y = Int.equal x.ord y.ord [@@inline]
+
+    let same (type a b) x y : (a,b) Type_equal.t =
+      if equal x y then
+        let module X = (val x.key : Witness with type t = a) in
+        let module Y = (val y.key : Witness with type t = b) in
+        match X.Id with
+        | Y.Id -> Type_equal.T
+        | _ -> failwith "broken type equality"
+      else failwith "types are not equal"
   end
   type 'a key = 'a Key.t
   type record =
@@ -1506,8 +1533,8 @@ module Dict = struct
       Format.fprintf ppf "EQ(%a,%a,%a)"
         pp_tree x pp_elt (k,a) pp_tree y
 
-  let pp_key ppf {Key.key} =
-    Format.fprintf ppf "%s" (Type_equal.Id.name key)
+  let pp_key ppf {Key.name} =
+    Format.fprintf ppf "%s" name
 end
 
 module Record = struct
@@ -1611,7 +1638,7 @@ module Record = struct
 
   let join x y = try_merge ~on_conflict:`fail x y
 
-  let eq = Type_equal.Id.same_witness_exn
+  let eq = Dict.Key.same
 
   let register_persistent (type p)
       (key : p Key.t)
