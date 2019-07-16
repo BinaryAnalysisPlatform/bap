@@ -313,11 +313,29 @@ let nice_pp_error fmt er =
     | r -> pp_sexp fmt (R.sexp_of_t r) in
   Format.fprintf fmt "%a" pp (R.of_info (Error.to_info er))
 
+let setup_gc () =
+  let opts = Caml.Gc.get () in
+  info "Setting GC parameters";
+  Caml.Gc.set {
+    opts with
+    window_size = 20;
+    minor_heap_size = 1024 * 1024;
+    major_heap_increment = 64 * 1024 * 1024;
+    space_overhead = 200;
+  }
+
+let has_env var = match Sys.getenv_opt var with
+  | None -> false
+  | Some _ -> true
+
 let () =
   let () =
     try if Sys.getenv "BAP_DEBUG" <> "0" then
         Printexc.record_backtrace true
     with Caml.Not_found -> () in
+  if not (has_env "OCAMLRUNPARAM" || has_env "CAMLRUNPARAM")
+  then setup_gc ()
+  else info "GC parameters are overriden by a user";
   Sys.(set_signal sigint (Signal_handle exit));
   let argv = load_recipe () in
   Log.start ?logdir:(get_logdir argv)();
