@@ -1116,6 +1116,16 @@ module Std : sig
          *)
         val return : (string * value list) observation
 
+        (** occurs when an externally linked primus stub is called.
+            Arguments values are specified in the same order as in
+            the [call] observation *)
+        val lisp_call : (string * value list) observation
+
+        (** occurs just before a lisp call from an external procedure
+            returns. Arguments values are specified in the same order as in
+            the [return] observation *)
+        val lisp_call_return : (string * value list) observation
+
         (** {3 Notification interface}
 
             Use [Machine.Observation.make] function, where [Machine]
@@ -1128,6 +1138,12 @@ module Std : sig
 
         (** the statement that makes [return] observations  *)
         val call_returned : (string * value list) statement
+
+        (** the statement that makes [lisp-call] observations  *)
+        val lisp_call_entered : (string * value list) statement
+
+        (** the statement that makes [lisp-call-return] observations  *)
+        val lisp_call_returned : (string * value list) statement
 
       end
 

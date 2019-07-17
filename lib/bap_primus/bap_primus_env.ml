@@ -95,10 +95,12 @@ module Make(Machine : Machine) = struct
     match Map.find t.values var with
     | Some res -> Machine.return res
     | None -> match Var.typ var with
-      | Type.Mem (_,_) -> null
+      | Type.Mem (_,_) | Type.Unk -> null
       | Type.Imm width -> match Map.find t.random var with
         | None -> Machine.raise (Undefined_var var)
-        | Some gen -> Generator.word gen width >>= Value.of_word
+        | Some gen ->
+          Generator.word gen width >>= Value.of_word >>= fun x ->
+          set var x >>| fun () -> x
 
   let has var =
     Machine.Local.get state >>| fun t ->
