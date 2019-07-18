@@ -1895,9 +1895,6 @@ module Knowledge = struct
         (* try_merge fails only if `fail is passed *)
         assert false
 
-    let merge ?on_conflict:_ x y =
-      {x with data = Record.merge_or_keep x.data y.data}
-
     let join x y = match Record.join x.data y.data with
       | Ok data -> Ok {x with data; time = next_second ()}
       | Error c -> Error c
