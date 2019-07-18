@@ -8,18 +8,18 @@ type new_kind = [ `idat | `idat64 | `ida  | `ida64  ] [@@deriving sexp, enumerat
 type ida_kind = [ old_kind | new_kind ] [@@deriving sexp]
 
 type ida = {
-    headless  : ida_kind;
-    graphical : ida_kind;
-    headless64  : ida_kind;
-    graphical64 : ida_kind;
-    version : version;
-  } [@@deriving sexp]
+  headless  : ida_kind;
+  graphical : ida_kind;
+  headless64  : ida_kind;
+  graphical64 : ida_kind;
+  version : version;
+} [@@deriving sexp]
 
 type t = {
-    path  : string;
-    ida   : ida;
-    is_headless : bool;
-  }
+  path  : string;
+  ida   : ida;
+  is_headless : bool;
+}
 
 type mode = [ `m32 | `m64 ]
 
@@ -76,12 +76,12 @@ module Check = struct
   let run {path; ida} =
     let require_kind = require_kind path in
     Result.all_unit [
-        require_ida path;
-        require_ida_python path;
-        require_kind ida.graphical;
-        require_kind ida.graphical64;
-        require_kind ida.headless;
-        require_kind ida.headless64; ]
+      require_ida path;
+      require_ida_python path;
+      require_kind ida.graphical;
+      require_kind ida.graphical64;
+      require_kind ida.headless;
+      require_kind ida.headless64; ]
 
   let check_integrity ida =
     let files = [ida.graphical; ida.headless;
@@ -103,8 +103,8 @@ let check ida =
   match Check.run ida with
   | Ok () as ok -> ok
   | Error fail ->
-     Or_error.errorf "IDA check failed with error code %d"
-       (code_of_failure fail)
+    Or_error.errorf "IDA check failed with error code %d"
+      (code_of_failure fail)
 
 let exists_kind path kind =
   Sys.file_exists (path / string_of_kind kind)
@@ -117,12 +117,12 @@ let create_ida path =
       | `m32 -> [`idaq; `ida]
       | `m64 -> [`idaq64; `ida64] in
     List.find ~f:(exists_kind path) kinds |>
-      function
-      | Some k -> Ok k
-      | None ->
-         let kinds = List.map ~f:string_of_kind kinds in
-         let files = String.concat ~sep:"/" kinds in
-         Error (File_not_found files) in
+    function
+    | Some k -> Ok k
+    | None ->
+      let kinds = List.map ~f:string_of_kind kinds in
+      let files = String.concat ~sep:"/" kinds in
+      Error (File_not_found files) in
   let version_of_headless = function
     | `idal -> Vold
     | _ -> Vnew in
@@ -148,21 +148,23 @@ let create path is_headless =
   match create' path is_headless with
   | Ok r -> Ok r
   | Error fail ->
-     warning "%s" (string_of_failure fail);
-     Or_error.errorf "IDA detection failed with error code %d" (code_of_failure fail)
+    warning "%s" (string_of_failure fail);
+    Or_error.errorf "IDA detection failed with error code %d: %s"
+      (code_of_failure fail)
+      (string_of_failure fail)
 
 (* Note, we always launch headless ida in case of IDA Pro 7 *)
 let ida32 info = match info.ida.version with
   | Vnew -> info.ida.headless
   | Vold ->
-     if info.is_headless then info.ida.headless
-     else info.ida.graphical
+    if info.is_headless then info.ida.headless
+    else info.ida.graphical
 
 let ida64 info = match info.ida.version with
   | Vnew -> info.ida.headless64
   | Vold ->
-     if info.is_headless then info.ida.headless64
-     else info.ida.graphical64
+    if info.is_headless then info.ida.headless64
+    else info.ida.graphical64
 
 let ida_of_suffix info filename =
   let ext = FilePath.replace_extension in
@@ -176,14 +178,14 @@ let ida_of_mode info = function
   | `m64 -> ida64 info
 
 let find_ida info mode target =
-    let kind = match mode with
-      | Some mode -> ida_of_mode info mode
-      | None ->
-         match ida_of_suffix info target with
-         | Some ida -> ida
-         | None -> ida64 info in
-    let s = Sexp.to_string (sexp_of_ida_kind kind) in
-    Filename.concat info.path s
+  let kind = match mode with
+    | Some mode -> ida_of_mode info mode
+    | None ->
+      match ida_of_suffix info target with
+      | Some ida -> ida
+      | None -> ida64 info in
+  let s = Sexp.to_string (sexp_of_ida_kind kind) in
+  Filename.concat info.path s
 
 let is_headless t = t.is_headless
 let path t = t.path
