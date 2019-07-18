@@ -74,12 +74,28 @@ module Input = struct
     finish;
   }
 
+  let symtab_agent =
+    let reliability = KB.Agent.authorative in
+    KB.Agent.register
+      ~reliability
+      ~desc:"extracts symbols from the image symtab entries"
+      ~package:"bap.std"
+      "symtab"
+
+  let provide_image image =
+    let image_symbols = Symbolizer.of_image image in
+    let image_roots = Rooter.of_image image in
+    info "providing rooter and symbolizer from image";
+    Symbolizer.provide symtab_agent image_symbols;
+    Rooter.provide image_roots
+
   let of_image ?loader filename =
     Image.create ?backend:loader filename >>| fun (img,warns) ->
     List.iter warns ~f:(fun e -> warning "%a" Error.pp e);
     let spec = Image.spec img in
     Signal.send Info.got_img img;
     Signal.send Info.got_spec spec;
+    provide_image img;
     let finish proj = {
       proj with
       storage = Dict.set proj.storage Image.specification spec;
@@ -171,49 +187,6 @@ let roots rooter = match rooter with
 let fresh_state () =
   Toplevel.reset ();
   Toplevel.env
-
-module MVar = struct
-  type 'a t = {
-    mutable value   : 'a Or_error.t;
-    mutable updated : bool;
-    compare : 'a -> 'a -> int;
-  }
-
-  let create ?(compare=fun _ _ -> 1) x =
-    {value=Ok x; updated=true; compare}
-  let peek x = ok_exn x.value
-  let read x = x.updated <- false; peek x
-  let is_updated x = x.updated
-  let write x v =
-    if x.compare (ok_exn x.value) v <> 0 then x.updated <- true;
-    x.value <- Ok v
-
-  let fail x err =
-    x.value <- Error err;
-    x.updated <- true
-
-  let ignore x =
-    Result.iter_error x.value ~f:Error.raise;
-    x.updated <- false
-
-  let from_source s =
-    let x = create None in
-    Stream.observe s (function
-        | Ok v -> write x (Some v)
-        | Error e -> fail x e);
-    x
-
-  let from_optional_source ?(default=fun () -> None) = function
-    | Some s -> from_source s
-    | None -> match default () with
-      | None -> create None
-      | Some s -> from_source s
-end
-
-let phase_triggered phase mvar =
-  let trigger = MVar.is_updated mvar in
-  if trigger then Signal.send phase (MVar.read mvar);
-  trigger
 
 module Cfg = Graphs.Cfg
 
