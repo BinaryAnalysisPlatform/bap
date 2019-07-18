@@ -213,7 +213,8 @@ let () =
        (Since flags are rarely used non-locally).
        Finally, on level 3 we extend our analysis to all variables." in
 
-    Config.(param int ~default:2 ~doc "level") in
+    Config.(param int ~default:0 ~doc "level") in
 
   Config.when_ready (fun {Config.get=(!)} ->
-      Project.register_pass ~deps:["api"] ~autorun:true (run !level))
+      if !level > 0
+      then Project.register_pass ~deps:["api"] ~autorun:true (run !level))
