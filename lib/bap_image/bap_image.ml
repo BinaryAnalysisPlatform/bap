@@ -176,9 +176,9 @@ let map_region data {locn={addr}; info={off; len; endian}} =
   Memory.create ~pos:off ~len endian addr data
 
 let static_view segments = function {addr} as locn ->
-  match Table.find_addr segments addr with
-  | None -> Result.failf "region is not mapped to memory" ()
-  | Some (segmem,_) -> mem_of_locn segmem locn
+match Table.find_addr segments addr with
+| None -> Result.failf "region is not mapped to memory" ()
+| Some (segmem,_) -> mem_of_locn segmem locn
 
 let add_sym segments memory (symtab : symtab)
     ({name; locn=entry; info={extra_locns=locns}} as sym) =
@@ -193,17 +193,17 @@ let add_sym segments memory (symtab : symtab)
         | _intersects_ -> Ok (memory,symtab))
 
 let add_segment base memory segments seg =
-    map_region base seg >>= fun mem ->
-    Table.add segments mem seg >>= fun segments ->
-    let memory = tag mem segment seg memory in
-    Result.return (memory,segments)
+  map_region base seg >>= fun mem ->
+  Table.add segments mem seg >>= fun segments ->
+  let memory = tag mem segment seg memory in
+  Result.return (memory,segments)
 
 let add_sections_view segments sections memmap =
   List.fold sections ~init:(memmap,[])
     ~f:(fun (memmap,ers) {name; locn}  ->
-      match static_view segments locn with
-      | Ok mem -> tag mem section name memmap, ers
-      | Error er -> memmap,er::ers)
+        match static_view segments locn with
+        | Ok mem -> tag mem section name memmap, ers
+        | Error er -> memmap,er::ers)
 
 let make_table add base memory =
   List.fold ~init:(memory,Table.empty,[])
@@ -350,7 +350,7 @@ module Scheme = struct
   let relocation () =
     declare "relocation" (scheme fixup $ addr) Tuple.T2.create
   let external_reference () =
-    declare "external_reference" (scheme addr $ name) Tuple.T2.create
+    declare "external-reference" (scheme addr $ name) Tuple.T2.create
   let base_address () = declare "base-address" (scheme addr) ident
 end
 
@@ -368,7 +368,7 @@ module Derive = struct
     Fact.Seq.reduce ~f:(fun a1 a2 ->
         if Arch.equal a1 a2 then Fact.return a1
         else Fact.failf "arch is ambiguous" ())
-        (Seq.filter_map ~f:Arch.of_string s) >>= fun a ->
+      (Seq.filter_map ~f:Arch.of_string s) >>= fun a ->
     match a with
     | Some a -> Fact.return a
     | None -> Fact.failf "unknown/unsupported architecture" ()
@@ -399,10 +399,10 @@ module Derive = struct
                 {addr; size; info=(r,w,x)}
                 {size=len; info=off}
                 {info=name} ->
-        location ~addr ~size >>= fun locn ->
-        int_of_int64 off >>= fun off ->
-        int_of_int64 len >>| fun len ->
-        {name; locn; info={off; len; endian; r; w; x}}) >>=
+                location ~addr ~size >>= fun locn ->
+                int_of_int64 off >>= fun off ->
+                int_of_int64 len >>| fun len ->
+                {name; locn; info={off; len; endian; r; w; x}}) >>=
     Fact.Seq.all
 
   let sections =
