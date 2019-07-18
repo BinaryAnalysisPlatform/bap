@@ -49,14 +49,12 @@ let chain ss =
 let of_image img =
   let symtab = Image.symbols img in
   let names = Addr.Table.create () in
-  Table.iteri symtab ~f:(fun mem name ->
-      Hashtbl.set names
-        ~key:(Memory.min_addr mem)
-        ~data:name);
-  let find addr = match Hashtbl.find names addr with
-    | None -> None
-    | Some sym -> Some (Image.Symbol.name sym) in
-  create find
+  Table.iteri symtab ~f:(fun mem sym ->
+      let name = Image.Symbol.name sym
+      and addr = Memory.min_addr mem in
+      if not (Name.is_empty name)
+      then Hashtbl.set names ~key:addr ~data:name);
+  create (Hashtbl.find names)
 
 let of_blocks seq =
   let syms = Addr.Table.create () in
@@ -89,13 +87,10 @@ let get_name addr =
   KB.Object.scoped Theory.Program.cls @@ fun label ->
   KB.provide Theory.Label.addr label data >>= fun () ->
   KB.resolve common_name label >>= function
-  | Some name ->
-    update_name_slot label name >>= fun () ->
-    KB.return name
-  | None ->
-    KB.collect Theory.Label.name label >>| function
+  | Some name -> KB.return name
+  | None -> KB.collect Theory.Label.name label >>| function
     | Some name -> name
-    | None -> resolve empty addr
+    | None -> name_of_addr addr
 
 module Toplevel = struct
   let name = Bap_toplevel.var "symbol-name"
