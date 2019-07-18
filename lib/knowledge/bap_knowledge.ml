@@ -312,10 +312,13 @@ end = struct
       ops with opinions = op :: opinions
     }
 
-  let add agent opinion = add_opinion {
-      opinion;
-      votes = Set.singleton (module Agent) agent;
-    }
+  let add agent opinion ({empty; equal} as ops) =
+    if equal opinion empty then ops
+    else
+      add_opinion {
+        opinion;
+        votes = Set.singleton (module Agent) agent;
+      } ops
 
   let join x y =
     List.fold y.opinions ~init:x ~f:(fun ops op -> add_opinion op ops)
@@ -1972,20 +1975,23 @@ module Knowledge = struct
 
   let provide : type a p. (a,p) slot -> a obj -> p -> unit Knowledge.t =
     fun slot obj x ->
-      get () >>= function {classes} as s ->
-        let {Env.vals} as objs =
-          match Map.find classes slot.cls.id with
-          | None -> Env.empty_class
-          | Some objs -> objs in
-        try put {
-            s with classes = Map.set classes ~key:slot.cls.id ~data:{
-            objs with vals = Map.update vals obj ~f:(function
-            | None -> Record.(put slot.key empty x)
-            | Some v -> match Record.commit slot.dom slot.key v x with
-              | Ok r -> r
-              | Error err -> raise (Record.Merge_conflict err))}}
-        with Record.Merge_conflict err ->
-          Knowledge.fail (Non_monotonic_update (Slot.name slot, err))
+      if Domain.is_empty slot.dom x
+      then Knowledge.return ()
+      else
+        get () >>= function {classes} as s ->
+          let {Env.vals} as objs =
+            match Map.find classes slot.cls.id with
+            | None -> Env.empty_class
+            | Some objs -> objs in
+          try put {
+              s with classes = Map.set classes ~key:slot.cls.id ~data:{
+              objs with vals = Map.update vals obj ~f:(function
+              | None -> Record.(put slot.key empty x)
+              | Some v -> match Record.commit slot.dom slot.key v x with
+                | Ok r -> r
+                | Error err -> raise (Record.Merge_conflict err))}}
+          with Record.Merge_conflict err ->
+            Knowledge.fail (Non_monotonic_update (Slot.name slot, err))
 
   let pids = ref Pid.zero
 
@@ -1996,7 +2002,10 @@ module Knowledge = struct
 
   let promise s get =
     register_promise s @@ fun obj ->
-    get obj >>= provide s obj
+    get obj >>= fun x ->
+    if Domain.is_empty s.dom x
+    then Knowledge.return ()
+    else provide s obj x
 
   let objects {Class.id} =
     get () >>| fun {classes} ->
