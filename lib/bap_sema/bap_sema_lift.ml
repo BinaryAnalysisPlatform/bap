@@ -106,24 +106,8 @@ module IrBuilder = struct
     | First x, First y -> Tid.equal x y
     | _ -> false
 
-  let insert_call alt blk =
-    let eq_alt = resolves_equal alt in
-    let alt = Some alt in
-    match Term.last jmp_t blk with
-    | None -> [Term.append jmp_t blk @@ Ir_jmp.reify ?alt ()]
-    | Some jmp -> update_jmp jmp ~f:(fun dst alt' jmp ->
-        match dst,alt' with
-        | dst,None -> [Term.update jmp_t blk @@ jmp ~dst ~alt]
-        | _,Some alt' when eq_alt alt' -> [blk]
-        | _,Some alt' ->
-          let call =
-            Term.append jmp_t (Ir_blk.create ()) @@
-            Ir_jmp.reify ?alt () in
-          let dst = Some (Ir_jmp.resolved (Term.tid call)) in
-          [
-            call;
-            Term.update jmp_t blk @@ jmp ~dst ~alt:(Some alt');
-          ])
+  let insert_inter_fall alt blk =
+    [Term.append jmp_t blk @@ Ir_jmp.reify ~alt ()]
 
   let is_last_jump_nonconditional blk =
     match Term.last jmp_t blk with
@@ -148,8 +132,6 @@ module IrBuilder = struct
     let x = Block.terminator block in
     let is_call = Insn.(is call x)
     and is_barrier = Insn.(is barrier x)
-    and is_jump = Insn.(is jump x)
-    and is_cond = Insn.(is conditional x)
     and is_return = Insn.(is return x) in
     with_first_blk_addressed (Block.addr block) @@
     List.rev @@ match blks,fall with
@@ -162,8 +144,8 @@ module IrBuilder = struct
     | x::xs, None ->
       let x = if is_call then turn_into_call fall x else x in
       match inter_fall symtab block with
-      | Some dst when is_call || is_cond || not is_jump ->
-        insert_call dst x @ xs
+      | Some dst when Term.length jmp_t x = 0 ->
+        insert_inter_fall dst x @ xs
       | _ -> x::xs
 end
 
