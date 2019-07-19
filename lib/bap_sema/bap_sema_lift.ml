@@ -107,14 +107,14 @@ module IrBuilder = struct
     | _ -> false
 
   let insert_call alt blk =
-    let same_tid = resolves_equal alt in
+    let eq_alt = resolves_equal alt in
     let alt = Some alt in
     match Term.last jmp_t blk with
     | None -> [Term.append jmp_t blk @@ Ir_jmp.reify ?alt ()]
     | Some jmp -> update_jmp jmp ~f:(fun dst alt' jmp ->
         match dst,alt' with
         | dst,None -> [Term.update jmp_t blk @@ jmp ~dst ~alt]
-        | _,Some alt' when same_tid alt' -> [blk]
+        | _,Some alt' when eq_alt alt' -> [blk]
         | _,Some alt' ->
           let call =
             Term.append jmp_t (Ir_blk.create ()) @@
@@ -145,22 +145,29 @@ module IrBuilder = struct
           lift_insn ~mem insn blks) in
     let fall = intra_fall cfg block in
     let blks = with_landing_pads fall blks in
+    let x = Block.terminator block in
+    let is_call = Insn.(is call x)
+    and is_barrier = Insn.(is barrier x)
+    and is_jump = Insn.(is jump x)
+    and is_cond = Insn.(is conditional x)
+    and is_return = Insn.(is return x) in
     with_first_blk_addressed (Block.addr block) @@
-    match blks,fall,Insn.(is call) (Block.terminator block) with
-    | [],_,_ -> []
-    | x::xs, Some _, true ->
-      List.rev (turn_into_call fall x :: xs)
-    | x::xs, Some dst, false ->
-      List.rev (fall_if_possible x (Ir_jmp.reify ~dst ()) :: xs)
-    | x::xs, None, is_call ->
+    List.rev @@ match blks,fall with
+    | [],_ -> []
+    | blks,_ when is_barrier || is_return -> blks
+    | x::xs, Some dst ->
+      if is_call
+      then turn_into_call fall x :: xs
+      else fall_if_possible x (Ir_jmp.reify ~dst ()) :: xs
+    | x::xs, None ->
       let x = if is_call then turn_into_call fall x else x in
       match inter_fall symtab block with
-      | None -> List.rev (x::xs)
-      | Some dst -> List.rev (insert_call dst x @ xs)
+      | Some dst when is_call || is_cond || not is_jump ->
+        insert_call dst x @ xs
+      | _ -> x::xs
 end
 
 let blk cfg block = IrBuilder.blk cfg block
-
 
 let lift_sub ?symtab ?tid entry cfg =
   let sub = Ir_sub.Builder.create ?tid ~blks:32 () in
