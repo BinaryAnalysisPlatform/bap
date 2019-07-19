@@ -1,9 +1,11 @@
-open Bap_knowledge
+open Bap_core_theory
 open Core_kernel
 open Bap_future.Std
 open Bap.Std
 open Objdump_config
 include Self()
+
+open KB.Syntax
 
 let default_objdump_opts = "-rd --no-show-raw-insn"
 
@@ -59,26 +61,38 @@ let with_objdump_output demangler ~file ~f =
     ~finish:ident
 
 let agent =
-  Knowledge.Agent.register ~package:"bap.std" "objdump-symbolizer"
+  KB.Agent.register ~package:"bap.std" "objdump-symbolizer"
 
-let provide_symbolizer demangler file =
-  let names = Hashtbl.create (module struct
+let provide_roots funcs =
+  let promise_property slot =
+    KB.promise slot @@ fun label ->
+    KB.collect Theory.Label.addr label >>| function
+    | None -> None
+    | Some addr ->
+      let addr = Bitvec.to_bigint addr in
+      Option.some_if (Hashtbl.mem funcs addr) true in
+  promise_property Theory.Label.is_valid;
+  promise_property Theory.Label.is_subroutine
+
+let provide_objdump demangler file =
+  let funcs = Hashtbl.create (module struct
       type t = Z.t
       let compare = Z.compare and hash = Z.hash
       let sexp_of_t x = Sexp.Atom (Z.to_string x)
     end) in
-  let accept name addr = Hashtbl.set names addr name in
+  let accept name addr = Hashtbl.set funcs addr name in
   with_objdump_output demangler ~file ~f:(parse_func_start ~accept);
-  if Hashtbl.length names = 0
+  if Hashtbl.length funcs = 0
   then warning "failed to obtain symbols";
-  let s = Symbolizer.create (fun addr ->
-      Hashtbl.find names @@
-      Bitvec.to_bigint (Word.to_bitvec addr)) in
-  Symbolizer.provide agent s
+  let symbolizer = Symbolizer.create @@ fun addr ->
+    Hashtbl.find funcs @@
+    Bitvec.to_bigint (Word.to_bitvec addr) in
+  Symbolizer.provide agent symbolizer;
+  provide_roots funcs
 
 let main demangler =
   Stream.observe Project.Info.file @@
-  provide_symbolizer demangler
+  provide_objdump demangler
 
 let () =
   let demangler =
@@ -92,9 +106,9 @@ let () =
         is potentially fragile to changes in objdumps output.";
     `S  "EXAMPLES";
     `P  "To view the symbols after running the plugin:";
-    `P  "$(b, bap $(i,executable) --dump-symbols) ";
+    `P  "$(b, bap) $(i,executable) --dump-symbols ";
     `P  "To view symbols without this plugin:";
-    `P  "$(b, bap $(i,executable) --no-objdump --dump-symbols)";
+    `P  "$(b, bap) $(i,executable) --no-objdump --dump-symbols";
     `S  "SEE ALSO";
     `P  "$(b,bap-plugin-ida)(1)"
   ];
