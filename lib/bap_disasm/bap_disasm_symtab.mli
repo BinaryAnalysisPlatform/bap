@@ -58,6 +58,6 @@ val insert_call : ?implicit:bool -> t -> block -> string -> t
     explicitly called from a  block with the given [address]. *)
 val explicit_callee : t -> addr -> string option
 
-(** [explicit_callee symtab address] returns a callee which is
-    implicitly called from a  block with the given [address]. *)
+(** [implicit_callee symtab address] returns a callee which is
+    implicitly called from a block with the given [address]. *)
 val implicit_callee : t -> addr -> string option

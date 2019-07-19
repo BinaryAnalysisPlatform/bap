@@ -162,12 +162,36 @@ let build_symbol disasm calls start =
     Symbolizer.get_name start >>| fun name ->
     name,entry,graph
 
-let create disasm calls =
+let create_intra disasm calls =
   Callgraph.entries calls |>
   Set.to_sequence |>
   KB.Seq.fold ~init:empty ~f:(fun symtab entry ->
       build_symbol disasm calls entry >>| fun fn ->
       add_symbol symtab fn)
+
+let create_inter disasm calls init =
+  Disasm.explore disasm
+    ~init
+    ~block:(fun mem _ -> KB.return mem)
+    ~node:(fun _ s -> KB.return s)
+    ~edge:(fun src dst s ->
+        let src = Memory.min_addr src
+        and dst = Memory.min_addr dst
+        and next = Addr.succ (Memory.max_addr src) in
+        if Addr.equal
+            (Callgraph.entry calls src)
+            (Callgraph.entry calls dst)
+        then KB.return s
+        else
+          Symbolizer.get_name dst >>| fun name ->
+          if Addr.equal next dst
+          then {s with icalls = Map.set s.icalls src name}
+          else {s with ecalls = Map.set s.ecalls src name})
+
+
+let create disasm calls =
+  create_intra disasm calls >>=
+  create_inter disasm calls
 
 let result = Toplevel.var "symtab"
 
