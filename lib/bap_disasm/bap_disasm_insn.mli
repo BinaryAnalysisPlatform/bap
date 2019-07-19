@@ -28,6 +28,7 @@ val conditional         : must property
 val indirect            : must property
 val call                : must property
 val return              : must property
+val barrier             : must property
 val affect_control_flow : may  property
 val load                : may  property
 val store               : may  property

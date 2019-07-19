@@ -156,7 +156,7 @@ module Std : sig
       - hashset is available under [Hash_set] name
       - sexpable and binable interface;
       - [to_string], [str], [pp], [ppo], [pps] functions
-      for pretty-printing.
+        for pretty-printing.
 
       It is a convention, that for each type, there is a module with
       the same name that implements its interface. For example, type
@@ -216,17 +216,17 @@ module Std : sig
       provides interfaces for the memory objects:
 
       - {{!Memory}mem} - a contiguous array of bytes, indexed with
-       absolute addresses;
+        absolute addresses;
 
       - {{!Table} 'a table} - a mapping from a memory regions to
-       arbitrary data (no duplicates or intersections);
+        arbitrary data (no duplicates or intersections);
 
       - {{!Memmap}a memmap} - a mapping from memory region to
         arbitrary data with duplicates and intersections allowed, aka
         segment tree or interval map;
 
       - {{!Image}image} - represents a binary object with all its
-       symbols, segments, sections and other meta information.
+        symbols, segments, sections and other meta information.
 
       The [Image] module uses the plugin system to load binary
       objects. In order to add new loader, one should implement the
@@ -239,10 +239,10 @@ module Std : sig
       are provided:
 
       - {{!Disasm}Disasm} - a regular interface that hides all
-       complexities, but may not always be very flexible.
+        complexities, but may not always be very flexible.
       - {{!Disasm_expert}Disasm_expert} - an expert interface that
-      provides access to a low-level representation. It is very
-      flexible and fast, but harder to use.
+        provides access to a low-level representation. It is very
+        flexible and fast, but harder to use.
 
       To disassemble files or data with the regular interface, use
       one of the following functions:
@@ -489,15 +489,15 @@ module Std : sig
       By default the memory is annotated with the following attributes:
 
       - {{!Image.section}section} -- for regions of memory that had a
-      particular name in the original binary. For example, in ELF,
-      sections have names that annotate a corresponding memory
-      region. If project was created from memory object, then the
-      overall memory will be marked as a ["bap.user"] section.
+        particular name in the original binary. For example, in ELF,
+        sections have names that annotate a corresponding memory
+        region. If project was created from memory object, then the
+        overall memory will be marked as a ["bap.user"] section.
 
       - {{!Image.segment}segment} -- if the binary data was loaded
-      from a binary format that contains segments, then the
-      corresponding memory regions are be marked. Segments provide
-      access to permission information.  *)
+        from a binary format that contains segments, then the
+        corresponding memory regions are be marked. Segments provide
+        access to permission information.  *)
 
   (** {1:api BAP API}  *)
 
@@ -1014,7 +1014,7 @@ module Std : sig
     ] [@@deriving variants]
 
     type 'a p = 'a constraint 'a = [< all]
-      [@@deriving bin_io, compare, sexp]
+    [@@deriving bin_io, compare, sexp]
 
     type t = all p
     [@@deriving bin_io, compare, sexp]
@@ -1448,26 +1448,26 @@ module Std : sig
         none of the nine preinstantiated suits you.
 
         @param prefix defines whether or not a number is prefixed:
-          - [`auto] (default) - a prefix that corresponds to the chosen
+        - [`auto] (default) - a prefix that corresponds to the chosen
             format is printed if it is necessary to disambiguate a
             number from a decimal representation;
-          - [`base] - a corresponding prefix is always printed;
-          - [`none] - the prefix is never printed;
-          - [`this p] - the user specified prefix [p] is always
+        - [`base] - a corresponding prefix is always printed;
+        - [`none] - the prefix is never printed;
+        - [`this p] - the user specified prefix [p] is always
             printed;
 
         @param suffix defines how the suffix should be printed:
-          - [`none] (default) - the suffix is never printed;
-          - [`full] - a full suffix that denotes size and signedness
+        - [`none] (default) - the suffix is never printed;
+        - [`full] - a full suffix that denotes size and signedness
             is printed, e.g., [0xDE:32s] is a signed integer modulo [32].
-          - [`size] - only the modulo is printed, e.g., [0xDE:32s] is
+        - [`size] - only the modulo is printed, e.g., [0xDE:32s] is
             printed as [0xDE:32]
 
         @param format defines the textual representation format:
-          - [hex] (default) - hexadecimal
-          - [dec] - decimal
-          - [oct] - octal
-          - [bin] - binary (0 and 1).
+        - [hex] (default) - hexadecimal
+        - [dec] - decimal
+        - [oct] - octal
+        - [bin] - binary (0 and 1).
 
         @param case defines the case of hexadecimal letters
     *)
@@ -1722,11 +1722,11 @@ module Std : sig
         Bitvector comes with 4 predefined prefix trees:
 
         - [Trie.Big.Bits] - big endian prefix tree, where each
-        token is a bit, and bitvector is tokenized from msb to lsb.
+          token is a bit, and bitvector is tokenized from msb to lsb.
 
         - [Trie.Big.Byte] - big endian prefix tree, where each token
-        is a byte, and bitvector is tokenized from most significant
-        byte to less significant
+          is a byte, and bitvector is tokenized from most significant
+          byte to less significant
 
         - [Trie.Little.Bits] - is a little endian bit tree.
 
@@ -1757,9 +1757,9 @@ module Std : sig
   (** Shortcut for bitvectors that represent addresses  *)
   module Addr : sig
     include module type of Bitvector
-    with type t = addr
-     and type endian = endian
-     and type comparator_witness = Bitvector.comparator_witness
+      with type t = addr
+       and type endian = endian
+       and type comparator_witness = Bitvector.comparator_witness
 
     (** [memref ?disp ?index ?scale base] mimics a memory reference syntax
         in gas assembler,   [dis(base,index,scale)]
@@ -3156,7 +3156,7 @@ module Std : sig
 
   (** BIL {{!Bili}interpreter}
       @deprecated Use the Primus Framework
-   *)
+  *)
   class ['a] bili : ['a] Bili.t
   [@@deprecated "[since 2018-03] in favor of the Primus Framework"]
 
@@ -3169,13 +3169,13 @@ module Std : sig
       following sorts of effects:
 
       - coeffects - a value of an expression depends on the outside
-      world, that is further subdivided by the read effect, when an
-      expression reads a CPU register, and the load effect, when an
-      expression an expression accesses the memory.
+        world, that is further subdivided by the read effect, when an
+        expression reads a CPU register, and the load effect, when an
+        expression an expression accesses the memory.
 
       - effects - a value modifies the state of the world, by either
-      storing a value in the memory, or by raising a CPU exception
-      via the division by zero or accessing the memory.
+        storing a value in the memory, or by raising a CPU exception
+        via the division by zero or accessing the memory.
 
       An expression that doesn't have effects or coeffects is
       idempotent and can be moved arbitrary in a tree, removed or
@@ -3469,38 +3469,38 @@ module Std : sig
         The following code simplification are applied:
 
         - constant folding: if an expression can be computed
-        statically then it is substituted with the result of
-        computation, e.g., [1 + 2 -> 3]
+          statically then it is substituted with the result of
+          computation, e.g., [1 + 2 -> 3]
 
         - neutral element elimination: binary operations with one of
-        the operands being known to be neutral, are substituted with
-        the other operand, e.g., [x * 1 -> x]
+          the operands being known to be neutral, are substituted with
+          the other operand, e.g., [x * 1 -> x]
 
         - zero element propagation: binary operations applied to a
-        zero element are substituted with the zero element, e.g.,
-        [x * 0 -> 0]
+          zero element are substituted with the zero element, e.g.,
+          [x * 0 -> 0]
 
         - symbolic equality reduction: if both branches of a
-        comparison are syntactically equal then the comparison is
-        reduced to a boolean constant, e.g., [a = a -> true],
-        [a < a -> false]. Note, by default a read from a register is
-        considered as a (co)effect, hence the above transformations
-        wouldn't be applied, consider passing [~ignore:[Eff.reads]]
-        if you want such expressions to be reduced.
+          comparison are syntactically equal then the comparison is
+          reduced to a boolean constant, e.g., [a = a -> true],
+          [a < a -> false]. Note, by default a read from a register is
+          considered as a (co)effect, hence the above transformations
+          wouldn't be applied, consider passing [~ignore:[Eff.reads]]
+          if you want such expressions to be reduced.
 
         - double complement reduction: an odd amount of complement
-        operations (one and two) are reduced to one complement of
-        the same sort, e.g., [~~~1 -> ~1]
+          operations (one and two) are reduced to one complement of
+          the same sort, e.g., [~~~1 -> ~1]
 
         - binary to unary reduction: reduce a subtraction from zero
-        to the unary negation, e.g., [0 - x -> -x]
+          to the unary negation, e.g., [0 - x -> -x]
 
         - exclusive disjunction reduction: reduces an exclusive
-        disjunction of syntactically equal expressions to zero, e.g,
-        [42 ^ 42 -> 0]. Note, by default a read from a register is
-        considered as a (co)effect, thus [xor eax eax] is not
-        reduced, consider passing [~ignore:[Eff.reads]] if you want
-        such expressions to be reduced.
+          disjunction of syntactically equal expressions to zero, e.g,
+          [42 ^ 42 -> 0]. Note, by default a read from a register is
+          considered as a (co)effect, thus [xor eax eax] is not
+          reduced, consider passing [~ignore:[Eff.reads]] if you want
+          such expressions to be reduced.
 
         @since 1.3
     *)
@@ -3741,14 +3741,14 @@ module Std : sig
         language, where expressions have the following properties:
 
         - Memory load expressions can be only applied to a memory. This
-        effectively disallows creation of temporary memory regions,
-        and requires all store operations to be committed via the
-        assignment operation. Also, this provides a guarantee, that
-        store expressions will not occur in integer assignments, jmp
-        destinations, and conditional expressions, leaving them valid
-        only in an assignment statement where the rhs has type mem_t.
-        This is effectively the same as make the [Load] constructor to
-        have type ([Load (var,exp,endian,size)]).
+          effectively disallows creation of temporary memory regions,
+          and requires all store operations to be committed via the
+          assignment operation. Also, this provides a guarantee, that
+          store expressions will not occur in integer assignments, jmp
+          destinations, and conditional expressions, leaving them valid
+          only in an assignment statement where the rhs has type mem_t.
+          This is effectively the same as make the [Load] constructor to
+          have type ([Load (var,exp,endian,size)]).
 
         - No load or store expressions in the following positions:
           1. the right-hand side of the let expression;
@@ -3760,11 +3760,11 @@ module Std : sig
         puts the following restrictions:
 
         - No let expressions - new variables can be created only with
-        the Move instruction.
+          the Move instruction.
 
         - All memory operations have sizes equal to one byte. Thus the
-        size and endianness can be ignored in analysis. During the
-        normalization, the following rewrites are performed
+          size and endianness can be ignored in analysis. During the
+          normalization, the following rewrites are performed
         {v
        let x = <expr> in ... x ... => ... <expr> ...
        x[a,el]:n => x[a+n-1] @ ... @ x[a]
@@ -4151,7 +4151,7 @@ module Std : sig
 
 
       val register_slot : (Theory.program,'a option) KB.slot ->
-                          (module S with type t = 'a) -> 'a tag
+        (module S with type t = 'a) -> 'a tag
 
       val slot : 'a t -> (Theory.program, 'a option) KB.slot
 
@@ -4544,7 +4544,7 @@ module Std : sig
 
   (** BIR {{!Biri}interpreter}
       @deprecated Use the Primus Framework
-   *)
+  *)
   class ['a] biri : ['a] Biri.t
   [@@deprecated "[since 2018-03] in favor of the Primus Framework"]
 
@@ -4663,7 +4663,7 @@ module Std : sig
 
         The [data] may not be copied and the returned memory view may
         reference the same bigstring object.
-     *)
+    *)
     val create :
       ?pos:int ->                   (** defaults to [0]  *)
       ?len:int ->                   (** defaults to full length  *)
@@ -4728,7 +4728,7 @@ module Std : sig
         @param disp is the base offset and defaults to [0]
         @param index defaults to [0]
         @param scale defaults to [`r8]
-     *)
+    *)
     val get : ?disp:int -> ?index:int -> ?scale:size -> ?addr:addr -> t -> word Or_error.t
 
     (** [m^n] dereferences a byte at address [n]  *)
@@ -4972,21 +4972,21 @@ module Std : sig
         summarized below:
 
         - [one_to_many] means that a particular region from table [t1] can
-        span several memory regions from table [t2]. Example: segments
-        to symbols relation.
+          span several memory regions from table [t2]. Example: segments
+          to symbols relation.
 
         - [one_to_one] means that for each value of type ['a] there is
-        exactly one value of type ['b]. This relation should be used with
-        caution, since it is quantified over _all_ values of type
-        ['a]. Indeed, it should be used only for cases, when it can be
-        guaranteed, that it is impossible to create such value of type
-        ['b], that has no correspondence in table [t2]. Otherwise,
-        [one_to_maybe_one] relation should be used. Example: llvm
-        machine code to assembly string relation.
+          exactly one value of type ['b]. This relation should be used with
+          caution, since it is quantified over _all_ values of type
+          ['a]. Indeed, it should be used only for cases, when it can be
+          guaranteed, that it is impossible to create such value of type
+          ['b], that has no correspondence in table [t2]. Otherwise,
+          [one_to_maybe_one] relation should be used. Example: llvm
+          machine code to assembly string relation.
 
         - [one_to_maybe_one] means that for each value in table [t1] there
-        exists at most one value in table [t2]. Example: function to
-        symbol relation.
+          exists at most one value in table [t2]. Example: function to
+          symbol relation.
 
         {3 Examples}
 
@@ -5155,7 +5155,7 @@ module Std : sig
       accessible for loading images.
 
       @deprecated Use new Ogre-powered loader interface
-   *)
+  *)
   module Backend : sig
 
     (** memory access permissions  *)
@@ -5357,9 +5357,9 @@ module Std : sig
         are possible with the following interpretation:
 
         - [Ok None] - a loader doesn't know how handle files of this
-        type.
+          type.
         - [Ok (Some doc)] - a loader was able to obtain some
-        information from the input.
+          information from the input.
 
         - [Error err] - a file was corrupted, according to the loader.
     *)
@@ -6180,6 +6180,10 @@ module Std : sig
     (** instruction is a return from a call  *)
     val return              : must property
 
+
+    (** instruction is a barrier *)
+    val barrier             : must property
+
     (** the instruction may perform a non-regular control flow  *)
     val affect_control_flow : may  property
 
@@ -6245,7 +6249,7 @@ module Std : sig
 
       The following invariants must be preserved:
       - there is no known jump in the program, that points to an
-      instruction that is not a leader of a basic block;
+        instruction that is not a leader of a basic block;
       - any jump instruction is a terminator of some basic block;
       - each basic block consists of at least one instruction.
   *)
@@ -7540,16 +7544,16 @@ module Std : sig
 
         Jumps are further subdivided into categories:
         - goto - is a local control transfer instruction. The label
-        can be only local to subroutine;
+          can be only local to subroutine;
         - call - transfer a control to another subroutine. A call
-        contains a continuation, i.e., a label to which we're hoping
-        to return after subroutine returns the control to us. Of
-        course, called subroutine can in general return to another
-        position, or not to return at all.
+          contains a continuation, i.e., a label to which we're hoping
+          to return after subroutine returns the control to us. Of
+          course, called subroutine can in general return to another
+          position, or not to return at all.
         - ret - performs a return from subroutine
         - int - calls to interrupt subroutine. If interrupt returns,
-        then continue with the provided label.
-   *)
+          then continue with the provided label.
+    *)
 
     type t = jmp term
 
@@ -7557,8 +7561,8 @@ module Std : sig
 
 
     val reify : ?tid:tid ->
-                ?cnd:Theory.Bool.t Theory.value ->
-                ?alt:dst -> ?dst:dst -> unit -> t
+      ?cnd:Theory.Bool.t Theory.value ->
+      ?alt:dst -> ?dst:dst -> unit -> t
 
 
     val guard : t -> Theory.Bool.t Theory.value option
@@ -7633,9 +7637,9 @@ module Std : sig
     type t = phi term
 
     val reify : ?tid:tid ->
-                'a Theory.var ->
-                (tid * 'a Theory.value) list ->
-                t
+      'a Theory.var ->
+      (tid * 'a Theory.value) list ->
+      t
 
     val var : t -> unit Theory.var
     val options : t -> (tid * unit Theory.value) seq
@@ -7707,8 +7711,8 @@ module Std : sig
     type t = arg term
 
     val reify : ?tid:tid -> ?intent:intent ->
-                'a Theory.var ->
-                'a Theory.value -> t
+      'a Theory.var ->
+      'a Theory.value -> t
 
     val var : t -> unit Theory.var
     val value : t -> unit Theory.value
@@ -8021,7 +8025,7 @@ module Std : sig
     val empty : t
 
     module Factory : Source.Factory.S with type t = t
-    [@@deprecated "[since 2019-05] use [provide]"]
+                                           [@@deprecated "[since 2019-05] use [provide]"]
 
   end
 
@@ -8053,7 +8057,7 @@ module Std : sig
 
     (** A factory of rooters. Useful to register custom rooters  *)
     module Factory : Source.Factory.S with type t = t
-    [@@deprecated "[since 2019-05] use [provide]"]
+                                           [@@deprecated "[since 2019-05] use [provide]"]
 
   end
 
@@ -8084,7 +8088,7 @@ module Std : sig
     val provide : t -> unit
 
     module Factory : Source.Factory.S with type t = t
-    [@@deprecated "[since 2019-05] use [provide]"]
+                                           [@@deprecated "[since 2019-05] use [provide]"]
 
   end
 
@@ -8399,18 +8403,18 @@ module Std : sig
         The following substitutions are supported:
 
         - [$section{_name,_addr,_min_addr,_max_addr}] - name of region of file
-        to which it belongs. For example, in ELF this name will
-        correspond to the section name
+          to which it belongs. For example, in ELF this name will
+          correspond to the section name
 
         - [$symbol{_name,_addr,_min_addr,_max_addr}] - name or address
-        of the symbol to which this memory belongs
+          of the symbol to which this memory belongs
 
         - [$asm] - assembler listing of the memory region
 
         - [$bil] - BIL code of the tagged memory region
 
         - [$block{_name,_addr,_min_addr,_max_addr}] - name or address of a basic
-        block to which this region belongs
+          block to which this region belongs
 
         - [$min_addr, $addr] - starting address of a memory region
 
@@ -8577,15 +8581,15 @@ module Std : sig
 
       (** An error that can occur when loading or running pass.
           - [Not_loaded name] pass with a given [name] wasn't loaded for
-          some reason. This is a very unlikely error, indicating
-          either a logic error in the plugin system implementation or
-          something very weird, that we didn't expect.
+            some reason. This is a very unlikely error, indicating
+            either a logic error in the plugin system implementation or
+            something very weird, that we didn't expect.
 
           - [Not_loaded name] when we tried to load plugin with a given
-          [name] we failed to find it in our search paths.
+            [name] we failed to find it in our search paths.
 
           - [Runtime_error (name,exn)] when plugin with a given [name]
-          was run it raised an [exn].
+            was run it raised an [exn].
 
       *)
       type error =
