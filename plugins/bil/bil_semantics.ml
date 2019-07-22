@@ -9,9 +9,12 @@ type context = Context
 let package = "bil-plugin-internal"
 let cls = KB.Class.declare ~package "context" Context
 let context = KB.Symbol.intern ~package "context" cls
-let domain = KB.Domain.optional ~inspect:sexp_of_arch "arch"
-    ~equal:Arch.equal
-let arch = KB.Class.property cls "arch" domain
+let inherits slot =
+  KB.Class.property cls
+    (KB.Slot.name slot)
+    (KB.Slot.domain slot)
+
+let arch = inherits Arch.slot
 
 
 let exp = Exp.slot

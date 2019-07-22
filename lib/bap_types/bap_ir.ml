@@ -1655,7 +1655,9 @@ module Ir_sub = struct
   let create ?(tid=Tid.create ()) ?name () : t =
     let name = match name with
       | Some name -> name
-      | None -> Tid.to_string tid in
+      | None -> match Tid.get_name tid with
+        | None -> Tid.to_string tid
+        | Some name -> name in
     make_term tid {
       name;
       args = [| |] ;

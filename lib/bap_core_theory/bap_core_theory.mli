@@ -611,6 +611,7 @@ module Theory : sig
 
       val jmp : exp -> t
       val goto :  word -> t
+      val call : string -> t
       val special : string -> t
       val cpuexn : int -> t
 

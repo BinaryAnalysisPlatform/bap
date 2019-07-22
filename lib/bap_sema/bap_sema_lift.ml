@@ -225,6 +225,26 @@ let link_call symtab addr sub_of_blk jmp =
           jmp ~dst ~alt:(Some alt))
       | None -> jmp
 
+
+let insert_synthetic prog =
+  Term.enum sub_t prog |>
+  Seq.fold ~init:prog ~f:(fun prog sub ->
+      Term.enum blk_t sub |>
+      Seq.fold ~init:prog ~f:(fun prog blk ->
+          Term.enum jmp_t blk |>
+          Seq.fold ~init:prog ~f:(fun prog jmp ->
+              match Ir_jmp.alt jmp with
+              | None -> prog
+              | Some dst -> match Ir_jmp.resolve dst with
+                | Second _ -> prog
+                | First dst ->
+                  if Option.is_some (Term.find sub_t prog dst)
+                  then prog
+                  else
+                    Term.append sub_t prog @@
+                    Ir_sub.create ~tid:dst ())))
+
+
 let program symtab =
   let b = Ir_program.Builder.create () in
   let sub_of_blk = Hashtbl.create (module Tid) in
@@ -242,7 +262,8 @@ let program symtab =
           Term.map jmp_t blk ~f:(fun jmp ->
               jmp |>
               alternate_nonlocal sub |>
-              link_call symtab addr sub_of_blk)))
+              link_call symtab addr sub_of_blk))) |>
+  insert_synthetic
 
 let sub blk cfg = lift_sub blk cfg
 

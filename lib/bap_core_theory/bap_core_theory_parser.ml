@@ -441,6 +441,11 @@ module Make(S : Core) = struct
           newlabel >>= fun lbl ->
           seq (blk lbl pass (jmp (expw ctxt self exp))) (next xs)
 
+        let call name =
+          newlabel >>= fun lbl ->
+          Label.for_name name >>= fun dst ->
+          seq (blk lbl pass (goto dst)) (next xs)
+
         let goto addr =
           newlabel >>= fun lbl ->
           Label.for_addr addr >>= fun dst ->
@@ -538,7 +543,7 @@ module Make(S : Core) = struct
 
         let jmp _ = assert false
         let goto _ = assert false
-
+        let call _ = assert false
 
         let move eff = seq eff (next xs)
         let set_bit var exp = move (set_bit ctxt self var exp)

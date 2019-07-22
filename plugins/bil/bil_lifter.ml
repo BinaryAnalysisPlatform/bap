@@ -3,11 +3,25 @@ open Bap.Std
 open Bap_future.Std
 open Bap_knowledge
 open Bap_core_theory
+open Monads.Std
 
 open Knowledge.Syntax
 
 open Theory.Parser
 include Self()
+
+module Call = struct
+  let prefix = "bil-fixup:"
+  let extern name =
+    let dst = sprintf "%s%s" prefix name in
+    Bil.special dst
+
+  let is_extern name =
+    String.is_prefix name ~prefix
+
+  let dst =
+    String.chop_prefix_exn ~prefix
+end
 
 module BilParser = struct
   type context = [`Bitv | `Bool | `Mem ] [@@deriving sexp]
@@ -169,6 +183,8 @@ module BilParser = struct
     | Move (v,x) -> let_ v x
     | Jmp (Int x) -> S.goto (Word.to_bitvec x)
     | Jmp x -> S.jmp x
+    | Special s when Call.is_extern s ->
+      S.call (Call.dst s)
     | Special s -> S.special s
     | While (c,xs) -> S.while_ c xs
     | If (c,xs,ys) -> S.if_ c xs ys
@@ -187,29 +203,98 @@ let provide_bir () =
   KB.Value.put Term.slot sema bir
 
 
-let provide_lifter () =
-  info "providing a lifter for all BIL lifters";
-  let unknown = Theory.Program.Semantics.empty in
-  let (>>?) x f = x >>= function
-    | None -> KB.return unknown
-    | Some x -> f x in
-  let lifter obj =
-    Knowledge.collect Arch.slot obj >>? fun arch ->
-    Knowledge.collect Memory.slot obj >>? fun mem ->
-    Knowledge.collect Disasm_expert.Basic.Insn.slot obj >>? fun insn ->
-    let module Target = (val target_of_arch arch) in
-    match Target.lift mem insn with
-    | Error _ ->
-      Knowledge.return unknown
-    | Ok bil ->
-      Bil_semantics.context >>= fun ctxt ->
-      Knowledge.provide Bil_semantics.arch ctxt (Some arch) >>= fun () ->
-      Lifter.run BilParser.t bil >>= fun sema ->
-      Knowledge.return sema in
-  Knowledge.promise Theory.Program.Semantics.slot lifter
+module Relocations = struct
+
+  type t = {
+    rels : addr Addr.Map.t;
+    exts : string Addr.Map.t;
+  }
+
+  module Fact = Ogre.Make(Monad.Ident)
+
+  module Request = struct
+    open Image.Scheme
+    open Fact.Syntax
+
+    let of_aseq s =
+      Seq.fold s ~init:Addr.Map.empty ~f:(fun m (key,data) ->
+          Map.set m ~key ~data)
+
+    let arch_width =
+      Fact.require arch >>= fun a ->
+      match Arch.of_string a with
+      | Some a -> Fact.return (Arch.addr_size a |> Size.in_bits)
+      | None -> Fact.failf "unknown/unsupported architecture" ()
+
+    let relocations =
+      arch_width >>= fun width ->
+      Fact.collect Ogre.Query.(select (from relocation)) >>= fun s ->
+      Fact.return
+        (of_aseq @@ Seq.map s ~f:(fun (addr, data) ->
+             Addr.of_int64 ~width addr, Addr.of_int64 ~width data))
+
+    let external_symbols  =
+      arch_width >>= fun width ->
+      Fact.collect Ogre.Query.(select (from external_reference)) >>| fun s ->
+      Seq.fold s ~init:Addr.Map.empty ~f:(fun addrs (addr, name) ->
+          Map.set addrs
+            ~key:(Addr.of_int64 ~width addr)
+            ~data:name)
+  end
+
+  let relocations = Fact.eval Request.relocations
+  let external_symbols = Fact.eval Request.external_symbols
+  let empty = {rels = Addr.Map.empty; exts = Addr.Map.empty}
+
+  let of_spec spec =
+    match relocations spec, external_symbols spec with
+    | Ok rels, Ok exts -> {rels; exts}
+    | Error e, _  | _, Error e -> Error.raise e
+
+  let span mem =
+    let start = Memory.min_addr mem in
+    let len = Memory.length mem in
+    Seq.init len ~f:(Addr.nsucc start)
+
+  let find_external {exts} mem =
+    Seq.find_map ~f:(Map.find exts) (span mem)
+
+  let find_internal {rels} mem =
+    Seq.find_map ~f:(Map.find rels) (span mem)
+
+  let subscribe () =
+    let open Future.Syntax in
+    Stream.hd Project.Info.spec >>|
+    of_spec
 
 
-module Brancher : Theory.Core = struct
+  let override_internal dst =
+    Stmt.map (object inherit Stmt.mapper
+      method! map_jmp _ = [Bil.Jmp (Int dst)]
+    end)
+
+  let override_external name =
+    Stmt.map (object inherit Stmt.mapper
+      method! map_jmp _ = [Call.extern name]
+    end)
+
+
+  let fixup info mem bil =
+    match Future.peek info with
+    | None -> bil
+    | Some info ->
+      match find_internal info mem with
+      | Some dst ->
+        override_internal dst bil
+      | None ->
+        match find_external info mem with
+        | Some name ->
+          override_external name bil
+        | None -> bil
+
+end
+
+module Brancher = struct
   include Theory.Core.Empty
 
   let pack kind dsts =
@@ -252,6 +337,31 @@ module Brancher : Theory.Core = struct
     let k = Theory.Effect.sort yes in
     KB.return (union k yes nay)
 end
+
+
+
+let provide_lifter () =
+  info "providing a lifter for all BIL lifters";
+  let relocations = Relocations.subscribe () in
+  let unknown = Theory.Program.Semantics.empty in
+  let (>>?) x f = x >>= function
+    | None -> KB.return unknown
+    | Some x -> f x in
+  let lifter obj =
+    Knowledge.collect Arch.slot obj >>? fun arch ->
+    Knowledge.collect Memory.slot obj >>? fun mem ->
+    Knowledge.collect Disasm_expert.Basic.Insn.slot obj >>? fun insn ->
+    let module Target = (val target_of_arch arch) in
+    match Target.lift mem insn with
+    | Error _ ->
+      Knowledge.return unknown
+    | Ok bil ->
+      let bil = Relocations.fixup relocations mem bil in
+      Bil_semantics.context >>= fun ctxt ->
+      Knowledge.provide Bil_semantics.arch ctxt (Some arch) >>= fun () ->
+      Lifter.run BilParser.t bil in
+  Knowledge.promise Theory.Program.Semantics.slot lifter
+
 
 let init () =
   Bil_ir.init ();
