@@ -281,7 +281,7 @@ include Regular.Make(struct
   end)
 
 let pp_asm ppf insn =
-  Format.fprintf ppf "%s" (asm insn)
+  Format.fprintf ppf "%s" (normalize_asm (asm insn))
 
 let () =
   Data.Write.create ~pp:Adt.pp () |>
