@@ -135,7 +135,7 @@ let lift2 = Packed.lift2
 let lift3 = Packed.lift3
 
 
-type t = Packed.t [@@deriving bin_io,sexp]
+type t = Packed.t [@@deriving bin_io]
 
 module type Compare = sig
   val compare: int -> int -> int
@@ -208,26 +208,6 @@ let pp_generic
   | `size -> fprintf ppf ":%d" width
   | `none -> ()
 
-let msb x = Bitvec.(msb (Packed.payload x) mod Packed.modulus x)
-let lsb x = Bitvec.(lsb (Packed.payload x) mod Packed.modulus x)
-
-
-let compare_mono x y =
-  if is_signed x || is_signed y then
-    let x_is_neg = msb x and y_is_neg = msb y in
-    match x_is_neg, y_is_neg with
-    | true,false -> -1
-    | false,true -> 1
-    | _ -> Bitvec.compare (payload x) (payload y)
-  else Bitvec.compare (payload x) (payload y)
-
-let compare compare_size x y =
-  if phys_equal x y then 0
-  else
-    let s = compare_size (bitwidth x) (bitwidth y) in
-    if s <> 0 then s
-    else compare_mono x y
-
 let pp_full ppf = pp_generic ~suffix:`full ppf
 let pp = pp_full
 
@@ -251,6 +231,56 @@ let word_of_string = function
   | s -> match String.split ~on:':' s with
     | [z; n] -> of_suffixed z n
     | _ -> failwithf "Bitvector.of_string: '%s'" s ()
+
+let pp_hex ppf = pp_generic ppf
+let pp_dec ppf = pp_generic ~format:`dec ppf
+let pp_oct ppf = pp_generic ~format:`oct ppf
+let pp_bin ppf = pp_generic ~format:`bin ppf
+
+let pp_hex_full ppf = pp_generic ~suffix:`full ppf
+let pp_dec_full ppf = pp_generic ~format:`dec ~suffix:`full ppf
+let pp_oct_full ppf = pp_generic ~format:`oct ~suffix:`full ppf
+let pp_bin_full ppf = pp_generic ~format:`bin ~suffix:`full ppf
+
+let string_of_value ?(hex=true) x =
+  if hex
+  then asprintf "%a" (fun p -> pp_generic ~prefix:`none ~case:`lower p) x
+  else asprintf "%a" (fun p -> pp_generic ~format:`dec p) x
+
+let pp = pp_hex
+let to_string = string_of_word
+let of_string = word_of_string
+
+module Readable_sexpable = struct
+  type t = Packed.t
+  let sexp_of_t x = Sexp.Atom (to_string x)
+  let t_of_sexp = function
+    | Sexp.Atom x -> of_string x
+    | _ -> invalid_arg "Bitvector.t_of_sexp: expects an atom"
+end
+
+include (Readable_sexpable : Sexpable.S with type t := Packed.t)
+
+let msb x = Bitvec.(msb (Packed.payload x) mod Packed.modulus x)
+let lsb x = Bitvec.(lsb (Packed.payload x) mod Packed.modulus x)
+
+
+let compare_mono x y =
+  if is_signed x || is_signed y then
+    let x_is_neg = msb x and y_is_neg = msb y in
+    match x_is_neg, y_is_neg with
+    | true,false -> -1
+    | false,true -> 1
+    | _ -> Bitvec.compare (payload x) (payload y)
+  else Bitvec.compare (payload x) (payload y)
+
+let compare compare_size x y =
+  if phys_equal x y then 0
+  else
+    let s = compare_size (bitwidth x) (bitwidth y) in
+    if s <> 0 then s
+    else compare_mono x y
+
 
 let with_validation t ~f = Or_error.map ~f (Validate.result t)
 
@@ -480,6 +510,7 @@ let is_positive x =  not (is_zero x) && not (is_negative x)
 let is_non_positive  = Fn.non is_positive
 let is_non_negative = Fn.non is_negative
 
+
 let validate check msg x =
   if check x then Validate.pass
   else Validate.fails msg x sexp_of_t
@@ -599,22 +630,6 @@ include (Unsafe : Bap_integer.S with type t := t)
 let one = Cons.one
 let zero = Cons.zero
 
-let pp_hex ppf = pp_generic ppf
-let pp_dec ppf = pp_generic ~format:`dec ppf
-let pp_oct ppf = pp_generic ~format:`oct ppf
-let pp_bin ppf = pp_generic ~format:`bin ppf
-
-let pp_hex_full ppf = pp_generic ~suffix:`full ppf
-let pp_dec_full ppf = pp_generic ~format:`dec ~suffix:`full ppf
-let pp_oct_full ppf = pp_generic ~format:`oct ~suffix:`full ppf
-let pp_bin_full ppf = pp_generic ~format:`bin ~suffix:`full ppf
-
-let string_of_value ?(hex=true) x =
-  if hex
-  then asprintf "%a" (fun p -> pp_generic ~prefix:`none ~case:`lower p) x
-  else asprintf "%a" (fun p -> pp_generic ~format:`dec p) x
-
-
 (* old representation for backward compatibility. *)
 module V1 = struct
   module Bignum = struct
@@ -670,11 +685,6 @@ module Stable = struct
   end
 end
 
-
-let pp = pp_hex
-let to_string = string_of_word
-let of_string = word_of_string
-
 let () =
   add_reader ~desc:"Janestreet Binary Protocol" ~ver:"1.0.0" "bin"
     (Data.bin_reader (module Stable.V1));
@@ -684,6 +694,15 @@ let () =
     (Data.sexp_reader (module Stable.V1));
   add_writer ~desc:"Janestreet Sexp Protocol" ~ver:"1.0.0" "sexp"
     (Data.sexp_writer (module Stable.V1));
+  add_reader ~desc:"Janestreet Binary Protocol" ~ver:"2.0.0" "bin"
+    (Data.bin_reader (module Packed));
+  add_writer ~desc:"Janestreet Binary Protocol" ~ver:"2.0.0" "bin"
+    (Data.bin_writer (module Packed));
+  add_reader ~desc:"Janestreet Sexp Protocol" ~ver:"2.0.0" "sexp"
+    (Data.sexp_reader (module Readable_sexpable));
+  add_writer ~desc:"Janestreet Sexp Protocol" ~ver:"2.0.0" "sexp"
+    (Data.sexp_writer (module Readable_sexpable));
+
   let add name desc pp =
     add_writer ~desc ~ver:"2.0.0" name (Data.Write.create ~pp ()) in
   add "hex" "Hexadecimal without a suffix" pp_hex;
