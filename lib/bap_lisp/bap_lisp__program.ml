@@ -398,12 +398,15 @@ module Typing = struct
      consistency of the program static properties.
   *)
 
+  type sort = Theory.Value.Sort.Top.t
+  [@@deriving compare, sexp_of]
+
   (* Type value (aka type). A program value could be either a symbol
      or a bitvector with the given width. All types have the same
      runtime representation (modulo bitwidth).  *)
   type tval =
     | Tsym
-    | Grnd of Sort.exp
+    | Grnd of sort
   [@@deriving compare, sexp_of]
 
   module Tval = Comparable.Make_plain(struct
@@ -583,7 +586,7 @@ module Typing = struct
 
   type t = {
     ctxt : Lisp.Context.t;
-    globs : Sort.exp String.Map.t;
+    globs : sort String.Map.t;
     prims : signature String.Map.t;
     funcs : Def.func Def.t list;
   }
@@ -600,7 +603,7 @@ module Typing = struct
 
   let pp_tval ppf = function
     | Tsym -> fprintf ppf "sym"
-    | Grnd s -> fprintf ppf "%a" Sort.pp_exp s
+    | Grnd s -> fprintf ppf "%a" Theory.Value.Sort.pp s
 
   let pp_plus ppf () = pp_print_char ppf '+'
   let pp_tvals ppf tvals =
@@ -690,6 +693,8 @@ module Typing = struct
     fprintf ppf "{%a}" (pp_print_list ~pp_sep pp_binding) @@
     Map.to_alist vs
 
+  let sort s = Type (Theory.Value.Sort.forget s)
+
   let (++) f g x = f (g x)
 
   let infer_ast glob bindings ast : Gamma.t -> Gamma.t =
@@ -731,7 +736,7 @@ module Typing = struct
         infer vs c ++
         infer vs x
       | {data=Msg (_,xs); id} ->
-        Gamma.constr id (Type (Sort.exp (Bool.t))) ++
+        Gamma.constr id (sort Theory.Bool.t) ++
         reduce vs xs
       | {data=Err _} -> ident
       | {data=App (Static _,_)} -> ident
@@ -759,8 +764,8 @@ module Typing = struct
 
   let make_globs =
     Seq.fold ~init:String.Map.empty ~f:(fun vars v ->
-        let data = Sort.exp (Var.sort v) in
-        Map.set vars ~key:(Var.name v) ~data)
+        let data = Theory.Value.Sort.forget (Theory.Var.sort v) in
+        Map.set vars ~key:(Theory.Var.name v) ~data)
 
   let make_prims {primits} =
     List.fold primits ~init:String.Map.empty ~f:(fun ps p ->

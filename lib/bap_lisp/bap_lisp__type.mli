@@ -30,7 +30,7 @@ val signature : ?rest:t -> t list -> t -> signature
 val pp : Format.formatter -> t -> unit
 
 module Check : sig
-  val sort : t -> 'a sort -> bool
+  val sort : t -> 'a Theory.Value.sort -> bool
 end
 
 

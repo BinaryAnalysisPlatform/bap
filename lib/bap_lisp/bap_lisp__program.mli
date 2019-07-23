@@ -29,7 +29,7 @@ end
 
 module Type : sig
   type error
-  val check : 'a Var.t Sequence.t -> program -> error list
+  val check : 'a Theory.Var.t Sequence.t -> program -> error list
   val pp_error : Format.formatter -> error -> unit
 end
 

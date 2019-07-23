@@ -11,23 +11,24 @@ type signature = {
 }
 
 let symbol_size = 63
-let bool = Type (Sort.exp Bool.t)
-let word n = Type (Sort.exp (Bits.define n))
+let sort s = Type (Theory.Value.Sort.forget s)
+let bool = sort Theory.Bool.t
+let word n = sort (Theory.Bitv.define n)
 let sym = Symbol
 let var n = Name n
 
 type read_error = Empty | Not_sexp | Bad_sort
 
-let rec parse_sort : Sexp.t -> (Sort.exp,read_error) result = function
-  | Atom "Bool" -> Ok Bool
-  | Atom s -> Ok (Cons (s,[]))
-  | List (Atom name :: ps) ->
-    Result.map (parse_params ps) ~f:(fun ps -> Sort.Cons (name,ps))
-  | List _ -> Error Bad_sort
-and parse_params ps = Result.all (List.map ps ~f:parse_param)
-and parse_param = function
-  | Atom x when Char.is_digit x.[0] -> Ok (Index (int_of_string x))
-  | x -> Result.map (parse_sort x) ~f:(fun x -> Sort.Sort x)
+(* let rec parse_sort : Sexp.t -> (_,read_error) result = function
+ *   | Atom "Bool" -> Ok Bool
+ *   | Atom s -> Ok (Cons (s,[]))
+ *   | List (Atom name :: ps) ->
+ *     Result.map (parse_params ps) ~f:(fun ps -> Sort.Cons (name,ps))
+ *   | List _ -> Error Bad_sort
+ * and parse_params ps = Result.all (List.map ps ~f:parse_param)
+ * and parse_param = function
+ *   | Atom x when Char.is_digit x.[0] -> Ok (Index (int_of_string x))
+ *   | x -> Result.map (parse_sort x) ~f:(fun x -> Sort.Sort x) *)
 
 
 let read s =
@@ -37,7 +38,9 @@ let read s =
   then Ok (Name s)
   else match Sexp.of_string s with
     | exception _ -> Error Not_sexp
-    | s -> Result.map (parse_sort s) ~f:(fun s -> Type s)
+    | s ->
+      failwith "Sort parsing is not implemented yet"
+(* Result.map (parse_sort s) ~f:(fun s -> Type s) *)
 
 let any = Any
 
@@ -52,7 +55,9 @@ module Check = struct
   let sort typ s = match typ with
     | Any | Name _ -> true
     | Symbol -> false
-    | Type s' -> Sort.compare_exp (Sort.exp s) s' = 0
+    | Type s' ->
+      let s = Theory.Value.Sort.forget s in
+      Theory.Value.Sort.Top.compare s s' = 0
 end
 
 module Spec = struct
@@ -108,7 +113,7 @@ end
 let pp ppf t = match t with
   | Any | Symbol -> ()
   | Name s -> Format.fprintf ppf "%s" s
-  | Type t -> Format.fprintf ppf "%a" Sort.pp_exp t
+  | Type _ -> ()
 
 
 include Comparable.Make(struct

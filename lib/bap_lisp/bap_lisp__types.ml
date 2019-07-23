@@ -19,7 +19,7 @@ type typ =
   | Any
   | Symbol
   | Name of string
-  | Type of Sort.exp [@@deriving sexp, compare]
+  | Type of Theory.Value.Sort.Top.t [@@deriving sexp, compare]
 type 'a term = {exp : 'a; typ : typ} [@@deriving compare]
 type word = Bitvec.t term indexed [@@deriving compare]
 type var = string term indexed [@@deriving compare]
