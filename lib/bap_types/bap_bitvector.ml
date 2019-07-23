@@ -137,19 +137,6 @@ let lift3 = Packed.lift3
 
 type t = Packed.t [@@deriving bin_io]
 
-module type Compare = sig
-  val compare: int -> int -> int
-end
-
-module Size_poly = struct
-  let compare x y = Int.compare x y
-end
-
-module Size_mono = struct
-  let compare x y =
-    if Int.(x <> y) then failwith "Non monomoprhic compare" else 0
-end
-
 let create x w = Packed.create (Bitvec.to_bigint x) w [@@inline]
 let to_bitvec x = Packed.payload x [@@inline]
 let unsigned x = x [@@inline]
@@ -273,14 +260,6 @@ let compare_mono x y =
     | false,true -> 1
     | _ -> Bitvec.compare (payload x) (payload y)
   else Bitvec.compare (payload x) (payload y)
-
-let compare compare_size x y =
-  if phys_equal x y then 0
-  else
-    let s = compare_size (bitwidth x) (bitwidth y) in
-    if s <> 0 then s
-    else compare_mono x y
-
 
 let with_validation t ~f = Or_error.map ~f (Validate.result t)
 
@@ -618,7 +597,9 @@ include Regular.Make(struct
     type t = Packed.t [@@deriving bin_io, sexp]
     let compare x y =
       if phys_equal x y then 0
-      else compare_mono x y
+      else match Int.compare (bitwidth x) (bitwidth y) with
+        | 0 -> compare_mono x y
+        | r -> r
     [@@inline]
     let version = "2.0.0"
     let module_name = Some "Bap.Std.Word"
