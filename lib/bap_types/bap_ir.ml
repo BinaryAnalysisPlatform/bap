@@ -541,10 +541,7 @@ module Label = struct
       let pp ppf = function
         | Indirect exp -> Bap_exp.pp ppf exp
         | Direct tid -> Format.fprintf ppf "%s" @@
-          match Tid.get_name tid with
-          | None -> Tid.to_string tid
-          | Some name -> name
-
+          Tid.name tid
     end)
 end
 
