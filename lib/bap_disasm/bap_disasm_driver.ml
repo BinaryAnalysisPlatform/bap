@@ -226,10 +226,11 @@ end = struct
       | _  -> view (step s) base ~empty ~ready
 
   let start mem ~code ~data ~init =
+    let init = if Set.is_empty init
+      then Set.singleton (module Addr) (Memory.min_addr mem)
+      else init in
     let work = init_work init in
-    let start = match Set.min_elt init with
-      | Some start -> start
-      | None -> Memory.min_addr mem in
+    let start = Set.min_elt_exn init in
     view {
       work; data; usat=code;
       addr = start;
