@@ -248,10 +248,21 @@ let insert_synthetic prog =
 let program symtab =
   let b = Ir_program.Builder.create () in
   let sub_of_blk = Hashtbl.create (module Tid) in
+  let tid_for_sub =
+    let tids = Hash_set.create (module Tid) () in
+    fun name ->
+      let tid = Tid.for_name name in
+      match Hash_set.strict_add tids tid with
+      | Ok () -> tid
+      | Error _ ->
+        let tid = Tid.create () in
+        Tid.set_name tid name;
+        Hash_set.strict_add_exn tids tid;
+        tid in
   Seq.iter (Symtab.to_sequence symtab) ~f:(fun (name,entry,cfg) ->
       let addr = Block.addr entry in
       let blk_tid = Tid.for_addr addr in
-      let sub_tid = Tid.for_name name in
+      let sub_tid = tid_for_sub name in
       let sub = lift_sub ~symtab ~tid:sub_tid entry cfg in
       Ir_program.Builder.add_sub b (Ir_sub.with_name sub name);
       Hashtbl.add_exn sub_of_blk ~key:blk_tid ~data:sub_tid;);
