@@ -54,10 +54,8 @@ let of_disasm disasm =
     ~block:(fun mem _ -> KB.return (Memory.min_addr mem))
     ~node:(fun n g ->
         let g = Callgraph.Node.insert n g in
-        let addr = Some (Word.to_bitvec n) in
-        KB.Object.scoped Theory.Program.cls @@ fun label ->
-        KB.provide Theory.Label.addr label addr >>= fun () ->
-        KB.collect Theory.Label.is_subroutine label >>| function
+        Theory.Label.for_addr (Word.to_bitvec n) >>= fun code ->
+        KB.collect Theory.Label.is_subroutine code >>| function
         | Some true -> Callgraph.mark_as_root n g
         | _ -> g)
     ~edge:(fun src dst g ->

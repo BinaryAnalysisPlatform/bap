@@ -242,6 +242,8 @@ end = struct
     } mem
 end
 
+
+
 let new_insn arch mem insn =
   let addr = Addr.to_bitvec (Memory.min_addr mem) in
   Theory.Label.for_addr addr >>= fun code ->
@@ -274,6 +276,24 @@ let collect_dests arch mem insn =
         | None -> {indirect=true; resolved}) >>= fun res ->
     KB.return res
 
+(* pre: insn is call /\ is a member of a valid chain *)
+let mark_call_destinations mem dests curr =
+  let next = Addr.to_bitvec @@ Addr.succ @@ Memory.max_addr mem in
+  Set.to_sequence dests |>
+  KB.Seq.iter ~f:(fun dest ->
+      KB.collect Theory.Label.addr dest >>= fun addr ->
+      if Option.is_none addr ||
+         Bitvec.(Option.value_exn addr <> next)
+      then KB.provide Theory.Label.is_subroutine dest (Some true)
+      else KB.return ())
+
+let update_calls mem curr =
+  KB.collect Theory.Program.Semantics.slot curr >>= fun insn ->
+  if Insn.(is call) insn
+  then match KB.Value.get Insn.Slot.dests insn with
+    | None -> KB.return ()
+    | Some dests -> mark_call_destinations mem dests curr
+  else KB.return ()
 
 let delay arch mem insn =
   new_insn arch mem insn >>= fun code ->
@@ -419,6 +439,7 @@ let explore
               ~init:(beg,0,[]) ~return:KB.return
               ~hit:(fun s mem insn (curr,len,insns) ->
                   new_insn arch mem insn >>= fun insn ->
+                  update_calls mem insn >>= fun () ->
                   let len = Memory.length mem + len in
                   let last = Memory.max_addr mem in
                   let next = Addr.succ last in
