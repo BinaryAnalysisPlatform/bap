@@ -227,10 +227,7 @@ let words_of_table word_size tab =
     Memory.foldi ~word_size mem ~init:tab
       ~f:(fun addr word tab ->
           match Memory.view ~word_size ~from:addr ~words:1 mem with
-          | Error err ->
-            eprintf "\nSkipping with error: %s\n"
-              (Error.to_string_hum err);
-            tab
+          | Error _ -> tab
           | Ok mem  -> ok_exn (Table.add tab mem word)) in
   Table.foldi tab ~init:Table.empty ~f:(fun mem _ -> words_of_memory mem)
 
