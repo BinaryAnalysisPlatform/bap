@@ -131,12 +131,11 @@ module IrBuilder = struct
     let blks = with_landing_pads fall blks in
     let x = Block.terminator block in
     let is_call = Insn.(is call x)
-    and is_barrier = Insn.(is barrier x)
-    and is_return = Insn.(is return x) in
+    and is_barrier = Insn.(is barrier x) in
     with_first_blk_addressed (Block.addr block) @@
     List.rev @@ match blks,fall with
     | [],_ -> []
-    | blks,_ when is_barrier || is_return -> blks
+    | blks,_ when is_barrier -> blks
     | x::xs, Some dst ->
       if is_call
       then turn_into_call fall x :: xs
