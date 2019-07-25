@@ -200,11 +200,15 @@ end = struct
     let parent = match s.curr with
       | Fall {delay=Ready (Some parent)} -> parent
       | _ -> s.curr in
-    let next = Fall {
-        dst = Addr.succ (Memory.max_addr mem);
-        parent;
-        delay = Ready None;
-      } in
+    let next = Addr.succ (Memory.max_addr mem) in
+    let next = match parent with
+      | Jump {dsts={barrier=true}} ->
+        Dest {dst=next; parent=None}
+      | parent -> Fall {
+          dst = next;
+          parent;
+          delay = Ready None;
+        } in
     let work = match s.curr with
       | Fall {delay = Delay} -> insert_delayed next s.work
       | _ -> next :: s.work in
