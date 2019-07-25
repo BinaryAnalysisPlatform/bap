@@ -21,6 +21,8 @@ let new_property _ name : 'a property =
   property
 
 let prop = new_property ()
+(* must be the first one *)
+let invalid             = prop "invalid"
 
 let jump                = prop "jump"
 let conditional         = prop "cond"
@@ -53,8 +55,17 @@ module Props = struct
     include Binable.Of_stringable(Bits)
   end
 
+  let name = snd
+
+  let assoc_of_props props =
+    List.map !known_properties ~f:(fun p ->
+        name p, has props p)
+
   let domain = KB.Domain.flat "props"
-      ~empty:Z.zero ~equal:Z.equal
+      ~empty:Z.one ~equal:Z.equal
+      ~inspect:(fun props ->
+          [%sexp_of: (string * bool) list]
+            (assoc_of_props props))
 
   let persistent = KB.Persistent.of_binable (module T)
 
@@ -107,7 +118,7 @@ module Slot = struct
                      type t = int option [@@deriving bin_io]
                    end))
 
-  type KB.conflict += Barrier_with_dests
+  type KB.conflict += Jump_vs_Move
 
   let dests =
     let empty = Some (Set.empty (module Theory.Label)) in
@@ -120,7 +131,7 @@ module Slot = struct
         if Set.is_subset y x then GT else NC in
     let join x y = match x,y with
       | None,None -> Ok None
-      | None,_ |Some _,None -> Error Barrier_with_dests
+      | None,_ |Some _,None -> Error Jump_vs_Move
       | Some x, Some y -> Ok (Some (Set.union x y)) in
     let data = KB.Domain.define ~empty ~order ~join "dest-set" in
     KB.Class.property ~package:"bap.std" Theory.Program.Semantics.cls
@@ -139,7 +150,7 @@ let lookup_jumps bil = (object
     | Bil.Int _ when under_condition -> [`Conditional_branch]
     | Bil.Int _ -> [`Unconditional_branch]
     | _ when under_condition -> [`Conditional_branch; `Indirect_branch]
-    | _ -> [`Indirect_branch]
+    | _ -> [`Unconditional_branch; `Indirect_branch]
 end)#run bil []
 
 let lookup_side_effects bil = (object
@@ -164,12 +175,17 @@ let of_basic ?bil insn : t =
     if bil <> None
     then List.mem ~equal:[%compare.equal : kind] bil_kinds kind
     else is kind in
+  (* those two are the only which we can't get from the BIL semantics *)
+  let is_return = is `Return in
+  let is_call = is `Call in
+
   let is_conditional_jump = is_bil `Conditional_branch in
   let is_jump = is_conditional_jump || is_bil `Unconditional_branch in
   let is_indirect_jump = is_bil `Indirect_branch in
-  let is_return = is `Return in
-  let is_call = is `Call in
-  let may_affect_control_flow = is `May_affect_control_flow in
+  let may_affect_control_flow =
+    is_jump ||
+    is `May_affect_control_flow in
+  let is_barrier = is_jump &&  not is_call && not is_conditional_jump in
   let may_load = is_bil `May_load in
   let may_store = is_bil `May_store in
   let effect =
@@ -183,6 +199,7 @@ let of_basic ?bil insn : t =
     Props.set_if is_indirect_jump indirect                   |>
     Props.set_if is_call call                                |>
     Props.set_if is_return return                            |>
+    Props.set_if is_barrier barrier                          |>
     Props.set_if may_affect_control_flow affect_control_flow |>
     Props.set_if may_load load                               |>
     Props.set_if may_store store in
