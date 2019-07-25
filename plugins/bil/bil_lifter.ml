@@ -359,7 +359,10 @@ let provide_lifter () =
       let bil = Relocations.fixup relocations mem bil in
       Bil_semantics.context >>= fun ctxt ->
       Knowledge.provide Bil_semantics.arch ctxt (Some arch) >>= fun () ->
-      Lifter.run BilParser.t bil in
+      Lifter.run BilParser.t bil >>| fun sema ->
+      let bil = Insn.bil sema in
+      KB.Value.merge ~on_conflict:`drop_left
+        sema (Insn.of_basic ~bil insn) in
   Knowledge.promise Theory.Program.Semantics.slot lifter
 
 

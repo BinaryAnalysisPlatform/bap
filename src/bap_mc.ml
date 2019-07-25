@@ -70,14 +70,7 @@ module Program(Conf : Mc_options.Provider) = struct
     KB.Object.create Theory.Program.cls >>= fun code ->
     KB.provide Arch.slot code (Some arch) >>= fun () ->
     KB.provide Memory.slot code (Some mem) >>= fun () ->
-    KB.provide Dis.Insn.slot code (Some insn) >>= fun () ->
-    let (<--) slot data v = KB.Value.put slot v data in
-    let insn = List.fold ~init:Insn.empty ~f:(fun insn add -> add insn) [
-        Insn.Slot.asm <-- Dis.Insn.asm insn;
-        Insn.Slot.ops <-- Some (Dis.Insn.ops insn);
-        Insn.Slot.name <-- Dis.Insn.name insn;
-      ] in
-    KB.provide Theory.Program.Semantics.slot code insn >>| fun () ->
+    KB.provide Dis.Insn.slot code (Some insn) >>| fun () ->
     code
 
   let lift arch mem insn =
@@ -115,9 +108,7 @@ module Program(Conf : Mc_options.Provider) = struct
           printf "%a@\n" pp sema )
 
   let print arch mem code =
-    let sema = lift arch mem code in
-    let bil = Insn.bil sema in
-    let insn = KB.Value.merge ~on_conflict:`drop_right sema (Insn.of_basic ~bil code) in
+    let insn = lift arch mem code in
     print_insn_size options.show_insn_size mem;
     print_insn options.insn_formats insn;
     print_bil insn;
