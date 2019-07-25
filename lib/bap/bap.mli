@@ -6180,8 +6180,7 @@ module Std : sig
     (** instruction is a return from a call  *)
     val return              : must property
 
-
-    (** instruction is a barrier *)
+    (** the instruction has no fall-through  *)
     val barrier             : must property
 
     (** the instruction may perform a non-regular control flow  *)
