@@ -14,6 +14,7 @@ type edge = [`Jump | `Cond | `Fall] [@@deriving compare]
 
 
 type dsts = {
+  barrier : bool;
   indirect : bool;
   resolved : Set.M(Addr).t;
 }
@@ -185,7 +186,10 @@ end = struct
     let src = Memory.min_addr mem in
     let jump = Jump {src; age=delay; dsts; parent} in
     let next = Addr.succ (Memory.max_addr mem) in
-    let next = Fall {dst=next; parent=jump; delay = Ready None} in
+    let next =
+      if dsts.barrier && delay = 0
+      then Dest {dst=next; parent=None}
+      else Fall {dst=next; parent=jump; delay = Ready None} in
     step {s with work = jump :: next :: s.work }
 
   let insert_delayed t = function
@@ -242,42 +246,47 @@ end = struct
     } mem
 end
 
-
-
 let new_insn arch mem insn =
   let addr = Addr.to_bitvec (Memory.min_addr mem) in
   Theory.Label.for_addr addr >>= fun code ->
   KB.provide Arch.slot code (Some arch) >>= fun () ->
   KB.provide Memory.slot code (Some mem) >>= fun () ->
-  KB.provide Dis.Insn.slot code (Some insn) >>= fun () ->
-  let insn = Insn.of_basic insn in
-  KB.provide Theory.Program.Semantics.slot code insn >>| fun () ->
+  KB.provide Dis.Insn.slot code (Some insn) >>| fun () ->
   code
 
 let collect_dests arch mem insn =
   let width = Size.in_bits (Arch.addr_size arch) in
   let fall = Addr.to_bitvec (Addr.succ (Memory.max_addr mem)) in
-  let init =
-    {indirect = false; resolved = Set.empty (module Addr)} in
   new_insn arch mem insn >>= fun code ->
   KB.collect Theory.Program.Semantics.slot code >>= fun insn ->
+  let init = {
+    barrier = Insn.(is barrier insn);
+    indirect = false;
+    resolved = Set.empty (module Addr)
+  } in
   KB.Value.get Insn.Slot.dests insn |> function
   | None -> KB.return init
   | Some dests ->
     Set.to_sequence dests |>
-    KB.Seq.fold ~init ~f:(fun {indirect;resolved} label ->
+    KB.Seq.fold ~init ~f:(fun {barrier; indirect; resolved} label ->
         KB.collect Theory.Label.addr label >>| function
         | Some d ->
           if Bitvec.(d <> fall)
           then {
+            barrier;
             indirect;
             resolved = Set.add resolved (Word.create d width)
-          } else {indirect; resolved}
-        | None -> {indirect=true; resolved}) >>= fun res ->
+          } else {barrier; indirect; resolved}
+        | None ->
+          {barrier; indirect=true; resolved}) >>= fun res ->
     KB.return res
 
+let pp_addr_opt ppf = function
+  | None -> Format.fprintf ppf "Unk"
+  | Some addr -> Format.fprintf ppf "%a" Bitvec.pp addr
+
 (* pre: insn is call /\ is a member of a valid chain *)
-let mark_call_destinations mem dests curr =
+let mark_call_destinations mem dests =
   let next = Addr.to_bitvec @@ Addr.succ @@ Memory.max_addr mem in
   Set.to_sequence dests |>
   KB.Seq.iter ~f:(fun dest ->
@@ -292,7 +301,7 @@ let update_calls mem curr =
   if Insn.(is call) insn
   then match KB.Value.get Insn.Slot.dests insn with
     | None -> KB.return ()
-    | Some dests -> mark_call_destinations mem dests curr
+    | Some dests -> mark_call_destinations mem dests
   else KB.return ()
 
 let delay arch mem insn =
@@ -384,6 +393,7 @@ let merge t1 t2 = {
   jmps = Map.merge t1.jmps t2.jmps ~f:(fun ~key:_ -> function
       | `Left dsts | `Right dsts -> Some dsts
       | `Both (d1,d2) -> Some {
+          barrier = d1.barrier || d2.barrier;
           indirect = d1.indirect || d2.indirect;
           resolved = Set.union d1.resolved d2.resolved;
         })
@@ -414,6 +424,10 @@ let with_disasm beg cfg f =
     | Error _ -> KB.return (cfg,None)
     | Ok dis -> f arch dis
 
+let may_fall insn =
+  KB.collect Theory.Program.Semantics.slot insn >>| fun insn ->
+  not Insn.(is barrier insn)
+
 let explore
     ?entry:start ?(follow=always) ~block ~node ~edge ~init
     {begs; jmps; data; mems} =
@@ -436,8 +450,8 @@ let explore
           | None -> KB.return (cfg,None)
           | Some base ->
             Dis.run dis (view beg base) ~stop_on:[`Valid]
-              ~init:(beg,0,[]) ~return:KB.return
-              ~hit:(fun s mem insn (curr,len,insns) ->
+              ~init:(beg,0,[],true) ~return:KB.return
+              ~hit:(fun s mem insn (curr,len,insns,_) ->
                   new_insn arch mem insn >>= fun insn ->
                   update_calls mem insn >>= fun () ->
                   let len = Memory.length mem + len in
@@ -447,22 +461,27 @@ let explore
                   then assert false
                   else
                   if Set.mem begs next || Map.mem jmps curr
-                  then KB.return (curr, len, insn::insns)
+                  then
+                    may_fall insn >>| fun may ->
+                    (curr, len, insn::insns,may)
                   else Dis.jump s (view next base)
-                      (next, len, insn::insns))
-            >>= fun (fin,len,insns) ->
+                      (next, len, insn::insns,true))
+            >>= fun (fin,len,insns,may_fall) ->
             let mem = view ~len beg base in
             block mem insns >>= fun block ->
             let fall = Addr.succ (Memory.max_addr mem) in
             Hashtbl.add_exn blocks beg block;
             node block cfg >>= fun cfg ->
             match Map.find jmps fin with
-            | None ->
+            | None when may_fall ->
               build cfg fall >>= fun (cfg,dst) ->
               edge_insert cfg block dst >>= fun cfg ->
               KB.return (cfg, Some block)
+            | None -> KB.return (cfg, Some block)
             | Some {resolved=dsts} ->
-              Set.to_sequence (Set.add dsts fall) |>
+              let dsts = if may_fall
+                then Set.add dsts fall else dsts in
+              Set.to_sequence dsts |>
               KB.Seq.fold ~init:cfg ~f:(fun cfg dst ->
                   build cfg dst >>= fun (cfg,dst) ->
                   edge_insert cfg block dst) >>= fun cfg ->
