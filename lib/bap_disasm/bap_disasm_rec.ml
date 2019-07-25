@@ -70,6 +70,11 @@ let follows_after m1 m2 = Addr.equal
     (Addr.succ (Memory.max_addr m1))
     (Memory.min_addr m2)
 
+let has_conditional_jump blk =
+  let insn = Block.terminator blk in
+  Insn.(is jump insn) &&
+  Insn.(is conditional insn)
+
 let global_cfg disasm =
   Driver.explore disasm
     ~init:Cfg.empty
@@ -87,6 +92,8 @@ let global_cfg disasm =
     ~edge:(fun src dst g ->
         let k = if follows_after (Block.memory src) (Block.memory dst)
           then `Fall
+          else if has_conditional_jump src
+          then `Cond
           else `Jump in
         let edge = Cfg.Edge.create src dst k in
         KB.return @@ Cfg.Edge.insert edge g)
