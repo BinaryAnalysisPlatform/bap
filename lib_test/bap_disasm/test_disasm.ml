@@ -363,7 +363,7 @@ let call1_3ret _ctxt =
             memory_of_string in
   let dis = Rec.run `x86_64 mem |> Or_error.ok_exn in
   assert_bool "No errors" (Rec.errors dis = []);
-  assert_bool "Three block" (Rec.cfg dis |> Cfg.number_of_nodes = 4);
+  assert_bool "Four block" (Rec.cfg dis |> Cfg.number_of_nodes = 4);
   let cfg = Rec.cfg dis in
   match Cfg.nodes cfg |> Seq.to_list |> sort_by_addr with
   | [b1;b2;b3;b4] ->
@@ -390,6 +390,6 @@ let suite () = "Disasm.Basic" >::: [
     "addresses"             >:: test_cfg addresses;
     "structure"             >:: test_cfg structure;
     "ret"                   >:: test_micro_cfg ret;
-    "sub"                   >:: test_micro_cfg sub;
+    "call"                  >:: test_micro_cfg call;
     "call1_3ret"            >:: call1_3ret;
   ]
