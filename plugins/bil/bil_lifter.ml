@@ -354,7 +354,7 @@ let provide_lifter () =
     let module Target = (val target_of_arch arch) in
     match Target.lift mem insn with
     | Error _ ->
-      Knowledge.return unknown
+      Knowledge.return (Insn.of_basic insn)
     | Ok bil ->
       let bil = Relocations.fixup relocations mem bil in
       Bil_semantics.context >>= fun ctxt ->
