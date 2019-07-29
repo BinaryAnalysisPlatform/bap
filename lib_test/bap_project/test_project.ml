@@ -1,3 +1,5 @@
+open Bap_core_theory
+
 open Core_kernel
 open Bap_future.Std
 open OUnit2
@@ -6,6 +8,7 @@ open Word_size
 open Bap.Std
 
 type case = {
+  name : string;
   arch : arch;
   addr : int;
   code : string;
@@ -14,19 +17,21 @@ type case = {
 }
 
 let arm = {
+  name = "arm-project";
   arch = `armv7;
   addr = 16;
-  code = "\x01\x20\xA0\xE1";
-  bil  = "R2 := R1";
-  asm  = "mov r2, r1";
+  code = "\x1e\xff\x2f\xe1";
+  bil  = "jmp LR";
+  asm  = "bx lr";
 }
 
 let x86 = {
+  name = "x86-project";
   arch = `x86;
   addr = 10;
-  code = "\x89\x34\x24";
-  asm  = "movl %esi, (%esp)";
-  bil  = "mem := mem with [ESP,el]:u32 <- ESI";
+  code = "\xeb\xfe";
+  asm  = "jmp -0x2";
+  bil  = "jmp 0xA";
 }
 
 let normalize = String.filter ~f:(function
@@ -43,16 +48,18 @@ let tag = Value.Tag.register (module String)
 let addr_width case = Arch.addr_size case.arch |> Size.in_bits
 
 let test_substitute case =
+  Bap_toplevel.reset ();
   let sub_name = Format.asprintf "test_%a" Arch.pp case.arch in
   let addr = sprintf "%#x" in
   let min_addr = addr case.addr in
   let max_addr = addr (case.addr + String.length case.code - 1) in
   let base = Addr.of_int case.addr ~width:(addr_width case) in
-  let name addr = Option.some_if Addr.(base = addr) sub_name in
-  let symbolizer = Stream.map Project.Info.arch (fun _ ->
-      Ok (Symbolizer.create name)) in
-  let new_rooter _ = Ok ([base] |> Seq.of_list |> Rooter.create) in
-  let rooter = Stream.map Project.Info.arch ~f:new_rooter in
+  let symbolizer = Symbolizer.create @@ fun addr ->
+    Option.some_if Addr.(base = addr) sub_name in
+  let agent =
+    let name = sprintf "test-project-symbolizer-for-%s" case.name in
+    KB.Agent.register name in
+  Symbolizer.provide agent symbolizer;
   let input =
     let file = "/dev/null" in
     let mem =
@@ -63,7 +70,7 @@ let test_substitute case =
     let data = code in
     Project.Input.create case.arch file ~code ~data in
 
-  let p = Project.create ~rooter ~symbolizer input |> ok_exn in
+  let p = Project.create input |> ok_exn in
   let mem,_ = Memmap.lookup (Project.memory p) base |> Seq.hd_exn in
   let test expect s =
     let p = Project.substitute p mem tag s in
