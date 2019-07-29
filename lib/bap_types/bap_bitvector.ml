@@ -238,7 +238,7 @@ let pp = pp_hex
 let to_string = string_of_word
 let of_string = word_of_string
 
-module Readable_sexpable = struct
+module Sexp_hum = struct
   type t = Packed.t
   let sexp_of_t x = Sexp.Atom (to_string x)
   let t_of_sexp = function
@@ -246,7 +246,7 @@ module Readable_sexpable = struct
     | _ -> invalid_arg "Bitvector.t_of_sexp: expects an atom"
 end
 
-include (Readable_sexpable : Sexpable.S with type t := Packed.t)
+include (Sexp_hum : Sexpable.S with type t := Packed.t)
 
 let msb x = Bitvec.(msb (Packed.payload x) mod Packed.modulus x)
 let lsb x = Bitvec.(lsb (Packed.payload x) mod Packed.modulus x)
@@ -666,6 +666,10 @@ module Stable = struct
   end
 end
 
+
+let to_string = string_of_word
+let of_string = word_of_string
+
 let () =
   add_reader ~desc:"Janestreet Binary Protocol" ~ver:"1.0.0" "bin"
     (Data.bin_reader (module Stable.V1));
@@ -675,14 +679,14 @@ let () =
     (Data.sexp_reader (module Stable.V1));
   add_writer ~desc:"Janestreet Sexp Protocol" ~ver:"1.0.0" "sexp"
     (Data.sexp_writer (module Stable.V1));
-  add_reader ~desc:"Janestreet Binary Protocol" ~ver:"2.0.0" "bin"
+  add_reader ~desc:"Janestreet Binary Protocol" ~ver:"1.0.0" "bin"
     (Data.bin_reader (module Packed));
-  add_writer ~desc:"Janestreet Binary Protocol" ~ver:"2.0.0" "bin"
+  add_writer ~desc:"Janestreet Binary Protocol" ~ver:"1.0.0" "bin"
     (Data.bin_writer (module Packed));
-  add_reader ~desc:"Janestreet Sexp Protocol" ~ver:"2.0.0" "sexp"
-    (Data.sexp_reader (module Readable_sexpable));
-  add_writer ~desc:"Janestreet Sexp Protocol" ~ver:"2.0.0" "sexp"
-    (Data.sexp_writer (module Readable_sexpable));
+  add_reader ~desc:"Janestreet Sexp Protocol" ~ver:"1.0.0" "sexp"
+    (Data.sexp_reader (module Sexp_hum));
+  add_writer ~desc:"Janestreet Sexp Protocol" ~ver:"1.0.0" "sexp"
+    (Data.sexp_writer (module Sexp_hum));
 
   let add name desc pp =
     add_writer ~desc ~ver:"2.0.0" name (Data.Write.create ~pp ()) in

@@ -405,9 +405,6 @@ let insn_mem s ~insn : mem =
   let from = Addr.(Mem.min_addr s.current.mem ++ off) in
   ok_exn (Mem.view s.current.mem ~from ~words)
 
-
-let kinds s ~insn:_ : kind list = []
-
 let set_memory dis p : unit =
   let open Bigsubstring in
   let buf = Mem.to_buffer p.mem in

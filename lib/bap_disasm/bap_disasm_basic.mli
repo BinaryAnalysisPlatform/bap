@@ -45,6 +45,7 @@ val run :
   ('a,'k) t ->
   return:('s -> 'r) ->
   init:'s -> mem -> 'r
+
 val insn_of_mem : (_,_) t -> mem ->
   (mem * (asm,kinds) insn option * [`left of mem | `finished]) Or_error.t
 
