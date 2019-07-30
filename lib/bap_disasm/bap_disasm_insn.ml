@@ -134,7 +134,12 @@ module Slot = struct
       | None,_ |Some _,None -> Error Jump_vs_Move
       | Some x, Some y -> Ok (Some (Set.union x y)) in
     let data = KB.Domain.define ~empty ~order ~join "dest-set" in
+    let persistent = KB.Persistent.of_binable (module struct
+        module Set = Set.Make_binable_using_comparator(Theory.Label)
+        type t = Set.t option [@@deriving bin_io]
+      end) in
     KB.Class.property ~package:"bap.std" Theory.Program.Semantics.cls
+      ~persistent
       "insn-dests" data
 
 end

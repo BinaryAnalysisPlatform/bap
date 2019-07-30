@@ -30,6 +30,9 @@ module Label = struct
   let attr name =
     let bool_t = Knowledge.Domain.optional ~equal:Bool.equal "bool" in
     Knowledge.Class.property ~package cls name bool_t
+      ~persistent:(Knowledge.Persistent.of_binable (module struct
+                     type t = bool option [@@deriving bin_io]
+                   end))
 
 
   let is_valid = attr "is-valid"
@@ -37,9 +40,29 @@ module Label = struct
 
 
   let addr = Knowledge.Class.property ~package cls "label-addr" word
-  let name = Knowledge.Class.property ~package cls "label-name" name
-  let ivec = Knowledge.Class.property ~package cls "label-ivec" int
-  let aliases = Knowledge.Class.property ~package cls "label-aliases" names
+      ~persistent:(Knowledge.Persistent.of_binable (module struct
+                     type t = Bitvec_binprot.t option
+                     [@@deriving bin_io]
+                   end))
+
+  let name =
+    Knowledge.Class.property ~package cls "label-name" name
+      ~persistent:(Knowledge.Persistent.of_binable (module struct
+                     type t = string option [@@deriving bin_io]
+                   end))
+
+  let ivec =
+    Knowledge.Class.property ~package cls "label-ivec" int
+      ~persistent:(Knowledge.Persistent.of_binable (module struct
+                     type t = int option [@@deriving bin_io]
+                   end))
+
+  let aliases =
+    Knowledge.Class.property ~package cls "label-aliases" names
+      ~persistent:(Knowledge.Persistent.of_binable (module struct
+                     type t = String.Set.t [@@deriving bin_io]
+                   end))
+
 
   open Knowledge.Syntax
 
@@ -63,8 +86,10 @@ end
 module Semantics = struct
   type cls = Effect.cls
   let cls = Knowledge.Class.refine Effect.cls Effect.Sort.top
-  include (val Knowledge.Value.derive cls)
-  let slot = Knowledge.Class.property program "semantics" domain
+  module Self = (val Knowledge.Value.derive cls)
+  let slot = Knowledge.Class.property program "semantics" Self.domain
+      ~persistent:(Knowledge.Persistent.of_binable (module Self))
+  include Self
 end
 
 include (val Knowledge.Value.derive cls)

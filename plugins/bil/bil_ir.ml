@@ -10,15 +10,15 @@ open Knowledge.Syntax
 include Self()
 
 type blk = {
-  name : Theory.label;
+  name : Theory.Label.t;
   defs : def term list;
   jmps : jmp term list;
-}
+} [@@deriving bin_io]
 
 type cfg = {
   blks : blk list;
-  entry : Theory.label;
-}
+  entry : Theory.Label.t;
+} [@@deriving bin_io]
 
 type t = cfg option
 
@@ -79,7 +79,12 @@ let is_null x =
 let domain = KB.Domain.optional ~inspect "graph"
     ~equal:(fun x y -> Theory.Label.equal x.entry y.entry)
 
-let graph = KB.Class.property Theory.Program.Semantics.cls "ir-graph" domain
+let graph =
+  KB.Class.property Theory.Program.Semantics.cls "ir-graph" domain
+    ~persistent:(KB.Persistent.of_binable (module struct
+                   type t = cfg option [@@deriving bin_io]
+                 end))
+
 let slot = graph
 
 module IR = struct
