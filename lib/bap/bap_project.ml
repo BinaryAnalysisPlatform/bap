@@ -15,9 +15,6 @@ include Bap_self.Create()
 
 let find name = FileUtil.which name
 
-module Toplevel = Bap_toplevel
-type state = Toplevel.env
-
 type t = {
   arch    : arch;
   disasm  : disasm;
@@ -25,7 +22,6 @@ type t = {
   storage : dict;
   program : program term;
   symbols : Symtab.t;
-  state   : state;
   passes  : string list;
 } [@@deriving fields]
 
@@ -183,11 +179,6 @@ let roots rooter = match rooter with
   | None -> []
   | Some r -> Rooter.roots r |> Seq.to_list
 
-
-let fresh_state () =
-  Toplevel.reset ();
-  Toplevel.env
-
 module Cfg = Graphs.Cfg
 
 let empty_disasm = Disasm.create Cfg.empty
@@ -249,7 +240,6 @@ end
 
 
 let build ~code ~data arch =
-  let state = fresh_state () in
   let init = Kernel.empty arch in
   let kernel =
     Memmap.to_sequence code |> KB.Seq.fold ~init ~f:(fun k (mem,_) ->
@@ -261,7 +251,7 @@ let build ~code ~data arch =
     symbols;
     arch; memory=union_memory code data;
     storage = Dict.empty;
-    state; passes=[]
+    passes=[]
   }
 
 let create_exn
@@ -284,8 +274,9 @@ let create
       create_exn
         ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input)
 
-let restore_state {state} =
-  Toplevel.set state
+let restore_state _ =
+  failwith "Project.restore_state: this function should no be used.
+    Please use the Bap_toplevel to save/restore the state."
 
 let with_memory = Field.fset Fields.memory
 let with_symbols = Field.fset Fields.symbols
