@@ -12,8 +12,7 @@ let state = ref Knowledge.empty
 let slots = ref 0
 let env = state
 
-let set s = state := !s
-
+let set s = state := s
 let reset () = state := Knowledge.empty
 let current () = !state
 

@@ -1,8 +1,6 @@
 open Bap_knowledge
 
 type 'a t = 'a
-type env
-type main
 type 'p var
 
 val eval : ('a,'p) Knowledge.slot -> 'a Knowledge.obj knowledge -> 'p t
@@ -18,7 +16,6 @@ val put : 'p var -> 'p knowledge -> unit t
 val var : string -> 'p var
 
 
-val env : env
 val reset : unit -> unit
-val set : env -> unit
+val set : Knowledge.state -> unit
 val current : unit -> Knowledge.state
