@@ -1,3 +1,5 @@
+open Bap_knowledge
+
 open Core_kernel
 open Bap_plugins.Std
 open Bap_future.Std
@@ -77,33 +79,49 @@ let process options project =
       | `stdout,fmt,ver ->
         Project.Io.show ~fmt ?ver project)
 
-let extract_format filename =
-  let fmt = match String.rindex filename '.' with
-    | None -> filename
-    | Some n -> String.subo ~pos:(n+1) filename in
-  match Bap_fmt_spec.parse fmt with
-  | `Error _ -> None, None
-  | `Ok (_,fmt,ver) -> Some fmt, ver
+let knowledge_cache () =
+  let reader = Data.Read.create
+      ~of_bigstring:Knowledge.of_bigstring () in
+  let writer = Data.Write.create
+      ~to_bigstring:Knowledge.to_bigstring () in
+  Data.Cache.Service.request reader writer
 
-let main o =
+
+let import_knowledge_from_cache opts =
+  info "looking for knowledge with digest %a"
+    Data.Cache.Digest.pp (digest opts);
+  let cache = knowledge_cache () in
+  match Data.Cache.load cache (digest opts) with
+  | None -> ()
+  | Some state ->
+    info "importing knowledge from cache";
+    Bap_toplevel.set state
+
+let store_knowledge_in_cache opts =
+  info "caching knowledge with digest %a"
+    Data.Cache.Digest.pp (digest opts);
+  let cache = knowledge_cache () in
+  Bap_toplevel.current () |>
+  Data.Cache.save cache (digest opts)
+
+
+let main ({filename; loader; disassembler} as opts) =
+  import_knowledge_from_cache opts;
   let proj_of_input input =
-    Project.create input ~disassembler:o.disassembler |> function
+    Project.create input ~disassembler |> function
     | Error err -> raise (Failed_to_create_project err)
     | Ok project -> project in
-  let proj_of_file ?ver ?fmt file =
-    In_channel.with_file file
-      ~f:(fun ch -> Project.Io.load ?fmt ?ver ch) in
-  let project = match o.source with
-    | `Project ->
-      let fmt,ver = extract_format o.filename in
-      proj_of_file ?fmt ?ver o.filename
+  let project =
+    match opts.source with
+    | `Project -> failwith "Unsupported feature: project of file"
     | `Memory arch ->
       proj_of_input @@
-      Project.Input.binary arch ~filename:o.filename
+      Project.Input.binary arch ~filename
     | `Binary ->
       proj_of_input @@
-      Project.Input.file ~loader:o.loader ~filename: o.filename in
-  process o project
+      Project.Input.file ~loader ~filename in
+  store_knowledge_in_cache opts;
+  process opts project
 
 let program_info =
   let doc = "Binary Analysis Platform" in
