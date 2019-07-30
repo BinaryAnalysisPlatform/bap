@@ -324,9 +324,9 @@ let setup_gc () =
     space_overhead = 200;
   }
 
-let has_env var = match Sys.getenv_opt var with
-  | None -> false
-  | Some _ -> true
+let has_env var = match Sys.getenv var with
+  | exception _ -> false
+  | _ -> true
 
 let () =
   let () =

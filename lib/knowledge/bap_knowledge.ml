@@ -1,6 +1,8 @@
 open Core_kernel
 open Monads.Std
 
+type ('a,'b) eq = ('a,'b) Type_equal.t = T : ('a,'a) eq
+
 module Order = struct
   type partial = LT | EQ | GT | NC
   module type S = sig
@@ -2463,10 +2465,12 @@ module Knowledge = struct
   include (Knowledge : S)
 
 
-  let compute_value cls obj =
-    Slot.enum cls |> List.iter ~f:(fun (Slot.Pack s) ->
-        collect s obj >>= fun v ->
-        provide s obj v)
+  let compute_value
+    : type a p . (a,p) cls -> p obj -> unit knowledge
+    = fun cls obj ->
+      Slot.enum cls |> List.iter ~f:(fun (Slot.Pack s) ->
+          collect s obj >>= fun v ->
+          provide s obj v)
 
 
   let get_value cls obj =

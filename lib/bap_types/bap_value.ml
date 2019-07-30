@@ -47,6 +47,8 @@ let types : (typeid, type_info) Hashtbl.t  =
 
 let uid = Type_equal.Id.uid
 
+type ('a,'b) eq = ('a,'b) Type_equal.t = T : ('a,'a) eq
+
 let register_slot (type a) slot
     (module S : S with type t = a) : a tag =
   let name = KB.Slot.name slot in
