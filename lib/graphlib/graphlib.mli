@@ -666,6 +666,13 @@ module Std : sig
     *)
     val default : ('n,'d) t -> 'd
 
+
+    (** [enum xs] enumerates all non-trivial values in the solution.
+
+        A value is non-trivial if it differs from the default value.
+    *)
+    val enum : ('n,'d) t -> ('n * 'd) Sequence.t
+
     (** [is_fixpoint s] is [true] if the solution is a fixed point
         solution, i.e., is a solution that stabilizes the system of
         equations.  *)

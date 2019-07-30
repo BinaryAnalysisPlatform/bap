@@ -27,11 +27,11 @@ module Kernel = struct
     default : arch;
     state : Driver.state;
     calls : Calls.t;
-  }
+  } [@@deriving bin_io]
 
-  let empty ?(state=Driver.init) arch = {
+  let empty arch = {
     default = arch;
-    state;
+    state = Driver.init;
     calls = Calls.empty;
   }
 
@@ -56,7 +56,7 @@ module Kernel = struct
   end
 end
 
-type state = Kernel.Driver.state [@@deriving bin_io]
+type state = Kernel.t [@@deriving bin_io]
 
 type t = {
   arch    : arch;
@@ -246,7 +246,9 @@ let union_memory m1 m2 =
 
 
 let build ?state ~code ~data arch =
-  let init = Kernel.empty ?state arch in
+  let init = match state with
+    | Some state -> state
+    | None -> Kernel.empty arch in
   let kernel =
     Memmap.to_sequence code |> KB.Seq.fold ~init ~f:(fun k (mem,_) ->
         Kernel.update k mem) in
@@ -261,7 +263,7 @@ let build ?state ~code ~data arch =
     passes=[]
   }
 
-let state {core={Kernel.state}} = state
+let state {core} = core
 
 let create_exn
     ?state

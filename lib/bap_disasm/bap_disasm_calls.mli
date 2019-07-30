@@ -4,7 +4,7 @@ open Graphlib.Std
 open Bap_types.Std
 module Driver = Bap_disasm_driver
 
-type t
+type t [@@deriving bin_io]
 
 val empty : t
 val equal : t -> t -> bool

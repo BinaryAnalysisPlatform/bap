@@ -13,12 +13,44 @@ open KB.Syntax
 module Driver = Bap_disasm_driver
 module Insn = Bap_disasm_insn
 
+
+module Parent = struct
+  let none = Word.b0
+  let unknown = Word.b1
+  let equal = Word.equal
+  let is_root p = equal p none
+  let is_known p = not (equal p unknown)
+  let merge x y =
+    if equal x unknown then y else
+    if equal y unknown then x else
+    if equal x y then x else none
+
+  let transfer self parent =
+    if equal parent none then self else parent
+end
+
+module Parents = struct
+  type t = (word,word) Solution.t
+  include Binable.Of_binable(struct
+      type t = (word * word) Seq.t [@@deriving bin_io]
+    end)(struct
+      type t = (word,word) Solution.t
+      let to_binable = Solution.enum
+      let of_binable xs =
+        let init = ok_exn @@
+          Map.of_increasing_sequence
+            (module Word) xs in
+        Solution.create init Parent.unknown
+    end)
+end
+
 type input = Driver.state
 type output = {
-  parents : (word, word) Solution.t;
-  entries : Set.M(Addr).t;
-}
-type t = output
+  parents : Parents.t;
+  entries : Addr.Set.t;
+} [@@deriving bin_io]
+
+type t = output [@@deriving bin_io]
 
 module Callgraph = struct
   let entry = Word.b0
@@ -62,20 +94,6 @@ let of_disasm disasm =
         let e = Callgraph.Edge.create src dst () in
         KB.return (Callgraph.Edge.insert e g))
 
-module Parent = struct
-  let none = Word.b0
-  let unknown = Word.b1
-  let equal = Word.equal
-  let is_root p = equal p none
-  let is_known p = not (equal p unknown)
-  let merge x y =
-    if equal x unknown then y else
-    if equal y unknown then x else
-    if equal x y then x else none
-
-  let transfer self parent =
-    if equal parent none then self else parent
-end
 
 let empty =
   let root =

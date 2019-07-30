@@ -1241,6 +1241,9 @@ module Fixpoint = struct
     | None -> default
     | Some x -> x
 
+  let enum (Solution {approx}) =
+    Map.to_sequence approx
+
   let is_subset ~equal (Solution {approx=m1}) ~of_:s2 =
     Map.for_alli m1 ~f:(fun ~key ~data -> equal (get s2 key) data)
 
