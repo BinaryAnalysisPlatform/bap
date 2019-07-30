@@ -25,7 +25,7 @@ module type Id = sig
   val zero : t
   val pp : Format.formatter -> t -> unit
   val of_string : string -> t
-  include Base.Comparable.S with type t := t
+  include Comparable.S_binable with type t := t
   include Binable.S with type t := t
 end
 
@@ -597,7 +597,7 @@ type 'a obj = Oid.t
 type fullname = {
   package : string;
   name : string;
-} [@@deriving sexp_of]
+} [@@deriving bin_io, sexp_of]
 
 
 module Registry = struct
@@ -1738,37 +1738,38 @@ module Knowledge = struct
   type 'a ord = Oid.comparator_witness
   type conflict = Conflict.t = ..
   type pid = Pid.t
-  type oid = Oid.t [@@deriving compare, sexp]
+  type oid = Oid.t [@@deriving bin_io, compare, sexp]
 
   type cell = {
     car : oid;
     cdr : oid;
-  } [@@deriving compare, sexp]
+  } [@@deriving bin_io, compare, sexp]
 
   module Cell = struct
     type t = cell
-    include Base.Comparable.Make(struct
-        type t = cell [@@deriving compare, sexp]
+    include Comparable.Make_binable(struct
+        type t = cell [@@deriving bin_io,compare, sexp]
       end)
   end
 
 
   module Env = struct
     type workers = {
-      waiting : Set.M(Pid).t;
-      current : Set.M(Pid).t;
-    }
-    type work = Done | Work of workers
+      waiting : Pid.Set.t;
+      current : Pid.Set.t;
+    } [@@deriving bin_io]
+
+    type work = Done | Work of workers [@@deriving bin_io]
 
     type objects = {
-      vals : Record.t Map.M(Oid).t;
-      comp : work Map.M(Dict.Key.Uid).t Map.M(Oid).t;
-      syms : fullname Map.M(Oid).t;
-      heap : cell Map.M(Oid).t;
-      data : Oid.t Map.M(Cell).t;
-      objs : Oid.t Map.M(String).t Map.M(String).t;
-      pubs : Set.M(Oid).t Map.M(String).t;
-    }
+      vals : Record.t Oid.Map.t;
+      comp : work Dict.Key.Uid.Map.t Oid.Map.t;
+      syms : fullname Oid.Map.t;
+      heap : cell Oid.Map.t;
+      data : Oid.t Cell.Map.t;
+      objs : Oid.t String.Map.t String.Map.t;
+      pubs : Oid.Set.t String.Map.t;
+    } [@@deriving bin_io]
 
     let empty_class = {
       vals = Map.empty (module Oid);
@@ -1781,12 +1782,19 @@ module Knowledge = struct
     }
 
     type t = {
-      classes : objects Map.M(Cid).t;
+      classes : objects Cid.Map.t;
       package : string;
-    }
+    } [@@deriving bin_io]
   end
 
   type state = Env.t
+
+  let of_bigstring =
+    Binable.of_bigstring (module Env)
+
+  let to_bigstring =
+    Binable.to_bigstring (module Env)
+
   let empty : Env.t = {
     package = user_package;
     classes = Map.empty (module Cid);

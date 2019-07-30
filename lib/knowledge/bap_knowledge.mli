@@ -4,9 +4,7 @@ open Monads.Std
 type 'a knowledge
 module Knowledge : sig
   type 'a t = 'a knowledge
-
   type (+'k,+'s) cls
-
   type +'a obj
   type +'a value
   type (+'a,'p) slot
@@ -21,15 +19,16 @@ module Knowledge : sig
   (** state with no knowledge  *)
   val empty : state
 
+  val of_bigstring : Bigstring.t -> state
+
+  val to_bigstring : state -> Bigstring.t
 
   (** [collect p x] collects the value of the property [p].
 
-      If the object [x] doesn't a value for the property [p]
-      and there are promises registered in the knowledge system,
-      to compute a value of the property [p] then they will
-      be invoked, otherwise the empty value of the property domain
-      is returned as the result.
-  *)
+      If the object [x] doesn't have a value for the property [p] and
+      there are promises registered in the knowledge system, to compute
+      the property [p] then they will be invoked, otherwise the empty
+      value of the property domain is returned as the result.  *)
   val collect : ('a,'p) slot -> 'a obj -> 'p t
 
 
