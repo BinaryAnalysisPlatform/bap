@@ -1,3 +1,5 @@
+open Bap_knowledge
+
 open Core_kernel
 open Regular.Std
 open Bap_future.Std
@@ -11,9 +13,14 @@ type t
 type project = t
 type pass [@@deriving sexp_of]
 type input
+type state [@@deriving bin_io]
 type second = float
 
+val state : t -> state
+
+
 val create :
+  ?state:state ->
   ?disassembler:string ->
   ?brancher:brancher source ->
   ?symbolizer:symbolizer source ->
@@ -71,7 +78,7 @@ module Pass : sig
   type error =
     | Unsat_dep of pass * string
     | Runtime_error of pass * exn
-    [@@deriving sexp_of]
+  [@@deriving sexp_of]
 
   exception Failed of error [@@deriving sexp]
 

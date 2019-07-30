@@ -16,8 +16,8 @@ type edge = [`Jump | `Cond | `Fall] [@@deriving compare]
 type dsts = {
   barrier : bool;
   indirect : bool;
-  resolved : Set.M(Addr).t;
-}
+  resolved : Addr.Set.t;
+} [@@deriving bin_io]
 
 module Machine : sig
   type task = private
@@ -356,12 +356,13 @@ let scan_mem arch disasm base : Machine.state KB.t =
     ~empty:KB.return
 
 type insns = Theory.Label.t list
+
 type state = {
-  begs : Set.M(Addr).t;
-  jmps : dsts Map.M(Addr).t;
-  data : Set.M(Addr).t;
+  begs : Addr.Set.t;
+  jmps : dsts Addr.Map.t;
+  data : Addr.Set.t;
   mems : mem list;
-}
+} [@@deriving bin_io]
 
 let init = {
   begs = Set.empty (module Addr);
@@ -375,20 +376,26 @@ let query_arch addr =
   KB.provide Theory.Label.addr obj (Some addr) >>= fun () ->
   KB.collect Arch.slot obj
 
+let already_scanned addr s =
+  List.exists s.mems ~f:(fun mem ->
+      Memory.contains mem addr)
+
 let scan mem s =
   let open KB.Syntax in
-  let start = Word.to_bitvec (Memory.min_addr mem) in
-  query_arch start >>= function
-  | None -> KB.return s
-  | Some arch -> match Dis.create (Arch.to_string arch) with
-    | Error _ -> KB.return s
-    | Ok dis ->
-      scan_mem arch dis mem >>| fun {Machine.begs; jmps; data} ->
-      let jmps = Map.merge s.jmps jmps ~f:(fun ~key:_ -> function
-          | `Left dsts | `Right dsts | `Both (_,dsts) -> Some dsts) in
-      let begs = Set.union s.begs begs in
-      let data = Set.union s.data data in
-      {begs; data; jmps; mems = mem :: s.mems}
+  let start = Memory.min_addr mem in
+  if already_scanned start s
+  then KB.return s
+  else query_arch (Word.to_bitvec start) >>= function
+    | None -> KB.return s
+    | Some arch -> match Dis.create (Arch.to_string arch) with
+      | Error _ -> KB.return s
+      | Ok dis ->
+        scan_mem arch dis mem >>| fun {Machine.begs; jmps; data} ->
+        let jmps = Map.merge s.jmps jmps ~f:(fun ~key:_ -> function
+            | `Left dsts | `Right dsts | `Both (_,dsts) -> Some dsts) in
+        let begs = Set.union s.begs begs in
+        let data = Set.union s.data data in
+        {begs; data; jmps; mems = mem :: s.mems}
 
 let merge t1 t2 = {
   begs = Set.union t1.begs t2.begs;

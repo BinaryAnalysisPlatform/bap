@@ -5,7 +5,7 @@ open Bap_types.Std
 open Image_common
 
 
-type t [@@deriving sexp_of]
+type t [@@deriving bin_io, sexp_of]
 
 val create
   : ?pos:int                    (** defaults to [0]  *)

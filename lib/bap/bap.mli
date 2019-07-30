@@ -8221,6 +8221,7 @@ module Std : sig
   module Project : sig
 
     type t = project
+    type state [@@deriving bin_io]
     type input
 
     (** IO interface to a project data structure.  *)
@@ -8349,6 +8350,7 @@ module Std : sig
         or it can just provide an empty information.
     *)
     val create :
+      ?state:state ->
       ?disassembler:string ->
       ?brancher:brancher source ->
       ?symbolizer:symbolizer source ->
@@ -8358,6 +8360,8 @@ module Std : sig
 
     (** [arch project] reveals the architecture of a loaded file  *)
     val arch : t -> arch
+
+    val state : t -> state
 
     (** [disasm project] returns results of disassembling  *)
     val disasm : t -> disasm

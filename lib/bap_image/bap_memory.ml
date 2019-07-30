@@ -21,7 +21,7 @@ type t = {
   addr : addr;
   off  : int;
   size : int;
-}
+} [@@deriving bin_io]
 
 module Repr = struct
   type t = {

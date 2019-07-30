@@ -5,7 +5,7 @@ open Bap_knowledge
 open Bap_core_theory
 module Dis = Bap_disasm_basic
 
-type state
+type state [@@deriving bin_io]
 type insns
 
 val init : state

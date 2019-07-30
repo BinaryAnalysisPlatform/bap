@@ -48,8 +48,8 @@ let args filename argv =
   String.Hash_set.sexp_of_t inputs |>
   Sexp.to_string_mach
 
-let digest o =
-  Data.Cache.digest ~namespace:"project" "%s%s"
+let digest ~namespace o =
+  Data.Cache.digest ~namespace "%s%s"
     (Caml.Digest.(file o.filename |> to_hex))
     (args o.filename Sys.argv)
 
@@ -86,29 +86,52 @@ let knowledge_cache () =
       ~to_bigstring:Knowledge.to_bigstring () in
   Data.Cache.Service.request reader writer
 
+let project_state_cache () =
+  let module State = struct
+    type t = Project.state [@@deriving bin_io]
+  end in
+  let of_bigstring = Binable.of_bigstring (module State) in
+  let to_bigstring = Binable.to_bigstring (module State) in
+  let reader = Data.Read.create ~of_bigstring () in
+  let writer = Data.Write.create ~to_bigstring () in
+  Data.Cache.Service.request reader writer
 
-let import_knowledge_from_cache opts =
+let import_knowledge_from_cache digest =
+  let digest = digest ~namespace:"knowledge" in
   info "looking for knowledge with digest %a"
-    Data.Cache.Digest.pp (digest opts);
+    Data.Cache.Digest.pp digest;
   let cache = knowledge_cache () in
-  match Data.Cache.load cache (digest opts) with
+  match Data.Cache.load cache digest with
   | None -> ()
   | Some state ->
     info "importing knowledge from cache";
     Bap_toplevel.set state
 
-let store_knowledge_in_cache opts =
+let load_project_state_from_cache digest =
+  let digest = digest ~namespace:"project" in
+  let cache = project_state_cache () in
+  Data.Cache.load cache digest
+
+let save_project_state_to_cache digest state =
+  let digest = digest ~namespace:"project" in
+  let cache = project_state_cache () in
+  Data.Cache.save cache digest state
+
+let store_knowledge_in_cache digest =
+  let digest = digest ~namespace:"knowledge" in
   info "caching knowledge with digest %a"
-    Data.Cache.Digest.pp (digest opts);
+    Data.Cache.Digest.pp digest;
   let cache = knowledge_cache () in
   Bap_toplevel.current () |>
-  Data.Cache.save cache (digest opts)
+  Data.Cache.save cache digest
 
 
 let main ({filename; loader; disassembler} as opts) =
-  import_knowledge_from_cache opts;
+  let digest = digest opts in
+  import_knowledge_from_cache digest;
+  let state = load_project_state_from_cache digest in
   let proj_of_input input =
-    Project.create input ~disassembler |> function
+    Project.create ?state input ~disassembler |> function
     | Error err -> raise (Failed_to_create_project err)
     | Ok project -> project in
   let project =
@@ -120,7 +143,10 @@ let main ({filename; loader; disassembler} as opts) =
     | `Binary ->
       proj_of_input @@
       Project.Input.file ~loader ~filename in
-  store_knowledge_in_cache opts;
+  if Option.is_none state then begin
+    store_knowledge_in_cache digest;
+    save_project_state_to_cache digest (Project.state project);
+  end;
   process opts project
 
 let program_info =

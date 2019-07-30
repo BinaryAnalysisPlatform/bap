@@ -10,13 +10,58 @@ open Bap_sema.Std
 open Or_error.Monad_infix
 open Format
 
+module Driver = Bap_disasm_driver
+
 module Event = Bap_event
 include Bap_self.Create()
 
 let find name = FileUtil.which name
 
+module Kernel = struct
+  open KB.Syntax
+  module Driver = Bap_disasm_driver
+  module Calls = Bap_disasm_calls
+  module Disasm = Disasm_expert.Recursive
+
+  type t = {
+    default : arch;
+    state : Driver.state;
+    calls : Calls.t;
+  }
+
+  let empty ?(state=Driver.init) arch = {
+    default = arch;
+    state;
+    calls = Calls.empty;
+  }
+
+  let update self mem =
+    Disasm.scan self.default mem self.state >>= fun state ->
+    Calls.update self.calls state >>| fun calls ->
+    {self with state; calls}
+
+  let symtab {state; calls} = Symtab.create state calls
+  let disasm {state} =
+    Disasm_expert.Recursive.global_cfg state
+
+  module Toplevel = struct
+    let result = Toplevel.var "result"
+    let run k =
+      Toplevel.put result begin
+        k >>= fun k ->
+        disasm k >>= fun g ->
+        symtab k >>| fun s -> g,s,k
+      end;
+      Toplevel.get result
+  end
+end
+
+type state = Kernel.Driver.state [@@deriving bin_io]
+
 type t = {
   arch    : arch;
+  core    : Kernel.t;
+
   disasm  : disasm;
   memory  : value memmap;
   storage : dict;
@@ -36,6 +81,7 @@ module Info = struct
   let program,got_program = Stream.create ()
   let spec,got_spec = Stream.create ()
 end
+
 
 module Input = struct
   type result = {
@@ -198,54 +244,15 @@ let union_memory m1 m2 =
   Memmap.to_sequence m2 |> Seq.fold ~init:m1 ~f:(fun m1 (mem,v) ->
       Memmap.add m1 mem v)
 
-module Kernel = struct
-  open KB.Syntax
-  module Driver = Bap_disasm_driver
-  module Calls = Bap_disasm_calls
-  module Disasm = Disasm_expert.Recursive
 
-  type t = {
-    default : arch;
-    state : Driver.state;
-    calls : Calls.t;
-  }
-
-  let empty arch = {
-    default = arch;
-    state = Driver.init;
-    calls = Calls.empty;
-  }
-
-  let update self mem =
-    Disasm.scan self.default mem self.state >>= fun state ->
-    Calls.update self.calls state >>| fun calls ->
-    {self with state; calls}
-
-  let symtab {state; calls} = Symtab.create state calls
-  let disasm {state} =
-    Disasm_expert.Recursive.global_cfg state
-
-  module Toplevel = struct
-    let result = Toplevel.var "result"
-    let run k =
-      Toplevel.put result begin
-        k >>= fun k ->
-        disasm k >>= fun g ->
-        symtab k >>| fun s -> g,s,k
-      end;
-      Toplevel.get result
-  end
-
-end
-
-
-let build ~code ~data arch =
-  let init = Kernel.empty arch in
+let build ?state ~code ~data arch =
+  let init = Kernel.empty ?state arch in
   let kernel =
     Memmap.to_sequence code |> KB.Seq.fold ~init ~f:(fun k (mem,_) ->
         Kernel.update k mem) in
-  let cfg,symbols,_ = Kernel.Toplevel.run kernel in
+  let cfg,symbols,core = Kernel.Toplevel.run kernel in
   {
+    core;
     disasm = Disasm.create cfg;
     program = Program.lift symbols;
     symbols;
@@ -254,7 +261,10 @@ let build ~code ~data arch =
     passes=[]
   }
 
+let state {core={Kernel.state}} = state
+
 let create_exn
+    ?state
     ?disassembler:_
     ?brancher:_
     ?symbolizer:_
@@ -266,13 +276,13 @@ let create_exn
   Signal.send Info.got_arch arch;
   Signal.send Info.got_data data;
   Signal.send Info.got_code code;
-  finish @@ build ~code ~data arch
+  finish @@ build ?state ~code ~data arch
 
 let create
-    ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input =
+    ?state ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input =
   Or_error.try_with ~backtrace:true (fun () ->
       create_exn
-        ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input)
+        ?state ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input)
 
 let restore_state _ =
   failwith "Project.restore_state: this function should no be used.
