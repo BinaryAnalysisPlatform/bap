@@ -21,6 +21,11 @@ module ToIR = struct
 
   let size_of_typ s = Size.of_int_exn !!s (** doubts here  *)
 
+
+  let undefine =
+    List.map ~f:(fun r -> Bil.(r := unknown "#undefined" (Var.typ r)))
+
+
   (* stmt helpers *)
 
   let store_s mode s t a e =
@@ -1488,42 +1493,54 @@ module ToIR = struct
     | Div(t, src) ->
       let dt' = !!t * 2 in
       let dt = Type.Imm dt' in
-      let dividend = op2e_dbl t in
-      let divisor = Bil.(Cast (UNSIGNED, !!dt, op2e t src)) in
+      let zero = int_exp 0 dt' in
+      let dividend = tmp ~name:"dividend" dt in
+      let divisor = tmp ~name:"divisor" dt in
       let tdiv = tmp ~name:"div" dt in
       let trem = tmp ~name:"rem" dt in
-      let assne = Bil.((Cast (LOW, !!t, Bil.Var trem)) ^ (Cast (LOW, !!t, Var tdiv))) in
-      Bil.If (Bil.(divisor = int_exp 0 dt'), [Cpu_exceptions.divide_by_zero], [])
-      :: Bil.Move (tdiv, Bil.(dividend / divisor))
-      :: Bil.Move (trem, Bil.(dividend mod divisor))
-      (* Overflow is indicated with the #DE (divide error) exception
-         rather than with the CF flag. *)
-      :: Bil.If (Bil.((Cast (HIGH, !!t, Var tdiv)) = int_exp 0 !!t), [], [Cpu_exceptions.divide_by_zero])
-      :: fst (assn_dbl t assne)
-      @ (let undef r =
-           Bil.Move (r, Bil.Unknown ((Var.name r ^ " undefined after div"), Var.typ r))
-         in
-         List.map ~f:undef [cf; oF; sf; zf; af; pf])
+      let result = Bil.(cast low!!t (var trem) ^ cast low !!t (var tdiv)) in
+      let apply_result = fst (assn_dbl t result) in
+      Bil.[
+        divisor := cast unsigned !!dt (op2e t src);
+        dividend := op2e_dbl t;
+        if_ (var divisor = zero) [
+          Cpu_exceptions.divide_by_zero
+        ](* else *) [
+          tdiv := var dividend / var divisor;
+          trem := var dividend mod var divisor;
+          if_ (cast high !!t (var tdiv) = int_exp 0 !!t)
+            apply_result (* else *)
+            [Cpu_exceptions.divide_by_zero]
+        ]
+      ] @ undefine [cf; oF; sf; zf; af; pf]
     | Idiv(t, src) ->
       let dt' = !!t * 2 in
       let dt = Type.Imm dt' in
-      let dividend = op2e_dbl t in
-      let divisor = Bil.(Cast (SIGNED, !!dt, op2e t src)) in
+      let zero = int_exp 0 dt' in
+      let dividend = tmp ~name:"dividend" dt in
+      let divisor = tmp ~name:"divisor" dt in
       let tdiv = tmp ~name:"div" dt in
       let trem = tmp ~name:"rem" dt in
-      let assne = Bil.((Cast (LOW, !!t, Var trem)) ^ (Cast (LOW, !!t, Var tdiv))) in
-      Bil.If (Bil.(divisor = int_exp 0 dt'), [Cpu_exceptions.divide_by_zero], [])
-      :: Bil.Move (tdiv, Bil.(dividend /$ divisor))
-      :: Bil.Move (trem, Bil.(dividend %$ divisor))
-      (* Overflow is indicated with the #DE (divide error) exception
-         rather than with the CF flag. *)
-      (* SWXXX For signed division make sure quotient is between smallest and
-         largest values.  For type t, this would be -2^(t/2) to (2^(t/2) - 1). *)
-      :: Bil.If (Bil.((Cast (HIGH, !!t, Var tdiv)) = int_exp 0 !!t), [], [Cpu_exceptions.divide_by_zero])
-      :: fst (assn_dbl t assne)
-      @ (let undef r =
-           Bil.Move (r, Bil.Unknown (Var.name r ^ " undefined after div", Var.typ r)) in
-         List.map ~f:undef [cf; oF; sf; zf; af; pf])
+      let result = Bil.(cast low !!t (var trem) ^ cast low !!t (var tdiv)) in
+      let apply_result = fst @@ assn_dbl t result in
+      let lbound =
+        let dtm1 = dt' - 1 in
+        Word.(one dt' lsl of_int ~width:dt' dtm1) in
+      let ubound = Word.(lbound - one dt') in
+      Bil.[
+        divisor := cast signed !!dt (op2e t src);
+        dividend := op2e_dbl t;
+        if_ (var divisor = zero) [
+          Cpu_exceptions.divide_by_zero
+        ] (* else *) [
+          tdiv := var dividend /$ var divisor;
+          trem := var dividend %$ var divisor;
+          if_ ((var tdiv >$ int ubound) lor (var tdiv <$ int lbound)) [
+            Cpu_exceptions.divide_by_zero;
+          ] (* else *)
+            apply_result;
+        ];
+      ] @ undefine [cf; oF; sf; zf; af; pf]
     | Cld ->
       [Bil.Move (df, exp_false)]
     | Leave t when pref = [] -> (* #UD if Lock prefix is used *)
