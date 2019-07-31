@@ -150,8 +150,8 @@ let pp_term pp_exp ppf = function
 let pp_word = pp_term Bitvec.pp
 let pp_var = pp_term String.pp
 
-let rec concat_prog =
-  List.concat_map ~f:(function
+let rec concat_prog xs =
+  List.concat_map xs ~f:(function
       | {data=Seq xs} -> concat_prog xs
       | x -> [x])
 
@@ -359,7 +359,7 @@ module Reindex = struct
         rename v >>= fun v ->
         map x >>| fun x ->
         {t with data = Set (v,x)}
-    and map_all = State.List.map ~f:map in
+    and map_all xs = State.List.map xs ~f:map in
     map (get def) >>| set def
 
   let reindex_all p =
