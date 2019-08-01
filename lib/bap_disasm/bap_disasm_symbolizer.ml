@@ -93,7 +93,7 @@ let get_name addr =
     | None -> name_of_addr addr
 
 module Toplevel = struct
-  let name = Bap_toplevel.var "symbol-name"
+  let name = Toplevel.var "symbol-name"
 
   let get_name addr =
     Toplevel.put name (get_name addr);

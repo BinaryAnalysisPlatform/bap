@@ -105,7 +105,7 @@ let import_knowledge_from_cache digest =
   | None -> ()
   | Some state ->
     info "importing knowledge from cache";
-    Bap_toplevel.set state
+    Toplevel.set state
 
 let load_project_state_from_cache digest =
   let digest = digest ~namespace:"project" in
@@ -122,7 +122,7 @@ let store_knowledge_in_cache digest =
   info "caching knowledge with digest %a"
     Data.Cache.Digest.pp digest;
   let cache = knowledge_cache () in
-  Bap_toplevel.current () |>
+  Toplevel.current () |>
   Data.Cache.save cache digest
 
 

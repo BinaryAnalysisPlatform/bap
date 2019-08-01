@@ -7,7 +7,6 @@ open Bap_image_std
 
 open KB.Syntax
 
-module Toplevel = Bap_toplevel
 module Driver = Bap_disasm_driver
 module Brancher = Bap_disasm_brancher
 module Rooter = Bap_disasm_rooter

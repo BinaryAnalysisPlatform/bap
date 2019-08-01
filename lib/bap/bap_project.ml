@@ -288,7 +288,7 @@ let create
 
 let restore_state _ =
   failwith "Project.restore_state: this function should no be used.
-    Please use the Bap_toplevel to save/restore the state."
+    Please use the Toplevel module to save/restore the state."
 
 let with_memory = Field.fset Fields.memory
 let with_symbols = Field.fset Fields.symbols

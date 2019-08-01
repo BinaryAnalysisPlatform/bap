@@ -61,7 +61,7 @@ let strings_of_insn insn =
   (name :: ops)
 
 let insn_of_mem arch data _ctxt =
-  Bap_toplevel.reset ();
+  Toplevel.reset ();
   let mem = memory_of_string data in
   Dis.with_disasm ~backend:"llvm" arch ~f:(fun dis ->
       Dis.insn_of_mem dis mem >>= function
@@ -94,7 +94,7 @@ let test_insn_of_mem  (arch,samples) ctxt =
   List.iter samples ~f:test
 
 let test_run_all (arch,samples) ctxt =
-  Bap_toplevel.reset ();
+  Toplevel.reset ();
   let mem =
     samples |> List.map ~f:fst3 |> String.concat |> memory_of_string in
   Dis.with_disasm ~backend:"llvm" arch ~f:(fun dis ->
@@ -303,7 +303,7 @@ let structure cfg ctxt =
 
 (* test one instruction cfg *)
 let test_micro_cfg insn ctxt =
-  Bap_toplevel.reset ();
+  Toplevel.reset ();
   let open Or_error in
   let mem = Bigstring.of_string insn |>
             Memory.create LittleEndian (Addr.of_int64 0L) |>
@@ -358,7 +358,7 @@ let sort_by_addr =
 
 
 let call1_3ret _ctxt =
-  Bap_toplevel.reset ();
+  Toplevel.reset ();
   let mem = String.concat [call1; ret; ret; ret] |>
             memory_of_string in
   let dis = Rec.run `x86_64 mem |> Or_error.ok_exn in

@@ -48,7 +48,7 @@ let tag = Value.Tag.register (module String)
 let addr_width case = Arch.addr_size case.arch |> Size.in_bits
 
 let test_substitute case =
-  Bap_toplevel.reset ();
+  Toplevel.reset ();
   let sub_name = Format.asprintf "test_%a" Arch.pp case.arch in
   let addr = sprintf "%#x" in
   let min_addr = addr case.addr in

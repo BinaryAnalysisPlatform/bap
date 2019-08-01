@@ -8204,6 +8204,17 @@ module Std : sig
 
   type project
 
+  (**/**)
+  (* Explicitly undocumented right now, as we will later
+     republish it as a separate library.
+  *)
+  module Toplevel : sig
+    val set : Knowledge.state -> unit
+    val reset : unit -> unit
+    val current : unit -> Knowledge.state
+  end
+  (**/**)
+
   (** Disassembled program.
 
       Project contains data that we were able to reconstruct during
