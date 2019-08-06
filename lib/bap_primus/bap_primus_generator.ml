@@ -109,8 +109,8 @@ module Random = struct
   module Seeded = struct
     let unpack_make key make =
       let init seed  = match make seed with
-        | Wait _ -> assert false
-        | Static _ -> assert false
+        | Wait _
+        | Static _ -> failwith "Generator.Seeded: invalid initializer"
         | Ready g -> match cast_gen key g with
           | Some g -> g
           | None -> invalid_arg "Seeded.create changed its type" in
