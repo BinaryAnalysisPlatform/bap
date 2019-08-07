@@ -128,9 +128,8 @@ module Make(S : Core) = struct
 
         let int x s = of_word x s
         let ite c x y = ite (expb c) (expw x) (expw y)
-        let signed w x =
-          let x = expw x in cast (bits w) (msb x) x
-        let unsigned w x = cast (bits w) b0 (expw x)
+        let signed w x = signed (bits w) (expw x)
+        let unsigned w x = unsigned (bits w) (expw x)
         let high w x = high (bits w) (expw x)
         let low w x = low (bits w) (expw x)
         let append x y =
