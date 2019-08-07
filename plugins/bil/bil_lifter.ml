@@ -91,10 +91,11 @@ module BilParser = struct
         S.extract s (byte hi) (byte lo) x
       | Concat (_,_) as cat -> S.concat (uncat [] cat)
       | Unknown (_, Imm s) -> S.unknown s
+      | BinOp ((EQ|NEQ|LT|LE|SLT|SLE), _, _) as op ->
+        S.ite op (Int Word.b1) (Int Word.b0)
 
       (* ill-formed expressions *)
       | Let _
-      | BinOp ((EQ|NEQ|LT|LE|SLT|SLE), _, _)
       | Store (_, _, _, _, _)
       | Unknown (_, (Mem _|Unk)) as exp -> fail exp `Bitv; S.error
 
