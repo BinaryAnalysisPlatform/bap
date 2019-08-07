@@ -109,7 +109,7 @@ type 'a pure = 'a Bap_core_theory_value.t knowledge
    the scope computation to be pure. *)
 let scoped : 'a sort -> ('a t -> 'b pure) -> 'b pure = fun s f ->
   Knowledge.Object.scoped const @@ fun v ->
-  f @@ create s (Var {num = Knowledge.Object.id v; ver=0})
+  f @@ create s (Let {num = Knowledge.Object.id v})
 
 module Ident = struct
   type t = ident [@@deriving bin_io, compare, hash, sexp]
