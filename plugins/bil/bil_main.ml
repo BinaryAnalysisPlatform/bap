@@ -73,25 +73,18 @@ let () =
       `P "$(b,bap)(3)";
     ] in
   let norml =
-    let doc = "Specifies the BIL normalization level.
+    let doc = "Selects a BIL normalization level.
       The normalization process doesn't change the semantics of
       a BIL program, but applies some transformations to simplify it.
-      There are two BIL normal forms (bnf): bnf1 and bnf2, both
-      of which are described in details in $(b,bap)(3).
-      Briefly, $(b,bnf1) produce the BIL code  with load expressions
-      that applied to a memory only. And $(b,bnf2) also adds some
-      more restrictions like absence of let-expressions and makes
-      load/store operations sizes equal to one byte.
-      So, there are next possible options for normalization level:
-      $(b,0) - disables normalization; $(b,1) - produce BIL in bnf1;
-      $(b,2) - produce BIL in bnf2" in
-    Config.(param (enum normalizations) ~default:[bnf1] ~doc "normalization") in
+      Consult BAP Annotated Reference (BAR) for the detailed
+      description of the BIL normalized forms." in
+    Config.(param (enum normalizations) ~default:[] ~doc "normalization") in
   let optim =
-    let doc = "Specifies the optimization level.\n
-      Level $(b,0) disables optimization,  and level $(b,1) performs
-      regular program simplifications, i.e., applies constant folding,
+    let doc = "Specifies an optimization level.\n
+      Level $(b,0) disables all optimizations,  and level $(b,1) performs
+      regular program simplifications, e.g., applies constant folding,
       propagation, and elimination of dead temporary (aka virtual) variables." in
-    Config.(param (enum optimizations) ~default:o1 ~doc "optimization") in
+    Config.(param (enum optimizations) ~default:[] ~doc "optimization") in
   let list_passes =
     let doc = "List all available passes and exit" in
     Config.flag ~doc "list-passes" in
