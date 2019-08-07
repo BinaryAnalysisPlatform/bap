@@ -76,6 +76,8 @@ module Make(S : Core) = struct
     int s Bitvec.(int x mod m)
   let join s1 s2 = bits (Bitv.size s1 + Bitv.size s2)
 
+  let mkvar sort name =
+    Var.create sort (Var.Ident.of_string name)
 
   type context = (string * Var.ident) list
   let rename (ctxt : context) v =
@@ -322,7 +324,7 @@ module Make(S : Core) = struct
 
         let floats s = IEEE754.Sort.define s
         let ieee754 s x : t  = float (floats s) (expw x)
-        let ieee754_var s name : t = var (Var.define (floats s) name)
+        let ieee754_var s name : t = var (mkvar (floats s) name)
         let ieee754_unk s = unk (floats s)
 
         let fadd m x y = fadd (expr m) (expf x) (expf y)
@@ -482,29 +484,29 @@ module Make(S : Core) = struct
   and set_bit : type e s r.
     context ->
     (e,r,s) parser -> string -> e -> data eff =
-    fun ctxt self v x -> set (Var.define bool v) (expb ctxt self x)
+    fun ctxt self v x -> set (mkvar bool v) (expb ctxt self x)
 
   and set_reg : type e s r.
     context ->
     (e,r,s) parser -> string -> int -> e -> data eff =
     fun ctxt self v s x ->
-    set (Var.define (bits s) v) (expw ctxt self x)
+    set (mkvar (bits s) v) (expw ctxt self x)
 
   and set_mem : type e s r.
     context ->
     (e,r,s) parser -> string -> int -> int -> e -> data eff =
     fun ctxt self v ks vs x ->
-    set (Var.define (Mem.define (bits ks) (bits vs)) v) (expm ctxt self x)
+    set (mkvar (Mem.define (bits ks) (bits vs)) v) (expm ctxt self x)
 
   and set_ieee754 : type e s r.
     context ->
     (e,r,s) parser -> string -> IEEE754.parameters -> e -> data eff =
-    fun ctxt self v fs x -> set (Var.define (IEEE754.Sort.define fs) v) (expf ctxt self x)
+    fun ctxt self v fs x -> set (mkvar (IEEE754.Sort.define fs) v) (expf ctxt self x)
 
   and set_rmode : type e s r.
     context ->
     (e,r,s) parser -> string -> r -> data eff =
-    fun ctxt self v x -> set (Var.define Rmode.t v) (expr ctxt self x)
+    fun ctxt self v x -> set (mkvar Rmode.t v) (expr ctxt self x)
 
   and stmtd : type e s r.
     context ->

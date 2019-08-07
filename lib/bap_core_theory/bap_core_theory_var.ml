@@ -43,7 +43,7 @@ let non_empty name =
 let all_chars_valid name =
   if not (valid_first_char name.[0])
   then invalid_argf
-      "Invalid var liter: a variable can't start from %c" name.[0] ();
+      "Invalid var literal: a variable can't start from %c" name.[0] ();
   match String.find name ~f:(Fn.non valid_char) with
   | None -> ()
   | Some c ->
