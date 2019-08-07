@@ -1355,7 +1355,15 @@ module Std : sig
         module Seeded : sig
 
           (** [create init] creates a self-seeded generator from a
-              regular generator.  *)
+              regular generator.
+
+              Caveats:
+
+              The [init] function can use only one of the two
+              generator constructors to create a generator:
+              - [Random.lcg]
+              - [Random.byte]
+          *)
           val create : (int -> t) -> t
 
 

@@ -222,16 +222,26 @@ module Make(Machine : Machine) = struct
     if size >= 8 then read start size
     else read_small mem base size
 
+  let remembered {values; layers} addr value =
+    put_curr {
+      layers;
+      values = Map.set values ~key:addr ~data:value;
+    } >>| fun () ->
+    value
+
+
   let read addr {values;layers} = match find_layer addr layers with
     | None -> pagefault addr
     | Some layer -> match Map.find values addr with
       | Some v -> Machine.return v
       | None ->
-        memory >>= fun {size} ->
-        match layer.mem with
-        | Dynamic {value} ->
-          Generate.next value >>= Value.of_int ~width:8
-        | Static mem -> Value.of_word (read_word mem addr size)
+        let read_value =
+          memory >>= fun {size} ->
+          match layer.mem with
+          | Dynamic {value} ->
+            Generate.next value >>= Value.of_int ~width:8
+          | Static mem -> Value.of_word (read_word mem addr size) in
+        read_value >>= remembered {values; layers} addr
 
   let write addr value {values;layers} =
     match find_layer addr layers with
