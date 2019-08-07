@@ -180,8 +180,7 @@ module BilParser = struct
       | Imm _ -> S.tmp_reg n x
       | Mem _ -> S.tmp_mem n x in
     function
-    | Move (v,x) when Var.is_physical v -> set v x
-    | Move (v,x) -> let_ v x
+    | Move (v,x) -> set v x
     | Jmp (Int x) -> S.goto (Word.to_bitvec x)
     | Jmp x -> S.jmp x
     | Special s when Call.is_extern s ->
