@@ -495,12 +495,12 @@ module Basic : Theory.Basic = struct
 end
 
 
-module BIL : Theory.Core = struct
+module Core : Theory.Core = struct
   include Theory.Core.Empty
   include Basic
 end
 
-module FBil = Bil_float.Make(BIL)
+module FBil = Bil_float.Make(Core)
 
 module FPEmulator = struct
   open Knowledge.Syntax
@@ -535,7 +535,7 @@ module FPEmulator = struct
     y >>= fun y ->
     let xs = sort x in
     match ieee754_of_sort xs with
-    | None -> BIL.unk xs
+    | None -> Core.unk xs
     | Some ({Theory.IEEE754.k} as p) ->
       let bs = bits k in
       let x = resort bs x and y = resort bs y in
@@ -554,7 +554,7 @@ module FPEmulator = struct
     x >>= fun x ->
     let xs = sort x in
     match ieee754_of_sort xs with
-    | None -> BIL.unk xs
+    | None -> Core.unk xs
     | Some ({Theory.IEEE754.k} as p) ->
       let bs = bits k in
       let x = resort bs x in
@@ -563,7 +563,7 @@ module FPEmulator = struct
 
   let fsqrt rm x = fuop FBil.fsqrt rm x
 
-  open BIL
+  open Core
 
   let small s x =
     let m = Bitvec.modulus (size s) in
@@ -592,7 +592,7 @@ module FPEmulator = struct
 
   let make_cast_float cast s m v =
     match ieee754_of_sort s with
-    | None -> BIL.unk s
+    | None -> Core.unk s
     | Some p ->
       cast (Theory.IEEE754.Sort.define p) m v >>| resort s
 
@@ -604,7 +604,7 @@ module FPEmulator = struct
     y >>= fun y ->
     let xs = sort x in
     match ieee754_of_sort xs with
-    | None -> BIL.unk bool
+    | None -> Core.unk bool
     | Some ({Theory.IEEE754.k; w; t}) ->
       let bs = bits k and ms = bits (k-1)in
       let x = resort bs x and y = resort bs y in
@@ -631,13 +631,7 @@ module FPEmulator = struct
       ]
 end
 
-module BIL_FP = struct
-  include BIL
+module Core_with_fp_emulation = struct
+  include Core
   include FPEmulator
 end
-
-
-let init () = Theory.register
-    ~desc:"denotes programs in terms of BIL expressions and statements"
-    ~name:"bil"
-    (module BIL_FP)

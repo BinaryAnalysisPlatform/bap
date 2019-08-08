@@ -173,12 +173,6 @@ module BilParser = struct
       | Imm m -> S.set_reg n m x
       | Mem (ks,vs) ->
         S.set_mem n (Size.in_bits ks) (Size.in_bits vs) x in
-    let let_ v x =
-      let n = Var.name v in
-      match Var.typ v with
-      | Imm 1 -> S.tmp_bit n x
-      | Imm _ -> S.tmp_reg n x
-      | Mem _ -> S.tmp_mem n x in
     function
     | Move (v,x) -> set v x
     | Jmp (Int x) -> S.goto (Word.to_bitvec x)
@@ -195,6 +189,8 @@ module BilParser = struct
 end
 
 module Lifter = Theory.Parser.Make(Theory.Manager)
+module Optimizer = Theory.Parser.Make(Bil_semantics.Core)
+[@@inlined]
 
 let provide_bir () =
   Knowledge.promise Theory.Program.Semantics.slot @@ fun obj ->
@@ -338,8 +334,6 @@ module Brancher = struct
     KB.return (union k yes nay)
 end
 
-
-
 let provide_lifter () =
   info "providing a lifter for all BIL lifters";
   let relocations = Relocations.subscribe () in
@@ -356,6 +350,8 @@ let provide_lifter () =
     | Error _ ->
       Knowledge.return (Insn.of_basic insn)
     | Ok bil ->
+      Optimizer.run BilParser.t bil >>= fun sema ->
+      let bil = Insn.bil sema in
       let bil = Relocations.fixup relocations mem bil in
       Bil_semantics.context >>= fun ctxt ->
       Knowledge.provide Bil_semantics.arch ctxt (Some arch) >>= fun () ->
