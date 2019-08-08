@@ -46,6 +46,8 @@ module Simpl = struct
       | x,y -> Concat (x,y)
 
     and cast t s x = match x with
+      | Cast (_,s',_) as x when s = s' -> x
+      | Cast (t',s',x) when t = t' && s' > s -> Cast (t,s,x)
       | Int w -> Int (Bil.Apply.cast t s w)
       | _ -> Cast (t,s,x)
 
