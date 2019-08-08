@@ -522,6 +522,11 @@ let term_pp pp_self ppf t =
     pp_self t.self;
   Seq.iter attrs ~f:(fun _ -> pp_close_tag ppf ())
 
+let pp_value slots ppf x =
+  match slots with
+  | [] -> KB.Value.pp ppf x
+  | slots -> KB.Value.pp_slots slots ppf x
+
 module Label = struct
   type t = label
   let direct x = Direct x
@@ -667,7 +672,7 @@ module Ir_arg = struct
       let exp = Rhs.exp rhs in
       Bap_exp.pp ppf exp)) ppf arg
 
-  let pp_slots slots = term_pp (pp_self (Knowledge.Value.pp_slots slots))
+  let pp_slots slots = term_pp (pp_self (pp_value slots))
 
 
   module V2 = struct
@@ -726,7 +731,7 @@ module Ir_def = struct
 
   let pp_self_slots slots ppf {Def.var; rhs} =
     Format.fprintf ppf
-      "%s := %a" (Theory.Var.name var) (Knowledge.Value.pp_slots slots) rhs
+      "%s := %a" (Theory.Var.name var) (pp_value slots) rhs
 
   let pp = term_pp pp_self
   let pp_slots ds = term_pp (pp_self_slots ds)
@@ -832,7 +837,7 @@ module Ir_phi = struct
       (Theory.Var.name var)
       (String.concat ~sep:", " @@
        List.map ~f:(fun (id,exp) ->
-           Format.asprintf "[%a, %%%a]" (Knowledge.Value.pp_slots ds) exp Tid.pp id)
+           Format.asprintf "[%a, %%%a]" (pp_value ds) exp Tid.pp id)
          (Map.to_alist map))
 
   let pp = term_pp pp_self

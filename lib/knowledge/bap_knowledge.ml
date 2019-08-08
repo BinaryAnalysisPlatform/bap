@@ -1467,6 +1467,14 @@ module Dict = struct
     }
 
 
+  let sexp_of_t dict = Sexp.List (foreach ~init:[] dict {
+      visit = fun k x xs ->
+        Sexp.List [
+          Sexp.Atom (Key.name k);
+          (Key.to_sexp k x)
+        ] :: xs
+    })
+
 
   let pp_field ppf (k,v) =
     Format.fprintf ppf "%s : %a"
@@ -1704,12 +1712,8 @@ module Record = struct
     } in
     Hashtbl.add_exn vtables ~key:(uid key) ~data:vtable
 
-  let sexp_of_t x =
-    let s = Format.asprintf "%a" Dict.pp x in
-    Sexp.Atom s
-
+  let sexp_of_t x = Dict.sexp_of_t x
   let t_of_sexp = opaque_of_sexp
-
   let inspect = sexp_of_t
 
   let pp ppf x = Sexp.pp_hum ppf (inspect x)

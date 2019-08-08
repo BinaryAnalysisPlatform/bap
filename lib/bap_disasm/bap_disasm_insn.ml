@@ -133,11 +133,13 @@ module Slot = struct
       | None,None -> Ok None
       | None,_ |Some _,None -> Error Jump_vs_Move
       | Some x, Some y -> Ok (Some (Set.union x y)) in
-    let data = KB.Domain.define ~empty ~order ~join "dest-set" in
-    let persistent = KB.Persistent.of_binable (module struct
-        module Set = Set.Make_binable_using_comparator(Theory.Label)
-        type t = Set.t option [@@deriving bin_io]
-      end) in
+    let module IO = struct
+      module Set = Set.Make_binable_using_comparator(Theory.Label)
+      type t = Set.t option [@@deriving bin_io, sexp_of]
+    end in
+    let inspect = IO.sexp_of_t in
+    let data = KB.Domain.define ~empty ~order ~join ~inspect "dest-set" in
+    let persistent = KB.Persistent.of_binable (module IO) in
     KB.Class.property ~package:"bap.std" Theory.Program.Semantics.cls
       ~persistent
       "insn-dests" data
