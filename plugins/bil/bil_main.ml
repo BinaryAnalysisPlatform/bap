@@ -1,3 +1,4 @@
+open Bap_core_theory
 open Core_kernel
 open Bap.Std
 
@@ -84,7 +85,7 @@ let () =
       Level $(b,0) disables all optimizations,  and level $(b,1) performs
       regular program simplifications, e.g., applies constant folding,
       propagation, and elimination of dead temporary (aka virtual) variables." in
-    Config.(param (enum optimizations) ~default:[] ~doc "optimization") in
+    Config.(param (enum optimizations) ~default:o1 ~doc "optimization") in
   let list_passes =
     let doc = "List all available passes and exit" in
     Config.flag ~doc "list-passes" in
@@ -98,7 +99,11 @@ let () =
       if !list_passes then print_passes ()
       else begin
         Bil.select_passes (!norml @ !optim @ !passes);
-        Bil_semantics.init ();
         Bil_lifter.init ();
-        Bil_ir.init()
+        Bil_ir.init();
+        Theory.register
+          ~desc:"denotes programs in terms of BIL expressions and statements"
+          ~name:"bil"
+          (module Bil_semantics.Core_with_fp_emulation)
+
       end)
