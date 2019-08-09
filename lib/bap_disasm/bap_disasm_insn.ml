@@ -99,10 +99,15 @@ module Slot = struct
       ~persistent:KB.Persistent.string
       Theory.Program.Semantics.cls "insn-asm" text
 
+  let sexp_of_op = function
+    | Op.Reg r -> Sexp.Atom (Reg.name r)
+    | Op.Imm w -> sexp_of_int64 (Imm.to_int64 w)
+    | Op.Fmm w -> sexp_of_float (Fmm.to_float w)
+
 
   let ops_domain = KB.Domain.optional "insn-ops"
       ~equal:[%compare.equal: Op.t array]
-      ~inspect:[%sexp_of: Op.t array]
+      ~inspect:[%sexp_of: op array]
 
   let ops_persistent = KB.Persistent.of_binable (module struct
       type t = Op.t array option [@@deriving bin_io]

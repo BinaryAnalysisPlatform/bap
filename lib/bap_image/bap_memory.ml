@@ -39,7 +39,11 @@ let to_repr mem = {
   Repr.size   = mem.size;
 }
 
-let sexp_of_t mem = Repr.sexp_of_t (to_repr mem)
+let sexp_of_t mem = Sexp.List [
+    Atom (Addr.string_of_value mem.addr);
+    sexp_of_int  mem.size;
+    sexp_of_endian mem.endian;
+  ]
 
 let endian t = t.endian
 

@@ -28,7 +28,8 @@ module Label = struct
       ~inspect:sexp_of_int
 
   let attr name =
-    let bool_t = Knowledge.Domain.optional ~equal:Bool.equal "bool" in
+    let bool_t = Knowledge.Domain.optional
+        ~inspect:sexp_of_bool ~equal:Bool.equal "bool" in
     Knowledge.Class.property ~package cls name bool_t
       ~persistent:(Knowledge.Persistent.of_binable (module struct
                      type t = bool option [@@deriving bin_io]
@@ -87,7 +88,7 @@ module Semantics = struct
   type cls = Effect.cls
   let cls = Knowledge.Class.refine Effect.cls Effect.Sort.top
   module Self = (val Knowledge.Value.derive cls)
-  let slot = Knowledge.Class.property program "semantics" Self.domain
+  let slot = Knowledge.Class.property ~package program "semantics" Self.domain
       ~persistent:(Knowledge.Persistent.of_binable (module Self))
   include Self
 end
