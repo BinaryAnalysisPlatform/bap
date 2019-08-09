@@ -251,6 +251,9 @@ include (Sexp_hum : Sexpable.S with type t := Packed.t)
 let msb x = Bitvec.(msb (Packed.payload x) mod Packed.modulus x)
 let lsb x = Bitvec.(lsb (Packed.payload x) mod Packed.modulus x)
 
+type packed = Packed.t [@@deriving bin_io]
+let sexp_of_packed = Sexp_hum.sexp_of_t
+let packed_of_sexp = Sexp_hum.t_of_sexp
 
 let compare_mono x y =
   if is_signed x || is_signed y then
@@ -541,7 +544,7 @@ let enum_bits bv endian =
   enum_chars bv endian |> Sequence.map ~f:bits_of_byte |> Sequence.concat
 
 module Mono = Comparable.Make(struct
-    type t = Packed.t [@@deriving sexp]
+    type t = packed [@@deriving sexp]
     let compare x y =
       if phys_equal x y then 0
       else match Int.compare (bitwidth x) (bitwidth y) with
@@ -594,7 +597,7 @@ end
 
 include Or_error.Monad_infix
 include Regular.Make(struct
-    type t = Packed.t [@@deriving bin_io, sexp]
+    type t = packed [@@deriving bin_io, sexp]
     let compare x y =
       if phys_equal x y then 0
       else match Int.compare (bitwidth x) (bitwidth y) with
@@ -679,13 +682,13 @@ let () =
     (Data.sexp_reader (module Stable.V1));
   add_writer ~desc:"Janestreet Sexp Protocol" ~ver:"1.0.0" "sexp"
     (Data.sexp_writer (module Stable.V1));
-  add_reader ~desc:"Janestreet Binary Protocol" ~ver:"1.0.0" "bin"
+  add_reader ~desc:"Janestreet Binary Protocol" ~ver:"2.0.0" "bin"
     (Data.bin_reader (module Packed));
-  add_writer ~desc:"Janestreet Binary Protocol" ~ver:"1.0.0" "bin"
+  add_writer ~desc:"Janestreet Binary Protocol" ~ver:"2.0.0" "bin"
     (Data.bin_writer (module Packed));
-  add_reader ~desc:"Janestreet Sexp Protocol" ~ver:"1.0.0" "sexp"
+  add_reader ~desc:"Janestreet Sexp Protocol" ~ver:"2.0.0" "sexp"
     (Data.sexp_reader (module Sexp_hum));
-  add_writer ~desc:"Janestreet Sexp Protocol" ~ver:"1.0.0" "sexp"
+  add_writer ~desc:"Janestreet Sexp Protocol" ~ver:"2.0.0" "sexp"
     (Data.sexp_writer (module Sexp_hum));
 
   let add name desc pp =
