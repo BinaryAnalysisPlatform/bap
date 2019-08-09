@@ -23,6 +23,8 @@ module Knowledge : sig
 
   val to_bigstring : state -> Bigstring.t
 
+  val pp_state : Format.formatter -> state -> unit
+
   (** [collect p x] collects the value of the property [p].
 
       If the object [x] doesn't have a value for the property [p] and

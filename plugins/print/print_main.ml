@@ -1,3 +1,4 @@
+open Bap_core_theory
 open Core_kernel
 open Regular.Std
 open Graphlib.Std
@@ -288,6 +289,10 @@ let pp_insn fmt ppf (mem,insn) =
   Insn.Io.print ~fmt ppf insn;
   fprintf ppf "@\n"
 
+let pp_knowledge ppf _ =
+  KB.pp_state ppf @@
+  Bap_toplevel.current ()
+
 let main attrs ansi_colors demangle symbol_fmts subs secs doms =
   let ver = version in
   let pp_syms =
@@ -323,6 +328,11 @@ let main attrs ansi_colors demangle symbol_fmts subs secs doms =
     Data.Write.create ~pp:(print_disasm (pp_insn "pretty") subs secs) () in
   let pp_disasm_sexp =
     Data.Write.create ~pp:(print_disasm (pp_insn "sexp") subs secs) () in
+
+  let pp_knowledge = Data.Write.create ~pp:(pp_knowledge) () in
+
+  Project.add_writer ~ver "knowledge"
+    ~desc:"dumps the knowledge base" pp_knowledge;
   Project.add_writer ~ver "cfg"
     ~desc:"print rich CFG for each procedure" pp_cfg;
   Project.add_writer ~ver "asm"

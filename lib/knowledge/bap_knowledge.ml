@@ -152,6 +152,9 @@ module Oid : Tid = struct
     if is_number x then x asr 1 else x asr 2
   [@@inline]
 
+  let pp ppf x =
+    Format.fprintf ppf "<%#0Lx>" (Int63.to_int64 x)
+
 end
 
 module Cid : Sid = Int63
@@ -667,13 +670,14 @@ module Class = struct
 
   let classes = ref Cid.zero
 
+  let names = Hashtbl.create (module Cid)
+
   let newclass ?desc ?package name sort =
     Cid.incr classes;
-    {
-      id = !classes;
-      name = Registry.add_class ?desc ?package name;
-      sort;
-    }
+    let id = !classes
+    and name = Registry.add_class ?desc ?package name in
+    Hashtbl.add_exn names id name;
+    {id; name; sort}
 
   let declare
     : ?desc:string -> ?package:string -> string -> 's -> ('k,'s) t =
@@ -778,6 +782,9 @@ module Dict = struct
   type t = record
 
   let empty = T0
+  let is_empty = function
+    | T0 -> true
+    | _ -> false
 
   (*
      - LL (x,y) : h(x) = h(y) - 1
@@ -2253,19 +2260,21 @@ module Knowledge = struct
     let uninterned_repr cls obj =
       Format.asprintf "#<%s %a>" cls Oid.pp obj
 
-    let repr {Class.name=cls as fname; id=cid} obj =
-      get () >>= fun {package; classes} ->
+    let to_string
+        {Class.name=cls as fname; id=cid} {Env.package; classes} obj =
       let cls = if package = cls.package then cls.name
         else string_of_fname fname in
-      Knowledge.return @@
       match Map.find classes cid with
       | None -> uninterned_repr cls obj
-      | Some {syms} -> match Map.find syms obj with
+      | Some {Env.syms} -> match Map.find syms obj with
         | Some fname -> if fname.package = package
           then fname.name
           else string_of_fname fname
         | None -> uninterned_repr cls obj
 
+    let repr cls obj =
+      get () >>| fun env ->
+      to_string cls env obj
 
     let read cls input =
       try
@@ -2497,6 +2506,28 @@ module Knowledge = struct
     | Ok x,s -> Ok (x,s)
     | Error err,_ -> Error err
 
+
+  let pp_fullname ~package ppf {package=p; name} =
+    if package = p
+    then Format.fprintf ppf "%s" name
+    else Format.fprintf ppf "%s:%s" p name
+
+  let pp_state ppf {Env.classes; package} =
+    Format.fprintf ppf "(in-package %s)@\n" package;
+    Map.iteri classes ~f:(fun ~key:cid ~data:{vals;syms} ->
+        let name = Hashtbl.find_exn Class.names cid in
+        Format.fprintf ppf "(in-class %a)@\n"
+          (pp_fullname ~package) name;
+        Map.iteri vals ~f:(fun ~key:oid ~data ->
+            if not (Dict.is_empty data) then
+              let () = match Map.find syms oid with
+                | None ->
+                  Format.fprintf ppf "@[<2>(%a@ " Oid.pp oid
+                | Some name ->
+                  Format.fprintf ppf "@[<2>(%a@ "
+                    (pp_fullname ~package) name in
+              Format.fprintf ppf "@,%a)@]@\n"
+                (Sexp.pp_hum_indent 2) (Dict.sexp_of_t data)))
 
   module Conflict = Conflict
   module Agent = Agent
