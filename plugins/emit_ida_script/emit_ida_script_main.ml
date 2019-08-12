@@ -3,6 +3,8 @@ open Bap.Std
 open Format
 include Self()
 
+module Buffer = Caml.Buffer
+
 (** ida uses a strange color coding, bgr, IIRC  *)
 let idacode_of_color = function
   | `black   -> 0x000000

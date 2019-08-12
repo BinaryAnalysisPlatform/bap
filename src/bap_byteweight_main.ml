@@ -86,6 +86,7 @@ let github =
   sprintf "https://github.com/BinaryAnalysisPlatform/bap/\
            releases/download/v%s/sigs.zip"
 
+module Filename = Stdlib.Filename
 
 (** list of posix regexes of files that are skipped during
     the training.  *)

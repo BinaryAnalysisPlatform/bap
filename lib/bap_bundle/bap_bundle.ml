@@ -1,5 +1,7 @@
 open Core_kernel
 
+module Filename = Caml.Filename
+
 module Std = struct
   exception Not_a_bundle
 

@@ -112,7 +112,7 @@ let mapfile path : Bigstring.t =
   let fd = Unix.(openfile path [O_RDONLY] 0o400) in
   let size = Unix.((fstat fd).st_size) in
   let data =
-    Bigarray.Genarray.map_file
+    Mmap.V1.map_file
       fd Bigarray.char Bigarray.c_layout false [|size|] in
   Unix.close fd;
   Bigarray.array1_of_genarray data

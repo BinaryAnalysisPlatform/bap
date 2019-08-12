@@ -13,6 +13,7 @@ open Format
 module Driver = Bap_disasm_driver
 
 module Event = Bap_main_event
+module Buffer = Caml.Buffer
 include Bap_self.Create()
 
 let find name = FileUtil.which name

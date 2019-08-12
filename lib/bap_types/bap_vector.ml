@@ -122,14 +122,17 @@ let index_exn ?equal vec x : int =
   let n = index_with ~default:(-1) ?equal vec x in
   if n < 0 then invalid_arg "index out of bounds" else n
 
+let length vec = vec.size
+
 module C = Container.Make(struct
     type nonrec 'a t = 'a t
     let fold = fold
     let iter = `Custom iter
+    let length = `Custom length
+
   end)
 
 let mem = C.mem
-let length vec = vec.size
 let is_empty vec = length vec = 0
 let exists = C.exists
 let for_all = C.for_all

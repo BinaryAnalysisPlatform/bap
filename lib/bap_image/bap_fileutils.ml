@@ -6,7 +6,7 @@ let mapfile path : Bigstring.t option =
   try
     let data =
       (* Unix.map_file in 4.06; using the old location for compatibility *)
-      Bigarray.Genarray.map_file
+      Mmap.V1.map_file
         fd Bigarray.char Bigarray.c_layout false [|-1|] in
     Unix.close fd;
     Some (Bigarray.array1_of_genarray data)

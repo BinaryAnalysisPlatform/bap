@@ -4,6 +4,9 @@ open Bap.Std
 
 include Self ()
 
+module Buffer = Caml.Buffer
+module Filename = Caml.Filename
+
 module Info = Bap_ida_info
 
 type ida = {

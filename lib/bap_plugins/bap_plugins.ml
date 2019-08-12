@@ -3,6 +3,8 @@ open Bap_bundle.Std
 open Bap_future.Std
 open Or_error.Monad_infix
 
+module Filename = Caml.Filename
+
 module Plugin = struct
 
   type 'a or_error = 'a Or_error.t
