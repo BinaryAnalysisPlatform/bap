@@ -141,10 +141,10 @@ let sexp_of_concat ((x,y),r) = results r @@ sexps [
   ]
 
 let sexp_of_ite ((cond, yes, no), r) = results r @@ sexps [
-  string_of_value cond;
-  string_of_value yes;
-  string_of_value no;
-]
+    string_of_value cond;
+    string_of_value yes;
+    string_of_value no;
+  ]
 
 let binop,on_binop =
   Observation.provide ~inspect:sexp_of_binop "binop"
@@ -524,7 +524,7 @@ module Make (Machine : Machine) = struct
   let arg_def = term normal arg_t arg_def
 
   let arg_use t = match Arg.intent t with
-    | None | Some (Out|Both) -> Arg.lhs t := Arg.rhs t
+    | Some Out -> Arg.lhs t := Arg.rhs t
     | _ -> Machine.return ()
 
   let arg_use = term normal arg_t arg_use
@@ -532,7 +532,9 @@ module Make (Machine : Machine) = struct
   let get_arg t = Env.get (Arg.lhs t)
   let get_args ~input sub =
     Term.enum arg_t sub |>
-    Seq.filter ~f:(fun x -> not input || Arg.intent x <> Some Out) |>
+    Seq.filter ~f:(fun x -> match input with
+        | true ->  Arg.intent x <> Some Out
+        | false -> Arg.intent x = Some Out) |>
     Machine.Seq.map ~f:get_arg
 
   let iter_args t f = Machine.Seq.iter (Term.enum arg_t t) ~f
@@ -542,11 +544,12 @@ module Make (Machine : Machine) = struct
     | Some entry ->
       let name = Sub.name t in
       iter_args t arg_def >>= fun () ->
-      get_args ~input:true t >>| Seq.to_list >>= fun args ->
-      !!Linker.Trace.call_entered (name,args) >>= fun () ->
+      get_args ~input:true t >>| Seq.to_list_rev >>= fun inputs ->
+      !!Linker.Trace.call_entered (name,List.rev inputs) >>= fun () ->
       blk entry >>= fun () ->
       iter_args t arg_use >>= fun () ->
-      get_args ~input:false t >>| Seq.to_list >>= fun args ->
+      get_args ~input:false t >>| Seq.to_list >>= fun rets ->
+      let args = List.rev_append inputs rets in
       !!Linker.Trace.call_returned (name,args)
 
 
