@@ -77,6 +77,9 @@ let halting,will_halt =
 let division_by_zero,will_divide_by_zero =
   Observation.provide ~inspect:sexp_of_unit "division-by-zero"
 
+let cfi_violation,cfi_will_diverge =
+  Observation.provide ~inspect:sexp_of_word "cfi-violation"
+
 let segfault, will_segfault =
   Observation.provide ~inspect:sexp_of_word "segfault"
 
@@ -194,6 +197,7 @@ type state = {
   addr : addr;
   curr : pos;
   lets : scope; (* lexical context *)
+  prompts : tid list;
 }
 
 let sexp_of_state {curr} =
@@ -218,12 +222,15 @@ let state = Primus.Machine.State.declare
          addr = null proj;
          curr = Top {me=prog; up=Nil};
          lets = empty_scope;
+         prompts = [];
        })
 
 type exn += Halt
 type exn += Division_by_zero
 type exn += Segmentation_fault of addr
+type exn += Cfi_violation of addr
 type exn += Runtime_error of string
+
 
 let () =
   Exn.add_printer (function
@@ -233,12 +240,14 @@ let () =
       | Segmentation_fault x ->
         Some (asprintf "Segmentation fault at %a" Addr.pp_hex x)
       | Division_by_zero -> Some "Division by zero"
+      | Cfi_violation where ->
+        Some (asprintf "CFI violation at %a" Addr.pp_hex where)
       | _ -> None)
 
 
 let division_by_zero_handler = "__primus_division_by_zero_handler"
 let pagefault_handler =  "__primus_pagefault_handler"
-
+let cfi_violation_handler = "__primus_cfi_violation_handler"
 
 module Make (Machine : Machine) = struct
   open Machine.Syntax
@@ -277,8 +286,6 @@ module Make (Machine : Machine) = struct
     !!on_reading v >>= fun () ->
     Env.get v >>= fun r ->
     !!on_read (v,r) >>| fun () -> r
-
-
 
   let call_when_provided name =
     Code.is_linked (`symbol name) >>= fun provided ->
@@ -565,26 +572,70 @@ module Make (Machine : Machine) = struct
       Value.of_word addr >>= fun addr ->
       !!will_jump (cond,addr)
 
+  let exec_to_prompt dst =
+    Machine.Local.get state >>= function
+    | {prompts = p :: _} when Tid.equal p dst ->
+      Machine.return ()
+    | _ -> Code.exec (`tid dst)
+
   let label cond : label -> _ = function
-    | Direct t ->
-      will_jump_to_tid cond t >>= fun () ->
-      Code.exec (`tid t)
+    | Direct dst ->
+      will_jump_to_tid cond dst >>= fun () ->
+      exec_to_prompt dst
     | Indirect x ->
       eval_exp x >>= fun ({value} as dst) ->
       !!will_jump (cond,dst) >>= fun () ->
-      Code.exec (`addr value)
+      Code.resolve_tid (`addr value) >>= function
+      | None -> Code.exec (`addr value)
+      | Some dst -> exec_to_prompt dst
 
-  let call cond c =
-    label cond (Call.target c) >>= fun () ->
-    match Call.return c with
-    | Some t -> label cond t
-    | None -> failf "a non-return call returned" ()
+
+  let resolve_return call = match Call.return call with
+    | None -> Machine.return None
+    | Some (Direct dst) -> Machine.return (Some dst)
+    | Some (Indirect dst) ->
+      eval_exp dst >>= fun {value=dst} ->
+      Code.resolve_tid (`addr dst)
+
+  let push_prompt dst = match dst with
+    | None -> Machine.return ()
+    | Some dst ->
+      Machine.Local.update state ~f:(fun s ->
+          {s with prompts = dst :: s.prompts})
+
+  let pop_prompt =
+    Machine.Local.update state ~f:(function
+        | {prompts=[]} as s -> s
+        | {prompts=_::prompts} as s -> {s with prompts})
+
+  let trap_cfi_violation callsite =
+    !!cfi_will_diverge callsite >>= fun () ->
+    call_when_provided cfi_violation_handler >>= function
+    | true -> Machine.return ()
+    | false -> Machine.raise (Cfi_violation callsite)
+
+  let call cond call =
+    Machine.Local.get state >>= fun {addr=callsite} ->
+    resolve_return call >>= fun ret ->
+    push_prompt ret >>= fun () ->
+    label cond (Call.target call) >>= fun () ->
+    Machine.Local.get state >>= function
+    | {prompts=[]} -> trap_cfi_violation callsite
+    | {prompts=p::_} -> match ret with
+      | None -> Machine.return ()
+      | Some p' when Tid.(p <> p') ->
+        trap_cfi_violation callsite >>= fun () ->
+        pop_prompt >>= fun () ->
+        label cond (Direct p')
+      | Some p ->
+        pop_prompt >>= fun () ->
+        label cond (Direct p)
 
   let goto cond c = label cond c
   let interrupt n  = !!will_interrupt n
 
   let jump cond t = match Jmp.kind t with
-    | Ret _ -> Machine.return () (* return from sub *)
+    | Ret dst -> label cond dst
     | Call c -> call cond c
     | Goto l -> goto cond l
     | Int (n,r) ->

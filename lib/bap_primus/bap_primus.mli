@@ -36,9 +36,9 @@ module Std : sig
       built from basic building blocks, with minimal coupling between
       them. The central component is the Interpreter itself. It
       evaluates a program and interacts with three other components:
-       - Linker
-       - Env
-       - Memory
+      - Linker
+      - Env
+      - Memory
 
       The Linker is responsible for linking code into the program
       abstraction. The [Env] component defines the environment
@@ -938,6 +938,18 @@ module Std : sig
           @since 1.5  *)
       val segfault : addr observation
 
+      (** [cfi_violation x] occurs when the CFI is not preserved.
+          The control flow integrity (CFI) is violated when a call
+          doesn't return to an expected place. This might be an
+          indicator of malicious code or an improper control flow
+          graph.
+
+          After the observation is made the [cfi_violation] trap is
+          signaled, which could be handled via the
+          [cfi_violation_handler].
+          @since 1.7  *)
+      val segfault : addr observation
+
       (** is raised when a computation is halted *)
       type exn += Halt
 
@@ -958,7 +970,7 @@ module Std : sig
           observation.
 
           @since 1.5
-       *)
+      *)
       val pagefault_handler : string
 
       (** [division_by_zero_hanlder] is a trap handler for
@@ -968,8 +980,17 @@ module Std : sig
           undefined.
 
           @since 1.5
-       *)
+      *)
       val division_by_zero_handler : string
+
+
+
+      (** [division_by_zero] is the name of a trap handler for the
+          [Cfi_violation] exception. If it is linked into the machine,
+          then it will be invoked when the cfi-violation trap is signaled.
+          If it returns normally, then the result of the faulty operation is
+          undefined. *)
+      val cfi_violation_handler : string
 
       (** Make(Machine) makes an interpreter that computes in the
           given [Machine].  *)
@@ -1070,7 +1091,7 @@ module Std : sig
         | `tid of tid
         | `addr of addr
         | `symbol of string
-        ] [@@deriving bin_io, compare, sexp]
+      ] [@@deriving bin_io, compare, sexp]
 
 
       (** Call tracing.
@@ -1088,7 +1109,7 @@ module Std : sig
           observations. However, the Primus Lisp Interpreter provides call
           observations only when an externally visible function is
           called, e.g., malloc, free.
-       *)
+      *)
       module Trace : sig
 
         (** occurs when a subroutine is called.
@@ -1099,7 +1120,7 @@ module Std : sig
             Example,
 
             (call (malloc 4))
-         *)
+        *)
         val call : (string * value list) observation
 
         (** occurs just before a subroutine returns.
@@ -1113,7 +1134,7 @@ module Std : sig
             Example,
 
             (call-return (malloc 4 0xDEADBEEF))
-         *)
+        *)
         val return : (string * value list) observation
 
         (** occurs when an externally linked primus stub is called.
@@ -1131,7 +1152,7 @@ module Std : sig
             Use [Machine.Observation.make] function, where [Machine]
             is a module implementing [Machine.S] interface, to provide
             observations.
-         *)
+        *)
 
         (** the statement that makes [call] observations. *)
         val call_entered : (string * value list) statement
@@ -1165,7 +1186,7 @@ module Std : sig
 
           @since 1.5
 
-       *)
+      *)
       val unresolved_handler : string
 
       module Name : Regular.S with type t = name
@@ -1178,9 +1199,9 @@ module Std : sig
           machine and performs a computation using this machine.*)
       module type Code = functor (Machine : Machine.S) -> sig
 
-                           (** [exec] computes the code.  *)
-                           val exec : unit Machine.t
-                         end
+        (** [exec] computes the code.  *)
+        val exec : unit Machine.t
+      end
 
 
       (** code representation  *)
@@ -1235,7 +1256,7 @@ module Std : sig
             with the given [name].
 
             @since 1.5.0
-         *)
+        *)
         val resolve_symbol : name -> string option m
 
 
@@ -1243,7 +1264,7 @@ module Std : sig
             with the given [name].
 
             @since 1.5.0
-         *)
+        *)
         val resolve_tid : name -> tid option m
 
 
@@ -1447,7 +1468,7 @@ module Std : sig
         (which could be different from the virtual memory address size).
         Each memory could be segmented and can have its own TLB, which is usually
         implemented via the [pagefault] handlers.
-     *)
+    *)
     module Memory : sig
 
 
@@ -1460,7 +1481,7 @@ module Std : sig
           In addition, it holds meta information about memory address
           and data bus sizes.
 
-       *)
+      *)
       module Descriptor : sig
         type t = memory [@@deriving compare, sexp_of]
 
@@ -1493,8 +1514,8 @@ module Std : sig
 
         (** [switch memory] switches the memory module to [memory].
 
-        All consecutive operations until the next switch will affect
-        only this memory.  *)
+            All consecutive operations until the next switch will affect
+            only this memory.  *)
         val switch : memory -> unit Machine.t
 
 
@@ -1504,7 +1525,7 @@ module Std : sig
         (** [get a] loads a byte from the address [a].
 
             raises the [Pagefault] machine exception if [a] is not mapped.
-         *)
+        *)
         val get : addr -> value Machine.t
 
 
@@ -2381,11 +2402,11 @@ ident ::= ?any atom that is not recognized as a <word>?
 
             {[
               Category 1:
-               - Element1 Name, Element1 Description;
-               - Element2 Name, Element2 Description;
-               ...
-              Category2:
-               - ...
+                - Element1 Name, Element1 Description;
+              - Element2 Name, Element2 Description;
+              ...
+                Category2:
+                  - ...
             ]}
 
             All entries are sorted in alphabetic order.
