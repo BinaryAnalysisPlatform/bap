@@ -291,7 +291,7 @@ let pp_insn fmt ppf (mem,insn) =
 
 let pp_knowledge ppf _ =
   KB.pp_state ppf @@
-  Bap_toplevel.current ()
+  Toplevel.current ()
 
 let main attrs ansi_colors demangle symbol_fmts subs secs doms =
   let ver = version in
