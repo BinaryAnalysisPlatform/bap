@@ -373,6 +373,17 @@ let of_string x =
 let (!$) x = of_string x [@@inline]
 let (!!) x m = int x m [@@inline]
 
+(* all bitvectors are normalized and therefore non-negative,
+   so we don't need to check the lower bound.
+*)
+let max_uint = Z.(one lsl Sys.int_size - one)
+let max_sint = Z.(of_int max_int)
+let max_uint32 = Z.(one lsl 32 - one)
+let max_sint32 = Z.(one lsl 31 - one)
+let max_uint64 = Z.(one lsl 64 - one)
+let max_sint64 = Z.(one lsl 63 - one)
+
+
 let fits_int = Z.fits_int
 let fits_int32 = Z.fits_int32
 let fits_int64 = Z.fits_int64
@@ -380,14 +391,23 @@ let fits_int64 = Z.fits_int64
 let doesn't_fit r x =
   failwith (to_string x ^ " doesn't fit the " ^ r ^ " type")
 
-let to_int x = if fits_int x then Z.to_int x
-  else doesn't_fit "int" x
+let convert tname size convert max_signed max_unsigned x =
+  if Z.(x <= max_signed) then convert x
+  else if Z.(x <= max_unsigned)
+  then convert (Z.signed_extract x 0 size)
+  else doesn't_fit tname x
 
-let to_int32 x = if fits_int32 x then Z.to_int32 x
-  else doesn't_fit "int32" x
+let to_int x =
+  convert "int" Sys.int_size Z.to_int max_sint max_uint x
+[@@inline]
 
-let to_int64 x = if fits_int64 x then Z.to_int64 x
-  else doesn't_fit "int64" x
+let to_int32 x =
+  convert "int32" 32 Z.to_int32 max_sint32 max_uint32 x
+[@@inline]
+
+let to_int64 x =
+  convert "int" 64 Z.to_int64 max_sint64 max_uint64 x
+[@@inline]
 
 let to_bigint x = x [@@inline]
 
