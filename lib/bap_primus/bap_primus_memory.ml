@@ -103,16 +103,25 @@ module Make(Machine : Machine) = struct
 
   let pagefault addr = Machine.raise (Pagefault addr)
 
+  let remembered {values; layers} addr value =
+    Machine.Local.put state {
+      layers;
+      values = Map.set values ~key:addr ~data:value;
+    } >>| fun () ->
+    value
+
   let read addr {values;layers} = match find_layer addr layers with
     | None -> pagefault addr
     | Some layer -> match Map.find values addr with
       | Some v -> Machine.return v
-      | None -> match layer.mem with
-        | Dynamic {value} ->
-          Generate.next value >>= Value.of_int ~width:8
-        | Static mem -> match Memory.get ~addr mem with
-          | Ok v -> Value.of_word v
-          | Error _ -> failwith "Primus.Memory.read"
+      | None ->
+        let read_value = match layer.mem with
+          | Dynamic {value} ->
+            Generate.next value >>= Value.of_int ~width:8
+          | Static mem -> match Memory.get ~addr mem with
+            | Ok v -> Value.of_word v
+            | Error _ -> failwith "Primus.Memory.read" in
+        read_value >>= remembered {values; layers} addr
 
 
   let write addr value {values;layers} =
