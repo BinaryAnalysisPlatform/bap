@@ -146,7 +146,9 @@ module Main(Machine : Primus.Machine.S) = struct
         Machine.Global.get state >>= fun {forkpoints} ->
         if Set.mem forkpoints dst
         then Eval.halt >>= never_returns
-        else Linker.exec (`tid dst)
+        else
+          Linker.exec (`tid dst) >>= fun () ->
+          Eval.halt >>= never_returns
     | _ -> Machine.return ()
 
   let fork_on_calls blk jmp = match Jmp.kind jmp with
