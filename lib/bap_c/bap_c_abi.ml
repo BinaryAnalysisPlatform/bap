@@ -35,7 +35,7 @@ let arg_intent : ctype -> intent = function
 type error = [
   | `Unknown_interface of string
   | `Parser_error of string * Error.t
-]
+] [@@deriving sexp_of]
 
 type param = Bap_c_data.t * exp
 
@@ -51,7 +51,7 @@ type t = {
 }
 
 
-exception Failed of error
+exception Failed of error [@@deriving sexp_of]
 let fail x = raise (Failed x)
 
 let data (size : #Bap_c_size.base) (t : Bap_c_type.t) =

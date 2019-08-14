@@ -13,6 +13,8 @@ type block = Bap_disasm_block.t [@@deriving compare, sexp_of]
 type cfg = Bap_disasm_rec.Cfg.t [@@deriving compare]
 
 module Disasm : sig
+  module Driver = Bap_disasm_driver
+
   type t = disasm
   type 'a disassembler = ?backend:string -> ?brancher:brancher -> ?rooter:rooter -> 'a
   val create : cfg -> disasm

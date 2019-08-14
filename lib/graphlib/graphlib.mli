@@ -648,6 +648,12 @@ module Std : sig
     *)
     val create : ('n,'d,_) Map.t -> 'd -> ('n,'d) t
 
+    (** [equal s1 s2] is [true] if [s1] and [s2] are equal solutions.
+
+        Two solutions are equal if for all [x] in the data domain
+        ['d], we have that [equal s1[x] s2[x]].
+    *)
+    val equal : equal:('d -> 'd -> bool) -> ('n,'d) t -> ('n,'d) t -> bool
 
     (** [iterations s] returns the total number of iterations that was
         made to obtain the current solution.  *)
@@ -659,6 +665,13 @@ module Std : sig
         decreases.
     *)
     val default : ('n,'d) t -> 'd
+
+
+    (** [enum xs] enumerates all non-trivial values in the solution.
+
+        A value is non-trivial if it differs from the default value.
+    *)
+    val enum : ('n,'d) t -> ('n * 'd) Sequence.t
 
     (** [is_fixpoint s] is [true] if the solution is a fixed point
         solution, i.e., is a solution that stabilizes the system of
@@ -1485,10 +1498,10 @@ module Std : sig
 
           For the purpose of this function a graph can be represented
           with three values:
-            - [nodes_of_edge] returns the source and destination nodes
+          - [nodes_of_edge] returns the source and destination nodes
               of an edge;
-            - [nodes] is a sequence of nodes;
-            - [edges] is a sequence of edges;
+          - [nodes] is a sequence of nodes;
+          - [edges] is a sequence of edges;
 
           @param name the name of the graph.
           @param attrs graphviz attributes of the graph.

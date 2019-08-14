@@ -7,6 +7,6 @@ Library bil_plugin
   Path:             plugins/bil
   Build$:           flag(everything) || flag(bil)
   FindlibName:      bap-plugin-bil
-  BuildDepends:     bap
-  XMETAExtraLines:  tags="bil,analysis"
-  InternalModules:  Bil_main
+  BuildDepends:     bap, bap-core-theory, bap-knowledge
+  XMETAExtraLines:  tags="bil,analysis,semantics"
+  InternalModules:  Bil_main, Bil_lifter, Bil_semantics, Bil_ir, Bil_float

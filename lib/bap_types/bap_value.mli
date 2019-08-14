@@ -1,3 +1,5 @@
+open Bap_core_theory
+
 open Core_kernel
 open Regular.Std
 
@@ -38,8 +40,13 @@ end
 
 module Tag : sig
   type 'a t = 'a tag
-  val register : name:literal -> uuid:literal ->
+  val register : name:string -> uuid:string ->
     (module S with type t = 'a) -> 'a tag
+
+  val register_slot : (Theory.program,'a option) KB.slot -> (module S with type t = 'a) -> 'a tag
+
+  val slot : 'a tag -> (Theory.program, 'a option) KB.slot
+
 
   val name : 'a tag -> string
   val typeid  : 'a tag -> typeid

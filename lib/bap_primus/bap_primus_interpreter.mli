@@ -8,6 +8,7 @@ val interrupt : int observation
 val division_by_zero : unit observation
 val segfault : addr observation
 val pagefault : addr observation
+val cfi_violation : addr observation
 
 val loading : value observation
 val loaded : (value * value) observation
@@ -60,9 +61,11 @@ val leave_jmp : jmp term observation
 type exn += Halt
 type exn += Division_by_zero
 type exn += Segmentation_fault of addr
+type exn += Cfi_violation of addr
 
 val division_by_zero_handler : string
 val pagefault_handler : string
+val cfi_violation_handler : string
 
 
 module Make (Machine : Machine) : sig

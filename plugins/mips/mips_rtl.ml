@@ -52,6 +52,7 @@ let rec bil_exp = function
   | Concat (x, y) -> Bil.(bil_exp x ^ bil_exp y)
   | Binop (op, x, y) -> Bil.binop op (bil_exp x) (bil_exp y)
   | Extract (hi, lo, x) -> Bil.extract hi lo (bil_exp x)
+  | Cast (_,1,x) -> Bil.(cast low 1 (bil_exp x))
   | Cast (Signed, width, x) -> Bil.(cast signed width (bil_exp x))
   | Cast (Unsigned, width, x) -> Bil.(cast unsigned width (bil_exp x))
   | Unop (op, x) -> Bil.unop op (bil_exp x)
@@ -72,15 +73,16 @@ let var_of_exp e = match e.body with
 module Exp = struct
 
   let cast x width sign =
-    let nothing_to_cast =
-      (x.sign = sign && x.width = width) ||
-      (x.width = width && width = 1) in
-    if nothing_to_cast then x
-    else
-    if x.width = 1 then
-      {width; sign; body = Cast (x.sign, width, x.body)}
-    else
-      {width; sign; body = Cast (sign, width, x.body)}
+    let same_sign = x.sign = sign
+    and same_size = x.width = width in
+    match same_sign, same_size with
+    | true,true -> x               (* nothing is changed *)
+    | false,true -> {x with sign}  (* size is preserved - no BIL cast *)
+    | true,false                  (* size is changed, *)
+    | false,false ->               (* possibly with sign *)
+      if x.width = 1
+      then {width; sign; body = Cast (x.sign, width, x.body)}
+      else {width; sign; body = Cast (sign, width, x.body)}
 
   let cast_width x width = cast x width x.sign
 
@@ -107,12 +109,14 @@ module Exp = struct
     let sign = derive_sign lhs.sign rhs.sign in
     binop_with_signedness sign op lhs rhs
 
+  let logop_with_cast op lhs rhs =
+    {(binop_with_cast op lhs rhs) with width = 1}
+
   let concat lhs rhs =
     let width = lhs.width + rhs.width in
     let body = Concat (lhs.body, rhs.body) in
     { sign = Unsigned; width; body; }
 
-  let bit_result x = cast_width x 1
 
   let plus  = binop_with_cast Bil.plus
   let minus = binop_with_cast Bil.minus
@@ -121,16 +125,16 @@ module Exp = struct
   let sdivide = binop_with_cast Bil.sdivide
   let modulo  = binop_with_cast Bil.modulo
   let smodulo = binop_with_cast Bil.smodulo
-  let lt x y  = bit_result (binop_with_cast Bil.lt x y)
-  let gt x y  = bit_result (binop_with_cast Bil.lt y x)
-  let eq x y  = bit_result (binop_with_cast Bil.eq x y)
-  let le x y  = bit_result (binop_with_cast Bil.le x y)
-  let ge x y  = bit_result (binop_with_cast Bil.le y x)
-  let neq x y = bit_result (binop_with_cast Bil.neq x y)
-  let slt x y = bit_result (binop_with_cast Bil.slt x y)
-  let sgt x y = bit_result (binop_with_cast Bil.slt y x)
-  let slte x y = bit_result (binop_with_cast Bil.sle x y)
-  let sgte x y = bit_result (binop_with_cast Bil.sle y x)
+  let lt x y  =  (logop_with_cast Bil.lt x y)
+  let gt x y  =  (logop_with_cast Bil.lt y x)
+  let eq x y  =  (logop_with_cast Bil.eq x y)
+  let le x y  =  (logop_with_cast Bil.le x y)
+  let ge x y  =  (logop_with_cast Bil.le y x)
+  let neq x y =  (logop_with_cast Bil.neq x y)
+  let slt x y =  (logop_with_cast Bil.slt x y)
+  let sgt x y =  (logop_with_cast Bil.slt y x)
+  let slte x y = (logop_with_cast Bil.sle x y)
+  let sgte x y = (logop_with_cast Bil.sle y x)
 
   let lshift  = unsigned_binop Bil.lshift
   let rshift  = unsigned_binop Bil.rshift

@@ -1,0 +1,24 @@
+Flag core_theory
+  Description: Build the bap-core-theory library
+  Default: false
+
+Library bap_core_theory
+  Build$: flag(everything) || flag(core_theory)
+  Path: lib/bap_core_theory
+  FindlibName: bap-core-theory
+  CompiledObject: best
+  BuildDepends: bap-knowledge, core_kernel,
+                bitvec, bitvec-order, bitvec-sexp, bitvec-binprot
+  Modules: Bap_core_theory
+  InternalModules:
+        Bap_core_theory_basic,
+        Bap_core_theory_definition,
+        Bap_core_theory_effect,
+        Bap_core_theory_empty,
+        Bap_core_theory_grammar_definition,
+        Bap_core_theory_IEEE754,
+        Bap_core_theory_program,
+        Bap_core_theory_manager,
+        Bap_core_theory_parser,
+        Bap_core_theory_value,
+        Bap_core_theory_var

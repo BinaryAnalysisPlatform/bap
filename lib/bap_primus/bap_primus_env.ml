@@ -69,7 +69,6 @@ let inspect_environment {values;random} =
           | None -> assert false)  in
   Sexp.List bindings
 
-let word = Word.of_int ~width:8
 
 
 module Make(Machine : Machine) = struct
@@ -88,15 +87,6 @@ module Make(Machine : Machine) = struct
           s with values = Map.set s.values ~key:var ~data:x
         })
 
-  let gen_word gen width =
-    assert (width > 0);
-    let rec next x =
-      if Word.bitwidth x >= width
-      then Machine.return (Word.extract_exn ~hi:(width-1) x)
-      else Generator.next gen >>= fun y ->
-        next (Word.concat x (word y)) in
-    Generator.next gen >>| word >>= next
-
   let null = Machine.get () >>| Project.arch >>| Arch.addr_size >>= fun s ->
     Value.zero (Size.in_bits s)
 
@@ -105,13 +95,12 @@ module Make(Machine : Machine) = struct
     match Map.find t.values var with
     | Some res -> Machine.return res
     | None -> match Var.typ var with
-      | Type.Mem (_,_) -> null
+      | Type.Mem (_,_) | Type.Unk -> null
       | Type.Imm width -> match Map.find t.random var with
         | None -> Machine.raise (Undefined_var var)
         | Some gen ->
-           gen_word gen width >>= Value.of_word >>= fun x ->
-           set var x >>= fun () ->
-           !!x
+          Generator.word gen width >>= Value.of_word >>= fun x ->
+          set var x >>| fun () -> x
 
   let has var =
     Machine.Local.get state >>| fun t ->

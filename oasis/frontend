@@ -7,4 +7,5 @@ Executable "bap"
   MainIs:         bap_main.ml
   Build$:         flag(everything) || flag(frontend)
   CompiledObject: best
-  BuildDepends:   bap, bap.plugins, cmdliner, findlib.dynload, parsexp
+  BuildDepends:   core_kernel, ppx_jane, bap-future, regular,
+                  bap, bap.plugins, cmdliner, findlib.dynload, parsexp

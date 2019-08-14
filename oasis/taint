@@ -24,7 +24,7 @@ Library primus_propagate_taint_plugin
   Build$: flag(everything) || flag(taint)
   FindlibName: bap-plugin-primus_propagate_taint
   CompiledObject: best
-  BuildDepends: bap-primus, bap-taint
+  BuildDepends: bap-primus, bap-taint, core_kernel, bap
   XMETADescription: a compatibility layer between different taint analysis frameworks
   InternalModules: Primus_propagate_taint_main
   XMETAExtraLines:  tags="dataflow, pass, taint, primus"
@@ -34,7 +34,7 @@ Library primus_taint_plugin
   Build$: flag(everything) || flag(taint)
   FindlibName: bap-plugin-primus_taint
   CompiledObject: best
-  BuildDepends: bap-primus, bap-taint
+  BuildDepends: bap-primus, bap-taint, bap, core_kernel
   XMETADescription: a taint analysis control interface
   DataFiles:        lisp/*.lisp ($primus_taint_lisp_path)
   InternalModules: Primus_taint_main, Primus_taint_policies

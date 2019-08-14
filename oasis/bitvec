@@ -1,0 +1,11 @@
+Flag bitvec
+  Description: Build the bitvec library
+  Default: false
+
+Library bitvec
+  Build$: flag(everything) || flag(bitvec)
+  Path: lib/bitvec
+  FindlibName: bitvec
+  CompiledObject: best
+  BuildDepends: zarith
+  Modules: Bitvec

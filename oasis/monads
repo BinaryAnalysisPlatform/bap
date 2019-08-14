@@ -7,7 +7,7 @@ Library monads
   Path: lib/monads
   FindlibName: monads
   CompiledObject: best
-  BuildDepends: core_kernel
+  BuildDepends: core_kernel, ppx_jane
   Modules: Monads
   InternalModules: Monads_monad,
                    Monads_monoid,

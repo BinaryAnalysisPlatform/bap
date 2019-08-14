@@ -1,3 +1,5 @@
+open Bap_knowledge
+
 open Core_kernel
 open Regular.Std
 open Bap_future.Std
@@ -17,22 +19,25 @@ let extract name arch =
 module type Target = sig
   type t
   val of_blocks : (string * addr * addr) seq -> t
-  module Factory : sig
-    val register : string -> t source -> unit
-  end
+  val provide : Knowledge.agent -> t -> unit
 end
 
+let agent =
+  let reliability = Knowledge.Agent.authorative in
+  Knowledge.Agent.register ~package:"bap.std"
+    ~reliability "user-symbolizer"
+
 let register syms =
-  let name = "file" in
-  let register (module T : Target) =
-    let source = Stream.map Project.Info.arch (fun arch ->
-        Or_error.try_with (fun () ->
-            extract syms arch |>
-            Seq.of_list |> T.of_blocks)) in
-    T.Factory.register name source in
-  register (module Rooter);
-  register (module Symbolizer);
-  register (module Reconstructor)
+  let provide (module T : Target) =
+    Stream.observe Project.Info.arch (fun arch ->
+        extract syms arch |>
+        Seq.of_list |> T.of_blocks |>
+        T.provide agent) in
+  provide (module struct
+    include Rooter
+    let provide _ s = provide s
+  end);
+  provide (module Symbolizer)
 
 let () =
   let () = Config.manpage [

@@ -1,10 +1,12 @@
 module Plugin_rules = struct
   module Fl = Findlib
 
+  open Printf
   open Ocamlbuild_plugin
-  open Core_kernel
   module Ocamlbuild = Ocamlbuild_pack
 
+  module List = ListLabels
+  module String = Ocamlbuild_plugin.String
 
   let (/) = Pathname.concat
   let () =
@@ -28,7 +30,7 @@ module Plugin_rules = struct
 
   let needs_threads ~predicates pkgs =
     let deps = Fl.package_deep_ancestors predicates pkgs in
-    List.mem deps "threads" ~equal:String.equal
+    List.mem ~set:deps "threads"
 
   let infer_thread_predicates ~predicates pkg =
     if needs_threads ~predicates pkg
@@ -59,6 +61,7 @@ module Plugin_rules = struct
     topological_closure
       ~predicates:(bap_predicates ~native:true) packages
 
+
   let findlibs
       ?(native=true)
       ?(predicates=pkg_predicates ~native)
@@ -69,17 +72,17 @@ module Plugin_rules = struct
         else predicates in
       let arch,preds = Fl.package_property_2 preds pkg "archive" in
       let base = Fl.package_directory pkg in
-      if dynamic && not (List.mem ~equal:Polymorphic_compare.equal preds (`Pred "plugin"))
-      then raise Caml.Not_found;
-      String.split ~on:' ' arch |>
+      if dynamic && not (List.mem ~set:preds (`Pred "plugin"))
+      then raise Not_found;
+      String.split_on_char ' ' arch |>
       List.map ~f:(Fl.resolve_path ~base)
-    with Caml.Not_found -> []
+    with Not_found -> []
 
   let externals pkgs =
     let interns = interns () in
     pkgs |>
     topological_closure ~predicates:(pkg_predicates ~native:true) |>
-    List.filter ~f:(fun dep -> not (List.mem ~equal:String.equal interns dep))
+    List.filter ~f:(fun dep -> not (List.mem ~set:interns dep))
 
   let packages () = externals !Options.ocaml_pkgs
 
@@ -125,21 +128,24 @@ module Plugin_rules = struct
     | xs ->
       List.map xs ~f:(fun src -> cp src Pathname.current_dir_name)
 
+
+  let concat_map xs ~f = List.(concat (map xs ~f))
+
   let generate_plugins_for_packages () =
     packages () |>
-    List.concat_map ~f:(fun name ->
-        List.concat_map [`native; `byte] ~f:(fun code ->
+    concat_map ~f:(fun name ->
+        concat_map [`native; `byte] ~f:(fun code ->
             generate_plugin_for_package code name))
 
   let make_list_option option = function
     | [] -> N
-    | xs -> S [A option; A (String.concat ~sep:"," xs)]
+    | xs -> S [A option; A (String.concat "," xs)]
 
   let is_cmx file = Filename.check_suffix file ".cmx"
 
   let bundle env =
     let requires =
-      packages () |> List.concat_map ~f:(fun pkg ->
+      packages () |> concat_map ~f:(fun pkg ->
           findlibs ~dynamic:false pkg |>
           List.map ~f:(fun path ->
               let name = path |>
@@ -174,7 +180,7 @@ module Plugin_rules = struct
     rule "bap: cmxs & packages -> bundle"
       ~deps:["%.cmxs"]
       ~stamp:"%.bundle"
-      (fun env _ -> Seq (generate_plugins_for_packages ()))
+      (fun _ _ -> Seq (generate_plugins_for_packages ()))
 
   let register_plugin_rule () =
     rule "bap: cmxs & cma & bundle -> plugin"
@@ -182,8 +188,8 @@ module Plugin_rules = struct
       ~deps:["%.bundle"; "%.cmxs"; "%.cma"]
       (fun env _ -> Seq [bundle env; symlink env])
 
-let pass_pp_to_link_phase () =
-  pflag ["ocaml"; "link"] "pp" (fun s -> S [A "-pp"; A s])
+  let pass_pp_to_link_phase () =
+    pflag ["ocaml"; "link"] "pp" (fun s -> S [A "-pp"; A s])
 
   let install () =
     register_cmxs_of_cmxa_rule ();

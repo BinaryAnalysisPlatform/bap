@@ -1,5 +1,7 @@
 open Core_kernel
 open Regular.Std
+open Bap_knowledge
+open Bap_core_theory
 open Bap_common
 open Format
 open Bap_bil
@@ -10,6 +12,7 @@ module Size = Bap_size
 
 type binop = exp -> exp -> exp
 type unop = exp -> exp
+
 
 module PP = struct
   open Bap_bil
@@ -56,21 +59,25 @@ module PP = struct
   type precendence = int
 
   let op_prec op = Binop.(match op with
-    | TIMES | DIVIDE | SDIVIDE | MOD| SMOD -> 8
-    | PLUS | MINUS -> 7
-    | LSHIFT | RSHIFT | ARSHIFT -> 6
-    | LT|LE|SLT|SLE -> 5
-    | EQ|NEQ -> 4
-    | AND -> 3
-    | XOR -> 2
-    | OR -> 1)
+      | TIMES | DIVIDE | SDIVIDE | MOD| SMOD -> 8
+      | PLUS | MINUS -> 7
+      | LSHIFT | RSHIFT | ARSHIFT -> 6
+      | LT|LE|SLT|SLE -> 5
+      | EQ|NEQ -> 4
+      | AND -> 3
+      | XOR -> 2
+      | OR -> 1)
 
   let prec x = Exp.(match x with
-    | Var _ | Int _ | Unknown _ -> 10
-    | Load _ | Cast _ | Extract _ -> 10
-    | UnOp _ -> 9
-    | BinOp (op,x,y) -> op_prec op
-    | Store _ | Let _ | Ite _ | Concat _ -> 0)
+      | Var _ | Int _ | Unknown _ -> 10
+      | Load _ | Cast _ | Extract _ -> 10
+      | UnOp _ -> 9
+      | BinOp (op,_,_) -> op_prec op
+      | Store _ | Let _ | Ite _ | Concat _ -> 0)
+
+  let msb x =
+    let m = Bitvec.modulus (Word.bitwidth x) in
+    Bitvec.(msb (Word.to_bitvec x) mod m)
 
   let rec pp fmt exp =
     let open Bap_bil.Exp in
@@ -88,7 +95,7 @@ module PP = struct
       pr "%a[%a]" pp mem pp idx
     | Load (mem, idx, edn, s) ->
       pr "%a[%a, %a]:%a" pp mem pp idx pp_edn edn Bap_size.pp s
-    | Store (mem, idx, exp, edn, `r8) ->
+    | Store (mem, idx, exp, _, `r8) ->
       pr "@[<4>%a@;with [%a] <- %a@]"
         pp mem pp idx pp exp
     | Store (mem, idx, exp, edn, s) ->
@@ -106,6 +113,8 @@ module PP = struct
       pr ("%a" ^^ pfmt p e) pp_unop Unop.NOT pp e
     | BinOp (EQ,Int x, e) as p when is_b0 x ->
       pr ("%a" ^^ pfmt p e) pp_unop Unop.NOT pp e
+    | BinOp (PLUS,le,(Int x as re)) as p when msb x ->
+      pr (pfmt p le ^^ " - " ^^ pfmt p re) pp le Word.pp (Word.neg x)
     | BinOp (op, le, re) as p ->
       pr (pfmt p le ^^ " %a " ^^ pfmt p re) pp le pp_binop op pp re
     | UnOp (op, exp) as p ->
@@ -232,6 +241,21 @@ module Infix = struct
   let ( ^ )    a b   = concat a b
 end
 
+
+
+let equal x y = phys_equal x y || compare x y = 0
+let to_string = Format.asprintf "%a" PP.pp
+let domain = Knowledge.Domain.flat "exp" ~equal
+    ~empty:(Unknown ("empty",Unk))
+    ~inspect:(fun exp -> Sexp.Atom (to_string exp))
+
+let persistent = Knowledge.Persistent.of_binable (module struct
+    type t = Bap_bil.exp [@@deriving bin_io]
+  end)
+
+let slot = Knowledge.Class.property ~package:"bap.std"
+    ~persistent Theory.Value.cls  "exp" domain
+    ~desc:"semantics of expressions in BIL"
 
 include Regular.Make(struct
     type t = Bap_bil.exp [@@deriving bin_io, compare, sexp]

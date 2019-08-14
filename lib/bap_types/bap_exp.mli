@@ -1,6 +1,8 @@
 (** Extends [exp] interface.  *)
 open Core_kernel
+open Bap_core_theory
 open Regular.Std
+open Bap_knowledge
 open Bap_common
 open Bap_bil
 open Format
@@ -99,3 +101,5 @@ module Infix : sig
   (** [a ^ b] contatenate [a] and [b]  *)
   val ( ^ )   : exp -> exp -> exp
 end
+
+val slot : (Theory.Value.cls, exp) Knowledge.slot

@@ -1,8 +1,10 @@
 open Core_kernel
+open Bap_core_theory
 open Regular.Std
 open Bap_types.Std
 open Or_error
 open Image_common
+
 
 type 'a or_error = 'a Or_error.t
 
@@ -19,7 +21,7 @@ type t = {
   addr : addr;
   off  : int;
   size : int;
-}
+} [@@deriving bin_io]
 
 module Repr = struct
   type t = {
@@ -37,7 +39,11 @@ let to_repr mem = {
   Repr.size   = mem.size;
 }
 
-let sexp_of_t mem = Repr.sexp_of_t (to_repr mem)
+let sexp_of_t mem = Sexp.List [
+    Atom (Addr.string_of_value mem.addr);
+    sexp_of_int  mem.size;
+    sexp_of_endian mem.endian;
+  ]
 
 let endian t = t.endian
 
@@ -430,3 +436,12 @@ include Printable.Make(struct
   end)
 
 let hexdump t = Format.asprintf "%a" pp_hex t
+
+
+let domain = KB.Domain.optional ~inspect:sexp_of_t "mem"
+    ~equal:(fun x y ->
+        Addr.equal x.addr y.addr &&
+        Int.equal x.size y.size)
+
+let slot = KB.Class.property ~package:"bap.std"
+    Theory.Program.cls "mem" domain

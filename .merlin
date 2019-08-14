@@ -13,6 +13,9 @@ B _build
 B _build/lib/bap
 B _build/lib/bap_abi
 B _build/lib/bap_api
+B _build/lib/bitvec
+B _build/lib/bitvec_order
+B _build/lib/bitvec_sexp
 B _build/lib/bap_bundle
 B _build/lib/bap_c
 B _build/lib/bap_config
@@ -24,6 +27,7 @@ B _build/lib/bap_image
 B _build/lib/bap_plugins
 B _build/lib/bap_sema
 B _build/lib/bap_types
+B _build/lib/bap_core_theory
 B _build/lib/graphlib
 B _build/lib/monads
 B _build/lib/ogre
@@ -31,6 +35,7 @@ B _build/lib/bap_primus
 B _build/lib/bap_llvm
 B _build/lib/regular
 B _build/lib/text_tags
+B _build/lib/knowledge
 
 S lib/bap
 S lib/bap_abi

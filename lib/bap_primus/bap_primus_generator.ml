@@ -156,4 +156,13 @@ module Make(Machine : Machine) = struct
         Machine.current () >>= fun id ->
         call key (init (Machine.Id.hash id))
       | Some iter -> call key iter
+
+  let word gen width =
+    let word = Word.of_int ~width:8 in
+    assert (width > 0);
+    let rec loop x =
+      if Word.bitwidth x >= width
+      then Machine.return (Word.extract_exn ~hi:(width-1) x)
+      else next gen >>= fun y -> loop (Word.concat x (word y)) in
+    next gen >>| word >>= loop
 end

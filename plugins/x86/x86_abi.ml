@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel.Std
 open Bap.Std
 open Bap_c.Std
 open Bap_future.Std
@@ -226,7 +226,6 @@ let dispatch default sub attrs proto =
 let demangle demangle prog =
   Term.map sub_t prog ~f:(fun sub ->
       let name = demangle (Sub.name sub) in
-      Tid.set_name (Term.tid sub) name;
       Sub.with_name sub name)
 
 let setup ?(abi=fun _ -> None) () =

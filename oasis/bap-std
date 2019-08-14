@@ -16,7 +16,12 @@ Library bap
                    bap.types,
                    bap-future,
                    cmdliner,
-                   regular
+                   bap-knowledge,
+                   bap-core-theory,
+                   graphlib,
+                   regular,
+                   core_kernel,
+                   ppx_jane
   Modules:         Bap
   InternalModules: Bap_event, Bap_log, Bap_project, Bap_self
 
@@ -27,7 +32,15 @@ Library types
   FindlibParent:   bap
   FindlibName:     types
   CompiledObject:  best
-  BuildDepends:    monads, zarith, uuidm, bap.config, regular, graphlib, ogre
+  BuildDepends:    monads, zarith,
+                   bitvec,
+                   uuidm,
+                   bap.config,
+                   regular,
+                   graphlib,
+                   ogre,
+                   bap-knowledge,
+                   bap-core-theory
 
   InternalModules:
                    Bap_addr,
@@ -63,8 +76,8 @@ Library types
                    Bap_ogre,
                    Bap_result,
                    Bap_size,
-                   Bap_state,
                    Bap_stmt,
+                   Bap_toplevel,
                    Bap_trie,
                    Bap_trie_intf,
                    Bap_type,
@@ -109,6 +122,8 @@ Library disasm
                  Bap_disasm_basic,
                  Bap_disasm_block,
                  Bap_disasm_brancher,
+                 Bap_disasm_calls,
+                 Bap_disasm_driver,
                  Bap_disasm_insn,
                  Bap_disasm_linear_sweep,
                  Bap_disasm_prim,
@@ -190,7 +205,7 @@ Library bundle
   Path:          lib/bap_bundle
   FindlibParent: bap
   FindlibName:   bundle
-  BuildDepends:  uri, camlzip, unix, bap.config
+  BuildDepends:  uri, camlzip, unix, bap.config, core_kernel, ppx_jane
   Modules:       Bap_bundle
 
 
@@ -200,7 +215,7 @@ Executable "bapbuild"
   MainIs:         bapbuild.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   core_kernel, ocamlbuild, bap-build, compiler-libs
+  BuildDepends:   core_kernel, ocamlbuild, bap-build, compiler-libs, ppx_jane
 
 Executable "bapbundle"
   Build$:          flag(everything) || flag(bap_std)

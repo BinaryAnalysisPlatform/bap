@@ -40,47 +40,47 @@ module Monad = struct
 
 
     module Lift = struct
-      let nullary = return
-      let unary f a = a >>| f
-      let binary f a b = a >>= fun a -> b >>| fun b -> f a b
-      let ternary f a b c = a >>= fun a -> b >>= fun b -> c >>| fun c -> f a b c
-      let quaternary f a b c d =
-        a >>= fun a -> b >>= fun b -> c >>= fun c -> d >>| fun d ->
-        f a b c d
-      let quinary f a b c d e =
-        a >>= fun a -> b >>= fun b -> c >>= fun c -> d >>= fun d -> e >>| fun e ->
-        f a b c d e
+      let nullary x = return x [@@inline]
+    let unary f a = a >>| f [@@inline]
+    let binary f a b = a >>= fun a -> b >>| fun b -> f a b [@@inline]
+    let ternary f a b c = a >>= fun a -> b >>= fun b -> c >>| fun c -> f a b c
+    let quaternary f a b c d =
+      a >>= fun a -> b >>= fun b -> c >>= fun c -> d >>| fun d ->
+      f a b c d
+    let quinary f a b c d e =
+      a >>= fun a -> b >>= fun b -> c >>= fun c -> d >>= fun d -> e >>| fun e ->
+      f a b c d e
 
-      module Syntax = struct
-        let (!!) = nullary
-        let (!$) = unary
-        let (!$$) = binary
-        let (!$$$) = ternary
-        let (!$$$$) = quaternary
-        let (!$$$$$) = quinary
-      end
+    module Syntax = struct
+      let (!!) x = nullary x [@@inline]
+    let (!$) = unary
+    let (!$$) = binary
+    let (!$$$) = ternary
+    let (!$$$$) = quaternary
+    let (!$$$$$) = quinary
+    end
     end
 
     open Lift.Syntax
 
     module Fn = struct
-      let id = return
-      let nothing = return
-      let ignore m = m >>| ignore
-      let non f x = f x >>| not
-      let apply_n_times ~n f x =
-        let rec loop n x =
-          if n <= 0 then return x
-          else f x >>= loop (n-1) in
-        loop n x
+      let id x = return x [@@inline]
+    let nothing x = return x [@@inline]
+    let ignore m = m >>| ignore [@@inline]
+    let non f x = f x >>| not [@@inline]
+    let apply_n_times ~n f x =
+      let rec loop n x =
+        if n <= 0 then return x
+        else f x >>= loop (n-1) in
+      loop n x
 
-      let compose f g x = g x >>= f
+    let compose f g x = g x >>= f [@@inline]
     end
 
     module Syntax = struct
       include Monad_infix
       include Lift.Syntax
-      let (>=>) g f = Fn.compose f g
+      let (>=>) g f = Fn.compose f g [@@inline]
     end
     open Syntax
 
@@ -224,9 +224,7 @@ module Monad = struct
         module Base = Eager_base(B)
         include Make(Base)
       end
-
     end
-
 
     module List = Collection.Delay(struct
         type 'a t = 'a list
@@ -244,9 +242,9 @@ module Monad = struct
         type 'a t = 'a Sequence.t
         let fold xs ~init ~f finish =
           Sequence.delayed_fold xs ~init ~f:(fun a x ~k ->
-            f a x k) ~finish
-        let zero () = Sequence.empty
-        let return = Sequence.return
+              f a x k) ~finish
+        let zero () = Sequence.empty [@@inline]
+        let return x = Sequence.return x [@@inline]
         let plus = Sequence.append
       end)
 
@@ -288,7 +286,7 @@ module Monad = struct
      Since, the code doesn't contain any implementation (just
      renaming) it can be considered OK.
 
- *)
+  *)
   module Core(M : Core) = struct
     type 'a t = 'a M.t
     include Make(struct
@@ -307,7 +305,7 @@ module Monad = struct
      monad representation to our maximal. We will not erase types
      from the resulting structure, as this functor is expected to
      be used as a type caster, e.g. [Monad.State.Make(Monad.Minimal(M)]
- *)
+  *)
   module Minimal( M : Minimal) = struct
     type 'a t = 'a M.t
     include Make(struct
@@ -411,7 +409,7 @@ module Ident
         type 'a t = 'a Sequence.t
         let fold xs ~init ~f finish =
           Sequence.delayed_fold xs ~init ~f:(fun a x ~k ->
-            f a x k) ~finish
+              f a x k) ~finish
         let zero () = Sequence.empty
         let return = Sequence.return
         let plus = Sequence.append
@@ -424,15 +422,15 @@ module Ident
   end
 
   module Syntax = struct
-    let (>>=) x f = x |> f
-    let (>>|) x f = x |> f
-    let (>=>) f g x = g (f x)
-    let (!!) = ident
-    let (!$) = ident
-    let (!$$) = ident
-    let (!$$$) = ident
-    let (!$$$$) = ident
-    let (!$$$$$) = ident
+    let (>>=) x f = x |> f [@@inline]
+  let (>>|) x f = x |> f [@@inline]
+  let (>=>) f g x = g (f x) [@@inline]
+  let (!!) = ident
+  let (!$) = ident
+  let (!$$) = ident
+  let (!$$$) = ident
+  let (!$$$$) = ident
+  let (!$$$$$) = ident
   end
 
   module Let_syntax = struct
@@ -488,7 +486,14 @@ module OptionT = struct
       let bind m f = M.bind m (function
           | Some r -> f r
           | None -> M.return None)
-      let map = `Define_using_bind
+      [@@inline]
+
+      let map m ~f = M.bind m (function
+          | Some r -> M.return (Some (f r))
+          | None -> M.return None)
+      [@@inline]
+
+      let map = `Custom map
     end
     type 'a error = unit
     let fail () = M.return None
@@ -516,11 +521,11 @@ module OptionT = struct
     : S with type 'a m := 'a T1(M).m
          and type 'a t := 'a T1(M).t
          and type 'a e := 'a T1(M).e
-  = Make2(struct
-    type ('a,'e) t = 'a M.t
-    type 'a error = unit
-    include (M : Monad.S with type 'a t := 'a M.t)
-  end)
+    = Make2(struct
+      type ('a,'e) t = 'a M.t
+      type 'a error = unit
+      include (M : Monad.S with type 'a t := 'a M.t)
+    end)
 
   include T1(Ident)
   include Make(Ident)
@@ -550,13 +555,19 @@ module ResultT = struct
      and type ('a,'e) e := ('a,'e) Tp(T)(M).e
      and type 'a error = 'a Tp(T)(M).error
   = struct
-    open M.Syntax
+
+    include struct
+      let (>>=) m f = (M.bind [@inlined]) m f [@@inline]
+    let (>>|) m f = (M.map [@inlined]) m f [@@inline]
+    end
+
     module Base = struct
       include Tp(T)(M)
       let return x = M.return (Ok x)
       let bind m f  : ('a,'e) t = m >>= function
         | Ok r -> f r
         | Error err -> M.return (Error err)
+      [@@inline]
 
       let fail err = M.return (Error err)
       let run = ident
@@ -565,8 +576,11 @@ module ResultT = struct
         | other -> M.return other
 
       let lift m = m >>| fun x -> Ok x
-      let map = `Define_using_bind
-
+      let map' m ~f = m >>= function
+        | Ok r -> return (f r)
+        | Error err -> M.return (Error err)
+      [@@inline]
+      let map = `Custom map'
     end
     include Base
     include Monad.Make2(Base)
@@ -590,10 +604,10 @@ module ResultT = struct
      and type 'a m := 'a T1(T)(M).m
      and type 'a e := 'a T1(T)(M).e
      and type err := T.t
-    = struct
-      type err = T.t
-      include Makep(struct type 'a t = T.t end)(M)
-    end
+  = struct
+    type err = T.t
+    include Makep(struct type 'a t = T.t end)(M)
+  end
 
   module Make2(M : Monad.S) : S2
     with type ('a,'e) t := ('a,'e) T2(M).t
@@ -617,20 +631,20 @@ module ResultT = struct
        and type 'a m := 'a T(M).m
        and type 'a e := 'a T(M).e
        and type err := Error.t
-      = struct
-        include Make(struct type t = Error.t end)(M)
+    = struct
+      include Make(struct type t = Error.t end)(M)
 
-        let failf fmt =
-          let open Caml.Format in
-          let buf = Buffer.create 512 in
-          let ppf = formatter_of_buffer buf in
-          let kon ppf () =
-            pp_print_flush ppf ();
-            let err = Or_error.error_string (Buffer.contents buf) in
-            M.return err in
-          kfprintf kon ppf fmt
+      let failf fmt =
+        let open Caml.Format in
+        let buf = Buffer.create 512 in
+        let ppf = formatter_of_buffer buf in
+        let kon ppf () =
+          pp_print_flush ppf ();
+          let err = Or_error.error_string (Buffer.contents buf) in
+          M.return err in
+        kfprintf kon ppf fmt
 
-      end
+    end
     type 'a t = 'a Or_error.t
     type 'a m = 'a
     type 'a e = 'a Or_error.t
@@ -659,11 +673,11 @@ module ResultT = struct
     with type ('a,'e) t = ('a,'e) result
      and type 'a m = 'a
      and type ('a,'e) e = ('a,'e) result
-    = struct
-      include T2(Ident)
-      include Make2(Ident)
-    end
-    include Self
+  = struct
+    include T2(Ident)
+    include Make2(Ident)
+  end
+  include Self
 end
 
 module ListT = struct
@@ -758,7 +772,7 @@ module Seq = struct
       let bind xsm f = xsm >>= fun xs ->
         Sequence.fold xs ~init:(!!Sequence.empty) ~f:(fun ysm x ->
             ysm >>= fun ys -> f x >>| fun xs ->
-             Sequence.append xs ys)
+            Sequence.append xs ys)
       let map xsm ~f = xsm >>| Sequence.map ~f
       let map = `Custom map
     end
@@ -780,9 +794,9 @@ module Seq = struct
   end
 
   module Make(M : Monad.S)
-      : S with type 'a m := 'a T1(M).m
-           and type 'a t := 'a T1(M).t
-           and type 'a e := 'a T1(M).e
+    : S with type 'a m := 'a T1(M).m
+         and type 'a t := 'a T1(M).t
+         and type 'a e := 'a T1(M).e
     = Make2(struct
       type ('a,'e) t = 'a M.t
       include (M : Monad.S with type 'a t := 'a M.t)
@@ -840,7 +854,7 @@ module Writer = struct
 
     let returnw x = M.return @@ writer x
     let write x = M.return @@  writer ((), x)
-    let read m = m >>= fun (Writer (x,e)) -> returnw (e,e)
+    let read m = m >>= fun (Writer (_,e)) -> returnw (e,e)
     let listen m = m >>= fun (Writer (x,e)) ->  returnw ((x,e),e)
     let run m = m >>| fun (Writer (x,e)) -> (x,e)
     let exec m = m >>| fun (Writer ((),e)) -> e
@@ -898,7 +912,7 @@ module Reader = struct
       let bind m f = reader @@ fun s -> m => s >>= fun x -> f x => s
       let map m ~f = reader @@ fun s -> m => s >>| f
       let read () = reader @@ fun s -> M.return s
-      let lift m  = reader @@ fun s -> m
+      let lift m  = reader @@ fun _ -> m
       let run m s = m => s
       let map = `Custom map
     end
@@ -966,7 +980,7 @@ module State = struct
     s : 'b;
   }
 
-  type ('a,'e) state = State of ('e -> 'a)
+  type ('a,'e) state = State of ('e -> 'a) [@@unboxed]
 
 
   module Tp(T : T1)(M : Monad.S) = struct
@@ -982,28 +996,31 @@ module State = struct
      and type ('a,'e) e := ('a,'e) Tp(T)(M).e
      and type 'a env   := 'a Tp(T)(M).env
   = struct
-    open M.Monad_infix
-    let make run = State run
-    let (=>) (State run) x = run x
+    include struct
+      let (>>=) m f = (M.bind [@inlined]) m f [@@inline]
+    let (>>|) m f = (M.map [@inlined]) m f [@@inline]
+    end
+
+    let make run = State run [@@inline]
+    let (=>) (State run) x = run x [@@inline]
     type 'a result = 'a M.t
     module Basic = struct
       include Tp(T)(M)
-      let return x = make @@ fun s -> M.return {x;s}
-      let bind m f = make @@ fun s -> m=>s >>= fun {x;s} -> f x => s
-      let map m ~f = make @@ fun s -> m=>s >>| fun {x;s} -> {x=f x;s}
+      let return x = (make [@inlined]) @@ fun s -> (M.return [@inlined]) {x;s} [@@inline]
+      let bind m f = make @@ fun s -> m=>s >>= fun {x;s} -> f x => s [@@inline]
+      let map m ~f = make @@ fun s -> m=>s >>| fun {x;s} -> {x=f x;s} [@@inline]
       let map = `Custom map
     end
-    let put s    = make @@ fun _ -> M.return {x=();s}
-    let get ()   = make @@ fun s -> M.return {x=s;s}
-    let gets f   = make @@ fun s -> M.return {x=f s;s}
-    let update f = make @@ fun s -> M.return {x=();s = f s}
+    let put s    = make @@ fun _ -> M.return {x=();s} [@@inline]
+    let get ()   = make @@ fun s -> M.return {x=s;s} [@@inline]
+    let gets f   = make @@ fun s -> M.return {x=f s;s} [@@inline]
+    let update f = make @@ fun s -> M.return {x=();s = f s} [@@inline]
     let modify m f =
-      make @@ fun s -> m=>s >>= fun {x;s} -> M.return {x; s = f s}
+      make @@ fun s -> m=>s >>= fun {x;s} -> M.return {x; s = f s} [@@inline]
     let run m s = M.(m => s >>| fun {x;s} -> (x,s))
     let eval m s = M.(run m s >>| fst)
     let exec m s = M.(run m s >>| snd)
-    let lift m = make @@ fun s ->
-      M.bind m (fun x -> M.return {x;s})
+    let lift m = make @@ fun s -> M.bind m (fun x -> M.return {x;s}) [@@inline]
     include Basic
     include Monad.Make2(Basic)
   end
@@ -1214,7 +1231,7 @@ module State = struct
 
 
       let run m = fun ctxt -> M.bind (SM.run m (init ctxt)) ~f:(fun (x,cs) ->
-        M.return (x,cs.init))
+          M.return (x,cs.init))
 
       include Monad.Make2(struct
           type nonrec ('a,'e) t = ('a,'e) t
@@ -1357,13 +1374,13 @@ module LazyT = struct
     with type 'a t = 'a Lazy.t
      and type 'a m = 'a
      and type 'a e = 'a
-    = struct
-      type 'a t = 'a Lazy.t
-      type 'a m = 'a
-      type 'a e = 'a
-      include Make(Ident)
-    end
-    include Self
+  = struct
+    type 'a t = 'a Lazy.t
+    type 'a m = 'a
+    type 'a e = 'a
+    include Make(Ident)
+  end
+  include Self
 end
 
 module Cont = struct
@@ -1446,90 +1463,13 @@ module Cont = struct
     S2 with type ('a,'e) t = ('a,'e) cont
         and type 'a m = 'a
         and type ('a,'e) e = (('a -> 'e) -> 'e)
-    = struct
-      type ('a,'e) t = ('a,'e) T(Ident).t
-      type 'a m = 'a
-      type ('a,'e) e = ('a -> 'e) -> 'e
-      include Make2(Ident)
-    end
+  = struct
+    type ('a,'e) t = ('a,'e) T(Ident).t
+    type 'a m = 'a
+    type ('a,'e) e = ('a -> 'e) -> 'e
+    include Make2(Ident)
+  end
   include Self
-end
-
-module T = struct
-  module Option = struct
-    module Make(M : Monad.S) = struct
-      type 'a t = 'a option M.t
-      include Monad.Make(struct
-          type nonrec 'a t = 'a t
-          let return x : 'a t = Option.return x |> M.return
-          let bind m f : 'b t  = M.bind m (function
-              | Some r -> f r
-              | None -> M.return None)
-          let map = `Define_using_bind
-        end)
-      let lift (m : 'a option) : 'a t = M.return m
-    end
-    module Make2(M : Monad.S2) = struct
-      type ('a,'b) t = ('a option,'b) M.t
-      include Monad.Make2(struct
-          type nonrec ('a,'b) t = ('a,'b) t
-          let return x  = Option.return x |> M.return
-          let bind m f   = M.bind m (function
-              | Some r -> f r
-              | None -> M.return None)
-          let map = `Define_using_bind
-        end)
-      let lift (m : 'a option) : ('a,'b) t = M.return m
-    end
-  end
-
-
-  module Or_error = struct
-    module Make(M : Monad.S) = struct
-      type 'a t = 'a Or_error.t M.t
-      include Monad.Make(struct
-          type nonrec 'a t = 'a t
-          let return x = Or_error.return x |> M.return
-          let bind m f = M.bind m (function
-              | Ok r -> f r
-              | Error err -> M.return (Error err))
-          let map = `Define_using_bind
-        end)
-      let lift m = M.return m
-    end
-    module Make2(M : Monad.S2) = struct
-      type ('a,'b) t = ('a Or_error.t,'b) M.t
-      include Monad.Make2(struct
-          type nonrec ('a,'b) t = ('a,'b) t
-          let return x = Or_error.return x |> M.return
-          let bind m f = M.bind m (function
-              | Ok r -> f r
-              | Error err -> M.return (Error err))
-          let map = `Define_using_bind
-        end)
-      let lift m = M.return m
-    end
-  end
-
-
-  module Result = struct
-    module Make(M : Monad.S) = struct
-      type ('a,'e) t = ('a,'e) Result.t M.t
-      include Monad.Make2(struct
-          type nonrec ('a,'e) t = ('a,'e) t
-          let return x = Result.return x |> M.return
-          let bind m f = M.bind m (function
-              | Ok r -> f r
-              | Error err -> M.return (Error err))
-          let map = `Define_using_bind
-        end)
-      let lift m : ('a,'e) t = M.return m
-    end
-  end
-
-  module State = struct
-    module Make = State
-  end
 end
 
 module Lazy = LazyT

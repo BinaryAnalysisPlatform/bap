@@ -1,10 +1,14 @@
 open Core_kernel
+open Bap_core_theory
 open Regular.Std
 open Bap_types.Std
 open Bap_disasm_types
+open Bap_ir
 
-type t [@@deriving bin_io, compare, sexp]
+type t = Theory.Program.Semantics.t [@@deriving bin_io, compare, sexp]
 type op = Op.t [@@deriving bin_io, compare, sexp]
+
+val empty : t
 
 val of_basic : ?bil:bil -> Basic.full_insn -> t
 
@@ -24,6 +28,7 @@ val conditional         : must property
 val indirect            : must property
 val call                : must property
 val return              : must property
+val barrier             : must property
 val affect_control_flow : may  property
 val load                : may  property
 val store               : may  property
@@ -34,6 +39,17 @@ val must    : must property -> t -> t
 val mustn't : must property -> t -> t
 val should    : may  property -> t -> t
 val shouldn't : may  property -> t -> t
+
+
+module Slot : sig
+  type 'a t = (Theory.Effect.cls, 'a) KB.slot
+  val name : string t
+  val asm :  string t
+  val ops :  op array option t
+  val delay : int option t
+  val dests : Set.M(Theory.Label).t option t
+end
+
 
 val pp_adt : Format.formatter -> t -> unit
 module Trie : sig

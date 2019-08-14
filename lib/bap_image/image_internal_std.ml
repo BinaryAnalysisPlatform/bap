@@ -10,7 +10,7 @@ module Backend = Image_backend
 type backend = Backend.t
 
 module Memory = Bap_memory
-type mem = Memory.t [@@deriving sexp_of]
+type mem = Memory.t [@@deriving bin_io, sexp_of]
 
 module Memmap = Bap_memmap
 type 'a memmap = 'a Memmap.t [@@deriving sexp_of]

@@ -3,11 +3,13 @@
 open Core_kernel
 open Bap_types.Std
 open Graphlib.Std
-
+open Bap_knowledge
 open Image_internal_std
 open Bap_disasm_basic
 open Bap_disasm_brancher
 open Bap_disasm_rooter
+
+module Driver = Bap_disasm_driver
 
 type t
 
@@ -33,3 +35,6 @@ val run :
 val cfg : t -> Cfg.t
 
 val errors : t -> error list
+
+val scan : arch -> mem -> Driver.state -> Driver.state knowledge
+val global_cfg : Driver.state -> Cfg.t knowledge

@@ -8,6 +8,7 @@
 open Core_kernel
 open Regular.Std
 open Bap_common
+open Bap_knowledge
 
 (** This module is included into [Bap.Std], you need to open it
     specifically if you're developing inside BAP *)
@@ -15,7 +16,7 @@ module Std = struct
   (** A definition for a regular type, and a handy module,
       that can create regular types out of thin air. *)
   module Integer = Integer
-  module State = Bap_state
+  module Toplevel = Bap_toplevel
   module Trie = struct
     include Bap_trie_intf
     include Bap_trie
@@ -65,6 +66,7 @@ module Std = struct
       type typ = Type.t =
         | Imm of int
         | Mem of addr_size * size
+        | Unk
       [@@deriving bin_io, compare, sexp]
       include Bap_bil.Cast
       include Bap_bil.Binop
@@ -98,6 +100,10 @@ module Std = struct
     include Bap_bil_pass
     module Pass = Bap_bil_pass.Pass_pp
     include Bap_bil_optimizations
+
+    let slot = Bap_stmt.slot
+    let domain = Bap_stmt.domain
+    let persistent = Bap_stmt.persistent
   end
 
   (** Types of BIL expressions  *)
@@ -140,6 +146,7 @@ module Std = struct
     let eval = Bap_expi.eval
     let simpl = Bap_helpers.Simpl.exp
     let pp_adt = Bap_bil_adt.pp_exp
+    let slot = Bap_exp.slot
   end
 
   (** [Regular] interface for BIL statements  *)
@@ -238,7 +245,6 @@ module Std = struct
   type 'a seq = 'a Seq.t [@@deriving bin_io, compare, sexp]
 
   module Callgraph = Bap_ir_callgraph
-
 
 
 end

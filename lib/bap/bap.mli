@@ -5,6 +5,8 @@ open Monads.Std
 open Regular.Std
 open Graphlib.Std
 open Bap_future.Std
+open Bap_knowledge
+open Bap_core_theory
 
 module Std : sig
   [@@@warning "-D"]
@@ -154,7 +156,7 @@ module Std : sig
       - hashset is available under [Hash_set] name
       - sexpable and binable interface;
       - [to_string], [str], [pp], [ppo], [pps] functions
-      for pretty-printing.
+        for pretty-printing.
 
       It is a convention, that for each type, there is a module with
       the same name that implements its interface. For example, type
@@ -214,17 +216,17 @@ module Std : sig
       provides interfaces for the memory objects:
 
       - {{!Memory}mem} - a contiguous array of bytes, indexed with
-       absolute addresses;
+        absolute addresses;
 
       - {{!Table} 'a table} - a mapping from a memory regions to
-       arbitrary data (no duplicates or intersections);
+        arbitrary data (no duplicates or intersections);
 
       - {{!Memmap}a memmap} - a mapping from memory region to
         arbitrary data with duplicates and intersections allowed, aka
         segment tree or interval map;
 
       - {{!Image}image} - represents a binary object with all its
-       symbols, segments, sections and other meta information.
+        symbols, segments, sections and other meta information.
 
       The [Image] module uses the plugin system to load binary
       objects. In order to add new loader, one should implement the
@@ -237,10 +239,10 @@ module Std : sig
       are provided:
 
       - {{!Disasm}Disasm} - a regular interface that hides all
-       complexities, but may not always be very flexible.
+        complexities, but may not always be very flexible.
       - {{!Disasm_expert}Disasm_expert} - an expert interface that
-      provides access to a low-level representation. It is very
-      flexible and fast, but harder to use.
+        provides access to a low-level representation. It is very
+        flexible and fast, but harder to use.
 
       To disassemble files or data with the regular interface, use
       one of the following functions:
@@ -487,17 +489,18 @@ module Std : sig
       By default the memory is annotated with the following attributes:
 
       - {{!Image.section}section} -- for regions of memory that had a
-      particular name in the original binary. For example, in ELF,
-      sections have names that annotate a corresponding memory
-      region. If project was created from memory object, then the
-      overall memory will be marked as a ["bap.user"] section.
+        particular name in the original binary. For example, in ELF,
+        sections have names that annotate a corresponding memory
+        region. If project was created from memory object, then the
+        overall memory will be marked as a ["bap.user"] section.
 
       - {{!Image.segment}segment} -- if the binary data was loaded
-      from a binary format that contains segments, then the
-      corresponding memory regions are be marked. Segments provide
-      access to permission information.  *)
+        from a binary format that contains segments, then the
+        corresponding memory regions are be marked. Segments provide
+        access to permission information.  *)
 
   (** {1:api BAP API}  *)
+
 
   (** Abstract integral type.
 
@@ -1011,7 +1014,7 @@ module Std : sig
     ] [@@deriving variants]
 
     type 'a p = 'a constraint 'a = [< all]
-      [@@deriving bin_io, compare, sexp]
+    [@@deriving bin_io, compare, sexp]
 
     type t = all p
     [@@deriving bin_io, compare, sexp]
@@ -1185,6 +1188,10 @@ module Std : sig
 
     (** {2 Constructors} *)
 
+
+    (** [create v w] creates a word from bitvector [v] of width [w].*)
+    val create : Bitvec.t -> int -> t
+
     (** [of_string s] parses a bitvector from a string representation
         defined in section {!bv_string}.    *)
     val of_string : string -> t
@@ -1241,6 +1248,9 @@ module Std : sig
     val of_binary : ?width:int -> endian -> string -> t
 
     (** {2 Conversions to OCaml built in integer types }  *)
+
+    (** [to_bitvec x] returns a Bitvec represenation of [x]  *)
+    val to_bitvec : t -> Bitvec.t
 
     (** [to_int x] projects [x] in to OCaml [int].  *)
     val to_int   : t -> int   Or_error.t
@@ -1438,26 +1448,26 @@ module Std : sig
         none of the nine preinstantiated suits you.
 
         @param prefix defines whether or not a number is prefixed:
-          - [`auto] (default) - a prefix that corresponds to the chosen
+        - [`auto] (default) - a prefix that corresponds to the chosen
             format is printed if it is necessary to disambiguate a
             number from a decimal representation;
-          - [`base] - a corresponding prefix is always printed;
-          - [`none] - the prefix is never printed;
-          - [`this p] - the user specified prefix [p] is always
+        - [`base] - a corresponding prefix is always printed;
+        - [`none] - the prefix is never printed;
+        - [`this p] - the user specified prefix [p] is always
             printed;
 
         @param suffix defines how the suffix should be printed:
-          - [`none] (default) - the suffix is never printed;
-          - [`full] - a full suffix that denotes size and signedness
+        - [`none] (default) - the suffix is never printed;
+        - [`full] - a full suffix that denotes size and signedness
             is printed, e.g., [0xDE:32s] is a signed integer modulo [32].
-          - [`size] - only the modulo is printed, e.g., [0xDE:32s] is
+        - [`size] - only the modulo is printed, e.g., [0xDE:32s] is
             printed as [0xDE:32]
 
         @param format defines the textual representation format:
-          - [hex] (default) - hexadecimal
-          - [dec] - decimal
-          - [oct] - octal
-          - [bin] - binary (0 and 1).
+        - [hex] (default) - hexadecimal
+        - [dec] - decimal
+        - [oct] - octal
+        - [bin] - binary (0 and 1).
 
         @param case defines the case of hexadecimal letters
     *)
@@ -1712,11 +1722,11 @@ module Std : sig
         Bitvector comes with 4 predefined prefix trees:
 
         - [Trie.Big.Bits] - big endian prefix tree, where each
-        token is a bit, and bitvector is tokenized from msb to lsb.
+          token is a bit, and bitvector is tokenized from msb to lsb.
 
         - [Trie.Big.Byte] - big endian prefix tree, where each token
-        is a byte, and bitvector is tokenized from most significant
-        byte to less significant
+          is a byte, and bitvector is tokenized from most significant
+          byte to less significant
 
         - [Trie.Little.Bits] - is a little endian bit tree.
 
@@ -1747,9 +1757,9 @@ module Std : sig
   (** Shortcut for bitvectors that represent addresses  *)
   module Addr : sig
     include module type of Bitvector
-    with type t = addr
-     and type endian = endian
-     and type comparator_witness = Bitvector.comparator_witness
+      with type t = addr
+       and type endian = endian
+       and type comparator_witness = Bitvector.comparator_witness
 
     (** [memref ?disp ?index ?scale base] mimics a memory reference syntax
         in gas assembler,   [dis(base,index,scale)]
@@ -1855,7 +1865,8 @@ module Std : sig
         | Concat  of exp * exp          (** concatenate two words  *)
       and typ =
         | Imm of int                     (** [Imm n] - n-bit immediate   *)
-        | Mem of addr_size * size        (** [Mem (a,t)] memory with a specified addr_size *)
+        | Mem of addr_size * size        (** [Mem (a,t)] memory with a specifed addr_size *)
+        | Unk
       [@@deriving bin_io, compare, sexp]
 
       type stmt =
@@ -1885,6 +1896,10 @@ module Std : sig
 
     include Printable.S with type t := t
     include Data.S      with type t := t
+
+    val domain : stmt list Knowledge.domain
+    val persistent : stmt list Knowledge.persistent
+    val slot : (Theory.Program.Semantics.cls, stmt list) Knowledge.slot
 
     (** [printf "%a" pp_binop op] prints a binary operation [op].  *)
     val pp_binop : binop printer
@@ -2470,7 +2485,6 @@ module Std : sig
   type exp   = Bil.exp     [@@deriving bin_io, compare, sexp]
   type stmt  = Bil.stmt    [@@deriving bin_io, compare, sexp]
   type unop  = Bil.unop    [@@deriving bin_io, compare, sexp]
-
   (** The type of a BIL expression.
 
       Each BIL expression is either an immediate value of a given
@@ -2492,6 +2506,7 @@ module Std : sig
     type t = Bil.typ =
       | Imm of int
       | Mem of addr_size * size
+      | Unk
     [@@deriving variants]
 
     (** type error   *)
@@ -2630,6 +2645,10 @@ module Std : sig
   module Var : sig
 
     type t = var
+
+    val reify : 'a Theory.var -> t
+    val ident : t -> Theory.Var.ident
+    val sort  : t -> Theory.Value.Sort.Top.t
 
     (** [create ?register ?fresh name typ] creates a variable with
         a given [name] and [typ]e.
@@ -3137,7 +3156,7 @@ module Std : sig
 
   (** BIL {{!Bili}interpreter}
       @deprecated Use the Primus Framework
-   *)
+  *)
   class ['a] bili : ['a] Bili.t
   [@@deprecated "[since 2018-03] in favor of the Primus Framework"]
 
@@ -3150,13 +3169,13 @@ module Std : sig
       following sorts of effects:
 
       - coeffects - a value of an expression depends on the outside
-      world, that is further subdivided by the read effect, when an
-      expression reads a CPU register, and the load effect, when an
-      expression an expression accesses the memory.
+        world, that is further subdivided by the read effect, when an
+        expression reads a CPU register, and the load effect, when an
+        expression an expression accesses the memory.
 
       - effects - a value modifies the state of the world, by either
-      storing a value in the memory, or by raising a CPU exception
-      via the division by zero or accessing the memory.
+        storing a value in the memory, or by raising a CPU exception
+        via the division by zero or accessing the memory.
 
       An expression that doesn't have effects or coeffects is
       idempotent and can be moved arbitrary in a tree, removed or
@@ -3234,6 +3253,8 @@ module Std : sig
   (** [Regular] interface for BIL expressions *)
   module Exp : sig
     type t = Bil.exp
+
+    val slot : (Theory.Value.cls, exp) KB.slot
 
     (** All visitors provide some information about the current
         position of the visitor *)
@@ -3448,38 +3469,38 @@ module Std : sig
         The following code simplification are applied:
 
         - constant folding: if an expression can be computed
-        statically then it is substituted with the result of
-        computation, e.g., [1 + 2 -> 3]
+          statically then it is substituted with the result of
+          computation, e.g., [1 + 2 -> 3]
 
         - neutral element elimination: binary operations with one of
-        the operands being known to be neutral, are substituted with
-        the other operand, e.g., [x * 1 -> x]
+          the operands being known to be neutral, are substituted with
+          the other operand, e.g., [x * 1 -> x]
 
         - zero element propagation: binary operations applied to a
-        zero element are substituted with the zero element, e.g.,
-        [x * 0 -> 0]
+          zero element are substituted with the zero element, e.g.,
+          [x * 0 -> 0]
 
         - symbolic equality reduction: if both branches of a
-        comparison are syntactically equal then the comparison is
-        reduced to a boolean constant, e.g., [a = a -> true],
-        [a < a -> false]. Note, by default a read from a register is
-        considered as a (co)effect, hence the above transformations
-        wouldn't be applied, consider passing [~ignore:[Eff.reads]]
-        if you want such expressions to be reduced.
+          comparison are syntactically equal then the comparison is
+          reduced to a boolean constant, e.g., [a = a -> true],
+          [a < a -> false]. Note, by default a read from a register is
+          considered as a (co)effect, hence the above transformations
+          wouldn't be applied, consider passing [~ignore:[Eff.reads]]
+          if you want such expressions to be reduced.
 
         - double complement reduction: an odd amount of complement
-        operations (one and two) are reduced to one complement of
-        the same sort, e.g., [~~~1 -> ~1]
+          operations (one and two) are reduced to one complement of
+          the same sort, e.g., [~~~1 -> ~1]
 
         - binary to unary reduction: reduce a subtraction from zero
-        to the unary negation, e.g., [0 - x -> -x]
+          to the unary negation, e.g., [0 - x -> -x]
 
         - exclusive disjunction reduction: reduces an exclusive
-        disjunction of syntactically equal expressions to zero, e.g,
-        [42 ^ 42 -> 0]. Note, by default a read from a register is
-        considered as a (co)effect, thus [xor eax eax] is not
-        reduced, consider passing [~ignore:[Eff.reads]] if you want
-        such expressions to be reduced.
+          disjunction of syntactically equal expressions to zero, e.g,
+          [42 ^ 42 -> 0]. Note, by default a read from a register is
+          considered as a (co)effect, thus [xor eax eax] is not
+          reduced, consider passing [~ignore:[Eff.reads]] if you want
+          such expressions to be reduced.
 
         @since 1.3
     *)
@@ -3720,14 +3741,14 @@ module Std : sig
         language, where expressions have the following properties:
 
         - Memory load expressions can be only applied to a memory. This
-        effectively disallows creation of temporary memory regions,
-        and requires all store operations to be committed via the
-        assignment operation. Also, this provides a guarantee, that
-        store expressions will not occur in integer assignments, jmp
-        destinations, and conditional expressions, leaving them valid
-        only in an assignment statement where the rhs has type mem_t.
-        This is effectively the same as make the [Load] constructor to
-        have type ([Load (var,exp,endian,size)]).
+          effectively disallows creation of temporary memory regions,
+          and requires all store operations to be committed via the
+          assignment operation. Also, this provides a guarantee, that
+          store expressions will not occur in integer assignments, jmp
+          destinations, and conditional expressions, leaving them valid
+          only in an assignment statement where the rhs has type mem_t.
+          This is effectively the same as make the [Load] constructor to
+          have type ([Load (var,exp,endian,size)]).
 
         - No load or store expressions in the following positions:
           1. the right-hand side of the let expression;
@@ -3739,11 +3760,11 @@ module Std : sig
         puts the following restrictions:
 
         - No let expressions - new variables can be created only with
-        the Move instruction.
+          the Move instruction.
 
         - All memory operations have sizes equal to one byte. Thus the
-        size and endianness can be ignored in analysis. During the
-        normalization, the following rewrites are performed
+          size and endianness can be ignored in analysis. During the
+          normalization, the following rewrites are performed
         {v
        let x = <expr> in ... x ... => ... <expr> ...
        x[a,el]:n => x[a+n-1] @ ... @ x[a]
@@ -3907,6 +3928,8 @@ module Std : sig
 
     (** [endian arch] returns a word endianness of the [arch]  *)
     val endian : t -> endian
+
+    val slot : (Theory.program, t option) Knowledge.slot
 
     (** [arch] type implements [Regular]  interface  *)
     include Regular.S with type t := t
@@ -4123,8 +4146,14 @@ module Std : sig
           The returned value of type [T.t tag] is a special key that
           can be used with [create] and [get] functions to pack and
           unpack values of type [T.t] into [value]. *)
-      val register : name:literal -> uuid:literal ->
+      val register : name:string -> uuid:string ->
         (module S with type t = 'a) -> 'a tag
+
+
+      val register_slot : (Theory.program,'a option) KB.slot ->
+        (module S with type t = 'a) -> 'a tag
+
+      val slot : 'a t -> (Theory.program, 'a option) KB.slot
 
       (** [name cons] returns a name of a constructor.  *)
       val name : 'a t -> string
@@ -4342,7 +4371,7 @@ module Std : sig
   type jmp [@@deriving bin_io, compare, sexp]
   type nil [@@deriving bin_io, compare, sexp]
 
-  type tid [@@deriving bin_io, compare, sexp]
+  type tid = Theory.Label.t [@@deriving bin_io, compare, sexp]
   type call [@@deriving bin_io, compare, sexp]
 
   (** target of control transfer  *)
@@ -4515,7 +4544,7 @@ module Std : sig
 
   (** BIR {{!Biri}interpreter}
       @deprecated Use the Primus Framework
-   *)
+  *)
   class ['a] biri : ['a] Biri.t
   [@@deprecated "[since 2018-03] in favor of the Primus Framework"]
 
@@ -4634,7 +4663,7 @@ module Std : sig
 
         The [data] may not be copied and the returned memory view may
         reference the same bigstring object.
-     *)
+    *)
     val create :
       ?pos:int ->                   (** defaults to [0]  *)
       ?len:int ->                   (** defaults to full length  *)
@@ -4642,6 +4671,7 @@ module Std : sig
       addr ->
       Bigstring.t -> t Or_error.t
 
+    val slot : (Theory.program, mem option) Knowledge.slot
 
     (** [of_file endian start name] creates a memory region from file.
         Takes data stored in a file with the given [name] and maps it
@@ -4686,8 +4716,19 @@ module Std : sig
     (** returns the order of bytes in a word  *)
     val endian : t -> endian
 
-    (** [get word_size mem addr] reads memory value from the specified
-        address. [word_size] default to [`r8] *)
+    (** [get ?disp ?index ?scale ?addr mem] reads a [scale] sized word from [mem].
+
+        Parameters mimic the reference syntax in the gas assembler,
+        e.g., [dis(base,index,scale)] denotes address at [base + index * scale + dis].
+
+        The size of the returned word is equal to [scale], bytes are read in
+        the [endian mem] order.
+
+
+        @param disp is the base offset and defaults to [0]
+        @param index defaults to [0]
+        @param scale defaults to [`r8]
+    *)
     val get : ?disp:int -> ?index:int -> ?scale:size -> ?addr:addr -> t -> word Or_error.t
 
     (** [m^n] dereferences a byte at address [n]  *)
@@ -4931,21 +4972,21 @@ module Std : sig
         summarized below:
 
         - [one_to_many] means that a particular region from table [t1] can
-        span several memory regions from table [t2]. Example: segments
-        to symbols relation.
+          span several memory regions from table [t2]. Example: segments
+          to symbols relation.
 
         - [one_to_one] means that for each value of type ['a] there is
-        exactly one value of type ['b]. This relation should be used with
-        caution, since it is quantified over _all_ values of type
-        ['a]. Indeed, it should be used only for cases, when it can be
-        guaranteed, that it is impossible to create such value of type
-        ['b], that has no correspondence in table [t2]. Otherwise,
-        [one_to_maybe_one] relation should be used. Example: llvm
-        machine code to assembly string relation.
+          exactly one value of type ['b]. This relation should be used with
+          caution, since it is quantified over _all_ values of type
+          ['a]. Indeed, it should be used only for cases, when it can be
+          guaranteed, that it is impossible to create such value of type
+          ['b], that has no correspondence in table [t2]. Otherwise,
+          [one_to_maybe_one] relation should be used. Example: llvm
+          machine code to assembly string relation.
 
         - [one_to_maybe_one] means that for each value in table [t1] there
-        exists at most one value in table [t2]. Example: function to
-        symbol relation.
+          exists at most one value in table [t2]. Example: function to
+          symbol relation.
 
         {3 Examples}
 
@@ -5114,7 +5155,7 @@ module Std : sig
       accessible for loading images.
 
       @deprecated Use new Ogre-powered loader interface
-   *)
+  *)
   module Backend : sig
 
     (** memory access permissions  *)
@@ -5316,9 +5357,9 @@ module Std : sig
         are possible with the following interpretation:
 
         - [Ok None] - a loader doesn't know how handle files of this
-        type.
+          type.
         - [Ok (Some doc)] - a loader was able to obtain some
-        information from the input.
+          information from the input.
 
         - [Error err] - a file was corrupted, according to the loader.
     *)
@@ -5580,8 +5621,8 @@ module Std : sig
   type disasm
 
   (** values of type [insn] represents machine instructions decoded
-      from the a given piece of memory *)
-  type insn [@@deriving bin_io, compare, sexp_of]
+      from a given piece of memory *)
+  type insn = Theory.Program.Semantics.t [@@deriving bin_io, compare, sexp]
 
   (** [block] is a region of memory that is believed to be a basic block
       of control flow graph to the best of our knowledge. *)
@@ -5789,7 +5830,7 @@ module Std : sig
           applies function [f] to it. Once [f] is evaluated the
           disassembler is closed with [close] function.  *)
       val with_disasm :
-        ?debug_level:int -> ?cpu:string -> backend:string -> string ->
+        ?debug_level:int -> ?cpu:string -> ?backend:string -> string ->
         f:((empty, empty) t -> 'a Or_error.t) -> 'a Or_error.t
 
       (** [create ?debug_level ?cpu ~backend target] creates a
@@ -5801,7 +5842,7 @@ module Std : sig
 
           [create ~debug_level:3 ~backend:"llvm" "x86_64" ~f:process]
       *)
-      val create : ?debug_level:int -> ?cpu:string -> backend:string -> string ->
+      val create : ?debug_level:int -> ?cpu:string -> ?backend:string -> string ->
         (empty, empty) t Or_error.t
 
       (** [close d] closes a disassembler [d].   *)
@@ -5931,6 +5972,8 @@ module Std : sig
 
         type ('a,'k) t = ('a,'k) insn
 
+        val slot : (Theory.program, full_insn option) Knowledge.slot
+
         (** [sexp_of_t insn] returns a sexp representation of [insn]  *)
         val sexp_of_t : ('a,'k) t -> Sexp.t
 
@@ -5963,6 +6006,7 @@ module Std : sig
 
         (** [ops insn] gives an access to [insn]'s operands.   *)
         val ops  : ('a,'k) t -> op array
+
       end
 
       (** Trie maps over instructions  *)
@@ -6062,13 +6106,25 @@ module Std : sig
   *)
   module Insn : sig
 
-    type t = insn [@@deriving bin_io, compare, sexp]
+    type t = Theory.Program.Semantics.t [@@deriving bin_io, compare, sexp]
+
+    module Slot : sig
+      type 'a t = (Theory.Program.Semantics.cls, 'a) KB.slot
+      val name : string t
+      val asm :  string t
+      val ops :  op array option t
+      val delay : int option t
+      val dests : Set.M(Theory.Label).t option t
+    end
 
     (** {3 Creating}
         The following functions will create [insn] instances from a lower
         level representation.
     *)
     val of_basic : ?bil:bil -> Disasm_expert.Basic.full_insn -> t
+
+    (** [empty] is an instruction with no known semantics  *)
+    val empty : t
 
     (** returns backend specific name of instruction *)
     val name : t -> string
@@ -6123,6 +6179,9 @@ module Std : sig
 
     (** instruction is a return from a call  *)
     val return              : must property
+
+    (** the instruction has no fall-through  *)
+    val barrier             : must property
 
     (** the instruction may perform a non-regular control flow  *)
     val affect_control_flow : may  property
@@ -6189,7 +6248,7 @@ module Std : sig
 
       The following invariants must be preserved:
       - there is no known jump in the program, that points to an
-      instruction that is not a leader of a basic block;
+        instruction that is not a leader of a basic block;
       - any jump instruction is a terminator of some basic block;
       - each basic block consists of at least one instruction.
   *)
@@ -6421,6 +6480,28 @@ module Std : sig
   (** Disassembled program.
       An interface for diassembling things. *)
   module Disasm : sig
+
+    module Driver : sig
+      type state
+      type insns
+
+      val init : state
+      val scan : mem -> state -> state knowledge
+
+      val explore :
+        ?entry:addr ->
+        ?follow:(addr -> bool knowledge) ->
+        block:(mem -> insns -> 'n knowledge) ->
+        node:('n -> 'c -> 'c knowledge) ->
+        edge:('n -> 'n -> 'c -> 'c knowledge) ->
+        init:'c ->
+        state -> 'c knowledge
+
+      val list_insns : ?rev:bool -> insns -> Theory.Label.t list
+      val execution_order : insns -> Theory.Label.t list knowledge
+    end
+
+
     type t = disasm
 
     (** [create cfg]   *)
@@ -6650,6 +6731,11 @@ module Std : sig
     (** [create ()] creates a fresh newly term identifier  *)
     val create : unit -> t
 
+    val for_name : string -> t
+    val for_addr : addr -> t
+    val for_ivec : int -> t
+
+
     (** [set_name tid name] associates a [name] with a given
         term identifier [tid]. Any previous associations are
         overridden.*)
@@ -6875,6 +6961,7 @@ module Std : sig
     (** [del_attr term attr] deletes attribute [attr] from [term]  *)
     val del_attr : 'a t -> 'b tag -> 'a t
 
+
     (** {Predefined attributes}  *)
 
     (** a term was artificially produced from a term with a given tid.   *)
@@ -7013,6 +7100,7 @@ module Std : sig
       ?jmp:(jmp term -> 'a) ->
       't term -> 'a
 
+    val slot : (Theory.Program.Semantics.cls, blk term list) Knowledge.slot
   end
 
   (** Program in Intermediate representation.  *)
@@ -7054,7 +7142,7 @@ module Std : sig
       (** fixes the result  *)
       val result : t -> program term
     end
-
+    val pp_slots : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
 
@@ -7184,7 +7272,7 @@ module Std : sig
       (** returns current result  *)
       val result : t -> sub term
     end
-
+    val pp_slots : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
 
@@ -7389,7 +7477,7 @@ module Std : sig
       (** returns current result  *)
       val result  : t -> blk term
     end
-
+    val pp_slots : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
 
@@ -7403,6 +7491,13 @@ module Std : sig
     *)
 
     type t = def term
+
+    val reify : ?tid:tid -> 'a Theory.var -> 'a Theory.value -> t
+
+    val var : t -> unit Theory.var
+
+    val value : t -> unit Theory.value
+
 
     (** [create ?tid x exp] creates definition [x := exp]  *)
     val create : ?tid:tid -> var -> exp -> t
@@ -7432,6 +7527,8 @@ module Std : sig
         for more information.  *)
     val free_vars : t -> Var.Set.t
 
+    val pp_slots : string list -> Format.formatter -> t -> unit
+
     include Regular.S with type t := t
   end
 
@@ -7446,18 +7543,36 @@ module Std : sig
 
         Jumps are further subdivided into categories:
         - goto - is a local control transfer instruction. The label
-        can be only local to subroutine;
+          can be only local to subroutine;
         - call - transfer a control to another subroutine. A call
-        contains a continuation, i.e., a label to which we're hoping
-        to return after subroutine returns the control to us. Of
-        course, called subroutine can in general return to another
-        position, or not to return at all.
+          contains a continuation, i.e., a label to which we're hoping
+          to return after subroutine returns the control to us. Of
+          course, called subroutine can in general return to another
+          position, or not to return at all.
         - ret - performs a return from subroutine
         - int - calls to interrupt subroutine. If interrupt returns,
-        then continue with the provided label.
-   *)
+          then continue with the provided label.
+    *)
 
     type t = jmp term
+
+    type dst
+
+
+    val reify : ?tid:tid ->
+      ?cnd:Theory.Bool.t Theory.value ->
+      ?alt:dst -> ?dst:dst -> unit -> t
+
+
+    val guard : t -> Theory.Bool.t Theory.value option
+    val with_guard : t -> Theory.Bool.t Theory.value option -> t
+    val dst : t -> dst option
+    val alt : t -> dst option
+
+    val resolved : tid -> dst
+    val indirect : 'a Theory.Bitv.t Theory.value -> dst
+    val resolve : dst -> (tid,'a Theory.Bitv.t Theory.value) Either.t
+
 
     (** [create ?cond kind] creates a jump of a given kind  *)
     val create : ?tid:tid -> ?cond:exp -> jmp_kind -> t
@@ -7504,6 +7619,7 @@ module Std : sig
     (** updated jump's kind  *)
     val with_kind : t -> jmp_kind -> t
 
+    val pp_slots : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
 
@@ -7518,6 +7634,15 @@ module Std : sig
         Each element of a phi-node corresponds to a particular
         incoming edge. *)
     type t = phi term
+
+    val reify : ?tid:tid ->
+      'a Theory.var ->
+      (tid * 'a Theory.value) list ->
+      t
+
+    val var : t -> unit Theory.var
+    val options : t -> (tid * unit Theory.value) seq
+
 
     (** [create var label exp] creates a phi-node that associates a
         variable [var] with an expression [exp]. This expression
@@ -7571,6 +7696,7 @@ module Std : sig
     (** [remove def id] removes definition with a given [id]  *)
     val remove : t -> tid -> t
 
+    val pp_slots : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
 
@@ -7582,6 +7708,14 @@ module Std : sig
         purposes. *)
 
     type t = arg term
+
+    val reify : ?tid:tid -> ?intent:intent ->
+      'a Theory.var ->
+      'a Theory.value -> t
+
+    val var : t -> unit Theory.var
+    val value : t -> unit Theory.value
+
 
     (** [create ?intent var exp] creates an argument. If intent is
         not specified it is left unknown.   *)
@@ -7865,6 +7999,8 @@ module Std : sig
     (** symbolizer data type  *)
     type t = symbolizer
 
+    val provide : Knowledge.agent -> t -> unit
+
     (** [create fn] creates a symbolizer for a given function  *)
     val create : (addr -> string option) -> t
 
@@ -7887,14 +8023,16 @@ module Std : sig
     (** [empty] is a symbolizer that knows nothing.  *)
     val empty : t
 
-    (** A factory of symbolizers. Use it register and create
-        symbolizers.  *)
     module Factory : Source.Factory.S with type t = t
+                                           [@@deprecated "[since 2019-05] use [provide]"]
+
   end
 
   (** Rooter finds starts of functions in the binary. *)
   module Rooter : sig
     type t = rooter
+
+    val provide : t -> unit
 
     (** [create seq] creates a rooter from a given sequence of addresses  *)
     val create : addr seq -> t
@@ -7918,6 +8056,8 @@ module Std : sig
 
     (** A factory of rooters. Useful to register custom rooters  *)
     module Factory : Source.Factory.S with type t = t
+                                           [@@deprecated "[since 2019-05] use [provide]"]
+
   end
 
   (** Brancher is responsible for resolving destinations of branch
@@ -7944,7 +8084,10 @@ module Std : sig
         the instruction [insn], that occupies memory region [mem].  *)
     val resolve : t -> mem -> full_insn -> dests
 
+    val provide : t -> unit
+
     module Factory : Source.Factory.S with type t = t
+                                           [@@deprecated "[since 2019-05] use [provide]"]
 
   end
 
@@ -8061,6 +8204,17 @@ module Std : sig
 
   type project
 
+  (**/**)
+  (* Explicitly undocumented right now, as we will later
+     republish it as a separate library.
+  *)
+  module Toplevel : sig
+    val set : Knowledge.state -> unit
+    val reset : unit -> unit
+    val current : unit -> Knowledge.state
+  end
+  (**/**)
+
   (** Disassembled program.
 
       Project contains data that we were able to reconstruct during
@@ -8078,6 +8232,7 @@ module Std : sig
   module Project : sig
 
     type t = project
+    type state [@@deriving bin_io]
     type input
 
     (** IO interface to a project data structure.  *)
@@ -8206,6 +8361,7 @@ module Std : sig
         or it can just provide an empty information.
     *)
     val create :
+      ?state:state ->
       ?disassembler:string ->
       ?brancher:brancher source ->
       ?symbolizer:symbolizer source ->
@@ -8215,6 +8371,8 @@ module Std : sig
 
     (** [arch project] reveals the architecture of a loaded file  *)
     val arch : t -> arch
+
+    val state : t -> state
 
     (** [disasm project] returns results of disassembling  *)
     val disasm : t -> disasm
@@ -8259,18 +8417,18 @@ module Std : sig
         The following substitutions are supported:
 
         - [$section{_name,_addr,_min_addr,_max_addr}] - name of region of file
-        to which it belongs. For example, in ELF this name will
-        correspond to the section name
+          to which it belongs. For example, in ELF this name will
+          correspond to the section name
 
         - [$symbol{_name,_addr,_min_addr,_max_addr}] - name or address
-        of the symbol to which this memory belongs
+          of the symbol to which this memory belongs
 
         - [$asm] - assembler listing of the memory region
 
         - [$bil] - BIL code of the tagged memory region
 
         - [$block{_name,_addr,_min_addr,_max_addr}] - name or address of a basic
-        block to which this region belongs
+          block to which this region belongs
 
         - [$min_addr, $addr] - starting address of a memory region
 
@@ -8437,15 +8595,15 @@ module Std : sig
 
       (** An error that can occur when loading or running pass.
           - [Not_loaded name] pass with a given [name] wasn't loaded for
-          some reason. This is a very unlikely error, indicating
-          either a logic error in the plugin system implementation or
-          something very weird, that we didn't expect.
+            some reason. This is a very unlikely error, indicating
+            either a logic error in the plugin system implementation or
+            something very weird, that we didn't expect.
 
           - [Not_loaded name] when we tried to load plugin with a given
-          [name] we failed to find it in our search paths.
+            [name] we failed to find it in our search paths.
 
           - [Runtime_error (name,exn)] when plugin with a given [name]
-          was run it raised an [exn].
+            was run it raised an [exn].
 
       *)
       type error =

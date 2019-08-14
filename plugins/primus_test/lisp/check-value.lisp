@@ -38,6 +38,7 @@
 
 ;; Observed Signals
 
+
 (defmethod loaded (addr value)
   (check-value/dereferenced addr value))
 

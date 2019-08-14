@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 open Regular.Std
 open Bap_common
 
@@ -60,6 +61,18 @@ module T = struct
     | #arm | #thumb | #x86 | #aarch64 | #r600
     | #hexagon | #nvptx | #xcore -> LittleEndian
     | #ppc | #mips | #sparc | #systemz   -> BigEndian
+
+  let equal x y = compare_arch x y = 0
+
+  let domain =
+    KB.Domain.optional ~equal ~inspect:sexp_of_t "arch"
+
+
+  let slot = KB.Class.property ~package:"bap.std"
+      Theory.Program.cls "arch" domain
+      ~persistent:(KB.Persistent.of_binable (module struct
+                     type t = arch option [@@deriving bin_io]
+                   end))
 end
 
 include T

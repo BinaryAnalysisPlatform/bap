@@ -1,3 +1,4 @@
+open Bap_core_theory
 open Core_kernel
 open Regular.Std
 open Graphlib.Std
@@ -79,9 +80,12 @@ let extract_program subs secs proj =
       should_print subs (Sub.name sub) &&
       should_print secs (sec_name mem bir sub))
 
-let print_bir subs secs ppf proj =
+let print_bir subs secs sema ppf proj =
+  let pp = match sema with
+    | None -> Program.pp
+    | Some cs -> Program.pp_slots cs in
   Text_tags.with_mode ppf "attr" ~f:(fun () ->
-      Program.pp ppf (extract_program subs secs proj))
+      pp ppf (extract_program subs secs proj))
 
 module Adt = struct
   let pr ch = Format.fprintf ch
@@ -238,13 +242,24 @@ let pp_addr ppf a =
 
 let setup_tabs ppf =
   pp_print_as ppf 50 "";
-  pp_set_tab ppf () [@ocaml.warning "-3"]
+  pp_set_tab ppf ()
+
+let sorted_blocks nodes =
+  let init = Set.empty (module Block) in
+  Seq.fold nodes ~init ~f:Set.add |>
+  Set.to_sequence
+
+let sort_fns fns =
+  let fns = Array.of_list_rev fns in
+  Array.sort fns ~compare:(fun (_,b1,_) (_,b2,_) ->
+      Block.compare b1 b2);
+  Seq.of_array fns
 
 let print_disasm pp_insn subs secs ppf proj =
   let memory = Project.memory proj in
   let syms = Project.symbols proj in
-  pp_open_tbox ppf () [@ocaml.warning "-3"];
-  setup_tabs ppf [@ocaml.warning "-3"];
+  pp_open_tbox ppf ();
+  setup_tabs ppf;
   Memmap.filter_map memory ~f:(Value.get Image.section) |>
   Memmap.to_sequence |> Seq.iter ~f:(fun (mem,sec) ->
       Symtab.intersecting syms mem |>
@@ -254,14 +269,13 @@ let print_disasm pp_insn subs secs ppf proj =
       | _ when not(should_print secs sec) -> ()
       | fns ->
         fprintf ppf "@\nDisassembly of section %s@\n" sec;
-        List.iter fns ~f:(fun (name,entry,cfg) ->
+        Seq.iter (sort_fns fns) ~f:(fun (name,entry,cfg) ->
             fprintf ppf "@\n%a: <%s>@\n" pp_addr (Block.addr entry) name;
-            Graphlib.reverse_postorder_traverse (module Graphs.Cfg)
-              ~start:entry cfg |> Seq.iter ~f:(fun blk ->
-                  let mem = Block.memory blk in
-                  fprintf ppf "%a:@\n" pp_addr (Memory.min_addr mem);
-                  Block.insns blk |> List.iter ~f:(pp_insn ppf))));
-  pp_close_tbox ppf () [@ocaml.warning "-3"]
+            sorted_blocks (Graphs.Cfg.nodes cfg) |> Seq.iter ~f:(fun blk ->
+                let mem = Block.memory blk in
+                fprintf ppf "%a:@\n" pp_addr (Memory.min_addr mem);
+                Block.insns blk |> List.iter ~f:(pp_insn ppf))));
+  pp_close_tbox ppf ()
 
 let pp_bil fmt ppf (mem,insn) =
   let pp_bil ppf = Bil.Io.print ~fmt ppf in
@@ -275,13 +289,17 @@ let pp_insn fmt ppf (mem,insn) =
   Insn.Io.print ~fmt ppf insn;
   fprintf ppf "@\n"
 
-let main attrs ansi_colors demangle symbol_fmts subs secs =
+let pp_knowledge ppf _ =
+  KB.pp_state ppf @@
+  Toplevel.current ()
+
+let main attrs ansi_colors demangle symbol_fmts subs secs doms =
   let ver = version in
   let pp_syms =
     Data.Write.create ~pp:(print_symbols subs secs demangle symbol_fmts) () in
   Project.add_writer
     ~desc:"print symbol table" ~ver "symbols" pp_syms;
-  let pp_bir = Data.Write.create ~pp:(print_bir subs secs) () in
+  let pp_bir = Data.Write.create ~pp:(print_bir subs secs doms) () in
   let pp_adt = Data.Write.create ~pp:Adt.pp_project () in
 
   List.iter attrs ~f:Text_tags.Attr.show;
@@ -310,6 +328,11 @@ let main attrs ansi_colors demangle symbol_fmts subs secs =
     Data.Write.create ~pp:(print_disasm (pp_insn "pretty") subs secs) () in
   let pp_disasm_sexp =
     Data.Write.create ~pp:(print_disasm (pp_insn "sexp") subs secs) () in
+
+  let pp_knowledge = Data.Write.create ~pp:(pp_knowledge) () in
+
+  Project.add_writer ~ver "knowledge"
+    ~desc:"dumps the knowledge base" pp_knowledge;
   Project.add_writer ~ver "cfg"
     ~desc:"print rich CFG for each procedure" pp_cfg;
   Project.add_writer ~ver "asm"
@@ -383,5 +406,14 @@ let () =
   let secs : string list Config.param =
     let doc = "Only display information for section $(docv)" in
     Config.(param_all string "section" ~docv:"NAME" ~doc) in
+  let semantics : string list option Config.param =
+    let doc =
+      "Display the $(docv) semantics of the program. If used without
+       an argument then all semantic values associated with terms will
+       be printed. Otherwise only the selected (if present) will be
+       printed." in
+    Config.(param (some (list string)) ~as_flag:(Some [])
+              ~doc ~docv:"SEMANTICS-LIST" "semantics") in
   Config.when_ready (fun {Config.get=(!)} ->
-      main !bir_attr !ansi_colors !demangle !print_symbols !subs !secs)
+      main !bir_attr !ansi_colors !demangle !print_symbols !subs !secs
+        !semantics)

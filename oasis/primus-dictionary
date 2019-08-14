@@ -5,9 +5,9 @@ Flag primus_dictionary
 Library primus_dictionary_library_plugin
   Build$:       flag(everything) || flag(primus_dictionary)
   Path:         plugins/primus_dictionary
-  BuildDepends: bap-primus
+  BuildDepends: bap-primus, bap, core_kernel
   FindlibName:     bap-plugin-primus_dictionary
   CompiledObject:  best
   InternalModules: Primus_dictionary_main
-  XMETADescription: provides a key-value storage 
+  XMETADescription: provides a key-value storage
   XMETAExtraLines:  tags="primus, primus-library"

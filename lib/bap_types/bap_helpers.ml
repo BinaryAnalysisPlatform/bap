@@ -90,10 +90,10 @@ class substitution x y = object(self)
   inherit bil_mapper as super
   method! map_let z ~exp ~body =
     if Bap_var.(z = x)
-    then super#map_let z ~exp:(self#map_exp exp) ~body
-    else super#map_let z ~exp:(self#map_exp exp) ~body:
-        (super#map_exp body)
-
+    then Let (z,self#map_exp exp,body)
+    else super#map_let z
+        ~exp:(self#map_exp exp)
+        ~body:(self#map_exp body)
   method! map_var z =
     match super#map_var z with
     | Exp.Var z when Bap_var.(z = x) -> y
@@ -209,16 +209,17 @@ module Type = struct
   and binop op x y = match op with
     | LSHIFT|RSHIFT|ARSHIFT -> shift x y
     | _ -> match unify x y with
-      | Type.Mem _ -> Type_error.expect_imm ()
+      | Type.Mem _ | Type.Unk -> Type_error.expect_imm ()
       | Type.Imm _ as t -> match op with
         | LT|LE|EQ|NEQ|SLT|SLE -> Type.Imm 1
         | _ -> t
   and shift x y = match infer x, infer y with
-    | Type.Mem _,_ | _,Type.Mem _ -> Type_error.expect_imm ()
+    | Type.Mem _,_ | _,Type.Mem _
+    | Type.Unk,_ | _,Type.Unk -> Type_error.expect_imm ()
     | t, Type.Imm _ -> t
   and load m a r = match infer m, infer a with
-    | Type.Imm _,_ -> Type_error.expect_mem ()
-    | _,Type.Mem _ -> Type_error.expect_imm ()
+    | (Type.Imm _|Unk),_ -> Type_error.expect_mem ()
+    | _,(Type.Mem _|Unk) -> Type_error.expect_imm ()
     | Type.Mem (s,_),Type.Imm s' ->
       let s = Size.in_bits s in
       if s = s' then Type.Imm (Size.in_bits r)
@@ -237,12 +238,12 @@ module Type = struct
   and cast c s x =
     let t = Type.Imm s in
     match c,infer x with
-    | _,Type.Mem _ -> Type_error.expect_imm ()
+    | _,(Type.Mem _|Unk) -> Type_error.expect_imm ()
     | (UNSIGNED|SIGNED),_ -> t
     | (HIGH|LOW), Type.Imm s' ->
       if s' >= s then t else Type_error.wrong_cast ()
   and extract hi lo x = match infer x with
-    | Type.Mem _ -> Type_error.expect_imm ()
+    | Type.Mem _ | Unk -> Type_error.expect_imm ()
     | Type.Imm _ ->
       (* we don't really need a type of x, as the extract operation
          can both narrow and widen. Though it is a question whether it is
@@ -278,9 +279,9 @@ module Type = struct
     | Ok u -> Some (Type_error.bad_type ~exp:t ~got:u)
     | Error err -> Some err
   and jmp x = match infer x with
-    | Ok (Imm s) when Result.is_ok (Size.addr_of_int s) -> None
+    | Ok (Imm _)  -> None
     | Ok (Mem _) -> Some Type_error.bad_imm
-    | Ok (Imm _) -> Some Type_error.bad_cast
+    | Ok Unk -> Some Type_error.unknown
     | Error err -> Some err
   and cond x = match infer x with
     | Ok (Imm 1) -> None
@@ -325,7 +326,7 @@ module Eff = struct
 
   let width x = match Type.infer_exn x with
     | Type.Imm x -> x
-    | Type.Mem _ -> failwith "width is not for memory"
+    | _ -> failwith "expected an immediate type"
 
   (* approximates a number of non-zero bits in a bitvector.  *)
   module Nz = struct
@@ -419,7 +420,7 @@ module Eff = struct
     | UnOp (_,x)
     | Cast (_,_,x)
     | Extract (_,_,x) -> eff x
-    | Let (_,_,_) -> assert false (* must be let-normalized *)
+    | Let (_,x,y) -> all [eff x; eff y]
   and div y = match Nz.bits y with
     | Nz.Maybe | Nz.Empty -> raise
     | _ -> none
@@ -432,6 +433,15 @@ module Eff = struct
   let raises t = Set.mem t Raises
   let of_list : t list -> t = Set.Poly.union_list
 end
+
+class rewriter x y = object
+  inherit bil_mapper as super
+  method! map_exp z =
+    let z = super#map_exp z in
+    if Bap_exp.(z = x) then y else z
+end
+
+
 module Simpl = struct
   open Bap_bil
   open Binop
@@ -444,7 +454,9 @@ module Simpl = struct
   let zero width = Int (Word.zero width)
   let ones width = Int (Word.ones width)
   let nothing _ = false
-
+  let subst x y =
+    let r = new substitution x y in
+    r#map_exp
 
   (* requires: let-free, simplifications(
         constant-folding,
@@ -466,27 +478,33 @@ module Simpl = struct
       | UnOp (op,x) -> unop op x
       | Var _ | Int _  | Unknown (_,_) as const -> const
       | Cast (t,s,x) -> cast t s x
-      | Let (v,x,y) -> Let (v, exp x, exp y)
-      | Ite (x,y,z) -> Ite (exp x, exp y, exp z)
+      | Let (v,x,y) -> let_ v x y
+      | Ite (x,y,z) -> ite_ x y z
       | Extract (h,l,x) -> extract h l x
       | Concat (x,y) -> concat x y
+    and ite_ c x y = match exp c, exp x, exp y with
+      | Int c,x,y -> if Bitvector.(c = b1) then x else y
+      | c,x,y -> Ite (c,x,y)
+    and let_ v x y = match exp x with
+      | Int _ | Unknown _ as r -> exp (subst v r y)
+      | r -> Let(v,r,exp y)
     and concat x y = match exp x, exp y with
       | Int x, Int y -> Int (Word.concat x y)
       | x,y -> Concat (x,y)
     and cast t s x = match exp x with
       | Int w -> Int (Apply.cast t s w)
-      | _ -> Cast (t,s,x)
+      | x -> Cast (t,s,x)
     and extract hi lo x = match exp x with
       | Int w -> Int (Bitvector.extract_exn ~hi ~lo w)
       | x -> Extract (hi,lo,x)
     and unop op x = match exp x with
-      | UnOp(op,Int x) -> Int (Apply.unop op x)
+      | Int x -> Int (Apply.unop op x)
       | UnOp(op',x) when op = op' -> exp x
       | x -> UnOp(op, x)
     and binop op x y =
       let width = match Type.infer_exn x with
         | Type.Imm s -> s
-        | Type.Mem _ -> failwith "binop" in
+        | _ -> failwith "binop" in
       let keep op x y = BinOp(op,x,y) in
       let int f = function Int x -> f x | _ -> false in
       let is0 = int is0 and is1 = int is1 and ism1 = int ism1 in
@@ -507,7 +525,7 @@ module Simpl = struct
       | (MOD|SMOD),_,y when is1 y -> zero width
       | (LSHIFT|RSHIFT|ARSHIFT),x,y when is0 y -> x
       | (LSHIFT|RSHIFT|ARSHIFT),x,_ when is0 x -> x
-      | (LSHIFT|RSHIFT|ARSHIFT),x,_ when ism1 x -> x
+      | ARSHIFT,x,_ when ism1 x -> x
       | AND,x,y when is0 x && removable y -> x
       | AND,x,y when is0 y && removable x -> y
       | AND,x,y when ism1 x -> y
@@ -564,12 +582,6 @@ let fix compare f x  =
 
 let fixpoint = fix compare_bil
 
-class rewriter x y = object
-  inherit bil_mapper as super
-  method! map_exp z =
-    let z = super#map_exp z in
-    if Bap_exp.(z = x) then y else z
-end
 
 
 let substitute x y = (new rewriter x y)#run
@@ -676,23 +688,19 @@ module Normalize = struct
 
   (* we don't need a full-fledged type inference here.
      requires: well-typed exp *)
-  let infer_addr_size exp =
-    let open Exp in
-    let rec infer = function
+  let infer_storage_type exp =
+    let rec infer : exp -> typ = function
       | Var v -> Var.typ v
-      | Store (m,_,_,_,_) -> infer m
-      | Ite (_,x,y) -> both x y
       | Unknown (_,t) -> t
-      | _ -> invalid_arg "type error"
-    and both x y =
-      match infer x, infer y with
-      | t1,t2 when Type.(t1 = t2) -> t1
+      | Store (m,_,_,_,_) | Ite (_,m,_) | Let (_,_,m) -> infer m
       | _ -> invalid_arg "type error" in
     match infer exp with
-    | Type.Mem (s,_) -> s
-    | Type.Imm _ -> invalid_arg "type error"
+    | Type.Mem (ks,vs) -> ks,vs
+    | _ -> invalid_arg "type error"
 
 
+  let infer_addr_size x = fst (infer_storage_type x)
+  let infer_value_size x = snd (infer_storage_type x)
 
   let make_succ m =
     let int n =
@@ -700,6 +708,7 @@ module Normalize = struct
       Exp.Int (Word.of_int ~width:(Size.in_bits size) n) in
     let sum a n = Exp.BinOp (Binop.PLUS, a,int n) in
     sum
+
 
   (* rewrite_store_little
      Store(m,a,x,e,s) =>
@@ -712,37 +721,36 @@ module Normalize = struct
 
   *)
   let expand_store m a x e s =
+    let vs = infer_value_size m in
     let (++) = make_succ m in
     let n = Size.in_bytes s in
     let nth i = if e = BigEndian then nth (n-i-1) else nth i in
     let rec expand i =
       if i >= 0
-      then Exp.Store(expand (i-1),(a++i),nth i x,LittleEndian,`r8)
+      then Exp.Store(expand (i-1),(a++i),nth i x,LittleEndian,vs)
       else m in
-    if s = `r8 then Exp.Store (m,a,x,e,s)
+    if Size.equal vs s then Exp.Store (m,a,x,e,s)
     else expand (n-1)
 
   (* x[a,el]:n => x[a+n-1] @ ... @ x[a] x[a,be]:n => x[a] @ ... @
      x[a+n-1]
-
-     This operation duplicates the address expression, this may break
-     semantics if this expression is non-generative.
 
      Special care should be taken if the expression contains store
      operations, that has an effect that may interfere with the result
      of the load operation.
   *)
   let expand_load m a e s =
+    let vs = infer_value_size m in
     let (++) = make_succ m in
     let cat x y = if e = LittleEndian
       then Exp.Concat (y,x)
       else Exp.Concat (x,y) in
-    let load a = Exp.Load (m,a,e,`r8) in
+    let load a = Exp.Load (m,a,e,vs) in
     let rec expand a i =
       if i > 1
       then cat (load a) (expand (a++1) (i-1))
       else load a in
-    if s = `r8 then load a
+    if Size.equal vs s then load a
     else expand a (Size.in_bytes s)
 
   let expand_memory = map_exp @@ object
@@ -758,19 +766,19 @@ module Normalize = struct
         expand_store mem addr x e s
     end
 
-  (* ensures: no-lets, one-byte-stores, one-byte-loads.
+  (* ensures: one-byte-stores, one-byte-loads.
      This is the first step of normalization. The full normalization,
      e.g., remove ite and hoisting storages can be only done on the
      BIL level.
 
      requires:
-       - generative-load-addr,
-       - generative-store-mem,
-       - generative-store-val,
-       - generative-let-value
+     - generative-load-addr,
+     - generative-store-mem,
+     - generative-store-val,
+     - generative-let-value
 
   *)
-  let normalize_exp x = expand_memory (reduce_let x)
+  let normalize_exp x = expand_memory x
 
   type assume = Assume of (exp * bool)
 
@@ -1031,8 +1039,8 @@ module Normalize = struct
 
 
   (* ensures: all while conditions are free from:
-      - ite expressions;
-      - store operations.
+     - ite expressions;
+     - store operations.
 
      Note the latter sounds more strong then the implementation, but
      it is true, as in a well-typed program a conditional must has

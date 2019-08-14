@@ -11,6 +11,7 @@ module Make_CPU(Env : ModeVars) = struct
       rax; rcx; rdx; rsi; rdi;
       rbx; rbp; rsp;
     ] @ Array.to_list r
+      @ Array.to_list ymms
 
   let flags = Var.Set.of_list [
       cf; pf; af; zf; sf; oF; df

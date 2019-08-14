@@ -5,11 +5,24 @@ open Bap_c.Std
 open Format
 open Bap_primus_types
 
-module Observation = Bap_primus_observation
-module State = Bap_primus_state
-module Linker = Bap_primus_linker
+module Primus = struct
+  module Env = Bap_primus_env
+  module Linker = Bap_primus_linker
+  module Machine = Bap_primus_machine
+  module Memory = Bap_primus_memory
+  module Observation = Bap_primus_observation
+  module State = Bap_primus_state
+  module Value = Bap_primus_value
+end
+
+open Primus
+
 
 open Bap_primus_sexp
+
+let memory_switch,switching_memory =
+  let inspect = Primus.Memory.Descriptor.sexp_of_t in
+  Observation.provide ~inspect "memory-switch"
 
 let enter_term, term_entered =
   Observation.provide ~inspect:sexp_of_tid "enter-term"
@@ -63,6 +76,9 @@ let halting,will_halt =
 
 let division_by_zero,will_divide_by_zero =
   Observation.provide ~inspect:sexp_of_unit "division-by-zero"
+
+let cfi_violation,cfi_will_diverge =
+  Observation.provide ~inspect:sexp_of_word "cfi-violation"
 
 let segfault, will_segfault =
   Observation.provide ~inspect:sexp_of_word "segfault"
@@ -172,9 +188,16 @@ let sexp_of_name = function
   | `tid tid -> Sexp.Atom (Tid.name tid)
   | `addr addr -> Sexp.Atom (Addr.string_of_value addr)
 
+type scope = {
+  stack : (var * value) list;
+  bound : int Var.Map.t;
+}
+
 type state = {
   addr : addr;
   curr : pos;
+  lets : scope; (* lexical context *)
+  prompts : tid list;
 }
 
 let sexp_of_state {curr} =
@@ -184,7 +207,12 @@ let null proj =
   let size = Arch.addr_size (Project.arch proj) in
   Addr.zero (Size.in_bits size)
 
-let state = Bap_primus_machine.State.declare
+let empty_scope = {
+  stack = [];
+  bound = Var.Map.empty;
+}
+
+let state = Primus.Machine.State.declare
     ~uuid:"14a17161-173b-46da-9e95-7819104cc220"
     ~name:"interpreter"
     ~inspect:sexp_of_state
@@ -193,12 +221,16 @@ let state = Bap_primus_machine.State.declare
        Pos.{
          addr = null proj;
          curr = Top {me=prog; up=Nil};
+         lets = empty_scope;
+         prompts = [];
        })
 
 type exn += Halt
 type exn += Division_by_zero
 type exn += Segmentation_fault of addr
+type exn += Cfi_violation of addr
 type exn += Runtime_error of string
+
 
 let () =
   Exn.add_printer (function
@@ -208,21 +240,23 @@ let () =
       | Segmentation_fault x ->
         Some (asprintf "Segmentation fault at %a" Addr.pp_hex x)
       | Division_by_zero -> Some "Division by zero"
+      | Cfi_violation where ->
+        Some (asprintf "CFI violation at %a" Addr.pp_hex where)
       | _ -> None)
 
 
 let division_by_zero_handler = "__primus_division_by_zero_handler"
 let pagefault_handler =  "__primus_pagefault_handler"
-
+let cfi_violation_handler = "__primus_cfi_violation_handler"
 
 module Make (Machine : Machine) = struct
   open Machine.Syntax
 
   module Eval = Eval.Make(Machine)
-  module Memory = Bap_primus_memory.Make(Machine)
-  module Env = Bap_primus_env.Make(Machine)
+  module Memory = Primus.Memory.Make(Machine)
+  module Env = Primus.Env.Make(Machine)
   module Code = Linker.Make(Machine)
-  module Value = Bap_primus_value.Make(Machine)
+  module Value = Primus.Value.Make(Machine)
 
   type 'a m = 'a Machine.t
 
@@ -247,11 +281,11 @@ module Make (Machine : Machine) = struct
     Env.set v x >>= fun () ->
     !!on_written (v,x)
 
+
   let get v =
     !!on_reading v >>= fun () ->
     Env.get v >>= fun r ->
     !!on_read (v,r) >>| fun () -> r
-
 
   let call_when_provided name =
     Code.is_linked (`symbol name) >>= fun provided ->
@@ -316,10 +350,60 @@ module Make (Machine : Machine) = struct
     value (if Word.is_one cond.value then yes.value else no.value) >>= fun r ->
     !!on_ite ((cond, yes, no), r) >>| fun () -> r
 
+
+  let get_lexical scope v =
+    List.Assoc.find_exn scope ~equal:Var.equal v
+
+  let update_lexical f =
+    Machine.Local.update state ~f:(fun s -> {
+          s with lets = f s.lets
+        })
+
+  let push_lexical v x = update_lexical @@ fun s -> {
+      stack = (v,x) :: s.stack;
+      bound = Map.update s.bound v ~f:(function
+          | None -> 1
+          | Some n -> n + 1)
+    }
+
+  let pop_lexical v = update_lexical @@ fun s -> {
+      stack = List.tl_exn s.stack;
+      bound = Map.change s.bound v ~f:(function
+          | None -> None
+          | Some 1 -> None
+          | Some n -> Some (n-1))
+    }
+
+  let memory typ name = match typ with
+    | Type.Imm _ as t -> failwithf "type error - load from %s:%a"
+                           name Type.pps t ()
+    | Type.Mem (ks,vs) ->
+      let ks = Size.in_bits ks and vs = Size.in_bits vs in
+      Primus.Memory.Descriptor.create ks vs name
+
+  let rec memory_of_storage : exp -> _ = function
+    | Var v -> memory (Var.typ v) (Var.name v)
+    | Unknown (_,typ) -> memory typ "unknown"
+    | Store (s,_,_,_,_)
+    | Ite (_,s,_)
+    | Let (_,_,s) -> memory_of_storage s
+    | x -> failwithf "expression `%a' is no a storage" Exp.pps x ()
+
+
+  let switch_memory m =
+    let m = memory_of_storage m in
+    Memory.memory >>= fun m' ->
+    if Primus.Memory.Descriptor.equal m m'
+    then Machine.return ()
+    else
+      !!switching_memory m >>= fun () ->
+      Memory.switch m
+
+
   let rec eval_exp x =
     let eval = function
-      | Bil.Load (Bil.Var _, a,_,`r8) -> eval_load a
-      | Bil.Store (m,a,x,_,`r8) -> eval_store m a x
+      | Bil.Load (m,a,_,_) -> eval_load m a
+      | Bil.Store (m,a,x,_,_) -> eval_store m a x
       | Bil.BinOp (op, x, y) -> eval_binop op x y
       | Bil.UnOp (op,x) -> eval_unop op x
       | Bil.Var v -> eval_var v
@@ -329,22 +413,30 @@ module Make (Machine : Machine) = struct
       | Bil.Extract (hi,lo,x) -> eval_extract hi lo x
       | Bil.Concat (x,y) -> eval_concat x y
       | Bil.Ite (cond, yes, no) -> eval_ite cond yes no
-      | exp ->
-        invalid_argf "precondition failed: denormalized exp: %s"
-          (Exp.to_string exp) () in
+      | Bil.Let (v,x,y) -> eval_let v x y in
     !!exp_entered x >>= fun () ->
     eval x >>= fun r ->
     !!exp_left x >>| fun () -> r
-  and eval_load a = eval_exp a >>= load_byte
+  and eval_let v x y =
+    eval_exp x >>= fun x ->
+    push_lexical v x >>= fun () ->
+    eval_exp y >>= fun r ->
+    pop_lexical v >>| fun () ->  r
   and eval_ite cond yes no =
     eval_exp yes >>= fun yes ->
     eval_exp no >>= fun no ->
     eval_exp cond >>= fun cond ->
     ite cond yes no
-  and eval_store m a x =
+  and eval_load m a =
+    eval_exp a >>= fun a ->
+    switch_memory m >>= fun () ->
     eval_storage m >>= fun () ->
+    load_byte a
+  and eval_store m a x =
     eval_exp a >>= fun a ->
     eval_exp x >>= fun x ->
+    switch_memory m >>= fun () ->
+    eval_storage m >>= fun () ->
     store_byte a x >>| fun () -> a
   and eval_binop op x y =
     eval_exp x >>= fun x ->
@@ -353,7 +445,11 @@ module Make (Machine : Machine) = struct
   and eval_unop op x =
     eval_exp x >>= fun x ->
     unop op x
-  and eval_var = get
+  and eval_var v =
+    Machine.Local.get state >>= fun {lets} ->
+    if Map.mem lets.bound v
+    then Machine.return (get_lexical lets.stack v)
+    else get v
   and eval_int = const
   and eval_cast t s x =
     eval_exp x >>= fun x ->
@@ -476,26 +572,70 @@ module Make (Machine : Machine) = struct
       Value.of_word addr >>= fun addr ->
       !!will_jump (cond,addr)
 
+  let exec_to_prompt dst =
+    Machine.Local.get state >>= function
+    | {prompts = p :: _} when Tid.equal p dst ->
+      Machine.return ()
+    | _ -> Code.exec (`tid dst)
+
   let label cond : label -> _ = function
-    | Direct t ->
-      will_jump_to_tid cond t >>= fun () ->
-      Code.exec (`tid t)
+    | Direct dst ->
+      will_jump_to_tid cond dst >>= fun () ->
+      exec_to_prompt dst
     | Indirect x ->
       eval_exp x >>= fun ({value} as dst) ->
       !!will_jump (cond,dst) >>= fun () ->
-      Code.exec (`addr value)
+      Code.resolve_tid (`addr value) >>= function
+      | None -> Code.exec (`addr value)
+      | Some dst -> exec_to_prompt dst
 
-  let call cond c =
-    label cond (Call.target c) >>= fun () ->
-    match Call.return c with
-    | Some t -> label cond t
-    | None -> failf "a non-return call returned" ()
+
+  let resolve_return call = match Call.return call with
+    | None -> Machine.return None
+    | Some (Direct dst) -> Machine.return (Some dst)
+    | Some (Indirect dst) ->
+      eval_exp dst >>= fun {value=dst} ->
+      Code.resolve_tid (`addr dst)
+
+  let push_prompt dst = match dst with
+    | None -> Machine.return ()
+    | Some dst ->
+      Machine.Local.update state ~f:(fun s ->
+          {s with prompts = dst :: s.prompts})
+
+  let pop_prompt =
+    Machine.Local.update state ~f:(function
+        | {prompts=[]} as s -> s
+        | {prompts=_::prompts} as s -> {s with prompts})
+
+  let trap_cfi_violation callsite =
+    !!cfi_will_diverge callsite >>= fun () ->
+    call_when_provided cfi_violation_handler >>= function
+    | true -> Machine.return ()
+    | false -> Machine.raise (Cfi_violation callsite)
+
+  let call cond call =
+    Machine.Local.get state >>= fun {addr=callsite} ->
+    resolve_return call >>= fun ret ->
+    push_prompt ret >>= fun () ->
+    label cond (Call.target call) >>= fun () ->
+    Machine.Local.get state >>= function
+    | {prompts=[]} -> trap_cfi_violation callsite
+    | {prompts=p::_} -> match ret with
+      | None -> Machine.return ()
+      | Some p' when Tid.(p <> p') ->
+        trap_cfi_violation callsite >>= fun () ->
+        pop_prompt >>= fun () ->
+        label cond (Direct p')
+      | Some p ->
+        pop_prompt >>= fun () ->
+        label cond (Direct p)
 
   let goto cond c = label cond c
   let interrupt n  = !!will_interrupt n
 
   let jump cond t = match Jmp.kind t with
-    | Ret _ -> Machine.return () (* return from sub *)
+    | Ret dst -> label cond dst
     | Call c -> call cond c
     | Goto l -> goto cond l
     | Int (n,r) ->

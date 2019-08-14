@@ -1,3 +1,4 @@
+open Bap.Std
 open Mips.Std
 
 (* BAL rs, offset
@@ -371,13 +372,14 @@ let bne cpu ops =
 (* NAL
  * No-op and Link, MIPS32 Release 6, deprecated
  * Page 358 *)
-let nal cpu ops =
+let nal cpu _ =
   let step = unsigned const byte 8 in
   RTL.[
     cpu.gpr 31 := cpu.cia + step;
   ]
 
 let () =
+  let (>>) = register ~delay:1 in
   "BAL" >> bal;
   "BEQ" >> beq;
   "BEQL" >> beql;
@@ -403,7 +405,6 @@ let () =
   "BGTZC" >> bgtzc;
   "BEQZC" >> beqzc;
   "BNEZC" >> bnezc;
-  "BGEZC" >> bgezc;
   "BGTZ" >> bgtz;
   "BGTZL" >> bgtzl;
   "J" >> jump;

@@ -1,9 +1,14 @@
 open Core_kernel
 open Regular.Std
+open Bap_core_theory
 open Bap_common
 open Bap_bil
 open Bap_value
 open Bap_visitor
+open Bap_core_theory
+
+type tid = Theory.Label.t
+[@@deriving bin_io, compare, sexp]
 
 type 'a term [@@deriving bin_io, compare, sexp]
 type program [@@deriving bin_io, compare, sexp]
@@ -14,27 +19,25 @@ type blk [@@deriving bin_io, compare, sexp]
 type phi [@@deriving bin_io, compare, sexp]
 type def [@@deriving bin_io, compare, sexp]
 type jmp [@@deriving bin_io, compare, sexp]
-
-type tid [@@deriving bin_io, compare, sexp]
 type call [@@deriving bin_io, compare, sexp]
 
 type label =
   | Direct of tid
   | Indirect of exp
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 type jmp_kind =
   | Call of call
   | Goto of label
   | Ret  of label
   | Int  of int * tid
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 type intent =
   | In
   | Out
   | Both
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 type ('a,'b) cls
 
@@ -48,19 +51,25 @@ val jmp_t : (blk, jmp) cls
 
 module Tid : sig
   type t = tid
-  val create : unit -> t
-  val set_name : t -> string -> unit
-  val name : t -> string
+
+  val for_name : string -> t Bap_toplevel.t
+  val for_addr : addr -> t Bap_toplevel.t
+  val for_ivec : int -> t Bap_toplevel.t
+
+  val create : unit -> t Bap_toplevel.t
+  val set_name : t -> string -> unit Bap_toplevel.t
+  val name : t -> string Bap_toplevel.t
   val from_string : string -> tid Or_error.t
   val from_string_exn : string -> tid
   val (!!) : string -> tid
   include Regular.S with type t := t
-  module Tid_generator : Bap_state.S
-  module Name_resolver : Bap_state.S
 end
 
 module Term : sig
   type 'a t = 'a term
+
+  val slot : (Theory.Program.Semantics.cls, blk term list) KB.slot
+
   val clone : 'a t -> 'a t
   val same : 'a t -> 'a t -> bool
   val name : 'a t -> string
@@ -102,7 +111,6 @@ module Term : sig
   val precondition : exp tag
   val invariant : exp tag
   val postcondition : exp tag
-
 
   class mapper : object
     inherit exp_mapper
@@ -193,7 +201,7 @@ module Ir_program : sig
     val add_sub : t -> sub term -> unit
     val result : t -> program term
   end
-
+  val pp_slots : string list -> Format.formatter -> t -> unit
   include Regular.S with type t := t
 end
 
@@ -221,6 +229,7 @@ module Ir_sub : sig
   val returns_twice : unit tag
   val nothrow : unit tag
   val entry_point : unit tag
+  val pp_slots : string list -> Format.formatter -> t -> unit
   include Regular.S with type t := t
 end
 
@@ -276,11 +285,19 @@ module Ir_blk : sig
     val add_elt : t -> elt -> unit
     val result  : t -> blk term
   end
+  val pp_slots : string list -> Format.formatter -> t -> unit
   include Regular.S with type t := t
 end
 
 module Ir_def : sig
   type t = def term
+
+  val reify : ?tid:tid -> 'a Theory.var -> 'a Theory.value -> t
+
+  val var : t -> unit Theory.var
+  val value : t -> unit Theory.value
+
+
   val create : ?tid:tid -> var -> exp -> t
   val lhs : t -> var
   val rhs : t -> exp
@@ -289,11 +306,28 @@ module Ir_def : sig
   val map_exp : t -> f:(exp -> exp) -> t
   val substitute : t -> exp -> exp -> t
   val free_vars : t -> Bap_var.Set.t
+  val pp_slots : string list -> Format.formatter -> t -> unit
+
   include Regular.S with type t := t
 end
 
 module Ir_jmp : sig
   type t = jmp term
+  type dst
+
+  val reify : ?tid:tid ->
+    ?cnd:Theory.Bool.t Theory.value ->
+    ?alt:dst -> ?dst:dst -> unit -> t
+
+  val guard : t -> Theory.Bool.t Theory.value option
+  val with_guard : t -> Theory.Bool.t Theory.value option -> t
+  val dst : t -> dst option
+  val alt : t -> dst option
+
+  val resolved : tid -> dst
+  val indirect : 'a Theory.Bitv.t Theory.value -> dst
+  val resolve : dst -> (tid,'a Theory.Bitv.t Theory.value) Either.t
+
   val create      : ?tid:tid -> ?cond:exp -> jmp_kind -> t
   val create_call : ?tid:tid -> ?cond:exp -> call -> t
   val create_goto : ?tid:tid -> ?cond:exp -> label -> t
@@ -307,11 +341,22 @@ module Ir_jmp : sig
   val map_exp : t -> f:(exp -> exp) -> t
   val substitute : t -> exp -> exp -> t
   val free_vars : t -> Bap_var.Set.t
+  val pp_slots : string list -> Format.formatter -> t -> unit
+
   include Regular.S with type t := t
 end
 
 module Ir_phi : sig
   type t = phi term
+
+  val reify : ?tid:tid ->
+    'a Theory.var ->
+    (tid * 'a Theory.value) list ->
+    t
+
+  val var : t -> unit Theory.var
+  val options : t -> (tid * unit Theory.value) seq
+
   val create : ?tid:tid -> var -> tid -> exp -> t
   val of_list : ?tid:tid -> var -> (tid * exp) list -> t
   val lhs : t -> var
@@ -324,11 +369,19 @@ module Ir_phi : sig
   val map_exp : t -> f:(exp -> exp) -> t
   val substitute : t -> exp -> exp -> t
   val free_vars : t -> Bap_var.Set.t
+  val pp_slots : string list -> Format.formatter -> t -> unit
   include Regular.S with type t := t
 end
 
 module Ir_arg : sig
   type t = arg term
+
+  val reify : ?tid:tid -> ?intent:intent ->
+    'a Theory.var ->
+    'a Theory.value -> t
+
+  val var : t -> unit Theory.var
+  val value : t -> unit Theory.value
 
   val create : ?tid:tid -> ?intent:intent -> var -> exp -> t
   val lhs : t -> var
@@ -342,6 +395,11 @@ module Ir_arg : sig
   val warn_unused : unit tag
   val restricted : unit tag
   val nonnull : unit tag
+  val pp_slots : string list -> Format.formatter -> t -> unit
+
+  module Intent : sig
+    val slot : (Theory.Value.cls, intent option) KB.slot
+  end
 
   include Regular.S with type t := t
 end

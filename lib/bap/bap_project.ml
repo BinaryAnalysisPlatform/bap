@@ -1,5 +1,6 @@
 open Core_kernel
 open Regular.Std
+open Bap_core_theory
 open Graphlib.Std
 open Bap_future.Std
 open Bap_types.Std
@@ -9,29 +10,63 @@ open Bap_sema.Std
 open Or_error.Monad_infix
 open Format
 
+module Driver = Bap_disasm_driver
+
 module Event = Bap_event
 include Bap_self.Create()
 
 let find name = FileUtil.which name
 
-module State = struct
+module Kernel = struct
+  open KB.Syntax
+  module Driver = Bap_disasm_driver
+  module Calls = Bap_disasm_calls
+  module Disasm = Disasm_expert.Recursive
+
   type t = {
-    tids : Tid.Tid_generator.t;
-    name : Tid.Name_resolver.t;
-    vars : Var.Id.t;
+    default : arch;
+    state : Driver.state;
+    calls : Calls.t;
+  } [@@deriving bin_io]
+
+  let empty arch = {
+    default = arch;
+    state = Driver.init;
+    calls = Calls.empty;
   }
+
+  let update self mem =
+    Disasm.scan self.default mem self.state >>= fun state ->
+    Calls.update self.calls state >>| fun calls ->
+    {self with state; calls}
+
+  let symtab {state; calls} = Symtab.create state calls
+  let disasm {state} =
+    Disasm_expert.Recursive.global_cfg state
+
+  module Toplevel = struct
+    let result = Toplevel.var "result"
+    let run k =
+      Toplevel.put result begin
+        k >>= fun k ->
+        disasm k >>= fun g ->
+        symtab k >>| fun s -> g,s,k
+      end;
+      Toplevel.get result
+  end
 end
 
-type state = State.t
+type state = Kernel.t [@@deriving bin_io]
 
 type t = {
   arch    : arch;
+  core    : Kernel.t;
+
   disasm  : disasm;
   memory  : value memmap;
   storage : dict;
   program : program term;
   symbols : Symtab.t;
-  state   : state;
   passes  : string list;
 } [@@deriving fields]
 
@@ -46,6 +81,7 @@ module Info = struct
   let program,got_program = Stream.create ()
   let spec,got_spec = Stream.create ()
 end
+
 
 module Input = struct
   type result = {
@@ -80,12 +116,28 @@ module Input = struct
     finish;
   }
 
+  let symtab_agent =
+    let reliability = KB.Agent.authorative in
+    KB.Agent.register
+      ~reliability
+      ~desc:"extracts symbols from the image symtab entries"
+      ~package:"bap.std"
+      "symtab"
+
+  let provide_image image =
+    let image_symbols = Symbolizer.of_image image in
+    let image_roots = Rooter.of_image image in
+    info "providing rooter and symbolizer from image";
+    Symbolizer.provide symtab_agent image_symbols;
+    Rooter.provide image_roots
+
   let of_image ?loader filename =
     Image.create ?backend:loader filename >>| fun (img,warns) ->
     List.iter warns ~f:(fun e -> warning "%a" Error.pp e);
     let spec = Image.spec img in
     Signal.send Info.got_img img;
     Signal.send Info.got_spec spec;
+    provide_image img;
     let finish proj = {
       proj with
       storage = Dict.set proj.storage Image.specification spec;
@@ -173,56 +225,6 @@ let roots rooter = match rooter with
   | None -> []
   | Some r -> Rooter.roots r |> Seq.to_list
 
-
-let fresh_state () = State.{
-    tids = Tid.Tid_generator.fresh ();
-    name = Tid.Name_resolver.fresh ();
-    vars = Var.Id.fresh ();
-  }
-
-module MVar = struct
-  type 'a t = {
-    mutable value   : 'a Or_error.t;
-    mutable updated : bool;
-    compare : 'a -> 'a -> int;
-  }
-
-  let create ?(compare=fun _ _ -> 1) x =
-    {value=Ok x; updated=true; compare}
-  let peek x = ok_exn x.value
-  let read x = x.updated <- false; peek x
-  let is_updated x = x.updated
-  let write x v =
-    if x.compare (ok_exn x.value) v <> 0 then x.updated <- true;
-    x.value <- Ok v
-
-  let fail x err =
-    x.value <- Error err;
-    x.updated <- true
-
-  let ignore x =
-    Result.iter_error x.value ~f:Error.raise;
-    x.updated <- false
-
-  let from_source s =
-    let x = create None in
-    Stream.observe s (function
-        | Ok v -> write x (Some v)
-        | Error e -> fail x e);
-    x
-
-  let from_optional_source ?(default=fun () -> None) = function
-    | Some s -> from_source s
-    | None -> match default () with
-      | None -> create None
-      | Some s -> from_source s
-end
-
-let phase_triggered phase mvar =
-  let trigger = MVar.is_updated mvar in
-  if trigger then Signal.send phase (MVar.read mvar);
-  trigger
-
 module Cfg = Graphs.Cfg
 
 let empty_disasm = Disasm.create Cfg.empty
@@ -242,101 +244,51 @@ let union_memory m1 m2 =
   Memmap.to_sequence m2 |> Seq.fold ~init:m1 ~f:(fun m1 (mem,v) ->
       Memmap.add m1 mem v)
 
+
+let build ?state ~code ~data arch =
+  let init = match state with
+    | Some state -> state
+    | None -> Kernel.empty arch in
+  let kernel =
+    Memmap.to_sequence code |> KB.Seq.fold ~init ~f:(fun k (mem,_) ->
+        Kernel.update k mem) in
+  let cfg,symbols,core = Kernel.Toplevel.run kernel in
+  {
+    core;
+    disasm = Disasm.create cfg;
+    program = Program.lift symbols;
+    symbols;
+    arch; memory=union_memory code data;
+    storage = Dict.empty;
+    passes=[]
+  }
+
+let state {core} = core
+
 let create_exn
-    ?disassembler:backend
-    ?brancher
-    ?symbolizer
-    ?rooter
-    ?reconstructor
+    ?state
+    ?disassembler:_
+    ?brancher:_
+    ?symbolizer:_
+    ?rooter:_
+    ?reconstructor:_
     (read : input)  =
-  let state = fresh_state () in
-  let mrooter =
-    MVar.from_optional_source ~default:Merge.rooter rooter in
-  let msymbolizer =
-    MVar.from_optional_source ~default:Merge.symbolizer symbolizer in
-  let mbrancher = MVar.from_optional_source brancher in
-  let mreconstructor = MVar.from_optional_source reconstructor in
-  let cfg     = MVar.create ~compare:Cfg.compare Cfg.empty in
-  let symtab  = MVar.create ~compare:Symtab.compare Symtab.empty in
-  let program = MVar.create ~compare:Program.compare (Program.create ()) in
-  let task = "loading" in
-  report_progress ~task ~stage:0 ~total:5 ~note:"reading" ();
   let {Input.arch; data; code; file; finish} = read () in
   Signal.send Info.got_file file;
   Signal.send Info.got_arch arch;
   Signal.send Info.got_data data;
   Signal.send Info.got_code code;
-  let rec loop () =
-    let updated = MVar.is_updated mbrancher || MVar.is_updated mrooter in
-    let brancher = MVar.read mbrancher
-    and rooter   = MVar.read mrooter in
-    let disassemble () =
-      report_progress ~task ~stage:1 ~note:"disassembling" ();
-      let run mem =
-        let dis =
-          Disasm.With_exn.of_mem ?backend ?brancher ?rooter arch mem in
-        Disasm.errors dis |>
-        List.iter ~f:(fun e -> warning "%a" pp_disasm_error e);
-        Disasm.cfg dis in
-      Memmap.to_sequence code |>
-      Seq.fold ~init:Cfg.empty ~f:(fun cfg (mem,_) ->
-          Graphlib.union (module Cfg) cfg (run mem)) |>
-      MVar.write cfg  in
-    if updated then disassemble ();
-    let is_cfg_updated = phase_triggered Info.got_cfg cfg in
-    let g = MVar.read cfg in
-    let reconstruct () =
-      if is_cfg_updated || MVar.is_updated msymbolizer then
-        let symbolizer = match MVar.read msymbolizer with
-          | None -> Symbolizer.empty
-          | Some s -> s in
-        let name = Symbolizer.resolve symbolizer in
-        let syms =
-          let () = report_progress ~task ~stage:2 ~note:"reconstructing" () in
-          Reconstructor.(run (default name (roots rooter)) g) in
-        MVar.write symtab syms in
-    if is_cfg_updated || MVar.is_updated mreconstructor
-    then match MVar.read mreconstructor with
-      | Some r ->
-        MVar.ignore msymbolizer;
-        report_progress ~task ~stage:2 ~note:"reconstructing" ();
-        MVar.write symtab (Reconstructor.run r g)
-      | None -> reconstruct ()
-    else reconstruct ();
-    let is_symtab_updated = phase_triggered Info.got_symtab symtab in
-    if is_symtab_updated
-    then begin
-      report_progress ~task ~stage:3 ~note:"lifting" ();
-      MVar.write program (Program.lift (MVar.read symtab))
-    end;
-    let _ = phase_triggered Info.got_program program in
-    if MVar.is_updated mrooter ||
-       MVar.is_updated mbrancher ||
-       MVar.is_updated msymbolizer ||
-       MVar.is_updated mreconstructor then loop ()
-    else
-      let disasm = Disasm.create g in
-      let program = MVar.read program in
-      report_progress ~task ~stage:4 ~note:"finishing" ();
-      finish {
-        disasm;
-        program;
-        symbols = MVar.read symtab;
-        arch; memory=union_memory code data;
-        storage = Dict.set Dict.empty filename file;
-        state; passes=[]
-      } in
-  loop ()
+  finish @@ build ?state ~code ~data arch
 
 let create
-    ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input =
+    ?state ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input =
   Or_error.try_with ~backtrace:true (fun () ->
       create_exn
-        ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input)
+        ?state ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input)
 
-let restore_state {state={State.tids; name}} =
-  Tid.Tid_generator.store tids;
-  Tid.Name_resolver.store name
+let restore_state _ =
+  failwith "Project.restore_state: this function should no be used.
+    Please use the Toplevel module to save/restore the state."
 
 let with_memory = Field.fset Fields.memory
 let with_symbols = Field.fset Fields.symbols
@@ -552,18 +504,6 @@ module type S = sig
   val of_image : image -> t
   module Factory : Bap_disasm_source.Factory with type t = t
 end
-
-let register x =
-  let module S = (val x : S) in
-  let stream =
-    Stream.map Info.img ~f:(fun img ->
-        Or_error.try_with (fun () -> S.of_image img)) in
-  S.Factory.register "internal" stream
-
-let () =
-  register (module Brancher);
-  register (module Rooter);
-  register (module Symbolizer)
 
 include Data.Make(struct
     type nonrec t = t

@@ -31,7 +31,7 @@ Library bap_llvm
                  Bap_llvm_ogre_samples,
                  Bap_llvm_ogre_types
   CCOpt:         $cc_optimization
-  CCLib:         $llvm_lib $cxxlibs $llvm_ldflags
+  CCLib:         $llvm_lib $cxxlibs $llvm_ldflags -lcurses
   CSources:      llvm_disasm.h,
                  llvm_disasm.c,
                  llvm_stubs.c,

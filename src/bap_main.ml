@@ -1,3 +1,5 @@
+open Bap_knowledge
+
 open Core_kernel
 open Bap_plugins.Std
 open Bap_future.Std
@@ -15,34 +17,6 @@ module Recipe = Bap_recipe
 exception Failed_to_create_project of Error.t [@@deriving sexp]
 exception Pass_not_found of string [@@deriving sexp]
 
-let find_source (type t) (module F : Source.Factory.S with type t = t)
-    field o = Option.(field o >>= F.find)
-
-let brancher = find_source (module Brancher.Factory) brancher
-let reconstructor =
-  find_source (module Reconstructor.Factory) reconstructor
-
-let merge_streams ss ~f : 'a Source.t =
-  Stream.concat_merge ss
-    ~f:(fun s s' -> match s, s' with
-        | Ok s, Ok s' -> Ok (f s s')
-        | Ok _, Error er
-        | Error er, Ok _ -> Error er
-        | Error er, Error er' ->
-          Error (Error.of_list [er; er']))
-
-let merge_sources create field (o : Bap_options.t) ~f =  match field o with
-  | [] -> None
-  | names -> match List.filter_map names ~f:create with
-    | [] -> assert false
-    | ss -> Some (merge_streams ss ~f)
-
-let symbolizer =
-  merge_sources Symbolizer.Factory.find symbolizers ~f:(fun s1 s2 ->
-      Symbolizer.chain [s1;s2])
-
-let rooter =
-  merge_sources Rooter.Factory.find rooters ~f:Rooter.union
 
 let print_formats_and_exit () =
   Bap_format_printer.run `writers (module Project);
@@ -74,8 +48,8 @@ let args filename argv =
   String.Hash_set.sexp_of_t inputs |>
   Sexp.to_string_mach
 
-let digest o =
-  Data.Cache.digest ~namespace:"project" "%s%s"
+let digest ~namespace o =
+  Data.Cache.digest ~namespace "%s%s"
     (Caml.Digest.(file o.filename |> to_hex))
     (args o.filename Sys.argv)
 
@@ -105,44 +79,75 @@ let process options project =
       | `stdout,fmt,ver ->
         Project.Io.show ~fmt ?ver project)
 
-let extract_format filename =
-  let fmt = match String.rindex filename '.' with
-    | None -> filename
-    | Some n -> String.subo ~pos:(n+1) filename in
-  match Bap_fmt_spec.parse fmt with
-  | `Error _ -> None, None
-  | `Ok (_,fmt,ver) -> Some fmt, ver
+let knowledge_cache () =
+  let reader = Data.Read.create
+      ~of_bigstring:Knowledge.of_bigstring () in
+  let writer = Data.Write.create
+      ~to_bigstring:Knowledge.to_bigstring () in
+  Data.Cache.Service.request reader writer
 
-let main o =
+let project_state_cache () =
+  let module State = struct
+    type t = Project.state [@@deriving bin_io]
+  end in
+  let of_bigstring = Binable.of_bigstring (module State) in
+  let to_bigstring = Binable.to_bigstring (module State) in
+  let reader = Data.Read.create ~of_bigstring () in
+  let writer = Data.Write.create ~to_bigstring () in
+  Data.Cache.Service.request reader writer
+
+let import_knowledge_from_cache digest =
+  let digest = digest ~namespace:"knowledge" in
+  info "looking for knowledge with digest %a"
+    Data.Cache.Digest.pp digest;
+  let cache = knowledge_cache () in
+  match Data.Cache.load cache digest with
+  | None -> ()
+  | Some state ->
+    info "importing knowledge from cache";
+    Toplevel.set state
+
+let load_project_state_from_cache digest =
+  let digest = digest ~namespace:"project" in
+  let cache = project_state_cache () in
+  Data.Cache.load cache digest
+
+let save_project_state_to_cache digest state =
+  let digest = digest ~namespace:"project" in
+  let cache = project_state_cache () in
+  Data.Cache.save cache digest state
+
+let store_knowledge_in_cache digest =
+  let digest = digest ~namespace:"knowledge" in
+  info "caching knowledge with digest %a"
+    Data.Cache.Digest.pp digest;
+  let cache = knowledge_cache () in
+  Toplevel.current () |>
+  Data.Cache.save cache digest
+
+
+let main ({filename; loader; disassembler} as opts) =
+  let digest = digest opts in
+  import_knowledge_from_cache digest;
+  let state = load_project_state_from_cache digest in
   let proj_of_input input =
-    let rooter = rooter o
-    and brancher = brancher o
-    and reconstructor = reconstructor o
-    and symbolizer = symbolizer o in
-    Project.create input ~disassembler:o.disassembler
-      ?brancher ?rooter ?symbolizer ?reconstructor  |> function
+    Project.create ?state input ~disassembler |> function
     | Error err -> raise (Failed_to_create_project err)
-    | Ok project ->
-      Project.Cache.save (digest o) project;
-      project in
-  let proj_of_file ?ver ?fmt file =
-    In_channel.with_file file
-      ~f:(fun ch -> Project.Io.load ?fmt ?ver ch) in
-  let project = match Project.Cache.load (digest o) with
-    | Some proj ->
-      Project.restore_state proj;
-      proj
-    | None -> match o.source with
-      | `Project ->
-        let fmt,ver = extract_format o.filename in
-        proj_of_file ?fmt ?ver o.filename
-      | `Memory arch ->
-        proj_of_input @@
-        Project.Input.binary arch ~filename:o.filename
-      | `Binary ->
-        proj_of_input @@
-        Project.Input.file ~loader:o.loader ~filename: o.filename in
-  process o project
+    | Ok project -> project in
+  let project =
+    match opts.source with
+    | `Project -> failwith "Unsupported feature: project of file"
+    | `Memory arch ->
+      proj_of_input @@
+      Project.Input.binary arch ~filename
+    | `Binary ->
+      proj_of_input @@
+      Project.Input.file ~loader ~filename in
+  if Option.is_none state then begin
+    store_knowledge_in_cache digest;
+    save_project_state_to_cache digest (Project.state project);
+  end;
+  process opts project
 
 let program_info =
   let doc = "Binary Analysis Platform" in
@@ -201,11 +206,12 @@ let program_info =
       `P "$(b,bap-mc)(1), $(b,bap-byteweight)(1), $(b,bap)(3)"
     ] in
   Term.info "bap" ~version:Config.version ~doc ~man
+
 let program _source =
   let create
       passopt
-      _ _ a b c d e f g i j k = (Bap_options.Fields.create
-                                   a b c d e f g i j k []), passopt in
+      _ _ a b c d e f = (Bap_options.Fields.create
+                           a b c d e f []), passopt in
   let open Bap_cmdline_terms in
   let passopt : string list Term.t =
     let doc =
@@ -223,11 +229,7 @@ let program _source =
         $(loader ())
         $(dump_formats ())
         $source_type
-        $verbose
-        $(brancher ())
-        $(symbolizers ())
-        $(rooters ())
-        $(reconstructor ())),
+        $verbose),
   program_info
 
 let parse_source argv =
@@ -349,17 +351,35 @@ let nice_pp_error fmt er =
     let open R in
     match r with
     | With_backtrace (r, backtrace) ->
-       Format.fprintf fmt "%a\n" pp r;
-       Format.fprintf fmt "Backtrace:\n%s" @@ String.strip backtrace
+      Format.fprintf fmt "%a\n" pp r;
+      Format.fprintf fmt "Backtrace:\n%s" @@ String.strip backtrace
     | String s -> Format.fprintf fmt "%s" s
     | r -> pp_sexp fmt (R.sexp_of_t r) in
   Format.fprintf fmt "%a" pp (R.of_info (Error.to_info er))
+
+let setup_gc () =
+  let opts = Caml.Gc.get () in
+  info "Setting GC parameters";
+  Caml.Gc.set {
+    opts with
+    window_size = 20;
+    minor_heap_size = 1024 * 1024;
+    major_heap_increment = 64 * 1024 * 1024;
+    space_overhead = 200;
+  }
+
+let has_env var = match Sys.getenv var with
+  | exception _ -> false
+  | _ -> true
 
 let () =
   let () =
     try if Sys.getenv "BAP_DEBUG" <> "0" then
         Printexc.record_backtrace true
     with Caml.Not_found -> () in
+  if not (has_env "OCAMLRUNPARAM" || has_env "CAMLRUNPARAM")
+  then setup_gc ()
+  else info "GC parameters are overriden by a user";
   Sys.(set_signal sigint (Signal_handle exit));
   let argv = load_recipe () in
   Log.start ?logdir:(get_logdir argv)();

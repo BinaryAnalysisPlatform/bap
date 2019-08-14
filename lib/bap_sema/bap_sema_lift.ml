@@ -1,361 +1,281 @@
+open Bap_core_theory
+
 open Core_kernel
 open Bap_types.Std
 open Graphlib.Std
 open Bap_image_std
 open Bap_disasm_std
 open Bap_ir
-open Format
 
+let update_jmp jmp ~f =
+  f (Ir_jmp.dst jmp) (Ir_jmp.alt jmp) @@ fun ~dst ~alt ->
+  Ir_jmp.reify
+    ~tid:(Term.tid jmp)
+    ?cnd:(Ir_jmp.guard jmp)
+    ?dst ?alt ()
 
-(* A note about lifting call instructions.
-
-   We're labeling calls with an expected continuation, that should be
-   derived from the BIL. But instead we lift calls in a rather
-   speculative way, thus breaking the abstraction of the BIL, that
-   desugars calls into two pseudo instructions:
-
-   <update return address to next instruction>
-   <jump to target>
-
-   A correct way of doing things would be to find a live write to the
-   place that is used to store return address (ABI specific), and put
-   this expression as an expected return address (aka continuation).
-
-   But a short survey into existing instruction sets shows, that call
-   instructions doesn't allow to store something other then next
-   instruction, e.g., `call` in x86, `bl` in ARM, `jal` in MIPS,
-   `call` and `jumpl` in SPARC (although the latter allows to choose
-   arbitrary register to store return address). That's all is not to
-   say, that it is impossible to encode a call with return address
-   different from a next instruction, that's why it is called a
-   speculation.
-*)
-
-type linear =
-  | Label of tid
-  | Instr of Ir_blk.elt
-
-
-let fall_of_block cfg block =
+let intra_fall cfg block =
   Seq.find_map (Cfg.Node.outputs block cfg) ~f:(fun e ->
       match Cfg.Edge.label e with
-      | `Fall -> Some (Cfg.Edge.dst e)
+      | `Fall -> Option.some @@
+        Ir_jmp.resolved (Tid.for_addr (Block.addr (Cfg.Edge.dst e)))
       | _ -> None)
 
-let label_of_fall cfg block =
-  Option.map (fall_of_block cfg block) ~f:(fun blk ->
-      Label.indirect Bil.(int (Block.addr blk)))
+(* a subroutine could be called implicitly via a fallthrough,
+   therefore it will not be reified into jmp terms automatically,
+   so we need to do some work here.
+   We look into the symtable for an implicit call, and if
+   such exists and it is physically present in the symtab, then we
+   return a tid for the address, otherwise we return a tid for the
+   subroutine name. It is important to return the tid for address,
+   so that we can compare tids in the [insert_call] function. *)
+let inter_fall symtab block =
+  let open Option.Monad_infix in
+  symtab >>= fun symtab ->
+  Symtab.implicit_callee symtab (Block.addr block) >>| fun name ->
+  Ir_jmp.resolved @@
+  match Symtab.find_by_name symtab name with
+  | None -> Tid.for_name name
+  | Some (_,entry,_) -> Tid.for_addr (Block.addr entry)
 
-let annotate_insn term insn = Term.set_attr term Disasm.insn insn
-let annotate_addr term addr = Term.set_attr term address addr
+module IrBuilder = struct
 
-let linear_of_stmt ?addr return insn stmt : linear list =
-  let (~@) t = match addr with
-    | None -> t
-    | Some addr -> annotate_addr (annotate_insn t insn) addr in
-  let goto ?cond id =
-    `Jmp ~@(Ir_jmp.create_goto ?cond (Label.direct id)) in
-  let jump ?cond exp =
-    let target = Label.indirect exp in
-    if Insn.(is return) insn
-    then Ir_jmp.create_ret ?cond target
-    else if Insn.(is call) insn
-    then
-      Ir_jmp.create_call ?cond (Call.create ?return ~target ())
-    else Ir_jmp.create_goto ?cond target in
-  let jump ?cond exp = Instr (`Jmp ~@(jump ?cond exp)) in
-  let cpuexn ?cond n =
-    let landing = Tid.create () in
-    let takeoff = Tid.create () in
-    let exn = `Jmp ~@(Ir_jmp.create_int ?cond n landing) in
-    match return with
-    | None -> [
-        Instr exn;
-        Label landing;
-        (* No code was found that follows the interrupt,
-           so this is a no-return interrupt *)
-      ]
-    | Some lab -> [
-        Instr (goto takeoff);
-        Label landing;
-        Instr (`Jmp ~@(Ir_jmp.create_goto lab));
-        Label takeoff;
-        Instr exn;
-      ] in
+  let def_only blk = Term.length jmp_t blk = 0
 
-  let rec linearize = function
-    | Bil.Move (lhs,rhs) ->
-      [Instr (`Def ~@(Ir_def.create lhs rhs))]
-    | Bil.If (_, [],[]) -> []
-    | Bil.If (cond,[],no) -> linearize Bil.(If (lnot cond, no,[]))
-    | Bil.If (cond,yes,[]) ->
-      let yes_label = Tid.create () in
-      let tail = Tid.create () in
-      Instr (goto ~cond yes_label) ::
-      Instr (goto tail) ::
-      Label yes_label ::
-      List.concat_map yes ~f:linearize @
-      Instr (goto tail) ::
-      Label tail :: []
-    | Bil.If (cond,yes,no) ->
-      let yes_label = Tid.create () in
-      let no_label = Tid.create () in
-      let tail = Tid.create () in
-      Instr (goto ~cond yes_label) ::
-      Instr (goto no_label) ::
-      Label yes_label ::
-      List.concat_map yes ~f:linearize @
-      Instr (goto tail) ::
-      Label no_label ::
-      List.concat_map no ~f:linearize @
-      Instr (goto tail) ::
-      Label tail :: []
-    | Bil.Jmp exp -> [jump exp]
-    | Bil.CpuExn n -> cpuexn n
-    | Bil.Special _ -> []
-    | Bil.While (cond,body) ->
-      let header = Tid.create () in
-      let tail = Tid.create () in
-      let finish = Tid.create () in
-      Instr (goto tail) ::
-      Label header ::
-      List.concat_map body ~f:linearize @
-      Instr (goto tail) ::
-      Label tail ::
-      Instr (goto ~cond header) ::
-      Instr (goto finish) ::
-      Label finish :: [] in
-  linearize stmt
+  (* concat two def-only blocks *)
+  let append_def_only b1 b2 =
+    let b = Ir_blk.Builder.init ~same_tid:true ~copy_defs:true b1 in
+    Term.enum def_t b2 |> Seq.iter ~f:(Ir_blk.Builder.add_def b);
+    Term.enum jmp_t b2 |> Seq.iter ~f:(Ir_blk.Builder.add_jmp b);
+    Ir_blk.Builder.result b
 
+  let append xs ys = match xs, ys with
+    | [],xs | xs,[] -> xs
+    | x :: xs, y :: ys when def_only x ->
+      List.rev_append ys (append_def_only x y :: xs)
+    | xs, ys -> List.rev_append ys xs
 
-let lift_insn ?addr fall init insn =
-  List.fold (Insn.bil insn) ~init ~f:(fun init stmt ->
-      List.fold (linear_of_stmt ?addr fall insn stmt) ~init
-        ~f:(fun (bs,b) -> function
-            | Label lab ->
-              Ir_blk.Builder.result b :: bs,
-              Ir_blk.Builder.create ~tid:lab ()
-            | Instr elt ->
-              Ir_blk.Builder.add_elt b elt; bs,b))
+  let ir_of_insn insn = KB.Value.get Term.slot insn
 
-let has_jump_under_condition bil =
-  with_return (fun {return} ->
-      let enter_control ifs = if ifs = 0 then ifs else return true in
-      Bil.fold (object
-        inherit [int] Stmt.visitor
-        method! enter_if ~cond:_ ~yes:_ ~no:_ x = x + 1
-        method! leave_if ~cond:_ ~yes:_ ~no:_ x = x - 1
-        method! enter_jmp _ ifs    = enter_control ifs
-        method! enter_cpuexn _ ifs = enter_control ifs
-      end) ~init:0 bil |> fun (_ : int) -> false)
+  let set_attributes ?mem insn blks =
+    let addr = Option.map ~f:Memory.min_addr mem in
+    let set_attributes k b =
+      Term.map k b ~f:(fun t ->
+          let t = Term.set_attr t Disasm.insn insn in
+          Option.value_map addr ~f:(Term.set_attr t address)
+            ~default:t) in
+    List.map blks ~f:(fun blk ->
+        set_attributes jmp_t blk |>
+        set_attributes def_t)
 
-let is_conditional_jump jmp =
-  Insn.(may affect_control_flow) jmp &&
-  has_jump_under_condition (Insn.bil jmp)
+  let lift_insn ?mem insn blks =
+    append blks @@
+    set_attributes ?mem insn (ir_of_insn insn)
 
-let has_called block addr =
-  let finder =
-    object inherit [unit] Stmt.finder
-      method! enter_jmp e r =
-        match e with
-        | Bil.Int a when Addr.(a = addr) -> r.return (Some ())
-        | _ -> r
-    end in
-  Bil.exists finder (Insn.bil (Block.terminator block))
+  let with_first_blk_addressed addr = function
+    | [] -> []
+    | b :: bs -> Term.set_attr b address addr :: bs
 
-let fall_of_symtab symtab block =
-  Option.(
-    symtab >>= fun symtab ->
-    match Symtab.enum_calls symtab (Block.addr block) with
-    | [] -> None
-    | calls ->
-      List.find_map calls
-        ~f:(fun (n,e) -> Option.some_if (e = `Fall) n) >>= fun name ->
-      Symtab.find_by_name symtab name >>= fun (_,entry,_) ->
-      Option.some_if Block.(block <> entry) entry >>= fun callee ->
-      let addr = Block.addr callee in
-      Option.some_if (not (has_called block addr)) () >>= fun () ->
-      let bldr = Ir_blk.Builder.create () in
-      let call = Call.create ~target:(Label.indirect Bil.(int addr)) () in
-      let () = Ir_blk.Builder.add_jmp bldr (Ir_jmp.create_call call) in
-      Some (Ir_blk.Builder.result bldr))
+  let turn_into_call ret blk =
+    Term.map jmp_t blk ~f:(update_jmp ~f:(fun dst _ jmp ->
+        jmp ~dst:ret ~alt:dst))
 
-let blk ?symtab cfg block : blk term list =
-  let fall_to_fn = fall_of_symtab symtab block in
-  let fall_label =
-    match label_of_fall cfg block, fall_to_fn with
-    | None, Some b -> Some (Label.direct (Term.tid b))
-    | fall_label,_ -> fall_label in
-  List.fold (Block.insns block) ~init:([],Ir_blk.Builder.create ())
-    ~f:(fun init (mem,insn) ->
-        let addr = Memory.min_addr mem in
-        lift_insn ~addr fall_label init insn) |>
-  fun (bs,b) ->
-  let fall =
-    let jmp = Block.terminator block in
-    if Insn.(is call) jmp && not (is_conditional_jump jmp)
-    then None else match fall_label with
-      | None -> None
-      | Some dst -> Some (`Jmp (Ir_jmp.create_goto dst)) in
-  Option.iter fall ~f:(Ir_blk.Builder.add_elt b);
-  let b = Ir_blk.Builder.result b in
-  let blocks = match fall_to_fn with
-    | None -> b :: bs
-    | Some b' -> b' :: b :: bs in
-  List.rev blocks |> function
-  | [] -> assert false
-  | b::bs -> Term.set_attr b address (Block.addr block) :: bs
+  let landing_pad return jmp =
+    match Ir_jmp.kind jmp with
+    | Int (_,pad) ->
+      let pad = Ir_blk.create ~tid:pad () in
+      let pad = match return with
+        | None -> pad
+        | Some dst -> Term.append jmp_t pad (Ir_jmp.reify ~dst ()) in
+      Some pad
+    | _ -> None
 
-let resolve_jmp ~local addrs jmp =
-  let update_kind jmp addr make_kind =
-    Option.value_map ~default:jmp
-      (Hashtbl.find addrs addr)
-      ~f:(fun id -> Ir_jmp.with_kind jmp (make_kind id)) in
-  match Ir_jmp.kind jmp with
-  | Ret _ | Int _ -> jmp
-  | Goto (Indirect (Bil.Int addr)) ->
-    update_kind jmp addr (fun id ->
-        if local then Goto (Direct id)
-        else
-          Call (Call.create ~target:(Direct id) ()))
-  | Goto _ -> jmp
-  | Call call ->
-    let jmp,call = match Call.target call with
-      | _ when local -> jmp, call
-      | Indirect (Bil.Int addr) ->
-        let new_call = ref call in
-        let jmp = update_kind jmp addr
-            (fun id ->
-               new_call := Call.with_target call (Direct id);
-               Call !new_call) in
-        jmp, !new_call
-      | _ -> jmp,call in
-    match Call.return call with
-    | Some (Indirect (Bil.Int addr)) when Hashtbl.mem addrs addr ->
-      update_kind jmp addr
-        (fun id -> Call (Call.with_return call (Direct id)))
-    | Some (Indirect (Bil.Int _)) ->
-      Ir_jmp.with_kind jmp @@ Call (Call.with_noreturn call)
-    | _ -> jmp
+  let with_landing_pads return bs = match bs with
+    | [] -> []
+    | b :: bs as blks ->
+      let pads = List.fold ~init:[] blks ~f:(fun pads b ->
+          Term.enum jmp_t b |>
+          Seq.fold ~init:pads ~f:(fun pads jmp ->
+              match landing_pad return jmp with
+              | Some pad -> pad :: pads
+              | None -> pads)) in
+      b :: List.rev_append pads bs
 
-(* remove all jumps that are after unconditional jump *)
-let remove_false_jmps blk =
-  Term.enum jmp_t blk |> Seq.find ~f:(fun jmp ->
-      Exp.(Ir_jmp.cond jmp = (Bil.Int Word.b1))) |> function
-  | None -> blk
-  | Some last ->
-    Term.after jmp_t blk (Term.tid last) |> Seq.map ~f:Term.tid |>
-    Seq.fold ~init:blk ~f:(Term.remove jmp_t)
+  let resolves_equal x y =
+    match Ir_jmp.resolve x, Ir_jmp.resolve y with
+    | First x, First y -> Tid.equal x y
+    | _ -> false
 
-let unbound _ = true
+  let insert_inter_fall alt blk =
+    [Term.append jmp_t blk @@ Ir_jmp.reify ~alt ()]
 
-let lift_sub ?symtab entry cfg =
-  let addrs = Addr.Table.create () in
-  let recons acc b =
-    let addr = Block.addr b in
-    let blks = blk ?symtab cfg b in
-    Option.iter (List.hd blks) ~f:(fun blk ->
-        Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid blk));
-    acc @ blks in
-  let blocks = Graphlib.reverse_postorder_traverse
-      (module Cfg) ~start:entry cfg in
-  let blks = Seq.fold blocks ~init:[] ~f:recons in
-  let n = let n = List.length blks in Option.some_if (n > 0) n in
-  let sub = Ir_sub.Builder.create ?blks:n () in
-  List.iter blks ~f:(fun blk ->
-      Ir_sub.Builder.add_blk sub
-        (Term.map jmp_t blk ~f:(resolve_jmp ~local:true addrs)));
+  let is_last_jump_nonconditional blk =
+    match Term.last jmp_t blk with
+    | None -> false
+    | Some jmp -> match Ir_jmp.cond jmp with
+      | Bil.Int x -> Word.equal Word.b1 x
+      | _ -> false
+
+  let fall_if_possible blk fall =
+    if is_last_jump_nonconditional blk
+    then blk
+    else Term.append jmp_t blk fall
+
+  let blk ?symtab cfg block : blk term list =
+    let tid = Tid.for_addr (Block.addr block) in
+    let blks =
+      Block.insns block |>
+      List.fold ~init:[Ir_blk.create ~tid ()] ~f:(fun blks (mem,insn) ->
+          lift_insn ~mem insn blks) in
+    let fall = intra_fall cfg block in
+    let blks = with_landing_pads fall blks in
+    let x = Block.terminator block in
+    let is_call = Insn.(is call x)
+    and is_barrier = Insn.(is barrier x) in
+    with_first_blk_addressed (Block.addr block) @@
+    List.rev @@ match blks,fall with
+    | [],_ -> []
+    | blks,_ when is_barrier -> blks
+    | x::xs, Some dst ->
+      if is_call
+      then turn_into_call fall x :: xs
+      else fall_if_possible x (Ir_jmp.reify ~dst ()) :: xs
+    | x::xs, None ->
+      let x = if is_call then turn_into_call fall x else x in
+      match inter_fall symtab block with
+      | Some dst when Term.length jmp_t x = 0 ->
+        insert_inter_fall dst x @ xs
+      | _ -> x::xs
+end
+
+let blk cfg block = IrBuilder.blk cfg block
+
+let lift_sub ?symtab ?tid entry cfg =
+  let sub = Ir_sub.Builder.create ?tid ~blks:32 () in
+  Graphlib.reverse_postorder_traverse (module Cfg) ~start:entry cfg |>
+  Seq.iter ~f:(fun block ->
+      let blks = IrBuilder.blk ?symtab cfg block in
+      List.iter blks ~f:(Ir_sub.Builder.add_blk sub));
   let sub = Ir_sub.Builder.result sub in
   Term.set_attr sub address (Block.addr entry)
 
-let create_synthetic name =
-  let sub = Ir_sub.create ~name () in
-  Tid.set_name (Term.tid sub) name;
-  Term.(set_attr sub synthetic ())
+(* Rewires some intraprocedural jmps into interprocedural.
 
-let indirect_target jmp =
-  match Ir_jmp.kind jmp with
-  | Ret _ | Int _ | Goto _ -> None
-  | Call call -> match Call.target call with
-    | Indirect (Bil.Int a) -> Some a
-    | _ -> None
+   - If a jmp is unresolved, we can't really prove that the control
+     flow won't leave the boundaries of its subroutine, therefore we
+     conservatively turn it into a call.
 
-let is_indirect_call jmp = Option.is_some (indirect_target jmp)
+   - If a jmp is resolved, but its destination is not within
+     the boundaries of its function, then we reclassify it as
+     interprocedural.
 
-let with_address t ~f ~default =
-  Option.value_map ~default ~f (Term.get_attr t address)
+   - If a jmp already has an alternate route, to keep things simple,
+     we do not touch it. *)
+let alternate_nonlocal sub jmp =
+  let needs_alternation =
+    Option.is_none (Ir_jmp.alt jmp) && match Ir_jmp.dst jmp with
+    | None -> false  (* already nonlocal *)
+    | Some dst -> match Ir_jmp.resolve dst with
+      | Second _ -> true  (* all unresolved are potentially calls *)
+      | First dst -> Option.is_none (Term.find blk_t sub dst) in
+  if needs_alternation
+  then update_jmp jmp ~f:(fun dst _ jmp -> jmp ~dst:None ~alt:dst)
+  else jmp
 
-let with_address_opt t ~f ~default =
-  let g a = Option.value (f a) ~default in
-  with_address t ~f:g ~default
+(* On the local level of lifting all resolved jmps are pointing to
+   basic blocks. When we lift on the program (global) level, we
+   need to link all resolved calls to subroutines.
 
-let update_unresolved symtab unresolved exts sub =
-  let iter cls t ~f = Term.to_sequence cls t |> Seq.iter ~f in
-  let symbol_exists name =
-    Option.is_some (Symtab.find_by_name symtab name) in
-  let is_known a = Option.is_some (Symtab.find_by_start symtab a) in
-  let is_unknown name = not (symbol_exists name) in
-  let add_external (name,_) =
-    if is_unknown name then
-      Hashtbl.update exts name ~f:(function
-          | None -> create_synthetic name
-          | Some x -> x) in
-  iter blk_t sub ~f:(fun blk ->
-      iter jmp_t blk ~f:(fun jmp ->
-          match indirect_target jmp with
-          | None -> ()
-          | Some a when is_known a -> ()
-          | _ ->
-            with_address blk ~default:() ~f:(fun addr ->
-                Hash_set.add unresolved addr;
-                Symtab.enum_calls symtab addr |>
-                List.iter ~f:add_external)))
+   The [sub_of_blk] mapping maps tids of entries (basic blocks) to
+   tids of their corresponding subroutines. If an intraprocedural
+   edge points to an entry of a subroutine we relink it to that
+   subroutine.
 
-let resolve_indirect symtab exts blk jmp =
-  let update_target tar =
-    Option.some @@
-    match Ir_jmp.kind jmp with
-    | Call c -> Ir_jmp.with_kind jmp (Call (Call.with_target c tar))
-    | _ -> jmp in
-  let resolve_name (name,_) =
-    match Symtab.find_by_name symtab name with
-    | Some (_,b,_) -> update_target (Indirect (Int (Block.addr b)))
-    | _ -> match Hashtbl.find exts name with
-      | Some s -> update_target (Direct (Term.tid s))
-      | None -> None in
-  with_address_opt blk ~default:jmp ~f:(fun addr ->
-      Symtab.enum_calls symtab addr |>
-      List.find_map ~f:resolve_name)
+   If a jump is an interprocedural edge, that points to an entry of
+   a subroutine we turn it into a tail call. This could be a real tail
+   call, a self recursive call, or an error from the previous steps of
+   lifting. In any case, it will guarantee that the entry block has
+   the local indegree zero.
+
+   Finally, if both jump edges are not pointing to the entries and
+   the interprocedural edge is resolved, then we have a jump to an
+   external function, so we relink it to a label that corresponds
+   to the name of the external function. Note, this step relies on
+   the [alternate_nonlocal] pass, described above. *)
+let link_call symtab addr sub_of_blk jmp =
+  let open Option.Monad_infix in
+  let resolve dst = dst jmp >>| Ir_jmp.resolve >>= function
+    | Second _ -> None
+    | First tid -> Some tid in
+  let sub_of_dst dst =
+    resolve dst >>= Hashtbl.find sub_of_blk >>| Ir_jmp.resolved in
+  let external_callee () =
+    addr >>= Symtab.explicit_callee symtab >>| Tid.for_name >>|
+    Ir_jmp.resolved in
+  match sub_of_dst Ir_jmp.dst, sub_of_dst Ir_jmp.alt with
+  | _, (Some _ as alt) ->
+    update_jmp jmp ~f:(fun dst _ jmp -> jmp ~dst ~alt)
+  | Some _ as alt, None ->
+    update_jmp jmp ~f:(fun _ _ jmp -> jmp ~dst:None ~alt)
+  | None,None -> match resolve Ir_jmp.alt with
+    | None -> jmp
+    | Some (_:tid) -> match external_callee () with
+      | Some alt -> update_jmp jmp ~f:(fun dst _ jmp ->
+          jmp ~dst ~alt:(Some alt))
+      | None -> jmp
+
+
+let insert_synthetic prog =
+  Term.enum sub_t prog |>
+  Seq.fold ~init:prog ~f:(fun prog sub ->
+      Term.enum blk_t sub |>
+      Seq.fold ~init:prog ~f:(fun prog blk ->
+          Term.enum jmp_t blk |>
+          Seq.fold ~init:prog ~f:(fun prog jmp ->
+              match Ir_jmp.alt jmp with
+              | None -> prog
+              | Some dst -> match Ir_jmp.resolve dst with
+                | Second _ -> prog
+                | First dst ->
+                  if Option.is_some (Term.find sub_t prog dst)
+                  then prog
+                  else
+                    Term.append sub_t prog @@
+                    Ir_sub.create ~tid:dst ())))
+
 
 let program symtab =
   let b = Ir_program.Builder.create () in
-  let addrs = Addr.Table.create () in
-  let externals = String.Table.create () in
-  let unresolved = Addr.Hash_set.create () in
+  let sub_of_blk = Hashtbl.create (module Tid) in
+  let tid_for_sub =
+    let tids = Hash_set.create (module Tid) () in
+    fun name ->
+      let tid = Tid.for_name name in
+      match Hash_set.strict_add tids tid with
+      | Ok () -> tid
+      | Error _ ->
+        let tid = Tid.create () in
+        Tid.set_name tid name;
+        Hash_set.strict_add_exn tids tid;
+        tid in
   Seq.iter (Symtab.to_sequence symtab) ~f:(fun (name,entry,cfg) ->
       let addr = Block.addr entry in
-      let sub = lift_sub ~symtab entry cfg in
+      let blk_tid = Tid.for_addr addr in
+      let sub_tid = tid_for_sub name in
+      let sub = lift_sub ~symtab ~tid:sub_tid entry cfg in
       Ir_program.Builder.add_sub b (Ir_sub.with_name sub name);
-      Tid.set_name (Term.tid sub) name;
-      Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid sub);
-      update_unresolved symtab unresolved externals sub);
-  Hashtbl.iter externals ~f:(Ir_program.Builder.add_sub b);
+      Hashtbl.add_exn sub_of_blk ~key:blk_tid ~data:sub_tid;);
   let program = Ir_program.Builder.result b in
-  let has_unresolved blk =
-    with_address blk ~default:false ~f:(Hash_set.mem unresolved) in
-  Term.map sub_t program
-    ~f:(fun sub -> Term.map blk_t sub ~f:(fun blk ->
-        Term.map jmp_t (remove_false_jmps blk)
-          ~f:(fun j ->
-              let j =
-                if is_indirect_call j && has_unresolved blk then
-                  resolve_indirect symtab externals blk j
-                else j in
-              resolve_jmp ~local:false addrs j)))
+  Term.map sub_t program ~f:(fun sub ->
+      Term.map blk_t sub ~f:(fun blk ->
+          let addr = Term.get_attr blk address in
+          Term.map jmp_t blk ~f:(fun jmp ->
+              jmp |>
+              alternate_nonlocal sub |>
+              link_call symtab addr sub_of_blk))) |>
+  insert_synthetic
 
-let sub = lift_sub ?symtab:None
-let blk = blk ?symtab:None
+let sub blk cfg = lift_sub blk cfg
 
 let insn insn =
-  lift_insn None ([], Ir_blk.Builder.create ()) insn |>
-  function (bs,b) -> List.rev (Ir_blk.Builder.result b :: bs)
+  List.rev @@ IrBuilder.lift_insn insn [Ir_blk.create ()]

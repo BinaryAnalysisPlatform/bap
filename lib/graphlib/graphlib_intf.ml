@@ -117,7 +117,9 @@ type graph_attr = Graph.Graphviz.DotAttributes.graph
 module type Solution = sig
   type ('n,'d) t
   val create : ('n,'d,_) Map.t -> 'd -> ('n,'d) t
+  val equal : equal:('d -> 'd -> bool) -> ('n,'d) t -> ('n,'d) t -> bool
   val iterations : ('n,'d) t -> int
+  val enum : ('n,'d) t -> ('n * 'd) Sequence.t
   val default : ('n,'d) t -> 'd
   val is_fixpoint : ('n,'d) t -> bool
   val get : ('n,'d) t -> 'n -> 'd

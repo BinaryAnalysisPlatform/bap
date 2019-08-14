@@ -97,7 +97,6 @@ let strip_leading_dot s =
 let demangle demangle prog =
   Term.map sub_t prog ~f:(fun sub ->
       let name = demangle (Sub.name sub) in
-      Tid.set_name (Term.tid sub) name;
       Sub.with_name sub name)
 
 let set_abi proj m =

@@ -1,4 +1,6 @@
 open Core_kernel
+open Bap_core_theory
+open Bap_knowledge
 open Regular.Std
 open Bap_common
 open Format
@@ -90,3 +92,22 @@ module Stmts_data = struct
     set_default_writer "bin";
     set_default_reader "bin"
 end
+
+
+let domain = Knowledge.Domain.flat "bil"
+    ~empty:[]
+    ~inspect:(function
+        | [] -> Sexp.List []
+        | bil -> Sexp.Atom (Stmts_pp.to_string bil))
+    ~equal:(fun x y ->
+        phys_equal x y ||
+        Int.(compare_bil x y = 0))
+
+
+let persistent = Knowledge.Persistent.of_binable (module struct
+    type t = stmt list [@@deriving bin_io]
+  end)
+
+let slot = Knowledge.Class.property ~package:"bap.std"
+    ~persistent Theory.Program.Semantics.cls "bil" domain
+    ~desc:"semantics of statements in BIL"

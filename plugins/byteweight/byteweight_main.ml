@@ -11,22 +11,24 @@ module Sigs = Bap_byteweight_signatures
 let create_finder path length threshold arch comp =
   match Sigs.load ?comp ?path ~mode:"bytes" arch with
   | Error `No_signatures ->
-    info "signature database is not available";
+    info "the signature database is not available";
     info "advice - use `bap-byteweight` to install signatures";
-    Or_error.errorf "no signatures"
+    info "advice - alternatively, use `opam install bap-signatures'";
+    Or_error.errorf "signatures are unavailable"
   | Error (`Corrupted err) ->
     let path = Option.value path ~default:Sigs.default_path in
-    error "signature database is corrupted: %s" err;
+    error "the signature database is corrupted: %s" err;
     info "advice - delete signatures at `%s'" path;
     info "advice - use `bap-byteweight` to install signatures";
-    Or_error.errorf "corrupted database"
-  | Error (`No_entry err) ->
-    error "no signatures for specified compiler and architecture";
-    info "advice - try to use default compiler entry";
-    info "advice - create new entries with `bap-byteweight' tool";
-    Or_error.errorf "no entry"
+    info "advice - alternatively, use `opam install bap-signatures'";
+    Or_error.errorf "signatures are corrupted"
+  | Error (`No_entry _) ->
+    error "no signatures for the specified compiler and/or architecture";
+    info "advice - try to use the default compiler entry";
+    info "advice - create new entries using the `bap-byteweight' tool";
+    Or_error.errorf "compiler is not supported by signatures"
   | Error (`Sys_error err) ->
-    error "signature loading was prevented by a system error: %s" err;
+    error "failed to load the signatures because of a system error: %s" err;
     Or_error.errorf "system error"
   | Ok data ->
     let bw = Binable.of_string (module BW) (Bytes.to_string data) in
@@ -43,22 +45,25 @@ let main path length threshold comp =
         Set.union roots @@ Addr.Set.of_list (finder mem)) in
   let find_roots arch mem = match finder arch with
     | Error _ as err ->
-      warning "unable to provide rooter service";
+      warning "will not provide roots";
       err
     | Ok finder -> match find finder mem with
       | roots when Set.is_empty roots ->
-        info "no roots was found";
-        info "advice - check your compiler's signatures";
+        info "no roots were found";
+        info "advice - check your signatures";
         Ok (Rooter.create Seq.empty)
       | roots -> Ok (roots |> Set.to_sequence |> Rooter.create)  in
-  let rooter =
-    let open Project.Info in
-    Stream.Variadic.(apply (args arch $ code) ~f:find_roots) in
   if sigs_exists path then
-    Rooter.Factory.register name rooter
-  else
-    let () = warning "signature database is not available" in
-    info "advice - use `bap-byteweight` to install signatures"
+    let inputs = Stream.zip Project.Info.arch Project.Info.code in
+    Stream.observe inputs (fun (arch,mem) ->
+        match find_roots arch mem with
+        | Ok roots -> Rooter.provide roots
+        | Error _ -> ())
+  else begin
+    warning "the signature database is not available";
+    info "advice - use `bap-byteweight` to install signatures";
+    info "advice - alternatively, use `opam install bap-signatures'";
+  end
 
 
 let () =
@@ -67,11 +72,11 @@ let () =
 
       `P
 
-        "This plugin provides a rooter (function start identification)
-       service using the BYTEWEIGHT algorithm described in [1]. The
-       plugin operates on a byte level. The $(b,SEE ALSO) section
-       contains links for other plugins, that provides rooters";
-
+        "This plugin identifies function starts, partially \
+         implementing on the BYTEWEIGHT algorithm described in \
+         [1]. Only the byte level matching is implemented. The $(b,SEE \
+         ALSO) section contains links for other plugins, that provides \
+         rooters";
 
       `P "[1]: Bao, Tiffany, et al. \"Byteweight: Learning to recognize
     functions in binary code.\" 23rd USENIX Security Symposium (USENIX
@@ -86,7 +91,7 @@ let () =
     let doc = "Minimum score for the function start" in
     Config.(param float ~default:0.9 "threshold" ~doc) in
   let sigsfile : string option Config.param =
-    let doc = "Path to the signature file. No needed by default, \
+    let doc = "Path to the signature file. Not needed by default, \
                usually it is enough to run `bap-byteweight update'." in
     Config.(param (some non_dir_file) "sigs" ~doc) in
   let compiler : string option Config.param =

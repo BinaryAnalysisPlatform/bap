@@ -8,6 +8,7 @@ type t = {
   arch : string;
   show_insn_size : bool;
   insn_formats : string list;
+  semantics : string list option;
   bil_formats : string list;
   bir_formats : string list;
   show_kinds: bool;

@@ -1037,7 +1037,7 @@ module ToIR = struct
             cf := cast high 1 dst;
           ] (* else *) [
             if_ (count = one) [
-              oF := cast high 1 dst lxor ((cast high 1 dst) lsl int_exp 1 word_size);
+              oF := cast high 1 dst lxor (cast high 1 (dst lsl int_exp 1 word_size));
             ]  (* else  *) [
               oF := unknown "OF undefined after rotate of more then 1 bit" bool_t;
             ]

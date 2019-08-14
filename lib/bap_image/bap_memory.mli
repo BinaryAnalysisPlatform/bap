@@ -1,9 +1,11 @@
 open Core_kernel
+open Bap_core_theory
 open Regular.Std
 open Bap_types.Std
 open Image_common
 
-type t [@@deriving sexp_of]
+
+type t [@@deriving bin_io, sexp_of]
 
 val create
   : ?pos:int                    (** defaults to [0]  *)
@@ -12,6 +14,7 @@ val create
   -> addr
   -> Bigstring.t -> t Or_error.t
 
+val slot : (Theory.program, t option) KB.slot
 val of_file : endian -> addr -> string -> t Or_error.t
 val view : ?word_size:size -> ?from:addr -> ?words:int -> t -> t Or_error.t
 val range : t -> addr -> addr -> t Or_error.t

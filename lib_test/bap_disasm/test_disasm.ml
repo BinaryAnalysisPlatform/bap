@@ -60,7 +60,8 @@ let strings_of_insn insn =
             List.map ~f:(Op.to_string) in
   (name :: ops)
 
-let insn_of_mem arch data ctxt =
+let insn_of_mem arch data _ctxt =
+  Toplevel.reset ();
   let mem = memory_of_string data in
   Dis.with_disasm ~backend:"llvm" arch ~f:(fun dis ->
       Dis.insn_of_mem dis mem >>= function
@@ -93,6 +94,7 @@ let test_insn_of_mem  (arch,samples) ctxt =
   List.iter samples ~f:test
 
 let test_run_all (arch,samples) ctxt =
+  Toplevel.reset ();
   let mem =
     samples |> List.map ~f:fst3 |> String.concat |> memory_of_string in
   Dis.with_disasm ~backend:"llvm" arch ~f:(fun dis ->
@@ -107,7 +109,7 @@ let test_run_all (arch,samples) ctxt =
               ~f:(fun (data,exp,kinds) -> function
                   | (_,None) -> assert_string "bad instruction"
                   | (mem, Some r) ->
-                    assert_strings_equal ctxt exp (strings_of_insn r);                    
+                    assert_strings_equal ctxt exp (strings_of_insn r);
                     assert_equal ~ctxt ~printer:Int.to_string
                       (String.length data) (Memory.length mem);
                     List.iter kinds ~f:(fun expected ->
@@ -224,7 +226,7 @@ let strlen = List.concat [
 type dest_kind = [`Jump | `Cond | `Fall ] [@@deriving sexp]
 
 type graph = (int * int list * (int * dest_kind) list) list
-  [@@deriving sexp_of]
+[@@deriving sexp_of]
 
 let graph : graph = [
   1, [],    [3, `Jump];
@@ -301,6 +303,7 @@ let structure cfg ctxt =
 
 (* test one instruction cfg *)
 let test_micro_cfg insn ctxt =
+  Toplevel.reset ();
   let open Or_error in
   let mem = Bigstring.of_string insn |>
             Memory.create LittleEndian (Addr.of_int64 0L) |>
@@ -339,7 +342,9 @@ let test_micro_cfg insn ctxt =
    |6:      ret        +<-----+
    +-------------------+
 
-   With the third ret unreachable.
+   +-------------------+
+   |7:      ret        +
+   +-------------------+
 *)
 
 let has_dest cfg src dst kind =
@@ -347,21 +352,29 @@ let has_dest cfg src dst kind =
   Cfg.Edge.mem e cfg
 
 
-let call1_3ret ctxt =
+let sort_by_addr =
+  List.sort ~compare:(fun x y ->
+      Addr.compare (Block.addr x) (Block.addr y))
+
+
+let call1_3ret _ctxt =
+  Toplevel.reset ();
   let mem = String.concat [call1; ret; ret; ret] |>
             memory_of_string in
   let dis = Rec.run `x86_64 mem |> Or_error.ok_exn in
   assert_bool "No errors" (Rec.errors dis = []);
-  assert_bool "Three block" (Rec.cfg dis |> Cfg.number_of_nodes = 3);
+  assert_bool "Four block" (Rec.cfg dis |> Cfg.number_of_nodes = 4);
   let cfg = Rec.cfg dis in
-  match Cfg.nodes cfg |> Seq.to_list with
-  | [b1;b2;b3] ->
+  match Cfg.nodes cfg |> Seq.to_list |> sort_by_addr with
+  | [b1;b2;b3;b4] ->
     let call = memory_of_string ~width:64 call1 in
     let ret1 = memory_of_string ret ~start:5 ~width:64 in
     let ret2 = memory_of_string ret ~start:6 ~width:64 in
+    let ret3 = memory_of_string ret ~start:7 ~width:64 in
     assert_memory call (Block.memory b1);
     assert_memory ret1 (Block.memory b2);
     assert_memory ret2 (Block.memory b3);
+    assert_memory ret3 (Block.memory b4);
     assert_bool "b1 -> jump b3" @@ has_dest cfg b1 b3 `Jump;
     assert_bool "b1 -> fall b2" @@ has_dest cfg b1 b2 `Fall;
     assert_bool "b2 has no succs" @@
@@ -377,7 +390,6 @@ let suite () = "Disasm.Basic" >::: [
     "addresses"             >:: test_cfg addresses;
     "structure"             >:: test_cfg structure;
     "ret"                   >:: test_micro_cfg ret;
-    "sub"                   >:: test_micro_cfg sub;
+    "call"                  >:: test_micro_cfg call;
     "call1_3ret"            >:: call1_3ret;
   ]
-

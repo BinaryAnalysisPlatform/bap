@@ -20,4 +20,6 @@ val resolve : t -> mem -> full_insn -> dests
 
 val empty : t
 
+val provide : t -> unit
+
 module Factory : Factory with type t = t

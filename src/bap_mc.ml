@@ -3,6 +3,7 @@ open Format
 open Bap.Std
 open Bap_plugins.Std
 open Mc_options
+open Bap_core_theory
 include Self()
 
 exception Bad_user_input
@@ -12,12 +13,13 @@ exception Create_mem of Error.t
 exception No_input
 exception Unknown_arch
 exception Trailing_data of int
+exception Inconsistency of KB.conflict
 
 module Program(Conf : Mc_options.Provider) = struct
   open Conf
   module Dis = Disasm_expert.Basic
 
-  let bad_insn addr state mem start =
+  let bad_insn addr state _ start =
     let stop = Addr.(Dis.addr state - addr |> to_int |> ok_exn) in
     raise (Bad_insn (Dis.memory state, start, stop))
 
@@ -49,7 +51,7 @@ module Program(Conf : Mc_options.Provider) = struct
       | "" | "\n" -> exit 0
       | "\\x" -> to_binary input
       | "0x" ->  to_binary ~map:escape_0x input
-      | x -> to_binary ~map:prepend_slash_x input
+      | _ -> to_binary ~map:prepend_slash_x input
 
   let create_memory arch s addr =
     let endian = Arch.endian arch in
@@ -63,42 +65,56 @@ module Program(Conf : Mc_options.Provider) = struct
     List.map ~f:sexp_of_kind |>
     List.iter ~f:(printf "%a@." Sexp.pp)
 
+  let new_insn arch mem insn =
+    let open KB.Syntax in
+    KB.Object.create Theory.Program.cls >>= fun code ->
+    KB.provide Arch.slot code (Some arch) >>= fun () ->
+    KB.provide Memory.slot code (Some mem) >>= fun () ->
+    KB.provide Dis.Insn.slot code (Some insn) >>| fun () ->
+    code
+
+  let lift arch mem insn =
+    match KB.run Theory.Program.cls (new_insn arch mem insn) KB.empty with
+    | Ok (code,_) -> KB.Value.get Theory.Program.Semantics.slot code
+    | Error conflict -> raise (Inconsistency conflict)
+
+
   let print_insn_size should_print mem =
     if should_print then
       let len = Memory.length mem in
       printf "%#x@\n" len
 
   let print_insn insn_formats insn =
-    let insn = Insn.of_basic insn in
     List.iter insn_formats ~f:(fun fmt ->
         Insn.with_printer fmt (fun () ->
             printf "%a@." Insn.pp insn))
 
-  let bil_of_insn lift mem insn =
-    match lift mem insn with
-    | Ok bil -> bil
-    | Error e -> [Bil.special @@ sprintf "Lifter: %s" @@
-                  Error.to_string_hum e]
-
-  let print_bil lift mem insn =
-    let bil = bil_of_insn lift mem in
+  let print_bil insn =
+    let bil = Insn.bil insn in
     List.iter options.bil_formats ~f:(fun fmt ->
-        printf "%s@." (Bytes.to_string @@ Bil.to_bytes ~fmt (bil insn)))
+        printf "%s@." (Bytes.to_string @@ Bil.to_bytes ~fmt bil))
 
-  let print_bir lift mem insn =
-    let bil = bil_of_insn lift mem insn in
-    let bs = Blk.from_insn (Insn.of_basic ~bil insn) in
+  let print_bir insn =
+    let bs = Blk.from_insn insn in
     List.iter options.bir_formats ~f:(fun fmt ->
         printf "%s" @@ String.concat ~sep:"\n"
           (List.map bs ~f:(fun b -> Bytes.to_string @@ Blk.to_bytes ~fmt b)))
 
-  let print arch mem insn =
-    let module Target = (val target_of_arch arch) in
+  let print_sema sema =
+    Option.iter options.semantics ~f:(function
+        | [] -> printf "%a@\n" KB.Value.pp sema
+        | cs ->
+          let pp = KB.Value.pp_slots cs in
+          printf "%a@\n" pp sema )
+
+  let print arch mem code =
+    let insn = lift arch mem code in
     print_insn_size options.show_insn_size mem;
     print_insn options.insn_formats insn;
-    print_bil Target.lift mem insn;
-    print_bir Target.lift mem insn;
-    if options.show_kinds then print_kinds insn
+    print_bil insn;
+    print_bir insn;
+    print_sema insn;
+    if options.show_kinds then print_kinds code
 
   let main () =
     let arch = match Arch.of_string options.arch with
@@ -188,6 +204,13 @@ module Cmdline = struct
     Arg.(value & opt_all ~vopt:"pretty" string [] &
          info ["show-bir"] ~doc)
 
+  let semantics =
+    let doc =
+      "Show instruction semantics. If an option value is specified,
+      then outputs only the semantics with the given name." in
+    Arg.(value & opt ~vopt:(Some []) (some (list string)) None &
+         info ["show-semantics"] ~doc)
+
   let addr =
     let doc = "Specify an address of first byte" in
     Arg.(value & opt  string "0x0" &  info ["addr"] ~doc)
@@ -196,8 +219,8 @@ module Cmdline = struct
     let doc = "Stop after the first instruction is decoded" in
     Arg.(value & flag & info ["only-one"] ~doc)
 
-  let create a b c d e f g h i j =
-    Mc_options.Fields.create a b c d e f g h i j
+  let create a b c d e f g h i j k =
+    Mc_options.Fields.create a b c d e f g h i j k
 
   let src =
     let doc = "String to disassemble. If not specified read stdin" in
@@ -231,7 +254,7 @@ module Cmdline = struct
         `S "SEE ALSO";
         `P "$(b,bap)(1), $(b,bap-llvm)(1), $(b,llvm-mc)(1)"] in
     Term.(const create $(disassembler ()) $src $addr $only_one $arch $show_insn_size
-          $insn_formats $bil_formats $bir_formats $show_kinds),
+          $insn_formats $semantics $bil_formats $bir_formats $show_kinds),
     Term.info "bap-mc" ~doc ~man ~version:Config.version
 
   let exitf n =
@@ -263,6 +286,9 @@ let _main : unit =
     | Ok () -> exit 0
     | Error err -> exitf 64 "%s\n" Error.(to_string_hum err)
   with
+  | Inconsistency conflict ->
+    exitf 67 "Lifters failed with a conflict: %a"
+      KB.Conflict.pp conflict
   | Bad_user_input ->
     exitf 65 "Could not parse: malformed input"
   | No_input -> exitf 66 "Could not read from stdin"

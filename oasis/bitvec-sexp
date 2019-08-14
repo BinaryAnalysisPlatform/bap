@@ -1,0 +1,11 @@
+Flag bitvec_sexp
+  Description: Provides sexp converters for bitvectors
+  Default: false
+
+Library bitvec_sexp
+  Build$: flag(everything) || flag(bitvec_sexp)
+  Path: lib/bitvec_sexp
+  FindlibName: bitvec-sexp
+  CompiledObject: best
+  BuildDepends: bitvec, sexplib0
+  Modules: Bitvec_sexp

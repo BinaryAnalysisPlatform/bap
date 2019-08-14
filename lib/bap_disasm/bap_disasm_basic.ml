@@ -1,6 +1,7 @@
 open Core_kernel
 open Regular.Std
 open Bap_types.Std
+open Bap_core_theory
 open Or_error
 
 module Kind = Bap_insn_kind
@@ -71,19 +72,30 @@ module Table = struct
             Bytes.to_string dst)
 end
 
-type dis = {
+type disassembler = {
   dd : int;
   insn_table : Table.t;
   reg_table  : Table.t;
-  asm : bool;
-  kinds : bool;
-  mutable closed : bool;
+  mutable users : int;
 }
 
-let (!!) dis =
-  if dis.closed then
-    failwith "with_disasm: dis value leaked the scope";
-  dis.dd
+let last_id = ref 0
+let disassemblers = Hashtbl.create (module String)
+
+
+
+type dis = {
+  name : string;
+  asm : bool;
+  kinds : bool;
+}
+
+let get {name} = match Hashtbl.find disassemblers name with
+  | None ->
+    failwith "Trying to access a closed disassembler"
+  | Some d -> d
+
+let (!!) h = (get h).dd
 
 module Reg = struct
 
@@ -94,7 +106,7 @@ module Reg = struct
         if reg_code = 0 then "Nil"
         else
           let off = C.insn_op_reg_name !!dis ~insn ~oper in
-          (Table.lookup dis.reg_table off) in
+          (Table.lookup (get dis).reg_table off) in
       {reg_code; reg_name} in
     {insn; oper; data}
 
@@ -103,7 +115,7 @@ module Reg = struct
 
   module T = struct
     type t = reg
-      [@@deriving bin_io, sexp, compare]
+    [@@deriving bin_io, sexp, compare]
 
     let module_name = Some "Bap.Std.Reg"
     let version = "1.0.0"
@@ -146,7 +158,7 @@ module Imm = struct
 
   module T = struct
     type t = imm
-      [@@deriving bin_io, sexp, compare]
+    [@@deriving bin_io, sexp, compare]
     let module_name = Some "Bap.Std.Imm"
     let version = "1.0.0"
     let pp fmt t =
@@ -176,7 +188,7 @@ module Fmm = struct
 
   module T = struct
     type t = fmm
-      [@@deriving bin_io, sexp, compare]
+    [@@deriving bin_io, sexp, compare]
 
     let module_name = Some "Bap.Std.Fmm"
     let version = "1.0.0"
@@ -194,7 +206,7 @@ module Op = struct
       | Reg of reg
       | Imm of imm
       | Fmm of fmm
-      [@@deriving bin_io, compare, sexp]
+    [@@deriving bin_io, compare, sexp]
 
     let pr fmt = Format.fprintf fmt
     let pp fmt = function
@@ -245,7 +257,7 @@ module Op = struct
 end
 
 type op = Op.t
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 let cpred_of_pred : pred -> C.pred = function
   | `Valid -> C.Is_true
@@ -292,7 +304,7 @@ module Insn = struct
     let code = C.insn_code !!dis ~insn in
     let name =
       let off = C.insn_name !!dis ~insn in
-      Table.lookup dis.insn_table off in
+      Table.lookup (get dis).insn_table off in
     let asm =
       if asm then
         let data = Bytes.create (C.insn_asm_size !!dis ~insn) in
@@ -317,6 +329,11 @@ module Insn = struct
     {code; name; asm; kinds; opers }
 
 
+  let domain =
+    KB.Domain.optional ~inspect:sexp_of_t "insn"
+      ~equal:(fun x y -> Int.equal x.code y.code)
+  let slot = KB.Class.property ~package:"bap.std"
+      Theory.Program.cls "insn" domain
 end
 
 type ('a,'k) insn = ('a,'k) Insn.t
@@ -341,7 +358,7 @@ type (+'a,+'k) insns = (mem * ('a,'k) insn option) list
 
 module Pred = Comparable.Make(struct
     type t = pred [@@deriving compare, sexp]
-end)
+  end)
 
 module Preds = Pred.Set
 type preds = Preds.t [@@deriving compare, sexp]
@@ -387,9 +404,6 @@ let insn_mem s ~insn : mem =
   let words = C.insn_size !!(s.dis) ~insn in
   let from = Addr.(Mem.min_addr s.current.mem ++ off) in
   ok_exn (Mem.view s.current.mem ~from ~words)
-
-
-let kinds s ~insn : kind list = []
 
 let set_memory dis p : unit =
   let open Bigsubstring in
@@ -483,28 +497,41 @@ let back s data =
     | x :: xs -> x,xs in
   step { s with current; history} data
 
-let create ?(debug_level=0) ?(cpu="") ~backend triple =
-  let dd = match C.create ~backend ~triple ~cpu ~debug_level with
-    | n when n >= 0 -> Ok n
-    | -2 -> errorf "Unknown backend: %s" backend
-    | -3 -> errorf "Unsupported target: %s %s" triple cpu
-    |  n -> errorf "Disasm.Basic: Unknown error %d" n in
-  dd >>= fun dd -> return {
-    dd;
-    insn_table = Table.create (C.insn_table dd);
-    reg_table = Table.create (C.reg_table dd);
-    asm = false;
-    kinds = false;
-    closed = false;
-  }
+let create ?(debug_level=0) ?(cpu="") ?(backend="llvm") triple =
+  let name = sprintf "%s:%s%s" backend triple cpu in
+  match Hashtbl.find disassemblers name with
+  | Some d ->
+    d.users <- d.users + 1;
+    Ok {name; asm=false; kinds=false}
+  | None ->
+    let dd = match C.create ~backend ~triple ~cpu ~debug_level with
+      | n when n >= 0 -> Ok n
+      | -2 -> errorf "Unknown backend: %s" backend
+      | -3 -> errorf "Unsupported target: %s %s" triple cpu
+      |  n -> errorf "Disasm.Basic: Unknown error %d" n in
+    dd >>= fun dd ->
+    let disassembler = {
+      dd;
+      insn_table = Table.create (C.insn_table dd);
+      reg_table = Table.create (C.reg_table dd);
+      users = 1;
+    } in
+    Hashtbl.add_exn disassemblers name disassembler;
+    Ok {name; asm = false; kinds = false}
 
 
 let close dis =
-  C.delete dis.dd;
-  dis.closed <- true
+  let disassembler = get dis in
+  disassembler.users <- disassembler.users - 1;
+  if disassembler.users = 0
+  then begin
+    Hashtbl.remove disassemblers dis.name;
+    C.delete disassembler.dd;
+  end
 
-let with_disasm ?debug_level ?cpu ~backend triple ~f =
-  create ?debug_level ?cpu ~backend triple >>= fun dis ->
+
+let with_disasm ?debug_level ?cpu ?backend triple ~f =
+  create ?debug_level ?cpu ?backend triple >>= fun dis ->
   f dis >>| fun res -> close dis; res
 
 type ('a,'k) t = dis
@@ -514,15 +541,14 @@ let run ?backlog ?(stop_on=[]) ?invalid ?stopped ?hit dis ~return ~init mem =
     create_state ?backlog ?invalid ?stopped ?hit ~return
       dis mem in
   let state = with_preds state stop_on in
+  C.store_asm_string !!dis dis.asm;
+  C.store_predicates !!dis dis.kinds;
   jump state (memory state) init
 
 let store_kinds d =
-  C.store_predicates !!d true;
   {d with kinds = true}
 
-
 let store_asm d =
-  C.store_asm_string !!d true;
   {d with asm = true}
 
 let insn_of_mem dis mem =
@@ -555,8 +581,8 @@ module Trie = struct
     let length = fst
     let nth_token (_, State s) i =
       match s.insns.(i) with
-      | (mem, None) -> 0, [| |]
-      | (mem, Some insn) -> Insn.(insn.code, insn.opers)
+      | (_, None) -> 0, [| |]
+      | (_, Some insn) -> Insn.(insn.code, insn.opers)
 
     let token_hash = Hashtbl.hash
   end

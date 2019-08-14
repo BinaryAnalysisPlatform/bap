@@ -1,6 +1,7 @@
 open Core_kernel
 open Regular.Std
 open Bap_types.Std
+open Bap_core_theory
 
 type mem = Bap_memory.t [@@deriving sexp_of]
 type kind = Bap_insn_kind.t [@@deriving compare, sexp]
@@ -24,10 +25,10 @@ type ('a,'k) t
 type (+'a,+'k,'s,'r) state
 
 val with_disasm :
-  ?debug_level:int -> ?cpu:string -> backend:string -> string ->
+  ?debug_level:int -> ?cpu:string -> ?backend:string -> string ->
   f:((empty, empty) t -> 'a Or_error.t) -> 'a Or_error.t
 
-val create : ?debug_level:int -> ?cpu:string -> backend:string -> string ->
+val create : ?debug_level:int -> ?cpu:string -> ?backend:string -> string ->
   (empty, empty) t Or_error.t
 
 val close : (_,_) t -> unit
@@ -44,6 +45,7 @@ val run :
   ('a,'k) t ->
   return:('s -> 'r) ->
   init:'s -> mem -> 'r
+
 val insn_of_mem : (_,_) t -> mem ->
   (mem * (asm,kinds) insn option * [`left of mem | `finished]) Or_error.t
 
@@ -87,6 +89,7 @@ module Insn : sig
   val is : ('a,kinds) t -> kind -> bool
   val asm : (asm,'k) t -> string
   val ops  : ('a,'k) t -> op array
+  val slot : (Theory.program,full_insn option) KB.slot
 end
 
 module Reg : sig
