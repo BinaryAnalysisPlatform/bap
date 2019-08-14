@@ -16,7 +16,9 @@ Library bap
                    bap.types,
                    bap-future,
                    cmdliner,
-                   regular
+                   regular,
+                   graphlib,
+                   ogre
   Modules:         Bap
   InternalModules: Bap_event, Bap_log, Bap_project, Bap_self
 
@@ -103,7 +105,7 @@ Library disasm
                  bap-future,
                  camlzip,
                  ocamlgraph,
-                 ogre
+                 graphlib
   InternalModules:
                  Bap_disasm,
                  Bap_disasm_basic,
@@ -124,7 +126,24 @@ Library disasm
                  Bap_disasm_target_factory,
                  Bap_disasm_target_intf,
                  Bap_disasm_types,
-                 Bap_insn_kind
+                 Bap_insn_kind,
+                 Superset_risg,
+                 Superset,
+                 Metrics,
+                 Common, 
+                 Traverse, 
+                 Trim, 
+                 Invariants, 
+                 Grammar, 
+                 Insn_disasm_benchmark, 
+                 Sheathed, 
+                 Decision_tree_set,
+                 Cfg_dot_layout,
+                 Abstract_ssa,
+                 Markup,
+                 Features,
+                 Report,
+                 Bap_disasm_superset
   CCOpt:         $cc_optimization
   CCLib:         $cxxlibs
   CSources:      disasm.h, disasm.c, disasm_stubs.c

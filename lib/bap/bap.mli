@@ -6042,6 +6042,19 @@ module Std : sig
           unlifted instructions.  *)
       val errors : t -> error list
     end
+
+    module SupersetDisasm : sig
+      type 'a t
+      val raw_superset : 
+        ?backend:string -> data:'a -> 
+        ?f:(mem * Basic.full_insn option -> 'a t -> 'a t) -> 
+        string -> 'a t
+      val trimmed_superset : 
+        data:'a ->  ?f:('a t -> mem -> Basic.full_insn option -> (addr option * edge) list -> 'a t) list -> 
+        backend:string -> string -> 'a t
+      val converged_superset : unit t -> unit t
+    end
+
   end
 
   (** Assembly instruction.
