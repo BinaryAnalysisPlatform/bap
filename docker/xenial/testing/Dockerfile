@@ -29,7 +29,7 @@ RUN wget https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh
 RUN echo "" | sh ./install.sh
 RUN opam --version
 
-RUN opam init --yes --compiler=4.05.0 --disable-sandboxing
+RUN opam init --yes --compiler=4.07.1 --disable-sandboxing
 RUN eval "$(opam env)"
 RUN opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
 RUN opam update
