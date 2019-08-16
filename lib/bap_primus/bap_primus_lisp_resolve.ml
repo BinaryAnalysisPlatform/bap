@@ -111,9 +111,11 @@ let all_bindings f =
   List.for_all ~f:(fun (v,x) ->
       f v.data.typ x)
 
-let zip x y = match List.zip x y with
+let zip x y =
+  let open List.Or_unequal_lengths in
+  match List.zip x y with
   | Ok z -> Some z
-  | _ -> None
+  | Unequal_lengths -> None
 
 let overload_defun typechecks args s3 =
   let open Option in
