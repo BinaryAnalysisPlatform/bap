@@ -38,6 +38,20 @@ let inter_fall symtab block =
   | None -> Tid.for_name name
   | Some (_,entry,_) -> Tid.for_addr (Block.addr entry)
 
+let has_explicit_call symtab block =
+  match symtab with
+  | None -> false
+  | Some symtab ->
+    Option.is_some (Symtab.explicit_callee symtab (Block.addr block))
+
+let has_inter_edges symtab block =
+  match symtab with
+  | None -> false
+  | Some symtab ->
+    let src = Block.addr block in
+    Option.is_some (Symtab.explicit_callee symtab src) ||
+    Option.is_some (Symtab.implicit_callee symtab src)
+
 module IrBuilder = struct
 
   let def_only blk = Term.length jmp_t blk = 0
@@ -107,7 +121,7 @@ module IrBuilder = struct
     | _ -> false
 
   let insert_inter_fall alt blk =
-    [Term.append jmp_t blk @@ Ir_jmp.reify ~alt ()]
+    Term.append jmp_t blk @@ Ir_jmp.reify ~alt ()
 
   let is_last_jump_nonconditional blk =
     match Term.last jmp_t blk with
@@ -130,7 +144,7 @@ module IrBuilder = struct
     let fall = intra_fall cfg block in
     let blks = with_landing_pads fall blks in
     let x = Block.terminator block in
-    let is_call = Insn.(is call x)
+    let is_call = Insn.(is call x) || has_explicit_call symtab block
     and is_barrier = Insn.(is barrier x) in
     with_first_blk_addressed (Block.addr block) @@
     List.rev @@ match blks,fall with
@@ -140,12 +154,17 @@ module IrBuilder = struct
       if is_call
       then turn_into_call fall x :: xs
       else fall_if_possible x (Ir_jmp.reify ~dst ()) :: xs
-    | x::xs, None ->
-      let x = if is_call then turn_into_call fall x else x in
-      match inter_fall symtab block with
-      | Some dst when Term.length jmp_t x = 0 ->
-        insert_inter_fall dst x @ xs
-      | _ -> x::xs
+    | x::xs, None -> match inter_fall symtab block with
+      | None ->
+        (if is_call then turn_into_call None x else x)::xs
+      | Some dst ->
+        if is_call then
+          let next = Ir_blk.create () in
+          let fall = Some (Ir_jmp.resolved (Term.tid next)) in
+          let next = insert_inter_fall dst next in
+          next :: turn_into_call fall x :: xs
+        else
+          insert_inter_fall dst x :: xs
 end
 
 let blk cfg block = IrBuilder.blk cfg block
