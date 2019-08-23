@@ -620,7 +620,7 @@ module Make (Machine : Machine) = struct
     push_prompt ret >>= fun () ->
     label cond (Call.target call) >>= fun () ->
     Machine.Local.get state >>= function
-    | {prompts=[]} -> trap_cfi_violation callsite
+    | {prompts=[]} -> Machine.return ()
     | {prompts=p::_} -> match ret with
       | None -> Machine.return ()
       | Some p' when Tid.(p <> p') ->
