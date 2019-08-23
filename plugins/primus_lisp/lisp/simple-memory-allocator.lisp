@@ -18,9 +18,19 @@
 (defparameter *malloc-guard-pattern* 0xA5
   "a byte that will be used to fill guard edges")
 
-
 (defparameter *malloc-zero-sentinel* 0
   "a pointer that is returned by (malloc 0)")
+
+(defparameter *malloc-initialize-memory* false
+  "if true then initialize allocated memory with *malloc-initial-value*")
+
+(defparameter *malloc-initial-value* 0
+  "initialize allocated memory with the said value")
+
+(defun memory/allocate (ptr len)
+  (if *malloc-initialize-memory*
+      (memory-allocate ptr n *malloc-initial-value*)
+    (memory-allocate ptr n)))
 
 (defun malloc (n)
   "allocates a memory region of size N"
@@ -29,11 +39,12 @@
     (if (malloc-will-reach-limit n) 0
       (let ((n (+ n (* 2 *malloc-guard-edges*)))
             (ptr brk)
-            (failed (memory-allocate ptr n 0)))
+            (failed (memory/allocate ptr n)))
         (if failed 0
           (set brk (+ brk n))
           (malloc/fill-edges ptr n)
           (+ ptr *malloc-guard-edges*))))))
+
 
 ;; in our simplistic malloc implementation, free is just a nop
 (defun free (p)
