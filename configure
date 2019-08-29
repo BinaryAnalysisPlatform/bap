@@ -6,8 +6,7 @@ rm -f _oasis
 
 case "is$BAP_DEBUG" in
     is|isno|isfalse|isdisable|is0)
-        QUIET="-quiet";
-        break;;
+        QUIET="-quiet";;
     *)
         QUIET=""
 esac
