@@ -1452,9 +1452,11 @@ module Std : sig
         approach where the constraint denotes only the input for the
         entry node).  *)
     val fixpoint : (module Graph with type t = 'c
-                                  and type node = 'n) ->
+                                  and type node = 'n
+                                  and type edge = 'e) ->
       ?steps:int -> ?start:'n -> ?rev:bool ->
       ?step:(int -> 'n -> 'd -> 'd -> 'd) ->
+      ?edge_fn:('e -> 'd -> 'd) ->
       init:('n,'d) Solution.t ->
       equal:('d -> 'd -> bool) ->
       merge:('d -> 'd -> 'd) -> f:('n -> 'd -> 'd) -> 'c -> ('n,'d) Solution.t

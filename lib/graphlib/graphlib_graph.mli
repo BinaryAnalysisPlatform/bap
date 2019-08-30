@@ -250,9 +250,11 @@ end
 module Fixpoint : Solution
 
 val fixpoint : (module Graph with type t = 'c
-                              and type node = 'n) ->
+                              and type node = 'n
+                              and type edge = 'e) ->
   ?steps:int -> ?start:'n -> ?rev:bool ->
   ?step:(int -> 'n -> 'd -> 'd -> 'd) ->
+  ?edge_fn:('e -> 'd -> 'd) ->
   init:('n,'d) Fixpoint.t ->
   equal:('d -> 'd -> bool) ->
   merge:('d -> 'd -> 'd) -> f:('n -> 'd -> 'd) -> 'c -> ('n,'d) Fixpoint.t

@@ -1340,9 +1340,9 @@ module Fixpoint = struct
      the correct meet, f,  and initial approximation.
 
   *)
-  let compute (type g n d)
-      (module G : Graph with type t = g and type node = n)
-      ?steps ?start ?(rev=false) ?step
+  let compute (type g n e d)
+      (module G : Graph with type t = g and type node = n and type edge = e)
+      ?steps ?start ?(rev=false) ?step ?edge_fn
       ~init:(Solution {approx; iters; default}) ~equal ~merge ~f g : (n,d) t =
     let nodes =
       reverse_postorder_traverse (module G) ~rev ?start g |>
@@ -1367,16 +1367,24 @@ module Fixpoint = struct
     let get approx n : d = match Map.find approx n with
       | Some x -> x
       | None -> default in
+    let get_edges ~start_node ~end_node =
+      let successors = if rev then G.Node.outputs start_node g else G.Node.inputs start_node g in
+      Seq.filter ~f:(fun edge -> (if rev then G.Edge.src edge else G.Edge.dst edge) = end_node) successors
+    in
     let step visits works approx = match Set.min_elt works with
       | None -> Done approx
-      | Some n ->
-        let works = Set.remove works n in
-        let out = f nodes.(n) (get approx n) in
-        succs.(n) |>
+      | Some current_node ->
+        let works = Set.remove works current_node in
+        let out = f nodes.(current_node) (get approx current_node) in
+        succs.(current_node) |>
         Set.fold ~init:(visits,works,approx)
           ~f:(fun (visits,works,approx) n ->
               let ap = get approx n in
-              let ap' = merge out ap in
+              let ap' = match edge_fn with
+                | None -> merge out ap
+                | Some edge_function ->
+                  let edges = get_edges ~start_node:nodes.(current_node) ~end_node:nodes.(n) in (* TODO: Check whether I have to iterate over the nodes here instead *)
+                  Seq.fold ~f:(fun ap' edge -> merge ap' (edge_function edge out)) ~init:ap edges in
               let visits,ap' = user_step visits n ap ap' in
               if equal ap ap' then (visits,works,approx)
               else visits,
