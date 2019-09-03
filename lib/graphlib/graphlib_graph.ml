@@ -1368,7 +1368,7 @@ module Fixpoint = struct
       | Some x -> x
       | None -> default in
     let get_edges ~start_node ~end_node =
-      let successors = if rev then G.Node.outputs start_node g else G.Node.inputs start_node g in
+      let successors = if rev then G.Node.inputs start_node g else G.Node.outputs start_node g in
       Seq.filter ~f:(fun edge -> (if rev then G.Edge.src edge else G.Edge.dst edge) = end_node) successors
     in
     let step visits works approx = match Set.min_elt works with
@@ -1383,7 +1383,7 @@ module Fixpoint = struct
               let ap' = match edge_fn with
                 | None -> merge out ap
                 | Some edge_function ->
-                  let edges = get_edges ~start_node:nodes.(current_node) ~end_node:nodes.(n) in (* TODO: Check whether I have to iterate over the nodes here instead *)
+                  let edges = get_edges ~start_node:nodes.(current_node) ~end_node:nodes.(n) in
                   Seq.fold ~f:(fun ap' edge -> merge ap' (edge_function edge out)) ~init:ap edges in
               let visits,ap' = user_step visits n ap ap' in
               if equal ap ap' then (visits,works,approx)
