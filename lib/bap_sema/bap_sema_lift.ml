@@ -152,9 +152,9 @@ module IrBuilder = struct
           lift_insn ~mem insn blks) in
     let fall = intra_fall cfg block in
     let blks = with_landing_pads fall blks in
-    let x = Block.terminator block in
-    let is_call = Insn.(is call x) || has_explicit_call symtab block
-    and is_barrier = Insn.(is barrier x) in
+    let insn = Block.terminator block in
+    let is_call = Insn.(is call insn) || has_explicit_call symtab block
+    and is_barrier = Insn.(is barrier insn) in
     with_first_blk_addressed (Block.addr block) @@
     concat_map_fst_and_rev blks @@ function
     | x when is_barrier -> [x]
@@ -162,7 +162,9 @@ module IrBuilder = struct
       | Some dst -> [
           fall_if_possible dst @@
           if is_call
-          then turn_into_call fall x
+          then
+            let fall = Option.some_if Insn.(is call insn) dst in
+            turn_into_call fall x
           else x
         ]
       | None -> match inter_fall symtab block with
@@ -174,7 +176,8 @@ module IrBuilder = struct
             let next = insert_inter_fall dst next in [
               next;
               fall_if_possible fall @@
-              turn_into_call (Some fall) x
+                let fall = Option.some_if Insn.(is call insn) fall in
+                turn_into_call fall x
             ]
           else [insert_inter_fall dst x]
 end
