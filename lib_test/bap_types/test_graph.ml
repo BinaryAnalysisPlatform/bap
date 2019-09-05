@@ -635,8 +635,6 @@ module Test_fixpoint = struct
     assert_bool "failed" (Solution.get fixpoint (G.Node.create 3) = 2);
     let fixpoint = Graphlib.fixpoint (module G) ~steps:20 ~rev:true ~init:start_solution ~equal:equal ~merge:merge ~f:(fun node value -> value + 1) !graph in
     assert_bool "failed" (Solution.get fixpoint (G.Node.create 3) = 8);
-    (* checking whether these tests are actually run or not *)
-    assert_bool "canary failed" false
 
   let suite () = [
     "Shortest path" >:: shortest_path_fixpoint_test
