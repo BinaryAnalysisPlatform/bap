@@ -609,6 +609,40 @@ module Test_partition = struct
   ]
 end
 
+module Test_fixpoint = struct
+  module G = Graphlib.Make(Int)(Int)
+
+  (** Computing several test cases for the fixpoint algorithm applied to a shortest path problem. *)
+  let shortest_path_fixpoint_test _ =
+    let equal x y = (x = y) in
+    let merge x y = Int.min x y in
+    let start_solution = (Map.empty (module G.Node)) in
+    let start_solution = Map.set start_solution ~key:(G.Node.create 1) ~data:0 in
+    let start_solution = Solution.create start_solution 500 in
+    let edge_fn edge value = value + 1 in
+    let graph = ref G.empty in
+    let () = for i = 1 to 10 do
+      graph := G.Edge.insert (G.Edge.create i (i + 1) 1) !graph
+    done in
+    graph := G.Edge.insert (G.Edge.create 10 1 1) !graph;
+    (* computing shortest path by counting edges *)
+    let fixpoint = Graphlib.fixpoint (module G) ~steps:20 ~rev:false ~edge_fn:edge_fn ~init:start_solution ~equal:equal ~merge:merge ~f:(fun node value -> value) !graph in
+    assert_bool "failed" (Solution.get fixpoint (G.Node.create 3) = 2);
+    let fixpoint = Graphlib.fixpoint (module G) ~steps:20 ~rev:true ~edge_fn:edge_fn ~init:start_solution ~equal:equal ~merge:merge ~f:(fun node value -> value) !graph in
+    assert_bool "failed" (Solution.get fixpoint (G.Node.create 3) = 8);
+    (* computing shortest path by counting nodes *)
+    let fixpoint = Graphlib.fixpoint (module G) ~steps:20 ~rev:false ~init:start_solution ~equal:equal ~merge:merge ~f:(fun node value -> value + 1) !graph in
+    assert_bool "failed" (Solution.get fixpoint (G.Node.create 3) = 2);
+    let fixpoint = Graphlib.fixpoint (module G) ~steps:20 ~rev:true ~init:start_solution ~equal:equal ~merge:merge ~f:(fun node value -> value + 1) !graph in
+    assert_bool "failed" (Solution.get fixpoint (G.Node.create 3) = 8);
+    (* checking whether these tests are actually run or not *)
+    assert_bool "canary failed" false
+
+  let suite () = [
+    "Shortest path" >:: shortest_path_fixpoint_test
+  ]
+end
+
 let suite () =
   "Graph" >::: [
     "Algo" >:::
@@ -617,5 +651,6 @@ let suite () =
         Test.suite (sprintf "%d" n));
     "Construction" >::: [Test_int100.suite];
     "IR" >::: Test_IR.suite ();
-    "Partition" >::: Test_partition.suite ()
+    "Partition" >::: Test_partition.suite ();
+    "Fixpoint" >::: Test_fixpoint.suite ()
   ]
