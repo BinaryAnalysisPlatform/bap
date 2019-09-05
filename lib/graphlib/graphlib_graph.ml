@@ -1367,10 +1367,6 @@ module Fixpoint = struct
     let get approx n : d = match Map.find approx n with
       | Some x -> x
       | None -> default in
-    let get_edges ~start_node ~end_node =
-      let successors = if rev then G.Node.inputs start_node g else G.Node.outputs start_node g in
-      Seq.filter ~f:(fun edge -> (if rev then G.Edge.src edge else G.Edge.dst edge) = end_node) successors
-    in
     let step visits works approx = match Set.min_elt works with
       | None -> Done approx
       | Some current_node ->
@@ -1383,8 +1379,11 @@ module Fixpoint = struct
               let ap' = match edge_fn with
                 | None -> merge out ap
                 | Some edge_function ->
-                  let edges = get_edges ~start_node:nodes.(current_node) ~end_node:nodes.(n) in
-                  Seq.fold ~f:(fun ap' edge -> merge ap' (edge_function edge out)) ~init:ap edges in
+                  let edge = if rev then
+                      Option.value_exn (G.Node.edge nodes.(n) nodes.(current_node) g)
+                    else
+                      Option.value_exn (G.Node.edge nodes.(current_node) nodes.(n) g) in
+                  merge ap' (edge_function edge out) in
               let visits,ap' = user_step visits n ap ap' in
               if equal ap ap' then (visits,works,approx)
               else visits,
