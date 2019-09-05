@@ -90,9 +90,16 @@ module IrBuilder = struct
     | [] -> []
     | b :: bs -> Term.set_attr b address addr :: bs
 
+  let is_conditional jmp = match Ir_jmp.cond jmp with
+    | Bil.Int _ ->  false
+    | _ -> true
+
   let turn_into_call ret blk =
-    Term.map jmp_t blk ~f:(update_jmp ~f:(fun dst _ jmp ->
-        jmp ~dst:ret ~alt:dst))
+    Term.map jmp_t blk ~f:(fun jmp ->
+        update_jmp jmp ~f:(fun dst _ make ->
+            if is_conditional jmp
+            then make ~dst:ret ~alt:None
+            else make ~dst:ret ~alt:dst))
 
   let landing_pad return jmp =
     match Ir_jmp.kind jmp with
@@ -122,10 +129,6 @@ module IrBuilder = struct
 
   let insert_inter_fall alt blk =
     Term.append jmp_t blk @@ Ir_jmp.reify ~alt ()
-
-  let is_conditional jmp = match Ir_jmp.cond jmp with
-    | Bil.Int _ ->  false
-    | _ -> true
 
   let is_last_jump_nonconditional blk =
     match Term.last jmp_t blk with
