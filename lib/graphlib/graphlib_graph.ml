@@ -1383,7 +1383,7 @@ module Fixpoint = struct
                       Option.value_exn (G.Node.edge nodes.(n) nodes.(current_node) g)
                     else
                       Option.value_exn (G.Node.edge nodes.(current_node) nodes.(n) g) in
-                  merge ap' (edge_function edge out) in
+                  merge (edge_function edge out) ap in
               let visits,ap' = user_step visits n ap ap' in
               if equal ap ap' then (visits,works,approx)
               else visits,
