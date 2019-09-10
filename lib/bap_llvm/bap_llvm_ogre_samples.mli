@@ -8,6 +8,10 @@ module Sections(Fact : Ogre.S) : sig
   val sections : unit Fact.t
 end
 
+module Regions(Fact : Ogre.S) : sig
+  val regions : unit Fact.t
+end
+
 module Relocatable_symbols(Fact : Ogre.S) : sig
   val symbols : unit Fact.t
 end

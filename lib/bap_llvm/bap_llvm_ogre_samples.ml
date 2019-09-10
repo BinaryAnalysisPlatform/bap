@@ -22,6 +22,7 @@ module Symbols(Fact : Ogre.S) = struct
           else Fact.return ())
 end
 
+
 module Sections(Fact : Ogre.S) = struct
   open Scheme
   open Fact.Syntax
@@ -34,6 +35,38 @@ module Sections(Fact : Ogre.S) = struct
           let addr = Int64.(relative_addr + base) in
           Fact.provide section addr size >>= fun () ->
           Fact.provide named_region addr size name)
+end
+
+module Regions(Fact : Ogre.S) = struct
+  open Scheme
+  open Fact.Syntax
+
+  let code =
+    Fact.foreach Ogre.Query.(begin
+        select (from named_region $ code_entry)
+          ~join:[[field name];
+                 [field size ~from:named_region;
+                  field size ~from:code_entry]]
+    end)
+      ~f:(fun {addr; size;} (_,off,_) -> addr,size,off) >>= fun s ->
+    Fact.Seq.iter s ~f:(fun (addr,size,off) ->
+        Fact.provide code_region addr size off)
+
+  let data =
+    Fact.foreach Ogre.Query.(begin
+        select (from named_region $ data_entry)
+          ~join:[[field name];
+                 [field size ~from:named_region;
+                  field size ~from:data_entry]]
+    end)
+      ~f:(fun {addr; size;} (_,off,_,w) -> addr,size,off,w) >>= fun s ->
+      Fact.Seq.iter s ~f:(fun (addr,size,off,w) ->
+          Fact.provide data_region addr size off w)
+
+  let regions =
+    code >>= fun () ->
+    data
+
 end
 
 module Relocatable_symbols(Fact : Ogre.S) = struct

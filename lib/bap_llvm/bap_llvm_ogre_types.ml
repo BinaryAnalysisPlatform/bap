@@ -47,6 +47,11 @@ module Scheme = struct
   let code_entry () =
     Ogre.declare ~name:"code-entry" (scheme name $ off $ size) Tuple.T3.create
 
+  (** named entry that contains data *)
+  let data_entry () =
+    Ogre.declare ~name:"data-entry" (scheme name $ off $ size $ writable)
+      (fun name addr size w -> name, addr, size, w)
+
   (** symbol *)
   let symbol_entry () =
     Ogre.declare ~name:"symbol-entry"
@@ -60,6 +65,7 @@ module type S = sig
   val segments : unit m
   val sections : unit m
   val symbols  : unit m
+  val regions  : unit m
 end
 
 module type Rules = sig

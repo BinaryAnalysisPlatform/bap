@@ -79,7 +79,8 @@ module Make(M : Monad.S) = struct
     provide_entry >>= fun () ->
     S.segments >>= fun () ->
     S.sections >>= fun () ->
-    S.symbols
+    S.symbols  >>= fun () ->
+    S.regions
 
   let image = Dispatcher.of_filetype >>= provide
 

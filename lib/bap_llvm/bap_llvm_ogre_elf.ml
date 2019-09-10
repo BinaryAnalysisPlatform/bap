@@ -31,6 +31,7 @@ module Make(Fact : Ogre.S) = struct
 
   include Sections(Fact)
   include Symbols(Fact)
+  include Regions(Fact)
 end
 
 module Relocatable = struct
@@ -55,5 +56,6 @@ module Relocatable = struct
 
     include Relocatable_symbols(Fact)
     include Relocatable_sections(Fact)
+    include Regions(Fact)
   end
 end

@@ -9,6 +9,8 @@ open Image_internal_std
 type t [@@deriving sexp_of]            (** image   *)
 type segment [@@deriving bin_io, compare, sexp]
 type symbol [@@deriving bin_io, compare, sexp]
+type data_region [@@deriving bin_io, compare, sexp]
+type code_region [@@deriving bin_io, compare, sexp]
 
 type path = string
 
@@ -30,11 +32,14 @@ val data : t -> Bigstring.t
 val words : t -> size -> word table
 val segments : t -> segment table
 val symbols : t -> symbol table
-
+val data_regions : t -> data_region table
+val code_regions : t -> code_region table
 
 val segment : segment tag
 val symbol  : string tag
 val section : string tag
+val code_region   : code_region tag
+val data_region   : data_region tag
 val specification : Ogre.doc tag
 
 val memory : t -> value memmap
@@ -118,4 +123,11 @@ module Scheme : sig
     (addr * string, (addr -> string -> 'a) -> 'a) Ogre.attribute
 
   val base_address : (addr, (addr -> 'a) -> 'a) Ogre.attribute
+
+  val code_region :
+    (addr * size * off, (addr -> size -> off -> 'a) -> 'a) Ogre.attribute
+
+  val data_region :
+    (addr * size * off * bool, (addr -> size -> off -> bool -> 'a) -> 'a) Ogre.attribute
+
 end

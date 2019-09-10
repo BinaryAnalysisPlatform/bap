@@ -58,6 +58,7 @@ static std::string macho_declarations =
     "(declare symbol-entry (name str) (relative-addr int) (size int) (off int))"
     "(declare macho-symbol (name str) (value int))"
     "(declare code-entry (name str) (off int) (size int))"
+    "(declare data-entry (name str) (off int) (size int) (w bool))"
     "(declare relocatable (flag bool))"
     "(declare ref-internal (sym-off int) (rel-off int))"
     "(declare ref-external (rel-off int) (name str))";
@@ -151,6 +152,7 @@ MACHO_SECTION_FIELD(reserved1, uint32_t)
 MACHO_SECTION_FIELD(reserved2, uint32_t)
 MACHO_SECTION_FIELD(addr, uint64_t)
 MACHO_SECTION_FIELD(offset, uint32_t)
+MACHO_SECTION_FIELD(segname, std::string)
 
 constexpr uint64_t max_uint64 = std::numeric_limits<uint64_t>::max();
 
@@ -302,6 +304,34 @@ void relocations(const macho &obj, ogre_doc &s) {
             symbol_reference(obj, rel, sec.getRelocatedSection(), s);
 }
 
+bool is_code_section(const macho &obj, const SectionRef &sec) {
+    auto flags = section_flags(obj,sec);
+    return static_cast<bool>
+        (flags & MachO::S_ATTR_PURE_INSTRUCTIONS ||
+         flags & MachO::S_ATTR_SOME_INSTRUCTIONS);
+}
+
+bool is_data_section(const macho &obj, const SectionRef &sec) {
+    return !(is_code_section(obj,sec));
+}
+
+bool is_writable_section(const macho &obj, const SectionRef &sec) {
+    auto segment = section_segname(obj, sec);
+    for (auto info : macho_commands(obj)) {
+        if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT_64) {
+            auto cmd = obj.getSegment64LoadCommand(info);
+            if (cmd.segname == segment)
+                return static_cast<bool>(cmd.initprot & MachO::VM_PROT_WRITE);
+        }
+        if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT) {
+            auto cmd = obj.getSegmentLoadCommand(info);
+            if (cmd.segname == segment)
+                return static_cast<bool>(cmd.initprot & MachO::VM_PROT_WRITE);
+        }
+    }
+    return false;
+}
+
 void sections(const macho &obj, ogre_doc &s) {
     auto base = image_base(obj);
     for (auto sec : prim::sections(obj)) {
@@ -311,8 +341,10 @@ void sections(const macho &obj, ogre_doc &s) {
         auto offs = section_offset(obj, section_iterator(sec));
         if (addr && name && size) {
             section(*name, prim::relative_address(base, *addr), *size, offs, s);
-            if (section_flags(obj, sec) & MachO::S_ATTR_PURE_INSTRUCTIONS)
+            if (is_code_section(obj, sec))
                 s.entry("code-entry") << *name << offs << *size;
+            else
+                s.entry("data-entry")  << *name << offs << *size << is_writable_section(obj,sec);
         }
     }
 }
