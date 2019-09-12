@@ -13,7 +13,7 @@ let image_base = ref None
 
 
 (** default image base for relocatable files *)
-let relocatable_base = 0xC0000000L
+let relocatable_base = 0x0L
 
 module Fact(M : Monad.S) = struct
   include Ogre.Make(M)
