@@ -47,7 +47,7 @@ module Make(Fact : Ogre.S) = struct
       ~f:(fun _ (_,addr,vsize) (_,off,_) -> Int64.(base + addr),vsize,off) >>= fun s ->
     Fact.Seq.iter s
       ~f:(fun (addr, size, off) ->
-        Fact.provide code_region addr size off)
+          Fact.provide code_region addr size off)
 
   include Symbols(Fact)
 end
@@ -81,21 +81,21 @@ module Relocatable = struct
         ~f:(fun (name,_,size,off) -> name,off,size) >>= fun s ->
       Fact.Seq.iter s
         ~f:(fun (name, off, size) ->
-          let addr = Int64.(base + off) in
-          Fact.provide section addr size >>= fun () ->
-          Fact.provide named_region addr size name)
+            let addr = Int64.(base + off) in
+            Fact.provide section addr size >>= fun () ->
+            Fact.provide named_region addr size name)
 
     let code_regions =
       Base.from_sections_offset >>= fun base ->
       Fact.foreach Ogre.Query.(
-        select (from section_entry $ code_entry)
-          ~join:[[field name];
-                 [field size ~from:section_entry;
-                  field size ~from:code_entry]])
+          select (from section_entry $ code_entry)
+            ~join:[[field name];
+                   [field size ~from:section_entry;
+                    field size ~from:code_entry]])
         ~f:(fun _ (_,off,size) -> Int64.(base + off),size,off) >>= fun s ->
       Fact.Seq.iter s
         ~f:(fun (addr, size, off) ->
-          Fact.provide code_region addr size off)
+            Fact.provide code_region addr size off)
 
     include Relocatable_symbols(Fact)
 

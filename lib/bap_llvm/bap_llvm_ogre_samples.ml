@@ -123,7 +123,7 @@ module Code_regions(Fact : Ogre.S) = struct
           ~join:[[field name];
                  [field size ~from:named_region;
                   field size ~from:code_entry]]
-    end)
+      end)
       ~f:(fun {addr; size;} (_,off,_) -> addr,size,off) >>= fun s ->
     Fact.Seq.iter s ~f:(fun (addr,size,off) ->
         Fact.provide code_region addr size off)
