@@ -99,8 +99,6 @@ module Component(Machine : Primus.Machine.S) = struct
       Value.of_int ~width addend >>= fun addend ->
       Primus.Linker.Trace.lisp_call_return >>> correct_sp sp addend
 
-  let seq = Machine.sequence
-
   let unresolve_plt_jumps p =
     Machine.Seq.iter (Plt.symbols p) ~f:Plt_entry.unresolve_jumps
 
