@@ -25,7 +25,6 @@ static const std::string coff_declarations =
     "(declare section-entry (name str) (relative-addr int) (size int) (off int))"
     "(declare virtual-section-header (name str) (relative-addr int) (size int))"
     "(declare code-entry (name str) (off int) (size int))"
-    "(declare data-entry (name str) (off int) (size int) (w bool))"
     "(declare section-flags (name str) (r bool) (w bool) (x bool))"
     "(declare symbol-entry (name str) (relative-addr int) (size int) (off int))"
     "(declare function (off int) (name str))"
@@ -49,8 +48,6 @@ void section(const coff_section &sec, uint64_t image_base,  ogre_doc &s) {
     s.entry("section-flags") << sec.Name << r << w << x;
     if (x)
         s.entry("code-entry") << sec.Name << sec.PointerToRawData << sec.SizeOfRawData;
-    else
-        s.entry("data-entry") << sec.Name << sec.PointerToRawData << sec.SizeOfRawData << w;
 }
 
 void symbol(const std::string &name, int64_t relative_addr, uint64_t size, uint64_t off, SymbolRef::Type typ, ogre_doc &s) {

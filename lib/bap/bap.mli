@@ -5218,11 +5218,6 @@ module Std : sig
     (** symbol  *)
     type symbol [@@deriving bin_io, compare, sexp]
 
-    (** code region  *)
-    type code_region [@@deriving bin_io, compare, sexp]
-    (** data region *)
-    type data_region [@@deriving bin_io, compare, sexp]
-
     type path = string
 
     (** {2 Constructing}  *)
@@ -5278,14 +5273,6 @@ module Std : sig
     (** [symbols image] returns a mapping from addresses to symbols *)
     val symbols : t -> symbol table
 
-    (** [code_regions image] returns a mapping from address to a
-        region with code *)
-    val code_regions : t -> code_region table
-
-    (** [data_regions image] returns a mapping from address to a
-        region with data *)
-    val data_regions : t -> data_region table
-
     (** {2 Tags}  *)
 
     (** tags a segment  *)
@@ -5298,10 +5285,7 @@ module Std : sig
     val section : string tag
 
     (** tags a code region  *)
-    val code_region  : code_region tag
-
-    (** tags a data region  *)
-    val data_region  : data_region tag
+    val code_region  : unit tag
 
     (** an image specification in OGRE  *)
     val specification : Ogre.doc tag
@@ -5513,10 +5497,6 @@ module Std : sig
 
       val code_region :
         (addr * size * off, (addr -> size -> off -> 'a) -> 'a) Ogre.attribute
-
-      val data_region :
-        (addr * size * off * bool, (addr -> size -> off -> bool -> 'a) -> 'a) Ogre.attribute
-
     end
   end
 

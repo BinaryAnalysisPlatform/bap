@@ -72,7 +72,6 @@ static const std::string elf_declarations =
     "(declare symbol-entry (name str) (relative-addr int) (size int) (off int))"
     "(declare plt-entry (name str) (relative-addr int) (size int) (off int))"
     "(declare code-entry (name str) (off int) (size int))"
-    "(declare data-entry (name str) (off int) (size int) (w bool))"
     "(declare ref-internal (sym-off int) (rel-off int))"
     "(declare ref-external (rel-off int) (name str))";
 
@@ -140,8 +139,6 @@ void section_header(const T &hdr, const std::string &name, uint64_t base, ogre_d
     s.entry("section-flags") << name << w << x;
     if (x)
         s.entry("code-entry") << name << hdr.sh_offset << hdr.sh_size;
-    else
-        s.entry("data-entry") << name << hdr.sh_offset << hdr.sh_size << w;
 }
 
 template <typename T>

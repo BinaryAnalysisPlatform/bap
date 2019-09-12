@@ -53,15 +53,13 @@ let pp_region fmt {name; locn={addr; size}} =
 
 let hash_region {locn={addr}} = Addr.hash addr
 
-module Mapped_region(N : sig
-             val name : string
-           end) = struct
+module Segment = struct
 
   module T = struct
     type t = mapped region [@@deriving bin_io, compare, sexp]
     let hash = hash_region
     let pp = pp_region
-    let module_name = Some N.name
+    let module_name = Some "Bap.Std.Image.Segment"
     let version = "2.0.0"
   end
 
@@ -74,11 +72,6 @@ module Mapped_region(N : sig
   include T
   include Regular.Make(T)
 end
-
-module Segment = Mapped_region(struct let name = "Bap.Std.Image.Segment" end)
-module Data_region = Mapped_region(struct let name = "Bap.Std.Image.Data_region" end)
-module Code_region = Mapped_region(struct let name = "Bap.Std.Image.Code_region" end)
-
 
 module Symbol = struct
   open! Polymorphic_compare
@@ -97,8 +90,6 @@ end
 
 type segment = Segment.t [@@deriving bin_io, compare, sexp]
 type symbol = Symbol.t [@@deriving bin_io,compare, sexp]
-type data_region = Data_region.t [@@deriving bin_io, compare, sexp]
-type code_region = Code_region.t   [@@deriving bin_io, compare, sexp]
 
 module Spec = struct
   type t = {
@@ -107,8 +98,7 @@ module Spec = struct
     segments : segment list;
     symbols : symbol list;
     sections : unit region list;
-    data  : data_region list;
-    code  : code_region list;
+    code  : mapped region list;
   } [@@deriving bin_io, compare, sexp]
 end
 
@@ -131,8 +121,6 @@ type t = {
   data : Bigstring.t;
   symbols : symbol table;
   segments : segment table;
-  data_regions : data_region table;
-  code_regions : code_region table;
   memory : value memmap;
   words : words sexp_opaque;
   memory_of_segment : segment -> mem sexp_opaque;
@@ -165,11 +153,7 @@ let section  = Value.Tag.register (module String)
     ~name:"section"
     ~uuid:"4014408d-a3af-488f-865b-5413beaf198e"
 
-let data_region = Value.Tag.register (module Data_region)
-    ~name:"data-region"
-    ~uuid:"e9fe38cb-ca99-470d-a554-dbd494dd7ec2"
-
-let code_region = Value.Tag.register (module Code_region)
+let code_region = Value.Tag.register (module Unit)
     ~name:"code-region"
     ~uuid:"5296b7e9-d5c3-40ce-98ba-7655ec68fad7"
 
@@ -224,8 +208,11 @@ let add_region kind base memory regions reg =
   let memory = tag mem kind reg memory in
   Result.return (memory,regions)
 
-let add_code = add_region code_region
-let add_data = add_region data_region
+let add_code base memory regions reg =
+  map_region base reg >>= fun mem ->
+  Table.add regions mem reg >>= fun regions ->
+  let memory = tag mem code_region () memory in
+  Result.return (memory,regions)
 
 let add_sections_view segments sections memmap =
   List.fold sections ~init:(memmap,[])
@@ -243,8 +230,7 @@ let make_table add base memory =
 
 let make_symtab = make_table add_sym
 let make_segtab = make_table add_segment
-let make_codtab = make_table add_code
-let make_dattab = make_table add_data
+let make_codetab = make_table add_code
 
 (** [words_of_table word_size table] maps all memory mapped by [table]
     to words of size [word_size]. If size of mapped region is not enough
@@ -285,13 +271,12 @@ let create_segment_of_symbol_table syms secs =
 
 let from_spec query base doc =
   Fact.eval query doc >>= function
-    {Spec.segments; symbols; sections;data;code} as spec ->
+    {Spec.segments; symbols; sections;code} as spec ->
     let memory = Memmap.empty in
     let memory,segs,seg_warns = make_segtab base memory segments in
     let memory,syms,sym_warns = make_symtab segs memory symbols in
     let memory,sec_warns = add_sections_view segs sections memory in
-    let memory,code_regs,creg_warns = make_codtab base memory code in
-    let memory,data_regs,dreg_warns = make_dattab base memory data in
+    let memory,_,creg_warns = make_codetab base memory code in
     let words = create_words segs in
     Table.(rev_map ~one_to:one Segment.hashable (segs : segment table)) >>=
     fun (memory_of_segment : segment -> mem) ->
@@ -304,14 +289,12 @@ let from_spec query base doc =
     Result.return ({
         doc; spec;
         name = None; data=base; symbols=syms; segments=segs; words;
-        code_regions = code_regs;
-        data_regions = data_regs;
         memory_of_segment;
         memory;
         memory_of_symbol   = Lazy.from_fun memory_of_symbol;
         symbols_of_segment = Lazy.from_fun symbols_of_segment;
         segment_of_symbol  = Lazy.from_fun segment_of_symbol;
-      }, (seg_warns @ sym_warns @ sec_warns @ creg_warns @ dreg_warns))
+      }, (seg_warns @ sym_warns @ sec_warns @ creg_warns))
 
 let data t = t.data
 let memory t = t.memory
@@ -336,8 +319,6 @@ let words t (size : size) : word table =
 let segments t = t.segments
 let symbols t = t.symbols
 let memory_of_segment t = t.memory_of_segment
-let data_regions t = t.data_regions
-let code_regions t = t.code_regions
 
 let memory_of_symbol {memory_of_symbol = lazy f} = f
 let symbols_of_segment {symbols_of_segment = lazy f} = f
@@ -384,8 +365,7 @@ module Scheme = struct
     declare "code-region" (scheme addr $ size $ off) Tuple.T3.create
 
   let data_region () =
-    declare "data-region" (scheme addr $ size $ off $ writable)
-      (fun addr size off wr -> addr,size,off,wr)
+    declare "data-region" (scheme addr $ size $ off)  Tuple.T3.create
 
   let relocation () =
     declare "relocation" (scheme fixup $ addr) Tuple.T2.create
@@ -501,31 +481,17 @@ module Derive = struct
         {locn; name; info={endian;off;len;r=true;w=false;x=true}}) >>=
     Fact.Seq.all
 
-  let data =
-    endian >>= fun endian ->
-    Fact.foreach Ogre.Query.(begin
-        select (from data_region $ named_region)
-          ~join:[[field addr];]
-      end) ~f:(fun (addr, size, off, write) {info=name} ->
-        location ~addr ~size >>= fun locn ->
-        int_of_int64 off  >>= fun off ->
-        int_of_int64 size >>| fun len ->
-        {locn; name; info={endian;off;len;r=true;w=write;x=false}}) >>=
-    Fact.Seq.all
-
   let image =
     arch >>= fun arch ->
     entry    >>= fun entry ->
     segments >>= fun segments ->
     sections >>= fun sections ->
     code >>= fun code ->
-    data >>= fun data ->
     symbols  >>| fun symbols  -> {
       Spec.arch; entry;
       segments = Seq.to_list_rev segments;
       symbols  = Seq.to_list_rev symbols;
       sections = Seq.to_list_rev sections;
-      data = Seq.to_list_rev data;
       code = Seq.to_list_rev code;
     }
 end

@@ -80,7 +80,7 @@ module Make(M : Monad.S) = struct
     S.segments >>= fun () ->
     S.sections >>= fun () ->
     S.symbols  >>= fun () ->
-    S.regions
+    S.code_regions
 
   let image = Dispatcher.of_filetype >>= provide
 
