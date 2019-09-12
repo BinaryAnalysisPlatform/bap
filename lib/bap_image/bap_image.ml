@@ -364,9 +364,6 @@ module Scheme = struct
   let code_region () =
     declare "code-region" (scheme addr $ size $ off) Tuple.T3.create
 
-  let data_region () =
-    declare "data-region" (scheme addr $ size $ off)  Tuple.T3.create
-
   let relocation () =
     declare "relocation" (scheme fixup $ addr) Tuple.T2.create
   let external_reference () =
