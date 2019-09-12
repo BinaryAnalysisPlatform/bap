@@ -120,7 +120,9 @@ module Adt = struct
   let pp_word ppf = Word.pp_generic ~prefix:`base ~format:`hex ppf
 
   module Tid = struct
-    let pp ppf tid = pr ppf "Tid(0x%a, %S)" Tid.pp tid (Tid.name tid)
+    let pp ppf tid = pr ppf "Tid(%#Ld, %S)"
+        (Int63.to_int64 (KB.Object.id tid))
+        (Tid.name tid)
   end
 
   let pp_seq pp_elem ch seq =
