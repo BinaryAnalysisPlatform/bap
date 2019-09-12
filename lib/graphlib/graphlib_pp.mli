@@ -26,6 +26,8 @@ val by_natural_order : scheme -> ('a -> 'a -> int) -> 'a Sequence.t -> 'a symbol
 module Dot : sig
   val pp_graph :
     ?name:string ->
+    ?cluster:bool ->
+    ?subgraph:bool ->
     ?attrs:string list ->
     ?string_of_node: 'n symbolizer ->
     ?node_label: 'n symbolizer ->
@@ -33,5 +35,4 @@ module Dot : sig
     nodes_of_edge : ('e -> 'n * 'n) ->
     nodes: 'n Sequence.t ->
     edges: 'e Sequence.t -> formatter -> unit
-
 end
