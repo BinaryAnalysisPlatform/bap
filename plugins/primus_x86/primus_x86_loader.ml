@@ -53,6 +53,11 @@ module Plt_entry(Machine : Primus.Machine.S) = struct
   module Linker = Primus.Linker.Make(Machine)
   open Machine.Syntax
 
+  let load_byte addr =
+    Memory.is_mapped addr >>= function
+    | false -> !! None
+    | true  -> Memory.load addr >>| Option.some
+
   let load bytes endian addr =
     let concat = match endian with
       | LittleEndian -> fun x y -> Addr.concat y x
@@ -60,19 +65,24 @@ module Plt_entry(Machine : Primus.Machine.S) = struct
     let last = Addr.nsucc addr bytes in
     let rec load data addr =
       if Addr.(addr < last) then
-        Memory.load addr >>= fun x ->
-        load (concat data x) (Addr.succ addr)
-      else Machine.return data in
-    Memory.load addr >>= fun data ->
-    load data (Addr.succ addr)
+        load_byte addr >>= function
+        | None -> !! None
+        | Some x ->
+           load (concat data x) (Addr.succ addr)
+      else !! (Some data) in
+    load_byte addr >>= function
+    | None -> !! None
+    | Some data -> load data (Addr.succ addr)
 
   let unresolve_jumps sym =
     Machine.arch >>= fun arch ->
     let endian = Arch.endian arch in
     let size = Size.in_bytes (Arch.addr_size arch) in
     Machine.List.iter (Got.cells sym) ~f:(fun cell ->
-        load size endian cell >>= fun addr ->
-        Linker.link ~addr (module Make_unresolved))
+        load size endian cell >>= function
+        | None -> !! ()
+        | Some addr ->
+           Linker.link ~addr (module Make_unresolved))
 end
 
 module Component(Machine : Primus.Machine.S) = struct
