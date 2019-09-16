@@ -79,7 +79,7 @@ type difference_kind =
   | Target_change of tid * tid
   | New_jmp of tid
   | Del_jmp of tid
-  [@@deriving variants, sexp]
+[@@deriving variants, sexp]
 
 let jmp_set b = Term.enum jmp_t b |> Seq.map ~f:Term.tid |>
                 Seq.fold ~init:Tid.Set.empty ~f:Set.add
@@ -143,7 +143,7 @@ module Node = struct
               match succ_tid_of_jmp jmp with
               | None -> None
               | Some tid when tid <> Term.tid dst -> None
-              | Some tid -> Some {src; pos; dst}))
+              | Some _ -> Some {src; pos; dst}))
 
   let outputs src t : edge seq =
     Term.enum jmp_t src |> Seq.filter_mapi ~f:(fun pos jmp ->
@@ -384,40 +384,43 @@ let compare x y = Sub.compare x.sub y.sub
 
 let is_directed = true
 
+
+let pp_full ppf g =
+  let node_label blk =
+    let open Bap_ir in
+    let phis =
+      Term.enum phi_t blk |> Seq.map ~f:Ir_phi.to_string in
+    let defs =
+      Term.enum def_t blk |> Seq.map ~f:Ir_def.to_string in
+    let jmps =
+      Term.enum jmp_t blk |> Seq.filter_map ~f:(fun jmp ->
+          match Jmp.kind jmp with
+          | Call _ | Ret _ | Int (_,_) -> Some (Jmp.to_string jmp)
+          | Goto _ -> match succ_tid_of_jmp jmp with
+            | None -> Some (Jmp.to_string jmp)
+            | Some _ -> None) in
+    let lines =
+      List.concat @@ List.map [phis; defs; jmps] ~f:Seq.to_list in
+    let body = String.concat lines |> String.concat_map
+                 ~f:(function '\n' -> "\\l"
+                            | c -> Char.to_string c) in
+    sprintf "%s\n%s" (Term.name blk) body in
+  let string_of_node b =
+    sprintf "%s" (Term.name b) in
+  let edge_label e = match Edge.cond e g with
+    | Exp.Int w when Bitvector.is_one w -> ""
+    | exp -> Bap_exp.to_string exp  in
+  let nodes_of_edge e = Edge.(src e, dst e) in
+  Graphlib.Dot.pp_graph
+    ~name:(Ir_sub.name g.sub)
+    ~attrs:["node[shape=box]"]
+    ~string_of_node ~node_label ~edge_label
+    ~nodes_of_edge ~nodes:(nodes g) ~edges:(edges g) ppf
+
 include Regular.Make(struct
     type nonrec t = graph [@@deriving bin_io, compare, sexp]
     let module_name = None
     let version = "1.0.0"
     let hash g = Sub.hash g.sub
-    let pp ppf g =
-      let node_label blk =
-        let open Bap_ir in
-        let phis =
-          Term.enum phi_t blk |> Seq.map ~f:Ir_phi.to_string in
-        let defs =
-          Term.enum def_t blk |> Seq.map ~f:Ir_def.to_string in
-        let jmps =
-          Term.enum jmp_t blk |> Seq.filter_map ~f:(fun jmp ->
-              match Jmp.kind jmp with
-              | Call _ | Ret _ | Int (_,_) -> Some (Jmp.to_string jmp)
-              | Goto _ -> match succ_tid_of_jmp jmp with
-                | None -> Some (Jmp.to_string jmp)
-                | Some _ -> None) in
-        let lines =
-          List.concat @@ List.map [phis; defs; jmps] ~f:Seq.to_list in
-        let body = String.concat lines |> String.concat_map
-                     ~f:(function '\n' -> "\\l"
-                                | c -> Char.to_string c) in
-        sprintf "%s\n%s" (Term.name blk) body in
-      let string_of_node b =
-        sprintf "%s" (Term.name b) in
-      let edge_label e = match Edge.cond e g with
-        | Exp.Int w when Bitvector.is_one w -> ""
-        | exp -> Bap_exp.to_string exp  in
-      let nodes_of_edge e = Edge.(src e, dst e) in
-      Graphlib.Dot.pp_graph
-        ~name:(Ir_sub.name g.sub)
-        ~attrs:["node[shape=box]"]
-        ~string_of_node ~node_label ~edge_label
-        ~nodes_of_edge ~nodes:(nodes g) ~edges:(edges g) ppf
+    let pp ppf g = pp_full ppf g
   end)

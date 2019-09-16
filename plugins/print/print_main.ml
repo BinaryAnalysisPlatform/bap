@@ -10,6 +10,61 @@ open Option.Monad_infix
 
 include Self()
 
+type property = {
+  extract : project -> addr -> string option;
+  explain : string;
+}
+
+let find_in_memory extract element proj addr =
+  let memory = Project.memory proj in
+  Memmap.lookup memory addr |> Seq.find_map ~f:(fun (_,v) ->
+      Value.get element v >>| extract)
+
+let properties = [
+  "symbol", {
+    extract = find_in_memory ident Image.symbol;
+    explain = "name of the enclosing symbol, where the symbol is \
+               looked up in the file symbol table or debuging \
+               information, if any";
+  };
+  "section", {
+    extract = find_in_memory ident Image.section;
+    explain = "name of the enclosing section of the file";
+  };
+  "segment", {
+    extract = find_in_memory Image.Segment.name Image.segment;
+    explain = "name of the enclosing segment of the file";
+  };
+
+  "subroutine", {
+    extract = begin fun proj addr ->
+      Symtab.find_by_start (Project.symbols proj) addr >>|
+      fun (name,_,_) -> name;
+    end;
+    explain = "name of the enclosing subroutine"
+  }
+]
+
+let properties_description =
+  String.concat ~sep:"; "@@
+  List.map properties ~f:(fun (name,{explain}) ->
+      sprintf "$(b,%s) - %s\n" name explain)
+
+
+let matches patterns proj addr =
+  List.for_all patterns ~f:(fun ({extract},pattern) ->
+      match addr with
+      | None -> false
+      | Some addr -> match extract proj addr with
+        | None -> false
+        | Some value -> Re.execp pattern value)
+
+
+let print_spec ppf proj =
+  match Project.get proj Image.specification with
+  | None -> warning "The file specification is not found"
+  | Some spec ->  Format.fprintf ppf "%a" Ogre.Doc.pp spec
+
 let create_demangler = function
   | None -> ident
   | Some name ->
@@ -23,41 +78,12 @@ let create_demangler = function
       invalid_argf "Bad demangler option" ()
     | Some d -> Demangler.run d
 
-
-let should_print = function
-  | [] -> fun _ -> true
-  | xs -> List.mem xs ~equal:String.equal
-
-
-let find_section_for_addr memory addr =
-  Memmap.lookup memory addr |> Seq.find_map ~f:(fun (_,v) ->
-      Value.get Image.section v)
-
-let bir memory sub =
-  Term.get_attr sub address >>=
-  find_section_for_addr memory
-
-let sym memory (_,entry,_) =
-  Block.addr entry |>
-  find_section_for_addr memory
-
-let sec_name memory fn sub =
-  match fn memory sub with
-  | None -> "bap.virtual"
-  | Some name -> name
-
-let print_spec ppf proj =
-  match Project.get proj Image.specification with
-  | None -> warning "The file specification is not found"
-  | Some spec ->  Format.fprintf ppf "%a" Ogre.Doc.pp spec
-
-let print_symbols subs secs demangler fmts ppf proj =
+let print_symbols patterns demangler fmts ppf proj =
   let demangle = create_demangler demangler in
   let symtab = Project.symbols proj in
   Symtab.to_sequence symtab |>
-  Seq.filter ~f:(fun ((name,_,_) as fn) ->
-      should_print subs name &&
-      should_print secs (sec_name (Project.memory proj) sym fn)) |>
+  Seq.filter ~f:(fun (_,entry,_) ->
+      matches patterns proj (Some (Block.addr entry))) |>
   Seq.iter ~f:(fun ((name,entry,_) as fn) ->
       List.iter fmts ~f:(function
           | `with_name ->
@@ -73,19 +99,17 @@ let print_symbols subs secs demangler fmts ppf proj =
             fprintf ppf "%2d " size);
       fprintf ppf "@\n")
 
-let extract_program subs secs proj =
-  let mem = Project.memory proj in
+let extract_program patterns proj =
   Project.program proj |>
   Term.filter sub_t ~f:(fun sub ->
-      should_print subs (Sub.name sub) &&
-      should_print secs (sec_name mem bir sub))
+      matches patterns proj (Term.get_attr sub address))
 
-let print_bir subs secs sema ppf proj =
+let print_bir patterns sema ppf proj =
   let pp = match sema with
     | None -> Program.pp
     | Some cs -> Program.pp_slots cs in
   Text_tags.with_mode ppf "attr" ~f:(fun () ->
-      pp ppf (extract_program subs secs proj))
+      pp ppf (extract_program patterns proj))
 
 module Adt = struct
   let pr ch = Format.fprintf ch
@@ -96,7 +120,9 @@ module Adt = struct
   let pp_word ppf = Word.pp_generic ~prefix:`base ~format:`hex ppf
 
   module Tid = struct
-    let pp ppf tid = pr ppf "Tid(0x%a, %S)" Tid.pp tid (Tid.name tid)
+    let pp ppf tid = pr ppf "Tid(%#Ld, %S)"
+        (Int63.to_int64 (KB.Object.id tid))
+        (Tid.name tid)
   end
 
   let pp_seq pp_elem ch seq =
@@ -227,15 +253,93 @@ module Adt = struct
       pp_program (Project.program proj)
 end
 
-let print_callgraph subs secs ppf proj =
-  let prog = extract_program subs secs proj in
+let print_callgraph patterns ppf proj =
+  let prog = extract_program patterns proj in
   fprintf ppf "%a@."
     Graphs.Callgraph.pp (Program.to_graph prog)
 
-let print_bir_graph subs secs ppf proj =
-  let prog = extract_program subs secs proj in
+module Ir_pp = struct
+  module Cfg = Graphs.Ir
+
+  let succ_tid_of_jmp jmp : tid option = match Jmp.kind jmp with
+    | Goto (Direct tid) -> Some tid
+    | Int (_,tid) -> Some tid
+    | Call t -> Option.(Call.return t >>= function
+      | Direct tid -> Some tid
+      | _ -> None)
+    | _ -> None
+
+  let node_label blk =
+    let phis =
+      Term.enum phi_t blk |> Seq.map ~f:Phi.to_string in
+    let defs =
+      Term.enum def_t blk |> Seq.map ~f:Def.to_string in
+    let jmps =
+      Term.enum jmp_t blk |> Seq.filter_map ~f:(fun jmp ->
+          match Jmp.kind jmp with
+          | Call _ | Ret _ | Int (_,_) -> Some (Jmp.to_string jmp)
+          | Goto _ -> match succ_tid_of_jmp jmp with
+            | None -> Some (Jmp.to_string jmp)
+            | Some _ -> None) in
+    let lines =
+      List.concat @@ List.map [phis; defs; jmps] ~f:Seq.to_list in
+    let body = String.concat lines |> String.concat_map
+                 ~f:(function '\n' -> "\\l"
+                            | c -> Char.to_string c) in
+    sprintf "\\%s\n%s" (Term.name blk) body
+
+  let string_of_node b =
+    sprintf "\\%s" (Tid.to_string (Term.tid b))
+end
+
+let pp_bir_cfg ~labeled name ppf g =
+  let module Cfg = Graphs.Ir in
+  let open Ir_pp in
+  let nodes = Cfg.nodes g |> Seq.map ~f:Cfg.Node.label in
+  let edges = Cfg.edges g in
+  let edge_label e = match Cfg.Edge.cond e g with
+    | Bil.Int w when Bitvector.is_one w -> ""
+    | exp -> Exp.to_string exp in
+  let nodes_of_edge e =
+    Cfg.(Node.label (Edge.src e), Node.label (Edge.dst e)) in
+  let node_label, edge_label =
+    if labeled then Some node_label, Some edge_label
+    else None,None in
+  Graphlib.Dot.pp_graph
+    ~name
+    ~subgraph:true
+    ~cluster:true
+    ~string_of_node ?node_label ?edge_label
+    ~nodes_of_edge ~nodes ~edges ppf
+
+
+let print_bir_graph ~labeled patterns ppf proj =
+  let prog = extract_program patterns proj in
+  let entries =
+    Term.enum sub_t prog |>
+    Seq.fold ~init:(Map.empty (module Tid)) ~f:(fun entries sub ->
+        match Term.first blk_t sub with
+        | None -> entries
+        | Some entry ->
+          Map.add_exn entries (Term.tid sub) (Term.tid entry)) in
+  fprintf ppf "digraph {@\nnode[shape=box];@\n";
   Term.enum sub_t prog |> Seq.iter ~f:(fun sub ->
-      fprintf ppf "%a@." Graphs.Ir.pp (Sub.to_cfg sub))
+      let name = Sub.name sub in
+      fprintf ppf "%a@." (pp_bir_cfg ~labeled name) (Sub.to_cfg sub);
+      Term.enum blk_t sub |>
+      Seq.iter ~f:(fun src ->
+          Term.enum jmp_t src |>
+          Seq.iter ~f:(fun jmp -> match Jmp.alt jmp with
+              | None -> ()
+              | Some dst -> match Jmp.resolve dst with
+                | Either.Second _ -> ()
+                | Either.First dst ->
+                  match Map.find entries dst with
+                  | None -> ()
+                  | Some dst ->
+                    fprintf ppf "\"\\%a\" -> \"\\%a\";@\n"
+                      Tid.pp (Term.tid src) Tid.pp dst)));
+  fprintf ppf "}"
 
 let pp_addr ppf a =
   Addr.pp_generic ~prefix:`none ~case:`lower ppf a
@@ -255,7 +359,7 @@ let sort_fns fns =
       Block.compare b1 b2);
   Seq.of_array fns
 
-let print_disasm pp_insn subs secs ppf proj =
+let print_disasm pp_insn patterns ppf proj =
   let memory = Project.memory proj in
   let syms = Project.symbols proj in
   pp_open_tbox ppf ();
@@ -263,10 +367,9 @@ let print_disasm pp_insn subs secs ppf proj =
   Memmap.filter_map memory ~f:(Value.get Image.section) |>
   Memmap.to_sequence |> Seq.iter ~f:(fun (mem,sec) ->
       Symtab.intersecting syms mem |>
-      List.filter ~f:(fun (name,_,_) ->
-          should_print subs name) |> function
+      List.filter ~f:(fun (_,entry,_) ->
+          matches patterns proj (Some (Block.addr entry))) |> function
       | [] -> ()
-      | _ when not(should_print secs sec) -> ()
       | fns ->
         fprintf ppf "@\nDisassembly of section %s@\n" sec;
         Seq.iter (sort_fns fns) ~f:(fun (name,entry,cfg) ->
@@ -293,13 +396,33 @@ let pp_knowledge ppf _ =
   KB.pp_state ppf @@
   Toplevel.current ()
 
-let main attrs ansi_colors demangle symbol_fmts subs secs doms =
+let compile_patterns subs secs patterns =
+  let subs = List.map subs ~f:(sprintf "symbol:%s") in
+  let secs = List.map secs ~f:(sprintf "section:%s") in
+  List.concat_no_order [
+    subs; secs; patterns
+  ] |> List.map ~f:(fun pattern ->
+      match String.index pattern ':' with
+      | None ->
+        failwithf "wrong pattern %S, expected `:`, none found"
+          pattern ()
+      | Some pos ->
+        let property = String.sub ~pos:0 ~len:pos pattern in
+        let pattern = String.subo ~pos:(pos+1) pattern in
+        let pattern = Re.Pcre.re pattern |> Re.compile in
+        match List.Assoc.find properties property ~equal:String.equal
+        with None ->
+          failwithf "unknown property %S" property ()
+           | Some property -> property,pattern)
+
+let main attrs ansi_colors demangle symbol_fmts subs secs patterns doms =
+  let patterns = compile_patterns subs secs patterns in
   let ver = version in
   let pp_syms =
-    Data.Write.create ~pp:(print_symbols subs secs demangle symbol_fmts) () in
+    Data.Write.create ~pp:(print_symbols patterns demangle symbol_fmts) () in
   Project.add_writer
     ~desc:"print symbol table" ~ver "symbols" pp_syms;
-  let pp_bir = Data.Write.create ~pp:(print_bir subs secs doms) () in
+  let pp_bir = Data.Write.create ~pp:(print_bir patterns doms) () in
   let pp_adt = Data.Write.create ~pp:Adt.pp_project () in
 
   List.iter attrs ~f:Text_tags.Attr.show;
@@ -309,25 +432,26 @@ let main attrs ansi_colors demangle symbol_fmts subs secs doms =
   Project.add_writer
     ~desc:"print program IR in ADT format" ~ver "adt" pp_adt;
   let pp_callgraph =
-    Data.Write.create ~pp:(print_callgraph subs secs) () in
+    Data.Write.create ~pp:(print_callgraph patterns) () in
   Project.add_writer ~ver "callgraph"
     ~desc:"print program callgraph in DOT format" pp_callgraph;
-  let pp_cfg = Data.Write.create ~pp:(print_bir_graph subs secs) () in
+  let pp_cfg = Data.Write.create ~pp:(print_bir_graph ~labeled:true patterns) () in
+  let pp_calls = Data.Write.create ~pp:(print_bir_graph ~labeled:false patterns) () in
   let pp_spec = Data.Write.create ~pp:print_spec () in
   let pp_disasm_bil =
-    Data.Write.create ~pp:(print_disasm (pp_bil "pretty") subs secs) () in
+    Data.Write.create ~pp:(print_disasm (pp_bil "pretty") patterns) () in
   let pp_disasm_bil_adt =
-    Data.Write.create ~pp:(print_disasm (pp_bil "adt") subs secs) () in
+    Data.Write.create ~pp:(print_disasm (pp_bil "adt") patterns) () in
   let pp_disasm_bil_sexp =
-    Data.Write.create ~pp:(print_disasm (pp_bil "sexp") subs secs) () in
+    Data.Write.create ~pp:(print_disasm (pp_bil "sexp") patterns) () in
   let pp_disasm_asm =
-    Data.Write.create ~pp:(print_disasm (pp_insn "asm") subs secs) () in
+    Data.Write.create ~pp:(print_disasm (pp_insn "asm") patterns) () in
   let pp_disasm_adt =
-    Data.Write.create ~pp:(print_disasm (pp_insn "adt") subs secs) () in
+    Data.Write.create ~pp:(print_disasm (pp_insn "adt") patterns) () in
   let pp_disasm_decoded =
-    Data.Write.create ~pp:(print_disasm (pp_insn "pretty") subs secs) () in
+    Data.Write.create ~pp:(print_disasm (pp_insn "pretty") patterns) () in
   let pp_disasm_sexp =
-    Data.Write.create ~pp:(print_disasm (pp_insn "sexp") subs secs) () in
+    Data.Write.create ~pp:(print_disasm (pp_insn "sexp") patterns) () in
 
   let pp_knowledge = Data.Write.create ~pp:(pp_knowledge) () in
 
@@ -335,6 +459,8 @@ let main attrs ansi_colors demangle symbol_fmts subs secs doms =
     ~desc:"dumps the knowledge base" pp_knowledge;
   Project.add_writer ~ver "cfg"
     ~desc:"print rich CFG for each procedure" pp_cfg;
+  Project.add_writer ~ver "graph"
+    ~desc:"print unlabeled CFG for each procedure" pp_calls;
   Project.add_writer ~ver "asm"
     ~desc:"print assembly instructions" pp_disasm_asm;
   Project.add_writer ~ver "asm.adt"
@@ -368,7 +494,7 @@ let () =
 let () =
   let () = Config.manpage [
       `S "DESCRIPTION";
-      `P "Setup various output formats for project data.";
+      `P "Provides various formats for dumping the project data structure.";
       `S "SEE ALSO";
       `P
         "$(b,bap-plugin-phoenix)(1), $(b,bap-plugin-piqi-printers)(1),
@@ -401,11 +527,26 @@ let () =
     let default = [`with_name] in
     Config.(param_all (enum opts) ~default "symbol-format" ~doc) in
   let subs : string list Config.param =
-    let doc = "Only display information for symbol $(docv)" in
+    let doc = "same as $(b,--print-matching=symbol:)$(docv)" in
     Config.(param_all string "symbol" ~docv:"NAME" ~doc) in
   let secs : string list Config.param =
-    let doc = "Only display information for section $(docv)" in
+    let doc = "same as $(b,--print-matching=section:)$(docv)" in
     Config.(param_all string "section" ~docv:"NAME" ~doc) in
+
+  let patterns : string list Config.param =
+    let doc =
+      sprintf
+        "Only print elements that matches with the provided patterns.
+      A pattern consists of the name of a property and a regular
+      expression, which denotes a set of values of this property.
+      The property name and the regular expression are separated wit
+      the $(b,:) symbol, e.g., $(b,symbol:main) will print all
+      elements that belong to the symbol entry $(b,main).
+      The syntax of the regular expressions is PCRE with partial
+      matching. The following properties are supported: %s."
+        properties_description in
+    Config.(param_all string "matching" ~doc) in
+
   let semantics : string list option Config.param =
     let doc =
       "Display the $(docv) semantics of the program. If used without
@@ -416,4 +557,5 @@ let () =
               ~doc ~docv:"SEMANTICS-LIST" "semantics") in
   Config.when_ready (fun {Config.get=(!)} ->
       main !bir_attr !ansi_colors !demangle !print_symbols !subs !secs
+        !patterns
         !semantics)

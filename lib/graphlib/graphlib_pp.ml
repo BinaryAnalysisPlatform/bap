@@ -45,10 +45,10 @@ let by_given_order (type a) (init,next) compare nodes =
   let module T : Comparator.S with type t = a = struct
     type t = a
     include Comparator.Make(struct
-      type t = a
-      let compare = compare
-      let sexp_of_t = sexp_of_opaque
-    end) end in
+        type t = a
+        let compare = compare
+        let sexp_of_t = sexp_of_opaque
+      end) end in
   Seq.fold nodes ~init:(Map.empty (module T),init) ~f:(fun (names,name) node ->
       Map.set names ~key:node ~data:name, next name) |> fst |>
   Map.find_exn
@@ -57,10 +57,10 @@ let by_natural_order (type a) variant compare nodes =
   let module T : Comparator.S with type t = a = struct
     type t = a
     include Comparator.Make(struct
-      type t = a
-      let compare = compare
-      let sexp_of_t = sexp_of_opaque
-    end) end in
+        type t = a
+        let compare = compare
+        let sexp_of_t = sexp_of_opaque
+      end) end in
   Seq.fold nodes ~init:(Set.empty (module T)) ~f:Set.add |>
   Set.to_sequence |> by_given_order variant compare
 
@@ -81,6 +81,8 @@ module Dot = struct
 
   let pp_graph
       ?name
+      ?(cluster=false)
+      ?(subgraph=false)
       ?(attrs=[])
       ?string_of_node:(node=noname)
       ?(node_label=noname)
@@ -92,10 +94,14 @@ module Dot = struct
         node src, node dst, edge_label e) in
     let attrs = if attrs = [] then "" else
         sprintf "@;%s" (String.concat ~sep:"@;" attrs) in
-    let name = match name with
+    let graphname = match name with
       | None -> ""
-      | Some name -> sprintf "%S" name in
-    fprintf ppf "@.@[<v2>digraph %s {%s" name attrs;
+      | Some name ->
+        if cluster then sprintf "%S" ("cluster_"^name)
+        else sprintf "%S" name in
+    let graph = if subgraph then "subgraph" else "digraph" in
+    fprintf ppf "@.@[<v2>%s %s {%s" graph graphname attrs;
+    Option.iter name ~f:(fprintf ppf "@;label=%S@;");
     Seq.iter nodes ~f:(fprintf ppf "@;%a" pp_node);
     Seq.iter edges ~f:(fprintf ppf "@;%a" pp_edge);
     fprintf ppf "@]@.}"
