@@ -7999,6 +7999,18 @@ module Std : sig
     (** symbolizer data type  *)
     type t = symbolizer
 
+
+    (** [provide agent symbolizer] registers [symbolizer] in the
+        knowledge base.
+
+        This function enables an easy integration of the old
+        symbolizers/information sources infrastructure into the
+        knowledge base representation introduced with BAP 2.0.
+
+        A symbolizer is regiestered in the knowledge base through an
+        agent which denotes the level of trustwothiness of the
+        symbolizer.
+    *)
     val provide : Knowledge.agent -> t -> unit
 
     (** [create fn] creates a symbolizer for a given function  *)
@@ -8023,8 +8035,8 @@ module Std : sig
     (** [empty] is a symbolizer that knows nothing.  *)
     val empty : t
 
-    module Factory : Source.Factory.S with type t = t
-                                           [@@deprecated "[since 2019-05] use [provide]"]
+    module Factory :
+      Source.Factory.S with type t = t [@@deprecated "[since 2019-05] use [provide]"]
 
   end
 

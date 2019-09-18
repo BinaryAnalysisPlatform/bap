@@ -14,7 +14,6 @@ let confdir = "$sysconfdir" / name
 let sharedstatedir = "$sharedstatedir"
 let localstatedir = "$localstatedir"
 let libdir = "$libdir"
-let plugindir = "$plugindir"
 let datarootdir = "$datarootdir"
 let datadir = "$datadir" / name
 let infodir = "$infodir"
