@@ -60,6 +60,7 @@ module type S = sig
   val segments : unit m
   val sections : unit m
   val symbols  : unit m
+  val code_regions : unit m
 end
 
 module type Rules = sig

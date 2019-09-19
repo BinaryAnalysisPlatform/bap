@@ -5284,6 +5284,9 @@ module Std : sig
     (** tags a section  *)
     val section : string tag
 
+    (** tags a code region  *)
+    val code_region  : unit tag
+
     (** an image specification in OGRE  *)
     val specification : Ogre.doc tag
 
@@ -5491,6 +5494,9 @@ module Std : sig
       (** [base_address addr] this is the base address of an image,
           i.e., an address of a first byte of the image.  *)
       val base_address : (addr, (addr -> 'a) -> 'a) Ogre.attribute
+
+      val code_region :
+        (addr * size * off, (addr -> size -> off -> 'a) -> 'a) Ogre.attribute
     end
   end
 

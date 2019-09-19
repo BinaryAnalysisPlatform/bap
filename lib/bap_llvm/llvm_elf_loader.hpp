@@ -137,6 +137,8 @@ void section_header(const T &hdr, const std::string &name, uint64_t base, ogre_d
     bool w = static_cast<bool>(hdr.sh_flags & ELF::SHF_WRITE);
     bool x = static_cast<bool>(hdr.sh_flags & ELF::SHF_EXECINSTR);
     s.entry("section-flags") << name << w << x;
+    if (x)
+        s.entry("code-entry") << name << hdr.sh_offset << hdr.sh_size;
 }
 
 template <typename T>
