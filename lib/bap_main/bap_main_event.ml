@@ -1,5 +1,4 @@
 open Core_kernel
-open Regular.Std
 open Bap_future.Std
 open Format
 
@@ -15,19 +14,11 @@ type event = t = ..
 let register_printer = Caml.Printexc.register_printer
 let stream,new_event = Stream.create ()
 let send (ev : t) = Signal.send new_event ev
-
 let string_of_event = Caml.Printexc.to_string
-
-include Printable.Make(struct
-    type nonrec t = t
-    let module_name = Some "Bap.Std.Event"
-    let pp ppf e =
-      pp_print_string ppf (string_of_event e)
-  end)
-
+let pp ppf e =
+  pp_print_string ppf (string_of_event e)
 
 module Log = struct
-
   type level =
     | Debug
     | Info
@@ -70,7 +61,7 @@ module Log = struct
 
   let progress ?note ?stage ?total task = send @@ Progress {
       task; note; stage; total;
-  }
+    }
 
   let pp ppf {level; section; message} =
     fprintf ppf "%s.%s> %s@." section (string_of_level level) message

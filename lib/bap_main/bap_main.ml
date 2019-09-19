@@ -67,7 +67,13 @@ module Type = struct
 
   let atom x = x
   let create parser printer default = {parser; printer; default}
-  let define = create
+  let define ~parse ~print default =
+    let parser x =
+      try `Ok (parse x) with exn -> `Error (Caml.Printexc.to_string exn) in
+    let printer ppf x =
+      Format.pp_print_string ppf (print x) in
+    create parser printer default
+
   let converter conv : 'a Arg.converter = conv.parser, conv.printer
   let default conv = conv.default
   let wrap (parser,printer) default = {parser; printer; default}
@@ -449,8 +455,9 @@ module Extension = struct
     let converter = Type.define
     let deprecated = "DEPRECATED."
 
-    let atom = Grammar.atom and list = Grammar.list
+    let get ctxt x = ctxt.get x
 
+    let atom = Grammar.atom and list = Grammar.list
     let param ?as_flag conv =
       Grammar.extend atom conv @@ fun conv def info ->
       Arg.value @@ Arg.opt ?vopt:as_flag conv def info
@@ -462,6 +469,7 @@ module Extension = struct
     let flag conv =
       Grammar.extend atom conv @@ fun _ def docs ->
       Term.(const (fun x -> x || def) $ Arg.value (Arg.flag docs))
+    let flag = flag Type.bool
 
     let manpage man = Grammar.describe (man :> Manpage.block list)
 
@@ -484,6 +492,7 @@ module Extension = struct
     let rest = Grammar.rest
     let argument = Grammar.argument
     let param = Grammar.param
+    let param_all = Grammar.param_all
     let flag = Grammar.flag
   end
 
@@ -505,19 +514,24 @@ type state =
 
 let state = ref Uninitialized
 
+let enable_logging = function
+  | Some (`Formatter fmt) -> Bap_main_log.process_events fmt
+  | Some (`Dir logdir) -> Bap_main_log.in_directory ~logdir ()
+  | None -> Bap_main_log.in_directory ()
 
-let init ?log ?name ?version ?env ?help ?err ?argv ?features ?library () =
+let init ?features ?library ?argv ?env ?log ?out ?err ?name ?version () =
   match state.contents with
   | Loaded _
   | Failed _ -> Error Already_initialized
   | Uninitialized ->
+    enable_logging log;
     let result = Plugins.load ?provides:features ?library () in
     let plugins,failures =
       List.partition_map result ~f:(function
           | Ok p -> `Fst p
           | Error e -> `Snd e) in
     if List.is_empty failures
-    then match Grammar.eval ?name ?version ?env ?help ?err ?argv () with
+    then match Grammar.eval ?name ?version ?env ?help:out ?err ?argv () with
       | Ok () ->
         state := Loaded plugins;
         Ok ()
@@ -525,6 +539,7 @@ let init ?log ?name ?version ?env ?help ?err ?argv ?features ?library () =
         state := Failed err;
         Error err
     else begin
-      state := Failed (Broken_plugins failures);
-      Error (Broken_plugins failures)
+      let problem = Broken_plugins failures in
+      state := Failed problem;
+      Error problem
     end

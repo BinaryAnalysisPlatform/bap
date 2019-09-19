@@ -3,6 +3,8 @@ open Bap_future.Std
 open Bap_plugins.Std
 open Format
 
+module Event = Bap_main_event
+
 let perm = 0o770
 let getenv opt = try Some (Sys.getenv opt) with Caml.Not_found -> None
 
@@ -40,17 +42,17 @@ let rec rotate max_logs file =
     FileUtil.mv file next
 
 let string_of_level = function
-  | Bap_event.Log.Debug -> "debug"
-  | Bap_event.Log.Info -> "info"
-  | Bap_event.Log.Warning -> "warning"
-  | Bap_event.Log.Error -> "error"
+  | Event.Log.Debug -> "debug"
+  | Event.Log.Info -> "info"
+  | Event.Log.Warning -> "warning"
+  | Event.Log.Error -> "error"
 
-let print ppf {Bap_event.Log.level; section; message} =
+let print ppf {Event.Log.level; section; message} =
   fprintf ppf "%s.%s> %s@." section (string_of_level level) message
 
 let print_message ppf msg =
   print ppf msg;
-  let open Bap_event.Log in match msg.level with
+  let open Event.Log in match msg.level with
   | Error -> eprintf "%s@\n%!" msg.message
   | _ -> ()
 
@@ -86,7 +88,7 @@ let open_log_channel user_dir =
     err_formatter
 
 let log_plugin_events () =
-  let open Bap_event.Log in
+  let open Event.Log in
   let section = "loader" in
   Stream.observe Plugins.events (function
       | `Loaded p ->
@@ -103,9 +105,13 @@ let log_plugin_events () =
         message Debug ~section "Linking library %s" lib)
 
 
-let start ?logdir () =
-  let ppf = open_log_channel logdir in
-  Stream.observe Bap_event.stream (function
-      | Bap_event.Log.Message message -> print_message ppf message
+
+
+let process_events ppf =
+  Stream.observe Event.stream (function
+      | Event.Log.Message message -> print_message ppf message
       | _ -> ());
   log_plugin_events ()
+
+let in_directory ?logdir () =
+  process_events (open_log_channel logdir)

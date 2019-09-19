@@ -8910,6 +8910,7 @@ module Std : sig
           used to safely dereference parameters.  *)
       val when_ready : (reader -> unit) -> unit
 
+
       (** The type for a block of man page text.
 
           - [`S s] introduces a new section [s].

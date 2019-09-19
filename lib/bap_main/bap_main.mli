@@ -3,11 +3,17 @@ open Bap_future.Std
 type error = ..
 
 val init :
-  ?logdir:string ->
-  ?etcdir:string ->
+  ?features:string list ->
+  ?library:string list ->
   ?argv:string array ->
-  ?command:string ->
-  unit -> (unit,error) result
+  ?env:(string -> string option) ->
+  ?log:[`Formatter of Format.formatter | `Dir of string] ->
+  ?out:Format.formatter ->
+  ?err:Format.formatter ->
+  ?name:string ->
+  ?version:string ->
+  unit ->
+  (unit, error) result
 
 module Extension : sig
 
@@ -22,7 +28,7 @@ module Extension : sig
 
     val define :
       parse:(string -> 'a) ->
-      print:('a -> string) -> 'a t
+      print:('a -> string) -> 'a -> 'a t
 
     val bool : bool t
     val char : char t
@@ -33,7 +39,6 @@ module Extension : sig
     val float : float t
     val string : string t
     val enum : (string * 'a) list -> 'a t
-    val doc_enum : ?quoted:bool -> (string * 'a) list -> string
     val file : string t
     val dir : string t
     val non_dir_file : string t
@@ -59,20 +64,25 @@ module Extension : sig
     val get : ctxt -> 'a param -> 'a
 
     val deprecated : string
+    val doc_enum : ?quoted:bool -> (string * 'a) list -> string
 
     val param :
-      'a Type.t -> ?deprecated:string -> ?default:'a -> ?as_flag:'a ->
+      ?as_flag:'a ->
+      'a Type.t -> ?deprecated:string -> ?default:'a ->
       ?docv:string -> ?doc:string -> ?synonyms:string list ->
       string -> 'a param
 
     val param_all :
+      ?as_flag:'a ->
       'a Type.t -> ?deprecated:string -> ?default:'a list ->
-      ?as_flag:'a -> ?docv:string -> ?doc:string ->
+      ?docv:string -> ?doc:string ->
       ?synonyms:string list ->  string -> 'a list param
 
     val flag :
       ?deprecated:string ->
-      ?docv:string -> ?doc:string -> ?synonyms:string list ->
+      ?default:bool ->
+      ?docv:string -> ?doc:string ->
+      ?synonyms:string list ->
       string -> bool param
 
     val determined : 'a param -> 'a future
@@ -89,10 +99,10 @@ module Extension : sig
 
     val manpage : manpage_block list -> unit
 
-    val version : string param
-    val datadir : string param
-    val libdir : string param
-    val confdir : string param
+    val version : string
+    val datadir : string
+    val libdir : string
+    val confdir : string
   end
 
   module Command : sig
@@ -109,29 +119,30 @@ module Extension : sig
     val argument :
       ?docv:string ->
       ?doc:string ->
-      'a Type.t ->
-      string param
+      'a Type.t -> 'a param
 
     val param :
-      'a Type.t ->
       ?docv:string ->
       ?doc:string ->
-      ?short:char ->
       ?as_flag:'a ->
-      string -> 'a param
+      ?short:char ->
+      string ->
+      'a Type.t -> 'a param
 
     val param_all :
       ?docv:string ->
       ?doc:string ->
+      ?as_flag:'a ->
       ?short:char ->
-      string -> 'a Type.t ->
-      'a list param
+      string ->
+      'a Type.t -> 'a list param
 
     val flag :
       ?docv:string ->
       ?doc:string ->
       ?short:char ->
-      string -> bool param
+      string ->
+      bool param
   end
 
   module Syntax : sig

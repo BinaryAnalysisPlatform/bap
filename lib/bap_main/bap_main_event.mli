@@ -1,4 +1,3 @@
-open Regular.Std
 open Bap_future.Std
 open Bap_plugins.Std
 
@@ -47,4 +46,4 @@ module Log : sig
   val message :  level -> section:string -> ('a,Format.formatter,unit) format -> 'a
 end
 
-include Printable.S with type t := t
+val pp : Format.formatter -> t -> unit
