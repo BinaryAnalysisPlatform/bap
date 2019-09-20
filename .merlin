@@ -11,6 +11,7 @@ PKG uuidm
 
 B _build
 B _build/lib/bap
+B _build/lib/bap_main
 B _build/lib/bap_abi
 B _build/lib/bap_api
 B _build/lib/bitvec
@@ -38,6 +39,7 @@ B _build/lib/text_tags
 B _build/lib/knowledge
 
 S lib/bap
+B lib/bap_main
 S lib/bap_abi
 S lib/bap_api
 S lib/bap_c

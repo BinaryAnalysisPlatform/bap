@@ -59,3 +59,11 @@ let rec find_map xs ~f =
     | yay -> yay
 
 ;;
+
+let (/) = Filename.concat
+let () = add_variable "plugindir"
+    ~doc:"A default folder for plugins"
+    ~define:(function
+        | Some x -> x
+        | None ->
+          BaseEnv.var_get "libdir" / "bap")

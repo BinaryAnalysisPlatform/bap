@@ -1,0 +1,19 @@
+Flag bap_bundle
+  Description: Build BAP bundler
+  Default: false
+
+Library bundle
+  Build$:        flag(everything) || flag(bap_bundle)
+  Path:          lib/bap_bundle
+  FindlibName:   bap-bundle
+  BuildDepends:  uri, camlzip, unix, core_kernel, ppx_jane
+  Modules:       Bap_bundle
+  InternalModules: Bap_bundle_config
+
+Executable "bapbundle"
+  Build$:          flag(everything) || flag(bap_bundle)
+  Path:           tools
+  MainIs:         bapbundle.ml
+  Install:        true
+  CompiledObject: best
+  BuildDepends:   core_kernel, bap-bundle, fileutils

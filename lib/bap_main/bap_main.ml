@@ -1,3 +1,6 @@
+(* Base kills exn, so we have to do it before opening *)
+type error = exn = ..
+
 open Base
 open Stdio
 open Bap_future.Std
@@ -119,10 +122,14 @@ end
 
 
 module Error = struct
-  type t = ..
-
+  type t = error = ..
   type t += Configuration
   type t += Invalid of string
+
+  let register_printer = Caml.Printexc.register_printer
+  let pp ppf e =
+    Format.pp_print_string ppf (Caml.Printexc.to_string e)
+
 end
 
 type manpage_block = [
@@ -384,6 +391,7 @@ end = struct
     fun ?deprecated:notice ?default ?(docv="VAL")
       ?(doc="Undocumented") ?(synonyms=[]) name ->
       let future, promise = Future.create () in
+      let rest = !plugin_spec in
       plugin_spec := begin fun ctxt ->
         let names = List.map (name::synonyms) ~f:(option_name ctxt) in
         let doc = prepend_deprecation_notice notice doc in
@@ -391,7 +399,7 @@ end = struct
         let default = decide_default (wrap conv) default name ctxt in
         let conv = Type.converter conv in
         Term.(const (fun x () -> Promise.fulfill promise x) $
-              make_term conv default ainfo $ !plugin_spec ctxt)
+              make_term conv default ainfo $ rest ctxt)
       end;
       future
   and list x = Type.list x
@@ -469,7 +477,7 @@ module Extension = struct
     let flag conv =
       Grammar.extend atom conv @@ fun _ def docs ->
       Term.(const (fun x -> x || def) $ Arg.value (Arg.flag docs))
-    let flag = flag Type.bool
+    let flag = flag Type.bool ~default:false
 
     let manpage man = Grammar.describe (man :> Manpage.block list)
 
@@ -503,7 +511,6 @@ module Extension = struct
   module Error = Error
 end
 
-type error = Error.t = ..
 type error += Already_initialized
 type error += Broken_plugins of (string * Base.Error.t) list
 
@@ -526,10 +533,14 @@ let init ?features ?library ?argv ?env ?log ?out ?err ?name ?version () =
   | Uninitialized ->
     enable_logging log;
     let result = Plugins.load ?provides:features ?library () in
+    Format.eprintf "finished to load plugins@\n%!";
     let plugins,failures =
       List.partition_map result ~f:(function
           | Ok p -> `Fst p
-          | Error e -> `Snd e) in
+          | Error (p,e) ->
+            Format.eprintf "Plugin %s failed with %a@\n%!"
+              p Base.Error.pp e;
+            `Snd (p,e)) in
     if List.is_empty failures
     then match Grammar.eval ?name ?version ?env ?help:out ?err ?argv () with
       | Ok () ->

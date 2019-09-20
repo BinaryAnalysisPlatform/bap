@@ -8,4 +8,4 @@ Executable "bap-mc"
   Build$:         flag(everything) || flag(mc)
   Install:        true
   CompiledObject: best
-  BuildDepends:   bap, bap.plugins, cmdliner, findlib.dynload
+  BuildDepends:   bap, bap-plugins, cmdliner, findlib.dynload

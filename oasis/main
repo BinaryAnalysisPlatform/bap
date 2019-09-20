@@ -1,0 +1,12 @@
+Flag bap_main
+  Description: Build BAP Main Framework Configuration Library
+  Default: false
+
+Library bap_main
+  Path:            lib/bap_main
+  Build$:          flag(everything) || flag(bap_main)
+  FindLibName:     bap-main
+  CompiledObject:  best
+  BuildDepends:    base, stdio, cmdliner, bap-future, bap-plugins
+  Modules:         Bap_main, Bap_main_config, Bap_main_event
+  InternalModules: Bap_main_log

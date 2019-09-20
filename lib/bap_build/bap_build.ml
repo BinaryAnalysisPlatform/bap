@@ -9,12 +9,8 @@ module Plugin_rules = struct
   module String = Ocamlbuild_plugin.String
 
   let (/) = Pathname.concat
-  let () =
-    let libs = Bap_config.standard_library / "compiler-libs" in
-    Unix.putenv "OCAMLFIND_IGNORE_DUPS_IN" libs
 
-  let packages = ["bap"; "core_kernel"; "ppx_jane"]
-
+  let default_packages = ["bap"; "core_kernel"; "ppx_jane"]
   let default_predicates = [
     "custom_ppx";
     "ppxlib";
@@ -40,7 +36,7 @@ module Plugin_rules = struct
   let bap_predicates ~native =
     let code = if native then "native" else "byte" in
     let predicates = code :: default_predicates in
-    infer_thread_predicates ~predicates packages
+    infer_thread_predicates ~predicates default_packages
 
   let pkg_predicates ~native =
     infer_thread_predicates ~predicates:(bap_predicates ~native)
@@ -52,14 +48,14 @@ module Plugin_rules = struct
   let set_default_options () : unit =
     Options.(begin
         use_ocamlfind := true;
-        ocaml_pkgs := packages;
+        ocaml_pkgs := default_packages;
         tags := default_tags;
         recursive := true;
       end)
 
   let interns () =
     topological_closure
-      ~predicates:(bap_predicates ~native:true) packages
+      ~predicates:(bap_predicates ~native:true) default_packages
 
 
   let findlibs

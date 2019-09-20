@@ -21,6 +21,9 @@ module Extension : sig
     type t = error = ..
     type t += Configuration
     type t += Invalid of string
+
+    val pp : Format.formatter -> t -> unit
+    val register_printer : (t -> string option) -> unit
   end
 
   module Type : sig
@@ -80,7 +83,6 @@ module Extension : sig
 
     val flag :
       ?deprecated:string ->
-      ?default:bool ->
       ?docv:string -> ?doc:string ->
       ?synonyms:string list ->
       string -> bool param

@@ -13,7 +13,7 @@ exception Destdir_is_not_a_dir
 let target = ref ""
 let manifest = ref (Manifest.create "")
 let modified = String.Hash_set.create ()
-let destdir = ref Bap_config.plugindir
+let destdir = ref Bap_bundle_config.plugindir
 
 let destdir_arg =
   "-destdir", Arg.Set_string destdir,

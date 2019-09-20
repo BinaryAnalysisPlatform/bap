@@ -1,0 +1,6 @@
+Executable "bap"
+  Path:           src
+  MainIs:         bap_frontend.ml
+  Build$:         flag(everything) || flag(bap_main)
+  CompiledObject: best
+  BuildDepends:   bap-main, bap, core_kernel, ppx_jane, findlib.dynload

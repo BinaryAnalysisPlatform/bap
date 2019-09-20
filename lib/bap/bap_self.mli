@@ -1,6 +1,8 @@
 open Format
 open Core_kernel
 open Bap_future.Std
+open Bap_main.Extension
+
 
 module Create() : sig
   val name : string
@@ -30,25 +32,31 @@ module Create() : sig
     val libdir : string
     val confdir : string
 
-    type 'a param
+    type 'a param = 'a Config.param
+
+    type 'a converter = 'a Type.t
 
     type 'a parser = string -> [ `Ok of 'a | `Error of string ]
     type 'a printer = Format.formatter -> 'a -> unit
-    type 'a converter
+    type reader = {get : 'a. 'a param -> 'a}
+    type ctxt = reader
 
-    val converter : 'a parser -> 'a printer -> 'a -> 'a converter
+    val converter : 'a parser -> 'a printer -> 'a -> 'a Type.t
 
     val deprecated : string
 
+    val get : ctxt -> 'a param -> 'a
 
     val param :
-      'a converter -> ?deprecated:string -> ?default:'a -> ?as_flag:'a ->
+      ?as_flag:'a ->
+      'a Type.t -> ?deprecated:string -> ?default:'a ->
       ?docv:string -> ?doc:string -> ?synonyms:string list ->
       string -> 'a param
 
     val param_all :
-      'a converter -> ?deprecated:string -> ?default:'a list ->
-      ?as_flag:'a -> ?docv:string -> ?doc:string ->
+      ?as_flag:'a ->
+      'a Type.t -> ?deprecated:string -> ?default:'a list ->
+      ?docv:string -> ?doc:string ->
       ?synonyms:string list ->  string -> 'a list param
 
     val flag :
@@ -58,8 +66,7 @@ module Create() : sig
 
     val determined : 'a param -> 'a future
 
-    type reader = {get : 'a. 'a param -> 'a}
-    val when_ready : (reader -> unit) -> unit
+    val when_ready : (ctxt -> unit) -> unit
 
     type manpage_block = [
       | `I of string * string
@@ -93,7 +100,5 @@ module Create() : sig
     val t4 : ?sep:char -> 'a converter -> 'b converter -> 'c converter ->
       'd converter -> ('a * 'b * 'c * 'd) converter
     val some : ?none:string -> 'a converter -> 'a option converter
-
   end
-
 end

@@ -37,7 +37,7 @@ Library powerpc_test
   Path:           lib_test/powerpc
   Build$:         flag(tests) && (flag(everything) || flag(powerpc))
   CompiledObject: best
-  BuildDepends:   bap, oUnit
+  BuildDepends:   bap, oUnit, core_kernel
   Install:        false
   Modules:        Powerpc_add_tests,
                   Powerpc_arith_tests,
@@ -56,7 +56,7 @@ Executable run_powerpc_tests
   Path:		  lib_test/powerpc
   Build$:	  flag(tests) && (flag(everything) || flag(powerpc))
   CompiledObject: best
-  BuildDepends:	  bap.plugins, findlib.dynload, oUnit, powerpc_test
+  BuildDepends:	  bap-plugins, findlib.dynload, oUnit, powerpc_test
   Install:	  false
   MainIs:         run_powerpc_tests.ml
 

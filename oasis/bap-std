@@ -9,9 +9,10 @@ Library bap
   CompiledObject:  best
   BuildDepends:    bap.disasm,
                    bap.image,
-                   bap.plugins,
                    bap.sema,
                    bap.types,
+                   bap-bundle,
+                   bap-main,
                    bap-future,
                    cmdliner,
                    bap-knowledge,
@@ -21,7 +22,7 @@ Library bap
                    core_kernel,
                    ppx_jane
   Modules:         Bap
-  InternalModules: Bap_event, Bap_log, Bap_project, Bap_self
+  InternalModules: Bap_project, Bap_self
 
 Library types
   Path:            lib/bap_types
@@ -29,7 +30,8 @@ Library types
   FindlibParent:   bap
   FindlibName:     types
   CompiledObject:  best
-  BuildDepends:    monads, zarith,
+  BuildDepends:    monads,
+                   zarith,
                    bitvec,
                    uuidm,
                    regular,
@@ -87,10 +89,10 @@ Library types
 
 Library bap_image
   Path:          lib/bap_image/
-  Build$:          flag(everything) || flag(bap_std)
+  Build$:        flag(everything) || flag(bap_std)
   FindlibParent: bap
   FindlibName:   image
-  BuildDepends:  bap.types, ogre
+  BuildDepends:  bap.types, ogre, monads
   InternalModules:
                  Bap_fileutils,
                  Bap_image,
@@ -112,6 +114,7 @@ Library disasm
                  bap-future,
                  camlzip,
                  ocamlgraph,
+                 monads,
                  ogre
   InternalModules:
                  Bap_disasm,
@@ -141,12 +144,13 @@ Library disasm
   CSources:      disasm.h, disasm.c, disasm_stubs.c
 
 Library sema
-  Build$:          flag(everything) || flag(bap_std)
+  Build$:        flag(everything) || flag(bap_std)
   Path:          lib/bap_sema
   FindlibParent: bap
   FindlibName:   sema
   BuildDepends:  bap.disasm,
-                 bap.types
+                 bap.types,
+                 monads
   InternalModules:
                  Bap_sema,
                  Bap_sema_lift,
