@@ -1,9 +1,11 @@
-let main () = Bap_main.init ()
-module Link_bap_main_package = Bap.Std
+open Bap_main.Extension
 
-let () = match main () with
+module type unit = sig end
+
+let () =
+  let _unused : (module unit) = (module Bap.Std) in
+  match Bap_main.init () with
   | Ok () -> ()
-  | Error err ->
-    Format.eprintf "%a@\n%!"
-      Bap_main.Extension.Error.pp err;
+  | Error (Error.Exit_requested code) -> exit code
+  | Error err -> Format.eprintf "%a@\n%!" Error.pp err;
     exit 1

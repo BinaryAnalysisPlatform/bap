@@ -125,11 +125,14 @@ module Error = struct
   type t = error = ..
   type t += Configuration
   type t += Invalid of string
+  type t += Already_initialized
+  type t += Broken_plugins of (string * Base.Error.t) list
+  type t += Unknown_plugin of string
+  type t += Exit_requested of int
 
   let register_printer = Caml.Printexc.register_printer
   let pp ppf e =
     Format.pp_print_string ppf (Caml.Printexc.to_string e)
-
 end
 
 type manpage_block = [
@@ -140,7 +143,81 @@ type manpage_block = [
   | `S of string
 ]
 
+module Markdown : sig
+  val to_manpage : string -> manpage_block list
+end = struct
+  let section s =
+    let len = String.length s in
+    let rec scan n =
+      if n < len then match s.[n] with
+        | '#' -> scan (n+1)
+        | _ -> if n = 0 || n = len - 1 then None
+          else Some (String.(strip @@ subo ~pos:n s))
+      else None in
+    scan 0
+
+  let verbatim s =
+    let delimiter = "```" in
+    if String.length s > 2 * String.length delimiter &&
+       String.is_prefix s ~prefix:delimiter &&
+       String.is_suffix s ~suffix:delimiter
+    then Option.some @@
+      String.sub s
+        ~pos:(String.length delimiter)
+        ~len:(String.length s - 2 * String.length delimiter)
+    else None
+
+  let list_item s =
+    let len = String.length s in
+    let rec scan_numeric n =
+      if n + 1 < len then match s.[n], s.[n+1] with
+        | ('.' | ')'), ' ' ->
+          Some (String.subo ~len:n s,
+                String.subo ~pos:(n+1) s |> String.strip)
+        | d,_ when Char.is_digit d -> scan_numeric (n+1)
+        | _ -> None
+      else None in
+    if len > 2 then match s.[0], s.[1] with
+      | ('*' | '#' | '+' | '-'),' ' ->
+        Some (String.subo ~len:1 s,
+              String.subo ~pos:2 s)
+      | x,_ -> if Char.is_digit x then scan_numeric 1 else None
+    else None
+
+  let split input =
+    let len = String.length input in
+    let rec scan start curr paras =
+      if curr < len then match input.[curr] with
+        | '\n' ->
+          if curr + 2 < len then match input.[curr+1] with
+            | '\n' ->
+              scan (curr+2) (curr+3) @@
+              String.sub ~pos:start ~len:(curr-start) input :: paras
+            | _ -> scan start (curr+2) paras
+          else scan start (curr+1) paras
+        | _ -> scan start (curr+1) paras
+      else if start < curr && curr - start <= String.length input
+      then List.rev @@
+        String.sub ~pos:start ~len:(curr-start) input :: paras
+      else List.rev paras in
+    scan 0 0 []
+
+  let to_manpage : string -> manpage_block list = fun input ->
+    split input |>
+    List.map ~f:(fun para ->
+        let para = String.strip para in
+        match section para with
+        | Some name -> `S name
+        | None -> match verbatim para with
+          | Some code -> `Pre code
+          | None -> match list_item para with
+            | Some (item,desc) -> `I (item,desc)
+            | None -> `P para)
+end
+
+
 type ctxt = {get : 'a. 'a Future.t -> 'a}
+
 
 module Grammar : sig
   open Cmdliner
@@ -214,6 +291,7 @@ module Grammar : sig
     string -> bool param
 
   val eval :
+    ?man:string ->
     ?name:string ->
     ?version:string ->
     ?env:(string -> string option) ->
@@ -386,6 +464,8 @@ end = struct
       | None -> Option.value user_default ~default
       | Some v -> parse ~where:"configuration file" v
 
+  let plugin_section plugin =
+    String.uppercase plugin ^ " OPTIONS"
 
   let extend wrap conv make_term =
     fun ?deprecated:notice ?default ?(docv="VAL")
@@ -395,7 +475,8 @@ end = struct
       plugin_spec := begin fun ctxt ->
         let names = List.map (name::synonyms) ~f:(option_name ctxt) in
         let doc = prepend_deprecation_notice notice doc in
-        let ainfo = Arg.info names ~doc ~docv in
+        let docs = plugin_section ctxt.name in
+        let ainfo = Arg.info names ~docs ~doc ~docv in
         let default = decide_default (wrap conv) default name ctxt in
         let conv = Type.converter conv in
         Term.(const (fun x () -> Promise.fulfill promise x) $
@@ -408,36 +489,91 @@ end = struct
   let describe man =
     plugin_page := man @ !plugin_page
 
-  let concat_pages () =
-    Set.of_list (module String) (Hashtbl.keys plugin_pages) |>
-    Set.fold ~init:[] ~f:(fun pages plugin ->
-        pages @
-        `S ("Plugin " ^ plugin) ::
-        Hashtbl.find_exn plugin_pages plugin)
 
   let (++) t1 t2 = Term.(const (fun () () -> ()) $ t1 $ t2)
 
   let concat_plugins () =
-    let init = Term.const () in
-    Hashtbl.fold plugin_specs ~init ~f:(fun ~key:_ ~data:t1 t2 ->
+    Hashtbl.fold plugin_specs ~init:unit ~f:(fun ~key:_ ~data:t1 t2 ->
         t1 ++ t2)
 
   let progname =
     Caml.Filename.basename (Caml.Sys.executable_name)
 
-  let eval_plugins () =
-    Hashtbl.iter plugin_codes ~f:(fun code ->
-        code {get=Future.peek_exn})
+  let eval_plugins disabled () =
+    let disabled = Hash_set.of_list (module String) disabled in
+    Hashtbl.iteri plugin_codes ~f:(fun ~key:name ~data:code ->
+        if not (Hash_set.mem disabled name)
+        then code {get=Future.peek_exn})
 
-  let eval ?(name=progname) ?version ?env ?help ?err ?argv () =
-    let man = concat_pages () in
+  let no_plugin_options plugins =
+    let init = Term.const [] in
+    List.fold plugins ~init ~f:(fun names name ->
+        let plugin = Arg.(value & flag & info ["no-"^name]) in
+        let append selected names =
+          if selected then name :: names else names in
+        Term.(const append $ plugin $ names))
+
+  let help_options ?version ppf plugins =
+    let init = Term.const (Ok ()) in
+    let fmts = [
+      "auto", `Auto;
+      "pager", `Pager;
+      "groff", `Groff;
+      "plain", `Plain;
+    ] in
+
+    (* Cmdliner doesn't give us an argument, but a term, so we
+       can't use man_format with a term of our own name *)
+    let make_help_option name =
+      let doc = sprintf "prints more information about the $(b,%s) plugin"
+          name in
+      let docs = plugin_section name in
+      Arg.(value & opt ~vopt:(Some `Auto)
+             (some (enum fmts)) None & info ~doc ~docs [name^"-help"]) in
+
+    let print_manpage fmt name = match Hashtbl.find plugin_pages name with
+      | None -> Error (Error.Unknown_plugin name)
+      | Some manpage ->
+        let left = match version with
+          | None -> ""
+          | Some v -> " " ^ v in
+        let caption = "BAP Programmer's Manual" in
+        let title = name, 3, "",left, caption in
+        let subst = function
+          | "tname" | "mname" -> Some name
+          | _ -> None in
+        Manpage.print ~subst fmt ppf (title,manpage);
+        Error (Error.Exit_requested 0) in
+
+    List.fold plugins ~init ~f:(fun served plugin ->
+        let serve_manpage served requested = match served with
+          | Error _ as err -> err
+          | Ok () -> match requested with
+            | None -> Ok ()
+            | Some fmt -> print_manpage fmt plugin in
+        Term.(const serve_manpage $ served $ make_help_option plugin))
+
+  let (>>>) t1 t2 = Term.(const (fun t1 t2 -> match t1 with
+      | Error _ as err -> err
+      | Ok () -> Ok t2) $ t1 $ t2)
+
+  let eval ?(man="") ?(name=progname) ?version ?env
+      ?(help=Format.std_formatter) ?err ?argv () =
+    let plugin_names = Plugins.list () |> List.map ~f:Plugin.name in
+    let disabled_plugins = no_plugin_options plugin_names in
+    let plugin_options = concat_plugins () in
+    let man = (Markdown.to_manpage man :> Manpage.block list)  in
     let main_info = Term.info ?version ~man name in
-    let plugins = Term.(const eval_plugins $ concat_plugins ()) in
+    let helps = help_options ?version help plugin_names in
+    let plugins = helps >>> Term.(const eval_plugins $
+                                  disabled_plugins $ plugin_options) in
     let commands = List.map !commands ~f:(fun (term,info) ->
-        plugins ++ term, info) in
-    match Term.eval_choice ~catch:false ?env ?help ?err ?argv
+        plugins >>> term, info) in
+    match Term.eval_choice ~catch:false ?env ~help ?err ?argv
             (plugins,main_info) commands with
-    | `Ok () | `Version | `Help -> Ok ()
+    | `Ok (Ok ()) -> Ok ()
+    | `Ok (Error _ as err) -> err
+    | `Version | `Help -> Ok ()
     | `Error _ -> Error Error.Configuration
 end
 
@@ -481,6 +617,9 @@ module Extension = struct
 
     let manpage man = Grammar.describe (man :> Manpage.block list)
 
+    let documentation doc =
+      manpage (Markdown.to_manpage doc)
+
     let determined (p:'a param) : 'a future = p
 
     let when_ready f : unit = Grammar.extension f
@@ -511,8 +650,6 @@ module Extension = struct
   module Error = Error
 end
 
-type error += Already_initialized
-type error += Broken_plugins of (string * Base.Error.t) list
 
 type state =
   | Uninitialized
@@ -526,10 +663,10 @@ let enable_logging = function
   | Some (`Dir logdir) -> Bap_main_log.in_directory ~logdir ()
   | None -> Bap_main_log.in_directory ()
 
-let init ?features ?library ?argv ?env ?log ?out ?err ?name ?version () =
+let init ?features ?library ?argv ?env ?log ?out ?err ?man ?name ?version () =
   match state.contents with
   | Loaded _
-  | Failed _ -> Error Already_initialized
+  | Failed _ -> Error Error.Already_initialized
   | Uninitialized ->
     enable_logging log;
     let result = Plugins.load ?provides:features ?library () in
@@ -542,7 +679,7 @@ let init ?features ?library ?argv ?env ?log ?out ?err ?name ?version () =
               p Base.Error.pp e;
             `Snd (p,e)) in
     if List.is_empty failures
-    then match Grammar.eval ?name ?version ?env ?help:out ?err ?argv () with
+    then match Grammar.eval ?name ?version ?env ?help:out ?err ?man ?argv () with
       | Ok () ->
         state := Loaded plugins;
         Ok ()
@@ -550,7 +687,7 @@ let init ?features ?library ?argv ?env ?log ?out ?err ?name ?version () =
         state := Failed err;
         Error err
     else begin
-      let problem = Broken_plugins failures in
+      let problem = Error.Broken_plugins failures in
       state := Failed problem;
       Error problem
     end

@@ -2,6 +2,7 @@ open Bap_future.Std
 
 type error = ..
 
+
 val init :
   ?features:string list ->
   ?library:string list ->
@@ -10,10 +11,10 @@ val init :
   ?log:[`Formatter of Format.formatter | `Dir of string] ->
   ?out:Format.formatter ->
   ?err:Format.formatter ->
+  ?man:string ->
   ?name:string ->
   ?version:string ->
-  unit ->
-  (unit, error) result
+  unit -> (unit, error) result
 
 module Extension : sig
 
@@ -21,6 +22,8 @@ module Extension : sig
     type t = error = ..
     type t += Configuration
     type t += Invalid of string
+    type t += Exit_requested of int
+    type t += Unknown_plugin of string
 
     val pp : Format.formatter -> t -> unit
     val register_printer : (t -> string option) -> unit
@@ -64,6 +67,15 @@ module Extension : sig
 
     type ctxt = reader [@@warning "-D"]
 
+    type manpage_block = [
+      | `I of string * string
+      | `Noblank
+      | `P of string
+      | `Pre of string
+      | `S of string
+    ]
+
+
     val get : ctxt -> 'a param -> 'a
 
     val deprecated : string
@@ -91,15 +103,9 @@ module Extension : sig
 
     val when_ready : (ctxt -> unit) -> unit
 
-    type manpage_block = [
-      | `I of string * string
-      | `Noblank
-      | `P of string
-      | `Pre of string
-      | `S of string
-    ]
-
     val manpage : manpage_block list -> unit
+
+    val documentation : string -> unit
 
     val version : string
     val datadir : string
