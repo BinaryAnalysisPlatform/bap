@@ -93,6 +93,15 @@ module Create() = struct
     type 'a parser = string -> [ `Ok of 'a | `Error of string ]
     type 'a printer = Format.formatter -> 'a -> unit
     type 'a converter = 'a Type.t
+    type 'a param = 'a Parameter.t
+    type reader = {get : 'a. 'a param -> 'a}
+    type manpage_block = [
+      | `I of string * string
+      | `Noblank
+      | `P of string
+      | `Pre of string
+      | `S of string
+    ]
 
     let converter parser printer =
       Type.define
@@ -102,8 +111,35 @@ module Create() = struct
         ~print:(fun x ->
             Format.asprintf "%a" printer x)
 
+    let param = Parameter.declare
+    let param_all = Parameter.declare_list
+    let flag = Parameter.flag
+    let determined = Parameter.determined
+    let when_ready f = declare @@ fun ctxt ->
+      try Ok (f {get = fun x -> Parameter.get ctxt x}) with
+      | exn ->
+        let backtrace = Caml.Printexc.get_backtrace () in
+        Error (Error.Bug (exn,backtrace))
 
-    include Config
+    let manpage (ps : manpage_block list) =
+      let open Format in
+      let buf = Buffer.create 64 in
+      let ppf = formatter_of_buffer buf in
+      List.iter ps ~f:(function
+          | `S name -> fprintf ppf "# %s@\n@\n" name
+          | `P text -> fprintf ppf "%a@\n@\n" pp_print_text text
+          | `Pre code -> fprintf ppf "```@\n%s@\n```@\n@\n" code
+          | `I (item,desc) -> fprintf ppf "%s %s@\n@\n" item desc
+          | `Noblank -> ());
+      fprintf ppf "%!";
+      documentation (Buffer.contents buf)
+
+    let doc_enum = Parameter.doc_enum
+    let deprecated = "DEPRECATED"
+    let confdir = Parameter.confdir
+    let datadir = Parameter.datadir
+    let libdir = Parameter.libdir
+    let version = Parameter.version
     include Type
   end
 end

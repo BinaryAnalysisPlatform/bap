@@ -2,7 +2,6 @@ open Bap_future.Std
 
 type error = ..
 
-
 val init :
   ?features:string list ->
   ?library:string list ->
@@ -17,20 +16,99 @@ val init :
   unit -> (unit, error) result
 
 module Extension : sig
+  type ctxt
+  type 'a typ
 
-  module Error : sig
-    type t = error = ..
-    type t += Configuration
-    type t += Invalid of string
-    type t += Exit_requested of int
-    type t += Unknown_plugin of string
+  val declare :
+    ?requires:string list ->
+    ?provides:string list ->
+    ?doc:string ->
+    ?name:string ->
+    (ctxt -> (unit,error) result) -> unit
 
-    val pp : Format.formatter -> t -> unit
-    val register_printer : (t -> string option) -> unit
+  val documentation : string -> unit
+
+  module Command : sig
+    type ('f,'r) t
+    type 'a param
+
+    val declare : ?doc:string -> string ->
+      ('f,(unit,error) result) t -> (ctxt -> 'f) -> unit
+
+    val ($) : ('a,'b -> 'c) t -> 'b param -> ('a,'c) t
+    val args : 'a param -> ('a -> 'b, 'b) t
+    val rest : 'a param -> 'a list param
+
+    val argument :
+      ?docv:string ->
+      ?doc:string ->
+      'a typ -> 'a param
+
+    val param :
+      ?docv:string ->
+      ?doc:string ->
+      ?as_flag:'a ->
+      ?short:char ->
+      string ->
+      'a typ -> 'a param
+
+    val param_all :
+      ?docv:string ->
+      ?doc:string ->
+      ?as_flag:'a ->
+      ?short:char ->
+      string ->
+      'a typ -> 'a list param
+
+    val flag :
+      ?docv:string ->
+      ?doc:string ->
+      ?short:char ->
+      string ->
+      bool param
+
+  end
+
+  module Parameter : sig
+    type 'a t
+
+    val get : ctxt -> 'a t -> 'a
+
+    val declare :
+      ?as_flag:'a ->
+      'a typ -> ?deprecated:string -> ?default:'a ->
+      ?docv:string -> ?doc:string -> ?synonyms:string list ->
+      string -> 'a t
+
+    val declare_list :
+      ?as_flag:'a ->
+      'a typ -> ?deprecated:string -> ?default:'a list ->
+      ?docv:string -> ?doc:string ->
+      ?synonyms:string list ->  string -> 'a list t
+
+    val flag :
+      ?deprecated:string ->
+      ?docv:string -> ?doc:string ->
+      ?synonyms:string list ->
+      string -> bool t
+
+    val determined : 'a t -> 'a future
+
+    val doc_enum : ?quoted:bool -> (string * 'a) list -> string
+
+    val version : string
+    val datadir : string
+    val libdir : string
+    val confdir : string
+  end
+
+
+  module Syntax : sig
+    val (-->) : ctxt -> 'a Parameter.t -> 'a
   end
 
   module Type : sig
-    type 'a t
+    type 'a t = 'a typ
 
     val define :
       parse:(string -> 'a) ->
@@ -59,101 +137,17 @@ module Extension : sig
     val some : ?none:string -> 'a t -> 'a option t
   end
 
-  module Config : sig
-    type 'a param
 
-    type reader = {get : 'a. 'a param -> 'a}
-    [@@deprecated "use ctxt instead"]
+  module Error : sig
+    type t = error = ..
+    type t += Configuration
+    type t += Invalid of string
+    type t += Exit_requested of int
+    type t += Unknown_plugin of string
+    type t += Bug of exn * string
 
-    type ctxt = reader [@@warning "-D"]
-
-    type manpage_block = [
-      | `I of string * string
-      | `Noblank
-      | `P of string
-      | `Pre of string
-      | `S of string
-    ]
-
-
-    val get : ctxt -> 'a param -> 'a
-
-    val deprecated : string
-    val doc_enum : ?quoted:bool -> (string * 'a) list -> string
-
-    val param :
-      ?as_flag:'a ->
-      'a Type.t -> ?deprecated:string -> ?default:'a ->
-      ?docv:string -> ?doc:string -> ?synonyms:string list ->
-      string -> 'a param
-
-    val param_all :
-      ?as_flag:'a ->
-      'a Type.t -> ?deprecated:string -> ?default:'a list ->
-      ?docv:string -> ?doc:string ->
-      ?synonyms:string list ->  string -> 'a list param
-
-    val flag :
-      ?deprecated:string ->
-      ?docv:string -> ?doc:string ->
-      ?synonyms:string list ->
-      string -> bool param
-
-    val determined : 'a param -> 'a future
-
-    val when_ready : (ctxt -> unit) -> unit
-
-    val manpage : manpage_block list -> unit
-
-    val documentation : string -> unit
-
-    val version : string
-    val datadir : string
-    val libdir : string
-    val confdir : string
+    val pp : Format.formatter -> t -> unit
+    val register_printer : (t -> string option) -> unit
   end
 
-  module Command : sig
-    type ('f,'r) t
-    type 'a param
-
-    val declare : ?doc:string -> string ->
-      ('f,unit) t -> (Config.ctxt -> 'f) -> unit
-
-    val ($) : ('a,'b -> 'c) t -> 'b param -> ('a,'c) t
-    val args : 'a param -> ('a -> 'b, 'b) t
-    val rest : 'a param -> 'a list param
-
-    val argument :
-      ?docv:string ->
-      ?doc:string ->
-      'a Type.t -> 'a param
-
-    val param :
-      ?docv:string ->
-      ?doc:string ->
-      ?as_flag:'a ->
-      ?short:char ->
-      string ->
-      'a Type.t -> 'a param
-
-    val param_all :
-      ?docv:string ->
-      ?doc:string ->
-      ?as_flag:'a ->
-      ?short:char ->
-      string ->
-      'a Type.t -> 'a list param
-
-    val flag :
-      ?docv:string ->
-      ?doc:string ->
-      ?short:char ->
-      string ->
-      bool param
-  end
-
-  module Syntax : sig
-    val (-->) : Config.ctxt -> 'a Config.param -> 'a
-  end
 end

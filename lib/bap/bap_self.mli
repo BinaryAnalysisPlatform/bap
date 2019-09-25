@@ -32,20 +32,17 @@ module Create() : sig
     val libdir : string
     val confdir : string
 
-    type 'a param = 'a Config.param
+    type 'a param = 'a Parameter.t
 
     type 'a converter = 'a Type.t
 
     type 'a parser = string -> [ `Ok of 'a | `Error of string ]
     type 'a printer = Format.formatter -> 'a -> unit
     type reader = {get : 'a. 'a param -> 'a}
-    type ctxt = reader
 
     val converter : 'a parser -> 'a printer -> 'a -> 'a Type.t
 
     val deprecated : string
-
-    val get : ctxt -> 'a param -> 'a
 
     val param :
       ?as_flag:'a ->
@@ -66,7 +63,7 @@ module Create() : sig
 
     val determined : 'a param -> 'a future
 
-    val when_ready : (ctxt -> unit) -> unit
+    val when_ready : (reader -> unit) -> unit
 
     type manpage_block = [
       | `I of string * string

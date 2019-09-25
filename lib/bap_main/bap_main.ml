@@ -77,6 +77,7 @@ module Type = struct
       Format.pp_print_string ppf (print x) in
     create parser printer default
 
+  let show {printer} x = Format.asprintf "%a" printer x
   let converter conv : 'a Arg.converter = conv.parser, conv.printer
   let default conv = conv.default
   let wrap (parser,printer) default = {parser; printer; default}
@@ -125,7 +126,9 @@ module Error = struct
   type t = error = ..
   type t += Configuration
   type t += Invalid of string
+  type t += Bug of exn * string
   type t += Already_initialized
+  type t += Recursive_init
   type t += Broken_plugins of (string * Base.Error.t) list
   type t += Unknown_plugin of string
   type t += Exit_requested of int
@@ -215,9 +218,58 @@ end = struct
             | None -> `P para)
 end
 
+module Context = struct
+  type env = string Map.M(String).t [@@deriving compare, sexp]
+  type plugins = Set.M(String).t [@@deriving compare, sexp]
+  type t = {
+    extensions : env Map.M(String).t;    (* plugin -> param -> value *)
+    features : plugins Map.M(String).t;   (* feature -> plugins *)
+  }
 
-type ctxt = {get : 'a. 'a Future.t -> 'a}
+  type builder =
+    | Building of t
+    | Sealed
 
+  type error += Already_defined
+
+  let ready,seal = Future.create ()
+
+  let builder = ref @@ Building {
+      extensions = Map.empty (module String);
+      features = Map.empty (module String);
+    }
+
+  let update f = match builder.contents with
+    | Building ctxt ->
+      builder := Building (f ctxt);
+      Ok ()
+    | Sealed -> Error Already_defined
+
+  let set ~plugin ~parameter ~value = update @@ fun ctxt -> {
+      ctxt with
+      extensions = Map.update ctxt.extensions plugin ~f:(function
+          | None -> Map.singleton (module String) parameter value
+          | Some env -> Map.set env ~key:parameter ~data:value)
+    }
+
+  let exclude disabled = update @@ fun ctxt -> {
+      ctxt with
+      extensions = List.fold disabled
+          ~init:ctxt.extensions ~f:Map.remove;
+    }
+
+  let request () =
+    if Promise.is_fulfilled seal
+    then Future.peek_exn ready
+    else match builder.contents with
+      | Sealed -> assert false
+      | Building ctxt ->
+        builder := Sealed;
+        Promise.fulfill seal ctxt;
+        ctxt
+end
+
+type ctxt = Context.t
 
 module Grammar : sig
   open Cmdliner
@@ -232,7 +284,7 @@ module Grammar : sig
   type 'a rule = ?deprecated:string ->
     ?default:'a ->
     ?docv:string -> ?doc:string ->
-    ?synonyms:string list -> string -> 'a Future.t
+    ?synonyms:string list -> string -> (ctxt * 'a) Future.t
 
   (** [extend arity conv make_term] extends the grammar of the plugin
       with a new term.
@@ -253,8 +305,9 @@ module Grammar : sig
 
   val describe : Manpage.block list -> unit
 
-  val extension : (ctxt -> unit) -> unit
-  val action : ?doc:string -> string -> ('a,unit) spec -> (ctxt -> 'a) -> unit
+  val extension : (ctxt -> (unit,Error.t) Result.t) -> unit
+  val action : ?doc:string -> string ->
+    ('a,(unit,Error.t) Result.t) spec -> (ctxt -> 'a) -> unit
 
 
   val args : 'a param -> ('a -> 'b,'b) spec
@@ -317,15 +370,15 @@ end = struct
     config : (string * string) list;
   }
 
-  type command = unit Term.t * Term.info
+  type command = (unit,Error.t) Result.t Term.t * Term.info
   type ('a,'b) arity = 'a Type.t -> 'b Type.t
 
   type 'a rule = ?deprecated:string ->
     ?default:'a ->
     ?docv:string -> ?doc:string ->
-    ?synonyms:string list -> string -> 'a Future.t
+    ?synonyms:string list -> string -> (ctxt * 'a) Future.t
 
-  let unit = Term.const ()
+  let unit = Term.const (Ok ())
 
   let plugin_specs = Hashtbl.create (module String)
   let plugin_pages = Hashtbl.create (module String)
@@ -400,7 +453,7 @@ end = struct
     plugin_code := Some code
 
   let action ?doc name {run} command =
-    let term = run @@ command {get = Future.peek_exn}
+    let term = run @@ command (Context.request ())
     and info = Term.info ?doc name in
     commands := (term,info) :: !commands
 
@@ -467,48 +520,69 @@ end = struct
   let plugin_section plugin =
     String.uppercase plugin ^ " OPTIONS"
 
-  let extend wrap conv make_term =
+  let extend wrap typ make_term =
     fun ?deprecated:notice ?default ?(docv="VAL")
       ?(doc="Undocumented") ?(synonyms=[]) name ->
-      let future, promise = Future.create () in
+      let value, ready = Future.create () in
       let rest = !plugin_spec in
       plugin_spec := begin fun ctxt ->
         let names = List.map (name::synonyms) ~f:(option_name ctxt) in
         let doc = prepend_deprecation_notice notice doc in
         let docs = plugin_section ctxt.name in
         let ainfo = Arg.info names ~docs ~doc ~docv in
-        let default = decide_default (wrap conv) default name ctxt in
-        let conv = Type.converter conv in
-        Term.(const (fun x () -> Promise.fulfill promise x) $
+        let default = decide_default (wrap typ) default name ctxt in
+        let conv = Type.converter typ in
+        let set_value x = function
+          | Error _ as err -> err
+          | Ok () ->
+            Promise.fulfill ready x;
+            Context.set
+              ~plugin:ctxt.name
+              ~parameter:(option_name ctxt name)
+              ~value:(Type.show (wrap typ) x) in
+        Term.(const set_value $
               make_term conv default ainfo $ rest ctxt)
       end;
-      future
+      Future.both Context.ready value
+
   and list x = Type.list x
   and atom x = x
 
   let describe man =
     plugin_page := man @ !plugin_page
 
-
-  let (++) t1 t2 = Term.(const (fun () () -> ()) $ t1 $ t2)
+  let (>>>) t1 t2 = Term.(const (fun t1 t2 -> match t1 with
+      | Error _ as err -> err
+      | Ok () -> t2) $ t1 $ t2)
 
   let concat_plugins () =
     Hashtbl.fold plugin_specs ~init:unit ~f:(fun ~key:_ ~data:t1 t2 ->
-        t1 ++ t2)
+        t1 >>> t2)
 
   let progname =
     Caml.Filename.basename (Caml.Sys.executable_name)
 
-  let eval_plugins disabled () =
+  let eval_plugins disabled plugins =
+    let open Result in
+    plugins >>= fun () ->
+    Context.exclude disabled >>= fun () ->
     let disabled = Hash_set.of_list (module String) disabled in
-    Hashtbl.iteri plugin_codes ~f:(fun ~key:name ~data:code ->
-        if not (Hash_set.mem disabled name)
-        then code {get=Future.peek_exn})
+    let ctxt = Context.request () in
+    let init = Ok () in
+    Hashtbl.fold plugin_codes ~init ~f:(fun ~key:name ~data:code ->
+        function Error _ as err -> err
+               | Ok () ->
+                 if not (Hash_set.mem disabled name)
+                 then code ctxt
+                 else Ok ())
 
   let no_plugin_options plugins =
     let init = Term.const [] in
     List.fold plugins ~init ~f:(fun names name ->
-        let plugin = Arg.(value & flag & info ["no-"^name]) in
+        let doc = "Disable the " ^ name ^ " plugin" in
+        let docs = plugin_section name in
+        let plugin = Arg.(value & flag &
+                          info ~doc ~docs ["no-"^name]) in
         let append selected names =
           if selected then name :: names else names in
         Term.(const append $ plugin $ names))
@@ -553,10 +627,6 @@ end = struct
             | Some fmt -> print_manpage fmt plugin in
         Term.(const serve_manpage $ served $ make_help_option plugin))
 
-  let (>>>) t1 t2 = Term.(const (fun t1 t2 -> match t1 with
-      | Error _ as err -> err
-      | Ok () -> Ok t2) $ t1 $ t2)
-
   let eval ?(man="") ?(name=progname) ?version ?env
       ?(help=Format.std_formatter) ?err ?argv () =
     let plugin_names = Plugins.list () |> List.map ~f:Plugin.name in
@@ -580,33 +650,46 @@ end
 module Extension = struct
 
   module Type = Type
+  type 'a typ = 'a Type.t
+  type ctxt = Context.t
 
-  module Config = struct
+  let declare
+      ?requires:_
+      ?provides:_
+      ?doc:_
+      ?name:_ f =
+    Grammar.extension f
+
+  type manpage_block = [
+    | `I of string * string
+    | `Noblank
+    | `P of string
+    | `Pre of string
+    | `S of string
+  ]
+
+  let manpage man = Grammar.describe (man :> Cmdliner.Manpage.block list)
+  let documentation doc =
+    manpage (Markdown.to_manpage doc)
+
+
+  module Parameter = struct
     open Cmdliner
 
-    type 'a param = 'a future
-    type reader = ctxt = {get : 'a. 'a param -> 'a}
-    type ctxt = reader
-    type manpage_block = [
-      | `I of string * string
-      | `Noblank
-      | `P of string
-      | `Pre of string
-      | `S of string
-    ]
-
+    type 'a t = (ctxt * 'a) future
 
     let converter = Type.define
     let deprecated = "DEPRECATED."
 
-    let get ctxt x = ctxt.get x
+    let get _ x = snd (Future.peek_exn x)
 
     let atom = Grammar.atom and list = Grammar.list
-    let param ?as_flag conv =
+
+    let declare ?as_flag conv =
       Grammar.extend atom conv @@ fun conv def info ->
       Arg.value @@ Arg.opt ?vopt:as_flag conv def info
 
-    let param_all ?as_flag conv =
+    let declare_list ?as_flag conv =
       Grammar.extend list conv @@ fun conv def info ->
       Arg.value @@ Arg.opt_all ?vopt:as_flag conv def info
 
@@ -615,14 +698,14 @@ module Extension = struct
       Term.(const (fun x -> x || def) $ Arg.value (Arg.flag docs))
     let flag = flag Type.bool ~default:false
 
-    let manpage man = Grammar.describe (man :> Manpage.block list)
+    let determined (p:'a t) : 'a future = Future.map p ~f:snd
 
-    let documentation doc =
-      manpage (Markdown.to_manpage doc)
-
-    let determined (p:'a param) : 'a future = p
-
-    let when_ready f : unit = Grammar.extension f
+    let when_ready f : unit = Grammar.extension @@ fun ctxt ->
+      try Ok (f ctxt) with
+      | Invalid_argument s -> Error (Error.Invalid s)
+      | exn ->
+        let backtrace = Caml.Printexc.get_backtrace () in
+        Error (Error.Bug (exn,backtrace))
 
     let doc_enum = Arg.doc_alts_enum
 
@@ -644,15 +727,15 @@ module Extension = struct
   end
 
   module Syntax = struct
-    let (-->) {get} v = get v
+    let (-->) ctxt v = Parameter.get ctxt v
   end
-
   module Error = Error
 end
 
 
 type state =
   | Uninitialized
+  | Initializing
   | Loaded of plugin list
   | Failed of error
 
@@ -667,6 +750,7 @@ let init ?features ?library ?argv ?env ?log ?out ?err ?man ?name ?version () =
   match state.contents with
   | Loaded _
   | Failed _ -> Error Error.Already_initialized
+  | Initializing -> Error Error.Recursive_init
   | Uninitialized ->
     enable_logging log;
     let result = Plugins.load ?provides:features ?library () in
