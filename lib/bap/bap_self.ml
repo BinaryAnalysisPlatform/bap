@@ -117,6 +117,7 @@ module Create() = struct
     let determined = Parameter.determined
     let when_ready f = declare @@ fun ctxt ->
       try Ok (f {get = fun x -> Parameter.get ctxt x}) with
+      | Invalid_argument s -> Error (Error.Invalid s)
       | exn ->
         let backtrace = Caml.Printexc.get_backtrace () in
         Error (Error.Bug (exn,backtrace))

@@ -33,7 +33,7 @@ module Extension : sig
     type 'a param
 
     val declare : ?doc:string -> string ->
-      ('f,(unit,error) result) t -> (ctxt -> 'f) -> unit
+      ('f,ctxt -> (unit,error) result) t -> 'f -> unit
 
     val ($) : ('a,'b -> 'c) t -> 'b param -> ('a,'c) t
     val args : 'a param -> ('a -> 'b, 'b) t
@@ -100,6 +100,12 @@ module Extension : sig
     val datadir : string
     val libdir : string
     val confdir : string
+  end
+
+  module Context : sig
+    type t = ctxt
+
+    val pp : Format.formatter -> t -> unit
   end
 
 

@@ -267,6 +267,10 @@ module Context = struct
         builder := Sealed;
         Promise.fulfill seal ctxt;
         ctxt
+
+  let pp ppf {extensions} =
+    Map.iter extensions ~f:(Map.iteri ~f:(fun ~key ~data ->
+        Format.fprintf ppf "%s = %s@\n" key data))
 end
 
 type ctxt = Context.t
@@ -307,7 +311,7 @@ module Grammar : sig
 
   val extension : (ctxt -> (unit,Error.t) Result.t) -> unit
   val action : ?doc:string -> string ->
-    ('a,(unit,Error.t) Result.t) spec -> (ctxt -> 'a) -> unit
+    ('a,ctxt -> (unit,Error.t) Result.t) spec -> 'a -> unit
 
 
   val args : 'a param -> ('a -> 'b,'b) spec
@@ -370,7 +374,7 @@ end = struct
     config : (string * string) list;
   }
 
-  type command = (unit,Error.t) Result.t Term.t * Term.info
+  type command = (ctxt -> (unit,Error.t) Result.t) Term.t * Term.info
   type ('a,'b) arity = 'a Type.t -> 'b Type.t
 
   type 'a rule = ?deprecated:string ->
@@ -453,7 +457,7 @@ end = struct
     plugin_code := Some code
 
   let action ?doc name {run} command =
-    let term = run @@ command (Context.request ())
+    let term = run @@ command
     and info = Term.info ?doc name in
     commands := (term,info) :: !commands
 
@@ -533,8 +537,14 @@ end = struct
         let default = decide_default (wrap typ) default name ctxt in
         let conv = Type.converter typ in
         let set_value x = function
-          | Error _ as err -> err
+          | Error msg as err ->
+            Format.eprintf
+              "skipping %s due to abnormal execution (%a)@\n%!"
+              (option_name ctxt name) Error.pp msg;
+            err
           | Ok () ->
+            Format.eprintf "Option %s is ready, fulfilling promises@\n%!"
+              (option_name ctxt name);
             Promise.fulfill ready x;
             Context.set
               ~plugin:ctxt.name
@@ -564,14 +574,19 @@ end = struct
 
   let eval_plugins disabled plugins =
     let open Result in
+    Format.eprintf "evaluating plugin options@\n%!";
     plugins >>= fun () ->
     Context.exclude disabled >>= fun () ->
     let disabled = Hash_set.of_list (module String) disabled in
+    Format.eprintf "Sealing the context@\n";
     let ctxt = Context.request () in
+    Format.eprintf "Context is set to %a@\n%!" Context.pp ctxt;
     let init = Ok () in
+    Format.eprintf "Evaluating plugin codes\n%!";
     Hashtbl.fold plugin_codes ~init ~f:(fun ~key:name ~data:code ->
         function Error _ as err -> err
                | Ok () ->
+                 Format.eprintf "Eval plugin %s@\n%!" name;
                  if not (Hash_set.mem disabled name)
                  then code ctxt
                  else Ok ())
@@ -635,10 +650,12 @@ end = struct
     let man = (Markdown.to_manpage man :> Manpage.block list)  in
     let main_info = Term.info ?version ~man name in
     let helps = help_options ?version help plugin_names in
-    let plugins = helps >>> Term.(const eval_plugins $
-                                  disabled_plugins $ plugin_options) in
-    let commands = List.map !commands ~f:(fun (term,info) ->
-        plugins >>> term, info) in
+    let plugins = helps >>>
+      Term.(const eval_plugins $disabled_plugins $plugin_options) in
+    let commands = List.map !commands ~f:(fun (command,info) ->
+        plugins >>> Term.(const (fun cmd ->
+            let ctxt = Context.request () in
+            cmd ctxt) $ command), info) in
     match Term.eval_choice ~catch:false ?env ~help ?err ?argv
             (plugins,main_info) commands with
     | `Ok (Ok ()) -> Ok ()
@@ -725,6 +742,8 @@ module Extension = struct
     let param_all = Grammar.param_all
     let flag = Grammar.flag
   end
+
+  module Context = Context
 
   module Syntax = struct
     let (-->) ctxt v = Parameter.get ctxt v
