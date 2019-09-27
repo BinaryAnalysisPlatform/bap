@@ -98,7 +98,7 @@ module IrBuilder = struct
     Term.map jmp_t blk ~f:(fun jmp ->
         update_jmp jmp ~f:(fun dst _ make ->
             if is_conditional jmp
-            then make ~dst:ret ~alt:None
+            then make ~dst:None ~alt:dst
             else make ~dst:ret ~alt:dst))
 
   let landing_pad return jmp =
