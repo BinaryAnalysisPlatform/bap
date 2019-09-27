@@ -3,86 +3,74 @@ open Bap.Std
 open Bap_primus.Std
 open X86_cpu
 
-module Plt = struct
-  let is_plt_section v =
-    match Value.get Image.section v with
-    | Some x -> x = ".plt"
-    | _ -> false
+let is_section name v =
+  match Value.get Image.section v with
+  | Some x -> String.(x = name)
+  | _ -> false
 
-  let is_plt_symbol sec sym =
-    match Term.get_attr sym address with
-    | None -> false
-    | Some a -> Memmap.contains sec a
-
-  let symbols p =
-    let sec = Memmap.filter (Project.memory p) ~f:is_plt_section in
-    Term.to_sequence sub_t (Project.program p) |>
-    Seq.filter ~f:(is_plt_symbol sec)
-end
-
-module Got = struct
-
-  let cells plt_sym =
-    let find j =
-      match Jmp.kind j with
-      | Goto _ | Int _ | Ret _ -> None
-      | Call c ->
-        match Call.target c with
-        | Indirect Bil.(Load (_,Int addr,_,_)) -> Some addr
-        | _ -> None in
-    (object
-      inherit [addr list] Term.visitor
-
-      method! enter_jmp c acc =
-        match find c with
-        | None -> acc
-        | Some a -> a :: acc
-    end)#visit_sub plt_sym []
-end
+let address_range mem arch =
+  let step = Arch.addr_size arch |> Size.in_bytes in
+  let rec loop acc n =
+    if Addr.(n > Memory.max_addr mem)
+    then acc
+    else
+      let next = Addr.(n ++ step) in
+      loop (n :: acc) next in
+  loop [] (Memory.min_addr mem)
 
 module Make_unresolved(Machine : Primus.Machine.S) = struct
   module Linker = Primus.Linker.Make(Machine)
-  open Machine.Syntax
 
   let exec =
     Linker.exec (`symbol Primus.Linker.unresolved_handler)
 end
 
-module Plt_entry(Machine : Primus.Machine.S) = struct
-  module Memory = Primus.Memory.Make(Machine)
+module Plt_jumps(Machine : Primus.Machine.S) = struct
+  module Interp = Primus.Interpreter.Make(Machine)
   module Linker = Primus.Linker.Make(Machine)
+  module Value  = Primus.Value.Make(Machine)
+
   open Machine.Syntax
 
-  let load_byte addr =
-    Memory.is_mapped addr >>= function
-    | false -> !! None
-    | true  -> Memory.load addr >>| Option.some
+  let section_memory sec_name =
+    Machine.get () >>| fun proj ->
+    Memmap.filter (Project.memory proj) ~f:(is_section sec_name) |>
+    Memmap.to_sequence |>
+    Seq.map ~f:fst |>
+    Seq.to_list
 
-  let load bytes endian addr =
-    let concat = match endian with
-      | LittleEndian -> fun x y -> Addr.concat y x
-      | BigEndian -> Addr.concat in
-    let last = Addr.nsucc addr bytes in
-    let rec load data addr =
-      if Addr.(addr < last) then
-        load_byte addr >>= function
-        | None -> !! None
-        | Some x ->
-           load (concat data x) (Addr.succ addr)
-      else !! (Some data) in
-    load_byte addr >>= function
-    | None -> !! None
-    | Some data -> load data (Addr.succ addr)
-
-  let unresolve_jumps sym =
+  let got_cells =
     Machine.arch >>= fun arch ->
-    let endian = Arch.endian arch in
-    let size = Size.in_bytes (Arch.addr_size arch) in
-    Machine.List.iter (Got.cells sym) ~f:(fun cell ->
-        load size endian cell >>= function
-        | None -> !! ()
-        | Some addr ->
-           Linker.link ~addr (module Make_unresolved))
+    section_memory ".got.plt" >>| fun memory ->
+    List.fold memory ~init:[]
+      ~f:(fun acc mem -> acc @ address_range mem arch)
+
+  let load_word addr =
+    Machine.arch >>= fun arch ->
+    Value.of_word addr >>= fun addr ->
+    Interp.load addr (Arch.endian arch)
+      (Arch.addr_size arch :> size) >>|
+    Value.to_word
+
+  let load_table =
+    got_cells >>=
+    Machine.List.map ~f:load_word
+
+  let filter_plt addrs =
+    section_memory ".plt" >>= fun memory ->
+    Machine.return @@
+    List.filter addrs ~f:(fun a ->
+        List.exists memory ~f:(fun mem -> Memory.contains mem a))
+
+  let unlink addrs =
+    Machine.List.iter addrs ~f:(fun addr ->
+        Linker.link ~addr (module Make_unresolved))
+
+  let unresolve =
+    load_table >>=
+    filter_plt >>=
+    unlink
+
 end
 
 module Component(Machine : Primus.Machine.S) = struct
@@ -90,7 +78,7 @@ module Component(Machine : Primus.Machine.S) = struct
   module Env = Primus.Env.Make(Machine)
   module Value = Primus.Value.Make(Machine)
   module Interpreter = Primus.Interpreter.Make(Machine)
-  module Plt_entry = Plt_entry(Machine)
+  module Plt_jumps = Plt_jumps(Machine)
 
   let zero = Primus.Generator.static 0
 
@@ -109,9 +97,6 @@ module Component(Machine : Primus.Machine.S) = struct
       Value.of_int ~width addend >>= fun addend ->
       Primus.Linker.Trace.lisp_call_return >>> correct_sp sp addend
 
-  let unresolve_plt_jumps p =
-    Machine.Seq.iter (Plt.symbols p) ~f:Plt_entry.unresolve_jumps
-
   let init () =
     Machine.get () >>= fun proj ->
     Machine.sequence @@
@@ -119,11 +104,11 @@ module Component(Machine : Primus.Machine.S) = struct
     | `x86 ->
       [initialize_flags IA32.flags;
        correct_sp IA32.sp 4;
-       unresolve_plt_jumps proj]
+       Plt_jumps.unresolve ]
     | `x86_64 ->
       [initialize_flags AMD64.flags;
        correct_sp AMD64.sp 8;
-       unresolve_plt_jumps proj]
+       Plt_jumps.unresolve ]
     | _ -> []
 
 end
