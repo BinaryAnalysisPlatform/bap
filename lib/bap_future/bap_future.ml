@@ -86,7 +86,7 @@ module Std = struct
       match t.cell, t'.cell with
       | Link t,_  -> link t t'
       | _,Link t' -> link t t'
-      | _,Full s -> t.cell <- Full s
+      | _,Full x -> decide t x
       | Full x,_ -> decide t' x
       | Wait wx, Wait wy ->
         wx.waiters <- (wx.waiters @ wy.waiters);
