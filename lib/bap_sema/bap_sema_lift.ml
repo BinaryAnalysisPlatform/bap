@@ -9,10 +9,11 @@ open Bap_ir
 
 let update_jmp jmp ~f =
   f (Ir_jmp.dst jmp) (Ir_jmp.alt jmp) @@ fun ~dst ~alt ->
-  Ir_jmp.reify
-    ~tid:(Term.tid jmp)
-    ?cnd:(Ir_jmp.guard jmp)
-    ?dst ?alt ()
+  let jmp' = Ir_jmp.reify
+      ~tid:(Term.tid jmp)
+      ?cnd:(Ir_jmp.guard jmp)
+      ?dst ?alt () in
+  Term.with_attrs jmp' (Term.attrs jmp)
 
 let intra_fall cfg block =
   Seq.find_map (Cfg.Node.outputs block cfg) ~f:(fun e ->
@@ -98,7 +99,7 @@ module IrBuilder = struct
     Term.map jmp_t blk ~f:(fun jmp ->
         update_jmp jmp ~f:(fun dst _ make ->
             if is_conditional jmp
-            then make ~dst:ret ~alt:None
+            then make ~dst:None ~alt:dst
             else make ~dst:ret ~alt:dst))
 
   let landing_pad return jmp =

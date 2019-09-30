@@ -959,8 +959,9 @@ module Ir_jmp = struct
     }
   }
 
-
-  let with_kind t kind = create ~tid:t.tid ~cond:(cond t) kind
+  let with_kind t kind =
+    let t' = create ~tid:t.tid ~cond:(cond t) kind in
+    { t' with dict = t.dict }
 
   let exps (jmp : jmp term) : exp Sequence.t =
     let open Sequence.Generator in
