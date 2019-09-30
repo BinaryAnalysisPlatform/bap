@@ -31,14 +31,17 @@ module Make(Fact : Ogre.S) = struct
 
   include Sections(Fact)
   include Symbols(Fact)
+  include Code_regions(Fact)
 end
 
 module Relocatable = struct
   module Make(Fact : Ogre.S) = struct
     open Fact.Syntax
 
+    module Base = Base_address(Fact)
+
     let segments =
-      Fact.require base_address >>= fun base ->
+      Base.from_sections_offset >>= fun base ->
       Fact.foreach Ogre.Query.(begin
           select (from section_entry $ section_flags)
             ~join:[[field name]]
@@ -55,5 +58,6 @@ module Relocatable = struct
 
     include Relocatable_symbols(Fact)
     include Relocatable_sections(Fact)
+    include Code_regions(Fact)
   end
 end

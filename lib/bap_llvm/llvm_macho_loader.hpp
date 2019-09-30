@@ -151,6 +151,7 @@ MACHO_SECTION_FIELD(reserved1, uint32_t)
 MACHO_SECTION_FIELD(reserved2, uint32_t)
 MACHO_SECTION_FIELD(addr, uint64_t)
 MACHO_SECTION_FIELD(offset, uint32_t)
+MACHO_SECTION_FIELD(segname, std::string)
 
 constexpr uint64_t max_uint64 = std::numeric_limits<uint64_t>::max();
 
@@ -302,6 +303,13 @@ void relocations(const macho &obj, ogre_doc &s) {
             symbol_reference(obj, rel, sec.getRelocatedSection(), s);
 }
 
+bool is_code_section(const macho &obj, const SectionRef &sec) {
+    auto flags = section_flags(obj,sec);
+    return static_cast<bool>
+        (flags & MachO::S_ATTR_PURE_INSTRUCTIONS ||
+         flags & MachO::S_ATTR_SOME_INSTRUCTIONS);
+}
+
 void sections(const macho &obj, ogre_doc &s) {
     auto base = image_base(obj);
     for (auto sec : prim::sections(obj)) {
@@ -311,7 +319,7 @@ void sections(const macho &obj, ogre_doc &s) {
         auto offs = section_offset(obj, section_iterator(sec));
         if (addr && name && size) {
             section(*name, prim::relative_address(base, *addr), *size, offs, s);
-            if (section_flags(obj, sec) & MachO::S_ATTR_PURE_INSTRUCTIONS)
+            if (is_code_section(obj, sec))
                 s.entry("code-entry") << *name << offs << *size;
         }
     }

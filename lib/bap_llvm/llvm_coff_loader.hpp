@@ -32,17 +32,21 @@ static const std::string coff_declarations =
     "(declare ref-internal (sym-off int) (rel-off int))"
     "(declare ref-external (rel-off int) (name str))";
 
+bool is_code_section(const coff_section &sec) {
+    return
+        static_cast<bool>(
+            sec.Characteristics & COFF::IMAGE_SCN_MEM_EXECUTE ||
+            sec.Characteristics & COFF::IMAGE_SCN_CNT_CODE);
+}
+
 void section(const coff_section &sec, uint64_t image_base,  ogre_doc &s) {
     bool r = static_cast<bool>(sec.Characteristics & COFF::IMAGE_SCN_MEM_READ);
     bool w = static_cast<bool>(sec.Characteristics & COFF::IMAGE_SCN_MEM_WRITE);
-    bool x = static_cast<bool>(sec.Characteristics & COFF::IMAGE_SCN_MEM_EXECUTE);
+    bool x = is_code_section(sec);
     s.entry("section-entry") << sec.Name << sec.VirtualAddress << sec.SizeOfRawData << sec.PointerToRawData;
     s.entry("virtual-section-header") << sec.Name << sec.VirtualAddress << sec.VirtualSize;
     s.entry("section-flags") << sec.Name << r << w << x;
-    auto c = sec.Characteristics;
-    if ((c & COFF::IMAGE_SCN_CNT_CODE) ||
-        (c & COFF::IMAGE_SCN_CNT_INITIALIZED_DATA) ||
-        (c & COFF::IMAGE_SCN_CNT_UNINITIALIZED_DATA))
+    if (x)
         s.entry("code-entry") << sec.Name << sec.PointerToRawData << sec.SizeOfRawData;
 }
 
