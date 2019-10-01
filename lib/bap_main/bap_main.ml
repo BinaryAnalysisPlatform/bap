@@ -5,6 +5,7 @@ open Base
 open Stdio
 open Bap_future.Std
 open Bap_plugins.Std
+open Bap_bundle.Std
 
 module Format = Caml.Format
 
@@ -219,11 +220,13 @@ end = struct
 end
 
 module Context = struct
-  type env = string Map.M(String).t [@@deriving compare, sexp]
-  type plugins = Set.M(String).t [@@deriving compare, sexp]
+  type value = {
+    scope : string;
+    value : string;
+  } [@@deriving sexp]
   type t = {
-    extensions : env Map.M(String).t;    (* plugin -> param -> value *)
-    features : plugins Map.M(String).t;   (* feature -> plugins *)
+    env     : value Map.M(String).t;
+    plugins : Set.M(String).t Map.M(String).t;
   }
 
   type builder =
@@ -235,8 +238,8 @@ module Context = struct
   let ready,seal = Future.create ()
 
   let builder = ref @@ Building {
-      extensions = Map.empty (module String);
-      features = Map.empty (module String);
+      env = Map.empty (module String);
+      plugins = Map.empty (module String);
     }
 
   let update f = match builder.contents with
@@ -245,17 +248,26 @@ module Context = struct
       Ok ()
     | Sealed -> Error Already_defined
 
-  let set ~plugin ~parameter ~value = update @@ fun ctxt -> {
+  let set ~scope ~key ~value = update @@ fun ctxt -> {
       ctxt with
-      extensions = Map.update ctxt.extensions plugin ~f:(function
-          | None -> Map.singleton (module String) parameter value
-          | Some env -> Map.set env ~key:parameter ~data:value)
+      env = Map.add_exn ctxt.env ~key ~data:{scope; value}
     }
 
-  let exclude disabled = update @@ fun ctxt -> {
-      ctxt with
-      extensions = List.fold disabled
-          ~init:ctxt.extensions ~f:Map.remove;
+  let get _ x = snd (Future.peek_exn x)
+
+  let set_plugins disabled plugins = update @@ fun ctxt -> {
+      env = Map.filter ctxt.env ~f:(fun {scope} ->
+          not (Set.mem disabled scope));
+      plugins =
+        let init = Map.empty (module String) in
+        List.fold ~init plugins ~f:(fun plugins p ->
+            let name = Plugin.name p in
+            if Set.mem disabled name then plugins
+            else
+              let b = Plugin.bundle p in
+              let {Manifest.tags} = Bundle.manifest b in
+              let data = Set.of_list (module String) tags in
+              Map.add_exn plugins name data)
     }
 
   let request () =
@@ -268,12 +280,62 @@ module Context = struct
         Promise.fulfill seal ctxt;
         ctxt
 
-  let pp ppf {extensions} =
-    Map.iter extensions ~f:(Map.iteri ~f:(fun ~key ~data ->
-        Format.fprintf ppf "%s = %s@\n" key data))
+  let make_filter = function
+    | None -> fun _ -> true
+    | Some xs ->
+      let xs = Set.of_list (module String) xs in
+      fun tags -> not @@ Set.is_empty (Set.inter tags xs)
+
+  let plugins ?features {plugins} =
+    let is_selected = make_filter features in
+    Map.fold plugins ~init:[] ~f:(fun ~key:p ~data:tags plugins ->
+        if is_selected tags then p :: plugins
+        else plugins)
+
+
+  let pp ppf {env} =
+    Map.iteri env ~f:(fun ~key ~data:{value} ->
+        Format.fprintf ppf "%s = %s@\n" key value)
+
+  let digest ?features ctxt =
+    let plugins = plugins ?features ctxt in
+    let buffer = Buffer.create 128 in
+    let ppf = Format.formatter_of_buffer buffer in
+    List.iter plugins ~f:(Buffer.add_string buffer);
+    let scopes = Set.of_list (module String) plugins in
+    Map.iteri ctxt.env ~f:(fun ~key ~data:{scope; value} ->
+        if Set.mem scopes scope
+        then Format.fprintf ppf "%s = %s@\n" key value);
+    Format.pp_print_flush ppf ();
+    Caml.Digest.string @@
+    Buffer.contents buffer
 end
 
 type ctxt = Context.t
+
+module Pre = struct
+  open Cmdliner
+
+  let logdir : string option Term.t =
+    let doc = "A folder for log files." in
+    let env = Term.env_info ~doc "BAP_LOG_DIR" in
+    Arg.(value & opt (some string) None & info ["logdir"; "log-dir"] ~env ~doc)
+
+  let plugin_locations =
+    let doc = "Adds folder to the list of plugins search paths" in
+    let env = Term.env_info ~doc "BAP_PLUGIN_PATH" in
+    Arg.(value & opt_all string [] &
+         info ~env ~doc ["L"; "plugin-path"; "load-path"])
+
+
+  let extract ?env option options = match options with
+    | None -> None
+    | Some argv -> fst (Term.eval_peek_opts ?env ~argv option)
+
+  let term = Term.(const (fun _ _ -> Ok ()) $ logdir $plugin_locations)
+
+end
+
 
 module Grammar : sig
   open Cmdliner
@@ -314,16 +376,28 @@ module Grammar : sig
     ('a,ctxt -> (unit,Error.t) Result.t) spec -> 'a -> unit
 
 
-  val args : 'a param -> ('a -> 'b,'b) spec
+  val args : ('a,'a) spec
   val ($) : ('a, 'b -> 'c) spec -> 'b param -> ('a,'c) spec
-
-  val rest : 'a param -> 'a list param
 
   val argument :
     ?docv:string ->
     ?doc:string -> 'a Type.t -> 'a param
 
-  val param :
+  val arguments :
+    ?docv:string ->
+    ?doc:string -> 'a Type.t -> 'a list param
+
+  val switch :
+    ?doc:('a -> string) ->
+    ('a -> string) ->
+    'a list -> 'a option param
+
+  val switches :
+    ?doc:('a -> string) ->
+    ('a -> string) ->
+    'a list -> 'a list param
+
+  val parameter :
     ?docv:string ->
     ?doc:string ->
     ?as_flag:'a ->
@@ -332,7 +406,7 @@ module Grammar : sig
     'a Type.t ->
     'a param
 
-  val param_all :
+  val parameters :
     ?docv:string ->
     ?doc:string ->
     ?as_flag:'a ->
@@ -346,6 +420,12 @@ module Grammar : sig
     ?doc:string ->
     ?short:char ->
     string -> bool param
+
+  val flags :
+    ?docv:string ->
+    ?doc:string ->
+    ?short:char ->
+    string -> int param
 
   val eval :
     ?man:string ->
@@ -361,7 +441,7 @@ end = struct
   type len = Fin of int | Inf
   type 'a param =
     | Pos : 'a Type.t * Arg.info -> 'a param
-    | All : 'a param -> 'a list param
+    | All : 'a Type.t * Arg.info -> 'a list param
     | Key : 'a Term.t -> 'a param
 
   type ('a,'b) spec = {
@@ -387,6 +467,7 @@ end = struct
   let plugin_specs = Hashtbl.create (module String)
   let plugin_pages = Hashtbl.create (module String)
   let plugin_codes = Hashtbl.create (module String)
+  let plugins = Hashtbl.create (module String)
   let plugin_spec = ref (fun _ -> unit)
   let plugin_page = ref []
   let plugin_code = ref None
@@ -395,16 +476,33 @@ end = struct
   let argument (type a) ?(docv="ARG") ?doc t : a param =
     Pos (t, Arg.info ~docv ?doc [])
 
+  let arguments (type a) ?(docv="ARG") ?doc t : a list param =
+    All (t, Arg.info ~docv ?doc [])
+
+  let switch ?doc inj opts =
+    let doc = Option.value doc
+        ~default:(fun s -> sprintf "Select %s" (inj s)) in
+    let opts = List.map opts ~f:(fun x ->
+        Some x, Arg.info ~doc:(doc x) [inj x]) in
+    Key Arg.(value & vflag None opts)
+
+  let switches ?doc inj opts =
+    let doc = Option.value doc
+        ~default:(fun s -> sprintf "Select %s" (inj s)) in
+    let opts = List.map opts ~f:(fun x ->
+        x, Arg.info ~doc:(doc x) [inj x]) in
+    Key Arg.(value & vflag_all [] opts)
+
   let names short long = match short with
     | None -> [long]
     | Some short -> [sprintf "%c" short; long]
 
-  let param ?docv ?doc ?as_flag:vopt ?short long t : 'a param =
+  let parameter ?docv ?doc ?as_flag:vopt ?short long t : 'a param =
     let t = Type.converter t and d = Type.default t in
     Key Arg.(value & opt ?vopt t d & info ?docv ?doc &
              names short long)
 
-  let param_all ?docv ?doc ?as_flag:vopt ?short long t : 'a param =
+  let parameters ?docv ?doc ?as_flag:vopt ?short long t : 'a param =
     let t = Type.converter t in
     Key Arg.(value & opt_all ?vopt t [] & info ?docv ?doc &
              names short long)
@@ -412,7 +510,11 @@ end = struct
   let flag ?docv ?doc ?short long : bool param =
     Key Arg.(value & flag & info ?docv ?doc & names short long)
 
-  let rest p = All p
+  let flags ?docv ?doc ?short long : int param =
+    let term = Arg.(value & flag_all & info ?docv ?doc &
+                    names short long) in
+    let count = Term.(const (List.count ~f:(fun x -> x)) $ term) in
+    Key count
 
   let add (type a) len (b : a param) = match len,b with
     | Fin len, Pos _ -> Fin (len + 1)
@@ -432,15 +534,6 @@ end = struct
     | 0 -> Arg.(value & pos_all c [] name)
     | p -> Arg.(value & pos_right (p-1) c [] name)
 
-  let args : type a. a param -> (a -> 'b,'b) spec = fun a -> {
-      len = add (Fin 0) a;
-      run = fun f -> Term.(pure f $ match a with
-        | Pos (t,i) -> one t i 0
-        | All (Pos (t,i)) -> all t i 0
-        | Key t -> t
-        | All _ -> assert false)}
-
-
   let ($) (type a) args (b : a param) = {
     len = add args.len b;
     run = fun f -> Term.(args.run f $ match b with
@@ -449,12 +542,17 @@ end = struct
         | Inf -> assert false
         | Fin n -> match b with
           | Pos (t,i) -> one t i n
-          | All (Pos (t,i)) -> all t i n
+          | All (t,i) -> all t i n
           | _ -> assert false)
   }
 
   let extension code =
     plugin_code := Some code
+
+  let args = {
+    len = Fin 0;
+    run = Term.const
+  }
 
   let action ?doc name {run} command =
     let term = run @@ command
@@ -481,6 +579,8 @@ end = struct
             | Some men -> men @ !plugin_page) in
       Option.iter plugin_code.contents ~f:(fun code ->
           Hashtbl.add_exn plugin_codes name code);
+
+      Hashtbl.add_exn plugins name p;
       reset_plugin ();
       Hashtbl.add_exn plugin_specs name term;
     | `Errored _ -> reset_plugin ()
@@ -547,8 +647,8 @@ end = struct
               (option_name ctxt name);
             Promise.fulfill ready x;
             Context.set
-              ~plugin:ctxt.name
-              ~parameter:(option_name ctxt name)
+              ~scope:ctxt.name
+              ~key:(option_name ctxt name)
               ~value:(Type.show (wrap typ) x) in
         Term.(const set_value $
               make_term conv default ainfo $ rest ctxt)
@@ -557,6 +657,7 @@ end = struct
 
   and list x = Type.list x
   and atom x = x
+
 
   let describe man =
     plugin_page := man @ !plugin_page
@@ -572,23 +673,37 @@ end = struct
   let progname =
     Caml.Filename.basename (Caml.Sys.executable_name)
 
-  let eval_plugins disabled plugins =
+
+  let switch_bundle name =
+    let was = main_bundle () in
+    let now = Hashtbl.find_exn plugins name in
+    set_main_bundle (Plugin.bundle now);
+    was
+
+  let try_eval f x = try f x with
+    | Invalid_argument s -> Error (Error.Invalid s)
+    | exn ->
+      let backtrace = Caml.Printexc.get_backtrace () in
+      Error (Error.Bug (exn,backtrace))
+
+
+  let eval_plugins disabled plugins_term =
     let open Result in
-    Format.eprintf "evaluating plugin options@\n%!";
-    plugins >>= fun () ->
-    Context.exclude disabled >>= fun () ->
-    let disabled = Hash_set.of_list (module String) disabled in
-    Format.eprintf "Sealing the context@\n";
+    plugins_term >>= fun () ->
+    let disabled = Set.of_list (module String) disabled in
+    let plugins = Hashtbl.data plugins in
+    Context.set_plugins disabled plugins >>= fun () ->
     let ctxt = Context.request () in
-    Format.eprintf "Context is set to %a@\n%!" Context.pp ctxt;
     let init = Ok () in
-    Format.eprintf "Evaluating plugin codes\n%!";
     Hashtbl.fold plugin_codes ~init ~f:(fun ~key:name ~data:code ->
         function Error _ as err -> err
                | Ok () ->
-                 Format.eprintf "Eval plugin %s@\n%!" name;
-                 if not (Hash_set.mem disabled name)
-                 then code ctxt
+                 if not (Set.mem disabled name)
+                 then
+                   let old = switch_bundle name in
+                   let res = try_eval code ctxt in
+                   set_main_bundle old;
+                   res
                  else Ok ())
 
   let no_plugin_options plugins =
@@ -601,6 +716,8 @@ end = struct
         let append selected names =
           if selected then name :: names else names in
         Term.(const append $ plugin $ names))
+
+
 
   let help_options ?version ppf plugins =
     let init = Term.const (Ok ()) in
@@ -650,7 +767,7 @@ end = struct
     let man = (Markdown.to_manpage man :> Manpage.block list)  in
     let main_info = Term.info ?version ~man name in
     let helps = help_options ?version help plugin_names in
-    let plugins = helps >>>
+    let plugins = Pre.term >>> helps >>>
       Term.(const eval_plugins $disabled_plugins $plugin_options) in
     let commands = List.map !commands ~f:(fun (command,info) ->
         plugins >>> Term.(const (fun cmd ->
@@ -713,6 +830,7 @@ module Extension = struct
     let flag conv =
       Grammar.extend atom conv @@ fun _ def docs ->
       Term.(const (fun x -> x || def) $ Arg.value (Arg.flag docs))
+
     let flag = flag Type.bool ~default:false
 
     let determined (p:'a t) : 'a future = Future.map p ~f:snd
@@ -732,19 +850,20 @@ module Extension = struct
   module Command = struct
     type ('f,'r) t = ('f,'r) Grammar.spec
     type 'a param = 'a Grammar.param
-
     let declare = Grammar.action
     let ($) = Grammar.($)
     let args = Grammar.args
-    let rest = Grammar.rest
     let argument = Grammar.argument
-    let param = Grammar.param
-    let param_all = Grammar.param_all
+    let arguments = Grammar.arguments
+    let switch = Grammar.switch
+    let switches = Grammar.switches
+    let parameter = Grammar.parameter
+    let parameters = Grammar.parameters
     let flag = Grammar.flag
+    let flags = Grammar.flags
   end
 
   module Context = Context
-
   module Syntax = struct
     let (-->) ctxt v = Parameter.get ctxt v
   end
@@ -771,8 +890,17 @@ let init ?features ?library ?argv ?env ?log ?out ?err ?man ?name ?version () =
   | Failed _ -> Error Error.Already_initialized
   | Initializing -> Error Error.Recursive_init
   | Uninitialized ->
+    let log = match log with
+      | Some _ -> log
+      | None -> Option.(join @@ Pre.(extract ?env logdir argv) >>|
+                        fun x -> `Dir x) in
     enable_logging log;
-    let result = Plugins.load ?provides:features ?library () in
+    let library = match library with
+      | Some libs -> libs
+      | None -> match Pre.(extract ?env plugin_locations argv) with
+        | None -> []
+        | Some libs -> libs in
+    let result = Plugins.load ?provides:features ~library () in
     Format.eprintf "finished to load plugins@\n%!";
     let plugins,failures =
       List.partition_map result ~f:(function

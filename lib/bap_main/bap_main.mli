@@ -35,16 +35,30 @@ module Extension : sig
     val declare : ?doc:string -> string ->
       ('f,ctxt -> (unit,error) result) t -> 'f -> unit
 
+    val args : ('a, 'a) t
     val ($) : ('a,'b -> 'c) t -> 'b param -> ('a,'c) t
-    val args : 'a param -> ('a -> 'b, 'b) t
-    val rest : 'a param -> 'a list param
 
     val argument :
       ?docv:string ->
       ?doc:string ->
       'a typ -> 'a param
 
-    val param :
+    val arguments :
+      ?docv:string ->
+      ?doc:string ->
+      'a typ -> 'a list param
+
+    val switch :
+      ?doc:('a -> string) ->
+      ('a -> string) ->
+      'a list -> 'a option param
+
+    val switches :
+      ?doc:('a -> string) ->
+      ('a -> string) ->
+      'a list -> 'a list param
+
+    val parameter :
       ?docv:string ->
       ?doc:string ->
       ?as_flag:'a ->
@@ -52,7 +66,7 @@ module Extension : sig
       string ->
       'a typ -> 'a param
 
-    val param_all :
+    val parameters :
       ?docv:string ->
       ?doc:string ->
       ?as_flag:'a ->
@@ -66,6 +80,13 @@ module Extension : sig
       ?short:char ->
       string ->
       bool param
+
+    val flags :
+      ?docv:string ->
+      ?doc:string ->
+      ?short:char ->
+      string ->
+      int param
 
   end
 
@@ -104,8 +125,10 @@ module Extension : sig
 
   module Context : sig
     type t = ctxt
-
-    val pp : Format.formatter -> t -> unit
+    val plugins : ?features:string list -> ctxt -> string list
+    val digest : ?features:string list -> ctxt -> string
+    val get : ctxt -> 'a Parameter.t -> 'a
+    val pp : Format.formatter -> ctxt -> unit
   end
 
 
