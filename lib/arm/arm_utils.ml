@@ -36,6 +36,10 @@ let bitlen = function
   | Type.Imm len -> len
   | Type.Mem (_,size) -> Size.in_bits size
 
+let is_move = function
+  | Bil.Move _ -> true
+  | _ -> false
+
 let exec
     (stmts : stmt list)
     ?(flags : stmt list option)
@@ -73,7 +77,15 @@ let exec
   (* We shortcut if the condition = all *)
   match cond with
   | `AL -> stmts
-  | _ -> [Bil.If (set_cond cond, stmts, [])]
+  | _ when List.for_all stmts ~f:is_move ->
+    let cond = set_cond cond in
+    List.map stmts ~f:(function
+        | Bil.Move (v,_) as s when Var.is_virtual v -> s
+        | Bil.Move (v,x) ->
+          Bil.(v := ite ~if_:cond ~then_:x ~else_:(var v))
+        | _ -> assert false)
+  | _ ->
+    [Bil.If (set_cond cond, stmts, [])]
 
 
 let exp_of_reg reg = Bil.var (Env.of_reg reg)

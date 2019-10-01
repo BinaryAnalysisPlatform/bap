@@ -137,10 +137,10 @@ end = struct
       else step {s with work = [
           Dest {dst=Set.min_elt_exn s.usat; parent=None}
         ]}
+    | Dest {dst=next} as curr :: work when is_data s next ->
+      step @@ cancel curr {s with work}
     | Dest {dst=next} as curr :: work ->
-      let s = if is_data s next
-        then step @@ cancel curr {s with work}
-        else {s with begs = Set.add s.begs next} in
+      let s = {s with begs = Set.add s.begs next} in
       if is_visited s next then step {s with work}
       else {s with work; addr=next; curr}
     | Fall {dst=next} as curr :: work ->
@@ -161,7 +161,7 @@ end = struct
             if not (is_visited s next)
             then {s with work = Dest {dst=next; parent = Some jump} ::
                                 s.work}
-            else s)
+            else {s with begs = Set.add s.begs next})
     | Jump jmp as self :: Fall ({dst=next} as slot) :: work ->
       let delay = if jmp.age = 1 then Ready (Some self) else Delay in
       step {
@@ -468,9 +468,6 @@ let explore
                   let len = Memory.length mem + len in
                   let last = Memory.max_addr mem in
                   let next = Addr.succ last in
-                  if Set.mem data next && not (Map.mem jmps curr)
-                  then assert false
-                  else
                   if Set.mem begs next || Map.mem jmps curr
                   then
                     may_fall insn >>| fun may ->
