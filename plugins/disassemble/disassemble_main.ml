@@ -18,7 +18,6 @@ let features_used = [
   "brancher";
 ]
 
-
 type Extension.Error.t += Expects_a_regular_file
 type Extension.Error.t += Old_and_new_style_passes
 type Extension.Error.t += Unknown_pass of string

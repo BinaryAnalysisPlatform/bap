@@ -1,0 +1,13 @@
+Flag disassemble
+  Description: Enable the disassemble command
+  Default: false
+
+Library disassemble_plugin
+  Build$: flag(everything) || flag(disassemble)
+  XMETADescription: implements the disassembler command
+  Path: plugins/disassemble
+  FindlibName: bap-plugin-disassemble
+  CompiledObject: best
+  BuildDepends: bap
+  InternalModules: Disassemble_main
+  XMETAExtraLines: tags="command"
