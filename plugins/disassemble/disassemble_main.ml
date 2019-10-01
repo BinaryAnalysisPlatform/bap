@@ -18,20 +18,23 @@ let features_used = [
   "brancher";
 ]
 
-type Extension.Error.t += Expects_a_regular_file
-type Extension.Error.t += Old_and_new_style_passes
-type Extension.Error.t += Unknown_pass of string
-type Extension.Error.t += Incompatible_options of string * string
-type Extension.Error.t += Project of Error.t
-type Extension.Error.t += Pass of Project.Pass.error
-type Extension.Error.t += Unknown_format of string
-type Extension.Error.t += Unavailable_format_version of string
+type failure =
+  | Expects_a_regular_file
+  | Old_and_new_style_passes
+  | Unknown_pass of string
+  | Incompatible_options of string * string
+  | Project of Error.t
+  | Pass of Project.Pass.error
+  | Unknown_format of string
+  | Unavailable_format_version of string
+
+type Extension.Error.t += Fail of failure
 
 module Err = Monad.Result.Make(Extension.Error)(Monad.Ident)
 open Err.Syntax
 
-let pass_error = Result.map_error ~f:(fun err -> Pass err)
-let proj_error = Result.map_error ~f:(fun err -> Project err)
+let pass_error = Result.map_error ~f:(fun err -> Fail (Pass err))
+let proj_error = Result.map_error ~f:(fun err -> Fail (Project err))
 
 let run_passes base proj =
   Err.List.fold ~init:(0,proj) ~f:(fun (step,proj) pass ->
@@ -151,12 +154,12 @@ let raw_bytes =
 
 let validate_input file =
   Result.ok_if_true (Sys.file_exists file)
-    ~error:Expects_a_regular_file
+    ~error:(Fail Expects_a_regular_file)
 
 let validate_passes_style old_style_passes new_style_passes =
   match old_style_passes, new_style_passes with
   | xs,[] | [],xs -> Ok xs
-  | _ -> Error Old_and_new_style_passes
+  | _ -> Error (Fail Old_and_new_style_passes)
 
 let validate_passes passes =
   let known = Project.passes () |>
@@ -165,10 +168,10 @@ let validate_passes passes =
   Result.all @@
   List.map passes ~f:(fun p -> match Map.find known p with
       | Some p -> Ok p
-      | None -> Error (Unknown_pass p))
+      | None -> Error (Fail (Unknown_pass p)))
 
 let assert_only_one name1 name2 opt1 opt2 = match opt1,opt2 with
-  | Some _, Some _ -> Error (Incompatible_options (name1,name2))
+  | Some _, Some _ -> Error (Fail (Incompatible_options (name1,name2)))
   | _ -> Ok ()
 
 let option_digest f = function
@@ -198,8 +201,8 @@ module Dump_formats = struct
     match Project.find_writer ?ver fmt with
     | Some _ -> Ok r
     | None -> match Project.find_writer fmt with
-      | None -> Error (Unknown_format fmt)
-      | Some _ -> Error (Unavailable_format_version fmt)
+      | None -> Error (Fail (Unknown_format fmt))
+      | Some _ -> Error (Fail (Unavailable_format_version fmt))
 
   let parse outputs =
     Result.all @@
@@ -227,14 +230,65 @@ let _disassemble_command_registered : unit =
   import_knowledge_from_cache digest;
   let state = load_project_state_from_cache digest in
   let input = match raw_bytes with
-    | Some arch -> Project.Input.binary arch ~filename:input
+    | Some arch ->
+      Project.Input.binary arch ~filename:input
     | None -> Project.Input.file ?loader ~filename:input in
-  Project.create ?state input |> proj_error >>= fun proj ->
+  Project.create
+    input |> proj_error >>= fun proj ->
   if Option.is_none state then begin
     store_knowledge_in_cache digest;
     save_project_state_to_cache digest (Project.state proj);
   end;
   process passes outputs proj
+
+let pp_guesses ppf badname =
+  let guess = String.map badname ~f:(function
+      | '_' -> '-'
+      | c -> Char.lowercase c) in
+  let suffix = "-" ^ name in
+  let good_guess name =
+    name = guess || String.is_suffix ~suffix name in
+  let guesses =
+    Project.passes () |>
+    List.filter_map ~f:(fun p ->
+        let name = Project.Pass.name p in
+        Option.some_if (good_guess name) name) in
+  let pp_sep ppf () = Format.pp_print_string ppf ", or" in
+  match guesses with
+  | [] -> Format.fprintf ppf "make sure that your plugin is installed"
+  | guesses ->
+    Format.fprintf ppf "did you mean %a?"
+      (Format.pp_print_list ~pp_sep Format.pp_print_string) guesses
+
+let string_of_failure = function
+  | Expects_a_regular_file ->
+    "expected a regular file as input"
+  | Old_and_new_style_passes ->
+    "passes are specified in both old an new style, \
+     please switch to the new style, e.g., `-p<p1,p2,p3>'"
+  | Unknown_pass name ->
+    asprintf "failed to find the pass named %S, %a" name pp_guesses name
+  | Incompatible_options (o1,o2) ->
+    sprintf "options `%s' and `%s' can not be used together" o1 o2
+  | Project err ->
+    asprintf "failed to build a project: %a" Error.pp err
+  | Pass (Project.Pass.Unsat_dep (p,s)) ->
+    sprintf "dependency %S of pass %S is not available"
+      s (Project.Pass.name p)
+  | Pass (Project.Pass.Runtime_error (p, Exn.Reraised (bt,exn))) ->
+    asprintf "pass %S failed in runtime with %a@\nBacktrace:@\n%s@\n"
+      (Project.Pass.name p) Exn.pp exn bt
+  | Pass (Project.Pass.Runtime_error (p, exn)) ->
+    asprintf "pass %S failed in runtime with %a"
+      (Project.Pass.name p) Exn.pp exn
+  | Unknown_format fmt ->
+    sprintf "unknown format %S" fmt
+  | Unavailable_format_version fmt ->
+    sprintf "unsupported version of the format %S" fmt
+
+let () = Extension.Error.register_printer @@ function
+  | Fail err -> Some (string_of_failure err)
+  | _ -> None
 
 
 (* let () =
