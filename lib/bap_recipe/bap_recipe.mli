@@ -1,5 +1,3 @@
-open Core_kernel
-
 type error
 
 type t
@@ -12,7 +10,15 @@ val load :
 
 val argv : t -> string array
 val cleanup : t -> unit
-val descr : t -> string
+val doc : t -> string
 val params : t -> param list
 val pp_error : Format.formatter -> error -> unit
-val pp_param : Format.formatter -> param -> unit
+
+
+module Param : sig
+  type t = param
+  val name : param -> string
+  val doc : param -> string
+  val default : param -> string
+  val pp : Format.formatter -> param -> unit
+end

@@ -1,5 +1,5 @@
 Flag bare
-  Description: Build monad library
+  Description: Build the BARE library
   Default: false
 
 Library bare

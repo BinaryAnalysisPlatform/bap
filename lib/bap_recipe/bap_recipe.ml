@@ -180,8 +180,8 @@ let mkdtemp ?(mode=0o0700) ?tmp_dir ?(prefix="") ?(suffix="") () =
 
 let unzip file dst =
   let zip = Zip.open_in file in
-  Zip.entries zip |> List.filter ~f:(fun entry -> not entry.is_directory) |>
-  List.iter ~f:(fun ({filename} as entry) ->
+  Zip.entries zip |> List.filter ~f:(fun entry -> not entry.Zip.is_directory) |>
+  List.iter ~f:(fun ({Zip.filename} as entry) ->
       let path = dst / filename in
       FileUtil.mkdir ~parent:true (Filename.dirname path);
       Zip.copy_entry_to_file zip entry path);
@@ -237,23 +237,21 @@ let parse_var str =
   | [var;x] -> Ok (String.strip var, String.strip x)
   | _ -> Error (Expect_var str)
 
-let parse_vars vars =
+let parse_vars ?(env=[]) vars =
   List.map vars ~f:parse_var |> Result.all >>= fun vars ->
-  match Map.of_alist (module String) vars with
+  match Map.of_alist (module String) (env@vars) with
   | `Ok v -> Ok v
   | `Duplicate_key s -> Error (Duplicate_var s)
 
-
-let load_exn ?(paths=[]) name =
+let load_exn ?(paths=[]) ?env name =
   let name,vars = match String.split name ~on:':' with
     | [] -> failwith "Recipe.load: an empty name was passed"
     | name :: vars -> String.strip name, vars in
-  parse_vars vars >>= fun vars ->
+  parse_vars ?env vars >>= fun vars ->
   load {paths; vars} name
 
-
-let load ?paths name =
-  try load_exn ?paths name with
+let load ?paths ?env name =
+  try load_exn ?paths ?env name with
   | Zip.Error (name,entry,msg) ->
     Error (Malformed_recipe (name,entry,msg))
   | Unix.Unix_error (err,_,_) ->
@@ -268,11 +266,19 @@ let argv t = Array.of_list (args t)
 
 let rec params t = t.spec.pars @ List.concat_map t.loads ~f:params
 
-let descr t =
+let doc t =
   t.descr
 
 let pp_param ppf {name;defl;desc} =
   fprintf ppf "%s - %s (defaults to %s)" name desc defl
+
+module Param = struct
+  type t = param
+  let name {name} = name
+  let doc {desc} = desc
+  let default {defl} = defl
+  let pp = pp_param
+end
 
 let rec cleanup t =
   if t.root.temp
