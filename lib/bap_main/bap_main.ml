@@ -133,6 +133,7 @@ module Error = struct
   type t += Broken_plugins of (string * Base.Error.t) list
   type t += Unknown_plugin of string
   type t += Exit_requested of int
+  type t += Bad_recipe of Bap_recipe.error
 
   let register_printer = Caml.Printexc.register_printer
   let pp ppf e =
@@ -327,12 +328,16 @@ module Pre = struct
     Arg.(value & opt_all string [] &
          info ~env ~doc ["L"; "plugin-path"; "load-path"])
 
+  let recipe =
+    let doc = "Load the specified recipe" in
+    Arg.(value & opt (some string) None & info ~doc ["recipe"])
 
-  let extract ?env option options = match options with
-    | None -> None
-    | Some argv -> fst (Term.eval_peek_opts ?env ~argv option)
 
-  let term = Term.(const (fun _ _ -> Ok ()) $ logdir $plugin_locations)
+
+  let extract ?env option argv =
+    fst (Term.eval_peek_opts ?env ~argv option)
+
+  let term = Term.(const (fun _ _ _ -> Ok ()) $ logdir $plugin_locations $recipe)
 
 end
 
@@ -733,8 +738,6 @@ end = struct
           if selected then name :: names else names in
         Term.(const append $ plugin $ names))
 
-
-
   let help_options ?version ppf plugins =
     let init = Term.const (Ok ()) in
     let fmts = [
@@ -901,12 +904,32 @@ let enable_logging = function
   | Some (`Dir logdir) -> Bap_main_log.in_directory ~logdir ()
   | None -> Bap_main_log.in_directory ()
 
-let init ?features ?library ?argv ?env ?log ?out ?err ?man ?name ?version () =
+
+let load_recipe recipe =
+  let paths = [
+    Stdlib.Filename.current_dir_name;
+    Extension.Parameter.datadir] in
+  match Bap_recipe.load ~paths recipe with
+  | Ok r ->
+    Stdlib.at_exit (fun () -> Bap_recipe.close r);
+    Ok r
+  | Error err -> Error (Error.Bad_recipe err)
+
+let (>>=) x f = Result.bind x ~f
+
+
+let init ?features ?library ?(argv=Sys.argv) ?env ?log ?out ?err ?man ?name ?version () =
   match state.contents with
   | Loaded _
   | Failed _ -> Error Error.Already_initialized
   | Initializing -> Error Error.Recursive_init
   | Uninitialized ->
+    let argv = match Pre.(extract ?env recipe argv) with
+      | None | Some None -> Ok argv
+      | Some (Some spec) ->
+        load_recipe spec >>= fun spec ->
+        Ok (Array.append argv @@ Bap_recipe.argv spec) in
+    argv >>= fun argv ->
     let log = match log with
       | Some _ -> log
       | None -> Option.(join @@ Pre.(extract ?env logdir argv) >>|
@@ -923,7 +946,7 @@ let init ?features ?library ?argv ?env ?log ?out ?err ?man ?name ?version () =
           | Ok p -> `Fst p
           | Error (p,e) -> `Snd (p,e)) in
     if List.is_empty failures
-    then match Grammar.eval ?name ?version ?env ?help:out ?err ?man ?argv () with
+    then match Grammar.eval ?name ?version ?env ?help:out ?err ?man ~argv () with
       | Ok () ->
         state := Loaded plugins;
         Ok ()
