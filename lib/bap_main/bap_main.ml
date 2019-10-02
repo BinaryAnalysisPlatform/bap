@@ -637,14 +637,8 @@ end = struct
         let default = decide_default (wrap typ) default name ctxt in
         let conv = Type.converter typ in
         let set_value x = function
-          | Error msg as err ->
-            Format.eprintf
-              "skipping %s due to abnormal execution (%a)@\n%!"
-              (option_name ctxt name) Error.pp msg;
-            err
+          | Error _ as err -> err
           | Ok () ->
-            Format.eprintf "Option %s is ready, fulfilling promises@\n%!"
-              (option_name ctxt name);
             Promise.fulfill ready x;
             Context.set
               ~scope:ctxt.name
@@ -901,14 +895,10 @@ let init ?features ?library ?argv ?env ?log ?out ?err ?man ?name ?version () =
         | None -> []
         | Some libs -> libs in
     let result = Plugins.load ?provides:features ~library () in
-    Format.eprintf "finished to load plugins@\n%!";
     let plugins,failures =
       List.partition_map result ~f:(function
           | Ok p -> `Fst p
-          | Error (p,e) ->
-            Format.eprintf "Plugin %s failed with %a@\n%!"
-              p Base.Error.pp e;
-            `Snd (p,e)) in
+          | Error (p,e) -> `Snd (p,e)) in
     if List.is_empty failures
     then match Grammar.eval ?name ?version ?env ?help:out ?err ?man ?argv () with
       | Ok () ->
