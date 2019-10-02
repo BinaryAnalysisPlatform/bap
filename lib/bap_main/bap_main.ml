@@ -427,6 +427,14 @@ module Grammar : sig
     ?short:char ->
     string -> int param
 
+  val dictionary :
+    ?docv:string ->
+    ?doc:('k -> string) ->
+    ?short:('k -> char) ->
+    ('k -> string) ->
+    'k list ->
+    'd Type.t -> ('k * 'd) list param
+
   val eval :
     ?man:string ->
     ?name:string ->
@@ -472,6 +480,20 @@ end = struct
   let plugin_page = ref []
   let plugin_code = ref None
   let commands : command list ref = ref []
+
+  let dictionary ?(docv="VAL") ?doc ?short name keys data =
+    let init = Term.const [] in
+    Key (List.fold keys ~init ~f:(fun terms key ->
+        let name = name key in
+        let doc = match doc with
+          | None -> sprintf "sets `%s' to %s" name docv
+          | Some doc -> doc key in
+        let names = match short with
+          | None -> [name]
+          | Some short -> [sprintf "%c" (short key); name] in
+        let t = Type.converter data and d = Type.default data in
+        let term = Arg.(value & opt t d & info ~docv ~doc names) in
+        Term.(const (fun xs x -> (key,x) :: xs) $ terms $ term)))
 
   let argument (type a) ?(docv="ARG") ?doc t : a param =
     Pos (t, Arg.info ~docv ?doc [])
@@ -855,6 +877,7 @@ module Extension = struct
     let parameters = Grammar.parameters
     let flag = Grammar.flag
     let flags = Grammar.flags
+    let dictionary = Grammar.dictionary
   end
 
   module Context = Context

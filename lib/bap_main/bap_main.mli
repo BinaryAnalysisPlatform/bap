@@ -88,6 +88,13 @@ module Extension : sig
       string ->
       int param
 
+    val dictionary :
+      ?docv:string ->
+      ?doc:('k -> string) ->
+      ?short:('k -> char) ->
+      ('k -> string) ->
+      'k list ->
+      'd typ -> ('k * 'd) list param
   end
 
   module Parameter : sig
