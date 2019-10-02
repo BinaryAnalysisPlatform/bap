@@ -33,13 +33,11 @@ type param = {
 }
 
 type item =
-  | Cmd of string * string list
   | Use of string
   | Opt of string * string list
   | Par of param
 
 type spec = {
-  main : (string * string list) option;
   uses : string list;
   opts : (string * string list) list;
   pars : param list;
@@ -67,7 +65,6 @@ type t = {
 }
 
 let empty_spec = {
-  main = None;
   uses = [];
   opts = [];
   pars = [];
@@ -92,8 +89,6 @@ let item_of_sexp = function
     atoms args >>| fun args -> Opt (name, args)
   | Sexp.List (Sexp.Atom "parameter" :: Sexp.Atom s :: _) ->
     Error (Bad_param s)
-  | Sexp.List (Sexp.Atom "command" :: Sexp.Atom name :: args) ->
-    atoms args >>| fun args -> Cmd (name,args)
   | x -> Error (Bad_item x)
 
 
@@ -102,8 +97,7 @@ let items_of_sexps xs = Result.all (List.map xs ~f:item_of_sexp)
 let spec_of_items = List.fold ~init:empty_spec ~f:(fun spec -> function
     | Use x -> {spec with uses = x :: spec.uses}
     | Opt (x,xs) -> {spec with opts = (x,xs) :: spec.opts}
-    | Par x -> {spec with pars = x :: spec.pars}
-    | Cmd (name,args) -> {spec with main = Some (name,args)})
+    | Par x -> {spec with pars = x :: spec.pars})
 
 let (/) = Filename.concat
 
@@ -148,18 +142,15 @@ let linearize =
           String.concat ~sep:"," xs
         ])
 
-let apply_subst_exn root pars vars main opts =
+let apply_subst_exn root pars vars opts =
   let subs = List.map ~f:(subst_string (make_subst root pars vars)) in
-  let main = match main with
-    | None -> []
-    | Some (name,args) -> name :: subs args in
   let args =
     linearize @@ List.map opts ~f:(fun (name,args) ->
         "--"^name, subs args) in
-  main @ args
+  args
 
-let apply_subst root pars vars main opts =
-  try Ok (apply_subst_exn root pars vars main opts)
+let apply_subst root pars vars opts =
+  try Ok (apply_subst_exn root pars vars opts)
   with Bad_substitution s -> Error (Bad_subst s)
 
 let rng = Caml.Random.State.make_self_init ()
@@ -188,7 +179,6 @@ let unzip file dst =
   Zip.close_in zip
 
 let is_zip path =
-  Sys.is_directory path ||
   try Zip.close_in (Zip.open_in path); true with Zip.Error _ -> false
 
 let target_format t =
@@ -212,23 +202,35 @@ let check_vars env spec loads =
   | None -> Ok ()
   | Some x -> Error (Unbound_param x)
 
-let rec load_path env path =
-  let root = read path in
-  get_descr root >>= fun descr ->
-  get_recipe root >>= fun spec ->
-  List.map spec.uses ~f:(load env) |> Result.all >>= fun loads ->
-  check_vars env.vars spec loads >>= fun () ->
-  apply_subst root spec.pars env.vars spec.main spec.opts >>| fun args ->
-  {root; descr; spec; loads; args}
-and load env name =
-  List.find_map env.paths ~f:(fun p ->
+let search paths =
+  List.concat_map paths ~f:(fun p ->
+      if Sys.file_exists p && Sys.is_directory p
+      then Array.to_list (Sys.readdir p) |>
+           List.filter_map ~f:(fun file ->
+               if String.is_suffix file ~suffix:".recipe"
+               then Some (p/file)
+               else None)
+      else [])
+
+let which paths name =
+  List.find_map paths ~f:(fun p ->
       if Sys.file_exists p && Sys.is_directory p
       then List.find ~f:Sys.file_exists [
           p / name;
           p / name ^ ".scm";
           p / name ^ ".recipe";
         ]
-      else None) |> function
+      else None)
+
+let rec load_path env path =
+  let root = read path in
+  get_descr root >>= fun descr ->
+  get_recipe root >>= fun spec ->
+  List.map spec.uses ~f:(load env) |> Result.all >>= fun loads ->
+  check_vars env.vars spec loads >>= fun () ->
+  apply_subst root spec.pars env.vars spec.opts >>| fun args ->
+  {root; descr; spec; loads; args}
+and load env name = match which env.paths name with
   | None -> Error (No_recipe name)
   | Some path -> load_path env path
 
@@ -262,7 +264,7 @@ let load ?paths ?env name =
 let rec args t =
   List.concat_map t.loads ~f:args @ t.args
 
-let argv t = Array.of_list (args t)
+let argv t = Array.of_list @@ args t
 
 let rec params t = t.spec.pars @ List.concat_map t.loads ~f:params
 
@@ -280,10 +282,10 @@ module Param = struct
   let pp = pp_param
 end
 
-let rec cleanup t =
+let rec close t =
   if t.root.temp
   then FileUtil.rm ~force:FileUtil.Force ~recurse:true [t.root.path];
-  List.iter t.loads ~f:cleanup
+  List.iter t.loads ~f:close
 
 let pp_error ppf = function
   | Expect_atom sexp ->
