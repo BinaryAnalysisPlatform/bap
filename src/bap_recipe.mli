@@ -5,7 +5,11 @@ type error
 type t
 type param
 
-val load : ?paths:string list -> string -> (t,error) result
+val load :
+  ?paths:string list ->
+  ?env:(string * string) list ->
+  string -> (t,error) result
+
 val argv : t -> string array
 val cleanup : t -> unit
 val descr : t -> string

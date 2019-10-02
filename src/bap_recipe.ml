@@ -1,9 +1,11 @@
-open Core_kernel
-open Bap.Std
+open Base
+open Stdio
 open Result.Monad_infix
-open Format
+open Caml.Format
 
-include Self()
+module Filename = Stdlib.Filename
+module Buffer = Stdlib.Buffer
+module Sys = Stdlib.Sys
 
 exception Bad_substitution of string
 
@@ -30,13 +32,14 @@ type param = {
   desc : string;
 }
 
-
 type item =
-  | Use of string  (* (Use x) include steps from the recipe x *)
+  | Cmd of string * string list
+  | Use of string
   | Opt of string * string list
   | Par of param
 
 type spec = {
+  main : (string * string list) option;
   uses : string list;
   opts : (string * string list) list;
   pars : param list;
@@ -45,7 +48,7 @@ type spec = {
 type entry = {path : string;}
 
 type env = {
-  vars : string String.Map.t;
+  vars : string Map.M(String).t;
   paths : string list;
 }
 
@@ -63,6 +66,12 @@ type t = {
   loads : t list;
 }
 
+let empty_spec = {
+  main = None;
+  uses = [];
+  opts = [];
+  pars = [];
+}
 
 let atom = function
   | Sexp.Atom x -> Ok x
@@ -83,17 +92,18 @@ let item_of_sexp = function
     atoms args >>| fun args -> Opt (name, args)
   | Sexp.List (Sexp.Atom "parameter" :: Sexp.Atom s :: _) ->
     Error (Bad_param s)
+  | Sexp.List (Sexp.Atom "command" :: Sexp.Atom name :: args) ->
+    atoms args >>| fun args -> Cmd (name,args)
   | x -> Error (Bad_item x)
 
 
 let items_of_sexps xs = Result.all (List.map xs ~f:item_of_sexp)
 
-let spec_of_items items =
-  let uses,opts,pars = List.partition3_map items ~f:(function
-      | Use x -> `Fst x
-      | Opt (x,xs) -> `Snd (x,xs)
-      | Par x -> `Trd x) in
-  {uses; opts; pars}
+let spec_of_items = List.fold ~init:empty_spec ~f:(fun spec -> function
+    | Use x -> {spec with uses = x :: spec.uses}
+    | Opt (x,xs) -> {spec with opts = (x,xs) :: spec.opts}
+    | Par x -> {spec with pars = x :: spec.pars}
+    | Cmd (name,args) -> {spec with main = Some (name,args)})
 
 let (/) = Filename.concat
 
@@ -121,22 +131,14 @@ let subst_string f str =
   Buffer.contents buf
 
 let make_subst root pars vars arg =
-  if arg = "prefix" then root.path
+  if String.equal arg "prefix" then root.path
   else match Map.find vars arg with
     | Some x -> x
     | None -> List.find_map pars ~f:(fun {name; defl} ->
-        if name = arg then Some defl else None) |> function
+        if String.equal name arg
+        then Some defl else None) |> function
               | Some x -> x
               | None -> raise (Bad_substitution arg)
-
-let apply_subst_exn root pars vars opts =
-  let subst = make_subst root pars vars in
-  List.map opts ~f:(fun (name,args) ->
-      "--"^name,List.map args ~f:(subst_string subst))
-
-let apply_subst root pars vars opts =
-  try Ok (apply_subst_exn root pars vars opts)
-  with Bad_substitution s -> Error (Bad_subst s)
 
 let linearize =
   List.map ~f:(fun (name,xs) -> match xs with
@@ -145,6 +147,20 @@ let linearize =
           name;
           String.concat ~sep:"," xs
         ])
+
+let apply_subst_exn root pars vars main opts =
+  let subs = List.map ~f:(subst_string (make_subst root pars vars)) in
+  let main = match main with
+    | None -> []
+    | Some (name,args) -> name :: subs args in
+  let args =
+    linearize @@ List.map opts ~f:(fun (name,args) ->
+        "--"^name, subs args) in
+  main @ args
+
+let apply_subst root pars vars main opts =
+  try Ok (apply_subst_exn root pars vars main opts)
+  with Bad_substitution s -> Error (Bad_subst s)
 
 let rng = Caml.Random.State.make_self_init ()
 
@@ -192,7 +208,7 @@ let check_vars env spec loads =
   Map.keys env |> List.find ~f:(fun arg ->
       not (List.exists specs ~f:(fun {pars} ->
           List.exists pars ~f:(fun par ->
-              par.name = arg)))) |> function
+              String.equal par.name arg)))) |> function
   | None -> Ok ()
   | Some x -> Error (Unbound_param x)
 
@@ -202,8 +218,8 @@ let rec load_path env path =
   get_recipe root >>= fun spec ->
   List.map spec.uses ~f:(load env) |> Result.all >>= fun loads ->
   check_vars env.vars spec loads >>= fun () ->
-  apply_subst root spec.pars env.vars spec.opts >>| fun args ->
-  {root; descr; spec; loads; args = linearize args}
+  apply_subst root spec.pars env.vars spec.main spec.opts >>| fun args ->
+  {root; descr; spec; loads; args}
 and load env name =
   List.find_map env.paths ~f:(fun p ->
       if Sys.file_exists p && Sys.is_directory p
@@ -216,7 +232,6 @@ and load env name =
   | None -> Error (No_recipe name)
   | Some path -> load_path env path
 
-
 let parse_var str =
   match String.split str ~on:'=' with
   | [var;x] -> Ok (String.strip var, String.strip x)
@@ -224,7 +239,7 @@ let parse_var str =
 
 let parse_vars vars =
   List.map vars ~f:parse_var |> Result.all >>= fun vars ->
-  match String.Map.of_alist vars with
+  match Map.of_alist (module String) vars with
   | `Ok v -> Ok v
   | `Duplicate_key s -> Error (Duplicate_var s)
 
