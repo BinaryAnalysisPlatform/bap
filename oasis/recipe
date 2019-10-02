@@ -10,3 +10,13 @@ Library recipe
   BuildDepends: base, stdio, parsexp, fileutils, camlzip, uuidm
   Modules: Bap_recipe
   XMETADescription: stores command line parameters and resources in a single file
+
+Library bap_recipe_plugin
+  Build$:           flag(everything) || flag(recipe)
+  Path:             plugins/recipe
+  FindlibName:      bap-plugin-recipe
+  CompiledObject:   best
+  BuildDepends:     bap, bap-recipe, bap-main, base, stdio
+  Modules:          Recipe_main
+  XMETADescription: manipulates bap recipes
+  XMETAExtraLines:  tags="recipe, command"
