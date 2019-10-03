@@ -11,12 +11,12 @@ Library recipe
   Modules: Bap_recipe
   XMETADescription: stores command line parameters and resources in a single file
 
-Library bap_recipe_plugin
+Library bap_recipe_command_plugin
   Build$:           flag(everything) || flag(recipe)
-  Path:             plugins/recipe
-  FindlibName:      bap-plugin-recipe
+  Path:             plugins/recipe_command
+  FindlibName:      bap-plugin-recipe_command
   CompiledObject:   best
   BuildDepends:     bap, bap-recipe, bap-main, base, stdio
-  Modules:          Recipe_main
+  Modules:          Recipe_command_main
   XMETADescription: manipulates bap recipes
-  XMETAExtraLines:  tags="recipe, command"
+  XMETAExtraLines:  tags="recipe,command"
