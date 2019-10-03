@@ -75,19 +75,62 @@ let is_explicit_file file =
   not (Sys.is_directory file) &&
   (String.contains file '/')
 
-let auto_disassemble args = match Array.to_list args with
+let infer_command args = match Array.to_list args with
   | name :: file :: args when is_explicit_file file ->
     Array.of_list (name :: "disassemble" :: file :: args)
   | _ -> args
 
-let input = Command.argument Type.string
-let output = Command.argument Type.int
+let pp_info ppf infos =
+  List.iter infos ~f:(fun info ->
+      Format.fprintf ppf "  %-24s %s@\n"
+        (Context.name info)
+        (Context.doc info))
+
+let admin_commands ctxt = Context.commands ctxt
+let commands ctxt = Context.commands ctxt
+let plugins ctxt = Context.plugins ctxt
+
+
+let print_info ctxt =
+  Result.return @@
+  Format.printf {|
+Usage:
+  bap <COMMAND> [<OPTIONS>]
+
+Common options:
+  --version                prints the version number and exits;
+  --plugin-path <DIR>      adds <DIR> to the plugins search path;
+  --logdir <DIR>           creates a log file in <DIR>;
+  --recipe <VAL>           extracts command line arguments from the recipe.
+
+Management commands:
+%a
+
+Commands:
+%a
+
+Plugins:
+%a
+
+If no command is specified and the first parameter is a file,
+then the `disassemble' command is assumed.
+
+Run 'bap <COMMAND> --help' for more information a command.
+Run 'bap --<PLUGIN>-help for more information about a plugin.
+Run 'bap --help' for the detailed manual.
+|}
+    pp_info (admin_commands ctxt)
+    pp_info (commands ctxt)
+    pp_info (plugins ctxt)
+
+
+
 
 
 let () =
   let _unused : (module unit) = (module Bap.Std) in
-  let argv = auto_disassemble Sys.argv in
-  match Bap_main.init ~name:"bap" ~man ~argv () with
+  let argv = infer_command Sys.argv in
+  match Bap_main.init ~default:print_info ~name:"bap" ~man ~argv () with
   | Ok () -> ()
   | Error (Error.Exit_requested code) -> exit code
   | Error err -> Format.eprintf "%a@\n%!" Error.pp err;

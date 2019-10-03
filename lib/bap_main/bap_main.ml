@@ -140,16 +140,8 @@ module Error = struct
     Format.pp_print_string ppf (Caml.Printexc.to_string e)
 end
 
-type manpage_block = [
-  | `I of string * string
-  | `Noblank
-  | `P of string
-  | `Pre of string
-  | `S of string
-]
-
 module Markdown : sig
-  val to_manpage : string -> manpage_block list
+  val to_manpage : string -> Cmdliner.Manpage.block list
 end = struct
   let section s =
     let len = String.length s in
@@ -207,7 +199,7 @@ end = struct
       else List.rev paras in
     scan 0 0 []
 
-  let to_manpage : string -> manpage_block list = fun input ->
+  let to_manpage : string -> _ list = fun input ->
     split input |>
     List.map ~f:(fun para ->
         let para = String.strip para in
@@ -230,6 +222,8 @@ module Context = struct
     plugins : Set.M(String).t Map.M(String).t;
   }
 
+  type info = string * string
+
   type builder =
     | Building of t
     | Sealed
@@ -237,6 +231,9 @@ module Context = struct
   type error += Already_defined
 
   let ready,seal = Future.create ()
+
+  let plugin_descriptions = Hashtbl.create (module String)
+  let command_descriptions = Hashtbl.create (module String)
 
   let builder = ref @@ Building {
       env = Map.empty (module String);
@@ -256,7 +253,21 @@ module Context = struct
 
   let get _ x = snd (Future.peek_exn x)
 
-  let set_plugins disabled plugins = update @@ fun ctxt -> {
+  let set_plugins disabled plugins commands =
+
+    List.iter plugins ~f:(fun p ->
+        let name = Plugin.name p in
+        if not (Set.mem disabled name)
+        then
+          let {Manifest.desc} = Bundle.manifest (Plugin.bundle p) in
+          Hashtbl.add_exn plugin_descriptions name desc);
+
+    List.iter commands ~f:(fun (plugin,commands) ->
+        if not (Set.mem disabled plugin)
+        then Hashtbl.add_exn command_descriptions
+            plugin commands);
+
+    update @@ fun ctxt -> {
       env = Map.filter ctxt.env ~f:(fun {scope} ->
           not (Set.mem disabled scope));
       plugins =
@@ -290,16 +301,27 @@ module Context = struct
   let plugins ?features {plugins} =
     let is_selected = make_filter features in
     Map.fold plugins ~init:[] ~f:(fun ~key:p ~data:tags plugins ->
-        if is_selected tags then p :: plugins
+        if is_selected tags
+        then
+          let info = match Hashtbl.find plugin_descriptions p with
+            | None -> "no description provided"
+            | Some info -> info in
+          (p,info) :: plugins
         else plugins)
 
+  let commands ?features {plugins} =
+    let is_selected = make_filter features in
+    Hashtbl.fold command_descriptions ~init:[] ~f:(fun ~key ~data cmds ->
+        match Map.find plugins key with
+        | Some tags when is_selected tags -> data @ cmds
+        | _ -> cmds)
 
   let pp ppf {env} =
     Map.iteri env ~f:(fun ~key ~data:{value} ->
         Format.fprintf ppf "%s = %s@\n" key value)
 
   let digest ?features ctxt =
-    let plugins = plugins ?features ctxt in
+    let plugins = plugins ?features ctxt |> List.map ~f:fst in
     let buffer = Buffer.create 128 in
     let ppf = Format.formatter_of_buffer buffer in
     List.iter plugins ~f:(Buffer.add_string buffer);
@@ -310,6 +332,9 @@ module Context = struct
     Format.pp_print_flush ppf ();
     Caml.Digest.string @@
     Buffer.contents buffer
+
+  (* the info interface *)
+  let name = fst and doc = snd
 end
 
 type ctxt = Context.t
@@ -446,6 +471,7 @@ module Grammar : sig
     ?version:string ->
     ?env:(string -> string option) ->
     ?help:Format.formatter ->
+    ?default:(ctxt -> (unit,Error.t) Result.t) ->
     ?err:Format.formatter ->
     ?argv:string array -> unit -> (unit, Error.t) Result.t
 end = struct
@@ -480,10 +506,12 @@ end = struct
   let plugin_specs = Hashtbl.create (module String)
   let plugin_pages = Hashtbl.create (module String)
   let plugin_codes = Hashtbl.create (module String)
+  let plugin_cmds = Hashtbl.create (module String)
   let plugins = Hashtbl.create (module String)
   let plugin_spec = ref (fun _ -> unit)
   let plugin_page = ref []
   let plugin_code = ref None
+  let actions = ref []
   let commands : command list ref = ref []
 
   let dictionary ?(docv="VAL") ?doc ?short name keys data =
@@ -581,15 +609,32 @@ end = struct
     run = Term.const
   }
 
-  let action ?doc name {run} command =
+  let first_paragraph = function
+    | `P p :: _ | `S _ :: `P p :: _ -> Some p
+    | _ -> None
+
+  let first_sentence text =
+    List.hd @@ String.split_on_chars text ~on:[
+      '\n'; '.'
+    ]
+
+  let short_description man =
+    Option.(first_paragraph man >>= first_sentence)
+
+
+  let action ?(doc="no description provided") name {run} command =
+    let man = Markdown.to_manpage doc in
+    let doc = Option.value (short_description man) ~default:doc in
     let term = run @@ command
-    and info = Term.info ?doc name in
+    and info = Term.info ~doc ~man name in
+    actions := (name,doc) :: !actions;
     commands := (term,info) :: !commands
 
   let reset_plugin () =
     plugin_spec := (fun _ -> unit);
     plugin_page := [];
-    plugin_code := None
+    plugin_code := None;
+    actions := []
 
   let () = Stream.observe Plugins.events @@ function
     | `Loaded p ->
@@ -606,8 +651,9 @@ end = struct
             | Some men -> men @ !plugin_page) in
       Option.iter plugin_code.contents ~f:(fun code ->
           Hashtbl.add_exn plugin_codes name code);
-
       Hashtbl.add_exn plugins name p;
+      if not (List.is_empty !actions)
+      then Hashtbl.add_exn plugin_cmds name !actions;
       reset_plugin ();
       Hashtbl.add_exn plugin_specs name term;
     | `Errored _ -> reset_plugin ()
@@ -713,7 +759,8 @@ end = struct
     plugins_term >>= fun () ->
     let disabled = Set.of_list (module String) disabled in
     let plugins = Hashtbl.data plugins in
-    Context.set_plugins disabled plugins >>= fun () ->
+    let commands = Hashtbl.to_alist plugin_cmds in
+    Context.set_plugins disabled plugins commands >>= fun () ->
     let ctxt = Context.request () in
     let init = Ok () in
     Hashtbl.fold plugin_codes ~init ~f:(fun ~key:name ~data:code ->
@@ -779,7 +826,7 @@ end = struct
         Term.(const serve_manpage $ served $ make_help_option plugin))
 
   let eval ?(man="") ?(name=progname) ?version ?env
-      ?(help=Format.std_formatter) ?err ?argv () =
+      ?(help=Format.std_formatter) ?default ?err ?argv () =
     let plugin_names = Plugins.list () |> List.map ~f:Plugin.name in
     let disabled_plugins = no_plugin_options plugin_names in
     let plugin_options = concat_plugins () in
@@ -792,8 +839,13 @@ end = struct
         plugins >>> Term.(const (fun cmd ->
             let ctxt = Context.request () in
             cmd ctxt) $ command), info) in
+    let main = match default with
+      | None -> plugins
+      | Some f -> Term.(const (fun p -> match p with
+          | Error _ as err -> err
+          | Ok () -> f @@ Context.request ()) $ plugins) in
     match Term.eval_choice ~catch:false ?env ~help ?err ?argv
-            (plugins,main_info) commands with
+            (main,main_info) commands with
     | `Ok (Ok ()) -> Ok ()
     | `Ok (Error _ as err) -> err
     | `Version | `Help -> Ok ()
@@ -890,7 +942,6 @@ module Extension = struct
   module Error = Error
 end
 
-
 type state =
   | Uninitialized
   | Initializing
@@ -918,7 +969,11 @@ let load_recipe recipe =
 let (>>=) x f = Result.bind x ~f
 
 
-let init ?features ?library ?(argv=Sys.argv) ?env ?log ?out ?err ?man ?name ?version () =
+let init ?features ?library ?(argv=Sys.argv)
+    ?env ?log ?out ?err ?man
+    ?name ?version
+    ?default
+    () =
   match state.contents with
   | Loaded _
   | Failed _ -> Error Error.Already_initialized
@@ -946,7 +1001,10 @@ let init ?features ?library ?(argv=Sys.argv) ?env ?log ?out ?err ?man ?name ?ver
           | Ok p -> `Fst p
           | Error (p,e) -> `Snd (p,e)) in
     if List.is_empty failures
-    then match Grammar.eval ?name ?version ?env ?help:out ?err ?man ~argv () with
+    then match
+        Grammar.eval ?name ?version ?env ?help:out
+          ?err ?man ~ argv ?default ()
+      with
       | Ok () ->
         state := Loaded plugins;
         Ok ()

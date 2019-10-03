@@ -1,6 +1,7 @@
 open Bap_future.Std
 
 type error = ..
+type ctxt
 
 val init :
   ?features:string list ->
@@ -13,10 +14,10 @@ val init :
   ?man:string ->
   ?name:string ->
   ?version:string ->
+  ?default:(ctxt -> (unit,error) result) ->
   unit -> (unit, error) result
 
 module Extension : sig
-  type ctxt
   type 'a typ
 
   val declare :
@@ -133,7 +134,14 @@ module Extension : sig
 
   module Context : sig
     type t = ctxt
-    val plugins : ?features:string list -> ctxt -> string list
+    type info
+
+    val plugins : ?features:string list -> ctxt -> info list
+    val commands : ?features:string list -> ctxt -> info list
+
+    val name : info -> string
+    val doc : info -> string
+
     val digest : ?features:string list -> ctxt -> string
     val get : ctxt -> 'a Parameter.t -> 'a
     val pp : Format.formatter -> ctxt -> unit
