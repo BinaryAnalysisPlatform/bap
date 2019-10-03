@@ -25,6 +25,11 @@ module Make_unresolved(Machine : Primus.Machine.S) = struct
     Linker.exec (`symbol Primus.Linker.unresolved_handler)
 end
 
+let try_load mem size addr =
+  match Memory.get ~scale:size ~addr mem with
+  | Ok data -> Some data
+  | _ -> None
+
 module Plt_jumps(Machine : Primus.Machine.S) = struct
   module Interp = Primus.Interpreter.Make(Machine)
   module Linker = Primus.Linker.Make(Machine)
@@ -55,6 +60,15 @@ module Plt_jumps(Machine : Primus.Machine.S) = struct
   let load_table =
     got_cells >>=
     Machine.List.map ~f:load_word
+
+  let load_table =
+    Machine.arch >>= fun arch ->
+    section_memory ".got.plt" >>| fun memory ->
+    List.fold memory ~init:[]
+      ~f:(fun acc mem ->
+        let range = address_range mem arch in
+        acc @ List.filter_map range
+                ~f:(try_load mem (Arch.addr_size arch :> size)))
 
   let filter_plt addrs =
     section_memory ".plt" >>= fun memory ->
