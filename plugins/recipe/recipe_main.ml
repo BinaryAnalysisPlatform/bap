@@ -7,7 +7,6 @@ module Recipe = Bap_recipe
 module Filename = Stdlib.Filename
 module Sys = Stdlib.Sys
 
-
 type Extension.Error.t += Recipe_error of Recipe.error
 
 let recipe_paths = [
@@ -15,7 +14,10 @@ let recipe_paths = [
   Extension.Parameter.datadir
 ]
 
-let print_and_close_recipe r =
+let cleanup ~keep r =
+  if not keep then Recipe.close r
+
+let print_recipe ~keep r =
   printf "DESCRIPTION@\n@\n%s@\n@\n" (Recipe.doc r);
   let params = Recipe.params r in
   if not (List.is_empty params) then begin
@@ -26,14 +28,14 @@ let print_and_close_recipe r =
   let args = Recipe.argv r in
   let sep = if Array.length args > 4 then " \\\n" else " " in
   printf "COMMAND LINE@\n@\n%s@\n" (String.concat_array ~sep args);
-  Recipe.close r
+  cleanup ~keep r
 
 let summary str =
   match String.index str '\n' with
   | None -> str
   | Some p -> String.subo ~len:p str
 
-let print_all_recipes () =
+let print_all_recipes ~keep () =
   let (/) = Filename.concat in
   List.iter recipe_paths ~f:(fun dir ->
       if Sys.file_exists dir &&
@@ -47,21 +49,30 @@ let print_all_recipes () =
             | Ok r ->
               printf "%-32s %s\n" (Filename.basename name)
                 (summary (Recipe.doc r));
-              Recipe.close r
+              cleanup ~keep r
             | Error err ->
               eprintf "Malformed recipe %s: %a@\n%!" file
                 Recipe.pp_error err))
 
 let recipes = Extension.Command.arguments Extension.Type.string
+let keep_open =
+  Extension.Command.flag ~short:'k' "keep-open"
+    ~doc:"Do not delete the temporary workspace."
 
 let () =
-  Extension.Command.(declare "print-recipes" (args $ recipes))
-  @@ fun recipes _ctxt -> match recipes with
-  | [] -> Ok (print_all_recipes ())
+  Extension.Command.(declare "print-recipes" (args $ recipes $keep_open))
+  @@ fun recipes keep _ctxt -> match recipes with
+  | [] -> Ok (print_all_recipes ~keep ())
   | recipes ->
     let open Result.Monad_infix in
     Result.all_unit @@
     List.map recipes ~f:(fun r ->
         Recipe.load ~paths:recipe_paths r |>
         Result.map_error ~f:(fun err -> Recipe_error err) >>| fun r ->
-        print_and_close_recipe r)
+        print_recipe ~keep r)
+
+
+let () = Extension.Error.register_printer @@ function
+  | Recipe_error err ->
+    Some (Stdlib.Format.asprintf "%a" Recipe.pp_error err)
+  | _ -> None
