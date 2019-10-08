@@ -158,7 +158,14 @@ let () =
         Format.printf "  %-24s @[<hov>%a@]@\n%!"
           feature Format.(pp_print_list ~pp_sep pp_print_string) plugins);
     Ok ()
-  | _ -> Ok ()
+  | `Formats ->
+    Project.available_writers () |>
+    List.iter ~f:(fun (name,`Ver ver, desc) ->
+        let name = sprintf "%s (%s)" name ver in
+        let desc =
+          Option.value desc ~default:"no description provided" in
+        Format.printf "%-24s %s@\n%!" name desc);
+    Ok ()
 
 let () =
   let _unused : (module unit) = (module Bap.Std) in
