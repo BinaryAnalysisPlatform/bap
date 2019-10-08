@@ -250,6 +250,11 @@ module Plugins = struct
     has_feature provides (Plugin.tags p) &&
     meets_constraint env (Plugin.cons p)
 
+
+  let plugin_name = function
+    | Ok p -> Plugin.name p
+    | Error (name,_) -> name
+
   let collect ?env ?provides ?(library=[]) () =
     let (/) = Filename.concat in
     let strset = Set.of_list (module String) in
@@ -265,7 +270,10 @@ module Plugins = struct
             else try
                 let p = Plugin.of_path file in
                 Option.some_if (is_selected ~provides ~env p) (Ok p)
-              with exn -> Some (Error (file,Error.of_exn exn))))
+              with exn -> Some (Error (file,Error.of_exn exn)))) |>
+    List.sort ~compare:(fun x y ->
+        String.compare (plugin_name x) (plugin_name y))
+
 
   let list ?env ?provides ?library () =
     collect ?env ?provides ?library () |> List.filter_map ~f:(function

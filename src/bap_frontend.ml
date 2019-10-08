@@ -1,46 +1,18 @@
 let man = {|
 # DESCRIPTION
 
-A frontend to the Binary Analysis Platform library.  The tool allows
-you to inspect binary programs by printing them in different
-representations including assembly, BIL, BIR, XML, HTML, JSON,
-Graphviz dot graphs and so on.
+The main command line utility of the Binary Analysis platform used to
+invoke BAP analysis from the command line. The utility loads all
+plugins, parses command line arguments, and runs the specified
+command. The default command is $(b,disassemble), which disassembles
+and analyzes the specified file.
 
-The tool is extensible via a plugin system. There're several
-extension points, that allows you:
+# PLUGINS
 
-      - write your own analysis;
-      - add new serialization formats;
-      - adjust printing formats;
-      - add new program loaders (i.e. to handle new file formats);
-      - add your own symbolizer, rooter or reconstructor;
-      - provide ABI information;
-      - tackle with disassembler, lifter and even architecture;
-      - provide your own disassembler.
-
-The following example shows how to write a simple analysis plugin
-(called a pass in our parlance):
-
-```
-      $ cat mycode.ml
-```
-
-# BUILDING PLUGINS
-
-Building is easy with our $(b,bapbuild) tool:
-
-```
-  bapbuild mycode.plugin
-  bapbundle install mycode.plugin
-```
-
-User plugins have access to all the program state, and can change it
-and communicate with other plugins, or just store their results in
-whatever place you like.
-
-- Note: The $(b,bapbuild) tool is just an $(b,ocamlbuild)
-extended with our rules. It is not needed (but still can be used)
-to build your standalone applications, or to build BAP itself.
+The BAP frontend does nothing by itself and all the functionality
+comes from various BAP plugins. BAP provides various extension points,
+but a disassembler pass is a good start. See $(bap, dis --help) for
+more information.
 
 # BUGS
 
@@ -58,27 +30,26 @@ open Bap_main.Extension
 
 module type unit = sig end
 
-(* to preserve backward compatibility we automatically add
-   the disassemble command if the first argument is a file.
+let qualified cmd =
+  if String.length cmd > 2 && Char.equal cmd.[0] ':'
+  then Some (String.subo ~pos:1 cmd)
+  else None
 
-   However, we don't want to shadow possible commands with
-   files in the current folder, so the filename should be
-   explicit, e.g., `bap configure` will be treated as command
-   even if there is a file `configure` in the current folder,
-   while `bap ./configure` will be interpreted as
-   ```
-   bap disassemble ./configure
-   ```
+(* To preserve backward compatibility and enhance usability we
+   automatically add the `disassemble' command if the first argument is
+   a file. However, since we can have a potential clash between a
+   command name, a command name could be prefixed with `:`, so that
+   it will be interpreter literally as a keyword, not as a file.
 *)
-let is_explicit_file file =
-  Sys.file_exists file &&
-  not (Sys.is_directory file) &&
-  (String.contains file '/')
-
-let infer_command args = match Array.to_list args with
-  | name :: file :: args when is_explicit_file file ->
-    Array.of_list (name :: "disassemble" :: file :: args)
-  | _ -> args
+let autocorrect_input args =
+  Array.of_list @@ match Array.to_list args with
+  | [] | [_] as args -> args
+  | name :: arg :: args -> match qualified arg with
+    | Some cmd -> name::cmd::args
+    | None ->
+      if Sys.file_exists arg && not (Sys.is_directory arg)
+      then name :: "disassemble" :: arg :: args
+      else name :: arg :: args
 
 let pp_info ppf infos =
   List.iter infos ~f:(fun info ->
@@ -113,7 +84,9 @@ Plugins:
 %a
 
 If no command is specified and the first parameter is a file,
-then the `disassemble' command is assumed.
+then the `disassemble' command is assumed. If the name of a
+command conflicts with an existing file, prefix the name with
+`:', e.g., `bap :plugins'.
 
 Run 'bap <COMMAND> --help' for more information a command.
 Run 'bap --<PLUGIN>-help for more information about a plugin.
@@ -124,12 +97,13 @@ Run 'bap --help' for the detailed manual.
     pp_info (plugins ctxt)
 
 
-
-
+let () =
+  Command.declare ~doc:"does nothing" "." Command.args @@
+  fun _ -> Ok ()
 
 let () =
   let _unused : (module unit) = (module Bap.Std) in
-  let argv = infer_command Sys.argv in
+  let argv = autocorrect_input Sys.argv in
   match Bap_main.init ~default:print_info ~name:"bap" ~man ~argv () with
   | Ok () -> ()
   | Error (Error.Exit_requested code) -> exit code

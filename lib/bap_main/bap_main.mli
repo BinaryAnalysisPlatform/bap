@@ -24,7 +24,6 @@ module Extension : sig
     ?requires:string list ->
     ?provides:string list ->
     ?doc:string ->
-    ?name:string ->
     (ctxt -> (unit,error) result) -> unit
 
   val documentation : string -> unit

@@ -1,3 +1,87 @@
+let man = {|
+  # DESCRIPTION
+
+  Disassembles and analyzes the input file. This is the default
+  command of the bap frontend which is assumed when no other command
+  was specified.
+
+  The input file is automatically parsed (unless the $(b,--raw) or
+  $(b,--loader) options were specified), then the extracted code, if
+  any, is disassembled, and the `Bap.Std.project` data structure is
+  built, on which the specified passes are run.
+
+
+  # PASSES
+
+  The passes are specified by the $(b,--pass) option and are run in the
+  order in which they specified. In addition, all passes that are
+  flagged with `autorun' are run before the explicitly specified
+  passes. Finally, if a pass specifies other passes as its
+  dependencies, then they are run before it, in the order in which
+  they were specified (modulo their own dependencies).
+
+  It's also possible to specify the passes using the old style syntax,
+  e.g., `$(b,--<PASS>)`, which is discouraged and later could be disabled.
+  Additionaly, it is not allowed to mix passes the old and the new
+  style.
+
+  # OUTPUT
+
+  After all passes are run on the input, the resulting project data
+  structure could be dumped using the $(b,--dump) (or $(b,-d) for short)
+  option, whichaccepts the desired format and, optionally, the output
+  file name.
+
+  It is possible to specify the $(b,--dump) option multiple times, in
+  which case the project will be dumped in several formats.
+
+  # WRITING A NEW PASS
+
+  To implement your own analysis as a pass on the project data
+  structure, you need to write a program in OCaml.
+
+  Start in a fresh new folder and create the `my_analysis.ml` file
+  with the following contents:
+
+  ```
+  open Core_kernel
+  open Bap_main
+  open Bap.Std
+
+  let main proj =
+    print_endline "My analysis is running!";
+    proj
+
+  let () = Extension.declare @@ fun _ctxt ->
+     Project.register_pass main
+  ```
+
+  Then run
+
+  ```
+  bapbuild my_analysis.plugin
+  bapbundle install my_analysis.plugin
+  ```
+
+  The analysis is ready and could be run using the `$(b,--passes)
+  option, e.g.,
+
+  ```
+  bap dis /bin/echo --pass=my-analysis
+  ```
+
+  Please note, that the name of the pass is automatically derived from
+  the plugin name. If the latter contains underscores then they are
+  substituted with dashes. If a plugin registers a pass with a
+  different name it will be still prefixed with the plugin name.
+
+  # EXAMPLES
+
+```
+  bap dis /bin/echo --passes=run,check -dbir:out.bir -dasm:out.asm
+```
+|}
+
 open Bap_knowledge
 open Core_kernel
 open Bap.Std
@@ -212,7 +296,7 @@ end
 
 let _disassemble_command_registered : unit =
   Extension.Command.(begin
-      declare "disassemble"
+      declare ~doc:man "disassemble"
         (args $input $outputs $old_style_passes $passes $loader $raw_bytes)
     end) @@
   fun input outputs old_style_passes passes loader raw_bytes ctxt ->

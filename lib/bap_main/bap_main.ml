@@ -47,16 +47,17 @@ end = struct
         Some (String.strip k, String.strip v)
 
   let read_or_fail filename =
-    try In_channel.with_file filename ~f:(fun ch ->
+    if not (Stdlib.Sys.file_exists filename) then []
+    else try In_channel.with_file filename ~f:(fun ch ->
         In_channel.input_lines ch |>
         List.filter_mapi ~f:parse_config_entry)
-    with
-    | Sys_error msg ->
-      fail "can't access config file %S: %s\n%!" filename msg
-    | Malformed_line (linenum,str) ->
-      fail "File %S, line %d, characters %d-%d\n\
-            Syntax error: expects <parameter> = <value>"
-        filename (linenum+1) 1 (String.length str + 1)
+      with
+      | Sys_error msg ->
+        fail "can't access config file %S: %s\n%!" filename msg
+      | Malformed_line (linenum,str) ->
+        fail "File %S, line %d, characters %d-%d\n\
+              Syntax error: expects <parameter> = <value>"
+          filename (linenum+1) 1 (String.length str + 1)
 end
 
 module Type = struct
@@ -144,6 +145,7 @@ module Markdown : sig
   val to_manpage : string -> Cmdliner.Manpage.block list
 end = struct
   let section s =
+    let s = String.strip s in
     let len = String.length s in
     let rec scan n =
       if n < len then match s.[n] with
@@ -155,16 +157,22 @@ end = struct
 
   let verbatim s =
     let delimiter = "```" in
-    if String.length s > 2 * String.length delimiter &&
-       String.is_prefix s ~prefix:delimiter &&
-       String.is_suffix s ~suffix:delimiter
-    then Option.some @@
-      String.sub s
-        ~pos:(String.length delimiter)
-        ~len:(String.length s - 2 * String.length delimiter)
-    else None
+    let begs s = String.(chop_prefix (lstrip s) ~prefix:delimiter)
+    and ends s = String.(chop_suffix (rstrip s) ~suffix:delimiter) in
+    match begs s with
+    | None ->
+      begin match ends s with
+        | None -> `Nocode
+        | Some code -> `End code
+      end
+    | Some code ->
+      begin match ends code with
+        | None -> `Beg code
+        | Some code -> `Pre code
+      end
 
   let list_item s =
+    let s = String.strip s in
     let len = String.length s in
     let rec scan_numeric n =
       if n + 1 < len then match s.[n], s.[n+1] with
@@ -175,7 +183,7 @@ end = struct
         | _ -> None
       else None in
     if len > 2 then match s.[0], s.[1] with
-      | ('*' | '#' | '+' | '-'),' ' ->
+      | ('*' | '+' | '-'),' ' ->
         Some (String.subo ~len:1 s,
               String.subo ~pos:2 s)
       | x,_ -> if Char.is_digit x then scan_numeric 1 else None
@@ -200,16 +208,27 @@ end = struct
     scan 0 0 []
 
   let to_manpage : string -> _ list = fun input ->
-    split input |>
-    List.map ~f:(fun para ->
-        let para = String.strip para in
-        match section para with
-        | Some name -> `S name
+    let rec build = function
+      | [] -> []
+      | para :: paras -> match section para with
+        | Some name -> `S name :: build paras
         | None -> match verbatim para with
-          | Some code -> `Pre code
-          | None -> match list_item para with
-            | Some (item,desc) -> `I (item,desc)
-            | None -> `P para)
+          | `Pre code -> `Pre code :: build paras
+          | `Beg code -> pre [code] paras
+          | `End para ->
+            `P ("ERROR: Unbalanced ```") ::
+            `P para :: build paras
+          | `Nocode -> match list_item para with
+            | Some (item,desc) -> `I (item,desc) :: build paras
+            | None -> `P (String.strip para) :: build paras
+    and pre codes = function
+      | [] -> [`P ("ERROR : unbalanced ```")]
+      | para :: paras -> match verbatim para with
+        | `End code | `Beg code ->
+          let code = String.concat ~sep:"\n\n" @@ List.rev (code::codes) in
+          `Pre code :: build paras
+        | _ -> pre (para::codes) paras in
+    build (split input)
 end
 
 module Context = struct
@@ -300,7 +319,8 @@ module Context = struct
 
   let plugins ?features {plugins} =
     let is_selected = make_filter features in
-    Map.fold plugins ~init:[] ~f:(fun ~key:p ~data:tags plugins ->
+    Map.to_sequence ~order:`Decreasing_key plugins |>
+    Sequence.fold ~init:[] ~f:(fun plugins (p,tags) ->
         if is_selected tags
         then
           let info = match Hashtbl.find plugin_descriptions p with
@@ -401,8 +421,14 @@ module Grammar : sig
 
   val describe : Manpage.block list -> unit
 
-  val extension : (ctxt -> (unit,Error.t) Result.t) -> unit
-  val action : ?doc:string -> string ->
+  val extension :
+    ?requires:string list ->
+    ?provides:string list ->
+    ?doc:string ->
+    (ctxt -> (unit,Error.t) Result.t) -> unit
+
+  val action :
+    ?doc:string -> string ->
     ('a,ctxt -> (unit,Error.t) Result.t) spec -> 'a -> unit
 
 
@@ -493,6 +519,12 @@ end = struct
     config : (string * string) list;
   }
 
+  type plugin_info = {
+    cons : string list;
+    tags : string list;
+    docs : string;
+  }
+
   type command = (ctxt -> (unit,Error.t) Result.t) Term.t * Term.info
   type ('a,'b) arity = 'a Type.t -> 'b Type.t
 
@@ -506,11 +538,13 @@ end = struct
   let plugin_specs = Hashtbl.create (module String)
   let plugin_pages = Hashtbl.create (module String)
   let plugin_codes = Hashtbl.create (module String)
+  let plugin_infos = Hashtbl.create (module String)
   let plugin_cmds = Hashtbl.create (module String)
   let plugins = Hashtbl.create (module String)
   let plugin_spec = ref (fun _ -> unit)
   let plugin_page = ref []
   let plugin_code = ref None
+  let plugin_info = ref None
   let actions = ref []
   let commands : command list ref = ref []
 
@@ -601,7 +635,12 @@ end = struct
           | _ -> assert false)
   }
 
-  let extension code =
+  let extension ?(requires=[]) ?(provides=[]) ?(doc="") code =
+    plugin_info := Some {
+        tags = provides;
+        cons = requires;
+        docs = doc;
+      };
     plugin_code := Some code
 
   let args = {
@@ -634,12 +673,30 @@ end = struct
     plugin_spec := (fun _ -> unit);
     plugin_page := [];
     plugin_code := None;
+    plugin_info := None;
     actions := []
+
+  let merge xs ys =
+    let xs = Set.of_list (module String) xs
+    and ys = Set.of_list (module String) ys in
+    Set.(to_list @@ union xs ys)
+
+
+  let update_from_bundle info plugin =
+    let b = Plugin.bundle plugin in
+    let {Manifest.tags; cons; desc} = Bundle.manifest b in
+    {
+      docs = if String.is_empty info.docs then desc else info.docs;
+      tags = merge tags info.tags;
+      cons = merge cons info.cons
+    }
+
 
   let () = Stream.observe Plugins.events @@ function
     | `Loaded p ->
       let name = Plugin.name p in
-      let filename = "/dev/null" in (* TODO: obtain a proper file name *)
+      let (/) = Stdlib.Filename.concat in
+      let filename = Bap_main_config.confdir / name  / "config" in
       let ctxt = {
         name;
         config = ConfigFile.read_or_fail filename
@@ -651,6 +708,9 @@ end = struct
             | Some men -> men @ !plugin_page) in
       Option.iter plugin_code.contents ~f:(fun code ->
           Hashtbl.add_exn plugin_codes name code);
+      Option.iter plugin_info.contents ~f:(fun info ->
+          Hashtbl.add_exn plugin_infos name
+            (update_from_bundle info p));
       Hashtbl.add_exn plugins name p;
       if not (List.is_empty !actions)
       then Hashtbl.add_exn plugin_cmds name !actions;
@@ -694,8 +754,8 @@ end = struct
       | None -> Option.value user_default ~default
       | Some v -> parse ~where:"configuration file" v
 
-  let plugin_section plugin =
-    String.uppercase plugin ^ " OPTIONS"
+  let plugin_section _ =
+    Manpage.s_common_options
 
   let extend wrap typ make_term =
     fun ?deprecated:notice ?default ?(docv="VAL")
@@ -858,12 +918,7 @@ module Extension = struct
   type 'a typ = 'a Type.t
   type ctxt = Context.t
 
-  let declare
-      ?requires:_
-      ?provides:_
-      ?doc:_
-      ?name:_ f =
-    Grammar.extension f
+  let declare = Grammar.extension
 
   type manpage_block = [
     | `I of string * string
