@@ -135,14 +135,59 @@ module Extension : sig
     type t = ctxt
     type info
 
-    val plugins : ?features:string list -> ctxt -> info list
-    val commands : ?features:string list -> ctxt -> info list
+    (** [plugins ctxt] enumerates all available plugins.
 
+        If [features] is specified, then enumerates only plugins
+        than provide at least one of specified feature.
+
+        If [exclude] is specified, then exclude from the list
+        plugins, that has one of the feature specified in the
+        [exclude] list.
+    *)
+    val plugins :
+      ?features:string list ->
+      ?exclude: string list -> ctxt -> info list
+
+
+    (** [commands ctxt] enumerates all available commands.
+
+        If [features] and/or [exclude] are specified, then they have
+        the same meaning as in {!plugins ~features ~exclude}.*)
+    val commands :
+      ?features:string list ->
+      ?exclude:string list -> ctxt -> info list
+
+    (** [name info] returns the name of a plugin or command. *)
     val name : info -> string
+
+    (** [doc info] returns the short documentation.  *)
     val doc : info -> string
 
-    val digest : ?features:string list -> ctxt -> string
+
+    (** [digest context] returns the [context] digest.
+
+        The digest is a 128-bit MD5 sum of all options of
+        all plugins that were selected in the context and match
+        the filters specified by the [features] and [exclude]
+        parameters.
+
+        See the {!plugins} function for the description of the
+        [features] and [exclude] parameters.
+
+        Note: the digest doesn't include the command options and
+        arguments only plugins configuration options.
+    *)
+    val digest :
+      ?features:string list ->
+      ?exclude:string list -> ctxt -> string
+
+    val features : ctxt -> string list
+
+
+    (** [get ctxt p] extracts the value of [p] from the context [ctxt] *)
     val get : ctxt -> 'a Parameter.t -> 'a
+
+    (** prints the context  *)
     val pp : Format.formatter -> ctxt -> unit
   end
 

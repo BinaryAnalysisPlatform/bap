@@ -116,9 +116,11 @@ let print_recipe ~keep r =
   cleanup ~keep r
 
 let summary str =
+  String.uncapitalize @@
   match String.index str '\n' with
   | None -> str
-  | Some p -> String.subo ~len:p str
+  | Some p -> String.subo ~len:(max p 60) str
+
 
 let print_all_recipes ~keep () =
   let (/) = Filename.concat in
@@ -132,7 +134,7 @@ let print_all_recipes ~keep () =
             let name = Filename.chop_suffix entry ".recipe" in
             match Recipe.load ~paths:recipe_paths name with
             | Ok r ->
-              printf "%-32s %s\n" (Filename.basename name)
+              printf "  %-24s %s\n" (Filename.basename name)
                 (summary (Recipe.doc r));
               cleanup ~keep r
             | Error err ->

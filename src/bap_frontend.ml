@@ -10,9 +10,9 @@ and analyzes the specified file.
 # PLUGINS
 
 The BAP frontend does nothing by itself and all the functionality
-comes from various BAP plugins. BAP provides various extension points,
-but a disassembler pass is a good start. See $(bap, dis --help) for
-more information.
+comes from various BAP plugins. There are many extension points in
+BAP, but writing a disassembler pass is probably the easiest to start
+with. See $(bap, dis --help) for more details.
 
 # BUGS
 
@@ -35,6 +35,8 @@ let qualified cmd =
   then Some (String.subo ~pos:1 cmd)
   else None
 
+let is_option = String.is_prefix ~prefix:"-"
+
 (* To preserve backward compatibility and enhance usability we
    automatically add the `disassemble' command if the first argument is
    a file. However, since we can have a potential clash between a
@@ -44,12 +46,13 @@ let qualified cmd =
 let autocorrect_input args =
   Array.of_list @@ match Array.to_list args with
   | [] | [_] as args -> args
-  | name :: arg :: args -> match qualified arg with
-    | Some cmd -> name::cmd::args
-    | None ->
-      if Sys.file_exists arg && not (Sys.is_directory arg)
-      then name :: "disassemble" :: arg :: args
-      else name :: arg :: args
+  | name :: arg :: args as input ->
+    if is_option arg then input else match qualified arg with
+      | Some cmd -> name::cmd::args
+      | None ->
+        if Sys.file_exists arg && not (Sys.is_directory arg)
+        then name :: "disassemble" :: arg :: args
+        else name :: arg :: args
 
 let pp_info ppf infos =
   List.iter infos ~f:(fun info ->
@@ -57,8 +60,8 @@ let pp_info ppf infos =
         (Context.name info)
         (Context.doc info))
 
-let admin_commands ctxt = Context.commands ctxt
-let commands ctxt = Context.commands ctxt
+let admin_commands ctxt = Context.commands ~features:["admin"] ctxt
+let commands ctxt = Context.commands ~exclude:["admin"] ctxt
 let plugins ctxt = Context.plugins ctxt
 
 
@@ -100,6 +103,62 @@ Run 'bap --help' for the detailed manual.
 let () =
   Command.declare ~doc:"does nothing" "." Command.args @@
   fun _ -> Ok ()
+
+
+let () =
+  let what = Command.argument @@ Type.enum [
+      "plugins", `Plugins;
+      "commands", `Commands;
+      "recipes", `Recipes;
+      "tags", `Tags;
+      "features", `Tags;
+      "passes", `Passes;
+      "formats", `Formats;
+    ] in
+  let filter = Command.parameter "filter" Type.(list string) in
+  let doc = "explores various BAP facilities" in
+  let push x xs = match xs with
+    | None -> Some [x]
+    | Some xs -> Some (x::xs) in
+  let parse_filter = List.fold ~init:(None,None)
+      ~f:(fun (features,exclude) elt ->
+          match String.chop_prefix elt ~prefix:"-" with
+          | Some elt -> (features, push elt exclude)
+          | None ->
+            let elt =
+              String.chop_prefix elt ~prefix:"+" |>
+              Option.value ~default:elt in
+            (push elt features, exclude)) in
+  Command.declare ~doc "list" Command.(args $what $filter) @@
+  fun what filter ctxt ->
+  let features, exclude = parse_filter filter in
+  match what with
+  | `Recipes ->
+    Format.printf "Use the `print-recipes' command to list recipes, e.g.,
+      bap print-recipes@\n%!";
+    Ok ()
+  | `Plugins ->
+    Format.printf "%a%!" pp_info (Context.plugins ?features ?exclude ctxt);
+    Ok ()
+  | `Commands ->
+    Format.printf "%a%!" pp_info
+      (Context.commands ?features ?exclude ctxt);
+    Ok ()
+  | `Passes ->
+    Project.passes () |>
+    List.iter ~f:(fun p -> Format.printf "  %s@\n%!" (Project.Pass.name p));
+    Ok ()
+  | `Tags ->
+    Context.features ctxt |>
+    List.iter ~f:(fun feature ->
+        let plugins =
+          Context.plugins ~features:[feature] ctxt |>
+          List.map ~f:Context.name in
+        let pp_sep ppf () = Format.fprintf ppf ",@ " in
+        Format.printf "  %-24s @[<hov>%a@]@\n%!"
+          feature Format.(pp_print_list ~pp_sep pp_print_string) plugins);
+    Ok ()
+  | _ -> Ok ()
 
 let () =
   let _unused : (module unit) = (module Bap.Std) in

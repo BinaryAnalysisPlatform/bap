@@ -273,7 +273,6 @@ module Context = struct
   let get _ x = snd (Future.peek_exn x)
 
   let set_plugins disabled plugins commands =
-
     List.iter plugins ~f:(fun p ->
         let name = Plugin.name p in
         if not (Set.mem disabled name)
@@ -311,14 +310,20 @@ module Context = struct
         Promise.fulfill seal ctxt;
         ctxt
 
-  let make_filter = function
-    | None -> fun _ -> true
-    | Some xs ->
+  let make_filter features exclude =
+    let intersects xs =
       let xs = Set.of_list (module String) xs in
-      fun tags -> not @@ Set.is_empty (Set.inter tags xs)
+      fun tags -> not @@ Set.is_empty (Set.inter tags xs) in
+    let selected = match features with
+      | None -> fun _ -> true
+      | Some xs -> intersects xs
+    and filtered = match exclude with
+      | None -> fun _ -> false
+      | Some xs -> intersects xs in
+    fun tags -> selected tags && not (filtered tags)
 
-  let plugins ?features {plugins} =
-    let is_selected = make_filter features in
+  let plugins ?features ?exclude {plugins} =
+    let is_selected = make_filter features exclude in
     Map.to_sequence ~order:`Decreasing_key plugins |>
     Sequence.fold ~init:[] ~f:(fun plugins (p,tags) ->
         if is_selected tags
@@ -329,19 +334,22 @@ module Context = struct
           (p,info) :: plugins
         else plugins)
 
-  let commands ?features {plugins} =
-    let is_selected = make_filter features in
+  let commands ?features ?exclude {plugins} =
+    let is_selected = make_filter features exclude in
     Hashtbl.fold command_descriptions ~init:[] ~f:(fun ~key ~data cmds ->
         match Map.find plugins key with
         | Some tags when is_selected tags -> data @ cmds
         | _ -> cmds)
 
+  let features {plugins} =
+    Set.to_list @@ Set.union_list (module String) (Map.data plugins)
+
   let pp ppf {env} =
     Map.iteri env ~f:(fun ~key ~data:{value} ->
         Format.fprintf ppf "%s = %s@\n" key value)
 
-  let digest ?features ctxt =
-    let plugins = plugins ?features ctxt |> List.map ~f:fst in
+  let digest ?features ?exclude ctxt =
+    let plugins = plugins ?features ?exclude ctxt |> List.map ~f:fst in
     let buffer = Buffer.create 128 in
     let ppf = Format.formatter_of_buffer buffer in
     List.iter plugins ~f:(Buffer.add_string buffer);
@@ -354,7 +362,7 @@ module Context = struct
     Buffer.contents buffer
 
   (* the info interface *)
-  let name = fst and doc = snd
+  let name = fst and doc x = String.uncapitalize (snd x)
 end
 
 type ctxt = Context.t

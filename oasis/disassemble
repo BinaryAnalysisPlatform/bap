@@ -10,4 +10,4 @@ Library disassemble_plugin
   CompiledObject: best
   BuildDepends: bap
   InternalModules: Disassemble_main
-  XMETAExtraLines: tags="command"
+  XMETAExtraLines: tags="command, analysis, disassemble"

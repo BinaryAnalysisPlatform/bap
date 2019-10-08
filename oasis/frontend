@@ -8,3 +8,4 @@ Executable "bap"
   Build$:         flag(everything) || flag(frontend)
   CompiledObject: best
   BuildDepends:   bap-main, bap, core_kernel, ppx_jane, findlib.dynload
+  XMETAExtraLines:  tags="command, admin"
