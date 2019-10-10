@@ -506,5 +506,7 @@ end
 
 include Data.Make(struct
     type nonrec t = t
-    let version = "1.0.0"
+    let version = "2.0.0"
   end)
+
+let () = Data.set_module_name instance "Bap.Std.Project"
