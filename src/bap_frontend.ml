@@ -26,6 +26,7 @@ $(b,bapbundle)(1), $(b,bapbuild)(1), $(b,bap)(3)"
 |}
 open Bap.Std
 open Core_kernel
+open Regular.Std
 open Bap_main.Extension
 
 module type unit = sig end
@@ -153,12 +154,14 @@ let () =
           feature Format.(pp_print_list ~pp_sep pp_print_string) plugins);
     Ok ()
   | `Formats ->
-    Project.available_writers () |>
-    List.iter ~f:(fun (name,`Ver ver, desc) ->
-        let name = sprintf "%s (%s)" name ver in
-        let desc =
-          Option.value desc ~default:"no description provided" in
-        Format.printf "%-24s %s@\n%!" name desc);
+    Data.all_writers () |>
+    List.iter ~f:(fun (typename,writers) ->
+        Format.printf "  %s:@\n" typename;
+        List.iter writers ~f:(fun (name,`Ver ver, desc) ->
+            let name = sprintf "%s (%s)" name ver in
+            let desc =
+              Option.value desc ~default:"no description provided" in
+            Format.printf "    %-22s %s@\n%!" name desc));
     Ok ()
 
 let () =
