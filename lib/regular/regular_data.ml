@@ -5,6 +5,8 @@ open Regular_data_intf
 module Read = Regular_data_read
 module Write = Regular_data_write
 
+type info = string * [`Ver of string] * string option
+
 let sexp_reader (type t) (module T : Sexpable with type t = t) =
   let of_bytes str = T.t_of_sexp (Sexp.of_string (Bytes.to_string str)) in
   let of_bigstring str = T.t_of_sexp (Sexp.of_bigstring str) in
@@ -52,65 +54,186 @@ let pretty_writer (type t)
     (module T : Pretty_printer.S with type t = t) =
   Write.create ~pp:T.pp ()
 
-(** A functor from the minimal signature  *)
-module Make(T : Versioned) = struct
-  type t = T.t
+module Ver = Comparable.Make(struct
+    type t = string [@@deriving sexp]
+    let sep = '.'
+    type strings = string list [@@deriving compare]
+    let compare x y =
+      let x = String.split ~on:sep x in
+      let y = String.split ~on:sep y in
+      compare_strings x y
+  end)
 
-  type info = string * [`Ver of string] * string option
-  let version = T.version
+module Id = String
 
-  module Ver = Comparable.Make(struct
-      type t = string [@@deriving sexp]
-      let sep = '.'
-      type strings = string list [@@deriving compare]
-      let compare x y =
-        let x = String.split ~on:sep x in
-        let y = String.split ~on:sep y in
-        compare_strings x y
+type 'a table = 'a Ver.Map.t Id.Map.t
+
+type 'a with_info = {
+  serializer : 'a;
+  name : string;
+  ver  : string;
+  desc : string option;
+}
+
+type 'a with_desc = {
+  cls : 'a;
+  desc : string option;
+}
+
+
+type 'a definition = {
+  module_name : string option;
+  default_printer : 'a writer with_info option;
+  default_reader : 'a reader with_info;
+  default_writer : 'a writer with_info;
+  writers : 'a writer with_desc table;
+  readers : 'a reader with_desc table;
+}
+
+
+
+module Class = struct
+  type 'a t = {
+    key : 'a Type_equal.Id.t;
+  }
+
+  module Registry = Univ_map.Make(struct
+      type 'a t = 'a definition
+      let sexp_of_t _ = sexp_of_opaque
     end)
 
-  module Id = String
+  let registry = ref Registry.empty
 
-  type 'a table = 'a Ver.Map.t Id.Table.t
+  let declare ?(name="opaque") () =
+    {key = Type_equal.Id.create ~name sexp_of_opaque}
 
-  type 'a with_info = {
-    serializer : 'a;
-    name : string;
-    ver  : string;
-    desc : string option;
-  }
+  let define {key} data =
+    registry := Registry.add_exn !registry key data
 
-  type 'a with_desc = {
-    cls : 'a;
-    desc : string option;
-  }
+  let refine {key} ~f =
+    registry := Registry.update !registry key ~f:(function
+        | None -> invalid_argf "Data class %s is not defined yet"
+                    (Type_equal.Id.name key) ()
+        | Some x -> f x)
 
 
-  type state = {
-    mutable default_printer : t writer with_info option;
-    mutable default_reader : t reader with_info;
-    mutable default_writer : t writer with_info;
-    writers : t writer with_desc table;
-    readers : t reader with_desc table;
-  }
+  let update (get,set) cls ~f =
+    refine cls ~f:(fun meta ->
+        set meta (f (get meta)))
 
-  let set (table : 'a table) ~ver name cls : unit =
-    Id.Table.change table name (function
-        | None -> Some (Ver.Map.singleton ver cls)
-        | Some vs -> Some (Ver.Map.set vs ver cls))
+  let add_method field cls ?desc ~ver name met : unit =
+    update field cls ~f:(fun mets -> Map.change mets name ~f:(function
+        | None -> Some (Ver.Map.singleton ver {cls=met; desc})
+        | Some vs -> Some (Ver.Map.set vs ver {cls=met; desc})))
+
 
   let find_with_ver (table : 'a table) ?ver name : (string * 'a) option =
-    match Hashtbl.find table name with
+    match Map.find table name with
     | None -> None
     | Some vs -> match ver with
       | Some ver -> Option.(Map.find vs ver >>| fun x -> ver,x)
       | None -> Map.max_elt vs
 
+  let find_with_info from ?ver name =
+    match find_with_ver from ?ver name with
+    | None -> invalid_argf "Unknown class %s" name ()
+    | Some (ver,{cls; desc}) -> {
+        ver; serializer = cls; name;
+        desc;
+      }
+
   let find (table : 'a table) ?ver name : 'a option =
     Option.(find_with_ver table ?ver name >>| snd)
 
+  let find_info (table : 'a table) ?ver name =
+    Option.(find_with_info table ?ver name)
+
   let find_cls table ?ver name =
     Option.map (find table ?ver name) ~f:(fun t -> t.cls)
+
+  let get (get,_) {key} =
+    get (Registry.find_exn !registry key)
+
+  let get_method fld cls ?ver name =
+    find_cls (get fld cls) ?ver name
+
+  let get_method_with_info fld cls ?ver name =
+    find_info (get fld cls) ?ver name
+
+  module Fields = struct
+    let writer_field =
+      (fun {writers} -> writers),
+      (fun s writers -> {s with writers})
+
+    let reader_field =
+      (fun {readers} -> readers),
+      (fun s readers -> {s with readers})
+
+    let default_printer_field =
+      (fun {default_printer} -> default_printer),
+      (fun s default_printer -> {s with default_printer})
+
+    let default_reader_field =
+      (fun {default_reader} -> default_reader),
+      (fun s default_reader -> {s with default_reader})
+
+    let default_writer_field =
+      (fun {default_writer} -> default_writer),
+      (fun s default_writer -> {s with default_writer})
+  end
+
+
+  open Fields
+
+  let writers cls = get writer_field cls
+  let readers cls = get reader_field cls
+
+  let collect_info (get,_) def =
+    Map.fold (get def) ~init:[] ~f:(fun ~key:name ~data:vers acc ->
+        Map.fold vers ~init:acc ~f:(fun ~key:ver ~data:{desc} acc ->
+            (name, `Ver ver, desc) :: acc))
+
+  type collector = {
+    collect : 'a. 'a definition -> info list
+  }
+
+  let writers_collector = {
+    collect = fun def -> collect_info writer_field def
+  }
+  let readers_collector = {
+    collect = fun def -> collect_info reader_field def
+  }
+
+  let info {collect}  =
+    Registry.to_alist !registry |>
+    List.map ~f:(fun (Registry.Packed.T (key,data)) ->
+        Type_equal.Id.name key,
+        collect data)
+
+  let all_readers () = info readers_collector
+  let all_writers () = info writers_collector
+end
+
+open Class.Fields
+type 'a cls = 'a Class.t
+
+module type Instance = sig
+  include Versioned
+  val instance : t cls
+end
+
+module type With_instance = sig
+  include Instance
+  include Data with type t := t
+end
+
+module New(T : Versioned.S) : Instance with type t = T.t = struct
+  include T
+  let instance : t cls = Class.declare ()
+  type nonrec info = info
+  let version = T.version
+
+  let cls = instance
 
   let make_default serializer = {
     serializer;
@@ -122,83 +245,95 @@ module Make(T : Versioned) = struct
   let default_writer = make_default (marshal_writer (module T))
   let default_reader = make_default (marshal_reader (module T))
 
-  let state = {
-    default_printer = None;
-    default_writer;
-    default_reader;
-    writers = Id.Table.create ();
-    readers = Id.Table.create ();
-  }
 
-  let add_cls (tc : 'a table) ?desc ~ver name cls =
-    set tc ~ver name {cls; desc}
+  let () = Class.define cls {
+      module_name = None;
+      default_printer = None;
+      default_writer;
+      default_reader;
+      writers = Id.Map.empty;
+      readers = Id.Map.empty;
+    }
+end
 
-  let add_reader = add_cls state.readers
-  let add_writer = add_cls state.writers
-  let find_reader = find_cls state.readers
-  let find_writer = find_cls state.writers
+(** A functor from the minimal signature  *)
+module Extend(T : sig
+    include Versioned.S
+    val instance : t cls
+  end) : With_instance with type t := T.t = struct
+  type t = T.t
 
-  let available (table : 'a table) : info list =
-    Hashtbl.fold table ~init:[] ~f:(fun ~key:name ~data:vers acc ->
+  type nonrec info = info
+  let version = T.version
+  let instance = T.instance
+  let cls = T.instance
+
+  let add_reader = Class.add_method reader_field cls
+  let add_writer = Class.add_method writer_field cls
+  let find_reader = Class.get_method reader_field cls
+  let find_writer = Class.get_method writer_field cls
+
+  let enum_info (table : 'a table) : info list =
+    Map.fold table ~init:[] ~f:(fun ~key:name ~data:vers acc ->
         Map.fold vers ~init:acc ~f:(fun ~key:ver ~data:{desc} acc ->
             (name, `Ver ver, desc) :: acc))
 
-  let get from ?ver name =
-    match find from ?ver name with
-    | None -> invalid_argf "Unknown class %s" name ()
-    | Some d -> d.cls
-
-  let get_with_info from ?ver name =
-    match find_with_ver from ?ver name with
-    | None -> invalid_argf "Unknown class %s" name ()
-    | Some (ver,{cls; desc}) -> {
-        ver; serializer = cls; name;
-        desc;
-      }
-
-  let get_reader_with_info = get_with_info state.readers
-  let get_writer_with_info = get_with_info state.writers
-
-  let available_readers () = available state.readers
-  let available_writers () = available state.writers
+  let available_readers () = enum_info (Class.readers cls)
+  let available_writers () = enum_info (Class.writers cls)
   let info s : info = s.name, `Ver s.ver, s.desc
-  let default_printer () = Option.map state.default_printer ~f:info
 
   let set_default_printer ?ver name =
-    state.default_printer <- Some (get_with_info state.writers ?ver name)
+    Class.update default_printer_field cls  ~f:(fun _ ->
+        Some (Class.get_method_with_info writer_field cls ?ver name))
 
   let with_printer ?ver name f =
-    let default = state.default_reader in
+    let default = Class.get default_writer_field cls in
     set_default_printer ?ver name;
-    protect ~f ~finally:(fun () -> state.default_reader <- default)
+    protect ~f ~finally:(fun () ->
+        Class.update default_writer_field cls ~f:(fun _ -> default))
 
-  let default_reader () = info state.default_reader
+
+  let default_printer () =
+    Class.get default_printer_field cls |>
+    Option.map ~f:info
+
+  let default_reader () =
+    info @@ Class.get default_reader_field cls
+
   let set_default_reader ?ver name =
-    state.default_reader <- get_with_info state.readers ?ver name
+    Class.update default_reader_field cls ~f:(fun _ ->
+        Class.get_method_with_info reader_field cls ?ver name)
+
   let with_reader ?ver name f  =
-    let default = state.default_reader in
+    let default = Class.get default_reader_field cls in
     set_default_reader ?ver name;
-    protect ~f ~finally:(fun () -> state.default_reader <- default)
+    protect ~f ~finally:(fun () ->
+        Class.update default_reader_field cls ~f:(fun _ -> default))
 
-  let default_writer () = info state.default_writer
+  let default_writer () =
+    info @@ Class.get default_writer_field cls
+
   let set_default_writer ?ver name =
-    state.default_writer <- get_with_info state.writers ?ver name
+    Class.update default_writer_field cls ~f:(fun _ ->
+        Class.get_method_with_info writer_field cls ?ver name)
+
   let with_writer ?ver name f  =
-    let default = state.default_writer in
+    let default = Class.get default_writer_field cls in
     set_default_writer ?ver name;
-    protect ~f ~finally:(fun () -> state.default_writer <- default)
+    protect ~f ~finally:(fun () ->
+        Class.update default_writer_field cls ~f:(fun _ -> default))
 
-
-  let get_default ?ver ?fmt place default =
+  let get_default ?ver ?fmt field default_field =
     match fmt with
-    | None -> default.serializer
-    | Some name -> get place ?ver name
+    | None -> (Class.get default_field cls).serializer
+    | Some name ->
+      (Class.get_method_with_info field cls ?ver name).serializer
 
   let writer ver fmt =
-    get_default ?ver ?fmt state.writers state.default_writer
+    get_default ?ver ?fmt writer_field default_writer_field
 
   let reader ver fmt =
-    get_default ?ver ?fmt state.readers state.default_reader
+    get_default ?ver ?fmt reader_field default_reader_field
 
   let size_in_bytes ?ver ?fmt = Write.size @@ writer ver fmt
   let of_bytes ?ver ?fmt = Read.of_bytes @@ reader ver fmt
@@ -254,7 +389,7 @@ module Make(T : Versioned) = struct
     let with_printer ?ver ?fmt f =
       match fmt with
       | Some _ -> f (writer ver fmt)
-      | None -> match state.default_printer  with
+      | None -> match Class.get default_printer_field cls with
         | None -> ()
         | Some writer -> f writer.serializer
 
@@ -281,4 +416,14 @@ module Make(T : Versioned) = struct
     let ver = version and name = "marshal" in
     add_reader ~desc ~ver name (marshal_reader (module T));
     add_writer ~desc ~ver name (marshal_writer (module T))
+
 end
+
+module Make(T : Versioned) = struct
+  module Self = New(T)
+  include Self
+  include Extend(Self)
+end
+
+let all_writers = Class.all_writers
+let all_readers = Class.all_readers
