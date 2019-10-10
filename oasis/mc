@@ -2,10 +2,20 @@ Flag mc
   Description: Build BAP Machine Code frontend
   Default: false
 
+Library mc_plugin
+  Path:            plugins/mc
+  FindLibName:     bap-plugin-mc
+  Build$:          flag(everything) || flag(mc)
+  CompiledObject:  best
+  Modules:         Mc_main
+  BuildDepends:    core_kernel, bap-main, bap
+  XMETAExtraLines: tags="command, disassemble"
+
+
 Executable "bap-mc"
   Path:           src
   MainIs:         bap_mc.ml
   Build$:         flag(everything) || flag(mc)
   Install:        true
   CompiledObject: best
-  BuildDepends:   bap, bap-plugins, cmdliner, findlib.dynload
+  BuildDepends: unix

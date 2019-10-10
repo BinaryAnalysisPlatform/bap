@@ -62,6 +62,7 @@ module Extension : sig
       ?docv:string ->
       ?doc:('k -> string) ->
       ?short:('k -> char) ->
+      ?as_flag:('k -> 'd) ->
       ('k -> string) ->
       'k list ->
       'd typ -> ('k * 'd) list param

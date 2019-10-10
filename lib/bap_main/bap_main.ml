@@ -13,6 +13,12 @@ let fail fmt = Printf.ksprintf failwith fmt
 let sprintf = Printf.sprintf
 
 
+type plugin_info = {
+  cons : string list;
+  tags : string list;
+  docs : string;
+}
+
 (** A simple config file parser.
     A config file is a list of <key> = <value> lines,
     with '#' being the comment symbol
@@ -273,13 +279,10 @@ module Context = struct
   let get _ x = snd (Future.peek_exn x)
 
   let set_plugins disabled plugins commands =
-    List.iter plugins ~f:(fun p ->
-        let name = Plugin.name p in
-        if not (Set.mem disabled name)
+    List.iter plugins ~f:(fun (plugin,info) ->
+        if not (Set.mem disabled plugin)
         then
-          let {Manifest.desc} = Bundle.manifest (Plugin.bundle p) in
-          Hashtbl.add_exn plugin_descriptions name desc);
-
+          Hashtbl.add_exn plugin_descriptions plugin info);
     List.iter commands ~f:(fun (plugin,commands) ->
         if not (Set.mem disabled plugin)
         then Hashtbl.add_exn command_descriptions
@@ -290,12 +293,9 @@ module Context = struct
           not (Set.mem disabled scope));
       plugins =
         let init = Map.empty (module String) in
-        List.fold ~init plugins ~f:(fun plugins p ->
-            let name = Plugin.name p in
+        List.fold ~init plugins ~f:(fun plugins (name,{tags}) ->
             if Set.mem disabled name then plugins
             else
-              let b = Plugin.bundle p in
-              let {Manifest.tags} = Bundle.manifest b in
               let data = Set.of_list (module String) tags in
               Map.add_exn plugins name data)
     }
@@ -330,7 +330,7 @@ module Context = struct
         then
           let info = match Hashtbl.find plugin_descriptions p with
             | None -> "no description provided"
-            | Some info -> info in
+            | Some {docs} -> docs in
           (p,info) :: plugins
         else plugins)
 
@@ -338,8 +338,8 @@ module Context = struct
     let is_selected = make_filter features exclude in
     Hashtbl.fold command_descriptions ~init:[] ~f:(fun ~key ~data cmds ->
         match Map.find plugins key with
-        | Some tags when is_selected tags -> data @ cmds
-        | _ -> cmds)
+        | Some tags -> if is_selected tags then data @ cmds else cmds
+        | None -> data @ cmds)
 
   let features {plugins} =
     Set.to_list @@ Set.union_list (module String) (Map.data plugins)
@@ -495,6 +495,7 @@ module Grammar : sig
     ?docv:string ->
     ?doc:('k -> string) ->
     ?short:('k -> char) ->
+    ?as_flag:('k -> 'd) ->
     ('k -> string) ->
     'k list ->
     'd Type.t -> ('k * 'd) list param
@@ -527,12 +528,6 @@ end = struct
     config : (string * string) list;
   }
 
-  type plugin_info = {
-    cons : string list;
-    tags : string list;
-    docs : string;
-  }
-
   type command = (ctxt -> (unit,Error.t) Result.t) Term.t * Term.info
   type ('a,'b) arity = 'a Type.t -> 'b Type.t
 
@@ -556,7 +551,7 @@ end = struct
   let actions = ref []
   let commands : command list ref = ref []
 
-  let dictionary ?(docv="VAL") ?doc ?short name keys data =
+  let dictionary ?(docv="VAL") ?doc ?short ?as_flag name keys data =
     let init = Term.const [] in
     Key (List.fold keys ~init ~f:(fun terms key ->
         let name = name key in
@@ -566,8 +561,11 @@ end = struct
         let names = match short with
           | None -> [name]
           | Some short -> [sprintf "%c" (short key); name] in
+        let vopt = match as_flag with
+          | None -> None
+          | Some f -> Some (f key) in
         let t = Type.converter data and d = Type.default data in
-        let term = Arg.(value & opt t d & info ~docv ~doc names) in
+        let term = Arg.(value & opt ?vopt t d & info ~docv ~doc names) in
         Term.(const (fun xs x -> (key,x) :: xs) $ terms $ term)))
 
   let argument (type a) ?(docv="ARG") ?doc t : a param =
@@ -826,7 +824,7 @@ end = struct
     let open Result in
     plugins_term >>= fun () ->
     let disabled = Set.of_list (module String) disabled in
-    let plugins = Hashtbl.data plugins in
+    let plugins = Hashtbl.to_alist plugin_infos in
     let commands = Hashtbl.to_alist plugin_cmds in
     Context.set_plugins disabled plugins commands >>= fun () ->
     let ctxt = Context.request () in

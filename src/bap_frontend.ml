@@ -60,10 +60,8 @@ let pp_info ppf infos =
         (Context.name info)
         (Context.doc info))
 
-let admin_commands ctxt = Context.commands ~features:["admin"] ctxt
-let commands ctxt = Context.commands ~exclude:["admin"] ctxt
+let commands ctxt = Context.commands ctxt
 let plugins ctxt = Context.plugins ctxt
-
 
 let print_info ctxt =
   Result.return @@
@@ -76,9 +74,6 @@ Common options:
   --plugin-path <DIR>      adds <DIR> to the plugins search path;
   --logdir <DIR>           creates a log file in <DIR>;
   --recipe <VAL>           extracts command line arguments from the recipe.
-
-Management commands:
-%a
 
 Commands:
 %a
@@ -95,7 +90,6 @@ Run 'bap <COMMAND> --help' for more information a command.
 Run 'bap --<PLUGIN>-help for more information about a plugin.
 Run 'bap --help' for the detailed manual.
 |}
-    pp_info (admin_commands ctxt)
     pp_info (commands ctxt)
     pp_info (plugins ctxt)
 
@@ -173,5 +167,6 @@ let () =
   match Bap_main.init ~default:print_info ~name:"bap" ~man ~argv () with
   | Ok () -> ()
   | Error (Error.Exit_requested code) -> exit code
+  | Error Error.Configuration -> exit 1
   | Error err -> Format.eprintf "%a@\n%!" Error.pp err;
     exit 1
