@@ -31,3 +31,5 @@ val pretty_writer : (module Pretty_printer.S with type t = 'a) -> 'a writer
 
 val all_readers : unit -> (string * info list) list
 val all_writers : unit -> (string * info list) list
+
+val set_module_name : 'a cls -> string -> unit

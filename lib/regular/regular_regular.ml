@@ -79,6 +79,7 @@ module Make(M : sig
 
     let () =
       let ver = version in
+      Option.iter module_name ~f:(set_module_name instance);
       add_writer ~desc:"Janestreet Binary Protocol" ~ver "bin" bin_writer;
       add_reader ~desc:"Janestreet Binary Protocol" ~ver "bin" bin_reader;
       add_writer ~desc:"Janestreet Sexp Protocol" ~ver "sexp" sexp_writer;

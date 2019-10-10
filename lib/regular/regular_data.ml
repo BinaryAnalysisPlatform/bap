@@ -180,6 +180,11 @@ module Class = struct
     let default_writer_field =
       (fun {default_writer} -> default_writer),
       (fun s default_writer -> {s with default_writer})
+
+
+    let module_name_field =
+      (fun {module_name} -> module_name),
+      (fun s module_name -> {s with module_name})
   end
 
 
@@ -189,12 +194,16 @@ module Class = struct
   let readers cls = get reader_field cls
 
   let collect_info (get,_) def =
+    let name = match def.module_name with
+      | None -> "unknown"
+      | Some name -> name in
+    name,
     Map.fold (get def) ~init:[] ~f:(fun ~key:name ~data:vers acc ->
         Map.fold vers ~init:acc ~f:(fun ~key:ver ~data:{desc} acc ->
             (name, `Ver ver, desc) :: acc))
 
   type collector = {
-    collect : 'a. 'a definition -> info list
+    collect : 'a. 'a definition -> string * info list
   }
 
   let writers_collector = {
@@ -206,8 +215,7 @@ module Class = struct
 
   let info {collect}  =
     Registry.to_alist !registry |>
-    List.map ~f:(fun (Registry.Packed.T (key,data)) ->
-        Type_equal.Id.name key,
+    List.map ~f:(fun (Registry.Packed.T (_,data)) ->
         collect data)
 
   let all_readers () = info readers_collector
@@ -427,3 +435,6 @@ end
 
 let all_writers = Class.all_writers
 let all_readers = Class.all_readers
+
+let set_module_name cls name = Class.update module_name_field cls ~f:(fun _ ->
+    Some name)

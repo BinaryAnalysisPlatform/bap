@@ -210,10 +210,13 @@ module Std : sig
     type lexbuf  = Lexing.lexbuf
     type scanbuf = Scanf.Scanning.scanbuf
 
+    type 'a cls
     type info = string * [`Ver of string] * string option
+
     val all_readers : unit -> (string * info list) list
     val all_writers : unit -> (string * info list) list
 
+    val set_module_name : 'a cls -> string -> unit
 
     (** Versioned interfaces  *)
     module Versioned : sig
@@ -513,11 +516,17 @@ module Std : sig
           version is not specified, then a writer with maximum version is
           returned.  *)
       val find_writer : ?ver:string -> string -> t writer option
+    end
 
+    module type With_instance = sig
+      include Versioned.S
+      val instance : t cls
+      include S with type t := t
     end
 
     (** Implements [Data.S] interface from the provided minimal implementation.  *)
-    module Make (T : Versioned.S) : S with type t := T.t
+    module Make (T : Versioned.S) : With_instance with type t := T.t
+
 
     (** [Read] typeclass.
 
