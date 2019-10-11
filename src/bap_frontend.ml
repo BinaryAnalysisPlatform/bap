@@ -100,6 +100,20 @@ let () =
   fun _ -> Ok ()
 
 
+let unqualified str = match String.rindex str '.' with
+  | None -> str
+  | Some p -> String.subo ~pos:(p+1) str
+
+let matches default set str = match set with
+  | None -> default
+  | Some set ->
+    Set.mem set str ||
+    let str = unqualified str in
+    Set.mem set str ||
+    Set.mem set (String.lowercase str)
+
+let strings = Option.map ~f:(Set.of_list (module String))
+
 let () =
   let what = Command.argument @@ Type.enum [
       "plugins", `Plugins;
@@ -154,14 +168,20 @@ let () =
           feature Format.(pp_print_list ~pp_sep pp_print_string) plugins);
     Ok ()
   | `Formats ->
+    let requested = strings features
+    and excluded = strings exclude in
+    let selected name =
+      matches true requested name && not (matches false excluded name) in
     Data.all_writers () |>
     List.iter ~f:(fun (typename,writers) ->
-        Format.printf "  %s:@\n" typename;
-        List.iter writers ~f:(fun (name,`Ver ver, desc) ->
-            let name = sprintf "%s (%s)" name ver in
-            let desc =
-              Option.value desc ~default:"no description provided" in
-            Format.printf "    %-22s %s@\n%!" name desc));
+        if selected typename then begin
+          Format.printf "  %s:@\n" typename;
+          List.iter writers ~f:(fun (name,`Ver ver, desc) ->
+              let name = sprintf "%s (%s)" name ver in
+              let desc =
+                Option.value desc ~default:"no description provided" in
+              Format.printf "    %-22s %s@\n%!" name desc)
+        end);
     Ok ()
 
 let () =
