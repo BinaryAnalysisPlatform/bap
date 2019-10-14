@@ -706,7 +706,7 @@ end = struct
     | `Loaded p ->
       let name = Plugin.name p in
       let (/) = Stdlib.Filename.concat in
-      let filename = Bap_main_config.confdir / name  / "config" in
+      let filename = Bap_main_config.confdir / "config" in
       let ctxt = {
         name;
         config = ConfigFile.read_or_fail filename
