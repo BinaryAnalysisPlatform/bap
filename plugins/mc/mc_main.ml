@@ -22,6 +22,7 @@ The following input formats are supported:
 
 open Core_kernel
 open Format
+open Regular.Std
 open Bap.Std
 open Bap_plugins.Std
 open Bap_core_theory
@@ -38,6 +39,8 @@ type error =
   | Invalid_base of string
   | Trailing_data of int
   | Inconsistency of KB.conflict
+  | Unknown_format of string * string * string list
+  | No_formats_expected of string
   | Disassembler_failed of Error.t
 
 type Extension.Error.t += Fail of error
@@ -62,11 +65,8 @@ let outputs = [
 
 let fail err = Error (Fail err)
 
-
-
 module Spec = struct
   open Extension
-
 
   let input = Command.arguments Type.string
 
@@ -185,11 +185,9 @@ let lift arch mem insn =
   | Ok (code,_) -> Ok (KB.Value.get Theory.Program.Semantics.slot code)
   | Error conflict -> fail (Inconsistency conflict)
 
-
 let print_insn_size formats mem =
   List.iter formats ~f:(fun _fmt ->
       printf "%#x@\n" (Memory.length mem))
-
 
 let print_insn insn_formats insn =
   List.iter insn_formats ~f:(fun fmt ->
@@ -219,9 +217,8 @@ let formats outputs kind =
   | None -> []
   | Some fmts -> fmts
 
-let print arch mem code outputs =
+let print arch mem code formats =
   lift arch mem code >>| fun insn ->
-  let formats = formats outputs in
   print_insn_size (formats `size) mem;
   print_insn (formats `insn) insn;
   print_bil (formats `bil) insn;
@@ -243,21 +240,59 @@ let create_disassembler ?(backend="llvm") arch =
   Result.map_error ~f:(fun err -> Fail (Disassembler_failed err))
 
 
+let module_of_kind = function
+  | `insn -> "Bap.Std.Insn"
+  | `bil -> "Bap.Std.Bil"
+  | `bir -> "Bap.Std.Blk"
+
+
+let validate_module kind formats =
+  let name = module_of_kind kind in
+  Data.all_writers () |>
+  List.find_map ~f:(fun (modname,fmts) ->
+      Option.some_if (String.equal modname name) fmts) |> function
+  | None ->
+    failwithf "Unable to find printers for module %s" name ()
+  | Some fmts ->
+    let fmts = List.map fmts ~f:(fun (n,_,_) -> n) in
+    let provided = Set.of_list (module String) fmts in
+    Result.all_unit @@
+    List.map formats ~f:(fun fmt ->
+        if Set.mem provided fmt then Ok ()
+        else Error (Unknown_format (name,fmt,fmts)))
+
+let validate_formats formats =
+  Result.map_error ~f:(fun err -> Fail err) @@
+  Result.all_unit @@
+  List.map formats ~f:(function
+      | (`insn|`bil|`bir) as kind,fmts ->
+        validate_module kind fmts
+      | (`kinds|`size),[] -> Ok ()
+      | `kinds,_ -> Error (No_formats_expected "kinds")
+      | `size,_ -> Error (No_formats_expected "size")
+      | `sema,_ ->
+        (* no validation right now, since the knowledge introspection
+           is not yet implemented *)
+        Ok ())
+
+
 let () = Extension.Command.(begin
     declare ~doc "mc"
       Spec.(args $arch $base $backend $only_one $input $outputs)
   end) @@ fun arch base backend only_one input outputs _ctxt ->
+  validate_formats outputs >>= fun () ->
   parse_base arch base >>= fun base ->
   read_input input >>= fun data ->
   create_memory arch data base >>= fun mem ->
   create_disassembler ?backend arch >>= fun dis ->
+  let formats = formats outputs in
   Dis.run dis mem
     ~init:0
     ~return:Result.return
     ~stop_on:[`Valid]
     ~invalid:(bad_insn base)
     ~hit:(fun state mem insn bytes ->
-        print arch mem insn outputs >>= fun () ->
+        print arch mem insn formats >>= fun () ->
         if only_one then Dis.stop state bytes
         else Dis.step state (bytes + Memory.length mem))
   >>= fun bytes ->
@@ -270,15 +305,6 @@ let () = Extension.Command.(begin
 
 let format_info get_fmts =
   get_fmts () |> List.map ~f:fst3 |> String.concat ~sep:", "
-
-(* let print_data_formats data_type =
- *   let print = Bap_format_printer.run `writers in
- *   match data_type with
- *   | `insn -> print (module Insn)
- *   | `bil  -> print (module Bil)
- *   | `bir  -> print (module Blk) *)
-
-
 
 
 let string_of_failure = function
@@ -308,6 +334,12 @@ let string_of_failure = function
     Bytes.set dump (pos stop) ')';
     sprintf "Invalid instruction at offset %d:\n%s"
       boff (Bytes.to_string dump)
+  | Unknown_format (mname,fmt,fmts) ->
+    let pp_sep = Format.pp_print_newline in
+    Format.asprintf "@[<v2>Unknown printer %s for %s, expecting: %a@]"
+      fmt mname Format.(pp_print_list ~pp_sep pp_print_string) fmts
+  | No_formats_expected name ->
+    sprintf "--show-%s doesn't expect any formats yet" name
 
 let () = Extension.Error.register_printer @@ function
   | Fail err -> Some (string_of_failure err)
