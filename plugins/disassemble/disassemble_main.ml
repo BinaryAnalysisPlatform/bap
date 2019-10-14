@@ -218,7 +218,7 @@ let input =
 
 let loader =
   Extension.Command.parameter
-    ~doc:"Use the specified loader"
+    ~doc:"Use the specified loader (defaults to `llvm')"
     "loader"
     Extension.Type.(some string)
 
@@ -304,11 +304,12 @@ let _disassemble_command_registered : unit =
   validate_passes_style old_style_passes passes >>=
   validate_passes >>= fun passes ->
   assert_only_one "loader" "raw" loader raw_bytes >>= fun () ->
+  let loader = Option.value loader ~default:"llvm" in
   Dump_formats.parse outputs >>= fun outputs ->
   let digest = make_digest [
       Extension.Context.digest ~features:features_used ctxt;
       Caml.Digest.file input;
-      option_digest ident loader;
+      loader;
       option_digest Arch.to_string raw_bytes;
     ] in
   import_knowledge_from_cache digest;
@@ -316,7 +317,7 @@ let _disassemble_command_registered : unit =
   let input = match raw_bytes with
     | Some arch ->
       Project.Input.binary arch ~filename:input
-    | None -> Project.Input.file ?loader ~filename:input in
+    | None -> Project.Input.file ~loader ~filename:input in
   Project.create
     input |> proj_error >>= fun proj ->
   if Option.is_none state then begin
@@ -344,6 +345,21 @@ let pp_guesses ppf badname =
     Format.fprintf ppf "did you mean %a?"
       (Format.pp_print_list ~pp_sep Format.pp_print_string) guesses
 
+let nice_pp_error fmt er =
+  let module R = Info.Internal_repr in
+  let rec pp_sexp fmt = function
+    | Sexp.Atom x -> Format.fprintf fmt "%s\n" x
+    | Sexp.List xs -> List.iter ~f:(pp_sexp fmt) xs in
+  let rec pp fmt r =
+    let open R in
+    match r with
+    | With_backtrace (r, backtrace) ->
+      Format.fprintf fmt "%a\n" pp r;
+      Format.fprintf fmt "Backtrace:\n%s" @@ String.strip backtrace
+    | String s -> Format.fprintf fmt "%s" s
+    | r -> pp_sexp fmt (R.sexp_of_t r) in
+  Format.fprintf fmt "%a" pp (R.of_info (Error.to_info er))
+
 let string_of_failure = function
   | Expects_a_regular_file ->
     "expected a regular file as input"
@@ -355,7 +371,7 @@ let string_of_failure = function
   | Incompatible_options (o1,o2) ->
     sprintf "options `%s' and `%s' can not be used together" o1 o2
   | Project err ->
-    asprintf "failed to build a project: %a" Error.pp err
+    asprintf "failed to build a project: %a" nice_pp_error err
   | Pass (Project.Pass.Unsat_dep (p,s)) ->
     sprintf "dependency %S of pass %S is not available"
       s (Project.Pass.name p)
