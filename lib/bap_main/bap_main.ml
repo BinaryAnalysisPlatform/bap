@@ -1032,7 +1032,7 @@ let (>>=) x f = Result.bind x ~f
 
 let init ?features ?library ?(argv=Sys.argv)
     ?env ?log ?out ?err ?man
-    ?name ?version
+    ?name ?(version=Bap_main_config.version)
     ?default
     () =
   match state.contents with
@@ -1063,7 +1063,7 @@ let init ?features ?library ?(argv=Sys.argv)
           | Error (p,e) -> `Snd (p,e)) in
     if List.is_empty failures
     then match
-        Grammar.eval ?name ?version ?env ?help:out
+        Grammar.eval ?name ~version ?env ?help:out
           ?err ?man ~ argv ?default ()
       with
       | Ok () ->
