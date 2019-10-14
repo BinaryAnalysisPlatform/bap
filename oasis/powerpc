@@ -6,7 +6,7 @@ Library powerpc_plugin
   XMETADescription: provide PowerPC lifter
   Path:             plugins/powerpc
   Build$:           flag(everything) || flag(powerpc)
-  BuildDepends:     bap, bap-abi, bap-c, bap-primus, zarith
+  BuildDepends:     bap, bap-abi, bap-c, zarith
   FindlibName:      bap-plugin-powerpc
   InternalModules:  Powerpc,
                     Powerpc_cpu,
@@ -29,8 +29,7 @@ Library powerpc_plugin
                     Powerpc_rotate,
                     Powerpc_shift,
                     Powerpc_store,
-                    Powerpc_sub,
-                    Powerpc_primus_loader
+                    Powerpc_sub
   XMETAExtraLines:  tags="powerpc, lifter"
 
 Library powerpc_test
