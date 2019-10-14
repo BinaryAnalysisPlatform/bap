@@ -128,23 +128,23 @@ let img_of_elf data elf : Img.t Or_error.t =
     | ELFCLASS64 -> `r64 in
   let addr = addr_maker addr_size in
   let entry = addr elf.e_entry in
-  let arch = match elf.e_machine, endian with
-    | EM_386, _ -> Ok `x86
-    | EM_X86_64, _ -> Ok `x86_64
-    | EM_ARM, LittleEndian -> Ok `armv7
-    | EM_ARM, BigEndian -> Ok `armv7eb
-    | EM_AARCH64, LittleEndian -> Ok `aarch64
-    | EM_AARCH64, BigEndian -> Ok `aarch64_be
-    | EM_SPARC,_ -> Ok `sparc
-    | EM_SPARCV9,_ -> Ok `sparcv9
-    | EM_PPC,_ -> Ok `ppc
-    | EM_PPC64, BigEndian -> Ok `ppc64
-    | EM_PPC64, LittleEndian -> Ok `ppc64le
-    | EM_S390,_ -> Ok `systemz
-    | EM_MIPS, BigEndian -> Ok `mips
-    | EM_MIPS, LittleEndian -> Ok `mipsel
-    | EM_MIPS_X, BigEndian -> Ok `mips64
-    | EM_MIPS_X, LittleEndian -> Ok `mips64el
+  let arch = match elf.e_machine, endian,addr_size with
+    | EM_386, _,_ -> Ok `x86
+    | EM_X86_64, _,_ -> Ok `x86_64
+    | EM_ARM, LittleEndian,_ -> Ok `armv7
+    | EM_ARM, BigEndian,_ -> Ok `armv7eb
+    | EM_AARCH64, LittleEndian,_ -> Ok `aarch64
+    | EM_AARCH64, BigEndian,_ -> Ok `aarch64_be
+    | EM_SPARC,_,_ -> Ok `sparc
+    | EM_SPARCV9,_ ,_-> Ok `sparcv9
+    | EM_PPC,_,_ -> Ok `ppc
+    | EM_PPC64, BigEndian,_ -> Ok `ppc64
+    | EM_PPC64, LittleEndian,_  -> Ok `ppc64le
+    | EM_S390,_,_ -> Ok `systemz
+    | EM_MIPS, BigEndian,`r32 -> Ok `mips
+    | EM_MIPS, LittleEndian, `r32 -> Ok `mipsel
+    | EM_MIPS, BigEndian,`r64 -> Ok `mips64
+    | EM_MIPS, LittleEndian, `r64 -> Ok `mips64el
     | _ -> errorf "can't load file, unsupported platform" in
   let segments,errors =
     Seq.filter_mapi elf.e_segments (create_segment addr) |>
