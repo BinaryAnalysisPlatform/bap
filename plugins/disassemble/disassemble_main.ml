@@ -349,7 +349,7 @@ let string_of_failure = function
     "expected a regular file as input"
   | Old_and_new_style_passes ->
     "passes are specified in both old an new style, \
-     please switch to the new style, e.g., `-p<p1,p2,p3>'"
+     please switch to the new style, e.g., `-p<p1>,<p2>,<p3>'"
   | Unknown_pass name ->
     asprintf "failed to find the pass named %S, %a" name pp_guesses name
   | Incompatible_options (o1,o2) ->
@@ -363,7 +363,7 @@ let string_of_failure = function
     asprintf "pass %S failed in runtime with %a@\nBacktrace:@\n%s@\n"
       (Project.Pass.name p) Exn.pp exn bt
   | Pass (Project.Pass.Runtime_error (p, exn)) ->
-    asprintf "pass %S failed in runtime with %a"
+    asprintf "pass %S failed at runtime with %a"
       (Project.Pass.name p) Exn.pp exn
   | Unknown_format fmt ->
     sprintf "unknown format %S" fmt
