@@ -546,7 +546,7 @@ end = struct
   let plugins = Hashtbl.create (module String)
   let plugin_spec = ref (fun _ -> unit)
   let plugin_page = ref []
-  let plugin_code = ref None
+  let plugin_code = ref (fun _ -> Ok ())
   let plugin_info = ref None
   let actions = ref []
   let commands : command list ref = ref []
@@ -647,7 +647,11 @@ end = struct
         cons = requires;
         docs = doc;
       };
-    plugin_code := Some code
+    let code' = !plugin_code in
+    plugin_code := fun ctxt -> match code ctxt with
+      | Ok () -> code' ctxt
+      | Error _ as err -> err
+
 
   let args = {
     len = Fin 0;
@@ -678,7 +682,7 @@ end = struct
   let reset_plugin () =
     plugin_spec := (fun _ -> unit);
     plugin_page := [];
-    plugin_code := None;
+    plugin_code := (fun _ -> Ok ());
     plugin_info := None;
     actions := []
 
@@ -712,8 +716,7 @@ end = struct
         Hashtbl.update plugin_pages name ~f:(function
             | None -> !plugin_page
             | Some men -> men @ !plugin_page) in
-      Option.iter plugin_code.contents ~f:(fun code ->
-          Hashtbl.add_exn plugin_codes name code);
+      Hashtbl.add_exn plugin_codes name !plugin_code;
       Option.iter plugin_info.contents ~f:(fun info ->
           Hashtbl.add_exn plugin_infos name
             (update_from_bundle info p));
