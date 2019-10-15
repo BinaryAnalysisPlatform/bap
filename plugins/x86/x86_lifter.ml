@@ -186,29 +186,21 @@ module ToIR = struct
       Bil.Move (v, Bil.(Var v + (df_to_offset mode df_e * i (bytes_of_width t))))
 
   let rep_wrap ?check_zf ~mode ~addr ~next stmts =
-    let bi = big_int_of_mode mode in
-    let bi0 = Word.b0 in
-    let bi1 = Word.b1 in
-    let endstmt = match check_zf with
-      | None -> Bil.Jmp(Bil.Int (bi addr))
-      | Some x when x = repz ->
-        (* a conditional jump was replaced with the new If statement here *)
-        Bil.If (zf_e, [Bil.Jmp (Bil.Int (bi addr))], [])
-      | Some x when x = repnz ->
-        Bil.If (zf_e, [], [Bil.Jmp (Bil.Int (bi addr))])
-      | _ -> failwith "invalid value for ?check_zf"
-    in
+    let extend = big_int_of_mode mode in
+    let zero = extend Word.b0 and one = extend Word.b1 in
     let rcx = match mode with
       | X86 -> R32.rcx
       | X8664 -> R64.rcx in
-    let rcx_e = Bil.Var rcx in
-    let open Stmt in
-    (* a conditional jump was replaced with the new If statement here *)
-    (If (Bil.(rcx_e = (Int (bi bi0))), [Jmp (Bil.Int (bi next))], []))
-    :: stmts
-    @ Move (rcx, Bil.(rcx_e - (Int (bi bi1))))
-      :: [(If (Bil.(rcx_e = (Int (bi bi0))), [Jmp (Bil.Int (bi next))], []))]
-    @ [endstmt]
+    let flag = tmp bool_t in
+    let cond = Bil.((var rcx <> int zero) land var flag) in
+    let head = Bil.(flag := int Word.b1) in
+    let tail =
+      Bil.(rcx := var rcx - int one) :: match check_zf with
+      | None -> []
+      | Some x when x = repz -> Bil.[flag := zf_e]
+      | Some x when x = repnz -> Bil.[flag := lnot zf_e]
+      | _ -> failwith "invalid value for ?check_zf" in
+    Bil.[head; while_ cond (stmts @ tail)]
 
   let compute_sf result = Bil.(Cast (HIGH, !!bool_t, result))
 
