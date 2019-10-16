@@ -286,6 +286,7 @@ module Plugins = struct
     if Future.is_decided loaded
     then []
     else begin
+      Dynlink.allow_unsafe_modules true;
       let excluded = Set.of_list (module String) exclude in
       let r =
         collect ?env ?provides ?library () |>
