@@ -155,15 +155,30 @@ let normalize_asm asm =
   String.substr_replace_all asm ~pattern:"\t"
     ~with_:" " |> String.strip
 
-let lookup_jumps bil = (object
-  inherit [kind list] Stmt.visitor
-  method! enter_jmp ex _ =
-    match ex with
-    | Bil.Int _ when under_condition -> [`Conditional_branch]
-    | Bil.Int _ -> [`Unconditional_branch]
-    | _ when under_condition -> [`Conditional_branch; `Indirect_branch]
-    | _ -> [`Unconditional_branch; `Indirect_branch]
-end)#run bil []
+type vis = {
+  jump : bool;
+  cond : bool;
+  indirect : bool;
+}
+
+let lookup_jumps bil =
+  let jump ?(cond=false) v = { v with jump = true; cond } in
+  let conditional v = jump ~cond:true v in
+  let indirect f v = f { v with indirect=true } in
+  let cons check x xs = if check then x :: xs else xs in
+  (object
+    inherit [vis] Stmt.visitor
+    method! enter_jmp ex vis = match ex with
+      | Bil.Int _ when under_condition -> conditional vis
+      | Bil.Int _ -> jump vis
+      | _ when under_condition -> indirect conditional vis
+      | _ -> indirect jump vis
+  end)#run bil {jump=false;cond=false;indirect=false} |> fun v ->
+  if not v.jump then []
+  else
+    cons (not v.cond) `Unconditional_branch [] |>
+    cons v.cond `Conditional_branch |>
+    cons v.indirect `Indirect_branch
 
 let lookup_side_effects bil = (object
   inherit [kind list] Stmt.visitor
