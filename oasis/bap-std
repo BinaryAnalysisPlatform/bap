@@ -24,6 +24,18 @@ Library bap
   Modules:         Bap
   InternalModules: Bap_project, Bap_self
 
+Library top
+  XMETADescription: Toplevel printers for bap-types and core_kernel
+  Build$:          flag(everything) || flag(bap_std)
+  Path: lib/bap
+  FindLibParent: bap
+  FindLibName: top
+  InternalModules: Bap_init_toplevel
+  BuildDepends: compiler-libs,
+                compiler-libs.common,
+                bap,
+                bap-main,
+                bap-plugins
 Library types
   Path:            lib/bap_types
   Build$:          flag(everything) || flag(bap_std)

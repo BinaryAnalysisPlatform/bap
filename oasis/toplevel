@@ -8,20 +8,3 @@ Executable "baptop"
   Build$:         flag(everything) || flag(toplevel)
   CompiledObject: byte
   BuildDepends:   bap-main, bap, core_kernel, ppx_jane, utop, threads, findlib.dynload
-
-
-# Flag bap_toplevel
-#   Description: Build BAP toplevel interative interpreter
-#   Default: false
-
-
-# Library bap_toplevel
-#   XMETADescription: Toplevel printers for bap-types and core_kernel
-#   Build$:          flag(everything) || flag(bap_toplevel)
-#   Path: lib/bap_toplevel
-#   FindLibName: bap-toplevel
-#   Modules : Core_printers
-#   InternalModules:
-#             Bap_install_printers,
-#             Bap_load_plugins
-#   BuildDepends: compiler-libs, compiler-libs.common
