@@ -100,6 +100,7 @@ let features_used = [
   "rooter";
   "reconstructor";
   "brancher";
+  "loader";
 ]
 
 type failure =
