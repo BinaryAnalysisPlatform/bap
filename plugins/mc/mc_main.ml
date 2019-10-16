@@ -42,6 +42,7 @@ type error =
   | Unknown_format of string * string * string list
   | No_formats_expected of string
   | Disassembler_failed of Error.t
+  | Loader_failed of Error.t
 
 type Extension.Error.t += Fail of error
 
@@ -69,6 +70,7 @@ module Spec = struct
   open Extension
 
   let input = Command.arguments Type.string
+  let file = Command.argument Type.file
 
   let arch_type = Type.define
       ~parse:(fun s -> match Arch.of_string s with
@@ -118,6 +120,13 @@ module Spec = struct
   let backend =
     let doc = "Specify the disassembler backend" in
     Command.parameter ~doc "backend" Type.(some string)
+
+  let loader =
+    Extension.Command.parameter
+      ~doc:"Use the specified loader (defaults to `llvm').
+          Use the loader `raw' to loade unstructured files"
+      "loader"
+      Extension.Type.(some string)
 end
 
 module Dis = Disasm_expert.Basic
@@ -206,6 +215,7 @@ let print_bir formats insn  =
         (List.map bs ~f:(fun b -> Bytes.to_string @@ Blk.to_bytes ~fmt b)))
 
 let print_sema formats sema = match formats with
+  | [] -> ()
   | ["all-slots"] -> printf "%a@\n" KB.Value.pp sema
   | some_slots ->
     let pp = KB.Value.pp_slots some_slots in
@@ -275,6 +285,16 @@ let validate_formats formats =
            is not yet implemented *)
         Ok ())
 
+let run ?(only_one=false) dis arch mem formats =
+  Dis.run dis mem
+    ~init:0
+    ~return:Result.return
+    ~stop_on:[`Valid]
+    ~invalid:(bad_insn (Memory.min_addr mem))
+    ~hit:(fun state mem insn bytes ->
+        print arch mem insn formats >>= fun () ->
+        if only_one then Dis.stop state bytes
+        else Dis.step state (bytes + Memory.length mem))
 
 let () = Extension.Command.(begin
     declare ~doc "mc"
@@ -286,21 +306,35 @@ let () = Extension.Command.(begin
   create_memory arch data base >>= fun mem ->
   create_disassembler ?backend arch >>= fun dis ->
   let formats = formats outputs in
-  Dis.run dis mem
-    ~init:0
-    ~return:Result.return
-    ~stop_on:[`Valid]
-    ~invalid:(bad_insn base)
-    ~hit:(fun state mem insn bytes ->
-        print arch mem insn formats >>= fun () ->
-        if only_one then Dis.stop state bytes
-        else Dis.step state (bytes + Memory.length mem))
-  >>= fun bytes ->
+  run ~only_one dis arch mem formats >>= fun bytes ->
   Dis.close dis;
   match String.length data - bytes with
   | 0 -> Ok ()
   | _ when only_one -> Ok ()
   | n -> fail (Trailing_data n)
+
+let () = Extension.Command.(begin
+    declare ~doc "objdump"
+      Spec.(args $backend $loader $file $outputs)
+  end) @@ fun backend loader input outputs _ctxt ->
+  validate_formats outputs >>= fun () ->
+  let loader = Option.value loader ~default:"llvm" in
+  let formats = formats outputs in
+  match Image.create ~backend:loader input with
+  | Error err -> Error (Fail (Loader_failed err))
+  | Ok (img,_warns) ->
+    let arch = Image.arch img in
+    create_disassembler ?backend arch >>= fun dis ->
+    Image.memory img |>
+    Memmap.to_sequence |>
+    Seq.filter_map ~f:(fun (mem,data) ->
+        Option.some_if
+          (Value.is Image.code_region data) mem) |>
+    Seq.map ~f:(fun mem ->
+        run dis arch mem formats >>= fun _bytes ->
+        Ok ()) |>
+    Seq.to_list |>
+    Result.all_unit
 
 
 let format_info get_fmts =
@@ -340,6 +374,9 @@ let string_of_failure = function
       fmt mname Format.(pp_print_list ~pp_sep pp_print_string) fmts
   | No_formats_expected name ->
     sprintf "--show-%s doesn't expect any formats yet" name
+  | Loader_failed err ->
+    Format.asprintf "Failed to unpack the file: %a" Error.pp err
+
 
 let () = Extension.Error.register_printer @@ function
   | Fail err -> Some (string_of_failure err)
