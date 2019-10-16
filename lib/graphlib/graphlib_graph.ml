@@ -1343,7 +1343,7 @@ module Fixpoint = struct
   let compute (type g n d)
       (module G : Graph with type t = g and type node = n)
       ?steps ?start ?(rev=false) ?step
-      ~init:(Solution {approx; iters; default}) ~equal ~merge ~f g : (n,d) t =
+      ~init:(Solution {approx=init; iters; default}) ~equal ~merge ~f g : (n,d) t =
     let nodes =
       reverse_postorder_traverse (module G) ~rev ?start g |>
       Sequence.to_array in
@@ -1390,7 +1390,7 @@ module Fixpoint = struct
         steps;
         iters;
         default;
-        approx = Map.fold approx ~init:G.Node.Map.empty
+        approx = Map.fold approx ~init
             ~f:(fun ~key:n ~data approx ->
                 Map.set approx ~key:nodes.(n) ~data);
       } in
@@ -1400,7 +1400,7 @@ module Fixpoint = struct
         | Step (visits,works,approx) -> loop visits (iters+1) works approx
       else make_solution iters approx in
     let works = List.init (Array.length nodes) ident in
-    let approx = Map.fold approx ~init:Int.Map.empty
+    let approx = Map.fold init ~init:Int.Map.empty
         ~f:(fun ~key:node ~data approx ->
             match Map.find rnodes node with
             | None -> approx

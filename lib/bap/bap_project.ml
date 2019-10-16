@@ -103,8 +103,7 @@ module Input = struct
     Hashtbl.set loaders ~key:name ~data:loader
 
   let is_code v =
-    Value.get Image.segment v |>
-    Option.value_map ~default:false ~f:Image.Segment.is_executable
+    Value.get Image.code_region v |> Option.is_some
 
   let is_data v = not (is_code v)
 

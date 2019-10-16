@@ -25,7 +25,9 @@
 
 
 (defun atexit (cb)
-  (declare (external "atexit")))
+  (declare (external "atexit"))
+  0)
+
 
 (defun stub ()
   "stubs that does nothing"

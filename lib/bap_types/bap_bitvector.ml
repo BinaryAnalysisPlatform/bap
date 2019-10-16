@@ -293,9 +293,20 @@ include Cons
 
 let safe f t = try_with (fun () -> f t)
 
-let to_int_exn x = Bitvec.to_int (payload x)
-let to_int32_exn x = Bitvec.to_int32 (payload x)
-let to_int64_exn x = Bitvec.to_int64 (payload x)
+
+let convert cast_z cast_bitvec x =
+  if Packed.is_signed x
+  then
+    cast_z @@
+    Z.signed_extract (Bitvec.to_bigint (payload x))
+      0                         (* pos *)
+      (Packed.bitwidth x)       (* len *)
+  else
+    cast_bitvec (payload x)
+
+let to_int_exn x = convert Z.to_int Bitvec.to_int x
+let to_int32_exn x = convert Z.to_int32 Bitvec.to_int32 x
+let to_int64_exn x = convert Z.to_int64 Bitvec.to_int64 x
 let to_int   = safe to_int_exn
 let to_int32 = safe to_int32_exn
 let to_int64 = safe to_int64_exn

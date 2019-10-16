@@ -9,6 +9,7 @@ type t [@@deriving bin_io]
 val empty : t
 val equal : t -> t -> bool
 val update : t -> Driver.state -> t KB.t
-val entry : t -> addr -> addr
+val belongs : t -> entry:addr -> addr -> bool
 val entries : t -> Set.M(Addr).t
+val siblings : t -> addr -> addr -> bool
 val domain : t KB.domain

@@ -31,10 +31,10 @@ val words : t -> size -> word table
 val segments : t -> segment table
 val symbols : t -> symbol table
 
-
 val segment : segment tag
 val symbol  : string tag
 val section : string tag
+val code_region   : unit tag
 val specification : Ogre.doc tag
 
 val memory : t -> value memmap
@@ -118,4 +118,8 @@ module Scheme : sig
     (addr * string, (addr -> string -> 'a) -> 'a) Ogre.attribute
 
   val base_address : (addr, (addr -> 'a) -> 'a) Ogre.attribute
+
+  val code_region :
+    (addr * size * off, (addr -> size -> off -> 'a) -> 'a) Ogre.attribute
+
 end

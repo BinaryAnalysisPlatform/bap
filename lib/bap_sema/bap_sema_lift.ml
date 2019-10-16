@@ -9,10 +9,11 @@ open Bap_ir
 
 let update_jmp jmp ~f =
   f (Ir_jmp.dst jmp) (Ir_jmp.alt jmp) @@ fun ~dst ~alt ->
-  Ir_jmp.reify
-    ~tid:(Term.tid jmp)
-    ?cnd:(Ir_jmp.guard jmp)
-    ?dst ?alt ()
+  let jmp' = Ir_jmp.reify
+      ~tid:(Term.tid jmp)
+      ?cnd:(Ir_jmp.guard jmp)
+      ?dst ?alt () in
+  Term.with_attrs jmp' (Term.attrs jmp)
 
 let intra_fall cfg block =
   Seq.find_map (Cfg.Node.outputs block cfg) ~f:(fun e ->
@@ -90,9 +91,16 @@ module IrBuilder = struct
     | [] -> []
     | b :: bs -> Term.set_attr b address addr :: bs
 
+  let is_conditional jmp = match Ir_jmp.cond jmp with
+    | Bil.Int _ ->  false
+    | _ -> true
+
   let turn_into_call ret blk =
-    Term.map jmp_t blk ~f:(update_jmp ~f:(fun dst _ jmp ->
-        jmp ~dst:ret ~alt:dst))
+    Term.map jmp_t blk ~f:(fun jmp ->
+        update_jmp jmp ~f:(fun dst _ make ->
+            if is_conditional jmp
+            then make ~dst:None ~alt:dst
+            else make ~dst:ret ~alt:dst))
 
   let landing_pad return jmp =
     match Ir_jmp.kind jmp with
@@ -126,14 +134,19 @@ module IrBuilder = struct
   let is_last_jump_nonconditional blk =
     match Term.last jmp_t blk with
     | None -> false
-    | Some jmp -> match Ir_jmp.cond jmp with
-      | Bil.Int x -> Word.equal Word.b1 x
-      | _ -> false
+    | Some jmp -> not (is_conditional jmp)
 
-  let fall_if_possible blk fall =
+  let fall_if_possible dst blk =
     if is_last_jump_nonconditional blk
     then blk
-    else Term.append jmp_t blk fall
+    else
+      Term.append jmp_t blk @@
+      Ir_jmp.reify ~dst ()
+
+  let concat_map_fst_and_rev xs f =
+    List.rev @@ match xs with
+    | [] -> []
+    | x :: xs -> f x @ xs
 
   let blk ?symtab cfg block : blk term list =
     let tid = Tid.for_addr (Block.addr block) in
@@ -147,24 +160,27 @@ module IrBuilder = struct
     let is_call = Insn.(is call x) || has_explicit_call symtab block
     and is_barrier = Insn.(is barrier x) in
     with_first_blk_addressed (Block.addr block) @@
-    List.rev @@ match blks,fall with
-    | [],_ -> []
-    | blks,_ when is_barrier -> blks
-    | x::xs, Some dst ->
-      if is_call
-      then turn_into_call fall x :: xs
-      else fall_if_possible x (Ir_jmp.reify ~dst ()) :: xs
-    | x::xs, None -> match inter_fall symtab block with
-      | None ->
-        (if is_call then turn_into_call None x else x)::xs
-      | Some dst ->
-        if is_call then
-          let next = Ir_blk.create () in
-          let fall = Some (Ir_jmp.resolved (Term.tid next)) in
-          let next = insert_inter_fall dst next in
-          next :: turn_into_call fall x :: xs
-        else
-          insert_inter_fall dst x :: xs
+    concat_map_fst_and_rev blks @@ function
+    | x when is_barrier -> [x]
+    | x -> match fall with
+      | Some dst -> [
+          fall_if_possible dst @@
+          if is_call
+          then turn_into_call fall x
+          else x
+        ]
+      | None -> match inter_fall symtab block with
+        | None -> [if is_call then turn_into_call None x else x]
+        | Some dst ->
+          if is_call then
+            let next = Ir_blk.create () in
+            let fall = Ir_jmp.resolved (Term.tid next) in
+            let next = insert_inter_fall dst next in [
+              next;
+              fall_if_possible fall @@
+              turn_into_call (Some fall) x
+            ]
+          else [insert_inter_fall dst x]
 end
 
 let blk cfg block = IrBuilder.blk cfg block

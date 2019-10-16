@@ -1508,12 +1508,17 @@ module Std : sig
           @param string_of_node name of a node.
           @param node_label text representation of the node label.
           @param edge_label text representation of the edge label.
+          @param cluster print graph as a cluster.
+          @param subgraph print graph as a subgraph.
 
           All optional parameters default to a null value, so that
           if a parameter is not specified, then a corresponding entry
-          will not be printed. *)
+          will not be printed.
+      *)
       val pp_graph :
         ?name:string ->
+        ?cluster:bool ->
+        ?subgraph:bool ->
         ?attrs:string list ->
         ?string_of_node: 'n symbolizer ->
         ?node_label: 'n symbolizer ->
