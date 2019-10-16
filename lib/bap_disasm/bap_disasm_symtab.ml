@@ -122,7 +122,6 @@ let explicit_callee {ecalls} = Map.find ecalls
 let implicit_callee {icalls} = Map.find icalls
 
 
-
 let (<--) = fun g f -> match g with
   | None -> None
   | Some (e,g) -> Some (e, f g)
@@ -130,8 +129,7 @@ let (<--) = fun g f -> match g with
 let build_cfg disasm calls entry =
   Disasm.explore disasm ~entry ~init:None
     ~follow:(fun dst ->
-        let p = Callgraph.entry calls dst in
-        KB.return Addr.(p = entry))
+        KB.return (Callgraph.belongs calls ~entry dst))
     ~block:(fun mem insns ->
         Disasm.execution_order insns >>= fun insns ->
         KB.List.filter_map insns ~f:(fun label ->
@@ -157,7 +155,10 @@ let build_cfg disasm calls entry =
 
 let build_symbol disasm calls start =
   build_cfg disasm calls start >>= function
-  | None -> assert false
+  | None ->
+    Format.eprintf "Failed to obtain a CFG from %a@\n%!"
+      Addr.pp start;
+    assert false
   | Some (entry,graph) ->
     Symbolizer.get_name start >>| fun name ->
     name,entry,graph
@@ -178,9 +179,7 @@ let create_inter disasm calls init =
         let src = Memory.min_addr src
         and dst = Memory.min_addr dst
         and next = Addr.succ (Memory.max_addr src) in
-        if Addr.equal
-            (Callgraph.entry calls src)
-            (Callgraph.entry calls dst)
+        if Callgraph.siblings calls src dst
         then KB.return s
         else
           Symbolizer.get_name dst >>| fun name ->

@@ -54,12 +54,14 @@ let test_substitute case =
   let min_addr = addr case.addr in
   let max_addr = addr (case.addr + String.length case.code - 1) in
   let base = Addr.of_int case.addr ~width:(addr_width case) in
+  let rooter = Rooter.create @@ Seq.of_list [base] in
   let symbolizer = Symbolizer.create @@ fun addr ->
     Option.some_if Addr.(base = addr) sub_name in
   let agent =
     let name = sprintf "test-project-symbolizer-for-%s" case.name in
     KB.Agent.register name in
   Symbolizer.provide agent symbolizer;
+  Rooter.provide rooter;
   let input =
     let file = "/dev/null" in
     let mem =
