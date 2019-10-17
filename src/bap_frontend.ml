@@ -96,7 +96,14 @@ Run 'bap --help' for the detailed manual.
 
 
 let () =
-  Command.declare ~doc:"does nothing" "." Command.args @@
+  let doc = {|
+# DESCRIPTION
+
+Does nothing and prints nothing. This command could be used to hush
+the default bap usage message, which is printed when the bap command
+is issued without any arguments.
+|} in
+  Command.declare ~doc "." Command.args @@
   fun _ -> Ok ()
 
 

@@ -1,4 +1,4 @@
-let doc = {|
+let mc_man = {|
 # DESCRIPTION
 
 Disassembles a (human readable) string of bytes. This command is the
@@ -18,6 +18,22 @@ The following input formats are supported:
     31d248f7f3";
 ```
 
+|}
+
+let objdump_man = {|
+# DESCRIPTION
+
+Disassembles and prints a binary using the linear sweep algorithm.
+This command is a sibling to the $(b,mc) command, except
+that it takes a binary file as an input. If the binary contains only
+raw code (i.e., no meta information), then use the $(b,raw) loader.
+
+# EXAMPLES
+
+```
+  bap objdump /bin/ls --show-asm
+  bap objdump ./code --loader=raw
+```
 |}
 
 open Core_kernel
@@ -297,7 +313,7 @@ let run ?(only_one=false) dis arch mem formats =
         else Dis.step state (bytes + Memory.length mem))
 
 let () = Extension.Command.(begin
-    declare ~doc "mc"
+    declare ~doc:mc_man "mc"
       Spec.(args $arch $base $backend $only_one $input $outputs)
   end) @@ fun arch base backend only_one input outputs _ctxt ->
   validate_formats outputs >>= fun () ->
@@ -314,7 +330,7 @@ let () = Extension.Command.(begin
   | n -> fail (Trailing_data n)
 
 let () = Extension.Command.(begin
-    declare ~doc "objdump"
+    declare ~doc:objdump_man "objdump"
       Spec.(args $backend $loader $file $outputs)
   end) @@ fun backend loader input outputs _ctxt ->
   validate_formats outputs >>= fun () ->
