@@ -16,10 +16,7 @@ module Make_unresolved(Machine : Primus.Machine.S) = struct
 end
 
 module Plt_jumps(Machine : Primus.Machine.S) = struct
-  module Interp = Primus.Interpreter.Make(Machine)
   module Linker = Primus.Linker.Make(Machine)
-  module Value  = Primus.Value.Make(Machine)
-
   open Machine.Syntax
 
   let section_memory sec_name =
