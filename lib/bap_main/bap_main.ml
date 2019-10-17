@@ -237,6 +237,23 @@ end = struct
     build (split input)
 end
 
+let first_paragraph = function
+  | `P p :: _ | `S _ :: `P p :: _ -> Some p
+  | _ -> None
+
+let first_sentence text =
+  List.hd @@ String.split_on_chars text ~on:[
+    '\n'; '.'
+  ]
+
+let first_sentence_of_man man =
+  Option.(first_paragraph man >>= first_sentence)
+
+let short_description
+    ?(default="no description provided") input =
+  Option.(input >>| String.uncapitalize |> Option.value ~default)
+
+
 module Context = struct
   type value = {
     scope : string;
@@ -362,7 +379,11 @@ module Context = struct
     Buffer.contents buffer
 
   (* the info interface *)
-  let name = fst and doc x = String.uncapitalize (snd x)
+  let name = fst
+  and doc x =
+    short_description @@
+    first_sentence_of_man @@
+    Markdown.to_manpage (snd x)
 end
 
 type ctxt = Context.t
@@ -642,11 +663,17 @@ end = struct
   }
 
   let extension ?(requires=[]) ?(provides=[]) ?(doc="") code =
-    plugin_info := Some {
-        tags = provides;
-        cons = requires;
-        docs = doc;
-      };
+    plugin_info := Option.some @@
+      Option.value_map !plugin_info ~f:(fun {tags; cons; docs} -> {
+            tags = tags @ provides;
+            cons = cons @ requires;
+            docs = docs ^ doc;
+          })
+        ~default:{
+          tags = provides;
+          cons = requires;
+          docs = doc;
+        };
     let code' = !plugin_code in
     plugin_code := fun ctxt -> match code ctxt with
       | Ok () -> code' ctxt
@@ -658,22 +685,11 @@ end = struct
     run = Term.const
   }
 
-  let first_paragraph = function
-    | `P p :: _ | `S _ :: `P p :: _ -> Some p
-    | _ -> None
-
-  let first_sentence text =
-    List.hd @@ String.split_on_chars text ~on:[
-      '\n'; '.'
-    ]
-
-  let short_description man =
-    Option.(first_paragraph man >>= first_sentence)
-
-
   let action ?(doc="no description provided") name {run} command =
     let man = Markdown.to_manpage doc in
-    let doc = Option.value (short_description man) ~default:doc in
+    let doc =
+      short_description ~default:doc @@
+      first_sentence_of_man man in
     let term = run @@ command
     and info = Term.info ~doc ~man name in
     actions := (name,doc) :: !actions;
@@ -695,12 +711,13 @@ end = struct
   let update_from_bundle info plugin =
     let b = Plugin.bundle plugin in
     let {Manifest.tags; cons; desc} = Bundle.manifest b in
-    {
-      docs = if String.is_empty info.docs then desc else info.docs;
-      tags = merge tags info.tags;
-      cons = merge cons info.cons
-    }
-
+    match info with
+    | None -> {docs = desc; tags; cons}
+    | Some info -> {
+        docs = if String.is_empty info.docs then desc else info.docs;
+        tags = merge tags info.tags;
+        cons = merge cons info.cons
+      }
 
   let () = Stream.observe Plugins.events @@ function
     | `Loaded p ->
@@ -712,14 +729,15 @@ end = struct
         config = ConfigFile.read_or_fail filename
       } in
       let term = !plugin_spec ctxt in
-      let () =
-        Hashtbl.update plugin_pages name ~f:(function
-            | None -> !plugin_page
-            | Some men -> men @ !plugin_page) in
+      let info = update_from_bundle !plugin_info p in
+      let man = match !plugin_page with
+        | [] -> Markdown.to_manpage info.docs
+        | page -> page in
+      Hashtbl.update plugin_pages name ~f:(function
+          | None -> man
+          | Some men -> men @ man);
       Hashtbl.add_exn plugin_codes name !plugin_code;
-      Option.iter plugin_info.contents ~f:(fun info ->
-          Hashtbl.add_exn plugin_infos name
-            (update_from_bundle info p));
+      Hashtbl.add_exn plugin_infos name info;
       Hashtbl.add_exn plugins name p;
       if not (List.is_empty !actions)
       then Hashtbl.add_exn plugin_cmds name !actions;
