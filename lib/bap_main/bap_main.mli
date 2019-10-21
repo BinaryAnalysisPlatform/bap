@@ -240,6 +240,99 @@
 
     [^1]: The list is not definitive and may change, consult the
     plugin documentation for the exhaustive and up-to-date list.
+
+
+    {2 The Command Line Interface}
+
+    The [Bap_main] library provides a few functions that could be used
+    to create composable command line interfaces. The final grammar
+    specification is build from piecies and is having the following
+    EBNF definition:
+
+    {v
+    G =
+      | "bap", common-options
+      | "bap" "<command1>", command1-grammar, common-options
+      ..
+      | "bap" "<commandN>", commandN-grammar, common-options
+
+    common-options =
+      | ""
+      | {"-L", [=], string}
+      | {"--load-path", [=], string}
+      | {"--plugin-path", [=], string}
+      | ["--log-dir", [=], string | "--log-dir", [=], string]
+      | "--recipe", recipe-grammar
+      | "--version"
+      | "--help", [[=], help-format]
+      | "--help-<plugin1>", [[=], help-format]
+      ...
+      | "--help-<pluginN>", [[=], help-format]
+      | "--<plugin1>"
+      ...
+      | "--<pluginN>"
+      | "--no-<plugin1>"
+      ...
+      | "--no-<pluginN>"
+      | plugin1-grammar
+      ...
+      | pluginN-grammar
+  v}
+
+
+    Each command can define its own syntax and use the full power of
+    the command line (including positional arguments and short keys)
+    as long as it doesn't introduce conflicts with the
+    [common-options] grammar.
+
+    The [common-options] grammar defines the syntax that is used to
+    specify plugin configuration parameters. Each plugin can register
+    its own parameters, but in a restricted way, e.g., no positional
+    arguments, all parameter names must be long and will be
+    automatically prefixed with the plugin name. Plugins configuration
+    parameters form the configuration context for each invocation of
+    BAP. These parameters also do not need an access to the command
+    line, and could be specified via configuration files, environment,
+    etc.
+
+    A couple of predefined rules are added to the [common-options]
+    grammar. First of all, for each registered [<plugin>]  the
+    ["--no-<plugin>"] option is added, which if specified, will
+    disable the plugin. A disabled plugin will still contribute to
+    the command line grammar, but the extensions which are registred
+    with it will not be loaded. Unless the extension is the command
+    itself, which will be still evaluated if selected on the command
+    line.
+
+    Also, for each registred [<plugin>] an option [--<plugin>] will be
+    added to enable the backward compatibility with the old style of
+    specifying passes.
+
+    Another rule which is added on per plugin basis, is the
+    [--help-<plugin>] rule which will render a manual page for the
+    given [<plugin>].
+
+    The [-L] and [--logdir] options are preparsed on the command line
+    and are used to specify the plugins search path (which obviously
+    should be specified before we can load plugins) and the logging
+    destination which we would like to know as soon as possible.
+
+
+    The [--recipe] option is very special, as it changes the command
+    line itself. Every occurence of the [--recipe] option will parse
+    the provided recipe, which will be evaluated to the list of
+    arguments which will be substituted instead of the specified
+    [--recipe] option. See [bap recipes] for more information about
+    the recipes.
+
+    Finally, the common [--version] and [--help] options are added
+    with an expected semantics.
+
+    For the detailed description of the command line interface read
+    the manual page generated with [bap --help].
+
+    Note, the actual parser is less strict than the grammar and may
+    accepts inputs that are not recognized by the grammar.
 *)
 
 open Bap_future.Std
@@ -433,7 +526,7 @@ module Extension : sig
   (** Interface for specifying commands.*)
   module Command : sig
 
-    (** denotes the command signature.
+    (** description of the command line syntax.
 
         The ['f] parameter is the type of function that is evaluated
         when the command is selected.
@@ -454,24 +547,27 @@ module Extension : sig
     *)
     type ('f,'r) t
 
-
     (** ['a param] command line parameter represented with the OCaml
         value of type ['a].  *)
     type 'a param
 
-    (** [declare signature name command] declares a [command].
+    (** [declare grammar name command] declares a [command].
 
         Declares to BAP that a command with the given [name] should be
         invoked when a user specifies the [name] or [:name] as the
-        first argument in the command line. The [signature] defines
+        first argument in the command line. The [grammar] defines
         the command line grammar of this command.
+
+
+        where [<command1>] ... [<commandN>] are the names of declared
+        commands, [grammar1] ... [grammarN] are corresponding grammars
+        for each command, and [G'] is the global
 
         When the command is selected and command line arguments are
         parsed succesfully, the [command] function is applied to the
-        the passed (and parsed to their OCaml representation) command
-        line arguments. The result of evaluation of the [command] will
-        become the result of the [Bap_main.init ()] expression in the
-        host program.
+        the specified command line arguments. The result of evaluation
+        of the [command] will become the result of the [Bap_main.init
+        ()] expression in the host program.
 
         If the function with the given [name] is already registered,
         then the command is not registred and BAP initialization will
@@ -542,23 +638,23 @@ module Extension : sig
       ('f,ctxt -> (unit,error) result) t -> 'f -> unit
 
 
-    (** [args] is an empty list of arguments.*)
+    (** [args] is the empty grammar.
+        Useful to define commands that do not take arguments or
+        as the initial grammar which is later extended with parameters
+        using the [$] operator (see below).
+    *)
     val args : ('a, 'a) t
 
 
-    (** [xs $ x] appends parameter [x] to the list of parameters [xs]  *)
+    (** [args t $ t'] extends the grammar specification [t] with [t'].*)
     val ($) : ('a,'b -> 'c) t -> 'b param -> ('a,'c) t
 
 
-    (** [arguments t] declares a positional argument of type [t].
+    (** [argument t] declares a positional argument of type [t].
 
-
-
-        Grammar:
+        The grammar of [args $ term $ argument t]:
         {v
-          term ::=
-               ...
-               <t>
+          G = term, [t] | [t], term
         v}
 
     *)
@@ -571,11 +667,9 @@ module Extension : sig
     (** [arguments t] declares an infinite number of positional
         arguments of type [t].
 
-        Grammar:
+        The grammar of [args $ term $ arguments t]:
         {v
-          term ::=
-               ...
-               <t>, <t>
+          G = term, {t} | {t}, term
         v}
 
 
@@ -601,20 +695,28 @@ module Extension : sig
       'a typ -> 'a list param
 
 
-    (** [switch values name]
+    (** [switch values name] declares a switch-type parameter.
 
-        Grammar:
+        The grammar of {args $ term $ switch values name}:
         {v
-          term ::=
-               ...
-               | --<(name v1)>
-               | --<(name v2)>
-               ...
-               | --<(name vN)>
-         v}
+          G  = term, G' | G', term
+          G' = ["--<name v0>" | .. | "--<name vN>"]
+        v}
 
-        where [v1] .. [vN] are elements of [values]
+        where [<name vK>] is the result of application of the [name]
+        function to the [K]th element of the [values] list.
 
+        The switch-type parameters enables a selection from a list of
+        choices. If [--<name vK>] is specified on the command line,
+        then [Some vK] will be passed to the command, otherwise,
+        the [None] value will be passed.
+
+        The [name] function could be non-injective, so that several
+        names can correspond to the same value in the choice list.
+
+        The [name] function shall return syntactically valid command
+        line keys, i.e., non-empty strings that do not contain
+        whitespaces.
     *)
     val switch :
       ?doc:('a -> string) ->
@@ -623,20 +725,33 @@ module Extension : sig
       'a option param
 
 
-    (** [switches values name]
+    (** [switches values name] is multiple choice switch-type parameter.
 
-        Grammar:
+        The grammar of [args $ term $ switches values name] is
         {v
-          term ::=
-               ...
-               | --<(name v1)>
-               | --<(name v2)>
-               ...
-               | --<(name vN)>
-         v}
+          G  = term, G' | G', term
+          G' = {"--<name v0>" | .. | "--<name vN>"}
+        v}
 
-        where [v1] .. [vN] are elements of [values]
+        where [v1] .. [vN] are elements of [values], and [<name vK>]
+        is the result of application of the [name] function to the
+        [K]th element of the [values] list.
 
+        The switch-type parameters enables a selection from a list of
+        choices, however unlike it [switch] counterpart, the selector
+        can occur more than once on the command line.
+        For every occurence [--<name vK>] on the command line, the
+        corresponding [vK] value will be added to the list that will
+        be passed as an argument to the command. The order of elements
+        in the list will match with the order of selectors on the
+        command line.
+
+        The [name] function could be non-injective, so that several
+        names can correspond to the same value in the choice list.
+
+        The [name] function shall return syntactically valid command
+        line keys, i.e., non-empty strings that do not contain
+        whitespaces.
     *)
     val switches :
       ?doc:('a -> string) ->
@@ -644,113 +759,400 @@ module Extension : sig
       ('a -> string) ->
       'a list param
 
-    (** [dictionary keys t name]
+    (** [dictionary keys t name] declares a dictionary-style parameter.
 
-        Grammar:
+        The grammar of [args $ term $ dictionary keys t name] is
         {v
-          term ::=
-               ...
-               | "--name(k1)" "=" <t>
-               | --<"name(k2)"> "=" <t>
-               ...
-               | --<"name(kN)"> "=" <t>
-         v}
+          G  = term, G' | G', term
+          G' = ["--<name k0>" [=] t] | .. | ["--<name kN>" [=] t]
+        v}
 
-        where name(k1)][k1] .. [kN] are elements of [keys]
+        where [k0] .. [kN] are elements of the [keys] list and [<name
+        kN>] is the result of application of the [name] function to
+        the [kN] element of the [keys] list.
 
+        For each occurence of [--<name k> [=] v] on the specified
+        command line a binding [(k,v)] will be added to the
+        dictionary, which is passed as an argument to the command.
+
+        Each key-value pair can occur at most once on the command
+        line. If a key-value pair is omitted, then the [default t]
+        will be added to the dictionary for that key. The length of the
+        passed dictionary is the same as the length of the [keys] list.
+
+
+        The [name] function could be non-injective, so that several
+        names can correspond to the same value in the choice list.
+
+        The [name] function shall return syntactically valid command
+        line keys, i.e., non-empty strings that do not contain
+        whitespaces.
+
+        {3 Keys as flags}
+
+        When the [as_flag] option is specified makes the value part
+        of the grammar becomes optional, thus the grammar of
+        [args $ term $ dictionary ~as_flag:s keys t name] becomes
+
+        {v
+          G  = term, G' | G', term
+          G' = ["--<name k0>" [[=] t]] | .. | ["--<name kN>" [[=] t]]
+        v}
+
+        If the value is omitted on the command line, by the key [k] is
+        specified, then the [(k,s)] will be added to the dictionary.
+
+        @parameter as_flag enables the "Keys as flags" mode.
+
+        @parameter docv is the name that will be used to reference
+        values in the documentation string.
+
+        @parameter doc if specified then [doc k] will be the
+        documentation string for the [--<key k>] parameter.
     *)
     val dictionary :
       ?docv:string ->
       ?doc:('k -> string) ->
-      ?short:('k -> char) ->
       ?as_flag:('k -> 'd) ->
       'k list ->
       'd typ ->
       ('k -> string) ->
       ('k * 'd) list param
 
-    (** [parameter t name]
+    (** [parameter t name] declares a generic command line parameter.
 
-        Grammar:
+        The grammar of [args $ term $ parameter t name]
         {v
-          term ::=
-               ...
-               | --"name" "=" <t>
-         v}
+          G  = term, G' | G', term
+          G' = ["--<name>" [=] t]
+        v}
 
-        where [k1] .. [kN] are elements of [keys]
+        If [--<name>=v] is specified, then [v] will be passed to the
+        command, otherwise the [default t] value will be passed.
+
+        {3 Parameters as flags}
+
+        When the [as_flag] option specified, then the value part of
+        becomes optional and the parameter could be specified without
+        it, as a flag, e.g., [--<name>], in that case the value passed
+        to the [as_flag] parameter will be passed as an argument to
+        the command.
+
+        {3 Short keys}
+
+        The [aliases] parameter may additionally contain
+        one-character-long names, which will be interpreted as short
+        keys, that should be specified with only one dash character,
+        i.e.,
+
+        The grammar of [args $ term $ parameter ~aliases:["<k>"] t name]
+        {v
+          G  = term, G' | G', term
+          G' = ["--<name>" [=] t | "-<k>" [=] t]
+        v}
+
+        where [<k>] is a single character.
+
+        @parameter as_flag enables the "Parameters as flags" mode.
+
+        @parameter doc is the documentation string.
+
+        @parameter docv is the name used to reference the parameter
+        value in its documentation.
+
+        @parameter aliases is a list of additional aliases of the
+        parameter.
 
     *)
     val parameter :
       ?docv:string ->
       ?doc:string ->
       ?as_flag:'a ->
-      ?short:char ->
+      ?aliases:string list ->
       'a typ ->
       string -> 'a param
 
+
+
+    (** [parameters] declares a generic command line parameter.
+
+        The grammar of [args $ term $ parameters t name]
+        {v
+          G  = term, G' | G', term
+          G' = {"--<name>" [=] t}
+        v}
+
+        This command line parameter behaves the same as its [parameter]
+        counterpart, but it could be specified more than once on the
+        command line. For each occurence of [--<name>=v], [v] will be
+        added to the list (in the order of occurence), which will be
+        passed as an argument to the command.
+
+        See the {!parameter} function for more details.
+    *)
     val parameters :
       ?docv:string ->
       ?doc:string ->
       ?as_flag:'a ->
-      ?short:char ->
+      ?aliases:string list ->
       string ->
       'a typ -> 'a list param
 
+
+    (** [flag name] declares a flag-style parameter.
+
+        The flag-style parameter is like a normal [parameter], except
+        that it is not possible to specify its value.
+
+        The grammar of [args $ term $ flag name] is
+
+        {v
+          G  = term, G' | G', term
+          G' = ["--<name>"]
+        v}
+
+        The flag could be specified at most once on the command line,
+        and if specified then the [true] value will be passed to the
+        command.
+
+        The rest of parameters of the [flag] function have the same
+        meaning as described in the {!parameter} function.
+    *)
     val flag :
       ?docv:string ->
       ?doc:string ->
-      ?short:char ->
+      ?aliases:string list ->
       string ->
       bool param
 
+
+
+    (** [flags] declares a muti-occuring flag-style parameter.
+
+        The grammar of [args $ term $ flag name] is
+
+        {v
+          G  = term, G' | G', term
+          G' = {"--<name>"}
+        v}
+
+        Unlike it {!flag} counterparts parameters declared as [flags]
+        make occur more than once on the command line. The number of
+        occurences will be passed to the command.
+    *)
     val flags :
       ?docv:string ->
       ?doc:string ->
-      ?short:char ->
+      ?aliases:string list ->
       string ->
       int param
-
   end
 
-  module Parameter : sig
-    type 'a t
 
-    val get : ctxt -> 'a t -> 'a
+  (** Configuration Parameters.
 
-    val declare :
-      ?as_flag:'a ->
-      'a typ -> ?deprecated:string -> ?default:'a ->
-      ?docv:string -> ?doc:string -> ?synonyms:string list ->
-      string -> 'a t
+      Use this module to declare and use configuration parameters for
+      your plugins. Algthough configuration parameters could be
+      specified via the command line, they are different from the
+      corresponding parameters of commands in several ways:
 
-    val declare_list :
-      ?as_flag:'a ->
-      'a typ -> ?deprecated:string -> ?default:'a list ->
-      ?docv:string -> ?doc:string ->
-      ?synonyms:string list ->  string -> 'a list t
+      - configuration parameters could be still passed even when there
+        is no command line interface (via configuration files and
+        environment);
 
-    val flag :
-      ?deprecated:string ->
-      ?docv:string -> ?doc:string ->
-      ?synonyms:string list ->
-      string -> bool t
+      - they are specific to plugins and are always prefixed with the
+        plugin name.
+  *)
+  module Configuration : sig
 
-    val determined : 'a t -> 'a future
+    (** a configuration parameter  *)
+    type 'a param
 
-    val doc_enum : ?quoted:bool -> (string * 'a) list -> string
 
-    val version : string
-    val datadir : string
-    val libdir : string
-    val confdir : string
-  end
-
-  module Context : sig
+    (** the current configuration.  *)
     type t = ctxt
+
+    (** a piece of information about a system component. *)
     type info
 
-    (** [plugins ctxt] enumerates all available plugins.
+
+    (** [get ctxt parameter] gets the value of the [parameter].
+
+        Accesses the value of the previously defined [parameter].
+
+        The [Extension.Syntax] module also provides an infix version
+        of this function under the [-->] name.
+    *)
+    val get : ctxt -> 'a param -> 'a
+
+
+    (** [parameter t name] declares a configuration parameter.
+
+        This declaration extends the [common-options] grammar by
+        adding the following rules
+        {v
+          common-options =
+            ...
+            | common-options, R | R, common-options
+          R = ["--<plugin>-<name>", ["="], t]
+        v},
+
+        where [<plugin>] is the name of the plugin in which the
+        configuration parameter is specified. (Note, the name of a
+        plugin is the name of the file in which it is packed without
+        the extension, e.g., a plugin [foo.plugin] has name [foo]).
+
+        When the [--<plugin>-<name> v] is specified on the command
+        line, or a configuration file, or in the environment, then
+        [get ctxt p] will evaluate to [v], where [p] is the declared
+        parameter.
+
+        The [as_flag] option makes the value part optional on the
+        command line, so that [declare ~as_flag=v t name] extends
+        the grammar by adding the following rules
+        {v
+          common-options =
+            ...
+            | common-options, R | R, common-options
+          R = ["--<plugin>-<name>", [["="], t]]
+        v},
+
+        Then, if the parameter was specified on the command line
+        without an argument, then [v] will be used as the value of the
+        parameter.
+
+        When [aliases] are specified, then for each [name] in the
+        aliases a [--<plugin>-<name>] option will be added.
+
+        Note, even if the name is short (i.e., consisting only of one
+        letter) it will still be prefixed with the plugin name and
+        interpreted as a long option, e.g., if name is ["k"] and the
+        plugin name is ["foo"], then the option name will be
+        ["--foo-k"].
+
+        {Examples}
+
+        Declaring a simple configuration parameter:
+
+        {[
+          open Core_kernel
+          open Bap_main.Extension
+
+          let depth = Configuration.parameter Type.int "depth"
+
+          let () =
+            Bap_main.Extension.declare @@ fun ctxt ->
+            printf "Will dive to depth %d\n"
+              (Configuration.get ctxt depth)
+        ]}
+
+        The [Extension.Syntax] module adds an infix [(-->)] operator
+        for the [get] function. Using this operator the previous
+        example could be rewritten as:
+
+        {[
+          open Core_kernel
+          open Bap_main.Extension
+          open Bap_main.Extension.Syntax
+
+          let depth = Configuration.parameter Type.int "depth"
+
+          let () =
+            Bap_main.Extension.declare @@ fun ctxt ->
+            printf "Will dive to depth %d\n" (ctxt-->depth)
+        ]}
+    *)
+    val parameter :
+      ?docv:string -> ?doc:string ->
+      ?as_flag:'a ->
+      ?aliases:string list ->
+      'a typ -> string -> 'a param
+
+
+    (** [parameters t name] declares a multi-occuring parameter.
+
+        This declaration extends the [common-options] grammar by
+        adding the following rules
+        {v
+          common-options =
+            ...
+            | common-options, R | R, common-options
+          R = {"--<plugin>-<name>", ["="], t}
+        v},
+
+        where [<plugin>] is the name of the plugin in which the
+        configuration parameter is specified. (Note, the name of a
+        plugin is the name of the file in which it is packed without
+        the extension, e.g., a plugin [foo.plugin] has name [foo]).
+
+        Every time the [--<plugin>-<name> v] is specified on the
+        command line, or a configuration file, or in the environment,
+        then [v] is added to the list to which [get ctxt p], where [p]
+        is the declared parameter.
+
+        The rest of the parameters have the same meaning as in
+        the {!parameter} function.
+    *)
+    val parameters :
+      ?docv:string -> ?doc:string ->
+      ?as_flag:'a ->
+      ?aliases:string list ->
+      'a typ -> string -> 'a list param
+
+
+    (** [flag name] declares a parameter that can be used as a flag.
+
+        This is a specialization of a more general {!parameter}
+        function. The [common-options] grammar is extended with the
+        following rules:
+
+        {v
+          common-options =
+            ...
+            | common-options, R | R, common-options
+          R = ["--<plugin>-<name>"]
+        v},
+
+        where [<plugin>] is the name of the plugin in which the
+        configuration parameter is specified. (Note, the name of a
+        plugin is the name of the file in which it is packed without
+        the extension, e.g., a plugin [foo.plugin] has name [foo]).
+
+        When the [--<plugin>-<name> v] is specified on the command
+        line, or in the environment, then [get ctxt p] will evaluate
+        to [true], where [p] is the declared parameter.
+    *)
+    val flag :
+      ?docv:string -> ?doc:string ->
+      ?aliases:string list ->
+      string -> bool param
+
+
+    (** [determined p] is a future that becomes determined when
+        context is ready.  *)
+    val determined : 'a param -> 'a future
+
+
+    (** [get ctxt version] is the application version.
+        This would be the value that was passes to the [version]
+        parameter of the {!Bap_main.init} function. *)
+    val version : string param
+
+
+    (** [get ctxt datadir] a directory for BAP readonly data. *)
+    val datadir : string param
+
+
+    (** [get ctxt libdir] a directory for BAP object files,
+        libraries, and internal binaries that are not intended to be
+        executed directly.  *)
+    val libdir : string param
+
+
+    (** [get ctxt confdir] a directory for BAP specific configuration files *)
+    val confdir : string param
+
+    (** [plugins ctxt] enumerates all enabled plugins.
 
         If [features] is specified, then enumerates only plugins
         than provide at least one of specified feature.
@@ -758,6 +1160,7 @@ module Extension : sig
         If [exclude] is specified, then exclude from the list
         plugins, that has one of the feature specified in the
         [exclude] list.
+
     *)
     val plugins :
       ?features:string list ->
@@ -773,11 +1176,10 @@ module Extension : sig
       ?exclude:string list -> ctxt -> info list
 
     (** [name info] returns the name of a plugin or command. *)
-    val name : info -> string
+    val info_name : info -> string
 
     (** [doc info] returns the short documentation.  *)
-    val doc : info -> string
-
+    val info_doc : info -> string
 
     (** [digest context] returns the [context] digest.
 
@@ -798,60 +1200,194 @@ module Extension : sig
 
     val features : ctxt -> string list
 
-
-    (** [get ctxt p] extracts the value of [p] from the context [ctxt] *)
-    val get : ctxt -> 'a Parameter.t -> 'a
-
     (** prints the context  *)
-    val pp : Format.formatter -> ctxt -> unit
+    val pp_ctxt : Format.formatter -> ctxt -> unit
   end
 
 
+  (** A lightweight syntax for accessing configuration parameters.
+
+      Once this module is opened it is possible to access the
+      parameter value using the infix notation, e.g., [ctxt-->arch].
+  *)
   module Syntax : sig
-    val (-->) : ctxt -> 'a Parameter.t -> 'a
+    val (-->) : ctxt -> 'a Configuration.param -> 'a
   end
 
+
+  (** Data types for parameters.
+
+  *)
   module Type : sig
     type 'a t = 'a typ
 
+
+    (** [define ~parse ~print default] defines a data type.
+
+        The [print x] is the textual representation of the value
+        [x]. For all [x] in the defined type, [x = parse (print x)].
+
+        The [digest x] function, if provided, should return a compact
+        representation of [x], which will be used for computing the
+        digest of the parameter. This option is useful for parameters
+        which a references by themselves (e.g., files, directories).
+    *)
     val define :
       ?digest:('a -> string) ->
       parse:(string -> 'a) ->
       print:('a -> string) -> 'a -> 'a t
 
+
+    (** [t || x] defines a new type with different default.
+
+        The new type has the same definition as [t] except the default
+        value is [x].
+    *)
+    val (||) : 'a t -> 'a -> 'a t
+
+
+    (** [bool] is ["true" | "false"]  *)
     val bool : bool t
+
+
+    (** [char] is a single character.  *)
     val char : char t
+
+
+    (** [int] is a sequence of digits.
+
+        Common OCaml syntax is supported, with binary, decimal,
+        and hexadecimal literals.
+    *)
     val int : int t
+
+
+    (** [nativeint] is a sequence of digit.
+
+        This type uses processor-native integer as OCaml representation so it
+        is one bit wider than the [int] type.
+    *)
     val nativeint : nativeint t
+
+
+    (** [int32] is a sequence of digits. *)
     val int32 : int32 t
+
+    (** [int64] is a sequence of digits. *)
     val int64 : int64 t
+
+    (** [float] is a floating point number. *)
     val float : float t
+
+
+    (** [string] is a sequence of bytes.
+
+        When the sequence contains whitespaces, delimit the whole
+        sequence with double or single quotes.*)
     val string : string t
+
+
+    (** [some t] extends [t] with an empty string. *)
+    val some : 'a t -> 'a option t
+
+
+    (** [enum repr] defines a type from the given representation.
+
+        Defines a type with such [print] and [parse], that for each
+        pair [(s,v)] in [repr], [print v = s] and [parse s = v].
+
+        It is a configuration error, when [repr] is empty.
+
+        If [repr] has repretitive keys, i.e., for the same textual
+        representation there are different values, then the result is
+        undefined.
+    *)
     val enum : (string * 'a) list -> 'a t
+
+
+    (** [file] is the file or directory name.
+
+        The file denoted by the name must exist.
+
+        If the name references to a regular file then the [digest] of the
+        file is the digest of its contents and the name itself doesn't
+        affect the digest value.
+
+        Otherwise, if the name doesn't refer to a regular file, then
+        the digest will depend on the name itself and the last
+        modification time of the file.
+    *)
+
     val file : string t
+
+
+    (** [dir] denotes a file which must be a directory.
+
+        The directory denoted by the name must exist. See the [file]
+        type for more information about computing the digest.
+    *)
     val dir : string t
+
+    (** [dir] denotes a file which must not be a directory.
+
+        The directory denoted by the name must exist. See the [file]
+        type for more information about computing the digest.
+    *)
     val non_dir_file : string t
+
+
+    (** [list ~sep t] is a list of [t] elements, separated with [sep].   *)
     val list : ?sep:char -> 'a t -> 'a list t
+
+
+    (** [array ~sep t] is an array of [t] elements, separated with [sep].
+        @parameter sep defaults to [','].
+    *)
     val array : ?sep:char -> 'a t -> 'a array t
+
+    (** [pair ~sep t1 t2] is a pair [t1] and [t2], separated with [sep].
+
+        @parameter sep defaults to [',']. *)
     val pair : ?sep:char -> 'a t -> 'b t -> ('a * 'b) t
+
+    (** [t2 ~sep t1 t2] is a pair [t1] and [t2], separated with [sep].
+
+        @parameter sep defaults to [','].
+    *)
     val t2 : ?sep:char -> 'a t -> 'b t -> ('a * 'b) t
-    val t3 : ?sep:char -> 'a t -> 'b t -> 'c t ->
-      ('a * 'b * 'c) t
-    val t4 : ?sep:char -> 'a t -> 'b t -> 'c t ->
-      'd t -> ('a * 'b * 'c * 'd) t
-    val some : ?none:string -> 'a t -> 'a option t
+
+
+    (** [t3 ~sep t1 t2 t3] is ([t1],[t2],[t3]), separated with [sep].
+        @parameter sep defaults to [',']. *)
+    val t3 : ?sep:char -> 'a t -> 'b t -> 'c t -> ('a * 'b * 'c) t
+
+    (** [t4 ~sep t1 t2 t3 t4] is ([t1],[t2],[t3],[t4), separated with [sep].
+        @parameter sep defaults to [',']. *)
+    val t4 : ?sep:char -> 'a t -> 'b t -> 'c t -> 'd t -> ('a * 'b * 'c * 'd) t
   end
 
 
+  (** An extensible set of possible errors  *)
   module Error : sig
     type t = error = ..
+
+
     type t += Configuration
+
     type t += Invalid of string
+
     type t += Exit_requested of int
+
     type t += Unknown_plugin of string
+
     type t += Bug of exn * string
 
+
+    (** [pp ppf err] outputs a human readable description of [err]  *)
     val pp : Format.formatter -> t -> unit
+
+    (** [register_printer to_string] registers a printer for a subset
+        of the errors. *)
     val register_printer : (t -> string option) -> unit
   end
 end

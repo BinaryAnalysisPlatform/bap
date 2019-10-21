@@ -88,6 +88,7 @@ module Type = struct
   let show {printer} x = Format.asprintf "%a" printer x
   let converter conv : 'a Arg.converter = conv.parser, conv.printer
   let default conv = conv.default
+  let redefault t default = {t with default}
   let wrap (parser,printer) default = {parser; printer; default}
 
   (* lift cmdliner into our converters *)
@@ -136,6 +137,7 @@ module Error = struct
   type t += Invalid of string
   type t += Bug of exn * string
   type t += Already_initialized
+  type t += Already_failed of t
   type t += Recursive_init
   type t += Broken_plugins of (string * Base.Error.t) list
   type t += Unknown_plugin of string
@@ -1051,14 +1053,17 @@ let load_recipe recipe =
 let (>>=) x f = Result.bind x ~f
 
 
-let init ?features ?library ?(argv=Sys.argv)
+let init
+    ?features
+    ?requires
+    ?library ?(argv=Sys.argv)
     ?env ?log ?out ?err ?man
     ?name ?(version=Bap_main_config.version)
     ?default
     () =
   match state.contents with
-  | Loaded _
-  | Failed _ -> Error Error.Already_initialized
+  | Loaded _ -> Error Error.Already_initialized
+  | Failed err -> Error (Error.Already_failed err)
   | Initializing -> Error Error.Recursive_init
   | Uninitialized ->
     let argv = match Pre.(extract ?env recipe argv) with
@@ -1077,7 +1082,7 @@ let init ?features ?library ?(argv=Sys.argv)
       | None -> match Pre.(extract ?env plugin_locations argv) with
         | None -> []
         | Some libs -> libs in
-    let result = Plugins.load ?provides:features ~library () in
+    let result = Plugins.load ?env:features ?provides:requires ~library () in
     let plugins,failures =
       List.partition_map result ~f:(function
           | Ok p -> `Fst p
