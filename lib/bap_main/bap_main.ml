@@ -1120,7 +1120,7 @@ let (>>=) x f = Result.bind x ~f
 let init
     ?features
     ?requires
-    ?library ?(argv=Sys.argv)
+    ?library ?(argv=[|Sys.executable_name |])
     ?env ?log ?out ?err ?man
     ?name ?(version=Bap_main_config.version)
     ?default
