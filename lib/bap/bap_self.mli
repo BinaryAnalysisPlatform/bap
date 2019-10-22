@@ -32,7 +32,7 @@ module Create() : sig
     val libdir : string
     val confdir : string
 
-    type 'a param = 'a Parameter.t
+    type 'a param
 
     type 'a converter = 'a Type.t
 
@@ -45,14 +45,13 @@ module Create() : sig
     val deprecated : string
 
     val param :
-      ?as_flag:'a ->
-      'a Type.t -> ?deprecated:string -> ?default:'a ->
+      'a Type.t -> ?deprecated:string -> ?default:'a -> ?as_flag:'a ->
       ?docv:string -> ?doc:string -> ?synonyms:string list ->
       string -> 'a param
 
     val param_all :
-      ?as_flag:'a ->
-      'a Type.t -> ?deprecated:string -> ?default:'a list ->
+      'a Type.t ->
+      ?deprecated:string -> ?default:'a list -> ?as_flag:'a ->
       ?docv:string -> ?doc:string ->
       ?synonyms:string list ->  string -> 'a list param
 

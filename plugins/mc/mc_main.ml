@@ -97,7 +97,7 @@ module Spec = struct
 
   let arch =
     let doc = "Target architecture" in
-    Command.parameter ~doc "arch" arch_type
+    Command.parameter ~doc arch_type "arch"
 
 
   let outputs =
@@ -123,11 +123,12 @@ module Spec = struct
       | `size -> "Print the instruction size." in
 
     let name s = "show-" ^ name_of_output s in
-    Extension.Command.dictionary ~doc ~as_flag name outputs Type.(list string)
+    Extension.Command.dictionary ~doc ~as_flag outputs
+      Type.(list string) name
 
   let base =
     let doc = "Specify an address of first byte" in
-    Command.parameter ~short:'b' ~doc "address" Type.string
+    Command.parameter ~aliases:["b"] ~doc Type.string "address"
 
   let only_one =
     let doc = "Stop after the first instruction is decoded" in
@@ -135,14 +136,14 @@ module Spec = struct
 
   let backend =
     let doc = "Specify the disassembler backend" in
-    Command.parameter ~doc "backend" Type.(some string)
+    Command.parameter ~doc Type.(some string) "backend"
 
   let loader =
     Extension.Command.parameter
-      ~doc:"Use the specified loader (defaults to `llvm').
-          Use the loader `raw' to loade unstructured files"
-      "loader"
-      Extension.Type.(some string)
+      ~doc:"Use the specified loader .
+          Use the loader `raw' to load unstructured files"
+      Extension.Type.(string =? "llvm") "loader"
+
 end
 
 module Dis = Disasm_expert.Basic
@@ -334,7 +335,6 @@ let () = Extension.Command.(begin
       Spec.(args $backend $loader $file $outputs)
   end) @@ fun backend loader input outputs _ctxt ->
   validate_formats outputs >>= fun () ->
-  let loader = Option.value loader ~default:"llvm" in
   let formats = formats outputs in
   match Image.create ~backend:loader input with
   | Error err -> Error (Fail (Loader_failed err))

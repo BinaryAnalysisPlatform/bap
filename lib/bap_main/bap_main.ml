@@ -7,9 +7,12 @@ open Bap_future.Std
 open Bap_plugins.Std
 open Bap_bundle.Std
 
-module Format = Caml.Format
+module Format = Stdlib.Format
+module Digest = Stdlib.Digest
+module Filename = Stdlib.Filename
+module Sys = Stdlib.Sys
 
-let fail fmt = Printf.ksprintf failwith fmt
+let fail fmt = Printf.ksprintf invalid_arg fmt
 let sprintf = Printf.sprintf
 
 
@@ -68,28 +71,93 @@ end
 
 module Type = struct
   open Cmdliner
-  type 'a parser = string -> [ `Ok of 'a | `Error of string ]
-  type 'a printer = Format.formatter -> 'a -> unit
+  type 'a parser = string -> 'a
+  type 'a printer = 'a -> string
   type 'a t = {
-    parser  : 'a parser;
-    printer : 'a printer;
+    name : string;
     default : 'a;
+    digest  : 'a -> string;
+    parse : string -> 'a;
+    print : 'a -> string;
   }
 
   let atom x = x
-  let create parser printer default = {parser; printer; default}
-  let define ~parse ~print default =
-    let parser x =
-      try `Ok (parse x) with exn -> `Error (Caml.Printexc.to_string exn) in
-    let printer ppf x =
-      Format.pp_print_string ppf (print x) in
-    create parser printer default
+  let define ?(name="VAL") ?digest ~parse ~print default =
+    let digest = match digest with
+      | None -> fun x -> Digest.string (print x)
+      | Some f -> f in
+    {name; parse; print; default; digest}
 
-  let show {printer} x = Format.asprintf "%a" printer x
-  let converter conv : 'a Arg.converter = conv.parser, conv.printer
+  let print {print=x} = x
+  let name {name=x} = x
+  let parse {parse=x} = x
+  let digest {digest=x} = x
+  let default {default=x} = x
+
+  let refine t validate = {
+    t with print = (fun x -> validate x; t.print x);
+           parse = (fun s -> let x = t.parse s in validate x; x);
+           default = (validate t.default; t.default);
+  }
+
+  let rename t name = {t with name}
+
+
+  let (=?) t default = {t with default}
+  let (|=) = refine
+  let (%:) name t = rename t name
+
+  let converter {parse; print} : 'a Arg.converter =
+    let parser s = try `Ok (parse s) with exn ->
+      `Error (Exn.to_string exn) in
+    let printer ppf s = Format.fprintf ppf "%s" (print s) in
+    parser, printer
   let default conv = conv.default
   let redefault t default = {t with default}
-  let wrap (parser,printer) default = {parser; printer; default}
+
+  let wrap ?digest (parser,printer) default =
+    let parse s = match parser s with
+      | `Ok s -> s
+      | `Error s -> invalid_arg s in
+    let print x = Format.asprintf "%a" printer x in
+    define ?digest ~parse ~print default
+
+
+  let path = wrap Arg.string ""
+
+  let digest_files ?(max_checks=4096) path =
+    let (++) init digest = Digest.string (init ^ digest) in
+    let digest_path path time =
+      Digest.string @@
+      sprintf "%s:%Ld" path (Int64.bits_of_float time) in
+    let new_digest input =
+      digest_path input @@ Unix.gettimeofday () in
+    let exception Stopped_checking in
+    let rec digest checked ~init path =
+      if checked < max_checks
+      then match Unix.stat path with
+        | {Unix.st_kind = S_REG; st_mtime} ->
+          checked+1,init ++ digest_path path st_mtime
+        | {Unix.st_kind = S_DIR; st_mtime} ->
+          let init = checked+1,init ++ digest_path path st_mtime in
+          Sys.readdir path |>
+          Array.fold ~init ~f:(fun (checked,init) entry ->
+              digest checked ~init @@ Filename.concat path entry)
+        | _ -> raise Stopped_checking
+        | exception _ -> raise Stopped_checking
+      else raise Stopped_checking in
+    match digest 0 ~init:"" path with
+    | exception Stopped_checking -> 0,new_digest path
+    | r -> r
+
+  let digest_path p =
+    if Sys.is_directory p then snd (digest_files p)
+    else Digest.file p
+
+  let file = wrap ~digest:digest_path Arg.file ""
+  let dir = wrap ~digest:digest_path Arg.dir ""
+  let non_dir_file = wrap ~digest:Digest.file Arg.non_dir_file ""
+
 
   (* lift cmdliner into our converters *)
   let bool = wrap Arg.bool false
@@ -103,9 +171,6 @@ module Type = struct
   let enum x =
     let _, default = List.hd_exn x in
     wrap (Arg.enum x) default
-  let file = wrap Arg.file ""
-  let dir = wrap Arg.dir ""
-  let non_dir_file = wrap Arg.non_dir_file ""
   let list ?sep x = wrap (Arg.list ?sep (converter x)) []
   let array ?sep x =
     let default = [| |] in
@@ -127,7 +192,7 @@ module Type = struct
     let d = converter z in
     let default = (default w, default x, default y, default z) in
     wrap (Arg.t4 ?sep a b c d) default
-  let some ?none x = wrap (Arg.some ?none (converter x)) None
+  let some x = wrap (Arg.some (converter x)) None
 end
 
 
@@ -260,6 +325,7 @@ module Context = struct
   type value = {
     scope : string;
     value : string;
+    digest : string;
   } [@@deriving sexp]
   type t = {
     env     : value Map.M(String).t;
@@ -290,9 +356,9 @@ module Context = struct
       Ok ()
     | Sealed -> Error Already_defined
 
-  let set ~scope ~key ~value = update @@ fun ctxt -> {
+  let set ~scope ~key ~value ~digest = update @@ fun ctxt -> {
       ctxt with
-      env = Map.add_exn ctxt.env ~key ~data:{scope; value}
+      env = Map.add_exn ctxt.env ~key ~data:{scope; value; digest}
     }
 
   let get _ x = snd (Future.peek_exn x)
@@ -341,24 +407,27 @@ module Context = struct
       | Some xs -> intersects xs in
     fun tags -> selected tags && not (filtered tags)
 
-  let plugins ?features ?exclude {plugins} =
-    let is_selected = make_filter features exclude in
+  let plugins {plugins} =
     Map.to_sequence ~order:`Decreasing_key plugins |>
-    Sequence.fold ~init:[] ~f:(fun plugins (p,tags) ->
-        if is_selected tags
-        then
-          let info = match Hashtbl.find plugin_descriptions p with
-            | None -> "no description provided"
-            | Some {docs} -> docs in
-          (p,info) :: plugins
-        else plugins)
+    Sequence.fold ~init:[] ~f:(fun plugins (p,_) ->
+        let info = match Hashtbl.find plugin_descriptions p with
+          | None -> "no description provided"
+          | Some {docs} -> docs in
+        (p,info) :: plugins)
 
-  let commands ?features ?exclude {plugins} =
-    let is_selected = make_filter features exclude in
-    Hashtbl.fold command_descriptions ~init:[] ~f:(fun ~key ~data cmds ->
-        match Map.find plugins key with
-        | Some tags -> if is_selected tags then data @ cmds else cmds
-        | None -> data @ cmds)
+  let commands {plugins} =
+    Hashtbl.fold command_descriptions ~init:[]
+      ~f:(fun ~key:plugin ~data cmds ->
+          if Map.mem plugins plugin then data @ cmds else cmds)
+
+
+  let refine ?provides ?exclude ctxt =
+    let is_selected = make_filter provides exclude in
+    let plugins = Map.filter ctxt.plugins ~f:is_selected in
+    let env = Map.filter ctxt.env ~f:(fun {scope} ->
+        Map.mem plugins scope) in
+    {plugins; env}
+
 
   let features {plugins} =
     Set.to_list @@ Set.union_list (module String) (Map.data plugins)
@@ -367,22 +436,20 @@ module Context = struct
     Map.iteri env ~f:(fun ~key ~data:{value} ->
         Format.fprintf ppf "%s = %s@\n" key value)
 
-  let digest ?features ?exclude ctxt =
-    let plugins = plugins ?features ?exclude ctxt |> List.map ~f:fst in
+
+  let digest ctxt =
     let buffer = Buffer.create 128 in
     let ppf = Format.formatter_of_buffer buffer in
-    List.iter plugins ~f:(Buffer.add_string buffer);
-    let scopes = Set.of_list (module String) plugins in
-    Map.iteri ctxt.env ~f:(fun ~key ~data:{scope; value} ->
-        if Set.mem scopes scope
-        then Format.fprintf ppf "%s = %s@\n" key value);
+    Map.iter_keys ctxt.plugins ~f:(Buffer.add_string buffer);
+    Map.iteri ctxt.env ~f:(fun ~key ~data:{digest} ->
+        Format.fprintf ppf "%s = %s@\n" key digest);
     Format.pp_print_flush ppf ();
     Caml.Digest.string @@
     Buffer.contents buffer
 
   (* the info interface *)
-  let name = fst
-  and doc x =
+  let info_name = fst
+  and info_doc x =
     short_description @@
     first_sentence_of_man @@
     Markdown.to_manpage (snd x)
@@ -428,10 +495,9 @@ module Grammar : sig
   type ('f,'r) spec
   type 'a param
 
-  type 'a rule = ?deprecated:string ->
-    ?default:'a ->
-    ?docv:string -> ?doc:string ->
-    ?synonyms:string list -> string -> (ctxt * 'a) Future.t
+  type 'a rule =
+    ?doc:string ->
+    ?aliases:string list -> string -> (ctxt * 'a) Future.t
 
   (** [extend arity conv make_term] extends the grammar of the plugin
       with a new term.
@@ -453,13 +519,15 @@ module Grammar : sig
   val describe : Manpage.block list -> unit
 
   val extension :
-    ?requires:string list ->
+    ?features:string list ->
     ?provides:string list ->
     ?doc:string ->
     (ctxt -> (unit,Error.t) Result.t) -> unit
 
   val action :
-    ?doc:string -> string ->
+    ?doc:string ->
+    ?requires:string list ->
+    string ->
     ('a,ctxt -> (unit,Error.t) Result.t) spec -> 'a -> unit
 
 
@@ -467,61 +535,61 @@ module Grammar : sig
   val ($) : ('a, 'b -> 'c) spec -> 'b param -> ('a,'c) spec
 
   val argument :
-    ?docv:string ->
-    ?doc:string -> 'a Type.t -> 'a param
+    ?doc:string ->
+    'a Type.t -> 'a param
 
   val arguments :
-    ?docv:string ->
-    ?doc:string -> 'a Type.t -> 'a list param
+    ?doc:string ->
+    'a Type.t -> 'a list param
 
   val switch :
     ?doc:('a -> string) ->
+    ?aliases:('a -> string list) ->
+    'a list ->
     ('a -> string) ->
-    'a list -> 'a option param
+    'a option param
 
   val switches :
     ?doc:('a -> string) ->
+    ?aliases:('a -> string list) ->
+    'a list ->
     ('a -> string) ->
-    'a list -> 'a list param
+    'a list param
 
   val parameter :
-    ?docv:string ->
     ?doc:string ->
     ?as_flag:'a ->
-    ?short:char ->
-    string ->
+    ?aliases:string list ->
     'a Type.t ->
+    string ->
     'a param
 
   val parameters :
-    ?docv:string ->
     ?doc:string ->
     ?as_flag:'a ->
-    ?short:char ->
-    string ->
+    ?aliases:string list ->
     'a Type.t ->
+    string ->
     'a list param
 
   val flag :
-    ?docv:string ->
     ?doc:string ->
-    ?short:char ->
+    ?aliases:string list ->
     string -> bool param
 
   val flags :
-    ?docv:string ->
     ?doc:string ->
-    ?short:char ->
+    ?aliases:string list ->
     string -> int param
 
   val dictionary :
-    ?docv:string ->
     ?doc:('k -> string) ->
-    ?short:('k -> char) ->
     ?as_flag:('k -> 'd) ->
-    ('k -> string) ->
+    ?aliases:('k -> string list) ->
     'k list ->
-    'd Type.t -> ('k * 'd) list param
+    'd Type.t ->
+    ('k -> string) ->
+    ('k * 'd) list param
 
   val eval :
     ?man:string ->
@@ -551,13 +619,16 @@ end = struct
     config : (string * string) list;
   }
 
-  type command = (ctxt -> (unit,Error.t) Result.t) Term.t * Term.info
+  type command =
+    (ctxt -> (unit,Error.t) Result.t) Term.t *
+    Term.info *
+    string list option
+
   type ('a,'b) arity = 'a Type.t -> 'b Type.t
 
-  type 'a rule = ?deprecated:string ->
-    ?default:'a ->
-    ?docv:string -> ?doc:string ->
-    ?synonyms:string list -> string -> (ctxt * 'a) Future.t
+  type 'a rule =
+    ?doc:string ->
+    ?aliases:string list -> string -> (ctxt * 'a) Future.t
 
   let unit = Term.const (Ok ())
 
@@ -574,16 +645,15 @@ end = struct
   let actions = ref []
   let commands : command list ref = ref []
 
-  let dictionary ?(docv="VAL") ?doc ?short ?as_flag name keys data =
+  let dictionary ?doc ?as_flag ?(aliases=fun _ -> []) keys data name =
+    let docv = Type.name data in
     let init = Term.const [] in
     Key (List.fold keys ~init ~f:(fun terms key ->
         let name = name key in
+        let names = name :: aliases key in
         let doc = match doc with
           | None -> sprintf "sets `%s' to %s" name docv
           | Some doc -> doc key in
-        let names = match short with
-          | None -> [name]
-          | Some short -> [sprintf "%c" (short key); name] in
         let vopt = match as_flag with
           | None -> None
           | Some f -> Some (f key) in
@@ -591,46 +661,47 @@ end = struct
         let term = Arg.(value & opt ?vopt t d & info ~docv ~doc names) in
         Term.(const (fun xs x -> (key,x) :: xs) $ terms $ term)))
 
-  let argument (type a) ?(docv="ARG") ?doc t : a param =
-    Pos (t, Arg.info ~docv ?doc [])
+  let argument (type a) ?doc t : a param =
+    Pos (t, Arg.info ~docv:(Type.name t) ?doc [])
 
-  let arguments (type a) ?(docv="ARG") ?doc t : a list param =
-    All (t, Arg.info ~docv ?doc [])
+  let arguments (type a) ?doc t : a list param =
+    All (t, Arg.info ~docv:(Type.name t) ?doc [])
 
-  let switch ?doc inj opts =
+  let switch ?doc ?(aliases=fun _ -> []) opts inj =
     let doc = Option.value doc
         ~default:(fun s -> sprintf "Select %s" (inj s)) in
     let opts = List.map opts ~f:(fun x ->
-        Some x, Arg.info ~doc:(doc x) [inj x]) in
+        Some x, Arg.info ~doc:(doc x) (inj x :: aliases x)) in
     Key Arg.(value & vflag None opts)
 
-  let switches ?doc inj opts =
+  let switches ?doc ?(aliases=fun _ -> []) opts inj =
     let doc = Option.value doc
         ~default:(fun s -> sprintf "Select %s" (inj s)) in
     let opts = List.map opts ~f:(fun x ->
-        x, Arg.info ~doc:(doc x) [inj x]) in
+        x, Arg.info ~doc:(doc x) (inj x :: aliases x) ) in
     Key Arg.(value & vflag_all [] opts)
 
-  let names short long = match short with
-    | None -> [long]
-    | Some short -> [sprintf "%c" short; long]
+  let names aliases name = match aliases with
+    | None -> [name]
+    | Some names -> name :: names
 
-  let parameter ?docv ?doc ?as_flag:vopt ?short long t : 'a param =
-    let t = Type.converter t and d = Type.default t in
-    Key Arg.(value & opt ?vopt t d & info ?docv ?doc &
-             names short long)
+  let parameter ?doc ?as_flag:vopt ?aliases t name : 'a param =
+    let t = Type.converter t and d = Type.default t
+    and docv = Type.name t in
+    Key Arg.(value & opt ?vopt t d & info ~docv ?doc &
+             names aliases name)
 
-  let parameters ?docv ?doc ?as_flag:vopt ?short long t : 'a param =
-    let t = Type.converter t in
-    Key Arg.(value & opt_all ?vopt t [] & info ?docv ?doc &
-             names short long)
+  let parameters ?doc ?as_flag:vopt ?aliases t name : 'a param =
+    let t = Type.converter t and docv = Type.name t in
+    Key Arg.(value & opt_all ?vopt t [] & info ~docv ?doc &
+             names aliases name)
 
-  let flag ?docv ?doc ?short long : bool param =
-    Key Arg.(value & flag & info ?docv ?doc & names short long)
+  let flag ?doc ?aliases name : bool param =
+    Key Arg.(value & flag & info ?doc & names aliases name)
 
-  let flags ?docv ?doc ?short long : int param =
-    let term = Arg.(value & flag_all & info ?docv ?doc &
-                    names short long) in
+  let flags ?doc ?aliases name : int param =
+    let term = Arg.(value & flag_all & info ?doc &
+                    names aliases name) in
     let count = Term.(const (List.count ~f:(fun x -> x)) $ term) in
     Key count
 
@@ -638,7 +709,7 @@ end = struct
     | Fin len, Pos _ -> Fin (len + 1)
     | Fin _, All _ -> Inf
     | Inf, All _ ->
-      invalid_arg "can't use `rest' twice in the same list of arguments"
+      invalid_arg "can't add an argument after arguments"
     | _ -> len
 
   let one t name p =
@@ -664,16 +735,16 @@ end = struct
           | _ -> assert false)
   }
 
-  let extension ?(requires=[]) ?(provides=[]) ?(doc="") code =
+  let extension ?(features=[]) ?(provides=[]) ?(doc="") code =
     plugin_info := Option.some @@
       Option.value_map !plugin_info ~f:(fun {tags; cons; docs} -> {
             tags = tags @ provides;
-            cons = cons @ requires;
+            cons = cons @ features;
             docs = docs ^ doc;
           })
         ~default:{
           tags = provides;
-          cons = requires;
+          cons = features;
           docs = doc;
         };
     let code' = !plugin_code in
@@ -687,7 +758,8 @@ end = struct
     run = Term.const
   }
 
-  let action ?(doc="no description provided") name {run} command =
+  let action ?(doc="no description provided") ?requires:deps
+      name {run} command =
     let man = Markdown.to_manpage doc in
     let doc =
       short_description ~default:doc @@
@@ -695,7 +767,7 @@ end = struct
     let term = run @@ command
     and info = Term.info ~doc ~man name in
     actions := (name,doc) :: !actions;
-    commands := (term,info) :: !commands
+    commands := (term,info,deps) :: !commands
 
   let reset_plugin () =
     plugin_spec := (fun _ -> unit);
@@ -748,10 +820,6 @@ end = struct
     | `Errored _ -> reset_plugin ()
     | _ -> ()
 
-  let prepend_deprecation_notice notice doc =
-    Option.value_map notice ~default:doc ~f: (fun notice ->
-        notice ^ " " ^ doc)
-
   let option_name ctxt name = sprintf "%s-%s" ctxt.name name
 
   let undashify = String.map ~f:(function
@@ -770,46 +838,46 @@ end = struct
   let get_from_config ctxt name =
     List.Assoc.find ~equal:String.equal ctxt.config name
 
-  let decide_default {Type.parser; default} user_default name ctxt =
+  let decide_default {Type.parse; default} name ctxt =
     let name = option_name ctxt name in
-    let parse ~where what = match parser what with
-      | `Ok v -> v
-      | `Error err ->
+    let parse ~where what = match parse what with
+      | v -> v
+      | exception exn ->
         fail "the value %S for the parameter %S is malformed in the %s - %s"
-          what name where err in
+          what name where (Exn.to_string exn) in
     match get_from_env name with
     | Some v -> parse ~where:"process environment " v
     | None -> match get_from_config ctxt name with
-      | None -> Option.value user_default ~default
+      | None -> default
       | Some v -> parse ~where:"configuration file" v
 
   let plugin_section _ =
     Manpage.s_common_options
 
-  let extend wrap typ make_term =
-    fun ?deprecated:notice ?default ?(docv="VAL")
-      ?(doc="Undocumented") ?(synonyms=[]) name ->
-      let value, ready = Future.create () in
-      let rest = !plugin_spec in
-      plugin_spec := begin fun ctxt ->
-        let names = List.map (name::synonyms) ~f:(option_name ctxt) in
-        let doc = prepend_deprecation_notice notice doc in
-        let docs = plugin_section ctxt.name in
-        let ainfo = Arg.info names ~docs ~doc ~docv in
-        let default = decide_default (wrap typ) default name ctxt in
-        let conv = Type.converter typ in
-        let set_value x = function
-          | Error _ as err -> err
-          | Ok () ->
-            Promise.fulfill ready x;
-            Context.set
-              ~scope:ctxt.name
-              ~key:(option_name ctxt name)
-              ~value:(Type.show (wrap typ) x) in
-        Term.(const set_value $
-              make_term conv default ainfo $ rest ctxt)
-      end;
-      Future.both Context.ready value
+  let extend (type a b) (wrap : (a,b) arity) typ make_term =
+    fun ?(doc="Undocumented") ?(aliases=[]) name ->
+    let value, ready = Future.create () in
+    let rest = !plugin_spec in
+    plugin_spec := begin fun ctxt ->
+      let names = List.map (name::aliases) ~f:(option_name ctxt) in
+      let docs = plugin_section ctxt.name in
+      let docv = Type.name (wrap typ) in
+      let ainfo = Arg.info names ~docs ~doc ~docv in
+      let default = decide_default (wrap typ) name ctxt in
+      let conv = Type.converter typ in
+      let set_value x = function
+        | Error _ as err -> err
+        | Ok () ->
+          Promise.fulfill ready x;
+          Context.set
+            ~scope:ctxt.name
+            ~key:(option_name ctxt name)
+            ~value:(Type.print (wrap typ) x)
+            ~digest:(Type.digest (wrap typ) x) in
+      Term.(const set_value $
+            make_term conv default ainfo $ rest ctxt)
+    end;
+    Future.both Context.ready value
 
   and list x = Type.list x
   and atom x = x
@@ -924,9 +992,11 @@ end = struct
     let helps = help_options ?version help plugin_names in
     let plugins = Pre.term >>> helps >>>
       Term.(const eval_plugins $disabled_plugins $plugin_options) in
-    let commands = List.map !commands ~f:(fun (command,info) ->
+    let commands = List.map !commands ~f:(fun (command,info,deps) ->
         plugins >>> Term.(const (fun cmd ->
-            let ctxt = Context.request () in
+            let ctxt =
+              Context.refine ?provides:deps @@
+              Context.request () in
             cmd ctxt) $ command), info) in
     let main = match default with
       | None -> plugins
@@ -949,46 +1019,40 @@ module Extension = struct
 
   let declare = Grammar.extension
 
-  type manpage_block = [
-    | `I of string * string
-    | `Noblank
-    | `P of string
-    | `Pre of string
-    | `S of string
-  ]
-
   let manpage man = Grammar.describe (man :> Cmdliner.Manpage.block list)
   let documentation doc =
     manpage (Markdown.to_manpage doc)
 
-
-  module Parameter = struct
+  module Configuration = struct
     open Cmdliner
 
-    type 'a t = (ctxt * 'a) future
-
-    let converter = Type.define
-    let deprecated = "DEPRECATED."
-
+    type 'a param = (ctxt * 'a) future
     let get _ x = snd (Future.peek_exn x)
 
     let atom = Grammar.atom and list = Grammar.list
 
-    let declare ?as_flag conv =
+    let parameter ?as_flag conv =
       Grammar.extend atom conv @@ fun conv def info ->
       Arg.value @@ Arg.opt ?vopt:as_flag conv def info
 
-    let declare_list ?as_flag conv =
+    let parameter ?doc ?as_flag ?aliases typ name
+      = parameter ?doc ?as_flag ?aliases typ name
+
+    let parameters ?as_flag conv =
       Grammar.extend list conv @@ fun conv def info ->
       Arg.value @@ Arg.opt_all ?vopt:as_flag conv def info
+
+    let parameters ?doc ?as_flag ?aliases typ name
+      = parameters ?doc ?as_flag ?aliases typ name
+
 
     let flag conv =
       Grammar.extend atom conv @@ fun _ def docs ->
       Term.(const (fun x -> x || def) $ Arg.value (Arg.flag docs))
 
-    let flag = flag Type.bool ~default:false
+    let flag = flag Type.bool
 
-    let determined (p:'a t) : 'a future = Future.map p ~f:snd
+    let determined (p:'a param) : 'a future = Future.map p ~f:snd
 
     let when_ready f : unit = Grammar.extension @@ fun ctxt ->
       try Ok (f ctxt) with
@@ -1000,6 +1064,7 @@ module Extension = struct
     let doc_enum = Arg.doc_alts_enum
 
     include Bap_main_config
+    include Context
   end
 
   module Command = struct
@@ -1019,9 +1084,8 @@ module Extension = struct
     let dictionary = Grammar.dictionary
   end
 
-  module Context = Context
   module Syntax = struct
-    let (-->) ctxt v = Parameter.get ctxt v
+    let (-->) ctxt v = Configuration.get ctxt v
   end
   module Error = Error
 end
@@ -1043,7 +1107,7 @@ let enable_logging = function
 let load_recipe recipe =
   let paths = [
     Stdlib.Filename.current_dir_name;
-    Extension.Parameter.datadir] in
+    Extension.Configuration.datadir] in
   match Bap_recipe.load ~paths recipe with
   | Ok r ->
     Stdlib.at_exit (fun () -> Bap_recipe.close r);

@@ -194,35 +194,33 @@ let process passes outputs project =
 let old_style_passes =
   Extension.Command.switches
     ~doc:(sprintf "Enables the pass %s in the old style (DEPRECATED)")
-    ident
     (Plugins.list () |> List.map ~f:Plugin.name)
+    ident
 
 let passes =
   Extension.Command.parameters
-    ~docv:"PASSES"
     ~doc:"Run the selected passes (in the specified order)"
-    ~short:'p' "passes" Extension.Type.string
+    ~aliases:["p"]
+    Extension.Type.("PASSES" %: string) "passes"
 
 let outputs =
   Extension.Command.parameters
-    ~docv:"[<FMT>[:<FILE>]]"
     ~doc:"Dumps the program to <FILE> (defaults to stdout) \
           in the <FMT> format (defaults to bir)."
     ~as_flag:"bir"
-    ~short:'d'
-    "dump" Extension.Type.string
+    ~aliases:["d"]
+    Extension.Type.("[<FMT>[:<FILE>]]" %: string)
+    "dump"
 
-let input =
-  Extension.Command.argument
-    ~docv:"FILE"
-    ~doc:"The input file" Extension.Type.string
+let input = Extension.Command.argument
+    ~doc:"The input file" Extension.Type.("FILE" %: string)
 
 let loader =
   Extension.Command.parameter
-    ~doc:"Use the specified loader (defaults to `llvm').
+    ~doc:"Use the specified loader.
           Use the loader `raw' to loade unstructured files"
+    Extension.Type.(string =? "llvm")
     "loader"
-    Extension.Type.(some string)
 
 let validate_input file =
   Result.ok_if_true (Sys.file_exists file)
@@ -281,16 +279,16 @@ end
 let _disassemble_command_registered : unit =
   Extension.Command.(begin
       declare ~doc:man "disassemble"
+        ~requires:features_used
         (args $input $outputs $old_style_passes $passes $loader)
     end) @@
   fun input outputs old_style_passes passes loader ctxt ->
   validate_input input >>= fun () ->
   validate_passes_style old_style_passes passes >>=
   validate_passes >>= fun passes ->
-  let loader = Option.value loader ~default:"llvm" in
   Dump_formats.parse outputs >>= fun outputs ->
   let digest = make_digest [
-      Extension.Context.digest ~features:features_used ctxt;
+      Extension.Configuration.digest ctxt;
       Caml.Digest.file input;
       loader;
     ] in

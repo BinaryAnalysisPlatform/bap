@@ -658,10 +658,7 @@ module Extension : sig
         v}
 
     *)
-    val argument :
-      ?docv:string ->
-      ?doc:string ->
-      'a typ -> 'a param
+    val argument : ?doc:string -> 'a typ -> 'a param
 
 
     (** [arguments t] declares an infinite number of positional
@@ -689,10 +686,7 @@ module Extension : sig
               (String.concat ~sep:" " inputs) output
         ]}
     *)
-    val arguments :
-      ?docv:string ->
-      ?doc:string ->
-      'a typ -> 'a list param
+    val arguments : ?doc:string -> 'a typ -> 'a list param
 
 
     (** [switch values name] declares a switch-type parameter.
@@ -720,6 +714,7 @@ module Extension : sig
     *)
     val switch :
       ?doc:('a -> string) ->
+      ?aliases:('a -> string list) ->
       'a list ->
       ('a -> string) ->
       'a option param
@@ -755,6 +750,7 @@ module Extension : sig
     *)
     val switches :
       ?doc:('a -> string) ->
+      ?aliases:('a -> string list) ->
       'a list ->
       ('a -> string) ->
       'a list param
@@ -811,9 +807,9 @@ module Extension : sig
         documentation string for the [--<key k>] parameter.
     *)
     val dictionary :
-      ?docv:string ->
       ?doc:('k -> string) ->
       ?as_flag:('k -> 'd) ->
+      ?aliases:('k -> string list) ->
       'k list ->
       'd typ ->
       ('k -> string) ->
@@ -865,7 +861,6 @@ module Extension : sig
 
     *)
     val parameter :
-      ?docv:string ->
       ?doc:string ->
       ?as_flag:'a ->
       ?aliases:string list ->
@@ -891,12 +886,12 @@ module Extension : sig
         See the {!parameter} function for more details.
     *)
     val parameters :
-      ?docv:string ->
       ?doc:string ->
       ?as_flag:'a ->
       ?aliases:string list ->
+      'a typ ->
       string ->
-      'a typ -> 'a list param
+      'a list param
 
 
     (** [flag name] declares a flag-style parameter.
@@ -919,7 +914,6 @@ module Extension : sig
         meaning as described in the {!parameter} function.
     *)
     val flag :
-      ?docv:string ->
       ?doc:string ->
       ?aliases:string list ->
       string ->
@@ -941,7 +935,6 @@ module Extension : sig
         occurences will be passed to the command.
     *)
     val flags :
-      ?docv:string ->
       ?doc:string ->
       ?aliases:string list ->
       string ->
@@ -1063,7 +1056,7 @@ module Extension : sig
         ]}
     *)
     val parameter :
-      ?docv:string -> ?doc:string ->
+      ?doc:string ->
       ?as_flag:'a ->
       ?aliases:string list ->
       'a typ -> string -> 'a param
@@ -1094,7 +1087,7 @@ module Extension : sig
         the {!parameter} function.
     *)
     val parameters :
-      ?docv:string -> ?doc:string ->
+      ?doc:string ->
       ?as_flag:'a ->
       ?aliases:string list ->
       'a typ -> string -> 'a list param
@@ -1123,7 +1116,7 @@ module Extension : sig
         to [true], where [p] is the declared parameter.
     *)
     val flag :
-      ?docv:string -> ?doc:string ->
+      ?doc:string ->
       ?aliases:string list ->
       string -> bool param
 
@@ -1133,28 +1126,44 @@ module Extension : sig
     val determined : 'a param -> 'a future
 
 
-    (** [get ctxt version] is the application version.
-        This would be the value that was passes to the [version]
-        parameter of the {!Bap_main.init} function. *)
-    val version : string param
+    (** [version] is the preconfigured application version.*)
+    val version : string
 
 
-    (** [get ctxt datadir] a directory for BAP readonly data. *)
-    val datadir : string param
+    (** [datadir] a directory for BAP readonly data. *)
+    val datadir : string
 
 
-    (** [get ctxt libdir] a directory for BAP object files,
+    (** [libdir] a directory for BAP object files,
         libraries, and internal binaries that are not intended to be
         executed directly.  *)
-    val libdir : string param
+    val libdir : string
 
 
-    (** [get ctxt confdir] a directory for BAP specific configuration files *)
-    val confdir : string param
+    (** [confdir] a directory for BAP specific configuration files *)
+    val confdir : string
+
+
+    (** [refine ~provides ~exclude ctxt] refines the context.
+
+        Refine the context by excluding from it all parameters of the
+        plugins that do not provide a feature from [provides] or
+        provide a feature from [excluded].
+
+        @parameter provides (defaults to set of all features) the set
+        of features that should be left.
+
+        @parameter exclude (defaults to the empty set) the set of
+        features that should be excluded.
+    *)
+    val refine :
+      ?provides:string list ->
+      ?exclude:string list ->
+      ctxt -> ctxt
 
     (** [plugins ctxt] enumerates all enabled plugins.
 
-        If [features] is specified, then enumerates only plugins
+        If [provides] is specified, then enumerates only plugins
         than provide at least one of specified feature.
 
         If [exclude] is specified, then exclude from the list
@@ -1162,18 +1171,14 @@ module Extension : sig
         [exclude] list.
 
     *)
-    val plugins :
-      ?features:string list ->
-      ?exclude: string list -> ctxt -> info list
+    val plugins : ctxt -> info list
 
 
     (** [commands ctxt] enumerates all available commands.
 
         If [features] and/or [exclude] are specified, then they have
         the same meaning as in {!plugins ~features ~exclude}.*)
-    val commands :
-      ?features:string list ->
-      ?exclude:string list -> ctxt -> info list
+    val commands : ctxt -> info list
 
     (** [name info] returns the name of a plugin or command. *)
     val info_name : info -> string
@@ -1194,14 +1199,12 @@ module Extension : sig
         Note: the digest doesn't include the command options and
         arguments only plugins configuration options.
     *)
-    val digest :
-      ?features:string list ->
-      ?exclude:string list -> ctxt -> string
+    val digest : ctxt -> string
 
     val features : ctxt -> string list
 
     (** prints the context  *)
-    val pp_ctxt : Format.formatter -> ctxt -> unit
+    val pp : Format.formatter -> ctxt -> unit
   end
 
 
@@ -1217,6 +1220,25 @@ module Extension : sig
 
   (** Data types for parameters.
 
+      A data type defines the validation, parsing, and textual
+      representation of data used for command and
+      configuration parameters.
+
+      Data types are not declarative, but stuctural, i.e., they define
+      a set of rules which describe the set of possible values and
+      mapping of those values to their OCaml representation.
+
+      Given that the textual representation of data could be non
+      structural itself, e.g., filenames do not define themselves but
+      act as a reference to some other data, it is also important to
+      correctly define the equality operator. We use the digest
+      function, that computes an md5 hash of the datum that
+      describes how it should be compared to other data of the same
+      type. This digests are approximations, which guarantee, that
+      data with equal digests are equal (modulo probability of md5
+      hash collision), but not always the vice verse (since
+      it is not always possible or feasible to compute the complete
+      digest, cf., digest of the [/dev] folder).
   *)
   module Type : sig
     type 'a t = 'a typ
@@ -1227,24 +1249,88 @@ module Extension : sig
         The [print x] is the textual representation of the value
         [x]. For all [x] in the defined type, [x = parse (print x)].
 
-        The [digest x] function, if provided, should return a compact
-        representation of [x], which will be used for computing the
-        digest of the parameter. This option is useful for parameters
-        which a references by themselves (e.g., files, directories).
+        The [parse] function may raise the [Invalid_arg] exception
+        to indicate that the provided datum doesn't represent a valid
+        element of the type. It may raise any other exception to
+        indicate other possible errors. In any case, any exception
+        raised by the [parse], [print], or [digest] functions will be
+        caught and propagated to the [Bap_main.init] abnormal
+        termination with a corresponding error condition.
+
+        @parameter digest if provided then [digest x], should
+        evaluate to an md5 hash of [x] such that if for all [y],
+        if [digest x = digest y mod md5] then [x = y]. I.e., if
+        digests are equal (modulo md5 collistion) then the [x] and [y]
+        are also equal. The opposite is not guaranteed, but most of
+        the data types usually provide this guarantee.
+
+        @parameter name is the variable name which is used to
+        reference to elements of the type [t]. (defaults to ["VAL"]).
     *)
     val define :
+      ?name:string ->
       ?digest:('a -> string) ->
       parse:(string -> 'a) ->
       print:('a -> string) -> 'a -> 'a t
 
 
-    (** [t || x] defines a new type with different default.
+
+    (** [refine t valid] narrows the set of [t], to those that [valid].
+        The [valid] function shall raise the [Invalid_arg] exception,
+        for all values that are not members of the newly defined data type.
+    *)
+    val refine : 'a t -> ('a -> unit) -> 'a t
+
+
+    (** [renam t var] denotes elements of [t] with the new [var].  *)
+    val rename : 'a t -> string -> 'a t
+
+
+    (** [digest t x] is the digest of [x].  *)
+    val digest : 'a t -> 'a -> string
+
+    (** [t =? x] defines a new type with different default.
 
         The new type has the same definition as [t] except the default
         value is [x].
     *)
-    val (||) : 'a t -> 'a -> 'a t
+    val (=?) : 'a t -> 'a -> 'a t
 
+
+    (** [t |? guard] is [refine t guard] *)
+    val (|=) : 'a t -> ('a -> unit) -> 'a t
+
+    (** [name %: t] is [rename t name].
+
+        Note, operators [(=?)], [|?], and [(%:)] are designed to be
+        used together for easy definitions of new types, e.g.,
+
+        {[
+          let arch = Type.("code" %: arch_t =? `x86 |= only_x86)
+        ]}
+
+    *)
+    val (%:) : string -> 'a t -> 'a t
+
+
+    (** [print t x] is the textual representation of [x].  *)
+    val print : 'a t -> 'a -> string
+
+
+    (** [parse t s] is the OCaml value representing [s].
+
+        Of those [s] which are not valid, raises the [Invalid_arg] exception.*)
+    val parse : 'a t -> string -> 'a
+
+
+    (** [name t] is the name of the var that ranges of [t].  *)
+    val name : 'a t -> string
+
+
+    (** [default t] is the default value of [t].  *)
+    val default : 'a t -> 'a
+
+    (** {3 Predefined data types}  *)
 
     (** [bool] is ["true" | "false"]  *)
     val bool : bool t
@@ -1252,7 +1338,6 @@ module Extension : sig
 
     (** [char] is a single character.  *)
     val char : char t
-
 
     (** [int] is a sequence of digits.
 
@@ -1305,19 +1390,45 @@ module Extension : sig
     val enum : (string * 'a) list -> 'a t
 
 
-    (** [file] is the file or directory name.
+    (** [path] denotes a file path.
 
-        The file denoted by the name must exist.
-
-        If the name references to a regular file then the [digest] of the
-        file is the digest of its contents and the name itself doesn't
-        affect the digest value.
-
-        Otherwise, if the name doesn't refer to a regular file, then
-        the digest will depend on the name itself and the last
-        modification time of the file.
+        The path is suitable for denoting output paths and its digest
+        is the digest of the characters, which constitute the path.
     *)
+    val path : string t
 
+
+    (** [file] the name of an input file or directory.
+
+        The file denoted by the name must exist and must be
+        accessible.
+
+        {3 Digesting paths}
+
+        The following rules describe how the digest of the path is
+        computed. It is assumed that the [file] type denotes the input
+        file, therefore the contents that is referenced by the path is
+        approximately digested. For the output destinations the [path]
+        type is more suitable.
+
+        1. If the name is a symbolik link then the digest of the link
+        destination is computed.
+
+        2. If the name references to a regular file then the [digest]
+        of the file is the digest of its contents and the name itself
+        doesn't affect the digest value.
+
+        3. If the name referenced to a directory, then a recursive
+        digest is computed, such that:
+        - if the directory contains a small number of regular files
+            and directories (less than 4k), then a cummulative digest
+            of its content built from all constituting path names and
+            modification times is computed;
+        - otherwise (if the directory is too large or contains non
+            regular files, e.g., sockets, fifo, devices), then a fresh
+            new random digest is created from the directory name and
+            the current time.
+    *)
     val file : string t
 
 

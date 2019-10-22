@@ -86,22 +86,22 @@ let () =
       a BIL program, but applies some transformations to simplify it.
       Consult BAP Annotated Reference (BAR) for the detailed
       description of the BIL normalized forms." in
-    Parameter.(declare Type.(enum normalizations) ~default:[]
-                 ~doc "normalization") in
+    Configuration.(parameter Type.(enum normalizations)
+                     ~doc "normalization") in
   let optim =
     let doc = "Specifies an optimization level.\n
       Level $(b,0) disables all optimizations,  and level $(b,1) performs
       regular program simplifications, e.g., applies constant folding,
       propagation, and elimination of dead temporary (aka virtual) variables." in
-    Parameter.(declare Type.(enum optimizations) ~default:o1 ~doc "optimization") in
+    Configuration.(parameter Type.(enum optimizations =? o1) ~doc "optimization") in
   let list_passes =
     let doc = "List all available passes and exit" in
-    Parameter.flag ~doc "list-passes" in
+    Configuration.flag ~doc "list-passes" in
   let passes =
     let doc =
       "Selects the list and the order of analyses to be applied during
        the lifing to BIL code." in
-    Parameter.(declare Type.(list pass) ~default:[] ~doc "passes") in
+    Configuration.(parameter Type.(list pass) ~doc "passes") in
   declare ~provides:["bil"; "core-theory"; "lifter"] @@ fun ctxt ->
   let open Syntax in
   if ctxt-->list_passes then print_passes ()

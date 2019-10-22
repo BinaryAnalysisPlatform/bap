@@ -8885,7 +8885,7 @@ module Std : sig
                           command line (specifically here, [Some 20]).
       *)
       val param :
-        ?as_flag:'a -> 'a converter -> ?deprecated:string -> ?default:'a ->
+        'a converter -> ?deprecated:string -> ?default:'a -> ?as_flag:'a ->
         ?docv:string -> ?doc:string -> ?synonyms:string list ->
         string -> 'a param
 
@@ -8893,7 +8893,7 @@ module Std : sig
           repetition of argument. Similar to [param (list 'a) ...]
           in all other respects. Defaults to an empty list if unspecified. *)
       val param_all :
-        ?as_flag:'a -> 'a converter -> ?deprecated:string -> ?default:'a list ->
+        'a converter -> ?deprecated:string -> ?default:'a list -> ?as_flag:'a ->
         ?docv:string -> ?doc:string ->
         ?synonyms:string list ->  string -> 'a list param
 

@@ -27,23 +27,23 @@ module Spec = struct
       ~print:Bitvec.to_string
       Bitvec.zero
 
-  let arch = Parameter.declare
+  let arch = Configuration.parameter
       ~doc:"Specifies the ISA of raw bytes"
       arch_t "arch"
 
-  let entry_points = Parameter.declare
+  let entry_points = Configuration.parameter
       ~doc:"Address (or addresses) of entry points"
       Type.(list addr_t) "entry-point"
 
-  let base_address = Parameter.declare
+  let base_address = Configuration.parameter
       ~doc:"The address of the first byte"
       addr_t "base"
 
-  let offset = Parameter.declare
+  let offset = Configuration.parameter
       ~doc:"The offset of the first byte"
       Type.int64 "offset"
 
-  let length = Parameter.declare
+  let length = Configuration.parameter
       ~doc:"The length of the code section"
       Type.(some int64) "length"
 end

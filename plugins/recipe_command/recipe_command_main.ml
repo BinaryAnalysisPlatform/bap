@@ -96,7 +96,7 @@ type Extension.Error.t += Recipe_error of Recipe.error
 
 let recipe_paths = [
   Filename.current_dir_name;
-  Extension.Parameter.datadir
+  Extension.Configuration.datadir
 ]
 
 let cleanup ~keep r =
@@ -143,7 +143,7 @@ let print_all_recipes ~keep () =
 
 let recipes = Extension.Command.arguments Extension.Type.string
 let keep_open =
-  Extension.Command.flag ~short:'k' "keep-open"
+  Extension.Command.flag ~aliases:["k"] "keep-open"
     ~doc:"Do not delete the temporary workspace."
 
 let () =

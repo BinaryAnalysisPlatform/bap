@@ -93,7 +93,7 @@ module Create() = struct
     type 'a parser = string -> [ `Ok of 'a | `Error of string ]
     type 'a printer = Format.formatter -> 'a -> unit
     type 'a converter = 'a Type.t
-    type 'a param = 'a Parameter.t
+    type 'a param = 'a Future.t
     type reader = {get : 'a. 'a param -> 'a}
     type manpage_block = [
       | `I of string * string
@@ -103,20 +103,51 @@ module Create() = struct
       | `S of string
     ]
 
-    let converter parser printer =
-      Type.define
+    let converter parser printer default =
+      Type.define default
         ~parse:(fun x -> match parser x with
             | `Ok x -> x
             | `Error err -> failwith err)
         ~print:(fun x ->
             Format.asprintf "%a" printer x)
 
-    let param = Parameter.declare
-    let param_all = Parameter.declare_list
-    let flag = Parameter.flag
-    let determined = Parameter.determined
-    let when_ready f = declare @@ fun ctxt ->
-      try Ok (f {get = fun x -> Parameter.get ctxt x}) with
+    let prepend_deprecation dep doc =
+      match dep with
+      | None -> doc
+      | Some dep -> sprintf "%s %s" dep doc
+
+
+    let param t ?deprecated
+        ?default:(d=Type.default t)
+        ?as_flag
+        ?(docv=Type.name t) ?(doc="Undocumented.") ?synonyms name =
+      let t = Type.(docv %: t =? d) in
+      let doc = prepend_deprecation deprecated doc in
+      Configuration.parameter ~doc ?as_flag ?aliases:synonyms t name |>
+      Configuration.determined
+
+    let param_all t ?deprecated
+        ?default
+        ?as_flag
+        ?(docv=Type.name t) ?(doc="Undocumented.") ?synonyms name =
+      let t = Type.(docv %: t) in
+      let doc = prepend_deprecation deprecated doc in
+      Configuration.parameters ~doc ?as_flag ?aliases:synonyms t name |>
+      Configuration.determined |>
+      Future.map ~f:(fun res -> match default with
+          | None -> res
+          | Some default -> match res with
+            | [] -> default
+            | xs -> xs)
+
+    let flag ?deprecated ?docv ?(doc="Undocumented.") ?synonyms name =
+      let doc = prepend_deprecation deprecated doc in
+      Configuration.flag ~doc ?aliases:synonyms name |>
+      Configuration.determined
+
+    let determined x = x
+    let when_ready f = declare @@ fun _ ->
+      try Ok (f {get = fun x -> Future.peek_exn x}) with
       | Invalid_argument s -> Error (Error.Invalid s)
       | exn ->
         let backtrace = Caml.Printexc.get_backtrace () in
@@ -135,12 +166,13 @@ module Create() = struct
       fprintf ppf "%!";
       documentation (Buffer.contents buf)
 
-    let doc_enum = Parameter.doc_enum
+    let doc_enum = Cmdliner.Arg.doc_alts_enum
     let deprecated = "DEPRECATED"
-    let confdir = Parameter.confdir
-    let datadir = Parameter.datadir
-    let libdir = Parameter.libdir
-    let version = Parameter.version
+    let confdir = Configuration.confdir
+    let datadir = Configuration.datadir
+    let libdir = Configuration.libdir
+    let version = Configuration.version
     include Type
+    let some ?none:_ t = some t
   end
 end

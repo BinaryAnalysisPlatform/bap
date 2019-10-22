@@ -58,11 +58,11 @@ let autocorrect_input args =
 let pp_info ppf infos =
   List.iter infos ~f:(fun info ->
       Format.fprintf ppf "  %-24s %s@\n"
-        (Context.name info)
-        (Context.doc info))
+        (Configuration.info_name info)
+        (Configuration.info_doc info))
 
-let commands ctxt = Context.commands ctxt
-let plugins ctxt = Context.plugins ctxt
+let commands ctxt = Configuration.commands ctxt
+let plugins ctxt = Configuration.plugins ctxt
 
 let print_info ctxt =
   Result.return @@
@@ -131,7 +131,7 @@ let () =
       "passes", `Passes;
       "formats", `Formats;
     ] in
-  let filter = Command.parameter "filter" Type.(list string) in
+  let filter = Command.parameter Type.(list string) "filter" in
   let doc = "explores various BAP facilities" in
   let push x xs = match xs with
     | None -> Some [x]
@@ -147,35 +147,35 @@ let () =
             (push elt features, exclude)) in
   Command.declare ~doc "list" Command.(args $what $filter) @@
   fun what filter ctxt ->
-  let features, exclude = parse_filter filter in
+  let requires, exclude = parse_filter filter in
+  let ctxt = Configuration.refine ?provides:requires ?exclude ctxt in
   match what with
   | `Recipes ->
     Format.printf "Use the `print-recipes' command to list recipes, e.g.,
       bap print-recipes@\n%!";
     Ok ()
   | `Plugins ->
-    Format.printf "%a%!" pp_info (Context.plugins ?features ?exclude ctxt);
+    Format.printf "%a%!" pp_info (Configuration.plugins ctxt);
     Ok ()
   | `Commands ->
-    Format.printf "%a%!" pp_info
-      (Context.commands ?features ?exclude ctxt);
+    Format.printf "%a%!" pp_info (Configuration.commands ctxt);
     Ok ()
   | `Passes ->
     Project.passes () |>
     List.iter ~f:(fun p -> Format.printf "  %s@\n%!" (Project.Pass.name p));
     Ok ()
   | `Tags ->
-    Context.features ctxt |>
+    Configuration.features ctxt |>
     List.iter ~f:(fun feature ->
-        let plugins =
-          Context.plugins ~features:[feature] ctxt |>
-          List.map ~f:Context.name in
+        let ctxt = Configuration.refine ~provides:[feature] ctxt in
+        let plugins = Configuration.plugins  ctxt |>
+                      List.map ~f:Configuration.info_name in
         let pp_sep ppf () = Format.fprintf ppf ",@ " in
         Format.printf "  %-24s @[<hov>%a@]@\n%!"
           feature Format.(pp_print_list ~pp_sep pp_print_string) plugins);
     Ok ()
   | `Formats ->
-    let requested = strings features
+    let requested = strings requires
     and excluded = strings exclude in
     let selected name =
       matches true requested name && not (matches false excluded name) in
