@@ -64,11 +64,19 @@ module IrBuilder = struct
     Term.enum jmp_t b2 |> Seq.iter ~f:(Ir_blk.Builder.add_jmp b);
     Ir_blk.Builder.result b
 
+  (* [append xs ys]
+     pre: the first block of [xs] is the exit block;
+     pre: the first block of [ys] is the entry block;
+     pre: the last block of [ys] is the exit block;
+     post: the first block of [append xs ys] is the new exit block. *)
   let append xs ys = match xs, ys with
     | [],xs | xs,[] -> xs
     | x :: xs, y :: ys when def_only x ->
-      List.rev_append ys (append_def_only x y :: xs)
-    | xs, ys -> List.rev_append ys xs
+       List.rev_append ys (append_def_only x y :: xs)
+    | x::xs, y::_ ->
+       let jmp = Ir_jmp.reify ~dst:(Ir_jmp.resolved @@ Term.tid y) () in
+       let x = Term.append jmp_t x jmp in
+       List.rev_append ys (x::xs)
 
   let ir_of_insn insn = KB.Value.get Term.slot insn
 
@@ -83,6 +91,9 @@ module IrBuilder = struct
         set_attributes jmp_t blk |>
         set_attributes def_t)
 
+  (* [lift_insn ?mem insn blks]
+     pre: the first block of [blks] is the exit block;
+     post: the first block of [lift_insn insn blks] is the new exit block. *)
   let lift_insn ?mem insn blks =
     append blks @@
     set_attributes ?mem insn (ir_of_insn insn)
