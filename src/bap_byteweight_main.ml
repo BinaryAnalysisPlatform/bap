@@ -1,114 +1,169 @@
+let man = {|
+# DESCRIPTION
+
+A utitilty to manipulate Byteweight function start signatures. This
+utility is not needed for Byteweight to function properly, for that
+you need the byteweight plugin. The utility is used to update
+signatures, using new training corpora, fetch the existing signatures
+from the Internet, install it into proper locations, and test the
+results.
+
+# TRAINING
+
+Signatures are stored in an archive, which is managed by the
+bap-byteweight library. The archive consists of several independent
+entries, for each combination of an architecture, compiler, and matching
+mode, having the following name $(b,<arch>/<comp>/<mode>). The
+$(b,default) name is used as a catch all compiler. The only mode
+currently supported is the $(b,byte) mode (i.e., matching on bytes).
+
+Each entry is a prefix tree, in which each prefix is a substring that
+was ever seen in the training corpora. Each prefix is associated with
+a pair of values, $(b,a) - the number of occurences of the prefix as
+a function start, and $(b,b) - the number of occurences of the prefix
+as not a function start.
+
+During the training, if the operaton mode is set to $(b,update) (the
+default), then the existing prefixed will be updated. The oracle, that
+tells which prefix starts a function or not, is derived from the
+binary itself. Therefore the training corpora should have non-empty
+symbol tables (and when applicable DWARF information). The
+$(b,symbols) command will output the set of addresses that will be
+used for training.
+
+When the operation mode is set to $(b,rewrite) then each round of
+training (i.e., each input file) will create a new entry for the given
+architecture, compiler, matching mode triple. So, probably this is not
+what you're looking for.
+
+|}
+
 open Core_kernel
 open Bap.Std
-open Bap_plugins.Std
 open Result.Monad_infix
 open Format
+open Bap_main
 
-include Self()
+module BW = Bap_byteweight.Bytes
+module Sigs = Bap_byteweight_signatures
+module Digest = Caml.Digest
 
-(** list of posix regexes of files that are ignored during
-    training.  *)
+type failure =
+  | Image of Error.t
+  | Sigs of Sigs.error
+  | Network of Curl.curlCode * int * string
+  | Http of int
+  | Unknown of exn
+
+type Extension.Error.t += Byteweight_failed of failure
+
+let github =
+  sprintf "https://github.com/BinaryAnalysisPlatform/bap/\
+           releases/download/v%s/sigs.zip"
+
+
+(** list of posix regexes of files that are skipped during
+    the training.  *)
 let ignored = [
   ".*\\.git.*";
   ".*/README.*";
   sprintf ".*\\.(%s)" @@ String.concat ~sep:"|" [
     "txt"; "html"; "htm"; "md"; "py"; "pyc"; "sh"
   ];
-]
+] |> List.map ~f:Re.Posix.re |> Re.alt |> Re.compile
 
-module BW = Bap_byteweight.Bytes
-module Sigs = Bap_byteweight_signatures
+let bw_failure err = Byteweight_failed err
+let fail err = Error (bw_failure err)
 
-let load ?comp meth db arch =
-  if not (Sys.file_exists db) then Ok (BW.create ())
-  else match Sigs.load ?comp ~mode:"bytes" ~path:db arch with
-       | Ok s -> if meth = `update
-          then Ok (Binable.of_string (module BW) (Bytes.to_string s))
-          else Ok (BW.create ())
-    | Error (`No_entry _) -> Ok (BW.create ())
-    | Error e ->
-      Or_error.errorf "can't update entry, because %s"
-        (Sigs.string_of_error e)
+let create_image loader input =
+  Image.create ~backend:loader input |>
+  Result.map_error ~f:(fun err -> bw_failure (Image err)) >>|
+  fst
 
-let train_on_file comp meth length db path : (unit,'a) Result.t =
-  Image.create path >>= fun (img,_warns) ->
+let with_sigs_error = Result.map_error ~f:(fun err ->
+    bw_failure (Sigs err))
+
+let load_or_create_signatures ?comp ?path operation arch =
+  match operation with
+  | `rewrite -> Ok (BW.create ())
+  | (`update|`load) as operation ->
+    match Sigs.load ?comp ?path ~mode:"bytes" arch with
+    | Ok s -> Ok (Binable.of_string (module BW) (Bytes.to_string s))
+    | Error (`No_entry _|`No_signatures) when operation = `update ->
+      Ok (BW.create ())
+    | Error e -> fail (Sigs e)
+
+let oracle_of_image img =
+  let starts = Hash_set.create (module Addr) () in
+  Image.symbols img |> Table.iteri ~f:(fun mem _ ->
+      Hash_set.add starts (Memory.min_addr mem));
+  fun mem -> Hash_set.mem starts (Memory.min_addr mem)
+
+let code_of_image img =
+  Image.memory img |> Memmap.to_sequence |>
+  Seq.filter_map ~f:(fun (mem,desc) ->
+      Option.some_if (Value.is Image.code_region desc) mem)
+
+let train_on_file loader comp operation max_length db path =
+  create_image loader path >>= fun img ->
   let arch = Image.arch img in
-  let symtab = Addr.Table.create () in
-  Table.iteri (Image.symbols img) ~f:(fun mem _ ->
-      Addr.Table.add_exn symtab ~key:(Memory.min_addr mem) ~data:());
-  let test mem = Addr.Table.mem symtab (Memory.min_addr mem) in
-  let bws =
-    let default = load meth db arch, None in
-    match comp with
-    | None -> [default]
-    | Some comp -> [default; load ~comp meth db arch, Some comp] in
-  List.map bws ~f:(fun (bw,comp) ->
-      bw >>= fun bw ->
-      Table.iteri (Image.segments img) ~f:(fun mem sec ->
-          if Image.Segment.is_executable sec then
-            BW.train bw ~max_length:length test mem);
-      let data = Binable.to_string (module BW) bw in
-      Sigs.save ?comp ~mode:"bytes" ~path:db arch (Bytes.of_string data) |>
-  Result.map_error ~f:(fun e ->
-      Error.createf "signatures are not updated: %s" @@
-      Sigs.string_of_error e)) |> Result.all_unit
+  let oracle = oracle_of_image img in
+  load_or_create_signatures ?comp ~path:db operation arch >>= fun bw ->
+  Seq.iter (code_of_image img) ~f:(BW.train bw ~max_length oracle);
+  with_sigs_error @@
+  Sigs.save ?comp ~mode:"bytes" ~path:db arch @@
+  Bytes.of_string @@
+  Binable.to_string (module BW) bw
 
-let matching =
-  let open FileUtil in
-  let ignored =
-    List.map ignored ~f:Re_posix.re |> Re.alt |> Re.compile in
-  let matches s = Re.execp ignored s in
-  let ignored = Custom matches in
-  FileUtil.(And (Is_file, Not ignored))
-[@@warning "-D"]
+let add_file files path =
+  Map.set files ~key:(Digest.file path) ~data:path
 
-let train meth length comp db paths =
+let all_not_ignored_files =
+  FileUtil.(And (Is_file, Not (Custom (Re.execp ignored))))
+
+let add_path files path =
+  if Sys.is_directory path
+  then FileUtil.find all_not_ignored_files path add_file files
+  else add_file files path
+
+let train loader operation length comp db paths _ctxt =
   let db = Option.value db ~default:"sigs.zip" in
-  let collect path =
-    FileUtil.find matching path (fun xs x -> x :: xs) [] in
-  let files = List.map paths
-      ~f:(fun f -> if Sys.is_directory f then collect f else [f]) |>
-              List.concat |> List.sort ~compare:String.compare in
-  let total = List.length files in
-  let start = Sys.time () in
+  let init = Map.empty (module String) in
+  let files = List.fold ~init paths ~f:add_path in
+  let total = Map.length files in
+  let start = Unix.gettimeofday () in
   let errors = ref 0 in
-  List.iteri files ~f:(fun n path ->
-      printf "[%3d / %3d] %-66s%!" (n+1) total path;
-      let r = match train_on_file comp meth length db path with
-        | Ok () -> "OK"
-        | Error err ->
-          eprintf "Error: %a\n%!" Error.pp err;
-          (incr errors); "SKIPPED" in
-      printf "%6s\n%!" r);
+  let step = ref 0 in
+  Map.iter files ~f:(fun path ->
+      incr step;
+      printf "[%3d / %3d] %-66s%!" !step total path;
+      match train_on_file loader comp operation length db path with
+      | Ok () -> printf "%6s\n%!" "OK"
+      | Error err ->
+        incr errors;
+        printf "%6s\n%!" "SKIPPED";
+        eprintf "Error: %a\n%!" Extension.Error.pp err;
+        (incr errors));
   printf "Processed %d files out of %d in %g seconds\n"
-    (total - !errors) total (Sys.time () -. start);
-  printf "Signatures are stored in %s\n%!" db;
+    (total - !errors) total (Unix.gettimeofday () -. start);
+  printf "Signatures were stored in %s\n%!" db;
   Ok ()
 
-let create_bw comp img path =
+let find loader threshold length comp path input _ctxt =
+  create_image loader input >>= fun img ->
   let arch = Image.arch img in
-  Sigs.load ?comp ?path ~mode:"bytes" arch |>
-  Result.map_error ~f:(fun e ->
-      Error.createf "failed to read signatures from a database: %s"
-        (Sigs.string_of_error e)) >>| fun data ->
-  Binable.of_string (module BW) (Bytes.to_string data)
+  load_or_create_signatures ?comp ?path `load arch >>| fun bw ->
+  let rec scan_memory offset mem =
+    let start = Memory.min_addr mem in
+    match BW.next bw ~length ~threshold mem offset with
+    | Some offset ->
+      printf "%a\n" Addr.pp Addr.(start ++ offset);
+      scan_memory (offset+1) mem
+    | None -> () in
+  code_of_image img |> Seq.iter ~f:(scan_memory 0)
 
-let find threshold length comp path input =
-  Image.create input >>= fun (img,_warns) ->
-  create_bw comp img path >>= fun bw ->
-  Table.iteri (Image.segments img) ~f:(fun mem sec ->
-      if Image.Segment.is_executable sec then
-        let start = Memory.min_addr mem in
-        let rec loop n =
-          match BW.next bw ~length ~threshold mem n with
-          | Some n -> printf "%a\n" Addr.pp Addr.(start ++ n); loop (n+1)
-          | None -> () in
-        loop 0);
-  Ok ()
-
-let symbols print_name print_size input =
-  Image.create input >>| fun (img,_warns) ->
-  let syms = Image.symbols img in
+let symbols loader print_name print_size input _ctxt =
+  create_image loader input >>| Image.symbols >>| fun syms ->
   Table.iteri syms ~f:(fun mem sym ->
       let addr = Memory.min_addr mem in
       let name = if print_name then Image.Symbol.name sym else "" in
@@ -117,19 +172,17 @@ let symbols print_name print_size input =
       printf "%a %s%s\n" Addr.pp addr size name);
   printf "Outputted %d symbols\n" (Table.length syms)
 
-let dump comp info length threshold path (input : string) =
-  Image.create input >>= fun (img, _warns) ->
+let dump loader comp info length threshold path input _ctxt =
+  create_image loader input >>= fun img ->
+  let arch = Image.arch img in
   match info with
   | `BW ->
-    create_bw comp img path >>= fun bw ->
-    let fs_set = Table.foldi (Image.segments img) ~init:Addr.Set.empty
-        ~f:(fun mem sec fs_s ->
-            if Image.Segment.is_executable sec then
-              let new_fs_s = BW.find bw ~length ~threshold mem in
-              Addr.Set.union fs_s @@ Addr.Set.of_list new_fs_s
-            else fs_s) in
-    Symbols.write_addrs stdout @@ Addr.Set.to_list fs_set;
-    Ok ()
+    load_or_create_signatures ?comp ?path `load arch >>| fun bw ->
+    Symbols.write_addrs stdout @@ Addr.Set.to_list @@
+    Seq.fold (code_of_image img)
+      ~init:Addr.Set.empty ~f:(fun starts mem ->
+          BW.find bw ~length ~threshold mem |>
+          List.fold ~init:starts ~f:Set.add)
   | `SymTbl ->
     let syms = Image.symbols img in
     let mems = Table.regions syms in
@@ -141,186 +194,203 @@ let create_parent_dir dst =
     then dst else Filename.dirname dst in
   FileUtil.mkdir ~parent:true dir
 
-
-let fetch fname url =
+let fetch fname url version _ctxt =
+  let url = match version with
+    | None -> url
+    | Some v -> github v in
   let tmp,fd = Filename.open_temp_file "bap_" ".sigs" in
   let write s = Out_channel.output_string fd s; String.length s in
   let conn = Curl.init () in
-  Curl.set_writefunction conn (write);
-  Curl.set_failonerror conn true;
+  Curl.set_writefunction conn write;
   Curl.set_followlocation conn true;
   Curl.set_sslverifypeer conn false;
   Curl.set_url conn url;
-  Curl.perform conn;
+  let result = try Ok (Curl.perform conn) with
+    | Curl.CurlException (code,n,str)-> fail (Network (code,n,str))
+    | exn -> fail (Unknown exn) in
+  let code = Curl.get_httpcode conn in
   Curl.cleanup conn;
   Out_channel.close fd;
-  create_parent_dir fname;
-  FileUtil.mv tmp fname;
-  printf "Successfully downloaded to %s\n" fname
+  match result with
+  | Ok () when code < 300 ->
+    create_parent_dir fname;
+    FileUtil.mv tmp fname;
+    printf "Successfully downloaded to %s\n" fname;
+    Ok ()
+  | _ ->
+    FileUtil.rm [tmp];
+    if Result.is_ok result
+    then fail (Http code)
+    else result
 
-let fetch fname url = try Ok (fetch fname url) with
-  | Curl.CurlException (err,_n,_) ->
-    Or_error.errorf "failed to fetch: %s" (Curl.strerror err)
-  | exn -> Or_error.of_exn ~backtrace:`Get exn
-
-let install src dst = Or_error.try_with begin fun () ->
+let install src dst _ctxt =
+  try
     create_parent_dir dst;
     FileUtil.cp [src] dst;
     printf "Installed signatures to %s\n" dst;
-  end
+    Ok ()
+  with exn -> fail (Unknown exn)
 
-let update url dst =
+let update url dst version ctxt =
   let old = Filename.temp_file "bap_old_sigs" ".zip" in
   if Sys.file_exists dst
   then FileUtil.cp [dst] old;
-  fetch dst url >>| fun () ->
+  fetch dst url version ctxt >>| fun () ->
   if FileUtil.cmp old dst = None
   then printf "Already up-to-date.\n"
   else printf "Installed new signatures.\n";
   if Sys.file_exists old then FileUtil.rm [old]
 
-module Cmdline = struct
-  open Cmdliner
+module Parameters = struct
+  open Extension
 
-  let filename : string Term.t =
-    let doc = "Input filename." in
-    Arg.(required & pos 0 (some non_dir_file) None &
-         info [] ~doc ~docv:"FILE")
+  let filename = Command.argument Type.non_dir_file
+      ~doc:"Input filename."
 
-  let database_in : string option Term.t =
-    let doc = "Path to signature database" in
-    Arg.(value & opt (some non_dir_file) None &
-         info ["db"; "d"] ~doc)
+  let loader = Command.parameter Type.(string =? "llvm") "loader"
+      ~doc:"Loader for binary files"
 
-  let database : string option Term.t =
-    let doc = "Update or create database at $(docv)" in
-    Arg.(value & opt (some string) None &
-         info ["db"; "d"] ~doc ~docv:"DBPATH")
+  let database_in = Command.parameter Type.(some non_dir_file) "db"
+      ~aliases:["d"]
+      ~doc:"Path to signature database"
 
-  let files : string list Term.t =
-    let doc = "Input files and directories" in
-    Arg.(non_empty & pos_all file [] & info [] ~doc ~docv:"FILE")
+  let database = Command.parameter Type.(some string) "signatures"
+      ~doc:"Update or create database at $(docv)"
+      ~aliases:["d"; "db"; "sigs"]
 
-  let compiler : string option Term.t =
-    let doc = "Assume the training set is compiled by $(docv)" in
-    Arg.(value & opt (some string) None &
-         info ["comp"] ~doc ~docv:"COMPILER")
+  let files = Command.arguments Type.file
+      ~doc:"Input files and directories"
 
-  let length : int Term.t =
-    let doc = "Maximum prefix length" in
-    Arg.(value & opt int 16 & info ["length"; "l"] ~doc)
+  let compiler = Command.parameter Type.(some string) "comp"
+      ~doc:"Assume the training set is compiled by $(docv)"
 
-  let meth : [`update | `rewrite] Term.t =
-    let enums = ["update", `update; "rewrite", `rewrite] in
-    let doc = sprintf "If entry exists then %s it." @@
-      Arg.doc_alts_enum enums in
-    Arg.(value & opt (enum enums) `update &
-         info ["method"; "m"] ~doc)
+  let length = Command.parameter Type.(int =? 16) "length"
+      ~doc:"Maximum prefix length"
+      ~aliases:["l"]
 
-  let threshold : float Term.t =
-    let doc = "Decide that sequence starts a function \
-               if m / n > $(docv),  where n is the total \
-               number of occurrences of a given sequence in \
-               the training set, and m is how many times \
-               it has occurred at the function start position." in
-    Arg.(value & opt float 0.5 &
-         info ["threshold"; "t"] ~doc ~docv:"THRESHOLD")
+  let operations = Type.enum [
+      "update", `update;
+      "rewrite", `rewrite
+    ]
 
-  let url : string Term.t =
-    let doc = "Url of the binary signatures" in
-    let default = sprintf
-        "https://github.com/BinaryAnalysisPlatform/bap/\
-         releases/download/v%s/sigs.zip" Config.version in
-    Arg.(value & opt string default & info ["url"] ~doc)
+  let operation = Command.parameter operations "method"
+      ~doc:"If entry exists then 'update' or 'rewrite' it."
+      ~aliases:["m"; "operation"]
 
-  let src : string Term.t =
-    Arg.(value & pos 0 non_dir_file "sigs.zip" & info []
-           ~doc:"Signatures file" ~docv:"SRC")
-  let dst : string Term.t =
-    Arg.(value & pos 1 string Sigs.default_path &
-         info [] ~doc:"Destination" ~docv:"DST")
+  let threshold = Command.parameter Type.(float =? 0.5) "threshold"
+      ~doc:"Decide that sequence starts a function \
+            if m / n > $(docv),  where n is the total \
+            number of occurrences of a given sequence in \
+            the training set, and m is how many times \
+            it has occurred at the function start position."
+      ~aliases:["t"]
 
-  let output : string Term.t =
-    let doc = "Output filename" in
-    Arg.(value & opt string "sigs.zip" & info ["o"] ~doc)
+  let ver = Configuration.version
+  let url = Command.parameter Type.(string =? github ver) "url"
+      ~doc:"Url of the binary signatures"
 
-  let print_name : bool Term.t =
-    let doc = "Print symbol's name." in
-    Arg.(value & flag & info ["print-name"; "n"] ~doc)
+  let version = Command.parameter Type.(some string) "from-version"
+      ~aliases:["v"; "for-version"]
+      ~doc:"fetch signatures for the specified version"
 
-  let print_size : bool Term.t =
-    let doc = "Print symbol's size." in
-    Arg.(value & flag & info ["print-size"; "s"] ~doc)
+  let src = Command.argument Type.("SRC" %: non_dir_file =? "sigs.zip")
+      ~doc:"Signatures file"
 
-  let tool : [`BW | `SymTbl] Term.t =
-    let enums = ["byteweight", `BW; "symbols", `SymTbl] in
-    let doc = sprintf "The info to be dumped. %s" @@ Arg.doc_alts_enum enums in
-    Arg.(value & opt (enum enums) `BW & info ["info"; "i"] ~doc)
+  let dst = Command.argument Type.(path =? Sigs.default_path)
+      ~doc:"Destination"
 
-  let dump =
-    let doc = "Dump the function starts in a given executable by given tool" in
-    Term.(pure dump $compiler $tool $length $threshold $database_in $filename),
-    Term.info "dump" ~doc
+  let output = Command.parameter Type.(string =? "sigs.zip") "o"
+      ~doc:"Output filename"
 
-  let train =
-    let doc = "Train byteweight on the specified set of files" in
-    Term.(pure train $meth $length $compiler $database $files),
-    Term.info "train" ~doc
+  let print_name = Command.flag "print-name"
+      ~doc:"Print symbol's name."
+      ~aliases:["n"]
 
-  let find =
-    let doc = "Output all function starts in a given executable" in
-    Term.(pure find $threshold $length $compiler $database_in $filename),
-    Term.info "find" ~doc
+  let print_size = Command.flag "print-size"
+      ~doc:"Print symbol's size."
+      ~aliases:["s"]
 
-  let fetch =
-    let doc = "Fetch signatures from the specified url" in
-    Term.(pure fetch $output $url), Term.info "fetch" ~doc
+  let tools = Type.enum [
+      "byteweight", `BW;
+      "symbols", `SymTbl
+    ]
 
-  let install =
-    let doc = "Install signatures" in
-    Term.(pure install $src $dst), Term.info "install" ~doc
+  let tool = Command.parameter tools "info"
+      ~doc:"The info to be dumped"
+      ~aliases:["i"]
 
-  let update =
-    let doc = "Download and install latest signatures" in
-    Term.(pure update $url $dst), Term.info "update" ~doc
-
-  let symbols =
-    let doc = "Print file's symbol table if any." in
-    Term.(pure symbols $print_name $print_size $filename),
-    Term.info "symbols" ~doc
-
-  let usage choices =
-    eprintf "usage: bap-byteweight [--version] [--help] \
-             <command> [<args>]\n";
-    eprintf "where <command> := %s.\n"
-      (String.concat ~sep:" | " choices);
-    Ok ()
-
-  let default =
-    let doc = "byteweight toolkit" in
-    let man = [
-      `S "DESCRIPTION";
-      `P "A toolkit for training, fetching, testing
-          and installing byteweight signatures.";
-      `S "SEE ALSO";
-      `P "$(b,bap)(1), $(b,bap-plugin-byteweight)(1)"
-    ] in
-    Term.(pure usage $ choice_names),
-    Term.info "bap-byteweight"
-      ~version:Config.version ~doc ~man
-
-  let eval argv = Term.eval_choice ~argv default
-      [train; find; fetch; install; update; symbols; dump]
 end
+let () =
+  let open Extension.Command in
+  let open Parameters in
+  declare "dump"
+    (args $loader $compiler $tool $length $threshold $database_in $filename)
+    dump
+    ~doc:"Dumps the function starts in machine readable format.";
+  declare "train"
+    (args $loader $operation $length $compiler $database $files)
+    train
+    ~doc:"Trains on the specified set of files.";
+  declare "find"
+    (args $loader $threshold $length $compiler $database_in $filename)
+    find
+    ~doc:"Outputs the function starts detected with Byteweight.";
+  declare "fetch"
+    (args $output $url $version)
+    fetch
+    ~doc:"Downloads signatures from to the current folder.";
+  declare "install"
+    (args $src $dst)
+    install
+    ~doc:"Copies signatures to the predefined location.";
+  declare "update"
+    (args $url $dst $version)
+    update
+    ~doc:"Downloads and installs signatures.";
+  declare "symbols"
+    (args $loader $print_name $print_size $filename)
+    symbols
+    ~doc:"Outputs the function starts provided by the binary (ground truth)."
+let string_of_error = function
+  | Image err ->
+    Format.asprintf "Failed to load a file: %a" Error.pp err
+  | Sigs err ->
+    sprintf "Failed to load/store signatures: %s"
+      (Sigs.string_of_error err)
+  | Network (err,code,msg) ->
+    sprintf "Network failure: %s, %d, %s" (Curl.strerror err) code msg
+  | Unknown exn ->
+    sprintf "An unexpected exception: %s"
+      (Exn.to_string exn)
+  | Http code ->
+    sprintf "got an unexepected HTTP code %d" code
+
+let () = Extension.Error.register_printer @@ function
+  | Byteweight_failed err -> Some (string_of_error err)
+  | _ -> None
+
+let default ctxt =
+  print_endline {|
+Usage:
+  bap-byteweight <COMMAND> [<OPTIONS>]
+Commands:
+|};
+  let open Extension.Configuration in
+  List.iter (commands ctxt) ~f:(fun cmd ->
+      printf "  %-24s %s\n"
+        (info_name cmd)
+        (info_doc cmd));
+  Ok ()
 
 let () =
-  Log.start ();
-  let args = Bap_plugin_loader.run ["byteweight-frontend"] Sys.argv in
-  match Cmdline.eval args with
-  | `Ok Ok () -> ()
-  | `Ok Error err ->
-    eprintf "Program failed: %s\n%!"
-      Error.(to_string_hum err);
-    exit 2
-  | `Version | `Help -> ()
-  | _ -> exit 1
+  match Bap_main.init ()
+          ~features:["byteweight-frontend"]
+          ~requires:["loader"; "byteweight"]
+          ~argv:Sys.argv
+          ~man
+          ~default
+          ~name:"bap-byteweight"
+  with Ok () -> ()
+     | Error err ->
+       Format.eprintf "Program failed with: %a@\n%!"
+         Extension.Error.pp err
