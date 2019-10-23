@@ -9,15 +9,14 @@ module BW = Bap_byteweight.Bytes
 module Sigs = Bap_byteweight_signatures
 
 let create_finder path length threshold arch comp =
-  match Sigs.load ?comp ?path ~mode:"bytes" arch with
+  match Sigs.load ?comp ~path ~mode:"bytes" arch with
   | Error `No_signatures ->
-    info "the signature database is not available";
+    info "function starts signatures are not available";
     info "advice - use `bap-byteweight` to install signatures";
     info "advice - alternatively, use `opam install bap-signatures'";
     Or_error.errorf "signatures are unavailable"
   | Error (`Corrupted err) ->
-    let path = Option.value path ~default:Sigs.default_path in
-    error "the signature database is corrupted: %s" err;
+    error "function starts signature file is corrupted: %s" err;
     info "advice - delete signatures at `%s'" path;
     info "advice - use `bap-byteweight` to install signatures";
     info "advice - alternatively, use `opam install bap-signatures'";
@@ -34,14 +33,11 @@ let create_finder path length threshold arch comp =
     let bw = Binable.of_string (module BW) (Bytes.to_string data) in
     Ok (BW.find bw ~length ~threshold)
 
-let sigs_exists path =
-  Sys.file_exists (Option.value ~default:Sigs.default_path path)
-
 let main path length threshold comp =
   let finder arch = create_finder path length threshold arch comp in
   let find finder mem =
     Memmap.to_sequence mem |>
-    Seq.fold ~init:Addr.Set.empty ~f:(fun roots (mem,v) ->
+    Seq.fold ~init:Addr.Set.empty ~f:(fun roots (mem,_) ->
         Set.union roots @@ Addr.Set.of_list (finder mem)) in
   let find_roots arch mem = match finder arch with
     | Error _ as err ->
@@ -53,7 +49,7 @@ let main path length threshold comp =
         info "advice - check your signatures";
         Ok (Rooter.create Seq.empty)
       | roots -> Ok (roots |> Set.to_sequence |> Rooter.create)  in
-  if sigs_exists path then
+  if Sys.file_exists path then
     let inputs = Stream.zip Project.Info.arch Project.Info.code in
     Stream.observe inputs (fun (arch,mem) ->
         match find_roots arch mem with
@@ -71,7 +67,6 @@ let () =
       `S "DESCRIPTION";
 
       `P
-
         "This plugin identifies function starts, partially \
          implementing on the BYTEWEIGHT algorithm described in \
          [1]. Only the byte level matching is implemented. The $(b,SEE \
@@ -90,10 +85,11 @@ let () =
   let threshold : float Config.param =
     let doc = "Minimum score for the function start" in
     Config.(param float ~default:0.9 "threshold" ~doc) in
-  let sigsfile : string option Config.param =
+  let sigsfile : string Config.param =
     let doc = "Path to the signature file. Not needed by default, \
                usually it is enough to run `bap-byteweight update'." in
-    Config.(param (some non_dir_file) "sigs" ~doc) in
+    let default = Sigs.default_path in
+    Config.(param non_dir_file ~default "sigs" ~doc) in
   let compiler : string option Config.param =
     let doc = "Assume the input file is compiled by $(docv)" in
     Config.(param (some string) "comp" ~doc ~docv:"COMPILER") in
