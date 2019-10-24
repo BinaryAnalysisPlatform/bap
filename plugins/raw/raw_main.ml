@@ -81,7 +81,7 @@ let register_loader ctxt =
             | x :: _ -> Bitvec.to_string x
           end;
           "length", Int64.to_string @@ match ctxt-->length with
-          | None -> measure input
+          | None -> Int64.(measure input - (ctxt-->offset))
           | Some n -> n;
         ] |> String.Map.of_alist_exn in
       let buf = Buffer.create 128 in
