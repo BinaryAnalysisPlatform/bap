@@ -10,4 +10,4 @@ Library primus_powerpc_plugin
   BuildDepends: bap, bap-primus, core_kernel
   XMETADescription: powerpc support package
   Modules: Primus_powerpc_main
-  XMETAExtraLines:  tags="loader, primus, powerpc"
+  XMETAExtraLines:  tags="primus, powerpc"
