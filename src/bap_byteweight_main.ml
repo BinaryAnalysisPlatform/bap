@@ -18,10 +18,10 @@ $(b,default) name is used as a catch all compiler. The only mode
 currently supported is the $(b,byte) mode (i.e., matching on bytes).
 
 Each entry is a prefix tree, in which each prefix is a substring that
-was ever seen in the training corpora. Each prefix is associated with
-a pair of values, $(b,a) - the number of occurences of the prefix as
-a function start, and $(b,b) - the number of occurences of the prefix
-as not a function start.
+was ever seen in the training corpora as a function start. Each prefix
+is associated with a pair of values, $(b,a) - the number of occurences
+of the prefix as a function start, and $(b,b) - the number of
+occurences of the prefix as not a function start.
 
 During the training, if the operaton mode is set to $(b,update) (the
 default), then the existing prefixed will be updated. The oracle, that
@@ -36,6 +36,31 @@ training (i.e., each input file) will create a new entry for the given
 architecture, compiler, matching mode triple. So, probably this is not
 what you're looking for.
 
+# THE IDENTIFICATION PROCEDURE
+
+The input memory is scanned, and for each byte that is not yet
+classified as a function start the longest sequence of bytes is
+searched in the signatures. If one is found, then the $(b,threshold)
+parameter defines the decision procedure. If it is a value below
+$(b,1.0) then the sequence of bytes will be classified as a function
+start if the the associated probability is higher than the specified
+threshold.  If the threshold is greater or equal than 1.0, then the
+sequence of bytes will be classified as a function start if the
+Bayes factor of the two competing hypothesis is greater than the
+specified threshold. The Bayes factor is the ratio between the
+posterior probabilities of the competing hypothesis. Therefore, it
+includes the prior odds of finding a function start, which makes the
+hypothesis testing more robust. The Bayes factor value is having the
+following interpretations:
+
+```
+    Bayes Factor          Strength
+
+    1 to 3.2              Weak
+    3.2 to 10             Substantial
+    10 to 100             Strong
+    100 and greater       Decisive;
+```
 |}
 
 open Core_kernel
@@ -149,40 +174,46 @@ let train loader operation length comp db paths _ctxt =
   printf "Signatures were stored in %s\n%!" db;
   Ok ()
 
-let find loader threshold length comp path input _ctxt =
+let find loader threshold min_length max_length comp path input _ctxt =
   create_image loader input >>= fun img ->
   let arch = Image.arch img in
   load_or_create_signatures ?comp ?path `load arch >>| fun bw ->
-  let rec scan_memory offset mem =
-    let start = Memory.min_addr mem in
-    match BW.next bw ~length ~threshold mem offset with
-    | Some offset ->
-      printf "%a\n" Addr.pp Addr.(start ++ offset);
-      scan_memory (offset+1) mem
-    | None -> () in
-  code_of_image img |> Seq.iter ~f:(scan_memory 0)
+  let find = if Float.(threshold > 1.)
+    then BW.find_using_bayes_factor bw threshold
+        ~min_length ~max_length
+    else BW.find_using_threshold bw threshold
+        ~min_length ~max_length in
+  let scan_memory mem =
+    find mem |> List.iter ~f:(fun addr ->
+        printf "%a\n" Addr.pp addr) in
+  code_of_image img |> Seq.iter ~f:scan_memory
 
 let symbols loader print_name print_size input _ctxt =
   create_image loader input >>| Image.symbols >>| fun syms ->
   Table.iteri syms ~f:(fun mem sym ->
-      let addr = Memory.min_addr mem in
-      let name = if print_name then Image.Symbol.name sym else "" in
-      let size = if print_size
-        then sprintf "%4d " (Memory.length mem) else "" in
-      printf "%a %s%s\n" Addr.pp addr size name);
-  printf "Outputted %d symbols\n" (Table.length syms)
+      printf "%a" Addr.pp (Memory.min_addr mem);
+      if print_name
+      then printf " %s" (Image.Symbol.name sym);
+      if print_size
+      then printf " %4d" (Memory.length mem);
+      printf "\n")
 
-let dump loader comp info length threshold path input _ctxt =
+let dump loader comp info min_length max_length threshold path input _ctxt =
   create_image loader input >>= fun img ->
   let arch = Image.arch img in
   match info with
   | `BW ->
     load_or_create_signatures ?comp ?path `load arch >>| fun bw ->
+    let find = if Float.(threshold > 1.)
+      then BW.find_using_bayes_factor bw threshold
+          ~min_length ~max_length
+      else BW.find_using_threshold bw threshold
+          ~min_length ~max_length in
+
     Symbols.write_addrs stdout @@ Addr.Set.to_list @@
     Seq.fold (code_of_image img)
       ~init:Addr.Set.empty ~f:(fun starts mem ->
-          BW.find bw ~length ~threshold mem |>
-          List.fold ~init:starts ~f:Set.add)
+          List.fold (find mem) ~init:starts ~f:Set.add)
   | `SymTbl ->
     let syms = Image.symbols img in
     let mems = Table.regions syms in
@@ -264,9 +295,19 @@ module Parameters = struct
   let compiler = Command.parameter Type.(some string) "comp"
       ~doc:"Assume the training set is compiled by $(docv)"
 
-  let length = Command.parameter Type.(int =? 16) "length"
-      ~doc:"Maximum prefix length"
-      ~aliases:["l"]
+  let min_length = Command.parameter Type.(int =? 8) "min-length"
+      ~doc:"The minimum length of a word, that could identify a \
+            function start. Any signatures that are below that \
+            length, will not be considered, affect prior \
+            probabilities, etc."
+
+  let max_length = Command.parameter Type.(int =? 16) "max-length"
+      ~aliases:["l"; "length"]
+      ~doc:"The maximum length of a word, that could identify a \
+            function start. Any signatures that are greater than that \
+            length, will not be considered, affect prior \
+            probabilities, etc."
+
 
   let operations = Type.enum [
       "update", `update;
@@ -277,17 +318,14 @@ module Parameters = struct
       ~doc:"If entry exists then 'update' or 'rewrite' it."
       ~aliases:["m"; "operation"]
 
-  let threshold = Command.parameter Type.(float =? 0.5) "threshold"
-      ~doc:"Decide that sequence starts a function \
-            if m / n > $(docv),  where n is the total \
-            number of occurrences of a given sequence in \
-            the training set, and m is how many times \
-            it has occurred at the function start position."
+  let threshold = Command.parameter Type.(float =? 10.) "threshold"
+      ~doc:"If greater than 1.0 then it is the Bayes factor, \
+            otherwise it is a probability."
       ~aliases:["t"]
 
   let ver = Configuration.version
   let url = Command.parameter Type.(string =? github ver) "url"
-      ~doc:"Url of the binary signatures"
+      ~doc:"URL of the function starts signatures."
 
   let version = Command.parameter Type.(some string) "from-version"
       ~aliases:["v"; "for-version"]
@@ -324,15 +362,15 @@ let () =
   let open Extension.Command in
   let open Parameters in
   declare "dump"
-    (args $loader $compiler $tool $length $threshold $database_in $filename)
+    (args $loader $compiler $tool $min_length $max_length $threshold $database_in $filename)
     dump
     ~doc:"Dumps the function starts in machine readable format.";
   declare "train"
-    (args $loader $operation $length $compiler $database $files)
+    (args $loader $operation $max_length $compiler $database $files)
     train
     ~doc:"Trains on the specified set of files.";
   declare "find"
-    (args $loader $threshold $length $compiler $database_in $filename)
+    (args $loader $threshold $min_length $max_length $compiler $database_in $filename)
     find
     ~doc:"Outputs the function starts detected with Byteweight.";
   declare "fetch"

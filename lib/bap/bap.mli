@@ -725,60 +725,116 @@ module Std : sig
         structure with string keys.
 
     *)
-    module type S = sig
-      (** trie can store arbitrary data  *)
-      type 'a t [@@deriving bin_io, sexp]
 
-      (** a key type that is used to lookup data  *)
-      type key
+    module V1 : sig
+      module type S = sig
+        (** trie can store arbitrary data  *)
+        type 'a t [@@deriving bin_io, sexp]
 
-      (** [create ()] creates new empty trie  *)
-      val create : unit -> 'a t
+        (** a key type that is used to lookup data  *)
+        type key
 
-      (** [add trie ~key ~data] associates [data] with [key]. If
-          [trie] already has some value associated with [key], then
-          the value will be overwritten (rebound) *)
-      val add : 'a t -> key:key -> data:'a -> unit
+        (** [create ()] creates new empty trie  *)
+        val create : unit -> 'a t
 
-      (** [change trie key f] if trie has [data] associated with [key] then
-          [f] will be called with [Some data], otherwise it will be called
-          with [None]. If [f] returns [None] then there will be no data
-          associated with [key], if [f] returns [Some thing], then [thing]
-          will be associated with [key] *)
-      val change : 'a t -> key -> ('a option -> 'a option) -> unit
+        (** [add trie ~key ~data] associates [data] with [key]. If
+            [trie] already has some value associated with [key], then
+            the value will be overwritten (rebound) *)
+        val add : 'a t -> key:key -> data:'a -> unit
 
-      (** [find trie key] finds data associated with [key]  *)
-      val find : 'a t -> key -> 'a option
+        (** [change trie key f] if trie has [data] associated with [key] then
+            [f] will be called with [Some data], otherwise it will be called
+            with [None]. If [f] returns [None] then there will be no data
+            associated with [key], if [f] returns [Some thing], then [thing]
+            will be associated with [key] *)
+        val change : 'a t -> key -> ('a option -> 'a option) -> unit
 
-      (** [walk trie key ~init ~f] walks down the tree starting from the
-          root and ending with the last token of the key. Function [f]
-          is fold over values associated with all substrings of the key,
-          starting from a zero substring. *)
-      val walk : 'a t -> key -> init:'b -> f:('b -> 'a option -> 'b) -> 'b
+        (** [find trie key] finds data associated with [key]  *)
+        val find : 'a t -> key -> 'a option
 
-      (** [remove trie key] removes value bound with [key] if any.  *)
-      val remove : 'a t -> key -> unit
+        (** [walk trie key ~init ~f] walks down the tree starting from the
+            root and ending with the last token of the key. Function [f]
+            is fold over values associated with all substrings of the key,
+            starting from a zero substring. *)
+        val walk : 'a t -> key -> init:'b -> f:('b -> 'a option -> 'b) -> 'b
 
-      (** [longest_match trie key] find a value associated with a
-          longest substring of [key]. Returns a pair - a length of
-          matched key and the value, associated with that key. *)
-      val longest_match : 'a t -> key -> (int * 'a) option
+        (** [remove trie key] removes value bound with [key] if any.  *)
+        val remove : 'a t -> key -> unit
 
-      (** [length trie] returns the number of values in [trie]  *)
-      val length : 'a t -> int
+        (** [longest_match trie key] find a value associated with a
+            longest substring of [key]. Returns a pair - a length of
+            matched key and the value, associated with that key. *)
+        val longest_match : 'a t -> key -> (int * 'a) option
 
-      (** [pp pp_val] creates a printer for a given value printer
-          [pp_val]. Example:
+        (** [length trie] returns the number of values in [trie]  *)
+        val length : 'a t -> int
 
-          [let int_trie = String.Trie.pp pp_int]
+        (** [pp pp_val] creates a printer for a given value printer
+            [pp_val]. Example:
 
-          will create a printer for a [String.Trie] that is populated by
-          integers.  *)
-      val pp : 'a printer -> 'a t printer
+            [let int_trie = String.Trie.pp pp_int]
+
+            will create a printer for a [String.Trie] that is populated by
+            integers.  *)
+        val pp : 'a printer -> 'a t printer
+      end
+    end
+    module V2 : sig
+
+
+      (** Extended version the [V1.S].   *)
+      module type S = sig
+        include V1.S
+
+        type token
+
+
+        (** [fold trie init f] folds over all elements of trie.
+
+            The function [f x key data] is applied to all elements
+            of [trie] which were previously added. The [key] is
+            represented as a list of tokens.
+        *)
+        val fold : 'a t -> init:'b -> f:('b -> token list -> 'a -> 'b) -> 'b
+
+
+        (** [iter trie f] iterates over all element of trie.
+
+            The function [f key data] is applied to all elements
+            of [trie] which were previously added. The [key] is
+            represented as a list of tokens.
+        *)
+        val iter : 'a t -> f:(token list -> 'a -> unit) -> unit
+
+
+        (** [make_printer print_tokens print_data] create a trie printer.
+
+            Creates a function that will print a trie using
+            [print_token] to print the key in the form of a token
+            list, and [print_data] to print data associated with
+            keys.
+
+            Only those keys that have associated data are printed
+            (i.e., those that were added to the trie).
+
+            Each key value pair is printed as using the following
+            format specification: ["@[<2>%a@ %a@]@;"]. So it is
+            advised to print it in a vertical box.
+        *)
+        val make_printer :
+          (Format.formatter -> token list -> unit) ->
+          (Format.formatter -> 'a -> unit) ->
+          (Format.formatter -> 'a t -> unit)
+
+      end
     end
 
+    module type S = V1.S
+
+
     (** Create a trie for a given [Key]  *)
-    module Make(Key : Key) : S with type key = Key.t
+    module Make(Key : Key) : V2.S with type key = Key.t
+                                   and type token = Key.token
 
     (** Minimum required interface for a token data type  *)
     module type Token = sig
@@ -788,14 +844,16 @@ module Std : sig
 
     (** Prefix and suffix tries for specified token types.  *)
     module Array : sig
-      module Prefix(Tok : Token) : S with type key = Tok.t array
-      module Suffix(Tok : Token) : S with type key = Tok.t array
+      module Prefix(Tok : Token) : V2.S with type key = Tok.t array
+                                         and type token = Tok.t
+      module Suffix(Tok : Token) : V2.S with type key = Tok.t array
+                                         and type token = Tok.t
     end
 
     (** Predefined prefix and suffix string tries.    *)
     module String : sig
-      module Prefix : S with type key = string
-      module Suffix : S with type key = string
+      module Prefix : V2.S with type key = string and type token = char
+      module Suffix : V2.S with type key = string and type token = char
     end
   end
 
@@ -4834,23 +4892,23 @@ module Std : sig
     module Trie : sig
       module Stable : sig
         module V1 : sig
-          module R8  : Trie.S with type key = t
-          module R16 : Trie.S with type key = t
-          module R32 : Trie.S with type key = t
-          module R64 : Trie.S with type key = t
+          module R8  : Trie.V2.S with type key = t and type token = word
+          module R16 : Trie.V2.S with type key = t and type token = word
+          module R32 : Trie.V2.S with type key = t and type token = word
+          module R64 : Trie.V2.S with type key = t and type token = word
         end
         module V2 : sig
-          module R8  : Trie.S with type key = t
-          module R16 : Trie.S with type key = t
-          module R32 : Trie.S with type key = t
-          module R64 : Trie.S with type key = t
+          module R8  : Trie.V2.S with type key = t and type token = word
+          module R16 : Trie.V2.S with type key = t and type token = word
+          module R32 : Trie.V2.S with type key = t and type token = word
+          module R64 : Trie.V2.S with type key = t and type token = word
         end
 
       end
-      module R8  : Trie.S with type key = t
-      module R16 : Trie.S with type key = t
-      module R32 : Trie.S with type key = t
-      module R64 : Trie.S with type key = t
+      module R8  : Trie.V2.S with type key = t and type token = word
+      module R16 : Trie.V2.S with type key = t and type token = word
+      module R32 : Trie.V2.S with type key = t and type token = word
+      module R64 : Trie.V2.S with type key = t and type token = word
     end
   end
 

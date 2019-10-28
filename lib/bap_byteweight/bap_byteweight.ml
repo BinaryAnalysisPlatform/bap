@@ -71,19 +71,37 @@ module Make
       let n = a + b in
       Float.(of_int a / of_int n) > threshold
 
-  let next trie ~length ~threshold set n =
+  let next_if (trie : t) ~length ~f set n =
     let open Option.Monad_infix in
     let rec loop n =
       Corpus.look set ~length n >>= fun key ->
-      if test ~threshold trie key then Some n
-      else loop (n+1) in
+      match Trie.longest_match trie key with
+      | None -> loop (n+1)
+      | Some (len,stats) ->
+        if f key len stats
+        then Some n
+        else loop (n+1) in
     loop n
+
+
+  let next trie ~length ~threshold set n =
+    next_if trie ~length set n ~f:(fun _ _ (a,b) ->
+        let n = a + b in
+        Float.(of_int a / of_int n) > threshold)
 
   let length = Trie.length
 end
 
+module Make2
+    (Corpus : Corpus)
+    (Trie : Trie.V2.S with type key = Corpus.key) = struct
+  include Make(Corpus)(Trie)
+  type token = Trie.token
+  let fold = Trie.fold
+end
+
 module Bytes = struct
-  include Make(struct
+  include Make2(struct
       type t = mem
       type key = mem
 
@@ -96,6 +114,7 @@ module Bytes = struct
         | _ -> None
     end)(Memory.Trie.Stable.V1.R8)
 
+
   let find bw ~length ~threshold mem =
     let start = Memory.min_addr mem in
     let rec loop acc n =
@@ -103,4 +122,73 @@ module Bytes = struct
       | Some n -> loop (Addr.(start ++ n) :: acc) (n+1)
       | None -> List.rev acc in
     loop [] 0
+
+  let find_if bw ~length ~f mem =
+    let start = Memory.min_addr mem in
+    let rec loop acc n =
+      match next_if bw ~length ~f mem n with
+      | Some n -> loop (Addr.(start ++ n) :: acc) (n+1)
+      | None -> List.rev acc in
+    loop [] 0
+
+  let p1 m n = float m /. float (m + n)
+  and p0 m n = float n /. float (m + n)
+
+  let find_using_bayes_factor sigs ~min_length ~max_length threshold =
+    let (s1,s0) = fold sigs ~init:(0,0) ~f:(fun (s1,s0) key (h1,h0) ->
+        let length = List.length key in
+        if length >= min_length && length <= max_length then
+          h1 + s1, h0 + s0
+        else s1,s0) in
+    let ph1 = float s1 /. float (s1 + s0) in
+    let ph0 = 1. -. ph1 in
+    let ratio m n =
+      let r = p1 m n /. p0 m n
+      and q = ph1 /. ph0 in
+      r *. q in
+    find_if sigs ~length:max_length ~f:(fun _ length (h1,h0) ->
+        length >= min_length &&
+        Float.(ratio h1 h0 > threshold))
+
+  let find_using_threshold sigs ~min_length ~max_length threshold =
+    find_if sigs ~length:max_length ~f:(fun _ length (h1,h0) ->
+        length >= min_length &&
+        Float.(p1 h1 h0 > threshold))
+
+  let pp_byte ppf x =
+    Format.fprintf ppf "%02x" @@ Word.to_int_exn x
+
+  let pp ppf t = fold t ~init:() ~f:(fun () words (a,b) ->
+      let p1h1 = float a /. float (a+b) in
+      Format.fprintf ppf "%-8d %-8d %-8d %.4f " (a+b) a b p1h1;
+      List.iter words ~f:(Format.fprintf ppf "%a" pp_byte);
+      Format.fprintf ppf "@\n");
+end
+
+type stats = int * int
+
+module V1 = struct
+  module type S = S
+  module Make = Make
+end
+module V2 = struct
+  module type S = sig
+    include V1.S
+
+    type token
+
+    val next_if : t -> length:int -> f:(key -> int -> stats -> bool) -> corpus ->
+      int -> int option
+
+    val fold : t -> init:'b -> f:('b -> token list -> stats -> 'b) -> 'b
+  end
+
+  module Make = Make2
+end
+
+module Stats = struct
+  type t = stats
+  let trials (a,b) = a + b
+  let h1 = fst
+  let h0 = snd
 end
