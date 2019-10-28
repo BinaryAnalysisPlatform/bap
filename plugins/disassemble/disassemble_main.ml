@@ -275,6 +275,20 @@ module Dump_formats = struct
     List.map outputs ~f:parse_format
 end
 
+let setup_gc () =
+  let opts = Caml.Gc.get () in
+  info "Setting GC parameters";
+  Caml.Gc.set {
+    opts with
+    window_size = 20;
+    minor_heap_size = 1024 * 1024;
+    major_heap_increment = 64 * 1024 * 1024;
+    space_overhead = 200;
+  }
+
+let has_env var = match Sys.getenv var with
+  | exception _ -> false
+  | _ -> true
 
 let _disassemble_command_registered : unit =
   Extension.Command.(begin
@@ -283,6 +297,9 @@ let _disassemble_command_registered : unit =
         (args $input $outputs $old_style_passes $passes $loader)
     end) @@
   fun input outputs old_style_passes passes loader ctxt ->
+  if not (has_env "OCAMLRUNPARAM" || has_env "CAMLRUNPARAM")
+  then setup_gc ()
+  else info "GC parameters are overriden by a user";
   validate_input input >>= fun () ->
   validate_passes_style old_style_passes passes >>=
   validate_passes >>= fun passes ->
