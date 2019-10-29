@@ -115,11 +115,17 @@ let print_recipe ~keep r =
   printf "COMMAND LINE@\n@\n%s@\n" (String.concat_array ~sep args);
   cleanup ~keep r
 
+let minimize str =
+  let len = String.length str in
+  if len < 60 then str
+  else String.subo ~len:60 str ^ "..."
+
 let summary str =
+  minimize @@
   String.uncapitalize @@
   match String.index str '\n' with
   | None -> str
-  | Some p -> String.subo ~len:(max p 60) str
+  | Some p -> String.subo ~len:(min p 60) str
 
 
 let print_all_recipes ~keep () =

@@ -218,7 +218,7 @@ let input = Extension.Command.argument
 let loader =
   Extension.Command.parameter
     ~doc:"Use the specified loader.
-          Use the loader `raw' to loade unstructured files"
+          Use the loader `raw' to load unstructured files"
     Extension.Type.(string =? "llvm")
     "loader"
 
