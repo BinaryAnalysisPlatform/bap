@@ -1,29 +1,111 @@
 open Core_kernel
 open Monads.Std
 
+
+(** denotes a knowledge computation.  *)
 type 'a knowledge
+
+
+
+(** Knowledge Base.
+
+    The knowledge base maintains a consistent set of facts about
+    object properties. The nature of objects and their properties
+    is domain-specific and is beyond the scope of the knowlege base
+    itself.
+
+
+    {3 Knowledge Base Taxonomy}
+
+    Objects are grouped into classes. Classes are further subdivided
+    into sorts. Object properties are stored in slots, and the class of
+    an object defines the set of slots that could be used to read
+    properties of its objects. A snapshot of all properties of an
+    object is called a value.
+
+    The data type of any property is required to be an instance of the
+    Domain data structure, it should be a set with a special [empty]
+    value and the [order] operation, that orders elements of this set
+    by their informational content, so that [empty] is the least
+    element.
+
+    Object properties could be accessed using the [collect] operator
+    and set using the [provide] operator. The knowledge base maintains
+    the consistency by disallowing changing an object property to a
+    value that has less informational contents than the previous
+    value, so that no information is never lost.
+
+    Object properties could also be computed on demand using the
+    [promise] operator, which effectively stores a procedure in the
+    knowledge base. Several procedures could be provided for a
+    property computation, and the procedures themselves could access
+    other properties, including the property being computed. The
+    knowledge base will ensure that the least fixed point of all
+    procedures involved in the property computation is reached.
+
+    All Knowledge Base operators return a monadic value of type
+    ['a knowledge], so the knowledge itself is a monad, that evaluates
+    to a value of type ['a] and more knowledge, that was obtained
+    during the computation.
+
+    The knowledge computation may lead to an inconsistent state, in
+    other words, it is not guaranteed that the computation will reach
+    the normal form. A diverging computation will yield a value of
+    type [conflict] when run.
+
+    To prevent unnecessary conflicts, it is possible to represent
+    object properties as opinions instead of facts. Opinions are facts
+    that are attributed with the name of an agent that provided this
+    fact. In case if mutiple agents provide conflicting opinions, the
+    [resolve] operator will compute the consensus, based on agents
+    predefined trustworthiness. Opinions are introduced using the
+    [suggest] operator or promised using the [propose] operator.
+
+
+    Finally, the knowledge base is partially persistent. It is
+    possible to make some slots persistent, so that properties, stored
+    in them are preserved between program runs.
+*)
 module Knowledge : sig
+
+
+  (** the knowledge computation  *)
   type 'a t = 'a knowledge
+
+
+  (** a sort ['s] of class ['k].   *)
   type (+'k,+'s) cls
-  type +'a obj
-  type +'a value
-  type (+'a,'p) slot
+
+  (** an object of class ['k]  *)
+  type +'k obj
+
+  (** a value of type ['k]  *)
+  type +'k value
+
+  (** a slot holding a property ['p] of a class ['k] object. *)
+  type (+'k,'p) slot
+
+  (** an instance of the domain type class  *)
   type 'p domain
+
+  (** an instance of the persistance type class  *)
   type 'a persistent
+
+
+  (** the knowledge base state  *)
   type state
+
+
+  (** possible conflicts  *)
   type conflict = ..
 
+
+  (** a provider of information.  *)
   type agent
+
+
+  (** a set of opinions.  *)
   type 'a opinions
-
-  (** state with no knowledge  *)
-  val empty : state
-
-  val of_bigstring : Bigstring.t -> state
-
-  val to_bigstring : state -> Bigstring.t
-
-  val pp_state : Format.formatter -> state -> unit
 
   (** [collect p x] collects the value of the property [p].
 
@@ -86,7 +168,30 @@ module Knowledge : sig
   val propose : agent -> ('a, 'p opinions) slot -> ('a obj -> 'p t) -> unit
 
 
+  (** state with no knowledge  *)
+  val empty : state
 
+
+
+  (** [of_bigstring data] loads state from [data] *)
+  val of_bigstring : Bigstring.t -> state
+
+
+  (** [to_bigstring state] serializes state into a binary representation.  *)
+  val to_bigstring : state -> Bigstring.t
+
+
+  (** prints the state of the knowledge base.  *)
+  val pp_state : Format.formatter -> state -> unit
+
+
+  (** [run cls obj state] computes the value of the object [obj] given
+      inital.
+
+
+
+
+  *)
   val run : ('k,'s) cls -> 'k obj t -> state -> (('k,'s) cls value * state, conflict) result
 
   module Syntax : sig
@@ -154,15 +259,43 @@ module Knowledge : sig
 
       A class [k] is denoted by an indexed type [(k,s) cls], where
       [s] is a sort.
+
+      A class denotes a set of properties that describe objects and
+      values of that class.
+
+      A class is a set of objects that share the same set of
+      properties. Objects of the same class could be furthermore
+      partitioned into subsets of objects all sharing something in
+      common. The type of the sort could be a concrete value, that
+      represents some static property common to all values belonging
+      to this sort.
+
+      Classes are declarative and each class should have a unique
+      name. To prevent name clashing the Knowledge Base employs a
+      Common Lisp style namespaces, where each name belongs to a
+      package.
+
+      The type index, associated with the class, should be protected
+      by the module that declares the class. For example, it is a bad
+      idea to use the [unit] type as an index.
+
+
   *)
   module Class : sig
     type (+'k,'s) t = ('k,'s) cls
 
 
-    (** [declare ?desc ?package name sort] declares a new
-        class with the given [name] and [sort] index. *)
-    val declare : ?desc:string -> ?package:string -> string ->
-      's -> ('k,'s) cls
+    (** [declare name sort] declares a new
+        class with the given [name] and [sort] index.
+
+        Since classes are declarative each new declaration creates a
+        new class that is not equal to any other.
+
+        The [package] and [name] pair should be unique. If there is
+        already a class with the given [package:name] then the
+        declaration fails.
+    *)
+    val declare : ?desc:string -> ?package:string -> string -> 's -> ('k,'s) cls
 
 
     (** [refine cls s] refines the [sort] of class ['k] to [s].   *)
@@ -216,15 +349,27 @@ module Knowledge : sig
       ?package:string ->
       ('k,_) cls -> string -> 'p domain -> ('k,'p) slot
 
-    val name : ('a,_) cls -> string
-    val package : ('a,_) cls -> string
-    val fullname : ('a,_) cls -> string
 
+    (** [name cls] is the class name.  *)
+    val name : ('a,_) cls -> string
+
+
+    (** [package cls] is the class package.  *)
+    val package : ('a,_) cls -> string
+
+
+    (** [fullname cls] is a fully qualified class name.  *)
+    val fullname : ('a,_) cls -> string
 
     (** [sort cls] returns the sort index of the class [k].  *)
     val sort : ('k,'s) cls -> 's
   end
 
+
+  (** Object interface.
+
+      An object is an entity
+  *)
   module Object : sig
     type 'a t = 'a obj
     type 'a ord
