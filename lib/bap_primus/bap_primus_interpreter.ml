@@ -539,7 +539,7 @@ module Make (Machine : Machine) = struct
     !!pos_left curr
 
 
-  let term ?(cleanup=Machine.return ()) return cls f t =
+  let term return cls f t =
     Machine.Local.get state >>= fun s ->
     match Pos.next s.curr cls t with
     | Error err -> Machine.raise err
@@ -547,13 +547,8 @@ module Make (Machine : Machine) = struct
       update_pc t >>= fun () ->
       Machine.Local.update state (fun s -> {s with curr}) >>= fun () ->
       enter cls curr t >>= fun () ->
-      Machine.catch (f t)
-        (fun exn ->
-           leave cls curr t >>= fun () ->
-           cleanup >>= fun () ->
-           Machine.raise exn) >>= fun r ->
+      f t >>= fun r ->
       leave cls curr t >>= fun () ->
-      cleanup >>= fun () ->
       return r
 
   let normal = Machine.return
