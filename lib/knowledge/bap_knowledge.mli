@@ -2,32 +2,78 @@ open Core_kernel
 open Monads.Std
 
 
-(** denotes a knowledge computation.  *)
+(** The Knowledge Representation Library.
+
+    A library for building knowledge representation and
+    reasoning systems. *)
+
+
+(** a knowledge dependent computation.  *)
 type 'a knowledge
 
 
+(** The Knowledge Representation Library.
 
-(** Knowledge Base.
+    {2 Introduction}
 
-    The knowledge base maintains a consistent set of facts about
-    object properties. The nature of objects and their properties
-    is domain-specific and is beyond the scope of the knowlege base
-    itself.
+    The library provides facilities for storing, accumulating, and
+    computing knowledge. The knowledge could be represented indirectly,
+    in the Knowledge Base, or directly as knowledge values. The
+    library focuses on representing knowledge that is partial and
+    provides mechanisms for knowledge accumulation and
+    refinement. The knowledge representation library leverages the
+    powerful type system of the OCaml language to facilitate
+    development of complex knowledge representation and reasoning systems.
 
+    {2 Knowledge Taxonomy}
 
-    {3 Knowledge Base Taxonomy}
+    For a given knowledge system, the domain of discourse is a set of
+    objects, optionally partitioned into sorts. Therefore, an {i object}
+    is fundamental building block of a knowledge system.
 
-    Objects are grouped into classes. Classes are further subdivided
-    into sorts. Object properties are stored in slots, and the class of
-    an object defines the set of slots that could be used to read
-    properties of its objects. A snapshot of all properties of an
-    object is called a value.
+    An object {i class} defines a set of possible properties
+    of that objects. A snapshot of all properties of an object is
+    called {i value}. A set of values belonging to a particular class
+    could be partitioned into sorts, to facilitate the design of
+    strongly typed interfaces.
 
+    Properties of objects and values are stored in {i slots}.
     The data type of any property is required to be an instance of the
-    Domain data structure, it should be a set with a special [empty]
+    {i domain} structure, i.e., it should be a set with a special [empty]
     value and the [order] operation, that orders elements of this set
     by their informational content, so that [empty] is the least
     element.
+
+    The knowledge could be represented directly as a value, or
+    indirectly as a set of objects in a knowledge base.
+
+
+    {2 Values}
+
+    A value is an ordered tuple of slots that holds all properties of
+    an object with which this value is associated. Additionally, a
+    value is attributed with a sort value, which is shared by all
+    values belonging to that sort. The sort value could be a concrete
+    value, holding some information that is common for all elements of
+    the sort or it could be just a type index that witnesses that the
+    value belongs to a certain set of values.
+
+    Properties of a value could be accessed using the [Value.get]
+    operator. A new value of a property could be put into the slot
+    using the [Value.put] operator.
+
+    Values are instances of the domain type class and therefore a
+    property of an object or another value could also be a value.
+
+    The set of slots of a given value is defined by its class, and
+    this set is extensible, i.e., it is possible to add more slots.
+
+    {2 Knowledge Base}
+
+    The knowledge base maintains a consistent set of facts about
+    object properties. An object is a unit of identity. The value of
+    an object is defined by its properties. However, the knowledge
+    base doesn't provide the direct access to the object value.
 
     Object properties could be accessed using the [collect] operator
     and set using the [provide] operator. The knowledge base maintains
@@ -43,10 +89,10 @@ type 'a knowledge
     knowledge base will ensure that the least fixed point of all
     procedures involved in the property computation is reached.
 
-    All Knowledge Base operators return a monadic value of type
-    ['a knowledge], so the knowledge itself is a monad, that evaluates
-    to a value of type ['a] and more knowledge, that was obtained
-    during the computation.
+    All Knowledge Base operators return a computation of type
+    ['a knowledge] which is a monad, that denotes a computation that
+    is knowledge dependent, i.e., it either accesses the knowledge
+    base, or modifies it, or both.
 
     The knowledge computation may lead to an inconsistent state, in
     other words, it is not guaranteed that the computation will reach
@@ -61,17 +107,15 @@ type 'a knowledge
     predefined trustworthiness. Opinions are introduced using the
     [suggest] operator or promised using the [propose] operator.
 
-
     Finally, the knowledge base is partially persistent. It is
     possible to make some slots persistent, so that properties, stored
     in them are preserved between program runs.
+
 *)
 module Knowledge : sig
 
-
-  (** the knowledge computation  *)
+  (** a knowledge monad  *)
   type 'a t = 'a knowledge
-
 
   (** a sort ['s] of class ['k].   *)
   type (+'k,+'s) cls
@@ -79,8 +123,8 @@ module Knowledge : sig
   (** an object of class ['k]  *)
   type +'k obj
 
-  (** a value of type ['k]  *)
-  type +'k value
+  (** a value of class ['c = ('k,'s) cls]  *)
+  type +'c value
 
   (** a slot holding a property ['p] of a class ['k] object. *)
   type (+'k,'p) slot
@@ -91,20 +135,16 @@ module Knowledge : sig
   (** an instance of the persistance type class  *)
   type 'a persistent
 
-
   (** the knowledge base state  *)
   type state
 
-
-  (** possible conflicts  *)
+  (** a set of possible conflicts  *)
   type conflict = ..
 
-
-  (** a provider of information.  *)
+  (** an information provider  *)
   type agent
 
-
-  (** a set of opinions.  *)
+  (** an opinion based fact of type ['a]  *)
   type 'a opinions
 
   (** [collect p x] collects the value of the property [p].
@@ -185,11 +225,18 @@ module Knowledge : sig
   val pp_state : Format.formatter -> state -> unit
 
 
-  (** [run cls obj state] computes the value of the object [obj] given
-      inital.
+  (** [run cls comp init] computes the value of the object [obj] given
 
+      Evaluates the knowledge dependent computation [comp] using the
+      initial set of facts [init].
 
+      The computation must evaluate to an object [p] of the class
+      [cls]. The [run] function computes all properties of [p], which
+      will trigger all promises associated with the slots.
 
+      The result of evaluation is either a conflict, or a pair of
+      value, which contains all properties of the object, and the
+      knowledge accumulated during the computation.
 
   *)
   val run : ('k,'s) cls -> 'k obj t -> state -> (('k,'s) cls value * state, conflict) result
@@ -217,11 +264,24 @@ module Knowledge : sig
   include Monad.Fail.S with type 'a t := 'a t
                         and type 'a error = conflict
 
-  (** Orders knowledge by information content.
+  (** Orders knowledge by its information content.
 
-      The [Order.partial] is a generalization of the total order,
+      [Order.partial] is a generalization of the total order,
       which is used to compare the amount of information in two
       specifications of knowledge.
+
+      Note: The information content of a value ordering shall not be
+      confused with any other natural ordering of the associated value
+      type. For example, if we will take age, measured in natural numbers,
+      then the order natural numbers has nothing to do with the amount
+      of information associated with each age. From the knowledge
+      representation perspective. We either do not know the age, or
+      know it to some certainty. Therefore, the domain representation
+      could be either [int option], with [None] being the minimal
+      element (denoting an absence of knowledge about the age of an
+      object) or [Some x], s.t.,
+      [order (Some x) (Some y) = NC iff x <> y], i.e., neither is
+      having more or less knowledge than another.
 
   *)
   module Order : sig
@@ -261,24 +321,18 @@ module Knowledge : sig
       [s] is a sort.
 
       A class denotes a set of properties that describe objects and
-      values of that class.
-
-      A class is a set of objects that share the same set of
-      properties. Objects of the same class could be furthermore
-      partitioned into subsets of objects all sharing something in
-      common. The type of the sort could be a concrete value, that
-      represents some static property common to all values belonging
-      to this sort.
+      values of the given class. Thus, a class fully defines the
+      structure of an object or a value. Sorts could be used to
+      further partition the class into subsets, if needed.
 
       Classes are declarative and each class should have a unique
-      name. To prevent name clashing the Knowledge Base employs a
+      name. To prevent name clashing the Knowledge Library employs a
       Common Lisp style namespaces, where each name belongs to a
       package.
 
       The type index, associated with the class, should be protected
       by the module that declares the class. For example, it is a bad
-      idea to use the [unit] type as an index.
-
+      idea to use the [unit] type as an index of a class.
 
   *)
   module Class : sig
@@ -338,10 +392,20 @@ module Knowledge : sig
     val assert_equal : ('a,_) cls -> ('b,_) cls -> ('a obj, 'b obj) Type_equal.t
 
 
-    (** [property ?desc ?persistent ?package cls name dom] declares
+    (** [property cls name dom] declares
         a new property of all instances of class [k].
 
-        Returns a slot, that is used to access this property.
+        Each property should have a unique name. If a property with
+        the given name was already, then the declaration fails.
+
+        The returned slot can be used to access the declarated
+        property. If the property is expected to be public then it
+        should be published via a library interface.
+
+        @param persistent is an instance of the [persistent] class that
+        will be used to persist the property.
+
+        @param desc is a property documentation.
     *)
     val property :
       ?desc:string ->
@@ -349,10 +413,8 @@ module Knowledge : sig
       ?package:string ->
       ('k,_) cls -> string -> 'p domain -> ('k,'p) slot
 
-
     (** [name cls] is the class name.  *)
     val name : ('a,_) cls -> string
-
 
     (** [package cls] is the class package.  *)
     val package : ('a,_) cls -> string
@@ -366,9 +428,11 @@ module Knowledge : sig
   end
 
 
-  (** Object interface.
+  (** Knowledge Base Objects.
 
-      An object is an entity
+      The knowledge base stores object properties. The
+      object itself is an identifier, and could be seen as a pointer
+      or a database key.
   *)
   module Object : sig
     type 'a t = 'a obj
@@ -380,7 +444,13 @@ module Knowledge : sig
     (** [scoped scope] pass a fresh new object to [scope].
 
         The extent of the created object is limited with the extent
-        of the function [scope].*)
+        of the function [scope]. The object passed to the [scope]
+        function is automatically deleted after the computation,
+        returned by [scope] evaluates to a value. The identity of an
+        object could be reused, which may lead to hard detected bugs,
+        thus care should be taken to prevent the object value from
+        escaping the scope of the function.
+    *)
     val scoped : ('a,_) cls -> ('a obj -> 'b knowledge) -> 'b knowledge
 
     (** [repr x] returns a textual representation of the object [x] *)
@@ -404,28 +474,134 @@ module Knowledge : sig
     val cast : ('a obj, 'b obj) Type_equal.t -> 'a obj -> 'b obj
 
 
+    (** [id obj] returns the internal representation of an object.   *)
     val id : 'a obj -> Int63.t
 
+
+    (** Ordered and persistent data types.  *)
     module type S = sig
       type t [@@deriving sexp]
       include Base.Comparable.S with type t := t
       include Binable.S with type t := t
     end
 
+
+    (** [derive cls] a module of type [S] for the given class [cls].*)
     val derive : ('a,'d) cls -> (module S
                                   with type t = 'a obj
                                    and type comparator_witness = 'a ord)
   end
 
+
+  (** Knowledge Values.
+
+      A value is a concrete representation of knowledge. It is a
+      snapshot of all properties associated with some object, i.e., an
+      ordered tuple of slots. The value has no identity and that
+      differs it from the object, as the value is essentially a
+      property of an object - not an object itself.
+
+      From another perspective, a value is an extensible record, with
+      fields reified into first-class slots, the record type into the
+      [cls] values, and an additional constraint that all field types
+      must be an instance of the domain type class (i.e., have a
+      default and an ordering).
+
+      Each value has a class. The class value itself is indexed with
+      the class and sort indices. The first index denotes the set of
+      properties that could be associated with the value. The second
+      index further partitions values of that class into subsets, to
+      so that domain specific relations between values could be
+      expressed explicitly with the host language type system.
+
+      The value sort is an arbitrary value, which can also be used to
+      store additional static information about the value, i.e., the
+      information that is common to all instances of the sort.
+
+
+      {3 Total ordering and age}
+
+      In addition to be partially ordered by their information
+      content, values are also totally ordered, so that they could be
+      organized into finite sets and maps.
+
+      The total order is induced from the information order, so that
+      if a value [x] is ordered before [y] in the information order,
+      then it will be also ordered before [y] in the total order. And
+      if [x] and [y] have the same information content, then they are
+      considered equal. Values with non-comparable information content
+      are ordered by their time-stamp.
+
+      Every time a new value created it is assigned a
+      time-stamp. A new value is created by all functions that has
+      ['a value] return type, except the [refine] function. Each
+      time-stamp is unique and no two values could have the same
+      time-stamps unless they are physically the same, or are
+      de-serializations of the same value, or are refinements of the
+      same value. In other words, values with equal time-stamps are
+      guaranteed to bear the same information.
+
+      Time-stamp values correlate with the order of evaluation. A
+      value that was evaluated more recently will have a higher
+      time-stamp. Therefore time-stamps define an age of a value. A
+      value which has a smaller time-stamp is younger than a value
+      that has a larger time-stamp.
+
+  *)
   module Value : sig
     type 'a t = 'a value
+
+
+    (** a witness of the ordering  *)
     type 'a ord
     include Type_equal.Injective with type 'a t := 'a t
 
+
+    (** [empty cls] the empty value of class [cls].
+
+        The empty value has the least information content, i.e., all
+        slots are empty.
+    *)
     val empty : ('a,'b) cls -> ('a,'b) cls value
+
+
+    (** [order x y] orders [x] and [y] by their information content.  *)
     val order : 'a value -> 'a value -> Order.partial
+
+
+    (** [join x y] joins pairwise all slots of [x] and [y].
+
+        Each slot of [x] and [y] are joined using the [Domain.join]
+        function. The result is either a pairwise join or a conflict
+        if any of the joins ended up with a conflict.
+    *)
     val join : 'a value -> 'a value -> ('a value,conflict) result
-    val merge : ?on_conflict:[
+
+
+    (** [merge x y] joins [x] and [y] and resolves conflicts.
+
+        Performs a pairwise join of [x] and [y] and in case if
+        any of the joins yields a conflict uses the provided strategy
+        to resolve it.
+
+        @param on_conflict specifies the conflict resolution strategy
+        (see below). Defaults to [`drop_old]
+
+        {3 Conflict resolution strategies}
+
+        The following conflict resolution strategies are currently
+        supported (more strategies could be added later):
+
+        - [`drop_old] a conflicting property of an older object is
+          ignored (an object is older if its time-stamp is less than
+          or equal the time-stamp of other object);
+        - [`drop_new] a conflicting property of the newer object is
+          ignored (an object is newer if its time-stamp is greater than
+          or equal the time-stamp of other object);
+        - [`drop_right] a conflicting property of [y] is ignored;
+        - [`drop_left] a conflicting property of [x] is ignored.
+    *)
+    val merge : ?on_conflict:[<
       | `drop_old
       | `drop_new
       | `drop_right
@@ -433,12 +609,23 @@ module Knowledge : sig
     ] -> 'a value -> 'a value -> 'a value
 
 
-    (** [cls x] is the class of [x]   *)
+    (** [cls x] is the class of [x].   *)
     val cls : ('k,'s) cls value -> ('k,'s) cls
+
+
+    (** [get p v] gets a value of the property [p].  *)
     val get : ('k,'p) slot -> ('k,_) cls value -> 'p
+
+
+    (** [put p v x] sets a value of the property [p].  *)
     val put : ('k,'p) slot -> ('k,'s) cls value -> 'p -> ('k,'s) cls value
 
-    (** [refine v s] refines the sort of [v] to [s].  *)
+    (** [refine v s] refines the sort of [v] to [s].
+
+        Since, this function doesn't change the information stored in
+        the value, the time-stamp of the returned value is the same,
+        therefore [v = refine v s].
+    *)
     val refine : ('k,_) cls value -> 's -> ('k,'s) cls value
 
     module type S = sig
@@ -449,27 +636,58 @@ module Knowledge : sig
       include Binable.S with type t := t
     end
 
+
+    (** [derive cls] derives the implementation of the [S] structure.   *)
     val derive : ('a,'s) cls ->
       (module S
         with type t = ('a,'s) cls t
          and type comparator_witness = ('a,'s) cls ord)
 
+
+    (** [pp ppf v] outputs [v] to the formatter [ppf].
+
+        Prints all slots of the value [v].
+    *)
     val pp : Format.formatter -> 'a value -> unit
 
+
+    (** [pp_slots slots ppf v] prints the specified set of slots.
+
+        Prints only slots that has a name in [slots].*)
     val pp_slots : string list -> Format.formatter -> 'a value -> unit
   end
 
+
+  (** Property accessor.
+
+      Properties are accessed by slots. A slot is a first-class
+      record field. Slots are declarative, each new declaration of
+      a slot creates a new instance. Slot names should be unique - it
+      is not allowed to have two slots with the same name, even if
+      they belong to different classes.
+
+      To declare a new slot of a class use the [Class.property]
+      function. This module enables [slot] introspection.
+
+  *)
   module Slot : sig
     type ('a,'p) t = ('a,'p) slot
 
+    (** [domain slot] the [slot] domain.  *)
     val domain : ('a,'p) slot -> 'p domain
+
+    (** [cls slot] slot's class.  *)
     val cls : ('a,_) slot -> ('a, unit) cls
+
+    (** [name slot] the slot name.  *)
     val name : ('a,'p) slot -> string
+
+    (** [desc slot] the slot documentation.  *)
     val desc : ('a,'p) slot -> string
   end
 
 
-  (** A symbol is an object with unique name.
+  (** A symbol is an object with a unique name.
 
       Sometimes it is necessary to refer to an object by name, so that
       a chosen name will always identify the same object. Finding or
@@ -594,16 +812,50 @@ module Knowledge : sig
     val import : ?strict:bool -> ?package:string -> string list -> unit knowledge
   end
 
+  (** An information provider.
+
+      A piece of information could be predicated with its source to
+      denote the trustworthiness of the information an/or to
+      enable information provenance.
+
+      An agent is a registry entity with associated name, description,
+      and reliability. The [name] and [description] are used for
+      introspection. The reliability could be used for conflict
+      resolution.
+
+      Using [Domain.opinions] it is easy to embed any data into the
+      domain structure, by pairing the elements of this set with the
+      information about its source, i.e., with the agent. *)
   module Agent : sig
     type t = agent
+
+
+    (** the agent's id.  *)
     type id
+
+
+    (** abstract ordered type to quantify reliability of agents.*)
     type reliability
 
+
+    (** [register name] registers a new agent.
+
+        The provided [package] and [name] pair should be unique. If
+        an agent with the given [package:name] is already registered,
+        the registration of the new agent will fail.
+
+        @param desc a description of the registered agent.
+        @param package a namespace of the registered agent.
+        @param reliability is the amount of agent's trustworthiness
+        (defaults to trustworthy).
+    *)
     val register :
       ?desc:string ->
       ?package:string ->
       ?reliability:reliability -> string -> agent
 
+
+    (** [registry ()] is the current registry of agents.*)
     val registry : unit -> id list
 
     val name : id -> string
