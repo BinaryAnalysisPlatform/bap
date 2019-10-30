@@ -59,7 +59,7 @@
     inject its analysis in the right place of a pipeline.
 
     There are plenty of extension points in BAP, too many to mention
-    here, but writing a disassemling pass would be a good
+    here, but writing a disassembling pass would be a good
     example. Using the [Project.register_pass] function an analyst can
     get straight to the point and apply its analysis as a
     transformation to the [project] data structure without being
@@ -68,7 +68,7 @@
     the command line arguments, selecting proper loaders and disassembler
     parameters.
 
-    This approach also establishes a unified inteface to BAP making the
+    This approach also establishes a unified interface to BAP making the
     whole system easier to use and understand.
 
     {3 Plugins}
@@ -76,7 +76,7 @@
     A plugin is compiled and packed code that could be loaded in
     runtime. A plugin is a bundle that in addition to the machine and
     byte code of the extension itself, contains the meta information
-    that descibes plugin properties, requirements, and provided
+    that describes plugin properties, requirements, and provided
     features. It may also optionally contain the code for
     dependencies, which leverages plugin portability, so that it can
     be loaded when the development environment is no longer
@@ -103,7 +103,7 @@
     standard OCaml [ocamlbuild] tool extended with a few rules that
     are necessary to build and pack plugins.
 
-    The [bapbuild] tool has its limitiations, for example, only one
+    The [bapbuild] tool has its limitations, for example, only one
     plugin per folder could be built. When the source base grows very
     big it is becoming hard to manage it with [bapbuild], so using
     some configuration system is advised, e.g., OASIS or dune. A
@@ -114,7 +114,7 @@
 
     After the plugin is deployed to the place where it could be found
     by BAP, it will be loaded every time the [Bap_main.init] function
-    is called. All toplevel expressions of all modules consituting the
+    is called. All toplevel expressions of all modules constituting the
     plugin will be evaluated, however, a well-behaving plugin shall
     not evaluate any side-effectful expressions except those that are
     provided by the [Extension] module.
@@ -146,7 +146,7 @@
 
     {2 Features and Requirements}
 
-    BAP employs a system of simple sematic tags to denote required and
+    BAP employs a system of simple semantic tags to denote required and
     provided capabilities of its various components. This system
     facilitates fine granular selection of components that are
     required for an application to satisfy it needs.
@@ -246,7 +246,7 @@
 
     The [Bap_main] library provides a few functions that could be used
     to create composable command line interfaces. The final grammar
-    specification is build from piecies and is having the following
+    specification is build from pieces and is having the following
     EBNF definition:
 
     {v
@@ -299,12 +299,12 @@
     grammar. First of all, for each registered [<plugin>]  the
     ["--no-<plugin>"] option is added, which if specified, will
     disable the plugin. A disabled plugin will still contribute to
-    the command line grammar, but the extensions which are registred
+    the command line grammar, but the extensions which are registered
     with it will not be loaded. Unless the extension is the command
     itself, which will be still evaluated if selected on the command
     line.
 
-    Also, for each registred [<plugin>] an option [--<plugin>] will be
+    Also, for each registered [<plugin>] an option [--<plugin>] will be
     added to enable the backward compatibility with the old style of
     specifying passes.
 
@@ -319,7 +319,7 @@
 
 
     The [--recipe] option is very special, as it changes the command
-    line itself. Every occurence of the [--recipe] option will parse
+    line itself. Every occurrence of the [--recipe] option will parse
     the provided recipe, which will be evaluated to the list of
     arguments which will be substituted instead of the specified
     [--recipe] option. See [bap recipes] for more information about
@@ -360,7 +360,7 @@ type ctxt
     it is not always an error, e.g., a user may have requested the
     help message, using the --help command).
 
-    If [init ()] terminates with any value other thatn [Ok ()] the
+    If [init ()] terminates with any value other that [Ok ()] the
     BAP framework is considered to be unitialized and shouldn't be
     used.
 
@@ -383,7 +383,7 @@ type ctxt
     @parameter library specifies a list of folders that will be
     prepended to the plugins search paths list (which already contains
     some precompiled location and the value of the BAP_PLUGIN_PATH
-    environment variabe, which in turn could also be a list).
+    environment variable, which in turn could also be a list).
 
     @parameter argv is the array of command line arguments, with the first
     value being the program name. If not specified, then it defaults
@@ -392,7 +392,7 @@ type ctxt
     passed to the process, use the [Sys.argv] variable.
 
     @parameter env, if specified, then this function will be used to
-    access environment variables. Otherwise, the environment varaibles
+    access environment variables. Otherwise, the environment variables
     are looked up using the [Sys.getenv] function.
 
     @parameter log, if specified, then the specified location will be
@@ -405,7 +405,7 @@ type ctxt
     reached, which will be discarded. If the [log] parameter is not
     specified, then the logging will be performed in a directory which
     name is obtained either from the command line (via the [--logdir]
-    parameter) or from the environemt (using the [BAP_LOG_DIR]
+    parameter) or from the environment (using the [BAP_LOG_DIR]
     variable). If neither is present then the logging will be
     performed into a directory prescribed by the XDG standard for the
     application - i.e., to the `$XDG_STATE_HOME/bap`, where the
@@ -471,7 +471,7 @@ module Extension : sig
       [features] needed by the extension are present.
 
       If [extension] evaluates to [Error condition], then no other
-      extensions will be evaluated and the initilialization procedure
+      extensions will be evaluated and the initialization procedure
       will stop immediately with the [Error condition] as the final
       result.
 
@@ -491,7 +491,7 @@ module Extension : sig
       provide features that are requested by the application are
       loaded. All configuration parameters of the extension will be
       attributed with tags from the [provides] set, so that they will
-      only affect those components that explicitly depend on on of the
+      only affect those components that explicitly depend on of the
       specified features. Note that, the set of provided features is
       shared by all extensions of a plugin, in other words it is an
       attribute of a plugin rather than of a particular extension
@@ -513,8 +513,8 @@ module Extension : sig
   (** [documentation s] specifies plugin documentation.
 
       A non-declarative way of specifying documentation. Each
-      occurence of the [documentation s] appends [s] to the plugin
-      documentation, as well as each occurence of the [doc] parameter
+      occurrence of the [documentation s] appends [s] to the plugin
+      documentation, as well as each occurrence of the [doc] parameter
       of the [Extension.declare] function.
 
       See the [doc] parameter of the {!Extension.declare} and
@@ -564,13 +564,13 @@ module Extension : sig
         for each command, and [G'] is the global
 
         When the command is selected and command line arguments are
-        parsed succesfully, the [command] function is applied to the
-        the specified command line arguments. The result of evaluation
+        parsed successfully, the [command] function is applied to the
+        specified command line arguments. The result of evaluation
         of the [command] will become the result of the [Bap_main.init
         ()] expression in the host program.
 
         If the function with the given [name] is already registered,
-        then the command is not registred and BAP initialization will
+        then the command is not registered and BAP initialization will
         terminate abnormally with the configuration error condition.
 
         {3 Examples}
@@ -593,7 +593,7 @@ module Extension : sig
         ]}
 
 
-        2) Declaring a command with one positional argumet
+        2) Declaring a command with one positional argument
 
         {[
           let input = Command.argument Type.int
@@ -735,7 +735,7 @@ module Extension : sig
         The switch-type parameters enables a selection from a list of
         choices, however unlike it [switch] counterpart, the selector
         can occur more than once on the command line.
-        For every occurence [--<name vK>] on the command line, the
+        For every occurrence [--<name vK>] on the command line, the
         corresponding [vK] value will be added to the list that will
         be passed as an argument to the command. The order of elements
         in the list will match with the order of selectors on the
@@ -767,7 +767,7 @@ module Extension : sig
         kN>] is the result of application of the [name] function to
         the [kN] element of the [keys] list.
 
-        For each occurence of [--<name k> [=] v] on the specified
+        For each occurrence of [--<name k> [=] v] on the specified
         command line a binding [(k,v)] will be added to the
         dictionary, which is passed as an argument to the command.
 
@@ -879,8 +879,8 @@ module Extension : sig
 
         This command line parameter behaves the same as its [parameter]
         counterpart, but it could be specified more than once on the
-        command line. For each occurence of [--<name>=v], [v] will be
-        added to the list (in the order of occurence), which will be
+        command line. For each occurrence of [--<name>=v], [v] will be
+        added to the list (in the order of occurrence), which will be
         passed as an argument to the command.
 
         See the {!parameter} function for more details.
@@ -921,7 +921,7 @@ module Extension : sig
 
 
 
-    (** [flags] declares a muti-occuring flag-style parameter.
+    (** [flags] declares a muti-occurring flag-style parameter.
 
         The grammar of [args $ term $ flag name] is
 
@@ -932,7 +932,7 @@ module Extension : sig
 
         Unlike it {!flag} counterparts parameters declared as [flags]
         make occur more than once on the command line. The number of
-        occurences will be passed to the command.
+        occurrences will be passed to the command.
     *)
     val flags :
       ?doc:string ->
@@ -945,7 +945,7 @@ module Extension : sig
   (** Configuration Parameters.
 
       Use this module to declare and use configuration parameters for
-      your plugins. Algthough configuration parameters could be
+      your plugins. Although configuration parameters could be
       specified via the command line, they are different from the
       corresponding parameters of commands in several ways:
 
@@ -1062,7 +1062,7 @@ module Extension : sig
       'a typ -> string -> 'a param
 
 
-    (** [parameters t name] declares a multi-occuring parameter.
+    (** [parameters t name] declares a multi-occurring parameter.
 
         This declaration extends the [common-options] grammar by
         adding the following rules
@@ -1224,7 +1224,7 @@ module Extension : sig
       representation of data used for command and
       configuration parameters.
 
-      Data types are not declarative, but stuctural, i.e., they define
+      Data types are not declarative, but structural, i.e., they define
       a set of rules which describe the set of possible values and
       mapping of those values to their OCaml representation.
 
@@ -1260,7 +1260,7 @@ module Extension : sig
         @parameter digest if provided then [digest x], should
         evaluate to an md5 hash of [x] such that if for all [y],
         if [digest x = digest y mod md5] then [x = y]. I.e., if
-        digests are equal (modulo md5 collistion) then the [x] and [y]
+        digests are equal (modulo md5 collision) then the [x] and [y]
         are also equal. The opposite is not guaranteed, but most of
         the data types usually provide this guarantee.
 
@@ -1411,7 +1411,7 @@ module Extension : sig
         approximately digested. For the output destinations the [path]
         type is more suitable.
 
-        1. If the name is a symbolik link then the digest of the link
+        1. If the name is a symbolic link then the digest of the link
         destination is computed.
 
         2. If the name references to a regular file then the [digest]
