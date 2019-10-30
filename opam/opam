@@ -48,7 +48,6 @@ build: [
     "--%{conf-ida:enable}%-ida"
     "--ida-path=%{conf-ida:path}%" {conf-ida:installed}
     "--ida-headless=%{conf-ida:headless}%" {conf-ida:installed}
-    "--%{conf-ida:enable}%-fsi-benchmark"
     "--%{conf-binutils:enable}%-objdump"
     "--objdump-path=%{conf-binutils:objdump}%" {conf-binutils:installed}
     "--objdump-targets=%{conf-binutils:targets}%" {conf-binutils:installed}
@@ -56,6 +55,13 @@ build: [
   [make]
 ]
 install: [
+  ["ocamlfind" "remove" "bap-main"]
+  ["ocamlfind" "remove" "bap-plugins"]
+  ["ocamlfind" "remove" "bap-bundle"]
+  ["ocamlfind" "remove" "bap-plugin-disassemble"]
+  ["ocamlfind" "remove" "bap-plugin-mc"]
+  ["ocamlfind" "remove" "bap-recipe"]
+  ["ocamlfind" "remove" "bap-plugin-recipe_command"]
   ["ocamlfind" "remove" "bap"]
   ["ocamlfind" "remove" "bap-arm"]
   ["ocamlfind" "remove" "bap-beagle-prey"]
@@ -150,6 +156,13 @@ install: [
   ["cp" "run_tests.native" "%{bin}%/bap_run_tests"]
 ]
 remove: [
+  ["ocamlfind" "remove" "bap-main"]
+  ["ocamlfind" "remove" "bap-plugins"]
+  ["ocamlfind" "remove" "bap-bundle"]
+  ["ocamlfind" "remove" "bap-plugin-disassemble"]
+  ["ocamlfind" "remove" "bap-plugin-mc"]
+  ["ocamlfind" "remove" "bap-recipe"]
+  ["ocamlfind" "remove" "bap-plugin-recipe_command"]
   ["ocamlfind" "remove" "bap"]
   ["ocamlfind" "remove" "bap-arm"]
   ["ocamlfind" "remove" "bap-beagle-prey"]
@@ -182,6 +195,7 @@ remove: [
   ["ocamlfind" "remove" "bap-plugin-phoenix"]
   ["ocamlfind" "remove" "bap-plugin-piqi_printers"]
   ["ocamlfind" "remove" "bap-plugin-powerpc"]
+  ["ocamlfind" "remove" "bap-plugin-primus_powerpc"]
   ["ocamlfind" "remove" "bap-plugin-primus_x86"]
   ["ocamlfind" "remove" "bap-plugin-primus_loader"]
   ["ocamlfind" "remove" "bap-plugin-primus_lisp"]
@@ -201,6 +215,7 @@ remove: [
   ["ocamlfind" "remove" "bap-plugin-trivial_condition_form"]
   ["ocamlfind" "remove" "bap-plugin-primus_wandering"]
   ["ocamlfind" "remove" "bap-plugin-print"]
+  ["ocamlfind" "remove" "bap-plugin-raw"]
   ["ocamlfind" "remove" "bap-plugin-report"]
   ["ocamlfind" "remove" "bap-plugin-read_symbols"]
   ["ocamlfind" "remove" "bap-plugin-x86"]

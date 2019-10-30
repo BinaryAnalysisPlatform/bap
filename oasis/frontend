@@ -1,11 +1,10 @@
 Flag frontend
-  Description: Build BAP frontend
+  Description: Build the bap command line utility
   Default: false
 
 Executable "bap"
   Path:           src
-  MainIs:         bap_main.ml
+  MainIs:         bap_frontend.ml
   Build$:         flag(everything) || flag(frontend)
   CompiledObject: best
-  BuildDepends:   core_kernel, ppx_jane, bap-future, regular,
-                  bap, bap.plugins, cmdliner, findlib.dynload, parsexp
+  BuildDepends:   bap-main, bap, core_kernel, ppx_jane, findlib.dynload

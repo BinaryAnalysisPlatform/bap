@@ -7,7 +7,6 @@ open Bap_types.Std
 open Bap_image_std
 open Bap_disasm_std
 open Bap_sema.Std
-open Bap_event
 
 type t
 type project = t

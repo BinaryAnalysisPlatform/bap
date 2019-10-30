@@ -216,11 +216,20 @@ module Relocations = struct
       Seq.fold s ~init:Addr.Map.empty ~f:(fun m (key,data) ->
           Map.set m ~key ~data)
 
-    let arch_width =
-      Fact.require arch >>= fun a ->
-      match Arch.of_string a with
-      | Some a -> Fact.return (Arch.addr_size a |> Size.in_bits)
+    let arch =
+      Fact.collect Ogre.Query.(select (from arch)) >>= fun s ->
+      Fact.Seq.reduce ~f:(fun a1 a2 ->
+          if Arch.equal a1 a2 then Fact.return a1
+          else Fact.failf "arch is ambiguous: %a <> %a"
+              Arch.pp a1 Arch.pp a2 ())
+        (Seq.filter_map ~f:Arch.of_string s) >>= fun a ->
+      match a with
+      | Some a -> Fact.return a
       | None -> Fact.failf "unknown/unsupported architecture" ()
+
+
+    let arch_width =
+      arch >>| fun arch -> Arch.addr_size arch |> Size.in_bits
 
     let relocations =
       arch_width >>= fun width ->

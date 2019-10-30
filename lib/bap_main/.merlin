@@ -1,0 +1,5 @@
+REC
+PKG base
+PKG stdio
+PKG cmdliner
+B ../../_build/lib/bap_main

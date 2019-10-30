@@ -50,8 +50,7 @@ Executable run_tests
   MainIs:       run_tests.ml
   Install:      false
   Build$:       (flag(everything) || flag(bap_std)) && flag(tests)
-  BuildDepends: bap.plugins,
-                disasm_test,
+  BuildDepends: disasm_test,
                 image_test,
                 oUnit,
                 sema_test,

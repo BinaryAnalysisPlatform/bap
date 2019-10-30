@@ -1,8 +1,46 @@
+let doc = {|
+# DESCRIPTION
+
+Defines the semantics of BAP Instruction Language (BIL) and makes old
+BIL lifters available in the system. This plugin denotes the semantics
+of the Core Theory in terms of BIL statements and expressions as well
+as defines an interpretation of BIL programs in terms of the Core
+Theory. The latter enables the old lifter to be seamlessly integrated
+with the new knowledge framework.
+
+The BIL code, obtained from the lifters is processed by the BIL
+transformation pipeline to enable optimization and/or normalization of
+BIL program.s
+
+# THE BIL PIPELINE
+
+The BIL transformation pipeline is used to transform the BIL code of
+each machine instruction and is applied to the output of a BIL
+lifter. Each piece of transformation is called $(i,a pass).  This
+plugin enables full control over the pass selection as well as
+provides some predefined passes. See the $(b,--bil-list-passes) for a
+comprehensive list of available transformations. The pipeline is
+formed as a concatenation of all normalization passes that correspond
+to the selected level of normalization (setting it to zero will
+disable normalizations), all optimization passes applicable to the
+selected level of optimization (again the zero level corresponds to an
+empty list of optimizations), and all passes selected via the
+$(b,--bil-passes) command line argument. All passes are applied until
+a fixed point is reached (i.e., until the outcome of the pipeline is
+equal to the income) or until a loop is detected. Thus to prevent
+infinite looping each registered pass should be a pure function of its
+inputs (same input shall result in the same output).
+
+A new pass could be registered via the $(b,Bil.register_pass)
+function. It won't be automatically selected, so it should be
+specified explicitly via the $(b,--bil-passes) command line
+argument.
+|}
+
 open Bap_core_theory
 open Core_kernel
 open Bap.Std
-
-include Self ()
+open Bap_main.Extension
 
 let register_norm name desc normalize_exp : Bil.pass =
   Bil.register_pass name ~desc (Stmt.normalize ~normalize_exp)
@@ -38,72 +76,42 @@ let print_passes () =
   List.iter ~f:(printf "%s\n");
   exit 0
 
-let pass = Config.enum
+let pass = Type.enum
     (List.map (Bil.passes ()) ~f:(fun p -> Bil.Pass.to_string p, p))
 
 let () =
-  let () = Config.manpage [
-      `S "DESCRIPTION";
-      `P "Controls the BIL transformation pipeline.";
-
-      `P "The BIL transformation pipeline is used to transform the BIL
-        code of each machine instruction and is applied to the output
-        of a lifter. Each piece of transformation is called $(i,a pass).
-        This plugin enables full control over the pass selection as
-        well as provides some predefined passes. See the
-        $(b,--bil-list-passes) for a comprehensive list of available
-        transformations. The pipeline is formed as a concatenation of
-        all normalization passes that correspond to the selected level
-        of normalization (setting it to zero will disable normalizations),
-        all optimization passes applicable to the selected level of
-        optimization (again the zero level corresponds to an empty
-        list of optimizations), and all passes selected via the
-        $(b,--bil-passes) command line argument. All passes are
-        applied until a fixed point is reached (i.e., until the
-        outcome of the pipeline is equal to the income) or until a
-        loop is detected. Thus to prevent infinite looping each
-        registered pass should be a pure function of its inputs (same
-        input shall result in the same output).";
-
-      `P "A new pass could be registered via the $(b,Bil.register_pass)
-        function. It won't be automatically selected, so it should be
-        specified explicitly via the $(b,--bil-passes) command line
-        argument.";
-
-      `S "SEE ALSO";
-      `P "$(b,bap)(3)";
-    ] in
   let norml =
     let doc = "Selects a BIL normalization level.
       The normalization process doesn't change the semantics of
       a BIL program, but applies some transformations to simplify it.
       Consult BAP Annotated Reference (BAR) for the detailed
       description of the BIL normalized forms." in
-    Config.(param (enum normalizations) ~default:[] ~doc "normalization") in
+    Configuration.(parameter Type.(enum normalizations)
+                     ~doc "normalization") in
   let optim =
     let doc = "Specifies an optimization level.\n
       Level $(b,0) disables all optimizations,  and level $(b,1) performs
       regular program simplifications, e.g., applies constant folding,
       propagation, and elimination of dead temporary (aka virtual) variables." in
-    Config.(param (enum optimizations) ~default:o1 ~doc "optimization") in
+    Configuration.(parameter Type.(enum optimizations =? o1) ~doc "optimization") in
   let list_passes =
     let doc = "List all available passes and exit" in
-    Config.flag ~doc "list-passes" in
+    Configuration.flag ~doc "list-passes" in
   let passes =
     let doc =
       "Selects the list and the order of analyses to be applied during
        the lifing to BIL code." in
-    Config.(param (list pass) ~default:[] ~doc "passes") in
-  Config.when_ready (fun {Config.get=(!)} ->
-
-      if !list_passes then print_passes ()
-      else begin
-        Bil.select_passes (!norml @ !optim @ !passes);
-        Bil_lifter.init ();
-        Bil_ir.init();
-        Theory.register
-          ~desc:"denotes programs in terms of BIL expressions and statements"
-          ~name:"bil"
-          (module Bil_semantics.Core_with_fp_emulation)
-
-      end)
+    Configuration.(parameter Type.(list pass) ~doc "passes") in
+  declare ~provides:["bil"; "core-theory"; "lifter"] @@ fun ctxt ->
+  let open Syntax in
+  if ctxt-->list_passes then print_passes ()
+  else begin
+    Bil.select_passes (ctxt-->norml @ ctxt-->optim @ ctxt-->passes);
+    Bil_lifter.init ();
+    Bil_ir.init();
+    Theory.register
+      ~desc:"denotes programs in terms of BIL expressions and statements"
+      ~name:"bil"
+      (module Bil_semantics.Core_with_fp_emulation);
+    Ok ()
+  end

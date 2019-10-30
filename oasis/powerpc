@@ -6,7 +6,7 @@ Library powerpc_plugin
   XMETADescription: provide PowerPC lifter
   Path:             plugins/powerpc
   Build$:           flag(everything) || flag(powerpc)
-  BuildDepends:     bap, bap-abi, bap-c, bap-primus, zarith
+  BuildDepends:     bap, bap-abi, bap-c, zarith
   FindlibName:      bap-plugin-powerpc
   InternalModules:  Powerpc,
                     Powerpc_cpu,
@@ -29,15 +29,14 @@ Library powerpc_plugin
                     Powerpc_rotate,
                     Powerpc_shift,
                     Powerpc_store,
-                    Powerpc_sub,
-                    Powerpc_primus_loader
+                    Powerpc_sub
   XMETAExtraLines:  tags="powerpc, lifter"
 
 Library powerpc_test
   Path:           lib_test/powerpc
   Build$:         flag(tests) && (flag(everything) || flag(powerpc))
   CompiledObject: best
-  BuildDepends:   bap, oUnit
+  BuildDepends:   bap, oUnit, core_kernel
   Install:        false
   Modules:        Powerpc_add_tests,
                   Powerpc_arith_tests,
@@ -56,7 +55,7 @@ Executable run_powerpc_tests
   Path:		  lib_test/powerpc
   Build$:	  flag(tests) && (flag(everything) || flag(powerpc))
   CompiledObject: best
-  BuildDepends:	  bap.plugins, findlib.dynload, oUnit, powerpc_test
+  BuildDepends:	  bap-plugins, findlib.dynload, oUnit, powerpc_test
   Install:	  false
   MainIs:         run_powerpc_tests.ml
 

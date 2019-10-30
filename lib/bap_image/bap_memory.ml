@@ -389,8 +389,8 @@ module Trie = struct
   module Make(Token : sig
       type t = word [@@deriving bin_io, compare, sexp]
     end) = struct
-    module Key
-        (Spec : sig val size : size end ) = struct
+
+    module Key(Spec : sig val size : size end ) = struct
       open Spec
       type nonrec t = t
       type token = Token.t [@@deriving bin_io, compare, sexp]

@@ -238,9 +238,6 @@ module Std = struct
   include Bap_int_conversions
   include Bap_attributes
 
-  (** Library configuration, version, and other constants  *)
-  module Config = Bap_config
-
   module Seq = Seq
   type 'a seq = 'a Seq.t [@@deriving bin_io, compare, sexp]
 

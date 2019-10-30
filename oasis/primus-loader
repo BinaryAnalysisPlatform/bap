@@ -1,3 +1,0 @@
-Flag primus_loader
-  Description: build generic program loader for Primus
-  Default: false

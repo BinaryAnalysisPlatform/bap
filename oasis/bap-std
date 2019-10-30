@@ -2,8 +2,6 @@ Flag bap_std
   Description: Build BAP Standard Library
   Default: false
 
-PostInstallCommand: ./postinstall.native
-
 Library bap
   Path:            lib/bap
   Build$:          flag(everything) || flag(bap_std)
@@ -11,9 +9,10 @@ Library bap
   CompiledObject:  best
   BuildDepends:    bap.disasm,
                    bap.image,
-                   bap.plugins,
                    bap.sema,
                    bap.types,
+                   bap-bundle,
+                   bap-main,
                    bap-future,
                    cmdliner,
                    bap-knowledge,
@@ -23,19 +22,30 @@ Library bap
                    core_kernel,
                    ppx_jane
   Modules:         Bap
-  InternalModules: Bap_event, Bap_log, Bap_project, Bap_self
+  InternalModules: Bap_project, Bap_self
 
-
+Library top
+  XMETADescription: Toplevel printers for bap-types and core_kernel
+  Build$:          flag(everything) || flag(bap_std)
+  Path: lib/bap
+  FindLibParent: bap
+  FindLibName: top
+  InternalModules: Bap_init_toplevel
+  BuildDepends: compiler-libs,
+                compiler-libs.common,
+                bap,
+                bap-main,
+                bap-plugins
 Library types
   Path:            lib/bap_types
   Build$:          flag(everything) || flag(bap_std)
   FindlibParent:   bap
   FindlibName:     types
   CompiledObject:  best
-  BuildDepends:    monads, zarith,
+  BuildDepends:    monads,
+                   zarith,
                    bitvec,
                    uuidm,
-                   bap.config,
                    regular,
                    graphlib,
                    ogre,
@@ -91,10 +101,10 @@ Library types
 
 Library bap_image
   Path:          lib/bap_image/
-  Build$:          flag(everything) || flag(bap_std)
+  Build$:        flag(everything) || flag(bap_std)
   FindlibParent: bap
   FindlibName:   image
-  BuildDepends:  bap.types, ogre
+  BuildDepends:  bap.types, ogre, monads
   InternalModules:
                  Bap_fileutils,
                  Bap_image,
@@ -116,6 +126,7 @@ Library disasm
                  bap-future,
                  camlzip,
                  ocamlgraph,
+                 monads,
                  ogre
   InternalModules:
                  Bap_disasm,
@@ -145,90 +156,16 @@ Library disasm
   CSources:      disasm.h, disasm.c, disasm_stubs.c
 
 Library sema
-  Build$:          flag(everything) || flag(bap_std)
+  Build$:        flag(everything) || flag(bap_std)
   Path:          lib/bap_sema
   FindlibParent: bap
   FindlibName:   sema
   BuildDepends:  bap.disasm,
-                 bap.types
+                 bap.types,
+                 monads
   InternalModules:
                  Bap_sema,
                  Bap_sema_lift,
                  Bap_sema_ssa,
                  Bap_sema_taint,
                  Bap_sema_free_vars
-
-Library plugins
-  Build$:          flag(everything) || flag(bap_std)
-  Path:            lib/bap_plugins
-  FindLibParent:   bap
-  FindLibName:     plugins
-  Modules:         Bap_plugins
-  BuildDepends:    core_kernel, dynlink, fileutils, findlib, bap.bundle, bap.config, bap-future
-
-Library "bap-build"
-  Build$:          flag(everything) || flag(bap_std)
-  Path: lib/bap_build
-  FindlibName: bap-build # will rename later
-  #FindlibParent: bap
-  CompiledObject: best
-  Modules: Bap_build
-  BuildDepends: findlib, ocamlbuild, bap.config
-
-
-Library top
-  XMETADescription: Toplevel printers for bap-types and core_kernel
-  Build$:          flag(everything) || flag(bap_std)
-  Path: lib/bap
-  FindLibParent: bap
-  FindLibName: top
-  Modules : Core_printers
-  InternalModules:
-            Bap_install_printers,
-            Bap_load_plugins
-  BuildDepends: compiler-libs,
-                compiler-libs.common,
-                bap,
-                bap.plugins,
-                bap.config
-
-Library config
-  Build$:          flag(everything) || flag(bap_std)
-  Path:            lib/bap_config
-  FindlibParent:   bap
-  FindlibName:     config
-  Modules:         Bap_config
-
-
-Library bundle
-  Build$:          flag(everything) || flag(bap_std)
-  Path:          lib/bap_bundle
-  FindlibParent: bap
-  FindlibName:   bundle
-  BuildDepends:  uri, camlzip, unix, bap.config, core_kernel, ppx_jane
-  Modules:       Bap_bundle
-
-
-Executable "bapbuild"
-  Build$:         flag(everything) || flag(bap_std)
-  Path:           tools
-  MainIs:         bapbuild.ml
-  Install:        true
-  CompiledObject: best
-  BuildDepends:   core_kernel, ocamlbuild, bap-build, compiler-libs, ppx_jane
-
-Executable "bapbundle"
-  Build$:          flag(everything) || flag(bap_std)
-  Path:           tools
-  MainIs:         bapbundle.ml
-  Install:        true
-  CompiledObject: best
-  BuildDepends:   core_kernel, bap.bundle, fileutils
-
-Executable "postinstall"
-  Build$:          flag(everything) || flag(bap_std)
-  Path:           tools
-  MainIs:         postinstall.ml
-  Install:        false
-  CompiledObject: best
-  BuildDepends:   bap.config, fileutils

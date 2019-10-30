@@ -41,3 +41,6 @@ _oasis
 /plugins/primus_lisp/primus_lisp_config.ml
 /setup.exe
 /tools/bap_config
+/lib/bap_bundle/bap_bundle_config.ml
+/lib/bap_plugins/bap_plugins_config.ml
+bap_main_config.ml

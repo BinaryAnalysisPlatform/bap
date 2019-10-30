@@ -1,5 +1,4 @@
 open Core_kernel
-open Bap_bundle.Std
 open Bap.Std
 include Self()
 open Option.Monad_infix

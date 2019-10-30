@@ -27,8 +27,13 @@ let load_plugins () =
                        Error.to_string_hum e))
 
 let run_unit_tests () =
-  load_plugins ();
-  run_test_tt_main (suite ())
+  match Bap_main.init () with
+  | Error err ->
+    Format.eprintf "Failed to initialize BAP: %a@\n%!"
+      Bap_main.Extension.Error.pp err;
+    exit 1;
+  | Ok () ->
+    run_test_tt_main (suite ())
 
 
 (* JS is changing the inline test interface every minor release,
@@ -41,5 +46,5 @@ let () = match Array.to_list Sys.argv with
   | _ :: "inline-test-runner" :: _ -> run_inline_tests ()
   | _ -> run_unit_tests ()
 
-let pp_set pp_elem pp ppf set =
+let pp_set pp_elem _pp ppf set =
   Set.iter set ~f:(fun e -> Format.fprintf ppf "%a " pp_elem e)
