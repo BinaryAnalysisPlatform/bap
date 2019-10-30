@@ -1,9 +1,9 @@
-Flag bap_bundle
+Flag bundle
   Description: Build BAP bundler
   Default: false
 
 Library bundle
-  Build$:        flag(everything) || flag(bap_bundle)
+  Build$:        flag(everything) || flag(bundle)
   Path:          lib/bap_bundle
   FindlibName:   bap-bundle
   BuildDepends:  uri, camlzip, unix, core_kernel, ppx_jane
@@ -11,7 +11,7 @@ Library bundle
   InternalModules: Bap_bundle_config
 
 Executable "bapbundle"
-  Build$:          flag(everything) || flag(bap_bundle)
+  Build$:          flag(everything) || flag(bundle)
   Path:           tools
   MainIs:         bapbundle.ml
   Install:        true

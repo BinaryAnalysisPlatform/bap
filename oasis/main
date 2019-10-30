@@ -1,10 +1,10 @@
-Flag bap_main
+Flag main
   Description: Build BAP Main Framework Configuration Library
   Default: false
 
 Library bap_main
   Path:            lib/bap_main
-  Build$:          flag(everything) || flag(bap_main)
+  Build$:          flag(everything) || flag(main)
   FindLibName:     bap-main
   CompiledObject:  best
   BuildDepends:    base, stdio, cmdliner, bap-future, bap-plugins, bap-recipe
