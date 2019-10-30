@@ -271,7 +271,7 @@ module Knowledge : sig
       specifications of knowledge.
 
       Note: The information content of a value ordering shall not be
-      confused with any other natural ordering of the associated value
+      confused with any other intrinsic ordering of the associated value
       type. For example, if we will take age, measured in natural numbers,
       then the order natural numbers has nothing to do with the amount
       of information associated with each age. From the knowledge
@@ -855,25 +855,133 @@ module Knowledge : sig
       ?reliability:reliability -> string -> agent
 
 
-    (** [registry ()] is the current registry of agents.*)
+    (** [registry ()] is the current registry of agents.
+
+        Each registered agent is represented by its ID, which could be
+        inspected or used to change the reliability.
+    *)
     val registry : unit -> id list
 
+
+    (** [name id] is the name of the agent.  *)
     val name : id -> string
+
+
+    (** [desc id] is the overall description of the agent.  *)
     val desc : id -> string
+
+
+    (** [reliability id] is the current reliability of the agent  *)
     val reliability : id -> reliability
+
+
+    (** [set_reliability id] changes the reliability of the agent.  *)
     val set_reliability : id -> reliability -> unit
 
+
+    (** {3 Reliability Levels} *)
+
+
+    (** The highest level of reliability.
+
+        The information was obtained from a source in which we trust
+        absolutely. There are no possible doubts that this information
+        is incorrect.
+
+        The authorative source is definitional and is always
+        preferred to any other information.
+
+        It could be compared to the information obtained from the
+        official legislative document, mathematical textbook, etc.
+
+    *)
     val authorative : reliability
+
+
+    (** A highly reliable source.
+
+        This source rarely, if ever, provides inaccurate results.
+
+        It could be compared to the information obtained from a
+        well-known expert, peer-reviewed journal, etc. *)
     val reliable    : reliability
+
+
+    (** A very reliable source.
+
+        This source provides accurate results most of the time. Only
+        in exceptional cases it could provide an inaccurate result.
+
+        It could be compared to the information obtained from a field
+        expert.
+    *)
     val trustworthy : reliability
+
+
+    (** Nearly reliable source.
+
+        This source sometimes provides inaccurate information or relies
+        on doubtful methods. It is still providing useful and accurate
+        information more often than not.
+
+        It could be compared to the information obtained from a
+        knowledgeable person.
+    *)
     val doubtful    : reliability
+
+
+    (** A not worthwhile source.
+
+        This source provides accurate information slightly more often
+        than inaccurate. Though it is a bad source of information,
+        many unreliable source could be combined to.
+
+        It could be compared to the knowledge obtained from gossips, i.e.,
+        from not knowledgeable persons close to the knowledge.
+    *)
     val unreliable  : reliability
 
+
+    (** prints the agent information.  *)
     val pp : Format.formatter -> t -> unit
+
+
+    (** prints the agent's id.  *)
     val pp_id : Format.formatter -> id -> unit
+
+
+    (** prints the reliability level.  *)
     val pp_reliability : Format.formatter -> reliability -> unit
   end
 
+
+  (** Partially ordered sets with the least element.
+
+      The Domain is fundamental structure for the Knowledge
+      representation as domains are used to represent property
+      values. Basically, all information is represented with
+      domains. Domains capture the idea of partial information or
+      an approximation of information.
+
+      A domain is a set equipped with the partial order, which orders
+      elements of this set by their information content, and the least
+      element [empty] or [bot], which is not greater than any other
+      element of this set. The [empty] element indicates an absence of
+      knowledge.
+
+      The resulting structure is not strictly a domain, the only
+      missing element is the maximal element. The role of the is taken
+      by values of type conflict, which denote the [top] element
+      equipped with the diagnostic information. Therefore, type
+      [('a,conflict) result] is a directed-complete partial order, or
+      a Scott-Ershov domain, or just a domain..
+
+      The domain structure is very general and the [join] operator is
+      induced by the specified [order]. However, it is possible to
+      upgrade the structure, used to represent a property, to lattice
+      or lattice-like structure, by providing a custom [join] function.
+
+  *)
   module Domain : sig
     type 'a t = 'a domain
 
@@ -896,6 +1004,11 @@ module Knowledge : sig
 
         The optional [inspect] function enables introspection, and may
         return any representation of the domain value.
+
+        The returned value is an instance of the domain type class
+        that is used for declaration of a property. The instance is
+        not nominal and is purely structural, the [name] argument is
+        used only for introspection and better error messages.
     *)
     val define :
       ?inspect:('a -> Base.Sexp.t) ->
@@ -903,6 +1016,26 @@ module Knowledge : sig
       empty:'a ->
       order:('a -> 'a -> Order.partial) -> string -> 'a domain
 
+
+    (** [total empty order name] defines a domain from the total [order].
+
+        Defines an ordinal domain, where the partial order is inferred
+        from the total order, so that [a <= b iff a < b].
+
+        The Hasse diagram of the ordinal domain:
+
+        {v
+             o xN
+             |
+             :
+             |
+             o x2
+             |
+             o x1
+             |
+             o bot
+         v}
+    *)
     val total :
       ?inspect:('a -> Base.Sexp.t) ->
       ?join:('a -> 'a -> ('a,conflict) result) ->
@@ -910,6 +1043,26 @@ module Knowledge : sig
       order:('a -> 'a -> int) ->
       string -> 'a domain
 
+
+    (** [flat empty equal name] defines a flat domain.
+
+        A flat domain has one element that is less than all other
+        elements except itself and any other two elements that are
+        not empty are non-comparable.
+
+        The Hasse diagram of the flat domain:
+
+        {v
+             x1 x2  ... xN
+             o  o       o
+             |  |       |
+             +--+-+...--+
+                  |
+                  o
+                 bot
+        v}
+
+    *)
     val flat :
       ?inspect:('a -> Base.Sexp.t) ->
       ?join:('a -> 'a -> ('a,conflict) result) ->
@@ -917,12 +1070,45 @@ module Knowledge : sig
       equal:('a -> 'a -> bool) ->
       string -> 'a domain
 
+
+    (** [optional ~equal name] a flat domain with [None] as bot.
+
+        Wrapping any data type into the option data type yields a flat
+        domain. For example,
+
+        {[
+          let tribool = optional ~equal:bool_equal "tribool"
+        ]}
+
+        is a tribool domain, where the property value could be either
+        unknown ([None]), true ([Some true]), or false ([Some false].
+    *)
     val optional :
       ?inspect:('a -> Base.Sexp.t) ->
       ?join:('a -> 'a -> ('a,conflict) result) ->
       equal:('a -> 'a -> bool) ->
       string -> 'a option domain
 
+
+    (** [mapping total_order data_equal name] a point-wise mapping domain.
+
+        Finite mapping naturally form domains, if every key in the
+        mapping is considered an independent kind of information, and
+        an absence of a key indicates the absence of that kind of
+        information.
+
+
+        The upper bound of two mapping is the point-wise union of
+        them, unless there is a key, which is present in both mapping
+        with different values (compared with [data_equal]). In the
+        latter case, the upper bound is the [conflict].
+
+        The partial order between [x] and [y] is defined as follows:
+        - [EQ] iff mappings are structurally equal;
+        - [LT] iff [y] contains all bindings of [x] and [x <> y];
+        - [GT] iff [x] contains all bindings of [y] and [x <> y];
+        - [NC] iff neither of the above rules applicable.
+    *)
     val mapping :
       ('a,'e) Map.comparator ->
       ?inspect:('d -> Base.Sexp.t) ->
@@ -930,11 +1116,28 @@ module Knowledge : sig
       string ->
       ('a,'d,'e) Map.t domain
 
+
+    (** [powerset total name] defines a set of all subsets domain.
+
+        Sets ordered by inclusion is a natural domain. The join
+        operator is the set union, and the order operator is the
+        [is_subset] function.
+    *)
     val powerset : ('a,'e) Set.comparator ->
       ?inspect:('a -> Sexp.t) ->
       string ->
       ('a,'e) Set.t domain
 
+
+    (** [opinions empty equal name] defines an opinionated domain.
+
+        In the opinionated domain, the order of elements is defined by
+        the total reliability of agents that support this
+        information. The more trustworthy the agent and the more
+        agents support data, the higher the data will be in the chain.
+
+        See corresponding [suggest], [propose], and [resolve] operators.
+    *)
     val opinions :
       ?inspect:('a -> Sexp.t) ->
       empty:'a ->
@@ -942,77 +1145,133 @@ module Knowledge : sig
       string ->
       'a opinions domain
 
+
+    (** [string] is flat domain with an empty string at the bottom.  *)
     val string : string domain
+
+
+    (** [bool] is the tribool domain. *)
     val bool : bool option domain
 
+
+    (** [obj] is a flat domain with a nil object at the bottom.  *)
     val obj : ('a,_) cls -> 'a obj domain
 
 
+    (** [empty domain] is the bottom of the [domain].  *)
     val empty : 'a t -> 'a
+
+
+    (** [is_empty domain x] is [true] if [x] is [empty domain].  *)
     val is_empty : 'a t -> 'a -> bool
+
+
+    (** [order domain x y] orders [x] and [y] according to the [domain] order.  *)
     val order : 'a t -> 'a -> 'a -> Order.partial
+
+
+    (** [join domain x y] is the upper bound of [x] and [y].  *)
     val join  : 'a t -> 'a -> 'a -> ('a,conflict) result
+
+
+    (** [inspect domain x] introspects [x].  *)
     val inspect : 'a t -> 'a -> Base.Sexp.t
+
+
+    (** [name domain] is the domain name.  *)
     val name : 'a t -> string
   end
 
+
+  (** Persistence type class.
+
+      A instance of the Persistent type class could be provided to the
+      property declaration to make this property persistent. See the
+      [Class.property] function.
+  *)
   module Persistent : sig
     type 'a t = 'a persistent
 
+
+    (** [define to_string of_string] derives an instance of [persistent].
+
+        Uses the provided [of_string] and [to_string] to deserialize
+        and serialize properties.
+    *)
     val define :
       to_string:('a -> string) ->
       of_string:(string -> 'a) ->
       'a persistent
 
+
+    (** [derive to_persistent of_persistent] derives an instance from
+        other instance. *)
     val derive :
       to_persistent:('a -> 'b) ->
       of_persistent:('b -> 'a) ->
       'b persistent -> 'a persistent
 
+
+
+    (** [of_binable t] derives [persistent] from the binable instance [t].  *)
     val of_binable : (module Binable.S with type t = 'a) -> 'a persistent
 
+
+    (** string is a persistent data type.  *)
     val string : string persistent
 
+
+    (** [list t] derives persistence for a list.  *)
     val list : 'a persistent -> 'a list persistent
+
+
+    (** [sequence t] derives persistent for a sequence.  *)
     val sequence : 'a persistent -> 'a Sequence.t persistent
+
+    (** [array t] derives persistent for an array.  *)
     val array : 'a persistent -> 'a array persistent
 
+    (** [set order t] derives persistent for a set.  *)
     val set : ('a,'c) Set.comparator -> 'a t -> ('a,'c) Set.t persistent
+
+
+    (** [map order t] derives persistent for a map.  *)
     val map : ('k,'c) Map.comparator -> 'k t -> 'd t -> ('k,'d,'c) Map.t persistent
   end
 
-  module Data : sig
-    type +'a t
-    type 'a ord
+  (** Conflicting information.
 
-    val atom : ('a,_) cls -> 'a obj -> 'a t knowledge
-    val cons : ('a,_) cls -> 'a t -> 'a t -> 'a t knowledge
+      Conflicts occur when two conflicting values are provided for a
+      property. When conflict happens the knowledge dependent
+      computation diverges and evaluation stops with the value of type
+      [conflict] (unless it is intercepted).
 
-    val case : ('a,_) cls -> 'a t ->
-      null:'r knowledge ->
-      atom:('a obj -> 'r knowledge) ->
-      cons:('a t -> 'a t -> 'r knowledge) -> 'r knowledge
-
-
-    val id : 'a obj -> Int63.t
-
-
-    module type S = sig
-      type t [@@deriving sexp]
-      include Base.Comparable.S with type t := t
-      include Binable.S with type t := t
-    end
-
-    val derive : ('a,_) cls -> (module S
-                                 with type t = 'a t
-                                  and type comparator_witness = 'a ord)
-  end
-
+      The conflict value, essentially serves as the upper bound to all
+      user provided domains, thus closing the poset structure and
+      turning it into a real domain. Although there could be many
+      values of type [conflict] it is better to think of them as one
+      value [top], equipped with diagnostic information.
+  *)
   module Conflict : sig
     type t = conflict = ..
+
+
+    (** prints the conflict  *)
     val pp : Format.formatter -> conflict -> unit
+
+
+    (** the s-expression denoting the conflict. *)
     val sexp_of_t : t -> Sexp.t
+
+
+    (** registers a printer for user specified extension of the conflict type.
+
+        The function shall return [Some s] for the variant added by
+        the user and [None] for all other variants.
+    *)
+    val register_printer : (t -> string option) -> unit
   end
 
+  (** the s-expression denoting the conflict. *)
   val sexp_of_conflict : conflict -> Sexp.t
 end

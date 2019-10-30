@@ -16,7 +16,7 @@ type conflict = exn = ..
 module Conflict = struct
   type t = conflict = ..
   let pp = Exn.pp
-  let add_printer pr = Caml.Printexc.register_printer pr
+  let register_printer pr = Caml.Printexc.register_printer pr
   let sexp_of_t = Exn.sexp_of_t
 end
 
@@ -2430,7 +2430,32 @@ module Knowledge = struct
   end
 
 
-  module Data = struct
+  module Data : sig
+    type +'a t
+    type 'a ord
+
+    val atom : ('a,_) cls -> 'a obj -> 'a t knowledge
+    val cons : ('a,_) cls -> 'a t -> 'a t -> 'a t knowledge
+
+    val case : ('a,_) cls -> 'a t ->
+      null:'r knowledge ->
+      atom:('a obj -> 'r knowledge) ->
+      cons:('a t -> 'a t -> 'r knowledge) -> 'r knowledge
+
+
+    val id : 'a obj -> Int63.t
+
+
+    module type S = sig
+      type t [@@deriving sexp]
+      include Base.Comparable.S with type t := t
+      include Binable.S with type t := t
+    end
+
+    val derive : ('a,_) cls -> (module S
+                                 with type t = 'a t
+                                  and type comparator_witness = 'a ord)
+  end = struct
     type +'a t = 'a obj
     type 'a ord = Oid.comparator_witness
 
