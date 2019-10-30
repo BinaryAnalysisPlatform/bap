@@ -1,0 +1,13 @@
+Flag primus_powerpc
+  Description: build Primus powerpc support package
+  Default: false
+
+Library primus_powerpc_plugin
+  Path: plugins/primus_powerpc
+  Build$: flag(everything) || flag(primus_powerpc)
+  FindlibName: bap-plugin-primus_powerpc
+  CompiledObject: best
+  BuildDepends: bap, bap-primus, core_kernel
+  XMETADescription: powerpc support package
+  Modules: Primus_powerpc_main
+  XMETAExtraLines:  tags="primus, powerpc"

@@ -60,10 +60,10 @@ let rec find_map xs ~f =
 
 ;;
 
-add_variable "plugindir"
-  ~doc:"A default folder for plugins"
-  ~define:(function
-      | Some x -> x
-      | None -> Filename.concat
-                  (BaseEnv.var_get "libdir")
-                  (BaseEnv.var_get "pkg_name"))
+let (/) = Filename.concat
+let () = add_variable "plugindir"
+    ~doc:"A default folder for plugins"
+    ~define:(function
+        | Some x -> x
+        | None ->
+          BaseEnv.var_get "libdir" / "bap")

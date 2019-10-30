@@ -69,7 +69,7 @@ Executable run_x86_tests
   Path:		  lib_test/x86
   Build$:	  flag(tests) && (flag(everything) || flag(x86))
   CompiledObject: best
-  BuildDepends:	  bap.plugins, findlib.dynload, oUnit, x86_test
+  BuildDepends:	  bap-plugins, findlib.dynload, oUnit, x86_test
   Install:	  false
   MainIs: run_x86_tests.ml
 

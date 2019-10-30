@@ -1,6 +1,5 @@
 open Core_kernel
 open Result
-open Bap_bundle.Std
 open Bap.Std
 include Self()
 

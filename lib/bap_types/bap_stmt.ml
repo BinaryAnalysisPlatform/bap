@@ -83,6 +83,7 @@ module Stmts_data = struct
 
   let () =
     let ver = version in
+    Data.set_module_name instance "Bap.Std.Bil";
     add_writer ~desc:"Janestreet Binary Protocol" ~ver "bin" bin_writer;
     add_reader ~desc:"Janestreet Binary Protocol" ~ver "bin" bin_reader;
     add_writer ~desc:"Janestreet Sexp Protocol" ~ver "sexp" sexp_writer;

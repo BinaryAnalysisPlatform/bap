@@ -1,0 +1,11 @@
+Flag raw
+  Description: Builds the raw loader plugin
+  Default: false
+
+Library bap_raw_plugin
+  Build$:           flag(everything) || flag(raw)
+  Path:             plugins/raw
+  FindlibName:      bap-plugin-raw
+  CompiledObject:   best
+  BuildDepends:     bap, core_kernel, ppx_jane, bap-main
+  Modules:          Raw_main

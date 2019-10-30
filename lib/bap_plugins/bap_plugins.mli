@@ -87,32 +87,88 @@ module Std : sig
       | `Errored of string * Error.t (** failed to load a plugin    *)
     ] [@@deriving sexp_of]
 
-    (** [list ?env ~provides:features ?library ()] scans a list of directories, provided by a
-        [library] parameter, and, finally, [Config.libdir] for files with
-        a [plugin] extension. Returns all plugins that provide a
-        superset of [features] and has constrains that are subset of [env]. *)
-    val list : ?env:string list -> ?provides:string list -> ?library:string list -> unit -> plugin list
 
-    (** [run ?env ?provides ?library ?exclude] load and execute all plugins that can
-        be found in the [library] paths, and are not in the [exclude]
-        list. The default event handler will abort the program if
-        there is any [Errored] event occurs, a message will be printed
-        to the standard output. If [don't_setup_handlers] option is
-        chosen, then events are not treated, so that a host program may
-        setup a more fine granular error handling. *)
+
+    (** [path] is the default directory where plugins are stored.  *)
+    val path : string
+
+    (** [list ()] is a list of available plugins.
+
+        Returns all plugins that provide features specified by
+        [provides] and meet the constraint specified by [env]. If a
+        non-valid plugin is found in the search path, then it is
+        ignored.
+
+        @param provides if specified then only those plugins that
+        provide at least one feature from the specified list are
+        selected. Otherwise, all plugins are selected.
+
+        @param env is a set of features provided by the runtime
+        (defaults to none). If specified, then all plugins that require
+        a set of features that is a subset of [env] will be
+        selected. Note, usually, plugins do not have any requirements
+        (i.e., the have an empty set of requirements), therefore all
+        are selected.
+
+        @param library is the list of additional directories in which
+        plugins are searched. If specified then it is prepended to the
+        default search path that contains (in that order):
+        - the list of paths specified by the BAP_PLUGIN_PATH
+          environment variable;
+        - the [Plugins.directory] constant.
+
+         Note, any non-files or non-directories are silently excluded from
+         the list.
+
+    *)
+    val list :
+      ?env:string list ->
+      ?provides:string list ->
+      ?library:string list ->
+      unit -> plugin list
+
+    (** [run ()] loads all plugins.
+
+        This command will load all plugins available in the system
+        (see the {!load} and {!list} functions for more information on
+        which plugins are available). If an error occurs during an
+        attempt to load a plugin and if [don't_setup_handlers] option
+        is not set to [true], an extended error message is printed to
+        the standard error channel and the currently running program is
+        terminated with exit code 1.
+
+        This function calls the [load] function and then observes
+        (unless [don't_setup_handlers] is set) events that occur
+        during loading to intercept any errors. So see the {!load}
+        function for more detailed information.
+
+        @param don't_setup_handlers if set to [true] (defaults to
+        [false]) then all erros are silently ignored. Don't use it
+        unless you're implementing your own error handling facility
+        via the event subsystem.*)
     val run :
       ?argv:string array ->
       ?env:string list ->
       ?provides:string list ->
       ?don't_setup_handlers:bool ->
       ?library:string list ->
-      ?exclude:string list -> unit -> unit
+      ?exclude:string list ->
+      unit -> unit
 
-    (** [load ?env ?provides ?library ?exclude] is like [run], but will not setup
-        handlers, and will return a result of loading. Each element of
-        the list is either an [Ok plugin] if a [plugin] was
-        successfully loaded, or [Error (name,error)] if a plugin with
-        the given [name] failed with [error].
+    (** [load ()] loads all plugins if they are not loaded yet.
+
+        Loads all plugins available in the system and returns a list
+        of values in which each entry corresponds to a result of a
+        loading attempt, which could be either a successfully loaded
+        plugin or an error, in case if the attempt has failed.
+
+        The list of all plugins is [list ?env ?provides ?library ()]
+        which is furthermore refined by removing all plugins which
+        names are specified in the [exclude] blacklist.
+
+        This function returns silently if [Plugins.loaded] is already
+        decided. No matter the outcome, the [Plugins.loaded] future
+        will be decided.
     *)
     val load :
       ?argv:string array ->

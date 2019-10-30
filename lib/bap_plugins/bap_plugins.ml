@@ -49,7 +49,7 @@ module Plugin = struct
     try
       Findlib.package_property preds pkg "archive" |>
       Filename.chop_extension
-    with exn -> pkg  (* fails if the infrastructure is broken *)
+    with _ -> pkg  (* fails if the infrastructure is broken *)
 
   let init = lazy begin
     Findlib.(recorded_packages Record_core) |> List.iter ~f:(fun pkg ->
@@ -87,7 +87,7 @@ module Plugin = struct
     Findlib.resolve_path ~base:dir file
 
   let find_library name =
-    try Some (find_library_exn name) with exn -> None
+    try Some (find_library_exn name) with _ -> None
 
   let load_unit ~reason ~name pkg : unit or_error =
     let open Format in
@@ -132,7 +132,7 @@ module Plugin = struct
       overwritten). This is a known bug/issue in the OCaml runtime
       that we need to workaround.
   *)
-  let load_entry ?(don't_register=false) plugin name =
+  let load_entry plugin name =
     let suffix = if Dynlink.is_native then ".cmxs" else ".cma" in
     let name = Filename.basename name in
     let dst = Filename.(temp_file name suffix) in
@@ -150,7 +150,7 @@ module Plugin = struct
         load_unit ~reason ~name lib
       | None -> Or_error.error_string "dependency not found"
 
-  let validate_unit plugin main =
+  let validate_unit _plugin main =
     match Hashtbl.find units main with
     | None -> Ok ()
     | Some (`Provided_by name) when name = main -> Ok ()
@@ -189,7 +189,7 @@ module Plugin = struct
       let old_bundle = main_bundle () in
       set_main_bundle (bundle plugin);
       load_entries plugin reqs >>= fun () ->
-      load_entry ~don't_register:true plugin main >>| fun () ->
+      load_entry plugin main >>| fun () ->
       Promise.fulfill plugin.finish ();
       notify (`Loaded plugin);
       set_main_bundle old_bundle;
@@ -230,58 +230,72 @@ module Plugins = struct
     try Sys.getenv "BAP_PLUGIN_PATH" |> String.split ~on:':'
     with Caml.Not_found -> []
 
+  let path = Bap_plugins_config.plugindir
+
   let plugin_paths library =
-    [library; paths_of_env (); [Bap_config.plugindir]] |> List.concat |>
+    [library; paths_of_env (); [path]] |>
+    List.concat |>
     List.filter ~f:Sys.file_exists |>
     List.filter ~f:Sys.is_directory
 
-  let collect ?(library=[]) () =
-    let (/) = Filename.concat in
-    plugin_paths library |> List.concat_map ~f:(fun dir ->
-        Sys.readdir dir |>
-        Array.to_list |>
-        List.filter_map ~f:(fun file ->
-            let file = dir / file in
-            if Filename.check_suffix file ".plugin"
-            then
-              try Some (Ok (Plugin.of_path file))
-              with exn -> Some (Error (file,Error.of_exn exn))
-            else None))
+  let has_feature requested features =
+    match requested with
+    | None -> true
+    | Some requested -> List.exists features ~f:(Set.mem requested)
 
-  let is_subset requested existed =
-    List.is_empty requested ||
-    List.for_all ~f:(List.mem ~equal:String.equal existed) requested
+  let meets_constraint provided requirements =
+    List.for_all requirements ~f:(Set.mem provided)
 
   let is_selected ~provides ~env p =
-    is_subset provides (Plugin.tags p) &&
-    is_subset (Plugin.cons p) env
+    has_feature provides (Plugin.tags p) &&
+    meets_constraint env (Plugin.cons p)
 
-  let is_not_selected ~provides ~env p = not (is_selected ~provides ~env p)
 
-  let select ~provides ~env plugins =
-    List.filter ~f:(is_selected ~provides ~env) plugins
+  let plugin_name = function
+    | Ok p -> Plugin.name p
+    | Error (name,_) -> name
 
-  let list ?(env=[]) ?(provides=[]) ?library () =
-    collect ?library () |> List.filter_map ~f:(function
+  let collect ?env ?provides ?(library=[]) () =
+    let (/) = Filename.concat in
+    let strset = Set.of_list (module String) in
+    let provides = Option.map provides ~f:strset in
+    let env = strset (Option.value env ~default:[]) in
+    plugin_paths library |>
+    List.concat_map ~f:(fun dir ->
+        Sys.readdir dir |> Array.to_list |>
+        List.filter_map ~f:(fun file ->
+            let file = dir / file in
+            if not (Filename.check_suffix file ".plugin")
+            then None
+            else try
+                let p = Plugin.of_path file in
+                Option.some_if (is_selected ~provides ~env p) (Ok p)
+              with exn -> Some (Error (file,Error.of_exn exn)))) |>
+    List.sort ~compare:(fun x y ->
+        String.compare (plugin_name x) (plugin_name y))
+
+
+  let list ?env ?provides ?library () =
+    collect ?env ?provides ?library () |> List.filter_map ~f:(function
         | Ok p -> Some p
-        | Error _ -> None) |> select ~provides ~env
-
-  let load ?argv ?(env=[]) ?(provides=[]) ?library ?(exclude=[]) () =
-    collect ?library () |> List.filter_map ~f:(function
-        | Error err -> Some (Error err)
-        | Ok p when List.mem ~equal:String.equal exclude (Plugin.name p) -> None
-        | Ok p when is_not_selected ~provides ~env p -> None
-        | Ok p -> match Plugin.load ?argv p with
-          | Ok () -> Some (Ok p)
-          | Error err -> Some (Error (Plugin.path p, err)))
+        | Error _ -> None)
 
   let loaded,finished = Future.create ()
 
-  let load ?argv ?env ?provides ?library ?exclude () =
+  let load ?argv ?env ?provides ?library ?(exclude=[]) () =
     if Future.is_decided loaded
     then []
     else begin
-      let r = load ?argv ?env ?provides ?library ?exclude () in
+      Dynlink.allow_unsafe_modules true;
+      let excluded = Set.of_list (module String) exclude in
+      let r =
+        collect ?env ?provides ?library () |>
+        List.filter_map ~f:(function
+            | Error err -> Some (Error err)
+            | Ok p when Set.mem excluded (Plugin.name p) -> None
+            | Ok p -> match Plugin.load ?argv p with
+              | Ok () -> Some (Ok p)
+              | Error err -> Some (Error (Plugin.path p, err))) in
       Promise.fulfill finished ();
       r
     end

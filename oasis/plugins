@@ -1,0 +1,11 @@
+Flag bap_plugins
+  Description: Build BAP plugins support library
+  Default: false
+
+Library bap_plugins
+  Build$:          flag(everything) || flag(bap_plugins)
+  Path:            lib/bap_plugins
+  FindLibName:     bap-plugins
+  Modules:         Bap_plugins
+  InternalModules: Bap_plugins_config
+  BuildDepends:    core_kernel, dynlink, fileutils, findlib, bap-bundle, bap-future

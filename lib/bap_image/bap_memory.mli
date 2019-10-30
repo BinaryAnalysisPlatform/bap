@@ -62,24 +62,25 @@ module Make_iterators( M : Monad.S )
 
 val to_buffer : t -> Bigsubstring.t
 
+
 module Trie : sig
   module Stable : sig
     module V1 : sig
-      module R8  : Trie.S with type key = t
-      module R16 : Trie.S with type key = t
-      module R32 : Trie.S with type key = t
-      module R64 : Trie.S with type key = t
+      module R8  : Trie.V2.S with type key = t and type token = word
+      module R16 : Trie.V2.S with type key = t and type token = word
+      module R32 : Trie.V2.S with type key = t and type token = word
+      module R64 : Trie.V2.S with type key = t and type token = word
     end
     module V2 : sig
-      module R8  : Trie.S with type key = t
-      module R16 : Trie.S with type key = t
-      module R32 : Trie.S with type key = t
-      module R64 : Trie.S with type key = t
+      module R8  : Trie.V2.S with type key = t and type token = word
+      module R16 : Trie.V2.S with type key = t and type token = word
+      module R32 : Trie.V2.S with type key = t and type token = word
+      module R64 : Trie.V2.S with type key = t and type token = word
     end
 
   end
-  module R8  : Trie.S with type key = t
-  module R16 : Trie.S with type key = t
-  module R32 : Trie.S with type key = t
-  module R64 : Trie.S with type key = t
+  module R8  : Trie.V2.S with type key = t and type token = word
+  module R16 : Trie.V2.S with type key = t and type token = word
+  module R32 : Trie.V2.S with type key = t and type token = word
+  module R64 : Trie.V2.S with type key = t and type token = word
 end

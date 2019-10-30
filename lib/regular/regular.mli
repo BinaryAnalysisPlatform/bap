@@ -112,7 +112,7 @@ module Std : sig
           formatN`. Example:
 
           {[Or_error.errorf "type %a is not valid for %a"
-            Type.str ty Exp.str exp]} *)
+              Type.str ty Exp.str exp]} *)
       val str : unit -> t -> string
 
       (** synonym for [str]  *)
@@ -209,6 +209,14 @@ module Std : sig
 
     type lexbuf  = Lexing.lexbuf
     type scanbuf = Scanf.Scanning.scanbuf
+
+    type 'a cls
+    type info = string * [`Ver of string] * string option
+
+    val all_readers : unit -> (string * info list) list
+    val all_writers : unit -> (string * info list) list
+
+    val set_module_name : 'a cls -> string -> unit
 
     (** Versioned interfaces  *)
     module Versioned : sig
@@ -508,11 +516,17 @@ module Std : sig
           version is not specified, then a writer with maximum version is
           returned.  *)
       val find_writer : ?ver:string -> string -> t writer option
+    end
 
+    module type With_instance = sig
+      include Versioned.S
+      val instance : t cls
+      include S with type t := t
     end
 
     (** Implements [Data.S] interface from the provided minimal implementation.  *)
-    module Make (T : Versioned.S) : S with type t := T.t
+    module Make (T : Versioned.S) : With_instance with type t := T.t
+
 
     (** [Read] typeclass.
 
@@ -570,9 +584,9 @@ module Std : sig
           instance from a provided minimal implementation.
 
           The minimal implementation is either of:
-           - [to_bytes];
-           - [to_bigstring];
-           - [pp].
+          - [to_bytes];
+          - [to_bigstring];
+          - [pp].
       *)
       val create :
         ?to_bytes  : ('a -> bytes) ->
@@ -729,7 +743,6 @@ module Std : sig
             type ['a].    *)
         val request : 'a reader -> 'a writer -> 'a t
       end
-
     end
   end
 
@@ -755,7 +768,7 @@ module Std : sig
       [Hashable.S_binable]
 
 
-*)
+  *)
   module Regular : sig
 
     (** Regular interface.  *)
@@ -789,18 +802,18 @@ module Std : sig
   module Opaque : sig
 
 
-  (** Opaque type is like regular type, except that we can print or
-      examine it in any way. So it can't be serialized or
-      pretty-printed.
+    (** Opaque type is like regular type, except that we can print or
+        examine it in any way. So it can't be serialized or
+        pretty-printed.
 
-      @see
-      <https://ocaml.janestreet.com/ocaml-core/latest/doc/core_kernel/Std/Comparable.mod/S.modt/>
-      [Comparable.S]
+        @see
+        <https://ocaml.janestreet.com/ocaml-core/latest/doc/core_kernel/Std/Comparable.mod/S.modt/>
+        [Comparable.S]
 
-      @see
-      <https://ocaml.janestreet.com/ocaml-core/latest/doc/core_kernel/Std/Hashable.mod/S.modt/>
-      [Hashable.S]
-  *)
+        @see
+        <https://ocaml.janestreet.com/ocaml-core/latest/doc/core_kernel/Std/Hashable.mod/S.modt/>
+        [Hashable.S]
+    *)
     module type S = sig
       type t
       include Comparable.S with type t := t

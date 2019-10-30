@@ -25,5 +25,10 @@ let load_plugins () =
                        Error.to_string_hum e))
 
 let () =
-  load_plugins ();
-  run_test_tt_main suite
+  match Bap_main.init () with
+  | Error err ->
+    Format.eprintf "Failed to initialize BAP: %a@\n%!"
+      Bap_main.Extension.Error.pp err;
+    exit 1;
+  | Ok () ->
+    run_test_tt_main suite
