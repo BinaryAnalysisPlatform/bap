@@ -7,7 +7,7 @@ Library bap_recipe_command_plugin
   Path:             plugins/recipe_command
   FindlibName:      bap-plugin-recipe_command
   CompiledObject:   best
-  BuildDepends:     bap, bap-recipe, bap-main, base, stdio
+  BuildDepends:     bap, bap-recipe, bap-main, base, stdio, stdlib-shims
   Modules:          Recipe_command_main
   XMETADescription: manipulates bap recipes
   XMETAExtraLines:  tags="recipe,command"
