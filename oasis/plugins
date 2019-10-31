@@ -1,9 +1,9 @@
-Flag bap_plugins
+Flag plugins
   Description: Build BAP plugins support library
   Default: false
 
 Library bap_plugins
-  Build$:          flag(everything) || flag(bap_plugins)
+  Build$:          flag(everything) || flag(plugins)
   Path:            lib/bap_plugins
   FindLibName:     bap-plugins
   Modules:         Bap_plugins
