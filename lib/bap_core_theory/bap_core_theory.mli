@@ -1,6 +1,339 @@
+(** BAP Semantics Representation.
+
+
+    {1 A Gentle Introduction to the Core Theory}
+
+    The Core Theory is an intermediate language that is designed to
+    express the semantics of computer programs. It focuses on programs
+    that are represented in binary machine code and is capable of an
+    accurate representation of the architectural and micro-architectural
+    details of the program behavior.
+
+    The language is extensible. It is possible to add new language
+    features, without affecting existing analyses and even
+    without recompilation. Adding new analyses also doesn't require
+    any changes to the existing code, which also could be reused
+    without recompilation. Thus the language doesn't suffer from the
+    expression problem.
+
+    The language is rigidly typed with types expressed as OCaml
+    types. A type of a Core Theory term is inferred (and checked) by
+    the OCaml type system, which can statically ascertain that the
+    term is not ill-formed and no analysis will get stuck.
+
+    The language is adaptable. Analysts can select a designated
+    subset of the language which is relevant to their tasks without
+    getting bogged down by the irrelevant architectural details.
+
+    The language can express the semantics of the floating point
+    operations including operations, but not limiting to, specified in
+    the IEEE754 standard.
+
+    The language facilitates developing custom intermediate
+    representation and languages, which could be seamlessly introduced
+    in the analysis pipeline without breaking existing components. The
+    new language is compatible with BIL, BIR, and older variants of
+    BIL. It is potentially compatible with any other intermediate
+    representations.
+
+
+    {2 The Language Hierarchy}
+
+    The Core Theory is not really a language but a family of
+    languages. If we will order the languages in this family by
+    subsumption, then we will get the following Hasse diagram:
+
+    {v
+
+                             o Core
+                             |
+              Trans o--------+--------o Float
+                             |        |
+                             o Basic  o FBasic
+                             |
+                             o Minimal
+                             |
+            +-------+--------+--------+-------+
+            |       |        |        |       |
+            o       o        o        o       o
+          Init    Bool     Bitv    Memory   Effect
+
+    v}
+
+    The Core language subsumes all other sub-languages and includes
+    modular arithmetic and other operations on bitvectos, operations
+    with memories, registers, floating points including
+    transcendental functions.
+
+    The reason to have so many languages is purely pragmatic: to
+    enable specialized implementations of analyses and lifters. This
+    structure is not really mandated, the languages are defined
+    structurally, not nominally, so it is possible to combine
+    languages in arbitrary ways, as well as define new languages.
+
+    The Core language, despite being at the top of our hierarchy, is
+    still very low-level and basic. It is intended to reflect
+    operations carried by classical computers with Harvard or
+    Princeton architectures. Therefore we chose the name "Core" to
+    reflect our vision of the Core language as the base for
+    higher-level hierarchies of languages.
+
+
+    {2 Hierarchy of Terms}
+
+    Terms and operations of the Core Theory languages are typed to
+    prevent the creation of ill-formed programs. We use the word sort
+    to denote a set of terms that share the same properties. The Core
+    Theory comes with a collection of predefined sorts, which are used
+    to specify the Core language, but it is possible to define new
+    sorts, to keep the theory extensible.
+
+    The terms of the Core Theory are divided in two classes - values
+    and effects. A value term denotes the semantics of programs that
+    produce values. Roughly, values correspond to the syntactic class of
+    language expressions.
+
+    Effects is a class of terms that do not produce values, but side
+    effects or just effects, e.g., changing a value of a register,
+    loading or storing memory location, performing I/O operation on a
+    port or issuing a synchronization barrier, etc. Roughly, effects
+    correspond to the syntactic class of language statements.
+
+    Both values and effects are knowledge classes. Each class is
+    further subdivided into an infinite set of sorts. The class of
+    values is inhabited with terms of Bool, Bitv, Mem, Float, and
+    Rmode. Some sorts are indexed, so they represent an (infinite)
+    family of sorts. For example, Bitv[s] is a family of bitvector sorts
+    indexed by their widths, e.g, Bitv[8], Bitv[32], etc.
+
+    The class of effects is subdivided into two sorts of effect, those
+    that affect the control flow and those that affect the data flow.
+
+
+    {v
+                              Term
+                                o
+                                |
+                         +------+------+
+                         |             |
+                   Value o             o Effect
+                         |             |
+                 Bool o--+         +---+---+
+                         |         |       |
+              Bitv[s] o--+         o       o
+                         |      Ctrl[i]  Data[i]
+             Mem[k,s] o--+
+                         |
+           Float[f,s] o--+
+                         |
+                Rmode o--+
+
+
+    v}
+
+
+    {2 Variables}
+
+    Variables are ubiquitous in programming languages and could be
+    used to reference memory locations, CPU registers, or just
+    be bound to expressions. Sometimes variables are typed, sometimes
+    they are just identifiers with not associated type.
+
+    In the Core Theory all variables are sorted, i.e., the have an
+    associated value sort. Variables are also having scope and
+    extent. Finally, variables could be mutable or immutable.
+
+    A physical variable is a global mutable variable with infinite
+    scope and extent. They are used to refer predefined (micro)
+    architectural locations of a modeled system, e.g., registers,
+    memory banks, caches, register files, etc. Global variables has
+    identifiers that are the same as names, e.g., `RAX`, `R0`, `mem`,
+    etc. The important thing, is that a global variable usually has
+    some physical representation.
+
+    Virtual variables are dual to physical variables and are further
+    subdivided into mutable and immutable.
+
+    A mutable virtual variable represents an unspecified scratch
+    location that holds data of the specified sort. They could be used
+    to abstract an actual physical location in a modeled system (when
+    it is not relevant or just not known) or just to simplify the
+    analysis. The mutable virtual variables have identifier of the
+    form [#<number>], e.g, [#1], [#2048], etc.
+
+    Finally, an immutable virtual variable is a local variable that
+    holds a value of an expression. It has a limited scope and its
+    immutability is ensured by the type system since the scope of a
+    local binding can contain only pure terms, i.e., no
+    side-effects. These variables have identifiers of the form
+    [$<number>], e.g., [$1], [$2], etc, and since their scope is
+    limited, those identifiers are reused in different scopes.
+
+
+    {2 Theories and Semantics}
+
+    Languages of the Core Theory, including the Core itself are
+    represented as module signatures, i.e., they are pure abstractions
+    or interfaces that do not define any data types, functions, or values.
+
+    This approach is called tagless-final style [1], pioneered by
+    Carette and Kiselyov and later rediscovered under the name "Object
+    algebras" by Oliviera and Cook [2]. We encourage to read those
+    papers and accompanying literature, but it is not strictly needed,
+    especially since the underlying idea is pretty simple.
+
+    In the final style, an embedded language is not represented by an
+    abstract syntax tree or some intermediate representation data
+    structure, but by denotations in a semantic algebra. Where the
+    semantic algebra is an implementation (structure) of the language
+    signature. Or, in other words, it is its denotational semantics.
+
+    The structure may choose, basically, any denotations, as long as
+    it fits the signature. For example, the language could be denoted
+    with its textual representation, BIL code, LLVM IR, BIR, sets of
+    reachable addresses, and so on. In other words, an implementation
+    of the Core signature could be seen as an analysis that computes the
+    property of a term.
+
+    Unlike a classical final approach described in [1] the Core Theory
+    signatures do not include any abstract types, all types mentioned
+    in the theories are defined on the scope of the Core Theory. This
+    constraint basically turns a structure, which implements the
+    Theory, into a simple array of functions, a first class value with
+    no caveats (like types escaping the scope, etc).
+
+    To enable each semantic algebra to have its own denotation we
+    employ ['a Knowledge.Value.t]. Thus both Core Theory values and
+    effects are instances of the Knowledge Value, parametrized by
+    corresponding class indices. The Knowledge Value is an instance of
+    Domain, that makes it ideal for representing the denotational
+    semantics of programs. The Knowledge value is an extensible
+    record, where each field corresponds to a particular denotation,
+    it is possible to store several denotations in one Knowledge
+    value.
+
+    Denotational semantics is composable, i.e., a denotation of
+    a term is composed from denotations of its constituent terms.
+    However, some denotations are context dependent. To enable
+    this, we made a term denotation an instance of ['a knowledge],
+    i.e., a knowledge dependent computation.
+
+    To summarize, a denotation is a structure that implements methods
+    of the corresponding structure. Each method corresponds to a
+    language form, e.g, [val add  : 'a bitv -> 'a bitv -> 'a bitv],
+    corresponds to an addition of two bitvectors. The implementation,
+    builds the denotation of the term from the denotations of its
+    inputs, e.g.,
+
+    {[
+      let add x y =
+        x >>-> fun x ->
+        y >>-> fun y ->
+        match x, y with
+        | Some x, Some y -> const (Bitvec.(x + y))
+        | _ -> nonconst
+    ]}
+
+    Where [>>->] extracts the module specific denotation and [const],
+    [noncost] put them back (assuming that the denotation is the
+    classical constant folding lattice).
+
+    The final style makes it easy to write a fold-style analysis, such
+    as constant folding, taint analysis, etc. Since all terms are
+    knowledge dependent computations, i.e., wrapped into the knowledge
+    monad, which turns any computation into a fixed-point computation,
+    it is also possible to write data-flow analysis and other forms of
+    abstract interpretation. In fact, it was shown, that any
+    optimization or analysis could be written in the final style in a
+    modular and composable way [3]. However, the classical approach,
+    that uses tagged AST and pattern matching is not denied at all.
+
+    Since the denotation could be anything (that is an instance of
+    domain), it is quite natural to use BIL, and BIR, or any other
+    concrete syntax tree as a possible denotation. Therefore, it is
+    possible to extract those denotations and write your analysis
+    using the save haven of pattern matching.
+
+
+    {2 Writing a new denotation}
+
+    Any denotation must be an instance of the Core signature. However,
+    it is not always required to implement all methods, as they could
+    be inherited from other instance or filled in with the Empty
+    Theory. Once analysis is written it should be declared, so that it
+    could be later run, e.g., let's extend a hypothetical
+    ["constant-tracker"] analysis:
+
+    {[
+      let () = Theory.declare "my-constant-tracker" (module struct
+          include (val Theory.require "constant-tracker")
+
+          (* probably a bad example, but we all do this :) *)
+          let add x y =
+            printf "add is called!\n%!";
+            add x y
+        end
+    ]}
+
+
+    The real analysis should store it results either in the knowledge
+    base or directly in denotations of the terms (or in both places).
+
+
+    {2 Instantiating a theory}
+
+    To use a theory we need to instantiate it. In the previous section
+    we instantiated a theory using the [Theory.require] function, that
+    returns a previously declared theory. But what if we need to use
+    several denotations, e.g., when we want to have both a
+    constant-tracker and BIL for our analysis.
+
+    The final style implementations, in Scala, OCaml, and Haskell,
+    usually employ functors or type classes, which both require a user
+    to specify an instance of a type class, which should be used in
+    the given context. Some languages allow only one instance of class
+    per type, other allow multiple, but still needs a declaration of
+    some instances as canonical.
+
+    In Core Theory we do not need to select any particular instance,
+    but instead it is possible to have multiple instances of the Core
+    theory running in parallel. The [Theory.instance ()] is a special
+    instance of Core that runs all declared theories and combines their
+    denotations. Since Knowledge value is a finite bounded domain, it
+    is a well-defined process.
+
+    Running all analyses in parallel might be an overkill, especially
+    if the results of some analyses won't be used at all. To narrow
+    down the set of denotations, it is possible to specify a context
+    or explicitly request analyses that provide certain features.
+
+    For example,
+
+    {[
+      module Core = (val Theory.instance ()
+                        ~context:[""]
+                        ~requires
+                    )
+    ]}
+
+
+
+
+
+    The [Theory.instance ()] function also accepts parameters that
+    enable cont
+
+
+
+    [1]: http://okmij.org/ftp/tagless-final/JFP.pdf
+    [2]: http://www.cs.utexas.edu/~wcook/Drafts/2012/ecoop2012.pdf
+    [3]: http://okmij.org/ftp/tagless-final/course/optimizations.html
+
+
+*)
+
 open Core_kernel
 open Caml.Format
-
 open Bap_knowledge
 
 module KB = Knowledge
@@ -424,10 +757,46 @@ module Theory : sig
     module Empty : Core
   end
 
-  module Manager : Core
 
-  val register : ?desc:string -> name:string -> (module Core) -> unit
+  (** [instance ()] creates an instance of the Core Theory.
 
+      The theory is built from all instances that match the context
+      specified by the [features] list and provide features specified
+      by the [requires] list.
+
+      If no instances satisfy this requirement than the empty theory
+      is returned.
+
+      @param features is a set of features that define the context,
+      the more features specified, the more specific the context.
+
+      @param requires is a set of semantic features that are
+      required. Defaults to the set of all possible features, i.e., if
+      unspecified, then all instances applicable to the context will
+      be loaded.
+  *)
+  val instance :
+    ?features:string list ->
+    ?requires:string list ->
+    unit -> (module Core)
+
+
+  (** [declare name s] structure [s] as an instance of the Core Theory.
+  *)
+  val declare :
+    ?desc:string ->
+    ?requires:string list ->
+    ?provides:string list ->
+    ?package:string ->
+    string -> (module Core) -> unit
+
+
+
+  (** [require ?package name] looks a [package:name] theory in the context.
+
+      @raise Invalid_arg if no such theory exists.
+  *)
+  val require : ?package:string -> string -> (module Core)
 
   module IEEE754 : sig
     type ('a,'e,'t) t

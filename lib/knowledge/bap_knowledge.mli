@@ -601,7 +601,7 @@ module Knowledge : sig
         - [`drop_right] a conflicting property of [y] is ignored;
         - [`drop_left] a conflicting property of [x] is ignored.
     *)
-    val merge : ?on_conflict:[<
+    val merge : ?on_conflict:[
       | `drop_old
       | `drop_new
       | `drop_right
@@ -1211,8 +1211,6 @@ module Knowledge : sig
       of_persistent:('b -> 'a) ->
       'b persistent -> 'a persistent
 
-
-
     (** [of_binable t] derives [persistent] from the binable instance [t].  *)
     val of_binable : (module Binable.S with type t = 'a) -> 'a persistent
 
@@ -1220,10 +1218,8 @@ module Knowledge : sig
     (** string is a persistent data type.  *)
     val string : string persistent
 
-
     (** [list t] derives persistence for a list.  *)
     val list : 'a persistent -> 'a list persistent
-
 
     (** [sequence t] derives persistent for a sequence.  *)
     val sequence : 'a persistent -> 'a Sequence.t persistent
