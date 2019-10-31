@@ -11,7 +11,7 @@ Library bundle
   InternalModules: Bap_bundle_config
 
 Executable "bapbundle"
-  Build$:          flag(everything) || flag(bundle)
+  Build$:         flag(everything) || flag(bundle)
   Path:           tools
   MainIs:         bapbundle.ml
   Install:        true

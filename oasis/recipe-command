@@ -1,9 +1,9 @@
-Flag recipe_cmd
+Flag recipe_command
   Description: Build the BAP recipe command plugin
   Default: false
 
 Library bap_recipe_command_plugin
-  Build$:           flag(everything) || flag(recipe_cmd)
+  Build$:           flag(everything) || flag(recipe_command)
   Path:             plugins/recipe_command
   FindlibName:      bap-plugin-recipe_command
   CompiledObject:   best
