@@ -10,17 +10,3 @@ Library recipe
   BuildDepends: stdlib-shims, base, stdio, parsexp, fileutils, camlzip, uuidm
   Modules: Bap_recipe
   XMETADescription: stores command line parameters and resources in a single file
-
-Flag recipe_cmd
-  Description: Build the BAP recipe command plugin
-  Default: false
-
-Library bap_recipe_command_plugin
-  Build$:           flag(everything) || flag(recipe_cmd)
-  Path:             plugins/recipe_command
-  FindlibName:      bap-plugin-recipe_command
-  CompiledObject:   best
-  BuildDepends:     bap, bap-recipe, bap-main, base, stdio
-  Modules:          Recipe_command_main
-  XMETADescription: manipulates bap recipes
-  XMETAExtraLines:  tags="recipe,command"
