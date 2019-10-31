@@ -7,7 +7,7 @@ Library recipe
   Path: lib/bap_recipe
   FindlibName: bap-recipe
   CompiledObject: best
-  BuildDepends: base, stdio, parsexp, fileutils, camlzip, uuidm
+  BuildDepends: stdlib-shims, base, stdio, parsexp, fileutils, camlzip, uuidm
   Modules: Bap_recipe
   XMETADescription: stores command line parameters and resources in a single file
 
