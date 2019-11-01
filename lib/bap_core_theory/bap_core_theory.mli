@@ -1568,35 +1568,103 @@ module Theory : sig
     val uge : 'a bitv -> 'a bitv -> bool
   end
 
+
+  (** The Basic Theory of Floating Points.  *)
   module type Fbasic = sig
+
+
+    (** [float s x] interprets [x] as a floating point number.  *)
     val float : ('r,'s) format Float.t Value.sort -> 's bitv -> ('r,'s) format float
+
+    (** [fbits x] bit representation of the floating point number [x].  *)
     val fbits : ('r,'s) format float -> 's bitv
 
-
+    (** [is_finite x] holds if [x] represents a finite number.  *)
     val is_finite : 'f float -> bool
+
+    (** [is_nan x] holds if [x] represents a non-a-number.  *)
     val is_nan : 'f float -> bool
+
+    (** [is_inf x] holds if [x] represents an infinite number.  *)
     val is_inf : 'f float -> bool
+
+    (** [is_fzero x] holds if [x] represents a zero.  *)
     val is_fzero : 'f float -> bool
+
+    (** [is_fpos x] holds if [x] represents a positive number.  *)
     val is_fpos : 'f float -> bool
+
+    (** [is_fneg x] hold if [x] represents a negative number  *)
     val is_fneg : 'f float -> bool
 
+
+
+    (** {3 Rounding modes}  *)
+
+    (** rounding to nearest, ties to even.  *)
     val rne : rmode
+
+    (** rounding to nearest, ties away.  *)
     val rna : rmode
+
+    (** rounding towards positive.  *)
     val rtp : rmode
+
+    (** rounding towards negative.  *)
     val rtn : rmode
+
+    (** rounding towards zero.  *)
     val rtz : rmode
+
+
+    (** [requal x y] holds if rounding modes are equal.  *)
     val requal : rmode -> rmode -> bool
 
+    (** [cast_float s rm x] is the closest to [x] floating number of sort [s].
+
+        The bitvector [x] is interpreted as an unsigned integer in the
+        two-complement form.
+    *)
     val cast_float  : 'f Float.t Value.sort  -> rmode -> 'a bitv -> 'f float
+
+
+    (** [cast_sfloat s rm x] is the closest to [x] floating point number of sort [x].
+
+        The bitvector [x] is interpreted as a signed integer in the
+        two-complement form.
+    *)
     val cast_sfloat : 'f Float.t Value.sort -> rmode -> 'a bitv -> 'f float
+
+    (** [cast_int s rm x] returns an integer closest to [x].
+
+        The resulting bitvector should be interpreted as an unsigned
+        two-complement integer.
+    *)
     val cast_int    : 'a Bitv.t Value.sort -> rmode -> 'f float -> 'a bitv
+
+    (** [cast_sint s rm x] returns an integer closest to [x].
+
+        The resulting bitvector should be interpreted as a signed
+        two-complement integer.
+    *)
     val cast_sint   : 'a Bitv.t Value.sort -> rmode -> 'f float -> 'a bitv
 
+
+    (** [fneg x] is [-x]  *)
     val fneg    : 'f float -> 'f float
+
+
+    (** [fabs x] the absolute value of [x].  *)
     val fabs    : 'f float -> 'f float
 
+
+    (** [fadd x y] is the floating point number closest to [x+y].  *)
     val fadd    : rmode -> 'f float -> 'f float -> 'f float
+
+    (** [fsub x y] is the floating point number closest to [x-y].  *)
     val fsub    : rmode -> 'f float -> 'f float -> 'f float
+
+    (** [fmul x y] is the floating point number closest to [x*y].  *)
     val fmul    : rmode -> 'f float -> 'f float -> 'f float
     val fdiv    : rmode -> 'f float -> 'f float -> 'f float
     val fsqrt   : rmode -> 'f float -> 'f float
