@@ -1979,21 +1979,44 @@ module Theory : sig
   end
 
 
+  (** The Core Theory signature.
+
+      The Core Theory signature includes operations on booleans, bitvectors,
+      floating point numbers, and memories, as well as denotations of
+      various control-flow and data-flow effects.
+  *)
   module type Core = sig
     include Basic
     include Float
     include Trans
   end
 
+
+  (** The Basic Theory.
+
+      Implements the empty basic theory and provides a module for
+      expressing the Basic Theory in terms of the Minimal theory.
+  *)
   module Basic : sig
+
+
+    (** Expresses Basic operations in terms of the Minimal operations.  *)
     module Make(S : Minimal) : Basic
+
+
+    (** The Empty theory.
+
+        All operations have empty denotations. *)
     module Empty : Basic
   end
 
+
+  (** The Empty Core Theory.  *)
   module Core : sig
+
+    (** The Empty Core Theory.  *)
     module Empty : Core
   end
-
 
   (** [instance ()] creates an instance of the Core Theory.
 
@@ -2044,10 +2067,47 @@ module Theory : sig
   *)
   val require : ?package:string -> string -> (module Core)
 
+
+  (** Sorts implementing IEEE754 formats.
+
+      This module provides an infinite set of indexed sorts for
+      floating point numbers defined in the IEEE754 standard.
+
+      This sorts are not referenced in the Core Theory (or any other
+      theory in this library) and provided for user convenience. Any
+      other format could be used with the Core Theory.
+  *)
   module IEEE754 : sig
-    type ('a,'e,'t) t
+
+
+    (** a type for IEEE754 format.
+
+        The type is indexed with three indices:
+        - ['b] the value of the base;
+        - ['e] the size of the exponent;
+        - ['t] the size of the significand.
+    *)
+    type ('b,'e,'t) t
+
+
     type ('a,'e,'t) ieee754 = ('a,'e,'t) t
-    (*  see IEEE754 3.6 *)
+
+
+    (** A named tuple of representation parameters.
+
+        The names of parameter are taken from the IEEE 754-1985
+        standard section 3.6, table 3.5 on page 13. For the
+        convenience, here is their meaning (refer the original
+        standard for more detailed definitions):
+
+        - [k] - storage width in bits;
+        - [p] - precision in bits;
+        - [w] - exponent field width in bits;
+        - [t] - trailing significand field width in bits;
+
+        The module provides a set of common predefined formats as well
+        as safe constructors to define uncommon formats.
+    *)
     type parameters = private {
       base : int;
       bias : int;
@@ -2057,122 +2117,388 @@ module Theory : sig
       t : int;
     }
 
-
+    (** Parameters for the binary16 IEEE754 format.  *)
     val binary16 : parameters
+
+    (** Parameters for the binary32 IEEE754 format.  *)
     val binary32 : parameters
+
+    (** Parameters for the binary64 IEEE754 format.  *)
     val binary64 : parameters
+
+    (** Parameters for the binary80 IEEE754 format.  *)
     val binary80 : parameters
+
+    (** Parameters for the binary128 IEEE754 format.  *)
     val binary128 : parameters
+
+    (** Parameters for the decimal32 IEEE754 format.  *)
     val decimal32 : parameters
+
+    (** Parameters for the decimal64 IEEE754 format.  *)
     val decimal64 : parameters
+
+    (** Parameters for the decimal128 IEEE754 format.  *)
     val decimal128 : parameters
 
+
+    (** [binary N] are parameters for the binary<N> IEEE754 format.
+
+        Where [N] is the storage width in bits, and parameters are
+        defined for the following N: 16,80, k*32, for all
+        natural k that are greater than 0.
+    *)
     val binary : int -> parameters option
+
+    (** [decimal N] are parameters for the decimal<N> IEEE754 format.
+
+        Where [N] is the storage width in bits, and parameters are
+        defined for all [N = k*32] where [k] is a natural
+        number greater than zero.
+    *)
     val decimal : int -> parameters option
 
+
+    (** IEEE754 sorts.  *)
     module Sort : sig
+
+      (** [define p] defines the IEEE754 format sort. *)
       val define : parameters -> (('b,'e,'t) ieee754,'s) format Float.t Value.sort
+
+      (** [exps s] is the sort of bitvectors for the exponent field.  *)
       val exps : (('b,'e,'t) ieee754,'s) format Float.t Value.sort -> 'e Bitv.t Value.sort
+
+      (** [exps s] is the sort of bitvectors for the significand field.  *)
       val sigs : (('b,'e,'t) ieee754,'s) format Float.t Value.sort -> 't Bitv.t Value.sort
+
+      (** [exps s] is the sort of bitvectors for the storage.  *)
       val bits : (('b,'e,'t) ieee754,'s) format Float.t Value.sort -> 's Bitv.t Value.sort
+
+      (** [spec s] is the encoding parameters of the sort [s].  *)
       val spec : (('b,'e,'t) ieee754,'s) format Float.t Value.sort -> parameters
     end
   end
 
 
+  (** An untyped grammar for a subset of Core Theory languages.
+
+      This module together with the [Parser] module provides an easy
+      to use facilities for writing recursive descent parsers, that
+      turn untyped representations into typed Core Theory terms.
+
+      The parser is built from 6 rules (per number of signatures in
+      this module). Each rule is a function that takes a module
+      implementing the corresponding signature an
+      expression in the target language (the language that is parsed),
+      and must denote the semantics of this expressions using
+      primitives provided by the module.
+
+      For example,
+
+      {[
+        let bitv : type t r. (t,exp,r) bitv_parser =
+          fun (module S) -> function
+            | BinOp(PLUS,x,y) -> s.add x y
+            | _ -> error
+      ]}
+
+      The denotation of terms are described in denotations of Core
+      Theory terms, so it is advised to refer to the Core Theory
+      signatures for detailed information. The names are consistent,
+      and in case when they are not it is noted in the documentation.
+  *)
   module Grammar : sig
     type ieee754 = IEEE754.parameters
+
+
+    (** Bitvectors.  *)
     module type Bitv = sig
+
+      (** an abstract type denoting a Core Theory bitvector term.  *)
       type t
+
+
+      (** the type of expressions of the target language.  *)
       type exp
+
+
+      (** an abstract type denoting a Core Theory rounding mode term,   *)
       type rmode
 
+
+      (** the error term.
+
+          Denotes an ill-typed term. The parsing is immediately
+          stopped. *)
       val error : t
 
+      (** [unsigned m x] is [unsinged (bits m) (bitv x)].    *)
       val unsigned : int -> exp -> t
+
+      (** [signed m x] is [signed (bits m) (bitv x)].    *)
       val signed : int -> exp -> t
+
+      (** [high m x] is [high (bits m) (bitv x)].    *)
       val high : int -> exp -> t
+
+      (** [low m x] is [low (bits m) (bitv x)].    *)
       val low : int -> exp -> t
+
+      (** [cast m x y] is [cast (bits m) (bool b) (bitv y)]. *)
       val cast : int -> exp -> exp -> t
+
+      (** [extract m hi lo x] is [extract (bits m) (bitv hi) (bitv lo) (bitv x)].  *)
       val extract : int -> exp -> exp -> exp -> t
 
+      (** [add x y] is [add (bitv x) (bitv y)]  *)
       val add : exp -> exp -> t
+
+      (** [sub x y] is [sub (bitv x) (bitv y)]  *)
       val sub : exp -> exp -> t
+
+      (** [mul x y] is [mul (bitv x) (bitv y)]  *)
       val mul : exp -> exp -> t
+
+      (** [div x y] is [div (bitv x) (bitv y)]  *)
       val div : exp -> exp -> t
+
+      (** [sdiv x y] is [sdiv (bitv x) (bitv y)]  *)
       val sdiv : exp -> exp -> t
+
+      (** [modulo x y] is [modulo (bitv x) (bitv y)]  *)
       val modulo : exp -> exp -> t
+
+      (** [smodulo x y] is [smodulo (bitv x) (bitv y)]  *)
       val smodulo : exp -> exp -> t
+
+      (** [lshift x y] is [lshift (bitv x) (bitv y)]  *)
       val lshift : exp -> exp -> t
+
+      (** [rshift x y] is [rshift (bitv x) (bitv y)]  *)
       val rshift : exp -> exp -> t
+
+      (** [arshift x y] is [arshift (bitv x) (bitv y)]  *)
       val arshift : exp -> exp -> t
+
+      (** [logand x y] is [logand (bitv x) (bitv y)]  *)
       val logand : exp -> exp -> t
+
+      (** [logor x y] is [logor (bitv x) (bitv y)]  *)
       val logor: exp -> exp -> t
+
+      (** [logxor x y] is [logxor (bitv x) (bitv y)]  *)
       val logxor : exp -> exp -> t
 
+      (** [neg x] is [neg (bitv x)]  *)
       val neg : exp -> t
+
+      (** [not x] is [not (bitv x)]  *)
       val not : exp -> t
 
+      (** [load_word m d s a] is [loadw (bits m) (bool d) (mem s) (bitv a)]. *)
       val load_word : int -> exp -> exp -> exp -> t
+
+      (** [load s k] is [load (mem s) (bitv k)]  *)
       val load : exp -> exp -> t
 
-
+      (** [var s m] is [var (ctxt s) (bits m)] *)
       val var : string -> int -> t
+
+
+      (** [int x m] is [int (bits m) x]  *)
       val int : word -> int -> t
+
+
+      (** [unknown m] is [unk (bits m)]  *)
       val unknown : int -> t
+
+
+      (** [ite c x y] is [ite (bool c) (bitv x) (bitv y)]  *)
       val ite : exp -> exp -> exp -> t
 
+
+      (** [let_bit s x y] is [scoped @@ fun v -> (bool x) (bitv [y|s->v])].
+
+          Note, the [let_bit] rule is not mapped to the [let_] term,
+          but instead a scoped fresh variable [v] is created and [s]
+          is substituted with [v] in [y]. *)
       val let_bit : string -> exp -> exp -> t
+
+      (** [let_reg s x y] is [scoped @@ fun v -> (bitv x) (bitv [y|s->v])].
+
+          Note, the [let_reg] rule is not mapped to the [let_] term,
+          but instead a scoped fresh variable [v] is created and [s]
+          is substituted with [v] in [y]. *)
       val let_reg : string -> exp -> exp -> t
+
+      (** [let_mem s x y] is [scoped @@ fun v -> (mem x) (bitv [y|s->v])].
+
+          Note, the [let_mem] rule is not mapped to the [let_] term,
+          but instead a scoped fresh variable [v] is created and [s]
+          is substituted with [v] in [y]. *)
       val let_mem : string -> exp -> exp -> t
+
+      (** [let_float s x y] is [scoped @@ fun v -> (float x) (bitv [y|s->v])].
+
+          Note, the [let_float] rule is not mapped to the [let_] term,
+          but instead a scoped fresh variable [v] is created and [s]
+          is substituted with [v] in [y]. *)
       val let_float : string -> exp -> exp -> t
 
+      (** [append x y] is [append s (bitv x) (bitv y)], where
+
+          [s] is [bits (size (sort (bitv x)) + size (sort (bitv x)))].
+      *)
       val append : exp -> exp -> t
+
+
+      (** [concat xs] is [concat (bits (size s * n)) xs],
+
+          where [s] is the sort of the [xs] element,
+          and [n] is the total number of elements in [xs].
+      *)
       val concat : exp list -> t
 
+      (** [cast_int m r x] is [cast_int (bits m) (rmode r) (float x)]. *)
       val cast_int : int -> rmode -> exp -> t
+
+      (** [cast_sint m r x] is [cast_sint (bits m) (rmode r) (float x)]. *)
       val cast_sint : int -> rmode -> exp -> t
+
+      (** [fbits x] is [fbits (float x)].  *)
       val fbits : exp -> t
     end
 
+
+    (** Booleans.  *)
     module type Bool = sig
+
+      (** an abstract type denoting a Core Theory boolean term.   *)
       type t
+
+      (** the type of expressions of the target language  *)
       type exp
 
+
+      (** an ill-formed term.  *)
       val error : t
 
+      (** [eq x y] is [eq (bitv x) (bitv y)].  *)
       val eq : exp -> exp -> t
+
+      (** [neq x y] is [neq (bitv x) (bitv y)].  *)
       val neq : exp -> exp -> t
+
+      (** [lt x y] is [lt (bitv x) (bitv y)].  *)
       val lt : exp -> exp -> t
+
+      (** [le x y] is [le (bitv x) (bitv y)].  *)
       val le : exp -> exp -> t
+
+      (** [slt x y] is [slt (bitv x) (bitv y)].  *)
       val slt : exp -> exp -> t
+
+      (** [sle x y] is [sle (bitv x) (bitv y)].  *)
       val sle : exp -> exp -> t
+
+      (** [var s] is [var bool (ctxt s)].  *)
       val var : string -> t
+
+      (** [int x] is [b0] is [Bitvec.equal x 0] else [b1].  *)
       val int : word -> t
+
+      (** [unknown ()] is [unk bool]  *)
       val unknown : unit -> t
+
+      (** [ite c x y] is [ite (bool x) (bool x) (bool y)]  *)
       val ite : exp -> exp -> exp -> t
+
+      (** [let_bit s x y] is [scoped @@ fun v -> (bool x) (bool [y|s->v])].
+
+          Note, the [let_bit] rule is not mapped to the [let_] term,
+          but instead a scoped fresh variable [v] is created and [s]
+          is substituted with [v] in [y]. *)
       val let_bit : string -> exp -> exp -> t
+
+      (** [let_reg s x y] is [scoped @@ fun v -> (bitv x) (bool [y|s->v])].
+
+          Note, the [let_reg] rule is not mapped to the [let_] term,
+          but instead a scoped fresh variable [v] is created and [s]
+          is substituted with [v] in [y]. *)
       val let_reg : string -> exp -> exp -> t
+
+      (** [let_mem s x y] is [scoped @@ fun v -> (mem x) (bool [y|s->v])].
+
+          Note, the [let_mem] rule is not mapped to the [let_] term,
+          but instead a scoped fresh variable [v] is created and [s]
+          is substituted with [v] in [y]. *)
       val let_mem : string -> exp -> exp -> t
+
+      (** [let_float s x y] is [scoped @@ fun v -> (float x) (bool [y|s->v])].
+
+          Note, the [let_float] rule is not mapped to the [let_] term,
+          but instead a scoped fresh variable [v] is created and [s]
+          is substituted with [v] in [y]. *)
       val let_float : string -> exp -> exp -> t
 
+      (** [high x] is [msb (bitv x)].  *)
       val high : exp -> t
+
+      (** [low x] is [lsb (bitv x)].  *)
       val low : exp -> t
+
+      (** [extract p x] is [extract (const p) (const p) (bitv x)].  *)
       val extract : int -> exp -> t
 
+      (** [not x] is [inv (bool x)].  *)
       val not : exp -> t
+
+      (** [logand x y] is [and_ (bool x) (bool y)]  *)
       val logand : exp -> exp -> t
+
+      (** [logor x y] is [or_ (bool x) (bool y)]  *)
       val logor: exp -> exp -> t
+
+      (** [logxor x y] is [xor_ (bool x) (bool y)]  *)
       val logxor : exp -> exp -> t
 
+      (** [is_inf x] is [is_inf (float x)]  *)
       val is_inf : exp -> t
+
+      (** [is_nan x] is [is_nan (float x)]  *)
       val is_nan : exp -> t
+
+      (** [is_fzero x] is [is_fzero (float x)]  *)
       val is_fzero : exp -> t
+
+      (** [is_fpos x] is [is_fpos (float x)]  *)
       val is_fpos : exp -> t
+
+      (** [is_fneg x] is [is_fneg (float x)]  *)
       val is_fneg : exp -> t
 
+      (** [fle x y] is [p < q \/ p = q],
+
+          where [p = float x],
+            and [q = float y],
+            and [p < q] if [forder p q],
+            and [r \/ s] is [or_ r s],
+            and [p = q] if (not (p < q) /\ not (q < p)),
+            and [r /\ s] is [and_ r s],
+            and [not r] is [inv r].
+      *)
       val fle  : exp -> exp -> t
+
+      (** [flt x y] is [forder (float x) (float y)]  *)
       val flt  : exp -> exp -> t
+
+      (** [feq x y] is [x = y],
+
+          where [p = q] if (not (p < q) /\ not (q < p)),
+            and [p < q] if [forder p q],
+            and [r /\ s] is [and_ r s],
+            and [not r] is [inv r].
+      *)
       val feq  : exp -> exp -> t
     end
 
