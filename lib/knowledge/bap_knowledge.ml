@@ -1835,7 +1835,7 @@ module Knowledge = struct
       cls : ('a,unit) cls;
       dom : 'p Domain.t;
       key : 'p Dict.Key.t;
-      name : string;
+      name : fullname;
       desc : string option;
       promises : (pid, 'p promise) Hashtbl.t;
     }
@@ -1851,9 +1851,8 @@ module Knowledge = struct
     let enum {Class.id} = Hashtbl.find_multi repository id
 
     let declare ?desc ?persistent ?package cls name (dom : 'a Domain.t) =
-      let slot = Registry.add_slot ?desc ?package name in
-      let name = string_of_fname slot in
-      let key = Dict.Key.create ~name dom.inspect in
+      let name = Registry.add_slot ?desc ?package name in
+      let key = Dict.Key.create ~name:(string_of_fname name) dom.inspect in
       Option.iter persistent (Record.register_persistent key);
       Record.register_domain key dom;
       let promises = Hashtbl.create (module Pid) in
@@ -1864,7 +1863,8 @@ module Knowledge = struct
 
     let cls x = x.cls
     let domain x = x.dom
-    let name x = x.name
+    let name {name={name}} = name
+    let fullname {name} = string_of_fname name
     let desc x = match x.desc with
       | None -> "no description"
       | Some s -> s

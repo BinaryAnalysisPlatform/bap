@@ -99,15 +99,7 @@ let register (type a) ~name ~uuid (module S : S with type t = a) =
       Theory.Program.cls name domain in
   register_slot slot (module S)
 
-let find_separator s =
-  if String.is_empty s then None
-  else String.Escaping.index s ~escape_char:'\\' ':'
-
-let tagname (Value.T (k,_)) =
-  let fullname = Type_equal.Id.name k in
-  match find_separator fullname with
-  | None -> fullname
-  | Some len -> String.subo fullname ~pos:(len+1)
+let tagname (Value.T (k,_)) = Type_equal.Id.name k
 
 let typeid (Value.T (k,_)) = Type_equal.Id.name k
 
