@@ -109,9 +109,20 @@ let () =
     Bil.select_passes (ctxt-->norml @ ctxt-->optim @ ctxt-->passes);
     Bil_lifter.init ();
     Bil_ir.init();
-    Theory.register
-      ~desc:"denotes programs in terms of BIL expressions and statements"
-      ~name:"bil"
-      (module Bil_semantics.Core_with_fp_emulation);
+    Theory.declare (module Bil_semantics.Core_with_fp_emulation)
+      ~package:"bap.std" ~name:"bil"
+      ~desc: "Denotes programs in terms of BIL expressions and statements.
+      Floating point operations are also expressed in terms of BIL
+      expressions."
+      ~context:["floating-point"]
+      ~provides:[
+        "bil";
+        "floating-point";
+        "lifter";
+      ];
+    Theory.declare (module Bil_semantics.Core)
+      ~package:"bap.std" ~name:"bil"
+      ~desc:"Denotes programs in terns of BIL expressions and statements."
+      ~provides:["bil"; "lifter"];
     Ok ()
   end

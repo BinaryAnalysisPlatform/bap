@@ -1204,6 +1204,9 @@ module Theory : sig
 
     (** [let_ v exp body] bind the value of [exp] to [v] [body]. *)
     val let_ : 'a var -> 'a pure -> 'b pure -> 'b pure
+
+    (** [ite c x y] is [x] if [c] evaluates to [b1] else [y].  *)
+    val ite : bool -> 'a pure -> 'a pure -> 'a pure
   end
 
 
@@ -1224,9 +1227,6 @@ module Theory : sig
 
     (** [or_ x y] is a disjunction of [x] and [y].  *)
     val or_ : bool -> bool -> bool
-
-    (** [ite c x y] is [x] if [c] evaluates to [b1] else [y].  *)
-    val ite : bool -> 'a pure -> 'a pure -> 'a pure
 
   end
 
@@ -2056,7 +2056,7 @@ module Theory : sig
     ?context:string list ->
     ?provides:string list ->
     ?package:string ->
-    string -> (module Core) -> unit
+    name:string -> (module Core) -> unit
 
 
 
@@ -2064,7 +2064,7 @@ module Theory : sig
 
       @raise Invalid_arg if no such theory exists.
   *)
-  val require : ?package:string -> string -> (module Core)
+  val require : ?context:string list -> ?package:string -> string -> (module Core)
 
 
   (** Sorts implementing IEEE754 formats.
@@ -2167,10 +2167,10 @@ module Theory : sig
       (** [exps s] is the sort of bitvectors for the exponent field.  *)
       val exps : (('b,'e,'t) ieee754,'s) format Float.t Value.sort -> 'e Bitv.t Value.sort
 
-      (** [exps s] is the sort of bitvectors for the significand field.  *)
+      (** [sigs s] is the sort of bitvectors for the significand field.  *)
       val sigs : (('b,'e,'t) ieee754,'s) format Float.t Value.sort -> 't Bitv.t Value.sort
 
-      (** [exps s] is the sort of bitvectors for the storage.  *)
+      (** [bits s] is the sort of bitvectors for the storage.  *)
       val bits : (('b,'e,'t) ieee754,'s) format Float.t Value.sort -> 's Bitv.t Value.sort
 
       (** [spec s] is the encoding parameters of the sort [s].  *)

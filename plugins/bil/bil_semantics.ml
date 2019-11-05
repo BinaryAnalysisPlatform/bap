@@ -521,7 +521,7 @@ module FPEmulator = struct
   let resort s x = KB.Value.refine x s
 
   let fbits x =
-    x >>| fun x -> resort (Theory.Float.size (sort x)) x
+    x >>| fun x -> resort (Theory.Float.bits (sort x)) x
 
   let float s x =
     x >>| fun x -> resort s x

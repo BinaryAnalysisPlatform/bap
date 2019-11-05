@@ -56,13 +56,7 @@ module Theory = struct
   module Core = struct
     module Empty : Core = Bap_core_theory_empty.Core
   end
-
-  module Manager = Bap_core_theory_manager.Theory
-  let register = Bap_core_theory_manager.register
-
   module IEEE754 = Bap_core_theory_IEEE754
-
-  module Grammar = Bap_core_theory_grammar_definition
   module Parser = Bap_core_theory_parser
-
+  include Bap_core_theory_manager
 end

@@ -298,30 +298,7 @@ module IR = struct
     defs >>-> fun defs ->
     jmps >>-> fun jmps ->
     appgraphs defs jmps
-  (* match defs, jmps with
-   * | {blks=[]}, {blks=[]} -> ret {
-   *     entry;
-   *     blks = [blk entry]
-   *   }
-   * | {blks=[]}, {entry=next; blks=b::blks}
-   * | {entry=next; blks=b::blks}, {blks=[]} ->
-   *   fresh >>= fun tid ->
-   *   ret {
-   *     entry;
-   *     blks = b :: blk entry ++ goto ~tid next :: blks
-   *   }
-   * | {entry=fst; blks=x::xs},
-   *   {entry=snd; blks=y::ys} ->
-   *   fresh >>= fun jmp1 ->
-   *   fresh >>= fun jmp2 ->
-   *   ret {
-   *     entry;
-   *     blks =
-   *       y ::
-   *       blk entry ++ goto ~tid:jmp1 fst ::
-   *       x ++ goto ~tid:jmp2 snd ::
-   *       List.rev_append xs ys
-   *   } *)
+
   let goto = do_goto
 end
 
@@ -329,10 +306,11 @@ let reify = function
   | None -> []
   | Some g -> BIR.reify g
 
-let init () =
-  Theory.register
-    ~desc:"CFG generator"
-    ~name:"cfg"
-    (module IR)
+let init () = Theory.declare (module IR)
+    ~package:"bap.std" ~name:"bir"
+    ~desc:"Builds the graphical representation of a program."
+    ~provides:[
+      "cfg";
+    ]
 
 module Theory = IR

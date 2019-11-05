@@ -37,6 +37,7 @@ module type Init = sig
   val var : 'a var -> 'a pure
   val unk : 'a sort -> 'a pure
   val let_ : 'a var -> 'a pure -> 'b pure -> 'b pure
+  val ite : bool -> 'a pure -> 'a pure -> 'a pure
 end
 
 module type Bool = sig
@@ -65,7 +66,6 @@ module type Bitv = sig
   val logxor  : 'a bitv -> 'a bitv -> 'a bitv
   val shiftr : bool -> 'a bitv -> 'b bitv -> 'a bitv
   val shiftl : bool -> 'a bitv -> 'b bitv -> 'a bitv
-  val ite : bool -> 'a pure -> 'a pure -> 'a pure
   val sle : 'a bitv -> 'a bitv -> bool
   val ule : 'a bitv -> 'a bitv -> bool
   val cast : 'a Bitv.t sort -> bool -> 'b bitv -> 'a bitv
@@ -172,10 +172,9 @@ end
 module type Float = sig
   include Fbasic
   val pow      : rmode -> 'f float -> 'f float -> 'f float
-  val powr     : rmode -> 'f float -> 'f float -> 'f float
   val compound : rmode -> 'f float -> 'a bitv -> 'f float
   val rootn    : rmode -> 'f float -> 'a bitv -> 'f float
-  val pownn    : rmode -> 'f float -> 'a bitv -> 'f float
+  val pown     : rmode -> 'f float -> 'a bitv -> 'f float
   val rsqrt    : rmode -> 'f float -> 'f float
   val hypot    : rmode -> 'f float -> 'f float -> 'f float
 end

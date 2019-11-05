@@ -188,9 +188,10 @@ module BilParser = struct
   let t = {bitv; mem; stmt; bool; float; rmode}
 end
 
-module Lifter = Theory.Parser.Make(Theory.Manager)
 module Optimizer = Theory.Parser.Make(Bil_semantics.Core)
 [@@inlined]
+
+
 
 let provide_bir () =
   Knowledge.promise Theory.Program.Semantics.slot @@ fun obj ->
@@ -350,6 +351,7 @@ let provide_lifter () =
   let (>>?) x f = x >>= function
     | None -> KB.return unknown
     | Some x -> f x in
+  let module Lifter = Theory.Parser.Make(val Theory.instance ()) in
   let lifter obj =
     Knowledge.collect Arch.slot obj >>? fun arch ->
     Knowledge.collect Memory.slot obj >>? fun mem ->
@@ -375,7 +377,10 @@ let init () =
   Bil_ir.init ();
   provide_lifter ();
   provide_bir ();
-  Theory.register
-    ~desc:"computes destinations"
-    ~name:"dests "
-    (module Brancher)
+  Theory.declare (module Brancher)
+    ~package:"bap.std" ~name:"jump-destinations"
+    ~desc:"Computes an approximation of jump destinations."
+    ~provides:[
+      "brancher";
+      "dests"
+    ]
