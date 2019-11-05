@@ -320,6 +320,7 @@ module Knowledge : sig
     val domain : ('a,'p) slot -> 'p domain
     val cls : ('a,_) slot -> ('a, unit) cls
     val name : ('a,'p) slot -> string
+    val fullname : ('a,'p) slot -> string
     val desc : ('a,'p) slot -> string
   end
 
