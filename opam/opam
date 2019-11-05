@@ -154,6 +154,11 @@ install: [
   ["ocamlfind" "remove" "bap-primus-machine"]
   [make "reinstall"]
   ["cp" "run_tests.native" "%{bin}%/bap_run_tests"]
+  ["cp" "run_future_tests.native" "%{bin}%/bap_future_tests"]
+  ["cp" "run_x86_tests.native" "%{bin}%/bap_x86_tests"]
+  ["cp" "run_powerpc_tests.native" "%{bin}%/bap_powerpc_tests"]
+  ["cp" "run_piqi_tests.native" "%{bin}%/bap_piqi_tests"]
+  ["cp" "run_traces_tests.native" "%{bin}%/bap_traces_tests"]
 ]
 remove: [
   ["ocamlfind" "remove" "bap-main"]
@@ -268,6 +273,11 @@ remove: [
   ["rm" "-f" "%{bin}%/bapbuild"]
   ["rm" "-f" "%{bin}%/baptop"]
   ["rm" "-f" "%{bin}%/bap_run_tests"]
+  ["rm" "-f" "%{bin}%/bap_future_tests"]
+  ["rm" "-f" "%{bin}%/bap_x86_tests"]
+  ["rm" "-f" "%{bin}%/bap_powerpc_tests"]
+  ["rm" "-f" "%{bin}%/bap_piqi_tests"]
+  ["rm" "-f" "%{bin}%/bap_traces_tests"]
 ]
 depexts: [
   [

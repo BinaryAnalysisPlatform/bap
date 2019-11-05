@@ -17,6 +17,11 @@ fi
 
 if [ "$TASK" == "unit_tests" ]; then
     bap_run_tests
+    bap_future_tests
+    bap_x86_tests
+    bap_powerpc_tests
+    bap_piqi_tests
+    bap_traces_tests
 fi
 
 if [ "$TASK" == "veri" ]; then

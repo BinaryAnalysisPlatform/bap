@@ -682,6 +682,8 @@ module Knowledge : sig
     (** [name slot] the slot name.  *)
     val name : ('a,'p) slot -> string
 
+    val fullname : ('a,'p) slot -> string
+
     (** [desc slot] the slot documentation.  *)
     val desc : ('a,'p) slot -> string
   end

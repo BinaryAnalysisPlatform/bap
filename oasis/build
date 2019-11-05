@@ -1,9 +1,9 @@
-Flag bap_build
+Flag build
   Description: Build BAP build automation tools
   Default: false
 
 Library "bap-build"
-  Build$:          flag(everything) || flag(bap_build)
+  Build$:          flag(everything) || flag(build)
   Path: lib/bap_build
   FindlibName: bap-build
   CompiledObject: best
@@ -11,7 +11,7 @@ Library "bap-build"
   BuildDepends: findlib, ocamlbuild
 
 Executable "bapbuild"
-  Build$:         flag(everything) || flag(bap_build)
+  Build$:         flag(everything) || flag(build)
   Path:           tools
   MainIs:         bapbuild.ml
   Install:        true
