@@ -1,6 +1,5 @@
 (** BAP Semantics Representation.
 
-
     {1 A Gentle Introduction to the Core Theory}
 
     The Core Theory is an intermediate language that is designed to
@@ -2180,753 +2179,908 @@ module Theory : sig
   end
 
 
-  (** An untyped grammar for a subset of Core Theory languages.
 
-      This module together with the [Parser] module provides an easy
-      to use facilities for writing recursive descent parsers, that
-      turn untyped representations into typed Core Theory terms.
+  (** Generates parsers of untyped ASTs into type Core Theory terms.
 
-      The parser is built from 6 rules (per number of signatures in
-      this module). Each rule is a function that takes a module
-      implementing the corresponding signature an
-      expression in the target language (the language that is parsed),
-      and must denote the semantics of this expressions using
-      primitives provided by the module.
+      The [Parser.Make] functor produces a recursive-descent parser
+      for a family of untyped BIL-style languages.
 
-      For example,
+      In general, the problem of parsing an untyped representation into
+      richly-typed term, such as the Core Theory term is convoluted if
+      not tedious. This module along with the signatures in the
+      Grammar module facilitates this task, at least for typical
+      intermediate languages such as BIL and its variants.
+
+      The recursive-descent parser has six top-level rules, for
+      each supported term sort:
+      - [bitv] - produces terms of type ['a bitv];
+      - [bool] - produces terms of type [bool];
+      - [mem] - produces terms of type [('k,'v) mem];
+      - [stmt] - produces terms of type ['a effect];
+      - [float] - produces terms of type [('f,'s) float];
+      - [rmode] - produces terms of type [rmode].
+
+      The target language is not required to represent all those terms
+      or to distinguish types in the same way as this parser do.
+
+      To implement a parser for a target language all five rules must
+      be provided, but they could be incomplete or empty.
+
+      Each rule is a function, that takes a parser that recognizes a
+      sub-language of a term that is parsed by the function, and the
+      expression or statement of the target language. The function has
+      to map each non-terminal of the target language to a rule in the
+      provided subgrammar, i.e.,
+
+      {v
+        let bitv : type t r. (t,exp,r) bitv_parser =
+          fun (module S) -> function
+          | symbol .. symbol -> S.rule1 symbol .. symbol
+          | ..
+          | symbol .. symbol -> S.ruleN symbol .. symbol
+
+      v}
+
+      Let's take the BIL parser as a concrete example,
 
       {[
         let bitv : type t r. (t,exp,r) bitv_parser =
           fun (module S) -> function
-            | BinOp(PLUS,x,y) -> s.add x y
-            | _ -> error
+            | Cast (HIGH,n,x) -> S.high n x
+            | .. -> ..
+            | Cast (SIGNED,n,x) -> S.signed n x
+            | BinOp(PLUS,x,y) -> S.add x y
+            | .. -> ..
+            | BinOp(XOR,x,y) -> S.logxor x y
+            | Let (v,y,z) when is_bit v -> S.let_bit (Var.name v) y z
+            | .. -> ..
+            | Let (v,y,z) when is_mem v -> S.let_mem (Var.name v) y z
+            | .. -> ..
+              (* ill-formed expressions *)
+            | Let _
+            | Store (_, _, _, _, _)
+            | Unknown (_, (Mem _|Unk)) as exp -> fail exp `Bitv; S.error
       ]}
 
-      The denotation of terms are described in denotations of Core
-      Theory terms, so it is advised to refer to the Core Theory
-      signatures for detailed information. The names are consistent,
-      and in case when they are not it is noted in the documentation.
-  *)
-  module Grammar : sig
-    type ieee754 = IEEE754.parameters
+      We omitted most of the rules for brevity, see the full
+      definition in the BIL plugin. The mapping is pretty
+      straightforward. As this example highlights, the parser is also
+      playing the role of a type checker. Expressions that are not valid
+      in the given context has to be mapped to the [error] term. The
+      term itself doesn't have any payload and works as an abort
+      symbol for the parser. Since parser are expected to be
+      implemented in a plugin code, they can utilize to full extend
+      the interface with the user to provide fancy error messages.
+
+      The context of the expression is automatically inferred by the
+      parser generator with the help of the top-level syntactic rules
+      provided by the user. In the example above, the context of the
+      let-bound expression is determined from the type of the
+      variable. For some languages, it might be necessary to write a
+      type-inference algorithm.
+
+      Note, that the parser must return a value of type [S.t] which is
+      abstract and couldn't be unified with the type of the Core
+      Theory term. Therefore, the rule implementer is limited to the
+      language that is defined by the transitive closure of the
+      sub-grammar that is passed to the function that implements the
+      rule. That basically makes this parser infrastructure
+      non-extensible, which is alleviated by the fact that provided
+      sub-grammars are very rich. The task of writing an extensible
+      parser is still a research question.
+
+
+      {3 Notes on future extensions}
+
+      We're reserving the right to extend the grammar signatures in
+      the [Parser.Grammar] module without changing the major version
+      of the library, since those modules are designed to be used
+      co-inductively (as types of modules that are  provided by the
+      library, not required), therefore adding more definitions to
+      the grammars which could be used by the library user makes the
+      library strictly more powerful (stronger). To prevent any
+      issues, it is recommended not to open the provided module (i.e.,
+      always use the grammar rules via the dot notation, e.g., S.add),
+      since adding a new rule may hide the existing functions in the
+      scope if the module is opened. For alternative implementations
+      of this parser generator it is recommended not to reuse these
+      module types literally but to copy them (or define your own
+      rules).
 
-
-    (** Bitvectors.  *)
-    module type Bitv = sig
-
-      (** an abstract type denoting a Core Theory bitvector term.  *)
-      type t
-
-
-      (** the type of expressions of the target language.  *)
-      type exp
-
-
-      (** an abstract type denoting a Core Theory rounding mode term,   *)
-      type rmode
-
-
-      (** the error term.
-
-          Denotes an ill-typed term. The parsing is immediately
-          stopped. *)
-      val error : t
-
-      (** [unsigned m x] is [unsinged (bits m) (bitv x)].    *)
-      val unsigned : int -> exp -> t
-
-      (** [signed m x] is [signed (bits m) (bitv x)].    *)
-      val signed : int -> exp -> t
-
-      (** [high m x] is [high (bits m) (bitv x)].    *)
-      val high : int -> exp -> t
-
-      (** [low m x] is [low (bits m) (bitv x)].    *)
-      val low : int -> exp -> t
-
-      (** [cast m x y] is [cast (bits m) (bool b) (bitv y)]. *)
-      val cast : int -> exp -> exp -> t
-
-      (** [extract m hi lo x] is [extract (bits m) (bitv hi) (bitv lo) (bitv x)].  *)
-      val extract : int -> exp -> exp -> exp -> t
-
-      (** [add x y] is [add (bitv x) (bitv y)]  *)
-      val add : exp -> exp -> t
-
-      (** [sub x y] is [sub (bitv x) (bitv y)]  *)
-      val sub : exp -> exp -> t
-
-      (** [mul x y] is [mul (bitv x) (bitv y)]  *)
-      val mul : exp -> exp -> t
-
-      (** [div x y] is [div (bitv x) (bitv y)]  *)
-      val div : exp -> exp -> t
-
-      (** [sdiv x y] is [sdiv (bitv x) (bitv y)]  *)
-      val sdiv : exp -> exp -> t
-
-      (** [modulo x y] is [modulo (bitv x) (bitv y)]  *)
-      val modulo : exp -> exp -> t
-
-      (** [smodulo x y] is [smodulo (bitv x) (bitv y)]  *)
-      val smodulo : exp -> exp -> t
-
-      (** [lshift x y] is [lshift (bitv x) (bitv y)]  *)
-      val lshift : exp -> exp -> t
-
-      (** [rshift x y] is [rshift (bitv x) (bitv y)]  *)
-      val rshift : exp -> exp -> t
-
-      (** [arshift x y] is [arshift (bitv x) (bitv y)]  *)
-      val arshift : exp -> exp -> t
-
-      (** [logand x y] is [logand (bitv x) (bitv y)]  *)
-      val logand : exp -> exp -> t
-
-      (** [logor x y] is [logor (bitv x) (bitv y)]  *)
-      val logor: exp -> exp -> t
-
-      (** [logxor x y] is [logxor (bitv x) (bitv y)]  *)
-      val logxor : exp -> exp -> t
-
-      (** [neg x] is [neg (bitv x)]  *)
-      val neg : exp -> t
-
-      (** [not x] is [not (bitv x)]  *)
-      val not : exp -> t
-
-      (** [load_word m d s a] is [loadw (bits m) (bool d) (mem s) (bitv a)]. *)
-      val load_word : int -> exp -> exp -> exp -> t
-
-      (** [load s k] is [load (mem s) (bitv k)]  *)
-      val load : exp -> exp -> t
-
-      (** [var s m] is [var (ctxt s) (bits m)] *)
-      val var : string -> int -> t
-
-
-      (** [int x m] is [int (bits m) x]  *)
-      val int : word -> int -> t
-
-
-      (** [unknown m] is [unk (bits m)]  *)
-      val unknown : int -> t
-
-
-      (** [ite c x y] is [ite (bool c) (bitv x) (bitv y)]  *)
-      val ite : exp -> exp -> exp -> t
-
-
-      (** [let_bit s x y] is [scoped @@ fun v -> (bool x) (bitv [y|s->v])].
-
-          Note, the [let_bit] rule is not mapped to the [let_] term,
-          but instead a scoped fresh variable [v] is created and [s]
-          is substituted with [v] in [y]. *)
-      val let_bit : string -> exp -> exp -> t
-
-      (** [let_reg s x y] is [scoped @@ fun v -> (bitv x) (bitv [y|s->v])].
-
-          Note, the [let_reg] rule is not mapped to the [let_] term,
-          but instead a scoped fresh variable [v] is created and [s]
-          is substituted with [v] in [y]. *)
-      val let_reg : string -> exp -> exp -> t
-
-      (** [let_mem s x y] is [scoped @@ fun v -> (mem x) (bitv [y|s->v])].
-
-          Note, the [let_mem] rule is not mapped to the [let_] term,
-          but instead a scoped fresh variable [v] is created and [s]
-          is substituted with [v] in [y]. *)
-      val let_mem : string -> exp -> exp -> t
-
-      (** [let_float s x y] is [scoped @@ fun v -> (float x) (bitv [y|s->v])].
-
-          Note, the [let_float] rule is not mapped to the [let_] term,
-          but instead a scoped fresh variable [v] is created and [s]
-          is substituted with [v] in [y]. *)
-      val let_float : string -> exp -> exp -> t
-
-      (** [append x y] is [append s (bitv x) (bitv y)], where
-
-          [s] is [bits (size (sort (bitv x)) + size (sort (bitv x)))].
-      *)
-      val append : exp -> exp -> t
-
-
-      (** [concat xs] is [concat (bits (size s * n)) xs],
-
-          where [s] is the sort of the [xs] element,
-          and [n] is the total number of elements in [xs].
-      *)
-      val concat : exp list -> t
-
-      (** [cast_int m r x] is [cast_int (bits m) (rmode r) (float x)]. *)
-      val cast_int : int -> rmode -> exp -> t
-
-      (** [cast_sint m r x] is [cast_sint (bits m) (rmode r) (float x)]. *)
-      val cast_sint : int -> rmode -> exp -> t
-
-      (** [fbits x] is [fbits (float x)].  *)
-      val fbits : exp -> t
-    end
-
-
-    (** Booleans.  *)
-    module type Bool = sig
-
-      (** an abstract type denoting a Core Theory boolean term.   *)
-      type t
-
-      (** the type of expressions of the target language  *)
-      type exp
-
-
-      (** an ill-formed term.  *)
-      val error : t
-
-      (** [eq x y] is [eq (bitv x) (bitv y)].  *)
-      val eq : exp -> exp -> t
-
-      (** [neq x y] is [neq (bitv x) (bitv y)].  *)
-      val neq : exp -> exp -> t
-
-      (** [lt x y] is [lt (bitv x) (bitv y)].  *)
-      val lt : exp -> exp -> t
-
-      (** [le x y] is [le (bitv x) (bitv y)].  *)
-      val le : exp -> exp -> t
-
-      (** [slt x y] is [slt (bitv x) (bitv y)].  *)
-      val slt : exp -> exp -> t
-
-      (** [sle x y] is [sle (bitv x) (bitv y)].  *)
-      val sle : exp -> exp -> t
-
-      (** [var s] is [var bool (ctxt s)].  *)
-      val var : string -> t
-
-      (** [int x] is [b0] is [Bitvec.equal x 0] else [b1].  *)
-      val int : word -> t
-
-      (** [unknown ()] is [unk bool]  *)
-      val unknown : unit -> t
-
-      (** [ite c x y] is [ite (bool x) (bool x) (bool y)]  *)
-      val ite : exp -> exp -> exp -> t
-
-      (** [let_bit s x y] is [scoped @@ fun v -> (bool x) (bool [y|s->v])].
-
-          Note, the [let_bit] rule is not mapped to the [let_] term,
-          but instead a scoped fresh variable [v] is created and [s]
-          is substituted with [v] in [y]. *)
-      val let_bit : string -> exp -> exp -> t
-
-      (** [let_reg s x y] is [scoped @@ fun v -> (bitv x) (bool [y|s->v])].
-
-          Note, the [let_reg] rule is not mapped to the [let_] term,
-          but instead a scoped fresh variable [v] is created and [s]
-          is substituted with [v] in [y]. *)
-      val let_reg : string -> exp -> exp -> t
-
-      (** [let_mem s x y] is [scoped @@ fun v -> (mem x) (bool [y|s->v])].
-
-          Note, the [let_mem] rule is not mapped to the [let_] term,
-          but instead a scoped fresh variable [v] is created and [s]
-          is substituted with [v] in [y]. *)
-      val let_mem : string -> exp -> exp -> t
-
-      (** [let_float s x y] is [scoped @@ fun v -> (float x) (bool [y|s->v])].
-
-          Note, the [let_float] rule is not mapped to the [let_] term,
-          but instead a scoped fresh variable [v] is created and [s]
-          is substituted with [v] in [y]. *)
-      val let_float : string -> exp -> exp -> t
-
-      (** [high x] is [msb (bitv x)].  *)
-      val high : exp -> t
-
-      (** [low x] is [lsb (bitv x)].  *)
-      val low : exp -> t
-
-      (** [extract p x] is [extract (const p) (const p) (bitv x)].  *)
-      val extract : int -> exp -> t
-
-      (** [not x] is [inv (bool x)].  *)
-      val not : exp -> t
-
-      (** [logand x y] is [and_ (bool x) (bool y)]  *)
-      val logand : exp -> exp -> t
-
-      (** [logor x y] is [or_ (bool x) (bool y)]  *)
-      val logor: exp -> exp -> t
-
-      (** [logxor x y] is [xor_ (bool x) (bool y)]  *)
-      val logxor : exp -> exp -> t
-
-      (** [is_inf x] is [is_inf (float x)]  *)
-      val is_inf : exp -> t
-
-      (** [is_nan x] is [is_nan (float x)]  *)
-      val is_nan : exp -> t
-
-      (** [is_fzero x] is [is_fzero (float x)]  *)
-      val is_fzero : exp -> t
-
-      (** [is_fpos x] is [is_fpos (float x)]  *)
-      val is_fpos : exp -> t
-
-      (** [is_fneg x] is [is_fneg (float x)]  *)
-      val is_fneg : exp -> t
-
-      (** [fle x y] is [p < q \/ p = q],
-
-          where [p = float x],
-            and [q = float y],
-            and [p < q] if [forder p q],
-            and [r \/ s] is [or_ r s],
-            and [p = q] if (not (p < q) /\ not (q < p)),
-            and [r /\ s] is [and_ r s],
-            and [not r] is [inv r].
-      *)
-      val fle  : exp -> exp -> t
-
-      (** [flt x y] is [forder (float x) (float y)]  *)
-      val flt  : exp -> exp -> t
-
-      (** [feq x y] is [x = y],
-
-          where [p = q] if (not (p < q) /\ not (q < p)),
-            and [p < q] if [forder p q],
-            and [r /\ s] is [and_ r s],
-            and [not r] is [inv r].
-      *)
-      val feq  : exp -> exp -> t
-    end
-
-
-    module type Mem = sig
-
-      (** an abstract type denoting a Core Theory memory term.   *)
-      type t
-
-      (** the type of expressions of the target language  *)
-      type exp
-
-      (** an ill-formed term.  *)
-      val error : t
-
-      (** [store s k x] is [store (mem s) (bitv k) (bitv x)] *)
-      val store : exp -> exp -> exp -> t
-
-      (** [store_word d s k x] is [storew (bool d) (mem s) (bitv k) (bitv x)].  *)
-      val store_word : exp -> exp -> exp -> exp -> t
-
-      (** [var s m n] is [var (ctxt s) (mems (bits m) (bits n))]   *)
-      val var : string -> int -> int -> t
-
-      (** [unknown m n] is [unk (mems (bits m) (bits n))]  *)
-      val unknown : int -> int -> t
-
-      (** [ite c x y] is [ite (bool c) (mem x) (mem y)]  *)
-      val ite : exp -> exp -> exp -> t
-
-      (** [let_bit s x y] is [scoped @@ fun v -> (bool x) (mem [y|s->v])].
-
-          Note, the [let_bit] rule is not mapped to the [let_] term,
-          but instead a scoped fresh variable [v] is created and [s]
-          is substituted with [v] in [y]. *)
-      val let_bit : string -> exp -> exp -> t
-
-      (** [let_reg s x y] is [scoped @@ fun v -> (bitv x) (mem [y|s->v])].
-
-          Note, the [let_reg] rule is not mapped to the [let_] term,
-          but instead a scoped fresh variable [v] is created and [s]
-          is substituted with [v] in [y]. *)
-      val let_reg : string -> exp -> exp -> t
-
-      (** [let_mem s x y] is [scoped @@ fun v -> (mem x) (mem [y|s->v])].
-
-          Note, the [let_mem] rule is not mapped to the [let_] term,
-          but instead a scoped fresh variable [v] is created and [s]
-          is substituted with [v] in [y]. *)
-      val let_mem : string -> exp -> exp -> t
-
-      (** [let_float s x y] is [scoped @@ fun v -> (float x) (mem [y|s->v])].
-
-          Note, the [let_float] rule is not mapped to the [let_] term,
-          but instead a scoped fresh variable [v] is created and [s]
-          is substituted with [v] in [y]. *)
-      val let_float : string -> exp -> exp -> t
-    end
-
-    (** Statements.  *)
-    module type Stmt = sig
-
-      (** an abstract type denoting effects of the Core Theory.  *)
-      type t
-
-      (** the type of expressions of the target language.  *)
-      type exp
-
-      (** the type for representing rounding modes in the target language.  *)
-      type rmode
-
-      (** the type of statements in the target language.  *)
-      type stmt
-
-      (** an ill-formed term.  *)
-      val error : t
-
-
-      (** [set_mem s m n x] is [set v (mem x)],
-
-          where [v = Var.create (mems (bits m) (bits n) s].
-      *)
-      val set_mem : string -> int -> int -> exp -> t
-
-      (** [set_reg s m x] is [set v (bitv x)],
-
-          where [v = Var.create (bits m) s.
-      *)
-      val set_reg : string -> int -> exp -> t
-
-
-      (** [set_bit s x] is [set v (bool x)],
-
-          where [v = Var.create Bool.t s].
-      *)
-      val set_bit : string -> exp -> t
-
-      (** [set_ieee754 s p x] is [set v (float x)],
-
-          where [v = Var.create (IEEE754.Sort.define p) s].
-      *)
-      val set_ieee754 : string -> ieee754 -> exp -> t
-
-
-      (** [set_rmode s x] is [set v (rmode x)],
-
-          where [v = Var.create Rmode.t x]. *)
-      val set_rmode : string -> rmode -> t
-
-      (** [tmp_mem s x] is [set v (mem x)],
-
-          where [v] is a freshly created variable,
-          and all occurrences of [s] are substituted
-          with the identifier of [v] in all subsequent
-          statements.
-      *)
-      val tmp_mem : string -> exp -> t
-
-      (** [tmp_reg s x] is [set v (bitv x)],
-
-          where [v] is a freshly created variable,
-          and all occurrences of [s] are substituted
-          with the identifier of [v] in all subsequent
-          statements.
-      *)
-      val tmp_reg : string -> exp -> t
-
-      (** [tmp_bit s x] is [set v (bool x)],
-
-          where [v] is a freshly created variable,
-          and all occurrences of [s] are substituted
-          with the identifier of [v] in all subsequent
-          statements.
-      *)
-      val tmp_bit : string -> exp -> t
-
-      (** [tmp_float s x] is [set v (float x)],
-
-          where [v] is a freshly created variable,
-          and all occurrences of [s] are substituted
-          with the identifier of [v] in all subsequent
-          statements.
-      *)
-      val tmp_float : string -> exp -> t
-
-
-      (** [tmp_rmode s x] is [set v (rmode x)],
-
-          where [v] is a freshly created variable,
-          and all occurrences of [s] are substituted
-          with the identifier of [v] in all subsequent
-          statements.
-      *)
-      val tmp_rmode : string -> rmode -> t
-
-
-      (** [let_mem s x p] is [seq (set v (mem x)) (stmt p)],
-
-          where [v] is freshly created variable, and all occurrences
-          of [s] will be substituted with the identifier of [v] in
-          the statement [p].
-      *)
-      val let_mem : string -> exp -> stmt -> t
-
-      (** [let_reg s x p] is [seq (set v (bitv x)) (stmt p)],
-
-          where [v] is freshly created variable, and all occurrences
-          of [s] will be substituted with the identifier of [v] in
-          the statement [p].
-      *)
-      val let_reg : string -> exp -> stmt -> t
-
-      (** [let_bit s x p] is [seq (set v (bool x)) (stmt p)],
-
-          where [v] is freshly created variable, and all occurrences
-          of [s] will be substituted with the identifier of [v] in
-          the statement [p].
-      *)
-      val let_bit : string -> exp -> stmt -> t
-
-      (** [let_float s x p] is [seq (set v (float x)) (stmt p)],
-
-          where [v] is freshly created variable, and all occurrences
-          of [s] will be substituted with the identifier of [v] in
-          the statement [p].
-      *)
-      val let_float : string -> exp -> stmt -> t
-
-      (** [let_rmode s x p] is [seq (set v (rmode x)) (stmt p)],
-
-          where [v] is freshly created variable, and all occurrences
-          of [s] will be substituted with the identifier of [v] in
-          the statement [p].
-      *)
-      val let_rmode : string -> rmode -> stmt -> t
-
-
-      (** [jmp x] is [jmp (bitv x)],
-
-          where [x] is a non-constant expression.
-
-          If [x] is a constant use [goto].
-      *)
-      val jmp : exp -> t
-
-
-      (** [goto x] is [goto lbl],
-
-          where [lbl = Label.for_addr x].
-      *)
-      val goto :  word -> t
-
-
-      (** [call x] is [goto lbl],
-
-          where [lbl = Label.for_name x]
-      *)
-      val call : string -> t
-
-      (** [special s] is [pass].  *)
-      val special : string -> t
-
-      (** [cpuexn x] is [goto lbl],
-
-          where [lbl = Label.for_ivec x].
-      *)
-      val cpuexn : int -> t
-
-      (** [while_ c ps] is [repet (bool c) (map stmt ps)].  *)
-      val while_ : exp -> stmt list -> t
-
-
-      (** [if_ c xs ys] is [branch (bool c) (map stmt xs) (map stmt ys)]. *)
-      val if_ : exp -> stmt list -> stmt list -> t
-
-      (** [seq xs] is [map stmt xs]  *)
-      val seq : stmt list -> t
-    end
-
-
-    (** Floating point expressions.  *)
-    module type Float = sig
-
-      (** an abstract type denoting a Core Theory floating point term.  *)
-      type t
-
-      (** the type of expressions of the target language.    *)
-      type exp
-
-      (** the type for representing rounding modes in the target language.  *)
-      type rmode
-
-      (** an ill-formed term.  *)
-      val error : t
-
-      (** [ieee754 p x] is [|float| s (bitv x)],
-
-          where [s = IEEE754.Sort.define p],
-            and [|float|] is the [float] operation from the Core Theory.
-      *)
-      val ieee754 : ieee754 -> exp -> t
-
-      (** [ieee754_var p x] is [var v x],
-
-          where [v = Var.define v s],
-            and [s = IEEE754.Sort.define p].
-      *)
-      val ieee754_var : ieee754 -> string -> t
-
-      (** [ieee754 p x] is [unk s],
-
-          where [s = IEEE754.Sort.define p]. *)
-      val ieee754_unk : ieee754 -> t
-
-      (** [ieee754_cast p m x] is [cast_float s (rmode m) (bitv x)],
-
-          where [s = IEEE754.Sort.define p]. *)
-      val ieee754_cast : ieee754 -> rmode -> exp -> t
-
-      (** [ieee754_cast_signed p m x] is [cast_sfloat s (rmode m) (bitv x)],
-
-          where [s = IEEE754.Sort.define p]. *)
-      val ieee754_cast_signed : ieee754 -> rmode -> exp -> t
-
-      (** [ieee754_convert p m x] is [fconvert s (rmode m) (float x)],
-
-          where [s = IEEE754.Sort.define p]. *)
-      val ieee754_convert : ieee754 -> rmode -> exp -> t
-
-      (** [ite c x y] is [ite (bool c) (float x) (float y)]  *)
-      val ite : exp -> exp -> exp -> t
-
-      (** [fadd m x y] is [fadd (rmode m) (float x) (float y)]. *)
-      val fadd : rmode -> exp -> exp -> t
-
-      (** [fsub m x y] is [fsub (rmode m) (float x) (float y)]. *)
-      val fsub : rmode -> exp -> exp -> t
-
-      (** [fmul m x y] is [fmul (rmode m) (float x) (float y)]. *)
-      val fmul : rmode -> exp -> exp -> t
-
-      (** [fdiv m x y] is [fdiv (rmode m) (float x) (float y)]. *)
-      val fdiv : rmode -> exp -> exp -> t
-
-      (** [frem m x y] is [fmodulo (rmode m) (float x) (float y)]. *)
-      val frem : rmode -> exp -> exp -> t
-
-      (** [fmin m x y] is [ite c p q],
-
-          where [p = float x],
-            and [q = float y],
-            and [c = forder p q].
-      *)
-      val fmin : exp -> exp -> t
-
-      (** [fmax m x y] is [ite c q p],
-
-          where [p = float x],
-            and [q = float y],
-            and [c = forder p q].
-      *)
-      val fmax : exp -> exp -> t
-
-
-      (** [fabs x] is [fabs (float x)].  *)
-      val fabs : exp -> t
-
-      (** [fneg x] is [fneg (float x)].  *)
-      val fneg : exp -> t
-
-
-      (** [fsqrt x] is [fsqrt (float x)].  *)
-      val fsqrt : rmode -> exp -> t
-
-      (** [fround x] is [fround (float x)].  *)
-      val fround : rmode -> exp -> t
-
-      (** [let_bit s x y] is [scoped @@ fun v -> (bool x) (float [y|s->v])].
-
-          Note, the [let_bit] rule is not mapped to the [let_] term,
-          but instead a scoped fresh variable [v] is created and [s]
-          is substituted with [v] in [y]. *)
-      val let_bit : string -> exp -> exp -> t
-
-      (** [let_reg s x y] is [scoped @@ fun v -> (bitv x) (float [y|s->v])].
-
-          Note, the [let_reg] rule is not mapped to the [let_] term,
-          but instead a scoped fresh variable [v] is created and [s]
-          is substituted with [v] in [y]. *)
-      val let_reg : string -> exp -> exp -> t
-
-      (** [let_mem s x y] is [scoped @@ fun v -> (mem x) (float [y|s->v])].
-
-          Note, the [let_mem] rule is not mapped to the [let_] term,
-          but instead a scoped fresh variable [v] is created and [s]
-          is substituted with [v] in [y]. *)
-      val let_mem : string -> exp -> exp -> t
-
-      (** [let_float s x y] is [scoped @@ fun v -> (float x) (float [y|s->v])].
-
-          Note, the [let_float] rule is not mapped to the [let_] term,
-          but instead a scoped fresh variable [v] is created and [s]
-          is substituted with [v] in [y]. *)
-      val let_float : string -> exp -> exp -> t
-    end
-
-
-    (** Rounding modes.  *)
-    module type Rmode = sig
-
-      (** an abstract type denoting a Core Theory rounding mode term.   *)
-      type t
-
-
-      (** the type for representing rounding modes in the target language.  *)
-      type exp
-
-
-      (** an ill-formed rounding mode term.  *)
-      val error : t
-
-
-      (** [rne] is [rne].  *)
-      val rne : t
-
-      (** [rtz] is [rtz].  *)
-      val rtz : t
-
-      (** [rtp] is [rtp].  *)
-      val rtp : t
-
-      (** [rtn] is [trp].  *)
-      val rtn : t
-
-      (** [rna] is [rna].  *)
-      val rna : t
-    end
-  end
-
-
-  (** Parses untyped AST into type Core Theory terms.
-
-      See the {!Grammar} module for more information about how this
-      module could be used.
   *)
   module Parser : sig
 
+    (** An untyped grammar for a subset of Core Theory languages.
 
-    (** [parser semantics exp]
+        This module defines grammars for six sub-languages for each
+        sort of Core Theory terms.
 
-        Parser is a function parametrized
+
+        {3 Notation}
+
+        Each rule in the grammar [S] returns a value of type [S.t],
+        which is a semantic action that will eventually build a Core
+        Theory term of a corresponding to the rule type. This type is
+        abstract and is totally co-inductive (i.e., it could also
+        produced, there are no grammar rules (functions) that consume
+        values of this type.
+
+        Since each grammar rule will eventually build a Core Theory
+        term, we will describe rules using the Core Theory
+        denotations. The parser generator will invoke recursively the
+        top-level rules on each non-terminal. Those rules are
+        referenced using the following names:
+
+        - [bitv] - parses the language of bitvectors;
+        - [bool] - parses the language of booleans;
+        - [mem]  - parses the language of memories;
+        - [stmt] - parses the language of statements;
+        - [float] - parses the language of floats;
+        - [rmode] - parses the language of rounding modes.
+
+        The parsing rules occasionally need to refer to the sorts of
+        therms, we use the following short-hand notation for sorts:
+        - [bits m = Bitv.define m] - a sort of bitvectors with [m] bits;
+        - [Bool.t] - the sort of booleans;
+        - [mems k v = Mem.define k v] - a sort of memories;
+
+        Finally, the width associated with the sort [s] is denoted
+        with [size s = Bitv.size s].
+
+        Example,
+
+        {[
+          (** [add x y] is [add (bitv x) (bitv y)].  *)
+          val add : exp -> exp -> t
+        ]}
+
+        says that the grammar rule [add] interprets its arguments in
+        the [bitv] context (recursively calls the [bitv] function) and
+        have the denotation of the [add p q] term of the Core Theory,
+        where [p = bitv x] and [q = bitv y].
+
+        {4 Contexts}
+
+        To ensure the freshness of generated variables and to enable a
+        higher-order abstract syntax style (a generalization of the De
+        Bruijn notation) we wrap each semantic action in a context
+        that holds the binding rules.
+
+        The [var] family of grammar rules rename the passed names if
+        they are bound in the renaming context, which is denoted with
+        [context s] which is a function that returns the name bound to
+        [s] in the context or [s] if it is unbound.
+
+        The [let_<T> n ...] and [tmp_<T> n ...] take the old name
+        [n], create a fresh variable [n'] and append the [n,n']
+        binding to the context in which the grammar rule is invoked,
+        denoted with [rule [<non-term>|n->n']], e.g.,
+
+        {[
+          [let_reg s x y] is [scoped @@ fun v -> (bitv x) (bitv [y|s->v])]
+        ]}
+
+        As a result of the [let_reg] rule applications any free occurrence
+        of the variable [s] will be substituted with the freshly
+        generated variable [v]. This will ensure alpha-equivalence of
+        expressions that use the [let_<T>] forms.
+
+        The [tmp_<T>] rules are basically the same as [let_<T>] except
+        that the scope of the freshly created variable is indefinite,
+        so these forms could be used to create hygienic symbol
+        generators.
     *)
+    module Grammar : sig
+      type ieee754 = IEEE754.parameters
+
+
+      (** Bitvectors.  *)
+      module type Bitv = sig
+
+        (** an abstract type denoting a Core Theory bitvector term.  *)
+        type t
+
+
+        (** the type of expressions of the target language.  *)
+        type exp
+
+
+        (** an abstract type denoting a Core Theory rounding mode term,   *)
+        type rmode
+
+
+        (** the error term.
+
+            Denotes an ill-typed term. The parsing is immediately
+            stopped. *)
+        val error : t
+
+        (** [unsigned m x] is [unsinged (bits m) (bitv x)].    *)
+        val unsigned : int -> exp -> t
+
+        (** [signed m x] is [signed (bits m) (bitv x)].    *)
+        val signed : int -> exp -> t
+
+        (** [high m x] is [high (bits m) (bitv x)].    *)
+        val high : int -> exp -> t
+
+        (** [low m x] is [low (bits m) (bitv x)].    *)
+        val low : int -> exp -> t
+
+        (** [cast m x y] is [cast (bits m) (bool b) (bitv y)]. *)
+        val cast : int -> exp -> exp -> t
+
+        (** [extract m hi lo x] is [extract (bits m) (bitv hi) (bitv lo) (bitv x)].  *)
+        val extract : int -> exp -> exp -> exp -> t
+
+        (** [add x y] is [add (bitv x) (bitv y)]  *)
+        val add : exp -> exp -> t
+
+        (** [sub x y] is [sub (bitv x) (bitv y)]  *)
+        val sub : exp -> exp -> t
+
+        (** [mul x y] is [mul (bitv x) (bitv y)]  *)
+        val mul : exp -> exp -> t
+
+        (** [div x y] is [div (bitv x) (bitv y)]  *)
+        val div : exp -> exp -> t
+
+        (** [sdiv x y] is [sdiv (bitv x) (bitv y)]  *)
+        val sdiv : exp -> exp -> t
+
+        (** [modulo x y] is [modulo (bitv x) (bitv y)]  *)
+        val modulo : exp -> exp -> t
+
+        (** [smodulo x y] is [smodulo (bitv x) (bitv y)]  *)
+        val smodulo : exp -> exp -> t
+
+        (** [lshift x y] is [lshift (bitv x) (bitv y)]  *)
+        val lshift : exp -> exp -> t
+
+        (** [rshift x y] is [rshift (bitv x) (bitv y)]  *)
+        val rshift : exp -> exp -> t
+
+        (** [arshift x y] is [arshift (bitv x) (bitv y)]  *)
+        val arshift : exp -> exp -> t
+
+        (** [logand x y] is [logand (bitv x) (bitv y)]  *)
+        val logand : exp -> exp -> t
+
+        (** [logor x y] is [logor (bitv x) (bitv y)]  *)
+        val logor: exp -> exp -> t
+
+        (** [logxor x y] is [logxor (bitv x) (bitv y)]  *)
+        val logxor : exp -> exp -> t
+
+        (** [neg x] is [neg (bitv x)]  *)
+        val neg : exp -> t
+
+        (** [not x] is [not (bitv x)]  *)
+        val not : exp -> t
+
+        (** [load_word m d s a] is [loadw (bits m) (bool d) (mem s) (bitv a)]. *)
+        val load_word : int -> exp -> exp -> exp -> t
+
+        (** [load s k] is [load (mem s) (bitv k)]  *)
+        val load : exp -> exp -> t
+
+        (** [var s m] is [var (ctxt s) (bits m)] *)
+        val var : string -> int -> t
+
+
+        (** [int x m] is [int (bits m) x]  *)
+        val int : word -> int -> t
+
+
+        (** [unknown m] is [unk (bits m)]  *)
+        val unknown : int -> t
+
+
+        (** [ite c x y] is [ite (bool c) (bitv x) (bitv y)]  *)
+        val ite : exp -> exp -> exp -> t
+
+
+        (** [let_bit s x y] is [scoped @@ fun v -> (bool x) (bitv [y|s->v])].
+
+            Note, the [let_bit] rule is not mapped to the [let_] term,
+            but instead a scoped fresh variable [v] is created and [s]
+            is substituted with [v] in [y]. *)
+        val let_bit : string -> exp -> exp -> t
+
+        (** [let_reg s x y] is [scoped @@ fun v -> (bitv x) (bitv [y|s->v])].
+
+            Note, the [let_reg] rule is not mapped to the [let_] term,
+            but instead a scoped fresh variable [v] is created and [s]
+            is substituted with [v] in [y]. *)
+        val let_reg : string -> exp -> exp -> t
+
+        (** [let_mem s x y] is [scoped @@ fun v -> (mem x) (bitv [y|s->v])].
+
+            Note, the [let_mem] rule is not mapped to the [let_] term,
+            but instead a scoped fresh variable [v] is created and [s]
+            is substituted with [v] in [y]. *)
+        val let_mem : string -> exp -> exp -> t
+
+        (** [let_float s x y] is [scoped @@ fun v -> (float x) (bitv [y|s->v])].
+
+            Note, the [let_float] rule is not mapped to the [let_] term,
+            but instead a scoped fresh variable [v] is created and [s]
+            is substituted with [v] in [y]. *)
+        val let_float : string -> exp -> exp -> t
+
+        (** [append x y] is [append s (bitv x) (bitv y)], where
+
+            [s] is [bits (size (sort (bitv x)) + size (sort (bitv x)))].
+        *)
+        val append : exp -> exp -> t
+
+
+        (** [concat xs] is [concat (bits (size s * n)) xs],
+
+            where [s] is the sort of the [xs] element,
+            and [n] is the total number of elements in [xs].
+        *)
+        val concat : exp list -> t
+
+        (** [cast_int m r x] is [cast_int (bits m) (rmode r) (float x)]. *)
+        val cast_int : int -> rmode -> exp -> t
+
+        (** [cast_sint m r x] is [cast_sint (bits m) (rmode r) (float x)]. *)
+        val cast_sint : int -> rmode -> exp -> t
+
+        (** [fbits x] is [fbits (float x)].  *)
+        val fbits : exp -> t
+      end
+
+
+      (** Booleans.  *)
+      module type Bool = sig
+
+        (** an abstract type denoting a Core Theory boolean term.   *)
+        type t
+
+        (** the type of expressions of the target language  *)
+        type exp
+
+
+        (** an ill-formed term.  *)
+        val error : t
+
+        (** [eq x y] is [eq (bitv x) (bitv y)].  *)
+        val eq : exp -> exp -> t
+
+        (** [neq x y] is [neq (bitv x) (bitv y)].  *)
+        val neq : exp -> exp -> t
+
+        (** [lt x y] is [lt (bitv x) (bitv y)].  *)
+        val lt : exp -> exp -> t
+
+        (** [le x y] is [le (bitv x) (bitv y)].  *)
+        val le : exp -> exp -> t
+
+        (** [slt x y] is [slt (bitv x) (bitv y)].  *)
+        val slt : exp -> exp -> t
+
+        (** [sle x y] is [sle (bitv x) (bitv y)].  *)
+        val sle : exp -> exp -> t
+
+        (** [var s] is [var Bool.t (ctxt s)].  *)
+        val var : string -> t
+
+        (** [int x] is [b0] is [Bitvec.equal x 0] else [b1].  *)
+        val int : word -> t
+
+        (** [unknown ()] is [unk Bool.t]  *)
+        val unknown : unit -> t
+
+        (** [ite c x y] is [ite (bool x) (bool x) (bool y)]  *)
+        val ite : exp -> exp -> exp -> t
+
+        (** [let_bit s x y] is [scoped @@ fun v -> (bool x) (bool [y|s->v])].
+
+            Note, the [let_bit] rule is not mapped to the [let_] term,
+            but instead a scoped fresh variable [v] is created and [s]
+            is substituted with [v] in [y]. *)
+        val let_bit : string -> exp -> exp -> t
+
+        (** [let_reg s x y] is [scoped @@ fun v -> (bitv x) (bool [y|s->v])].
+
+            Note, the [let_reg] rule is not mapped to the [let_] term,
+            but instead a scoped fresh variable [v] is created and [s]
+            is substituted with [v] in [y]. *)
+        val let_reg : string -> exp -> exp -> t
+
+        (** [let_mem s x y] is [scoped @@ fun v -> (mem x) (bool [y|s->v])].
+
+            Note, the [let_mem] rule is not mapped to the [let_] term,
+            but instead a scoped fresh variable [v] is created and [s]
+            is substituted with [v] in [y]. *)
+        val let_mem : string -> exp -> exp -> t
+
+        (** [let_float s x y] is [scoped @@ fun v -> (float x) (bool [y|s->v])].
+
+            Note, the [let_float] rule is not mapped to the [let_] term,
+            but instead a scoped fresh variable [v] is created and [s]
+            is substituted with [v] in [y]. *)
+        val let_float : string -> exp -> exp -> t
+
+        (** [high x] is [msb (bitv x)].  *)
+        val high : exp -> t
+
+        (** [low x] is [lsb (bitv x)].  *)
+        val low : exp -> t
+
+        (** [extract p x] is [extract (const p) (const p) (bitv x)].  *)
+        val extract : int -> exp -> t
+
+        (** [not x] is [inv (bool x)].  *)
+        val not : exp -> t
+
+        (** [logand x y] is [and_ (bool x) (bool y)]  *)
+        val logand : exp -> exp -> t
+
+        (** [logor x y] is [or_ (bool x) (bool y)]  *)
+        val logor: exp -> exp -> t
+
+        (** [logxor x y] is [xor_ (bool x) (bool y)]  *)
+        val logxor : exp -> exp -> t
+
+        (** [is_inf x] is [is_inf (float x)]  *)
+        val is_inf : exp -> t
+
+        (** [is_nan x] is [is_nan (float x)]  *)
+        val is_nan : exp -> t
+
+        (** [is_fzero x] is [is_fzero (float x)]  *)
+        val is_fzero : exp -> t
+
+        (** [is_fpos x] is [is_fpos (float x)]  *)
+        val is_fpos : exp -> t
+
+        (** [is_fneg x] is [is_fneg (float x)]  *)
+        val is_fneg : exp -> t
+
+        (** [fle x y] is [p < q \/ p = q],
+
+            where [p = float x],
+              and [q = float y],
+              and [p < q] if [forder p q],
+              and [r \/ s] is [or_ r s],
+              and [p = q] if (not (p < q) /\ not (q < p)),
+              and [r /\ s] is [and_ r s],
+              and [not r] is [inv r].
+        *)
+        val fle  : exp -> exp -> t
+
+        (** [flt x y] is [forder (float x) (float y)]  *)
+        val flt  : exp -> exp -> t
+
+        (** [feq x y] is [x = y],
+
+            where [p = q] if (not (p < q) /\ not (q < p)),
+              and [p < q] if [forder p q],
+              and [r /\ s] is [and_ r s],
+              and [not r] is [inv r].
+        *)
+        val feq  : exp -> exp -> t
+      end
+
+
+      module type Mem = sig
+
+        (** an abstract type denoting a Core Theory memory term.   *)
+        type t
+
+        (** the type of expressions of the target language  *)
+        type exp
+
+        (** an ill-formed term.  *)
+        val error : t
+
+        (** [store s k x] is [store (mem s) (bitv k) (bitv x)] *)
+        val store : exp -> exp -> exp -> t
+
+        (** [store_word d s k x] is [storew (bool d) (mem s) (bitv k) (bitv x)].  *)
+        val store_word : exp -> exp -> exp -> exp -> t
+
+        (** [var s m n] is [var (ctxt s) (mems (bits m) (bits n))]   *)
+        val var : string -> int -> int -> t
+
+        (** [unknown m n] is [unk (mems (bits m) (bits n))]  *)
+        val unknown : int -> int -> t
+
+        (** [ite c x y] is [ite (bool c) (mem x) (mem y)]  *)
+        val ite : exp -> exp -> exp -> t
+
+        (** [let_bit s x y] is [scoped @@ fun v -> (bool x) (mem [y|s->v])].
+
+            Note, the [let_bit] rule is not mapped to the [let_] term,
+            but instead a scoped fresh variable [v] is created and [s]
+            is substituted with [v] in [y]. *)
+        val let_bit : string -> exp -> exp -> t
+
+        (** [let_reg s x y] is [scoped @@ fun v -> (bitv x) (mem [y|s->v])].
+
+            Note, the [let_reg] rule is not mapped to the [let_] term,
+            but instead a scoped fresh variable [v] is created and [s]
+            is substituted with [v] in [y]. *)
+        val let_reg : string -> exp -> exp -> t
+
+        (** [let_mem s x y] is [scoped @@ fun v -> (mem x) (mem [y|s->v])].
+
+            Note, the [let_mem] rule is not mapped to the [let_] term,
+            but instead a scoped fresh variable [v] is created and [s]
+            is substituted with [v] in [y]. *)
+        val let_mem : string -> exp -> exp -> t
+
+        (** [let_float s x y] is [scoped @@ fun v -> (float x) (mem [y|s->v])].
+
+            Note, the [let_float] rule is not mapped to the [let_] term,
+            but instead a scoped fresh variable [v] is created and [s]
+            is substituted with [v] in [y]. *)
+        val let_float : string -> exp -> exp -> t
+      end
+
+      (** Statements.  *)
+      module type Stmt = sig
+
+        (** an abstract type denoting effects of the Core Theory.  *)
+        type t
+
+        (** the type of expressions of the target language.  *)
+        type exp
+
+        (** the type for representing rounding modes in the target language.  *)
+        type rmode
+
+        (** the type of statements in the target language.  *)
+        type stmt
+
+        (** an ill-formed term.  *)
+        val error : t
+
+
+        (** [set_mem s m n x] is [set v (mem x)],
+
+            where [v = Var.create (mems (bits m) (bits n) s].
+        *)
+        val set_mem : string -> int -> int -> exp -> t
+
+        (** [set_reg s m x] is [set v (bitv x)],
+
+            where [v = Var.create (bits m) s.
+        *)
+        val set_reg : string -> int -> exp -> t
+
+
+        (** [set_bit s x] is [set v (bool x)],
+
+            where [v = Var.create Bool.t s].
+        *)
+        val set_bit : string -> exp -> t
+
+        (** [set_ieee754 s p x] is [set v (float x)],
+
+            where [v = Var.create (IEEE754.Sort.define p) s].
+        *)
+        val set_ieee754 : string -> ieee754 -> exp -> t
+
+
+        (** [set_rmode s x] is [set v (rmode x)],
+
+            where [v = Var.create Rmode.t x]. *)
+        val set_rmode : string -> rmode -> t
+
+        (** [tmp_mem s x] is [set v (mem x)],
+
+            where [v] is a freshly created variable,
+            and all occurrences of [s] are substituted
+            with the identifier of [v] in all subsequent
+            statements.
+        *)
+        val tmp_mem : string -> exp -> t
+
+        (** [tmp_reg s x] is [set v (bitv x)],
+
+            where [v] is a freshly created variable,
+            and all occurrences of [s] are substituted
+            with the identifier of [v] in all subsequent
+            statements.
+        *)
+        val tmp_reg : string -> exp -> t
+
+        (** [tmp_bit s x] is [set v (bool x)],
+
+            where [v] is a freshly created variable,
+            and all occurrences of [s] are substituted
+            with the identifier of [v] in all subsequent
+            statements.
+        *)
+        val tmp_bit : string -> exp -> t
+
+        (** [tmp_float s x] is [set v (float x)],
+
+            where [v] is a freshly created variable,
+            and all occurrences of [s] are substituted
+            with the identifier of [v] in all subsequent
+            statements.
+        *)
+        val tmp_float : string -> exp -> t
+
+
+        (** [tmp_rmode s x] is [set v (rmode x)],
+
+            where [v] is a freshly created variable,
+            and all occurrences of [s] are substituted
+            with the identifier of [v] in all subsequent
+            statements.
+        *)
+        val tmp_rmode : string -> rmode -> t
+
+
+        (** [let_mem s x p] is [seq (set v (mem x)) (stmt p)],
+
+            where [v] is freshly created variable, and all occurrences
+            of [s] will be substituted with the identifier of [v] in
+            the statement [p].
+        *)
+        val let_mem : string -> exp -> stmt -> t
+
+        (** [let_reg s x p] is [seq (set v (bitv x)) (stmt p)],
+
+            where [v] is freshly created variable, and all occurrences
+            of [s] will be substituted with the identifier of [v] in
+            the statement [p].
+        *)
+        val let_reg : string -> exp -> stmt -> t
+
+        (** [let_bit s x p] is [seq (set v (bool x)) (stmt p)],
+
+            where [v] is freshly created variable, and all occurrences
+            of [s] will be substituted with the identifier of [v] in
+            the statement [p].
+        *)
+        val let_bit : string -> exp -> stmt -> t
+
+        (** [let_float s x p] is [seq (set v (float x)) (stmt p)],
+
+            where [v] is freshly created variable, and all occurrences
+            of [s] will be substituted with the identifier of [v] in
+            the statement [p].
+        *)
+        val let_float : string -> exp -> stmt -> t
+
+        (** [let_rmode s x p] is [seq (set v (rmode x)) (stmt p)],
+
+            where [v] is freshly created variable, and all occurrences
+            of [s] will be substituted with the identifier of [v] in
+            the statement [p].
+        *)
+        val let_rmode : string -> rmode -> stmt -> t
+
+
+        (** [jmp x] is [jmp (bitv x)],
+
+            where [x] is a non-constant expression.
+
+            If [x] is a constant use [goto].
+        *)
+        val jmp : exp -> t
+
+
+        (** [goto x] is [goto lbl],
+
+            where [lbl = Label.for_addr x].
+        *)
+        val goto :  word -> t
+
+
+        (** [call x] is [goto lbl],
+
+            where [lbl = Label.for_name x]
+        *)
+        val call : string -> t
+
+        (** [special s] is [pass].  *)
+        val special : string -> t
+
+        (** [cpuexn x] is [goto lbl],
+
+            where [lbl = Label.for_ivec x].
+        *)
+        val cpuexn : int -> t
+
+        (** [while_ c ps] is [repet (bool c) (map stmt ps)].  *)
+        val while_ : exp -> stmt list -> t
+
+
+        (** [if_ c xs ys] is [branch (bool c) (map stmt xs) (map stmt ys)]. *)
+        val if_ : exp -> stmt list -> stmt list -> t
+
+        (** [seq xs] is [map stmt xs]  *)
+        val seq : stmt list -> t
+      end
+
+
+      (** Floating point expressions.  *)
+      module type Float = sig
+
+        (** an abstract type denoting a Core Theory floating point term.  *)
+        type t
+
+        (** the type of expressions of the target language.    *)
+        type exp
+
+        (** the type for representing rounding modes in the target language.  *)
+        type rmode
+
+        (** an ill-formed term.  *)
+        val error : t
+
+        (** [ieee754 p x] is [|float| s (bitv x)],
+
+            where [s = IEEE754.Sort.define p],
+              and [|float|] is the [float] operation from the Core Theory.
+        *)
+        val ieee754 : ieee754 -> exp -> t
+
+        (** [ieee754_var p x] is [var v x],
+
+            where [v = Var.define v s],
+              and [s = IEEE754.Sort.define p].
+        *)
+        val ieee754_var : ieee754 -> string -> t
+
+        (** [ieee754 p x] is [unk s],
+
+            where [s = IEEE754.Sort.define p]. *)
+        val ieee754_unk : ieee754 -> t
+
+        (** [ieee754_cast p m x] is [cast_float s (rmode m) (bitv x)],
+
+            where [s = IEEE754.Sort.define p]. *)
+        val ieee754_cast : ieee754 -> rmode -> exp -> t
+
+        (** [ieee754_cast_signed p m x] is [cast_sfloat s (rmode m) (bitv x)],
+
+            where [s = IEEE754.Sort.define p]. *)
+        val ieee754_cast_signed : ieee754 -> rmode -> exp -> t
+
+        (** [ieee754_convert p m x] is [fconvert s (rmode m) (float x)],
+
+            where [s = IEEE754.Sort.define p]. *)
+        val ieee754_convert : ieee754 -> rmode -> exp -> t
+
+        (** [ite c x y] is [ite (bool c) (float x) (float y)]  *)
+        val ite : exp -> exp -> exp -> t
+
+        (** [fadd m x y] is [fadd (rmode m) (float x) (float y)]. *)
+        val fadd : rmode -> exp -> exp -> t
+
+        (** [fsub m x y] is [fsub (rmode m) (float x) (float y)]. *)
+        val fsub : rmode -> exp -> exp -> t
+
+        (** [fmul m x y] is [fmul (rmode m) (float x) (float y)]. *)
+        val fmul : rmode -> exp -> exp -> t
+
+        (** [fdiv m x y] is [fdiv (rmode m) (float x) (float y)]. *)
+        val fdiv : rmode -> exp -> exp -> t
+
+        (** [frem m x y] is [fmodulo (rmode m) (float x) (float y)]. *)
+        val frem : rmode -> exp -> exp -> t
+
+        (** [fmin m x y] is [ite c p q],
+
+            where [p = float x],
+              and [q = float y],
+              and [c = forder p q].
+        *)
+        val fmin : exp -> exp -> t
+
+        (** [fmax m x y] is [ite c q p],
+
+            where [p = float x],
+              and [q = float y],
+              and [c = forder p q].
+        *)
+        val fmax : exp -> exp -> t
+
+
+        (** [fabs x] is [fabs (float x)].  *)
+        val fabs : exp -> t
+
+        (** [fneg x] is [fneg (float x)].  *)
+        val fneg : exp -> t
+
+
+        (** [fsqrt x] is [fsqrt (float x)].  *)
+        val fsqrt : rmode -> exp -> t
+
+        (** [fround x] is [fround (float x)].  *)
+        val fround : rmode -> exp -> t
+
+        (** [let_bit s x y] is [scoped @@ fun v -> (bool x) (float [y|s->v])].
+
+            Note, the [let_bit] rule is not mapped to the [let_] term,
+            but instead a scoped fresh variable [v] is created and [s]
+            is substituted with [v] in [y]. *)
+        val let_bit : string -> exp -> exp -> t
+
+        (** [let_reg s x y] is [scoped @@ fun v -> (bitv x) (float [y|s->v])].
+
+            Note, the [let_reg] rule is not mapped to the [let_] term,
+            but instead a scoped fresh variable [v] is created and [s]
+            is substituted with [v] in [y]. *)
+        val let_reg : string -> exp -> exp -> t
+
+        (** [let_mem s x y] is [scoped @@ fun v -> (mem x) (float [y|s->v])].
+
+            Note, the [let_mem] rule is not mapped to the [let_] term,
+            but instead a scoped fresh variable [v] is created and [s]
+            is substituted with [v] in [y]. *)
+        val let_mem : string -> exp -> exp -> t
+
+        (** [let_float s x y] is [scoped @@ fun v -> (float x) (float [y|s->v])].
+
+            Note, the [let_float] rule is not mapped to the [let_] term,
+            but instead a scoped fresh variable [v] is created and [s]
+            is substituted with [v] in [y]. *)
+        val let_float : string -> exp -> exp -> t
+      end
+
+
+      (** Rounding modes.  *)
+      module type Rmode = sig
+
+        (** an abstract type denoting a Core Theory rounding mode term.   *)
+        type t
+
+
+        (** the type for representing rounding modes in the target language.  *)
+        type exp
+
+
+        (** an ill-formed rounding mode term.  *)
+        val error : t
+
+
+        (** [rne] is [rne].  *)
+        val rne : t
+
+        (** [rtz] is [rtz].  *)
+        val rtz : t
+
+        (** [rtp] is [rtp].  *)
+        val rtp : t
+
+        (** [rtn] is [trp].  *)
+        val rtn : t
+
+        (** [rna] is [rna].  *)
+        val rna : t
+      end
+    end
+
+    (** [bitv grammar exp] parses [exp] using [grammar]. *)
     type ('a,'e,'r) bitv_parser =
       (module Grammar.Bitv with type t = 'a
                             and type exp = 'e
                             and type rmode = 'r) ->
       'e -> 'a
 
+    (** [bool grammar exp] parses [exp] using [grammar]. *)
     type ('a,'e,'r) bool_parser =
       (module Grammar.Bool with type t = 'a
                             and type exp = 'e) ->
       'e -> 'a
 
+    (** [mem grammar exp] parses [exp] using [grammar]. *)
     type ('a,'e) mem_parser =
       (module Grammar.Mem with type t = 'a
                            and type exp = 'e) ->
       'e -> 'a
 
+    (** [stmt grammar stmt] parses [stmt] using [grammar]. *)
     type ('a,'e,'r,'s) stmt_parser =
       (module Grammar.Stmt with type t = 'a
                             and type exp = 'e
@@ -2934,12 +3088,14 @@ module Theory : sig
                             and type rmode = 'r) ->
       's -> 'a
 
+    (** [float grammar exp] parses [exp] using [grammar]. *)
     type ('a,'e,'r) float_parser =
       (module Grammar.Float with type t = 'a
                              and type exp = 'e
                              and type rmode = 'r) ->
       'e -> 'a
 
+    (** [rmode grammar exp] parses [exp] using [grammar]. *)
     type ('a,'e) rmode_parser =
       (module Grammar.Rmode with type t = 'a
                              and type exp = 'e) ->
@@ -2954,9 +3110,24 @@ module Theory : sig
       rmode : 'a . ('a,'r) rmode_parser;
     }
 
+
+    (** [parser] is a tuple of top-level parsing routines.
+
+        Parser defines a Core Theory denotation of an untyped AST
+        with expressions of type ['e], statements of type ['s] and
+        rounding modes represented with type ['r].
+    *)
     type ('e,'r,'s) parser = ('e,'r,'s) t
 
+    (** [Make(Theory)] parses AST to the specified [Theory] terms.  *)
     module Make(S : Core) : sig
+
+
+      (** [run parser program] the starting rule of the parser.
+
+          Applies the parser to a sequence of statements and computes
+          a denotation of [program] in a Core Theory terms.
+      *)
       val run : ('e,'r,'s) parser -> 's list -> unit eff
     end
   end
