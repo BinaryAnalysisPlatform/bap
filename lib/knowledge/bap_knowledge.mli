@@ -147,6 +147,9 @@ module Knowledge : sig
   (** an opinion based fact of type ['a]  *)
   type 'a opinions
 
+  (** a fully qualified name  *)
+  type name
+
   (** [collect p x] collects the value of the property [p].
 
       If the object [x] doesn't have a value for the property [p] and
@@ -414,14 +417,7 @@ module Knowledge : sig
       ('k,_) cls -> string -> 'p domain -> ('k,'p) slot
 
     (** [name cls] is the class name.  *)
-    val name : ('a,_) cls -> string
-
-    (** [package cls] is the class package.  *)
-    val package : ('a,_) cls -> string
-
-
-    (** [fullname cls] is a fully qualified class name.  *)
-    val fullname : ('a,_) cls -> string
+    val name : ('a,_) cls -> name
 
     (** [sort cls] returns the sort index of the class [k].  *)
     val sort : ('k,'s) cls -> 's
@@ -680,9 +676,7 @@ module Knowledge : sig
     val cls : ('a,_) slot -> ('a, unit) cls
 
     (** [name slot] the slot name.  *)
-    val name : ('a,'p) slot -> string
-
-    val fullname : ('a,'p) slot -> string
+    val name : ('a,'p) slot -> name
 
     (** [desc slot] the slot documentation.  *)
     val desc : ('a,'p) slot -> string
@@ -1268,6 +1262,105 @@ module Knowledge : sig
         the user and [None] for all other variants.
     *)
     val register_printer : (t -> string option) -> unit
+  end
+
+
+  (** Fully qualified names.  *)
+  module Name : sig
+    type t = name [@@deriving bin_io, compare, sexp]
+
+
+    (** [create ?package name] creates a fully qualified name.
+
+        The [package] and [name] strings can contain any characters
+        all treated literally, e.g., the [:] character
+        won't be treated as a separator neither it will break
+        anything.
+
+        If [package] is not specified, then it defaults to the
+        ["user"] package.
+    *)
+    val create : ?package:string -> string -> t
+
+
+    (** [read ?package input] reads a full name from input.
+
+        This function will parse the [input] and return a
+        fully-qualified name that corresponds to the input, using
+        [package] as the currently opened package. The input syntax
+        is {v
+          name = string, ":", string
+               | ":", string
+               | string
+          string = ?a sequence of any characters?
+        v}
+
+
+        Not all characters in the [input] string are treated
+        literally, the following two characters have a special
+        interpretation:
+        - ['\\'] the escape character;
+        - [':'] the package separator character.
+
+        The escape character disables a special interpretation of the
+        consequent character. The package separator denotes the place
+        in the input where the package name ends and the name part
+        starts.
+
+        If [package] is specified then it is treated literally (as in
+        the [create] function). The same as in [create] it defaults to
+        the ["user"] package.
+
+        If [input] doesn't denote a fully qualified name (i.e., there
+        is no [':'] special character in [input], then the read name
+        is qualified with the passed [package], otherwise the package
+        is defined by the [input].
+
+        The function is expected to work with the output of the [show]
+        function, so that for all [n], [read (show n) = n]. However,
+        it is robust enough to accept any user inputs, even if it is
+        not a well-formed input, e.g., when an escape character is
+        used to escaped a non-special character or when input contains
+        more than one unescaped separators. In case of invalid input,
+        all special characters that doesn't make sense are treated
+        literally and the first special [':'] denotes the end of the
+        package field. If the input is not valid, then it is possible
+        that [show (read s) <> s], since the output of [show] is
+        always valid, e.g.
+
+        [show@@read "hello:cruel:world" = "hello:cruel\\:world"]
+    *)
+    val read : ?package:string -> string -> t
+
+
+    (** [show name] is the readable representation of [name].
+
+        The name is represented as [<package>:<name>], with all
+        special characters escaped. See the {!read} function for
+        more information.
+    *)
+    val show : t -> string
+
+    (** [unqualified name] is the unqualified name.
+
+        Returns the name without the package specifier.
+    *)
+    val unqualified : t -> string
+
+    (** [package name] is the package of the [name].  *)
+    val package : t -> string
+
+
+    (** [str () x = show x] shows [x].
+
+        This function is useful with printf-style functions that
+        output to a string. *)
+    val str : unit -> t -> string
+
+    include Base.Comparable.S with type t := t
+    include Binable.S with type t := t
+    include Stringable.S with type t := t
+    include Pretty_printer.S with type t := t
   end
 
   (** the s-expression denoting the conflict. *)

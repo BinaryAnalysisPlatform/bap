@@ -600,8 +600,127 @@ type 'a obj = Oid.t
 type fullname = {
   package : string;
   name : string;
-} [@@deriving bin_io, sexp_of]
+} [@@deriving bin_io, compare, sexp]
 
+
+module Name = struct
+  type t = fullname [@@deriving bin_io, compare, sexp]
+
+
+  let separator = ':'
+  let escape_char = '\\'
+  let escapeworthy = [separator]
+
+  let is_escaped s = String.Escaping.is_char_escaped s ~escape_char
+
+  let find_separator s =
+    if String.is_empty s then None
+    else String.Escaping.index s ~escape_char separator
+
+  let is_separator_unescaped s p c =
+    Char.equal separator c && not (is_escaped s p)
+
+  let unescaped_exists_so_escape ?(skip_pos=(-1)) s =
+    let buf = Buffer.create (String.length s + 1) in
+    Caml.StringLabels.iteri s ~f:(fun p c ->
+        if p <> skip_pos && is_separator_unescaped s p c
+        then Buffer.add_char buf escape_char;
+        Buffer.add_char buf c);
+    Buffer.contents buf
+
+  let has_unescaped ?pos s =
+    Option.is_some @@
+    String.lfindi ?pos s ~f:(fun p c ->
+        is_separator_unescaped s p c)
+
+  let escape_all_unescaped ?(is_keyword=false) s =
+    match s with
+    | "" -> s
+    | ":" -> if is_keyword then s else "\\:"
+    | _ ->
+      let pos = if is_keyword then 1 else 0 in
+      if has_unescaped ~pos s
+      then unescaped_exists_so_escape ~skip_pos:pos s
+      else s
+
+  let escape_all_literally =
+    unstage @@
+    String.Escaping.escape ~escapeworthy ~escape_char
+
+  let unescape =
+    unstage @@
+    String.Escaping.unescape ~escape_char
+
+  (* invariant, keywords are always prefixed with [:] *)
+  let normalize_name input ~package name = match input with
+    | `Literal ->
+      if package = keyword_package
+      then ":" ^ escape_all_literally name
+      else escape_all_literally name
+    | `Reading ->
+      let escape = escape_all_unescaped in
+      if package = keyword_package
+      then
+        if not (String.is_prefix ~prefix:":" name)
+        then ":" ^ escape name
+        else ":" ^ escape @@ String.subo ~pos:1 name
+      else escape name
+
+  let normalize_package input package =
+    let package = if String.is_empty package
+      then user_package
+      else package in
+    match input with
+    | `Literal -> escape_all_literally package
+    | `Reading -> escape_all_unescaped package
+
+  let create ?(package=user_package) name = {
+    package = normalize_package `Literal package;
+    name = normalize_name `Literal ~package name;
+  }
+
+  let keyword = create ~package:keyword_package
+
+  let read ?(package=user_package) s =
+    let package = normalize_package `Literal package in
+    let escape = escape_all_unescaped in
+    match find_separator s with
+    | None -> {
+        package;
+        name = normalize_name `Reading ~package s
+      }
+    | Some 0 -> {
+        package = keyword_package;
+        name = escape ~is_keyword:true s
+      }
+    | Some len ->
+      let package = escape (String.sub s ~pos:0 ~len) in
+      {
+        package;
+        name = normalize_name `Reading ~package @@
+          String.subo s ~pos:(len+1);
+      }
+
+
+  let package t = unescape t.package
+  let short t = unescape t.name
+  let unqualified t = short t
+  let to_string {package; name} =
+    if package = keyword_package || package = user_package
+    then name
+    else package ^ ":" ^ name
+
+  let show t = to_string t
+
+  let of_string s = read s
+
+  let str () s = to_string s
+  let pp ppf x = Format.fprintf ppf "%s" (show x)
+
+  include Base.Comparable.Make(struct
+      type t = fullname [@@deriving bin_io, compare, sexp]
+    end)
+end
 
 module Registry = struct
   let packages = Hash_set.create (module String) ()
@@ -629,34 +748,6 @@ module Registry = struct
   let add_class = register "class" classes
   let add_slot  = register "property" slots
 end
-
-let string_of_fname {package; name} =
-  if package = keyword_package || package = user_package
-  then name
-  else package ^ ":" ^ name
-
-let escaped =
-  Staged.unstage @@
-  String.Escaping.escape ~escapeworthy:[':'] ~escape_char:'\\'
-
-let find_separator s =
-  if String.is_empty s then None
-  else String.Escaping.index s ~escape_char:'\\' ':'
-
-(* invariant, keywords are always prefixed with [:] *)
-let normalize_name ~package name =
-  let package = escaped package in
-  if package = keyword_package &&
-     not (String.is_prefix ~prefix:":" name)
-  then ":"^name else name
-
-let split_name package s = match find_separator s with
-  | None -> {package; name=s}
-  | Some 0 -> {package=keyword_package; name=s}
-  | Some len -> {
-      package = String.sub s ~pos:0 ~len;
-      name = String.subo s ~pos:(len+1);
-    }
 
 module Class = struct
   type +'s info = {
@@ -696,17 +787,14 @@ module Class = struct
     | None ->
       failwithf "assert_equal: wrong assertion, classes of %s and %s \
                  are different"
-        (string_of_fname x.name)
-        (string_of_fname y.name)
+        (Name.to_string x.name)
+        (Name.to_string y.name)
         ()
 
 
 
   let sort = fun {sort} -> sort
-  let name {name={name}} = name
-  let package {name={package}} = package
-  let fullname {name} = string_of_fname name
-
+  let name {name} = name
 end
 
 module Dict = struct
@@ -1852,7 +1940,7 @@ module Knowledge = struct
 
     let declare ?desc ?persistent ?package cls name (dom : 'a Domain.t) =
       let name = Registry.add_slot ?desc ?package name in
-      let key = Dict.Key.create ~name:(string_of_fname name) dom.inspect in
+      let key = Dict.Key.create ~name:(Name.to_string name) dom.inspect in
       Option.iter persistent (Record.register_persistent key);
       Record.register_domain key dom;
       let promises = Hashtbl.create (module Pid) in
@@ -1863,8 +1951,7 @@ module Knowledge = struct
 
     let cls x = x.cls
     let domain x = x.dom
-    let name {name={name}} = name
-    let fullname {name} = string_of_fname name
+    let name {name} = name
     let desc x = match x.desc with
       | None -> "no description"
       | Some s -> s
@@ -1971,7 +2058,7 @@ module Knowledge = struct
           end)
         let domain = Domain.define ~empty ~order ~join
             ~inspect:sexp_of_t
-            (Class.name cls)
+            (Name.short (Class.name cls))
       end in
       (module R)
 
@@ -1992,7 +2079,7 @@ module Knowledge = struct
   let gets f = Knowledge.lift (State.gets f)
   let update f = Knowledge.lift (State.update f)
 
-  exception Non_monotonic_update of string * Conflict.t [@@deriving sexp]
+  exception Non_monotonic_update of Name.t * Conflict.t [@@deriving sexp]
 
   let provide : type a p. (a,p) slot -> a obj -> p -> unit Knowledge.t =
     fun slot obj x ->
@@ -2231,10 +2318,8 @@ module Knowledge = struct
         put {s with classes = Map.set classes clsid objects} >>| fun () ->
         obj in
 
-      fun ?(public=false) ?desc:_ ?package name {Class.id} ->
+      fun ?(public=false) ?desc:_ {package; name} {Class.id} ->
         get () >>= fun ({classes} as s) ->
-        let package = Option.value package ~default:s.package in
-        let name = normalize_name ~package name in
         let objects = match Map.find classes id with
           | None -> Env.empty_class
           | Some objs -> objs in
@@ -2254,8 +2339,16 @@ module Knowledge = struct
        contrary to [read], where they are, and [do_intern] where
        a leading [:] in a name will be left for keywords *)
     let intern ?public ?desc ?package name cls =
-      let name = escaped name in
-      do_intern ?public ?desc ?package name cls
+      match package with
+      | Some package ->
+        do_intern ?public ?desc (Name.create ~package name) cls
+      | None ->
+        get () >>= fun {Env.package} ->
+        let name = {
+          package;
+          name = Name.normalize_name `Literal ~package name
+        } in
+        do_intern ?public ?desc name cls
 
     let uninterned_repr cls obj =
       Format.asprintf "#<%s %a>" cls Oid.pp obj
@@ -2263,13 +2356,13 @@ module Knowledge = struct
     let to_string
         {Class.name=cls as fname; id=cid} {Env.package; classes} obj =
       let cls = if package = cls.package then cls.name
-        else string_of_fname fname in
+        else Name.to_string fname in
       match Map.find classes cid with
       | None -> uninterned_repr cls obj
       | Some {Env.syms} -> match Map.find syms obj with
         | Some fname -> if fname.package = package
           then fname.name
-          else string_of_fname fname
+          else Name.to_string fname
         | None -> uninterned_repr cls obj
 
     let repr cls obj =
@@ -2282,8 +2375,7 @@ module Knowledge = struct
         Knowledge.return (Oid.atom_of_string obj)
       with _ ->
         get () >>= fun {Env.package} ->
-        let {package; name} = split_name package input in
-        do_intern ~package name cls
+        do_intern (Name.read ~package input) cls
 
     let cast : type a b. (a obj, b obj) Type_equal.t -> a obj -> b obj =
       fun Type_equal.T x -> x
@@ -2326,7 +2418,7 @@ module Knowledge = struct
       Sexp.Atom (Format.asprintf "#<%s %a>" name Oid.pp x)
 
     let obj {Class.name} =
-      let name = string_of_fname name in
+      let name = Name.to_string name in
       total ~inspect:(inspect_obj name) ~empty:Oid.zero
         ~order:Oid.compare name
   end
@@ -2404,16 +2496,16 @@ module Knowledge = struct
         else Knowledge.fail (Not_a_symbol sym)
 
     let current = function
-      | Some p -> Knowledge.return p
+      | Some p -> Knowledge.return (Name.normalize_package `Literal p)
       | None -> gets (fun s -> s.package)
 
     let import ?(strict=false) ?package imports : unit knowledge =
-      current package >>| escaped >>= fun package ->
+      current package >>= fun package ->
       get () >>= fun s ->
       Knowledge.List.fold ~init:s.classes imports ~f:(fun classes name ->
-          let name = match find_separator name with
+          let name = match Name.find_separator name with
             | None -> `Pkg name
-            | Some _ -> `Sym (split_name package name) in
+            | Some _ -> `Sym (Name.read name) in
           let needs_import {Env.pubs} sym obj = match name with
             | `Sym s -> sym = s
             | `Pkg p -> match Map.find pubs p with
@@ -2559,6 +2651,8 @@ module Knowledge = struct
   type 'a opinions = 'a Opinions.t
   type agent = Agent.t
   let sexp_of_conflict = Conflict.sexp_of_t
+  module Name = Name
+  type name = Name.t
 end
 
 type 'a knowledge = 'a Knowledge.t

@@ -10,12 +10,13 @@ let package = "bil-plugin-internal"
 let cls = KB.Class.declare ~package "context" Context
 let context = KB.Symbol.intern ~package "context" cls
 let inherits slot =
-  KB.Class.property cls
-    (KB.Slot.name slot)
+  let name = KB.Slot.name slot in
+  let package = KB.Name.package name
+  and name = KB.Name.unqualified name in
+  KB.Class.property cls ~package name
     (KB.Slot.domain slot)
 
 let arch = inherits Arch.slot
-
 
 let exp = Exp.slot
 let stmt = Bil.slot
