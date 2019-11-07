@@ -1350,12 +1350,14 @@ module Knowledge : sig
     (** [package name] is the package of the [name].  *)
     val package : t -> string
 
-
     (** [str () x = show x] shows [x].
 
         This function is useful with printf-style functions that
         output to a string. *)
     val str : unit -> t -> string
+
+    (** [hash name] the [name] hash. *)
+    val hash : t -> int
 
     include Base.Comparable.S with type t := t
     include Binable.S with type t := t

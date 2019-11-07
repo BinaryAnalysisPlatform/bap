@@ -88,7 +88,7 @@ let graph =
 let slot = graph
 
 module IR = struct
-  include Theory.Core.Empty
+  include Theory.Empty
   let ret = Knowledge.return
 
   let blk tid = {name=tid; defs=[]; jmps=[]}

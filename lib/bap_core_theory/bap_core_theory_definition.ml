@@ -31,7 +31,11 @@ type word = Bitvec.t
 type 'a var = 'a Var.t
 type label = program Knowledge.Object.t
 
+type theory_cls
+let theory : (theory_cls,unit) Knowledge.cls =
+  Knowledge.Class.declare ~package:"core-theory" "theory" ()
 
+type theory = theory_cls Knowledge.Object.t
 
 module type Init = sig
   val var : 'a var -> 'a pure

@@ -36,6 +36,11 @@ module Theory = struct
   type 'a var = 'a Var.t
   type word = Bitvec.t
   type label = program Knowledge.Object.t
+  type cls = Bap_core_theory_definition.theory_cls
+  let t = Bap_core_theory_definition.theory
+  type theory = Bap_core_theory_definition.theory
+  type t = theory
+
   module type Init = Bap_core_theory_definition.Init
   module type Bool = Bap_core_theory_definition.Bool
   module type Bitv = Bap_core_theory_definition.Bitv
@@ -53,9 +58,7 @@ module Theory = struct
     module Make = Bap_core_theory_basic.Make
   end
 
-  module Core = struct
-    module Empty : Core = Bap_core_theory_empty.Core
-  end
+  module Empty : Core = Bap_core_theory_empty.Core
   module IEEE754 = Bap_core_theory_IEEE754
   module Parser = Bap_core_theory_parser
   include Bap_core_theory_manager

@@ -8,341 +8,322 @@ open Knowledge.Syntax
 let user_package = "user"
 
 module Value = Knowledge.Value
+module Name = Knowledge.Name
 
-
-type 'a t = {
-  name : string;
+type 'a theory = {
+  name : Set.M(Name).t;
   desc : string;
   requires : Set.M(String).t;
   provides : Set.M(String).t;
-  proc : 'a;
+  structure : 'a;
+  is_empty : Base.bool;
+  id : Set.M(Name).t;
 }
 
-type provider = (module Core)
-let known_theories : (string, provider t list) Hashtbl.t =
-  Hashtbl.create (module String)
+type core = (module Core)
+let known_theories : (Name.t, core theory) Hashtbl.t =
+  Hashtbl.create (module Name)
 
 let features = Set.of_list (module String)
-let fullname ?(package=user_package) name = package ^ ":" ^ name
+let names = Set.of_list (module Name)
 
+module Empty = struct
+  let name = Name.create ~package:"core-theory" "empty"
+  let requires = ["empty"]
+  let provides = [Name.show name]
+  module Self = Bap_core_theory_empty.Core
+  let theory = {
+    is_empty = true;
+    name = names [name];
+    desc = "The empty theory.";
+    requires = Set.of_list (module String) requires;
+    provides = Set.of_list (module String) provides;
+    structure = (module Self : Core);
+    id = names [name];
+  }
+end
+
+let check_uniqueness name =
+  match Hashtbl.find known_theories name with
+  | None -> ()
+  | Some {desc} ->
+    invalid_argf "Theory.declare: Name exists. \
+                  A theory with the name `%a' is already declared \
+                  by some other component. \
+                  The other component provided %s."
+      Name.str name
+      (if desc = ""
+       then "no description to its theory"
+       else sprintf "the following description to its theory: %S" desc)
+      ()
 
 let declare
     ?(desc="")
+    ?(extends=[])
     ?(context=[])
     ?(provides=[])
-    ?package ~name proc =
-  let name = fullname ?package name in
-  Hashtbl.add_multi known_theories name {
-    name; desc; proc;
+    ?package ~name structure =
+
+  let name = Name.create ?package name in
+  let extends = List.map extends ~f:Name.read in
+  check_uniqueness name;
+  Hashtbl.add_exn known_theories name {
+    is_empty = false;
+    name = names (name :: Empty.name :: extends);
+    desc; structure;
     requires = features context;
-    provides = Set.add (features provides) name;
+    provides = Set.add (features provides) (Name.show name);
+    id = names [name];
   }
 
-
-let size = Bitv.size
-let sort x = x >>| fun v -> KB.Class.sort (Value.cls v)
-let effect x = x >>| fun v -> KB.Class.sort (Value.cls v)
-let bool = Bool.t
-
-let ret = Knowledge.return
-
-let newval s =
-  Knowledge.return @@
-  Value.empty @@
-  KB.Class.refine cls s
+let (++) x y =
+  x >>= fun x ->
+  y >>| fun y ->
+  Value.merge x y
 [@@inline]
 
-let neweff s =
-  Knowledge.return @@
-  Value.empty @@
-  KB.Class.refine Effect.cls s
+let join1 p q x =
+  x >>= fun x ->
+  p !!x ++ q !!x
 [@@inline]
 
-let provide_theories (theories : provider t list) =
-  let module Manager = struct
-    let foreach f init = Knowledge.List.fold theories ~init ~f
-    let lift0 gen join sort f =
-      gen sort >>=
-      foreach @@begin fun r {proc} ->
-        f proc >>| fun r' ->
-        join r r'
-      end
+let join1s p q s x =
+  x >>= fun x ->
+  p s !!x ++ q s !!x
+[@@inline]
 
-    let lift1 gen join x sort f =
-      x >>= fun x ->
-      sort !!x >>= gen >>=
-      foreach @@begin fun r {proc} ->
-        f proc !!x >>| fun r' ->
-        join r r'
-      end
+let join2 p q x y =
+  x >>= fun x ->
+  y >>= fun y ->
+  p !!x !!y ++ q !!x !!y
+[@@inline]
 
-    let lift2 gen join x y sort f =
-      x >>= fun x ->
-      y >>= fun y ->
-      sort !!x !!y >>= gen >>=
-      foreach @@begin fun r {proc} ->
-        f proc !!x !!y >>| fun r' ->
-        join r r'
-      end
+let join2s p q s x y =
+  x >>= fun x ->
+  y >>= fun y ->
+  p s !!x !!y ++ q s !!x !!y
+[@@inline]
 
-    let lift3 gen join x y z sort f =
-      x >>= fun x ->
-      y >>= fun y ->
-      z >>= fun z ->
-      sort !!x !!y !!z >>= gen >>=
-      foreach @@begin fun r {proc} ->
-        f proc !!x !!y !!z >>| fun r' ->
-        join r r'
-      end
+let join3 p q x y z =
+  x >>= fun x ->
+  y >>= fun y ->
+  z >>= fun z ->
+  p !!x !!y !!z ++ q !!x !!y !!z
+[@@inline]
 
-    let lift4 gen join x y z a sort f =
-      x >>= fun x ->
-      y >>= fun y ->
-      z >>= fun z ->
-      a >>= fun a ->
-      sort !!x !!y !!z !!a >>= gen >>=
-      foreach @@begin fun r {proc} ->
-        f proc !!x !!y !!z !!a >>| fun r' ->
-        join r r'
-      end
+let join3s p q s x y z =
+  x >>= fun x ->
+  y >>= fun y ->
+  z >>= fun z ->
+  p s !!x !!y !!z ++ q s !!x !!y !!z
+[@@inline]
 
-    let val0 sort f = lift0 newval Value.merge sort f
-    let val1 x sort f = lift1 newval Value.merge x sort f
-    let val2 x y sort f = lift2 newval Value.merge x y sort f
-    let val3 x y z sort f = lift3 newval Value.merge x y z sort f
-    let val4 x y z a sort f = lift4 newval Value.merge x y z a sort f
-    let eff0 sort f = lift0 neweff Value.merge sort f
-    let eff1 x sort f = lift1 neweff Value.merge x sort f
-    let eff2 x y sort f = lift2 neweff Value.merge x y sort f
-    let eff3 x y z sort f = lift3 neweff Value.merge x y z sort f
+let join4 p q r x y z =
+  r >>= fun r ->
+  x >>= fun x ->
+  y >>= fun y ->
+  z >>= fun z ->
+  p !!r !!x !!y !!z ++ q !!r !!x !!y !!z
+[@@inline]
 
-    module Theory : Core = struct
-      type 'a t = 'a Knowledge.t
+let joinN p q xs =
+  KB.List.map ~f:KB.return xs >>= fun xs ->
+  p xs ++ q xs
 
-      let var v = val0 (Var.sort v) @@ fun (module P) -> P.var v
-      let int s x = val0 s @@ fun (module P) -> P.int s x
-      let unk s = val0 s @@ fun (module P) -> P.unk s
-      let b0 = val0 bool @@ fun (module P) -> P.b0
-      let b1 = val0 bool @@ fun (module P) -> P.b1
-      let inv x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.inv
-      let and_ x y = val2 x y (fun _ _ -> !!bool) @@ fun (module P) -> P.and_
-      let or_ x y = val2 x y (fun _ _ -> !!bool) @@ fun (module P) -> P.or_
-      let msb x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.msb
-      let lsb x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.lsb
+module Join(P : Core)(Q : Core) : Core = struct
+  let var v             = P.var v ++ Q.var v
+  let int s x           = P.int s x ++ Q.int s x
+  let unk s             = P.unk s ++ Q.unk s
+  let b0                = P.b0 ++ Q.b0
+  let b1                = P.b1 ++ Q.b1
+  let inv x             = join1 P.inv Q.inv x
+  let and_ x y          = join2 P.and_ Q.and_ x y
+  let or_ x y           = join2 P.or_ Q.or_ x y
+  let msb x             = join1 P.msb Q.msb x
+  let lsb x             = join1 P.lsb Q.lsb x
+  let neg x             = join1 P.neg Q.neg x
+  let not x               = join1 P.not Q.not x
+  let add x y           = join2 P.add Q.add x y
+  let sub x y           = join2 P.sub Q.add x y
+  let mul x y           = join2 P.mul Q.mul x y
+  let div x y           = join2 P.div Q.div x y
+  let sdiv x y          = join2 P.sdiv Q.sdiv x y
+  let modulo x y        = join2 P.modulo Q.modulo x y
+  let smodulo x y       = join2 P.smodulo Q.smodulo x y
+  let logand x y        = join2 P.logand Q.logand x y
+  let logor x y         = join2 P.logor Q.logor x y
+  let logxor x y        = join2 P.logxor Q.logxor x y
+  let shiftr b x y      = join3 P.shiftr Q.shiftr b x y
+  let shiftl b x y      = join3 P.shiftl Q.shiftl b x y
+  let ite b x y         = join3 P.ite Q.ite b x y
+  let sle x y           = join2 P.sle Q.sle x y
+  let ule x y           = join2 P.ule Q.ule x y
+  let cast s x y        = join2s P.cast Q.cast s x y
+  let concat s xs       = joinN (P.concat s) (Q.concat s) xs
+  let append s x y      = join2s P.append Q.append s x y
+  let load m k          = join2 P.load Q.load m k
+  let store m k v       = join3 P.store Q.store m k v
+  let perform s         = P.perform s ++ Q.perform s
+  let set v x           = join1s P.set Q.set v x
+  let let_ v x b        = join2s P.let_ Q.let_ v x b
+  let jmp d             = join1 P.jmp Q.jmp d
+  let goto d            = P.goto d ++ Q.goto d
+  let seq x y           = join2 P.seq Q.seq x y
+  let blk l x y         = join2s P.blk Q.blk l x y
+  let repeat b x        = join2 P.repeat Q.repeat b x
+  let branch b x y      = join3 P.branch Q.branch b x y
+  let zero s            = P.zero s ++ Q.zero s
+  let is_zero x         = join1 P.is_zero Q.is_zero x
+  let non_zero x        = join1 P.non_zero Q.non_zero x
+  let succ x            = join1 P.succ Q.succ x
+  let pred x            = join1 P.pred Q.pred x
+  let nsucc x n         = x >>= fun x -> P.nsucc !!x n ++ Q.nsucc !!x n
+  let npred x n         = x >>= fun x -> P.npred !!x n ++ Q.npred !!x n
+  let high s x          = join1s P.high Q.high s x
+  let low s x           = join1s P.low Q.low s x
+  let signed s x        = join1s P.signed Q.signed s x
+  let unsigned s x      = join1s P.unsigned Q.unsigned s x
+  let extract s x y z   = join3s P.extract Q.extract s x y z
+  let loadw s d m k     = join3s P.loadw Q.loadw s d m k
+  let storew d m k x    = join4 P.storew Q.storew d m k x
+  let arshift x y       = join2 P.arshift Q.arshift x y
+  let rshift x y        = join2 P.rshift Q.rshift x y
+  let lshift x y        = join2 P.lshift Q.lshift x y
+  let eq x y            = join2 P.eq Q.eq x y
+  let neq x y           = join2 P.neq Q.neq x y
+  let slt x y           = join2 P.slt Q.slt x y
+  let ult x y           = join2 P.ult Q.ult x y
+  let sgt x y           = join2 P.sgt Q.sgt x y
+  let ugt x y           = join2 P.ugt Q.ugt x y
+  let sge x y           = join2 P.sge Q.sge x y
+  let uge x y           = join2 P.uge Q.uge x y
+  let rne               = P.rne ++ Q.rne
+  let rna               = P.rna ++ Q.rna
+  let rtp               = P.rtp ++ Q.rtp
+  let rtn               = P.rtn ++ Q.rtn
+  let rtz               = P.rtz ++ Q.rtz
+  let requal x y        = join2 P.requal Q.requal x y
+  let float s x         = join1s P.float Q.float s x
+  let fbits x           = join1 P.fbits Q.fbits x
+  let is_finite x       = join1 P.is_finite Q.is_finite x
+  let is_fzero x        = join1 P.is_fzero Q.is_fzero x
+  let is_fneg x         = join1 P.is_fneg Q.is_fneg x
+  let is_fpos x         = join1 P.is_fpos Q.is_fpos x
+  let is_nan x          = join1 P.is_nan Q.is_nan x
+  let is_inf x          = join1 P.is_inf Q.is_inf x
+  let cast_float s m x  = join2s P.cast_float Q.cast_float s m x
+  let cast_sfloat s m x = join2s P.cast_sfloat Q.cast_sfloat s m x
+  let cast_int s m x    = join2s P.cast_int Q.cast_int s m x
+  let cast_sint s m x   = join2s P.cast_sint Q.cast_sint s m x
+  let fneg x            = join1 P.fneg Q.fneg x
+  let fabs x            = join1 P.fabs Q.fabs x
+  let fadd m x y        = join3 P.fadd Q.fadd m x y
+  let fsub m x y        = join3 P.fsub Q.fsub m x y
+  let fmul m x y        = join3 P.fmul Q.fmul m x y
+  let fdiv m x y        = join3 P.fdiv Q.fdiv m x y
+  let fmodulo m x y     = join3 P.fmodulo Q.fmodulo m x y
+  let fmad m x y z      = join4 P.fmad Q.fmad m x y z
+  let fround m x        = join2 P.fround Q.fround m x
+  let fconvert s x y    = join2s P.fconvert Q.fconvert s x y
+  let fsucc x           = join1 P.fsucc Q.fsucc x
+  let fpred x           = join1 P.fpred Q.fpred x
+  let forder x y        = join2 P.forder Q.forder x y
+  let pow m x y         = join3 P.pow Q.pow m x y
+  let compound m x y    = join3 P.compound Q.compound m x y
+  let rootn m x y       = join3 P.rootn Q.rootn m x y
+  let pown m x y        = join3 P.pown Q.pown m x y
+  let hypot m x y       = join3 P.hypot Q.hypot m x y
+  let fsqrt m x         = join2 P.fsqrt Q.fsqrt m x
+  let rsqrt m x         = join2 P.rsqrt Q.rsqrt m x
+  let exp m x           = join2 P.exp Q.exp m x
+  let expm1 m x         = join2 P.expm1 Q.expm1 m x
+  let exp2 m x          = join2 P.exp2 Q.exp2 m x
+  let exp2m1 m x        = join2 P.exp2m1 Q.exp2m1 m x
+  let exp10 m x         = join2 P.exp10 Q.exp10 m x
+  let exp10m1 m x       = join2 P.exp10m1 Q.exp10m1 m x
+  let log m x           = join2 P.log Q.log m x
+  let log2 m x          = join2 P.log2 Q.log2 m x
+  let log10 m x         = join2 P.log10 Q.log10 m x
+  let logp1 m x         = join2 P.logp1 Q.logp1 m x
+  let log2p1 m x        = join2 P.log2p1 Q.log2p1 m x
+  let log10p1 m x       = join2 P.log10p1 Q.log10p1 m x
+  let sin m x           = join2 P.sin Q.sin m x
+  let cos m x           = join2 P.cos Q.cos m x
+  let tan m x           = join2 P.tan Q.tan m x
+  let sinpi m x         = join2 P.sinpi Q.sinpi m x
+  let cospi m x         = join2 P.cospi Q.cospi m x
+  let atanpi m x        = join2 P.atanpi Q.atanpi m x
+  let atan2pi m x y     = join3 P.atan2pi Q.atan2pi m x y
+  let asin m x          = join2 P.asin Q.asin m x
+  let acos m x          = join2 P.acos Q.acos m x
+  let atan m x          = join2 P.atan Q.atan m x
+  let atan2 m x y       = join3 P.atan2 Q.atan2 m x y
+  let sinh m x          = join2 P.sinh Q.sinh m x
+  let cosh m x          = join2 P.cosh Q.cosh m x
+  let tanh m x          = join2 P.tanh Q.tanh m x
+  let asinh m x         = join2 P.asinh Q.asinh m x
+  let acosh m x         = join2 P.acosh Q.acosh m x
+  let atanh m x         = join2 P.atanh Q.atanh m x
+end
 
-      let neg x = val1 x sort @@ fun (module P) -> P.neg
-      let not x = val1 x sort @@ fun (module P) -> P.not
+let join_cores (module P : Core) (module Q : Core) : (module Core) =
+  (module Join(P)(Q))
 
-      let uop x f = val1 x sort f
-      let aop x y f = val2 x y (fun x _ -> sort x) f
-      let add x y = aop x y @@ fun (module P) -> P.add
-      let sub x y = aop x y @@ fun (module P) -> P.sub
-      let mul x y = aop x y @@ fun (module P) -> P.mul
-      let div x y = aop x y @@ fun (module P) -> P.div
-      let sdiv x y = aop x y @@ fun (module P) -> P.sdiv
-      let modulo x y = aop x y @@ fun (module P) -> P.modulo
-      let smodulo x y = aop x y @@ fun (module P) -> P.smodulo
-      let logand x y = aop x y @@ fun (module P) -> P.logand
-      let logor x y = aop x y @@ fun (module P) -> P.logor
-      let logxor x y = aop x y @@ fun (module P) -> P.logxor
+let equal x y = Set.equal x.name y.name
 
-      let shiftr b x y = val3 b x y (fun _ x _ -> sort x) @@
-        fun (module P) -> P.shiftr
-      let shiftl b x y = val3 b x y (fun _ x _ -> sort x) @@
-        fun (module P) -> P.shiftl
-      let ite b x y = val3 b x y (fun _ x _ -> sort x) @@
-        fun (module P) -> P.ite
+let set_inclusion_order x y : Knowledge.Order.partial =
+  if Set.equal x y then EQ else
+  if Set.is_subset x y then LT else
+  if Set.is_subset y x then GT else NC
 
-      let lop x y f = val2 x y  (fun _ _ -> !!bool) f
-      let sle x y = lop x y @@ fun (module P) -> P.sle
-      let ule x y = lop x y @@ fun (module P) -> P.ule
+let order t1 t2 = set_inclusion_order t1.name t2.name
 
-      let cast s x z = val2 x z (fun _ _ -> !!s) @@
-        fun (module P) -> P.cast s
+let merge t1 t2 = match order t1 t2 with
+  | EQ -> t1
+  | LT -> t2
+  | GT -> t1
+  | NC -> {
+      name = Set.union t1.name t2.name;
+      desc = ""; is_empty = false;
+      requires = Set.union t1.requires t2.requires;
+      provides = Set.union t1.provides t2.provides;
+      structure = join_cores t1.structure t2.structure;
+      id = Set.union t1.id t2.id;
+    }
 
-      let concat s xs =
-        Knowledge.List.all xs >>= fun xs ->
-        let xs = List.map ~f:(!!) xs in
-        newval s >>=
-        foreach @@begin fun r {proc=(module P)} ->
-          P.concat s xs >>| fun r' ->
-          Value.merge r r'
-        end
+let join t1 t2 = Ok (merge t1 t2)
 
-      let append s x y = val2 x y (fun _ _ -> !!s) @@
-        fun (module P) -> P.append s
+let sexp_of_name name =
+  Sexp.List (Set.to_list name |>
+             List.map ~f:(fun n -> Sexp.Atom (Name.show n)))
 
-      let load m k = val2 m k (fun m _ -> sort m >>| Mem.vals) @@
-        fun (module P) -> P.load
+let inspect {name; desc} =
+  Sexp.List (sexp_of_name name ::
+             if desc = "" then [] else [Atom desc])
 
-      let store m k v = val3 m k v (fun m _ _ -> sort m) @@
-        fun (module P) -> P.store
+let domain = Knowledge.Domain.define "theory"
+    ~inspect
+    ~join
+    ~empty:Empty.theory
+    ~order
 
-      let perform s = eff0 s @@ fun (module P) -> P.perform s
-
-      let set v x = eff1 x (fun _ -> !!Effect.Sort.bot) @@ fun (module P) ->
-        P.set v
-
-      let let_ v x b = val2 x b (fun _ x -> sort x) @@ fun (module P) ->
-        P.let_ v
-
-      let jmp d = eff1 d (fun _ -> !!Effect.Sort.bot) @@ fun (module P) ->
-        P.jmp
-
-      let goto d = eff0 Effect.Sort.bot @@ fun (module P) -> P.goto d
-
-      let seq x y = eff2 x y (fun x _ -> effect x) @@ fun (module P) ->
-        P.seq
-      let blk l x y = eff2 x y (fun _ _ -> !!Effect.Sort.bot) @@ fun (module P) ->
-        P.blk l
-
-      let repeat b x = eff2 b x (fun _ _ -> !!Effect.Sort.bot) @@ fun (module P) ->
-        P.repeat
-
-      let branch b x y = eff3 b x y (fun _ x _ -> effect x) @@ fun (module P) ->
-        P.branch
+let slot = Knowledge.Class.property theory "instance" domain
+    ~package:"core-theory"
+    ~desc:"The theory structure"
 
 
-      (* Provider *)
-      let zero s = val0 s @@ fun (module P) -> P.zero s
-      let is_zero x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_zero
-      let non_zero x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.non_zero
-      let succ x = val1 x sort @@ fun (module P) -> P.succ
-      let pred x = val1 x sort @@ fun (module P) -> P.pred
-      let nsucc x n = val1 x sort @@ fun (module P) x ->
-        P.nsucc x n
-      let npred x n = val1 x sort @@ fun (module P) x ->
-        P.npred x n
+let str_ctxt () ctxt =
+  List.to_string (Set.to_list ctxt) ~f:ident
 
-      let high s x = val1 x (fun _ -> !!s) @@ fun (module P) ->
-        P.high s
-      let low s x = val1 x (fun _ ->  !!s) @@ fun (module P) ->
-        P.low s
-      let signed s x = val1 x (fun _ -> !!s) @@ fun (module P) ->
-        P.signed s
-      let unsigned s x = val1 x (fun _ -> !!s) @@ fun (module P) ->
-        P.unsigned s
+module Theory = (val Knowledge.Object.derive theory)
 
-      let extract s x y z = val3 x y z (fun _ _ _ -> !!s) @@ fun (module P) ->
-        P.extract s
-
-      let loadw s d m k = val3 d m k (fun _ _ _ -> !!s) @@ fun (module P) ->
-        P.loadw s
-
-      let storew d m k x = val4 d m k x (fun _ m _ _ -> sort m) @@ fun (module P) ->
-        P.storew
-
-      let arshift x y = val2 x y (fun x _ -> sort x) @@ fun (module P) ->
-        P.arshift
-      let rshift x y = val2 x y (fun x _ -> sort x) @@ fun (module P) ->
-        P.rshift
-      let lshift x y = val2 x y (fun x _ -> sort x) @@ fun (module P) ->
-        P.lshift
-
-      let eq x y = lop x y @@ fun (module P) -> P.eq
-      let neq x y = lop x y @@ fun (module P) -> P.neq
-      let slt x y = lop x y @@ fun (module P) -> P.slt
-      let ult x y = lop x y @@ fun (module P) -> P.ult
-      let sgt x y = lop x y @@ fun (module P) -> P.sgt
-      let ugt x y = lop x y @@ fun (module P) -> P.ugt
-      let sge x y = lop x y @@ fun (module P) -> P.sge
-      let uge x y = lop x y @@ fun (module P) -> P.uge
-
-
-      let rne = val0 Rmode.t @@ fun (module P) -> P.rne
-      let rna = val0 Rmode.t @@ fun (module P) -> P.rne
-      let rtp = val0 Rmode.t @@ fun (module P) -> P.rne
-      let rtn = val0 Rmode.t @@ fun (module P) -> P.rne
-      let rtz = val0 Rmode.t @@ fun (module P) -> P.rne
-      let requal x y = val2 x y (fun _ _ -> !!bool) @@ fun (module P) ->
-        P.requal
-
-      let float s x = val1 x (fun _ -> !!s) @@ fun (module P) -> P.float s
-      let fbits x = val1 x (fun x -> sort x >>| Float.bits) @@ fun (module P) ->
-        P.fbits
-
-      let is_finite x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_finite
-      let is_fzero x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_fzero
-      let is_fneg x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_fneg
-      let is_fpos x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_fpos
-      let is_nan x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_nan
-      let is_inf x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_inf
-
-      let cast_float s m x = val2 m x (fun _ _ -> !!s) @@ fun (module P) ->
-        P.cast_float s
-
-      let cast_sfloat s m x = val2 m x (fun _ _ -> !!s) @@ fun (module P) ->
-        P.cast_sfloat s
-
-      let cast_int s m x = val2 m x (fun _ _ -> !!s) @@ fun (module P) ->
-        P.cast_int s
-
-      let cast_sint s m x = val2 m x (fun _ _ -> !!s) @@ fun (module P) ->
-        P.cast_sint s
-
-      let fneg x = uop x @@ fun (module P) -> P.fneg
-      let fabs x = uop x @@ fun (module P) -> P.fabs
-
-      let faop m x y f = val3 m x y (fun _ x _ -> sort x) f
-      let fadd m x y = faop m x y @@ fun (module P) -> P.fadd
-      let fsub m x y = faop m x y @@ fun (module P) -> P.fsub
-      let fmul m x y = faop m x y @@ fun (module P) -> P.fmul
-      let fdiv m x y = faop m x y @@ fun (module P) -> P.fdiv
-      let fmodulo m x y = faop m x y @@ fun (module P) -> P.fmodulo
-
-      let fmad m x y z = val4 m x y z (fun _ x _ _ -> sort x) @@ fun (module P) ->
-        P.fmad
-
-      let fround m x = val2 m x (fun _ x -> sort x) @@ fun (module P) ->
-        P.fround
-      let fconvert s x y = val2 x y (fun _ _ -> !!s) @@ fun (module P) ->
-        P.fconvert s
-
-      let fsucc x = uop x @@ fun (module P) -> P.fsucc
-      let fpred x = uop x @@ fun (module P) -> P.fpred
-
-      let forder x y = val2 x y (fun _ _ -> !!bool) @@ fun (module P) -> P.forder
-
-      let pow m x y = faop m x y @@ fun (module P) -> P.pow
-      let compound m x y = faop m x y @@ fun (module P) -> P.compound
-      let rootn m x y = faop m x y @@ fun (module P) -> P.rootn
-      let pown m x y = faop m x y @@ fun (module P) -> P.pown
-      let fuop m x f = val2 m x (fun _ x -> sort x) f
-      let fsqrt m x = fuop m x @@ fun (module P) -> P.fsqrt
-      let rsqrt m x = fuop m x @@ fun (module P) -> P.rsqrt
-      let hypot m x y = faop m x y @@ fun (module P) -> P.hypot
-      let exp m x = fuop m x @@ fun (module P) -> P.exp
-      let expm1 m x = fuop m x @@ fun (module P) -> P.expm1
-      let exp2 m x = fuop m x @@ fun (module P) -> P.exp2
-      let exp2m1 m x = fuop m x @@ fun (module P) -> P.exp2m1
-      let exp10 m x = fuop m x @@ fun (module P) -> P.exp10
-      let exp10m1 m x = fuop m x @@ fun (module P) -> P.exp10m1
-      let log m x = fuop m x @@ fun (module P) -> P.log
-      let log2 m x = fuop m x @@ fun (module P) -> P.log2
-      let log10 m x = fuop m x @@ fun (module P) -> P.log10
-      let logp1 m x = fuop m x @@ fun (module P) -> P.logp1
-      let log2p1 m x = fuop m x @@ fun (module P) -> P.log2p1
-      let log10p1 m x = fuop m x @@ fun (module P) -> P.log10p1
-      let sin m x = fuop m x @@ fun (module P) -> P.sin
-      let cos m x = fuop m x @@ fun (module P) -> P.cos
-      let tan m x = fuop m x @@ fun (module P) -> P.tan
-      let sinpi m x = fuop m x @@ fun (module P) -> P.sinpi
-      let cospi m x = fuop m x @@ fun (module P) -> P.cospi
-      let atanpi m x = fuop m x @@ fun (module P) -> P.atanpi
-      let atan2pi m x y = faop m x y @@ fun (module P) -> P.atan2pi
-      let asin m x = fuop m x @@ fun (module P) -> P.asin
-      let acos m x = fuop m x @@ fun (module P) -> P.acos
-      let atan m x = fuop m x @@ fun (module P) -> P.atan
-      let atan2 m x y = faop m x y @@ fun (module P) -> P.atan2
-      let sinh m x = fuop m x @@ fun (module P) -> P.sinh
-      let cosh m x = fuop m x @@ fun (module P) -> P.cosh
-      let tanh m x = fuop m x @@ fun (module P) -> P.tanh
-      let asinh m x = fuop m x @@ fun (module P) -> P.asinh
-      let acosh m x = fuop m x @@ fun (module P) -> P.acosh
-      let atanh m x = fuop m x @@ fun (module P) -> P.atanh
-    end
-  end in
-  (module Manager.Theory : Core)
+let theories () =
+  let init = Map.empty (module Theory) in
+  Hashtbl.to_alist known_theories |>
+  Knowledge.List.fold ~init ~f:(fun theories (name,structure) ->
+      Knowledge.Symbol.intern (Name.unqualified name) theory
+        ~package:(Name.package name) >>| fun name ->
+      Map.add_exn theories name structure)
 
 
 let is_applicable ~provided ~requires =
@@ -353,54 +334,51 @@ let is_required ~required ~provides =
   | None -> true
   | Some required -> Set.exists provides ~f:(Set.mem required)
 
-let select_most_specific theories =
+let without_subsumptions theories =
   List.filter theories ~f:(fun t1 ->
-      List.exists theories ~f:(fun t2 ->
-          Set.is_subset t1.requires ~of_:t2.requires &&
-          not (Set.equal t1.requires t2.requires)))
+      not @@ List.exists theories ~f:(fun t2 ->
+          match order t1 t2 with
+          | LT -> true
+          | _ -> false))
 
-
-let str_ctxt () ctxt =
-  List.to_string (Set.to_list ctxt) ~f:ident
-
-let require ?(context=[]) ?package name =
-  let name = fullname ?package name in
-  let provided = features context in
-  match Hashtbl.find known_theories name with
-  | None ->
-    invalid_argf "Theory.require: \
-                  can't find a theory with name %S" name ()
-  | Some theories ->
-    List.filter theories ~f:(fun {requires} ->
-        is_applicable ~provided ~requires) |>
-    select_most_specific |> function
-    | [] ->
-      invalid_argf "Theory.require: \
-                    can't find a theory with name %S \
-                    that is applicable in the context %a"
-        name str_ctxt provided ()
-    | [{proc}] -> proc
-    | many -> provide_theories many
-
-
-
-let instance ?(context=[]) ?requires () =
+let refine ?(context=[]) ?requires theories =
   let provided = features context
   and required = Option.map ~f:features requires in
-  Hashtbl.data known_theories |>
-  List.concat_map ~f:(fun classes ->
-      select_most_specific @@
-      List.filter classes ~f:(fun {requires; provides} ->
-          is_applicable ~provided ~requires &&
-          is_required ~required ~provides)) |> function
-  | [] -> (module Bap_core_theory_empty.Core : Core)
-  | [{proc}] -> proc
-  | many -> provide_theories many
+  without_subsumptions @@
+  List.filter theories ~f:(fun {requires; provides} ->
+      is_applicable ~provided ~requires &&
+      is_required ~required ~provides)
 
+let new_theory ?context ?requires () =
+  theories () >>| Map.data >>| refine ?context ?requires >>= function
+  | [] -> Knowledge.return Empty.theory
+  | [t] -> Knowledge.return t
+  | theories ->
+    Knowledge.return @@
+    (List.reduce_balanced_exn theories ~f:merge)
 
-let () = declare (module Bap_core_theory_empty.Core)
-    ~package:"core-theory"
-    ~name:"empty"
-    ~desc:{|an empty theory.
-    All terms are denoted with an empty value.
-|}
+let theory_for_id id =
+  let sym = sprintf "'%s" @@
+    List.to_string (Set.to_list id) ~f:Name.show in
+  Knowledge.Symbol.intern sym theory
+    ~package:"core-theory-internal.mananager"
+
+let instance ?context ?requires () =
+  theories () >>| Map.data >>| refine ?context ?requires >>= function
+  | [] -> theory_for_id Empty.theory.id
+  | [t] -> theory_for_id t.id
+  | theories ->
+    List.fold theories ~init:(Set.empty (module Name)) ~f:(fun names t ->
+        Set.union names t.id) |>
+    theory_for_id >>= fun id ->
+    let theory = List.reduce_balanced_exn theories ~f:merge in
+    Knowledge.provide slot id theory >>| fun () ->
+    id
+
+let require name =
+  let open Knowledge.Syntax in
+  theories () >>= fun theories ->
+  match Map.find theories name with
+  | Some t -> Knowledge.return t.structure
+  | None -> Knowledge.collect slot name >>| fun t ->
+    t.structure

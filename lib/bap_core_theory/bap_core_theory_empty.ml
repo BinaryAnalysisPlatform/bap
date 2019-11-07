@@ -12,6 +12,12 @@ let sort x = x >>| Value.cls >>| KB.Class.sort
 module Core : Core = struct
   type 'a t = 'a Knowledge.t
 
+  let name =
+    KB.Symbol.intern "empty" theory
+      ~package:"core-theory"
+      ~public:true
+      ~desc:"The empty theory."
+
   let empty x =
     Knowledge.return @@
     Value.empty (KB.Class.refine cls x)

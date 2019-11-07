@@ -495,7 +495,7 @@ end
 
 
 module Core : Theory.Core = struct
-  include Theory.Core.Empty
+  include Theory.Empty
   include Basic
 end
 

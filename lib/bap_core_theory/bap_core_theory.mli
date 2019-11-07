@@ -367,6 +367,12 @@ module KB = Knowledge
 
 (** The Core Theory.  *)
 module Theory : sig
+  type cls
+  type theory = cls KB.obj
+  type t = theory
+
+  (** The class of all Core theories.  *)
+  val t : (cls,unit) KB.cls
 
 
   (** The denotation of expression.
@@ -1040,18 +1046,14 @@ module Theory : sig
   type data = Effect.Sort.data
   type ctrl = Effect.Sort.ctrl
 
-
   (** a concrete representation of words in the Core Theory.  *)
   type word = Bitvec.t
-
 
   (**  a concrete representation of variables.  *)
   type 'a var = 'a Var.t
 
-
   (** a class index for class of programs.  *)
   type program
-
 
   (** label is an object of the program class.  *)
   type label = program KB.Object.t
@@ -1412,8 +1414,6 @@ module Theory : sig
     val branch : bool -> 'a eff -> 'a eff -> 'a eff
   end
 
-
-
   (** The Minimal theory. *)
   module type Minimal = sig
     include Init
@@ -1422,7 +1422,6 @@ module Theory : sig
     include Memory
     include Effect
   end
-
 
   (** The Basic theory of bitvector machines.
 
@@ -2010,12 +2009,26 @@ module Theory : sig
   end
 
 
-  (** The Empty Core Theory.  *)
-  module Core : sig
+  (** The empty theory.  *)
+  module Empty : Core
 
-    (** The Empty Core Theory.  *)
-    module Empty : Core
-  end
+  (** [declare name s] structure [s] as an instance of the Core
+      Theory.
+
+      @param context defines a context in which a theory is
+      applicable.
+
+      @param provides is a set of semantic tags that describe
+      capabilities provided by the theory. The fully qualified name of
+      the theory is automatically provided.
+  *)
+  val declare :
+    ?desc:string ->
+    ?extends:string list ->
+    ?context:string list ->
+    ?provides:string list ->
+    ?package:string ->
+    name:string -> (module Core) -> unit
 
   (** [instance ()] creates an instance of the Core Theory.
 
@@ -2038,34 +2051,13 @@ module Theory : sig
   val instance :
     ?context:string list ->
     ?requires:string list ->
-    unit -> (module Core)
-
-
-  (** [declare name s] structure [s] as an instance of the Core
-      Theory.
-
-      @param context defines a context in which a theory is
-      applicable.
-
-      @param provides is a set of semantic tags that describe
-      capabilities provided by the theory. The fully qualified name of
-      the theory is automatically provided.
-  *)
-  val declare :
-    ?desc:string ->
-    ?context:string list ->
-    ?provides:string list ->
-    ?package:string ->
-    name:string -> (module Core) -> unit
-
-
+    unit -> theory knowledge
 
   (** [require ?package name] looks a [package:name] theory in the context.
 
       @raise Invalid_arg if no such theory exists.
   *)
-  val require : ?context:string list -> ?package:string -> string -> (module Core)
-
+  val require : theory -> (module Core) knowledge
 
   (** Sorts implementing IEEE754 formats.
 

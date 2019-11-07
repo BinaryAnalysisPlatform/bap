@@ -717,6 +717,8 @@ module Name = struct
   let str () s = to_string s
   let pp ppf x = Format.fprintf ppf "%s" (show x)
 
+  let hash {name} = String.hash name
+
   include Base.Comparable.Make(struct
       type t = fullname [@@deriving bin_io, compare, sexp]
     end)
