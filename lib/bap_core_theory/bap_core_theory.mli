@@ -367,13 +367,20 @@ module KB = Knowledge
 
 (** The Core Theory.  *)
 module Theory : sig
+
+  (** The class index for all Core Theories.  *)
   type cls
+
+
+  (** A theory instance.
+      To create a new theory instance use the {!instance} function.
+      To manifest a theory into an OCaml module, use the {!require}
+      function. *)
   type theory = cls KB.obj
+
+
+  (** Theory.t is theory.  *)
   type t = theory
-
-  (** The class of all Core theories.  *)
-  val t : (cls,unit) KB.cls
-
 
   (** The denotation of expression.
 
@@ -2012,11 +2019,25 @@ module Theory : sig
   (** The empty theory.  *)
   module Empty : Core
 
-  (** [declare name s] structure [s] as an instance of the Core
+  (** [declare name s] that structure [s] as an instance of the Core
       Theory.
 
+      The qualified with the [package] [name] shall be unique,
+      otherwise the declaration fails.
+
+      The [extends] list shall contain all theories that are included
+      in the structure [s] (except the [Empty] theory, which is
+      the base theory of all core theories, so there is no need to add
+      it). Failure to list a theory in the [extends] list will prevent
+      optimization during theory instantiation and may lead to less
+      efficient theories (when the same denotation is computed twice)
+      or even conflicts, when the extension overrides the extended
+      theory.
+
       @param context defines a context in which a theory is
-      applicable.
+      applicable. The declared theory could be only instantiated if
+      the context, provided during the instantiation, contains all
+      features specified in the [context] argument.
 
       @param provides is a set of semantic tags that describe
       capabilities provided by the theory. The fully qualified name of
@@ -2032,12 +2053,18 @@ module Theory : sig
 
   (** [instance ()] creates an instance of the Core Theory.
 
-      The theory is built from all instances that match the context
+      The instance is built from all theories that match the context
       specified by the [features] list and provide features specified
-      by the [requires] list.
+      by the [requires] list. If any theory is subsumed by other
+      theory, then it is excluded.
 
       If no instances satisfy this requirement than the empty theory
-      is returned.
+      is returned. If only one theory satisfies the requirement, then
+      it is returned. If many theories match, then a join of all
+      theories is computed, stored in the knowledge base, and the
+      resulting theory is returned.
+
+      To manifest a theory into an structure, use the [require] function.
 
       @param features is a set of features that define the context,
       only those theories that have a context that is a subset of
@@ -2053,9 +2080,33 @@ module Theory : sig
     ?requires:string list ->
     unit -> theory knowledge
 
-  (** [require ?package name] looks a [package:name] theory in the context.
+  (** [require theory] manifests the [theory] as an OCaml structure.
 
-      @raise Invalid_arg if no such theory exists.
+      It is only possible to create an instance of theory using the
+      {!instance} function. For example, the following will create an
+      theory that is a join all currently declared theories (which are
+      not specific to any context),
+
+      {[
+        Theory.(instance>=>require) () -> fun (module Core) ->
+      ]}
+
+      To a create an instance for a specific context and requirements,
+
+      {[
+        Theory.instance ()
+          ~context:["arm-gnueabi"; "arm"]
+          ~require:["bil"; "stack-frame-analysis"] >>=
+        Theory.require >>= fun (module Core) ->
+      ]}
+
+      Finally, to manifest a theory with a specific name, specify the
+      name of the theory in the list of requirements.
+
+      {[
+        Theory.instance ~requires:["bap.std:bil"] () >>=
+        Theory.require >>= fun (module Core) ->
+      ]}
   *)
   val require : theory -> (module Core) knowledge
 
