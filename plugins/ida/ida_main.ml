@@ -170,18 +170,12 @@ end = struct
 
   let of_brancher_info arch bf : t =
     let (!) = (int64_to_word arch) in
-    let normal_flow_to_dests = function
-      | Some fall -> [Some !fall, `Fall]
-      | None -> []
-    in
     let other_flows_to_dests flows =
       List.fold flows ~init:[] ~f:(fun acc addr ->
-          (Some !addr, `Jump)::acc)
-    in
-    let helper tab (addr,normal_flow,other_flows) =
+          (Some !addr, `Jump)::acc) in
+    let helper tab (addr,_normal_flow,other_flows) =
       Addr.Table.add_exn tab ~key:!addr
-        ~data:((normal_flow_to_dests normal_flow)
-               @ (other_flows_to_dests other_flows));
+        ~data:(other_flows_to_dests other_flows);
       tab
     in
     List.fold bf

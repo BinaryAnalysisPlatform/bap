@@ -260,7 +260,6 @@ let new_insn arch mem insn =
 
 let collect_dests arch mem insn =
   let width = Size.in_bits (Arch.addr_size arch) in
-  let fall = Addr.to_bitvec (Addr.succ (Memory.max_addr mem)) in
   new_insn arch mem insn >>= fun code ->
   KB.collect Theory.Program.Semantics.slot code >>= fun insn ->
   let init = {
@@ -274,13 +273,11 @@ let collect_dests arch mem insn =
     Set.to_sequence dests |>
     KB.Seq.fold ~init ~f:(fun {barrier; indirect; resolved} label ->
         KB.collect Theory.Label.addr label >>| function
-        | Some d ->
-          if Bitvec.(d <> fall)
-          then {
+        | Some d -> {
             barrier;
             indirect;
             resolved = Set.add resolved (Word.create d width)
-          } else {barrier; indirect; resolved}
+          }
         | None ->
           {barrier; indirect=true; resolved}) >>= fun res ->
     KB.return res
