@@ -6,6 +6,8 @@ open Monads.Std
 include Self()
 open Format
 
+module Callgraph = Graphs.Callgraph
+
 module Param = struct
   open Config;;
 
@@ -15,7 +17,7 @@ module Param = struct
   ];;
 
   let argv = param (array string)  "argv"
-      ~doc:"Process argument vector";;
+      ~doc:"Process argument vector"
 
   let envp = param (array string) "env"
       ~doc:"Program environemt as a comma separated list of VAR=VAL pairs";;
@@ -37,13 +39,28 @@ module Param = struct
       scheduler. If neither the argument nor there any entry points in
       the program, then a function called $(b,_start) is called. If
       $(b,all-subroutines) are specified then Primus will execute all
-      subroutines in topological order";;
+      subroutines in topological order"
 
   let in_isolation = flag "in-isolation"
       ~doc:"Run each entry point as an isolated machine.
 
       Each entry point is started in a separate machine and run
       sequentially, with the project data structure passed between them."
+
+
+  let with_repetitions = flag "with-repetitions"
+      ~doc:
+
+        "The pass runs subroutines in the topological order meaning
+      the farther a subroutine is in a callgraph from the roots the
+      later it will be run as an entry point and higher chances it
+      will be called before that from some other subroutine. And
+      being a callee is more interesting case for analysis then
+      being an entry point due to the wider context of the former.
+      Given that, we skip by default such of entry points that
+      were visited during the run of other ones.
+      And this option disables this behavior and runs all the
+      subroutines in a row. "
 
 end
 
@@ -87,16 +104,37 @@ end
 let entry_points prog =
   entry_point_collector#run prog []
 
+let callgraph start prog =
+  let mark_as_root n g =
+    if Tid.(n = start) then g
+    else Callgraph.Edge.(insert (create start n []) g) in
+  let connect_inputs g =
+    Callgraph.nodes g |>
+    Seq.fold ~init:g ~f:(fun g n ->
+        if Callgraph.Node.degree ~dir:`In n g = 0
+        then mark_as_root n g
+        else g) in
+  let connect_unreachable_scc g =
+    Graphlib.depth_first_search (module Callgraph) g
+      ~start
+      ~init:g
+      ~start_tree:mark_as_root in
+  Program.to_graph prog |>
+  connect_inputs |>
+  connect_unreachable_scc
+
 let all_subroutines prog =
   let entries = entry_points prog in
+  let start = Tid.create () in
   let non_entry =
-    let roots = Tid.Set.of_list entries in
+    let roots = Tid.Set.of_list (start :: entries) in
     fun t -> if Set.mem roots t then None else Some (`tid t) in
   List.map entries ~f:(fun t -> `tid t) @
   Seq.to_list @@
   Seq.filter_map ~f:non_entry @@
-  Graphlib.reverse_postorder_traverse (module Graphs.Callgraph) @@
-  Program.to_graph prog
+  Graphlib.reverse_postorder_traverse (module Graphs.Callgraph)
+    ~start @@
+  callgraph start prog
 
 let parse_entry_points proj entry = match entry with
   | ["all-subroutines"] -> all_subroutines (Project.program proj)
@@ -122,22 +160,50 @@ let exec x =
 
 module Eval = Primus.Interpreter.Make(Machine)
 
+let visited = Primus.Machine.State.declare
+    ~uuid:"c6028425-a8c7-48cf-b6d9-57a44ed9a08a"
+    ~name:"visited-subroutines"
+    (fun _ -> Set.empty (module Tid))
 
-let rec run = function
-  | [] ->
-    info "all toplevel machines done, halting";
-    Eval.halt >>=
-    never_returns
-  | x :: xs ->
-    Machine.current () >>= fun pid ->
-    Machine.fork ()    >>= fun () ->
-    Machine.current () >>= fun cid ->
-    if pid = cid
-    then run xs
-    else
-      exec x >>= fun () ->
+module Visited(Machine : Primus.Machine.S) = struct
+  open Machine.Syntax
+
+  let visit sub =
+    Machine.Global.update visited ~f:(fun tids -> Set.add tids (Term.tid sub))
+
+  let init () = Primus.Interpreter.enter_sub >>> visit
+end
+
+let () = Primus.Machine.add_component (module Visited)
+
+let is_visited = function
+  | `tid tid ->
+    Machine.Global.get visited >>= fun subs ->
+    Machine.return (Set.mem subs tid)
+  | _ -> Machine.return false
+
+let run need_repeat entries =
+  let rec loop = function
+    | [] ->
+      info "all toplevel machines done, halting";
       Eval.halt >>=
       never_returns
+    | x :: xs ->
+      Machine.current () >>= fun pid ->
+      Machine.fork ()    >>= fun () ->
+      Machine.current () >>= fun cid ->
+      if pid = cid
+      then loop xs
+      else
+        is_visited x >>= fun is_visited ->
+        if is_visited && not need_repeat then
+          Eval.halt >>=
+          never_returns
+        else
+          exec x >>= fun () ->
+          Eval.halt >>=
+          never_returns in
+  loop entries
 
 let pp_var ppf v =
   fprintf ppf "%a" Sexp.pp (Var.sexp_of_t v)
@@ -153,9 +219,9 @@ let typecheck =
     List.iter xs ~f:(eprintf "%a@\n" Primus.Lisp.Type.pp_error)
 
 
-let run_all envp args proj xs =
+let run_all need_repeat envp args proj xs =
   Main.run ~envp ~args proj
-    (typecheck >>= fun () -> run xs)
+    (typecheck >>= fun () -> run need_repeat xs)
 
 let run_sep envp args proj xs =
   let s,proj = Main.run ~envp ~args proj typecheck in
@@ -167,7 +233,7 @@ let run_sep envp args proj xs =
 
 let main {Config.get=(!)} proj =
   let open Param in
-  let run = if !in_isolation then run_sep else run_all in
+  let run = if !in_isolation then run_sep else run_all !with_repetitions in
   parse_entry_points proj !entry |> run !envp !argv proj |> function
   | (Primus.Normal,proj)
   | (Primus.Exn Primus.Interpreter.Halt,proj) ->
