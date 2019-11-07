@@ -41,7 +41,6 @@ type type_info = {
   compare : Value.t -> Value.t -> int;
 }
 
-let names : string Hash_set.t = Hash_set.create (module Typeid) ()
 let types : (typeid, type_info) Hashtbl.t  =
   Hashtbl.create ~size:128 (module Typeid)
 
@@ -51,7 +50,7 @@ type ('a,'b) eq = ('a,'b) Type_equal.t = T : ('a,'a) eq
 
 let register_slot (type a) slot
     (module S : S with type t = a) : a tag =
-  let name = KB.Slot.name slot in
+  let name = KB.Name.show @@ KB.Slot.name slot in
   let key = Type_equal.Id.create name S.sexp_of_t in
   let pp ppf (Value.T (k,x)) =
     let T = Equal.proof k key in
@@ -99,17 +98,13 @@ let register (type a) ~name ~uuid (module S : S with type t = a) =
       Theory.Program.cls name domain in
   register_slot slot (module S)
 
-let find_separator s =
-  if String.is_empty s then None
-  else String.Escaping.index s ~escape_char:'\\' ':'
+let key_name k =
+  KB.Name.unqualified @@ KB.Name.read @@ Type_equal.Id.name k
+let key_typeid k = Type_equal.Id.name k
 
-let tagname (Value.T (k,_)) =
-  let fullname = Type_equal.Id.name k in
-  match find_separator fullname with
-  | None -> fullname
-  | Some len -> String.subo fullname ~pos:(len+1)
+let tagname (Value.T (k,_)) = key_name k
 
-let typeid (Value.T (k,_)) = Type_equal.Id.name k
+let typeid (Value.T (k,_)) = key_typeid k
 
 let info typeid =
   Hashtbl.find_and_call types typeid
@@ -177,8 +172,8 @@ let get_exn
 
 module Tag = struct
   type 'a t = 'a tag
-  let name tag = Type_equal.Id.name tag.key
-  let typeid tag = name tag
+  let name tag = key_name tag.key
+  let typeid tag = key_typeid tag.key
   let key tag = tag.key
   let uid tag = uid tag.key
 

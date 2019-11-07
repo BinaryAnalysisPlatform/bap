@@ -10,12 +10,11 @@ let package = "bil-plugin-internal"
 let cls = KB.Class.declare ~package "context" Context
 let context = KB.Symbol.intern ~package "context" cls
 let inherits slot =
-  KB.Class.property cls
-    (KB.Slot.name slot)
+  let name = KB.Name.unqualified @@KB.Slot.name slot in
+  KB.Class.property cls ~package name
     (KB.Slot.domain slot)
 
 let arch = inherits Arch.slot
-
 
 let exp = Exp.slot
 let stmt = Bil.slot
@@ -496,7 +495,7 @@ end
 
 
 module Core : Theory.Core = struct
-  include Theory.Core.Empty
+  include Theory.Empty
   include Basic
 end
 
@@ -521,7 +520,7 @@ module FPEmulator = struct
   let resort s x = KB.Value.refine x s
 
   let fbits x =
-    x >>| fun x -> resort (Theory.Float.size (sort x)) x
+    x >>| fun x -> resort (Theory.Float.bits (sort x)) x
 
   let float s x =
     x >>| fun x -> resort s x

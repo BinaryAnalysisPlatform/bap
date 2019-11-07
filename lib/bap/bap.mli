@@ -4197,10 +4197,6 @@ module Std : sig
           functions will be used to print, compare and serialize
           values.
 
-          [uuid] and [name] parameters must be string literals, i.e.,
-          they must be known at compile time. This is to prevent the
-          abuse of type system.
-
           The returned value of type [T.t tag] is a special key that
           can be used with [create] and [get] functions to pack and
           unpack values of type [T.t] into [value]. *)

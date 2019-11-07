@@ -115,7 +115,7 @@ module Tid = struct
     then intern str
     else match str.[0] with
       | '%' -> parse @@ sprintf "#<%s 0x%s>"
-          (KB.Class.fullname Theory.Program.Semantics.cls)
+          (KB.Name.show (KB.Class.name Theory.Program.Semantics.cls))
           (String.subo ~pos:1 str)
       | '@' -> intern (String.subo ~pos:1 str)
       | _ -> intern str

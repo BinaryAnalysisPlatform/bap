@@ -12,6 +12,12 @@ let sort x = x >>| Value.cls >>| KB.Class.sort
 module Core : Core = struct
   type 'a t = 'a Knowledge.t
 
+  let name =
+    KB.Symbol.intern "empty" theory
+      ~package:"core-theory"
+      ~public:true
+      ~desc:"The empty theory."
+
   let empty x =
     Knowledge.return @@
     Value.empty (KB.Class.refine cls x)
@@ -108,7 +114,7 @@ module Core : Core = struct
   let requal _ _  = empty bool
 
   let float s _ = empty s
-  let fbits x = sort x >>| Float.size >>= empty
+  let fbits x = sort x >>| Float.bits >>= empty
 
   let is_finite _ = empty bool
   let is_fzero _ = empty bool
@@ -139,7 +145,7 @@ module Core : Core = struct
   let powr _ x _ = sort x >>= empty
   let compound _ x _ = sort x >>= empty
   let rootn _ x _ = sort x >>= empty
-  let pownn _ x _ = sort x >>= empty
+  let pown _ x _ = sort x >>= empty
   let rsqrt _ x  = sort x >>= empty
   let hypot _ x _ = sort x >>= empty
 

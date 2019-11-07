@@ -86,7 +86,7 @@ module Float : sig
   val define : ('r,'s) format Sort.t -> ('r,'s) format t sort
   val refine : unit sort -> ('r,'s) format t sort option
   val format : ('r,'s) format t sort -> ('r,'s) format Sort.t
-  val size : ('r,'s) format t sort -> 's Bitv.t sort
+  val bits : ('r,'s) format t sort -> 's Bitv.t sort
 end
 
 module Rmode : sig

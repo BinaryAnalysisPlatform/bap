@@ -243,7 +243,7 @@ module Float : sig
   val define : ('r,'s) format Sort.exp -> ('r,'s) format t sort
   val refine : Sort.top -> ('r,'s) format t sort option
   val format : ('r,'s) format t sort -> ('r,'s) format Sort.exp
-  val size : ('r,'s) format t sort -> 's Bitv.t sort
+  val bits : ('r,'s) format t sort -> 's Bitv.t sort
 end = struct
   module Format = struct
     type ('r,'s) t = ('r -> 's Bitv.t)
@@ -258,7 +258,7 @@ end = struct
   let define fmt = Sort.(fmt @-> sym float)
   let refine x = Sort.refine float x
   let format x = Sort.(hd x)
-  let size x = Format.bits (format x)
+  let bits x = Format.bits (format x)
 end
 
 module Rmode : sig

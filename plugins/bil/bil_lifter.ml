@@ -188,9 +188,10 @@ module BilParser = struct
   let t = {bitv; mem; stmt; bool; float; rmode}
 end
 
-module Lifter = Theory.Parser.Make(Theory.Manager)
 module Optimizer = Theory.Parser.Make(Bil_semantics.Core)
 [@@inlined]
+
+
 
 let provide_bir () =
   Knowledge.promise Theory.Program.Semantics.slot @@ fun obj ->
@@ -300,7 +301,7 @@ module Relocations = struct
 end
 
 module Brancher = struct
-  include Theory.Core.Empty
+  include Theory.Empty
 
   let pack kind dsts =
     KB.Value.put Insn.Slot.dests (Theory.Effect.empty kind) dsts
@@ -351,6 +352,7 @@ let provide_lifter () =
     | None -> KB.return unknown
     | Some x -> f x in
   let lifter obj =
+    Theory.(instance>=>require) () >>= fun (module Core) ->
     Knowledge.collect Arch.slot obj >>? fun arch ->
     Knowledge.collect Memory.slot obj >>? fun mem ->
     Knowledge.collect Disasm_expert.Basic.Insn.slot obj >>? fun insn ->
@@ -361,6 +363,7 @@ let provide_lifter () =
     | Ok bil ->
       Bil_semantics.context >>= fun ctxt ->
       Knowledge.provide Bil_semantics.arch ctxt (Some arch) >>= fun () ->
+      let module Lifter = Theory.Parser.Make(Core) in
       Optimizer.run BilParser.t bil >>= fun sema ->
       let bil = Insn.bil sema in
       let bil = Relocations.fixup relocations mem bil in
@@ -372,10 +375,12 @@ let provide_lifter () =
 
 
 let init () =
-  Bil_ir.init ();
   provide_lifter ();
   provide_bir ();
-  Theory.register
-    ~desc:"computes destinations"
-    ~name:"dests "
-    (module Brancher)
+  Theory.declare (module Brancher)
+    ~package:"bap.std" ~name:"jump-destinations"
+    ~desc:"Computes an approximation of jump destinations."
+    ~provides:[
+      "brancher";
+      "dests"
+    ]
