@@ -201,7 +201,7 @@ let passes =
   Extension.Command.parameters
     ~doc:"Run the selected passes (in the specified order)"
     ~aliases:["p"]
-    Extension.Type.("PASSES" %: string) "passes"
+    Extension.Type.("PASSES" %: list string) "passes"
 
 let outputs =
   Extension.Command.parameters
@@ -301,7 +301,7 @@ let _disassemble_command_registered : unit =
   then setup_gc ()
   else info "GC parameters are overriden by a user";
   validate_input input >>= fun () ->
-  validate_passes_style old_style_passes passes >>=
+  validate_passes_style old_style_passes (List.concat passes) >>=
   validate_passes >>= fun passes ->
   Dump_formats.parse outputs >>= fun outputs ->
   let digest = make_digest [
