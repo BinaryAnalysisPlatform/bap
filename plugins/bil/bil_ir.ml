@@ -84,6 +84,9 @@ let graph =
     ~persistent:(KB.Persistent.of_binable (module struct
                    type t = cfg option [@@deriving bin_io]
                  end))
+    ~package:"bap.std"
+    ~public:true
+    ~desc:"the graphical representation of the program"
 
 let slot = graph
 

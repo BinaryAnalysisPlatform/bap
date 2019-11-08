@@ -7,7 +7,11 @@ module Effect = Bap_core_theory_effect
 
 type cls = Program
 type program = cls
-let (cls : (cls,unit) Knowledge.cls) = Knowledge.Class.declare ~package "program" ()
+let (cls : (cls,unit) Knowledge.cls) =
+  Knowledge.Class.declare ~package "program" ()
+    ~public:true
+    ~desc:"a class of program instances"
+
 let program = cls
 
 module Label = struct
@@ -27,17 +31,21 @@ module Label = struct
       ~equal:Int.equal
       ~inspect:sexp_of_int
 
-  let attr name =
+  let attr name desc =
     let bool_t = Knowledge.Domain.optional
         ~inspect:sexp_of_bool ~equal:Bool.equal "bool" in
     Knowledge.Class.property ~package cls name bool_t
       ~persistent:(Knowledge.Persistent.of_binable (module struct
                      type t = bool option [@@deriving bin_io]
                    end))
+      ~public:true
+      ~desc
 
 
   let is_valid = attr "is-valid"
+      "is the program valid or not"
   let is_subroutine = attr "is-subroutine"
+      "is the program a subroutine entry point"
 
 
   let addr = Knowledge.Class.property ~package cls "label-addr" word
@@ -45,24 +53,32 @@ module Label = struct
                      type t = Bitvec_binprot.t option
                      [@@deriving bin_io]
                    end))
+      ~public:true
+      ~desc:"the program virtual address"
 
   let name =
     Knowledge.Class.property ~package cls "label-name" name
       ~persistent:(Knowledge.Persistent.of_binable (module struct
                      type t = string option [@@deriving bin_io]
                    end))
+      ~public:true
+      ~desc:"the program linkage name"
 
   let ivec =
     Knowledge.Class.property ~package cls "label-ivec" int
       ~persistent:(Knowledge.Persistent.of_binable (module struct
                      type t = int option [@@deriving bin_io]
                    end))
+      ~public:true
+      ~desc:"the program interrupt vector"
 
   let aliases =
     Knowledge.Class.property ~package cls "label-aliases" names
       ~persistent:(Knowledge.Persistent.of_binable (module struct
                      type t = String.Set.t [@@deriving bin_io]
                    end))
+      ~public:true
+      ~desc:"the set of known program names"
 
 
   open Knowledge.Syntax
@@ -90,6 +106,8 @@ module Semantics = struct
   module Self = (val Knowledge.Value.derive cls)
   let slot = Knowledge.Class.property ~package program "semantics" Self.domain
       ~persistent:(Knowledge.Persistent.of_binable (module Self))
+      ~public:true
+      ~desc:"the program semantics"
   include Self
 end
 

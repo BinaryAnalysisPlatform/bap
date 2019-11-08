@@ -17,6 +17,8 @@ let name_choices = KB.Domain.opinions ~empty:None
 let common_name =
   KB.Class.property ~package:"bap.std"
     Theory.Program.cls "common-name" name_choices
+    ~public:true
+    ~desc:"a unique name associated with the program"
 
 
 let name_of_addr addr =

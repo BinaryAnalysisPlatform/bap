@@ -73,6 +73,8 @@ module T = struct
       ~persistent:(KB.Persistent.of_binable (module struct
                      type t = arch option [@@deriving bin_io]
                    end))
+      ~public:true
+      ~desc:"an ISA of the program"
 end
 
 include T

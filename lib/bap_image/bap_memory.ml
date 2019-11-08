@@ -445,3 +445,5 @@ let domain = KB.Domain.optional ~inspect:sexp_of_t "mem"
 
 let slot = KB.Class.property ~package:"bap.std"
     Theory.Program.cls "mem" domain
+    ~public:true
+    ~desc:"a memory region occupied by the program"

@@ -404,7 +404,7 @@ let compile_patterns subs secs patterns =
   ] |> List.map ~f:(fun pattern ->
       match String.index pattern ':' with
       | None ->
-        failwithf "wrong pattern %S, expected `:`, none found"
+        invalid_argf "wrong pattern %S, expected `:`, none found"
           pattern ()
       | Some pos ->
         let property = String.sub ~pos:0 ~len:pos pattern in
@@ -412,7 +412,7 @@ let compile_patterns subs secs patterns =
         let pattern = Re.Pcre.re pattern |> Re.compile in
         match List.Assoc.find properties property ~equal:String.equal
         with None ->
-          failwithf "unknown property %S" property ()
+          invalid_argf "unknown property %S" property ()
            | Some property -> property,pattern)
 
 let main attrs ansi_colors demangle symbol_fmts subs secs patterns doms =

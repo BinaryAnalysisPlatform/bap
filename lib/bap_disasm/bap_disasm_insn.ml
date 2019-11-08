@@ -70,8 +70,10 @@ module Props = struct
   let persistent = KB.Persistent.of_binable (module T)
 
   let slot = KB.Class.property ~package:"bap.std"
-      ~persistent
       Theory.Program.Semantics.cls "insn-properties" domain
+      ~persistent
+      ~public:true
+      ~desc:"semantic properties of an instruction"
 end
 
 
@@ -92,12 +94,16 @@ module Slot = struct
 
 
   let name = KB.Class.property ~package:"bap.std"
-      ~persistent:KB.Persistent.string
       Theory.Program.Semantics.cls "insn-opcode" text
+      ~persistent:KB.Persistent.string
+      ~public:true
+      ~desc:"instruction opcode"
 
   let asm = KB.Class.property ~package:"bap.std"
-      ~persistent:KB.Persistent.string
       Theory.Program.Semantics.cls "insn-asm" text
+      ~persistent:KB.Persistent.string
+      ~public:true
+      ~desc:"an assembly string"
 
   let sexp_of_op = function
     | Op.Reg r -> Sexp.Atom (Reg.name r)
@@ -114,14 +120,18 @@ module Slot = struct
     end)
 
   let ops = KB.Class.property ~package:"bap.std"
-      ~persistent:ops_persistent
       Theory.Program.Semantics.cls "insn-ops" ops_domain
+      ~persistent:ops_persistent
+      ~public:true
+      ~desc:"an array of instruction operands"
 
   let delay = KB.Class.property ~package:"bap.std"
       Theory.Program.Semantics.cls "insn-delay" delay_t
       ~persistent:(KB.Persistent.of_binable (module struct
                      type t = int option [@@deriving bin_io]
                    end))
+      ~public:true
+      ~desc:"the length of the delay slot"
 
   type KB.conflict += Jump_vs_Move
 
@@ -146,9 +156,10 @@ module Slot = struct
     let data = KB.Domain.define ~empty ~order ~join ~inspect "dest-set" in
     let persistent = KB.Persistent.of_binable (module IO) in
     KB.Class.property ~package:"bap.std" Theory.Program.Semantics.cls
-      ~persistent
       "insn-dests" data
-
+      ~persistent
+      ~public:true
+      ~desc:"a set of destinations of a control-flow instruction"
 end
 
 let normalize_asm asm =

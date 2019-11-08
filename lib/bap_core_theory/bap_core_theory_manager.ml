@@ -312,6 +312,7 @@ let slot = Knowledge.Class.property theory "instance" domain
     ~desc:"The theory structure"
 
 
+
 let str_ctxt () ctxt =
   List.to_string (Set.to_list ctxt) ~f:ident
 
@@ -361,7 +362,7 @@ let theory_for_id id =
   let sym = sprintf "'%s" @@
     List.to_string (Set.to_list id) ~f:Name.show in
   Knowledge.Symbol.intern sym theory
-    ~package:"core-theory-internal.mananager"
+    ~package:"core-theory-internal"
 
 let instance ?context ?requires () =
   theories () >>| Map.data >>| refine ?context ?requires >>= function
@@ -382,3 +383,20 @@ let require name =
   | Some t -> Knowledge.return t.structure
   | None -> Knowledge.collect slot name >>| fun t ->
     t.structure
+
+
+module Documentation = struct
+  module Theory = struct
+    type t = Name.t * core theory
+
+    let (-) xs name = Set.remove xs (Name.show name)
+
+    let name = fst
+    let desc (_,{desc}) = desc
+    let requires (_,{requires=fs}) = Set.to_list fs
+    let provides (self,{provides=fs}) =
+      Set.to_list (fs - Empty.name - self)
+  end
+
+  let theories () = Hashtbl.to_alist known_theories
+end

@@ -593,8 +593,9 @@ module Ir_arg = struct
     let domain =
       KB.Domain.optional ~equal:equal_intent ~inspect:sexp_of_intent "intent"
     let persistent = KB.Persistent.of_binable (module T)
-    let slot = KB.Class.property ~package ~persistent
-        Theory.Value.cls "arg-intent" domain
+    let slot = KB.Class.property Theory.Value.cls "arg-intent" domain
+        ~package ~persistent
+
     let set intent x = match intent with
       | None -> x
       | Some intent -> KB.Value.put slot x intent
@@ -1206,8 +1207,11 @@ module Term = struct
       type t = blk term list [@@deriving bin_io]
     end)
 
-  let slot = Knowledge.Class.property ~package ~persistent
+  let slot = Knowledge.Class.property
       Theory.Program.Semantics.cls "bir" domain
+      ~package ~persistent
+      ~public:true
+      ~desc:"BIL semantics in a graphical IR"
 
 
   let change t p tid f =

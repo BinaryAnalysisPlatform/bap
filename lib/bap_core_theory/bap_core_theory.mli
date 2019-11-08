@@ -3174,4 +3174,31 @@ module Theory : sig
       val run : ('e,'r,'s) parser -> 's list -> unit eff
     end
   end
+
+
+  (** Documents all declared theories. *)
+  module Documentation : sig
+
+
+    (** Theory documentation.  *)
+    module Theory : sig
+      (** the documentation  *)
+      type t
+
+      (** [name theory] is the fully qualified name of [theory].  *)
+      val name : t -> Knowledge.Name.t
+
+      (** [desc theory] is the description provided for [theory].  *)
+      val desc : t -> string
+
+      (** [requires theory] is the list of theory requirements.  *)
+      val requires : t -> string list
+
+      (** [provides theory] is the list of theory capabilities.  *)
+      val provides : t -> string list
+    end
+
+    (** [theories ()] the declared theories.  *)
+    val theories : unit -> Theory.t list
+  end
 end

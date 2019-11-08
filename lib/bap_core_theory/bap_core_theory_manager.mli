@@ -15,3 +15,15 @@ val instance :
   unit -> theory knowledge
 
 val require : theory -> (module Core) knowledge
+
+module Documentation : sig
+  module Theory : sig
+    type t
+    val name : t -> Knowledge.Name.t
+    val desc : t -> string
+    val requires : t -> string list
+    val provides : t -> string list
+  end
+
+  val theories : unit -> Theory.t list
+end

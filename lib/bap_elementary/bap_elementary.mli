@@ -65,10 +65,9 @@ module Elementary (Theory : Theory.Core) : sig
     type 'a t = 'a Value.sort -> int -> string
 
     val pow : 'a t
-    val powr : 'a t
     val compound : 'a t
     val rootn : 'a t
-    val pownn : 'a t
+    val pown : 'a t
     val rsqrt : 'a t
     val hypot : 'a t
     val exp  : 'a t

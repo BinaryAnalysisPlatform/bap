@@ -66,8 +66,10 @@ end
     packages = Hashtbl.create (module String);
   }
 
-  let cls = KB.Class.declare ~package:"core-theory"
-      "value" ()
+  let cls = KB.Class.declare ~package:"core-theory" "value" ()
+      ~public:true
+      ~desc:"the denotation of an expression"
+
 
   module Name = struct
     type t = name [@@deriving bin_io, compare, sexp]
