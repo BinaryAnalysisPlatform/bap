@@ -117,11 +117,10 @@ module Input = struct
 
   let symtab_agent =
     let reliability = KB.Agent.authorative in
-    KB.Agent.register
+    KB.Agent.register "symtab"
       ~reliability
-      ~desc:"extracts symbols from the image symtab entries"
+      ~desc:"extracts symbols from symbol tables"
       ~package:"bap.std"
-      "symtab"
 
   let provide_image image =
     let image_symbols = Symbolizer.of_image image in

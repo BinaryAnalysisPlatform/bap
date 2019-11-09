@@ -60,6 +60,7 @@ end
 type +'a sort = 'a Sort.t
 let cls : (cls, unit) Knowledge.Class.t =
   Knowledge.Class.declare ~package "effect"
+    ~public:true
     ~desc:"denotation of a result of effectful computation"
     ()
 

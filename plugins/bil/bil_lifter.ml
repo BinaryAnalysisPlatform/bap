@@ -344,16 +344,26 @@ module Brancher = struct
     KB.return (union k yes nay)
 end
 
-let provide_lifter () =
+let base_context = [
+  "bil-lifter";
+]
+
+let provide_lifter ~with_fp () =
   info "providing a lifter for all BIL lifters";
   let relocations = Relocations.subscribe () in
   let unknown = Theory.Program.Semantics.empty in
+  let context arch =
+    sprintf "arch-%a" Arch.str arch ::
+    if with_fp
+    then "floating-point" :: base_context
+    else base_context in
   let (>>?) x f = x >>= function
     | None -> KB.return unknown
     | Some x -> f x in
   let lifter obj =
-    Theory.(instance>=>require) () >>= fun (module Core) ->
     Knowledge.collect Arch.slot obj >>? fun arch ->
+    Theory.instance ~context:(context arch) () >>=
+    Theory.require >>= fun (module Core) ->
     Knowledge.collect Memory.slot obj >>? fun mem ->
     Knowledge.collect Disasm_expert.Basic.Insn.slot obj >>? fun insn ->
     let module Target = (val target_of_arch arch) in
@@ -374,13 +384,13 @@ let provide_lifter () =
   Knowledge.promise Theory.Program.Semantics.slot lifter
 
 
-let init () =
-  provide_lifter ();
+let init ~with_fp () =
+  provide_lifter ~with_fp ();
   provide_bir ();
   Theory.declare (module Brancher)
-    ~package:"bap.std" ~name:"jump-destinations"
-    ~desc:"Computes an approximation of jump destinations."
+    ~package:"bap.std" ~name:"jump-dests"
+    ~desc:"an approximation of jump destinations"
     ~provides:[
       "brancher";
-      "dests"
+      "branch-destinations"
     ]

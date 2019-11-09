@@ -351,8 +351,14 @@ module Knowledge : sig
         The [package] and [name] pair should be unique. If there is
         already a class with the given [package:name] then the
         declaration fails.
+
+        @param public (defaults to false) if specified, then the
+        class will referenced in the Knowledge documentation output.
     *)
-    val declare : ?desc:string -> ?package:string -> string -> 's -> ('k,'s) cls
+    val declare :
+      ?public:bool ->
+      ?desc:string ->
+      ?package:string -> string -> 's -> ('k,'s) cls
 
 
     (** [refine cls s] refines the [sort] of class ['k] to [s].   *)
@@ -409,8 +415,12 @@ module Knowledge : sig
         will be used to persist the property.
 
         @param desc is a property documentation.
+
+        @param public (defaults to false) if specified, then the
+        property will referenced in the Knowledge documentation output.
     *)
     val property :
+      ?public:bool ->
       ?desc:string ->
       ?persistent:'p persistent ->
       ?package:string ->
@@ -860,7 +870,7 @@ module Knowledge : sig
 
 
     (** [name id] is the name of the agent.  *)
-    val name : id -> string
+    val name : id -> name
 
 
     (** [desc id] is the overall description of the agent.  *)
@@ -1367,4 +1377,53 @@ module Knowledge : sig
 
   (** the s-expression denoting the conflict. *)
   val sexp_of_conflict : conflict -> Sexp.t
+
+
+  (** Online Knowledge documentation.
+
+      Provides information about declared knowledge entities, such as
+      classes, properties, and agents.
+  *)
+  module Documentation : sig
+
+
+    (** A documentation element.  *)
+    module type Element = sig
+
+      (** the type of the element  *)
+      type t
+
+
+      (** [name elt] is the fully qualified element name.  *)
+      val name : t -> name
+
+
+      (** [desc elt] is the text describing the element.  *)
+      val desc : t -> string
+    end
+
+
+    (** Describes Knowledge agents.  *)
+    module Agent : Element
+
+
+    (** Describes Knowledge classes.  *)
+    module Class : Element
+
+
+    (** Describes Class properties.  *)
+    module Property : Element
+
+
+    (** [agents ()] is the list of currently registered agents.  *)
+    val agents : unit -> Agent.t list
+
+
+    (** [classes ()] public classes and their properties.
+
+        Only classes and properties that are declared [public] are
+        included in the list.
+    *)
+    val classes : unit -> (Class.t * Property.t list) list
+  end
 end

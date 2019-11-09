@@ -255,6 +255,7 @@ let persistent = Knowledge.Persistent.of_binable (module struct
 
 let slot = Knowledge.Class.property ~package:"bap.std"
     ~persistent Theory.Value.cls  "exp" domain
+    ~public:true
     ~desc:"semantics of expressions in BIL"
 
 include Regular.Make(struct

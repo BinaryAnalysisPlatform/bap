@@ -34,6 +34,8 @@ type label = program Knowledge.Object.t
 type theory_cls
 let theory : (theory_cls,unit) Knowledge.cls =
   Knowledge.Class.declare ~package:"core-theory" "theory" ()
+    ~public:true
+    ~desc:"the class of Core Theory instances"
 
 type theory = theory_cls Knowledge.Object.t
 

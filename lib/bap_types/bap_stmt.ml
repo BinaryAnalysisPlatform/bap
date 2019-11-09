@@ -111,4 +111,5 @@ let persistent = Knowledge.Persistent.of_binable (module struct
 
 let slot = Knowledge.Class.property ~package:"bap.std"
     ~persistent Theory.Program.Semantics.cls "bil" domain
+    ~public:true
     ~desc:"semantics of statements in BIL"

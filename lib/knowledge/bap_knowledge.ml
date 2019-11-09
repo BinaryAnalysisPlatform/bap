@@ -168,6 +168,132 @@ type slot_status =
   | Awoke
   | Ready
 
+type fullname = {
+  package : string;
+  name : string;
+} [@@deriving bin_io, compare, sexp]
+
+module Name = struct
+  type t = fullname [@@deriving bin_io, compare, sexp]
+
+
+  let separator = ':'
+  let escape_char = '\\'
+  let escapeworthy = [separator]
+
+  let is_escaped s = String.Escaping.is_char_escaped s ~escape_char
+
+  let find_separator s =
+    if String.is_empty s then None
+    else String.Escaping.index s ~escape_char separator
+
+  let is_separator_unescaped s p c =
+    Char.equal separator c && not (is_escaped s p)
+
+  let unescaped_exists_so_escape ?(skip_pos=(-1)) s =
+    let buf = Buffer.create (String.length s + 1) in
+    Caml.StringLabels.iteri s ~f:(fun p c ->
+        if p <> skip_pos && is_separator_unescaped s p c
+        then Buffer.add_char buf escape_char;
+        Buffer.add_char buf c);
+    Buffer.contents buf
+
+  let has_unescaped ?pos s =
+    Option.is_some @@
+    String.lfindi ?pos s ~f:(fun p c ->
+        is_separator_unescaped s p c)
+
+  let escape_all_unescaped ?(is_keyword=false) s =
+    match s with
+    | "" -> s
+    | ":" -> if is_keyword then s else "\\:"
+    | _ ->
+      let pos = if is_keyword then 1 else 0 in
+      if has_unescaped ~pos s
+      then unescaped_exists_so_escape ~skip_pos:pos s
+      else s
+
+  let escape_all_literally =
+    unstage @@
+    String.Escaping.escape ~escapeworthy ~escape_char
+
+  let unescape =
+    unstage @@
+    String.Escaping.unescape ~escape_char
+
+  (* invariant, keywords are always prefixed with [:] *)
+  let normalize_name input ~package name = match input with
+    | `Literal ->
+      if package = keyword_package
+      then ":" ^ escape_all_literally name
+      else escape_all_literally name
+    | `Reading ->
+      let escape = escape_all_unescaped in
+      if package = keyword_package
+      then
+        if not (String.is_prefix ~prefix:":" name)
+        then ":" ^ escape name
+        else ":" ^ escape @@ String.subo ~pos:1 name
+      else escape name
+
+  let normalize_package input package =
+    let package = if String.is_empty package
+      then user_package
+      else package in
+    match input with
+    | `Literal -> escape_all_literally package
+    | `Reading -> escape_all_unescaped package
+
+  let create ?(package=user_package) name = {
+    package = normalize_package `Literal package;
+    name = normalize_name `Literal ~package name;
+  }
+
+  let keyword = create ~package:keyword_package
+
+  let read ?(package=user_package) s =
+    let package = normalize_package `Literal package in
+    let escape = escape_all_unescaped in
+    match find_separator s with
+    | None -> {
+        package;
+        name = normalize_name `Reading ~package s
+      }
+    | Some 0 -> {
+        package = keyword_package;
+        name = escape ~is_keyword:true s
+      }
+    | Some len ->
+      let package = escape (String.sub s ~pos:0 ~len) in
+      {
+        package;
+        name = normalize_name `Reading ~package @@
+          String.subo s ~pos:(len+1);
+      }
+
+
+  let package t = unescape t.package
+  let short t = unescape t.name
+  let unqualified t = short t
+  let to_string {package; name} =
+    if package = keyword_package || package = user_package
+    then name
+    else package ^ ":" ^ name
+
+  let show t = to_string t
+
+  let of_string s = read s
+
+  let str () s = to_string s
+  let pp ppf x = Format.fprintf ppf "%s" (show x)
+
+  let hash {name} = String.hash name
+
+  include Base.Comparable.Make(struct
+      type t = fullname [@@deriving bin_io, compare, sexp]
+    end)
+end
+
 
 module Agent : sig
   type t
@@ -188,7 +314,7 @@ module Agent : sig
   val doubtful    : reliability
   val unreliable  : reliability
 
-  val name : id -> string
+  val name : id -> Name.t
   val desc : id -> string
   val reliability : id -> reliability
 
@@ -209,7 +335,7 @@ end = struct
   type id = Id.t
   type reliability = A | B | C | D | E [@@deriving sexp]
   type info = {
-    name : string;
+    name : Name.t;
     desc : string;
     rcls : reliability;
   }
@@ -232,13 +358,13 @@ end = struct
 
   let register
       ?(desc="no description provided")
-      ?(package="user")
+      ?package
       ?(reliability=trustworthy) name =
-    let name = sprintf "%s:%s" package name in
-    let agent = Caml.Digest.string name in
+    let name = Name.create ?package name in
+    let agent = Caml.Digest.string (Name.show name) in
     if Hashtbl.mem agents agent then
-      failwithf "An agent with name `%s' already exists, \
-                 please choose another name" name ();
+      failwithf "An agent with name `%a' already exists, \
+                 please choose another name" Name.str name ();
     Hashtbl.add_exn agents agent {
       desc; name; rcls = reliability
     };
@@ -257,15 +383,15 @@ end = struct
         | None -> assert false
         | Some agent -> {agent with rcls})
 
-  let pp ppf agent = Format.pp_print_string ppf (name agent)
+  let pp ppf agent = Name.pp ppf (name agent)
 
   let pp_reliability ppf r =
     Sexp.pp ppf (sexp_of_reliability r)
 
   let pp_id ppf agent =
     let {name; desc; rcls} = info agent in
-    Format.fprintf ppf "Class %a %s - %s"
-      pp_reliability rcls name desc
+    Format.fprintf ppf "Class %a %a - %s"
+      pp_reliability rcls Name.pp name desc
 
   include (String : Base.Comparable.S with type t := t)
 end
@@ -597,139 +723,10 @@ end
 
 type 'a obj = Oid.t
 
-type fullname = {
-  package : string;
-  name : string;
-} [@@deriving bin_io, compare, sexp]
-
-
-module Name = struct
-  type t = fullname [@@deriving bin_io, compare, sexp]
-
-
-  let separator = ':'
-  let escape_char = '\\'
-  let escapeworthy = [separator]
-
-  let is_escaped s = String.Escaping.is_char_escaped s ~escape_char
-
-  let find_separator s =
-    if String.is_empty s then None
-    else String.Escaping.index s ~escape_char separator
-
-  let is_separator_unescaped s p c =
-    Char.equal separator c && not (is_escaped s p)
-
-  let unescaped_exists_so_escape ?(skip_pos=(-1)) s =
-    let buf = Buffer.create (String.length s + 1) in
-    Caml.StringLabels.iteri s ~f:(fun p c ->
-        if p <> skip_pos && is_separator_unescaped s p c
-        then Buffer.add_char buf escape_char;
-        Buffer.add_char buf c);
-    Buffer.contents buf
-
-  let has_unescaped ?pos s =
-    Option.is_some @@
-    String.lfindi ?pos s ~f:(fun p c ->
-        is_separator_unescaped s p c)
-
-  let escape_all_unescaped ?(is_keyword=false) s =
-    match s with
-    | "" -> s
-    | ":" -> if is_keyword then s else "\\:"
-    | _ ->
-      let pos = if is_keyword then 1 else 0 in
-      if has_unescaped ~pos s
-      then unescaped_exists_so_escape ~skip_pos:pos s
-      else s
-
-  let escape_all_literally =
-    unstage @@
-    String.Escaping.escape ~escapeworthy ~escape_char
-
-  let unescape =
-    unstage @@
-    String.Escaping.unescape ~escape_char
-
-  (* invariant, keywords are always prefixed with [:] *)
-  let normalize_name input ~package name = match input with
-    | `Literal ->
-      if package = keyword_package
-      then ":" ^ escape_all_literally name
-      else escape_all_literally name
-    | `Reading ->
-      let escape = escape_all_unescaped in
-      if package = keyword_package
-      then
-        if not (String.is_prefix ~prefix:":" name)
-        then ":" ^ escape name
-        else ":" ^ escape @@ String.subo ~pos:1 name
-      else escape name
-
-  let normalize_package input package =
-    let package = if String.is_empty package
-      then user_package
-      else package in
-    match input with
-    | `Literal -> escape_all_literally package
-    | `Reading -> escape_all_unescaped package
-
-  let create ?(package=user_package) name = {
-    package = normalize_package `Literal package;
-    name = normalize_name `Literal ~package name;
-  }
-
-  let keyword = create ~package:keyword_package
-
-  let read ?(package=user_package) s =
-    let package = normalize_package `Literal package in
-    let escape = escape_all_unescaped in
-    match find_separator s with
-    | None -> {
-        package;
-        name = normalize_name `Reading ~package s
-      }
-    | Some 0 -> {
-        package = keyword_package;
-        name = escape ~is_keyword:true s
-      }
-    | Some len ->
-      let package = escape (String.sub s ~pos:0 ~len) in
-      {
-        package;
-        name = normalize_name `Reading ~package @@
-          String.subo s ~pos:(len+1);
-      }
-
-
-  let package t = unescape t.package
-  let short t = unescape t.name
-  let unqualified t = short t
-  let to_string {package; name} =
-    if package = keyword_package || package = user_package
-    then name
-    else package ^ ":" ^ name
-
-  let show t = to_string t
-
-  let of_string s = read s
-
-  let str () s = to_string s
-  let pp ppf x = Format.fprintf ppf "%s" (show x)
-
-  let hash {name} = String.hash name
-
-  include Base.Comparable.Make(struct
-      type t = fullname [@@deriving bin_io, compare, sexp]
-    end)
-end
-
 module Registry = struct
-  let packages = Hash_set.create (module String) ()
+  let public = Hashtbl.create (module Name)
   let classes = Hashtbl.create (module String)
   let slots = Hashtbl.create (module String)
-
-  let add_package name = Hash_set.add packages name
 
   let is_present ~package namespace name =
     match Hashtbl.find namespace package with
@@ -737,7 +734,6 @@ module Registry = struct
     | Some names -> Map.mem names name
 
   let register kind namespace ?desc ?(package=user_package) name =
-    add_package package;
     if is_present ~package namespace name
     then failwithf
         "Failed to declare new %s, there is already a %s \
@@ -749,6 +745,54 @@ module Registry = struct
 
   let add_class = register "class" classes
   let add_slot  = register "property" slots
+
+  let is_public cls = Hashtbl.mem public cls
+
+  let public_class cls =
+    Hashtbl.add_exn public cls []
+
+  let update_class ~cls ~slot =
+    if is_public cls
+    then Hashtbl.add_multi public cls slot
+
+  let find namespace name =
+    let names = Hashtbl.find_exn namespace (Name.package name) in
+    Map.find_exn names (Name.unqualified name)
+
+end
+
+module Documentation = struct
+  module type Element = sig
+    type t
+    val name : t -> Name.t
+    val desc : t -> string
+  end
+
+  let agents = Agent.registry
+
+  module Agent = struct
+    type t = Agent.id
+    let name = Agent.name
+    let desc = Agent.desc
+  end
+
+  module Pair = struct
+    type t = Name.t * string option
+    let name = fst
+    let desc = function
+      | _,None -> ""
+      | _,Some d -> d
+  end
+  module Class = Pair
+  module Property = Pair
+
+  let classes () =
+    Hashtbl.to_alist Registry.public |>
+    List.map ~f:(fun (cls,slots) ->
+        (cls,Registry.(find classes) cls),
+        List.map slots ~f:(fun slot ->
+            slot,
+            Registry.(find slots) slot))
 end
 
 module Class = struct
@@ -765,17 +809,18 @@ module Class = struct
 
   let names = Hashtbl.create (module Cid)
 
-  let newclass ?desc ?package name sort =
+  let newclass ?(public=false) ?desc ?package name sort =
     Cid.incr classes;
     let id = !classes
     and name = Registry.add_class ?desc ?package name in
+    if public then Registry.public_class name;
     Hashtbl.add_exn names id name;
     {id; name; sort}
 
   let declare
-    : ?desc:string -> ?package:string -> string -> 's -> ('k,'s) t =
-    fun ?desc ?package name data ->
-    newclass ?desc ?package name data
+    : ?public:bool -> ?desc:string -> ?package:string -> string -> 's -> ('k,'s) t =
+    fun ?public ?desc ?package name data ->
+    newclass ?public ?desc ?package name data
 
   let refine {id; name} sort = {id; name; sort}
 
@@ -1940,9 +1985,10 @@ module Knowledge = struct
 
     let enum {Class.id} = Hashtbl.find_multi repository id
 
-    let declare ?desc ?persistent ?package cls name (dom : 'a Domain.t) =
+    let declare ?(public=false) ?desc ?persistent ?package cls name (dom : 'a Domain.t) =
       let name = Registry.add_slot ?desc ?package name in
       let key = Dict.Key.create ~name:(Name.to_string name) dom.inspect in
+      if public then Registry.update_class ~cls:cls.Class.name ~slot:name;
       Option.iter persistent (Record.register_persistent key);
       Record.register_domain key dom;
       let promises = Hashtbl.create (module Pid) in
@@ -2655,6 +2701,7 @@ module Knowledge = struct
   let sexp_of_conflict = Conflict.sexp_of_t
   module Name = Name
   type name = Name.t
+  module Documentation = Documentation
 end
 
 type 'a knowledge = 'a Knowledge.t

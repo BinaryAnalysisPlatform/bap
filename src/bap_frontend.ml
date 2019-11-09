@@ -121,17 +121,72 @@ let matches default set str = match set with
 
 let strings = Option.map ~f:(Set.of_list (module String))
 
+let pp_sep ppf () = Format.fprintf ppf ",@ "
+let pp_strings ppf xs =
+  Format.(pp_print_list ~pp_sep pp_print_string) ppf xs
+
+type entity = [
+  | `Entities
+  | `Plugins
+  | `Commands
+  | `Recipes
+  | `Tags
+  | `Passes
+  | `Formats
+  | `Classes
+  | `Theories
+  | `Agents
+]
+
+let entities : (string, entity) List.Assoc.t = [
+  "entities", `Entities;
+  "plugins", `Plugins;
+  "commands", `Commands;
+  "recipes", `Recipes;
+  "tags", `Tags;
+  "features", `Tags;
+  "passes", `Passes;
+  "formats", `Formats;
+  "classes", `Classes;
+  "theories", `Theories;
+  "agents", `Agents;
+]
+
+let entity_name = function
+  | `Entities -> "entities"
+  | `Plugins -> "plugins"
+  | `Commands -> "commands"
+  | `Recipes -> "recipes"
+  | `Tags -> "features"
+  | `Passes -> "passes"
+  | `Formats -> "formats"
+  | `Classes -> "classes"
+  | `Theories -> "theories"
+  | `Agents -> "agents"
+
+let entity_desc : (entity * string) list = [
+  `Entities, "prints this message";
+  `Plugins, "installed BAP plugins";
+  `Commands, "bap utility commands";
+  `Recipes, "installed recipes";
+  `Tags, "plugin capabilities";
+  `Passes, "disassembler passes";
+  `Formats, "data output formats";
+  `Classes, "knowledge representation classes";
+  `Theories, "installed theories";
+  `Agents, "knowledge providers";
+]
+
 let () =
-  let what = Command.argument @@ Type.enum [
-      "plugins", `Plugins;
-      "commands", `Commands;
-      "recipes", `Recipes;
-      "tags", `Tags;
-      "features", `Tags;
-      "passes", `Passes;
-      "formats", `Formats;
-    ] in
-  let filter = Command.parameter Type.(list string) "filter" in
+  let what = Command.argument @@ Type.enum entities in
+  let filter = Command.parameter Type.(list string) "filter"
+      ~aliases:["f"]
+      ~doc:"Select what to print.
+      The input is a comma-separated list of names, optionally
+      prefixed with the minus sign, e.g., $(b,--filter=foo,-bar).
+      When specified, then only entities with specified names will
+      be printed. If the name is specified with the $(b,-) before it,
+      then entities with that name will not be printed." in
   let doc = "explores various BAP facilities" in
   let push x xs = match xs with
     | None -> Some [x]
@@ -149,10 +204,14 @@ let () =
   fun what filter ctxt ->
   let requires, exclude = parse_filter filter in
   let ctxt = Configuration.refine ?provides:requires ?exclude ctxt in
+  let requested = strings requires
+  and excluded = strings exclude in
+  let selected name =
+    matches true requested name && not (matches false excluded name) in
   match what with
   | `Recipes ->
-    Format.printf "Use the `print-recipes' command to list recipes, e.g.,
-      bap print-recipes@\n%!";
+    ignore (Sys.command "bap print-recipes");
+    Format.printf "Use the `print-recipes' for the detailed list of recipes\n";
     Ok ()
   | `Plugins ->
     Format.printf "%a%!" pp_info (Configuration.plugins ctxt);
@@ -170,15 +229,9 @@ let () =
         let ctxt = Configuration.refine ~provides:[feature] ctxt in
         let plugins = Configuration.plugins  ctxt |>
                       List.map ~f:Configuration.info_name in
-        let pp_sep ppf () = Format.fprintf ppf ",@ " in
-        Format.printf "  %-24s @[<hov>%a@]@\n%!"
-          feature Format.(pp_print_list ~pp_sep pp_print_string) plugins);
+        Format.printf "  %-24s @[<hov>%a@]@\n%!" feature pp_strings plugins);
     Ok ()
   | `Formats ->
-    let requested = strings requires
-    and excluded = strings exclude in
-    let selected name =
-      matches true requested name && not (matches false excluded name) in
     Data.all_writers () |>
     List.iter ~f:(fun (typename,writers) ->
         if selected typename then begin
@@ -189,6 +242,57 @@ let () =
                 Option.value desc ~default:"no description provided" in
               Format.printf "    %-22s %s@\n%!" name desc)
         end);
+    Ok ()
+  | `Classes ->
+    let module Name = Bap_knowledge.Knowledge.Name in
+    let open Bap_knowledge.Knowledge.Documentation in
+    classes () |>
+    List.iter ~f:(fun (cls,properties) ->
+        let name = Name.show (Class.name cls)
+        and desc = Class.desc cls in
+        if selected name
+        then begin
+          Format.printf "@\n  %-30s @[<hov>%s@]@\n" name desc;
+          List.iter properties ~f:(fun prop ->
+              let name = Name.show (Property.name prop)
+              and desc = Property.desc prop in
+              Format.printf "    - %-26s @[<hov>%s@]@\n%!" name desc)
+        end);
+    Ok ()
+  | `Theories ->
+    let open Bap_core_theory.Theory.Documentation in
+    let module Name = Bap_knowledge.Knowledge.Name in
+    theories () |> List.iter ~f:(fun theory ->
+        let name = Name.show (Theory.name theory)
+        and desc = Theory.desc theory
+        and requires = Theory.requires theory
+        and provides = Theory.provides theory in
+        if selected name then begin
+          Format.printf "  %-24s @[<hov>%a@]@\n" name
+            Format.pp_print_text desc;
+          Format.printf "    %-22s @[<hov>%a@]@\n" "requires:"
+            pp_strings requires;
+          Format.printf "    %-22s @[<hov>%a@]@\n@\n%!" "provides:"
+            pp_strings provides;
+        end);
+    Ok ()
+  | `Agents ->
+    let open Bap_knowledge.Knowledge.Documentation in
+    let module Name = Bap_knowledge.Knowledge.Name in
+    agents () |> List.iter ~f:(fun agent ->
+        let name = Name.show (Agent.name agent)
+        and desc = Agent.desc agent in
+        if selected name
+        then Format.printf "  %-32s @[<hov>%a@]@\n" name
+            Format.pp_print_text desc;
+        ());
+    Ok ()
+  | `Entities ->
+    List.iter entity_desc ~f:(fun (entity,desc) ->
+        let name = entity_name entity in
+        if selected name
+        then Format.printf "  %-24s @[<hov>%a@]@\n" name
+            Format.pp_print_text desc);
     Ok ()
 
 let () =

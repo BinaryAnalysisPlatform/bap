@@ -334,6 +334,8 @@ module Insn = struct
       ~equal:(fun x y -> Int.equal x.code y.code)
   let slot = KB.Class.property ~package:"bap.std"
       Theory.Program.cls "insn" domain
+      ~public:true
+      ~desc:"a decoded machine instruction"
 end
 
 type ('a,'k) insn = ('a,'k) Insn.t

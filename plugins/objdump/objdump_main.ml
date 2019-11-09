@@ -62,6 +62,8 @@ let with_objdump_output demangler ~file ~f =
 
 let agent =
   KB.Agent.register ~package:"bap.std" "objdump-symbolizer"
+    ~desc:"extracts symbols objdump"
+
 
 let provide_roots funcs =
   let promise_property slot =

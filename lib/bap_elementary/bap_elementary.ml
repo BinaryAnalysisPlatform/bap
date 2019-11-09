@@ -95,10 +95,9 @@ module Elementary (Core : Theory.Core) = struct
     type 'a t = 'a Theory.Value.sort -> int -> string
 
     let pow s = name "pow" s
-    let powr s = name "powr" s
     let compound  s = name "compound" s
     let rootn s = name "rootn" s
-    let pownn s = name "pownn" s
+    let pown s = name "pown" s
     let rsqrt s = name "rsqrt" s
     let hypot s = name "hypot" s
     let exp  s = name "exp" s

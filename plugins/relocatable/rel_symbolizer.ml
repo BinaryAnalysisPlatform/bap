@@ -32,7 +32,8 @@ module Rel = struct
 end
 
 let agent = Knowledge.Agent.register
-    ~package:"bap.std" "relocation-symbolizer"
+    ~package:"bap.std" "rel-symbolizer"
+    ~desc:"extracts symbols from external relocations"
 
 let init () =
   Stream.observe Project.Info.spec @@ fun spec ->

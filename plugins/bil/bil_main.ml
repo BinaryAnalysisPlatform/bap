@@ -102,23 +102,28 @@ let () =
       "Selects the list and the order of analyses to be applied during
        the lifing to BIL code." in
     Configuration.(parameter Type.(list pass) ~doc "passes") in
+  let enable_fp_emu = Configuration.flag "enable-fp-emulation"
+      ~doc:"Enable the floating point emulation mode.
+      When specified, enables reification of the floating point
+      operations into Bil expressions that denote those operations
+      in terms of bitvector arithmetic. This may lead to very large
+      denotations." in
+
   declare ~provides:["bil"; "core-theory"; "lifter"] @@ fun ctxt ->
   let open Syntax in
   if ctxt-->list_passes then print_passes ()
   else begin
     Bil.select_passes (ctxt-->norml @ ctxt-->optim @ ctxt-->passes);
-    Bil_lifter.init ();
+    Bil_lifter.init ~with_fp:(ctxt-->enable_fp_emu) ();
     Bil_ir.init();
     Theory.declare (module Bil_semantics.Core)
       ~package:"bap.std" ~name:"bil"
-      ~desc:"Denotes programs in terns of BIL expressions and statements."
+      ~desc:"semantics in BIL"
       ~provides:["bil"; "lifter"];
     Theory.declare (module Bil_semantics.Core_with_fp_emulation)
-      ~package:"bap.std" ~name:"bil-with-fp-emulation"
+      ~package:"bap.std" ~name:"bil-fp-emu"
       ~extends:["bap.std:bil"]
-      ~desc: "Denotes programs in terms of BIL expressions and statements.
-      Floating point operations are also expressed in terms of BIL
-      expressions."
+      ~desc: "semantics in BIL, including FP emulation"
       ~context:["floating-point"]
       ~provides:[
         "bil";
