@@ -8,8 +8,7 @@
 [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap)
 [![pip](https://img.shields.io/badge/pip-1.3.0-green.svg)](https://pypi.python.org/pypi/bap/)
 
-# BAP in 90 seconds
-
+# BAP in 90 seconds (without js)
 
 ![tutorial](./play.svg)
 
