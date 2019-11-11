@@ -21,8 +21,7 @@ Report bugs to
 
 # SEE ALSO
 
-$(b,bapbundle)(1), $(b,bapbuild)(1), $(b,bap)(3)"
-
+$(b,bapbundle)(1), $(b,bapbuild)(1), $(b,bap)(3)
 |}
 open Bap.Std
 open Core_kernel

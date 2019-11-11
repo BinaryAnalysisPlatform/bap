@@ -7,4 +7,4 @@ Executable "baptop"
   MainIs:         baptop.ml
   Build$:         flag(everything) || flag(toplevel)
   CompiledObject: byte
-  BuildDepends:   bap-main, bap, core_kernel, ppx_jane, utop, threads, findlib.dynload
+  BuildDepends:   utop, threads, findlib.dynload

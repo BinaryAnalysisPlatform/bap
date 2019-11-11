@@ -2,14 +2,10 @@ open Printf
 
 let (/) = Filename.concat
 
-(* TODO get it from bap_config *)
-let bindir = Bap_config.bindir
-let mandir = Bap_config.mandir
+let mandir = "$prefix" / "man" / "man1"
 
 let tools = [
-  "bap-mc";
   "bap";
-  "bap-byteweight";
 ]
 
 (** handwritten man pages *)
@@ -31,11 +27,8 @@ let create_man prog =
 
 
 let main () =
-  let utils = ["baptop"; "ppx-bap"] in
   let helps = List.map create_man tools |> List.concat in
   FileUtil.mkdir ~parent:true mandir;
-  FileUtil.cp (manpages @ helps) mandir;
-  FileUtil.cp (List.map (fun t -> "tools" / t) utils) bindir;
-  List.iter (fun name -> Unix.chmod (bindir / name) 0o770) utils
+  FileUtil.cp (manpages @ helps) mandir
 
 let () = main ()
