@@ -102,9 +102,12 @@ module Index = struct
       warning "unable to remove entry: %s" (Exn.to_string exn)
 
   let remove_files old_index new_index =
-    Map.iteri old_index.entries ~f:(fun ~key ~data:e ->
-        if not (Map.mem new_index.entries key)
-        then remove_entry e)
+    Map.symmetric_diff old_index.entries new_index.entries
+      ~data_equal:(fun e e' -> String.equal e.path e'.path) |>
+    Seq.iter ~f:(fun (_key,diff) ->
+        match diff with
+        | `Right _ -> ()
+        | `Left e | `Unequal (e,_) -> remove_entry e)
 
   module T = struct
     type t = index [@@deriving bin_io]
@@ -256,15 +259,12 @@ let create reader writer =
             "entry" ".cache" in
         Data.Write.to_channel writer ch proj;
         Out_channel.close ch;
-        let entry = {
-          size = size path; path; atime = ctime; ctime; hits = 1
-        } in
-        let entries = Map.update index.entries id ~f:(function
-            | None -> entry
-            | Some e ->
-              Index.remove_entry e;
-              entry) in
-        { index with entries }) in
+        {
+          index with
+          entries = Map.set index.entries ~key:id ~data:{
+              size = size path; path; atime = ctime; ctime; hits = 1
+            }
+        }) in
   let load src =
     Index.with_entry src ~f:(fun e ->
         try
