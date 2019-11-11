@@ -9,6 +9,6 @@ val addr_size : arch -> addr_size
 
 val endian : arch -> endian
 
-val slot : (Theory.program, arch option) KB.slot
+val slot : (Theory.program, arch) KB.slot
 
 include Regular.S with type t := arch

@@ -5,6 +5,7 @@ open Bap.Std
 open Bap_elf.Std
 open Bap_dwarf.Std
 open Backend
+[@@warning "-D"]
 
 open Elf
 
@@ -191,3 +192,4 @@ let () =
   | `Ok -> ()
   | `Duplicate ->
     eprintf "Elf_backend: name «%s» is already used\n" name
+[@@warning "-D"]

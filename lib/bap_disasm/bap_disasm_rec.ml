@@ -112,11 +112,11 @@ let provide_arch arch mem =
   let width = Size.in_bits (Arch.addr_size arch) in
   KB.promise Arch.slot @@ fun label ->
   KB.collect Theory.Label.addr label >>| function
-  | None -> None
+  | None -> `unknown
   | Some p ->
     let p = Word.create p width in
-    if Memory.contains mem p then Some arch
-    else None
+    if Memory.contains mem p then arch
+    else `unknown
 
 let scan arch mem state =
   provide_arch arch mem;

@@ -557,8 +557,8 @@ module ResultT = struct
   = struct
 
     include struct
-      let (>>=) m f = (M.bind [@inlined]) m f [@@inline]
-    let (>>|) m f = (M.map [@inlined]) m f [@@inline]
+      let (>>=) m f = M.bind m f [@@inline]
+      let (>>|) m f = M.map  m f [@@inline]
     end
 
     module Base = struct
@@ -997,8 +997,8 @@ module State = struct
      and type 'a env   := 'a Tp(T)(M).env
   = struct
     include struct
-      let (>>=) m f = (M.bind [@inlined]) m f [@@inline]
-    let (>>|) m f = (M.map [@inlined]) m f [@@inline]
+      let (>>=) m f = M.bind m f [@@inline]
+      let (>>|) m f = M.map  m f [@@inline]
     end
 
     let make run = State run [@@inline]
@@ -1006,7 +1006,7 @@ module State = struct
     type 'a result = 'a M.t
     module Basic = struct
       include Tp(T)(M)
-      let return x = (make [@inlined]) @@ fun s -> (M.return [@inlined]) {x;s} [@@inline]
+      let return x = (make [@inlined]) (fun s -> M.return {x;s}) [@@inline]
       let bind m f = make @@ fun s -> m=>s >>= fun {x;s} -> f x => s [@@inline]
       let map m ~f = make @@ fun s -> m=>s >>| fun {x;s} -> {x=f x;s} [@@inline]
       let map = `Custom map

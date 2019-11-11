@@ -151,6 +151,9 @@ module Arch = struct
   type xcore = [`xcore]
   [@@deriving bin_io, compare, enumerate, sexp]
 
+  type unknown = [`unknown]
+  [@@deriving bin_io, compare, enumerate, sexp]
+
   type t = [
     | aarch64
     | arm
@@ -166,6 +169,7 @@ module Arch = struct
     | systemz
     | x86
     | xcore
+    | unknown
   ] [@@deriving bin_io, compare, enumerate, sexp]
 end
 

@@ -93,7 +93,7 @@ let () =
   let provide_delay obj =
     let open KB.Syntax in
     KB.collect Arch.slot obj >>= function
-    | Some #Arch.mips ->
+    | #Arch.mips ->
       KB.collect Theory.Program.Semantics.slot obj >>| fun insn ->
       let name = KB.Value.get Insn.Slot.name insn in
       Hashtbl.find_and_call Std.delayed_opcodes name
