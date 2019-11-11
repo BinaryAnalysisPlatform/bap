@@ -25,6 +25,8 @@ let (/) = Filename.concat
 
 module Index = struct
   let index_version = 2
+  let supported_versions = [2;1]
+
   let index_file = sprintf "index.%d" index_version
 
   let is_index path =
@@ -100,9 +102,12 @@ module Index = struct
       warning "unable to remove entry: %s" (Exn.to_string exn)
 
   let remove_files old_index new_index =
-    Map.iteri old_index.entries ~f:(fun ~key ~data:e ->
-        if not (Map.mem new_index.entries key)
-        then remove_entry e)
+    Map.symmetric_diff old_index.entries new_index.entries
+      ~data_equal:(fun e e' -> String.equal e.path e'.path) |>
+    Seq.iter ~f:(fun (_key,diff) ->
+        match diff with
+        | `Right _ -> ()
+        | `Left e | `Unequal (e,_) -> remove_entry e)
 
   module T = struct
     type t = index [@@deriving bin_io]
@@ -183,7 +188,7 @@ module Index = struct
   }
 
   let with_entry src ~f =
-    with_index ~f:(fun dir idx ->
+    with_index ~f:(fun _dir idx ->
         match Map.find idx.entries src with
         | None -> idx,None
         | Some entry ->
@@ -204,9 +209,16 @@ module Index = struct
           "can't update index version from %d to %d" x index_version in
     Sys.remove file
 
+  let versions =
+    List.map supported_versions ~f:(sprintf "index.%d")
+
+  let find_index () =
+    let dir = cache_dir () in
+    let files = List.map versions ~f:(fun x -> dir / x) in
+    List.find files ~f:Sys.file_exists
+
   let upgrade () =
-    FileUtil.ls (cache_dir ()) |>
-    List.find ~f:is_index |> function
+    match find_index () with
     | None -> ()
     | Some file -> match get_version file with
       | Ok ver when Int.(ver = index_version) -> ()
@@ -263,7 +275,7 @@ let create reader writer =
           let hits = e.hits + 1 in
           report_progress ~note:"reindexing" ();
           Some {e with atime; hits}, Some proj
-        with exn -> None,None) in
+        with _exn -> None,None) in
   Data.Cache.create ~load ~save
 
 
