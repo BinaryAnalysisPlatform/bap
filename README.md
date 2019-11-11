@@ -8,6 +8,12 @@
 [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap)
 [![pip](https://img.shields.io/badge/pip-1.3.0-green.svg)](https://pypi.python.org/pypi/bap/)
 
+# BAP in 90 seconds
+
+
+![tutorial](./play.svg)
+
+
 The Carnegie Mellon University Binary Analysis Platform (CMU BAP) is a reverse engineering and program analysis platform
 that works with binary code and doesn't require the source code. BAP supports
 multiple architectures: ARM, x86, x86-64, PowerPC, and MIPS. BAP disassembles and lifts binary code into
