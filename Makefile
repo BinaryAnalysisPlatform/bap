@@ -18,6 +18,7 @@ all:
 install:
 	$(SETUP) -install $(BAPINSTALLFLAGS)
 	sh tools/build_plugins.sh
+	[ -f ./postinstall.native ] && ./postinstall.native
 
 uninstall:
 	$(SETUP) -uninstall $(BAPUNINSTALLFLAGS)

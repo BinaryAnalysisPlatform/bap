@@ -44,3 +44,4 @@ _oasis
 /lib/bap_bundle/bap_bundle_config.ml
 /lib/bap_plugins/bap_plugins_config.ml
 bap_main_config.ml
+tools/postinstall.ml
