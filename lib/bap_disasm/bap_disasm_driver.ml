@@ -253,7 +253,7 @@ end
 let new_insn arch mem insn =
   let addr = Addr.to_bitvec (Memory.min_addr mem) in
   Theory.Label.for_addr addr >>= fun code ->
-  KB.provide Arch.slot code (Some arch) >>= fun () ->
+  KB.provide Arch.slot code arch >>= fun () ->
   KB.provide Memory.slot code (Some mem) >>= fun () ->
   KB.provide Dis.Insn.slot code (Some insn) >>| fun () ->
   code
@@ -382,9 +382,9 @@ let scan mem s =
   let start = Memory.min_addr mem in
   if already_scanned start s
   then KB.return s
-  else query_arch (Word.to_bitvec start) >>= function
-    | None -> KB.return s
-    | Some arch -> match Dis.create (Arch.to_string arch) with
+  else
+    query_arch (Word.to_bitvec start) >>= fun arch ->
+    match Dis.create (Arch.to_string arch) with
       | Error _ -> KB.return s
       | Ok dis ->
         scan_mem arch dis mem >>| fun {Machine.begs; jmps; data} ->
@@ -425,12 +425,10 @@ let execution_order stack =
 let always _ = KB.return true
 
 let with_disasm beg cfg f =
-  query_arch (Word.to_bitvec beg) >>= function
-  | None -> KB.return (cfg,None)
-  | Some arch ->
-    match Dis.create (Arch.to_string arch) with
-    | Error _ -> KB.return (cfg,None)
-    | Ok dis -> f arch dis
+  query_arch (Word.to_bitvec beg) >>= fun arch ->
+  match Dis.create (Arch.to_string arch) with
+  | Error _ -> KB.return (cfg,None)
+  | Ok dis -> f arch dis
 
 let may_fall insn =
   KB.collect Theory.Program.Semantics.slot insn >>| fun insn ->

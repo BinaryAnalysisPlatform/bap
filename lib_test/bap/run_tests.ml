@@ -27,7 +27,7 @@ let load_plugins () =
                        Error.to_string_hum e))
 
 let run_unit_tests () =
-  match Bap_main.init () with
+  match Bap_main.init ~requires:["lifter"; "disassembler"; "semantics";] () with
   | Error err ->
     Format.eprintf "Failed to initialize BAP: %a@\n%!"
       Bap_main.Extension.Error.pp err;

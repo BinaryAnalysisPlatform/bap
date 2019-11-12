@@ -1955,8 +1955,17 @@ module Std : sig
     include Printable.S with type t := t
     include Data.S      with type t := t
 
+
+    (** Bil is an instance of Domain.
+
+        A flat domain with the empty Bil program being the empty element.
+     *)
     val domain : stmt list Knowledge.domain
+
+    (** Instance of the persistence class  *)
     val persistent : stmt list Knowledge.persistent
+
+    (** the BIL property  *)
     val slot : (Theory.Program.Semantics.cls, stmt list) Knowledge.slot
 
     (** [printf "%a" pp_binop op] prints a binary operation [op].  *)
@@ -2704,8 +2713,14 @@ module Std : sig
 
     type t = var
 
+
+    (** [reify v] reifies a core theory variable into the Bil variable. *)
     val reify : 'a Theory.var -> t
+
+    (** [ident v] is the identifier of the variable [v]  *)
     val ident : t -> Theory.Var.ident
+
+    (** [sort v] returns a core theory sort of the variable [v].  *)
     val sort  : t -> Theory.Value.Sort.Top.t
 
     (** [create ?register ?fresh name typ] creates a variable with
@@ -3312,6 +3327,10 @@ module Std : sig
   module Exp : sig
     type t = Bil.exp
 
+
+    (** the Exp.t property.
+
+        This property of a value denotes it in terms of Bil expressions.*)
     val slot : (Theory.Value.cls, exp) KB.slot
 
     (** All visitors provide some information about the current
@@ -3959,6 +3978,9 @@ module Std : sig
     type xcore = [`xcore]
     [@@deriving bin_io, compare, enumerate, sexp]
 
+    type unknown = [`unknown]
+    [@@deriving bin_io, compare, enumerate, sexp]
+
     type t = [
       | aarch64
       | arm
@@ -3974,6 +3996,7 @@ module Std : sig
       | systemz
       | x86
       | xcore
+      | unknown
     ] [@@deriving bin_io, compare, enumerate, sexp]
 
     (** [of_string s] will try to be clever and to capture all
@@ -3987,7 +4010,8 @@ module Std : sig
     (** [endian arch] returns a word endianness of the [arch]  *)
     val endian : t -> endian
 
-    val slot : (Theory.program, t option) Knowledge.slot
+    (** the architecture (ISA) of a program.  *)
+    val slot : (Theory.program, t) Knowledge.slot
 
     (** [arch] type implements [Regular]  interface  *)
     include Regular.S with type t := t
@@ -4203,10 +4227,11 @@ module Std : sig
       val register : name:string -> uuid:string ->
         (module S with type t = 'a) -> 'a tag
 
-
+      (** [register_slot slot (module T)] reflects Knowledge property into BAP value.  *)
       val register_slot : (Theory.program,'a option) KB.slot ->
         (module S with type t = 'a) -> 'a tag
 
+      (** [slot tag] returns a slot associated with the tag. *)
       val slot : 'a t -> (Theory.program, 'a option) KB.slot
 
       (** [name cons] returns a name of a constructor.  *)
@@ -4725,6 +4750,7 @@ module Std : sig
       addr ->
       Bigstring.t -> t Or_error.t
 
+    (** memory representation of a program  *)
     val slot : (Theory.program, mem option) Knowledge.slot
 
     (** [of_file endian start name] creates a memory region from file.
@@ -6032,6 +6058,7 @@ module Std : sig
 
         type ('a,'k) t = ('a,'k) insn
 
+        (** a decoded representa  *)
         val slot : (Theory.program, full_insn option) Knowledge.slot
 
         (** [sexp_of_t insn] returns a sexp representation of [insn]  *)
@@ -6168,12 +6195,27 @@ module Std : sig
 
     type t = Theory.Program.Semantics.t [@@deriving bin_io, compare, sexp]
 
+
+    (** Instruction properties.  *)
     module Slot : sig
       type 'a t = (Theory.Program.Semantics.cls, 'a) KB.slot
+
+      (** An opcode name,
+
+          Also accessible with [Insn.name].
+      *)
       val name : string t
+
+      (** An assembly representation.  *)
       val asm :  string t
+
+      (** a list of operands  *)
       val ops :  op array option t
+
+      (** the length of the delay slot. *)
       val delay : int option t
+
+      (** the set of destinations (not including the fall-through edge).  *)
       val dests : Set.M(Theory.Label).t option t
     end
 
@@ -7160,6 +7202,7 @@ module Std : sig
       ?jmp:(jmp term -> 'a) ->
       't term -> 'a
 
+    (** the graphical representation of the program  *)
     val slot : (Theory.Program.Semantics.cls, blk term list) Knowledge.slot
   end
 
@@ -7202,6 +7245,8 @@ module Std : sig
       (** fixes the result  *)
       val result : t -> program term
     end
+
+    (** [pp_slots names] prints slots that are in [names].  *)
     val pp_slots : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
@@ -7332,7 +7377,10 @@ module Std : sig
       (** returns current result  *)
       val result : t -> sub term
     end
+
+    (** [pp_slots names] prints slots that are in [names].  *)
     val pp_slots : string list -> Format.formatter -> t -> unit
+
     include Regular.S with type t := t
   end
 
@@ -7537,6 +7585,8 @@ module Std : sig
       (** returns current result  *)
       val result  : t -> blk term
     end
+
+    (** [pp_slots names] prints slots that are in [names].  *)
     val pp_slots : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
@@ -7552,12 +7602,14 @@ module Std : sig
 
     type t = def term
 
+    (** [reify v x] reifies Core Theory terms into the IR term.  *)
     val reify : ?tid:tid -> 'a Theory.var -> 'a Theory.value -> t
 
+    (** [var def] is the left-hand-side as a Core Theory variable.   *)
     val var : t -> unit Theory.var
 
+    (** [value def] is the right-hand-side as a Core Theory value.  *)
     val value : t -> unit Theory.value
-
 
     (** [create ?tid x exp] creates definition [x := exp]  *)
     val create : ?tid:tid -> var -> exp -> t
@@ -7587,6 +7639,7 @@ module Std : sig
         for more information.  *)
     val free_vars : t -> Var.Set.t
 
+    (** [pp_slots names] prints slots that are in [names].  *)
     val pp_slots : string list -> Format.formatter -> t -> unit
 
     include Regular.S with type t := t
@@ -7619,20 +7672,56 @@ module Std : sig
     type dst
 
 
+
+    (** [reify ()] reifies inputs into a jump term.
+
+       Calls and interrupt subroutines invocations are represented
+       with two edges: the normal edge (denoted [dst]) is the
+       intra-procedural edge which connects the callsite with the
+       fall-through destination (if such exists) and an alternative
+       destination (denoted with [alt]) which represents an
+       inter-procedural destination between the callsite and the
+       call destination.
+
+       @param cnd is a core theory term that denotes the
+       guard condition of a conditional jump.
+
+       @param alt is the alternative control flow destination.
+
+       @param dst is the direct control flow destination
+
+       @tid is the jump identifier, if not specified a fresh
+       new identifier is created.
+
+     *)
     val reify : ?tid:tid ->
       ?cnd:Theory.Bool.t Theory.value ->
       ?alt:dst -> ?dst:dst -> unit -> t
 
-
+    (** [guard jmp] if [jmp] is conditional, returns its condition.  *)
     val guard : t -> Theory.Bool.t Theory.value option
+
+    (** [with_guard jmp cnd] updates the jump condition of [jmp].  *)
     val with_guard : t -> Theory.Bool.t Theory.value option -> t
+
+    (** [dst jmp] returns the intra-procedural destination of [jmp].  *)
     val dst : t -> dst option
+
+    (** [alt jmp] returns the inter-procedural destination of [jmp].  *)
     val alt : t -> dst option
 
+    (** [resolved dst] creates a resolved destination.*)
     val resolved : tid -> dst
-    val indirect : 'a Theory.Bitv.t Theory.value -> dst
-    val resolve : dst -> (tid,'a Theory.Bitv.t Theory.value) Either.t
 
+
+    (** [indirect v] creates an indirect jump destination.
+
+        The destination (or a set of destinations) is encoded with
+        the Core Theory term [v]. *)
+    val indirect : 'a Theory.Bitv.t Theory.value -> dst
+
+    (** [resolve dst] resolves destination. *)
+    val resolve : dst -> (tid,'a Theory.Bitv.t Theory.value) Either.t
 
     (** [create ?cond kind] creates a jump of a given kind  *)
     val create : ?tid:tid -> ?cond:exp -> jmp_kind -> t
@@ -7679,6 +7768,7 @@ module Std : sig
     (** updated jump's kind  *)
     val with_kind : t -> jmp_kind -> t
 
+    (** [pp_slots names] prints slots that are in [names].  *)
     val pp_slots : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
@@ -7695,12 +7785,21 @@ module Std : sig
         incoming edge. *)
     type t = phi term
 
+
+    (** [reify v xs] reifies Core Theory terms into the phi term.   *)
     val reify : ?tid:tid ->
       'a Theory.var ->
       (tid * 'a Theory.value) list ->
       t
 
+    (** [var phi] is the left-hand-side of the [phi] term.  *)
     val var : t -> unit Theory.var
+
+    (** [options def] returns a list of possible values the term can take.
+
+        Values are predicated with the term identifiers of the paths (denoted
+        by the tid of the predecessor)
+    *)
     val options : t -> (tid * unit Theory.value) seq
 
 
@@ -7756,6 +7855,7 @@ module Std : sig
     (** [remove def id] removes definition with a given [id]  *)
     val remove : t -> tid -> t
 
+    (** [pp_slots names] prints slots that are in [names].  *)
     val pp_slots : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
@@ -7769,13 +7869,18 @@ module Std : sig
 
     type t = arg term
 
+
+    (** [reify v x] reifies Core Theory terms into an [arg] term.  *)
     val reify : ?tid:tid -> ?intent:intent ->
       'a Theory.var ->
       'a Theory.value -> t
 
-    val var : t -> unit Theory.var
-    val value : t -> unit Theory.value
 
+    (** [var arg] is the left-hand-side of the [arg] term.  *)
+    val var : t -> unit Theory.var
+
+    (** [value arg] is the right-hand-side of the [arg] term.  *)
+    val value : t -> unit Theory.value
 
     (** [create ?intent var exp] creates an argument. If intent is
         not specified it is left unknown.   *)

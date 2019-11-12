@@ -71,11 +71,11 @@ let provide agent (Symbolizer name) =
   KB.propose agent common_name @@ fun label ->
   KB.collect Arch.slot label >>= fun arch ->
   KB.collect Theory.Label.addr label >>| fun addr ->
-  match arch, addr with
-  | Some arch, Some addr ->
+  match addr with
+  | Some addr ->
     let width = Size.in_bits (Arch.addr_size arch) in
     name (Addr.create addr width)
-  | _ -> None
+  | None -> None
 
 
 let update_name_slot label name =

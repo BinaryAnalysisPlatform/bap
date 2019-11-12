@@ -473,14 +473,14 @@ module Basic : Theory.Basic = struct
 
   let arch lbl =
     KB.collect Arch.slot lbl >>= function
-    | Some _ as r -> !!r
-    | None -> context >>= KB.collect arch
+    | `unknown -> context >>= KB.collect arch
+    | r -> !!r
 
   let goto lbl =
     KB.collect Theory.Label.addr lbl >>= fun dst ->
     arch lbl >>= fun arch ->
-    match dst, arch with
-    | Some addr, Some arch ->
+    match dst with
+    | Some addr ->
       let size = Size.in_bits (Arch.addr_size arch) in
       let dst = Word.create addr size in
       ctrl Bil.[Jmp (Int dst)]

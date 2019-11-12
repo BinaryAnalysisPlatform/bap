@@ -169,6 +169,9 @@ module BilParser = struct
     let set v x =
       let n = Var.name v in
       match Var.typ v with
+      | Unk ->
+         error "can't reify the variable %s: unknown type" (Var.name v);
+         S.error
       | Imm 1 -> S.set_bit n x
       | Imm m -> S.set_reg n m x
       | Mem (ks,vs) ->
@@ -361,7 +364,7 @@ let provide_lifter ~with_fp () =
     | None -> KB.return unknown
     | Some x -> f x in
   let lifter obj =
-    Knowledge.collect Arch.slot obj >>? fun arch ->
+    Knowledge.collect Arch.slot obj >>= fun arch ->
     Theory.instance ~context:(context arch) () >>=
     Theory.require >>= fun (module Core) ->
     Knowledge.collect Memory.slot obj >>? fun mem ->
@@ -372,7 +375,7 @@ let provide_lifter ~with_fp () =
       Knowledge.return (Insn.of_basic insn)
     | Ok bil ->
       Bil_semantics.context >>= fun ctxt ->
-      Knowledge.provide Bil_semantics.arch ctxt (Some arch) >>= fun () ->
+      Knowledge.provide Bil_semantics.arch ctxt arch >>= fun () ->
       let module Lifter = Theory.Parser.Make(Core) in
       Optimizer.run BilParser.t bil >>= fun sema ->
       let bil = Insn.bil sema in

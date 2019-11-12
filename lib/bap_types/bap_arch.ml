@@ -51,6 +51,7 @@ module T = struct
     | #arm | #armeb | #thumb | #thumbeb
     | `x86 | `ppc | `mips | `mipsel | `sparc
     | `nvptx | `hexagon |  `r600 | `xcore  -> `r32
+    | `unknown -> `r32
 
     | #aarch64 | `mips64el |`sparcv9|`ppc64le|`x86_64
     | `ppc64|`nvptx64 | `systemz | `mips64 -> `r64
@@ -59,19 +60,19 @@ module T = struct
     | #armeb  | `aarch64_be | #thumbeb -> BigEndian
     | `mipsel | `mips64el | `ppc64le -> LittleEndian
     | #arm | #thumb | #x86 | #aarch64 | #r600
-    | #hexagon | #nvptx | #xcore -> LittleEndian
+    | #hexagon | #nvptx | #xcore | #unknown -> LittleEndian
     | #ppc | #mips | #sparc | #systemz   -> BigEndian
 
   let equal x y = compare_arch x y = 0
 
   let domain =
-    KB.Domain.optional ~equal ~inspect:sexp_of_t "arch"
+    KB.Domain.flat ~empty:`unknown ~equal ~inspect:sexp_of_t "arch"
 
 
   let slot = KB.Class.property ~package:"bap.std"
       Theory.Program.cls "arch" domain
       ~persistent:(KB.Persistent.of_binable (module struct
-                     type t = arch option [@@deriving bin_io]
+                     type t = arch [@@deriving bin_io]
                    end))
       ~public:true
       ~desc:"an ISA of the program"

@@ -69,7 +69,7 @@ module Component(Machine : Primus.Machine.S) = struct
 
   let correct_sp sp addend =
     match Var.typ sp with
-    | Mem _ -> Machine.return ()
+    | Unk | Mem _ -> Machine.return ()
     | Imm width ->
       Value.of_int ~width addend >>= fun addend ->
       Primus.Linker.Trace.lisp_call_return >>> correct_sp sp addend

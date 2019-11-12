@@ -113,7 +113,7 @@ let virtual_memory arch =
   let module Target = (val target_of_arch arch) in
   let mem = Target.CPU.mem in
   match Var.typ mem with
-  | Type.Imm _ as t ->
+  | Type.Imm _ | Type.Unk as t ->
     invalid_argf "The CPU.mem variable %a:%a is not a storage"
       Var.pps mem Type.pps t ()
   | Type.Mem (ks,vs) ->

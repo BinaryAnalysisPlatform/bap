@@ -154,7 +154,7 @@ let unimplemented a s  = disfailwith a ("disasm x86: unimplemented feature: "^s)
 (* eflags *)
 let df_to_offset mode e =
   match type_of_mode mode with
-  | Type.Mem _ -> failwith "type_of_mode shouldn't be returning this"
+  | Type.Mem _ | Type.Unk -> failwith "type_of_mode shouldn't be returning this"
   | Type.Imm t ->
     let open Exp in
     Bil.(ite (e = exp_false) (int_exp 1 t) (int_exp (-1) t))

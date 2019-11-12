@@ -26,6 +26,7 @@ module Var = struct
   let pp_ty ch = function
     | Type.Imm n -> pr ch "Imm(%d)" n
     | Type.Mem (n,m) -> pr ch "Mem(%a,%a)" pp_size n pp_size m
+    | Type.Unk -> pr ch "Unk"
 
   let pp_var ch v =
     pr ch "Var(\"%a\",%a)" Bap_var.pp v  pp_ty Bap_var.(typ v)
