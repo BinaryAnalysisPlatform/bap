@@ -1,5 +1,3 @@
-# Overview
-
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/BinaryAnalysisPlatform/bap/blob/master/LICENSE)
 [![Join the chat at https://gitter.im/BinaryAnalysisPlatform/bap](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/BinaryAnalysisPlatform/bap?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![docs](https://img.shields.io/badge/doc-1.6.0-green.svg)](http://binaryanalysisplatform.github.io/bap/api/v1.6.0/argot_index.html)
@@ -7,24 +5,8 @@
 [![docs](https://img.shields.io/badge/doc-2.0.0-green.svg)](http://binaryanalysisplatform.github.io/bap/api/odoc/index.html)
 [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap)
 
-The Carnegie Mellon University Binary Analysis Platform (CMU BAP) is a suite of utilities and libraries that enables analysis of programs in their machine representation. BAP includes an evergrowing set of ready to use [tools][1] and provides various facilities for building custom tools, starting from various analysis-specific domain languages, such as, Primus Lisp, BML, BARE, Recipes, etc which do not require sophisticated programming skills and ending with implementing custom plugins in OCaml or even in Rust or C, via provided bindings.  The following short [demonstration][2] of BAP capabilities is interactive, you can pause it at any moment and even copy the contents. 
-
-BAP is developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by grants from the United States Department of Defense, Siemens, Boening, ForallSecure, and the Korea government, see [sponsors](#Sponsors) for more information. BAP is used in various instutitions and forms and serves as a backbone for many interesting projects such as
-- [The CGC winner](cgc)[ForAllSecure Mayhem][3]
-- [Draper's Laboratory CBAT Tools][4]
-- [Fraunhofer FKIE CWE Checker][5]
-
-
-
-[1]: https://github.com/BinaryAnalysisPlatform/bap-toolkit
-[2]: http://binaryanalysisplatform.github.io/assets/playfull.svg
-[3]: https://forallsecure.com/solutions/devsecops/
-[4]: https://github.com/draperlaboratory/cbat_tools
-[5]: https://github.com/fkie-cad/cwe_checker
-[cgc]: https://www.darpa.mil/program/cyber-grand-challenge
-
-
 # Table of contents
+* [Overview](#overview)
 * [Installation](#installation)
   * [Binary](#binary)
   * [Sources](#from-sources)
@@ -36,6 +18,25 @@ BAP is developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by
   * [baptop](#baptop)
 * [Contributing](#contributing)
 * [Sponsors](#sponsors)
+
+# Overview
+
+The Carnegie Mellon University Binary Analysis Platform (CMU BAP) is a suite of utilities and libraries that enables analysis of programs in their machine representation. BAP includes an evergrowing set of ready to use [tools][toolkit] and provides various facilities for building custom tools, starting from various analysis-specific domain languages, such as, Primus Lisp, BML, BARE, Recipes, etc which do not require sophisticated programming skills and ending with implementing custom plugins in OCaml or even in Rust or C, via provided bindings.  The following short [demonstration][demo] of BAP capabilities is interactive, you can pause it at any moment and even copy the contents. 
+
+BAP is developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by grants from the United States Department of Defense, Siemens, Boening, ForallSecure, and the Korea government, see [sponsors](#Sponsors) for more information. BAP is used in various instutitions and forms and serves as a backbone for many interesting projects such as
+- [The CGC winner][cgc] [ForAllSecure Mayhem][mayhem]
+- [Draper's Laboratory CBAT Tools][cbat]
+- [Fraunhofer FKIE CWE Checker][cwe-checker]
+
+
+
+[tookit]: https://github.com/BinaryAnalysisPlatform/bap-toolkit
+[demo]: http://binaryanalysisplatform.github.io/assets/playfull.svg
+[mayhem]: https://forallsecure.com/solutions/devsecops/
+[cbat]: https://github.com/draperlaboratory/cbat_tools
+[cwe-checker]: https://github.com/fkie-cad/cwe_checker
+[cgc]: https://www.darpa.mil/program/cyber-grand-challenge
+
 
 # Installation
 
