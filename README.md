@@ -24,9 +24,6 @@ BAP is developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by
 
 
 
-
-
-
 # Installation
 
 ## Binary
@@ -56,7 +53,31 @@ or contact us directly via our Gitter [chat](https://gitter.im/BinaryAnalysisPla
 
 # Using
 
-## Shell
+## Basic interactions
+
+BAP, like docker or git, is driven by a single command line utility called `bap`. Just type `bap` in your shell and it will print a message which shows BAP capabilities. The `disassemble` command will take a binary program, disassemble it, lift it into the intermediate architecture agnostic representation, build a control flow graph, and finally apply staged user defined analysis in a form of disassembling passes. Finally, the `--dump` option will output the resulting program in the specified format. This is the default command, so you don't even need to specify it, e.g., the following will disassembled and dump the `/bin/echo` binary on your machine:
+```bash
+bap /bin/echo -d
+```
+
+Note, that unlike `objdump` this command will build the control flow graph of a program. If you just want to dump each instruction of a binary one after another (the so called linear sweep disassembler), then you can use the `objdump` command, e.g.,
+
+```bash
+bap objdump /bin/echo --show-{asm,bil}
+```
+
+If your input is a blob of machine code, not an executable, then you can use the `raw` loader, e.g.,
+```bash
+bap objdump /bin/echo --loader=raw --loader-base=0x400000 
+```
+
+The raw loader takes a few parameters, like offsets, lenghts, and base addresses, which makes it a swiss-knife that you can use as a can opener for formats that are not known to BAP. The raw loader works for all commands that open files, e.g., if the `raw` loader is used together with the `disassemble` command, BAP will still automatically identify function starts and build a suitable CFG without even knowing where the code is in the binary,
+```bash
+bap /bin/echo --loader=raw --loader-base=0x400000 
+```
+
+
+
 
 The BAP main frontend is a command line utility called `bap`. You can
 use it to explore the binary, run existing analysis, plugin your own
@@ -67,79 +88,9 @@ equivalent, `-d`), For example, let's run `bap` on the
 [x86_64-linux-gnu-echo](https://github.com/BinaryAnalysisPlatform/bap-testsuite/blob/master/bin/x86_64-linux-gnu-echo)
 file.
 
-```fortran
-$ bap testsuite/bin/x86_64-linux-gnu-echo -d | grep 'sub print_endline' -A44
-00000334: sub print_endline()
-00000301:
-00000302: v483 := RBP
-00000303: RSP := RSP - 8
-00000304: mem := mem with [RSP, el]:u64 <- v483
-00000305: RBP := RSP
-00000307: RSP := RSP - 0x20
-0000030e: mem := mem with [RBP + 0xFFFFFFFFFFFFFFE8, el]:u64 <- RDI
-0000030f: RAX := mem[RBP + 0xFFFFFFFFFFFFFFE8, el]:u64
-00000310: mem := mem with [RBP + 0xFFFFFFFFFFFFFFF8, el]:u64 <- RAX
-00000311: goto %00000312
-
-00000312:
-00000313: RAX := mem[RBP + 0xFFFFFFFFFFFFFFF8, el]:u64
-00000314: RAX := pad:64[pad:32[mem[RAX]]]
-00000315: v545 := low:8[low:32[RAX]]
-0000031b: ZF := 0 = v545
-0000031c: when ~ZF goto %0000032a
-0000031d: goto %0000031e
-
-0000031e:
-0000031f: RDI := pad:64[0xA]
-00000320: RSP := RSP - 8
-00000321: mem := mem with [RSP, el]:u64 <- 0x400731
-00000322: call @putchar with return %00000323
-
-00000323:
-00000324: RSP := RBP
-00000325: RBP := mem[RSP, el]:u64
-00000326: RSP := RSP + 8
-00000327: v693 := mem[RSP, el]:u64
-00000328: RSP := RSP + 8
-00000329: return v693
-
-0000032a:
-0000032b: RAX := mem[RBP + 0xFFFFFFFFFFFFFFF8, el]:u64
-0000032c: RDX := RAX + 1
-0000032d: mem := mem with [RBP + 0xFFFFFFFFFFFFFFF8, el]:u64 <- RDX
-0000032e: RAX := pad:64[pad:32[mem[RAX]]]
-0000032f: RAX := pad:64[extend:32[low:8[low:32[RAX]]]]
-00000330: RDI := pad:64[low:32[RAX]]
-00000331: RSP := RSP - 8
-00000332: mem := mem with [RSP, el]:u64 <- 0x40071C
-00000333: call @putchar with return %00000312
-```
-
-By default, the `--dump` options used the IR format, but you can
-choose from various other formats. Use the `--list-formats` option to
-get the list. However, formats are provided by plugins, so just
-because you don't see your preferred format listed doesn't mean you
-can't generate it. Check OPAM for plugins which may provide the format
-you want to read (the bap-piqi plugin provides protobuf, xml, and
-json, which cover many use cases).
-
-To discover what plugins are currently available, use the
-`--list-plugins` option. A short description will be printed for each
-plugin. The `--list-plugins` option also accepts a list of tags, that
-will limit the output to plugins that match with the selected tags. For
-the list of tags use the `--list-tags` option. You can also use
-the `opam search bap` command, to get the information about bap packages,
-available from OPAM.
-
-To get information about a specific plugin named `<PLUGIN>` use
-the `--<PLUGIN>-help` option, e.g., `bap --llvm-help`.
-
-The `bap` utility works with whole binaries; if you have just few
-bytes with which you would like to tackle, then `bap-mc` is what you
-are looking for.
 
 
-## OCaml
+## Writing a simple disassembling pass
 
 An idiomatic way of using BAP is to extend it with a plugin. Suppose,
 you want to write some analysis. For example, let's estimate the ratio
