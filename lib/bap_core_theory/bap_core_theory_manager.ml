@@ -21,7 +21,7 @@ type 'a theory = {
 }
 
 type core = (module Core)
-let known_theories : (Name.t, core theory) Hashtbl.t =
+let known_theories : (Name.t, core knowledge theory) Hashtbl.t =
   Hashtbl.create (module Name)
 
 let features = Set.of_list (module String)
@@ -312,7 +312,6 @@ let slot = Knowledge.Class.property theory "instance" domain
     ~desc:"The theory structure"
 
 
-
 let str_ctxt () ctxt =
   List.to_string (Set.to_list ctxt) ~f:ident
 
@@ -321,11 +320,10 @@ module Theory = (val Knowledge.Object.derive theory)
 let theories () =
   let init = Map.empty (module Theory) in
   Hashtbl.to_alist known_theories |>
-  Knowledge.List.fold ~init ~f:(fun theories (name,structure) ->
+  Knowledge.List.fold ~init ~f:(fun theories (name,def) ->
       Knowledge.Symbol.intern (Name.unqualified name) theory
         ~package:(Name.package name) >>| fun name ->
-      Map.add_exn theories name structure)
-
+      Map.add_exn theories name def)
 
 let is_applicable ~provided ~requires =
   Set.for_all requires ~f:(Set.mem provided)
@@ -350,44 +348,75 @@ let refine ?(context=[]) ?requires theories =
       is_applicable ~provided ~requires &&
       is_required ~required ~provides)
 
-let new_theory ?context ?requires () =
-  theories () >>| Map.data >>| refine ?context ?requires >>= function
-  | [] -> Knowledge.return Empty.theory
-  | [t] -> Knowledge.return t
-  | theories ->
-    Knowledge.return @@
-    (List.reduce_balanced_exn theories ~f:merge)
-
 let theory_for_id id =
   let sym = sprintf "'%s" @@
     List.to_string (Set.to_list id) ~f:Name.show in
   Knowledge.Symbol.intern sym theory
     ~package:"core-theory-internal"
 
+let is_instantiated id =
+  Knowledge.collect slot id >>| fun t ->
+  not t.is_empty
+
+
+(* On instantiation of recursive modules.
+
+   We employ the same techinique as OCaml does [1].
+   When a module is instantiated we create an instance
+   of this module with an empty structure, so that if
+   a module creates an instance of itself during instantiation,
+   it will not enter an infinite recursion but will get the
+   empty denotation. Our merge operator, which will be called,
+   by the provide operator after the final instance is created,
+   will notice that the initial structure is ordered strictly
+   before the new one (because we used the Empty.name for it),
+   thus it will drop it from the final structure.
+
+   [1]: Leroy, Xavier."A proposal for recursive modules in Objective
+   Caml." Available from the author’s website (2003).
+*)
+let instantiate t =
+  theory_for_id t.id >>= fun id ->
+  is_instantiated id >>= function
+  | true -> Knowledge.return id
+  | false ->
+    Knowledge.provide slot id {
+      Empty.theory with is_empty = false
+    } >>= fun () ->
+    t.structure >>= fun structure ->
+    Knowledge.provide slot id {t with structure} >>| fun () ->
+    id
+
 let instance ?context ?requires () =
   theories () >>| Map.data >>| refine ?context ?requires >>= function
   | [] -> theory_for_id Empty.theory.id
-  | [t] -> theory_for_id t.id
+  | [t] ->
+    instantiate t
   | theories ->
     List.fold theories ~init:(Set.empty (module Name)) ~f:(fun names t ->
         Set.union names t.id) |>
     theory_for_id >>= fun id ->
-    let theory = List.reduce_balanced_exn theories ~f:merge in
-    Knowledge.provide slot id theory >>| fun () ->
-    id
+    is_instantiated id >>= function
+    | true -> Knowledge.return id
+    | false ->
+      Knowledge.List.map theories
+        ~f:(instantiate >=> Knowledge.collect slot) >>|
+      List.reduce_balanced_exn ~f:merge >>=
+      Knowledge.provide slot id >>| fun () ->
+      id
 
 let require name =
   let open Knowledge.Syntax in
   theories () >>= fun theories ->
   match Map.find theories name with
-  | Some t -> Knowledge.return t.structure
+  | Some t -> t.structure
   | None -> Knowledge.collect slot name >>| fun t ->
     t.structure
 
 
 module Documentation = struct
   module Theory = struct
-    type t = Name.t * core theory
+    type t = Name.t * core knowledge theory
 
     let (-) xs name = Set.remove xs (Name.show name)
 

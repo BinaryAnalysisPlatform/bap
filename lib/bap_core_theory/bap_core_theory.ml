@@ -53,6 +53,7 @@ module Theory = struct
   module type Trans = Bap_core_theory_definition.Trans
   module type Core = Bap_core_theory_definition.Core
 
+  type core = (module Core)
   module Basic = struct
     module Empty : Basic = Bap_core_theory_empty.Core
     module Make = Bap_core_theory_basic.Make

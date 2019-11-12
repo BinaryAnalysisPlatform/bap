@@ -7,7 +7,9 @@ val declare :
   ?context:string list ->
   ?provides:string list ->
   ?package:string ->
-  name:string -> (module Core) -> unit
+  name:string ->
+  (module Core) knowledge ->
+  unit
 
 val instance :
   ?context:string list ->

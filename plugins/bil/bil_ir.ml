@@ -309,7 +309,7 @@ let reify = function
   | None -> []
   | Some g -> BIR.reify g
 
-let init () = Theory.declare (module IR)
+let init () = Theory.declare !!(module IR : Theory.Core)
     ~package:"bap.std" ~name:"bir"
     ~desc:"Builds the graphical representation of a program."
     ~provides:[

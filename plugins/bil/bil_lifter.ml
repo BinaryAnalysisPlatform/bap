@@ -390,7 +390,7 @@ let provide_lifter ~with_fp () =
 let init ~with_fp () =
   provide_lifter ~with_fp ();
   provide_bir ();
-  Theory.declare (module Brancher)
+  Theory.declare !!(module Brancher : Theory.Core)
     ~package:"bap.std" ~name:"jump-dests"
     ~desc:"an approximation of jump destinations"
     ~provides:[

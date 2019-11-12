@@ -116,11 +116,13 @@ let () =
     Bil.select_passes (ctxt-->norml @ ctxt-->optim @ ctxt-->passes);
     Bil_lifter.init ~with_fp:(ctxt-->enable_fp_emu) ();
     Bil_ir.init();
-    Theory.declare (module Bil_semantics.Core)
+    let open KB.Syntax in
+    Theory.declare !!(module Bil_semantics.Core : Theory.Core)
       ~package:"bap.std" ~name:"bil"
       ~desc:"semantics in BIL"
       ~provides:["bil"; "lifter"];
-    Theory.declare (module Bil_semantics.Core_with_fp_emulation)
+
+    Theory.declare !!(module Bil_semantics.Core_with_fp_emulation : Theory.Core)
       ~package:"bap.std" ~name:"bil-fp-emu"
       ~extends:["bap.std:bil"]
       ~desc: "semantics in BIL, including FP emulation"
