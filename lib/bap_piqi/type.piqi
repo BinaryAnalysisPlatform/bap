@@ -2,6 +2,7 @@
   .name typ
   .option [.type imm]
   .option [.type mem]
+  .option [.name unk]
 ]
 
 .variant [

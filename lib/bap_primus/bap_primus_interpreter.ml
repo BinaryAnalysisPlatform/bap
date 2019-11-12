@@ -269,9 +269,8 @@ module Make (Machine : Machine) = struct
   let value = Value.of_word
 
   let word_of_type = function
-    | Type.Mem _ -> Word.b0
     | Type.Imm t -> Word.zero t
-  [@@warning "-8"]
+    | Type.Mem _ | Type.Unk -> Word.b0
 
   let undefined t =
     value (word_of_type t) >>= fun r ->
@@ -376,12 +375,10 @@ module Make (Machine : Machine) = struct
     }
 
   let memory typ name = match typ with
-    | Type.Imm _ as t -> failwithf "type error - load from %s:%a"
-                           name Type.pps t ()
     | Type.Mem (ks,vs) ->
       let ks = Size.in_bits ks and vs = Size.in_bits vs in
       Primus.Memory.Descriptor.create ks vs name
-  [@@warning "-8"]
+    | _ as t  -> failwithf "type error - load from %s:%a"  name Type.pps t ()
 
   let rec memory_of_storage : exp -> _ = function
     | Var v -> memory (Var.typ v) (Var.name v)

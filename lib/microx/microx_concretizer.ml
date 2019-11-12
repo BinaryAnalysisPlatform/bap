@@ -55,7 +55,7 @@ class ['a] main
 
     method private emit policy = function
       | Type.Imm sz -> self#emit_const policy sz
-      | Type.Mem _  -> self#emit_empty
+      | Type.Mem _ | Type.Unk -> self#emit_empty
 
     method private emit_const policy sz =
       SM.get () >>= fun ctxt ->

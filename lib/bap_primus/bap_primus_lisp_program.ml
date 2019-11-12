@@ -762,7 +762,8 @@ module Typing = struct
         match Var.typ v with
         | Type.Imm x ->
           Map.set vars ~key:(Var.name v) ~data:x
-        | Type.Mem _ -> vars)
+        | Type.Mem _
+        | Type.Unk -> vars)
 
   let make_prims {codes} =
     List.fold codes ~init:String.Map.empty ~f:(fun ps p ->

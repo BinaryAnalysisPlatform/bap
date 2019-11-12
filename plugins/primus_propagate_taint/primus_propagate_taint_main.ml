@@ -31,8 +31,8 @@ let mapper = Primus.Machine.State.declare
        })
 
 let is_mem v = match Var.typ v with
-  | Type.Imm _ -> false
   | Type.Mem _ -> true
+  | _ -> false
 
 
 module Intro(Machine : Primus.Machine.S) = struct
