@@ -8,16 +8,14 @@
 [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap)
 [![pip](https://img.shields.io/badge/pip-1.3.0-green.svg)](https://pypi.python.org/pypi/bap/)
 
-The Carnegie Mellon University Binary Analysis Platform (CMU BAP) is a suite of utilities and libraries that enables analysis of programs in their machine representation. BAP includes an evergrowing set of ready to use [tools][1] and provides various facilities for building custom tools, starting from various analysis-specific domain languages, such as, Primus Lisp, BML, BARE, Recipes, etc which do not require sophisticated programming skills and ending with implementing custom plugins in OCaml or even in Rust or C, via provided bindings. Click on the image below for a quick demonstration of BAP capabilities. 
-![tutorial](http://binaryanalysisplatform.github.io/assets/playfull.svg)
+The Carnegie Mellon University Binary Analysis Platform (CMU BAP) is a suite of utilities and libraries that enables analysis of programs in their machine representation. BAP includes an evergrowing set of ready to use [tools][1] and provides various facilities for building custom tools, starting from various analysis-specific domain languages, such as, Primus Lisp, BML, BARE, Recipes, etc which do not require sophisticated programming skills and ending with implementing custom plugins in OCaml or even in Rust or C, via provided bindings.  The following short [demonstration][2] of BAP capabilities is interactive, you can pause it at any moment and even copy the contents. 
+
 
 [1]: https://github.com/BinaryAnalysisPlatform/bap-toolkit
+[2]: http://binaryanalysisplatform.github.io/assets/playfull.svg
 
 BAP supports most of the common hardware architectures, like ARM, x86, x86-64, PowerPC, and MIPS. More architectures could be easily added using a 
 
-# BAP in 90 seconds (without js)
-
-![tutorial](http://binaryanalysisplatform.github.io/assets/playfull.svg)
 
 
 The Carnegie Mellon University Binary Analysis Platform (CMU BAP) is a reverse engineering and program analysis platform
