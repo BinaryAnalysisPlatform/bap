@@ -8,14 +8,7 @@
 # Table of contents
 * [Overview](#overview)
 * [Installation](#installation)
-  * [Binary](#binary)
-  * [Sources](#from-sources)
-* [Usage](#usage)
-  * [Shell](#shell)
-  * [OCaml](#ocaml)
-  * [Python](#python)
-  * [C](#c)
-  * [baptop](#baptop)
+* [Usage and Learning](#usage)
 * [Contributing](#contributing)
 * [Sponsors](#sponsors)
 
