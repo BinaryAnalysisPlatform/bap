@@ -3,14 +3,21 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/BinaryAnalysisPlatform/bap/blob/master/LICENSE)
 [![Join the chat at https://gitter.im/BinaryAnalysisPlatform/bap](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/BinaryAnalysisPlatform/bap?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![docs](https://img.shields.io/badge/doc-1.6.0-green.svg)](http://binaryanalysisplatform.github.io/bap/api/v1.6.0/argot_index.html)
-[![docs](https://img.shields.io/badge/doc-master-green.svg)](http://binaryanalysisplatform.github.io/bap/api/master/argot_index.html)
+[![docs](https://img.shields.io/badge/doc-master-green.svg)](http://binaryanalysisplatform.github.io/bap/api/master/index.html)
 [![docs](https://img.shields.io/badge/odoc-master-green.svg)](http://binaryanalysisplatform.github.io/bap/api/odoc/index.html)
 [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap)
 [![pip](https://img.shields.io/badge/pip-1.3.0-green.svg)](https://pypi.python.org/pypi/bap/)
 
+The Carnegie Mellon University Binary Analysis Platform (CMU BAP) is a suite of utilities and libraries that enables analysis of programs in their machine representation. BAP includes an evergrowing set of ready to use [tools][1] and provides various facilities for building custom tools, starting from various analysis-specific domain languages, such as, Primus Lisp, BML, BARE, Recipes, etc which do not require sophisticated programming skills and ending with implementing custom plugins in OCaml or even in Rust or C, via provided bindings. Click on the image below for a quick demonstration of BAP capabilities. 
+![tutorial](http://binaryanalysisplatform.github.io/assets/playfull.svg)
+
+[1]: https://github.com/BinaryAnalysisPlatform/bap-toolkit
+
+BAP supports most of the common hardware architectures, like ARM, x86, x86-64, PowerPC, and MIPS. More architectures could be easily added using a 
+
 # BAP in 90 seconds (without js)
 
-![tutorial](http://binaryanalysisplatform.github.io/assets/playwindow.svg)
+![tutorial](http://binaryanalysisplatform.github.io/assets/playfull.svg)
 
 
 The Carnegie Mellon University Binary Analysis Platform (CMU BAP) is a reverse engineering and program analysis platform
