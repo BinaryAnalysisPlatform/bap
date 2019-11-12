@@ -264,20 +264,20 @@
     ["constant-tracker"] analysis:
 
     {[
-      let () = Theory.declare "my-constant-tracker" (module struct
-          include (val Theory.require "constant-tracker")
-
-          (* probably a bad example, but we all do this :) *)
-          let add x y =
-            printf "add is called!\n%!";
-            add x y
+      let () =
+          Theory.declare "my-constant-tracker"
+          Theory.instance ~require:["bap.std:constant-tracker"] >>=
+          Theory.require >>|
+          fun (module Base) : Theory.core -> (module struct
+            include Base
+            let add x y =
+              printf "add is called!\n%!";
+              add x y
         end
     ]}
 
-
     The real analysis should store it results either in the knowledge
     base or directly in denotations of the terms (or in both places).
-
 
     {2 Instantiating a theory}
 
@@ -310,15 +310,18 @@
     specified context. For example,
 
     {[
-      module Theory = (val Theory.instance ()
-                          ~context:["arm"; "arm-gnueabi"]
-                          ~requires:[
-                            "variable-recovery";
-                            "stack-frame-analysis";
-                            "structural-analysis";
-                            "floating-point";
-                            "bap.std:bil-semantics";
-                          ])
+
+      Theory.instance ()
+        ~context:["arm"; "arm-gnueabi"]
+        ~requires:[
+          "variable-recovery";
+          "stack-frame-analysis";
+          "structural-analysis";
+          "floating-point";
+          "bap.std:bil-semantics"
+      ] >>=
+      Theory.require >>= fun (module Theory) ->
+
     ]}
 
     In the example above, theories that are specific to ARM
@@ -329,9 +332,11 @@
     explicitly, the [bap.std:bil-semantics], to ensure that each term
     has a BIL denotation.
 
-    [1]: http://okmij.org/ftp/tagless-final/JFP.pdf
-    [2]: http://www.cs.utexas.edu/~wcook/Drafts/2012/ecoop2012.pdf
-    [3]: http://okmij.org/ftp/tagless-final/course/optimizations.html
+    References:
+
+    - [1]: http://okmij.org/ftp/tagless-final/JFP.pdf
+    - [2]: http://www.cs.utexas.edu/~wcook/Drafts/2012/ecoop2012.pdf
+    - [3]: http://okmij.org/ftp/tagless-final/course/optimizations.html
 
 
     {2 Parsing binary code}
@@ -1997,6 +2002,10 @@ module Theory : sig
   end
 
 
+  (** a type abbreviation for the core theory module type.  *)
+  type core = (module Core)
+
+
   (** The Basic Theory.
 
       Implements the empty basic theory and provides a module for
@@ -2049,7 +2058,9 @@ module Theory : sig
     ?context:string list ->
     ?provides:string list ->
     ?package:string ->
-    name:string -> (module Core) -> unit
+    name:string ->
+    (module Core) knowledge ->
+    unit
 
   (** [instance ()] creates an instance of the Core Theory.
 

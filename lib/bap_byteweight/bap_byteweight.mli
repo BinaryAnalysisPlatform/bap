@@ -1,6 +1,6 @@
 (** Byteweight library.
 
-    Byteweight is a function start identification mechanism [[1]]. This
+    Byteweight is a function start identification algorithm [[1]]. This
     library provides a functorized implementation.
 
     An auxiliary {!Bap_byteweight_signatures} library provides an
@@ -13,7 +13,6 @@
          23rd USENIX Security Symposium (USENIX Security 14). 2014.
     v}
 *)
-
 open Bap.Std
 
 

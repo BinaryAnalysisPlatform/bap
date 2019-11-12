@@ -2,66 +2,64 @@ open Core_kernel
 open Regular.Std
 
 (**
-      {3 Graph library}
+   {3 Graph library}
 
-      {!Graphlib} is a generic library that extends a well known
-      OCamlGraph library. {!Graphlib} uses its own, more reach,
-      {!Graph} interface that is isomorphic to OCamlGraph's [Sigs.P]
-      signature for persistent graphs. Two functors witness the
-      isomorphism of the interfaces:
-      {!Graphlib.To_ocamlgraph} and {!Graphlib.Of_ocamlgraph}. Thanks
-      to these functors, any algorithm written for OCamlGraph can be
-      used on [Graphlibs] graph and vice verse.
+   {!Graphlib} is a generic library that extends a well known
+   OCamlGraph library. {!Graphlib} uses its own and richer
+   {!Graph} interface that is isomorphic to OCamlGraph's [Sigs.P]
+   signature for persistent graphs. Two functors witnesses
+   isomorphism of the interfaces:
+   {!Graphlib.To_ocamlgraph} and {!Graphlib.Of_ocamlgraph}. Thanks
+   to these functors, any algorithm written for OCamlGraph can be
+   used on [Graphlibs] graph and vice verse.
 
-      The {!Graph} interface provides a richer interface in a Core
-      style. Nodes and Edges implements {!Opaque} data structure,
-      i.e., they come with Maps, Sets, Hashtbls, etc, preloaded (e.g.,
-      [G.Node.Set] is a set of node for graph implementation, provided
-      by a module named [G]). Graphs also implement {!Printable}
-      interface, that makes them much easier to debug.
+   The {!Graph} interface provides a richer interface in a Core
+   style. Nodes and Edges implements the {!Opaque} interface,
+   i.e., they come with Maps, Sets, Hashtbls, etc, (e.g.,
+   [G.Node.Set] is a set of node for graph implementation, provided
+   by a module named [G]). Graphs also implement {!Printable}
+   interface, that makes them much easier to debug.
 
-      Along with graphs, auxiliary data structures are provided, like
-      {{!Path}path} to represent paths in graph, {{!Tree}tree} for
-      representing different graph spannings, {{!Partition}partition}
-      for graph partitioning, and more.
+   Along with graphs, auxiliary data structures are provided, like
+   {{!Path}path} to represent paths in graph, {{!Tree}tree} for
+   representing different graph spannings, {{!Partition}partition}
+   for graph partitioning, and more.
 
-      {!Graphlib} is a library that provides a set of generic
-      algorithms, as well as implementations of a {!Graph} interface,
-      and a suite of preinstantiated graphs.
+   The {!Graphlib} module provides a set of generic graph
+   algorithms. Contrary to OCamlGraph, each {!Graphlib} interface
+   is provided using functions rather than functors. Which makes
+   the interface easier to use, at least in simple cases. Also,
+   {!Graphlib} heavily uses optional and keyword parameters. For
+   die-hards, many algorithms still have a functor interface.
 
-      Contrary to OCamlGraph, each {!Graphlib} interface is provided
-      as a function, not a functor. Thus making there use syntactically
-      easier. Also, {!Graphlib} heavily uses optional and keyword
-      parameters. For die-hards, many algorithms still have functor
-      a interface.
+   All {!Graphlib} algorithms accept a first-class module with
+   graph implementation as a first argument. You can think of this
+   parameter as an explicit type class.
 
-      All {!Graphlib} algorithms accept a first-class module with
-      graph implementation as a first argument. You can think of this
-      parameter as an explicit type class. Later, when modular
-      implicits will be accepted in OCaml, this parameter can be
-      omitted. But for now, we need to pass them.
 
-      A recommended way to work with {!Graphlib} is to bind the
-      chosen implementation with some short name, usually [G] would be
-      a good choice:
+   A recommended way to work with {!Graphlib} is to bind the
+   chosen implementation to some short name, usually [G] would be
+   a good choice:
 
    {[module G = Graphlib.Make(String)(Bool)]}
 
-      This will bind name [G] with a graph implementation that has
-      [string] nodes, with edges labeled by values of type [bool].
+   This will bind [G] to a graph implementation that has
+   [string] nodes with edges labeled by values of type [bool].
 
-      To create a graph of type [G.t] one can use a generic
-      {!Graphlib.create} function:
+   Graphs of type [G.t] could be created using the generic
+   {!Graphlib.create} function:
 
-   {[let g = Graphlib.create (module G) ~edges:[
-       "entry", "loop", true;
-       "loop", "exit", true;
-       "loop", "loop", false;
-     ] ()]}
+   {[
+     let g = Graphlib.create (module G) ~edges:[
+         "entry", "loop", true;
+         "loop", "exit", true;
+         "loop", "loop", false;
+       ] ()
+   ]}
 
-      This will create an instance of type [G.t]. Of course, it is
-      still possible to use non-generic [G.empty], [G.Node.insert],
-      [G.Edge.insert].
+   This will create an instance of type [G.t]. Of course, it is
+   still possible to use non-generic [G.empty], [G.Node.insert],
+   [G.Edge.insert].
 *)
 module Std : sig
   (** {!Graph} nodes.  *)
@@ -981,23 +979,6 @@ module Std : sig
         unique.
 
 
-        {b Lemma}: Everything dominates unreachable block.
-
-        {b Proof}: (by contradiction) suppose there exists a node [u] that
-        doesn't dominate unreachable block [v]. That means, that there
-        exists a path from [entry] to [v] that doesn't contain
-        [u]. But that means, at least, that [v] is reachable. This  is
-        a contradiction with the original statement that [v] is
-        unreachable. {b Qed.}
-
-        If some nodes of graph [g] are unreachable from the provided
-        [entry] node, then they are dominated by all other nodes of a
-        graph. It means that the provided system is under constrained
-        and has more then one solution (i.e., there exists more than
-        one tree, that satisfies properties (1) - (5). In a current
-        implementation each unreachable node is immediately dominated
-        by the [entry], if the [entry] is in graph.
-
         To get a post-dominator tree, reverse the graph by passing
         [true] to [rev] and pass exit node as a starting node.
 
@@ -1005,7 +986,11 @@ module Std : sig
         good idea to have an entry node, that doesn't have any
         predecessors. Usually, this is what is silently assumed in
         many program analysis textbooks, but is not true in general
-        for control-flow graphs that are reconstructed from binaries *)
+        for control-flow graphs that are reconstructed from binaries.
+
+        Note: all nodes that are not reachable from the specified
+        [entry] node are parented by the [entry] node.
+    *)
     val dominators :
       (module Graph with type t = 'c
                      and type node = 'n
@@ -1169,22 +1154,21 @@ module Std : sig
         approximation [init] (obtained either with [Solution.create] or
         from the previous calls to [fixpoint]).
 
-        The general representation of the fixpoint equations is
+        The general representation of the fixpoint equation is
 
         {v
-          x(i) = f(i) (a(i,1) x(1) %  ... % a(i,j) x(j)),
+          x(i) = f(i) (a(1,i) x(1) %  ... % a(n,i) x(n)),
         v}
 
         where
         - [x(i)] is the value of the [i]'th variable (node);
-        - [a(i,j)] is [1] if there is an edge from the node
-          [i] to the node [j] and [0] otherwise;
+        - [a(s,d)] is [1] if there is an edge from the node
+          [s] to the node [d] and [0] otherwise;
         - [%] the merge operator;
-        - [f(i)] is the transfer function for the node [i];
-        - [=] is the equivalence operation.
+        - [f(i)] is the transfer function for the node [i].
 
         A solution is obtained through a series of iterations until
-        the fixpoint is reached, i.e., until the system
+        the fixed point is reached, i.e., until the system
         stabilizes. The total number of iterations could be bound by
         an arbitrary number. If the maximum number of iterations is
         reached before the system stabilizes then the solution is not
@@ -1229,37 +1213,24 @@ module Std : sig
         {4 Introduction}
 
         The data domain is a set of values equipped with a partial
-        ordering operation [(L,<=)], also know as a lattice or a
-        poset. We assume, that the lattice is complete, i.e., there
-        are two special elements of a set that are called [top] and
+        ordering operation [(L,<=)], also know as a poset. We assume,
+        that the poset is bounded complete, i.e., there
+        are two special elements of the set that are called [top] and
         [bot] (the bottom value). The top element is the greatest
-        element of the set L, i.e., for all [x] in [L], [x <=
-        top]. Correspondingly, the bottom element is the least element
+        element of the set L, i.e., for all [x] in [L], [x <= top].
+        Correspondingly, the bottom element is the least element
         of the set [L], i.e., for all [x] in [L], [bot <= x]. It is not
-        required by the framework that the lattice has both or any of
-        them, however their presence makes the explanation easier, and
-        since any lattice could be artificially extended with these
+        required by the framework that the poset has both or any of
+        the bounds, however their presence makes the explanation easier, and
+        since any poset could be artificially extended with these
         two elements, their introduction will not introduce a loss of
-        generality. Since values of the lattice [L] represent
+        generality. Since values of the set [L] represent
         information, the partial ordering between two pieces of
         information [a] and [b], e.g., [a <= b], tells us that [a]
         contains no more information than [b]. Therefore the [top]
         value contains all the information, representable in the
-        lattice, correspondingly the [bot] value represents an absence
-        of information. Thus, we will consider the bottom value as an
-        over approximation (or a lower approximation in terms of the
-        lattice ordering relation), as an absence of information
-        cannot contain false statements (vacuous truth). Assuming,
-        that there is some value [t], [bot <= t <= top] that represents
-        a ground truth (that is usually unobtainable), we say that all
-        values that are less than or equal [t] are over-approximations
-        of the truth, and the rest of the values, are
-        under-approximations. Under-approximations under estimate a
-        behavior of a system, and usually represent information about
-        a system that is not true, hence an under approximate solution,
-        is usually unsafe to use. In general, our task is to find an
-        over approximation that is as close as possible to the ground
-        truth [t].
+        set, correspondingly the [bot] value represents an absence
+        of information.
 
         A solution to a fixed point equation (i.e., an equation of the
         form [x = f(x)]) could be obtainted by starting from some
@@ -1268,7 +1239,7 @@ module Std : sig
         In general, a function may have multiple (or no at all) fixed
         points. If a function has several fixed points, then we can
         distinguish two extremums - the least fixed point [lfp] and
-        the greatest fixed point [gfp] w.r.t the ordering of lattice
+        the greatest fixed point [gfp] w.r.t the ordering of the poset
         [L]. Assuming that function [f] is positive monotonic function
         (i.e., [x <= y] implies that [f(x) <= f(y)]), thechoice of the
         initial value [x0] denotes which of the two fixed points is
@@ -1284,20 +1255,20 @@ module Std : sig
         ground truth (i.e., we are monotonically aggregating facts).
 
         In general, a function may not have a solution at all, or the
-        solution may not be computable in practice, i.e., when the chain
-        of function applications [x = f(... f(x0) ...)] is either
-        infinite or effectively infinite (e.g., 2^64 applications). The
-        Tarksi theorem states that if [L] is complete and [f] is
-        monotone, then it has a fixed point. If a lattice has a
-        limited height (maximum length of chain of elements, such that
-        x0 < x1 < .. < xM) then we will obtain a solution in no more
-        than [M] steps. However, if [M] is very big, or infinite, then
-        the solution won't be find in general, and the computation may
-        not terminate.
+        solution may not be computable in practice, i.e., when the
+        chain of function applications [x = f(... f(x0) ...)] is
+        either infinite or effectively infinite (e.g., 2^64
+        applications). The Tarksi theorem states that if [L] is
+        complete and [f] is monotone, then it has a fixed point. If a
+        poset has a limited height (maximum length of an ascending
+        chain of elements, such that x0 < x1 < .. < xM) then we will
+        obtain a solution in no more than [M] steps. However, if [M]
+        is very big, or infinite, then the solution won't be find in
+        general, and the computation may not terminate.
 
         This brings us to the main distinction between Abstract
         Interpretation and Data Flow Analysis. The latter usually
-        deals with lattice that have finite heights, while the former
+        deals with lattices that have finite heights, while the former
         deals with very big and infinite lattices. To accelerate the
         convergence of a chain of approximations, a special technique
         called [widening] is used. Widening can be seen as an
