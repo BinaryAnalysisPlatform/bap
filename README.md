@@ -8,7 +8,8 @@
 # Table of contents
 * [Overview](#overview)
 * [Installation](#installation)
-* [Usage and Learning](#usage)
+* [Using](#usage)
+* [Learning](#learning)
 * [Contributing](#contributing)
 * [Sponsors](#sponsors)
 
@@ -23,12 +24,7 @@ BAP is developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by
 
 
 
-[tookit]: https://github.com/BinaryAnalysisPlatform/bap-toolkit
-[demo]: http://binaryanalysisplatform.github.io/assets/playfull.svg
-[mayhem]: https://forallsecure.com/solutions/devsecops/
-[cbat]: https://github.com/draperlaboratory/cbat_tools
-[cwe-checker]: https://github.com/fkie-cad/cwe_checker
-[cgc]: https://www.darpa.mil/program/cyber-grand-challenge
+
 
 
 # Installation
@@ -40,17 +36,13 @@ derivatives. For other distributions we provide tgz archives. To
 install bap on a Debian derivative:
 
 ```bash
-wget https://github.com/BinaryAnalysisPlatform/bap/releases/download/v1.6.0/{bap,libbap,libbap-dev}_1.6.0.deb
-sudo dpkg -i {bap,libbap,libbap-dev}_1.6.0.deb
+wget https://github.com/BinaryAnalysisPlatform/bap/releases/download/v2.0.0/{bap,libbap,libbap-dev}_2.0.0.deb
+sudo dpkg -i {bap,libbap,libbap-dev}_2.0.0.deb
 ```
 
 ## From sources
 
-The binary release doesn't contain OCaml runtime, and is suitable only
-if you are not going to extend BAP using OCaml programming language.
-If you want to write your own analysis in OCaml, we recommend to use the OPAM package manager to
-install BAP and the development environment.  After you've successfully
-[installed](https://opam.ocaml.org/doc/Install.html) OPAM, run the
+The binary release doesn't contain OCaml development environment, and is suitable only if you are not going to extend BAP using OCaml programming language. If you want to write your own analysis in OCaml, we recommend to use the OPAM package manager to install BAP and the development environment.  After you've successfully [installed](https://opam.ocaml.org/doc/Install.html) OPAM, run the
 following commands:
 
 ```bash
@@ -59,10 +51,10 @@ eval `opam config env`               # activate opam environment
 opam depext --install bap            # install bap
 ```
 
-Got any problems? Then visit our [troubleshooting page](https://github.com/BinaryAnalysisPlatform/bap/wiki/Troubleshooting-installation)
+Got any problems? Then visit our [troubleshooting page](troubleshoot)
 or contact us directly via our Gitter [chat](https://gitter.im/BinaryAnalysisPlatform/bap).
 
-# Usage
+# Using
 
 ## Shell
 
@@ -352,5 +344,14 @@ the benefit of the community.
 * [Siemens AG](https://www.siemens.com/us/en/home.html)
 * Institute for Information & communications Technology Promotion(IITP) grant funded by the Korea government(MSIT)
   (No.2015-0-00565,Development of Vulnerability Discovery Technologies for IoT Software Security)
+  
+  
+[tookit]: https://github.com/BinaryAnalysisPlatform/bap-toolkit
+[demo]: http://binaryanalysisplatform.github.io/assets/playfull.svg
+[mayhem]: https://forallsecure.com/solutions/devsecops/
+[cbat]: https://github.com/draperlaboratory/cbat_tools
+[cwe-checker]: https://github.com/fkie-cad/cwe_checker
+[cgc]: https://www.darpa.mil/program/cyber-grand-challenge
+[troubleshoot]: https://github.com/BinaryAnalysisPlatform/bap/wiki/Troubleshooting-installation
 
 Please, [contact us](https://www.cylab.cmu.edu/partners/index.html) if you would like to become a sponsor.
