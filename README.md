@@ -10,7 +10,7 @@
 
 # BAP in 90 seconds (without js)
 
-![tutorial](./play.svg)
+![tutorial](http://binaryanalysisplatform.github.io/assets/playwindow.svg)
 
 
 The Carnegie Mellon University Binary Analysis Platform (CMU BAP) is a reverse engineering and program analysis platform
