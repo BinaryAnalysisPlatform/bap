@@ -7,22 +7,21 @@
 [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)][travis]
 
 ## Table of contents
-*  [Overview](#overview)
-*  [Installation](#installation)
-*  [Using](#using)
-*  [Learning](#learning)
-*  [Contributing](#contributing)
-*  [Sponsors](#sponsors)
+*   [Overview](#overview)
+*   [Installation](#installation)
+*   [Using](#using)
+*   [Learning](#learning)
+*   [Contributing](#contributing)
+*   [Sponsors](#sponsors)
 
 ## Overview
 
 The Carnegie Mellon University Binary Analysis Platform (CMU BAP) is a suite of utilities and libraries that enables analysis of programs in their machine representation. BAP includes an evergrowing set of ready to use [tools][toolkit] and provides various facilities for building custom tools, starting from various analysis-specific domain languages, such as, Primus Lisp, BML, BARE, Recipes, etc, which do not require sophisticated programming skills, and ending with implementing custom plugins in OCaml or even in Rust or C, via provided bindings.  The following short [demonstration][demo] of BAP capabilities is interactive, you can pause it at any moment and even copy the contents. 
 
 BAP is developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by grants from the United States Department of Defense, Siemens, Boening, ForallSecure, and the Korea government, see [sponsors](#Sponsors) for more information. BAP is used in various institutions and serves as a backbone for many interesting projects, some are highlighted below:
-  * [The CGC winner][cgc] [ForAllSecure Mayhem][mayhem]
-  * [Draper's Laboratory CBAT Tools][cbat]
-  * [Fraunhofer FKIE CWE Checker][cwe-checker]
-
+*   [The CGC winner][cgc] [ForAllSecure Mayhem][mayhem]
+*   [Draper's Laboratory CBAT Tools][cbat]
+*   [Fraunhofer FKIE CWE Checker][cwe-checker]
 
 ## Installation
 
@@ -120,7 +119,6 @@ bap /bin/echo --pass=jmp
 
 Let's briefly go through the code. The `counter` object is a visitor that has the state consisting of a pair of counters. The first counter keeps track of the number of jmp terms, and the second counter is incremented every time we enter any term.  The `main` function just runs the counter and prints the output. We declare our extension use the [Extension.declare][extension-declare] function from the [Bap_main][bap-main] library. An extension is just a function that receives the context (which could be used to obtain configuration parameters). In this function, we register our `main` function as a pass using the `Project.register_pass` function. 
 
-
 ### Interactive REPL
 
 BAP also ships an interactive toplevel utility `baptop`. This is a shell-like utility that interactively evaluates OCaml expressions and prints their values. It will load BAP libraries and initialize all plugins for you, so you can interactively explore the vast world of BAP. The `baptop` utility can also serve as a non-interactive interpreter, so that you can run your OCaml scripts, e.g., `baptop myscript.ml` or you can even specify it using sha-bang at the top of your file, e.g., `#!/usr/bin/env baptop`. We built `baptop` using UTop, but you can easily use any other OCaml toplevel, including `ocaml` itself, just load the `bap.top` library, e.g., for vanilla `ocaml` toplevel use the following directives
@@ -144,12 +142,15 @@ Of course, there is no need to submit your work to one of our repositories. BAP 
 
 
 ## Sponsors
-* [ForAllSecure][fas]
-* [Boeing][boeing]
-* [DARPA VET Project](https://www.darpa.mil/program/vetting-commodity-it-software-and-firmware)
-* [Siemens AG](https://www.siemens.com/us/en/home.html)
-* Institute for Information & communications Technology Promotion(IITP) grant funded by the Korea government(MSIT)
-  (No.2015-0-00565, Development of Vulnerability Discovery Technologies for IoT Software Security)
+*   [ForAllSecure][fas]
+
+*   [Boeing][boeing]
+
+*   [DARPA VET Project](https://www.darpa.mil/program/vetting-commodity-it-software-and-firmware)
+
+*   [Siemens AG](https://www.siemens.com/us/en/home.html)
+
+*   Institute for Information & communications Technology Promotion(IITP) grant funded by the Korea government(MSIT) (No.2015-0-00565, Development of Vulnerability Discovery Technologies for IoT Software Security)
  
 Please, [contact us][contact-us] if you would like to become a sponsor or are seeking a deeper collaboration. 
   
