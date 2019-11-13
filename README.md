@@ -140,7 +140,6 @@ BAP is built by the community and we're welcome all contributions from authors t
 
 Of course, there is no need to submit your work to one of our repositories. BAP is a plugin-based framework and your code could be hosted anywhere and have any license (including proprietary). If you want to make your work available to the community it would be a good idea to release it via [opam][opam-packaging]. 
 
-
 ## Sponsors
 *   [ForAllSecure][fas]
 
@@ -163,7 +162,6 @@ Please, [contact us][contact-us] if you would like to become a sponsor or are se
 [cbat]: https://github.com/draperlaboratory/cbat_tools
 [cwe-checker]: https://github.com/fkie-cad/cwe_checker
 [cgc]: https://www.darpa.mil/program/cyber-grand-challenge
-[troubleshoot]: https://github.com/BinaryAnalysisPlatform/bap/wiki/Troubleshooting-installation
 [opam-install]: https://opam.ocaml.org/doc/Install.html
 [contact-us]: https://www.cylab.cmu.edu/partners/index.html
 [gitter]: https://gitter.im/BinaryAnalysisPlatform/bap
