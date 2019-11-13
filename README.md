@@ -8,7 +8,7 @@
 # Table of contents
 * [Overview](#overview)
 * [Installation](#installation)
-* [Using](#usage)
+* [Using](#using)
 * [Learning](#learning)
 * [Contributing](#contributing)
 * [Sponsors](#sponsors)
