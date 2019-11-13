@@ -120,15 +120,9 @@ bap /bin/echo --pass=jmp
 Let's briefly go through the code. The `counter` object is a visitor that has the state consisting of a pair of counters. The first counter keeps track of the number of jmp terms, and the second counter is incremented every time we enter any term.  The `main` function just runs the counter and prints the output. We declare our extension use the [Extension.declare][extension-declare] function from the [Bap_main][bap-main] library. An extension is a just a function that receieves the context (which could be used to obtain configuration parameters). In this function we register our `main` function as a pass using the `Project.register_pass` function. 
 
 
-## baptop
+## Interactive REPL
 
-BAP also ships an interactive toplevel, aka REPL. This is a shell-like program that will interactively evaluate OCaml instructions and print the results. It will load BAP libraries and initalize all plugins for you, so you can iteractively explore the vast word of BAP. 
-
-```bash
-$ baptop
-```
-
-The `baptop` utility can also serve as non-interactive interpreter, so that you can run you ocaml scripts, e.g., `baptop myscript.ml` or you can even specify it using sha-bang at the top of your file, e.g., `#!/usr/bin/env baptop`. We built `baptop` using `utop`, but you can easily use any other OCaml toplevel, including `ocaml` itself, just load the `bap.top` library, e.g., for vanilla `ocaml` toplevel
+BAP also ships an interactive toplevel utility `baptop`. This is a shell-like utility that interactively evaluates OCaml expressions and prints their values. It will load BAP libraries and initalize all plugins for you, so you can iteractively explore the vast word of BAP. The `baptop` utility can also serve as non-interactive interpreter, so that you can run you OCaml scripts, e.g., `baptop myscript.ml` or you can even specify it using sha-bang at the top of your file, e.g., `#!/usr/bin/env baptop`. We built `baptop` using UTop, but you can easily use any other OCaml toplevel, including `ocaml` itself, just load the `bap.top` library, e.g., for vanilla `ocaml` toplevel use the following directives
 
 ```ocaml
 #use "topfind";;
@@ -137,41 +131,33 @@ The `baptop` utility can also serve as non-interactive interpreter, so that you 
 
 # Learning
 
-Other than
-[API](https://binaryanalysisplatform.github.io/bap/api/master/argot_index.html)
-documentation, we have
-[blog](https://binaryanalysisplatform.github.io/) and
-[wiki](https://github.com/BinaryAnalysisPlatform/bap/wiki/), where you
-can find some useful information. Also, we have a permanently manned
-chat in case of emergency. Look at the badge on top of the README
-file, and feel free to join.
+We understand that BAP is huge and it is easy to get lost. We're working constantly on improving documentation ensuring that every single function in [BAP API][api-master] is thoroughly documented. But writing higher-level guidlines in the form of manuals or tutorials is much harder, especially given how different the goals of our fellow researchers and users. Therefore we employ a backward-chaining approach and prefer to answer real questions rather then prematurely trying to address all possible questions. We will be happy to see you in your [chat][gitter] that features searcheable, indexed by Google, archive.
+
+We are writing, occasionally, to our [blog][blog] and [wiki][wiki] and are encouraging everyone to contribute to both of them. You can also post your questions on [stackoverflow][so-ocaml] or discuss BAP on the [OCaml][discuss-bap] board. We also have a cute [discord][discord-bap] channel, which has much less traffic than our [gitter][gitter].
 
 # Contributing
 
-BAP is a framework, so you don't need to change its code to extend
-it.We use the dependency injection principle with many injection
-points to allow the user to alter BAP behavior. However, bugs happen,
-so if you have any problems, questions or suggestions, please, don't
-hesitate to use our issue tracker. Submitting a pull request with a
-problem fix will make us really happy. However, we will only accepted
-pull requests that have MIT license.
+BAP is built by the community and we're welcome all contributions from authors that are willing to share them under the MIT license. If you don't think that your analysis or tool suits this repository (e.g., it has a limited use, not fully ready, doesn't meet our standards, etc), then you can consider contributing to our [bap-plugins][bap-plugins] repository that is a collection of useful BAP plugins that are not mature enough to be included in the main distribution. Alternatively, you can consider extending our [toolkit][toolkit] with your tool. 
 
-If you wrote analysis with BAP, then don't hesitate to
-[release](https://opam.ocaml.org/doc/Packaging.html) it to OPAM, for
-the benefit of the community.
+Of course, there is no need to submit your work to one of our repositories. BAP is a plugin based framework and your code could be hosted anywhere and have any license (including properietary). If you want to make your work available to the community it would be a good idea to release it via [opam][opam-packaging]. 
 
-# <a name="Sponsors"></a>Sponsors
 
+# Sponsors
+* [ForAllSecure][fas]
+* [Boeing][boeing]
 * [DARPA VET Project](https://www.darpa.mil/program/vetting-commodity-it-software-and-firmware)
 * [Siemens AG](https://www.siemens.com/us/en/home.html)
 * Institute for Information & communications Technology Promotion(IITP) grant funded by the Korea government(MSIT)
   (No.2015-0-00565,Development of Vulnerability Discovery Technologies for IoT Software Security)
  
- Please, [contact us][contact-us] if you would like to become a sponsor or are seeking a deeper collaboration. 
+Please, [contact us][contact-us] if you would like to become a sponsor or are seeking a deeper collaboration. 
   
 [toolkit]: https://github.com/BinaryAnalysisPlatform/bap-toolkit
+[bap-plugins]: https://github.com/BinaryAnalysisPlatform/bap-plugins
 [demo]: https://binaryanalysisplatform.github.io/assets/playfull.svg
 [mayhem]: https://forallsecure.com/solutions/devsecops/
+[fas]: https://forallsecure.com/
+[boeing]: https://www.boeing.com
 [cbat]: https://github.com/draperlaboratory/cbat_tools
 [cwe-checker]: https://github.com/fkie-cad/cwe_checker
 [cgc]: https://www.darpa.mil/program/cyber-grand-challenge
@@ -181,7 +167,12 @@ the benefit of the community.
 [gitter]: https://gitter.im/BinaryAnalysisPlatform/bap
 [travis]: https://travis-ci.org/BinaryAnalysisPlatform/bap
 [wiki]: https://github.com/BinaryAnalysisPlatform/bap/wiki
+[blog]: https://binaryanalysisplatform.github.io/
+[so-ocaml]: https://stackoverflow.com/questions/tagged/ocaml
+[discuss-bap]: https://discuss.ocaml.org/tags/bap
+[discord-bap]: https://discord.gg/bwJ3p7q
 [emacs]: https://github.com/BinaryAnalysisPlatform/bap/wiki/Emacs
+[opam-packaging]: https://opam.ocaml.org/doc/Packaging.html
 [bap-main]: http://binaryanalysisplatform.github.io/bap/api/master/bap-main/Bap_main/index.html
 [extension-declare]: http://binaryanalysisplatform.github.io/bap/api/master/bap-main/Bap_main/Extension/index.html#val-declare
 
