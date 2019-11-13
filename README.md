@@ -279,6 +279,8 @@ the benefit of the community.
 [gitter]: https://gitter.im/BinaryAnalysisPlatform/bap
 [wiki]: https://github.com/BinaryAnalysisPlatform/bap/wiki
 [emacs]: https://github.com/BinaryAnalysisPlatform/bap/wiki/Emacs
+[bap-main]: http://binaryanalysisplatform.github.io/bap/api/master/bap-main/Bap_main/index.html
+[extension-declare]: http://binaryanalysisplatform.github.io/bap/api/master/bap-main/Bap_main/Extension/index.html#val-declare
 
 [api-1.6]: http://binaryanalysisplatform.github.io/bap/api/v1.6.0/argot_index.html
 [api-2.0]: http://binaryanalysisplatform.github.io/bap/api/odoc/index.html
