@@ -43,7 +43,7 @@ opam init --comp=4.07.0              # install the compiler
 eval `opam config env`               # activate opam environment
 opam depext --install bap            # install bap
 ```
-The `opam depext --install bap` command will try to fuflill the system dependencies of BAP, e.g., LLVM and is the common point of failure, especially on uncommon distributions or for rare versions of LLVM. If it fails, try to install the system depencies manually, using your operating system package manager, and then use the common `opam install bap` command, to install BAP. If it still doesn't work, do no hesitate to drop by our [chat][gitter] and seek help their. It is manned with friendly people that will be happy to help.
+The `opam depext --install bap` command will try to fulfill the system dependencies of BAP, e.g., LLVM and is the common point of failure, especially on uncommon distributions or for rare versions of LLVM. If it fails, try to install the system dependencies manually, using your operating system package manager, and then use the common `opam install bap` command, to install BAP. If it still doesn't work, do not hesitate to drop by our [chat][gitter] and seek help there. It is manned with friendly people that will be happy to help.
 
 The instruction above will get you the latest stable release of BAP. If you're interested in our rolling releases, which are automatically updated every time a commit to the master branch happens, then you can add our testing repository to opam, with the following command
 ```bash
@@ -52,23 +52,23 @@ opam repo add  bap-testing git+https://github.com/BinaryAnalysisPlatform/opam-re
 
 After it is added, the `bap-testing` repository will take precedence over the stable repository and you will get the freshly picked BAP packages straight from the farm.
 
-If you insist on building BAP manually or just want to tackle with BAP internals, then you can clone this repository and build it manually. You will need to start with a fresh environment without BAP being installed, to prevent clashes. You will obviously need to install the dependencies of BAP, our `configure` script will help you figure out the missing libraries. Once all the dependencies are satisfied, the following tripplet will build and install the Platform:
+If you insist on building BAP manually or just want to tackle with BAP internals, then you can clone this repository and build it manually. You will need to start with a fresh environment without BAP being installed, to prevent clashes. You will obviously need to install the dependencies of BAP, our `configure` script will help you figure out the missing libraries. Once all the dependencies are satisfied, the following triplet will build and install the Platform:
 ```bash
 ./configure --enable-everything
 make
 make install 
 ```
 
-The `configure` script lets you define a specific set of components that you need. We have nearly a hundred of components and naming them all will be too tedious, that's why we added the `--enable-everything` option. It plays nice with the `--disable-<feature>` component, so that you can unselect components that are not relevant to your current task. For more tips and tricks see our [wiki][wiki] and do not hestiate to tip back. We encourage everyone to use our wiki for collaboration and information sharing. And as always, drop by [gitter][gitter] for a friendly chat.
+The `configure` script lets you define a specific set of components that you need. We have nearly a hundred of components and naming them all will be too tedious, that's why we added the `--enable-everything` option. It plays nice with the `--disable-<feature>` component so that you can unselect components that are not relevant to your current task. For more tips and tricks see our [wiki][wiki] and do not hesitate to tip back. We encourage everyone to use our wiki for collaboration and information sharing. And as always, drop by [gitter][gitter] for a friendly chat.
 
 # Using
 
-BAP, like Docker or Git, is driven by a single command line utility called `bap`. Just type `bap` in your shell and it will print a message which shows BAP capabilities. The `disassemble` command will take a binary program, disassemble it, lift it into the intermediate architecture agnostic representation, build a control flow graph, and finally apply staged user defined analysis in a form of disassembling passes. Finally, the `--dump` option (`-d` in short) will output the resulting program in the specified format. This is the default command, so you don't even need to specify it, e.g., the following will disassembled and dump the `/bin/echo` binary on your machine:
+BAP, like Docker or Git, is driven by a single command-line utility called `bap`. Just type `bap` in your shell and it will print a message which shows BAP capabilities. The `disassemble` command will take a binary program, disassemble it, lift it into the intermediate architecture agnostic representation, build a control flow graph, and finally apply staged user-defined analysis in a form of disassembling passes. Finally, the `--dump` option (`-d` in short) will output the resulting program in the specified format. This is the default command, so you don't even need to specify it, e.g., the following will disassembled and dump the `/bin/echo` binary on your machine:
 ```bash
 bap /bin/echo -d
 ```
 
-Note, that unlike `objdump` this command will build the control flow graph of a program. If you just want to dump each instruction of a binary one after another (the so called linear sweep disassembler mode), then you can use the `objdump` command, e.g.,
+Note, that unlike `objdump` this command will build the control flow graph of a program. If you just want to dump each instruction of a binary one after another (the so-called linear sweep disassembler mode), then you can use the `objdump` command, e.g.,
 
 ```bash
 bap objdump /bin/echo --show-{insn=asm,bil}
@@ -90,7 +90,7 @@ bap /bin/echo --loader=raw --raw-base=0x400000
 
 ## Writing your own analysis
 
-BAP is a plugin based framework and if you want to develop a new analysis you can write a plugin, build it, install, and it will work with the rest of the BAP without any recompilation. There are many extension points which you could use to add new analysis, change existing, or even build your own applications. We will start with a simple example, that registers a disassembling pass to the disassemble command. Suppose that we want to write an analysis that estimates the ratio of jump instructions to the total number of instruction in the binary. We will start with creating an empty file named `jmp.ml` in an empty folder (the folder name doesn't matter). Next, using our favorite text [editor][emacs] we will put the following code into it:
+BAP is a plugin-based framework and if you want to develop a new analysis you can write a plugin, build it, install, and it will work with the rest of the BAP without any recompilation. There are many extension points that you could use to add new analysis, change existing, or even build your own applications. We will start with a simple example, that registers a disassembling pass to the disassemble command. Suppose that we want to write an analysis that estimates the ratio of jump instructions to the total number of instructions in the binary. We will start by creating an empty file named `jmp.ml` in an empty folder (the folder name doesn't matter). Next, using our favorite text [editor][emacs] we will put the following code into it:
 
 ```ocaml
 open Core_kernel
@@ -117,12 +117,12 @@ bapbundle install jmp.plugin
 bap /bin/echo --pass=jmp
 ```
 
-Let's briefly go through the code. The `counter` object is a visitor that has the state consisting of a pair of counters. The first counter keeps track of the number of jmp terms, and the second counter is incremented every time we enter any term.  The `main` function just runs the counter and prints the output. We declare our extension use the [Extension.declare][extension-declare] function from the [Bap_main][bap-main] library. An extension is a just a function that receieves the context (which could be used to obtain configuration parameters). In this function we register our `main` function as a pass using the `Project.register_pass` function. 
+Let's briefly go through the code. The `counter` object is a visitor that has the state consisting of a pair of counters. The first counter keeps track of the number of jmp terms, and the second counter is incremented every time we enter any term.  The `main` function just runs the counter and prints the output. We declare our extension use the [Extension.declare][extension-declare] function from the [Bap_main][bap-main] library. An extension is just a function that receives the context (which could be used to obtain configuration parameters). In this function, we register our `main` function as a pass using the `Project.register_pass` function. 
 
 
 ## Interactive REPL
 
-BAP also ships an interactive toplevel utility `baptop`. This is a shell-like utility that interactively evaluates OCaml expressions and prints their values. It will load BAP libraries and initalize all plugins for you, so you can iteractively explore the vast word of BAP. The `baptop` utility can also serve as non-interactive interpreter, so that you can run you OCaml scripts, e.g., `baptop myscript.ml` or you can even specify it using sha-bang at the top of your file, e.g., `#!/usr/bin/env baptop`. We built `baptop` using UTop, but you can easily use any other OCaml toplevel, including `ocaml` itself, just load the `bap.top` library, e.g., for vanilla `ocaml` toplevel use the following directives
+BAP also ships an interactive toplevel utility `baptop`. This is a shell-like utility that interactively evaluates OCaml expressions and prints their values. It will load BAP libraries and initialize all plugins for you, so you can interactively explore the vast world of BAP. The `baptop` utility can also serve as a non-interactive interpreter, so that you can run your OCaml scripts, e.g., `baptop myscript.ml` or you can even specify it using sha-bang at the top of your file, e.g., `#!/usr/bin/env baptop`. We built `baptop` using UTop, but you can easily use any other OCaml toplevel, including `ocaml` itself, just load the `bap.top` library, e.g., for vanilla `ocaml` toplevel use the following directives
 
 ```ocaml
 #use "topfind";;
@@ -131,7 +131,7 @@ BAP also ships an interactive toplevel utility `baptop`. This is a shell-like ut
 
 # Learning
 
-We understand that BAP is huge and it is easy to get lost. We're working constantly on improving documentation ensuring that every single function in [BAP API][api-master] is thoroughly documented. But writing higher-level guidlines in the form of manuals or tutorials is much harder, especially given how different the goals of our fellow researchers and users. Therefore we employ a backward-chaining approach and prefer to answer real questions rather then prematurely trying to address all possible questions. We will be happy to see you in your [chat][gitter] that features searcheable, indexed by Google, archive.
+We understand that BAP is huge and it is easy to get lost. We're working constantly on improving documentation ensuring that every single function in [BAP API][api-master] is thoroughly documented. But writing higher-level guidelines in the form of manuals or tutorials is much harder, especially given how different the goals of our fellow researchers and users. Therefore we employ a backward-chaining approach and prefer to answer real questions rather than prematurely trying to address all possible questions. We will be happy to see you in your [chat][gitter] that features searchable, indexed by Google, archive.
 
 We are writing, occasionally, to our [blog][blog] and [wiki][wiki] and are encouraging everyone to contribute to both of them. You can also post your questions on [stackoverflow][so-ocaml] or discuss BAP on the [OCaml][discuss-bap] board. We also have a cute [discord][discord-bap] channel, which has much less traffic than our [gitter][gitter].
 
@@ -139,7 +139,7 @@ We are writing, occasionally, to our [blog][blog] and [wiki][wiki] and are encou
 
 BAP is built by the community and we're welcome all contributions from authors that are willing to share them under the MIT license. If you don't think that your analysis or tool suits this repository (e.g., it has a limited use, not fully ready, doesn't meet our standards, etc), then you can consider contributing to our [bap-plugins][bap-plugins] repository that is a collection of useful BAP plugins that are not mature enough to be included in the main distribution. Alternatively, you can consider extending our [toolkit][toolkit] with your tool. 
 
-Of course, there is no need to submit your work to one of our repositories. BAP is a plugin based framework and your code could be hosted anywhere and have any license (including properietary). If you want to make your work available to the community it would be a good idea to release it via [opam][opam-packaging]. 
+Of course, there is no need to submit your work to one of our repositories. BAP is a plugin-based framework and your code could be hosted anywhere and have any license (including proprietary). If you want to make your work available to the community it would be a good idea to release it via [opam][opam-packaging]. 
 
 
 # Sponsors
@@ -148,7 +148,7 @@ Of course, there is no need to submit your work to one of our repositories. BAP 
 * [DARPA VET Project](https://www.darpa.mil/program/vetting-commodity-it-software-and-firmware)
 * [Siemens AG](https://www.siemens.com/us/en/home.html)
 * Institute for Information & communications Technology Promotion(IITP) grant funded by the Korea government(MSIT)
-  (No.2015-0-00565,Development of Vulnerability Discovery Technologies for IoT Software Security)
+  (No.2015-0-00565, Development of Vulnerability Discovery Technologies for IoT Software Security)
  
 Please, [contact us][contact-us] if you would like to become a sponsor or are seeking a deeper collaboration. 
   
