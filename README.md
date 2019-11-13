@@ -3,7 +3,7 @@
 [![docs](https://img.shields.io/badge/doc-master-green.svg)][api-master]
 [![docs](https://img.shields.io/badge/doc-2.0.0-green.svg)][api-2.0]
 [![docs](https://img.shields.io/badge/doc-1.6.0-green.svg)][api-1.6]
-[![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap)
+[![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)][travis]
 
 # Table of contents
 * [Overview](#overview)
@@ -119,114 +119,16 @@ bap /bin/echo --pass=jmp
 
 Let's briefly go through the code. The `counter` object is a visitor that has the state consisting of a pair of counters. The first counter keeps track of the number of jmp terms, and the second counter is incremented every time we enter any term.  The `main` function just runs the counter and prints the output. We declare our extension use the [Extension.declare][extension-declare] function from the [Bap_main][bap-main] library. An extension is a just a function that receieves the context (which could be used to obtain configuration parameters). In this function we register our `main` function as a pass using the `Project.register_pass` function. 
 
-## Python
-
-OK, If the previous example doesn't make any sense to you, then you
-can try our
-[Python bindings](https://github.com/BinaryAnalysisPlatform/bap-python).
-Install them with `pip install bap` (you still need to install `bap`
-beforehand). Here is the same example, but in Python:
-
-```python
-import bap
-from bap.adt import Visitor
-
-class Counter(Visitor) :
-    def __init__(self):
-        self.jmps = 0
-        self.total = 0
-
-    def enter_Jmp(self,jmp):
-        self.jmps += 1
-
-    def enter_Term(self,t):
-        self.total += 1
-
-proj = bap.run('/bin/true')
-count = Counter()
-count.run(proj.program)
-print("ratio = {0}/{1} = {2}".format(count.jmps, count.total,
-                                     count.jmps/float(count.total)))
-```
-
-## C
-
-The same program in C will take too much space, and will not fit into
-the README format, but this is an example, of a simple diassembler in C:
-
-```c
-#include <stdio.h>
-#include <bap.h>
-
-char data[] = "\x48\x8d\x00";
-
-int main(int argc, const char **argv) {
-    bap_init(argc, argv);
-
-    if (bap_load_plugins() < 0) {
-        fprintf(stderr, "Failed to load BAP plugins\n");
-        return 1;
-    }
-
-    bap_disasm_basic_t *dis = bap_disasm_basic_create(BAP_ARCH_X86_64);
-
-    if (!dis) {
-        fprintf(stderr, "can't create a disassembler: %s\n", bap_error_get());
-    }
-
-    const int len = sizeof(data) - 1;
-    bap_code_t *code = bap_disasm_basic_next(dis, data, sizeof(data) - 1, 0x80000);
-    if (!code) {
-        fprintf(stderr, "can't disassemble instruction: %s\n", bap_error_get());
-        return 1;
-    }
-    bap_code_print(code);
-    bap_release(code);
-    bap_disasm_basic_close(dis);
-    return 0;
-}
-```
-
-The example can be compiled with the following command (assuming that
-the code is in the `example.c` file):
-
-```
-make LDLIBS=-lbap example
-```
-
-
 
 ## baptop
 
-BAP also ships an interactive toplevel, aka REPL. This is a shell-like
-program that will interactively evaluate OCaml instructions and
-print the results. Just run:
+BAP also ships an interactive toplevel, aka REPL. This is a shell-like program that will interactively evaluate OCaml instructions and print the results. It will load BAP libraries and initalize all plugins for you, so you can iteractively explore the vast word of BAP. 
 
 ```bash
 $ baptop
 ```
 
-Now, you can play with BAP. The following example will open a file,
-build callgraph of a program, and a control flow graph with a
-dominance tree of a function.
-
-```ocaml
-open Core_kernel.Std;;
-open Bap.Std;;
-open Graphlib.Std;;
-let rooter = Rooter.Factory.find "byteweight" |> Option.value_exn;;
-let proj = Project.create ~rooter (Project.Input.file "/bin/true") |> ok_exn;;
-let prog = Project.program proj;;
-let cg = Program.to_graph prog;;
-let sub = Term.first sub_t prog |> Option.value_exn;;
-let cfg = Sub.to_cfg sub;;
-module G = Graphs.Ir;;
-let entry = Option.value_exn (Term.first blk_t sub);;
-let dom_tree = Graphlib.dominators (module G) cfg (G.Node.create entry);;
-```
-
-Note: if you do not want to use `baptop` or `utop`, then you can
-execute the following in any OCaml top-level:
+The `baptop` utility can also serve as non-interactive interpreter, so that you can run you ocaml scripts, e.g., `baptop myscript.ml` or you can even specify it using sha-bang at the top of your file, e.g., `#!/usr/bin/env baptop`. We built `baptop` using `utop`, but you can easily use any other OCaml toplevel, including `ocaml` itself, just load the `bap.top` library, e.g., for vanilla `ocaml` toplevel
 
 ```ocaml
 #use "topfind";;
@@ -268,7 +170,7 @@ the benefit of the community.
  Please, [contact us][contact-us] if you would like to become a sponsor or are seeking a deeper collaboration. 
   
 [toolkit]: https://github.com/BinaryAnalysisPlatform/bap-toolkit
-[demo]: http://binaryanalysisplatform.github.io/assets/playfull.svg
+[demo]: https://binaryanalysisplatform.github.io/assets/playfull.svg
 [mayhem]: https://forallsecure.com/solutions/devsecops/
 [cbat]: https://github.com/draperlaboratory/cbat_tools
 [cwe-checker]: https://github.com/fkie-cad/cwe_checker
@@ -277,6 +179,7 @@ the benefit of the community.
 [opam-install]: https://opam.ocaml.org/doc/Install.html
 [contact-us]: https://www.cylab.cmu.edu/partners/index.html
 [gitter]: https://gitter.im/BinaryAnalysisPlatform/bap
+[travis]: https://travis-ci.org/BinaryAnalysisPlatform/bap
 [wiki]: https://github.com/BinaryAnalysisPlatform/bap/wiki
 [emacs]: https://github.com/BinaryAnalysisPlatform/bap/wiki/Emacs
 [bap-main]: http://binaryanalysisplatform.github.io/bap/api/master/bap-main/Bap_main/index.html
