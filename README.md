@@ -43,7 +43,7 @@ opam init --comp=4.07.0              # install the compiler
 eval `opam config env`               # activate opam environment
 opam depext --install bap            # install bap
 ```
-The `opam depext --install bap` command will try to fuflill the system dependencies of BAP, e.g., LLVM and is the common point of failure, especially on uncommon distributions or for rare versions of LLVM. If it fails, try to install the system depencies manually, using your operating system package manager, and then use the common `opam install bap` command, to install BAP. If it still doesn't work, do no hesitate to drop by our [chat][gitter] and seek help their. It is manned with friendly people which will be happy to help.
+The `opam depext --install bap` command will try to fuflill the system dependencies of BAP, e.g., LLVM and is the common point of failure, especially on uncommon distributions or for rare versions of LLVM. If it fails, try to install the system depencies manually, using your operating system package manager, and then use the common `opam install bap` command, to install BAP. If it still doesn't work, do no hesitate to drop by our [chat][gitter] and seek help their. It is manned with friendly people that will be happy to help.
 
 The instruction above will get you the latest stable release of BAP. If you're interested in our rolling releases, which are automatically updated every time a commit to the master branch happens, then you can add our testing repository to opam, with the following command
 ```bash
@@ -63,56 +63,38 @@ The `configure` script lets you define a specific set of components that you nee
 
 # Using
 
-## Basic interactions
-
-BAP, like docker or git, is driven by a single command line utility called `bap`. Just type `bap` in your shell and it will print a message which shows BAP capabilities. The `disassemble` command will take a binary program, disassemble it, lift it into the intermediate architecture agnostic representation, build a control flow graph, and finally apply staged user defined analysis in a form of disassembling passes. Finally, the `--dump` option will output the resulting program in the specified format. This is the default command, so you don't even need to specify it, e.g., the following will disassembled and dump the `/bin/echo` binary on your machine:
+BAP, like Docker or Git, is driven by a single command line utility called `bap`. Just type `bap` in your shell and it will print a message which shows BAP capabilities. The `disassemble` command will take a binary program, disassemble it, lift it into the intermediate architecture agnostic representation, build a control flow graph, and finally apply staged user defined analysis in a form of disassembling passes. Finally, the `--dump` option (`-d` in short) will output the resulting program in the specified format. This is the default command, so you don't even need to specify it, e.g., the following will disassembled and dump the `/bin/echo` binary on your machine:
 ```bash
 bap /bin/echo -d
 ```
 
-Note, that unlike `objdump` this command will build the control flow graph of a program. If you just want to dump each instruction of a binary one after another (the so called linear sweep disassembler), then you can use the `objdump` command, e.g.,
+Note, that unlike `objdump` this command will build the control flow graph of a program. If you just want to dump each instruction of a binary one after another (the so called linear sweep disassembler mode), then you can use the `objdump` command, e.g.,
 
 ```bash
 bap objdump /bin/echo --show-{asm,bil}
 ```
 
 If your input is a blob of machine code, not an executable, then you can use the `raw` loader, e.g.,
+
 ```bashthan a hundred components
 bap objdump /bin/echo --loader=raw --loader-base=0x400000 
 ```
 
 The raw loader takes a few parameters, like offsets, lenghts, and base addresses, which makes it a swiss-knife that you can use as a can opener for formats that are not known to BAP. The raw loader works for all commands that open files, e.g., if the `raw` loader is used together with the `disassemble` command, BAP will still automatically identify function starts and build a suitable CFG without even knowing where the code is in the binary,
+
 ```bash
 bap /bin/echo --loader=raw --loader-base=0x400000 
 ```
 
+# Extending
 
+## Writing your own analysis
 
-
-The BAP main frontend is a command line utility called `bap`. You can
-use it to explore the binary, run existing analysis, plugin your own
-behavior, load traces, and much more.
-
-To dump a program in various formats use the `--dump` option (or its short
-equivalent, `-d`), For example, let's run `bap` on the
-[x86_64-linux-gnu-echo](https://github.com/BinaryAnalysisPlatform/bap-testsuite/blob/master/bin/x86_64-linux-gnu-echo)
-file.
-
-
-
-## Writing a simple disassembling pass
-
-An idiomatic way of using BAP is to extend it with a plugin. Suppose,
-you want to write some analysis. For example, let's estimate the ratio
-of jump instructions to the total amount of instructions (a value that
-probably correlates with a complexity of a program).
-
-So, let's do it. Create an empty folder, then open your
-[favorite text editor](https://github.com/BinaryAnalysisPlatform/bap/wiki/Emacs)
-and write the following program in a `jmp.ml` file:
+BAP is a plugin based framework and if you want to develop a new analysis you can write a plugin, build it, install, and it will work with the rest of the BAP without any recompilation. There are many extension points which you could use to add new analysis, change existing, or even build your own applications. We will start with a simple example, that registers a disassembling pass to the disassemble command. Suppose that we want to write an analysis that estimates the ratio of jump instructions to the total number of instruction in the binary. We will start with creating an empty file named `jmp.ml` in an empty folder (the folder name doesn't matter). Next, using our favorite text [editor][emacs] we will put the following code into it:
 
 ```ocaml
-open Core_kernel.Std
+open Core_kernel
+open Bap_main
 open Bap.Std
 
 let counter = object
@@ -125,40 +107,17 @@ let main proj =
   let jmps,total = counter#run (Project.program proj) (0,0) in
   printf "ratio = %d/%d = %g\n" jmps total (float jmps /. float total)
 
-
-let () = Project.register_pass' main
+let () = Extension.declare @@ fun _ctxt -> 
+   Project.register_pass' main
 ```
-
-Before we run it, let's go through the code. The `counter` object is a
-visitor that has a state consisting of a pair of counters. The first
-counter keeps track of the number of jmp terms, and the second counter
-is incremented every time we enter any term.  The `main` function
-just runs the counter. Finally, we register it with the
-`Project.register_pass'` function. Later the function can be invoked
-from a command line, and it will get a project data structure, that
-contains all the information that was recovered from a binary.
-
-To compile the plugin simply run the following command:
-
+Now we can build, install, and run our analysis using the following commands:
 ```
 bapbuild jmp.plugin
-```
-
-It is easier to run the pass, if it is installed, so let's do it:
-
-```
 bapbundle install jmp.plugin
+bap /bin/echo --pass=jmp
 ```
 
-Now we can test it:
-```
-$ bap /bin/true --pass=jmp
-ratio = 974/7514 = 0.129625
-$ bap /bin/ls --pass=jmp
-ratio = 8917/64557 = 0.138126
-```
-
-
+Let's briefly go through the code. The `counter` object is a visitor that has the state consisting of a pair of counters. The first counter keeps track of the number of jmp terms, and the second counter is incremented every time we enter any term.  The `main` function just runs the counter and prints the output. We declare our extension use the [Extension.declare][extension-declare] function from the [Bap_main][bap-main] library. An extension is a just a function that receieves the context (which could be used to obtain configuration parameters). In this function we register our `main` function as a pass using the `Project.register_pass` function. 
 
 ## Python
 
@@ -319,7 +278,7 @@ the benefit of the community.
 [contact-us]: https://www.cylab.cmu.edu/partners/index.html
 [gitter]: https://gitter.im/BinaryAnalysisPlatform/bap
 [wiki]: https://github.com/BinaryAnalysisPlatform/bap/wiki
-
+[emacs]: https://github.com/BinaryAnalysisPlatform/bap/wiki/Emacs
 
 [api-1.6]: http://binaryanalysisplatform.github.io/bap/api/v1.6.0/argot_index.html
 [api-2.0]: http://binaryanalysisplatform.github.io/bap/api/odoc/index.html
