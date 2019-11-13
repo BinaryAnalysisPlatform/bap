@@ -18,9 +18,9 @@
 The Carnegie Mellon University Binary Analysis Platform (CMU BAP) is a suite of utilities and libraries that enables analysis of programs in their machine representation. BAP includes an evergrowing set of ready to use [tools][toolkit] and provides various facilities for building custom tools, starting from various analysis-specific domain languages, such as, Primus Lisp, BML, BARE, Recipes, etc, which do not require sophisticated programming skills, and ending with implementing custom plugins in OCaml or even in Rust or C, via provided bindings.  The following short [demonstration][demo] of BAP capabilities is interactive, you can pause it at any moment and even copy the contents. 
 
 BAP is developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by grants from the United States Department of Defense, Siemens, Boening, ForallSecure, and the Korea government, see [sponsors](#Sponsors) for more information. BAP is used in various institutions and serves as a backbone for many interesting projects, some are highlighted below:
-- [The CGC winner][cgc] [ForAllSecure Mayhem][mayhem];
-- [Draper's Laboratory CBAT Tools][cbat];
-- [Fraunhofer FKIE CWE Checker][cwe-checker].
+- [The CGC winner][cgc] [ForAllSecure Mayhem][mayhem]
+- [Draper's Laboratory CBAT Tools][cbat]
+- [Fraunhofer FKIE CWE Checker][cwe-checker]
 
 
 # Installation
@@ -71,19 +71,19 @@ bap /bin/echo -d
 Note, that unlike `objdump` this command will build the control flow graph of a program. If you just want to dump each instruction of a binary one after another (the so called linear sweep disassembler mode), then you can use the `objdump` command, e.g.,
 
 ```bash
-bap objdump /bin/echo --show-{asm,bil}
+bap objdump /bin/echo --show-{insn=asm,bil}
 ```
 
 If your input is a blob of machine code, not an executable, then you can use the `raw` loader, e.g.,
 
-```bashthan a hundred components
-bap objdump /bin/echo --loader=raw --loader-base=0x400000 
+```bash
+bap objdump /bin/echo --loader=raw --raw-base=0x400000 
 ```
 
-The raw loader takes a few parameters, like offsets, lenghts, and base addresses, which makes it a swiss-knife that you can use as a can opener for formats that are not known to BAP. The raw loader works for all commands that open files, e.g., if the `raw` loader is used together with the `disassemble` command, BAP will still automatically identify function starts and build a suitable CFG without even knowing where the code is in the binary,
+The raw loader takes a few parameters, like offsets, lengths, and base addresses, which makes it a swiss-knife that you can use as a can opener for formats that are not known to BAP. The raw loader works for all commands that open files, e.g., if the `raw` loader is used together with the `disassemble` command, BAP will still automatically identify function starts and build a suitable CFG without even knowing where the code is in the binary,
 
 ```bash
-bap /bin/echo --loader=raw --loader-base=0x400000 
+bap /bin/echo --loader=raw --raw-base=0x400000 
 ```
 
 # Extending
