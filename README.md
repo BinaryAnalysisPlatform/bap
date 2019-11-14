@@ -18,7 +18,7 @@
 
 The Carnegie Mellon University Binary Analysis Platform (CMU BAP) is a suite of utilities and libraries that enables analysis of programs in their machine representation. BAP includes an evergrowing set of ready to use [tools][toolkit] and provides various facilities for building custom tools, starting from various analysis-specific domain languages, such as, Primus Lisp, BML, BARE, Recipes, etc, which do not require sophisticated programming skills, and ending with implementing custom plugins in OCaml or even in Rust or C, via provided bindings.  The following short [demonstration][demo] of BAP capabilities is interactive, you can pause it at any moment and even copy the contents. 
 
-BAP is developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by grants from the United States Department of Defense, Siemens, Boeing, ForallSecure, and the Korea government, see [sponsors](#Sponsors) for more information. BAP is used in various institutions and serves as a backbone for many interesting projects, some are highlighted below:
+BAP is developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by grants from the United States Department of Defense, Siemens, Boeing, ForAllSecure, and the Korea government, see [sponsors](#Sponsors) for more information. BAP is used in various institutions and serves as a backbone for many interesting projects, some are highlighted below:
 *   [The CGC winner][cgc] [ForAllSecure Mayhem][mayhem]
 *   [Draper's Laboratory CBAT Tools][cbat]
 *   [Fraunhofer FKIE CWE Checker][cwe-checker]
