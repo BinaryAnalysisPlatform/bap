@@ -18,7 +18,7 @@
 
 The Carnegie Mellon University Binary Analysis Platform (CMU BAP) is a suite of utilities and libraries that enables analysis of programs in their machine representation. BAP includes an evergrowing set of ready to use [tools][toolkit] and provides various facilities for building custom tools, starting from various analysis-specific domain languages, such as, Primus Lisp, BML, BARE, Recipes, etc, which do not require sophisticated programming skills, and ending with implementing custom plugins in OCaml or even in Rust or C, via provided bindings.  The following short [demonstration][demo] of BAP capabilities is interactive, you can pause it at any moment and even copy the contents. 
 
-BAP is developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by grants from the United States Department of Defense, Siemens, Boening, ForallSecure, and the Korea government, see [sponsors](#Sponsors) for more information. BAP is used in various institutions and serves as a backbone for many interesting projects, some are highlighted below:
+BAP is developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by grants from the United States Department of Defense, Siemens, Boeing, ForallSecure, and the Korea government, see [sponsors](#Sponsors) for more information. BAP is used in various institutions and serves as a backbone for many interesting projects, some are highlighted below:
 *   [The CGC winner][cgc] [ForAllSecure Mayhem][mayhem]
 *   [Draper's Laboratory CBAT Tools][cbat]
 *   [Fraunhofer FKIE CWE Checker][cwe-checker]
@@ -63,7 +63,7 @@ The `configure` script lets you define a specific set of components that you nee
 
 ## Using
 
-BAP, like Docker or Git, is driven by a single command-line utility called `bap`. Just type `bap` in your shell and it will print a message which shows BAP capabilities. The `disassemble` command will take a binary program, disassemble it, lift it into the intermediate architecture agnostic representation, build a control flow graph, and finally apply staged user-defined analysis in a form of disassembling passes. Finally, the `--dump` option (`-d` in short) will output the resulting program in the specified format. This is the default command, so you don't even need to specify it, e.g., the following will disassembled and dump the `/bin/echo` binary on your machine:
+BAP, like Docker or Git, is driven by a single command-line utility called [bap][man-bap]. Just type `bap` in your shell and it will print a message which shows BAP capabilities. The `disassemble` command will take a binary program, disassemble it, lift it into the intermediate architecture agnostic representation, build a control flow graph, and finally apply staged user-defined analysis in a form of disassembling passes. Finally, the `--dump` option (`-d` in short) will output the resulting program in the specified format. This is the default command, so you don't even need to specify it, e.g., the following will disassembled and dump the `/bin/echo` binary on your machine:
 ```bash
 bap /bin/echo -d
 ```
@@ -77,14 +77,26 @@ bap objdump /bin/echo --show-{insn=asm,bil}
 If your input is a blob of machine code, not an executable, then you can use the `raw` loader, e.g.,
 
 ```bash
-bap objdump /bin/echo --loader=raw --raw-base=0x400000 
+bap objdump /bin/echo --loader=raw --raw-base=0x400000 --show-{insn=asm,bil}
 ```
 
 The raw loader takes a few parameters, like offsets, lengths, and base addresses, which makes it a swiss-knife that you can use as a can opener for formats that are not known to BAP. The raw loader works for all commands that open files, e.g., if the `raw` loader is used together with the `disassemble` command, BAP will still automatically identify function starts and build a suitable CFG without even knowing where the code is in the binary,
 
 ```bash
-bap /bin/echo --loader=raw --raw-base=0x400000 
+bap /bin/echo --loader=raw --raw-base=0x400000 -d
 ```
+
+If you would like to play manually with bytes, e.g., type the instruction encoding manually and see how BAP disassembles it and what semantics it has, then `mc` is the command you're looking for. It is named for the corresponding utility in LLVM and stands for machine code and has the same interface as the `objdump` command except that it takes an ASCII encoding of instruction instead of a binary file, e.g.,
+
+```bash
+bap mc --show-{insn=asm,bil} -- 48 83 ec 08
+```
+or
+```
+bap mc --show-{insn=asm,bil} "\x48\x83\xec\x08"
+```
+
+It recognizes a few input formats (including `llvm-mc` is using for its `-show-encoding` option). Consult the documentation for more detailed information.
 
 ## Extending
 
@@ -179,3 +191,4 @@ Please, [contact us][contact-us] if you would like to become a sponsor or are se
 [api-1.6]: http://binaryanalysisplatform.github.io/bap/api/v1.6.0/argot_index.html
 [api-2.0]: http://binaryanalysisplatform.github.io/bap/api/odoc/index.html
 [api-master]: http://binaryanalysisplatform.github.io/bap/api/master/index.html
+[man-bap]: http://binaryanalysisplatform.github.io/bap/api/man/bap.1.html
