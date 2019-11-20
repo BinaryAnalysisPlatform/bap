@@ -7,7 +7,6 @@ module Filename = Stdlib.Filename
 module Buffer = Stdlib.Buffer
 module Sys = Stdlib.Sys
 
-include Self()
 
 exception Bad_substitution of string
 
