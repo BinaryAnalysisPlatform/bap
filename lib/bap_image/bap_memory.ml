@@ -17,7 +17,7 @@ type getter = {
 
 type t = {
   endian : endian;
-  data: Bigstring.t;
+  data: Bigstring.Stable.V1.t;
   addr : addr;
   off  : int;
   size : int;

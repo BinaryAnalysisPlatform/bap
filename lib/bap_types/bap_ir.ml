@@ -1199,7 +1199,7 @@ module Term = struct
   let equal_tids x y = Tid.equal (tid x) (tid y)
 
   let domain = Knowledge.Domain.flat ~empty:[] "bir"
-      ~equal:(List.equal ~equal:equal_tids)
+      ~equal:(List.equal equal_tids)
       ~inspect:(fun blks -> Sexp.List (List.map blks ~f:(fun b ->
           Sexp.Atom (name b))))
 

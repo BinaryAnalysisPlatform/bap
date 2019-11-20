@@ -110,11 +110,10 @@ let all_bindings f =
       f v.data.typ x)
 
 let overload_defun typechecks args s3 =
-  let open Option in
   List.filter_map s3 ~f:(fun def ->
-      List.zip (Def.Func.args def) args >>= fun bs ->
-      if all_bindings typechecks bs
-      then Some (def,bs) else None)
+      match List.zip (Def.Func.args def) args with
+      | Ok bs when all_bindings typechecks bs -> Some (def,bs)
+      | _ -> None)
 
 let zip_tail xs ys =
   let rec zip zs xs ys = match xs,ys with
