@@ -2654,10 +2654,11 @@ module Knowledge = struct
   let compute_value
     : type a p . (a,p) cls -> p obj -> unit knowledge
     = fun cls obj ->
-      Slot.enum cls |> List.iter ~f:(fun (Slot.Pack s) ->
-          collect s obj >>= fun v ->
-          provide s obj v)
-
+      Slot.enum cls |>
+      Base.List.filter ~f:(function Slot.Pack {promises} ->
+          not (Hashtbl.is_empty promises)) |>
+      List.iter ~f:(fun (Slot.Pack s) ->
+          ignore_m @@ collect s obj)
 
   let get_value cls obj =
     compute_value cls obj >>= fun () ->
