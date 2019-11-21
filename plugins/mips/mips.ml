@@ -2,6 +2,7 @@ open Core_kernel
 open Bap.Std
 open Bap_core_theory
 
+
 (* This CPU model and instruction set is based on the
  * "MIPS Architecture For Programmers
  * Volume II-A: The MIPS64 Instruction Set Reference Manual"
@@ -101,4 +102,5 @@ let () =
             KB.Value.put Insn.Slot.delay insn (Some delay))
         ~if_not_found:(fun _ -> insn)
     | _ -> KB.return Insn.empty in
-  KB.promise Theory.Program.Semantics.slot provide_delay
+  Bap_main.Extension.declare @@ fun _ctxt ->
+  Ok (KB.promise Theory.Program.Semantics.slot provide_delay)

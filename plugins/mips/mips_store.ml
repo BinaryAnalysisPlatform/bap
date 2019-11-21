@@ -152,6 +152,7 @@ let swe cpu ops =
 (* TODO: SWRE rt, offset(base) *)
 
 let () =
+  Bap_main.Extension.declare @@ fun _ctxt ->
   "SB" >> sb;
   "SBE" >> sbe;
   "SC" >> sc;
@@ -165,3 +166,4 @@ let () =
   "SHE" >> she;
   "SW" >> sw;
   "SWE" >> swe;
+  Ok ()

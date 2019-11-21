@@ -479,6 +479,7 @@ let main attrs ansi_colors demangle symbol_fmts subs secs patterns doms =
     ~desc:"print the file specification in the OGRE format" ~ver "ogre" pp_spec
 
 let () =
+  Config.when_ready @@ fun _ ->
   let open Adt in
   let desc = "Abstract Data Type pretty printing format" in
   let ver = Program.version and name = "adt" in

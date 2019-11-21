@@ -221,6 +221,7 @@ let daddu cpu ops =
   ]
 
 let () =
+  Bap_main.Extension.declare @@ fun _ctxt ->
   "ADD" >> add;
   "ADDi" >> addi;
   "ADDiu" >> addiu;
@@ -240,3 +241,4 @@ let () =
   "DSUBu" >> dsubu;
   "DADDu" >> daddu;
   "DADDiu" >> daddiu;
+  Ok ()
