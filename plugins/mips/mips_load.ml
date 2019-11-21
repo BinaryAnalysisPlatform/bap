@@ -238,6 +238,7 @@ let lwupc cpu ops =
   ]
 
 let () =
+  Bap_main.Extension.declare @@ fun _ctxt ->
   "LB" >> lb;
   "LBE" >> lbe;
   "LBu" >> lbu;
@@ -259,5 +260,4 @@ let () =
   "LWPC" >> lwpc;
   "LWu" >> lwu;
   "LWupc" >> lwupc;
-
-
+  Ok ()

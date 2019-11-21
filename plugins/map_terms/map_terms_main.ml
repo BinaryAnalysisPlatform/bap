@@ -114,9 +114,11 @@ let unmarker attr = object
     Term.with_attrs t attrs
 end
 
-let () = Mappers.Unary.register "unset-attr" unmarker
-
-let () = Map_terms_features.init ()
+let () =
+  Bap_main.Extension.declare @@ fun _ctxt ->
+  Mappers.Unary.register "unset-attr" unmarker;
+  Map_terms_features.init ();
+  Ok ()
 
 let main patts file proj =
   let patts = match file with

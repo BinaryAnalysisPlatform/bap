@@ -123,6 +123,7 @@ let multu cpu ops =
   ]
 
 let () =
+  Bap_main.Extension.declare @@ fun _ctxt ->
   "MUL" >> mul;
   "MUH" >> muh;
   "MULu" >> mulu;
@@ -133,3 +134,4 @@ let () =
   "DMUHu" >> dmuhu;
   "MULT" >> mult;
   "MULTu" >> multu;
+  Ok ()

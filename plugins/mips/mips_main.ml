@@ -42,5 +42,5 @@ let () =
       register_target `mips (module MIPS32);
       register_target `mipsel (module MIPS32_le);
       register_target `mips64 (module MIPS64);
-      register_target `mips64el (module MIPS64_le));
-  Mips_abi.setup ()
+      register_target `mips64el (module MIPS64_le);
+      Mips_abi.setup ());

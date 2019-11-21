@@ -91,9 +91,11 @@ let selnez cpu ops =
   ]
 
 let () =
+  Bap_main.Extension.declare @@ fun _ctxt ->
   "SLT"  >> slt;
   "SLTi" >> slti;
   "SLTu"  >> sltu;
   "SLTiu" >> sltiu;
   "SELEQZ" >> seleqz;
   "SELNEQ" >> selnez;
+  Ok ();

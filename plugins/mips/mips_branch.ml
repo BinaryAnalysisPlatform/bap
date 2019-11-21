@@ -379,6 +379,7 @@ let nal cpu _ =
   ]
 
 let () =
+  Bap_main.Extension.declare @@ fun _ctxt ->
   let (>>) = register ~delay:1 in
   "BAL" >> bal;
   "BEQ" >> beq;
@@ -415,4 +416,5 @@ let () =
   "JIC" >> jic;
   "JR" >> jr;
   "NAL" >> nal;
-  "JALR64" >> jalr
+  "JALR64" >> jalr;
+  Ok ()

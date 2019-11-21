@@ -174,7 +174,6 @@ module Visited(Machine : Primus.Machine.S) = struct
   let init () = Primus.Interpreter.enter_sub >>> visit
 end
 
-let () = Primus.Machine.add_component (module Visited)
 
 let is_visited = function
   | `tid tid ->
@@ -248,4 +247,6 @@ let deps = [
 ]
 
 let () =
-  Config.when_ready (fun conf -> Project.register_pass ~deps (main conf))
+  Config.when_ready (fun conf ->
+      Project.register_pass ~deps (main conf);
+      Primus.Machine.add_component (module Visited))

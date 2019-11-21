@@ -204,6 +204,7 @@ let dsrlv cpu ops =
   ]
 
 let () =
+  Bap_main.Extension.declare @@ fun _ctxt ->
   "ROTR" >> rotr;
   "ROTRV" >> rotrv;
   "SLL" >> sll;
@@ -221,3 +222,4 @@ let () =
   "DSRL" >> dsrl;
   "DSRL32" >> dsrl32;
   "DSRLV" >> dsrlv;
+  Ok ()
