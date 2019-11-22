@@ -69,6 +69,7 @@ type output = [
   | `sema
   | `kinds
   | `size
+  | `invalid
 ] [@@deriving compare]
 
 let outputs = [
@@ -78,9 +79,12 @@ let outputs = [
   `sema;
   `kinds;
   `size;
+  `invalid;
 ]
 
 let fail err = Error (Fail err)
+
+let enabled = "enabled"
 
 module Spec = struct
   open Extension
@@ -99,7 +103,6 @@ module Spec = struct
     let doc = "Target architecture" in
     Command.parameter ~doc arch_type "arch"
 
-
   let outputs =
     let name_of_output = function
       | `insn -> "insn"
@@ -107,12 +110,13 @@ module Spec = struct
       | `bir  -> "bir"
       | `sema -> "sema"
       | `kinds -> "kinds"
-      | `size -> "size" in
+      | `size -> "size"
+      | `invalid -> "invalid" in
 
     let as_flag = function
       | `insn | `bil | `bir -> ["pretty"]
       | `sema -> ["all-slots"]
-      | `kinds | `size -> [] in
+      | `kinds | `size | `invalid -> [enabled] in
 
     let doc = function
       | `insn -> "Print the decoded instruction."
@@ -120,7 +124,8 @@ module Spec = struct
       | `bir -> "Print the IR."
       | `sema -> "Print the knowledge base."
       | `kinds -> "Print semantics tags associated with instruction."
-      | `size -> "Print the instruction size." in
+      | `size -> "Print the instruction size."
+      | `invalid -> "Print invalid instructions." in
 
     let name s = "show-" ^ name_of_output s in
     Extension.Command.dictionary ~doc ~as_flag outputs
@@ -133,6 +138,9 @@ module Spec = struct
   let only_one =
     let doc = "Stop after the first instruction is decoded" in
     Command.flag ~doc "only-one"
+
+  let stop_on_error = Command.flag "stop-on-errors"
+      ~doc:"Stop disassembling on the first error and report it"
 
   let backend =
     let doc = "Specify the disassembler backend" in
@@ -148,7 +156,7 @@ end
 
 module Dis = Disasm_expert.Basic
 
-let bad_insn addr state _ start =
+let bad_insn addr state start =
   let stop = Addr.(Dis.addr state - addr |> to_int |> ok_exn) in
   fail (Bad_insn (Dis.memory state, start, stop))
 
@@ -238,7 +246,12 @@ let print_sema formats sema = match formats with
     let pp = KB.Value.pp_slots some_slots in
     printf "%a@\n" pp sema
 
-let equal_output x y = compare_output x y = 0
+let equal_output = [%compare.equal: output]
+
+let is_enabled = function
+  | [opt] -> String.equal enabled opt
+  | _ -> false
+
 let formats outputs kind =
   match List.Assoc.find outputs kind ~equal:equal_output with
   | None -> []
@@ -294,20 +307,33 @@ let validate_formats formats =
   List.map formats ~f:(function
       | (`insn|`bil|`bir) as kind,fmts ->
         validate_module kind fmts
-      | (`kinds|`size),[] -> Ok ()
+      | (`kinds|`size|`invalid),[] -> Ok ()
+      | (`kinds|`size|`invalid),[opt]
+        when String.equal enabled opt -> Ok ()
       | `kinds,_ -> Error (No_formats_expected "kinds")
       | `size,_ -> Error (No_formats_expected "size")
+      | `invalid,_ -> Error (No_formats_expected "invalid")
       | `sema,_ ->
         (* no validation right now, since the knowledge introspection
            is not yet implemented *)
         Ok ())
 
-let run ?(only_one=false) dis arch mem formats =
+
+let print_invalid _pos =
+
+  Format.printf "<invalid>@\n"
+
+let run ?(only_one=false) ?(stop_on_error=false) dis arch mem formats =
+  let show_invalid = is_enabled (formats `invalid) in
   Dis.run dis mem
     ~init:0
     ~return:Result.return
     ~stop_on:[`Valid]
-    ~invalid:(bad_insn (Memory.min_addr mem))
+    ~invalid:(fun state _ pos ->
+        if show_invalid then print_invalid pos;
+        if stop_on_error
+        then bad_insn (Memory.min_addr mem) state pos
+        else Dis.step state pos)
     ~hit:(fun state mem insn bytes ->
         print arch mem insn formats >>= fun () ->
         if only_one then Dis.stop state bytes
@@ -315,15 +341,15 @@ let run ?(only_one=false) dis arch mem formats =
 
 let () = Extension.Command.(begin
     declare ~doc:mc_man "mc"
-      Spec.(args $arch $base $backend $only_one $input $outputs)
-  end) @@ fun arch base backend only_one input outputs _ctxt ->
+      Spec.(args $arch $base $backend $only_one $stop_on_error $input $outputs)
+  end) @@ fun arch base backend only_one stop_on_error input outputs _ctxt ->
   validate_formats outputs >>= fun () ->
   parse_base arch base >>= fun base ->
   read_input input >>= fun data ->
   create_memory arch data base >>= fun mem ->
   create_disassembler ?backend arch >>= fun dis ->
   let formats = formats outputs in
-  run ~only_one dis arch mem formats >>= fun bytes ->
+  run ~only_one ~stop_on_error dis arch mem formats >>= fun bytes ->
   Dis.close dis;
   match String.length data - bytes with
   | 0 -> Ok ()
@@ -332,8 +358,8 @@ let () = Extension.Command.(begin
 
 let () = Extension.Command.(begin
     declare ~doc:objdump_man "objdump"
-      Spec.(args $backend $loader $file $outputs)
-  end) @@ fun backend loader input outputs _ctxt ->
+      Spec.(args $backend $loader $stop_on_error $file $outputs)
+  end) @@ fun backend loader stop_on_error input outputs _ctxt ->
   validate_formats outputs >>= fun () ->
   let formats = formats outputs in
   match Image.create ~backend:loader input with
@@ -347,7 +373,7 @@ let () = Extension.Command.(begin
         Option.some_if
           (Value.is Image.code_region data) mem) |>
     Seq.map ~f:(fun mem ->
-        run dis arch mem formats >>= fun _bytes ->
+        run ~stop_on_error dis arch mem formats >>= fun _bytes ->
         Ok ()) |>
     Seq.to_list |>
     Result.all_unit
