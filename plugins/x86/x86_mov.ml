@@ -107,5 +107,7 @@ module IA32 = Make (X86_tools.IA32) (X86_backend.IA32)
 module AMD64 = Make (X86_tools.AMD64) (X86_backend.AMD64)
 
 let () =
+  Bap_main.Extension.declare @@ fun _ctxt ->
   IA32.register all_of_mov_ia32;
-  AMD64.register all_of_mov_amd64
+  AMD64.register all_of_mov_amd64;
+  Ok ()
