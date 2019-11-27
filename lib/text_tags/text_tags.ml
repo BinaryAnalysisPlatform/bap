@@ -138,7 +138,8 @@ module Attr = struct
     then pp_print_string ppf "\x1b[39;49m";
     clean := true
 
-  let print_open_tag ppf tag : unit =
+  let print_open_tag ppf stag : unit =
+    let tag = string_of_stag stag in
     if need_to_print tag then
       match ascii_color tag with
       | Some color when colorify.contents ->
@@ -150,10 +151,10 @@ module Attr = struct
 
   let install ppf =
     pp_set_print_tags ppf true;
-    let tags = pp_get_formatter_tag_functions ppf () in
-    pp_set_formatter_tag_functions ppf {
+    let tags = pp_get_formatter_stag_functions ppf () in
+    pp_set_formatter_stag_functions ppf {
       tags with
-      print_open_tag = print_open_tag ppf;
+      print_open_stag = print_open_tag ppf;
     };
     let out = pp_get_formatter_out_functions ppf () in
     pp_set_formatter_out_functions ppf {
