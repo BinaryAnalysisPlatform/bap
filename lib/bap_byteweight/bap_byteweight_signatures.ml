@@ -64,7 +64,7 @@ let save_exn ?comp ~mode ~path arch data =
     let dst = entry ?comp ~mode arch in
     List.iter old ~f:(fun (entry,data) ->
         let file = Zip.(entry.filename) in
-        if file <> dst then Zip.add_entry data zip file);
+        if String.(file <> dst) then Zip.add_entry data zip file);
     Zip.add_entry data zip dst;
     Zip.close_out zip
   with Sys_error msg -> fail (`Sys_error msg)

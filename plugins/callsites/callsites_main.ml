@@ -36,8 +36,12 @@ let transfer_attrs t1 t2 =
   transfer_attr Disasm.insn t1 |>
   transfer_attr address t1
 
+let is_out = function
+  | Out -> true
+  | _ -> false
+
 let add_def intent blk def =
-  if intent = Out
+  if is_out intent
   then Term.prepend def_t blk def
   else Term.append  def_t blk def
 
@@ -47,7 +51,7 @@ let defs_of_args call intent args =
       def_of_arg arg >>| transfer_attrs call)
 
 let target intent sub blk call =
-  if intent = Out
+  if is_out intent
   then Call.return call >>= function
     | Direct tid -> Term.find blk_t sub tid
     | _ -> None

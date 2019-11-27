@@ -30,7 +30,7 @@ let tmp ?(name="v") typ =
 
 
 let assn d s =
-  if d = Env.pc then Bil.jmp s else Bil.move d s
+  if Var.equal d Env.pc then Bil.jmp s else Bil.move d s
 
 let bitlen = function
   | Type.Imm len -> len

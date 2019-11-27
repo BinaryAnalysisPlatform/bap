@@ -66,7 +66,7 @@ let setup_headless_env path =
   fun () ->
     try
       FileUtil.rm ~recurse:true [lib];
-      if old_path <> "" then Unix.putenv var old_path
+      if String.(old_path <> "") then Unix.putenv var old_path
     with _ -> ()
 
 let cleanup_minidump () =
@@ -132,11 +132,13 @@ let create {Ida_config.ida_info; debug; curses} target mode =
 
 let substitute s (x,y) =
   let b = Buffer.create (String.length s + 64) in
-  Buffer.add_substitute b (fun s -> if s = x then y else s) s;
+  Buffer.add_substitute b (fun s -> if String.equal s x then y else s) s;
   Buffer.contents b
 
 let exec (self:ida) command =
-  let ext = if Command.language command = `idc then ".idc" else ".py" in
+  let ext = match Command.language command with
+    | `idc -> ".idc"
+    | `python -> ".py" in
   let script,out = Filename.open_temp_file "bap_" ext in
   let result = Filename.temp_file "bap_" ".ida_out" in
   substitute (Command.script command) ("output", result) |>

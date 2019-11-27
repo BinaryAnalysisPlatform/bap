@@ -50,7 +50,7 @@ let add_lookup chunk ctxt =
     | [] -> assert_string "can't find just added chunk"
     | _ :: _ -> assert_string "found more that one chunk" in
   let rec loop x =
-    if x <= Memory.max_addr chunk
+    if Addr.(x <= Memory.max_addr chunk)
     then (check x; loop Addr.(succ x)) in
   loop (Memory.min_addr chunk)
 

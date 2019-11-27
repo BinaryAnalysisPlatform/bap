@@ -452,7 +452,7 @@ module Pass = struct
   [@@deriving variants, sexp_of]
 
   let find name : pass option =
-    DList.find passes ~f:(fun p -> p.name = name)
+    DList.find passes ~f:(fun p -> String.equal p.name name)
 
   exception Failed of error [@@deriving sexp]
 
@@ -463,7 +463,7 @@ module Pass = struct
       raise (Failed (Runtime_error (pass, Exn.Reraised (backtrace, exn))))
 
   let is_evaled pass proj =
-    List.exists proj.passes ~f:(fun name -> name = pass.name)
+    List.exists proj.passes ~f:(fun name -> String.equal name pass.name)
 
   let eval pass proj = {
     (pass.main proj) with

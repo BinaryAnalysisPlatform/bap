@@ -73,7 +73,7 @@ let var_of_exp e = match e.body with
 module Exp = struct
 
   let cast x width sign =
-    let same_sign = x.sign = sign
+    let same_sign = [%compare.equal :sign] x.sign sign
     and same_size = x.width = width in
     match same_sign, same_size with
     | true,true -> x               (* nothing is changed *)
@@ -195,7 +195,7 @@ module Exp = struct
     if width = e.width then e
     else
       match e.body with
-      | Vars (v,vars) when vars <> [] ->
+      | Vars (v,vars) when Caml.not (List.is_empty vars) ->
         extract_of_vars e hi lo (v :: vars)
       | _ ->
         { sign=Unsigned; width; body = Extract (hi,lo,e.body) }

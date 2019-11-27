@@ -878,7 +878,7 @@ module Ir_jmp = struct
     | Indirect {vec} -> Indirect (Rhs.exp vec)
 
   let create ?(tid=Tid.create()) ?(cond=always) kind =
-    let cnd = if cond = always then None else Some (Cnd.of_exp cond) in
+    let cnd = if Exp.equal cond always then None else Some (Cnd.of_exp cond) in
     make_term tid @@ match kind with
     | Goto lbl -> Jmp.{
         cnd;
@@ -1048,7 +1048,7 @@ module Term = struct
 
   let create self : 'a term = make_term (Tid.create ()) self
   let clone {self} = create self
-  let same x y = x.tid = y.tid
+  let same x y = Tid.equal x.tid y.tid
   let name b = Tid.name b.tid
   let tid x = x.tid
   let with_field field term x = {
@@ -1058,13 +1058,13 @@ module Term = struct
   let apply f t p = {p with self=f (t.get p.self) |> t.set p.self}
 
   let update t p y =
-    apply (fun xs -> Array.update_if xs y ~f:(fun x -> x.tid = y.tid)) t p
+    apply (fun xs -> Array.update_if xs y ~f:(fun x -> Tid.(x.tid = y.tid))) t p
 
   let find t p tid =
-    Array.find (t.get p.self) ~f:(fun x -> x.tid = tid)
+    Array.find (t.get p.self) ~f:(fun x -> Tid.(x.tid = tid))
 
   let find_exn t p tid =
-    Array.find_exn (t.get p.self) ~f:(fun x -> x.tid = tid)
+    Array.find_exn (t.get p.self) ~f:(fun x -> Tid.(x.tid = tid))
 
   let nth t p i =
     let xs = t.get p.self in
@@ -1073,7 +1073,7 @@ module Term = struct
   let nth_exn t p i = (t.get p.self).(i)
 
   let remove t p tid =
-    apply (Array.remove_if ~f:(fun x -> x.tid = tid)) t p
+    apply (Array.remove_if ~f:(fun x -> Tid.(x.tid = tid))) t p
 
   let to_seq xs =
     Seq.init (Array.length xs) ~f:(Array.unsafe_get xs)
@@ -1100,7 +1100,7 @@ module Term = struct
 
   let filter t p ~f = apply (Array.filter ~f) t p
   let findi t p tid =
-    Array.findi (t.get p.self) ~f:(fun _i x -> x.tid = tid)
+    Array.findi (t.get p.self) ~f:(fun _i x -> Tid.(x.tid = tid))
 
   let next t p tid =
     let open Option.Monad_infix in
@@ -1123,14 +1123,14 @@ module Term = struct
 
   let after ?(rev=false) t p tid =
     let run,cut = if rev then Seq.take_while,0 else Seq.drop_while,1 in
-    Seq.(drop_eagerly (to_sequence ~rev t p |> run ~f:(fun x -> x.tid <> tid)) cut)
+    Seq.(drop_eagerly (to_sequence ~rev t p |> run ~f:(fun x -> Tid.(x.tid <> tid))) cut)
 
   let before ?(rev=false) t p tid =
     let run,cut = if rev then Seq.drop_while,1 else Seq.take_while,0 in
-    Seq.(drop_eagerly (to_sequence ~rev t p |> run ~f:(fun x -> x.tid <> tid)) cut)
+    Seq.(drop_eagerly (to_sequence ~rev t p |> run ~f:(fun x -> Tid.(x.tid <> tid))) cut)
 
   let before_or_after run ?rev t p tid =
-    if Array.exists (t.get p.self) ~f:(fun x -> x.tid = tid)
+    if Array.exists (t.get p.self) ~f:(fun x -> Tid.(x.tid = tid))
     then run ?rev t p tid
     else Seq.empty
 
@@ -1143,7 +1143,7 @@ module Term = struct
       | `after None -> Array.insert xs x (Array.length xs)
       | `before None -> Array.insert xs x 0
       | `after (Some this) | `before (Some this) ->
-        match Array.findi xs ~f:(fun _ x -> x.tid = this), where with
+        match Array.findi xs ~f:(fun _ x -> Tid.(x.tid = this)), where with
         | None,_ -> xs
         | Some (i,_),`before _ -> Array.insert xs x i
         | Some (i,_),`after _ -> Array.insert xs x (i+1) in
@@ -1155,7 +1155,7 @@ module Term = struct
   let attrs t = t.dict
   let get_attr t = Dict.find t.dict
   let del_attr t tag = {t with dict = Dict.remove t.dict tag}
-  let has_attr t tag = get_attr t tag <> None
+  let has_attr t tag = Option.is_some @@ get_attr t tag
   let with_attrs t dict = {t with dict}
 
   let length t p = Array.length (t.get p.self)
@@ -1215,7 +1215,7 @@ module Term = struct
 
 
   let change t p tid f =
-    Array.findi (t.get p.self) ~f:(fun _ x -> x.tid = tid) |> function
+    Array.findi (t.get p.self) ~f:(fun _ x -> Tid.(x.tid = tid)) |> function
     | None -> Option.value_map (f None) ~f:(append t p) ~default:p
     | Some (i,x) -> match f (Some x) with
       | None -> remove t p tid
@@ -1529,10 +1529,10 @@ module Ir_blk = struct
 
   let split_top blk = split_at 0 blk
   let split_bot blk = split_at (Array.length blk.self.defs) blk
-  let split_before blk def = split_while blk ~f:(fun {tid} -> tid <> def.tid)
+  let split_before blk def = split_while blk ~f:(fun {tid} -> Tid.(tid <> def.tid))
   let split_after blk def =
     let i = match Array.findi blk.self.defs
-                    ~f:(fun _ {tid} -> tid = def.tid) with
+                    ~f:(fun _ {tid} -> Tid.(tid = def.tid)) with
     | Some (i,_) -> i + 1
     | None -> Array.length blk.self.defs in
     split_at i blk
@@ -1619,17 +1619,17 @@ module Ir_blk = struct
 
   let find_var blk var =
     Term.to_sequence def_t blk ~rev:true |>
-    Seq.find ~f:(fun d -> Ir_def.lhs d = var) |> function
+    Seq.find ~f:(fun d -> Var.equal (Ir_def.lhs d) var) |> function
     | Some def -> Some (`Def def)
     | None ->
       Term.to_sequence phi_t blk |>
-      Seq.find ~f:(fun p -> Ir_phi.lhs p = var) |> function
+      Seq.find ~f:(fun p -> Var.equal (Ir_phi.lhs p) var) |> function
       | Some phi -> Some (`Phi phi)
       | None -> None
 
   let occurs b ~after:dominator id =
-    dominator = id ||
-    Term.(after def_t b dominator |> Seq.exists ~f:(fun x -> x.tid = id))
+    Tid.(dominator = id) ||
+    Term.(after def_t b dominator |> Seq.exists ~f:(fun x -> Tid.(x.tid = id)))
 
   let pp_self ppf self =
     Format.fprintf ppf "@[@.%a%a%a@]"
@@ -1824,14 +1824,14 @@ module Ir_program = struct
   let get_1st get prog tid : (path * 'a) option =
     with_return (fun {return} ->
         Array.iteri (get prog.self) ~f:(fun i x ->
-            if x.tid = tid then return (Some ([|i|], x )));
+            if Tid.(x.tid = tid) then return (Some ([|i|], x )));
         None)
 
   let get_2nd get {self} tid : (path * 'a) option =
     with_return (fun {return} ->
         Array.iteri self.subs ~f:(fun i sub ->
             Array.iteri (get sub.self) ~f:(fun j term ->
-                if term.tid = tid then return (Some ([|i;j|],term))));
+                if Tid.(term.tid = tid) then return (Some ([|i;j|],term))));
         None)
 
   let get_3rd get {self} tid : (path * 'a) option =
@@ -1839,7 +1839,7 @@ module Ir_program = struct
         Array.iteri self.subs ~f:(fun i {self} ->
             Array.iteri self.blks ~f:(fun j blk ->
                 Array.iteri (get blk.self) ~f:(fun k ent ->
-                    if ent.tid = tid
+                    if Tid.(ent.tid = tid)
                     then return (Some ([|i; j; k|], ent)))));
         None)
 
@@ -1862,7 +1862,7 @@ module Ir_program = struct
     | Some path ->
       try
         let thing = term.of_path prog path in
-        if thing.tid = tid then Some thing
+        if Tid.(thing.tid = tid) then Some thing
         else get_and_cache term.get prog tid
       with Invalid_argument _ -> get_and_cache term.get prog tid
 
@@ -1876,7 +1876,7 @@ module Ir_program = struct
     | Blk -> finder get_2nd blks blk_of_path
     | Arg -> finder get_2nd args arg_of_path
     | Sub -> finder get_1st subs sub_of_path
-    | Top -> (fun p tid -> Option.some_if (p.tid = tid) p)
+    | Top -> (fun p tid -> Option.some_if Tid.(p.tid = tid) p)
     | Nil -> assert false
 
   let lookup t = finder_of_type t.typ

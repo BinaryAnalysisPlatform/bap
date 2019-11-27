@@ -288,7 +288,27 @@ module Std : sig
     include Monad.S with type 'a t := 'a t
     include Applicative.S with type 'a t := 'a t
     module Variadic : Variadic.S with type 'a arg = 'a t
-    module Args : Applicative.Args with type 'a arg := 'a t
+
+    module Args : sig
+      type 'a arg = 'a t
+      type ('f, 'r) t
+
+      (** the empty argument list **)
+      val nil : ('r, 'r) t
+
+      (** prepend an argument *)
+      val cons : 'a arg -> ('f, 'r) t -> ('a -> 'f, 'r) t
+
+      (** infix operator for [cons] *)
+      val (@>) : 'a arg -> ('f, 'r) t -> ('a -> 'f, 'r) t
+
+      val step : ('f1, 'r) t -> f:('f2 -> 'f1) -> ('f2, 'r) t
+
+      val mapN : f:'f -> ('f, 'r) t -> 'r arg
+
+      val applyN : 'f arg -> ('f, 'r) t -> 'r arg
+
+    end
 
     (** [create ()] creates a new future. The function returns a pair
         of the future itself and a promise that can be used to fulfill
@@ -525,25 +545,25 @@ module Std : sig
         values xs, producing a stream of results.*)
     val apply : ('a -> 'b) t -> 'a t -> 'b t
 
-    (** [concat ss] returns a stream that will produce elements from 
+    (** [concat ss] returns a stream that will produce elements from
         the input list of streams [ss]. The ordering of the elements
         of different streams is unspecified, though it is guaranteed
         that elements of the same stream will preserve their ordering.*)
     val concat : 'a t list -> 'a t
 
-    (** [concat_merge xs ~f] builds a stream, that will 
-        produce elements from the input list and applies [f] to all 
-        consecutive elements. The ordering of the input list does not 
+    (** [concat_merge xs ~f] builds a stream, that will
+        produce elements from the input list and applies [f] to all
+        consecutive elements. The ordering of the input list does not
         mandate the ordering of elements in the output stream, and is
         undefined. See [concat] for more information.*)
     val concat_merge : 'a t list -> f:('a -> 'a -> 'a) -> 'a t
 
-    (** [split xs ~f] returns a pair of streams, where the first stream 
+    (** [split xs ~f] returns a pair of streams, where the first stream
         contains [fst (f x)] for each [x] in [xs] and the second stream
         contains [snd (f x)] for each [x] in [xs]. *)
     val split : 'a t -> f:('a -> 'b * 'c) -> 'b t * 'c t
 
-    (** [zip xs ys] creates a steam that will produce an element [(x,y)] 
+    (** [zip xs ys] creates a steam that will produce an element [(x,y)]
         every time both [xs] and [ys] produce elements [x] and [y] respectively *)
     val zip : 'a t -> 'b t -> ('a * 'b) t
 
@@ -552,7 +572,7 @@ module Std : sig
         each [x] in [xs]. Essentially, the same as [split ~f:ident] *)
     val unzip : ('a * 'b) t -> 'a t * 'b t
 
-    (** [once xs] creates a stream that will at most contain the next value 
+    (** [once xs] creates a stream that will at most contain the next value
         produced by [xs] and nothing more. *)
     val once : 'a t -> 'a t
 

@@ -94,7 +94,7 @@ module Index = struct
 
   let rec clean idx =
     let size = size idx in
-    if size > 0L && size > idx.config.max_size
+    if Int64.(size > 0L) && Int64.(size > idx.config.max_size)
     then clean (evict_entry idx)
     else idx
 

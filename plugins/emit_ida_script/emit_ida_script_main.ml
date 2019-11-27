@@ -112,8 +112,8 @@ let extract_script data code attrs =
   Memmap.to_sequence data |> Seq.iter ~f:(fun (mem,x) ->
       switch x @@
       case python (fun line -> Buffer.add_string buf line) @@
-      default ignore);
-  (program_visitor buf attrs)#run code ("",None) |> ignore;
+      default Caml.ignore);
+  (program_visitor buf attrs)#run code ("",None) |> Caml.ignore;
   Buffer.add_string buf Py.epilogue;
   Buffer.contents buf
 

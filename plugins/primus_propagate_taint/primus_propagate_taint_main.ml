@@ -91,7 +91,7 @@ module Intro(Machine : Primus.Machine.S) = struct
       | Bil.Load (_,addr,ed,sz)
       | Bil.Store (_,addr,_,ed,sz) ->
         Eval.exp addr >>= fun ptr ->
-        if kind = `Reg
+        if [%compare.equal: [`Reg | `Ptr] ] kind `Reg
         then taint_ptr t ptr
         else
           Eval.load ptr ed sz >>=

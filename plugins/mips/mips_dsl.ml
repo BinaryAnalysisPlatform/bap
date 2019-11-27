@@ -52,7 +52,7 @@ let const signed width value =
   apply_signess signed (Exp.of_word x)
 
 let of_string signed s =
-  let s = String.filter ~f:(fun c -> c <> '_') s in
+  let s = String.filter ~f:(fun c -> Char.(c <> '_')) s in
   let chop (prefix, len) =
     match String.chop_prefix ~prefix s with
     | None -> None

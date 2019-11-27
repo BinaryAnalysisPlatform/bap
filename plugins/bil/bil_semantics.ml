@@ -46,7 +46,7 @@ module Simpl = struct
 
     and cast t s x = match x with
       | Cast (_,s',_) as x when s = s' -> x
-      | Cast (t',s',x) when t = t' && s' > s -> Cast (t,s,x)
+      | Cast (t',s',x) when [%compare.equal: cast] t t' && s' > s -> Cast (t,s,x)
       | Int w -> Int (Bil.Apply.cast t s w)
       | _ -> Cast (t,s,x)
 
@@ -56,7 +56,7 @@ module Simpl = struct
 
     and unop op x = match x with
       | Int x -> Int (Bil.Apply.unop op x)
-      | UnOp(op',x) when op = op' -> x
+      | UnOp(op',x) when [%compare.equal: unop] op op' -> x
       | x -> UnOp(op, x)
 
     and binop op x y =

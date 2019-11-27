@@ -43,7 +43,7 @@ let validate validate word ctxt =
   let v = validate word in
   assert_bool
     (String.concat ~sep:"\n" (Validate.errors v))
-    (Validate.result v = Ok ())
+    (Or_error.is_ok @@ Validate.result v)
 
 let binary op ~width ~expect x y ctxt =
   let (!$) = Word.of_int ~width in
@@ -266,7 +266,7 @@ let suite () =
     "cast_mid:8"  >:: bitsub ~expect:(0xAD,8) ~hi:0xB ~lo:0x4 (0xDAD5,16);
     "mono_size"   >:: (fun ctxt ->
         try
-          ignore Word.(Mono.(zero_32 < b0));
+          Caml.ignore Word.(Mono.(zero_32 < b0));
           assert_string "Monomorphic comparison"
         with exn -> ());
   ]

@@ -105,7 +105,7 @@ module Plugin = struct
 
 
   let is_debugging () =
-    try Sys.getenv "BAP_DEBUG" <> "0" with Caml.Not_found -> false
+    try String.(Sys.getenv "BAP_DEBUG" <> "0") with Caml.Not_found -> false
 
   let do_if_not_debugging f x =
     if is_debugging () then () else f x
@@ -155,7 +155,7 @@ module Plugin = struct
   let validate_unit _plugin main =
     match Hashtbl.find units main with
     | None -> Ok ()
-    | Some (`Provided_by name) when name = main -> Ok ()
+    | Some (`Provided_by name) when String.equal name main -> Ok ()
     | Some reason ->
       let with_whom = match reason with
         | `In_core -> "host program"
@@ -327,7 +327,7 @@ module Plugins = struct
   let run ?argv ?env ?provides ?(don't_setup_handlers=false) ?library ?exclude () =
     if not don't_setup_handlers
     then setup_default_handler ();
-    load ?argv ?env ?provides ?library ?exclude () |> ignore
+    load ?argv ?env ?provides ?library ?exclude () |> Caml.ignore
 
   let events = Plugin.system_events
   type event = Plugin.system_event [@@deriving sexp_of]

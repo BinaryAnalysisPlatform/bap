@@ -101,7 +101,7 @@ let print_list r =
 let to_list ~word_size backend ~expect ctxt =
   let data = String.Table.find_exn files backend |> Bytes.to_string in
   let r = Image.of_string ~backend data >>| fun (img,warns) ->
-    assert_bool "to_list: no warning" (warns = []);
+    assert_bool "to_list: no warning" (List.is_empty warns);
     Table.to_sequence (Image.words img word_size) |>
     Seq.map ~f:snd |>  Seq.to_list in
   let width = Size.in_bits word_size in
@@ -113,7 +113,7 @@ let check ?(base=0) backend ~f ctxt =
   let data = Bytes.to_string data in
   let r = Image.of_string ~backend data
     >>= fun (img,warns) ->
-    assert_bool "check: no warning" (warns = []);
+    assert_bool "check: no warning" (List.is_empty warns);
     f img >>= fun _ -> return () in
   let printer err = Sexp.to_string_hum
       (Or_error.sexp_of_t sexp_of_unit err) in
@@ -142,7 +142,7 @@ let assert_cont ~word_size img =
         | Error err -> assert_string @@ Error.to_string_hum err
         | Ok diff ->
           assert_bool "a1 <> a2 -> a2 - a1 = (word_size)"
-            (a1 <> a2 ==> Addr.is_zero diff) in
+            (Word.(a1 <> a2) ==> Addr.is_zero diff) in
       a2) |> return
 
 let suite () = "Image" >::: [

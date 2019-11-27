@@ -35,7 +35,7 @@ type ('t,'a,'b) many = ('t,'a,('t Def.t * 'b) list) resolver
 
 type exn += Failed of string * Context.t * resolution
 
-let interns d name = Def.name d = name
+let interns d name = String.equal (Def.name d) name
 let externs def name =
   match Attribute.Set.get (Def.attributes def) External.t with
   | None -> false
@@ -94,8 +94,9 @@ let stage3 s2  =
 *)
 let stage4 = function
   | [] -> []
-  | x :: xs ->
-    if List.for_all xs ~f:(fun y -> compare_def x y = Same)
+  | x :: xs -> if List.for_all xs ~f:(fun y -> match compare_def x y with
+      | Same -> true
+      | _ -> false)
     then x::xs
     else []
 

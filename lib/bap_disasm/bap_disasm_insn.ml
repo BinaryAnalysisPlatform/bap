@@ -45,7 +45,7 @@ module Props = struct
   let (+) flags (flag,_) = Z.logor flags flag
   let (-) flags (flag,_) = Z.logand flags (Z.lognot flag)
   let has flags (flag,_) =
-    Z.logand flags flag = flag
+    [%compare.equal : t] (Z.logand flags flag) flag
   let set_if cond flag =
     if cond then fun flags -> flags + flag else ident
 
@@ -210,7 +210,7 @@ let of_basic ?bil insn : t =
     | None -> [] in
   let is = Insn.is insn in
   let is_bil kind =
-    if bil <> None
+    if Option.is_some bil
     then List.mem ~equal:[%compare.equal : kind] bil_kinds kind
     else is kind in
   (* those two are the only which we can't get from the BIL semantics *)
@@ -281,7 +281,7 @@ module Adt = struct
 
   let pp ppf insn =
     let name = name insn in
-    if name = Slot.empty
+    if String.equal name Slot.empty
     then pr ppf "Undefined()"
     else pr ppf "%s(%a, Props(%s))"
         (String.capitalize name)
@@ -330,7 +330,7 @@ include Regular.Make(struct
 
     let pp fmt insn =
       let name = name insn in
-      if name = Slot.empty
+      if String.equal name Slot.empty
       then Format.fprintf fmt "%s" name
       else Format.fprintf fmt "%s(%s)" name (string_of_ops (ops insn))
   end)

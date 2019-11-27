@@ -502,7 +502,7 @@ module Legacy = struct
 
   let rec is p = function
     | Or (p1,p2) -> is p p1 || is p p2
-    | p' -> p = p'
+    | p' -> [%compare.equal: perm] p p'
 
   let addr x = ok_exn (Word.to_int64 x)
 
@@ -512,7 +512,9 @@ module Legacy = struct
   let vsize secs {Segment.name; location={Location.addr;len}} =
     List.find_map secs
       ~f:(fun {Section.name=n; location={Location.addr=a;len}} ->
-          if name = n && addr = a then Some len else None) |> function
+          if String.equal name n && Addr.equal addr a
+          then Some len
+          else None) |> function
     | None -> len
     | Some len -> len
 

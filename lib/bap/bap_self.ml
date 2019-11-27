@@ -40,7 +40,7 @@ module Create() = struct
     let is_key = String.is_prefix ~prefix:"-" in
     Array.fold (Plugin.argv ()) ~init:([],`drop) ~f:(fun (args,act) arg ->
         let take arg = ("--" ^ arg) :: args in
-        if arg = Sys.argv.(0) then (name::args,`drop)
+        if String.equal arg Sys.argv.(0) then (name::args,`drop)
         else match String.chop_prefix arg ~prefix, act with
           | None,`take when is_key arg -> args,`drop
           | None,`take -> arg::args,`drop
@@ -50,7 +50,7 @@ module Create() = struct
     fst |> List.rev |> Array.of_list
 
   let argv =
-    if name = main then Sys.argv
+    if String.equal name main then Sys.argv
     else filter_args name
 
   let has_var v = match Sys.getenv ("BAP_" ^ String.uppercase v) with

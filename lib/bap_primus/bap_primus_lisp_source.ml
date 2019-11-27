@@ -49,7 +49,7 @@ let nexteq p = {p with lasteq = Eq.next p.lasteq}
 
 let rec repr s id = match Map.find s.rclass id with
   | None -> id
-  | Some id' -> if id = id' then id else repr s id'
+  | Some id' -> if Id.(id = id') then id else repr s id'
 
 let hashcons p sexp =
   match Map.find p.hashed sexp with
@@ -170,7 +170,7 @@ let fold p ~init ~f = Map.fold ~init p.source ~f:(fun ~key ~data user ->
     f key data user)
 
 let derived p ~from id =
-  if Id.null = from then {
+  if Id.(Id.null = from) then {
     p with lastid = Id.max id p.lastid
   } else {
     p with

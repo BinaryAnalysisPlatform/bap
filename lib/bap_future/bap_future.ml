@@ -134,10 +134,20 @@ module Std = struct
         include Monad
       end)
 
-    module Args = Applicative.Make_args(struct
-        type nonrec 'a t = 'a t
+    module Args = struct
+        type 'a arg = 'a t
         include App
-      end)
+
+        type ('f, 'r) t = { applyN : 'f arg -> 'r arg }
+
+        let nil = { applyN = Fn.id }
+        let cons arg t = { applyN = fun d -> t.applyN (apply d arg) }
+        let step t ~f = { applyN = fun d -> t.applyN (map ~f d) }
+        let (@>) = cons
+        let applyN arg t = t.applyN arg
+        let mapN ~f t = applyN (return f) t
+    end
+
     include App
     include Monad
   end
@@ -190,11 +200,11 @@ module Std = struct
       let f id x = f x in
       add t f
 
-    let watch s f = ignore (add s f)
+    let watch s f = Caml.ignore (add s f)
 
     let observe s f =
       let f id x = f x in
-      ignore (add s f)
+      Caml.ignore (add s f)
 
     let unsubscribe t id =
       Hashtbl.remove t.subs id;
@@ -319,7 +329,7 @@ module Std = struct
       let q1 = Queue.create ~capacity () in
       let q2 = Queue.create ~capacity () in
       let drop () =
-        let drop q = ignore (Queue.dequeue_exn q) in
+        let drop q = Caml.ignore (Queue.dequeue_exn q) in
         drop q1; drop q2 in
       let step src q x =
         Queue.enqueue q x;
@@ -373,7 +383,7 @@ module Std = struct
       link s s' step;
       s'
 
-    let listen x f = ignore (subscribe x f)
+    let listen x f = Caml.ignore (subscribe x f)
 
     let of_list xs = unfold_until ~init:xs ~f:(function
         | [] -> None
@@ -428,7 +438,7 @@ module Std = struct
       let buf = Queue.create () in
       let add_value x =
         if Queue.length buf >= n then
-          ignore (Queue.dequeue buf);
+          Caml.ignore (Queue.dequeue buf);
         Queue.enqueue buf x in
       let id = subscribe xs add_value in
       let future, promise = Future.create () in

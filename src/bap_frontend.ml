@@ -209,7 +209,7 @@ let () =
     matches true requested name && not (matches false excluded name) in
   match what with
   | `Recipes ->
-    ignore (Sys.command "bap print-recipes");
+    Caml.ignore (Sys.command "bap print-recipes");
     Format.printf "Use the `print-recipes' for the detailed list of recipes\n";
     Ok ()
   | `Plugins ->
@@ -298,7 +298,7 @@ let () =
   let _unused : (module unit) = (module Bap.Std) in
   let argv = autocorrect_input Sys.argv in
   let () =
-    try if Sys.getenv "BAP_DEBUG" <> "0" then
+    try if String.(Sys.getenv "BAP_DEBUG" <> "0") then
         Printexc.record_backtrace true
     with Caml.Not_found -> () in
   Sys.(set_signal sigint (Signal_handle exit));

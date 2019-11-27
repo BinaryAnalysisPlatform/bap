@@ -326,7 +326,7 @@ let pp_guesses ppf badname =
       | c -> Char.lowercase c) in
   let suffix = "-" ^ name in
   let good_guess name =
-    name = guess || String.is_suffix ~suffix name in
+    String.equal name guess || String.is_suffix ~suffix name in
   let guesses =
     Project.passes () |>
     List.filter_map ~f:(fun p ->

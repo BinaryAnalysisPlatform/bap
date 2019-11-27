@@ -117,7 +117,7 @@ let left_bound tab x =
     | _  -> p in
   if has_intersections tab x then match prev_key tab.map x with
     | Some (p,_) when intersects p x -> Some (search_left p)
-    | _ when Map.find tab.map x <> None -> Some x (* see note above*)
+    | _ when Option.is_some @@ Map.find tab.map x -> Some x (* see note above*)
     | _ -> next_key tab.map x |> Option.map ~f:fst
   else None
 
@@ -191,7 +191,7 @@ let first_some user our =
 
 let foldi ?start ?until (tab : 'a t) ~(init : 'b) ~f : 'b =
   let f_labeled = fun ~key ~data s -> f key data s in
-  if start = None && until = None
+  if Option.is_none start && Option.is_none until
   then Map.fold tab.map ~init:init ~f:f_labeled
   else
     let from = first_some start (Map.min_elt tab.map) in
@@ -277,7 +277,7 @@ let find_addr tab (addr : addr) : (mem * 'a) option =
       None)
 
 let make_map map add ?start ?until tab ~f =
-  if start = None && until = None
+  if Option.is_none start && Option.is_none until
   then {
     bound = tab.bound;
     map = map tab.map ~f:(fun ~key ~data -> f key data);

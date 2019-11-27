@@ -191,7 +191,7 @@ module Interpreter(Machine : Machine) = struct
     | None, Some (sp,dir,off) ->
       Some (sp,dir,Word.(off ++ Size.in_bytes n))
     | Some (sp,dir,off), Some (sp',dir',off') ->
-      if Var.same sp sp' && dir = dir' then
+      if Var.same sp sp' && Caml.(dir = dir') then
         let off = Word.max off off' in
         Some (sp,dir,Word.(off ++ Size.in_bytes n))
       else Some (sp,dir,off)
@@ -207,12 +207,16 @@ module Interpreter(Machine : Machine) = struct
     match find_max_slot args with
     | None -> Machine.return None
     | Some (sp,dir,max) ->
-      let sign = if dir = `down then Bil.MINUS else Bil.PLUS in
+      let sign = if Caml.(dir = `down) then Bil.MINUS else Bil.PLUS in
       Eval.get sp >>= fun sp_value ->
       Eval.const max >>= fun frame_size ->
       Eval.binop sign sp_value frame_size >>=
       Eval.set sp >>= fun () ->
       Machine.return (Some (sp,sp_value))
+
+  let is_out_intent a = match Arg.intent a with
+    | Some Out -> true
+    | _ -> false
 
   (* we won't notify linker about a call, since the callee will
      notify it itself. Basically, it is the responsibility of a
@@ -234,7 +238,7 @@ module Interpreter(Machine : Machine) = struct
         Seq.zip args (Seq.of_list sub_args) |>
         Machine.Seq.iter ~f:(fun (arg,x) ->
             let open Bil.Types in
-            if Arg.intent arg <> Some Out
+            if not (is_out_intent arg)
             then match Arg.rhs arg with
               | Var v -> Eval.set v x
               | Load (_,BinOp (op, Var sp, Int off),endian,size) ->
@@ -249,7 +253,7 @@ module Interpreter(Machine : Machine) = struct
             else Machine.return ()) >>= fun () ->
         Linker.exec (`addr sub_addr.value) >>= fun () ->
         Machine.Seq.find_map args ~f:(fun arg ->
-            if Arg.intent arg = Some Out
+            if is_out_intent arg
             then Eval.get (Arg.lhs arg) >>| Option.some
             else Machine.return None) >>= fun rval ->
         let teardown_frame = match frame with
@@ -381,7 +385,7 @@ module Interpreter(Machine : Machine) = struct
         | false ->
           Lisp.Program.get program para |>
           List.find ~f:(fun p ->
-              Lisp.Def.name p = Var.name v) |> function
+              String.equal (Lisp.Def.name p) (Var.name v)) |> function
           | None -> Eval.get v
           | Some p ->
             eval (Lisp.Def.Para.default p) >>= fun x ->
@@ -462,7 +466,7 @@ module Make(Machine : Machine) = struct
 
   let find_sub prog name =
     Term.enum sub_t prog |>
-    Seq.find ~f:(fun s -> Sub.name s = name) |> function
+    Seq.find ~f:(fun s -> String.equal (Sub.name s) name) |> function
     | None -> [],None,None,None
     | Some sub ->
       let tid = Some (Term.tid sub) in
@@ -485,7 +489,7 @@ module Make(Machine : Machine) = struct
       s.program
       Lisp.Program.Items.func name args |> function
     | None -> Machine.return ()
-    | Some (Error _) when tid = None -> Machine.return ()
+    | Some (Error _) when Option.is_none tid -> Machine.return ()
     | Some (Error err) -> Machine.raise (Unresolved (name,err))
     | Some (Ok (fn,bs)) ->
       let bs,frame_size = Vars.make_frame s.width bs in
@@ -509,12 +513,12 @@ module Make(Machine : Machine) = struct
           | Some v -> match Arg.rhs v with
             | Bil.Var reg -> Eval.set reg r
             | Bil.(Cast (LOW, rsize, Var reg)) ->
-            let vsize = size_of_reg reg in
-            Eval.get reg >>= fun lhs ->
-            Eval.extract ~hi:(vsize-1) ~lo:rsize lhs >>= fun high ->
-            Eval.concat high r >>= fun r ->
-            Eval.set reg r
-          | e -> failf "unknown return semantics: %a" Exp.pps e ()
+              let vsize = size_of_reg reg in
+              Eval.get reg >>= fun lhs ->
+              Eval.extract ~hi:(vsize-1) ~lo:rsize lhs >>= fun high ->
+              Eval.concat high r >>= fun r ->
+              Eval.set reg r
+            | e -> failf "unknown return semantics: %a" Exp.pps e ()
 
         let exec =
           eval_args >>= fun bs ->
@@ -582,7 +586,7 @@ module Make(Machine : Machine) = struct
           module Unpacked = Library(M)
           let run =
             Unpacked.defs () |> List.find ~f:(fun d ->
-                Lisp.Def.name d = Lisp.Def.name def) |> function
+                String.equal (Lisp.Def.name d) (Lisp.Def.name def)) |> function
             | Some code -> (Lisp.Def.Primitive.body code)
             | _ -> assert false
         end in
@@ -681,7 +685,7 @@ module Doc = struct
         | `white,true  -> `white
         | `white,false -> `black
         | `black,true  -> push c; `white
-        | `black,false -> `black) |> ignore;
+        | `black,false -> `black) |> Caml.ignore;
     Buffer.contents buf
 
   let normalize_descr s =
@@ -689,10 +693,11 @@ module Doc = struct
 
   let normalize xs =
     List.Assoc.map xs ~f:normalize_descr |>
-    String.Map.of_alist_reduce ~f:(fun x y ->
-        if x = "" then y else if y = "" then x
-        else if x = y then x
-        else sprintf "%s\nOR\n%s" x y) |>
+    String.Map.of_alist_reduce ~f:(fun x y -> match x,y with
+        | "", y -> y
+        | x, "" -> x
+        | x,y when String.equal x y -> x
+        | x,y -> sprintf "%s\nOR\n%s" x y) |>
     Map.to_alist
 
   let describe prog item =

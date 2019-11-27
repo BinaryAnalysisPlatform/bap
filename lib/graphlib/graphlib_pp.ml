@@ -92,7 +92,7 @@ module Dot = struct
     let edges = Seq.map edges ~f:(fun e ->
         let src,dst = nodes_of_edge e in
         node src, node dst, edge_label e) in
-    let attrs = if attrs = [] then "" else
+    let attrs = if List.is_empty attrs then "" else
         sprintf "@;%s" (String.concat ~sep:"@;" attrs) in
     let graphname = match name with
       | None -> ""

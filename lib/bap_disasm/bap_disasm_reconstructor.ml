@@ -46,7 +46,7 @@ let is_start roots cfg blk =
   Set.mem roots (Block.addr blk) ||
   Cfg.Node.degree ~dir:`In blk cfg = 0
 
-let is_fall e = Cfg.Edge.label e = `Fall
+let is_fall e = [%compare.equal: Block.edge] (Cfg.Edge.label e) `Fall
 let is_call b = Insn.(is call) (Block.terminator b)
 
 let entries_of_block cfg roots blk =
@@ -117,7 +117,7 @@ let reconstruct name initial_roots prog =
     let name = name (Block.addr entry) in
     let syms = Symtab.add_symbol syms (name,entry,cfg) in
     Set.fold inputs ~init:syms ~f:(fun syms e ->
-        let implicit = Cfg.Edge.label e = `Fall in
+        let implicit = is_fall e in
         Symtab.insert_call ~implicit syms (Cfg.Edge.src e) name) in
   let remove_node cfg n = Cfg.Node.remove n cfg in
   let remove_reachable cfg from =

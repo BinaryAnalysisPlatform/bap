@@ -149,7 +149,7 @@ let update_slots = function
             active = true
           });
     Hashtbl.mapi_inplace tasks ~f:(fun ~key:name ~data:task' ->
-        if String.is_prefix ~prefix:name task && task <> name
+        if String.is_prefix ~prefix:name task && String.(task <> name)
         then {task' with updated=now; active=true}
         else task');
     render_progress ();

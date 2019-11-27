@@ -167,7 +167,7 @@ module Std = struct
       b >>> fun zip ->
       Zip.entries zip |> List.filter_map ~f:(fun e ->
           let name = Zip.(e.filename) in
-          Option.some_if (not (name = Nameof.manifest)) name)
+          Option.some_if (not (String.equal name Nameof.manifest)) name)
 
     let transform files bundle ~f =
       let zin = open_in bundle.path in
@@ -225,7 +225,7 @@ module Std = struct
 
     let update_manifest bundle ~f =
       update bundle ~f:(fun file ->
-          if file = Nameof.manifest
+          if String.equal file Nameof.manifest
           then `Map (fun s -> Manifest.(of_string s |> f |> to_string))
           else `Copy)
 

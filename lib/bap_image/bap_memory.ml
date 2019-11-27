@@ -17,7 +17,7 @@ type getter = {
 
 type t = {
   endian : endian;
-  data: Bigstring.Stable.V1.t;
+  data : Bigstring.Stable.V1.t;
   addr : addr;
   off  : int;
   size : int;
@@ -85,7 +85,7 @@ let getter {endian; addr; off; size; data}  =
       fun (a, b, c, d) -> concat (concat (of_int64 a) (of_int64 b))
           (concat (of_int64 c) (of_int64 d))) in
   let open Bigstring in
-  if endian = BigEndian then
+  if [%compare.equal: endian] endian BigEndian then
     let get_int64_beX2 t ~pos = (
       unsafe_get_int64_t_be t ~pos:pos,
       unsafe_get_int64_t_be t ~pos:(pos+8)
@@ -97,7 +97,7 @@ let getter {endian; addr; off; size; data}  =
       unsafe_get_int64_t_be t ~pos:(pos+24)
     ) in
     function
-    | `s8 -> int   1 unsafe_get_int8
+    | `s8 -> int    1 unsafe_get_int8
     | `r8  -> int   1 unsafe_get_uint8
     | `s16 -> int   2 unsafe_get_int16_be
     | `r16 -> int   2 unsafe_get_uint16_be
@@ -240,7 +240,7 @@ let merge m1 m2 =
   let m1_max = max_addr m1 in
   if Addr.(min_addr m2 > succ m1_max)
   then errorf "blocks doesn't intersect"
-  else if endian m1 <> endian m2
+  else if not ([%compare.equal: endian] (endian m1) (endian m2))
   then errorf "blocks has different sex"
   else if not (phys_equal m1.data m2.data)
   then errorf "blocks doesn't share base"
@@ -372,7 +372,7 @@ let pp_hex fmt t =
       List.iter (List.rev chars) ~f:print_char;
       Format.fprintf fmt "%*s\n" (off + 1) "|" in
   let chars = foldi t ~init:[] ~f:(fun addr char chars ->
-      let newline = chars = [] || List.length chars = 16 in
+      let newline = List.is_empty chars || List.length chars = 16 in
       let addr = ok_exn Addr.(to_int64 (signed addr)) in
       let char = ok_exn Word.(to_int char) in
       if newline then begin

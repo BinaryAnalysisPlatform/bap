@@ -2,10 +2,10 @@ open Core_kernel
 open Bap.Std
 include Self()
 
-type version = Vold | Vnew [@@deriving sexp]
-type old_kind = [ `idal | `idal64 | `idaq | `idaq64 ] [@@deriving sexp, enumerate]
-type new_kind = [ `idat | `idat64 | `ida  | `ida64  ] [@@deriving sexp, enumerate]
-type ida_kind = [ old_kind | new_kind ] [@@deriving sexp]
+type version = Vold | Vnew [@@deriving sexp, compare]
+type old_kind = [ `idal | `idal64 | `idaq | `idaq64 ] [@@deriving sexp, enumerate, compare]
+type new_kind = [ `idat | `idat64 | `ida  | `ida64  ] [@@deriving sexp, enumerate, compare]
+type ida_kind = [ old_kind | new_kind ] [@@deriving sexp, compare]
 
 type ida = {
   headless  : ida_kind;
@@ -86,7 +86,8 @@ module Check = struct
   let check_integrity ida =
     let files = [ida.graphical; ida.headless;
                  ida.graphical64; ida.headless64;] in
-    let is_of kinds = List.mem (kinds :> ida_kind list) ~equal:(=) in
+    let is_of kinds = List.mem (kinds :> ida_kind list)
+                        ~equal:[%compare.equal : ida_kind] in
     let check version = List.for_all files ~f:(is_of version) in
     let expected = match ida.headless with
       | `idal -> (all_of_old_kind :> ida_kind list)
@@ -191,4 +192,5 @@ let is_headless t = t.is_headless
 let path t = t.path
 
 let require_ncurses t =
-  Sys.os_type = "Unix" && t.is_headless && t.ida.version = Vold
+  String.equal Sys.os_type "Unix" && t.is_headless &&
+    Caml.([%compare.equal : version] t.ida.version Vold)

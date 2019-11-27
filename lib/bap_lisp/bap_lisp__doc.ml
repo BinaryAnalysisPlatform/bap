@@ -34,7 +34,7 @@ let dedup_whitespace str =
       | `white,true  -> `white
       | `white,false -> `black
       | `black,true  -> push c; `white
-      | `black,false -> `black) |> ignore;
+      | `black,false -> `black) |> Caml.ignore;
   Buffer.contents buf
 
 let normalize_descr s =
@@ -42,10 +42,11 @@ let normalize_descr s =
 
 let normalize xs =
   List.Assoc.map xs ~f:normalize_descr |>
-  String.Map.of_alist_reduce ~f:(fun x y ->
-      if x = "" then y else if y = "" then x
-      else if x = y then x
-      else sprintf "%s\nOR\n%s" x y) |>
+  String.Map.of_alist_reduce ~f:(fun x y -> match x,y with
+      | "",y -> y
+      | x,"" -> x
+      | x,y when String.equal x y -> x
+      | _ -> sprintf "%s\nOR\n%s" x y) |>
   Map.to_alist
 
 
