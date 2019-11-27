@@ -107,7 +107,7 @@ let findi vec ~f =
           if f i x then return (Some (i,x)));
       None)
 
-let peq = Polymorphic_compare.equal
+let peq = Poly.equal
 
 let index_with ?(equal=peq) ~default vec x : int =
   with_return (fun {return} ->

@@ -517,10 +517,10 @@ let term_pp pp_self ppf t =
   let open Format in
   let attrs = Dict.data t.dict in
   Seq.iter attrs ~f:(fun attr ->
-      pp_open_tag ppf (asprintf "%a" pp_attr attr));
+      pp_open_stag ppf @@ String_tag (asprintf "%a" pp_attr attr));
   fprintf ppf "@[%08Lx: %a@]@." (Int63.to_int64 (KB.Object.id t.tid))
     pp_self t.self;
-  Seq.iter attrs ~f:(fun _ -> pp_close_tag ppf ())
+  Seq.iter attrs ~f:(fun _ -> pp_close_stag ppf ())
 
 let pp_value slots ppf x =
   match slots with
@@ -1558,16 +1558,17 @@ module Ir_blk = struct
       Seq.(seq jmp_t ~rev blk >>| fun x -> `Jmp x)
 
 
-  let apply_map name get map skip blk ~f =
-    if List.mem ~equal:Polymorphic_compare.equal skip name
+  let apply_map ~equal name get map skip blk ~f =
+    if List.mem ~equal skip name
     then (get blk.self)
     else Array.map (get blk.self) ~f:(fun x -> map x ~f)
 
-  let map_exp ?(skip=[]) blk ~f = {
+  let map_exp ?(skip=[]) blk ~f =
+    let equal = [%equal: [`def | `phi | `jmp ] ] in {
     blk with self = {
-      phis = apply_map `phi phis Ir_phi.map_exp skip blk ~f;
-      defs = apply_map `def defs Ir_def.map_exp skip blk ~f;
-      jmps = apply_map `jmp jmps Ir_jmp.map_exp skip blk ~f;
+      phis = apply_map ~equal `phi phis Ir_phi.map_exp skip blk ~f;
+      defs = apply_map ~equal `def defs Ir_def.map_exp skip blk ~f;
+      jmps = apply_map ~equal `jmp jmps Ir_jmp.map_exp skip blk ~f;
     }
   }
 
@@ -1588,10 +1589,11 @@ module Ir_blk = struct
   let map_phi_lhs p ~f = Ir_phi.with_lhs p (f (Ir_phi.lhs p))
   let map_def_lhs d ~f = Ir_def.with_lhs d (f (Ir_def.lhs d))
 
-  let map_lhs ?(skip=[]) blk ~f = {
+  let map_lhs ?(skip : [`phi | `def] list =[]) blk ~f =
+    let equal = [%equal: [`phi | `def ] ] in {
     blk with self = {
-      phis = apply_map `phi phis map_phi_lhs skip blk ~f;
-      defs = apply_map `def defs map_def_lhs skip blk ~f;
+        phis = apply_map ~equal `phi phis map_phi_lhs skip blk ~f;
+        defs = apply_map ~equal `def defs map_def_lhs skip blk ~f;
       jmps = jmps blk.self;
     }
   }

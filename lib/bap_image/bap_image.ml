@@ -40,9 +40,10 @@ type mapped = {
   x : bool;
 } [@@deriving bin_io, compare, sexp]
 
+type kind = [`Code | `Debug | `Dyn] [@@deriving bin_io, compare, equal, sexp]
 
 type symbol_info = {
-  kind : [`Code | `Debug | `Dyn] list;
+  kinds : kind list;
   extra_locns : location list;
 } [@@deriving bin_io, compare, sexp]
 
@@ -74,7 +75,7 @@ module Segment = struct
 end
 
 module Symbol = struct
-  open! Polymorphic_compare
+
   module T = struct
     type t = symbol_info region [@@deriving bin_io,compare,sexp]
     let pp = pp_region and hash = hash_region
@@ -82,8 +83,8 @@ module Symbol = struct
     let version = "2.0.0"
   end
   let name {name} = name
-  let is_debug {info={kind}} = List.mem ~equal kind `Debug
-  let is_function {info={kind}} = List.mem ~equal kind `Code
+  let is_debug {info={kinds}} = List.mem ~equal:equal_kind kinds `Debug
+  let is_function {info={kinds}} = List.mem ~equal:equal_kind kinds `Code
   include T
   include Regular.Make(T)
 end
@@ -463,7 +464,7 @@ module Derive = struct
           | [] -> Fact.return None
           | locn::locns ->
             Fact.return (Some {
-                name; locn; info={kind=[`Code]; extra_locns = locns}
+                name; locn; info={kinds=[`Code]; extra_locns = locns}
               })) >>=
     Fact.Seq.all >>| Seq.filter_opt
 

@@ -293,13 +293,13 @@ module Std : sig
       type 'a arg = 'a t
       type ('f, 'r) t
 
-      (** the empty argument list **)
+      (** [nil] the empty argument list **)
       val nil : ('r, 'r) t
 
-      (** prepend an argument *)
+      (** [const arg t] prepend an argument *)
       val cons : 'a arg -> ('f, 'r) t -> ('a -> 'f, 'r) t
 
-      (** infix operator for [cons] *)
+      (** [@>] infix operator for [cons] *)
       val (@>) : 'a arg -> ('f, 'r) t -> ('a -> 'f, 'r) t
 
       val step : ('f1, 'r) t -> f:('f2 -> 'f1) -> ('f2, 'r) t

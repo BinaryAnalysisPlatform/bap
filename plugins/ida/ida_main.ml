@@ -69,7 +69,7 @@ let register_source (module T : Target) =
   T.provide ida_symbolizer (T.of_blocks (extract file arch))
 
 
-type perm = [`code | `data] [@@deriving sexp, compare]
+type perm = [`code | `data] [@@deriving sexp, equal]
 type section = string * perm * int * (int64 * int)
 [@@deriving sexp]
 
@@ -142,7 +142,7 @@ let loader path =
             code,data
           | Ok mem ->
             let sec = Value.create Image.section name in
-            if [%compare.equal : perm]perm `code
+            if equal_perm perm `code
             then Memmap.add code mem sec, data
             else code, Memmap.add data mem sec) in
   Project.Input.create arch path ~code ~data

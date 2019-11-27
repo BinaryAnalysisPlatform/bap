@@ -195,14 +195,14 @@ let supported () : (module abi) list = [
   (module WATCOM_REGS)
 ]
 
-let has_same_name abi name =
+let is_named_after abi name =
   let module Abi = (val abi : abi) in
   String.equal Abi.name name ||
   String.equal (Abi.name ^ "_abi") name
 
 let name (module Abi : abi) = Abi.name
 let arch (module Abi : abi) = Abi.arch
-let find name = supported () |> List.find ~f:(fun abi -> has_same_name abi name)
+let find name = supported () |> List.find ~f:(fun abi -> is_named_after abi name)
 
 let auto proj = supported () |> List.find ~f:(fun (module Abi) ->
     Abi.autodetect proj)
@@ -221,7 +221,7 @@ let default_abi arch : (module abi) = match arch with
 let dispatch default sub attrs proto =
   let abi = supported () |> List.find ~f:(fun abi ->
       List.exists attrs ~f:(fun {C.Type.Attr.name} ->
-          has_same_name abi name)) |> function
+          is_named_after abi name)) |> function
             | None -> default
             | Some abi -> abi in
   info "applying %s to %s" (name abi) (Sub.name sub);

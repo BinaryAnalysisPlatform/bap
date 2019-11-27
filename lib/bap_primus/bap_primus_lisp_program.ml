@@ -795,7 +795,7 @@ module Typing = struct
       let p = Reindex.program p in
       let gamma = infer vars p in
       List.fold (Gamma.exps gamma) ~init:Loc.Map.empty ~f:(fun errs exp ->
-          assert (Id.(exp <> Source.Id.null));
+          assert Id.(exp <> Source.Id.null);
           if Source.has_loc p.sources exp
           then match Gamma.get gamma exp with
             | None -> errs

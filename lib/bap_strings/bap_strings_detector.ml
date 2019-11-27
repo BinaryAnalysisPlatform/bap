@@ -1,7 +1,7 @@
 open Core_kernel
 open Format
 
-type stage = Working | Accepted | Finished [@@deriving compare]
+type stage = Working | Accepted | Finished [@@deriving equal]
 type answer = Accept | Decline | Undecided
 
 type +'a decision = {
@@ -58,7 +58,7 @@ let decide t p =
 let push h x c = {
   h with
   len = h.len + 1;
-  cut = if Caml.(h.stage = Accepted) then h.cut + 1 else h.cut;
+  cut = if equal_stage h.stage Accepted then h.cut + 1 else h.cut;
   chars = c :: h.chars;
   data = x :: h.data;
 }
@@ -91,19 +91,19 @@ let step_char t x char =
   | Finished,_ -> t
 
 let step t x char =
-  if [%compare.equal: stage] t.h.stage Finished
+  if equal_stage t.h.stage Finished
   then step_char {t with h = empty} x char
   else step_char t x char
 
 
 let when_decided t ~f init =
-  if [%compare.equal: stage] t.h.stage Finished then f t.h else init
+  if equal_stage t.h.stage Finished then f t.h else init
 
 let decision t =
   when_decided t ~f:(fun x -> Some x) None
 
 let abort t =
-  if [%compare.equal: stage] t.h.stage Accepted
+  if equal_stage t.h.stage Accepted
   then Some {t.h with cut=0}
   else None
 

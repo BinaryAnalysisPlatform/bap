@@ -162,6 +162,8 @@ let message,new_message =
 
 module Trace = Bap_primus_linker.Trace
 
+type dir = [`down | `up] [@@deriving equal]
+
 
 module Interpreter(Machine : Machine) = struct
   open Machine.Syntax
@@ -191,7 +193,7 @@ module Interpreter(Machine : Machine) = struct
     | None, Some (sp,dir,off) ->
       Some (sp,dir,Word.(off ++ Size.in_bytes n))
     | Some (sp,dir,off), Some (sp',dir',off') ->
-      if Var.same sp sp' && Caml.(dir = dir') then
+      if Var.same sp sp' && equal_dir dir dir' then
         let off = Word.max off off' in
         Some (sp,dir,Word.(off ++ Size.in_bytes n))
       else Some (sp,dir,off)
@@ -207,7 +209,7 @@ module Interpreter(Machine : Machine) = struct
     match find_max_slot args with
     | None -> Machine.return None
     | Some (sp,dir,max) ->
-      let sign = if Caml.(dir = `down) then Bil.MINUS else Bil.PLUS in
+      let sign = if equal_dir dir `down then Bil.MINUS else Bil.PLUS in
       Eval.get sp >>= fun sp_value ->
       Eval.const max >>= fun frame_size ->
       Eval.binop sign sp_value frame_size >>=

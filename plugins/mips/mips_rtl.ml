@@ -2,7 +2,7 @@ open Core_kernel
 open Bap.Std
 open Mips_utils
 
-type sign = Signed | Unsigned [@@deriving bin_io, compare, sexp]
+type sign = Signed | Unsigned [@@deriving bin_io, compare, equal, sexp]
 
 type binop = Bil.binop [@@deriving bin_io, compare, sexp]
 type unop  = Bil.unop  [@@deriving bin_io, compare, sexp]
@@ -73,7 +73,7 @@ let var_of_exp e = match e.body with
 module Exp = struct
 
   let cast x width sign =
-    let same_sign = [%compare.equal :sign] x.sign sign
+    let same_sign = equal_sign x.sign sign
     and same_size = x.width = width in
     match same_sign, same_size with
     | true,true -> x               (* nothing is changed *)

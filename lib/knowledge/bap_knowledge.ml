@@ -4,7 +4,7 @@ open Monads.Std
 type ('a,'b) eq = ('a,'b) Type_equal.t = T : ('a,'a) eq
 
 module Order = struct
-  type partial = LT | EQ | GT | NC [@@deriving compare]
+  type partial = LT | EQ | GT | NC [@@deriving equal]
   module type S = sig
     type t
     val order : t -> t -> partial
@@ -498,8 +498,7 @@ module Domain = struct
   let join d = d.join
   let name d = d.name
 
-  let is_empty {empty; order} x =
-    [%compare.equal : Order.partial] (order empty x) EQ
+  let is_empty {empty; order} x = Order.equal_partial (order empty x) EQ
 
   exception Join of string * Sexp.t * Sexp.t [@@deriving sexp_of]
 

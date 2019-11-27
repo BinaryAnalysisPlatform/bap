@@ -4,9 +4,6 @@ open OUnit2
 
 module T = Trie.String.Prefix;;
 
-module type A = module type of Option
-
-
 let longest_match _ =
   let (=) = Option.equal (fun (a,b) (c,d) -> a = c && b = d) in
   let t = T.create () in

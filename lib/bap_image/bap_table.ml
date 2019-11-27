@@ -117,7 +117,7 @@ let left_bound tab x =
     | _  -> p in
   if has_intersections tab x then match prev_key tab.map x with
     | Some (p,_) when intersects p x -> Some (search_left p)
-    | _ when Option.is_some @@ Map.find tab.map x -> Some x (* see note above*)
+    | _ when Map.mem tab.map x -> Some x (* see note above*)
     | _ -> next_key tab.map x |> Option.map ~f:fst
   else None
 
