@@ -438,7 +438,11 @@ type ctxt
     @parameter version defaults to the BAP Framework version.
 
     @parameter default, if specified, then this function will be invoked
-    when no command was specified in the command line.
+    when no command line arguments were provided.
+
+    @parameter default_command, if specified, then this command will
+    be used when command line arguments are provided but do not
+    specify a command. @since 2.1.0.
 *)
 val init :
   ?features:string list ->
@@ -453,6 +457,7 @@ val init :
   ?name:string ->
   ?version:string ->
   ?default:(ctxt -> (unit,error) result) ->
+  ?default_command:string ->
   unit -> (unit, error) result
 
 
