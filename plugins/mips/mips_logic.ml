@@ -174,6 +174,7 @@ let dbitswap cpu ops =
   ]
 
 let () =
+  Bap_main.Extension.declare @@ fun _ctxt ->
   "AND" >> mand;
   "ANDi" >> mandi;
   "NOP" >> nop;
@@ -187,3 +188,4 @@ let () =
   "DBITSWAP" >> dbitswap;
   "WSBH" >> wsbh;
   "DSBH" >> dsbh;
+  Ok ()

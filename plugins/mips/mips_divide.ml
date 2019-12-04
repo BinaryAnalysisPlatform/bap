@@ -115,6 +115,7 @@ let dmodulou cpu ops =
   ]
 
 let () =
+  Bap_main.Extension.declare @@ fun _ctxt ->
   "SDIV" >> div;
   "MOD"  >> modulo;
   "UDIV" >> divu;
@@ -123,3 +124,4 @@ let () =
   "DMOD" >> dmodulo;
   "DDIVu" >> ddivu;
   "DMODu" >> dmodulou;
+  Ok ()

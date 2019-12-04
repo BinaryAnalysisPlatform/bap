@@ -10,6 +10,8 @@ type endbr = [ `ENDBR32 | `ENDBR64 ] [@@deriving bin_io, sexp, compare, enumerat
 let lift _mem _insn = Ok [ Bil.special "end-of-branch" ]
 
 let () =
+  Bap_main.Extension.declare @@ fun _ctxt ->
   let name op = sexp_of_endbr op |> Sexp.to_string in
   List.iter all_of_endbr ~f:(fun op -> IA32.register (name op) lift);
-  List.iter all_of_endbr ~f:(fun op -> AMD64.register (name op) lift)
+  List.iter all_of_endbr ~f:(fun op -> AMD64.register (name op) lift);
+  Ok ()
