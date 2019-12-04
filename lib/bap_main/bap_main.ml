@@ -598,8 +598,9 @@ module Grammar : sig
     ?env:(string -> string option) ->
     ?help:Format.formatter ->
     ?default:(ctxt -> (unit,Error.t) Result.t) ->
+    ?command:string ->
     ?err:Format.formatter ->
-    ?argv:string array -> unit -> (unit, Error.t) Result.t
+    string array -> (unit, Error.t) Result.t
 end = struct
   open Cmdliner
 
@@ -983,7 +984,7 @@ end = struct
         Term.(const serve_manpage $ served $ make_help_option plugin))
 
   let eval ?(man="") ?(name=progname) ?version ?env
-      ?(help=Format.std_formatter) ?default ?err ?argv () =
+      ?(help=Format.std_formatter) ?default ?command ?err argv =
     let plugin_names = Plugins.list () |> List.map ~f:Plugin.name in
     let disabled_plugins = no_plugin_options plugin_names in
     let plugin_options = concat_plugins () in
@@ -1003,7 +1004,16 @@ end = struct
       | Some f -> Term.(const (fun p -> match p with
           | Error _ as err -> err
           | Ok () -> f @@ Context.request ()) $ plugins) in
-    match Term.eval_choice ~catch:false ?env ~help ?err ?argv
+    let argv = match command with
+      | None -> argv
+      | Some cmd -> match Array.to_list argv with
+        | prog :: arg :: rest ->
+          if List.exists commands ~f:(fun (_,info) ->
+              String.is_prefix ~prefix:arg (Term.name info))
+          then argv
+          else Array.of_list (prog::cmd::arg::rest)
+        | [_] | [] -> argv in
+    match Term.eval_choice ~catch:false ?env ~help ?err ~argv
             (main,main_info) commands with
     | `Ok (Ok ()) -> Ok ()
     | `Ok (Error _ as err) -> err
@@ -1124,6 +1134,7 @@ let init
     ?env ?log ?out ?err ?man
     ?name ?(version=Bap_main_config.version)
     ?default
+    ?default_command
     () =
   match state.contents with
   | Loaded _ -> Error Error.Already_initialized
@@ -1134,7 +1145,7 @@ let init
       | None | Some None -> Ok argv
       | Some (Some spec) ->
         load_recipe spec >>= fun spec ->
-        Ok (Array.append argv @@ Bap_recipe.argv spec) in
+        Ok (Bap_recipe.argv ~argv spec) in
     argv >>= fun argv ->
     let log = match log with
       | Some _ -> log
@@ -1152,9 +1163,9 @@ let init
           | Ok p -> `Fst p
           | Error (p,e) -> `Snd (p,e)) in
     if List.is_empty failures
-    then match
-        Grammar.eval ?name ~version ?env ?help:out
-          ?err ?man ~ argv ?default ()
+    then match Grammar.eval argv
+                 ?name ~version ?env ?help:out
+                 ?err ?man ?default ?command:default_command
       with
       | Ok () ->
         state := Loaded plugins;
