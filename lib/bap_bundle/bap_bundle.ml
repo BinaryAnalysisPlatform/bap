@@ -124,7 +124,7 @@ module Std = struct
           | Some man -> man
           | None -> Manifest.create "noname" in
         let mdata = Manifest.to_string man in
-        Zip.add_entry mdata zip Nameof.manifest;
+        Zip.add_entry ~level:0 mdata zip Nameof.manifest;
         Zip.close_out zip
     end
 
@@ -192,9 +192,9 @@ module Std = struct
       let zout = Zip.open_out bundle.path in
       Hashtbl.iteri files ~f:(fun ~key:name ~data ->
           match data with
-          | `Data s -> Zip.add_entry s zout name
-          | `Copy f -> Zip.copy_file_to_entry f zout name
-          | `Move f -> Zip.copy_file_to_entry f zout name;
+          | `Data s -> Zip.add_entry ~level:0 s zout name
+          | `Copy f -> Zip.copy_file_to_entry ~level:0 f zout name
+          | `Move f -> Zip.copy_file_to_entry ~level:0 f zout name;
             Sys.remove f);
       Zip.close_out zout
 
