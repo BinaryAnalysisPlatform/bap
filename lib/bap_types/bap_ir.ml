@@ -517,10 +517,10 @@ let term_pp pp_self ppf t =
   let open Format in
   let attrs = Dict.data t.dict in
   Seq.iter attrs ~f:(fun attr ->
-      pp_open_stag ppf @@ String_tag (asprintf "%a" pp_attr attr));
+      pp_open_tag ppf (asprintf "%a" pp_attr attr));
   fprintf ppf "@[%08Lx: %a@]@." (Int63.to_int64 (KB.Object.id t.tid))
     pp_self t.self;
-  Seq.iter attrs ~f:(fun _ -> pp_close_stag ppf ())
+  Seq.iter attrs ~f:(fun _ -> pp_close_tag ppf ())
 
 let pp_value slots ppf x =
   match slots with
