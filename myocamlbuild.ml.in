@@ -88,8 +88,9 @@ let link_shared_native ~cmxa ~dst =
 let register_cmxs_of_cmxa_rule () =
   rule "bap: cmxa -> cmxs"
     ~prods:["%.cmxs"]
-    ~deps:["%.cmxa"]
-    (fun env _ -> link_shared_native
+    ~deps:["%.cmxa"; "%.a"]
+    (fun env _ ->
+       link_shared_native
          ~cmxa:(env "%.cmxa")
          ~dst:(env "%.cmxs"))
 
