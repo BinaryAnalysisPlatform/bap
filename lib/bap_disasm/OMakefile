@@ -1,9 +1,11 @@
 # You may modify this file freely. It is not overwritten by oasis
 # setup once it exists. See the OMakefile in the topmost directory
 # for more documentation.
+
 CFLAGS += -O2
 CXXFLAGS += -std=c++11 -fPIC -Ilib/bap_disasm -O2
-OCAML_LIB_CCLIB += -lstdc++
+LDFLAGS += -lstdc++
+OCAMLMKLIBFLAGS += -lstdc++
 
 include _oasis_hier.om
 
@@ -15,6 +17,7 @@ include _oasis_hier.om
 
 include _oasis_build.om
 include _oasis_install.om
+
 
 DefineBuildRules()
 DefineInstallRules()
