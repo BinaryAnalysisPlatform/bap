@@ -20,4 +20,4 @@ sed -i 's/.*CCLib:.*//' _oasis
 oasis setup
 ocamlfind ocamlopt unix.cmxa setup.ml -o setup.exe
 rm setup.cmx setup.cmi setup.o
-./setup.exe -configure
+./setup.exe -configure --prefix $(opam config var prefix)
