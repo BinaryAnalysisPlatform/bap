@@ -1,6 +1,7 @@
 #include <vector>
 #include <memory>
 #include <set>
+#include <cstdint>
 
 extern "C" {
     #include "disasm.h"
