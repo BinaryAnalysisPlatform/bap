@@ -7,7 +7,7 @@ Library elf
   Path:          lib/bap_elf
   Build$:        flag(everything) || flag(elf)
   FindlibName:   bap-elf
-  BuildDepends:  bitstring, bitstring.ppx, regular
+  BuildDepends:  bitstring, bitstring.ppx, regular, core_kernel
   Modules: Bap_elf
   InternalModules:
                  Elf_parse,
@@ -22,7 +22,7 @@ Library elf_loader_plugin
   Build$:           flag(everything) || flag(elf)
   FindlibName:      bap-plugin-elf_loader
   CompiledObject:   best
-  BuildDepends:     bap, bap-elf, bap-dwarf
+  BuildDepends:     bap, bap-elf, bap-dwarf, core_kernel, regular
   InternalModules:  Elf_loader_main
   XMETADescription: read ELF and DWARF formats in a pure OCaml
   XMETAExtraLines:  tags="legacy, loader, elf, dwarf"

@@ -18,7 +18,8 @@ Library bap_ida_plugin
   Path:             plugins/ida
   FindlibName:      bap-plugin-ida
   CompiledObject:   best
-  BuildDepends:     bap, bap-ida, core_kernel, ppx_jane
+  BuildDepends:     bap, bap-ida, core_kernel, ppx_jane, fileutils,
+                    re.posix, bap-knowledge, graphlib, regular, bap-future
   Modules:          Ida_main
   InternalModules:  Bap_ida_config, Bap_ida_service, Bap_ida_info
   XMETADescription: use ida to provide rooter, symbolizer and reconstructor

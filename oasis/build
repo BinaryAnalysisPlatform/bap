@@ -16,4 +16,4 @@ Executable "bapbuild"
   MainIs:         bapbuild.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   core_kernel, ocamlbuild, bap-build, compiler-libs, ppx_jane
+  BuildDepends:   core_kernel, ocamlbuild, bap_build, compiler-libs, ppx_jane

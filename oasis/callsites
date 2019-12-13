@@ -7,7 +7,7 @@ Library callsites_plugin
   Path:             plugins/callsites
   FindlibName:      bap-plugin-callsites
   CompiledObject:   best
-  BuildDepends:     bap
+  BuildDepends:     bap, core_kernel
   Modules:          Callsites_main
   XMETADescription: annotate callsites with subroutine's arguments
   XMETAExtraLines:  tags="pass"

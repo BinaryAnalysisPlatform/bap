@@ -7,7 +7,7 @@ Library trivial_condition_form_plugin
   Path:             plugins/trivial_condition_form
   FindlibName:      bap-plugin-trivial_condition_form
   CompiledObject:   best
-  BuildDepends:     bap
+  BuildDepends:     bap, core_kernel
   Modules:          Trivial_condition_form_main
   XMETADescription: eliminates complex conditionals in branches
   XMETAExtraLines:  tags="pass"

@@ -7,7 +7,7 @@ Library dwarf
   Path:          lib/bap_dwarf
   FindlibName:   bap-dwarf
   Build$:        flag(everything) || flag(dwarf)
-  BuildDepends:  bap
+  BuildDepends:  bap, core_kernel, ppx_jane, regular
   Modules:       Bap_dwarf
 
   InternalModules:
@@ -21,7 +21,7 @@ Library dwarf_test
   Path:           lib_test/bap_dwarf
   Build$:         flag(tests) && (flag(everything) || flag(dwarf))
   CompiledObject: best
-  BuildDepends:   bap-dwarf, oUnit
+  BuildDepends:   bap-dwarf, oUnit, core_kernel
   Install:        false
   Modules:        Test_leb128
 

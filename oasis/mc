@@ -8,7 +8,8 @@ Library mc_plugin
   Build$:          flag(everything) || flag(mc)
   CompiledObject:  best
   Modules:         Mc_main
-  BuildDepends:    core_kernel, bap-main, bap
+  BuildDepends:    core_kernel, bap-main, bap, regular, bap-plugins,
+                   bap-core-theory, bap-knowledge, ppx_jane, bitvec
   XMETAExtraLines: tags="command, disassemble"
 
 
