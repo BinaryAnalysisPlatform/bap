@@ -1,0 +1,211 @@
+################################################################################
+#  OASIS: architecture for building OCaml libraries and applications           #
+#                                                                              #
+#  Copyright (C) 2011-2013, Sylvain Le Gall                                    #
+#  Copyright (C) 2008-2011, OCamlCore SARL                                     #
+#                                                                              #
+#  This library is free software; you can redistribute it and/or modify it     #
+#  under the terms of the GNU Lesser General Public License as published by    #
+#  the Free Software Foundation; either version 2.1 of the License, or (at     #
+#  your option) any later version, with the OCaml static compilation           #
+#  exception.                                                                  #
+#                                                                              #
+#  This library is distributed in the hope that it will be useful, but         #
+#  WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  #
+#  or FITNESS FOR A PARTICULAR PURPOSE. See the file COPYING for more          #
+#  details.                                                                    #
+#                                                                              #
+#  You should have received a copy of the GNU Lesser General Public License    #
+#  along with this library; if not, write to the Free Software Foundation,     #
+#  Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA               #
+################################################################################
+
+# This file was created by "oasis setup". You may modify this file freely.
+# It is not overwritten once it exists. The same holds for OMakeroot and
+# all OMakefiles in the subdirectories. The files following the naming
+# pattern _oasis_*.om are overwritten by the next "oasis setup".
+
+# Include OASIS library:
+
+if $(not $(file-exists _oasis_lib.om))
+    err. =
+        extends $(Exception)
+        message = $'Not set up. Run first: oasis setup'
+    raise $(err)
+
+if $(not $(file-exists setup.data))
+    err. =
+        extends $(Exception)
+        message = $'Not configured. Run first: ocaml setup.ml -configure'
+    raise $(err)
+
+include _oasis_lib.om
+
+# Include the configuration, i.e. the output of "ocaml setup.ml -configure".
+# The settings are written to a file setup.data. We need it in a different
+# format, and convert the setup here. Note that the variables from setup.data
+# are prefixed with "oasis_", e.g. "prefix" is made available as
+# $(oasis_prefix). At this point we also initialize a number of build-related
+# variables like BYTE_ENANBLED or OCAMLFLAGS.
+
+.INCLUDE: _oasis_setup.om: setup.data
+    OASIS_generate_setup()
+
+# At this point you may fine-tune the configuration, and modify defaults:
+#
+# OCAML_LIB_MODULE_SUFFIXES += .ml       (install also .ml files with libs)
+# OCAMLFINDFLAGS += -verbose             (be verbose)
+# OCAMLFLAGS += -bin-annot               (create .cmt/.cmti files)
+
+OCAMLFLAGS_ANNOT = -annot -bin-annot
+OCAMLFLAGS += $(OCAMLFLAGS_ANNOT)
+OCAMLFLAGS += -opaque
+# section
+#   vmount(src, _build/src)
+#   vmount(lib, _build/lib)
+#   vmount(lib_test, _build/lib_test)
+#   .SUBDIRS: _build/src _build/lib _build/lib_test _build/plugins
+
+# Until this point we allow to override variables via the command-line.
+# That means all initializations from above can be changed by omake arguments
+# here. E.g. invoke with "omake BYTE_ENABLED=false" to disable bytecode
+# builds.
+
+DefineCommandVars()
+
+# Global phonies: This declaration is visible in the whole build tree.
+
+.PHONY: build doc install uninstall reinstall clean distclean
+.DEFAULT: build
+
+# Define hierarchy (sets OASIS_SUBDIRS to the sub directories that are part
+# of the build):
+
+include _oasis_hier.om
+
+# Include these subdirectories into the build. Normally, you only name
+# direct subdirectories here. Also note that all definitions up to this
+# point are automatically passed down to the OMakefiles in the subdirectories.
+
+.SUBDIRS: $(OASIS_SUBDIRS)
+
+# Local phonies: This declaration is only visible in this directory.
+
+.PHONY: build-here doc-here install-here uninstall-here reinstall-here pre-install-here clean-here distclean-here
+
+# At this point you may set any of the EXTRA variables used in the .om files:
+#
+# -- build --
+# EXTRA_OCAMLPACKS                (findlib packages)
+# EXTRA_OCAMLINCLUDES             (include directories)
+# EXTRA_MODULES                   (OCaml modules w/o extension)
+# EXTRA_C_OBJECTS                 (C object files)
+# EXTRA_OCAML_LIBS                (internal OCaml libraries w/o extension)
+# EXTRA_OCAML_LIB_CCLIB           (-L and -l switches to embed into libs)
+# EXTRA_OCAML_LIB_DLLIB           (-L and -l switches to embed into bytecode libs)
+# EXTRA_OCAML_LIB_DLLPATH         (runtime path to embed into libs)
+# EXTRA_OCAML_LIB_FLAGS           (flags for creating libs)
+# EXTRA_OCAML_LINK_CCLIB          (-L and -l switches for linking executables)
+# EXTRA_OCAML_LINK_DLLIB          (-L and -l switches for dynamic bytecode executables)
+# EXTRA_OCAML_LINK_DLLPATH        (runtime path for bytecode executables)
+# EXTRA_OCAML_LINK_FLAGS          (flags for creating executables)
+# EXTRA_OCAMLFINDFLAGS            (flags for ocamlfind call)
+#
+# -- install --
+# EXTRA_INSTALL_MODULES           (OCaml modules w/o extension)
+# EXTRA_INSTALL_FILES             (files to install with the library)
+# EXTRA_INSTALL_OPTIONAL_FILES    (optional files to install with the library)
+#
+# In order to restrict such a variable to only a single library, executable, or
+# object, append its name separated with an underscore, e.g.
+#
+# EXTRA_MODULES_mylibrary[] =
+#    module7
+
+# Include definitions generated by OASIS. These files contain the definitions
+# derived from the _oasis file.
+
+include _oasis_build.om
+include _oasis_install.om
+
+# These calls define the rules needed for "build", "install", etc.
+
+DefineBuildRules()
+DefineInstallRules()
+
+# You may define additional build rules here, e.g.
+#
+# file.ml: file.mlp
+#     ./mypreprocessor file.mlp
+
+# If you set here one of the following variables, the setting will be
+# taken for compiling modules and C sources in this directory, unless
+# more specific settings exist.  Note that _oasis_build.om ensures
+# that these variables are already filled with something reasonable
+# derived from _oasis, but you might want to adjust this here. You can
+# also append to variables with "+=". If you move the setting before the
+# .SUBDIRS line it is applied to all subdirectories, too.
+#
+# OCAMLPACKS =
+# OCAMLINCLUDES =
+# OCAMLFINDFLAGS =
+# OCAMLFLAGS =
+# OCAMLCFLAGS =
+# OCAMLOPTFLAGS =
+# OCAMLLEXFLAGS =
+# OCAMLYACCFLAGS =
+
+# It is also possible to specify variables for a single source file. Use
+# the OASIS_modify_* functions to append flags for a single source only.
+# Do not add file extensions like .ml or .c here. These functions must be
+# called from the OMakefile in the directory of the module to modify.
+#
+# OASIS_modify_OCAMLPACKS(module, unix)
+# OASIS_modify_OCAMLINCLUDES(module, /some/path)
+# OASIS_modify_OCAMLFINDFLAGS(module, -syntax camlp4o)
+# OASIS_modify_OCAMLFLAGS(module, -warn-error +a)
+# OASIS_modify_OCAMLOPTFLAGS(module, -p)
+# OASIS_modify_OCAMLCFLAGS(module, -vmthread)
+# OASIS_modify_OCAMLLEXFLAGS(module, -ml)
+# OASIS_modify_OCAMLYACCFLAGS(module, -q)
+# OASIS_modify_CFLAGS(module, -q)
+
+# Entry points:
+#
+# omake build: Build the configured targets here and in subdirectories
+# omake build-here: Build the configured targets only in this directory
+# omake install: Install here and in subdirectories
+# omake install-here: Install only in this directory
+# omake clean: Clean here and in subdirectories
+# omake clean-here: Clean only in this directory
+# omake distclean: dist-clean here and in subdirectories
+# omake distclean-here: dist-clean only in this directory
+#
+# You can also request to build explicit files, e.g. omake mylib.cma
+
+build-here: $(BUILD_TARGETS)
+doc-here: $(BUILD_DOC_TARGETS)
+install-here: $(INSTALL_TARGETS)
+uninstall-here: $(UNINSTALL_TARGETS)
+reinstall-here: $(REINSTALL_TARGETS)
+pre-install-here:
+
+clean-here:
+    rm -f $(OASIS_clean_list)
+    rm -rf $(OASIS_rec_clean_list)
+    section
+        OASIS_rmdir($(OASIS_dir_clean_list))
+
+distclean-here:
+    rm -f $(OASIS_distclean_list)
+    rm -rf $(OASIS_rec_distclean_list)
+    section
+        OASIS_rmdir($(OASIS_dir_distclean_list))
+
+build: build-here
+doc: doc-here
+install: install-here
+uninstall: uninstall-here
+reinstall: reinstall-here
+clean: clean-here
+distclean: distclean-here
