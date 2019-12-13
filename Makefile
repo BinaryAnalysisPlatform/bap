@@ -15,17 +15,24 @@ doc:
 all:
 	$(SETUP) -all $(BAPALLFLAGS)
 
-install:
-	$(SETUP) -install $(BAPINSTALLFLAGS)
+.PHONY: plugins
+install-plugins:
 	sh tools/build_plugins.sh
 	if [ -f ./postinstall.native ]; then ./postinstall.native; fi
+	if [ -f ./postinstall.byte ]; then ./postinstall.byte; fi
+	if [ -f ./postinstall ]; then ./postinstall; fi
+
+install-libs:
+	$(SETUP) -install $(BAPINSTALLFLAGS)
+
+reinstall-libs:
+	$(SETUP) -reinstall $(BAPINSTALLFLAGS)
 
 uninstall:
 	$(SETUP) -uninstall $(BAPUNINSTALLFLAGS)
 
-reinstall:
-	make uninstall
-	make install
+install: install-libs install-plugins
+reinstall: reinstall-libs install-plugins
 
 clean:
 	$(SETUP) -clean $(BAPCLEANFLAGS)
