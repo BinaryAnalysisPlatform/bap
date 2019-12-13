@@ -4,54 +4,59 @@ set -ue
 
 . $(dirname $0)/bap_config
 
+md5sum=md5sum
+
+if [ $OS = "macosx" ]; then
+    md5sum=md5
+fi
+
+built_plugins=_build/built_plugins
+[ -d $built_plugins ] || mkdir -p $built_plugins
+
+compute_digest() {
+    plugin_lib=$1
+    output=$2
+    $md5sum `ocamlfind query -predicates byte -a-format -r $plugin_lib` > $output
+}
 
 build_plugin() {
     plugin=bap_plugin_$1
-    TMPDIR=`mktemp -d`
-    cd $TMPDIR
-    touch $plugin.ml
-    bapbuild -package bap-plugin-$1 $plugin.plugin
-    DESC=`ocamlfind query -format "%D" bap-plugin-$1`
-    CONS=`ocamlfind query -format "%(constraints)" bap-plugin-$1`
-    TAGS=`ocamlfind query -format "%(tags)" bap-plugin-$1`
-    if [ ! -z "$CONS" ]; then
-        bapbundle update -cons "$CONS" $plugin.plugin
-    fi
-    if [ ! -z "$TAGS" ]; then
-        bapbundle update -tags "$TAGS" $plugin.plugin
-    fi
-    bapbundle update -desc "$DESC" $plugin.plugin
-    bapbundle update -name $1 $plugin.plugin
+    plugin_lib=bap-plugin-$1
+    BUILDIR=$built_plugins/$1
 
-    mv $plugin.plugin $1.plugin
+    [ -d $BUILDIR ] || mkdir $BUILDIR
+    cd $BUILDIR
+
+    [ -f digest ] || touch digest
+
+    compute_digest $plugin_lib new_digest
+
+    if cmp -s digest new_digest
+    then
+        echo "$1: cache hit"
+    else
+        echo "$1: cache miss"
+        touch $plugin.ml
+        bapbuild -clean
+        bapbuild -package bap-plugin-$1 $plugin.plugin
+        DESC=`ocamlfind query -format "%D" bap-plugin-$1`
+        CONS=`ocamlfind query -format "%(constraints)" bap-plugin-$1`
+        TAGS=`ocamlfind query -format "%(tags)" bap-plugin-$1`
+        if [ -z $CONS ]; then
+            bapbundle update -name $1 -desc "$DESC" -tags "core,$TAGS" $plugin.plugin
+        else
+            bapbundle update -name $1 -desc "$DESC" -cons "$CONS" -tags "core,$TAGS" $plugin.plugin
+        fi
+        mv $plugin.plugin $1.plugin
+    fi
     bapbundle install $1.plugin
-    cd -
-    rm -rf $TMPDIR
+    mv new_digest digest
 }
 
-cd plugins
 
-for plugin in `ls`; do
-    if ocamlfind query bap-plugin-$plugin 2>/dev/null
-    then
-        plugin_lib=`ocamlfind query bap-plugin-$plugin`
-        if [ -f $PLUGINS_DIR/$plugin.plugin ]
-        then
-            existing_plugin=$PLUGINS_DIR/$plugin.plugin
-            if [ $plugin_lib  -nt $existing_plugin ]
-            then
-                build_plugin $plugin &
-            else
-                echo "Not rebuilding $plugin"
-            fi
-        else
-            echo "Building $plugin as it wasn't built yet"
-            build_plugin $plugin &
-        fi
-    else
-        echo "Not building $plugin as it wasn't selected"
-    fi
+for plugin in `ls plugins`; do
+    (build_plugin $plugin)&
+    echo `pwd`
 done
-
-cd ..
 wait
+echo "Finished updating plugins"
