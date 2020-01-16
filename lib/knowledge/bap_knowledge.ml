@@ -328,6 +328,8 @@ module Agent : sig
   (* the private interface *)
 
   val weight : t -> int
+  val id : t -> id
+
   include Base.Comparable.S with type t := t
 end = struct
   module Id = String
@@ -357,6 +359,8 @@ end = struct
     | D -> 2
     | E -> 1
 
+  let id x = x
+
   let register
       ?(desc="no description provided")
       ?package
@@ -367,7 +371,7 @@ end = struct
       failwithf "An agent with name `%a' already exists, \
                  please choose another name" Name.str name ();
     Hashtbl.add_exn agents agent {
-      desc; name; rcls = reliability
+      desc; name; rcls = reliability;
     };
     agent
 
@@ -730,10 +734,41 @@ end
 
 type 'a obj = Oid.t
 
+
 module Registry = struct
+  type info = {
+    desc : string option;
+  }
+
+  type 'a rule = {
+    name : Name.t;
+    provides : 'a;
+    requires : Name.t list;
+    parameters : string list list;
+    comment : string;
+  }
+  type unfinished = Unifinished
+  type finished = Name.t
+  type def = unfinished rule
+  type doc = finished rule
+
+  let sexp_of_rule {name} = Name.sexp_of_t name
+
+  module Rule = struct
+    type t = finished rule
+    let hash {provides=name} = Name.hash name
+    let sexp_of_t = sexp_of_rule
+    include Base.Comparable.Inherit(Name)(struct
+        type t = finished rule
+        let component {name} = name
+        let sexp_of_t = sexp_of_rule
+      end)
+  end
+
   let public = Hashtbl.create (module Name)
   let classes = Hashtbl.create (module String)
   let slots = Hashtbl.create (module String)
+  let rules = Hash_set.create (module Rule) ()
 
   let is_present ~package namespace name =
     match Hashtbl.find namespace package with
@@ -743,12 +778,40 @@ module Registry = struct
   let register kind namespace ?desc ?(package=user_package) name =
     if is_present ~package namespace name
     then failwithf
-        "Failed to declare new %s, there is already a %s \
+        "Failed to declare a new %s, there is already a %s \
          named `%s' in package `%s'" kind kind name package ();
+    let info = {desc} in
     Hashtbl.update namespace package ~f:(function
-        | None -> Map.singleton (module String) name desc
-        | Some names -> Map.add_exn names ~key:name ~data:desc);
+        | None -> Map.singleton (module String) name info
+        | Some names -> Map.add_exn names ~key:name ~data:info);
     {package; name}
+
+
+
+  let start_rule ?package name = {
+    name = Name.create ?package name;
+    provides = Unifinished;
+    requires = [];
+    parameters = [];
+    comment = ""
+  }
+
+  let rule_require name rule = {
+    rule with requires = name :: rule.requires;
+  }
+
+  let rule_provide name rule = {
+    rule with provides = name;
+  }
+
+  let rule_dynamic params rule = {
+    rule with parameters = params :: rule.parameters;
+  }
+
+  let rule_comment comment rule =
+    Hash_set.add rules {
+      rule with comment
+    }
 
   let add_class = register "class" classes
   let add_slot  = register "property" slots
@@ -765,7 +828,6 @@ module Registry = struct
   let find namespace name =
     let names = Hashtbl.find_exn namespace (Name.package name) in
     Map.find_exn names (Name.unqualified name)
-
 end
 
 module Documentation = struct
@@ -779,19 +841,77 @@ module Documentation = struct
 
   module Agent = struct
     type t = Agent.id
+    let of_agent = Agent.id
     let name = Agent.name
     let desc = Agent.desc
   end
 
   module Pair = struct
-    type t = Name.t * string option
+    type t = Name.t * Registry.info
     let name = fst
-    let desc = function
-      | _,None -> ""
-      | _,Some d -> d
+    let desc (_,{Registry.desc}) = match desc with
+      | None -> ""
+      | Some d -> d
   end
   module Class = Pair
   module Property = Pair
+
+  module Rule = struct
+    open Registry
+    type t = Rule.t
+    let name t = t.name
+    let desc r = r.comment
+    let property name = name, Registry.(find slots) name
+    let provides r = property r.provides
+    let requires r = List.map ~f:property r.requires
+    let parameters r = r.parameters
+
+    let refmt input =
+      let max_column = 70 in
+      let buffer = Buffer.create 64 in
+      Buffer.add_string buffer "-- ";
+      let column = ref 3 in
+      let prev = ref ' ' in
+      let in_white () = !prev = ' ' in
+      let push c =
+        if !column >= max_column && in_white () then begin
+          Buffer.add_string buffer "\n-- ";
+          column := 4;
+        end;
+        Buffer.add_char buffer c;
+        if Char.is_whitespace c
+        then prev := ' '
+        else prev := c;
+        incr column; in
+      let skip = () in
+      String.iter input ~f:(fun c ->
+          if Char.is_whitespace c then
+            if in_white () then skip else push ' '
+          else push c);
+      Buffer.contents buffer
+
+    let pp_parameters ppf = function
+      | [] -> ()
+      | ps ->
+        List.iter ps ~f:(fun ps ->
+            let pp_sep ppf () = Format.fprintf ppf ", " in
+            Format.fprintf ppf "(%a)"
+              Format.(pp_print_list ~pp_sep pp_print_string) ps)
+
+    let pp ppf {parameters; provides; requires; name; comment} =
+      if comment <> "" then
+        Format.fprintf ppf "%s@\n" (refmt comment);
+      Format.fprintf ppf "@[<v2>%a%a ::=@\n"
+        Name.pp name pp_parameters parameters;
+      let max_len = ref (String.length (Name.to_string provides)) in
+      List.iter requires ~f:(fun name ->
+          let len = String.length (Name.to_string name) in
+          max_len := Int.max len !max_len;
+          Format.fprintf ppf "%a@\n" Name.pp name;);
+      let sep = String.make !max_len '-' in
+      Format.fprintf ppf "%s@\n%a@]@\n"
+        sep Name.pp provides
+  end
 
   let classes () =
     Hashtbl.to_alist Registry.public |>
@@ -800,6 +920,9 @@ module Documentation = struct
         List.map slots ~f:(fun slot ->
             slot,
             Registry.(find slots) slot))
+
+  let rules () =
+    Hash_set.to_list Registry.rules
 end
 
 module Class = struct
@@ -2703,6 +2826,16 @@ module Knowledge = struct
     let (-->) x p = collect p x
     let (<--) p f = promise p f
     let (//) c s = Object.read c s
+
+    let (>>=?) x f =
+      x >>= function
+      | None -> Knowledge.return None
+      | Some x -> f x
+
+    let (>>|?) x f =
+      x >>| function
+      | None -> None
+      | Some x -> f x
   end
 
   module type S = sig
@@ -2757,6 +2890,16 @@ module Knowledge = struct
                     (pp_fullname ~package) name in
               Format.fprintf ppf "@,%a)@]@\n"
                 (Sexp.pp_hum_indent 2) (Dict.sexp_of_t data)))
+
+  module Rule = struct
+    type def = Registry.def
+    type doc = Registry.doc
+    let declare = Registry.start_rule
+    let require {Slot.name} = Registry.rule_require name
+    let provide {Slot.name} = Registry.rule_provide name
+    let dynamic = Registry.rule_dynamic
+    let comment = Registry.rule_comment
+  end
 
   module Conflict = Conflict
   module Agent = Agent
