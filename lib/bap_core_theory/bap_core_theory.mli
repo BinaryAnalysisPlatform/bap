@@ -1129,6 +1129,13 @@ module Theory : sig
     val name : (program, string option) KB.slot
 
 
+    (** a possible (and opinionated) name.
+
+        Use this slot when the name of a program is not really known
+        or when it is possible that other name providers will have a
+        conflicting opinion.  *)
+    val possible_name : (program, string option KB.opinions) KB.slot
+
     (** the interrupt vector of the label.
 
         Labels could also represent code in interrupt vector
@@ -1143,6 +1150,10 @@ module Theory : sig
         This may include versioned names, demangled names, etc.
     *)
     val aliases : (program, Set.M(String).t) KB.slot
+
+
+    (** a filesystem name of the file that contains the program.  *)
+    val path : (program, string option) KB.slot
 
 
     (** a link is valid if it references a valid program.

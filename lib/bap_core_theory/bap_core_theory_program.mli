@@ -18,13 +18,16 @@ end
 include Knowledge.Value.S with type t := t
 
 module Label : sig
-  type t = program Knowledge.obj
-  val addr : (program, Bitvec.t option) Knowledge.slot
-  val name : (program, string option) Knowledge.slot
-  val ivec : (program, Int.t option) Knowledge.slot
-  val aliases : (program, Set.M(String).t) Knowledge.slot
-  val is_valid : (program, bool option) Knowledge.slot
-  val is_subroutine : (program, bool option) Knowledge.slot
+  open Knowledge
+  type t = program obj
+  val path : (program, string option) slot
+  val addr : (program, Bitvec.t option) slot
+  val name : (program, string option) slot
+  val ivec : (program, Int.t option) slot
+  val aliases : (program, Set.M(String).t) slot
+  val possible_name : (program, string option opinions) slot
+  val is_valid : (program, bool option) slot
+  val is_subroutine : (program, bool option) slot
   val for_addr : ?package:string -> Bitvec.t -> t knowledge
   val for_name : ?package:string -> string -> t knowledge
   val for_ivec : ?package:string -> int -> t knowledge

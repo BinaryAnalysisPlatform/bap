@@ -23,8 +23,17 @@ module Label = struct
       ~equal:String.equal
       ~inspect:sexp_of_string
 
+  let path = Knowledge.Domain.optional "path"
+      ~equal:String.equal
+      ~inspect:sexp_of_string
+
   let names = Knowledge.Domain.powerset (module String) "names"
       ~inspect:sexp_of_string
+
+  let name_choices = Knowledge.Domain.opinions ~empty:None
+      ~equal:(Option.equal String.equal)
+      ~inspect:(sexp_of_option sexp_of_string)
+      "name-choices"
 
 
   let int = Knowledge.Domain.optional "ivec"
@@ -56,6 +65,13 @@ module Label = struct
       ~public:true
       ~desc:"the program virtual address"
 
+  let path = Knowledge.Class.property ~package cls "label-path" path
+      ~persistent:(Knowledge.Persistent.of_binable (module struct
+                     type t = string option [@@deriving bin_io]
+                   end))
+      ~public:true
+      ~desc:"a filesytem name of the file that contains the program"
+
   let name =
     Knowledge.Class.property ~package cls "label-name" name
       ~persistent:(Knowledge.Persistent.of_binable (module struct
@@ -63,6 +79,14 @@ module Label = struct
                    end))
       ~public:true
       ~desc:"the program linkage name"
+
+
+  let possible_name =
+    Knowledge.Class.property ~package
+      cls "possible-name" name_choices
+      ~public:true
+      ~desc:"a unique name associated with the program"
+
 
   let ivec =
     Knowledge.Class.property ~package cls "label-ivec" int
@@ -96,6 +120,22 @@ module Label = struct
     let s = sprintf "ivec-%x" x in
     Knowledge.Symbol.intern ?package s cls >>= fun obj ->
     Knowledge.provide ivec obj (Some x) >>| fun () -> obj
+
+  let _decide_name_from_possible_name : unit =
+    Knowledge.Rule.(declare ~package "name-of-possible-names" |>
+                    require possible_name |>
+                    provide name |>
+                    comment "resolves possible name");
+    Knowledge.promise name @@
+    Knowledge.resolve possible_name
+
+  let _is_subroutine_implies_is_valid : unit =
+    Knowledge.Rule.(declare ~package "subroutine-is-valid" |>
+                    require is_subroutine |>
+                    provide is_valid |>
+                    comment "is-subroutine -> is-valid");
+    Knowledge.promise is_valid @@ fun obj ->
+    Knowledge.collect is_subroutine obj
 
   include (val Knowledge.Object.derive cls)
 end
