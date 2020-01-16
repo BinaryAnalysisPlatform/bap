@@ -284,6 +284,47 @@ let build ?package ?state ~file ~code ~data arch =
 let state {core} = core
 let package {core={Kernel.package}} = package
 
+let is_mapped arch map addr =
+  let addr = Word.create addr (Size.in_bits (Arch.addr_size arch)) in
+  not (Seq.is_empty (Memmap.lookup map addr))
+
+
+
+;;
+KB.Rule.(declare ~package:"bap.std" "project-filename" |>
+         dynamic ["input"] |>
+         dynamic ["data"; "code"; "path"] |>
+         require Theory.Label.addr |>
+         provide Theory.Label.path |>
+         comment {|
+On [Project.create input] provides [path] for the address [x]
+if [x] in [data] or [x] in [code].
+|})
+let provide_filename arch data code path =
+  let open KB.Syntax in
+  KB.promise Theory.Label.path @@ fun label ->
+  KB.collect Theory.Label.addr label >>|? fun addr ->
+  if is_mapped arch data addr || is_mapped arch code addr
+  then Some path
+  else None
+
+;;
+KB.Rule.(declare ~package:"bap.std" "project-arch" |>
+         dynamic ["input"] |>
+         dynamic ["arch"; "code"] |>
+         require Theory.Label.addr |>
+         provide Arch.slot |>
+         comment {|
+On [Project.create input] provides [arch] for the address [x]
+if [x] in [code].
+|})
+let provide_arch arch code  =
+  let open KB.Syntax in
+  KB.promise Arch.slot @@ fun label ->
+  KB.collect Theory.Label.addr label >>| function
+  | Some addr when is_mapped arch code addr -> arch
+  | _ -> `unknown
+
 let create_exn
     ?package
     ?state
@@ -294,6 +335,8 @@ let create_exn
     ?reconstructor:_
     (read : input)  =
   let {Input.arch; data; code; file; finish} = read () in
+  provide_filename arch data code file;
+  provide_arch arch code;
   Signal.send Info.got_file file;
   Signal.send Info.got_arch arch;
   Signal.send Info.got_data data;
