@@ -44,6 +44,28 @@ module Log : sig
 
   val progress : ?note:string -> ?stage:int -> ?total:int -> string -> unit
   val message :  level -> section:string -> ('a,Format.formatter,unit) format -> 'a
+
+
+  module Create() : sig
+    open Format
+
+    val debug   : ('a,formatter,unit) format -> 'a
+    val info    : ('a,formatter,unit) format -> 'a
+    val warning : ('a,formatter,unit) format -> 'a
+    val error   : ('a,formatter,unit) format -> 'a
+
+    val report_progress :
+      ?task:string ->
+      ?note:string ->
+      ?stage:int ->
+      ?total:int -> unit -> unit
+
+    val debug_formatter : formatter
+    val info_formatter : formatter
+    val warning_formatter : formatter
+    val error_formatter : formatter
+  end
+
 end
 
 val pp : Format.formatter -> t -> unit

@@ -1,5 +1,7 @@
 open Core_kernel
 open Bap_future.Std
+open Bap_plugins.Std
+open Bap_bundle.Std
 open Format
 
 (* we're reusing [exn] type only because we want to use
@@ -69,4 +71,62 @@ module Log = struct
   let () = register_printer (function
       | Message msg -> Some (asprintf "%a" pp msg)
       | _ -> None)
+
+  module Create() = struct
+    let bundle = main_bundle ()
+
+    let main =
+      let base = Filename.basename Sys.executable_name in
+      try Filename.chop_extension base with _ -> base
+
+
+    let manifest =
+      try Bundle.manifest bundle
+      with _exn -> Manifest.create main
+
+    let name = Manifest.name manifest
+
+    let report_progress ?task ?note ?stage ?total () =
+      let task = match task with
+        | None -> name
+        | Some subtask -> sprintf "%s/%s" name subtask in
+      let task = if String.(name = main) then task
+        else sprintf "%s/%s" main task in
+      progress ?note ?stage ?total task
+
+    let has_var v = match Sys.getenv ("BAP_" ^ String.uppercase v) with
+      | exception Caml.Not_found -> false
+      | "false" | "0" -> false
+      | _ -> true
+
+    let is_verbose = has_var ("DEBUG_"^name) ||
+                     has_var ("DEBUG")
+
+    let debug = (); match is_verbose with
+      | false -> fun fmt -> ifprintf std_formatter fmt
+      | true ->  fun fmt -> message Debug ~section:name fmt
+
+    let info f = message Info ~section:name f
+    let warning f = message Warning ~section:name f
+    let error f = message Error ~section:name f
+
+    let make_formatter (f : ('a, formatter, unit) format -> 'a) =
+      let buf = Buffer.create 512 in
+      let output = Buffer.add_substring buf in
+      let flush () =
+        f "%s" (Buffer.contents buf);
+        Buffer.clear buf in
+      let fmt = make_formatter output flush in
+      let out = pp_get_formatter_out_functions fmt () in
+      let out = {out with out_newline = flush} in
+      pp_set_formatter_out_functions fmt out;
+      fmt
+
+    let debug_formatter = make_formatter debug
+    let info_formatter = make_formatter info
+    let warning_formatter = make_formatter warning
+    let error_formatter = make_formatter error
+
+
+  end
 end
