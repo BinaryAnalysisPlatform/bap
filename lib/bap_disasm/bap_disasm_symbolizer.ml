@@ -9,18 +9,6 @@ open KB.Syntax
 type t = Symbolizer of (addr -> string option)
 type symbolizer = t
 
-let name_choices = KB.Domain.opinions ~empty:None
-    ~equal:(Option.equal String.equal)
-    ~inspect:(sexp_of_option sexp_of_string)
-    "name-choices"
-
-let common_name =
-  KB.Class.property ~package:"bap.std"
-    Theory.Program.cls "common-name" name_choices
-    ~public:true
-    ~desc:"a unique name associated with the program"
-
-
 let name_of_addr addr =
   sprintf "sub_%s" @@ Addr.string_of_value addr
 
@@ -66,37 +54,30 @@ let of_blocks seq =
 
 module Factory = Factory.Make(struct type nonrec t = t end)
 
-let provide agent (Symbolizer name) =
-  let open KB.Syntax in
-  KB.propose agent common_name @@ fun label ->
-  KB.collect Arch.slot label >>= fun arch ->
-  KB.collect Theory.Label.addr label >>| fun addr ->
-  match addr with
-  | Some addr ->
-    let width = Size.in_bits (Arch.addr_size arch) in
-    name (Addr.create addr width)
-  | None -> None
-
-
-let update_name_slot label name =
-  KB.collect Theory.Label.name label >>= function
-  | Some _ -> KB.return ()
-  | None ->
-    KB.provide Theory.Label.name label (Some name)
+let provide =
+  KB.Rule.(declare ~package:"bap.std" "reflect-symbolizers" |>
+           dynamic ["symbolizer"] |>
+           require Arch.slot |>
+           require Theory.Label.addr |>
+           provide Theory.Label.possible_name |>
+           comment "[Symbolizer.provide s] reflects [s] to KB.");
+  fun agent (Symbolizer resolve) ->
+    let open KB.Syntax in
+    KB.propose agent Theory.Label.possible_name @@ fun label ->
+    KB.collect Arch.slot label >>= fun arch ->
+    KB.collect Theory.Label.addr label >>|? fun addr ->
+    resolve @@ Addr.create addr @@ Size.in_bits (Arch.addr_size arch)
 
 let get_name addr =
   let data = Some (Word.to_bitvec addr) in
   KB.Object.scoped Theory.Program.cls @@ fun label ->
   KB.provide Theory.Label.addr label data >>= fun () ->
-  KB.resolve common_name label >>= function
-  | Some name -> KB.return name
-  | None -> KB.collect Theory.Label.name label >>| function
-    | Some name -> name
-    | None -> name_of_addr addr
+  KB.collect Theory.Label.name label >>| function
+  | None -> name_of_addr addr
+  | Some name -> name
 
 module Toplevel = struct
   let name = Toplevel.var "symbol-name"
-
   let get_name addr =
     Toplevel.put name (get_name addr);
     Toplevel.get name

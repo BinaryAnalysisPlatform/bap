@@ -7,7 +7,6 @@ open Bap_disasm_source
 type t
 type symbolizer = t
 
-val common_name : (Theory.program, string option KB.opinions) KB.slot
 val provide : Knowledge.agent -> t -> unit
 val get_name : addr -> string knowledge
 

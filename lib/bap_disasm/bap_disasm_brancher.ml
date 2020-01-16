@@ -159,17 +159,23 @@ let (>>=?) x f = x >>= function
   | None -> KB.return Insn.empty
   | Some x -> f x
 
-
-let provide brancher =
-  let init = Set.empty (module Theory.Label) in
-  KB.promise Theory.Program.Semantics.slot @@ fun label ->
-  KB.collect Memory.slot label >>=? fun mem ->
-  KB.collect Dis.Insn.slot label >>=? fun insn ->
-  resolve brancher mem insn |>
-  KB.List.fold ~init ~f:(fun dsts dst ->
-      match dst with
-      | Some addr,_ ->
-        Theory.Label.for_addr (Word.to_bitvec addr) >>| fun dst ->
-        Set.add dsts dst
-      | None,_ -> KB.return dsts) >>| fun dests ->
-  KB.Value.put Insn.Slot.dests Insn.empty (Some dests)
+let provide =
+  KB.Rule.(declare ~package:"bap.std" "reflect-brancher" |>
+           dynamic ["brancher"] |>
+           require Memory.slot |>
+           require Dis.Insn.slot |>
+           provide Insn.Slot.dests |>
+           comment "[Brancher.provide b] provides [b] to KB");
+  fun brancher ->
+    let init = Set.empty (module Theory.Label) in
+    KB.promise Theory.Program.Semantics.slot @@ fun label ->
+    KB.collect Memory.slot label >>=? fun mem ->
+    KB.collect Dis.Insn.slot label >>=? fun insn ->
+    resolve brancher mem insn |>
+    KB.List.fold ~init ~f:(fun dsts dst ->
+        match dst with
+        | Some addr,_ ->
+          Theory.Label.for_addr (Word.to_bitvec addr) >>| fun dst ->
+          Set.add dsts dst
+        | None,_ -> KB.return dsts) >>| fun dests ->
+    KB.Value.put Insn.Slot.dests Insn.empty (Some dests)
