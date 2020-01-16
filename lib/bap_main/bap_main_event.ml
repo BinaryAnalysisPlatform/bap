@@ -4,6 +4,8 @@ open Bap_plugins.Std
 open Bap_bundle.Std
 open Format
 
+module Buffer = Caml.Buffer
+
 (* we're reusing [exn] type only because we want to use
    Printexc magic printer. It is not visible from outside,
    that the type is [exn], and has no other consequences.
