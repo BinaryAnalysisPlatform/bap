@@ -115,6 +115,7 @@ type entity = [
   | `Classes
   | `Theories
   | `Agents
+  | `Rules
 ]
 
 let entities : (string, entity) List.Assoc.t = [
@@ -129,6 +130,7 @@ let entities : (string, entity) List.Assoc.t = [
   "classes", `Classes;
   "theories", `Theories;
   "agents", `Agents;
+  "rules", `Rules;
 ]
 
 let entity_name = function
@@ -142,6 +144,7 @@ let entity_name = function
   | `Classes -> "classes"
   | `Theories -> "theories"
   | `Agents -> "agents"
+  | `Rules -> "rules"
 
 let entity_desc : (entity * string) list = [
   `Entities, "prints this message";
@@ -154,6 +157,7 @@ let entity_desc : (entity * string) list = [
   `Classes, "knowledge representation classes";
   `Theories, "installed theories";
   `Agents, "knowledge providers";
+  `Rules, "knowledge base rules";
 ]
 
 let () =
@@ -265,6 +269,10 @@ let () =
         then Format.printf "  %-32s @[<hov>%a@]@\n" name
             Format.pp_print_text desc;
         ());
+    Ok ()
+  | `Rules ->
+    let open Bap_knowledge.Knowledge.Documentation in
+    rules () |> List.iter ~f:(Format.printf "%a@\n" Rule.pp);
     Ok ()
   | `Entities ->
     List.iter entity_desc ~f:(fun (entity,desc) ->
