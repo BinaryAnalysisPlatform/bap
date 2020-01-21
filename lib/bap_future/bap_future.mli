@@ -291,6 +291,8 @@ module Std : sig
 
     module Args : sig
       type 'a arg = 'a t
+
+      (** ['f] is the type of a function that consumes the list of arguments and returns an ['r]. *)
       type ('f, 'r) t
 
       (** [nil] the empty argument list **)
