@@ -30,11 +30,12 @@ let transfer_attr attr t1 t2 =
   | None -> t2
   | Some v -> Term.set_attr t2 attr v
 
-let transfer_attrs t1 t2 =
-  let t2 = Term.set_attr t2 Term.synthetic () in
-  Term.set_attr t2 Term.origin (Term.tid t1) |>
-  transfer_attr Disasm.insn t1 |>
-  transfer_attr address t1
+let transfer_attrs origin_arg call arg =
+  let arg = Term.with_attrs arg (Term.attrs origin_arg) in
+  let arg = Term.set_attr arg Term.synthetic () in
+  Term.set_attr arg Term.origin (Term.tid call) |>
+  transfer_attr Disasm.insn call |>
+  transfer_attr address call
 
 let add_def intent blk def =
   if intent = Out
@@ -44,7 +45,7 @@ let add_def intent blk def =
 let defs_of_args call intent args =
   List.filter_map args ~f:(fun arg ->
       require (intent_matches arg intent) >>= fun () ->
-      def_of_arg arg >>| transfer_attrs call)
+      def_of_arg arg >>| transfer_attrs arg call)
 
 let target intent sub blk call =
   if intent = Out
