@@ -43,8 +43,18 @@
         (if failed 0
           (set brk (+ brk n))
           (malloc/fill-edges ptr n)
-          (+ ptr *malloc-guard-edges*))))))
+          (let ((ptr (+ ptr *malloc-guard-edges*)))
+            (dict-add 'malloc/regions ptr n)
+            ptr))))))
 
+(defun realloc (ptr len)
+  (declare (external "realloc"))
+  (let ((len' (dict-get 'malloc/regions ptr)))
+    (if (not len') (malloc len)
+      (if (>= len' len) ptr
+        (let ((new_ptr (malloc len)))
+          (if (not new_ptr) new_ptr
+            (copy-right new_ptr ptr len')))))))
 
 ;; in our simplistic malloc implementation, free is just a nop
 (defun free (p)

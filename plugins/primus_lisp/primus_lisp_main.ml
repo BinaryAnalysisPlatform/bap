@@ -100,7 +100,7 @@ module Signals(Machine : Primus.Machine.S) = struct
       signal pc_change word one
         {|(pc-change PC) is emitted when PC is updated|};
       signal eval_cond value one
-        {|(eval_cond V) is emitted after evaluating a conditional to V|};
+        {|(eval-cond V) is emitted after evaluating a conditional to V|};
       signal jumping (value,value) pair
         {|(jumping C D) is emitted before jump to D occurs under the
           condition C|};
