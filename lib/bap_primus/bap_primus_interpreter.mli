@@ -14,6 +14,9 @@ val loading : value observation
 val loaded : (value * value) observation
 val storing : value observation
 val stored : (value * value) observation
+val filling : (value * int * int) observation
+val filled : (value * int * int) observation
+
 val reading : var observation
 val read : (var * value) observation
 val writing : var observation
@@ -87,6 +90,7 @@ module Make (Machine : Machine) : sig
   val const : word -> value m
   val load : value -> endian -> size -> value m
   val store : value -> value -> endian -> size -> unit m
+  val fill : value -> len:int -> int -> unit m
 end
 
 

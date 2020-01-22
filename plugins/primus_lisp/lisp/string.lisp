@@ -99,12 +99,9 @@
 
 (defun memset (p c n)
   (declare (external "memset"))
-  (let ((p p))
-    (while n
-      (memory-write p c)
-      (incr p)
-      (decr n)))
-  p)
+  (memory-fill p n c)
+  (+ p n))
+
 
 (defun memcmp (p1 p2 n)
   (declare (external "memcmp"))

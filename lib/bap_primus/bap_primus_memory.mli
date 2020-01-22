@@ -47,4 +47,7 @@ module Make(Machine : Machine) : sig
   val is_mapped : addr -> bool Machine.t
 
   val is_writable : addr -> bool Machine.t
+
+  val fill : addr -> len:int -> int -> unit Machine.t
+
 end

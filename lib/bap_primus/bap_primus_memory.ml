@@ -304,4 +304,18 @@ module Make(Machine : Machine) = struct
     find_layer addr layers |>
     function Some {perms={readonly}} -> not readonly
            | None -> false
+
+  let fill base ~len value =
+    let filter_out values region =
+      Map.filteri values
+        ~f:(fun ~key:addr ~data:_ ->  not (inside region addr)) in
+    get_curr >>= fun {layers;values} ->
+    is_writable base >>= fun is_writable ->
+    if is_writable then
+      let mem = { base; len; value = Generator.static value } in
+      let values = filter_out values mem in
+      let perms = {executable=false; readonly=false} in
+      put_curr {values; layers = {perms; mem = Dynamic mem} :: layers; }
+    else pagefault base
+
 end

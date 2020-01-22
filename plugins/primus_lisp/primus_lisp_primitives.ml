@@ -92,6 +92,28 @@ module MemoryAllocate(Machine : Primus.Machine.S) = struct
     | _ -> Lisp.failf "allocate requires two arguments" ()
 end
 
+module MemoryFill(Machine : Primus.Machine.S) = struct
+  include Lib(Machine)
+  let negone = Value.one 8
+  let zero = Value.zero 8
+
+  let run = function
+    | [addr; len; value] ->
+       let len = Value.to_word len |> Word.to_int in
+       let value = Value.to_word value |> Word.to_int in
+       if Result.is_error len || Result.is_error value
+       then negone
+       else
+         let len = Or_error.ok_exn len in
+         let value = Or_error.ok_exn value in
+         Eval.fill addr len value >>= fun () ->
+         zero
+
+    | _ ->
+       Lisp.failf "memory-fill requires three arguments" ()
+end
+
+
 
 module MemoryRead(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
@@ -300,6 +322,8 @@ module Primitives(Machine : Primus.Machine.S) = struct
         "(memory-read A) loads one byte from the address A";
       def "memory-write" (tuple [int; byte] @-> int) (module MemoryWrite)
         "(memory-write A X) stores by X to A";
+      def "memory-fill" (tuple [int; int; byte] @-> int) (module MemoryFill)
+        "(memory-fill A L X) fills every byte from A to A + L with X";
       def "memory-allocate" (tuple [int; int] // all byte @-> byte) (module MemoryAllocate)
         "(memory-allocate P N V?) maps memory region [P,P+N), if V is
          provided, then fills the newly mapped region with the value V";

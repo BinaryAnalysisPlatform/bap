@@ -797,6 +797,17 @@ module Std : sig
           the address [addr] *)
       val stored : (value * value) observation
 
+      (** [filling (addr,len,value) happens before the memory [addr, addr + len)
+          is filled with [value]
+
+          @since 2.1.0 *)
+      val filling : (value * int * int) observation
+
+      (** [filled (addr,len,value) happens after the memory [addr, addr + len)
+          is filled with [value]
+
+          @since 2.1.0*)
+      val filled : (value * int * int) observation
 
       (** [reading x] happens before the variable [x] is read from the
           environment. *)
@@ -1071,6 +1082,18 @@ module Std : sig
             invoked and the operation is repeated. Otherwise the
             [Segmentation_fault] machine exception is raised.  *)
         val store : value -> value -> endian -> size -> unit m
+
+        (** [fill a len x] fills [len] bytes of the memory starting at
+            addres [a] with value [x]
+
+            If [a] is not mapped or not writable then the pagefault
+            trap is invoked. If the handler is provided, then it is
+            invoked and the operation is repeated. Otherwise the
+            [Segmentation_fault] machine exception is raised.
+
+            @since 2.1.0 *)
+        val fill : value -> len:int -> int -> unit m
+
       end
     end
 

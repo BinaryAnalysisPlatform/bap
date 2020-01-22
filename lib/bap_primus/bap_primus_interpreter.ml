@@ -125,6 +125,22 @@ let eval_cond,on_cond =
   Observation.provide ~inspect:sexp_of_value "eval-cond"
 
 
+let sexp_of_filling (addr,len,value) =
+  Sexp.List [
+      sexp_of_value addr;
+      sexp_of_int len;
+      sexp_of_int value;
+    ]
+
+
+let filling,on_filling =
+  Observation.provide ~inspect:sexp_of_filling "filling"
+
+let filled,on_filled =
+  Observation.provide ~inspect:sexp_of_filling "filled"
+
+
+
 let results r op = Sexp.List [op; sexp_of_value r]
 
 let sexp_of_binop ((op,x,y),r) = results r @@ sexps [
@@ -345,6 +361,11 @@ module Make (Machine : Machine) = struct
     !!on_storing a >>= fun () ->
     trapped_memory_access (Memory.set a.value x) >>= fun () ->
     !!on_stored (a,x)
+
+  let fill a ~len value =
+    !!on_filling (a,len,value) >>= fun () ->
+    trapped_memory_access (Memory.fill a.value ~len value) >>= fun () ->
+    !!on_filled (a,len,value)
 
   let ite cond yes no =
     value (if Word.is_one cond.value then yes.value else no.value) >>= fun r ->
