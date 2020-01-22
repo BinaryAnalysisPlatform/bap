@@ -8,13 +8,6 @@ let is_section name v =
   | Some x -> String.(x = name)
   | _ -> false
 
-module Make_unresolved(Machine : Primus.Machine.S) = struct
-  module Linker = Primus.Linker.Make(Machine)
-
-  let exec =
-    Linker.exec (`symbol Primus.Linker.unresolved_handler)
-end
-
 module Plt_jumps(Machine : Primus.Machine.S) = struct
   module Linker = Primus.Linker.Make(Machine)
   open Machine.Syntax
@@ -40,8 +33,7 @@ module Plt_jumps(Machine : Primus.Machine.S) = struct
         Seq.exists memory ~f:(fun mem -> Memory.contains mem a))
 
   let unlink addrs =
-    Machine.List.iter addrs ~f:(fun addr ->
-        Linker.link ~addr (module Make_unresolved))
+    Machine.List.iter addrs ~f:(fun addr -> Linker.unlink (`addr addr))
 
   let unresolve  =
     load_table >>=
@@ -49,6 +41,65 @@ module Plt_jumps(Machine : Primus.Machine.S) = struct
     unlink
 
 end
+
+module Link_plt(Machine : Primus.Machine.S) = struct
+  open Machine.Syntax
+
+  let section_memory sec_name =
+    Machine.get () >>| fun proj ->
+    Memmap.filter (Project.memory proj) ~f:(is_section sec_name) |>
+    Memmap.to_sequence |>
+    Seq.map ~f:fst
+
+  let is_a_plt_stub mem sub =
+    match Term.get_attr sub address with
+    | None -> false
+    | Some addr -> Seq.exists mem ~f:(fun m -> Memory.contains m addr)
+
+  let relink plt prog =
+    let normalize_name x =
+      match String.split ~on:'@' x with
+      | name :: _ -> name
+      | _ -> x in
+    let add m sub =
+      Map.set m (normalize_name @@ Sub.name sub) (Term.tid sub) in
+    let subs = Term.to_sequence sub_t prog in
+    let stubs, subs =
+      Seq.fold ~init:(Map.empty (module String), Map.empty (module String))  subs
+        ~f:(fun (stubs, subs) sub ->
+          if is_a_plt_stub plt sub
+          then add stubs sub, subs
+          else stubs, add subs sub) in
+    let twins =
+      Map.fold stubs ~init:(Map.empty (module Tid))
+        ~f:(fun ~key:name ~data:tid twins ->
+          match Map.find subs name with
+          | None -> twins
+          | Some tid' -> Map.set twins tid tid') in
+    (object
+       inherit Term.mapper
+
+       method! map_jmp jmp =
+         match Jmp.kind jmp with
+         | Goto _ | Int _ | Ret _ -> jmp
+         | Call c ->
+            match Call.target c with
+            | Indirect _ -> jmp
+            | Direct tid ->
+               match Map.find twins tid with
+               | None -> jmp
+               | Some tid' ->
+                  Jmp.with_kind jmp (Call (Call.with_target c (Direct tid')))
+    end)#run prog
+
+  let init () =
+    section_memory ".plt" >>= fun plt ->
+    Machine.get () >>= fun proj ->
+    Machine.put @@
+      Project.with_program proj
+        (relink plt (Project.program proj))
+end
+
 
 module Component(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
@@ -72,7 +123,9 @@ module Component(Machine : Primus.Machine.S) = struct
     | Unk | Mem _ -> Machine.return ()
     | Imm width ->
       Value.of_int ~width addend >>= fun addend ->
-      Primus.Linker.Trace.lisp_call_return >>> correct_sp sp addend
+      Machine.sequence [
+          Primus.Linker.Trace.lisp_call_return >>> correct_sp sp addend;
+          Primus.Linker.unresolved >>> correct_sp sp addend ]
 
   let init () =
     Machine.get () >>= fun proj ->

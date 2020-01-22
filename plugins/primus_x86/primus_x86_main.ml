@@ -3,7 +3,8 @@ open Bap_primus.Std
 include Self()
 
 let init _ =
-  Primus.Machine.add_component (module Primus_x86_loader.Component);;
+  Primus.Machine.add_component (module Primus_x86_loader.Component);
+  Primus.Machine.add_component (module Primus_x86_loader.Link_plt);;
 
 Config.manpage [
   `S "DESCRIPTION";
