@@ -3,6 +3,8 @@ open Bap_bundle.Std
 open Bap_future.Std
 open Or_error.Monad_infix
 
+module Units = Bap_plugins_config.Units
+
 module Plugin = struct
 
   type 'a or_error = 'a Or_error.t
@@ -31,14 +33,7 @@ module Plugin = struct
   let system_events,event = Stream.create ()
   let notify (value : system_event) = Signal.send event value
 
-  type reason = [
-    | `In_core
-    | `Provided_by of string
-    | `Requested_by of string
-  ]
-
   let load = ref Dynlink.loadfile
-  let units : reason String.Table.t = String.Table.create ()
 
   let setup_dynamic_loader loader =
     load := loader
@@ -51,14 +46,7 @@ module Plugin = struct
       Filename.chop_extension
     with _ -> pkg  (* fails if the infrastructure is broken *)
 
-  let init = lazy begin
-    Findlib.(recorded_packages Record_core) |> List.iter ~f:(fun pkg ->
-        Hashtbl.set units ~key:(unit_of_package pkg) ~data:`In_core);
-    Findlib.recorded_predicates () |> List.iter ~f:(fun pred ->
-        match String.chop_prefix pred ~prefix:"used_" with
-        | None -> ()
-        | Some lib -> Hashtbl.set units ~key:lib ~data:`In_core)
-  end
+  let init = lazy (Units.init ())
 
   let of_path path =
     try
@@ -89,12 +77,13 @@ module Plugin = struct
   let find_library name =
     try Some (find_library_exn name) with _ -> None
 
-  let load_unit ~reason ~name pkg : unit or_error =
+  let load_unit ?(don't_register=false) ~reason ~name pkg : unit or_error =
     let open Format in
     try
       notify (`Linking name);
       !load pkg;
-      Hashtbl.set units ~key:name ~data:reason;
+      if not (don't_register)
+      then Units.record name reason;
       Ok ()
     with
     | Dynlink.Error err ->
@@ -132,7 +121,7 @@ module Plugin = struct
       overwritten). This is a known bug/issue in the OCaml runtime
       that we need to workaround.
   *)
-  let load_entry plugin name =
+  let load_entry ?don't_register plugin name =
     let suffix = if Dynlink.is_native then ".cmxs" else ".cma" in
     let name = Filename.basename name in
     let dst = Filename.(temp_file name suffix) in
@@ -141,17 +130,17 @@ module Plugin = struct
     Bundle.get_file ~name:dst plugin.bundle path |> function
     | Some uri ->
       let path = Uri.to_string uri in
-      let result = load_unit ~reason ~name path in
+      let result = load_unit ?don't_register ~reason ~name path in
       do_if_not_debugging Sys.remove path;
       result
     | None -> match find_library name with
       | Some lib ->
         let name = Filename.(basename name |> chop_extension) in
-        load_unit ~reason ~name lib
+        load_unit ?don't_register ~reason ~name lib
       | None -> Or_error.error_string "dependency not found"
 
   let validate_unit _plugin main =
-    match Hashtbl.find units main with
+    match Units.lookup main with
     | None -> Ok ()
     | Some (`Provided_by name) when name = main -> Ok ()
     | Some reason ->
@@ -174,6 +163,8 @@ module Plugin = struct
           Or_error.errorf "Failed to load %s: %s" entry @@
           Error.to_string_hum err)
 
+  let is_missing dep = Option.is_none (Units.lookup dep)
+
   let try_load (plugin : t) =
     if Future.is_decided plugin.loaded
     then Ok ()
@@ -183,19 +174,17 @@ module Plugin = struct
       let m = manifest plugin in
       let mains = Manifest.provides m in
       validate_provided plugin mains >>= fun () ->
-      let reqs = Manifest.requires m |>
-                 List.filter ~f:(fun r -> not (Hashtbl.mem units r)) in
+      let reqs = Manifest.requires m |> List.filter ~f:is_missing in
       let main = Manifest.main m in
       let old_bundle = main_bundle () in
       set_main_bundle (bundle plugin);
       load_entries plugin reqs >>= fun () ->
-      load_entry plugin main >>| fun () ->
+      load_entry ~don't_register:true plugin main >>| fun () ->
       Promise.fulfill plugin.finish ();
       notify (`Loaded plugin);
       set_main_bundle old_bundle;
       let reason = `Provided_by plugin.name in
-      List.iter mains ~f:(fun unit ->
-          Hashtbl.set units ~key:unit ~data:reason)
+      List.iter mains ~f:(fun unit -> Units.record unit reason)
 
 
   let with_argv argv f = match argv with
@@ -321,7 +310,6 @@ module Plugins = struct
           events_backtrace := ev :: !events_backtrace);
     Future.upon loaded (fun () -> events_backtrace := [])
 
-
   let run ?argv ?env ?provides ?(don't_setup_handlers=false) ?library ?exclude () =
     if not don't_setup_handlers
     then setup_default_handler ();
@@ -337,6 +325,6 @@ module Std = struct
   module Plugin = Plugin
   module Plugins = Plugins
   let setup_dynamic_loader = Plugin.setup_dynamic_loader
-  let list_loaded_units () = Hashtbl.keys Plugin.units
+  let list_loaded_units () = Units.list ()
 
 end
