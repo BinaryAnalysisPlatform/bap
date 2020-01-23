@@ -196,6 +196,6 @@ module Self = Self ()
 let () =
   Bap_main.Extension.declare @@ fun _ctxt ->
   let llvm_version = String.sub llvm_version 0 3 in
-  if llvm_version = "3.4" then T_34.register ()
+  if String.equal llvm_version "3.4" then T_34.register ()
   else T.register ();
   Ok ()

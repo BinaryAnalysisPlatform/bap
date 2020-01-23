@@ -30,29 +30,6 @@ open Bap_main.Extension
 
 module type unit = sig end
 
-let qualified cmd =
-  if String.length cmd > 2 && Char.equal cmd.[0] ':'
-  then Some (String.subo ~pos:1 cmd)
-  else None
-
-let is_option = String.is_prefix ~prefix:"-"
-
-(* To preserve backward compatibility and enhance usability we
-   automatically add the `disassemble' command if the first argument is
-   a file. However, since we can have a potential clash between a
-   command name, a command name could be prefixed with `:`, so that
-   it will be interpreter literally as a keyword, not as a file.
-*)
-let autocorrect_input args =
-  Array.of_list @@ match Array.to_list args with
-  | [] | [_] as args -> args
-  | name :: arg :: args as input ->
-    if is_option arg then input else match qualified arg with
-      | Some cmd -> name::cmd::args
-      | None ->
-        if Sys.file_exists arg && not (Sys.is_directory arg)
-        then name :: "disassemble" :: arg :: args
-        else name :: arg :: args
 
 let pp_info ppf infos =
   List.iter infos ~f:(fun info ->
@@ -81,10 +58,13 @@ Commands:
 Plugins:
 %a
 
-If no command is specified and the first parameter is a file,
-then the `disassemble' command is assumed. If the name of a
-command conflicts with an existing file, prefix the name with
-`:', e.g., `bap :plugins'.
+If no command line options or arguments are specified, then this
+message is printed. To hush this message specify the `.' command,
+e.g., `bap .'. The command could be omitted altogether, in that case the
+`disassemble' command is assumed, e.g., `bap /bin/ls' is the same
+as `bap disassemble /bin/ls'. Not that the default command is
+subject to change, so it is better not to rely on this behavior in
+your automation tools.
 
 Run 'bap <COMMAND> --help' for more information a command.
 Run 'bap --<PLUGIN>-help for more information about a plugin.
@@ -296,14 +276,16 @@ let () =
 
 let () =
   let _unused : (module unit) = (module Bap.Std) in
-  let argv = autocorrect_input Sys.argv in
   let () =
-    try if Sys.getenv "BAP_DEBUG" <> "0" then
+    try if String.(Sys.getenv "BAP_DEBUG" <> "0") then
         Printexc.record_backtrace true
     with Caml.Not_found -> () in
   Sys.(set_signal sigint (Signal_handle exit));
   at_exit Format.(pp_print_flush err_formatter);
-  match Bap_main.init ~default:print_info ~name:"bap" ~man ~argv () with
+  match Bap_main.init ~default:print_info
+          ~default_command:"disassemble"
+          ~name:"bap" ~man ~argv:Sys.argv ()
+  with
   | Ok () -> ()
   | Error (Error.Exit_requested code) -> exit code
   | Error Error.Configuration -> exit 1

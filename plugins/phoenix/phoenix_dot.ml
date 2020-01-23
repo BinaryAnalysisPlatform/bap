@@ -72,7 +72,7 @@ module Make(Env : sig
     let label_order x y = match x,y with
       | `with_name,`with_name -> 0
       | `with_name, _ -> -1
-      | _ -> Polymorphic_compare.compare x y
+      | _ -> Poly.compare x y
 
 
     let escape_label str =

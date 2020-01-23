@@ -24,7 +24,7 @@ let make_segment arch bin ind =
       ~addr:(segment_addr bin ind |> make_addr arch)
       ~len:(Int64.to_int_exn size) in
   match perm with
-  | Some perm when size <> 0L ->
+  | Some perm when Int64.(size <> 0L) ->
     Backend.Segment.Fields.create ~name ~perm ~off ~location |>
     Option.some
   | _ -> None
@@ -38,7 +38,7 @@ let make_symbol arch bin ind =
   let locations = Location.Fields.create
       ~addr:(make_addr arch addr)
       ~len:(Int64.to_int_exn size), [] in
-  if size <> 0L then
+  if Int64.(size <> 0L) then
     Backend.Symbol.Fields.create ~name ~is_function ~is_debug ~locations |>
     Option.some
   else None

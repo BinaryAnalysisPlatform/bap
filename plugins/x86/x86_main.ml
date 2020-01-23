@@ -3,7 +3,7 @@ open Bap.Std
 open X86_target
 include Self()
 
-type kind = Legacy | Modern | Merge
+type kind = Legacy | Modern | Merge [@@deriving equal]
 
 let main kind x32 x64 =
   let ia32, amd64 = match kind with
@@ -38,7 +38,7 @@ let () =
     ] in
   let abi arch name =
     let abis = X86_abi.supported () |> List.filter_map ~f:(fun abi ->
-        if X86_abi.arch abi = arch
+        if Arch.equal (X86_abi.arch abi :> arch) arch
         then Some (X86_abi.name abi, abi)
         else None) in
     let doc = sprintf "Use specified $(docv) as a default one. The $(docv)
@@ -56,6 +56,6 @@ let () =
         (Config.doc_enum kinds)
         (List.find_map_exn kinds
            ~f:(fun (name, kind) ->
-               Option.some_if (kind = default) name)) in
+               Option.some_if (equal_kind kind default) name)) in
     Config.(param (enum kinds) "lifter" ~doc ~default) in
   Config.when_ready (fun {Config.get=(!)} -> main !kind !x32 !x64)

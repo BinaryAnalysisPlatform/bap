@@ -49,7 +49,7 @@ module Unit = struct
         let base = Rng.next base in
         let value =
           (float (Rng.value base) -. float Rng.min) *. factor in
-        if value < 1. then {base; value}
+        if Float.(value < 1.) then {base; value}
         else next {base;value}
 
       let value t = t.value
@@ -97,11 +97,12 @@ module Geometric = struct
         let rng = Unit.next t.rng in
         let x = 1.0 -. Unit.value rng in
         let y = Float.round (log x /. t.log1mp) in
-        if y >= Dom.to_float Dom.max_value
+        if Float.(y >= Dom.to_float Dom.max_value)
         then {t with rng; value = Dom.max_value}
         else {t with rng; value = Dom.of_float y}
 
       let create ~p rng =
+        let open Float in
         if p < 0. || p > 1.
         then invalid_arg
             "Geometric distribution: \

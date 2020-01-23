@@ -20,7 +20,7 @@ type path = Path.filename
 type api_descr = {
   lang : string;
   name : string;
-}
+} [@@deriving equal]
 
 type api = {
   desc : api_descr;
@@ -188,7 +188,9 @@ let add_api paths api =
 
 let rem_api paths desc =
   let is_no_path ers =
-    List.for_all ~f:(fun (er,_) -> er = Error `No_dst) ers
+    List.for_all ~f:(fun (er,_) -> match er with
+        | Error `No_dst -> true
+        | _ -> false) ers
     && List.length ers = List.length paths in
   let rm_api ers path = match Api.rm path desc with
     | Ok () ->
@@ -272,12 +274,13 @@ let show_all_apis paths =
       print_newline () in
   let apis = api_of_paths paths |>
              List.sort ~compare:(fun x y -> String.compare x.desc.lang y.desc.lang) in
-  List.iter ~f:print_lang (List.group ~break:(fun x y -> x.desc.lang <> y.desc.lang) apis);
+  List.iter ~f:print_lang (List.group ~break:(fun x y -> String.(x.desc.lang <> y.desc.lang)) apis);
   printf "Total number of available API: %d\n" (List.length apis)
 
 let sanity_check paths =
   let is_same api api' =
-    api.path <> api'.path && api.desc = api'.desc in
+    equal_api_descr api.desc api'.desc &&
+    Path.compare api.path api'.path <> 0 in
   let check_for_pair api apis =
     match List.find ~f:(is_same api) apis with
     | None -> ()

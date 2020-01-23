@@ -39,7 +39,9 @@ module ToIR = struct
                                            LittleEndian, sz)))
 
   (* copypasted from op2e_s below, but keeps the opcode width *)
-  let op2e_s_keep_width mode ss has_rex t = function
+  let op2e_s_keep_width mode ss has_rex t operand =
+    let (=) = Type.equal in
+    match operand with
     | Ovec r when t = reg256_t -> (bits2ymme mode r, t)
     | Ovec r when t = reg128_t -> (bits2ymm128e mode r, t)
     | Ovec r when t = reg64_t -> (bits2ymm64e mode r, t)
@@ -61,7 +63,9 @@ module ToIR = struct
     | Oaddr e -> (load_s mode ss (size_of_typ t) e, t)
     | Oimm i -> Bil.(Int (resize_word i !!t), t)
 
-  let op2e_s mode ss has_rex t = function
+  let op2e_s mode ss has_rex t operand =
+    let (=) = Type.equal in
+    match operand with
     | Ovec r when t = reg256_t -> bits2ymme mode r
     | Ovec r when t = reg128_t -> bits2ymm128e mode r
     | Ovec r when t = reg64_t -> bits2ymm64e mode r
@@ -105,7 +109,7 @@ module ToIR = struct
       let final_e = List.reduce_exn ~f:(fun big_e e -> Bil.Concat (e, big_e)) !concat_exps in
       Bil.Move (v, final_e)
     in
-    let is8664 = mode = X8664 in
+    let is8664 = [%compare.equal: mode] mode X8664 in
     match v, t with
     (* Zero-extend 128-bit assignments to 256-bit ymms. *)
     | Ovec r, Type.Imm (128|64|32) when has_vex ->
@@ -122,14 +126,14 @@ module ToIR = struct
     | Oreg r, Type.Imm (64|32|16) ->
       let v = bits2genreg mode r in
       sub_assn t v e
-    | Oreg r, Type.Imm 8 when r < 4 || (mode = X8664 && has_rex) ->
+    | Oreg r, Type.Imm 8 when r < 4 || ([%compare.equal: mode] mode X8664 && has_rex) ->
       let v = bits2genreg mode r in
       sub_assn t v e
     | Oreg r, Type.Imm 8 ->
       let v = bits2genreg mode (r land 3) in
       sub_assn ~off:8 t v e
     | Oreg _, _ -> unimplemented mode "assignment to sub registers"
-    | Oseg r, _ when t = reg16_t ->
+    | Oseg r, _ when Type.equal t reg16_t ->
       let v = bits2segreg r in
       Bil.Move (v, e)
     | Oseg _, _ -> disfailwith mode "Can't assign to non 16 bit segment register"
@@ -180,7 +184,7 @@ module ToIR = struct
 
   let string_incr mode t v =
     let i n = Bil.Int (int_of_mode mode n) in
-    if t = reg8_t then
+    if Type.equal t reg8_t then
       Bil.Move (v, Bil.(Var v + df_to_offset mode df_e))
     else
       Bil.Move (v, Bil.(Var v + (df_to_offset mode df_e * i (bytes_of_width t))))
@@ -298,6 +302,12 @@ module ToIR = struct
         | Oimm imm -> Type.imm (Word.bitwidth imm)
         | _ -> disfailwith "imm operand expected" in
       Bil.(cast signed (bitwidth_of_type t) (op2e op_typ op)) in
+    let is_repz = function
+      | [x] -> x = repz
+      | _ -> false in
+    let is_repnz = function
+      | [x] -> x = repnz
+      | _ -> false in
     function
     | Nop -> []
     | Bswap(t, op) ->
@@ -307,7 +317,7 @@ module ToIR = struct
         | _ -> disfailwith "bswap: Expected 32 or 64 bit type"
       in
       [assn t op e]
-    | Retn (op, far_ret) when pref = [] || pref = [repz]  || pref = [repnz]->
+    | Retn (op, far_ret) when List.is_empty pref || is_repz pref || is_repnz pref ->
       let temp = tmp mt in
       let load_stmt = if far_ret
         then (* TODO Mess with segment selectors here *)
@@ -354,8 +364,10 @@ module ToIR = struct
       in
       let bs =
         let dst_e = op2e t dst in
-        if dst = o_fs && !compute_segment_bases then [Bil.Move (fs_base, base_e dst_e)]
-        else if dst = o_gs && !compute_segment_bases then [Bil.Move (gs_base, base_e dst_e)]
+        if [%compare.equal: operand] dst o_fs && !compute_segment_bases
+        then [Bil.Move (fs_base, base_e dst_e)]
+        else if [%compare.equal: operand] dst o_gs && !compute_segment_bases
+        then [Bil.Move (gs_base, base_e dst_e)]
         else []
       in
       assn t dst c_src :: bs
@@ -366,7 +378,7 @@ module ToIR = struct
         :: string_incr mode t rdi
         :: []
       in
-      if pref = [] then
+      if List.is_empty pref then
         stmts
       else if ints_mem pref repz || ints_mem pref repnz then
         (* movs has only rep instruction others just considered to be rep *)
@@ -697,7 +709,7 @@ module ToIR = struct
               (get_xmm1 ind0 <= get_xmm2 index) land (get_xmm2 index <= get_xmm1 ind1) in
             Bil.(rangevalid land (inrange lor acc)) in
           Bil.(is_valid_xmm2_e index land
-               List.fold_left ~f:check_char ~init:exp_false (List.range ~stride:(-1) ~stop:`inclusive Pervasives.(nelem/2-1) 0))
+               List.fold_left ~f:check_char ~init:exp_false (List.range ~stride:(-1) ~stop:`inclusive Stdlib.(nelem/2-1) 0))
         | EqualEach ->
           (* Does xmm1[index] = xmm2[index]? *)
           let xmm1_invalid = Bil.(UnOp (NOT, (is_valid_xmm1_e index))) in
@@ -712,7 +724,7 @@ module ToIR = struct
         | EqualOrdered ->
           (* Does the substring xmm1 occur at xmm2[index]? *)
           let check_char acc j =
-            let equal = Bil.(get_xmm1 j = get_xmm2 Pervasives.(index+j)) in
+            let equal = Bil.(get_xmm1 j = get_xmm2 Stdlib.(index+j)) in
             let substrended = Bil.(UnOp (NOT, (is_valid_xmm1_e j))) in
             let bigstrended = Bil.UnOp (NOT, (is_valid_xmm2_e (index+j))) in
             (* substrended => true
@@ -872,7 +884,7 @@ module ToIR = struct
         [assn exp_type dst_op (Bil.var tmp_dst)]
       ]
 
-    | Lea(t, r, a) when pref = [] ->
+    | Lea(t, r, a) when List.is_empty pref ->
       (* See Table 3-64 *)
       (* previously, it checked whether addrbits > opbits before the cast_low.
        * The conclusion we came to was that
@@ -1007,7 +1019,7 @@ module ToIR = struct
       let size = int_exp word_size word_size in
       let shift = op2e exp_type shift_op in
 
-      if shift_type = LSHIFT then
+      if [%compare.equal: binop] shift_type LSHIFT then
         Bil.[
           count_var := (shift land shift_mask) mod size;
           assn exp_type dst_op ((dst lsl count) lor (dst lsr (size - count)));
@@ -1041,7 +1053,7 @@ module ToIR = struct
       let value, shift = match bitbase with
         | Oreg _ ->
           let reg = op2e t bitbase in
-          let shift = Bil.(offset land int_exp Pervasives.(t' - 1) t') in
+          let shift = Bil.(offset land int_exp Stdlib.(t' - 1) t') in
           reg, shift
         | Oaddr a ->
           let offset = Bil.(cast unsigned (width_of_mode mode) offset) in
@@ -1183,7 +1195,7 @@ module ToIR = struct
          So, effectively there is no incrementation.
       *)
       assn t o (load_s mode seg_ss (size_of_typ t) rsp_e)
-      :: if o = o_rsp then []
+      :: if [%compare.equal: operand] o o_rsp then []
       else [Bil.Move (rsp, Bil.(rsp_e + Int (mi (bytes_of_width t))))]
     | Pushf(t) ->
       (* Note that we currently treat these fields as unknowns, but the
@@ -1379,7 +1391,7 @@ module ToIR = struct
       :: Bil.Move (cf, exp_false)
       :: Bil.Move (af, Bil.Unknown ("AF is undefined after or", bool_t))
       :: set_pszf t (op2e t o1)
-    | Xor(t, o1, o2) when o1 = o2 ->
+    | Xor(t, o1, o2) when [%compare.equal: operand] o1 o2 ->
       assn t o1 Bil.(Int (BV.of_int ~width:(!!t) 0))
       :: Bil.Move (af, Bil.Unknown ("AF is undefined after xor", bool_t))
       :: List.map ~f:(fun v -> Bil.Move (v, exp_true)) [zf; pf]
@@ -1535,7 +1547,7 @@ module ToIR = struct
       ] @ undefine [cf; oF; sf; zf; af; pf]
     | Cld ->
       [Bil.Move (df, exp_false)]
-    | Leave t when pref = [] -> (* #UD if Lock prefix is used *)
+    | Leave t when List.is_empty pref -> (* #UD if Lock prefix is used *)
       Bil.Move (rsp, rbp_e)
       ::to_ir mode addr next ss pref has_rex has_vex (Pop(t, o_rbp))
     | Interrupt3 -> [Bil.Special "int3"]
@@ -1558,8 +1570,8 @@ end (* ToIR *)
 let disasm_instr mode mem addr =
   let module D = X86_disasm in
   let (pref, prefix, op, na) = D.parse_instr mode mem addr in
-  let has_rex = prefix.rex <> None in
-  let has_vex = prefix.vex <> None in
+  let has_rex = Option.is_some prefix.rex in
+  let has_vex = Option.is_some prefix.vex in
   let (ss, pref) = D.parse_prefixes mode pref op in
   ToIR.to_ir mode addr na ss pref has_rex has_vex op
 

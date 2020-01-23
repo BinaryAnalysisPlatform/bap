@@ -104,7 +104,7 @@ Library bap_image
   Build$:        flag(everything) || flag(bap_std)
   FindlibParent: bap
   FindlibName:   image
-  BuildDepends:  bap.types, ogre, monads
+  BuildDepends:  bap.types, ogre, mmap, monads
   InternalModules:
                  Bap_fileutils,
                  Bap_image,

@@ -26,7 +26,7 @@ let run name =
     List.map targets ~f:(fun t -> t ^ "c++filt") in
   List.find_map demanglers ~f:(fun d ->
       let demangled = demangle d name in
-      Option.some_if (demangled <> name) demangled) |> function
+      Option.some_if String.(demangled <> name) demangled) |> function
   | None -> name
   | Some name -> name
 

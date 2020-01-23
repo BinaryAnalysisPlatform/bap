@@ -69,7 +69,7 @@ class base (m : model) = object(self)
     | `Structure {Spec.t={Compound.fields}}
     | `Union {Spec.t={Compound.fields}} ->
       List.fold fields ~init:byte ~f:(fun align (_,t) ->
-          max align (self#alignment t))
+          Size.max align (self#alignment t))
     | `Function _ -> (self#pointer :> size)
     | #scalar as t -> self#scalar t
 

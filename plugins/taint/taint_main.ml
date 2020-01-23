@@ -78,8 +78,8 @@ module Marker = struct
   let sats strains def =
     let tid = Term.tid def in
     List.for_all strains ~f:(function
-        | Tid name -> Tid.name tid = name
-        | Var name -> Var.name (Def.lhs def) = name
+        | Tid name -> String.equal (Tid.name tid) name
+        | Var name -> String.equal (Var.name (Def.lhs def)) name
         | Addr a -> match Term.get_attr def address with
           | None -> false
           | Some addr -> match Addr.to_int64 addr with

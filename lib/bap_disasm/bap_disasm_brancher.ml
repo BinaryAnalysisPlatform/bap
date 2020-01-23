@@ -11,7 +11,7 @@ module Targets = Bap_disasm_target_factory
 module Dis = Bap_disasm_basic
 module Insn = Bap_disasm_insn
 
-type edge = Bap_disasm_block.edge [@@deriving sexp]
+type edge = Bap_disasm_block.edge [@@deriving sexp, compare]
 type dest = addr option * edge [@@deriving sexp]
 type dests = dest list [@@deriving sexp]
 type full_insn = Bap_disasm_basic.full_insn
@@ -98,8 +98,8 @@ let resolve (Brancher f) = f
 let empty = Brancher (fun _ _ -> [])
 
 let kind_of_dests = function
-  | xs when List.for_all xs ~f:(fun (_,x) -> x = `Fall) -> `Fall
-  | xs -> if List.exists  xs ~f:(fun (_,x) -> x = `Jump)
+  | xs when List.for_all xs ~f:(fun (_,x) -> [%compare.equal : edge] x `Fall) -> `Fall
+  | xs -> if List.exists  xs ~f:(fun (_,x) -> [%compare.equal : edge] x `Jump)
     then `Jump
     else `Cond
 

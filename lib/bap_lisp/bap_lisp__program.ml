@@ -317,7 +317,7 @@ module Reindex = struct
 
   let reindex (get,set) macros def =
     let rename t =
-      if Set.mem macros t.id || Id.null = t.id
+      if Set.mem macros t.id || Id.(null = t.id)
       then derive t.id >>| fun id -> {t with id}
       else State.return t in
     let rec map : ast -> ast m = fun t ->
@@ -652,7 +652,7 @@ module Typing = struct
     match Map.find glob.prims name with
     | Some sign -> [sign]
     | None -> List.fold glob.funcs ~init:[] ~f:(fun sigs def ->
-        if Def.name def = name
+        if String.equal (Def.name def) name
         then signature_of_gamma def gamma :: sigs
         else sigs)
 
@@ -746,7 +746,7 @@ module Typing = struct
     infer bindings ast
 
   let find_func funcs id =
-    List.find funcs ~f:(fun f -> f.id = id)
+    List.find funcs ~f:(fun f -> Id.(f.id = id))
 
   let transfer glob node gamma =
     match node with
@@ -797,7 +797,7 @@ module Typing = struct
       let p = Reindex.program p in
       let gamma = infer vars p in
       List.fold (Gamma.exps gamma) ~init:Loc.Map.empty ~f:(fun errs exp ->
-          assert (exp <> Source.Id.null);
+          assert Id.(exp <> Source.Id.null);
           if Source.has_loc p.sources exp
           then match Gamma.get gamma exp with
             | None -> errs

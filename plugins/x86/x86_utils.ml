@@ -8,7 +8,7 @@ let tmp ?(name="v") ty =
   Var.create ~fresh:true ~is_virtual:true name ty
 
 let index_ofq elt lst =
-  match List.findi lst ~f:(fun _ e -> e = elt) with
+  match List.findi lst ~f:(fun _ e -> Var.equal e elt) with
   | None -> raise Caml.Not_found
   | Some (i,_) -> i
 

@@ -175,6 +175,8 @@ module Visited(Machine : Primus.Machine.S) = struct
 end
 
 
+module Id = Monad.State.Multi.Id
+
 let is_visited = function
   | `tid tid ->
     Machine.Global.get visited >>= fun subs ->
@@ -191,7 +193,7 @@ let run need_repeat entries =
       Machine.current () >>= fun pid ->
       Machine.fork ()    >>= fun () ->
       Machine.current () >>= fun cid ->
-      if pid = cid
+      if Id.(pid = cid)
       then loop xs
       else
         is_visited x >>= fun is_visited ->

@@ -19,7 +19,7 @@ let apply attr sub =
 module Gnu = struct
   let register_attr n f =
     let pass {Attr.name; args} sub =
-      if n = name then f args sub else sub in
+      if String.equal n name then f args sub else sub in
     register pass
 
   exception Attr_type   of string * string

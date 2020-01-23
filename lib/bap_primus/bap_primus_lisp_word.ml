@@ -31,12 +31,12 @@ let int ?typ id eq s =
 
 let read id eq x =
   if String.is_empty x then Error Empty
-  else if x.[0] = '?'
+  else if Char.(x.[0] = '?')
   then char id eq x
   else if Char.is_digit x.[0] ||
           String.length x > 1 &&
           Char.is_digit x.[1] &&
-          x.[0] = '-'
+          Char.(x.[0] = '-')
   then match String.split x ~on:':' with
     | [x] -> int id eq x
     | [x;typ] -> int ~typ id eq x

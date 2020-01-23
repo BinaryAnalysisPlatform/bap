@@ -71,7 +71,7 @@ module Cmp(T : Comparable) = struct
 end
 
 let (-) pref tag = pref ^ "-" ^ Value.Tag.name tag
-let (+) pref suf = if suf = "" then pref else pref^"-"^suf
+let (+) pref suf = if String.is_empty suf then pref else pref^"-"^suf
 
 let unit suf set is tag =
   Mappers.Nullary.register (set-tag+suf) (marker ident tag ());

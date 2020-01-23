@@ -151,7 +151,7 @@ end
   let forget = ident
   let refine witness t = match t with
     | App {name=Some name}
-    | Sym name when name = witness -> Some t
+    | Sym name when [%compare.equal: name] name witness -> Some t
     | _ -> None
 
   let forget : 'a t -> unit t = ident
