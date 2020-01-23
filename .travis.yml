@@ -39,6 +39,7 @@ cache:
 env:
   - OCAML_VERSION=4.07 WITH_BUILD_CACHE=true
   - OCAML_VERSION=4.08
+  - OCAML_VERSION=4.09
 
 stage: Compile
 script: bash -ex .travis_install.sh
