@@ -375,7 +375,7 @@ module Construction(Factory : Factory) = struct
       | n ->
         validate g ctxt;
         loop (nextop g) (n-1) in
-    loop (E.empty, G.empty) length |> Caml.ignore
+    loop (E.empty, G.empty) length |> ignore
 
   let suite : test =
     "constructive" >:: run constructive_scheme 1000

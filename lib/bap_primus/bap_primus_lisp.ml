@@ -687,7 +687,7 @@ module Doc = struct
         | `white,true  -> `white
         | `white,false -> `black
         | `black,true  -> push c; `white
-        | `black,false -> `black) |> Caml.ignore;
+        | `black,false -> `black) |> ignore;
     Buffer.contents buf
 
   let normalize_descr s =

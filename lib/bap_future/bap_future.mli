@@ -290,7 +290,6 @@ module Std : sig
     module Variadic : Variadic.S with type 'a arg = 'a t
 
     module Args : sig
-      type 'a arg = 'a t
 
       (** ['f] is the type of a function that consumes the list of arguments and returns an ['r]. *)
       type ('f, 'r) t
@@ -299,16 +298,24 @@ module Std : sig
       val nil : ('r, 'r) t
 
       (** [const arg t] prepend an argument *)
-      val cons : 'a arg -> ('f, 'r) t -> ('a -> 'f, 'r) t
+      val cons : 'a future -> ('f, 'r) t -> ('a -> 'f, 'r) t
 
       (** [@>] infix operator for [cons] *)
-      val (@>) : 'a arg -> ('f, 'r) t -> ('a -> 'f, 'r) t
+      val (@>) : 'a future -> ('f, 'r) t -> ('a -> 'f, 'r) t
 
+      (** [step t ~f] transforms argument values in some way.
+      For example, one can label a function argument like so:
+
+      {[
+        step ~f:(fun f x -> f ~foo:x) : ('a -> 'r1, 'r2) t -> (foo:'a -> 'r1, 'r2) t
+      ]} *)
       val step : ('f1, 'r) t -> f:('f2 -> 'f1) -> ('f2, 'r) t
 
-      val mapN : f:'f -> ('f, 'r) t -> 'r arg
+      (** [applyN f args] applies function stored in future [f] to [args] *)
+      val applyN : 'f future -> ('f, 'r) t -> 'r future
 
-      val applyN : 'f arg -> ('f, 'r) t -> 'r arg
+      (** [mapN ~f args] applies function [f] to [args] *)
+      val mapN : f:'f -> ('f, 'r) t -> 'r future
 
     end
 

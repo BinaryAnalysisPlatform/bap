@@ -527,7 +527,7 @@ module Exp = struct
 
   let lookup_var name {fields} {attr; field={Type.fname;ftype}} =
     match attr with
-    | Some name' when Caml.not (String.equal name name') -> None
+    | Some name' when Poly.(name <> name') -> None
     | _ -> Map.find fields fname |> Option.map ~f:(lift ftype)
 
   (* join on one variable represented by an equivalence class *)

@@ -10,7 +10,7 @@ let pp_bytes fmt s =
 
 let pp_array pp fmt ar =
   let ppa pref = Format.fprintf fmt "%s%a" pref pp in
-  Caml.ignore (Array.fold ~f:(fun pref a -> ppa pref a; ", ") ~init:"" ar)
+  ignore (Array.fold ~f:(fun pref a -> ppa pref a; ", ") ~init:"" ar)
 
 module Move = struct
   include Move

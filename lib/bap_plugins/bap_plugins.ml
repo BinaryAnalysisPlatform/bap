@@ -327,7 +327,7 @@ module Plugins = struct
   let run ?argv ?env ?provides ?(don't_setup_handlers=false) ?library ?exclude () =
     if not don't_setup_handlers
     then setup_default_handler ();
-    load ?argv ?env ?provides ?library ?exclude () |> Caml.ignore
+    load ?argv ?env ?provides ?library ?exclude () |> ignore
 
   let events = Plugin.system_events
   type event = Plugin.system_event [@@deriving sexp_of]

@@ -113,7 +113,6 @@ let all_bindings f =
       f v.data.typ x)
 
 let zip x y =
-  let open List.Or_unequal_lengths in
   match List.zip x y with
   | Ok z -> Some z
   | Unequal_lengths -> None

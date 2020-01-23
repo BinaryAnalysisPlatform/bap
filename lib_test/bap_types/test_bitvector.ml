@@ -266,7 +266,7 @@ let suite () =
     "cast_mid:8"  >:: bitsub ~expect:(0xAD,8) ~hi:0xB ~lo:0x4 (0xDAD5,16);
     "mono_size"   >:: (fun ctxt ->
         try
-          Caml.ignore Word.(Mono.(zero_32 < b0));
+          ignore Word.(Mono.(zero_32 < b0));
           assert_string "Monomorphic comparison"
         with exn -> ());
   ]
