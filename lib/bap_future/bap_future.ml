@@ -19,16 +19,27 @@ module Std = struct
     val apply : f:'a -> ('a,'b) t -> 'b arg
   end
 
+
+  module Make_args(T : Applicable.S) = struct
+    open T
+    type 'a arg = 'a t
+    type ('a, 'b) t = { run : 'a -> 'b arg }
+
+    let nil = { run = Fn.id }
+    let singleton a = { run = fun f -> map ~f a }
+    let prepend  arg t = { run = fun d -> t.run (apply d arg) }
+    let add      t arg = { run = fun f -> apply (t.run f) arg }
+    let apply ~f args = args.run f
+    let wrap t ~f = { run = fun d -> t.run (map ~f d) }
+  end
+
   module Variadic = struct
     module type S = Variadic
     module Make(T : Applicable.S) : Variadic with type 'a arg = 'a T.t =
     struct
-      open T
-      type 'a arg = 'a t
-      type ('a,'b) t = {run : 'a -> 'b arg}
-      let args a = {run = fun f -> map ~f a}
-      let ($) args b = {run = fun f -> apply (args.run f) @@ b}
-      let apply ~f args = args.run f
+      include Make_args(T)
+      let args = singleton
+      let ($) = add
     end
 
     include Make(struct
@@ -122,22 +133,33 @@ module Std = struct
       end)
 
     let apply fx x = bind fx (fun f -> map x ~f)
-    module Variadic = Variadic.Make(struct
-        type nonrec 'a t = 'a t
-        let apply = apply
-        let map = map
-      end)
 
+    module Applicable = struct
+      type nonrec 'a t = 'a t
+      let apply = apply
+      let map = map
+    end
+
+    module Variadic = Variadic.Make(Applicable)
 
     module App = Applicative.Of_monad(struct
         type nonrec 'a t = 'a t
         include Monad
       end)
 
-    module Args = Applicative.Make_args(struct
-        type nonrec 'a t = 'a t
-        include App
-      end)
+    module Args = struct
+      module Args = Make_args(Applicable)
+      type 'a arg = 'a t
+      type nonrec ('f, 'r) t = ('f arg, 'r) Args.t
+
+      let cons = Args.prepend
+      let (@>) = cons
+      let nil = Args.nil
+      let step = Args.wrap
+      let applyN arg t = Args.apply ~f:arg t
+      let mapN ~f t = applyN (Monad.return f) t
+    end
+
     include App
     include Monad
   end

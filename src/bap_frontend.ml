@@ -277,7 +277,7 @@ let () =
 let () =
   let _unused : (module unit) = (module Bap.Std) in
   let () =
-    try if Sys.getenv "BAP_DEBUG" <> "0" then
+    try if String.(Sys.getenv "BAP_DEBUG" <> "0") then
         Printexc.record_backtrace true
     with Caml.Not_found -> () in
   Sys.(set_signal sigint (Signal_handle exit));

@@ -154,7 +154,7 @@ module Redirection = struct
     if String.length oldname < 1 ||
        String.length newname < 1
     then `Error ("bad redirection: expected two non-empty names")
-    else if String.get oldname 0 = '<'
+    else if Char.equal (String.get oldname 0) '<'
     then if List.mem known_channels ~equal:String.equal oldname
       then `Ok (oldname,newname)
       else `Error (sprintf "unknown channel %s, expected one of %s"

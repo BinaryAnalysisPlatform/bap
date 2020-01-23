@@ -34,7 +34,7 @@ module Param = struct
 end
 
 let starts_with name x =
-  String.length name > 1 && name.[0] = x
+  String.length name > 1 && Char.equal name.[0] x
 
 let strip name =
   if starts_with name '+' || starts_with name '-'
@@ -42,7 +42,7 @@ let strip name =
   else name
 
 let has_name name p =
-  Primus.Observation.Provider.name p = name
+  String.equal (Primus.Observation.Provider.name p) name
 
 let remove_provider name = List.filter ~f:(Fn.non (has_name name))
 
@@ -81,7 +81,7 @@ let rule_providers rule =
   Bare.Rule.lhs rule |> List.concat_map ~f:(function
       | Sexp.Atom x
       | Sexp.List (Sexp.Atom x :: _) ->
-        if String.length x > 0 && x.[0] = '?'
+        if String.length x > 0 && Char.(x.[0] = '?')
         then Primus.Observation.list_providers () |>
              List.map ~f:Primus.Observation.Provider.name
         else [x]

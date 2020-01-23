@@ -15,7 +15,7 @@ type read_error = Empty | Not_a_var | Bad_format
 
 let read id eq = function
   | "" -> Error Empty
-  | x when Char.is_digit x.[0] || x.[0] = '\'' || x.[0] = '"' ->
+  | x when Char.is_digit x.[0] || Char.(x.[0] = '\'') || Char.(x.[0] = '"') ->
     Error Not_a_var
   | x -> match String.split x ~on:':' with
     | [] -> assert false

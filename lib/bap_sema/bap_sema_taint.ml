@@ -89,7 +89,7 @@ class context = object(self)
 
   method taint_ptr a (s : size) ts =
     if Set.is_empty ts then self
-    else if s = `r8
+    else if Size.equal s `r8
     then
       {< tas = Map.set tas ~key:a ~data:ts >}
     else

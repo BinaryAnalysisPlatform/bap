@@ -33,7 +33,7 @@ let int ?typ id eq s =
 let base x =
   if String.length x < 3 then 10
   else
-    let i = if x.[0] = '-' then 1 else 0 in
+    let i = if Char.(x.[0] = '-') then 1 else 0 in
     match x.[i], x.[i+1] with
     | '0',('b'|'B') -> 2
     | '0',('o'|'O') -> 8
@@ -51,7 +51,7 @@ let is_hex = function
 
 let infer_width x =
   let base = base x in
-  let sign_bit = if x.[0] = '-' then 1 else 0 in
+  let sign_bit = if Char.(x.[0] = '-') then 1 else 0 in
   let is_digit = if base = 16 then is_hex else Char.is_digit in
   let len = String.count x ~f:is_digit in
   let return n = String.concat [
@@ -63,12 +63,12 @@ let infer_width x =
 
 let read id eq x =
   if String.is_empty x then Error Empty
-  else if x.[0] = '?'
+  else if Char.(x.[0] = '?')
   then char id eq x
   else if Char.is_digit x.[0] ||
           String.length x > 1 &&
           Char.is_digit x.[1] &&
-          x.[0] = '-'
+          Char.(x.[0] = '-')
   then match String.split x ~on:':' with
     | [x;typ] -> int ~typ id eq x
     | [x] -> int id eq @@ infer_width x

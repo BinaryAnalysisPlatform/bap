@@ -3,6 +3,8 @@ open Bap_bundle.Std
 open Bap_future.Std
 open Or_error.Monad_infix
 
+module Filename = Caml.Filename
+
 module Plugin = struct
 
   type 'a or_error = 'a Or_error.t
@@ -103,7 +105,7 @@ module Plugin = struct
 
 
   let is_debugging () =
-    try Sys.getenv "BAP_DEBUG" <> "0" with Caml.Not_found -> false
+    try String.(Sys.getenv "BAP_DEBUG" <> "0") with Caml.Not_found -> false
 
   let do_if_not_debugging f x =
     if is_debugging () then () else f x
@@ -153,7 +155,7 @@ module Plugin = struct
   let validate_unit _plugin main =
     match Hashtbl.find units main with
     | None -> Ok ()
-    | Some (`Provided_by name) when name = main -> Ok ()
+    | Some (`Provided_by name) when String.equal name main -> Ok ()
     | Some reason ->
       let with_whom = match reason with
         | `In_core -> "host program"

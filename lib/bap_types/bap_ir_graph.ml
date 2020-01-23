@@ -22,7 +22,7 @@ module Pred = struct
         | Some xs -> Some (Set.remove xs src))
 
   let remove_all src rdep =
-    Map.map rdep ~f:(Set.filter ~f:(fun id -> id <> src))
+    Map.map rdep ~f:(Set.filter ~f:(fun id -> Tid.(id <> src)))
 
   let update src dst rdep =
     Map.change rdep dst (function
@@ -142,7 +142,7 @@ module Node = struct
           Term.enum jmp_t src |> Seq.filter_mapi ~f:(fun pos jmp ->
               match succ_tid_of_jmp jmp with
               | None -> None
-              | Some tid when tid <> Term.tid dst -> None
+              | Some tid when Tid.(tid <> Term.tid dst) -> None
               | Some _ -> Some {src; pos; dst}))
 
   let outputs src t : edge seq =

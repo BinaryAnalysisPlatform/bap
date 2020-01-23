@@ -107,7 +107,7 @@ let findi vec ~f =
           if f i x then return (Some (i,x)));
       None)
 
-let peq = Polymorphic_compare.equal
+let peq = Poly.equal
 
 let index_with ?(equal=peq) ~default vec x : int =
   with_return (fun {return} ->
@@ -122,14 +122,17 @@ let index_exn ?equal vec x : int =
   let n = index_with ~default:(-1) ?equal vec x in
   if n < 0 then invalid_arg "index out of bounds" else n
 
+let length vec = vec.size
+
 module C = Container.Make(struct
     type nonrec 'a t = 'a t
     let fold = fold
     let iter = `Custom iter
+    let length = `Custom length
+
   end)
 
 let mem = C.mem
-let length vec = vec.size
 let is_empty vec = length vec = 0
 let exists = C.exists
 let for_all = C.for_all

@@ -173,7 +173,7 @@ let ctype gamma {lookup} t =
 
 let repr sizeof size types =
   List.find types ~f:(fun t ->
-      sizeof#integer (t :> C.Type.integer) = size)
+      Size.equal (sizeof#integer (t :> C.Type.integer)) size)
 
 let is_signed = function
   | #C.Type.signed -> true

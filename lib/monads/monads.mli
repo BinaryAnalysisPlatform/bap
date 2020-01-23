@@ -857,9 +857,11 @@ module Std : sig
             which order the computations are evaluated, and whether
             all computations are performed.  *)
         val map : 'a t -> f:('a -> 'b m) -> 'b t m
+
         (** [iter xs ~f] performs [f x] for each [x] in [xs] in the
                     left to right order.  *)
         val iter : 'a t -> f:('a -> unit m) -> unit m
+
         (** [fold xs ~init:s0 ~f] folds [f] over [xs] in the given monad.
 
              Effectively computes a chain:
@@ -1793,6 +1795,7 @@ module Std : sig
 
         (** [get s] gets the current state  *)
         val get : unit -> ('s,'s) t
+
         (** [gets p] projects the current state with the function [p]  *)
         val gets : ('s -> 'r) -> ('r,'s) t
 
