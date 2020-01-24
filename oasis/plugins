@@ -8,8 +8,7 @@ Library bap_plugins
   FindLibName:     bap-plugins
   Modules:         Bap_plugins
   InternalModules: Bap_plugins_config,
-                   Bap_plugins_units_modern,
-                   Bap_plugins_units_findlib,
+                   Bap_plugins_units,
+                   Bap_plugins_units_fallback,
                    Bap_plugins_units_intf
-  BuildDepends:    core_kernel, dynlink, fileutils, findlib, bap-bundle, bap-future,
-                   uri, ppx_jane
+  BuildDepends:    core_kernel, dynlink, fileutils, findlib, bap-bundle, bap-future, ppx_jane

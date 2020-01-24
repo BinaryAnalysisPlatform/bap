@@ -1,5 +1,0 @@
-let () = add_variable "plugins_backend"
-    ~doc:"how to compute the set of loaded units, (findlib | modern)"
-    ~define:(function
-        | Some x -> x
-        | None -> "findlib")

@@ -3,7 +3,7 @@ open Bap_bundle.Std
 open Bap_future.Std
 open Or_error.Monad_infix
 
-module Units = Bap_plugins_config.Units
+module Units = Bap_plugins_units
 module Filename = Caml.Filename
 
 module Plugin = struct
@@ -39,14 +39,6 @@ module Plugin = struct
   let setup_dynamic_loader loader =
     load := loader
 
-  (* this function requires working Findlib infrastructure. *)
-  let unit_of_package pkg =
-    let preds = Findlib.recorded_predicates () in
-    try
-      Findlib.package_property preds pkg "archive" |>
-      Filename.chop_extension
-    with _ -> pkg  (* fails if the infrastructure is broken *)
-
   let init = lazy (Units.init ())
 
   let of_path path =
@@ -79,7 +71,6 @@ module Plugin = struct
     try Some (find_library_exn name) with _ -> None
 
   let load_unit ?(don't_register=false) ~reason ~name pkg : unit or_error =
-    let open Format in
     try
       notify (`Linking name);
       !load pkg;
@@ -87,9 +78,9 @@ module Plugin = struct
       then Units.record name reason;
       Ok ()
     with
-    | Dynlink.Error err ->
-      Or_error.error_string (Dynlink.error_message err)
+    | Dynlink.Error err -> Units.handle_error name reason err
     | exn -> Or_error.of_exn exn
+
 
 
   let is_debugging () =
