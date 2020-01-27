@@ -209,14 +209,14 @@ module Std = struct
       t.last_id
 
     let subscribe t f =
-      let f id x = f x in
+      let f _id x = f x in
       add t f
 
-    let watch s f = ignore (add s f)
+    let watch s f = ignore (add s f : id)
 
     let observe s f =
-      let f id x = f x in
-      ignore (add s f)
+      let f _id x = f x in
+      ignore (add s f : id)
 
     let unsubscribe t id =
       Hashtbl.remove t.subs id;
@@ -341,7 +341,8 @@ module Std = struct
       let q1 = Queue.create ~capacity () in
       let q2 = Queue.create ~capacity () in
       let drop () =
-        let drop q = ignore (Queue.dequeue_exn q) in
+        let drop : type a. a Queue.t -> unit = fun q ->
+          ignore (Queue.dequeue_exn q : a) in
         drop q1; drop q2 in
       let step src q x =
         Queue.enqueue q x;
@@ -395,7 +396,7 @@ module Std = struct
       link s s' step;
       s'
 
-    let listen x f = ignore (subscribe x f)
+    let listen x f = ignore (subscribe x f : id)
 
     let of_list xs = unfold_until ~init:xs ~f:(function
         | [] -> None
@@ -450,7 +451,7 @@ module Std = struct
       let buf = Queue.create () in
       let add_value x =
         if Queue.length buf >= n then
-          ignore (Queue.dequeue buf);
+          ignore (Queue.dequeue buf : 'a option);
         Queue.enqueue buf x in
       let id = subscribe xs add_value in
       let future, promise = Future.create () in

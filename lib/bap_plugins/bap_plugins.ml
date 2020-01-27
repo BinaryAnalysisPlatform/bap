@@ -305,7 +305,9 @@ module Plugins = struct
   let run ?argv ?env ?provides ?(don't_setup_handlers=false) ?library ?exclude () =
     if not don't_setup_handlers
     then setup_default_handler ();
-    load ?argv ?env ?provides ?library ?exclude () |> ignore
+    let _ : (Plugin.t, string * Error.t) result list =
+      load ?argv ?env ?provides ?library ?exclude ()  in
+    ()
 
   let events = Plugin.system_events
   type event = Plugin.system_event [@@deriving sexp_of]
