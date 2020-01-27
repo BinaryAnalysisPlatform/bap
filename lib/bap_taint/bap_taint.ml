@@ -398,7 +398,7 @@ module Gc = struct
         ~f:(finish ~live:false) >>= fun () ->
       Machine.Local.put gc {old = cur}
 
-    let finalize _ =
+    let finalize () =
       Machine.Local.get tainter >>= fun cur ->
       Set.to_sequence (objects cur) |>
       Machine.Seq.iter ~f:(finish ~live:true)
