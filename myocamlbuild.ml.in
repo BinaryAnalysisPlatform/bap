@@ -72,7 +72,9 @@ let predicate_used_libs = function
   | _ -> ()
 
 let disable_crossmodule_optimization = function
-  | After_rules -> flag ["ocaml"; "compile"] (A "-opaque")
+  | After_rules ->
+    if bool_of_string @@ expand "$development"
+    then flag ["ocaml"; "compile"] (A "-opaque")
   | _ -> ()
 
 
