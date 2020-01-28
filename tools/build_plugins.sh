@@ -53,7 +53,7 @@ build_plugin() {
 }
 
 for plugin in $(ls plugins); do
-    if [ -d $plugin ]; then
+    if [ -d plugins/$plugin ]; then
         (build_plugin $plugin)&
     fi
 done
