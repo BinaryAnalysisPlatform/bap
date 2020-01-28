@@ -52,7 +52,7 @@ let check_uniqueness name =
                   by some other component. \
                   The other component provided %s."
       Name.str name
-      (if desc = ""
+      (if String.is_empty desc
        then "no description to its theory"
        else sprintf "the following description to its theory: %S" desc)
       ()
@@ -299,7 +299,7 @@ let sexp_of_name name =
 
 let inspect {name; desc} =
   Sexp.List (sexp_of_name name ::
-             if desc = "" then [] else [Atom desc])
+             if String.is_empty desc then [] else [Atom desc])
 
 let domain = Knowledge.Domain.define "theory"
     ~inspect

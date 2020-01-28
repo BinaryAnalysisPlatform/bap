@@ -3,7 +3,7 @@ open Option.Monad_infix
 
 module Seq = Sequence
 
-module type Interval = sig 
+module type Interval = sig
   type t [@@deriving compare, sexp_of]
   type point [@@deriving compare, sexp_of]
   val lower : t -> point
@@ -38,12 +38,12 @@ module type S = sig
   val remove_dominators : 'a t -> key -> 'a t
   val to_sequence : 'a t -> (key * 'a) Sequence.t
   include Container.S1 with type 'a t := 'a t
-end 
+end
 
 module Make(Interval : Interval) = struct
   type key = Interval.t [@@deriving sexp_of]
 
-  module Point = Comparable.Make_plain(struct 
+  module Point = Comparable.Make_plain(struct
       type t = Interval.point [@@deriving compare, sexp_of]
     end)
 
@@ -134,7 +134,7 @@ module Make(Interval : Interval) = struct
       then bal (add t.lhs key data) t.key t.data t.rhs
       else bal t.lhs t.key t.data (add t.rhs key data)
 
-  let is_inside key p = 
+  let is_inside key p =
     let low = Interval.lower key and high = Interval.upper key in
     Point.between ~low ~high p
 
@@ -144,9 +144,9 @@ module Make(Interval : Interval) = struct
       | None -> return ()
       | Some t when Point.(a < t.least || a > t.greatest) -> return ()
       | Some t ->
-        if is_inside t.key a 
-        then 
-          go t.lhs >>= fun () -> yield (t.key, t.data) >>= fun () -> 
+        if is_inside t.key a
+        then
+          go t.lhs >>= fun () -> yield (t.key, t.data) >>= fun () ->
           go t.rhs
         else go t.lhs >>= fun () -> go t.rhs in
     start |> go |> run
@@ -294,6 +294,9 @@ module Make(Interval : Interval) = struct
           iter m.rhs ~f)
 
       let iter  = `Custom iter
+
+      let length = `Define_using_fold
+
     end)
 
   let fold = C.fold

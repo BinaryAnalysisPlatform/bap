@@ -222,10 +222,10 @@ module Make(M : Monad.S) = struct
 
 
   let kill id =
-    if id = global then return ()
+    if Id.(id = global) then return ()
     else
       current () >>= fun cid ->
-      if id = cid then sentence_to_death id
+      if Id.(id = cid) then sentence_to_death id
       else lifts @@ SM.kill id
 
   (* we can't make it public as it will change the interface

@@ -42,8 +42,8 @@ let parse_name = function
   | {data=Atom x} as s ->
     let n = String.length x in
     if n < 2 then x
-    else if x.[0] = '"'
-    then if x.[n-1] = '"'
+    else if Char.(x.[0] = '"')
+    then if Char.(x.[n-1] = '"')
       then String.sub ~pos:1 ~len:(n-2) x
       else fail Unterminated_quote [s]
     else x
@@ -103,7 +103,7 @@ module Advice = struct
       match s with
       | ":before" -> parse_targets Before ss
       | ":after" -> parse_targets After ss
-      | _ when s.[0] = ':' -> fail (Unknown_method s) [lit]
+      | _ when Char.(s.[0] = ':') -> fail (Unknown_method s) [lit]
       | _ -> parse_targets Before trees
 
   let add d1 d2 = {

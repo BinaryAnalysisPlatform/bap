@@ -191,9 +191,9 @@ module Test_algo(Gl : Graph_for_algo) = struct
       Seq.range 0 (size-1) |> Seq.fold ~init:g ~f:(fun g i ->
           Gl.Edge.insert (edge i (i+1)) g) in
     Seq.range 0 size |> Seq.fold ~init:g ~f:(fun g i ->
-        if Random.float 1.0 < 0.3 then
+        if Float.(Random.float 1.0 < 0.3) then
           let dst =
-            if Random.float 1.0 < 0.2
+            if Float.(Random.float 1.0 < 0.2)
             then Random.int (i + 1)
             else i + Random.int (size - i) in
           Gl.Edge.insert (edge i dst) g

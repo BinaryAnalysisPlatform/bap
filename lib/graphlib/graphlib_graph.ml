@@ -654,6 +654,10 @@ end
 
 let pass _ _ s = s
 
+let is_tree = function
+  | `Tree -> true
+  | _ -> false
+
 let depth_first_search
     (type g) (type n) (type e)
     (module G : Graph with type t = g
@@ -682,10 +686,10 @@ let depth_first_search
           let finish (ord,state) = ord, leave_edge kind e state in
           let state = enter_edge kind e state in
           if tailrec
-          then if kind = `Tree
+          then if is_tree kind
             then visit ord v state (fun s -> k (finish s))
             else k (finish (ord,state))
-          else if kind = `Tree
+          else if is_tree kind
           then finish (visit ord v state k)
           else finish (ord,state)) in
     let ord,rpost = Order.leave ord u in
@@ -797,6 +801,8 @@ let to_dot
       Dot.output_graph chan g))
 
 
+exception Unreachable
+
 (** Immediate dominators.
     This algorithm implements «A simple, fast dominance algorithm»
     [1], with some modifications, that allows it to run on arbitrary
@@ -825,7 +831,10 @@ let idom (type t) (type n) (type e)
   let node = Array.create ~len entry in
   let pnums = G.Node.Table.create ~size:len () in
   let doms = Array.create ~len ~-1 in
-  let pnum = Hashtbl.find_exn pnums in
+  let pnum =
+    Hashtbl.find_and_call pnums
+      ~if_found:ident
+      ~if_not_found:(fun _ -> raise Unreachable) in
   if len > 0 then doms.(len - 1) <- len - 1;
   with_return (fun {return} ->
       depth_first_search ~rev (module G) g ~init:0 ~start:entry
@@ -853,7 +862,7 @@ let idom (type t) (type n) (type e)
                 if doms.(pn) < 0 then new_idom
                 else if new_idom < 0 then pn
                 else intersect new_idom pn
-              with Caml.Not_found -> new_idom ) in
+              with Unreachable -> new_idom ) in
         let changed' = doms.(i) <> new_idom in
         if changed' then doms.(i) <- new_idom;
         changed' || changed) && loop () in
@@ -862,7 +871,7 @@ let idom (type t) (type n) (type e)
       try
         let i = pnum n in
         if i <> len - 1 then Some node.(doms.(i)) else None
-      with Caml.Not_found ->
+      with Unreachable ->
         if G.Node.mem n g
         then Some node.(len - 1) else None)
 
@@ -1008,7 +1017,7 @@ let shortest_path
   loop ()
 
 let is_reachable graph ?rev g u v =
-  shortest_path graph ?rev g u v <> None
+  Option.is_some @@ shortest_path graph ?rev g u v
 
 let fold_reachable (type t) (type n) (type e)
     (module G : Graph with type t = t

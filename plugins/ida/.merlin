@@ -1,5 +1,6 @@
 PKG cmdliner
 PKG bap-ida
+PKG mmap
 REC
 
 B ../../_build/lib/bap_ida

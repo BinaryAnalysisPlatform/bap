@@ -2,7 +2,7 @@ open Core_kernel
 
 let maybe_mangled name =
   String.length name > 2 &&
-  name.[0] = '_' &&
+  Char.(name.[0] = '_') &&
   Char.is_uppercase name.[1] &&
   Char.is_alpha name.[1]
 

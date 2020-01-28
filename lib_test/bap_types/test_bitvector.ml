@@ -43,7 +43,7 @@ let validate validate word ctxt =
   let v = validate word in
   assert_bool
     (String.concat ~sep:"\n" (Validate.errors v))
-    (Validate.result v = Ok ())
+    (Or_error.is_ok @@ Validate.result v)
 
 let binary op ~width ~expect x y ctxt =
   let (!$) = Word.of_int ~width in

@@ -16,7 +16,7 @@ let regs = ARM.CPU.[r0;r1;r2;r3] |> List.map ~f:Bil.var
 let mems = Seq.map nats ~f:(C.Abi.Stack.create `armv7)
 
 let align ncrn t =
-  if size#alignment t = `r64 then match ncrn with
+  if Size.equal (size#alignment t) `r64 then match ncrn with
     | [_;_;_;_] -> ncrn
     | [_;r2;r3] -> [r2;r3]
     | _ -> []

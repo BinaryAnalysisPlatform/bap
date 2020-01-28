@@ -102,7 +102,7 @@ module Make(Node : Opaque.S)(Label : T) = struct
         | None -> None
         | Some data -> Some {src; dst; data}
 
-    let has_edge src dst g = edge src dst g <> None
+    let has_edge src dst g = Option.is_some @@ edge src dst g
 
 
     let degree select n g = match Map.find g n with
