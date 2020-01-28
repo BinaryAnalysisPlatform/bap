@@ -53,7 +53,9 @@ build_plugin() {
 }
 
 for plugin in $(ls plugins); do
-    (build_plugin $plugin)&
+    if [ -d $plugin ]; then
+        (build_plugin $plugin)&
+    fi
 done
 wait
 echo "Finished updating plugins"
