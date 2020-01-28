@@ -73,3 +73,4 @@ _oasis
 /lib/bap_plugins/bap_plugins_config.ml
 bap_main_config.ml
 tools/postinstall.ml
+OMakefile
