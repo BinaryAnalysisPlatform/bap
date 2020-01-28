@@ -19,7 +19,6 @@ module Plugin_rules = struct
   let default_tags = [
     "thread";
     "debug";
-    "short_paths";
     "custom";
     "pp(ppx-jane -dump-ast -inline-test-drop)"
   ] @ List.map default_predicates ~f:(sprintf "predicate(%s)")
