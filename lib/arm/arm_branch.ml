@@ -18,7 +18,7 @@ let lift operand ?link ?x:_ ?cond addr =
       let width = Word.bitwidth offset in
       let _1 = Word.one 32 in
       let min_32 = Word.Int_exn.(_1 lsl Word.of_int 31 ~width) in
-      let offset = if offset = min_32 then Word.zero 32 else offset in
+      let offset = if Word.equal offset min_32 then Word.zero 32 else offset in
       let r = Word.Int_exn.(addr + pc_offset + offset) in
       Bil.int r in
   (* TODO detect change to thumb in `x` *)

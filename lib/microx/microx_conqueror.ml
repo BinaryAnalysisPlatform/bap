@@ -105,12 +105,12 @@ class context
     | [] -> false
     | sub :: _ -> match Map.find vis tid with
       | None -> false
-      | Some n -> n > max_loop && Term.find blk_t sub tid <> None
+      | Some n -> n > max_loop && Option.is_some @@ Term.find blk_t sub tid
 
   method will_return tid = match callstack with
     | cur :: _ ->
       let blk = Option.value_exn blk in
-      let will what = what tid <> None in
+      let will what = Option.is_some @@ what tid in
       let fall = Term.find jmp_t blk in
       let jump = Term.find blk_t cur in
       let call = Term.find sub_t   p in

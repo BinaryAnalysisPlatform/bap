@@ -143,7 +143,7 @@ module Imm = struct
     {insn; oper; data}
 
   let to_int {data=n} : int option =
-    if n.imm_large = None then Some n.imm_small else None
+    if Option.is_none n.imm_large then Some n.imm_small else None
 
   let to_int64 {data = n} =
     match n.imm_large with
@@ -556,7 +556,7 @@ let store_asm d =
 let insn_of_mem dis mem =
   let init = mem,None,`left mem in
   let split mem' =
-    if Mem.(max_addr mem' = max_addr mem) then Ok `finished
+    if Addr.equal (Mem.max_addr mem') (Mem.max_addr mem) then Ok `finished
     else Mem.view mem ~from:Addr.(Mem.max_addr mem' ++ 1)
       >>| fun r -> `left r in
   run ~stop_on:[`Valid] dis mem ~return ~init

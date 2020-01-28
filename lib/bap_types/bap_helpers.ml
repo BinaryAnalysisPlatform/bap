@@ -175,6 +175,8 @@ module Type = struct
   include Type
 
 
+  let type_equal t t' = Type.compare t t' = 0
+
   (** [infer x] infers the type of the expression [x].  Either returns
       the inferred type, or terminates abnormally on the first type
       error with the `Type_error.E` exception.  *)
@@ -193,11 +195,11 @@ module Type = struct
     | Concat (x,y) -> concat x y
   and unify x y =
     let t1 = infer x and t2 = infer y in
-    if t1 = t2 then t1
+    if type_equal t1 t2 then t1
     else Type_error.expect t1 ~got:t2
   and let_ v x y =
     let t = Var.typ v and u = infer x in
-    if t = u then infer y
+    if type_equal t u then infer y
     else Type_error.expect t ~got:u
   and ite c x y = match infer c with
     | Type.Mem _ -> Type_error.expect_imm ()
@@ -275,7 +277,7 @@ module Type = struct
   and move v x =
     let t = Var.typ v in
     match infer x with
-    | Ok u when t = u -> None
+    | Ok u when type_equal t u -> None
     | Ok u -> Some (Type_error.bad_type ~exp:t ~got:u)
     | Error err -> Some err
   and jmp x = match infer x with
@@ -338,6 +340,7 @@ module Eff = struct
       | Maybe                   (* the set might be non-empty *)
       | Exists                  (* there exists at least one non-zero bit *)
       | Forall                  (* all bits are set (the [~0] value)  *)
+    [@@deriving compare]
 
     (* assumes that zero and unit elements are already applied, thus
        we shouldn't see expressions where all operands are ints. This
@@ -387,7 +390,7 @@ module Eff = struct
       | Empty,Empty -> Empty
     and ite _ x y = match bits x, bits y with
       | Exists,Forall| Forall,Exists -> Exists
-      | x,y when x = y -> x
+      | x,y when [%compare.equal : nzbits] x y -> x
       | _ -> Maybe
   end
 
@@ -499,7 +502,7 @@ module Simpl = struct
       | x -> Extract (hi,lo,x)
     and unop op x = match exp x with
       | Int x -> Int (Apply.unop op x)
-      | UnOp(op',x) when op = op' -> exp x
+      | UnOp(op',x) when [%compare.equal : unop] op op' -> exp x
       | x -> UnOp(op, x)
     and binop op x y =
       let width = match Type.infer_exn x with
@@ -724,7 +727,7 @@ module Normalize = struct
     let vs = infer_value_size m in
     let (++) = make_succ m in
     let n = Size.in_bytes s in
-    let nth i = if e = BigEndian then nth (n-i-1) else nth i in
+    let nth i = if [%compare.equal : endian] e BigEndian then nth (n-i-1) else nth i in
     let rec expand i =
       if i >= 0
       then Exp.Store(expand (i-1),(a++i),nth i x,LittleEndian,vs)
@@ -742,7 +745,7 @@ module Normalize = struct
   let expand_load m a e s =
     let vs = infer_value_size m in
     let (++) = make_succ m in
-    let cat x y = if e = LittleEndian
+    let cat x y = if [%compare.equal : endian] e LittleEndian
       then Exp.Concat (y,x)
       else Exp.Concat (x,y) in
     let load a = Exp.Load (m,a,e,vs) in
@@ -1129,7 +1132,7 @@ module Exp = struct
 
   let find (finder : 'a #finder) es : 'a option =
     finder#find es
-  let exists finder ss = finder#find ss = Some ()
+  let exists finder ss = Option.is_some @@ finder#find ss
   let iter (visitor : unit #visitor) ss = visitor#visit_exp ss ()
   let fold (visitor : 'a #visitor) ~init ss = visitor#visit_exp ss init
   let map m = m#map_exp
@@ -1163,7 +1166,7 @@ module Stmt = struct
 
   let find (finder : 'a #finder) s : 'a option =
     finder#find [s]
-  let exists finder ss = finder#find [ss] = Some ()
+  let exists finder ss = Option.is_some @@ finder#find [ss]
   let iter (visitor : unit #visitor) ss = visitor#visit_stmt ss ()
   let fold (visitor : 'a #visitor) ~init ss = visitor#visit_stmt ss init
   let map (m : #mapper) = m#run

@@ -663,12 +663,16 @@ module Make (Machine : Machine) = struct
 
   let arg_use = term normal arg_t arg_use
 
+  let is_out_intent x = match Arg.intent x with
+    | Some Out -> true
+    | _ -> false
+
   let get_arg t = Env.get (Arg.lhs t)
   let get_args ~input sub =
     Term.enum arg_t sub |>
     Seq.filter ~f:(fun x -> match input with
-        | true ->  Arg.intent x <> Some Out
-        | false -> Arg.intent x = Some Out) |>
+        | true -> not @@ is_out_intent x
+        | false -> is_out_intent x) |>
     Machine.Seq.map ~f:get_arg
 
   let iter_args t f = Machine.Seq.iter (Term.enum arg_t t) ~f

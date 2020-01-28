@@ -21,7 +21,7 @@ let create ?root fname =
   let base = Option.value root ~default:(Sys.getcwd ()) in
   mkdir base;
   let base =
-    if base <> Sys.getcwd () then base
+    if String.(base <> Sys.getcwd ()) then base
     else base / Filename.basename fname in
   mkdir base;
   base,Filename.basename fname

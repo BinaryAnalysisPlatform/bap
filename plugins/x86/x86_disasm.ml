@@ -72,7 +72,7 @@ let parse_instr mode mem addr =
     }
   in
   let get_vex a =
-    if mode = X86 then None, a else
+    if [%compare.equal: mode] mode X86 then None, a else
       match Char.to_int (g a) with
       (* 3-byte prefix *)
       | 0xc4 | 0x8f ->
@@ -433,7 +433,7 @@ let parse_instr mode mem addr =
     let mbi = big_int_of_mode mode in
     let mt = type_of_mode mode in
     (* A VEX prefix always implies the first byte of 0x0f *)
-    let b1, na = if vex <> None then 0x0f, a else Char.to_int (g a), s a in
+    let b1, na = if Option.is_some vex then 0x0f, a else Char.to_int (g a), s a in
     match b1 with (* Table A-2 *)
     (*** 00 to 3d are near the end ***)
     | 0x40 | 0x41 | 0x42 | 0x43 | 0x44 | 0x45 | 0x46 | 0x47 ->
@@ -444,7 +444,7 @@ let parse_instr mode mem addr =
       (Push(prefix.bopsize, Oreg(rm_extend lor (b1 land 7))), na)
     | 0x58 | 0x59 | 0x5a | 0x5b | 0x5c | 0x5d | 0x5e | 0x5f ->
       (Pop(prefix.bopsize, Oreg(rm_extend lor (b1 land 7))), na)
-    | 0x63 when mode = X8664 ->
+    | 0x63 when [%compare.equal: mode] mode X8664 ->
       let (r, rm, na) = parse_modrm_addr None na in
       (Movsx(prefix.opsize, r, reg32_t, rm), na)
     | 0x68 | 0x6a  ->
@@ -461,7 +461,7 @@ let parse_instr mode mem addr =
       let it =
         if b1 = 0x6b
         then reg8_t
-        else if prefix.opsize = reg16_t then reg16_t
+        else if Type.equal prefix.opsize reg16_t then reg16_t
         else reg32_t
       in
       let (r, rm, na) = parse_modrm_addr (Some it) na in
@@ -473,7 +473,7 @@ let parse_instr mode mem addr =
       (Jcc(Jabs(Oimm(add_to_addr na i)), cc_to_exp b1), na)
     | 0x80 | 0x81 | 0x82 | 0x83 ->
       let it = match b1 with
-        | 0x81 -> if prefix.opsize = reg64_t then reg32_t else prefix.opsize
+        | 0x81 -> if Type.equal prefix.opsize reg64_t then reg32_t else prefix.opsize
         | _ -> reg8_t
       in
       let (r, rm, na) = parse_modrmext_addr (Some it) na in
@@ -507,7 +507,7 @@ let parse_instr mode mem addr =
     | 0x8b -> let (r, rm, na) = parse_modrm_addr None na in
       (Mov(prefix.opsize, r, rm, None), na)
     | 0x8c -> let (r, rm, na) = parse_modrmseg_addr None na in
-      let extend = if prefix.opsize = reg64_t then reg64_t else reg16_t in
+      let extend = if Type.equal prefix.opsize reg64_t then reg64_t else reg16_t in
       (Mov(extend, rm, r, None), na)
     | 0x8d -> let (r, rm, na) = parse_modrm_addr None na in
       (match rm with
@@ -550,7 +550,7 @@ let parse_instr mode mem addr =
     | 0xaf -> (Scas prefix.opsize, na)
     | 0xa8 -> let (i, na) = parse_imm8 na in
       (Test(reg8_t, o_rax, i), na)
-    | 0xa9 -> let it = if prefix.opsize = reg64_t then reg32_t else prefix.opsize in
+    | 0xa9 -> let it = if Type.equal prefix.opsize reg64_t then reg32_t else prefix.opsize in
       let (i,na) = parse_immz it na in
       (Test(prefix.opsize, o_rax, oimm_resize i prefix.opsize), na)
     | 0xaa -> (Stos reg8_t, na)
@@ -672,7 +672,7 @@ let parse_instr mode mem addr =
     | 0xf4 -> (Hlt, na)
     | 0xf6
     | 0xf7 -> let t = if b1 = 0xf6 then reg8_t else prefix.opsize in
-      let it = if t = reg64_t then reg32_t else t in
+      let it = if Type.equal t reg64_t then reg32_t else t in
       let (r, rm, na) = parse_modrmext_addr (Some it) na in
       (match r with (* Grp 3 *)
        | 0 ->
@@ -754,7 +754,7 @@ let parse_instr mode mem addr =
         in
         let t = if (b1 land 1) = 0  then reg8_t else prefix.opsize in
         (* handle sign extended immediate cases *)
-        let it = if t = reg64_t then reg32_t else t in
+        let it = if Type.equal t reg64_t then reg32_t else t in
         let (o1, o2, na) = match b1 land 7 with
           | 0 | 1 -> let r, rm, na = parse_modrm_addr None na in
             (rm, r, na)
@@ -783,7 +783,7 @@ let parse_instr mode mem addr =
           (match b3 with
            | 0xd0 -> (Xgetbv, nna)
            | _ -> disfailwith (Printf.sprintf "unsupported opcode %02x %02x %02x" b1 b2 b3))
-        | 0x05 when mode = X8664 -> (Syscall, na)
+        | 0x05 when [%compare.equal: mode] mode X8664 -> (Syscall, na)
         | 0x1f ->
           (* Even though we don't use the operand to nop, we need to
              parse it to get the next address *)
@@ -808,7 +808,7 @@ let parse_instr mode mem addr =
           let r, rm, rv, na = parse_modrm_vec None na in
           let tdst, dst, telt, tsrc1, src1, off_src1, off_dst1, src2 =
             match b2 with
-            | (0x12 | 0x16) when rv <> None ->
+            | (0x12 | 0x16) when Option.is_some rv ->
               let offs1, offs2, offd1, offd2 = match b2, rm with
                 | 0x12, Ovec _ -> 64, 64, 64, 0
                 | 0x12, _ -> 64, 0, 64, 0
@@ -854,10 +854,10 @@ let parse_instr mode mem addr =
                 | 0x28 | 0x29 -> true
                 | _ -> disfailwith "impossible"
               in
-              let t = if prefix.mopsize = reg256_t then reg256_t else reg128_t in
+              let t = if Type.equal prefix.mopsize reg256_t then reg256_t else reg128_t in
               s, d, t, t, align
             | 0x6e | 0x7e -> (* MOVD, MOVQ *)
-              let t = if prefix.opsize = reg64_t then reg64_t else reg32_t in
+              let t = if Type.equal prefix.opsize reg64_t then reg64_t else reg32_t in
               let s, d, ts, td = match b2 with
                 | 0x6e -> toreg rm, r, t, reg128_t
                 | 0x7e when prefix.repeat -> rm, r, reg64_t, reg128_t
@@ -871,7 +871,7 @@ let parse_instr mode mem addr =
                 | 0x7f -> r, rm
                 | _ -> disfailwith "impossible"
               in
-              let size = if prefix.repeat && prefix.vex = None then reg128_t else prefix.mopsize in
+              let size = if prefix.repeat && Option.is_none prefix.vex then reg128_t else prefix.mopsize in
               let align = if prefix.opsize_override then true else false in
               s, d, size, size, align
             | 0xd6 -> (* MOVQ *)
@@ -972,7 +972,7 @@ let parse_instr mode mem addr =
           (Mov(prefix.opsize, r, rm, Some(cc_to_exp b2)), na)
         | 0x57 ->
           let r, rm, rv, na = parse_modrm_vec None na in
-          let t = if prefix.mopsize = reg256_t then reg256_t else reg128_t in
+          let t = if Type.equal prefix.mopsize reg256_t then reg256_t else reg128_t in
           (Ppackedbinop(t, prefix.opsize, Bil.(lxor), "xorp", r, rm, rv), na)
         | 0x60 | 0x61 | 0x62 | 0x68 | 0x69 | 0x6a ->
           let order = match b2 with
@@ -1006,7 +1006,7 @@ let parse_instr mode mem addr =
             | 0x60 -> Bil.SLT, "pcmpgt"
             | _ -> disfailwith "impossible" in
           (Pcmp(prefix.mopsize, elet, bop, bstr, r, rm, rv), na)
-        | 0x70 when prefix.opsize = reg16_t ->
+        | 0x70 when Type.equal prefix.opsize reg16_t ->
           let r, rm, rv, na = parse_modrm_vec (Some reg8_t) na in
           let i, na = parse_imm8 na in
           (Pshufd(prefix.mopsize, r, rm, rv, i), na)
@@ -1038,7 +1038,7 @@ let parse_instr mode mem addr =
         | 0x9a | 0x9b | 0x9c | 0x9d | 0x9e | 0x9f ->
           let _r, rm, na = parse_modrm_addr None na in
           (* unclear what happens otherwise *)
-          assert (prefix.opsize = reg32_t);
+          assert (Type.equal prefix.opsize reg32_t);
           (Setcc(reg8_t, rm, cc_to_exp b2), na)
         | 0xa2 -> (Cpuid, na)
         | 0xa3 | 0xba ->
@@ -1159,7 +1159,7 @@ let parse_instr mode mem addr =
           (Pbinop(prefix.mopsize, Bil.(lxor), "pxor", r, rm, rv), na)
         | 0xf0 ->
           let r, rm, _, na = parse_modrm_vec None na in
-          let t = if prefix.mopsize = reg256_t then reg256_t else reg128_t in
+          let t = if Type.equal prefix.mopsize reg256_t then reg256_t else reg128_t in
           (Movdq(t, rm, t, r, false), na)
         | 0xf8 | 0xf9 | 0xfa | 0xfb ->
           let r, rm, rv, na = parse_modrm_vec None na in

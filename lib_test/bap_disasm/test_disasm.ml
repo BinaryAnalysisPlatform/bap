@@ -262,7 +262,7 @@ let amount dis ctxt =
     ~msg:"Expected 4 basic blocks"
     4 (Cfg.number_of_nodes (Rec.cfg dis))
 
-let equal_addrs m1 m2 = Memory.(min_addr m1 = min_addr m2)
+let equal_addrs m1 m2 = Addr.equal (Memory.min_addr m1) (Memory.min_addr m2)
 let string_of_mem mem = Addr.string_of_value (Memory.min_addr mem)
 let unexpected_block mem =
   failwithf "Unexpected block starting from %s" (string_of_mem mem) ()
@@ -292,7 +292,7 @@ let build_graph dis : graph =
       (blk_num blk, Seq.to_list preds, Seq.to_list dests) :: graph)
 
 let structure cfg ctxt =
-  let sort x = List.sort ~compare:Polymorphic_compare.compare x in
+  let sort x = List.sort ~compare:Poly.compare x in
   let deepsort graph =
     List.map graph ~f:(fun (id,preds,succs) ->
         id, sort preds, sort succs) |> sort in
@@ -309,7 +309,7 @@ let test_micro_cfg insn ctxt =
             Memory.create LittleEndian (Addr.of_int64 0L) |>
             ok_exn in
   let dis = Rec.run `x86_64 mem |> ok_exn in
-  assert_bool "No errors" (Rec.errors dis = []);
+  assert_bool "No errors" (List.is_empty (Rec.errors dis));
   assert_bool "One block" (Rec.cfg dis |> Cfg.number_of_nodes = 1);
   Rec.cfg dis |> Cfg.nodes |>
   Seq.to_list |> List.hd_exn
@@ -362,7 +362,7 @@ let call1_3ret _ctxt =
   let mem = String.concat [call1; ret; ret; ret] |>
             memory_of_string in
   let dis = Rec.run `x86_64 mem |> Or_error.ok_exn in
-  assert_bool "No errors" (Rec.errors dis = []);
+  assert_bool "No errors" (List.is_empty (Rec.errors dis));
   assert_bool "Four block" (Rec.cfg dis |> Cfg.number_of_nodes = 4);
   let cfg = Rec.cfg dis in
   match Cfg.nodes cfg |> Seq.to_list |> sort_by_addr with

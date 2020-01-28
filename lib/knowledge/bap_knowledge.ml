@@ -4,7 +4,7 @@ open Monads.Std
 type ('a,'b) eq = ('a,'b) Type_equal.t = T : ('a,'a) eq
 
 module Order = struct
-  type partial = LT | EQ | GT | NC
+  type partial = LT | EQ | GT | NC [@@deriving equal]
   module type S = sig
     type t
     val order : t -> t -> partial
@@ -224,12 +224,12 @@ module Name = struct
   (* invariant, keywords are always prefixed with [:] *)
   let normalize_name input ~package name = match input with
     | `Literal ->
-      if package = keyword_package
+      if String.equal package keyword_package
       then ":" ^ escape_all_literally name
       else escape_all_literally name
     | `Reading ->
       let escape = escape_all_unescaped in
-      if package = keyword_package
+      if String.equal package keyword_package
       then
         if not (String.is_prefix ~prefix:":" name)
         then ":" ^ escape name
@@ -276,7 +276,7 @@ module Name = struct
   let short t = unescape t.name
   let unqualified t = short t
   let to_string {package; name} =
-    if package = keyword_package || package = user_package
+    if String.(package = keyword_package || package = user_package)
     then name
     else package ^ ":" ^ name
 
@@ -498,7 +498,7 @@ module Domain = struct
   let join d = d.join
   let name d = d.name
 
-  let is_empty {empty; order} x = order empty x = EQ
+  let is_empty {empty; order} x = Order.equal_partial (order empty x) EQ
 
   exception Join of string * Sexp.t * Sexp.t [@@deriving sexp_of]
 
@@ -2403,12 +2403,12 @@ module Knowledge = struct
 
     let to_string
         {Class.name=cls as fname; id=cid} {Env.package; classes} obj =
-      let cls = if package = cls.package then cls.name
+      let cls = if String.equal package cls.package then cls.name
         else Name.to_string fname in
       match Map.find classes cid with
       | None -> uninterned_repr cls obj
       | Some {Env.syms} -> match Map.find syms obj with
-        | Some fname -> if fname.package = package
+        | Some fname -> if String.equal fname.package package
           then fname.name
           else Name.to_string fname
         | None -> uninterned_repr cls obj
@@ -2555,7 +2555,7 @@ module Knowledge = struct
             | None -> `Pkg name
             | Some _ -> `Sym (Name.read name) in
           let needs_import {Env.pubs} sym obj = match name with
-            | `Sym s -> sym = s
+            | `Sym s -> [%compare.equal : fullname] sym s
             | `Pkg p -> match Map.find pubs p with
               | None -> false
               | Some pubs -> Set.mem pubs obj in
@@ -2674,7 +2674,7 @@ module Knowledge = struct
 
 
   let pp_fullname ~package ppf {package=p; name} =
-    if package = p
+    if String.equal package p
     then Format.fprintf ppf "%s" name
     else Format.fprintf ppf "%s:%s" p name
 

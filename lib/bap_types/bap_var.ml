@@ -87,7 +87,6 @@ let create ?(is_virtual=false) ?(fresh=false) name typ =
   else
     Var (Theory.Var.define sort name)
 
-let same x y = base x = base y
 
 
 module T = struct
@@ -131,3 +130,5 @@ module T = struct
 end
 
 include Regular.Make(T)
+
+let same x y = equal (base x) (base y)

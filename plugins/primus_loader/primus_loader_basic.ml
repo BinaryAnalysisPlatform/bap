@@ -55,7 +55,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
 
   let rec is set = function
     | Backend.Or (p1,p2) -> is set p1 || is set p2
-    | bit -> bit = set
+    | bit -> [%compare.equal : Backend.perm] bit set
   [@@warning "-D"]
 
   let segmentations =
@@ -175,7 +175,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     fun end_of_envp_table ->
     save_string null end_of_envp_table >>=
     fun _argv_frame_ptr ->
-    assert (argv_frame_ptr = _argv_frame_ptr);
+    assert Word.(argv_frame_ptr = _argv_frame_ptr);
     save_word endian argc sp >>= fun _ ->
     set_word "environ" envp_table_ptr
 

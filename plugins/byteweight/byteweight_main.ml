@@ -37,7 +37,7 @@ let create_finder path ~min_length ~max_length threshold arch comp =
   | Ok data ->
     let sigs = Binable.of_string (module BW) (Bytes.to_string data) in
     Result.return @@
-    if threshold >= 1.0
+    if Float.(threshold >= 1.0)
     then BW.find_using_bayes_factor sigs ~min_length ~max_length threshold
     else BW.find_using_threshold sigs ~min_length ~max_length threshold
 

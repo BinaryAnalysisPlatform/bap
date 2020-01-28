@@ -53,7 +53,7 @@ in parameter called $(b,prefix), that is substituted with the path
 to the recipe top folder. See the $(b,parameter) command to learn
 how to introduce parameters.
 
-The parameter command introduces a parameter to the recipe, i.e.,
+The $(b,parameter) command introduces a parameter to the recipe, i.e.,
 a variable ingredient that could be changed when the recipe is
 used. The parameter command has 3 arguments, all required. The
 first argument is the parameter name, the second is the default
@@ -71,6 +71,11 @@ If the parameter is not set through the command line, then it will
 be substituted with $(b,128) otherwise it will receive whatever
 value a user has passed.
 
+The $(b,command) stanza specifies the command that the recipe should
+run. It is optional, since recipes could be generic and applicable to
+different commands, which gives an extra freedom to the recipe
+user.
+
 Finally, the $(b,extend) command is like the include statement in
 the C preprocessor as it includes all the ingredients from another
 recipe. (Make sure that you're not introducing loops!). The
@@ -81,10 +86,11 @@ include.;
 
 ```
     recipe ::= {<recipe-item>}
-    recipe-item ::= <option> | <parameter> | <extend>
+    recipe-item ::= <option> | <parameter> | <extend> | <command>
     option ::= (option <atom> {<atom>})
     parameter ::= (parameter <atom> <atom> <atom>)
     extend ::= (extend <atom>)
+    command ::= (command <atom>)
 ```
 |}
 

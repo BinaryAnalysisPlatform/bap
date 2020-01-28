@@ -53,7 +53,7 @@ module Make(Key : Key) = struct
 
   let length trie =
     let rec count trie =
-      let n = if trie.data = None then 0 else 1 in
+      let n = if Option.is_none trie.data then 0 else 1 in
       Tokens.fold ~init:n trie.subs
         ~f:(fun ~key:_ ~data:trie n -> n + count trie) in
     count trie

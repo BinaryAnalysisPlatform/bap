@@ -14,7 +14,7 @@ let apply demangler proj =
 
 let find_demangler name =
   Demanglers.available () |>
-  List.find ~f:(fun d -> Demangler.name d = name)
+  List.find ~f:(fun d -> String.equal (Demangler.name d) name)
 
 let () =
   let () = Config.manpage [

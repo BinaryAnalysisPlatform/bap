@@ -33,11 +33,13 @@ type param = {
 }
 
 type item =
+  | Cmd of string
   | Use of string
   | Opt of string * string list
   | Par of param
 
 type spec = {
+  cmd : string option;
   uses : string list;
   opts : (string * string list) list;
   pars : param list;
@@ -65,6 +67,7 @@ type t = {
 }
 
 let empty_spec = {
+  cmd = None;
   uses = [];
   opts = [];
   pars = [];
@@ -89,6 +92,7 @@ let item_of_sexp = function
     atoms args >>| fun args -> Opt (name, args)
   | Sexp.List (Sexp.Atom "parameter" :: Sexp.Atom s :: _) ->
     Error (Bad_param s)
+  | Sexp.List [Sexp.Atom "command";  Sexp.Atom name] -> Ok (Cmd name)
   | x -> Error (Bad_item x)
 
 
@@ -97,7 +101,8 @@ let items_of_sexps xs = Result.all (List.map xs ~f:item_of_sexp)
 let spec_of_items = List.fold ~init:empty_spec ~f:(fun spec -> function
     | Use x -> {spec with uses = x :: spec.uses}
     | Opt (x,xs) -> {spec with opts = (x,xs) :: spec.opts}
-    | Par x -> {spec with pars = x :: spec.pars})
+    | Par x -> {spec with pars = x :: spec.pars}
+    | Cmd name -> {spec with cmd = Some name})
 
 let (/) = Filename.concat
 
@@ -264,7 +269,28 @@ let load ?paths ?env name =
 let rec args t =
   List.concat_map t.loads ~f:args @ t.args
 
-let argv t = Array.of_list @@ args t
+let prepend_before_dash_dash argv args =
+  match Array.findi argv ~f:(fun _ -> String.equal "--") with
+  | None -> Array.append argv args
+  | Some (p,_) -> Array.concat [
+      Array.subo ~len:p argv;
+      args;
+      Array.subo ~pos:p argv
+    ]
+
+let args t = Array.of_list @@ args t
+let command t = t.spec.cmd
+let argv ?(argv=[||]) t = match command t with
+  | None -> prepend_before_dash_dash argv (args t)
+  | Some cmd ->
+    let argv = Array.of_list @@ match Array.to_list argv with
+    | [] | [_] as argv -> argv @ [cmd]
+    | self :: arg :: rest when String.is_prefix ~prefix:arg cmd ->
+      self :: cmd :: rest
+    | self :: arg :: rest ->
+      self :: cmd :: arg :: rest in
+    prepend_before_dash_dash argv (args t)
+
 
 let rec params t = t.spec.pars @ List.concat_map t.loads ~f:params
 
