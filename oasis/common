@@ -11,9 +11,7 @@ Plugins:     META (0.4)
 AlphaFeatures: ocamlbuild_more_args, compiled_setup_ml
 BuildTools: ocamlbuild
 XOCamlbuildExtraArgs:
-     -j 4
-     -use-ocamlfind
-     -classic-display
+     -j 0
      -plugin-tags "'package(findlib)'"
 
 PreConfCommand: $rm setup.data
@@ -21,4 +19,8 @@ PostDistcleanCommand: $rm  _tags myocamlbuild.ml setup.ml setup.data
 
 Flag everything
   Description: Build every feature by default
+  Default: false
+
+Flag development
+  Description: Enable development mode
   Default: false

@@ -53,7 +53,6 @@ build_plugin() {
     mv new_digest digest
 }
 
-
 for plugin in `ls plugins`; do
     (build_plugin $plugin)&
     echo `pwd`
