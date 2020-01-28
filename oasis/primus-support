@@ -7,7 +7,7 @@ Library primus_loader_plugin
   Build$: flag(everything) || flag(primus_support)
   FindlibName: bap-plugin-primus_loader
   CompiledObject: best
-  BuildDepends: bap, bap-primus, core_kernel, ogre
+  BuildDepends: bap, bap-primus, core_kernel, ogre, ppx_jane
   XMETADescription: generic program loader for Primus
   Modules: Primus_loader_main
   InternalModules: Primus_loader_basic

@@ -13,7 +13,7 @@ Flag llvm_legacy
 Library bap_llvm
   Path:          lib/bap_llvm
   Build$:        flag(everything) || flag(llvm)
-  BuildDepends:  bap, ogre, monads, core_kernel, ppx_jane
+  BuildDepends:  bap, ogre, monads, core_kernel, ppx_jane, mmap
   FindlibName:   bap-llvm
   Modules:       Bap_llvm,
                  Bap_llvm_loader

@@ -26,7 +26,7 @@ Library traces_test
   Install:         false
   CompiledObject:  best
   Modules:         Test_traces
-  BuildDepends:    bap, bap-traces, oUnit, core_kernel, uri
+  BuildDepends:    bap, bap-traces, oUnit, core_kernel, uri, ppx_jane
 
 
 Executable run_traces_tests
