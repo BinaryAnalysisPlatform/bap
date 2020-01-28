@@ -29,32 +29,49 @@
 
 (defun memory/allocate (ptr len)
   (if *malloc-initialize-memory*
-      (memory-allocate ptr n *malloc-initial-value*)
-    (memory-allocate ptr n)))
+      (memory-allocate ptr len *malloc-initial-value*)
+    (memory-allocate ptr len)))
+
+(defun word-size () (/ (word-width) 8))
+
+(defun encode-memory-length(ptr len)
+  (write-word ptr_t ptr len))
+
+(defun decode-memory-length(ptr)
+  (read-word ptr_t ptr))
+
+(defun decode-memory-length'(ptr)
+  (if ptr (decode-memory-length (- ptr (word-size))) 0))
+
+(defun malloc_internal (n)
+  "allocates a memory region of size N"
+  (if (= n 0) *malloc-zero-sentinel*
+    (if (malloc-will-reach-limit n) 0
+      (let ((width (word-size))
+            (full (+ n (* 2 *malloc-guard-edges*) width))
+            (ptr brk)
+            (failed (memory/allocate ptr full)))
+        (if failed 0
+          (set brk (+ brk full))
+          (malloc/fill-edges ptr full)
+          (set ptr (+ ptr *malloc-guard-edges*))
+          (encode-memory-length ptr n)
+          (+ ptr width))))))
 
 (defun malloc (n)
   "allocates a memory region of size N"
   (declare (external "malloc"))
-  (if (= n 0) *malloc-zero-sentinel*
-    (if (malloc-will-reach-limit n) 0
-      (let ((n (+ n (* 2 *malloc-guard-edges*)))
-            (ptr brk)
-            (failed (memory/allocate ptr n)))
-        (if failed 0
-          (set brk (+ brk n))
-          (malloc/fill-edges ptr n)
-          (let ((ptr (+ ptr *malloc-guard-edges*)))
-            (dict-add 'malloc/regions ptr n)
-            ptr))))))
+  (malloc_internal n))
 
-(defun realloc (ptr len)
+(defun realloc (ptr new)
   (declare (external "realloc"))
-  (let ((len' (dict-get 'malloc/regions ptr)))
-    (if (not len') (malloc len)
-      (if (>= len' len) ptr
-        (let ((new_ptr (malloc len)))
-          (if (not new_ptr) new_ptr
-            (copy-right new_ptr ptr len')))))))
+  (let ((old (decode-memory-length' ptr))
+        (ptr' (malloc new))
+        (dst ptr'))
+    (if (not ptr) ptr'
+      (when (and ptr ptr')
+        (copy-right dst ptr old))
+      ptr')))
 
 ;; in our simplistic malloc implementation, free is just a nop
 (defun free (p)
