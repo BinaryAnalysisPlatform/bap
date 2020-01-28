@@ -17,7 +17,10 @@ sed -i 's/.*Build$.*//' _oasis
 sed -i 's/.*CCOpt:.*//' _oasis
 sed -i 's/.*CCLib:.*//' _oasis
 
-oasis setup
-ocamlfind ocamlopt unix.cmxa setup.ml -o setup.exe
-rm setup.cmx setup.cmi setup.o
-./setup.exe -configure --prefix $(opam config var prefix)
+# call setup twice so that it can capture the AB deps
+for pass in `seq 2`; do
+    oasis setup
+    ocamlfind ocamlopt unix.cmxa setup.ml -o setup.exe
+    rm setup.cmx setup.cmi setup.o
+    ./setup.exe -configure --prefix $(opam config var prefix)
+done
