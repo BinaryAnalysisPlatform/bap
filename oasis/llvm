@@ -13,7 +13,7 @@ Flag llvm_legacy
 Library bap_llvm
   Path:          lib/bap_llvm
   Build$:        flag(everything) || flag(llvm)
-  BuildDepends:  bap, ogre, monads
+  BuildDepends:  bap, ogre, monads, core_kernel, ppx_jane, mmap
   FindlibName:   bap-llvm
   Modules:       Bap_llvm,
                  Bap_llvm_loader
@@ -66,14 +66,14 @@ Library llvm_plugin
   Build$:          flag(everything) || flag(llvm)
   FindlibName:     bap-plugin-llvm
   InternalModules: Llvm_main
-  BuildDepends:    bap, bap-llvm
+  BuildDepends:    bap, bap-llvm, core_kernel
   XMETAExtraLines: tags="disassembler, llvm, loader, elf, macho, coff"
 
 Library legacy_llvm_plugin
   XMETADescription: provide legacy loader using LLVM library
   Path:            plugins/legacy_llvm
   Build$:          flag(llvm_legacy)
-  BuildDepends:    bap, bap-llvm
+  BuildDepends:    bap, bap-llvm, core_kernel
   FindlibName:     bap-plugin-legacy_llvm
   InternalModules: Legacy_loader_main
   XMETAExtraLines: tags="legacy, llvm, loader, elf, macho, coff"

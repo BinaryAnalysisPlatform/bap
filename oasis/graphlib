@@ -7,7 +7,7 @@ Library graphlib
   FindlibName:     graphlib
   Build$:          flag(everything) || flag(graphlib)
   CompiledObject:  best
-  BuildDepends:    core_kernel, regular, ocamlgraph
+  BuildDepends:    core_kernel, regular, ocamlgraph, ppx_jane
   Modules:         Graphlib
   InternalModules:
                    Graphlib_graph,

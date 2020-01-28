@@ -20,6 +20,7 @@ install-plugins:
 	sh tools/build_plugins.sh
 	if [ -f ./postinstall.native ]; then ./postinstall.native; fi
 	if [ -f ./postinstall.byte ]; then ./postinstall.byte; fi
+	if [ -f ./postinstall ]; then ./postinstall; fi
 
 install-libs:
 	$(SETUP) -install $(BAPINSTALLFLAGS)

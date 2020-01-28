@@ -8,7 +8,8 @@ Library bap_primus
   Path: lib/bap_primus
   FindlibName: bap-primus
   CompiledObject: best
-  BuildDepends: bap, bap-abi, bap-c, uuidm, bap-future, parsexp, bap-strings
+  BuildDepends: bap, bap-abi, bap-c, uuidm, bap-future, parsexp, bap-strings,
+                core_kernel, ppx_jane, regular, monads, graphlib
   Modules: Bap_primus
   InternalModules:
            Bap_primus_env,

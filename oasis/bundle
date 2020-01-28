@@ -16,4 +16,4 @@ Executable "bapbundle"
   MainIs:         bapbundle.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   core_kernel, bap-bundle, fileutils
+  BuildDepends:   core_kernel, bap-bundle, fileutils, uri

@@ -6,7 +6,7 @@ Library emit_ida_script_plugin
   Build$:           flag(everything) || flag(ida_plugin)
   Path:             plugins/emit_ida_script
   FindlibName:      bap-plugin-emit_ida_script
-  BuildDepends:     bap
+  BuildDepends:     bap, core_kernel, ppx_jane, regular
   Modules:          Emit_ida_script_main
   XMETADescription: extract a IDA python script from bap
   XMETAExtraLines:  tags="ida, python"

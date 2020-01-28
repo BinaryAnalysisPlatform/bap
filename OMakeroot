@@ -1,0 +1,5 @@
+# include the standard installed configuration file.
+include $(STDROOT)
+
+# include the OMakefile in this directory.
+.SUBDIRS: .
