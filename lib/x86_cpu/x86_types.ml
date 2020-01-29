@@ -5,7 +5,7 @@ module BV = Bitvector
 
 type binopf = Exp.t -> Exp.t -> Exp.t
 
-type mode = X86 | X8664
+type mode = X86 | X8664 [@@deriving compare]
 
 type order = Low | High
 
@@ -17,6 +17,7 @@ type operand =
   | Oseg of int
   | Oaddr of Exp.t
   | Oimm of addr
+[@@deriving compare]
 
 type jumptarget =
   | Jabs of operand

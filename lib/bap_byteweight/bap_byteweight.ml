@@ -45,14 +45,14 @@ module Make
     let rec outer = function
       | 0 -> ()
       | n -> inner n 0
-    and inner length m = match Corpus.look set ~length m with
-      | None -> outer (length - 1)
-      | Some s when pass = `Pos && test s ->
+    and inner length m = match Corpus.look set ~length m,pass with
+      | None,_ -> outer (length - 1)
+      | Some s, `Pos when test s ->
         Trie.change trie s (function
             | None -> Some (1,0)
             | Some (a,b) -> Some (a+1,b));
         inner length (m+1)
-      | Some s when pass = `Neg ->
+      | Some s, `Neg ->
         Trie.change trie s (function
             | Some (m,n) when not(test s) -> Some (m,n+1)
             | x -> x);
@@ -69,7 +69,7 @@ module Make
     | None -> false
     | Some (_,(a,b)) ->
       let n = a + b in
-      Float.(of_int a / of_int n) > threshold
+      Float.(of_int a / of_int n > threshold)
 
   let next_if (trie : t) ~length ~f set n =
     let open Option.Monad_infix in
@@ -87,7 +87,7 @@ module Make
   let next trie ~length ~threshold set n =
     next_if trie ~length set n ~f:(fun _ _ (a,b) ->
         let n = a + b in
-        Float.(of_int a / of_int n) > threshold)
+        Float.(of_int a / of_int n > threshold))
 
   let length = Trie.length
 end

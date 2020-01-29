@@ -191,7 +191,7 @@ let different_subscribe_id ctxt =
   let stub' _ = () in
   let id = Stream.subscribe ss stub in
   let id' = Stream.subscribe ss stub' in
-  assert_false "check id" (id = id')
+  assert_false "check id" Poly.(id = id')
 
 let different_watch_id ctxt = 
   let ss,signal,_ = Stream.of_list values in
@@ -203,7 +203,7 @@ let different_watch_id ctxt =
   Stream.watch ss f';
   Signal.send signal ();
   assert_false "check watch id" 
-    ((Option.value_exn !w_id) = (Option.value_exn !w_id'))
+    Poly.((Option.value_exn !w_id) = (Option.value_exn !w_id'))
 
 let same_watch_id ctxt = 
   let ss,signal,_ = Stream.of_list values in

@@ -1,7 +1,7 @@
 open Core_kernel
 open Format
 
-type stage = Working | Accepted | Finished
+type stage = Working | Accepted | Finished [@@deriving equal]
 type answer = Accept | Decline | Undecided
 
 type +'a decision = {
@@ -52,13 +52,13 @@ let hprop {p1; w0; w1; h={n;m}} =
   float m *. w0 +. float n *. w1 +. p1
 
 let decide t p =
-  if p <= t.t0 then Decline else
-  if p >= t.t1 then Accept else Undecided
+  if Float.(p <= t.t0) then Decline else
+  if Float.(p >= t.t1) then Accept else Undecided
 
 let push h x c = {
   h with
   len = h.len + 1;
-  cut = if h.stage = Accepted then h.cut + 1 else h.cut;
+  cut = if equal_stage h.stage Accepted then h.cut + 1 else h.cut;
   chars = c :: h.chars;
   data = x :: h.data;
 }
@@ -91,19 +91,19 @@ let step_char t x char =
   | Finished,_ -> t
 
 let step t x char =
-  if t.h.stage = Finished
+  if equal_stage t.h.stage Finished
   then step_char {t with h = empty} x char
   else step_char t x char
 
 
 let when_decided t ~f init =
-  if t.h.stage = Finished then f t.h else init
+  if equal_stage t.h.stage Finished then f t.h else init
 
 let decision t =
   when_decided t ~f:(fun x -> Some x) None
 
 let abort t =
-  if t.h.stage = Accepted
+  if equal_stage t.h.stage Accepted
   then Some {t.h with cut=0}
   else None
 

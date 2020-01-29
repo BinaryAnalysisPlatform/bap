@@ -20,7 +20,7 @@ let merge_pos merge p1 p2 = Parsexp.Positions.{
   }
 
 let merge p1 p2 =
-  if p1.file <> p2.file
+  if String.(p1.file <> p2.file)
   then invalid_arg "Loc: can't merge locations from different files";
   Parsexp.Positions.{
     p1 with range = {

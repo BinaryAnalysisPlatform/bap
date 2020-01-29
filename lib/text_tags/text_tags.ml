@@ -45,6 +45,7 @@ module Html = struct
       print_open_tag = print_open_tag fmt;
       print_close_tag = print_close_tag fmt;
     }
+  [@@warning "-D"]
 end
 
 module Blocks = struct
@@ -94,6 +95,7 @@ module Blocks = struct
       print_open_tag = print_open_tag fmt;
       print_close_tag = print_close_tag fmt;
     }
+  [@@warning "-D"]
 end
 
 module Attr = struct
@@ -156,6 +158,7 @@ module Attr = struct
           reset ppf;
           out.out_newline ())
     }
+  [@@warning "-D"]
 end
 
 module None_mode = struct
@@ -187,6 +190,7 @@ let with_mode fmt mode =
     pp_set_formatter_tag_functions fmt g in
   install fmt mode;
   Exn.protect ~finally
+[@@warning "-D"]
 
 let () =
   register_mode "attr" Attr.install;

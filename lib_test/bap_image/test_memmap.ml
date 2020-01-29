@@ -50,7 +50,7 @@ let add_lookup chunk ctxt =
     | [] -> assert_string "can't find just added chunk"
     | _ :: _ -> assert_string "found more that one chunk" in
   let rec loop x =
-    if x <= Memory.max_addr chunk
+    if Addr.(x <= Memory.max_addr chunk)
     then (check x; loop Addr.(succ x)) in
   loop (Memory.min_addr chunk)
 
@@ -156,7 +156,7 @@ let intersections cons size ctxt =
       let got = Memmap.intersections map mem |> Seq.map ~f:snd
                 |> Seq.to_list
                 |> sort_ints |> List.dedup_and_sort ~compare:Int.compare in
-      assert_equal ~printer ~ctxt ~cmp:(List.equal ~equal:Int.equal) expect got)
+      assert_equal ~printer ~ctxt ~cmp:(List.equal Int.equal) expect got)
 
 let suite () = "Memmap" >::: [
     "add/lookup/1@0"    >:: add_lookup (byte 0);

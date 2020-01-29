@@ -304,6 +304,7 @@ type mode_r = Offset | PreIndex | PostIndex
 type sign = Signed | Unsigned
 type operation = Ld | St
 type size = B | H | W | D
+[@@deriving compare]
 
 (** Types for multiple-register memory access *)
 type mode_m = IA | IB | DA | DB
@@ -314,7 +315,7 @@ type arth = [`ADD | `ADC | `SBC | `RSC | `SUB | `RSB ]
 type move = [`AND | `BIC | `EOR | `MOV | `MVN | `ORR ]
 type data_oper = [ arth | move]
 
-type repair = [`POS | `NEG]
+type repair = [`POS | `NEG] [@@deriving compare]
 
 (** shift types *)
 type shift = [`ASR | `LSL | `LSR | `ROR | `RRX]

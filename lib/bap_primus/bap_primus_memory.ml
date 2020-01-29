@@ -139,7 +139,7 @@ let find_layer addr = List.find ~f:(function
     | {mem=Dynamic mem} -> inside mem addr
     | {mem=Static  mem} -> Memory.contains mem addr)
 
-let is_mapped addr {layers} = find_layer addr layers <> None
+let is_mapped addr {layers} = Option.is_some @@ find_layer addr layers
 
 let empty_state = {
   values = Addr.Map.empty;

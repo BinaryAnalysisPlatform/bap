@@ -12,8 +12,8 @@ depends: [
   "bitstring"
   "camlzip"
   "cmdliner" {>= "1.0" & < "2.0"}
-  "ppx_jane" {>= "v0.11" & < "v0.12"}
-  "core_kernel" {>= "v0.11" & < "v0.12"}
+  "ppx_jane" {>= "v0.12" & < "v0.13"}
+  "core_kernel" {>= "v0.12" & < "v0.13"}
   "ezjsonm"
   "fileutils"
   "FrontC"

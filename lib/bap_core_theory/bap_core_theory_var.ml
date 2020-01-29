@@ -118,7 +118,7 @@ module Ident = struct
     failwithf "`%s' is not a valid temporary value" s ()
 
   let split_version s =
-    match String.rfindi s ~f:(fun _ c -> c = '.') with
+    match String.rfindi s ~f:(fun _ c -> Char.(c = '.')) with
     | None -> s,0
     | Some n ->
       String.subo ~len:n s,

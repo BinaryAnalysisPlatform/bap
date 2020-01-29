@@ -7,7 +7,7 @@ Library bap_strings
   Build$:       flag(everything) || flag(strings)
   Path:         lib/bap_strings
   FindlibName:  bap-strings
-  BuildDepends: core_kernel
+  BuildDepends: core_kernel,ppx_jane
   Modules:      Bap_strings,
                 Bap_strings_detector,
                 Bap_strings_index,

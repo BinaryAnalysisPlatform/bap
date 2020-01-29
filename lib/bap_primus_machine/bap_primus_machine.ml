@@ -403,10 +403,10 @@ module Primus = struct
 
 
   let kill id =
-    if id = global then return ()
+    if Id.(id = global) then return ()
     else
       current () >>= fun cid ->
-      if id = cid then sentence_to_death id
+      if Id.(id = cid) then sentence_to_death id
       else lifts @@ SM.kill id
 
   let die next =

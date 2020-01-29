@@ -639,7 +639,7 @@ let with_various_input input expected _ctxt =
   let z_value = Option.value_exn
       ((object inherit [exp option] Stmt.visitor
         method! enter_move var e x =
-          if Var.name var = "z" then Some e
+          if String.equal (Var.name var) "z" then Some e
           else x
       end)#run bil' None) in
   let error = sprintf "error with various input %s\n"

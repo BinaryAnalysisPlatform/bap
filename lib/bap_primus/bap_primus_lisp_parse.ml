@@ -63,10 +63,10 @@ let loc src trees = match trees with
 
 let is_quoted s =
   let n = String.length s in
-  n > 1 && s.[0] = '"' && s.[n - 1] = '"'
+  n > 1 && Char.(s.[0] = '"') && Char.(s.[n - 1] = '"')
 
 let is_symbol s =
-  String.length s > 1 && s.[0] = '\''
+  String.length s > 1 && Char.(s.[0] = '\'')
 
 let unqoute s =
   if is_quoted s

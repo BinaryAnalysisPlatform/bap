@@ -87,6 +87,7 @@ module DoNothing(Machine : Primus.Machine.S) = struct
   let exec = Machine.return ()
 end
 
+module Id = Monad.State.Multi.Id
 
 module Main(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
@@ -119,7 +120,7 @@ module Main(Machine : Primus.Machine.S) = struct
     else
       Machine.fork () >>= fun () ->
       Machine.current () >>= fun id ->
-      if pid = id then Machine.return id
+      if Id.(pid = id) then Machine.return id
       else
         child () >>= fun () ->
         Machine.switch pid >>| fun () -> id
@@ -141,7 +142,7 @@ module Main(Machine : Primus.Machine.S) = struct
     | Some (Direct dst) ->
       Machine.current () >>= fun pid ->
       do_fork blk ~child:Machine.return >>= fun id ->
-      if id = pid then Machine.return ()
+      if Id.(id = pid) then Machine.return ()
       else
         Machine.Global.get state >>= fun {forkpoints} ->
         if Set.mem forkpoints dst

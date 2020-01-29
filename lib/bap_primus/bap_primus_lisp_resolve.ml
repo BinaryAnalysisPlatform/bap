@@ -35,7 +35,7 @@ type ('t,'a,'b) many = ('t,'a,('t Def.t * 'b) list) resolver
 
 type exn += Failed of string * Context.t * resolution
 
-let interns d name = Def.name d = name
+let interns d name = String.equal (Def.name d) name
 let externs def name =
   match Attribute.Set.get (Def.attributes def) External.t with
   | None -> false
@@ -94,8 +94,9 @@ let stage3 s2  =
 *)
 let stage4 = function
   | [] -> []
-  | x :: xs ->
-    if List.for_all xs ~f:(fun y -> compare_def x y = Same)
+  | x :: xs -> if List.for_all xs ~f:(fun y -> match compare_def x y with
+      | Same -> true
+      | _ -> false)
     then x::xs
     else []
 
@@ -107,18 +108,23 @@ let overload_macro code (s3) =
   | ((n,_,_) as c) :: cs -> List.filter_map (c::cs) ~f:(fun (m,d,bs) ->
       Option.some_if (n = m) (d,bs))
 
-let all_bindings f = 
+let all_bindings f =
   List.for_all ~f:(fun (v,x) ->
       f v.data.typ x)
+
+let zip x y =
+  match List.zip x y with
+  | Ok z -> Some z
+  | Unequal_lengths -> None
 
 let overload_defun typechecks args s3 =
   let open Option in
   List.filter_map s3 ~f:(fun def ->
-      List.zip (Def.Func.args def) args >>= fun bs ->
+      zip (Def.Func.args def) args >>= fun bs ->
       if all_bindings typechecks bs
       then Some (def,bs) else None)
 
-let zip_tail xs ys = 
+let zip_tail xs ys =
   let rec zip zs xs ys = match xs,ys with
     | [],[] -> zs, None
     | x,[] -> zs, Some (First x)
@@ -128,11 +134,11 @@ let zip_tail xs ys =
   List.rev zs,tail
 
 
-let overload_meth typechecks args s3 = 
-  List.filter_map s3 ~f:(fun m -> 
+let overload_meth typechecks args s3 =
+  List.filter_map s3 ~f:(fun m ->
       match zip_tail (Def.Meth.args m) args with
-      | bs,None 
-      | bs, Some (Second _) when all_bindings typechecks bs -> 
+      | bs,None
+      | bs, Some (Second _) when all_bindings typechecks bs ->
         Some (m,bs)
       | _ -> None)
 

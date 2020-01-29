@@ -96,7 +96,7 @@ let create_symtab data endian elf  =
     [Some (Ok segment)] - if we have loaded segment at the end.
 *)
 let create_segment make_addr i es : Segment.t Or_error.t option =
-  if es.p_type <> PT_LOAD then None
+  if not ([%compare.equal : p_type] es.p_type PT_LOAD) then None
   else
     let segment =
       let name = sprintf "%02d" i in
