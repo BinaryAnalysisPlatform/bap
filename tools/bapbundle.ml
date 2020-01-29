@@ -153,10 +153,10 @@ module Pack = struct
 
   let main () =
     let manifest = !manifest in
-    let target = if target.contents = ""
+    let target = if String.is_empty target.contents
       then Manifest.name manifest
       else target.contents in
-    if target = "" then raise Target_unspecified;
+    if String.is_empty target then raise Target_unspecified;
     let uri = Uri.of_string target in
     Bundle.Builder.embed_manifest pack manifest;
     Bundle.Builder.flush pack uri
@@ -200,7 +200,7 @@ module Install = struct
   let args = [destdir_arg]
 
   let main () =
-    if target.contents = "" then raise Target_unspecified;
+    if String.is_empty target.contents then raise Target_unspecified;
     target := normalized !target;
     if not (Sys.file_exists !destdir)
     then FileUtil.mkdir ~parent:true !destdir;
@@ -216,7 +216,7 @@ end
 module Remove = struct
   let args = [destdir_arg]
   let main () =
-    if target.contents = "" then raise Target_unspecified;
+    if String.is_empty target.contents then raise Target_unspecified;
     let file = normalized @@ Filename.concat !destdir !target in
     if Sys.file_exists file
     then Sys.remove file

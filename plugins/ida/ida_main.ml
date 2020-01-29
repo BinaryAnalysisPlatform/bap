@@ -69,7 +69,7 @@ let register_source (module T : Target) =
   T.provide ida_symbolizer (T.of_blocks (extract file arch))
 
 
-type perm = [`code | `data] [@@deriving sexp]
+type perm = [`code | `data] [@@deriving sexp, equal]
 type section = string * perm * int * (int64 * int)
 [@@deriving sexp]
 
@@ -83,7 +83,9 @@ module Img = Data.Make(struct
 
 exception Unsupported_architecture of string
 
-let arch_of_procname size name = match String.lowercase name with
+let arch_of_procname size name =
+  let (=) = [%compare.equal: addr_size] in
+  match String.lowercase name with
   | "8086" | "80286r" | "80286p"
   | "80386r" | "80386p"
   | "80486r" | "80486p"
@@ -112,7 +114,7 @@ let mapfile path : Bigstring.t =
   let fd = Unix.(openfile path [O_RDONLY] 0o400) in
   let size = Unix.((fstat fd).st_size) in
   let data =
-    Bigarray.Genarray.map_file
+    Mmap.V1.map_file
       fd Bigarray.char Bigarray.c_layout false [|size|] in
   Unix.close fd;
   Bigarray.array1_of_genarray data
@@ -140,7 +142,7 @@ let loader path =
             code,data
           | Ok mem ->
             let sec = Value.create Image.section name in
-            if perm = `code
+            if equal_perm perm `code
             then Memmap.add code mem sec, data
             else code, Memmap.add data mem sec) in
   Project.Input.create arch path ~code ~data

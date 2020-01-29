@@ -11,8 +11,9 @@ module Proto = struct
 
   let name = "trace.binprot"
   let probe uri =
-    Uri.scheme uri = Some "file" &&
-    Filename.check_suffix (Uri.path uri) ".binprot"
+    match Uri.scheme uri with
+    | Some "file" -> Filename.check_suffix (Uri.path uri) ".binprot"
+    | _ -> false
 
   let supports: 'a tag -> bool = fun _ -> true
 

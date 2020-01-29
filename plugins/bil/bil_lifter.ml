@@ -43,7 +43,7 @@ module BilParser = struct
   let byte x = Bil.int (Word.of_int ~width:8 x)
   let is_big e =
     Bil.int @@
-    if e = BigEndian then Word.b1 else Word.b0
+    if [%compare.equal : endian] e BigEndian then Word.b1 else Word.b0
 
   let is_reg v = match Var.typ v with
     | Type.Imm 1 | Type.Mem _ -> false

@@ -86,6 +86,7 @@ let github =
   sprintf "https://github.com/BinaryAnalysisPlatform/bap/\
            releases/download/v%s/sigs.zip"
 
+module Filename = Stdlib.Filename
 
 (** list of posix regexes of files that are skipped during
     the training.  *)
@@ -111,12 +112,12 @@ let with_sigs_error = Result.map_error ~f:(fun err ->
 let load_or_create_signatures ?comp ?path operation arch =
   match operation with
   | `rewrite -> Ok (BW.create ())
-  | (`update|`load) as operation ->
-    match Sigs.load ?comp ?path ~mode:"bytes" arch with
-    | Ok s -> Ok (Binable.of_string (module BW) (Bytes.to_string s))
-    | Error (`No_entry _|`No_signatures) when operation = `update ->
+  | operation ->
+    match Sigs.load ?comp ?path ~mode:"bytes" arch, operation with
+    | Ok s,_ -> Ok (Binable.of_string (module BW) (Bytes.to_string s))
+    | Error (`No_entry _|`No_signatures), `update ->
       Ok (BW.create ())
-    | Error e -> fail (Sigs e)
+    | Error e,_ -> fail (Sigs e)
 
 let oracle_of_image img =
   let starts = Hash_set.create (module Addr) () in
@@ -295,7 +296,7 @@ let update url dst version ctxt =
   if Sys.file_exists dst
   then FileUtil.cp [dst] old;
   fetch dst url version ctxt >>| fun () ->
-  if FileUtil.cmp old dst = None
+  if Option.is_none @@ FileUtil.cmp old dst
   then printf "Already up-to-date.\n"
   else printf "Installed new signatures.\n";
   if Sys.file_exists old then FileUtil.rm [old]

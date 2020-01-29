@@ -8,6 +8,8 @@ module Env = Arm_env
 
 (** Memory access operations *)
 
+let is_pc v = Var.equal v Env.pc
+
 
 (* Doug TODO check for misaligned access *)
 (* Single-register memory access *)
@@ -19,18 +21,18 @@ let lift_r  ~(dst1 : Var.t) ?(dst2 : Var.t option) ~(base : Var.t)
    * Use the originals
    **)
   let address = match mode, operation, size, dst1 with
-    | PostIndex, Ld, W, d when d = Env.pc -> Bil.var o_base
-    | PreIndex, Ld, W, d when d = Env.pc  -> Bil.(var o_base + offset)
+    | PostIndex, Ld, W, d when is_pc d -> Bil.var o_base
+    | PreIndex, Ld, W, d when is_pc d  -> Bil.(var o_base + offset)
     | PostIndex, _,  _, _               -> Bil.var base
     | PreIndex, _, _, _ | Offset, _, _, _ -> Bil.(var base + offset) in
 
   (* Create temps for original if this is a jump *)
   let pre_write_back = match mode, operation, size, dst1 with
-    | PreIndex,  Ld, W, d when d = Env.pc -> [
+    | PreIndex,  Ld, W, d when is_pc d -> [
         Bil.move o_base Bil.(var base);
         Bil.move base  Bil.(var base + offset)
       ]
-    | PostIndex, Ld, W, d when d = Env.pc -> [
+    | PostIndex, Ld, W, d when is_pc d -> [
         Bil.move o_base  Bil.(var base);
         Bil.move base Bil.(var base + offset)
       ]
@@ -38,8 +40,8 @@ let lift_r  ~(dst1 : Var.t) ?(dst2 : Var.t option) ~(base : Var.t)
     | _ -> [] in
 
   let write_back = match mode, operation, size, dst1 with
-    | PreIndex,  Ld, W, d when d = Env.pc -> []
-    | PostIndex, Ld, W, d when d = Env.pc -> []
+    | PreIndex,  Ld, W, d when is_pc d -> []
+    | PostIndex, Ld, W, d when is_pc d -> []
     | Offset,    _,  _, _               -> []
     | _ -> [Bil.move base Bil.(var base + offset)] in
 
@@ -66,7 +68,7 @@ let lift_r  ~(dst1 : Var.t) ?(dst2 : Var.t option) ~(base : Var.t)
       | W | D -> [] in
     let loads =
       let mem = Bil.var (Env.mem) in
-      if size = D then [
+      if [%compare.equal: size] size D then [
         Bil.move dst1 (load mem address);
         Bil.move (uw dst2) (load mem Bil.(address + four));
       ] else [
@@ -82,7 +84,7 @@ let lift_r  ~(dst1 : Var.t) ?(dst2 : Var.t option) ~(base : Var.t)
     (* truncate the value if necessary *)
     let trunc = match size with
       | B | H ->
-        let n = if size = B then 8 else 16 in
+        let n = if [%compare.equal: size] size B then 8 else 16 in
         [Bil.move temp Bil.(cast low n (var dst1))]
       | W | D -> [] in
     let stores =

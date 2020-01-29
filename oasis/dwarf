@@ -7,7 +7,7 @@ Library dwarf
   Path:          lib/bap_dwarf
   FindlibName:   bap-dwarf
   Build$:        flag(everything) || flag(dwarf)
-  BuildDepends:  bap
+  BuildDepends:  bap, core_kernel.binary_packing
   Modules:       Bap_dwarf
 
   InternalModules:

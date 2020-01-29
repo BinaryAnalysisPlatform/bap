@@ -118,7 +118,7 @@ let init redirections =
           Char.of_int_exn @@
           Word.to_int_exn @@
           Value.to_word c in
-        if c = '\000'
+        if Char.(c = '\000')
         then Machine.return (String.of_char_list (List.rev chars))
         else Value.succ ptr >>= loop (c::chars)  in
       loop [] ptr

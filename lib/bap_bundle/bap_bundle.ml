@@ -1,5 +1,7 @@
 open Core_kernel
 
+module Filename = Caml.Filename
+
 module Std = struct
   exception Not_a_bundle
 
@@ -124,7 +126,7 @@ module Std = struct
           | Some man -> man
           | None -> Manifest.create "noname" in
         let mdata = Manifest.to_string man in
-        Zip.add_entry mdata zip Nameof.manifest;
+        Zip.add_entry ~level:0 mdata zip Nameof.manifest;
         Zip.close_out zip
     end
 
@@ -165,7 +167,7 @@ module Std = struct
       b >>> fun zip ->
       Zip.entries zip |> List.filter_map ~f:(fun e ->
           let name = Zip.(e.filename) in
-          Option.some_if (not (name = Nameof.manifest)) name)
+          Option.some_if (not (String.equal name Nameof.manifest)) name)
 
     let transform files bundle ~f =
       let zin = open_in bundle.path in
@@ -192,9 +194,9 @@ module Std = struct
       let zout = Zip.open_out bundle.path in
       Hashtbl.iteri files ~f:(fun ~key:name ~data ->
           match data with
-          | `Data s -> Zip.add_entry s zout name
-          | `Copy f -> Zip.copy_file_to_entry f zout name
-          | `Move f -> Zip.copy_file_to_entry f zout name;
+          | `Data s -> Zip.add_entry ~level:0 s zout name
+          | `Copy f -> Zip.copy_file_to_entry ~level:0 f zout name
+          | `Move f -> Zip.copy_file_to_entry ~level:0 f zout name;
             Sys.remove f);
       Zip.close_out zout
 
@@ -223,7 +225,7 @@ module Std = struct
 
     let update_manifest bundle ~f =
       update bundle ~f:(fun file ->
-          if file = Nameof.manifest
+          if String.equal file Nameof.manifest
           then `Map (fun s -> Manifest.(of_string s |> f |> to_string))
           else `Copy)
 

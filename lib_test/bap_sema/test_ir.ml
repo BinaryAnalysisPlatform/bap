@@ -246,7 +246,7 @@ module Example = struct
             Var.same v var && Var.index v = var_ver)) |> function
     | None -> assert_string "no such phi-node"
     | Some phi -> Phi.values phi |> Seq.find ~f:(fun (tid,exp) ->
-        Term.tid blk = tid && match exp with
+        Tid.equal (Term.tid blk) tid && match exp with
         | Bil.Var v -> Var.index v = blk_ver
         | _ -> assert false) |> function
                   | None -> assert_string "wrong phi-node"

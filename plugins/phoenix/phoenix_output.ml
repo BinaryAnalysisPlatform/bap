@@ -38,7 +38,7 @@ module Make(Env : sig
                         ~f:(fun p -> p ^ "*" ^ id));
         "expanded", bool false;
         "function", bool is_func;
-        if children = []
+        if List.is_empty children
         then "leaf", bool true
         else "children", `A children]) in
     let funcs =

@@ -69,7 +69,7 @@ let create_demangler = function
   | None -> ident
   | Some name ->
     Demanglers.available () |>
-    List.find ~f:(fun d -> Demangler.name d = name) |> function
+    List.find ~f:(fun d -> String.equal (Demangler.name d) name) |> function
     | None ->
       error "Unknown demangler";
       info "Available demanglers are: %s" @@

@@ -75,7 +75,7 @@ module Rule = struct
       | Sexp.List xs -> List.fold ~init ~f:loop xs in
     loop init sexp
 
-  let is_variable x = String.length x > 0 && x.[0] = '?'
+  let is_variable x = String.length x > 0 && Char.(x.[0] = '?')
 
   let vars_of_sexp ~get_pos init xs =
     sexp_fold_atoms ~get_pos ~init xs ~f:(fun atoms loc atom ->
@@ -196,7 +196,7 @@ module Rule = struct
           | None -> Some (Map.set bs ~key ~data))
 
   let rec bindings lhs rhs = match lhs,rhs with
-    | Sexp.Atom x, Sexp.Atom y when x = y -> Some empty
+    | Sexp.Atom x, Sexp.Atom y when String.equal x y -> Some empty
     | Sexp.Atom "?",_ -> Some empty
     | Sexp.Atom x, rhs when is_variable x -> Some (binding x rhs)
     | Sexp.List lhs, Sexp.List rhs -> concat_bindings lhs rhs
