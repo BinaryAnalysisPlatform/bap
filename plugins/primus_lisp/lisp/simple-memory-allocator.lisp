@@ -43,8 +43,9 @@
 (defun decode-memory-length'(ptr)
   (if ptr (decode-memory-length (- ptr (word-size))) 0))
 
-(defun malloc_internal (n)
+(defun malloc (n)
   "allocates a memory region of size N"
+  (declare (external "malloc"))
   (if (= n 0) *malloc-zero-sentinel*
     (if (malloc-will-reach-limit n) 0
       (let ((width (word-size))
@@ -57,11 +58,6 @@
           (set ptr (+ ptr *malloc-guard-edges*))
           (encode-memory-length ptr n)
           (+ ptr width))))))
-
-(defun malloc (n)
-  "allocates a memory region of size N"
-  (declare (external "malloc"))
-  (malloc_internal n))
 
 (defun realloc (ptr new)
   (declare (external "realloc"))
