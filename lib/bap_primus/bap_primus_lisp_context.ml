@@ -57,8 +57,8 @@ let parse_name = function
   | {data=Atom x} as s ->
     let n = String.length x in
     if n < 2 then x
-    else if x.[0] = '"'
-    then if x.[n-1] = '"'
+    else if Char.(x.[0] = '"')
+    then if Char.(x.[n-1] = '"')
       then String.sub ~pos:1 ~len:(n-2) x
       else fail Unterminated_quote s
     else x

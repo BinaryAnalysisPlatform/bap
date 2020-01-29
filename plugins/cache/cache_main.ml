@@ -4,6 +4,8 @@ open Bap.Std
 open Format
 include Self()
 
+module Filename = Caml.Filename
+
 type entry = {
   atime   : float;
   ctime   : float;
@@ -92,7 +94,7 @@ module Index = struct
 
   let rec clean idx =
     let size = size idx in
-    if size > 0L && size > idx.config.max_size
+    if Int64.(size > 0L) && Int64.(size > idx.config.max_size)
     then clean (evict_entry idx)
     else idx
 
@@ -118,8 +120,7 @@ module Index = struct
     let module T = (val b) in
     let fd = Unix.(openfile file [O_RDONLY] 0o400) in
     try
-      let data =
-        Bigarray.Genarray.map_file
+      let data = Mmap.V1.map_file
           fd Bigarray.char Bigarray.c_layout false [|-1|] in
       let pos_ref = ref 0 in
       let t = T.bin_read_t (Bigarray.array1_of_genarray data) ~pos_ref in
@@ -143,7 +144,7 @@ module Index = struct
       let () =
         try
           let buf =
-            Bigarray.Genarray.map_file
+            Mmap.V1.map_file
               fd Bigarray.char Bigarray.c_layout true [|size|] in
           let _ = T.bin_write_t (Bigarray.array1_of_genarray buf) ~pos:0 data in
           Unix.close fd

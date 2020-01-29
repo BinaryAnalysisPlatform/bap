@@ -12,6 +12,9 @@ open Bap_main
 open Core_kernel
 open Extension.Syntax
 
+module Buffer = Caml.Buffer
+
+
 module Spec = struct
   open Extension
   let arch_t =

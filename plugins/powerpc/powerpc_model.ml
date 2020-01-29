@@ -288,7 +288,7 @@ module Make_cpu(P : PowerPC) : CPU = struct
     List.fold data ~init:Var.Set.empty
       ~f:(fun regs v -> Var.Set.add regs v)
 
-  let sp = Var.Set.find_exn gpr ~f:(fun v -> Var.name v = "R1")
+  let sp = Var.Set.find_exn gpr ~f:(fun v -> String.equal (Var.name v) "R1")
   let vf = ov
   let cf = ca
   let nf = Map.find_exn cri 0

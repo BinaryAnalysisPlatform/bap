@@ -22,8 +22,8 @@ let repair_imm (src : word) ~sign_mask ~imm_mask rtype : exp =
   let bit_set =
     Word.(Z.(word sign_mask land src) = word sign_mask) in
   let negate =
-    (bit_set && rtype = `NEG) ||
-    (not bit_set && rtype = `POS) in
+    (bit_set && [%compare.equal: repair] rtype `NEG) ||
+    (not bit_set && [%compare.equal: repair] rtype `POS) in
   let offset = Z.(src land word imm_mask) in
   Bil.int (if negate then Z.neg offset else offset)
 
@@ -31,7 +31,8 @@ let repair_reg reg imm ~sign_mask rtype =
   let bit_set =
     Word.(Z.(word sign_mask land imm) = word sign_mask) in
   let negate =
-    (bit_set && rtype = `NEG) || (not bit_set && rtype = `POS)
+    (bit_set && [%compare.equal: repair] rtype `NEG) ||
+    (not bit_set && [%compare.equal: repair] rtype `POS)
   in
   let m_one = Word.(ones (bitwidth imm))  in
   if negate then Bil.(int m_one * reg) else reg

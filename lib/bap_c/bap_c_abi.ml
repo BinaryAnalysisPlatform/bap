@@ -86,7 +86,7 @@ let create_arg i addr_size intent name t (data,exp) sub =
   let typ = match data with
     | Bap_c_data.Imm (sz,_) -> Type.Imm (Size.in_bits sz)
     | _ -> Type.Imm (Size.in_bits addr_size) in
-  let name = if name = "" then sprintf "arg%d" (i+1) else name in
+  let name = if String.is_empty name then sprintf "arg%d" (i+1) else name in
   let var = Var.create (Sub.name sub ^ "_" ^ name) typ in
   let arg = Arg.create ~intent var exp in
   let arg = Term.set_attr arg Attrs.data data in
@@ -96,22 +96,24 @@ let create_arg i addr_size intent name t (data,exp) sub =
 
 
 let find_by_name prog name =
-  Term.enum sub_t prog |> Seq.find ~f:(fun sub -> Sub.name sub = name)
+  Term.enum sub_t prog |> Seq.find ~f:(fun sub -> String.equal (Sub.name sub) name)
 
 let find_first_caller prog tid =
   Term.enum sub_t prog |> Seq.find ~f:(fun sub ->
       Term.enum blk_t sub |> Seq.exists ~f:(fun blk ->
           Term.enum jmp_t blk |> Seq.exists ~f:(fun jmp ->
               match Jmp.kind jmp with
-              | Call c -> Call.target c = Direct tid
+              | Call c -> Label.equal (Call.target c) (Direct tid)
               | _ -> false)))
 
 let proj_int = function Bil.Int x -> Some x | _ -> None
 
-let has_libc_runtime prog =
-  find_by_name prog "__libc_csu_fini" <> None &&
-  find_by_name prog "__libc_csu_init" <> None
+let is_sub_exists prog name = Option.is_some @@ find_by_name prog name
+let is_sub_absent prog name = not (is_sub_exists prog name)
 
+let has_libc_runtime prog =
+  is_sub_exists prog "__libc_csu_fini" &&
+  is_sub_exists prog "__libc_csu_init"
 
 let find_entry_point prog =
   Term.enum sub_t prog |>
@@ -156,7 +158,7 @@ let rename_main abi prog = match detect_main_address prog with
         | _ -> sub)
 
 let rename_libc_start_main abi prog =
-  if find_by_name prog "__libc_start_main" = None
+  if is_sub_absent prog "__libc_start_main"
   then match find_libc_start_main prog with
     | None -> prog
     | Some tid ->
@@ -174,8 +176,8 @@ let stage2 stage1 = object
   method! run prog =
     let prog = stage1#run prog in
     if has_libc_runtime prog &&
-       (find_by_name prog "main" = None ||
-        (find_by_name prog "__libc_start_main" = None))
+        (is_sub_absent prog "main" ||
+        (is_sub_absent prog "__libc_start_main"))
     then fix_libc_runtime stage1 prog
     else prog
 end

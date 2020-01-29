@@ -20,8 +20,12 @@ let check_pc name c expected =
   | _ ->
     assert_bool (sprintf "%s fail: pc is not a word" name) false
 
+let is_bot = function
+  | Bil.Bot -> true
+  | _ -> false
+
 let check_jmp_absence name c =
-  assert_bool (sprintf "%s fail: jmp occurred" name) (c#pc = Bil.Bot)
+  assert_bool (sprintf "%s fail: jmp occurred" name) (is_bot c#pc)
 
 let addr_of_arch = function
   | `ppc -> Word.of_int64 ~width:32 0xABCD42AAL

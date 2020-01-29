@@ -243,7 +243,7 @@ end
 
 
 
-let equal x y = phys_equal x y || compare x y = 0
+let equal x y = phys_equal x y || compare_exp x y = 0
 let to_string = Format.asprintf "%a" PP.pp
 let domain = Knowledge.Domain.flat "exp" ~equal
     ~empty:(Unknown ("empty",Unk))

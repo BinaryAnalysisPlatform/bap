@@ -178,7 +178,7 @@ let pp_generic
     | `this x -> fprintf ppf "%s" x
     | `base -> pp_prefix ppf
     | `auto ->
-      if Bitvec_order.(x >= (min (word 10) base))
+      if Z.(geq x (min (word 10) base))
       then pp_prefix ppf in
   let fmt = format_of_string @@ match format, case with
     | `hex,`upper -> "%X"
@@ -186,7 +186,7 @@ let pp_generic
     | _ -> "%d" in
   let rec print x =
     let d = int Z.(x mod base) in
-    if Z.(x >= base)
+    if Z.geq x base
     then print Z.(x / base);
     fprintf ppf fmt d in
   print x;

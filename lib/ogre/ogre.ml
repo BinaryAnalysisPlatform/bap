@@ -213,7 +213,7 @@ module Doc = struct
     let sign = Map.find_exn scheme name in
     Map.mapi fields ~f:(fun ~key ~data ->
         let {Type.ftype} =
-          List.find_exn sign ~f:(fun {Type.fname} -> fname = key) in
+          List.find_exn sign ~f:(fun {Type.fname} -> String.equal fname key) in
         Type.normalize ftype data)
 
   let update_entries name packed doc =
@@ -264,7 +264,7 @@ module Doc = struct
   let parse_fname name =
     if Char.is_alpha name.[0] &&
        String.for_all name ~f:(fun c ->
-           Char.is_alphanum c || c = '-')
+           Char.is_alphanum c || Char.(c = '-'))
     then Ok name
     else errorf "bad field name %s, expected [a..z][a..z-]*" name
 
@@ -292,7 +292,7 @@ module Doc = struct
     | Some {Type.fname} -> Ok (fname,x)
 
   let named hdr name x =
-    List.find hdr ~f:(fun (_,{Type.fname}) -> name = fname) |> function
+    List.find hdr ~f:(fun (_,{Type.fname}) -> String.equal name fname) |> function
     | None -> errorf "unknown field %s" name
     | Some _ -> Ok (name,x)
 
@@ -526,9 +526,9 @@ module Exp = struct
     List.Assoc.find_exn ~equal:[%compare.equal: Type.typ] parsers ftype
 
   let lookup_var name {fields} {attr; field={Type.fname;ftype}} =
-    if attr = Some name || attr = None
-    then Map.find fields fname |> Option.map ~f:(lift ftype)
-    else None
+    match attr with
+    | Some name' when Poly.(name <> name') -> None
+    | _ -> Map.find fields fname |> Option.map ~f:(lift ftype)
 
   (* join on one variable represented by an equivalence class *)
   let unify_var columns row =

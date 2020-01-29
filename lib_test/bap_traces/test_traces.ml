@@ -115,7 +115,6 @@ let set_meta t ctxt =
   let meta = Trace.meta t in
   assert_dict_equal ~ctxt meta test_meta
 
-
 let find_all_matching ctxt =
   let t = new_tracer () in
   let s = Trace.read_all_matching t
@@ -124,7 +123,7 @@ let find_all_matching ctxt =
           case memory_store (fun x  -> `Memory) @@
           default           (fun () -> `Unknown)
         end) in
-  let s' = Seq.filter s ~f:(fun x -> x = `Memory) in
+  let s' = Seq.filter s ~f:(fun x -> [%compare.equal: [ `Memory | `Unknown] ] x `Memory) in
   assert_bool "failed find_all_matching"
     (Seq.length s' = List.length memory_events)
 
