@@ -2,14 +2,12 @@ open Bap.Std
 open Bap_primus.Std
 include Self()
 
-let init _ =
-  Primus.Machine.add_component (module Primus_x86_loader.Component);
-  Primus.Machine.add_component (module Primus_x86_loader.Link_plt);;
+let init _ = Primus_x86_loader.init () ;;
 
 Config.manpage [
   `S "DESCRIPTION";
   `P
-  "Performs the x86 target specific setup. So far it just initializes
+    "Performs the x86 target specific setup. So far it just initializes
   all flag registers to zero."
 ];;
 
