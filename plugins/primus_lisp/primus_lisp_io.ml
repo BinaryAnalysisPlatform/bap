@@ -264,7 +264,7 @@ let init redirections =
             channel that has the descriptor DESCR to be outputted to the
             associated destination. Returns -1 if no such channel exists or
             if in case of an IO error.|};
-        def "channel-input"  (one int @-> int) (module Input)
+        def "channel-input"  (one int @-> byte) (module Input)
           {|(channel-input DESC) reads one byte from a channel that
             has the descriptor DESC. Returns -1 if no such channel
             exists, or if any IO error occurs, if the channel is not

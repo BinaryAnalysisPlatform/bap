@@ -143,8 +143,10 @@ let pp_callgraph ppf g =
     g
 
 let pp_term pp_exp ppf = function
+  | {data={exp; typ=Any}; id} ->
+    fprintf ppf "@[<v2>[%a %a]@]" Id.pp id pp_exp exp
   | {data={exp; typ}; id} ->
-    fprintf ppf "%a[%a]:%a" pp_exp exp Id.pp id Lisp.Type.pp typ
+    fprintf ppf "@[<v2>[%a<%a> %a]@]" Id.pp id Lisp.Type.pp typ pp_exp exp
 let pp_word = pp_term Int64.pp
 let pp_var = pp_term String.pp
 
@@ -155,7 +157,7 @@ let rec concat_prog p =
 
 module Ast = struct
   let rec pp ppf {data;id} =
-    fprintf ppf "@[<v2>{%a[%a]}@]" pp_exp data Id.pp id
+    fprintf ppf "@[<v2>[%a: %a]}@]" pp_exp data Id.pp id
   and pp_exp ppf = function
     | Int x ->
       pp_word ppf x
@@ -405,9 +407,76 @@ module Typing = struct
     | Grnd of int
   [@@deriving compare, sexp_of]
 
-  module Tval = Comparable.Make_plain(struct
-      type t = tval [@@deriving compare, sexp_of]
-    end)
+  type signature = Lisp.Type.signature = {
+    args : typ list;
+    rest : typ option;
+    ret  : typ;
+  } [@@deriving compare, sexp]
+
+  type error =
+    | Unresolved_variable of string
+    | Unresolved_function of string * signature list
+  [@@deriving compare, sexp_of]
+
+  module Tvals : sig
+    type t [@@deriving compare, sexp_of]
+    val bot : error -> t
+    val is_bot : t -> bool
+    val singleton : tval -> t
+    val inter : t -> t -> t
+    val union : t -> t -> t
+    val elements : t -> tval list
+    val trace : t -> tval list
+    val error : t -> error option
+  end = struct
+    module Set = Set.Make_plain(struct
+        type t = tval [@@deriving compare, sexp_of]
+      end)
+
+    type t = {
+      final : Set.t;
+      trace : Set.t;
+      error : error option;
+    } [@@deriving compare, sexp_of]
+
+    let bot what = {
+      final = Set.empty;
+      trace = Set.empty;
+      error = Some what;
+    }
+
+    let is_bot x = Set.is_empty x.final
+
+    let singleton t = {
+      final = Set.singleton t;
+      trace = Set.singleton t;
+      error = None;
+    }
+
+    let inter x y = match x.error,y.error with
+      | Some err,_|_,Some err -> bot err
+      | None,None -> {
+          final = Set.inter x.final y.final;
+          trace = Set.union x.trace y.trace;
+          error = None;
+        }
+
+    let union x y = match x.error,y.error with
+      | Some err,_|_,Some err -> bot err
+      | None,None -> {
+          final = if Set.is_empty x.final ||
+                     Set.is_empty y.final
+            then Set.empty
+            else Set.union x.final y.final;
+          trace = Set.union x.trace y.trace;
+          error = None;
+        }
+
+    let elements x = Set.elements x.final
+    let trace x = Set.to_list x.trace
+    let error x = x.error
+
+  end
 
   (* type variables
      we allow users to specify type variables, the rest of the type
@@ -428,14 +497,18 @@ module Typing = struct
       rule is a function of type [gamma -> gamma], so the rules can be
       composed with the function composition operator.
   *)
-  module Gamma' : sig
+  module Gamma : sig
     type t [@@deriving compare, sexp_of]
 
     type rule = t -> t
+    type group
 
     val empty : t
 
-    val unresolved : Id.t -> rule
+
+    (** [bot x rule] marks [x] as an unsound expression, which violates
+        an external [rule].  *)
+    val bot : Id.t -> error -> rule
 
     (** [get gamma exp] returns a type of the expression [exp].
         If [None] is returned, then the expression doesn't have any
@@ -444,7 +517,7 @@ module Typing = struct
         term can have during program evaluation. If this set is empty,
         then the term is ill-typed.
     *)
-    val get : t -> Id.t -> Tval.Set.t option
+    val get : t -> Id.t -> Tvals.t option
 
     (** [exps gamma] returns a list of typed expressions. *)
     val exps : t -> Id.t list
@@ -468,6 +541,27 @@ module Typing = struct
 
     (** [merge xs ys]  *)
     val merge : t -> t -> t
+
+
+    (** [partition g] returns a partition of the set of expressions.
+
+        Each class denotes a set of expressions that represent the
+        same set of values. If the set of values of that group is
+        empty, then those expressions are ill-typed.
+    *)
+    val partition : t -> group list
+
+    module Group : sig
+      (** the set of expressions that belong to the group. *)
+      val elements : group -> Id.Set.t
+
+      (** [values groups] is the set of values that all elements of
+          the equivalence class share. [None] denotes a set of all
+          sets, i.e., absence of any constraints for the expressions
+          in the group.
+      *)
+      val values : group -> Tvals.t option
+    end
 
 
     val pp : formatter -> t -> unit
@@ -506,11 +600,17 @@ module Typing = struct
     *)
     type t = {
       vars : tvar Id.Map.t;
-      vals : Tval.Set.t Tvar.Map.t;
+      vals : Tvals.t Tvar.Map.t;
       miss : Id.Set.t;
     } [@@deriving compare, sexp_of]
 
     type rule = t -> t
+
+    type group = {
+      var : tvar;
+      values : Tvals.t option;
+      elements : Id.Set.t;
+    }
 
     let empty = {
       vars = Id.Map.empty;
@@ -544,7 +644,7 @@ module Typing = struct
       match Map.find g.vals u, Map.find g.vals v with
       | None, None -> g
       | None, Some t | Some t, None -> set_val w t g
-      | Some t, Some t' -> set_val w (Set.inter t t') g
+      | Some t, Some t' -> set_val w (Tvals.inter t t') g
 
     (* val[min u v] <- val[u] \/ val[v]  *)
     let join_types u v g =
@@ -552,7 +652,7 @@ module Typing = struct
       match Map.find g.vals u, Map.find g.vals v with
       | None, None -> g
       | None, Some _ | Some _, None -> del_val w g
-      | Some s, Some t -> set_val w (Set.union s t) g
+      | Some s, Some t -> set_val w (Tvals.union s t) g
 
     let union_types merge u v g =
       let u,v = if Tvar.(u < v) then u,v else v,u in
@@ -612,7 +712,7 @@ module Typing = struct
               match Map.find g1.vals u, Map.find g2.vals v with
               | None,None -> g
               | Some t,None | None, Some t -> set_val u t g
-              | Some s, Some t -> set_val u (Set.inter s t) g
+              | Some s, Some t -> set_val u (Tvals.inter s t) g
             else g)
 
     let merge g1 g2 =
@@ -622,7 +722,7 @@ module Typing = struct
             | `Both (u,v) when Tvar.equal u v -> Some u
             | `Both _ -> None);
         vals = Map.merge_skewed g1.vals g2.vals ~combine:(fun ~key:_ ->
-            Set.inter);
+            Tvals.inter);
         miss = Set.union g1.miss g2.miss;
       } in
       let g = copy g1 g2 g in
@@ -633,18 +733,18 @@ module Typing = struct
       | None -> f (Tvar x) (add_var x (Tvar x) g)
       | Some u -> f u g
 
-    let unresolved x g = with_tvar x g @@ fun u g ->
-      let g = set_val u Tval.Set.empty g in
+    let bot x err g = with_tvar x g @@ fun u g ->
+      let g = set_val u (Tvals.bot err) g in
       {g with miss = Set.add g.miss x}
 
     let constr_name x n g = with_tvar x g @@ fun u g ->
       union_types meet_types u (Name n) g
 
     let constr_grnd x t g = with_tvar x g @@ fun u g ->
-      let t = Tval.Set.singleton t in
+      let t = Tvals.singleton t in
       match Map.find g.vals u with
       | None -> set_val u t g
-      | Some t' -> set_val u (Set.inter t t') g
+      | Some t' -> set_val u (Tvals.inter t t') g
 
     let constr id t g = match t with
       | Any -> g
@@ -656,6 +756,19 @@ module Typing = struct
       let init = Tvar.Map.empty in
       Map.fold vars ~init ~f:(fun ~key:x ~data:u joined ->
           Map.add_multi joined u x)
+
+    let partition {vars; vals} =
+      join_vars vars |>
+      Map.fold ~init:[] ~f:(fun ~key ~data xs -> {
+            var = key;
+            elements=Id.Set.of_list data;
+            values = Map.find vals key;
+          } :: xs)
+
+    module Group = struct
+      let elements g = g.elements
+      let values g = g.values
+    end
 
     let pp_exps =
       pp_print_list ~pp_sep:(fun ppf () ->
@@ -674,9 +787,9 @@ module Typing = struct
     let pp_vals ppf = function
       | None -> fprintf ppf "T"
       | Some xs ->
-        if Set.is_empty xs
+        if Tvals.is_bot xs
         then fprintf ppf "empty"
-        else pp_vals_list ppf  (Set.to_list xs)
+        else pp_vals_list ppf  (Tvals.elements xs)
 
     let pp ppf {vars; vals} =
       Map.iteri (join_vars vars) ~f:(fun ~key:u ~data:xs ->
@@ -750,13 +863,7 @@ module Typing = struct
    *     g'
    * end *)
 
-  module Gamma = Gamma'
 
-  type signature = Lisp.Type.signature = {
-    args : typ list;
-    rest : typ option;
-    ret  : typ;
-  }
 
   type t = {
     ctxt : Lisp.Context.t;
@@ -808,7 +915,7 @@ module Typing = struct
   let type_of_expr g expr : typ =
     match Gamma.get g expr.id with
     | None -> Any
-    | Some ts -> match Set.elements ts with
+    | Some ts -> match Tvals.elements ts with
       | [Tsym] -> Symbol
       | [Grnd n] -> Type n
       | _ -> Any
@@ -842,11 +949,12 @@ module Typing = struct
 
 
   let apply glob id name args gamma =
-    signatures glob id gamma name |>
-    List.filter_map ~f:(fun s ->
+    let sigs = signatures glob id gamma name in
+    List.filter_map sigs ~f:(fun s ->
         apply_signature id args gamma s) |>
     List.reduce ~f:Gamma.merge |> function
-    | None -> Gamma.unresolved id gamma
+    | None ->
+      Gamma.bot id (Unresolved_function (name,sigs)) gamma
     | Some gamma -> gamma
 
   let last xs = match List.rev xs with
@@ -854,11 +962,12 @@ module Typing = struct
     | _ -> assert false
 
   let constr_glob {globs} vars var gamma =
-    if Map.mem vars var.data.exp then gamma
-    else match Map.find globs var.data.exp with
-      | None -> Gamma.unresolved var.id gamma
+    let name = var.data.exp in
+    if Map.mem vars name then gamma
+    else match Map.find globs name with
+      | None ->
+        Gamma.bot var.id (Unresolved_variable name) gamma
       | Some n -> Gamma.constr var.id (Type n) gamma
-
 
   let push vars {data; id} =
     Map.set vars ~key:data.exp ~data:id
@@ -953,19 +1062,19 @@ module Typing = struct
         | Type.Mem _
         | Type.Unk -> vars)
 
-  let make_prims {codes} =
-    List.fold codes ~init:String.Map.empty ~f:(fun ps p ->
+  let make_prims {codes} init =
+    List.fold codes ~init ~f:(fun ps p ->
         match Def.Closure.signature p with
         | None -> ps
         | Some types ->
-          Map.add_exn ps ~key:(Def.name p) ~data:types)
+          Map.set ps ~key:(Def.name p) ~data:types)
 
   let gamma_equal g1 g2 = Gamma.compare g1 g2 = 0
 
-  let infer vars p : Gamma.t =
+  let infer externals vars p : Gamma.t =
     let glob = {
       ctxt = p.context;
-      prims = make_prims p;
+      prims = make_prims p (String.Map.of_alist_exn externals);
       globs = make_globs vars;
       funcs = p.defs;
     } in
@@ -979,29 +1088,122 @@ module Typing = struct
 
   (* The public interface  *)
   module Type = struct
-    type error = Loc.t * Source.Id.t
-    let check vars p : error list =
-      let p = Reindex.program p in
-      let gamma = infer vars p in
-      printf "Typechecking is complete:@\nGamma =  %a@\n"
-        Gamma.pp gamma;
-      List.fold (Gamma.exps gamma) ~init:Loc.Map.empty ~f:(fun errs exp ->
-          assert Id.(exp <> Source.Id.null);
-          match Gamma.get gamma exp with
-          | None -> errs
-          | Some ts ->
-            if Set.is_empty ts
-            then Map.set errs ~key:(Source.loc p.sources exp) ~data:exp
-            else errs) |>
-      Map.to_alist
+    type error = {
+      prog : program;
+      exps : Id.Set.t;
+      vals : Tvals.t;
+    }
 
-    let pp_error ppf (loc,id) =
-      fprintf ppf "%a@\nType error - expression is ill-typed: %a"
-        Loc.pp loc Id.pp id
+    type env = {
+      program : program;
+      gamma :    Gamma.t;
+    }
+
+    let infer ?(externals=[]) vars program =
+      let program = Reindex.program program in
+      let gamma = infer externals vars program in
+      {program; gamma }
+
+    let errors _ = []
+
+    let check vars program : error list =
+      let {program=prog; gamma} = infer vars program in
+      Gamma.partition gamma |>
+      List.fold ~init:[] ~f:(fun errs g ->
+          match Gamma.Group.values g with
+          | Some vals when Tvals.is_bot vals ->
+            {prog; vals; exps = Gamma.Group.elements g} :: errs
+          | _ -> errs)
+
+
+    let pp_env _ _ = ()
+
+    let pp_sigs _ _ = ()
+
+
+    let pp_val ppf = function
+      | Tsym -> fprintf ppf "sym"
+      | Grnd n -> fprintf ppf "i%d" n
+
+    let pp_vals_list =
+      pp_print_list ~pp_sep:(fun ppf () ->
+          fprintf ppf ",")
+        pp_val
+
+    let pp_vals ppf vals =
+      fprintf ppf "%a" pp_vals_list (Tvals.trace vals)
+
+
+    let pp_print_underline ppf (off,len) =
+      let line = String.init len ~f:(fun i ->
+          if i < off then ' ' else '^') in
+      fprintf ppf "> %s@\n" line
+
+
+    let context = 4
+
+    let pp_from_file_with_underline ppf
+        {Loc.file; range={start_pos; end_pos}} =
+      In_channel.with_file file ~f:(fun chan ->
+          let current = ref 0 in
+          In_channel.iter_lines chan ~f:(fun line ->
+              incr current;
+              if current.contents = end_pos.line + 1
+              then pp_print_underline ppf (start_pos.col,end_pos.col);
+              let distance = min
+                  (abs (!current - start_pos.line))
+                  (abs (!current - end_pos.line)) in
+              let bad = !current >= start_pos.line &&
+                        !current <= end_pos.line in
+              if distance < context
+              then fprintf ppf "%c %s@\n"
+                  (if bad then '>' else '|') line))
+
+    let extract_from_file {Loc.file; range={start_pos; end_pos}} =
+      In_channel.with_file file ~f:(fun chan ->
+          let len = end_pos.offset - start_pos.offset + 1 in
+          let buf = Bytes.create len in
+          In_channel.seek chan (Int64.of_int start_pos.offset);
+          In_channel.really_input_exn chan ~buf ~pos:0 ~len;
+          Bytes.to_string buf)
+
+    let pp_exps ppf (prog,exps) =
+      let src = prog.sources in
+      Set.iter exps ~f:(fun exp ->
+          if (Source.has_loc src exp)
+          then
+            let loc = Source.loc src exp in
+            fprintf ppf "%a:@\n%a@\n" Loc.pp loc
+              pp_from_file_with_underline loc)
+
+
+    let pp_error ppf {prog; exps; vals} =
+      match Tvals.error vals with
+      | Some (Unresolved_variable name) ->
+        fprintf ppf "\
+Type error. The following expressions@ are ill-typed because they
+depend on an unresolved free variable `%s:@\n%a@\n"
+          name pp_exps (prog,exps)
+      | Some (Unresolved_function (name,[])) ->
+        fprintf ppf "\
+Type error. The following expressions are ill-typed because they
+depend on an unresolved external call to `%s':@\n%a@\n"
+          name pp_exps (prog,exps)
+      | Some (Unresolved_function (name,sigs)) ->
+        fprintf ppf "\
+Type error. The following expressions are ill-typed because they
+depend on an external call to `%s' that doesn't have an applicable
+signature:@\n%a@\n%a@\n" name pp_exps (prog,exps) pp_sigs sigs
+      | None ->
+        fprintf ppf "\
+Type error. The following group of expressions was used in a context
+that requires all expressions to have the same type, however there is
+no common type that will unify types %a: Offending expressions are:@\n%a@\n"
+          pp_vals vals
+          pp_exps (prog,exps)
+
   end
 end
-
-
 
 module Context = Lisp.Context
 module Type = Typing.Type
