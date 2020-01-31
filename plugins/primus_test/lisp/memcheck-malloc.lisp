@@ -3,8 +3,7 @@
 (defmethod call (name ptr)
   (when (and ptr (= name 'free)
              (not (= ptr *malloc-zero-sentinel*)))
-    (when (and ptr
-               (not (memcheck-is-allocated 'malloc ptr)))
+    (unless (memcheck-is-tracked 'malloc ptr)
       (memcheck-acquire 'malloc ptr 1))
     (memcheck-release 'malloc ptr)))
 

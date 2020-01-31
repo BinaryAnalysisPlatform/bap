@@ -25,7 +25,7 @@
 
 ;; Public Interface
 
-(defun memcheck-is-allocated (heap ptr)
+(defun memcheck-is-tracked (heap ptr)
   (or
    (region-contains (symbol-concat 'memcheck/live heap) ptr)
    (region-contains (symbol-concat 'memcheck/dead heap) ptr)))

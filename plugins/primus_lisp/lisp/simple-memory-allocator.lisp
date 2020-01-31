@@ -32,42 +32,56 @@
       (memory-allocate ptr len *malloc-initial-value*)
     (memory-allocate ptr len)))
 
-(defun word-size () (/ (word-width) 8))
-
-(defun encode-memory-length(ptr len)
+(defun malloc/put-chunk-size (ptr len)
   (write-word ptr_t ptr len))
 
-(defun decode-memory-length(ptr)
-  (read-word ptr_t ptr))
-
-(defun decode-memory-length'(ptr)
-  (if ptr (decode-memory-length (- ptr (word-size))) 0))
+(defun malloc/get-chunk-size (ptr)
+  (let ((header-size (/ (word-width) 8)))
+    (if ptr (read-word ptr_t (- ptr header-size)) 0)))
 
 (defun malloc (n)
   "allocates a memory region of size N"
   (declare (external "malloc"))
   (if (= n 0) *malloc-zero-sentinel*
     (if (malloc-will-reach-limit n) 0
-      (let ((width (word-size))
-            (full (+ n (* 2 *malloc-guard-edges*) width))
+      (let ((header-size (/ (word-width) 8))
+            (chunk-size (+ n (* 2 *malloc-guard-edges*) header-size))
             (ptr brk)
-            (failed (memory/allocate ptr full)))
+            (failed (memory/allocate ptr chunk-size)))
         (if failed 0
-          (set brk (+ brk full))
-          (malloc/fill-edges ptr full)
+          (set brk (+ brk chunk-size))
+          (malloc/fill-edges ptr chunk-size)
           (set ptr (+ ptr *malloc-guard-edges*))
-          (encode-memory-length ptr n)
-          (+ ptr width))))))
+          (malloc/put-chunk-size ptr n)
+          (+ ptr header-size))))))
 
-(defun realloc (ptr new)
+
+;; pre: ptr is not null
+(defun realloc/update-chunk-size (ptr len)
+  (malloc/put-chunk-size ptr len)
+  ptr)
+
+;; pre: both old-ptr and new-len are not null
+(defun realloc/update-chunk (old-ptr new-len)
+  (let ((old-len (malloc/get-chunk-size old-ptr)))
+    (if (>= old-len len) (realloc/update-chunk-size ptr len)
+      (let ((new-ptr (malloc new-len)))
+        (when new-ptr (memcpy new-ptr old-ptr old-len))
+        (free old-ptr)
+        new-ptr))))
+
+(defun realloc/as-malloc (len)
+  (malloc len))
+
+(defun realloc/as-free (ptr)
+  (free ptr)
+  *malloc-zero-sentinel*)
+
+(defun realloc (ptr len)
   (declare (external "realloc"))
-  (let ((old (decode-memory-length' ptr))
-        (ptr' (malloc new))
-        (dst ptr'))
-    (if (not ptr) ptr'
-      (when (and ptr ptr')
-        (copy-right dst ptr old))
-      ptr')))
+  (if (not ptr) (realloc/as-malloc len)
+    (if (not len) (realloc/as-free ptr)
+      (realloc/update-chunk ptr len))))
 
 ;; in our simplistic malloc implementation, free is just a nop
 (defun free (p)
