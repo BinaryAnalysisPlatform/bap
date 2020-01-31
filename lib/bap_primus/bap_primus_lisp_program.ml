@@ -1144,8 +1144,8 @@ module Typing = struct
 
     let pp_from_file_with_underline ppf
         {Loc.file; range={start_pos; end_pos}} =
+      let current = ref 0 in
       In_channel.with_file file ~f:(fun chan ->
-          let current = ref 0 in
           In_channel.iter_lines chan ~f:(fun line ->
               incr current;
               if current.contents = end_pos.line + 1
@@ -1157,7 +1157,10 @@ module Typing = struct
                         !current <= end_pos.line in
               if distance < context
               then fprintf ppf "%c %s@\n"
-                  (if bad then '>' else '|') line))
+                  (if bad then '>' else '|') line));
+      (* in case if the error was on the last line in a file *)
+      if current.contents = end_pos.line
+      then pp_print_underline ppf (start_pos.col,end_pos.col)
 
     let extract_from_file {Loc.file; range={start_pos; end_pos}} =
       In_channel.with_file file ~f:(fun chan ->
