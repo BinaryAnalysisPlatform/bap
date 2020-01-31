@@ -435,6 +435,8 @@ module Typing = struct
 
     val empty : t
 
+    val unresolved : Id.t -> rule
+
     (** [get gamma exp] returns a type of the expression [exp].
         If [None] is returned, then the expression doesn't have any
         statical constraints, so its type is [Any]. If some set is
@@ -463,7 +465,6 @@ module Typing = struct
 
     (** [join x xs] joins all types in [x::xs]   *)
     val joins : Id.t -> Id.t list -> rule
-
 
     (** [merge xs ys]  *)
     val merge : t -> t -> t
@@ -506,6 +507,7 @@ module Typing = struct
     type t = {
       vars : tvar Id.Map.t;
       vals : Tval.Set.t Tvar.Map.t;
+      miss : Id.Set.t;
     } [@@deriving compare, sexp_of]
 
     type rule = t -> t
@@ -513,9 +515,9 @@ module Typing = struct
     let empty = {
       vars = Id.Map.empty;
       vals = Tvar.Map.empty;
+      miss = Id.Set.empty;
     }
 
-    let exps {vars} = Map.keys vars
     let get g x = match Map.find g.vars x with
       | None -> None
       | Some v -> Map.find g.vals v
@@ -620,7 +622,8 @@ module Typing = struct
             | `Both (u,v) when Tvar.equal u v -> Some u
             | `Both _ -> None);
         vals = Map.merge_skewed g1.vals g2.vals ~combine:(fun ~key:_ ->
-            Set.inter)
+            Set.inter);
+        miss = Set.union g1.miss g2.miss;
       } in
       let g = copy g1 g2 g in
       let g = copy g2 g1 g in
@@ -629,6 +632,10 @@ module Typing = struct
     let with_tvar x g f = match Map.find g.vars x with
       | None -> f (Tvar x) (add_var x (Tvar x) g)
       | Some u -> f u g
+
+    let unresolved x g = with_tvar x g @@ fun u g ->
+      let g = set_val u Tval.Set.empty g in
+      {g with miss = Set.add g.miss x}
 
     let constr_name x n g = with_tvar x g @@ fun u g ->
       union_types meet_types u (Name n) g
@@ -676,6 +683,9 @@ module Typing = struct
           fprintf ppf "(%a)[%a] : %a@\n"
             pp_exps xs pp_tvar u pp_vals
             (Map.find vals u))
+
+    let exps {vars} = Map.keys vars
+
   end
 
   (* module Gamma = struct
@@ -812,43 +822,31 @@ module Typing = struct
     args = type_of_exprs gamma (Def.Func.args def);
   }
 
-  let prenex_type def : typ -> typ = function
-    | Name n -> Name (sprintf "%s$%s" def n)
+  let prenex_type id : typ -> typ = function
+    | Name n -> Name (asprintf "%s$%a" n Id.pp id)
     | t -> t
 
-  let prenex_signature def {args; rest; ret}= {
-    args = List.map args ~f:(prenex_type def);
-    rest = Option.map rest ~f:(prenex_type def);
-    ret = prenex_type def ret;
+  let prenex_signature id {args; rest; ret}= {
+    args = List.map args ~f:(prenex_type id);
+    rest = Option.map rest ~f:(prenex_type id);
+    ret = prenex_type id ret;
   }
 
-  let prenex_type def : typ -> typ = function
-    | Name n -> Name (sprintf "%s$%s" def n)
-    | t -> t
-
-  let prenex_signature def {args; rest; ret}= {
-    args = List.map args ~f:(prenex_type def);
-    rest = Option.map rest ~f:(prenex_type def);
-    ret = prenex_type def ret;
-  }
-
-  let signatures scope glob gamma name =
-    let scope = sprintf "%s$%s" scope name in
+  let signatures glob id gamma name =
     match Map.find glob.prims name with
-    | Some sign -> [prenex_signature scope sign]
+    | Some sign -> [prenex_signature id sign]
     | None -> List.fold glob.funcs ~init:[] ~f:(fun sigs def ->
         if String.equal (Def.name def) name
         then signature_of_gamma def gamma :: sigs
         else sigs)
 
 
-  let apply scope glob id name args gamma =
-    signatures scope glob gamma name |>
+  let apply glob id name args gamma =
+    signatures glob id gamma name |>
     List.filter_map ~f:(fun s ->
         apply_signature id args gamma s) |>
     List.reduce ~f:Gamma.merge |> function
-    | None ->
-      gamma
+    | None -> Gamma.unresolved id gamma
     | Some gamma -> gamma
 
   let last xs = match List.rev xs with
@@ -858,8 +856,7 @@ module Typing = struct
   let constr_glob {globs} vars var gamma =
     if Map.mem vars var.data.exp then gamma
     else match Map.find globs var.data.exp with
-      | None ->
-        gamma
+      | None -> Gamma.unresolved var.id gamma
       | Some n -> Gamma.constr var.id (Type n) gamma
 
 
@@ -882,7 +879,7 @@ module Typing = struct
 
   let (++) f g x = f (g x)
 
-  let infer_ast scope glob bindings ast : Gamma.t -> Gamma.t =
+  let infer_ast glob bindings ast : Gamma.t -> Gamma.t =
     let rec infer vs expr =
       match expr with
       | {data=Sym _; id} ->
@@ -906,7 +903,7 @@ module Typing = struct
         infer vs x ++
         Gamma.constr v.id v.data.typ
       | {data=App ((Dynamic name),xs); id} ->
-        apply scope glob id name xs ++
+        apply glob id name xs ++
         reduce vs xs
       | {data=Seq []} ->
         ident
@@ -945,8 +942,7 @@ module Typing = struct
         let vars = List.fold args ~init:String.Map.empty ~f:push in
         let gamma = List.fold args ~init:gamma ~f:(fun gamma v ->
             Gamma.constr v.id v.data.typ gamma) in
-        let scope = Def.name f in
-        let gamma = infer_ast scope glob vars (Def.Func.body f) gamma in
+        let gamma = infer_ast glob vars (Def.Func.body f) gamma in
         gamma
 
   let make_globs =
@@ -987,6 +983,8 @@ module Typing = struct
     let check vars p : error list =
       let p = Reindex.program p in
       let gamma = infer vars p in
+      printf "Typechecking is complete:@\nGamma =  %a@\n"
+        Gamma.pp gamma;
       List.fold (Gamma.exps gamma) ~init:Loc.Map.empty ~f:(fun errs exp ->
           assert Id.(exp <> Source.Id.null);
           match Gamma.get gamma exp with
