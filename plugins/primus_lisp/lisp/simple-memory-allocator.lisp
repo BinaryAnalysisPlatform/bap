@@ -37,7 +37,7 @@
 
 (defun malloc/get-chunk-size (ptr)
   (let ((header-size (/ (word-width) 8)))
-    (if ptr (read-word ptr_t (- ptr header-size)) 0)))
+    (read-word ptr_t (- ptr header-size))))
 
 (defun malloc (n)
   "allocates a memory region of size N"
@@ -56,7 +56,6 @@
           (+ ptr header-size))))))
 
 
-;; pre: ptr is not null
 (defun realloc/update-chunk-size (ptr len)
   (malloc/put-chunk-size ptr len)
   ptr)
@@ -66,12 +65,10 @@
   (let ((old-len (malloc/get-chunk-size old-ptr)))
     (if (>= old-len len) (realloc/update-chunk-size ptr len)
       (let ((new-ptr (malloc new-len)))
-        (when new-ptr (memcpy new-ptr old-ptr old-len))
-        (free old-ptr)
+        (when new-ptr
+          (memcpy new-ptr old-ptr old-len)
+          (free old-ptr))
         new-ptr))))
-
-(defun realloc/as-malloc (len)
-  (malloc len))
 
 (defun realloc/as-free (ptr)
   (free ptr)
@@ -79,7 +76,7 @@
 
 (defun realloc (ptr len)
   (declare (external "realloc"))
-  (if (not ptr) (realloc/as-malloc len)
+  (if (not ptr) (malloc len)
     (if (not len) (realloc/as-free ptr)
       (realloc/update-chunk ptr len))))
 
