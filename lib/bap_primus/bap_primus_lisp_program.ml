@@ -870,6 +870,7 @@ module Typing = struct
     globs : int String.Map.t;
     prims : signature String.Map.t;
     funcs : Def.func Def.t list;
+    paras : String.Set.t;
   }
 
 
@@ -961,13 +962,14 @@ module Typing = struct
     | {id} :: _ -> id
     | _ -> assert false
 
-  let constr_glob {globs} vars var gamma =
+  let constr_glob {globs; paras} vars var gamma =
     let name = var.data.exp in
     if Map.mem vars name then gamma
     else match Map.find globs name with
-      | None ->
-        Gamma.bot var.id (Unresolved_variable name) gamma
       | Some n -> Gamma.constr var.id (Type n) gamma
+      | None ->
+        if Set.mem paras name then gamma
+        else Gamma.bot var.id (Unresolved_variable name) gamma
 
   let push vars {data; id} =
     Map.set vars ~key:data.exp ~data:id
@@ -1069,6 +1071,10 @@ module Typing = struct
         | Some types ->
           Map.set ps ~key:(Def.name p) ~data:types)
 
+  let make_paras {pars} =
+    List.fold pars ~init:String.Set.empty ~f:(fun pars par ->
+        Set.add pars (Def.name par))
+
   let gamma_equal g1 g2 = Gamma.compare g1 g2 = 0
 
   let infer externals vars p : Gamma.t =
@@ -1077,6 +1083,7 @@ module Typing = struct
       prims = make_prims p (String.Map.of_alist_exn externals);
       globs = make_globs vars;
       funcs = p.defs;
+      paras = make_paras p;
     } in
     let g = Callgraph.build p.defs in
     let init = Solution.create Callgraph.Node.Map.empty Gamma.empty in
