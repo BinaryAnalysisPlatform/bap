@@ -157,7 +157,7 @@ let rec concat_prog p =
 
 module Ast = struct
   let rec pp ppf {data;id} =
-    fprintf ppf "@[<v2>[%a: %a]}@]" pp_exp data Id.pp id
+    fprintf ppf "@[<v2>[%a: %a]@]" pp_exp data Id.pp id
   and pp_exp ppf = function
     | Int x ->
       pp_word ppf x
@@ -198,9 +198,11 @@ module Ast = struct
 end
 
 let pp_def ppf d =
-  fprintf ppf "@[<2>(defun %s @[<2>(%a)@]@ %a)@]@,"
+  fprintf ppf "@[<2>(defun %s:%a @[<2>(%a)@][%a]@ %a)@]@,"
     (Def.name d)
+    Id.pp d.id
     (pp_print_list ~pp_sep:pp_print_space pp_var) (Def.Func.args d)
+    Id.pp ((Def.Func.body d).id)
     Ast.pp_prog (Def.Func.body d)
 
 let pp_met ppf d =
@@ -215,13 +217,14 @@ let pp_par ppf d =
     Ast.pp_prog (Def.Para.default d)
     (Def.docs d)
 
-let pp ppf {pars; mets; defs;} =
+let pp_program ppf {pars; mets; defs;} =
   let pp_items pp items =
     fprintf ppf "@[<v>%a@]" (pp_print_list pp) items in
   pp_items pp_par pars;
   pp_items pp_met mets;
   pp_items pp_def defs
 
+let pp ppf prog = pp_program ppf prog
 
 module Use = struct
   let empty = String.Map.empty
@@ -310,7 +313,7 @@ module Reindex = struct
       ids_of_defs p.substs List.concat_map Def.Subst.body;
     ]
 
-  let derive from =
+  let derive from  =
     State.get () >>= fun src ->
     let nextid = Id.next (Source.lastid src) in
     State.put (Source.derived src ~from nextid) >>| fun () ->
@@ -421,7 +424,9 @@ module Typing = struct
   module Tvals : sig
     type t [@@deriving compare, sexp_of]
     val bot : error -> t
+    val top : t
     val is_bot : t -> bool
+    val is_top : t -> bool
     val singleton : tval -> t
     val inter : t -> t -> t
     val union : t -> t -> t
@@ -437,20 +442,32 @@ module Typing = struct
       final : Set.t;
       trace : Set.t;
       error : error option;
+      widen : bool;
     } [@@deriving compare, sexp_of]
 
     let bot what = {
       final = Set.empty;
       trace = Set.empty;
       error = Some what;
+      widen = false;
     }
 
-    let is_bot x = Set.is_empty x.final
+    let is_top x = x.widen
+    let is_bot x = Option.is_some x.error ||
+                   not x.widen && Set.is_empty x.final
+
+    let top = {
+      final = Set.empty;
+      trace = Set.empty;
+      error = None;
+      widen = true;
+    }
 
     let singleton t = {
       final = Set.singleton t;
       trace = Set.singleton t;
       error = None;
+      widen = false;
     }
 
     let inter x y = match x.error,y.error with
@@ -459,6 +476,7 @@ module Typing = struct
           final = Set.inter x.final y.final;
           trace = Set.union x.trace y.trace;
           error = None;
+          widen = x.widen || y.widen;
         }
 
     let union x y = match x.error,y.error with
@@ -470,6 +488,7 @@ module Typing = struct
             else Set.union x.final y.final;
           trace = Set.union x.trace y.trace;
           error = None;
+          widen = x.widen || y.widen;
         }
 
     let elements x = Set.elements x.final
@@ -497,7 +516,7 @@ module Typing = struct
       rule is a function of type [gamma -> gamma], so the rules can be
       composed with the function composition operator.
   *)
-  module Gamma : sig
+  module Gamma' : sig
     type t [@@deriving compare, sexp_of]
 
     type rule = t -> t
@@ -506,9 +525,16 @@ module Typing = struct
     val empty : t
 
 
-    (** [bot x rule] marks [x] as an unsound expression, which violates
+    (** [bot x] marks [x] as an unsound expression, which violates
         an external [rule].  *)
     val bot : Id.t -> error -> rule
+
+
+    (** [widen x] marks [x] as an unconstraint variable.
+
+        Effectively [x] type is [forall a. a] so it is no longer
+        tracked and all variables unified with it are also widen.*)
+    val widen : Id.t -> rule
 
     (** [get gamma exp] returns a type of the expression [exp].
         If [None] is returned, then the expression doesn't have any
@@ -538,6 +564,7 @@ module Typing = struct
 
     (** [join x xs] joins all types in [x::xs]   *)
     val joins : Id.t -> Id.t list -> rule
+
 
     (** [merge xs ys]  *)
     val merge : t -> t -> t
@@ -601,7 +628,6 @@ module Typing = struct
     type t = {
       vars : tvar Id.Map.t;
       vals : Tvals.t Tvar.Map.t;
-      miss : Id.Set.t;
     } [@@deriving compare, sexp_of]
 
     type rule = t -> t
@@ -615,7 +641,6 @@ module Typing = struct
     let empty = {
       vars = Id.Map.empty;
       vals = Tvar.Map.empty;
-      miss = Id.Set.empty;
     }
 
     let get g x = match Map.find g.vars x with
@@ -651,7 +676,8 @@ module Typing = struct
       let w = Tvar.min u v in
       match Map.find g.vals u, Map.find g.vals v with
       | None, None -> g
-      | None, Some _ | Some _, None -> del_val w g
+      | None, Some t | Some t, None ->
+        if Tvals.is_top t then set_val w t g else del_val w g
       | Some s, Some t -> set_val w (Tvals.union s t) g
 
     let union_types merge u v g =
@@ -723,7 +749,6 @@ module Typing = struct
             | `Both _ -> None);
         vals = Map.merge_skewed g1.vals g2.vals ~combine:(fun ~key:_ ->
             Tvals.inter);
-        miss = Set.union g1.miss g2.miss;
       } in
       let g = copy g1 g2 g in
       let g = copy g2 g1 g in
@@ -734,8 +759,10 @@ module Typing = struct
       | Some u -> f u g
 
     let bot x err g = with_tvar x g @@ fun u g ->
-      let g = set_val u (Tvals.bot err) g in
-      {g with miss = Set.add g.miss x}
+      set_val u (Tvals.bot err) g
+
+    let widen x g = with_tvar x g @@ fun u g ->
+      set_val u Tvals.top g
 
     let constr_name x n g = with_tvar x g @@ fun u g ->
       union_types meet_types u (Name n) g
@@ -788,7 +815,9 @@ module Typing = struct
       | None -> fprintf ppf "T"
       | Some xs ->
         if Tvals.is_bot xs
-        then fprintf ppf "empty"
+        then fprintf ppf "empty" else
+        if Tvals.is_top xs
+        then fprintf ppf "widen"
         else pp_vals_list ppf  (Tvals.elements xs)
 
     let pp ppf {vars; vals} =
@@ -801,67 +830,76 @@ module Typing = struct
 
   end
 
-  (* module Gamma = struct
-   *   include Gamma'
-   *
-   *   let pp_ground ppf = function
-   *     | Any -> fprintf ppf "T"
-   *     | Symbol -> fprintf ppf "S"
-   *     | Name n -> fprintf ppf "%s" n
-   *     | Type t -> fprintf ppf "%d" t
-   *
-   *   let constr x t g =
-   *     let g' = constr x t g in
-   *     printf "%a@\nconstr %a %a =>@\n%a@\n"
-   *       pp g
-   *       Id.pp x pp_ground t
-   *       pp g';
-   *     g'
-   *
-   *   let pp_ids = pp_print_list ~pp_sep:(fun ppf () ->
-   *       fprintf ppf ",") Id.pp
-   *
-   *   let meet x y g =
-   *     let g' = meet x y g in
-   *     printf "%a@\nmeet %a %a =>@\n%a@\n"
-   *       pp g
-   *       Id.pp x Id.pp y
-   *       pp g';
-   *     g'
-   *
-   *
-   *   let meets x xs g =
-   *     let g' = meets x xs g in
-   *     printf "%a@\nmeets %a =>@\n%a@\n"
-   *       pp g
-   *       pp_ids (x::xs)
-   *       pp g';
-   *     g'
-   *
-   *   let join x y g =
-   *     let g' = join x y g in
-   *     printf "%a@\njoin %a %a =>@\n%a@\n"
-   *       pp g
-   *       Id.pp x Id.pp y
-   *       pp g';
-   *     g'
-   *
-   *
-   *   let joins x xs g =
-   *     let g' = joins x xs g in
-   *     printf "%a@\njoins %a =>@\n%a@\n"
-   *       pp g
-   *       pp_ids (x::xs)
-   *       pp g';
-   *     g'
-   *
-   *   let merge g1 g2 =
-   *     let g' = merge g1 g2 in
-   *     printf
-   *       "Merging@\n<<<<<<<<<<<<<<<@\n%a@\n===============@\n%a@\n>>>>>>>>>>>>>>>@\n%a@\n"
-   *       pp g1 pp g2 pp g';
-   *     g'
-   * end *)
+  module Gamma = struct
+    include Gamma'
+
+    let pp_ground ppf = function
+      | Any -> fprintf ppf "T"
+      | Symbol -> fprintf ppf "S"
+      | Name n -> fprintf ppf "%s" n
+      | Type t -> fprintf ppf "%d" t
+
+    let constr x t g =
+      let g' = constr x t g in
+      printf "%a@\nconstr %a %a =>@\n%a@\n"
+        pp g
+        Id.pp x pp_ground t
+        pp g';
+      g'
+
+    let pp_ids = pp_print_list ~pp_sep:(fun ppf () ->
+        fprintf ppf ",") Id.pp
+
+    let meet x y g =
+      let g' = meet x y g in
+      printf "%a@\nmeet %a %a =>@\n%a@\n"
+        pp g
+        Id.pp x Id.pp y
+        pp g';
+      g'
+
+
+    let meets x xs g =
+      let g' = meets x xs g in
+      printf "%a@\nmeets %a =>@\n%a@\n"
+        pp g
+        pp_ids (x::xs)
+        pp g';
+      g'
+
+    let join x y g =
+      let g' = join x y g in
+      printf "%a@\njoin %a %a =>@\n%a@\n"
+        pp g
+        Id.pp x Id.pp y
+        pp g';
+      g'
+
+
+    let joins x xs g =
+      let g' = joins x xs g in
+      printf "%a@\njoins %a =>@\n%a@\n"
+        pp g
+        pp_ids (x::xs)
+        pp g';
+      g'
+
+    let merge g1 g2 =
+      let g' = merge g1 g2 in
+      printf
+        "Merging@\n<<<<<<<<<<<<<<<@\n%a@\n===============@\n%a@\n>>>>>>>>>>>>>>>@\n%a@\n"
+        pp g1 pp g2 pp g';
+      g'
+
+    let widen x g =
+      let g' = widen x g in
+      printf "%a@\nwiden %a =>@\n%a@\n"
+        pp g
+        Id.pp x
+        pp g';
+      g'
+
+  end
 
 
 
@@ -895,6 +933,11 @@ module Typing = struct
         (pp_print_list ~pp_sep:pp_plus pp_tval)
         (Set.elements tvals)
 
+  let apply_return appid ret g =
+    match ret with
+    | Any -> Gamma.widen appid g
+    | _ -> Gamma.constr appid ret g
+
   let apply_signature appid ts g {args; rest; ret} =
     let rec apply g ts ns =
       match ts,ns with
@@ -904,7 +947,7 @@ module Typing = struct
     match apply g ts args with
     | None,_ -> None
     | Some g,ts ->
-      let g = Gamma.constr appid ret g in
+      let g = apply_return appid ret g in
       match ts with
       | [] -> Some g
       | ts -> match rest with
@@ -950,13 +993,16 @@ module Typing = struct
 
 
   let apply glob id name args gamma =
+    printf "applying a signature for %s@\n%!" name;
     let sigs = signatures glob id gamma name in
     List.filter_map sigs ~f:(fun s ->
         apply_signature id args gamma s) |>
-    List.reduce ~f:Gamma.merge |> function
+    List.hd |> function
     | None ->
       Gamma.bot id (Unresolved_function (name,sigs)) gamma
-    | Some gamma -> gamma
+    | Some gamma ->
+      printf "applied a signature for %s@\n%!" name;
+      gamma
 
   let last xs = match List.rev xs with
     | {id} :: _ -> id
@@ -1009,8 +1055,8 @@ module Typing = struct
         infer vs z
       | {data=Let (v,x,y); id} ->
         Gamma.meet y.id id ++
-        infer (push vs v) y ++
         Gamma.meet x.id v.id ++
+        infer (push vs v) y ++
         infer vs x ++
         Gamma.constr v.id v.data.typ
       | {data=App ((Dynamic name),xs); id} ->
@@ -1022,7 +1068,7 @@ module Typing = struct
         Gamma.meet (last xs) id ++
         reduce vs xs
       | {data=Set (v,x); id} ->
-        Gamma.joins id [v.id; x.id] ++
+        Gamma.joins id [v.id; x.id; varclass vs v] ++
         Gamma.constr v.id v.data.typ ++
         infer vs x
       | {data=Rep (c,x); id} ->
@@ -1109,7 +1155,8 @@ module Typing = struct
     let infer ?(externals=[]) vars program =
       let program = Reindex.program program in
       let gamma = infer externals vars program in
-      {program; gamma }
+      printf "Inference done@\n%a%!" pp_program program;
+      {program; gamma}
 
     let errors {program=prog; gamma} =
       Gamma.partition gamma |>
@@ -1152,7 +1199,6 @@ module Typing = struct
             let loc = Source.loc src exp in
             fprintf ppf "%a:@\n%a@\n" Loc.pp loc
               (Source.pp_underline src) loc)
-
 
     let pp_error ppf {prog; exps; vals} =
       match Tvals.error vals with
