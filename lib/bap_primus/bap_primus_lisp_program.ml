@@ -1111,10 +1111,7 @@ module Typing = struct
       let gamma = infer externals vars program in
       {program; gamma }
 
-    let errors _ = []
-
-    let check vars program : error list =
-      let {program=prog; gamma} = infer vars program in
+    let errors {program=prog; gamma} =
       Gamma.partition gamma |>
       List.fold ~init:[] ~f:(fun errs g ->
           match Gamma.Group.values g with
@@ -1122,6 +1119,7 @@ module Typing = struct
             {prog; vals; exps = Gamma.Group.elements g} :: errs
           | _ -> errs)
 
+    let check vars program : error list = errors (infer vars program)
 
     let pp_env _ _ = ()
 
@@ -1161,7 +1159,7 @@ module Typing = struct
       | Some (Unresolved_variable name) ->
         fprintf ppf "\
 Type error. The following expressions@ are ill-typed because they
-depend on an unresolved free variable `%s:@\n%a@\n"
+depend on an unresolved free variable `%s':@\n%a@\n"
           name pp_exps (prog,exps)
       | Some (Unresolved_function (name,[])) ->
         fprintf ppf "\

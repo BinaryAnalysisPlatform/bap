@@ -37,6 +37,7 @@ end
 
 module Type : sig
   type t
+  type env
   type signature
   type error
 
@@ -67,6 +68,9 @@ module Type : sig
     val (@->) : [< parameters] -> t -> signature
   end
 
+  val infer : ?externals:(string * signature) list ->
+    Arch.t -> Var.t seq -> program -> env
+  val errors : env -> error list
   val check : Var.t seq -> program -> error list
   val pp_error : Format.formatter -> error -> unit
 end

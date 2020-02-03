@@ -2432,6 +2432,9 @@ ident ::= ?any atom that is not recognized as a <word>?
         type t
 
 
+        (** Typing environemnt is a mapping from expressions to types.  *)
+        type env
+
         (** Definition signature  *)
         type signature
 
@@ -2556,12 +2559,18 @@ ident ::= ?any atom that is not recognized as a <word>?
         end
 
 
-        (** [check env prog] type checks program in the environment
-            [env] and returns a list of errors. If the list is empty
-            the the program is well-typed.
+        (** [infer ?externals arch globs program] infers typing environment.
 
-            Note: this function is currently experimental *)
+
+
+         *)
+        val infer : ?externals:(string * signature) list -> Arch.t ->
+                    Var.t seq -> program -> env
+
+        val errors : env -> error list
+
         val check : Var.t seq -> program -> error list
+        [@@deprecated "[since 2020-02] use [infer] and [errors] instead"]
 
 
         (** [pp_error ppf err] prints a description of the type error

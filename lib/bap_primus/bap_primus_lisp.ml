@@ -653,8 +653,17 @@ module Type = struct
         let cod = cod arch in
         let rest = Option.map rest ~f:(fun t -> t arch) in
         Lisp.Type.signature args ?rest cod
-
   end
+
+
+  let invoke_subroutine_signature =
+    "invoke-subroutine", Spec.(one int // all any @-> any)
+
+  let infer ?(externals=[]) arch globs prog =
+    let externals = invoke_subroutine_signature :: externals |>
+                    List.map ~f:(fun (n,s) -> n,s arch) in
+    infer ~externals globs prog
+
 end
 
 

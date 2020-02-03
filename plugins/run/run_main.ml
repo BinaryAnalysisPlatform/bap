@@ -209,10 +209,35 @@ let run need_repeat entries =
 let pp_var ppf v =
   fprintf ppf "%a" Sexp.pp (Var.sexp_of_t v)
 
+let signature_of_sub sub =
+  let module Lisp = Primus.Lisp.Type.Spec in
+  let lisp_type_of_arg arg = match Var.typ (Arg.lhs arg) with
+    | Type.Imm 1 -> Lisp.bool
+    | Type.Imm n -> Lisp.word n
+    | Type.Unk | Type.Mem _ -> Lisp.any in
+  if Term.length arg_t sub = 0
+  then Lisp.(all any @-> any)
+  else Term.enum ~rev:true arg_t sub |>
+       Seq.fold ~init:([],Lisp.any) ~f:(fun (args,ret) arg ->
+           match Arg.intent arg with
+           | Some Out -> args, lisp_type_of_arg arg
+           | _ -> lisp_type_of_arg arg :: args,ret) |> fun (args,ret) ->
+       Lisp.(tuple args @-> ret)
+
+
+let signatures_of_subs prog =
+  Term.enum sub_t prog |>
+  Seq.map ~f:(fun s -> Sub.name s, signature_of_sub s) |>
+  Seq.to_list
+
 let typecheck =
+  Machine.get () >>= fun proj ->
   Lisp.program >>= fun prog ->
   Env.all >>| fun vars ->
-  match Primus.Lisp.Type.check vars prog with
+  let externals = signatures_of_subs (Project.program proj) in
+  let arch = Project.arch proj in
+  let env = Primus.Lisp.Type.infer ~externals arch vars prog in
+  match Primus.Lisp.Type.errors env with
   | [] -> info "The Lisp Machine program is well-typed"
   | xs ->
     warning "The Lisp Machine program is ill-typed";
