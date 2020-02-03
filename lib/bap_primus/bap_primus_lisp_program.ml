@@ -1146,37 +1146,6 @@ module Typing = struct
           if i < off then ' ' else '^') in
       fprintf ppf "> %s@\n" line
 
-
-    let context = 4
-
-    let pp_from_file_with_underline ppf
-        {Loc.file; range={start_pos; end_pos}} =
-      let current = ref 0 in
-      In_channel.with_file file ~f:(fun chan ->
-          In_channel.iter_lines chan ~f:(fun line ->
-              incr current;
-              if current.contents = end_pos.line + 1
-              then pp_print_underline ppf (start_pos.col,end_pos.col);
-              let distance = min
-                  (abs (!current - start_pos.line))
-                  (abs (!current - end_pos.line)) in
-              let bad = !current >= start_pos.line &&
-                        !current <= end_pos.line in
-              if distance < context
-              then fprintf ppf "%c %s@\n"
-                  (if bad then '>' else '|') line));
-      (* in case if the error was on the last line in a file *)
-      if current.contents = end_pos.line
-      then pp_print_underline ppf (start_pos.col,end_pos.col)
-
-    let extract_from_file {Loc.file; range={start_pos; end_pos}} =
-      In_channel.with_file file ~f:(fun chan ->
-          let len = end_pos.offset - start_pos.offset + 1 in
-          let buf = Bytes.create len in
-          In_channel.seek chan (Int64.of_int start_pos.offset);
-          In_channel.really_input_exn chan ~buf ~pos:0 ~len;
-          Bytes.to_string buf)
-
     let pp_exps ppf (prog,exps) =
       let src = prog.sources in
       Set.iter exps ~f:(fun exp ->
@@ -1184,7 +1153,7 @@ module Typing = struct
           then
             let loc = Source.loc src exp in
             fprintf ppf "%a:@\n%a@\n" Loc.pp loc
-              pp_from_file_with_underline loc)
+              (Source.pp_underline src) loc)
 
 
     let pp_error ppf {prog; exps; vals} =

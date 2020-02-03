@@ -1,4 +1,5 @@
 open Core_kernel
+open Format
 
 module Cst = Parsexp.Cst
 module Loc = Bap_primus_lisp_loc
@@ -27,6 +28,7 @@ type t = {
   origin : string Id.Map.t;
   ranges : Loc.range Id.Map.t;
   source : tree list String.Map.t;
+  inputs : string String.Map.t;
   rclass : Id.t Id.Map.t;
 }
 
@@ -38,6 +40,7 @@ let empty = {
   origin = Id.Map.empty;
   ranges = Id.Map.empty;
   source = String.Map.empty;
+  inputs = String.Map.empty;
   rclass = Id.Map.empty;
 }
 
@@ -144,7 +147,8 @@ let load p filename =
     Ok {
       p with
       origin;
-      source = Map.set p.source ~key:filename ~data:tree
+      source = Map.set p.source ~key:filename ~data:tree;
+      inputs = Map.set p.inputs ~key:filename ~data:source;
     }
 
 let find p filename = Map.find p.source filename
@@ -187,3 +191,42 @@ let rec sexp_of_tree = function
 
 let pp_tree ppf t =
   Sexp.pp_hum ppf (sexp_of_tree t)
+
+
+let pp_print_underline ppf (off,len) =
+  let line = String.init len ~f:(fun i ->
+      if i < off then ' ' else '^') in
+  fprintf ppf "> %s@\n" line
+
+
+let pp_underline ?(context=4)
+    {inputs} ppf
+    {Loc.file; range={start_pos; end_pos}} =
+  match Map.find inputs file with
+  | None -> ()
+  | Some source ->
+    let current = ref 0 in
+    String.split_lines source |> List.iter ~f:(fun line ->
+        incr current;
+        if current.contents = end_pos.line + 1
+        then pp_print_underline ppf (start_pos.col,end_pos.col);
+        let distance = min
+            (abs (!current - start_pos.line))
+            (abs (!current - end_pos.line)) in
+        let bad = !current >= start_pos.line &&
+                  !current <= end_pos.line in
+        if distance < context
+        then fprintf ppf "%c %s@\n"
+            (if bad then '>' else '|') line);
+    (* in case if the error was on the last line in a file *)
+    if current.contents = end_pos.line
+    then pp_print_underline ppf (start_pos.col,end_pos.col)
+
+let pp {inputs} ppf {Loc.file; range={start_pos; end_pos}} =
+  match Map.find inputs file with
+  | None -> ()
+  | Some source ->
+    let pos = start_pos.offset in
+    let len = end_pos.offset - start_pos.offset + 1 in
+    let exp = String.sub source ~pos ~len in
+    fprintf ppf "%s" exp
