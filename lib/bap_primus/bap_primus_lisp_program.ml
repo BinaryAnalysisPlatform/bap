@@ -11,6 +11,7 @@ module Lisp = struct
   module Context = Bap_primus_lisp_context
   module Var = Bap_primus_lisp_var
   module Type = Bap_primus_lisp_type
+  module Attribute = Bap_primus_lisp_attribute
 end
 
 module Def = Bap_primus_lisp_def
@@ -488,7 +489,7 @@ module Typing = struct
       rule is a function of type [gamma -> gamma], so the rules can be
       composed with the function composition operator.
   *)
-  module Gamma' : sig
+  module Gamma : sig
     type t [@@deriving compare, sexp_of]
 
     type rule = t -> t
@@ -778,59 +779,59 @@ module Typing = struct
 
   end
 
-  module Gamma = struct
-    include Gamma'
-
-    let pp_ground ppf = function
-      | Any -> fprintf ppf "T"
-      | Symbol -> fprintf ppf "S"
-      | Name n -> fprintf ppf "%s" n
-      | Type t -> fprintf ppf "%d" t
-
-    let constr x t g =
-      let g' = constr x t g in
-      printf "%a@\nconstr %a %a =>@\n%a@\n"
-        pp g
-        Id.pp x pp_ground t
-        pp g';
-      g'
-
-    let pp_ids = pp_print_list ~pp_sep:(fun ppf () ->
-        fprintf ppf ",") Id.pp
-
-    let unify x y g =
-      let g' = unify x y g in
-      printf "%a@\nmeet %a %a =>@\n%a@\n"
-        pp g
-        Id.pp x Id.pp y
-        pp g';
-      g'
-
-
-    let unify_all x xs g =
-      let g' = unify_all x xs g in
-      printf "%a@\nmeets %a =>@\n%a@\n"
-        pp g
-        pp_ids (x::xs)
-        pp g';
-      g'
-
-    let merge g1 g2 =
-      let g' = merge g1 g2 in
-      printf
-        "Merging@\n<<<<<<<<<<<<<<<@\n%a@\n===============@\n%a@\n>>>>>>>>>>>>>>>@\n%a@\n"
-        pp g1 pp g2 pp g';
-      g'
-
-    let widen x g =
-      let g' = widen x g in
-      printf "%a@\nwiden %a =>@\n%a@\n"
-        pp g
-        Id.pp x
-        pp g';
-      g'
-
-  end
+  (* module Gamma = struct
+   *   include Gamma'
+   *
+   *   let pp_ground ppf = function
+   *     | Any -> fprintf ppf "T"
+   *     | Symbol -> fprintf ppf "S"
+   *     | Name n -> fprintf ppf "%s" n
+   *     | Type t -> fprintf ppf "%d" t
+   *
+   *   let constr x t g =
+   *     let g' = constr x t g in
+   *     printf "%a@\nconstr %a %a =>@\n%a@\n"
+   *       pp g
+   *       Id.pp x pp_ground t
+   *       pp g';
+   *     g'
+   *
+   *   let pp_ids = pp_print_list ~pp_sep:(fun ppf () ->
+   *       fprintf ppf ",") Id.pp
+   *
+   *   let unify x y g =
+   *     let g' = unify x y g in
+   *     printf "%a@\nmeet %a %a =>@\n%a@\n"
+   *       pp g
+   *       Id.pp x Id.pp y
+   *       pp g';
+   *     g'
+   *
+   *
+   *   let unify_all x xs g =
+   *     let g' = unify_all x xs g in
+   *     printf "%a@\nmeets %a =>@\n%a@\n"
+   *       pp g
+   *       pp_ids (x::xs)
+   *       pp g';
+   *     g'
+   *
+   *   let merge g1 g2 =
+   *     let g' = merge g1 g2 in
+   *     printf
+   *       "Merging@\n<<<<<<<<<<<<<<<@\n%a@\n===============@\n%a@\n>>>>>>>>>>>>>>>@\n%a@\n"
+   *       pp g1 pp g2 pp g';
+   *     g'
+   *
+   *   let widen x g =
+   *     let g' = widen x g in
+   *     printf "%a@\nwiden %a =>@\n%a@\n"
+   *       pp g
+   *       Id.pp x
+   *       pp g';
+   *     g'
+   *
+   * end *)
 
 
 
@@ -980,8 +981,7 @@ module Typing = struct
         Gamma.unify id  v.id ++
         constr_glob glob vs v ++
         Gamma.constr v.id v.data.typ
-      | {data=Ite (x,y,z); id} ->
-        (* Gamma.unify_all id [y.id; z.id] ++ *)
+      | {data=Ite (x,y,z)} ->
         infer vs x ++
         infer vs y ++
         infer vs z
@@ -1055,6 +1055,13 @@ module Typing = struct
 
   let gamma_equal g1 g2 = Gamma.compare g1 g2 = 0
 
+  let applicable_defs {context=global; defs} =
+    List.filter defs ~f:(fun def ->
+        match Lisp.Attribute.Set.get
+                (Def.attributes def) Lisp.Context.t with
+        | None -> true
+        | Some def -> Lisp.Context.(global <= def))
+
   let infer externals vars p : Gamma.t =
     let glob = {
       ctxt = p.context;
@@ -1063,7 +1070,7 @@ module Typing = struct
       funcs = p.defs;
       paras = make_paras p;
     } in
-    let g = Callgraph.build p.defs in
+    let g = Callgraph.build (applicable_defs p) in
     let init = Solution.create Callgraph.Node.Map.empty Gamma.empty in
     let equal = gamma_equal in
     let fp =
