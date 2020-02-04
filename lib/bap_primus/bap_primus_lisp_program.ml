@@ -1002,6 +1002,7 @@ module Typing = struct
       | {data=Set (v,x); id} ->
         Gamma.unify_all id [v.id; x.id; varclass vs v] ++
         Gamma.constr v.id v.data.typ ++
+        constr_glob glob vs v ++
         infer vs x
       | {data=Rep (c,x); id} ->
         Gamma.unify c.id id ++
