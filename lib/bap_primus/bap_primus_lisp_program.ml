@@ -1063,6 +1063,14 @@ module Typing = struct
         | None -> true
         | Some def -> Lisp.Context.(global <= def))
 
+  let check_methods glob mets gamma =
+    List.fold mets ~init:gamma ~f:(fun gamma met ->
+        let args = Def.Meth.args met in
+        let vars = List.fold args ~init:String.Map.empty ~f:push in
+        let gamma = List.fold args ~init:gamma ~f:(fun gamma v ->
+            Gamma.constr v.id v.data.typ gamma) in
+        infer_ast glob vars (Def.Meth.body met) gamma)
+
   let infer externals vars p : Gamma.t =
     let glob = {
       ctxt = p.context;
@@ -1077,7 +1085,8 @@ module Typing = struct
     let fp =
       Graphlib.fixpoint (module Callgraph) ~rev:true ~start:Exit
         ~equal ~merge:Gamma.merge ~init ~f:(transfer glob) g in
-    Solution.get fp Entry
+    let g = Solution.get fp Entry in
+    check_methods glob p.mets g
 
   (* The public interface  *)
   module Type = struct
