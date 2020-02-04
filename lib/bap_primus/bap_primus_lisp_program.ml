@@ -406,6 +406,7 @@ module Typing = struct
      or a bitvector with the given width. All types have the same
      runtime representation (modulo bitwidth).  *)
   type tval =
+    | Tany
     | Tsym
     | Grnd of int
   [@@deriving compare, sexp_of]
@@ -416,85 +417,56 @@ module Typing = struct
     ret  : typ;
   } [@@deriving compare, sexp]
 
-  type error =
-    | Unresolved_variable of string
-    | Unresolved_function of string * signature list
+  type type_error =
+    | Unresolved_variable of Id.t * string
+    | Unresolved_function of Id.t * string * signature list
+    | No_unification of Id.t * tval * Id.t * tval
   [@@deriving compare, sexp_of]
 
   module Tvals : sig
     type t [@@deriving compare, sexp_of]
-    val bot : error -> t
-    val top : t
-    val is_bot : t -> bool
-    val is_top : t -> bool
-    val singleton : tval -> t
-    val inter : t -> t -> t
-    val union : t -> t -> t
-    val elements : t -> tval list
-    val trace : t -> tval list
-    val error : t -> error option
+    val create : Id.t -> tval -> t
+    val fail : Id.t -> type_error -> t
+    val meet : Id.t -> t -> t -> t
+    val result : t -> (tval,type_error) result
   end = struct
     module Set = Set.Make_plain(struct
         type t = tval [@@deriving compare, sexp_of]
       end)
 
+
     type t = {
-      final : Set.t;
-      trace : Set.t;
-      error : error option;
-      widen : bool;
+      result : (tval,type_error) Result.t;
+      origin : Id.t;
     } [@@deriving compare, sexp_of]
 
-    let bot what = {
-      final = Set.empty;
-      trace = Set.empty;
-      error = Some what;
-      widen = false;
+    let fail where what = {
+      result = Error what;
+      origin = where;
     }
 
-    let is_top x = x.widen
-    let is_bot x = Option.is_some x.error ||
-                   not x.widen && Set.is_empty x.final
-
-    let top = {
-      final = Set.empty;
-      trace = Set.empty;
-      error = None;
-      widen = true;
+    let create origin t = {
+      result = Ok t;
+      origin;
     }
 
-    let singleton t = {
-      final = Set.singleton t;
-      trace = Set.singleton t;
-      error = None;
-      widen = false;
-    }
+    let is_any = function {result=Ok Tany} -> true | _ -> false
+    let is_bot x = Result.is_error x.result
 
-    let inter x y = match x.error,y.error with
-      | Some err,_|_,Some err -> bot err
-      | None,None -> {
-          final = Set.inter x.final y.final;
-          trace = Set.union x.trace y.trace;
-          error = None;
-          widen = x.widen || y.widen;
+    let meet_tvals x y t1 t2 = match t1,t2 with
+      | Tany,_| _,Tany -> Ok Tany
+      | _ -> if compare_tval t1 t2 = 0 then Ok t1
+        else Error (No_unification (x,t1,y,t2))
+
+    let meet id x y = match x.result,y.result with
+      | Error _,_ -> x
+      | _,Error _ -> y
+      | Ok t1,Ok t2 -> {
+          result = meet_tvals x.origin y.origin t1 t2;
+          origin = id;
         }
 
-    let union x y = match x.error,y.error with
-      | Some err,_|_,Some err -> bot err
-      | None,None -> {
-          final = if Set.is_empty x.final ||
-                     Set.is_empty y.final
-            then Set.empty
-            else Set.union x.final y.final;
-          trace = Set.union x.trace y.trace;
-          error = None;
-          widen = x.widen || y.widen;
-        }
-
-    let elements x = Set.elements x.final
-    let trace x = Set.to_list x.trace
-    let error x = x.error
-
+    let result x = x.result
   end
 
   (* type variables
@@ -525,16 +497,9 @@ module Typing = struct
     val empty : t
 
 
-    (** [bot x] marks [x] as an unsound expression, which violates
+    (** [fail x] marks [x] as an unsound expression, which violates
         an external [rule].  *)
-    val bot : Id.t -> error -> rule
-
-
-    (** [widen x] marks [x] as an unconstraint variable.
-
-        Effectively [x] type is [forall a. a] so it is no longer
-        tracked and all variables unified with it are also widen.*)
-    val widen : Id.t -> rule
+    val fail : Id.t -> type_error -> rule
 
     (** [get gamma exp] returns a type of the expression [exp].
         If [None] is returned, then the expression doesn't have any
@@ -551,24 +516,17 @@ module Typing = struct
     (** [constr exp typ] expression [exp] shall have type [typ]  *)
     val constr : Id.t -> typ -> rule
 
+    val widen : Id.t -> rule
+
     (** [meet x y] types of [x] and [y] shall have the same type,
         which is the greatest lower bound of types [x] and [y]. *)
-    val meet : Id.t -> Id.t -> rule
+    val unify : Id.t -> Id.t -> rule
 
     (** [meets x xs] meets all types in [x::xs]  *)
-    val meets : Id.t -> Id.t list -> rule
-
-    (** [join x y] types of [x] and [y] shall have the same type,
-        which is the least upper bound of types [x] and [y].  *)
-    val join : Id.t -> Id.t -> rule
-
-    (** [join x xs] joins all types in [x::xs]   *)
-    val joins : Id.t -> Id.t list -> rule
-
+    val unify_all : Id.t -> Id.t list -> rule
 
     (** [merge xs ys]  *)
     val merge : t -> t -> t
-
 
     (** [partition g] returns a partition of the set of expressions.
 
@@ -664,37 +622,29 @@ module Typing = struct
       | Tvar n -> fprintf ppf "t/%a" Id.pp n
 
     (* val[min u v] <- val[u] /\ val[v] *)
-    let meet_types u v g =
+    let meet_types x u v g =
       let w = Tvar.min u v in
       match Map.find g.vals u, Map.find g.vals v with
       | None, None -> g
       | None, Some t | Some t, None -> set_val w t g
-      | Some t, Some t' -> set_val w (Tvals.inter t t') g
+      | Some t, Some t' -> set_val w (Tvals.meet x t t') g
 
-    (* val[min u v] <- val[u] \/ val[v]  *)
-    let join_types u v g =
-      let w = Tvar.min u v in
-      match Map.find g.vals u, Map.find g.vals v with
-      | None, None -> g
-      | None, Some t | Some t, None ->
-        if Tvals.is_top t then set_val w t g else del_val w g
-      | Some s, Some t -> set_val w (Tvals.union s t) g
 
-    let union_types merge u v g =
+    let unify_types x u v g =
       let u,v = if Tvar.(u < v) then u,v else v,u in
-      let init = del_val v (merge u v g) in
+      let init = del_val v (meet_types x u v g) in
       Map.fold g.vars ~init ~f:(fun ~key:z ~data:w g ->
           if Tvar.equal v w then set_var z u g else g)
 
     (* if x <> y then
-          1. var[x] <- min var[x] var[y]
-          2. var[y] <- min var[x] var[y]
-          3. var[w] <- merge val[var[x]] val[var[y]]
-          4. forall z s.t. var[z] = max var[x] var[y]
-               var[z] <- min var[x] var[y]
+          let w = min var[x] var[y]
+          1. val[w] <- val[var[x]] /\ val[var[y]]
+          2. var[x] <- w
+          3. var[y] <- w
+          4. forall z s.t. var[z] = w: var[z] <- w
           5. max var[x] var[y] is not in vals
     *)
-    let union merge x y g =
+    let unify x y g =
       if Id.equal x y then g
       else match Map.find g.vars x, Map.find g.vars y with
         | None,Some t -> add_var x t g
@@ -704,15 +654,10 @@ module Typing = struct
           add_var x t @@
           add_var y t g
         | Some u,Some v when Tvar.equal u v -> g
-        | Some u,Some v -> union_types merge u v g
+        | Some u,Some v -> unify_types (Id.min x y) u v g
 
-    let unions merge x xs g =
-      List.fold xs ~init:g ~f:(fun g x' -> union merge x x' g)
-
-    let meet = union meet_types
-    and meets = unions meet_types
-    let join = union join_types
-    and joins = unions join_types
+    let unify_all x xs g =
+      List.fold xs ~init:g ~f:(fun g x' -> unify x x' g)
 
     let transfer x u g1 g =
       let g = add_var x u g in
@@ -738,7 +683,7 @@ module Typing = struct
               match Map.find g1.vals u, Map.find g2.vals v with
               | None,None -> g
               | Some t,None | None, Some t -> set_val u t g
-              | Some s, Some t -> set_val u (Tvals.inter s t) g
+              | Some s, Some t -> set_val u (Tvals.meet x s t) g
             else g)
 
     let merge g1 g2 =
@@ -748,7 +693,7 @@ module Typing = struct
             | `Both (u,v) when Tvar.equal u v -> Some u
             | `Both _ -> None);
         vals = Map.merge_skewed g1.vals g2.vals ~combine:(fun ~key:_ ->
-            Tvals.inter);
+            Tvals.meet Id.null); (* todo: find a better origin *)
       } in
       let g = copy g1 g2 g in
       let g = copy g2 g1 g in
@@ -758,20 +703,20 @@ module Typing = struct
       | None -> f (Tvar x) (add_var x (Tvar x) g)
       | Some u -> f u g
 
-    let bot x err g = with_tvar x g @@ fun u g ->
-      set_val u (Tvals.bot err) g
+    let fail x err g = with_tvar x g @@ fun u g ->
+      set_val u (Tvals.fail x err) g
 
-    let widen x g = with_tvar x g @@ fun u g ->
-      set_val u Tvals.top g
 
     let constr_name x n g = with_tvar x g @@ fun u g ->
-      union_types meet_types u (Name n) g
+      unify_types x u (Name n) g
 
     let constr_grnd x t g = with_tvar x g @@ fun u g ->
-      let t = Tvals.singleton t in
+      let t = Tvals.create x t in
       match Map.find g.vals u with
       | None -> set_val u t g
-      | Some t' -> set_val u (Tvals.inter t t') g
+      | Some t' -> set_val u (Tvals.meet x t t') g
+
+    let widen x g = constr_grnd x Tany g
 
     let constr id t g = match t with
       | Any -> g
@@ -803,6 +748,7 @@ module Typing = struct
         Id.pp
 
     let pp_val ppf = function
+      | Tany -> fprintf ppf "any"
       | Tsym -> fprintf ppf "sym"
       | Grnd n -> fprintf ppf "%d" n
 
@@ -813,12 +759,14 @@ module Typing = struct
 
     let pp_vals ppf = function
       | None -> fprintf ppf "T"
-      | Some xs ->
-        if Tvals.is_bot xs
-        then fprintf ppf "empty" else
-        if Tvals.is_top xs
-        then fprintf ppf "widen"
-        else pp_vals_list ppf  (Tvals.elements xs)
+      | Some t -> match Tvals.result t with
+        | Ok t -> pp_val ppf t
+        | Error (No_unification (_,t1,_,t2)) ->
+          fprintf ppf "%a <> %a" pp_val t1 pp_val t2
+        | Error (Unresolved_variable (_,v)) ->
+          fprintf ppf "ill-types(unresolve-variable %s)" v
+        | Error (Unresolved_function (_,s,_)) ->
+          fprintf ppf "ill-types(unresolve-function %s)" s
 
     let pp ppf {vars; vals} =
       Map.iteri (join_vars vars) ~f:(fun ~key:u ~data:xs ->
@@ -850,8 +798,8 @@ module Typing = struct
     let pp_ids = pp_print_list ~pp_sep:(fun ppf () ->
         fprintf ppf ",") Id.pp
 
-    let meet x y g =
-      let g' = meet x y g in
+    let unify x y g =
+      let g' = unify x y g in
       printf "%a@\nmeet %a %a =>@\n%a@\n"
         pp g
         Id.pp x Id.pp y
@@ -859,26 +807,9 @@ module Typing = struct
       g'
 
 
-    let meets x xs g =
-      let g' = meets x xs g in
+    let unify_all x xs g =
+      let g' = unify_all x xs g in
       printf "%a@\nmeets %a =>@\n%a@\n"
-        pp g
-        pp_ids (x::xs)
-        pp g';
-      g'
-
-    let join x y g =
-      let g' = join x y g in
-      printf "%a@\njoin %a %a =>@\n%a@\n"
-        pp g
-        Id.pp x Id.pp y
-        pp g';
-      g'
-
-
-    let joins x xs g =
-      let g' = joins x xs g in
-      printf "%a@\njoins %a =>@\n%a@\n"
         pp g
         pp_ids (x::xs)
         pp g';
@@ -924,6 +855,7 @@ module Typing = struct
   let pp_tval ppf = function
     | Tsym -> fprintf ppf "sym"
     | Grnd n -> fprintf ppf "%d" n
+    | Tany -> fprintf ppf "any"
 
   let pp_plus ppf () = pp_print_char ppf '+'
   let pp_tvals ppf tvals =
@@ -959,9 +891,9 @@ module Typing = struct
   let type_of_expr g expr : typ =
     match Gamma.get g expr.id with
     | None -> Any
-    | Some ts -> match Tvals.elements ts with
-      | [Tsym] -> Symbol
-      | [Grnd n] -> Type n
+    | Some ts -> match Tvals.result ts with
+      | Ok Tsym -> Symbol
+      | Ok (Grnd n) -> Type n
       | _ -> Any
 
   let type_of_exprs gamma exprs =
@@ -999,7 +931,7 @@ module Typing = struct
         apply_signature id args gamma s) |>
     List.hd |> function
     | None ->
-      Gamma.bot id (Unresolved_function (name,sigs)) gamma
+      Gamma.fail id (Unresolved_function (id, name,sigs)) gamma
     | Some gamma ->
       printf "applied a signature for %s@\n%!" name;
       gamma
@@ -1015,7 +947,7 @@ module Typing = struct
       | Some n -> Gamma.constr var.id (Type n) gamma
       | None ->
         if Set.mem paras name then gamma
-        else Gamma.bot var.id (Unresolved_variable name) gamma
+        else Gamma.fail var.id (Unresolved_variable (var.id,name)) gamma
 
   let push vars {data; id} =
     Map.set vars ~key:data.exp ~data:id
@@ -1044,18 +976,18 @@ module Typing = struct
       | {data=Int x; id} ->
         Gamma.constr id x.data.typ
       | {data=Var v; id} ->
-        Gamma.meet v.id (varclass vs v) ++
-        Gamma.meet id  v.id ++
+        Gamma.unify v.id (varclass vs v) ++
+        Gamma.unify id  v.id ++
         constr_glob glob vs v ++
         Gamma.constr v.id v.data.typ
       | {data=Ite (x,y,z); id} ->
-        Gamma.joins id [y.id; z.id] ++
+        (* Gamma.unify_all id [y.id; z.id] ++ *)
         infer vs x ++
         infer vs y ++
         infer vs z
       | {data=Let (v,x,y); id} ->
-        Gamma.meet y.id id ++
-        Gamma.meet x.id v.id ++
+        Gamma.unify y.id id ++
+        Gamma.unify x.id v.id ++
         infer (push vs v) y ++
         infer vs x ++
         Gamma.constr v.id v.data.typ
@@ -1065,14 +997,14 @@ module Typing = struct
       | {data=Seq []} ->
         ident
       | {data=Seq xs; id} ->
-        Gamma.meet (last xs) id ++
+        Gamma.unify (last xs) id ++
         reduce vs xs
       | {data=Set (v,x); id} ->
-        Gamma.joins id [v.id; x.id; varclass vs v] ++
+        Gamma.unify_all id [v.id; x.id; varclass vs v] ++
         Gamma.constr v.id v.data.typ ++
         infer vs x
       | {data=Rep (c,x); id} ->
-        Gamma.meet c.id id ++
+        Gamma.unify c.id id ++
         infer vs c ++
         infer vs x
       | {data=Msg (_,xs); id} ->
@@ -1142,9 +1074,8 @@ module Typing = struct
   (* The public interface  *)
   module Type = struct
     type error = {
-      prog : program;
-      exps : Id.Set.t;
-      vals : Tvals.t;
+      sources : Source.t;
+      problem : type_error;
     }
 
     type env = {
@@ -1158,13 +1089,14 @@ module Typing = struct
       printf "Inference done@\n%a%!" pp_program program;
       {program; gamma}
 
-    let errors {program=prog; gamma} =
+    let errors {program={sources}; gamma} =
       Gamma.partition gamma |>
       List.fold ~init:[] ~f:(fun errs g ->
           match Gamma.Group.values g with
-          | Some vals when Tvals.is_bot vals ->
-            {prog; vals; exps = Gamma.Group.elements g} :: errs
-          | _ -> errs)
+          | None -> errs
+          | Some vals -> match Tvals.result vals with
+            | Ok _ -> errs
+            | Error problem -> {sources; problem} :: errs)
 
     let check vars program : error list = errors (infer vars program)
 
@@ -1176,55 +1108,40 @@ module Typing = struct
     let pp_val ppf = function
       | Tsym -> fprintf ppf "sym"
       | Grnd n -> fprintf ppf "i%d" n
+      | Tany -> fprintf ppf "any"
 
     let pp_vals_list =
       pp_print_list ~pp_sep:(fun ppf () ->
           fprintf ppf ",")
         pp_val
 
-    let pp_vals ppf vals =
-      fprintf ppf "%a" pp_vals_list (Tvals.trace vals)
-
-
     let pp_print_underline ppf (off,len) =
       let line = String.init len ~f:(fun i ->
           if i < off then ' ' else '^') in
       fprintf ppf "> %s@\n" line
 
-    let pp_exps ppf (prog,exps) =
-      let src = prog.sources in
-      Set.iter exps ~f:(fun exp ->
-          if (Source.has_loc src exp)
-          then
-            let loc = Source.loc src exp in
-            fprintf ppf "%a:@\n%a@\n" Loc.pp loc
-              (Source.pp_underline src) loc)
+    let pp_exp ppf (src,exp) =
+      let loc = Source.loc src exp in
+      fprintf ppf "%a:@\n%a@\n" Loc.pp loc
+        (Source.pp_underline src) loc
 
-    let pp_error ppf {prog; exps; vals} =
-      match Tvals.error vals with
-      | Some (Unresolved_variable name) ->
-        fprintf ppf "\
-Type error. The following expressions@ are ill-typed because they
-depend on an unresolved free variable `%s':@\n%a@\n"
-          name pp_exps (prog,exps)
-      | Some (Unresolved_function (name,[])) ->
-        fprintf ppf "\
-Type error. The following expressions are ill-typed because they
-depend on an unresolved external call to `%s':@\n%a@\n"
-          name pp_exps (prog,exps)
-      | Some (Unresolved_function (name,sigs)) ->
-        fprintf ppf "\
-Type error. The following expressions are ill-typed because they
-depend on an external call to `%s' that doesn't have an applicable
-signature:@\n%a@\n%a@\n" name pp_exps (prog,exps) pp_sigs sigs
-      | None ->
-        fprintf ppf "\
-Type error. The following group of expressions was used in a context
-that requires all expressions to have the same type, however there is
-no common type that will unify types %a: Offending expressions are:@\n%a@\n"
-          pp_vals vals
-          pp_exps (prog,exps)
-
+    let pp_error ppf {sources; problem} = match problem with
+      | Unresolved_variable (exp,name) ->
+        fprintf ppf "Unresolved variable `%s':@\n%a@\n"
+          name pp_exp (sources,exp)
+      | Unresolved_function (exp,name,[]) ->
+        fprintf ppf "Unresolved function or primitive `%s':@\n%a@\n"
+          name pp_exp (sources,exp)
+      | Unresolved_function (exp,name,sigs) ->
+        fprintf ppf "No matching signature for `%s':@\n%a@\nTried:@\n%a@\n"
+          name pp_exp (sources,exp) pp_sigs sigs
+      | No_unification (x,t1,y,t2) ->
+        fprintf ppf "
+Type error: expected %a got %a. Details follow, the expression:
+%ahas type %a, but it is expected to have type %a after its unification
+with the expression:@\n%a@\n"
+          pp_val t1 pp_val t2
+          pp_exp (sources,x) pp_val t1 pp_val t2 pp_exp (sources,y)
   end
 end
 
