@@ -55,15 +55,20 @@
           (malloc/put-chunk-size ptr n)
           (+ ptr header-size))))))
 
+(defun realloc (ptr len)
+  (declare (external "realloc"))
+  (if (not ptr) (malloc len)
+    (if (not len) (realloc/as-free ptr)
+      (realloc/update-chunk ptr len))))
 
-(defun realloc/update-chunk-size (ptr len)
+(defun realloc/shrink-chunk (ptr len)
   (malloc/put-chunk-size ptr len)
   ptr)
 
 ;; pre: both old-ptr and new-len are not null
 (defun realloc/update-chunk (old-ptr new-len)
   (let ((old-len (malloc/get-chunk-size old-ptr)))
-    (if (>= old-len len) (realloc/update-chunk-size ptr len)
+    (if (>= old-len len) (realloc/shrink-chunk ptr len)
       (let ((new-ptr (malloc new-len)))
         (when new-ptr
           (memcpy new-ptr old-ptr old-len)
@@ -74,11 +79,6 @@
   (free ptr)
   *malloc-zero-sentinel*)
 
-(defun realloc (ptr len)
-  (declare (external "realloc"))
-  (if (not ptr) (malloc len)
-    (if (not len) (realloc/as-free ptr)
-      (realloc/update-chunk ptr len))))
 
 ;; in our simplistic malloc implementation, free is just a nop
 (defun free (p)
