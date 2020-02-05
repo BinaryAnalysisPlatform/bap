@@ -45,9 +45,9 @@ module Documentation = struct
     match Main.run proj print with
     | Normal, _ -> ()
     | Exn e, _ ->
-       eprintf "Failed to generate documentation: %s\n"
-         (Primus.Exn.to_string e);
-       exit 1
+      eprintf "Failed to generate documentation: %s\n"
+        (Primus.Exn.to_string e);
+      exit 1
 end
 
 module Signals(Machine : Primus.Machine.S) = struct
@@ -171,6 +171,49 @@ module Redirection = struct
   let convert = Config.converter parse print ("none","none")
 end
 
+module Typechecker(Machine : Primus.Machine.S) = struct
+  open Machine.Syntax
+  module Lisp = Primus.Lisp.Make(Machine)
+  module Env = Primus.Env.Make(Machine)
+
+  let signature_of_sub sub =
+    let module Lisp = Primus.Lisp.Type.Spec in
+    let lisp_type_of_arg arg = match Var.typ (Arg.lhs arg) with
+      | Type.Imm 1 -> Lisp.bool
+      | Type.Imm n -> Lisp.word n
+      | Type.Unk | Type.Mem _ -> Lisp.any in
+    if Term.length arg_t sub = 0
+    then Lisp.(all any @-> any)
+    else Term.enum ~rev:true arg_t sub |>
+         Seq.fold ~init:([],Lisp.any) ~f:(fun (args,ret) arg ->
+             match Arg.intent arg with
+             | Some Out -> args, lisp_type_of_arg arg
+             | _ -> lisp_type_of_arg arg :: args,ret) |> fun (args,ret) ->
+         Lisp.(tuple args @-> ret)
+
+  let signatures_of_subs prog =
+    Term.enum sub_t prog |>
+    Seq.map ~f:(fun s -> Sub.name s, signature_of_sub s) |>
+    Seq.to_list
+
+  let typecheck () =
+    Machine.get () >>= fun proj ->
+    Lisp.program >>= fun prog ->
+    Env.all >>| fun vars ->
+    Format.eprintf "Starting typechecking@\n%!";
+    let externals = signatures_of_subs (Project.program proj) in
+    let arch = Project.arch proj in
+    let env = Primus.Lisp.Type.infer ~externals arch vars prog in
+    match Primus.Lisp.Type.errors env with
+    | [] -> info "The Lisp Machine program is well-typed"
+    | xs ->
+      warning "The Lisp Machine program is ill-typed";
+      List.iter xs ~f:(eprintf "%a@\n" Primus.Lisp.Type.pp_error)
+
+  let init () =
+    Primus.Machine.init >>> typecheck
+end
+
 let () =
   Config.manpage [
     `S "DESCRIPTION";
@@ -214,6 +257,7 @@ let () =
       let paths = [Filename.current_dir_name] @ !libs @ [Lisp_config.library] in
       let features = "init" :: !features in
       Primus.Machine.add_component (module LispCore);
+      Primus.Machine.add_component (module Typechecker);
       Channels.init !redirects;
       Primitives.init ();
       load_lisp_program !dump paths features)
