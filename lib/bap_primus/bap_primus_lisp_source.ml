@@ -44,6 +44,8 @@ let empty = {
   rclass = Id.Map.empty;
 }
 
+let is_empty {lastid} = Id.equal Id.null lastid
+
 let nextid p = {
   p with lastid = Id.next p.lastid
 }

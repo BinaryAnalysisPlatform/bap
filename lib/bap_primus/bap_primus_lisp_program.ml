@@ -44,6 +44,16 @@ let empty = {
   consts=[];
 }
 
+let merge p1 p2 =
+  let p1,p2 = if Source.is_empty p1.sources then
+      p1,p2 else
+      p2,p1 in {
+    p2 with
+    sigs = p1.sigs @ p2.sigs;
+    codes = p1.codes @ p2.codes;
+  }
+
+
 type 'a item = ([`Read | `Set_and_create ], t, 'a Def.t list) Fieldslib.Field.t_with_perm
 
 module Items = struct

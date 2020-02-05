@@ -548,7 +548,7 @@ module Make(Machine : Machine) = struct
 
   let link_program program =
     Machine.Local.get state >>= fun s ->
-    let program = copy_primitives s.program program in
+    let program = Lisp.Program.merge s.program program in
     Machine.Local.put state {s with program} >>= fun () ->
     link_features ()
 
@@ -570,17 +570,17 @@ module Make(Machine : Machine) = struct
     Machine.gets Project.arch >>= fun arch ->
     let specialize = List.map ~f:(fun p -> p arch) in
     let name = Bap_primus_observation.name obs in
-    let unit = Type 1 in
-    let default_types = Lisp.Type.signature [] ~rest:Any unit in
+    Format.eprintf "adding signal %S@\n%!" name;
+    let default_types = Lisp.Type.signature [] ~rest:Any Any in
     let types = match params with
       | None ->
         default_types
       | Some (`All t) ->
-        Lisp.Type.signature [] ~rest:(t arch) unit
+        Lisp.Type.signature [] ~rest:(t arch) Any
       | Some (`Tuple ts) ->
-        Lisp.Type.signature (specialize ts) unit
+        Lisp.Type.signature (specialize ts) Any
       | Some (`Gen (ts,t)) ->
-        Lisp.Type.signature (specialize ts) ~rest:(t arch) unit in
+        Lisp.Type.signature (specialize ts) ~rest:(t arch) Any in
     let r = Lisp.Def.Signal.create ~types ~docs:doc name in
     Machine.Local.update state ~f:(fun s -> {
           s with program = Lisp.Program.add s.program signal r
