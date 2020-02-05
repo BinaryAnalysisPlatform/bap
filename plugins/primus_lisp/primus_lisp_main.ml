@@ -200,7 +200,6 @@ module Typechecker(Machine : Primus.Machine.S) = struct
     Machine.get () >>= fun proj ->
     Lisp.program >>= fun prog ->
     Env.all >>| fun vars ->
-    Format.eprintf "Starting typechecking@\n%!";
     let externals = signatures_of_subs (Project.program proj) in
     let arch = Project.arch proj in
     let env = Primus.Lisp.Type.infer ~externals arch vars prog in

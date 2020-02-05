@@ -570,7 +570,6 @@ module Make(Machine : Machine) = struct
     Machine.gets Project.arch >>= fun arch ->
     let specialize = List.map ~f:(fun p -> p arch) in
     let name = Bap_primus_observation.name obs in
-    Format.eprintf "adding signal %S@\n%!" name;
     let default_types = Lisp.Type.signature [] ~rest:Any Any in
     let types = match params with
       | None ->
