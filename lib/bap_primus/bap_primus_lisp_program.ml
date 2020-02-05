@@ -434,6 +434,8 @@ module Typing = struct
   type type_error =
     | Unresolved_variable of Id.t * string
     | Unresolved_function of Id.t * string * signature list
+    | Unresolved_signal of Id.t * string * signature option
+    | Unresolved_parameter of Id.t * string
     | No_unification of Id.t * tval * Id.t * tval
   [@@deriving compare, sexp_of]
 
@@ -781,6 +783,11 @@ module Typing = struct
           fprintf ppf "ill-types(unresolve-variable %s)" v
         | Error (Unresolved_function (_,s,_)) ->
           fprintf ppf "ill-types(unresolve-function %s)" s
+        | Error (Unresolved_signal (_,s,_)) ->
+          fprintf ppf "ill-typed(unresolved-signal %s)" s
+        | Error (Unresolved_parameter (_,s)) ->
+          fprintf ppf "ill-typed(unresolved-parameter %s)" s
+
 
     let pp ppf {vars; vals} =
       Map.iteri (join_vars vars) ~f:(fun ~key:u ~data:xs ->
@@ -792,62 +799,6 @@ module Typing = struct
 
   end
 
-  (* module Gamma = struct
-   *   include Gamma'
-   *
-   *   let pp_ground ppf = function
-   *     | Any -> fprintf ppf "T"
-   *     | Symbol -> fprintf ppf "S"
-   *     | Name n -> fprintf ppf "%s" n
-   *     | Type t -> fprintf ppf "%d" t
-   *
-   *   let constr x t g =
-   *     let g' = constr x t g in
-   *     printf "%a@\nconstr %a %a =>@\n%a@\n"
-   *       pp g
-   *       Id.pp x pp_ground t
-   *       pp g';
-   *     g'
-   *
-   *   let pp_ids = pp_print_list ~pp_sep:(fun ppf () ->
-   *       fprintf ppf ",") Id.pp
-   *
-   *   let unify x y g =
-   *     let g' = unify x y g in
-   *     printf "%a@\nmeet %a %a =>@\n%a@\n"
-   *       pp g
-   *       Id.pp x Id.pp y
-   *       pp g';
-   *     g'
-   *
-   *
-   *   let unify_all x xs g =
-   *     let g' = unify_all x xs g in
-   *     printf "%a@\nmeets %a =>@\n%a@\n"
-   *       pp g
-   *       pp_ids (x::xs)
-   *       pp g';
-   *     g'
-   *
-   *   let merge g1 g2 =
-   *     let g' = merge g1 g2 in
-   *     printf
-   *       "Merging@\n<<<<<<<<<<<<<<<@\n%a@\n===============@\n%a@\n>>>>>>>>>>>>>>>@\n%a@\n"
-   *       pp g1 pp g2 pp g';
-   *     g'
-   *
-   *   let widen x g =
-   *     let g' = widen x g in
-   *     printf "%a@\nwiden %a =>@\n%a@\n"
-   *       pp g
-   *       Id.pp x
-   *       pp g';
-   *     g'
-   *
-   * end *)
-
-
-
   type t = {
     ctxt : Lisp.Context.t;
     globs : int String.Map.t;
@@ -855,7 +806,6 @@ module Typing = struct
     funcs : Def.func Def.t list;
     paras : String.Set.t;
   }
-
 
   let pp_args ppf args =
     pp_print_list Lisp.Type.pp ppf args
@@ -939,16 +889,13 @@ module Typing = struct
 
 
   let apply glob id name args gamma =
-    printf "applying a signature for %s@\n%!" name;
     let sigs = signatures glob id gamma name in
     List.filter_map sigs ~f:(fun s ->
         apply_signature id args gamma s) |>
     List.hd |> function
     | None ->
       Gamma.fail id (Unresolved_function (id, name,sigs)) gamma
-    | Some gamma ->
-      printf "applied a signature for %s@\n%!" name;
-      gamma
+    | Some gamma -> gamma
 
   let last xs = match List.rev xs with
     | {id} :: _ -> id
@@ -962,6 +909,16 @@ module Typing = struct
       | None ->
         if Set.mem paras name then gamma
         else Gamma.fail var.id (Unresolved_variable (var.id,name)) gamma
+
+  let is_special var =
+    String.is_prefix ~prefix:"*" var &&
+    String.is_suffix ~suffix:"*" var
+
+  let constr_special {paras} var gamma =
+    let name = var.data.exp in
+    if is_special name && not (Set.mem paras name)
+    then Gamma.fail var.id (Unresolved_parameter (var.id,name)) gamma
+    else gamma
 
   let push vars {data; id} =
     Map.set vars ~key:data.exp ~data:id
@@ -999,6 +956,7 @@ module Typing = struct
         infer vs y ++
         infer vs z
       | {data=Let (v,x,y); id} ->
+        constr_special glob v ++
         Gamma.unify y.id id ++
         Gamma.unify x.id v.id ++
         infer (push vs v) y ++
@@ -1069,20 +1027,35 @@ module Typing = struct
 
   let gamma_equal g1 g2 = Gamma.compare g1 g2 = 0
 
-  let applicable_defs {context=global; defs} =
-    List.filter defs ~f:(fun def ->
+  let applicable global =
+    List.filter ~f:(fun def ->
         match Lisp.Attribute.Set.get
                 (Def.attributes def) Lisp.Context.t with
         | None -> true
         | Some def -> Lisp.Context.(global <= def))
 
-  let check_methods glob mets gamma =
-    List.fold mets ~init:gamma ~f:(fun gamma met ->
-        let args = Def.Meth.args met in
-        let vars = List.fold args ~init:String.Map.empty ~f:push in
-        let gamma = List.fold args ~init:gamma ~f:(fun gamma v ->
-            Gamma.constr v.id v.data.typ gamma) in
-        infer_ast glob vars (Def.Meth.body met) gamma)
+  let find_signal (sigs : Def.signal Def.t list) name =
+    List.find sigs ~f:(fun s -> String.equal (Def.name s) name)
+
+  let check_methods glob {context; mets; sigs} g =
+    applicable context mets |>
+    List.fold ~init:g ~f:(fun g met ->
+        let name = Def.name met in
+        match find_signal sigs name with
+        | None ->
+          Gamma.fail met.id (Unresolved_signal (met.id,name,None)) g
+        | Some s ->
+          let args = Def.Meth.args met in
+          let pars = Def.Signal.signature s in
+          match apply_signature met.id args g pars with
+          | None ->
+            let problem = Unresolved_signal (met.id,name,Some pars) in
+            Gamma.fail met.id problem g
+          | Some g ->
+            let vars = List.fold args ~init:String.Map.empty ~f:push in
+            let g = List.fold args ~init:g ~f:(fun g v ->
+                Gamma.constr v.id v.data.typ g) in
+            infer_ast glob vars (Def.Meth.body met) g)
 
   let infer externals vars p : Gamma.t =
     let glob = {
@@ -1092,14 +1065,14 @@ module Typing = struct
       funcs = p.defs;
       paras = make_paras p;
     } in
-    let g = Callgraph.build (applicable_defs p) in
+    let g = Callgraph.build (applicable p.context p.defs) in
     let init = Solution.create Callgraph.Node.Map.empty Gamma.empty in
     let equal = gamma_equal in
     let fp =
       Graphlib.fixpoint (module Callgraph) ~rev:true ~start:Exit
         ~equal ~merge:Gamma.merge ~init ~f:(transfer glob) g in
     let g = Solution.get fp Entry in
-    check_methods glob p.mets g
+    check_methods glob p g
 
   (* The public interface  *)
   module Type = struct
@@ -1116,7 +1089,6 @@ module Typing = struct
     let infer ?(externals=[]) vars program =
       let program = Reindex.program program in
       let gamma = infer externals vars program in
-      printf "Inference done@\n%a%!" pp_program program;
       {program; gamma}
 
     let errors {program={sources}; gamma} =
@@ -1132,8 +1104,9 @@ module Typing = struct
 
     let pp_env _ _ = ()
 
-    let pp_sigs _ _ = ()
-
+    let pp_sigs ppf sigs =
+      List.iteri sigs ~f:(fun i s ->
+          fprintf ppf "%d: %a" (i+1) pp_signature s)
 
     let pp_val ppf = function
       | Tsym -> fprintf ppf "sym"
@@ -1165,6 +1138,16 @@ module Typing = struct
       | Unresolved_function (exp,name,sigs) ->
         fprintf ppf "No matching signature for `%s':@\n%a@\nTried:@\n%a@\n"
           name pp_exp (sources,exp) pp_sigs sigs
+      | Unresolved_signal (exp,name,None) ->
+        fprintf ppf "Unresolved signal for method `%s':@\n%a\n"
+          name pp_exp (sources,exp)
+      | Unresolved_signal (exp,name,Some signature) ->
+        fprintf ppf "Method `%s' at@\n%adoesn't match the signal signature `%a'"
+          name pp_exp (sources,exp) pp_signature signature
+      | Unresolved_parameter (exp,name) ->
+        fprintf ppf "The variable `%s' is treated as parameter, \
+                     but there is no such parameter:@\n%a"
+          name pp_exp (sources,exp)
       | No_unification (x,t1,y,t2) ->
         fprintf ppf "
 Type error: expected %a got %a. Details follow, the expression:
