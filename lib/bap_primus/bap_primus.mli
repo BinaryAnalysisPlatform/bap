@@ -2563,9 +2563,9 @@ ident ::= ?any atom that is not recognized as a <word>?
 
 
 
-         *)
+        *)
         val infer : ?externals:(string * signature) list -> Arch.t ->
-                    Var.t seq -> program -> env
+          Var.t seq -> program -> env
 
         val errors : env -> error list
 
@@ -2694,7 +2694,7 @@ ident ::= ?any atom that is not recognized as a <word>?
             @param doc optional documentation string
         *)
         val signal :
-          ?params:Type.parameters ->
+          ?params:[< Type.parameters] ->
           ?doc:string ->
           'a observation ->
           ('a -> value list Machine.t) -> unit Machine.t

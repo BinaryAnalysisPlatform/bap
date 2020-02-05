@@ -107,7 +107,7 @@ module Make (Machine : Machine) : sig
   val define : ?types:Type.signature -> ?docs:string -> string -> closure -> unit Machine.t
 
   val signal :
-    ?params:Type.parameters ->
+    ?params:[< Type.parameters] ->
     ?doc:string ->
     'a observation ->
     ('a -> value list Machine.t) -> unit Machine.t

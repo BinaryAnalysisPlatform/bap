@@ -702,6 +702,8 @@ module Typing = struct
               | Some s, Some t -> set_val u (Tvals.meet x s t) g
             else g)
 
+
+
     let merge g1 g2 =
       let g = {
         vars = Map.merge g1.vars g2.vars ~f:(fun ~key:_ -> function
@@ -709,7 +711,7 @@ module Typing = struct
             | `Both (u,v) when Tvar.equal u v -> Some u
             | `Both _ -> None);
         vals = Map.merge_skewed g1.vals g2.vals ~combine:(fun ~key:_ ->
-            Tvals.meet Id.null); (* todo: find a better origin *)
+            Tvals.meet Id.null);
       } in
       let g = copy g1 g2 g in
       let g = copy g2 g1 g in
@@ -809,6 +811,7 @@ module Typing = struct
 
   let pp_args ppf args =
     pp_print_list Lisp.Type.pp ppf args
+      ~pp_sep:(fun ppf () -> pp_print_char ppf ' ')
 
   let pp_signature ppf {args; rest; ret} =
     fprintf ppf "@[(%a" pp_args args;
@@ -834,10 +837,11 @@ module Typing = struct
     | Any -> Gamma.widen appid g
     | _ -> Gamma.constr appid ret g
 
-  let apply_signature appid ts g {args; rest; ret} =
+  let apply_signature ?(allow_partial=false) appid ts g {args; rest; ret} =
     let rec apply g ts ns =
       match ts,ns with
       | ts,[] -> Some g,ts
+      | [],_ when allow_partial -> Some g, ts
       | [],_ -> None,[]
       | t :: ts, n :: ns -> apply (Gamma.constr t.id n g) ts ns in
     match apply g ts args with
@@ -1047,7 +1051,7 @@ module Typing = struct
         | Some s ->
           let args = Def.Meth.args met in
           let pars = Def.Signal.signature s in
-          match apply_signature met.id args g pars with
+          match apply_signature ~allow_partial:true met.id args g pars with
           | None ->
             let problem = Unresolved_signal (met.id,name,Some pars) in
             Gamma.fail met.id problem g
@@ -1102,8 +1106,6 @@ module Typing = struct
 
     let check vars program : error list = errors (infer vars program)
 
-    let pp_env _ _ = ()
-
     let pp_sigs ppf sigs =
       List.iteri sigs ~f:(fun i s ->
           fprintf ppf "%d: %a" (i+1) pp_signature s)
@@ -1142,8 +1144,10 @@ module Typing = struct
         fprintf ppf "Unresolved signal for method `%s':@\n%a\n"
           name pp_exp (sources,exp)
       | Unresolved_signal (exp,name,Some signature) ->
-        fprintf ppf "Method `%s' at@\n%adoesn't match the signal signature `%a'"
-          name pp_exp (sources,exp) pp_signature signature
+        fprintf ppf "
+The signal `%s' has signature `%a'. This signature doesn't match with
+the inferred type of the method:@\n%a"
+          name pp_signature signature pp_exp (sources,exp)
       | Unresolved_parameter (exp,name) ->
         fprintf ppf "The variable `%s' is treated as parameter, \
                      but there is no such parameter:@\n%a"

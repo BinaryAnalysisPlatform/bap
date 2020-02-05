@@ -36,7 +36,6 @@ module Type : sig
   val infer : ?externals:(string * signature) list -> Var.t seq -> program -> env
   val check : Var.t seq -> program -> error list
   val errors : env -> error list
-  val pp_env : Format.formatter -> env -> unit
   val pp_error : Format.formatter -> error -> unit
 end
 

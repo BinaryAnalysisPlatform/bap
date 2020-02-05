@@ -179,8 +179,10 @@ module Signals(Machine : Primus.Machine.S) = struct
   let doc = "(taint-finalize T L) is emitted when the taint T is finilized
      while still live if L is true or dead if T is false."
 
+  let params = Primus.Lisp.Type.Spec.(tuple [Taint.Object.t; bool])
+
   let init () =
-    Lisp.signal ~doc Taint.Gc.taint_finalize @@ fun (t,live) ->
+    Lisp.signal ~params ~doc Taint.Gc.taint_finalize @@ fun (t,live) ->
     Machine.List.all [
       Object.to_value t;
       Value.of_bool live;
