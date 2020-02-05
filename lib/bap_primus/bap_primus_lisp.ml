@@ -38,7 +38,6 @@ type state = {
   width : int;
   env : bindings;
   cur : Id.t;
-  reflections : (string * string) list;
 }
 
 let inspect {env} = sexp_of_bindings env
@@ -57,7 +56,6 @@ let state = Bap_primus_state.declare ~inspect
          cur = Id.null;
          program = Lisp.Program.empty;
          width = width_of_ctxt proj;
-         reflections = [];
        })
 
 
@@ -568,10 +566,25 @@ module Make(Machine : Machine) = struct
     Lisp.Def.Closure.create ?types ?docs name body |>
     link_primitive
 
-  let signal ?params:_ ?(doc="undocumented") obs proj =
+  let signal ?params ?(doc="undocumented") obs proj =
+    Machine.gets Project.arch >>= fun arch ->
+    let specialize = List.map ~f:(fun p -> p arch) in
     let name = Bap_primus_observation.name obs in
+    let unit = Type 1 in
+    let default_types = Lisp.Type.signature [] ~rest:Any unit in
+    let types = match params with
+      | None ->
+        default_types
+      | Some (`All t) ->
+        Lisp.Type.signature [] ~rest:(t arch) unit
+      | Some (`Tuple ts) ->
+        Lisp.Type.signature (specialize ts) unit
+      | Some (`Gen (ts,t)) ->
+        Lisp.Type.signature (specialize ts) ~rest:(t arch) unit in
+    let r = Lisp.Def.Signal.create ~types ~docs:doc name in
     Machine.Local.update state ~f:(fun s -> {
-          s with reflections = (name,doc) :: s.reflections}) >>= fun () ->
+          s with program = Lisp.Program.add s.program signal r
+        }) >>= fun () ->
     Machine.Observation.observe obs (fun x ->
         proj x >>= Self.eval_signal name)
 
@@ -716,7 +729,7 @@ module Doc = struct
         Lisp.Def.name x, Lisp.Def.docs x) |> normalize
 
 
-  let index p signals = Lisp.Program.Items.[
+  let index p = Lisp.Program.Items.[
       "Macros", describe p macro;
       "Substitutions", describe p subst;
       "Constants", describe p const;
@@ -724,13 +737,13 @@ module Doc = struct
       "Methods", describe p meth;
       "Parameters", describe p para;
       "Primitives", describe p primitive;
-      "Signals", normalize signals;
+      "Signals", describe p signal;
     ]
 
   module Make(Machine : Machine) = struct
     open Machine.Syntax
     let generate_index : index Machine.t =
       Machine.Local.get state >>| fun s ->
-      index s.program s.reflections
+      index s.program
   end
 end

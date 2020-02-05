@@ -26,6 +26,7 @@ type t = {
   defs : Def.func Def.t list;
   mets : Def.meth Def.t list;
   pars : Def.para Def.t list;
+  sigs : Def.signal Def.t list;
 } [@@deriving fields]
 
 type program = t
@@ -37,6 +38,7 @@ let empty = {
   defs = [];
   mets = [];
   pars = [];
+  sigs = [];
   macros=[];
   substs=[];
   consts=[];
@@ -52,6 +54,7 @@ module Items = struct
   let meth = Fields.mets
   let para = Fields.pars
   let primitive = Fields.codes
+  let signal = Fields.sigs
 end
 
 let add p (fld : 'a item) x =

@@ -26,6 +26,7 @@ module Items : sig
   val meth  : Def.meth  item
   val para  : Def.para item
   val primitive  : Def.prim item
+  val signal : Def.signal item
 end
 
 module Type : sig
