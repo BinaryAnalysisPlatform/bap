@@ -405,7 +405,7 @@ module Gc = struct
 
     let init () = Machine.sequence Primus.Interpreter.[
         leave_blk >>> main;
-        Primus.Machine.finished >>> finalize;
+        Primus.Interpreter.halting >>> finalize;
       ]
 
 
