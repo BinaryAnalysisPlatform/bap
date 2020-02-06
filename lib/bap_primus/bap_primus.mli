@@ -8,37 +8,41 @@ open Bap_strings.Std
 module Std : sig
   (** Primus - The Microexecution Framework.
 
-
-      Primus is a microexecution framework that can be used to build
+      Primus is a microexecution framework that can be used to implement
       CPU and full system emulators, symbolic executers, static
       fuzzers, policy checkers, tracers, quickcheck-like test suites,
       etc.
 
-      The underlying idea is quite simple - Primus interprets a lifted
-      program. The interpreter provides a set of extension points
-      through which it is possible to observe what is happening inside
-      the interpreter, and even to change the interpreter
-      behavior. This extension points are called "observations" in
-      Primus parlance. A simple publish/subscriber architecture is
-      used to watch for the interpreter events, where subscribers are
-      allowed to arbitrary change the interpreter state.
+      Primus is an extensible non-deterministic interpreter of BAP IR.
+      Primus provides a set of extension points through which it is
+      possible to track what it interpreter is doing, examine its
+      state, and even change the semantics of operatons (to a limited
+      extent). These extension points are called "observations" in
+      Primus parlance. We user a simple publish/subscriber
+      architecture, and subscriber's code is run in Primus monad that
+      permits arbitrary mutation of the interpreter state.
 
-      A novel idea is that the interpreter is non-deterministic
-      in the same sense as a non-deterministic Turing machine. That
-      means that any computation may have more than one result. Every
-      time there is a non-determinism in the computation the machine
-      state is cloned. Different scheduling policies mixed with
-      different non-deterministic strategies provide an analyst a vast
-      selection of avenues to investigate.
+      Primus implements a non-deterministic compuation model (here
+      non-deterministic is used in a sense of the non-deterministic
+      Turning Machine, when on each executing step machine can have
+      more than one outcome). Two non-deterministic operations are
+      provided: [fork] that clones current computations into two
+      identical computations and [switch] that switches between
+      computations. Other than these two operators, non-determinism is
+      not observable as every thread of execution (called `machine' in
+      our parlance) sees a totally deterministic word.
 
-      Primus is build around an idea of a component base linearly
-      extensible interpreter. That means, that an analysis can be
-      built from basic building blocks, with minimal coupling between
-      them. The central component is the Interpreter itself. It
-      evaluates a program and interacts with three other components:
-      - Linker
-      - Env
-      - Memory
+      Primus is built from components. The core components are:
+      - Env - provides mapping from variables to values
+      - Memory - provides mapping from memory locations to values;
+      - Linker - provides mapping from labels to code;
+      - Lisp - enables Lisp-like DSL.
+
+
+      A new component could be added to Primus to extend its
+      behavior. A component's [init] function is evaluated when
+      Primus starts and it usually registers handlers for
+      observations.
 
       The Linker is responsible for linking code into the program
       abstraction. The [Env] component defines the environment
@@ -467,11 +471,8 @@ module Std : sig
           into an arbitrary [Monad].  *)
       module Make(M : Monad.S) : S with type 'a m := 'a M.t
 
-
-
       (** Primus Entry Point.  *)
       module Main(M : S) : sig
-
         (** [run ?envp ?args proj] returns a computation that will
             run a program represented with the [proj] data structure.
 
@@ -491,8 +492,19 @@ module Std : sig
           (exit_status * project) M.m
       end
 
-      (** [add_component comp] registers a machine component in the
-          Primus Framework.  *)
+      (** [add_component comp] registers the machine component [comp] in the
+          Primus Framework.
+          The component's [init] function will be run every time the
+          Machine compuation is run. After all components are
+          initialized, the [init] observation is made.
+
+          The components shall not access the interpreter in their
+          [init] function. Instead, they should subscribe to
+          observations and/or initialize the machine state via
+          Linker/Memory/Env components.
+
+          See also a more general [register_component] function.
+      *)
       val add_component : component -> unit
     end
 
@@ -1683,25 +1695,20 @@ module Std : sig
 
         {2 Type system}
 
-        A type defines all possible values of an expression. In Primus
-        Lisp, expression values can be only scalar, i.e., machine
-        words of different widths. The width is always specified in
-        the number of bits. A maximum width of a word is equal to the
-        width of the architecture machine word, thus a family of types
-        is dependent on the context of evaluation. (Note, current
-        implementation limits maximum width of the machine word to 64
-        bits). We denote a type of expression with a decimal number,
-        e.g., [(exp : 16)] means that an expression ranges over all 16
-        bit words.
+        Primus Lips has a gradual type system.  A type defines all
+        possible values of an expression. In Primus Lisp, expression
+        values can be only scalar, i.e., machine words of different
+        widths. The width is always specified in the number of
+        bits. We denote a type of an expression with a decimal number,
+        e.g., [(exp : 16)] means that an expression ranges over all
+        16-bit-wide words.
 
-        An expression can have a polymorphic type [t] that denotes a
-        powerset of all types for the given architecture. For example,
-        for ARMv7, {b t = 32 \/ 31 \/ .. \/ 1 }. Thus a value of any
-        type, is a also a value of type [t].
-
-        Side note -- the type system doesn't include the unit type,
-        i.e., the [0] type. An expression [()] evaluates to the [0:1]
-        value.
+        An expression can have a polymorphic type [any] that means
+        that there are no static guarantees about the term
+        type. Branching expressions in Primus Lisp are relaxed from
+        typing (so the type of the [if] form depends on the
+        condition). In other words, the type of a branching expression
+        is always [any].
 
         {2 Functions and expressions}
 
@@ -2558,8 +2565,15 @@ ident ::= ?any atom that is not recognized as a <word>?
           val (@->) : [< parameters] -> t -> signature
         end
 
+
+        (** [error p] occurs when the typechecker detects an error [p].
+            @since 2.1.0
+        *)
         val error : error observation
 
+
+        (** [errors env] is a list of type errors.
+            [@since 2.1.0] *)
         val errors : env -> error list
 
         val check : Var.t seq -> program -> error list
@@ -2630,10 +2644,10 @@ ident ::= ?any atom that is not recognized as a <word>?
             Machine. Previous program, if any, is discarded. *)
         val link_program : program -> unit Machine.t
 
-
         (** [program] is the current Machine program.  *)
         val program : program Machine.t
 
+        (** [types] returns Primus Lisp typing environment.  *)
         val types : Type.env Machine.t
 
         (** [define ?docs name code] defines a lisp primitive with
