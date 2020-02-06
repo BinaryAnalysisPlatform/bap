@@ -160,7 +160,9 @@ module Std : sig
     module Object : sig
       type t
 
-      (** the Primus Lisp type of objects.  *)
+      (** the Primus Lisp type of objects.
+          [@since 2.1]
+      *)
       val t : Primus.Lisp.Type.t
 
       module Make(Machine : Primus.Machine.S) : sig

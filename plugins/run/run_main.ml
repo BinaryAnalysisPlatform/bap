@@ -74,7 +74,7 @@ end
 open Machine.Syntax
 
 module Main = Primus.Machine.Main(Machine)
-module Interpreter = Primus.Interpreter.Make(Machine)
+module Eval = Primus.Interpreter.Make(Machine)
 module Linker = Primus.Linker.Make(Machine)
 module Env = Primus.Env.Make(Machine)
 module Lisp = Primus.Lisp.Make(Machine)
@@ -158,7 +158,6 @@ let exec x =
          (Primus.Exn.to_string exn);
        Machine.return ())
 
-module Eval = Primus.Interpreter.Make(Machine)
 
 let visited = Primus.Machine.State.declare
     ~uuid:"c6028425-a8c7-48cf-b6d9-57a44ed9a08a"
