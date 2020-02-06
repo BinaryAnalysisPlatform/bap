@@ -1,5 +1,5 @@
 Flag stub_resolver
-  Description: Resolves stubs and relink a program so real functions would be called instead
+  Description: Build Stub Resolver plugin
   Default: false
 
 Library stub_resolver_library_plugin
