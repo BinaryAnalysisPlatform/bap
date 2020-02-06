@@ -92,7 +92,7 @@
     (while (and
             (not (points-to-null p))
             (not found))
-      (set found (strchr s (memory-read p)))
+      (set found (strchr str (cast int (memory-read p))))
       (incr p))
     found))
 

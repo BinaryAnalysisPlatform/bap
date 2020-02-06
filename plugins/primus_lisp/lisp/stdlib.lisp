@@ -2,6 +2,7 @@
 (require atoi)
 (require stdio)
 (require simple-memory-allocator)
+(require types)
 
 (defun getenv (name)
   "finds a value of an environment variable with the given name"
@@ -10,7 +11,7 @@
     (while (and (not (points-to-null p))
                 (/= (strcmp p name) 0))
       (ptr+1 ptr_t p))
-    (if p (strchr p ?=) p)))
+    (if p (strchr p (cast int ?=)) p)))
 
 
 (defun abort ()
