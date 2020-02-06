@@ -80,44 +80,50 @@ module Signals(Machine : Primus.Machine.S) = struct
 
   let call make_pars (name,args) = make_pars name args
 
-  let signal obs kind proj doc =
-    Lisp.signal ~doc obs @@ fun arg ->
+  let signal obs kind proj params doc =
+    Lisp.signal ~params ~doc obs @@ fun arg ->
     Machine.List.all (proj kind arg)
 
-  let init = Machine.sequence Primus.Interpreter.[
-      signal loading value one
-        {|(loading A) is emitted before load from A occurs|};
-      signal loaded (value,value) pair
-        {|(loaded A X) is emitted when X is loaded from A|};
-      signal storing value one
-        {|(storing A) is emitted before store to A occurs|};
-      signal stored (value,value) pair
-        {|(stored A X) is emitted when X is stored to A|};
-      signal read  (var,value) pair
-        {|(read V X) is emitted when X is read from V|};
-      signal written (var,value) pair
-        {|(written V X) is emitted when X is written to V|};
-      signal pc_change word one
-        {|(pc-change PC) is emitted when PC is updated|};
-      signal eval_cond value one
-        {|(eval_cond V) is emitted after evaluating a conditional to V|};
-      signal jumping (value,value) pair
-        {|(jumping C D) is emitted before jump to D occurs under the
+  let init =
+    let module Type = Primus.Lisp.Type.Spec in
+    Machine.sequence Primus.Interpreter.[
+        signal loading value one Type.(one int)
+          {|(loading A) is emitted before load from A occurs|} ;
+        signal loaded (value,value) pair Type.(tuple [int; byte])
+          {|(loaded A X) is emitted when X is loaded from A|} ;
+        signal storing value one Type.(one int)
+          {|(storing A) is emitted before store to A occurs|};
+        signal stored (value,value) pair Type.(tuple [int; byte])
+          {|(stored A X) is emitted when X is stored to A|};
+        signal read  (var,value) pair Type.(tuple [sym; any])
+          {|(read V X) is emitted when X is read from V|};
+        signal written (var,value) pair Type.(tuple [sym; any])
+          {|(written V X) is emitted when X is written to V|};
+        signal pc_change word one Type.(one int)
+          {|(pc-change PC) is emitted when PC is updated|};
+        signal eval_cond value one Type.(one bool)
+          {|(eval_cond V) is emitted after evaluating a conditional to V|};
+        signal jumping (value,value) pair Type.(tuple [bool; int])
+          {|(jumping C D) is emitted before jump to D occurs under the
           condition C|};
-      signal Primus.Linker.Trace.call parameters call
-        {|(call NAME X Y ...) is emitted when a call to a function with the
+        signal Primus.Linker.Trace.call parameters call
+          Type.(one sym // all any)
+          {|(call NAME X Y ...) is emitted when a call to a function with the
           symbolic NAME occurs with the specified list of arguments X,Y,...|};
-      signal Primus.Linker.Trace.return parameters call
-        {|(call-return NAME X Y ... R) is emitted when a call to a function with the
+        signal Primus.Linker.Trace.return parameters call
+          Type.(one sym // all any)
+          {|(call-return NAME X Y ... R) is emitted when a call to a function with the
           symbolic NAME returns with the specified list of arguments
           X,Y,... and return value R.|};
-      signal interrupt int one
-        {|(interrupt N) is emitted when the hardware interrupt N occurs|};
-      Lisp.signal Primus.Machine.init (fun () -> Machine.return [])
-        ~doc:{|(init) occurs when the Primus Machine is initialized|};
-      Lisp.signal Primus.Machine.finished (fun () -> Machine.return [])
-        ~doc:{|(fini) occurs when the Primus Machine is finished|};
-    ]
+        signal interrupt int one Type.(one int)
+          {|(interrupt N) is emitted when the hardware interrupt N occurs|};
+        Lisp.signal Primus.Machine.init (fun () -> Machine.return [])
+          ~doc: {|(init) occurs when the Primus Machine is initialized|}
+          ~params:Type.unit;
+        Lisp.signal Primus.Machine.finished (fun () -> Machine.return [])
+          ~doc:{|(fini) occurs when the Primus Machine is finished|}
+          ~params:Type.unit;
+      ]
 end
 
 let load_lisp_program dump paths features =
@@ -171,46 +177,18 @@ module Redirection = struct
   let convert = Config.converter parse print ("none","none")
 end
 
+
+
 module Typechecker(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
-  module Lisp = Primus.Lisp.Make(Machine)
   module Env = Primus.Env.Make(Machine)
 
-  let signature_of_sub sub =
-    let module Lisp = Primus.Lisp.Type.Spec in
-    let lisp_type_of_arg arg = match Var.typ (Arg.lhs arg) with
-      | Type.Imm 1 -> Lisp.bool
-      | Type.Imm n -> Lisp.word n
-      | Type.Unk | Type.Mem _ -> Lisp.any in
-    if Term.length arg_t sub = 0
-    then Lisp.(all any @-> any)
-    else Term.enum ~rev:true arg_t sub |>
-         Seq.fold ~init:([],Lisp.any) ~f:(fun (args,ret) arg ->
-             match Arg.intent arg with
-             | Some Out -> args, lisp_type_of_arg arg
-             | _ -> lisp_type_of_arg arg :: args,ret) |> fun (args,ret) ->
-         Lisp.(tuple args @-> ret)
-
-  let signatures_of_subs prog =
-    Term.enum sub_t prog |>
-    Seq.map ~f:(fun s -> Sub.name s, signature_of_sub s) |>
-    Seq.to_list
-
-  let typecheck () =
-    Machine.get () >>= fun proj ->
-    Lisp.program >>= fun prog ->
-    Env.all >>| fun vars ->
-    let externals = signatures_of_subs (Project.program proj) in
-    let arch = Project.arch proj in
-    let env = Primus.Lisp.Type.infer ~externals arch vars prog in
-    match Primus.Lisp.Type.errors env with
-    | [] -> info "The Lisp Machine program is well-typed"
-    | xs ->
-      warning "The Lisp Machine program is ill-typed";
-      List.iter xs ~f:(eprintf "%a@\n" Primus.Lisp.Type.pp_error)
+  let report err =
+    Machine.return @@
+    error "%a" Primus.Lisp.Type.pp_error err
 
   let init () =
-    Primus.Machine.init >>> typecheck
+    Primus.Lisp.Type.error >>> report
 end
 
 let () =

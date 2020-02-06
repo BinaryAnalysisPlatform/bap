@@ -35,6 +35,7 @@ type bindings = {
 } [@@deriving sexp_of]
 type state = {
   program : Lisp.Program.t;
+  typeenv : Lisp.Program.Type.env;
   width : int;
   env : bindings;
   cur : Id.t;
@@ -55,6 +56,7 @@ let state = Bap_primus_state.declare ~inspect
          };
          cur = Id.null;
          program = Lisp.Program.empty;
+         typeenv = Lisp.Program.Type.empty;
          width = width_of_ctxt proj;
        })
 
@@ -443,6 +445,65 @@ module Interpreter(Machine : Machine) = struct
           Machine.Local.update state ~f:(Vars.pop frame_size))
 end
 
+let init ?log:_ ?paths:_ _features  =
+  failwith "Lisp library no longer requires initialization"
+
+type primitives = Lisp.Def.primitives
+module type Primitives = Lisp.Def.Primitives
+module Primitive = Lisp.Def.Primitive
+module type Closure = Lisp.Def.Closure
+type closure = Lisp.Def.closure
+type program = Lisp.Program.t
+module Load = Lisp.Parse
+module Type = struct
+  include Lisp.Program.Type
+  type t = arch -> Lisp.Type.t
+  type signature = arch -> Lisp.Type.signature
+
+  type parameters = [
+    | `All of t
+    | `Gen of t list * t
+    | `Tuple of t list
+  ]
+
+
+  let error,notify_error =
+    Bap_primus_observation.provide "lisp-type-error"
+
+  module Spec = struct
+    let any _ = Lisp.Type.any
+    let var s _ = Lisp.Type.var s
+    let sym _ = Lisp.Type.sym
+    let word n _ = Lisp.Type.word n
+    let int arch =
+      Lisp.Type.word (Size.in_bits (Arch.addr_size arch))
+    let bool = word 1
+    let byte = word 8
+    let a : t = var "a"
+    let b : t = var "b"
+    let c : t = var "c"
+    let d : t = var "d"
+
+    let tuple ts = `Tuple ts
+    let unit = tuple []
+    let one t = tuple [t]
+    let all t = `All t
+
+    let (//) : [`Tuple of t list] -> [`All of t] -> parameters =
+      fun (`Tuple ts) (`All t) -> `Gen (ts,t)
+
+    let (@->) (dom : [< parameters]) (cod : t) : signature =
+      let args,rest = match dom with
+        | `All t -> [],Some t
+        | `Tuple ts -> ts,None
+        | `Gen (ts,t) -> ts, Some t in
+      fun arch ->
+        let args = List.map args ~f:(fun t -> t arch) in
+        let cod = cod arch in
+        let rest = Option.map rest ~f:(fun t -> t arch) in
+        Lisp.Type.signature args ?rest cod
+  end
+end
 
 module Make(Machine : Machine) = struct
   open Machine.Syntax
@@ -452,6 +513,53 @@ module Make(Machine : Machine) = struct
   module Value = Bap_primus_value.Make(Machine)
   module Vars = Locals(Machine)
   include Errors(Machine)
+
+
+  module Typechecker = struct
+    module Env = Bap_primus_env.Make(Machine)
+
+    let signature_of_sub sub =
+      let lisp_type_of_arg arg = match Var.typ (Arg.lhs arg) with
+        | Imm 1 -> Type.Spec.bool
+        | Imm n -> Type.Spec.word n
+        | Unk | Mem _ -> Type.Spec.any in
+      if Term.length arg_t sub = 0
+      then Type.Spec.(all any @-> any)
+      else Term.enum ~rev:true arg_t sub |>
+           Seq.fold ~init:([],Type.Spec.any) ~f:(fun (args,ret) arg ->
+               match Arg.intent arg with
+               | Some Out -> args, lisp_type_of_arg arg
+               | _ -> lisp_type_of_arg arg :: args,ret) |> fun (args,ret) ->
+           Type.Spec.(tuple args @-> ret)
+
+    let signatures_of_subs prog =
+      Term.enum sub_t prog |>
+      Seq.map ~f:(fun s -> Sub.name s, signature_of_sub s) |>
+      Seq.to_list
+
+    let invoke_subroutine_signature =
+      "invoke-subroutine", Type.Spec.(one int // all any @-> any)
+
+    let run =
+      Machine.get () >>= fun proj ->
+      Machine.Local.get state >>= fun s ->
+      Env.all >>= fun vars ->
+      let arch = Project.arch proj in
+      let externals =
+        invoke_subroutine_signature ::
+        signatures_of_subs (Project.program proj) |>
+        List.map ~f:(fun (n,s) -> n,s arch) in
+      let typeenv =
+        Lisp.Program.Type.infer ~externals vars s.program in
+      Lisp.Program.Type.errors typeenv |>
+      Machine.List.iter ~f:(fun s ->
+          Machine.Observation.make Type.notify_error s) >>= fun () ->
+      Machine.Local.put state {s with typeenv}
+  end
+
+
+  let typecheck = Typechecker.run
+  let types = Machine.Local.get state >>| fun s -> s.typeenv
 
   let collect_externals s =
     Lisp.Program.get s.program Lisp.Program.Items.func |>
@@ -611,73 +719,6 @@ module Make(Machine : Machine) = struct
   let eval_method = Self.eval_signal
   let eval_fun = Self.eval_lisp
 end
-
-let init ?log:_ ?paths:_ _features  =
-  failwith "Lisp library no longer requires initialization"
-
-type primitives = Lisp.Def.primitives
-module type Primitives = Lisp.Def.Primitives
-module Primitive = Lisp.Def.Primitive
-module type Closure = Lisp.Def.Closure
-type closure = Lisp.Def.closure
-type program = Lisp.Program.t
-module Load = Lisp.Parse
-module Type = struct
-  include Lisp.Program.Type
-  type t = arch -> Lisp.Type.t
-  type signature = arch -> Lisp.Type.signature
-
-  type parameters = [
-    | `All of t
-    | `Gen of t list * t
-    | `Tuple of t list
-  ]
-
-  module Spec = struct
-    let any _ = Lisp.Type.any
-    let var s _ = Lisp.Type.var s
-    let sym _ = Lisp.Type.sym
-    let word n _ = Lisp.Type.word n
-    let int arch =
-      Lisp.Type.word (Size.in_bits (Arch.addr_size arch))
-    let bool = word 1
-    let byte = word 8
-    let a : t = var "a"
-    let b : t = var "b"
-    let c : t = var "c"
-    let d : t = var "d"
-
-    let tuple ts = `Tuple ts
-    let unit = tuple []
-    let one t = tuple [t]
-    let all t = `All t
-
-    let (//) : [`Tuple of t list] -> [`All of t] -> parameters =
-      fun (`Tuple ts) (`All t) -> `Gen (ts,t)
-
-    let (@->) (dom : [< parameters]) (cod : t) : signature =
-      let args,rest = match dom with
-        | `All t -> [],Some t
-        | `Tuple ts -> ts,None
-        | `Gen (ts,t) -> ts, Some t in
-      fun arch ->
-        let args = List.map args ~f:(fun t -> t arch) in
-        let cod = cod arch in
-        let rest = Option.map rest ~f:(fun t -> t arch) in
-        Lisp.Type.signature args ?rest cod
-  end
-
-
-  let invoke_subroutine_signature =
-    "invoke-subroutine", Spec.(one int // all any @-> any)
-
-  let infer ?(externals=[]) arch globs prog =
-    let externals = invoke_subroutine_signature :: externals |>
-                    List.map ~f:(fun (n,s) -> n,s arch) in
-    infer ~externals globs prog
-
-end
-
 
 module Doc = struct
   module type Element = sig

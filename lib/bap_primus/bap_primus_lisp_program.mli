@@ -33,6 +33,7 @@ end
 module Type : sig
   type env
   type error
+  val empty : env
   val infer : ?externals:(string * signature) list -> Var.t seq -> program -> env
   val check : Var.t seq -> program -> error list
   val errors : env -> error list

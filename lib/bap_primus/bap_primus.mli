@@ -2558,19 +2558,12 @@ ident ::= ?any atom that is not recognized as a <word>?
           val (@->) : [< parameters] -> t -> signature
         end
 
-
-        (** [infer ?externals arch globs program] infers typing environment.
-
-
-
-        *)
-        val infer : ?externals:(string * signature) list -> Arch.t ->
-          Var.t seq -> program -> env
+        val error : error observation
 
         val errors : env -> error list
 
         val check : Var.t seq -> program -> error list
-        [@@deprecated "[since 2020-02] use [infer] and [errors] instead"]
+        [@@deprecated "[since 2020-02] use [Make(Machine).types] [errors] instead"]
 
 
         (** [pp_error ppf err] prints a description of the type error
@@ -2640,6 +2633,8 @@ ident ::= ?any atom that is not recognized as a <word>?
 
         (** [program] is the current Machine program.  *)
         val program : program Machine.t
+
+        val types : Type.env Machine.t
 
         (** [define ?docs name code] defines a lisp primitive with
             the given [name] and an optional documentation string

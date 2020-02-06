@@ -68,8 +68,8 @@ module Type : sig
     val (@->) : [< parameters] -> t -> signature
   end
 
-  val infer : ?externals:(string * signature) list ->
-    Arch.t -> Var.t seq -> program -> env
+  val error : error observation
+
   val errors : env -> error list
   val check : Var.t seq -> program -> error list
   val pp_error : Format.formatter -> error -> unit
@@ -103,6 +103,10 @@ module Make (Machine : Machine) : sig
   val link_program : program -> unit Machine.t
 
   val program : program Machine.t
+
+  val typecheck : unit Machine.t
+
+  val types : Type.env Machine.t
 
   val define : ?types:Type.signature -> ?docs:string -> string -> closure -> unit Machine.t
 

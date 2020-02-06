@@ -703,16 +703,19 @@ module Typing = struct
             else g)
 
 
-
     let merge g1 g2 =
+      (* first we merge parts that do not conflict *)
       let g = {
         vars = Map.merge g1.vars g2.vars ~f:(fun ~key:_ -> function
             | `Left u | `Right u -> Some u
             | `Both (u,v) when Tvar.equal u v -> Some u
             | `Both _ -> None);
-        vals = Map.merge_skewed g1.vals g2.vals ~combine:(fun ~key:_ ->
-            Tvals.meet Id.null);
+        vals = Map.merge g1.vals g2.vals ~f:(fun ~key:_ -> function
+            | `Left t | `Right t -> Some t
+            | `Both (u,v) when Tvals.compare u v = 0 -> Some u
+            | `Both _ -> None);
       } in
+      (* then resolve the intersections *)
       let g = copy g1 g2 g in
       let g = copy g2 g1 g in
       g
@@ -1088,6 +1091,11 @@ module Typing = struct
     type env = {
       program : program;
       gamma :    Gamma.t;
+    }
+
+    let empty = {
+      program = empty;
+      gamma = Gamma.empty;
     }
 
     let infer ?(externals=[]) vars program =
