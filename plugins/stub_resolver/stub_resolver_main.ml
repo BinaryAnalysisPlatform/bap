@@ -4,89 +4,70 @@ open Bap_core_theory
 open Bap_knowledge
 include Self ()
 
-module type Resolver = sig
-  val run : Project.t -> tid Tid.Map.t
-end
+let is_section name v =
+  match Value.get Image.section v with
+  | Some x -> String.(x = name)
+  | _ -> false
 
-module Resolver(R : sig
-    val is_stub : sub term -> bool
-    val is_stub_of : sub term -> of_:sub term -> bool
-  end) = struct
+let eval slot exp =
+  let cls = Knowledge.Slot.cls slot in
+  match Knowledge.run cls exp (Toplevel.current ()) with
+  | Ok (v,_) -> Ok (Knowledge.Value.get slot v)
+  | Error conflict -> Error conflict
 
-  let partition prog =
-    let stubs = Seq.fold Term.to_sequence
+let find_aliases (tid : tid) =
+  match eval Theory.Label.aliases (Knowledge.return tid) with
+  | Ok names -> names
+  | Error _ -> Set.empty (module String)
 
-end
-
-
+let section_memory proj sec_name =
+  let collect_addresses addrs (mem,_ )=
+    Memory.foldi mem ~word_size:`r8 ~init:addrs
+      ~f:(fun addr _ acc -> Set.add acc addr) in
+  Memmap.filter (Project.memory proj) ~f:(is_section sec_name) |>
+  Memmap.to_sequence |>
+  Seq.fold ~init:(Set.empty (module Addr)) ~f:collect_addresses
 
 
 module Plt_resolver = struct
 
-  let is_section name v =
-    match Value.get Image.section v with
-    | Some x -> String.(x = name)
-    | _ -> false
-
-  let eval slot exp =
-    let cls = Knowledge.Slot.cls slot in
-    match Knowledge.run cls exp (Toplevel.current ()) with
-    | Ok (v,_) -> Ok (Knowledge.Value.get slot v)
-    | Error conflict -> Error conflict
-
-  let collect_names (tid : tid) =
-    match eval Theory.Label.aliases (Knowledge.return tid) with
-    | Ok names -> names
-    | Error _ -> Set.empty (module String)
-
-  let section_memory proj sec_name =
-    let collect_addresses addrs (mem,_ )=
-      Memory.foldi mem ~word_size:`r8 ~init:addrs
-        ~f:(fun addr _ acc -> Set.add acc addr) in
-    Memmap.filter (Project.memory proj) ~f:(is_section sec_name) |>
-    Memmap.to_sequence |>
-    Seq.fold ~init:(Set.empty (module Addr)) ~f:collect_addresses
-
-  let is_a_plt_stub mem sub =
+  let memory_contains m sub =
     match Term.get_attr sub address with
     | None -> false
-    | Some addr -> Set.mem mem addr
+    | Some addr -> Set.mem m addr
 
-  (* pre: all functions have different names *)
-  let partition plt prog =
-    let add_name tid subs name = Map.set subs name tid in
-    let add_stub stubs stub =
+  (* pre: all functions have different names
+     pre: there aren't any stubs with the same alias *)
+  let partition mem prog =
+    let add_aliases stubs stub =
       let tid = Term.tid stub in
-      Set.fold ~init:stubs (collect_names tid) ~f:(add_name tid) in
-    let add_sub subs sub =
-      add_name (Term.tid sub) subs (Sub.name sub) in
+      Set.fold ~init:stubs (find_aliases tid)
+        ~f:(fun stubs alias -> Map.set stubs alias tid) in
+    let add_sym syms s = Map.set syms (Sub.name s) (Term.tid s) in
+    let names = Map.empty (module String) in
     Term.to_sequence sub_t prog |>
-    Seq.fold ~init:(Map.empty (module String), Map.empty (module String))
-      ~f:(fun (stubs, subs) sub ->
-          if is_a_plt_stub plt sub
-          then add_stub stubs sub, subs
-          else stubs, add_sub subs sub)
+    Seq.fold ~init:(names,names) ~f:(fun (stubs, syms) sub ->
+        if memory_contains mem sub
+        then add_aliases stubs sub, syms
+        else stubs, add_sym syms sub)
 
-  let find_unambiguous_pairs subs stubs =
-    let pairs, duplicates =
-      Map.fold stubs ~init:(Map.empty (module Tid), Set.empty (module Tid))
-        ~f:(fun ~key:name ~data:tid (pairs, duplicates) ->
-            match Map.find subs name with
-            | None -> pairs, duplicates
-            | Some tid' ->
-              match Map.add pairs tid tid' with
-              | `Ok pairs  -> pairs, duplicates
-              | `Duplicate -> pairs, Set.add duplicates tid) in
-    Set.fold duplicates ~init:pairs ~f:Map.remove
+  let find_unambiguous_pairs syms stubs =
+    Map.fold stubs ~init:(Map.empty (module Tid))
+      ~f:(fun ~key:name ~data:tid pairs ->
+          match Map.find syms name with
+          | None -> pairs
+          | Some tid' -> Map.add_multi pairs tid tid') |>
+    Map.filter_map ~f:(function
+        | [tid] -> Some tid
+        | _ -> None)
 
   let run proj =
-    let plt = section_memory proj ".plt" in
-    if Set.is_empty plt
+    let mem = section_memory proj ".plt" in
+    if Set.is_empty mem
     then Map.empty (module Tid)
     else
-      let stubs, subs = partition plt (Project.program proj) in
+      let stubs, subs = partition mem (Project.program proj) in
       find_unambiguous_pairs subs stubs
-
 end
 
 let relink prog links =
@@ -106,24 +87,24 @@ let relink prog links =
             Jmp.with_kind jmp (Call (Call.with_target c (Direct tid')))
   end)#run prog
 
-let relink resolver proj =
-  let module R = (val resolver : Resolver) in
-  let links = R.run proj in
+let run proj =
+  let links = Plt_resolver.run proj in
   if Map.is_empty links then proj
   else
     Project.with_program proj (relink (Project.program proj) links)
-
-let run proj = relink (module Plt_resolver) proj
-
 
 let () =
   let _man = Config.manpage [
       `S "DESCRIPTION";
 
       `P "This plugin provides an abi pass that transforms a program
-          in the following way: for any stub symbol (e.g. a plt entry)
-          it tries to find a symbol with the same name and if a symbol
-          was found, it substitues any call to a stub symbol with a
-          call to the found one."
+          by substituting calls to stubs with calls to real
+          subroutines.";
+
+      `P "Thus, for stubs in .plt section, the correspondence is
+          based on symbols names: if a stub from plt section has the
+          same name as any other subroutine, then all calls to this stub
+          will be replaced with calls to the subroutine."
+
     ] in
   Config.when_ready (fun _ -> Bap_abi.register_pass run)
