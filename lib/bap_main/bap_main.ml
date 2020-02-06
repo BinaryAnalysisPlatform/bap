@@ -467,9 +467,8 @@ module Pre = struct
 
   let plugin_locations =
     let doc = "Adds folder to the list of plugins search paths" in
-    let env = Term.env_info ~doc "BAP_PLUGIN_PATH" in
     Arg.(value & opt_all string [] &
-         info ~env ~doc ["L"; "plugin-path"; "load-path"])
+         info ~doc ["L"; "plugin-path"; "load-path"])
 
   let recipe =
     let doc = "Load the specified recipe" in
