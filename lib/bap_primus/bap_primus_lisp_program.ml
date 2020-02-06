@@ -157,10 +157,10 @@ let pp_callgraph ppf g =
     g
 
 let pp_term pp_exp ppf = function
-  | {data={exp; typ=Any}; id} ->
-    fprintf ppf "@[<v2>[%a %a]@]" Id.pp id pp_exp exp
-  | {data={exp; typ}; id} ->
-    fprintf ppf "@[<v2>[%a<%a> %a]@]" Id.pp id Lisp.Type.pp typ pp_exp exp
+  | {data={exp; typ=Any}} ->
+    fprintf ppf "@[<v2>%a@]" pp_exp exp
+  | {data={exp; typ}} ->
+    fprintf ppf "@[<v2>%a:%a@]" pp_exp exp Lisp.Type.pp typ
 let pp_word = pp_term Int64.pp
 let pp_var = pp_term String.pp
 
@@ -170,8 +170,8 @@ let rec concat_prog p =
       | x -> [x])
 
 module Ast = struct
-  let rec pp ppf {data;id} =
-    fprintf ppf "@[<v2>[%a: %a]@]" pp_exp data Id.pp id
+  let rec pp ppf {data} =
+    fprintf ppf "@[<v2>%a@]" pp_exp data
   and pp_exp ppf = function
     | Int x ->
       pp_word ppf x
@@ -212,11 +212,9 @@ module Ast = struct
 end
 
 let pp_def ppf d =
-  fprintf ppf "@[<2>(defun %s:%a @[<2>(%a)@][%a]@ %a)@]@,"
+  fprintf ppf "@[<2>(defun %s @[<2>(%a)@]@ %a)@]@,"
     (Def.name d)
-    Id.pp d.id
     (pp_print_list ~pp_sep:pp_print_space pp_var) (Def.Func.args d)
-    Id.pp ((Def.Func.body d).id)
     Ast.pp_prog (Def.Func.body d)
 
 let pp_met ppf d =
