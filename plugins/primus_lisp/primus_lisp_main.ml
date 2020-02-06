@@ -177,9 +177,38 @@ module Redirection = struct
   let convert = Config.converter parse print ("none","none")
 end
 
+module TypeErrorSummary(Machine : Primus.Machine.S) = struct
+  open Machine.Syntax
+
+  module Lisp = Primus.Lisp.Make(Machine)
+
+  let init () =
+    Primus.Machine.init >>> fun () ->
+    Lisp.types >>| fun env ->
+    let errors = List.length (Primus.Lisp.Type.errors env) in
+    if errors = 0
+    then Format.printf "Primus Lisp code is well-typed@\n%!"
+    else Format.printf "Primus Lisp code is ill-typed. Found %d error%s.@\n%!"
+        errors (if errors > 1 then "s" else "")
+end
+
+let typecheck proj =
+  let module Machine = struct
+    type 'a m = 'a
+    include Primus.Machine.Make(Monad.Ident)
+  end in
+  let module Main = Primus.Machine.Main(Machine) in
+  let module Lisp = Primus.Lisp.Make(Machine) in
+  Primus.Machine.add_component (module TypeErrorSummary);
+  match Main.run proj @@ Machine.return () with
+  | Normal,_ -> ()
+  | Exn err,_ ->
+    warning "Primus Frameworkd failed to initialize: %s@\n%!"
+      (Primus.Exn.to_string err)
 
 
-module Typechecker(Machine : Primus.Machine.S) = struct
+
+module TypeErrorPrinter(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
   module Env = Primus.Env.Make(Machine)
 
@@ -212,12 +241,18 @@ let () =
   let dump =
     Config.(flag ~doc:"dumps generated AST" "dump") in
 
+  let enable_typecheck =
+    Config.flag "typecheck"
+      ~synonyms:["type-check"]
+      ~doc:"typechecks the program and prints erros if they exist" in
+
   let libs =
     Config.(param (list dir) ~doc:"paths to lisp libraries" "add") in
 
   let features =
     Config.(param (list string) ~doc:"load specified module" "load"
               ~default:["posix"]) in
+
 
   let redirects =
     let doc = sprintf
@@ -228,13 +263,15 @@ let () =
         (String.concat ~sep:" or " Redirection.known_channels) in
     Config.(param (list Redirection.convert) ~doc "channel-redirect") in
 
-  Config.when_ready (fun {Config.get=(!)} ->
-      if !documentation then
+  Config.when_ready (fun {Config.get=(!!)} ->
+      if !!documentation then
         Project.register_pass' ~deps:["api"] ~autorun:true Documentation.print;
-      let paths = [Filename.current_dir_name] @ !libs @ [Lisp_config.library] in
-      let features = "init" :: !features in
+      if !!enable_typecheck then
+        Project.register_pass' ~deps:["api"] ~autorun:true typecheck;
+      let paths = [Filename.current_dir_name] @ !!libs @ [Lisp_config.library] in
+      let features = "init" :: !!features in
       Primus.Machine.add_component (module LispCore);
-      Primus.Machine.add_component (module Typechecker);
-      Channels.init !redirects;
+      Primus.Machine.add_component (module TypeErrorPrinter);
+      Channels.init !!redirects;
       Primitives.init ();
-      load_lisp_program !dump paths features)
+      load_lisp_program !!dump paths features)
