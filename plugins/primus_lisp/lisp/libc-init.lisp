@@ -24,9 +24,10 @@
   (declare (external "__libc_start_main")
            (context (abi "ppc32")))
   (set R2 (+ stack_on_entry 0x7008))
-  (let ((argc (read-word int32_t stack_on_entry))
-        (argv (ptr+1 int32_t stack_on_entry)))
-    (invoke-subroutine (read-word int32_t (+ stinfo 4)) argc argv)))
+  (let ((argc (read-word ptr_t stack_on_entry))
+        (argv (ptr+1 ptr_t stack_on_entry))
+        (main (read-word ptr_t (+ stinfo 4))))
+    (invoke-subroutine main argc argv)))
 
 
 (defun fini ()

@@ -74,7 +74,7 @@ end
 open Machine.Syntax
 
 module Main = Primus.Machine.Main(Machine)
-module Interpreter = Primus.Interpreter.Make(Machine)
+module Eval = Primus.Interpreter.Make(Machine)
 module Linker = Primus.Linker.Make(Machine)
 module Env = Primus.Env.Make(Machine)
 module Lisp = Primus.Lisp.Make(Machine)
@@ -158,7 +158,6 @@ let exec x =
          (Primus.Exn.to_string exn);
        Machine.return ())
 
-module Eval = Primus.Interpreter.Make(Machine)
 
 let visited = Primus.Machine.State.declare
     ~uuid:"c6028425-a8c7-48cf-b6d9-57a44ed9a08a"
@@ -206,30 +205,17 @@ let run need_repeat entries =
           never_returns in
   loop entries
 
-let pp_var ppf v =
-  fprintf ppf "%a" Sexp.pp (Var.sexp_of_t v)
-
-let typecheck =
-  Lisp.program >>= fun prog ->
-  Env.all >>| fun vars ->
-  match Primus.Lisp.Type.check vars prog with
-  | [] -> info "The Lisp Machine program is well-typed"
-  | xs ->
-    warning "The Lisp Machine program is ill-typed";
-    info "The typechecker is broken for now, ignore the message above";
-    List.iter xs ~f:(eprintf "%a@\n" Primus.Lisp.Type.pp_error)
-
-
 let run_all need_repeat envp args proj xs =
-  Main.run ~envp ~args proj
-    (typecheck >>= fun () -> run need_repeat xs)
+  Main.run ~envp ~args proj @@
+  run need_repeat xs
 
 let run_sep envp args proj xs =
-  let s,proj = Main.run ~envp ~args proj typecheck in
-  s,List.fold xs ~init:proj ~f:(fun proj p ->
-      snd (Main.run ~envp ~args proj (exec p >>=
-                                      fun () -> Eval.halt >>=
-                                      never_returns)))
+  List.fold xs ~init:(Primus.Normal,proj) ~f:(fun (_,proj) p ->
+      Main.run ~envp ~args proj @@ begin
+        exec p >>=
+        fun () -> Eval.halt >>=
+        never_returns
+      end)
 
 
 let main {Config.get=(!)} proj =

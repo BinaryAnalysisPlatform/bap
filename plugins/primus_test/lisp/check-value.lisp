@@ -51,7 +51,7 @@
       (check-value/unchecked pc)
       (dict-del 'check-value/required taint))))
 
-(defmethod enter-jmp (cnd dst)
+(defmethod eval-cond (cnd)
   (check-value-clear cnd))
 
 
