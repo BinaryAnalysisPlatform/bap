@@ -1,0 +1,26 @@
+#!/bin/sh
+
+rm -f _oasis
+mv oasis/benchmarks oasis/benchmarks.backup
+mv oasis/piqi oasis/piqi.backup
+mv oasis/common oasis/common.backup
+cp oasis/common.omake oasis/common
+SECTIONS=`ocaml tools/oasis_sections.ml --sections --enable-everything`
+SETUPS=`ocaml tools/collect.ml setup.ml $SECTIONS`
+AB=`ocaml tools/collect.ml files.ab $SECTIONS`
+ocaml tools/cat.ml '"\n# $name\n"' -- $SECTIONS $AB _oasis
+ocaml tools/cat.ml '"\n#1 \"$name\"\n"' -- $SETUPS setup.ml.in setup.ml
+cp oasis/common.backup oasis/common
+cp oasis/benchmarks.backup oasis/benchmarks
+cp oasis/piqi.backup oasis/piqi
+sed -i 's/.*Build$.*//' _oasis
+sed -i 's/.*CCOpt:.*//' _oasis
+sed -i 's/.*CCLib:.*//' _oasis
+
+# call setup twice so that it can capture the AB deps
+for pass in `seq 2`; do
+    oasis setup
+    ocamlfind ocamlopt unix.cmxa setup.ml -o setup.exe
+    rm setup.cmx setup.cmi setup.o
+    ./setup.exe -configure --prefix $(opam config var prefix)
+done

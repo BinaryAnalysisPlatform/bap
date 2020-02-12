@@ -9191,57 +9191,11 @@ module Std : sig
     end
 
   end
-
-  (** Default Logger.
-
-      The logger will capture {!Event.Log} events and print them into
-      the log file, that is located at [$BAP_LOG_DIR/log] or, if
-      [$BAP_LOG_DIR] is undefined, then it is in the
-      [$XDG_STATE_HOME/bap/log] folder, and if this variable is also
-      undefined, then the log will be at [$HOME/.local/stat/bap] or if
-      even $HOME is undefined, then it will be in the system
-      temporary folder under name [bap.log].
-
-      Every time a logger is started the logs in the folder will be
-      rotated. Previous logs will be accessed as [NAME~AGE],
-      where [NAME] is the name of the log file, and [AGE] is the age
-      of the log (in calls to [start] function). For example, if the
-      name is [log], then the previous log will be in the file
-      [log~1].
-
-      The maximum age of the log can be set via environment variable
-      [BAP_BACKLOG] and it defaults to [99], i.e., the oldest log file
-      will have name [log~99].
-  *)
   module Log : sig
-
-    (** Starts event logging.
-
-        A file named [log] is created in the [logdir] folder. If such
-        file already exists in this folder, then the log rotation is
-        initiated - the existing [log] file is renamed to [log~1],
-        [log~1] to [log~2] and so on until there are no more files to
-        rename, or the [log~99] is reached which is discarded
-        (unlinked).
-
-        Events of type [Event.Log.event] are printed to the log
-        file. Events of the [Event.Log.Error] level are also
-        duplicated to the [stderr] output.
-
-        If it wasn't possible to create the destination log file, then
-        all events will be logged into the [stderr] output.
-
-        If [logdir] is not specified then the [XDG_STATE_HOME]
-        variable is looked up in the environment. If it is present,
-        then the logging will be performed in the
-        [$XDG_STATE_HOME/bap]. Otherwise, the logging will be
-        performed in the [$HOME/.local/state/bap] folder, if the
-        [HOME] variable is present in the environment. If [HOME] is
-        not present, then a [bap.log] folder will be created in the
-        system temporary folder and used for logging.
-    *)
     val start : ?logdir:string -> unit -> unit
   end
+  [@@deprecated "[since 2019-11] use Bap_main.init log or Events module"]
+
 
   (**/**)
   module Monad : module type of Legacy.Monad

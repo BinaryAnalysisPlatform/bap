@@ -7,7 +7,7 @@ Library bap_abi
   Path:             lib/bap_abi
   FindlibName:      bap-abi
   CompiledObject:   best
-  BuildDepends:     bap
+  BuildDepends:     bap, core_kernel, ppx_jane
   Modules:          Bap_abi
 
 Library abi_plugin
@@ -15,7 +15,7 @@ Library abi_plugin
   Path:             plugins/abi
   FindlibName:      bap-plugin-abi
   CompiledObject:   best
-  BuildDepends:     bap, bap-abi
+  BuildDepends:     bap, bap-abi, core_kernel
   InternalModules:  Abi_main
   XMETADescription: apply abi information to a project
   XMETAExtraLines:  tags="abi, pass"

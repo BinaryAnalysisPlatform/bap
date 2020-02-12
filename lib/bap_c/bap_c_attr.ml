@@ -69,5 +69,5 @@ module Gnu = struct
     register_attr "malloc" (set Sub.malloc);
     register_attr "noreturn" (set Sub.noreturn);
     register_attr "returns_twice" (set Sub.returns_twice);
-    register_attr "noreturn" (set Sub.nothrow)
+    register_attr "nothrow" (set Sub.nothrow)
 end

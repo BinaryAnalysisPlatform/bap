@@ -45,9 +45,9 @@ module Documentation = struct
     match Main.run proj print with
     | Normal, _ -> ()
     | Exn e, _ ->
-       eprintf "Failed to generate documentation: %s\n"
-         (Primus.Exn.to_string e);
-       exit 1
+      eprintf "Failed to generate documentation: %s\n"
+        (Primus.Exn.to_string e);
+      exit 1
 end
 
 module Signals(Machine : Primus.Machine.S) = struct
@@ -80,44 +80,50 @@ module Signals(Machine : Primus.Machine.S) = struct
 
   let call make_pars (name,args) = make_pars name args
 
-  let signal obs kind proj doc =
-    Lisp.signal ~doc obs @@ fun arg ->
+  let signal obs kind proj params doc =
+    Lisp.signal ~params ~doc obs @@ fun arg ->
     Machine.List.all (proj kind arg)
 
-  let init = Machine.sequence Primus.Interpreter.[
-      signal loading value one
-        {|(loading A) is emitted before load from A occurs|};
-      signal loaded (value,value) pair
-        {|(loaded A X) is emitted when X is loaded from A|};
-      signal storing value one
-        {|(storing A) is emitted before store to A occurs|};
-      signal stored (value,value) pair
-        {|(stored A X) is emitted when X is stored to A|};
-      signal read  (var,value) pair
-        {|(read V X) is emitted when X is read from V|};
-      signal written (var,value) pair
-        {|(written V X) is emitted when X is written to V|};
-      signal pc_change word one
-        {|(pc-change PC) is emitted when PC is updated|};
-      signal eval_cond value one
-        {|(eval-cond V) is emitted after evaluating a conditional to V|};
-      signal jumping (value,value) pair
-        {|(jumping C D) is emitted before jump to D occurs under the
+  let init =
+    let module Type = Primus.Lisp.Type.Spec in
+    Machine.sequence Primus.Interpreter.[
+        signal loading value one Type.(one int)
+          {|(loading A) is emitted before load from A occurs|} ;
+        signal loaded (value,value) pair Type.(tuple [int; byte])
+          {|(loaded A X) is emitted when X is loaded from A|} ;
+        signal storing value one Type.(one int)
+          {|(storing A) is emitted before store to A occurs|};
+        signal stored (value,value) pair Type.(tuple [int; byte])
+          {|(stored A X) is emitted when X is stored to A|};
+        signal read  (var,value) pair Type.(tuple [sym; any])
+          {|(read V X) is emitted when X is read from V|};
+        signal written (var,value) pair Type.(tuple [sym; any])
+          {|(written V X) is emitted when X is written to V|};
+        signal pc_change word one Type.(one int)
+          {|(pc-change PC) is emitted when PC is updated|};
+        signal eval_cond value one Type.(one bool)
+          {|(eval_cond V) is emitted after evaluating a conditional to V|};
+        signal jumping (value,value) pair Type.(tuple [bool; int])
+          {|(jumping C D) is emitted before jump to D occurs under the
           condition C|};
-      signal Primus.Linker.Trace.call parameters call
-        {|(call NAME X Y ...) is emitted when a call to a function with the
+        signal Primus.Linker.Trace.call parameters call
+          Type.(one sym // all any)
+          {|(call NAME X Y ...) is emitted when a call to a function with the
           symbolic NAME occurs with the specified list of arguments X,Y,...|};
-      signal Primus.Linker.Trace.return parameters call
-        {|(call-return NAME X Y ... R) is emitted when a call to a function with the
+        signal Primus.Linker.Trace.return parameters call
+          Type.(one sym // all any)
+          {|(call-return NAME X Y ... R) is emitted when a call to a function with the
           symbolic NAME returns with the specified list of arguments
           X,Y,... and return value R.|};
-      signal interrupt int one
-        {|(interrupt N) is emitted when the hardware interrupt N occurs|};
-      Lisp.signal Primus.Machine.init (fun () -> Machine.return [])
-        ~doc:{|(init) occurs when the Primus Machine is initialized|};
-      Lisp.signal Primus.Machine.finished (fun () -> Machine.return [])
-        ~doc:{|(fini) occurs when the Primus Machine is finished|};
-    ]
+        signal interrupt int one Type.(one int)
+          {|(interrupt N) is emitted when the hardware interrupt N occurs|};
+        Lisp.signal Primus.Machine.init (fun () -> Machine.return [])
+          ~doc: {|(init) occurs when the Primus Machine is initialized|}
+          ~params:Type.unit;
+        Lisp.signal Primus.Machine.finished (fun () -> Machine.return [])
+          ~doc:{|(fini) occurs when the Primus Machine is finished|}
+          ~params:Type.unit;
+      ]
 end
 
 let load_lisp_program dump paths features =
@@ -171,6 +177,49 @@ module Redirection = struct
   let convert = Config.converter parse print ("none","none")
 end
 
+module TypeErrorSummary(Machine : Primus.Machine.S) = struct
+  open Machine.Syntax
+
+  module Lisp = Primus.Lisp.Make(Machine)
+
+  let init () =
+    Primus.Machine.init >>> fun () ->
+    Lisp.types >>| fun env ->
+    let errors = List.length (Primus.Lisp.Type.errors env) in
+    if errors = 0
+    then Format.printf "Primus Lisp code is well-typed@\n%!"
+    else Format.printf "Primus Lisp code is ill-typed. Found %d error%s.@\n%!"
+        errors (if errors > 1 then "s" else "")
+end
+
+let typecheck proj =
+  let module Machine = struct
+    type 'a m = 'a
+    include Primus.Machine.Make(Monad.Ident)
+  end in
+  let module Main = Primus.Machine.Main(Machine) in
+  let module Lisp = Primus.Lisp.Make(Machine) in
+  Primus.Machine.add_component (module TypeErrorSummary);
+  match Main.run proj @@ Machine.return () with
+  | Normal,_ -> ()
+  | Exn err,_ ->
+    warning "Primus Frameworkd failed to initialize: %s@\n%!"
+      (Primus.Exn.to_string err)
+
+
+
+module TypeErrorPrinter(Machine : Primus.Machine.S) = struct
+  open Machine.Syntax
+  module Env = Primus.Env.Make(Machine)
+
+  let report err =
+    Machine.return @@
+    error "%a" Primus.Lisp.Type.pp_error err
+
+  let init () =
+    Primus.Lisp.Type.error >>> report
+end
+
 let () =
   Config.manpage [
     `S "DESCRIPTION";
@@ -192,12 +241,18 @@ let () =
   let dump =
     Config.(flag ~doc:"dumps generated AST" "dump") in
 
+  let enable_typecheck =
+    Config.flag "typecheck"
+      ~synonyms:["type-check"]
+      ~doc:"typechecks the program and prints erros if they exist" in
+
   let libs =
     Config.(param (list dir) ~doc:"paths to lisp libraries" "add") in
 
   let features =
     Config.(param (list string) ~doc:"load specified module" "load"
               ~default:["posix"]) in
+
 
   let redirects =
     let doc = sprintf
@@ -208,12 +263,15 @@ let () =
         (String.concat ~sep:" or " Redirection.known_channels) in
     Config.(param (list Redirection.convert) ~doc "channel-redirect") in
 
-  Config.when_ready (fun {Config.get=(!)} ->
-      if !documentation then
+  Config.when_ready (fun {Config.get=(!!)} ->
+      if !!documentation then
         Project.register_pass' ~deps:["api"] ~autorun:true Documentation.print;
-      let paths = [Filename.current_dir_name] @ !libs @ [Lisp_config.library] in
-      let features = "init" :: !features in
+      if !!enable_typecheck then
+        Project.register_pass' ~deps:["api"] ~autorun:true typecheck;
+      let paths = [Filename.current_dir_name] @ !!libs @ [Lisp_config.library] in
+      let features = "init" :: !!features in
       Primus.Machine.add_component (module LispCore);
-      Channels.init !redirects;
+      Primus.Machine.add_component (module TypeErrorPrinter);
+      Channels.init !!redirects;
       Primitives.init ();
-      load_lisp_program !dump paths features)
+      load_lisp_program !!dump paths features)

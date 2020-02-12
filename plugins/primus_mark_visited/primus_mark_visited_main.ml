@@ -24,11 +24,15 @@ let state = Primus.Machine.State.declare
        })
 
 
+let mark_visited t = Term.set_attr t Term.visited ()
+
 let marker visited = object
   inherit Term.mapper as super
   method! map_blk t =
     if Set.mem visited (Term.tid t) then
-      Term.map def_t t ~f:(fun d -> Term.set_attr d Term.visited ())
+      mark_visited t |>
+      Term.map def_t ~f:mark_visited |>
+      Term.map jmp_t ~f:mark_visited
     else t
 end
 

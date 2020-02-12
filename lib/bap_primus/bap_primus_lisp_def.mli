@@ -20,6 +20,7 @@ type prim
 type closure = (module Closure)
 type 'a primitive
 type para
+type signal
 
 type attrs = Attribute.set
 
@@ -85,6 +86,11 @@ module Closure : sig
   val create : ?types:Type.signature -> ?docs:string -> string -> closure -> prim t
   val signature : prim t -> Type.signature option
   val body : prim t -> closure
+end
+
+module Signal : sig
+  val create : ?docs:string -> types:Type.signature -> string -> signal t
+  val signature : signal t -> Type.signature
 end
 
 module type Primitives = functor (Machine : Machine) ->  sig

@@ -20,7 +20,11 @@ Library bap
                    graphlib,
                    regular,
                    core_kernel,
-                   ppx_jane
+                   ppx_jane,
+                   monads,
+                   bitvec,
+                   ogre,
+                   fileutils
   Modules:         Bap
   InternalModules: Bap_project, Bap_self
 
@@ -45,12 +49,17 @@ Library types
   BuildDepends:    monads,
                    zarith,
                    bitvec,
+                   bitvec-order,
+                   bitvec-sexp,
+                   bitvec-binprot,
                    uuidm,
                    regular,
                    graphlib,
                    ogre,
                    bap-knowledge,
-                   bap-core-theory
+                   bap-core-theory,
+                   core_kernel,
+                   ppx_jane
 
   InternalModules:
                    Bap_addr,
@@ -104,7 +113,8 @@ Library bap_image
   Build$:        flag(everything) || flag(bap_std)
   FindlibParent: bap
   FindlibName:   image
-  BuildDepends:  bap.types, ogre, mmap, monads
+  BuildDepends:  bap.types, ogre, mmap, monads, core_kernel, regular,
+                 bap-core-theory, ppx_jane, bap-knowledge
   InternalModules:
                  Bap_fileutils,
                  Bap_image,
@@ -126,8 +136,17 @@ Library disasm
                  bap-future,
                  camlzip,
                  ocamlgraph,
+                 graphlib,
                  monads,
-                 ogre
+                 ogre,
+                 core_kernel,
+                 regular,
+                 bap-core-theory,
+                 bap-knowledge,
+                 ppx_jane,
+                 zarith,
+                 bitvec,
+                 bitvec-order
   InternalModules:
                  Bap_disasm,
                  Bap_disasm_basic,
@@ -162,7 +181,14 @@ Library sema
   FindlibName:   sema
   BuildDepends:  bap.disasm,
                  bap.types,
-                 monads
+                 bap.image,
+                 monads,
+                 core_kernel,
+                 ppx_jane,
+                 graphlib,
+                 regular,
+                 bap-knowledge,
+                 bap-core-theory
   InternalModules:
                  Bap_sema,
                  Bap_sema_lift,

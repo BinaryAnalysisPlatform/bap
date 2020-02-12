@@ -14,9 +14,8 @@ let callee call prog = match Call.target call with
 let require x = Option.some_if x ()
 
 let def_of_arg arg =
-  let x = Arg.lhs arg in
-  let e = Arg.rhs arg in
-  Some (Def.create x e)
+  let d = Def.create (Arg.lhs arg) (Arg.rhs arg) in
+  Some (Term.with_attrs d (Term.attrs arg))
 
 let intent_matches x y = match Arg.intent x with
   | None -> true
