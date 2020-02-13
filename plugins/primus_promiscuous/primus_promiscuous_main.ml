@@ -219,14 +219,9 @@ module Main(Machine : Primus.Machine.S) = struct
     Linker.link ~name:Primus.Interpreter.division_by_zero_handler
       (module DoNothing)
 
-  let ignore_unresolved_names =
-    Linker.link ~name:Primus.Linker.unresolved_handler
-      (module DoNothing)
-
   let init () = Machine.sequence [
       setup_vars;
       ignore_division_by_zero;
-      ignore_unresolved_names;
       Primus.Interpreter.pagefault >>> pagefault;
       Primus.Interpreter.leave_pos >>> step;
       Primus.Interpreter.leave_blk >>> mark_visited;
