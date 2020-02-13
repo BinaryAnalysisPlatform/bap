@@ -6,6 +6,10 @@
 
 ;; mark all taints that affected branch control, this gives at least
 ;; a hope that the untrusted input was checked and validated.
+
+(require types)
+(require pointers)
+
 (defmethod eval-cond (c)
   (let ((t (taint-get-direct 'untrusted c)))
     (when t
@@ -71,10 +75,10 @@
 
 (defun must/trust-args (args)
   (while args
-    (must/trust-string (read_word ptr_t args))
+    (must/trust-string (read-word ptr_t args))
     (ptr+1 ptr_t args)))
 
 (defmethod call (name pid path fa attr args envp)
   (must/trust-string path)
   (must/trust-args args)
-  (must/trust-envp envp))
+  (must/trust-args envp))

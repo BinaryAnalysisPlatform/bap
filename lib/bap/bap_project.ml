@@ -244,7 +244,7 @@ let union_memory m1 m2 =
       Memmap.add m1 mem v)
 
 
-let build ?state ~code ~data arch =
+let build ?state ~file ~code ~data arch =
   let init = match state with
     | Some state -> state
     | None -> Kernel.empty arch in
@@ -258,7 +258,7 @@ let build ?state ~code ~data arch =
     program = Program.lift symbols;
     symbols;
     arch; memory=union_memory code data;
-    storage = Dict.empty;
+    storage = Dict.set Dict.empty filename file;
     passes=[]
   }
 
@@ -277,7 +277,7 @@ let create_exn
   Signal.send Info.got_arch arch;
   Signal.send Info.got_data data;
   Signal.send Info.got_code code;
-  finish @@ build ?state ~code ~data arch
+  finish @@ build ?state ~file ~code ~data arch
 
 let create
     ?state ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input =

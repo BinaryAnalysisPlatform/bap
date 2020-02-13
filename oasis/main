@@ -7,6 +7,8 @@ Library bap_main
   Build$:          flag(everything) || flag(main)
   FindLibName:     bap-main
   CompiledObject:  best
-  BuildDepends:    stdlib-shims, base, stdio, cmdliner, bap-future, bap-plugins, bap-recipe
+  BuildDepends:    stdlib-shims, base, stdio, cmdliner, bap-future,
+                   bap-bundle, bap-plugins, bap-recipe, core_kernel,
+                   fileutils
   Modules:         Bap_main, Bap_main_config, Bap_main_event
   InternalModules: Bap_main_log

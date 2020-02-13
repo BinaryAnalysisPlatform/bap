@@ -7,7 +7,9 @@ Library objdump_plugin
   Path:             plugins/objdump
   FindlibName:      bap-plugin-objdump
   CompiledObject:   best
-  BuildDepends:     bap, re.pcre
+  BuildDepends:     bap, re.pcre, regular, bap-core-theory,
+                    bap-future, core_kernel, bap-knowledge,
+                    zarith, bitvec
   InternalModules:  Objdump_main, Objdump_config
   XMETADescription: use objdump to provide a symbolizer
   XMETAExtraLines:  tags="objdump, symbolizer"

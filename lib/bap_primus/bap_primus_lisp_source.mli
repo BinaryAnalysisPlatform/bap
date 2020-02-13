@@ -37,6 +37,7 @@ and token = Atom of string | List of tree list
 (** [empty] source repository  *)
 val empty : t
 
+val is_empty : t -> bool
 
 (** [load source filename] loads the source code from the given
     [filename]. The source code should be a sequence of well-formed
@@ -70,7 +71,6 @@ val has_loc : t -> Id.t -> bool
     a bogus filename is returned. *)
 val filename : t -> Id.t -> string
 
-
 (** [fold source ~init ~f] iterates over all files loaded into the
     [source] repository.  *)
 val fold : t -> init:'a -> f:(string -> tree list -> 'a -> 'a) -> 'a
@@ -85,3 +85,24 @@ val lasteq : t -> Eq.t
 val pp_error : Format.formatter -> error -> unit
 
 val pp_tree : Format.formatter -> tree -> unit
+
+
+(** [pp_underline ?context src] creates an underlined source code printer.
+
+    [let pp_loc = pp_underline ~context:n src] creates a function that
+    takes a location and prints the corresponding original text of the
+    location with the location being underlined with ['^'] and
+    prefixed with ['>']. If context [n] is greater than [0], then [n]
+    closest lines to the position are printed also and prefixed with
+    ['|'].
+
+    If the printed location spans over more than one line, then only
+    the last line is underlined, however all lines are prefixed.*)
+val pp_underline : ?context:int -> t -> Format.formatter -> Loc.t -> unit
+
+(** [pp ?context src] creates a source code printer.
+
+    [let pp_loc = pp src] creates a function that takes a location and
+    prints the corresponding original text that is designated by the
+    location. *)
+val pp : t -> Format.formatter -> Loc.t -> unit

@@ -29,8 +29,8 @@
 
 (defun memory/allocate (ptr len)
   (if *malloc-initialize-memory*
-      (memory-allocate ptr n *malloc-initial-value*)
-    (memory-allocate ptr n)))
+      (memory-allocate ptr len *malloc-initial-value*)
+    (memory-allocate ptr len)))
 
 (defun malloc (n)
   "allocates a memory region of size N"

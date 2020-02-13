@@ -1,0 +1,97 @@
+# Include OASIS library:
+
+if $(not $(file-exists _oasis_lib.om))
+    err. =
+        extends $(Exception)
+        message = $'Not set up. Run first: oasis setup'
+    raise $(err)
+
+if $(not $(file-exists setup.data))
+    err. =
+        extends $(Exception)
+        message = $'Not configured. Run first: ocaml setup.ml -configure'
+    raise $(err)
+
+include _oasis_lib.om
+
+# Include the configuration, i.e. the output of "ocaml setup.ml -configure".
+# The settings are written to a file setup.data. We need it in a different
+# format, and convert the setup here. Note that the variables from setup.data
+# are prefixed with "oasis_", e.g. "prefix" is made available as
+# $(oasis_prefix). At this point we also initialize a number of build-related
+# variables like BYTE_ENANBLED or OCAMLFLAGS.
+
+.INCLUDE: _oasis_setup.om: setup.data
+    OASIS_generate_setup()
+
+# At this point you may fine-tune the configuration, and modify defaults:
+#
+# OCAML_LIB_MODULE_SUFFIXES += .ml       (install also .ml files with libs)
+# OCAMLFINDFLAGS += -verbose             (be verbose)
+# OCAMLFLAGS += -bin-annot               (create .cmt/.cmti files)
+
+OCAMLFLAGS_ANNOT = -annot -bin-annot
+OCAMLFLAGS += $(OCAMLFLAGS_ANNOT)
+OCAMLFLAGS += -opaque
+
+# Until this point we allow to override variables via the command-line.
+# That means all initializations from above can be changed by omake arguments
+# here. E.g. invoke with "omake BYTE_ENABLED=false" to disable bytecode
+# builds.
+
+DefineCommandVars()
+
+# Global phonies: This declaration is visible in the whole build tree.
+
+.PHONY: build doc install uninstall reinstall clean distclean
+.DEFAULT: build
+
+# Define hierarchy (sets OASIS_SUBDIRS to the sub directories that are part
+# of the build):
+
+include _oasis_hier.om
+
+# Include these subdirectories into the build. Normally, you only name
+# direct subdirectories here. Also note that all definitions up to this
+# point are automatically passed down to the OMakefiles in the subdirectories.
+
+.SUBDIRS: $(OASIS_SUBDIRS)
+
+# Local phonies: This declaration is only visible in this directory.
+
+.PHONY: build-here doc-here install-here uninstall-here reinstall-here pre-install-here clean-here distclean-here
+
+include _oasis_build.om
+include _oasis_install.om
+
+# These calls define the rules needed for "build", "install", etc.
+
+DefineBuildRules()
+DefineInstallRules()
+
+build-here: $(BUILD_TARGETS)
+doc-here: $(BUILD_DOC_TARGETS)
+install-here: $(INSTALL_TARGETS)
+uninstall-here: $(UNINSTALL_TARGETS)
+reinstall-here: $(REINSTALL_TARGETS)
+pre-install-here:
+
+clean-here:
+    rm -f $(OASIS_clean_list)
+    rm -rf $(OASIS_rec_clean_list)
+    section
+        OASIS_rmdir($(OASIS_dir_clean_list))
+
+distclean-here:
+    rm -f $(OASIS_distclean_list)
+    rm -rf $(OASIS_rec_distclean_list)
+    section
+        OASIS_rmdir($(OASIS_dir_distclean_list))
+
+build: build-here
+doc: doc-here
+install: install-here
+uninstall: uninstall-here
+reinstall: reinstall-here
+clean: clean-here
+distclean: distclean-here

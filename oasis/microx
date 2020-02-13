@@ -6,5 +6,5 @@ Library microx
   Build$:       flag(everything) || flag(microx)
   Path:         lib/microx
   FindlibName:  bap-microx
-  BuildDepends: bap, monads, core_kernel
+  BuildDepends: bap, monads, core_kernel, ppx_jane
   Modules:      Microx, Microx_concretizer, Microx_conqueror

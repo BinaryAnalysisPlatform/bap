@@ -62,8 +62,8 @@ let test_substitute case =
     KB.Agent.register name in
   Symbolizer.provide agent symbolizer;
   Rooter.provide rooter;
+  let file = "/dev/null" in
   let input =
-    let file = "/dev/null" in
     let mem =
       Memory.create LittleEndian base (Bigstring.of_string case.code)
       |> ok_exn in
@@ -79,6 +79,10 @@ let test_substitute case =
     let s = Option.value_exn (Project.memory p |>
                               Memmap.find_map ~f:(Value.get tag)) in
     expect >:: assert_normalized ~expect s in
+  let has_filename = "filename-is-provided" >:: fun ctxt ->
+      match Project.get p filename with
+      | None -> assert_failure "filename is not set"
+      | Some file' -> assert_equal ~ctxt ~printer:ident file file' in
   [
     test case.asm "$asm";
     test case.bil "$bil";
@@ -92,6 +96,7 @@ let test_substitute case =
     test min_addr "$addr";
     test min_addr "$min_addr";
     test max_addr "$max_addr";
+    has_filename;
   ]
 
 

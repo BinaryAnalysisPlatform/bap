@@ -22,6 +22,7 @@ module Main(Machine : Machine) = struct
 
   module Mach = Bap_primus_machine
   module Link = Bap_primus_interpreter.Init(Machine)
+  module Lisp = Bap_primus_lisp.Make(Machine)
 
   let init_components () =
     Machine.List.iter !components ~f:(fun (module Component) ->
@@ -38,6 +39,7 @@ module Main(Machine : Machine) = struct
   let run ?(envp=[| |]) ?(args=[| |]) proj m =
     let comp =
       init_components () >>= fun () ->
+      Lisp.typecheck >>= fun () ->
       init () >>= fun () ->
       Link.run () >>= fun () ->
       Machine.catch m (fun err ->

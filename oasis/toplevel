@@ -6,5 +6,6 @@ Executable "baptop"
   Path:           src
   MainIs:         baptop.ml
   Build$:         flag(everything) || flag(toplevel)
+  ByteOpt: -thread
   CompiledObject: byte
   BuildDepends:   utop, threads, findlib.dynload
