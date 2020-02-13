@@ -40,13 +40,27 @@ end
 module Main(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
 
+  module Linker = Primus.Linker.Make(Machine)
+
   let visit t =
-    Machine.Global.get state >>= fun {total; visited} ->
-    report_progress ~stage:(Set.length visited) ~total ();
-    Machine.Global.put state {
-      total;
-      visited = Set.add visited (Term.tid t)
-    }
+    Machine.Global.update state ~f:(fun s ->
+        let s = {
+          s with
+          visited = Set.add s.visited (Term.tid t)
+        } in
+        report_progress ~stage:(Set.length s.visited - 1) ~total:s.total ();
+        s)
+
+  let visit_stub (name,_) =
+    Linker.resolve_tid (`symbol name) >>= function
+    | None -> Machine.return ()
+    | Some tid -> Machine.gets Project.program >>= fun prog ->
+      match Term.find sub_t prog tid with
+      | None -> Machine.return ()
+      | Some sub ->
+        Term.enum blk_t sub |>
+        Machine.Seq.iter ~f:visit
+
 
 
   let mark () =
@@ -59,6 +73,7 @@ module Main(Machine : Primus.Machine.S) = struct
   let init () = Machine.sequence [
       Primus.Interpreter.enter_blk >>> visit;
       Primus.Machine.finished >>> mark;
+      Primus.Linker.Trace.lisp_call >>> visit_stub;
     ]
 end
 
