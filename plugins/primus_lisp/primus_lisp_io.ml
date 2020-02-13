@@ -71,7 +71,7 @@ let init redirs = {
 
 let try_open path = Or_error.try_with (fun () -> {
       input = Some (In_channel.create path);
-      output = Some (Out_channel.create path)
+      output = Some (Out_channel.create ~append:true path)
     })
 
 let try_flush {output} = Or_error.try_with @@ fun () ->
