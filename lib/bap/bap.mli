@@ -1959,7 +1959,7 @@ module Std : sig
     (** Bil is an instance of Domain.
 
         A flat domain with the empty Bil program being the empty element.
-     *)
+    *)
     val domain : stmt list Knowledge.domain
 
     (** Instance of the persistence class  *)
@@ -6574,9 +6574,19 @@ module Std : sig
         This is a graph where all information is distilled to term
         identifiers and relations between them, that are also labeled with
         term identifiers.  *)
-    module Tid : Graph with type node = tid
-                        and type Node.label = tid
-                        and type Edge.label = tid
+    module Tid : sig
+      type node = tid
+
+      (** [start] is a pseudo node that is used as the entry node of a graph.  *)
+      val start : node
+
+      (** [exit] is a pseudo node that is used as the exit node of a graph.  *)
+      val exit : node
+      include Graph with type node := tid
+                     and type Node.label = tid
+                     and type Edge.label = tid
+    end
+
   end
 
   (** Disassembled program.
@@ -7294,12 +7304,24 @@ module Std : sig
         dominators tree is used.  *)
     val free_vars : t -> Var.Set.t
 
-    (** [to_graph sub] builds a graph of subroutine [sub]. Graph nodes
-        are block term identifiers, and edges are labeled with term
-        identifiers of the jmp terms, that corresponds to the edge.
-        This representation is useful, if you need to compute some
-        graph relation on a subroutine, that will be later used to
-        perform its incremental transformation. *)
+    (** [to_graph sub] builds a graph of subroutine [sub].
+
+        Graph nodes are block term identifiers and edges are labeled
+        with term identifiers of the jmp terms that correspond to
+        the given edge.
+
+        @since 2.1 the returned graph contains two pseudo-nodes
+        [Graphs.Tid.start] and [Graphs.Tid.exit] so that all nodes
+        that has in-degree [0] or that start a strongly connected
+        component are connected to the [start] node (the same for
+        [exit] but on the reversed graph.
+
+        Edges from [start] to other nodes are labeled with the
+        [Graphs.Tid.start] tid.
+
+        Edges from nodes to the [exit] node are labeled with the
+        [Graphs.Tid.exit] tid.
+    *)
     val to_graph : t -> Graphs.Tid.t
 
     (** [to_cfg sub] builds a graph representation of a subroutine
@@ -7311,6 +7333,21 @@ module Std : sig
         Since {!Graphlib.Ir} module builds term incrementally this
         operation is just a projection, i.e., it has O(0) complexity.  *)
     val of_cfg : Graphs.Ir.t -> t
+
+
+    (** [compute_liveness sub] computes a set of live variables for each block.
+
+        For a block [b] and solution [s = compute_liveness sub],
+        [Solution.get s (Term.tid b)] is a set of variables that are
+        live at the _exit_ from this block.
+
+        A set of variables that are live (free) in the
+        whole subroutine is the set of variables that are live at the
+        [Graphs.Tid.start] node.
+
+        @since 2.1
+    *)
+    val compute_liveness : t -> (tid, Var.Set.t) Solution.t
 
     (** other names for the given subroutine.*)
     val aliases : string list tag
@@ -7675,25 +7712,25 @@ module Std : sig
 
     (** [reify ()] reifies inputs into a jump term.
 
-       Calls and interrupt subroutines invocations are represented
-       with two edges: the normal edge (denoted [dst]) is the
-       intra-procedural edge which connects the callsite with the
-       fall-through destination (if such exists) and an alternative
-       destination (denoted with [alt]) which represents an
-       inter-procedural destination between the callsite and the
-       call destination.
+        Calls and interrupt subroutines invocations are represented
+        with two edges: the normal edge (denoted [dst]) is the
+        intra-procedural edge which connects the callsite with the
+        fall-through destination (if such exists) and an alternative
+        destination (denoted with [alt]) which represents an
+        inter-procedural destination between the callsite and the
+        call destination.
 
-       @param cnd is a core theory term that denotes the
-       guard condition of a conditional jump.
+        @param cnd is a core theory term that denotes the
+        guard condition of a conditional jump.
 
-       @param alt is the alternative control flow destination.
+        @param alt is the alternative control flow destination.
 
-       @param dst is the direct control flow destination
+        @param dst is the direct control flow destination
 
-       @tid is the jump identifier, if not specified a fresh
-       new identifier is created.
+        @tid is the jump identifier, if not specified a fresh
+        new identifier is created.
 
-     *)
+    *)
     val reify : ?tid:tid ->
       ?cnd:Theory.Bool.t Theory.value ->
       ?alt:dst -> ?dst:dst -> unit -> t
@@ -8233,7 +8270,7 @@ module Std : sig
 
     (** A factory of rooters. Useful to register custom rooters  *)
     module Factory : Source.Factory.S with type t = t
-                                           [@@deprecated "[since 2019-05] use [provide]"]
+      [@@deprecated "[since 2019-05] use [provide]"]
 
   end
 
@@ -8264,7 +8301,7 @@ module Std : sig
     val provide : t -> unit
 
     module Factory : Source.Factory.S with type t = t
-                                           [@@deprecated "[since 2019-05] use [provide]"]
+      [@@deprecated "[since 2019-05] use [provide]"]
 
   end
 

@@ -38,38 +38,15 @@ let block_transitions sub =
         uses = Ir_blk.free_vars blk;
       })
 
-let start = Tid.create ()
-let exit = Tid.create ()
-
-let connect_with_exit n g =
-  if Tid.equal n exit then g
-  else G.Edge.insert (G.Edge.create n exit exit) g
-
-let connect_with_start sub = match Term.first blk_t sub with
-  | None -> G.Node.insert start
-  | Some entry -> G.Edge.insert @@
-    G.Edge.create start (Term.tid entry) start
-
-(* post: all nodes are reachable from the exit node *)
-let graph_of_sub_with_exit sub =
-  let g = connect_with_start sub (G.create sub) in
-  G.nodes g |> Seq.fold ~init:g ~f:(fun g n ->
-      if G.Node.degree ~dir:`Out n g = 0
-      then connect_with_exit n g
-      else g) |> fun g ->
-  Graphlib.depth_first_search (module G) g
-    ~rev:true ~init:g ~start:exit
-    ~start_tree:connect_with_exit
-
-let liveness sub =
-  let g = graph_of_sub_with_exit sub in
+let compute_liveness sub =
+  let g = G.create sub in
   let init = Solution.create Tid.Map.empty Var.Set.empty in
   let tran = block_transitions sub in
-  Graphlib.fixpoint (module G) ~init ~start:exit ~rev:true g
+  Graphlib.fixpoint (module G) ~init ~start:G.exit ~rev:true g
     ~merge:Set.union
     ~equal:Var.Set.equal
     ~f:(fun n vars ->
-        if Tid.equal n exit || Tid.equal n start  then vars
+        if Tid.equal n G.exit || Tid.equal n G.start  then vars
         else
           let {defs; uses} = Map.find_exn tran n in
           vars -- defs ++ uses)
@@ -77,4 +54,4 @@ let liveness sub =
 let free_vars_of_sub sub  =
   if Ssa.is_transformed sub
   then ssa_free_vars sub
-  else Solution.get (liveness sub) start
+  else Solution.get (compute_liveness sub) G.start
