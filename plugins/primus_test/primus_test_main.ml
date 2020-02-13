@@ -96,11 +96,29 @@ module Location = struct
   let sexp_of_key v =
     Sexp.Atom (asprintf "%a" Word.pp_dec (Primus.Value.to_word v))
 
+
+  let inspect_instance (name,key,locations) =
+    Sexp.List (Sexp.Atom name ::
+               sexp_of_key key ::
+               List.map locations ~f:sexp_of_key)
+
   let location,report_location =
     Primus.Observation.provide "incident-location"
       ~desc:"Occurs when the location of a possible incident is created."
       ~inspect:(fun (key,trace) ->
           Sexp.List [sexp_of_key key; sexp_of_trace trace])
+
+  let new_instance,report_new_instance =
+    Primus.Observation.provide "incident-new-instance"
+      ~inspect:inspect_instance
+
+  let new_class,report_new_class =
+    Primus.Observation.provide "incident-new-class"
+      ~inspect:inspect_instance
+
+  let new_representative,report_new_representative =
+    Primus.Observation.provide "incident-new-representative"
+      ~inspect:inspect_instance
 
   let trace = Primus.Machine.State.declare
       ~uuid:"3663b645-87a6-4561-b75f-c447cdc221bc"
@@ -142,6 +160,46 @@ module Location = struct
         switches = (t.length,{id=machine}) :: t.switches;
         length = t.length + 1
       }
+
+  let set_of_trace {trace} = Set.of_list (module Bitvec_order) trace
+
+  let last_blk = function
+    | _ :: blk :: _ -> blk
+    | [blk] -> blk
+    | [] -> failwith "last_blk: empty trace"
+
+  let is_member cls traces =
+    List.for_all2_exn traces cls.points ~f:(fun {trace} points ->
+        Set.mem points (last_blk trace))
+
+  let set_cls name id cls s = {
+    s with incidents = Map.update s.incidents name ~f:(function
+      | None -> Primus.Value.Map.singleton id cls
+      | Some classes -> Map.set classes id cls)
+  }
+
+
+  let classify {incidents; locations} name traces
+      ~new_representative
+      ~new_instance
+      ~new_class =
+    let traces = List.filter_map ~f:(Map.find locations) traces in
+    let points = List.map ~f:set_of_trace traces in
+    let cls' = {points; traces} in
+    match Map.find incidents name with
+    | None -> new_class cls'
+    | Some classes ->
+      Map.fold classes ~init:None ~f:(fun ~key ~data:cls found ->
+          match found with
+          | Some _ -> found
+          | None ->
+            if is_member cls traces
+            then Some (new_instance key)
+            else if is_member cls' cls.traces
+            then Some (new_representative key cls')
+            else None) |> function
+      | None -> new_class cls'
+      | Some other -> other
 
   module Record(Machine : Primus.Machine.S) = struct
     open Machine.Syntax
@@ -201,14 +259,38 @@ module Incident = struct
 
   module Report(Machine : Primus.Machine.S) = struct
     open Machine.Syntax
+    open Location
 
     module Value = Primus.Value.Make(Machine)
+    let (!!) = Machine.Observation.make
+
+    let next name incidents = match Map.find incidents name with
+      | None -> Value.of_int 1 ~width:63
+      | Some classes -> match Map.max_elt classes with
+        | None -> Value.of_int 1 ~width:63
+        | Some (k,_) -> Value.succ k
+
 
     [@@@warning "-P"]
     let run (name :: locations) =
-      Machine.Observation.post report ~f:(fun report ->
-          Value.Symbol.of_value name >>= fun name ->
-          report (name,locations)) >>= fun () ->
+      Value.Symbol.of_value name >>= fun name ->
+      !!report (name,locations) >>= fun () ->
+      Machine.Global.get Location.state >>= fun s ->
+      Location.classify s name locations
+        ~new_representative:(fun id cls ->
+            !!report_new_instance (name,id,locations) >>= fun () ->
+            !!report_new_representative (name,id,locations) >>= fun () ->
+            Machine.Global.update Location.state
+              (Location.set_cls name id cls))
+        ~new_instance:(fun id ->
+            !!report_new_instance (name,id,locations))
+        ~new_class:(fun cls ->
+            next name s.incidents >>= fun id ->
+            !!report_new_class (name,id,locations) >>= fun () ->
+            !!report_new_instance (name,id,locations) >>= fun () ->
+            Machine.Global.update Location.state
+              (Location.set_cls name id cls))
+      >>= fun () ->
       Value.b1
 
   end
