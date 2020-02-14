@@ -14,6 +14,7 @@ type edge = [`Jump | `Cond | `Fall] [@@deriving compare]
 
 
 type dsts = {
+  call : bool;
   barrier : bool;
   indirect : bool;
   resolved : Addr.Set.t;
@@ -263,6 +264,7 @@ let collect_dests arch mem insn =
   new_insn arch mem insn >>= fun code ->
   KB.collect Theory.Program.Semantics.slot code >>= fun insn ->
   let init = {
+    call = Insn.(is call insn);
     barrier = Insn.(is barrier insn);
     indirect = false;
     resolved = Set.empty (module Addr)
@@ -271,39 +273,21 @@ let collect_dests arch mem insn =
   | None -> KB.return init
   | Some dests ->
     Set.to_sequence dests |>
-    KB.Seq.fold ~init ~f:(fun {barrier; indirect; resolved} label ->
+    KB.Seq.fold ~init ~f:(fun {call; barrier; indirect; resolved} label ->
         KB.collect Theory.Label.addr label >>| function
         | Some d -> {
+            call;
             barrier;
             indirect;
             resolved = Set.add resolved (Word.create d width)
           }
         | None ->
-          {barrier; indirect=true; resolved}) >>= fun res ->
+          {call; barrier; indirect=true; resolved}) >>= fun res ->
     KB.return res
 
 let pp_addr_opt ppf = function
   | None -> Format.fprintf ppf "Unk"
   | Some addr -> Format.fprintf ppf "%a" Bitvec.pp addr
-
-(* pre: insn is call /\ is a member of a valid chain *)
-let mark_call_destinations mem dests =
-  let next = Addr.to_bitvec @@ Addr.succ @@ Memory.max_addr mem in
-  Set.to_sequence dests |>
-  KB.Seq.iter ~f:(fun dest ->
-      KB.collect Theory.Label.addr dest >>= fun addr ->
-      if Option.is_none addr ||
-         Bitvec.(Option.value_exn addr <> next)
-      then KB.provide Theory.Label.is_subroutine dest (Some true)
-      else KB.return ())
-
-let update_calls mem curr =
-  KB.collect Theory.Program.Semantics.slot curr >>= fun insn ->
-  if Insn.(is call) insn
-  then match KB.Value.get Insn.Slot.dests insn with
-    | None -> KB.return ()
-    | Some dests -> mark_call_destinations mem dests
-  else KB.return ()
 
 let delay arch mem insn =
   new_insn arch mem insn >>= fun code ->
@@ -377,6 +361,16 @@ let already_scanned addr s =
   List.exists s.mems ~f:(fun mem ->
       Memory.contains mem addr)
 
+let commit_calls {jmps} =
+  Map.to_sequence jmps |>
+  KB.Seq.iter ~f:(fun (_,dsts) ->
+      if dsts.call then
+        Set.to_sequence dsts.resolved |>
+        KB.Seq.iter ~f:(fun addr ->
+            Theory.Label.for_addr (Word.to_bitvec addr) >>= fun dst ->
+            KB.provide Theory.Label.is_subroutine dst (Some true))
+      else KB.return ())
+
 let scan mem s =
   let open KB.Syntax in
   let start = Memory.min_addr mem in
@@ -385,14 +379,16 @@ let scan mem s =
   else
     query_arch (Word.to_bitvec start) >>= fun arch ->
     match Dis.create (Arch.to_string arch) with
-      | Error _ -> KB.return s
-      | Ok dis ->
-        scan_mem arch dis mem >>| fun {Machine.begs; jmps; data} ->
-        let jmps = Map.merge s.jmps jmps ~f:(fun ~key:_ -> function
-            | `Left dsts | `Right dsts | `Both (_,dsts) -> Some dsts) in
-        let begs = Set.union s.begs begs in
-        let data = Set.union s.data data in
-        {begs; data; jmps; mems = mem :: s.mems}
+    | Error _ -> KB.return s
+    | Ok dis ->
+      scan_mem arch dis mem >>= fun {Machine.begs; jmps; data} ->
+      let jmps = Map.merge s.jmps jmps ~f:(fun ~key:_ -> function
+          | `Left dsts | `Right dsts | `Both (_,dsts) -> Some dsts) in
+      let begs = Set.union s.begs begs in
+      let data = Set.union s.data data in
+      let s = {begs; data; jmps; mems = mem :: s.mems} in
+      commit_calls s >>| fun () ->
+      s
 
 let merge t1 t2 = {
   begs = Set.union t1.begs t2.begs;
@@ -401,6 +397,7 @@ let merge t1 t2 = {
   jmps = Map.merge t1.jmps t2.jmps ~f:(fun ~key:_ -> function
       | `Left dsts | `Right dsts -> Some dsts
       | `Both (d1,d2) -> Some {
+          call = d1.call || d2.call;
           barrier = d1.barrier || d2.barrier;
           indirect = d1.indirect || d2.indirect;
           resolved = Set.union d1.resolved d2.resolved;
@@ -459,7 +456,6 @@ let explore
               ~init:(beg,0,[],true) ~return:KB.return
               ~hit:(fun s mem insn (curr,len,insns,_) ->
                   new_insn arch mem insn >>= fun insn ->
-                  update_calls mem insn >>= fun () ->
                   let len = Memory.length mem + len in
                   let last = Memory.max_addr mem in
                   let next = Addr.succ last in
