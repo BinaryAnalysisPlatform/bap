@@ -26,7 +26,6 @@ type state = {
   cfg : Cfg.t;
   dom : tid tree;
   frontier : tid frontier;
-  entry : tid;
   vars : Var.Set.t;
 }
 
@@ -55,16 +54,18 @@ let iterated_frontier f blks =
   fixpoint Tid.Set.empty
 
 let blk_of_tid sub tid = match Term.find blk_t sub tid with
-  | Some blk -> blk
+  | Some blk -> Some blk
   | None ->
-    failwithf
-      "Internal error. Broken invariant in subroutine %s: \
-       A term %a is missing" (Ir_sub.name sub) Tid.pps tid
-      ()
+    if Tid.equal Cfg.start tid || Tid.equal Cfg.exit tid
+    then None
+    else failwithf
+        "Internal error. Broken invariant in subroutine %s: \
+         A term %a is missing" (Ir_sub.name sub) Tid.pps tid
+        ()
 
 
 let succs cfg sub tid =
-  Cfg.Node.succs tid cfg |> Seq.map ~f:(blk_of_tid sub)
+  Cfg.Node.succs tid cfg |> Seq.filter_map ~f:(blk_of_tid sub)
 
 (** [collect_vars] traverses through subroutine [sub] and collects
     variables, that are live across multiple blocks. *)
@@ -91,11 +92,6 @@ let substitute vars = (object
     | None | Some [] -> z
     | Some (d :: _) -> d
 end)#map_exp
-
-let blk sub tid =
-  match Term.find blk_t sub tid with
-  | Some blk -> blk
-  | _ -> failwithf "failed to get block %a" Tid.str tid ()
 
 (** [rename t] performs a renaming of variables in a subroutine
     [t.sub]. An algorithm is described in section 19.7 of [[2]] and 9.12
@@ -130,8 +126,7 @@ let rename t =
         Ir_def.with_rhs (Ir_def.with_lhs def lhs) rhs) in
   let rename_jmps blk =
     Term.map jmp_t blk ~f:(Ir_jmp.map_exp ~f:(substitute vars)) in
-  let update_phis src dst =
-    let tid = Term.tid src in
+  let update_phis tid dst =
     Term.map phi_t dst ~f:(fun phi ->
         Ir_phi.values phi |> Seq.fold ~init:phi ~f:(fun phi rhs ->
             match rhs with
@@ -147,21 +142,21 @@ let rename t =
     Term.enum def_t blk |>
     Seq.iter ~f:(fun def -> pop (Ir_def.lhs def)) in
 
-  let rec rename_block sub blk' =
-    let tid = Term.tid blk' in
-    let blk' = blk sub tid in
-    let blk = blk' |> rename_phis |> rename_defs |> rename_jmps in
-    let sub = Term.update blk_t sub blk in
+  let rec rename_block sub' tid =
+    let sub = match blk_of_tid sub' tid with
+      | None -> sub'
+      | Some blk ->
+        blk |> rename_phis |> rename_defs |> rename_jmps |>
+        Term.update blk_t sub' in
     let sub =
       succs t.cfg sub tid |> Seq.fold ~init:sub ~f:(fun sub dst ->
-          Term.update blk_t sub (update_phis blk dst)) in
+          Term.update blk_t sub (update_phis tid dst)) in
     let children = Cfg.nodes t.cfg |>
-                   Seq.filter ~f:(Tree.is_child_of ~parent:tid t.dom) |>
-                   Seq.map ~f:(blk_of_tid sub) in
+                   Seq.filter ~f:(Tree.is_child_of ~parent:tid t.dom) in
     let sub = Seq.fold children ~init:sub ~f:rename_block in
-    pop_defs blk';
+    Option.iter (blk_of_tid sub' tid) ~f:pop_defs;
     sub in
-  rename_block t.sub (blk_of_tid t.sub t.entry)
+  rename_block t.sub Cfg.start
 
 let has_phi_for_var blk x =
   Term.enum phi_t blk |> Seq.exists ~f:(fun phi ->
@@ -181,37 +176,25 @@ let insert_phi_node ins blk x =
 let insert_phi_nodes t : sub term =
   Set.fold t.vars ~init:t.sub ~f:(fun sub x ->
       let bs = blocks_that_define_var x sub in
-      iterated_frontier t.frontier (t.entry :: bs) |>
+      iterated_frontier t.frontier (Cfg.start :: bs) |>
       Set.fold ~init:sub ~f:(fun sub tid ->
-          let blk = blk_of_tid sub tid in
-          let ins = Cfg.Node.preds tid t.cfg |>
-                    Seq.map ~f:(blk_of_tid sub) in
-          Term.update blk_t sub (insert_phi_node ins blk x)))
+          match blk_of_tid sub tid with
+          | None -> sub
+          | Some blk ->
+            let ins = Cfg.Node.preds tid t.cfg |>
+                      Seq.filter_map ~f:(blk_of_tid sub) in
+            Term.update blk_t sub (insert_phi_node ins blk x)))
 
 let is_transformed sub = Term.has_attr sub ssa_form
 
 (** transforms subroutine into a semi-pruned SSA form.  *)
 let sub sub =
-  match Term.first blk_t sub with
-  | Some entry when not (is_transformed sub) ->
-    let entry = Term.tid entry in
+  if not (is_transformed sub) then
     let cfg = Cfg.create sub in
-    let cfg,sub,entry =
-      if Cfg.Node.degree ~dir:`In entry cfg = 0
-      then cfg,sub,entry
-      else
-        let blk = Ir_blk.create () in
-        let jmp = Ir_jmp.create_goto (Direct entry) in
-        let blk = Term.append jmp_t blk jmp in
-        let sub = Term.prepend blk_t sub blk in
-        let entry' = Cfg.Node.create (Term.tid blk) in
-        let edge = Cfg.Edge.create entry' entry (Term.tid jmp) in
-        let cfg = Cfg.Edge.insert edge cfg in
-        cfg,sub,entry' in
     let vars = collect_vars sub in
-    let dom = Graphlib.dominators (module Cfg) cfg entry in
+    let dom = Graphlib.dominators (module Cfg) cfg Cfg.start in
     let frontier = Graphlib.dom_frontier (module Cfg) cfg dom in
-    let t = {entry; dom; frontier; cfg; sub; vars} in
+    let t = {dom; frontier; cfg; sub; vars} in
     let sub = rename {t with sub = insert_phi_nodes t}  in
     Term.set_attr sub ssa_form ()
-  | _ -> sub
+  else sub
