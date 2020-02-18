@@ -7,6 +7,7 @@ module Lib(Machine : Primus.Machine.S) = struct
   module Lisp = Primus.Lisp.Make(Machine)
   module Memory = Primus.Memory.Make(Machine)
   module Value = Primus.Value.Make(Machine)
+  module Linker = Primus.Linker.Make(Machine)
   include Machine.Syntax
   let all f args = List.exists args ~f |> Value.of_bool
   let addr_width =
@@ -31,6 +32,29 @@ module Lib(Machine : Primus.Machine.S) = struct
       | x :: (y :: _ as rest) -> order x y && ordered rest in
     if ordered xs then true_ else false_
 
+end
+
+module ExecAddr(Machine : Primus.Machine.S) = struct
+  include Lib(Machine)
+  let run = function
+    | _ :: _ :: _ | [] ->
+      Lisp.failf "Lisp Type Error: exec-address expects one argument" ()
+    | [addr] ->
+      Linker.exec (`addr (Primus.Value.to_word addr)) >>= fun () ->
+      Eval.halt >>=
+      never_returns
+end
+
+module ExecSym(Machine : Primus.Machine.S) = struct
+  include Lib(Machine)
+  let run = function
+    | _ :: _ :: _ | [] ->
+      Lisp.failf "Lisp Type Error: exec-address expects one argument" ()
+    | [name] ->
+      Value.Symbol.of_value name >>= fun name ->
+      Linker.exec (`symbol name) >>= fun () ->
+      Eval.halt >>=
+      never_returns
 end
 
 module IsZero(Machine : Primus.Machine.S) = struct
@@ -118,6 +142,7 @@ module GetPC(Machine : Primus.Machine.S) = struct
     | _ -> Lisp.failf
              "get-current-program-counter requires zero arguments" ()
 end
+
 
 module Add(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
@@ -286,6 +311,10 @@ module Primitives(Machine : Primus.Machine.S) = struct
     let def name types closure docs =
       Lisp.define ~types ~docs name closure  in
     Machine.sequence [
+      def "exec-addr" (one int @-> any) (module ExecAddr)
+        "(exec-addr D) passes the control flow to D and never returns";
+      def "exec-symbol" (one sym @-> any) (module ExecSym)
+        "(exec-symbol D) passes the control flow to D and never returns";
       def "is-zero" (all any @-> bool) (module IsZero)
         "(is-zero X Y ...) returns true if all arguments are zeros";
       def "is-positive" (all any @-> bool) (module IsPositive)

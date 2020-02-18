@@ -85,6 +85,7 @@ module Insn : sig
   val compare : ('a,'k) t -> ('a,'k) t -> int
   val code : ('a,'k) t -> int
   val name : ('a,'k) t -> string
+  val encoding : ('a,'k) t -> string
   val kinds : ('a,kinds) t -> kind list
   val is : ('a,kinds) t -> kind -> bool
   val asm : (asm,'k) t -> string

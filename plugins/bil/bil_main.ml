@@ -109,12 +109,19 @@ let () =
       in terms of bitvector arithmetic. This may lead to very large
       denotations." in
 
+  let enable_intrinsics = Configuration.flag "lift-unknown"
+      ~doc:"Translate unknown instructions into intrinsic calls. \
+            Warning! This feature is experimental and could be \
+            renamed, moved, or removed in the future." in
+
   declare ~provides:["bil"; "core-theory"; "lifter"] @@ fun ctxt ->
   let open Syntax in
   if ctxt-->list_passes then print_passes ()
   else begin
     Bil.select_passes (ctxt-->norml @ ctxt-->optim @ ctxt-->passes);
-    Bil_lifter.init ~with_fp:(ctxt-->enable_fp_emu) ();
+    Bil_lifter.init ()
+      ~with_fp:(ctxt-->enable_fp_emu)
+      ~with_intrinsics:(ctxt-->enable_intrinsics);
     Bil_ir.init();
     let open KB.Syntax in
     Theory.declare !!(module Bil_semantics.Core : Theory.Core)

@@ -233,7 +233,7 @@ module Interpreter(Machine : Machine) = struct
       Seq.find ~f:(fun sub -> match Term.get_attr sub address with
           | None -> false
           | Some addr -> Word.(addr = sub_addr.value)) |> function
-      | None ->
+      | None  ->
         failf "invoke-subroutine: no function for %a" Addr.pps
           sub_addr.value ()
       | Some sub ->

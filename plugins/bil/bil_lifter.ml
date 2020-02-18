@@ -10,18 +10,7 @@ open Knowledge.Syntax
 open Theory.Parser
 include Self()
 
-module Call = struct
-  let prefix = "bil-fixup:"
-  let extern name =
-    let dst = sprintf "%s%s" prefix name in
-    Bil.special dst
-
-  let is_extern name =
-    String.is_prefix name ~prefix
-
-  let dst =
-    String.chop_prefix_exn ~prefix
-end
+module Call = Bil_semantics.Call
 
 module BilParser = struct
   type context = [`Bitv | `Bool | `Mem ] [@@deriving sexp]
@@ -170,23 +159,24 @@ module BilParser = struct
       let n = Var.name v in
       match Var.typ v with
       | Unk ->
-         error "can't reify the variable %s: unknown type" (Var.name v);
-         S.error
+        error "can't reify the variable %s: unknown type" (Var.name v);
+        S.error
       | Imm 1 -> S.set_bit n x
       | Imm m -> S.set_reg n m x
       | Mem (ks,vs) ->
         S.set_mem n (Size.in_bits ks) (Size.in_bits vs) x in
-    function
-    | Move (v,x) -> set v x
-    | Jmp (Int x) -> S.goto (Word.to_bitvec x)
-    | Jmp x -> S.jmp x
-    | Special s when Call.is_extern s ->
-      S.call (Call.dst s)
-    | Special s -> S.special s
-    | While (c,xs) -> S.while_ c xs
-    | If (c,xs,ys) -> S.if_ c xs ys
-    | CpuExn n -> S.cpuexn n
-
+    fun s -> match Call.dst s with
+      | Some dst ->
+        info "translating a special to call(%s)" dst;
+        S.call dst
+      | None -> match s with
+        | Move (v,x) -> set v x
+        | Jmp (Int x) -> S.goto (Word.to_bitvec x)
+        | Jmp x -> S.jmp x
+        | Special s -> S.special s
+        | While (c,xs) -> S.while_ c xs
+        | If (c,xs,ys) -> S.if_ c xs ys
+        | CpuExn n -> S.cpuexn n
 
   let t = {bitv; mem; stmt; bool; float; rmode}
 end
@@ -284,7 +274,7 @@ module Relocations = struct
 
   let override_external name =
     Stmt.map (object inherit Stmt.mapper
-      method! map_jmp _ = [Call.extern name]
+      method! map_jmp _ = [Call.create name]
     end)
 
 
@@ -351,7 +341,34 @@ let base_context = [
   "bil-lifter";
 ]
 
-let provide_lifter ~with_fp () =
+let create_intrinsic arch mem insn =
+  let module Insn = Disasm_expert.Basic.Insn in
+  let width = Size.in_bits (Arch.addr_size arch) in
+  let mangled fmt = ksprintf (fun s -> Insn.encoding insn ^ ":" ^ s) fmt in
+  let pre = Insn.ops insn |> Array.to_list |> List.mapi ~f:(fun p op ->
+      let name = mangled "op%d" (p+1) in
+      let v = Var.create name (Imm width) in
+      Bil.move v @@ match op with
+      | Op.Imm x -> Bil.int (Option.value_exn (Imm.to_word ~width x))
+      | Op.Reg r -> Bil.var (Var.create (mangled "%s" (Reg.name r)) (Imm width))
+      | Op.Fmm x -> Bil.int @@ Word.of_int64 @@
+        Int64.bits_of_float (Fmm.to_float x)) in
+  pre @ Bil.[
+      Var.create (mangled "next_address") (Imm width) :=
+        int (Addr.succ (Memory.max_addr mem));
+      Call.create (mangled "%s" (Insn.name insn));
+    ]
+
+let lift ~with_intrinsics arch mem insn =
+  let module Target = (val target_of_arch arch) in
+  match Target.lift mem insn with
+  | Error _ when with_intrinsics ->
+    Ok (create_intrinsic arch mem insn)
+  | other -> other
+
+
+
+let provide_lifter ~with_intrinsics ~with_fp () =
   info "providing a lifter for all BIL lifters";
   let relocations = Relocations.subscribe () in
   let unknown = Theory.Program.Semantics.empty in
@@ -369,8 +386,7 @@ let provide_lifter ~with_fp () =
     Theory.require >>= fun (module Core) ->
     Knowledge.collect Memory.slot obj >>? fun mem ->
     Knowledge.collect Disasm_expert.Basic.Insn.slot obj >>? fun insn ->
-    let module Target = (val target_of_arch arch) in
-    match Target.lift mem insn with
+    match lift ~with_intrinsics arch mem insn with
     | Error _ ->
       Knowledge.return (Insn.of_basic insn)
     | Ok bil ->
@@ -387,8 +403,8 @@ let provide_lifter ~with_fp () =
   Knowledge.promise Theory.Program.Semantics.slot lifter
 
 
-let init ~with_fp () =
-  provide_lifter ~with_fp ();
+let init ~with_intrinsics ~with_fp () =
+  provide_lifter ~with_intrinsics ~with_fp ();
   provide_bir ();
   Theory.declare !!(module Brancher : Theory.Core)
     ~package:"bap.std" ~name:"jump-dests"
