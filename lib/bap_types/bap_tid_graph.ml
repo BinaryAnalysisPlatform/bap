@@ -31,14 +31,17 @@ let connect_with_start n =
     G.Edge.insert @@
     G.Edge.create start n start
 
+let if_unreachable ~from connect g n =
+  if G.Node.degree ~dir:from n g = 0
+  then connect n
+  else ident
+
 let create sub =
   let g = of_sub sub in
   G.nodes g |> Seq.fold ~init:g ~f:(fun g n ->
-      if G.Node.degree ~dir:`Out n g = 0
-      then connect_with_exit n g else
-      if G.Node.degree ~dir:`In n g = 0
-      then connect_with_start n g
-      else g) |> fun g ->
+      g |>
+      if_unreachable ~from:`In connect_with_start g n |>
+      if_unreachable ~from:`Out connect_with_exit g n) |> fun g ->
   Graphlib.depth_first_search (module G) g
     ~init:g ~start
     ~start_tree:connect_with_start
