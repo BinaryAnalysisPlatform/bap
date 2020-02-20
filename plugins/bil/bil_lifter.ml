@@ -341,22 +341,25 @@ let base_context = [
   "bil-lifter";
 ]
 
+
 let create_intrinsic arch mem insn =
   let module Insn = Disasm_expert.Basic.Insn in
   let width = Size.in_bits (Arch.addr_size arch) in
-  let mangled fmt = ksprintf (fun s -> Insn.encoding insn ^ ":" ^ s) fmt in
+  let module Target = (val target_of_arch arch) in
   let pre = Insn.ops insn |> Array.to_list |> List.mapi ~f:(fun p op ->
-      let name = mangled "op%d" (p+1) in
+      let name = sprintf "insn:op%d" (p+1) in
       let v = Var.create name (Imm width) in
       Bil.move v @@ match op with
       | Op.Imm x -> Bil.int (Option.value_exn (Imm.to_word ~width x))
-      | Op.Reg r -> Bil.var (Var.create (mangled "%s" (Reg.name r)) (Imm width))
       | Op.Fmm x -> Bil.int @@ Word.of_int64 @@
-        Int64.bits_of_float (Fmm.to_float x)) in
+        Int64.bits_of_float (Fmm.to_float x)
+      | Op.Reg r -> Bil.int (Word.of_int ~width (Reg.code r))) in
   pre @ Bil.[
-      Var.create (mangled "next_address") (Imm width) :=
+      Var.create ("insn:next_address") (Imm width) :=
         int (Addr.succ (Memory.max_addr mem));
-      Call.create (mangled "%s" (Insn.name insn));
+      Call.create (sprintf "%s:%s"
+                     (Insn.encoding insn)
+                     (Insn.name insn));
     ]
 
 let lift ~with_intrinsics arch mem insn =
