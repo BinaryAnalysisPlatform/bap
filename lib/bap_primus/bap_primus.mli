@@ -2708,6 +2708,16 @@ ident ::= ?any atom that is not recognized as a <word>?
         val run : value list -> value Machine.t
       end
 
+
+      (** [(lisp-primitive <name> <arg1> ... <argM> <rval>)] is posted
+          when the Lisp primitive with the given <name> is called with
+          the list of arguments [(<arg1> .... <argM>)] and evaluates
+          to the [<rval>] value.
+
+          @since 2.1.0
+      *)
+      val primitive : (string * value list) observation
+
       (** a closure packed as an OCaml value *)
       type closure = (module Closure)
 

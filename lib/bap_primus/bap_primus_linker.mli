@@ -1,3 +1,4 @@
+open Core_kernel
 open Bap.Std
 open Regular.Std
 open Bap_primus_types
@@ -17,6 +18,8 @@ val unresolved : name observation
 
 val unresolved_handler : string
 
+val sexp_of_call : string * value list -> Sexp.t
+
 module Trace : sig
   val call : (string * value list) observation
   val call_entered : (string * value list) statement
@@ -27,6 +30,7 @@ module Trace : sig
   val lisp_call_return : (string * value list) observation
   val lisp_call_returned : (string * value list) statement
 end
+
 module type Code = functor (Machine : Machine) -> sig
   val exec : unit Machine.t
 end
