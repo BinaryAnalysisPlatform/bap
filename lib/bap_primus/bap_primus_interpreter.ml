@@ -684,12 +684,14 @@ module Make (Machine : Machine) = struct
       let name = Sub.name t in
       iter_args t arg_def >>= fun () ->
       get_args ~input:true t >>| Seq.to_list_rev >>= fun inputs ->
-      post Linker.Trace.call_entered ~f:(fun k -> k (name,List.rev inputs)) >>= fun () ->
+      post Linker.Trace.call_entered ~f:(fun k ->
+          k (name,List.rev inputs)) >>= fun () ->
       blk entry >>= fun () ->
       iter_args t arg_use >>= fun () ->
-      get_args ~input:false t >>| Seq.to_list >>= fun rets ->
-      let args = List.rev_append inputs rets in
-      post Linker.Trace.call_returned ~f:(fun k -> k (name,args))
+      post Linker.Trace.call_returned ~f:(fun k ->
+          get_args ~input:false t >>| Seq.to_list >>= fun rets ->
+          let args = List.rev_append inputs rets in
+          k (name,args))
 
 
   let sub = term normal sub_t sub

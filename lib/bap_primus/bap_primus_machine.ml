@@ -57,6 +57,7 @@ module Make(M : Monad.S) = struct
     observations : unit t Observation.observations;
   }
 
+  type 'a machine = 'a t
   type 'a c = 'a t
   type 'a m = 'a M.t
   type 'a e = (exit_status * project) m effect
@@ -112,17 +113,6 @@ module Make(M : Monad.S) = struct
     let set_observations observations = with_global_context @@ fun () ->
       lifts (SM.update @@ fun s -> {s with observations})
 
-    let make key obs =
-      with_global_context observations >>= fun os ->
-      Seq.sequence @@ Observation.notify os key obs
-
-    type posted = unit m seq
-    let post key ~f =
-      with_global_context observations >>= fun os ->
-      Seq.sequence @@
-      Observation.notify_if_observed os key @@ fun k ->
-      f (fun x -> k x)
-
     let observe key observer =
       with_global_context @@ fun () ->
       observations () >>= fun os ->
@@ -132,6 +122,20 @@ module Make(M : Monad.S) = struct
       with_global_context @@ fun () ->
       observations () >>= fun os ->
       set_observations (Observation.add_watcher os prov watcher)
+
+    module Observation = Observation.Make(struct
+        type 'a t = 'a machine
+        include CM
+      end)
+
+    let make key obs =
+      with_global_context observations >>= fun os ->
+      Observation.notify os key obs
+
+    let post key ~f =
+      with_global_context observations >>= fun os ->
+      Observation.notify_if_observed os key @@ fun k ->
+      f (fun x -> k x)
   end
 
   module Make_state(S : sig

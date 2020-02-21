@@ -1,6 +1,7 @@
 open Core_kernel
 open Bap.Std
 open Bap_future.Std
+open Monads.Std
 
 type 'a t
 type 'a statement
@@ -16,14 +17,16 @@ val of_statement : 'a statement -> 'a t
 val add_observer : 'e observations -> 'a t -> ('a -> 'e) -> 'e observations
 val add_watcher : 'e observations -> provider -> (Sexp.t -> 'e) -> 'e observations
 
-val notify :
-  'e observations ->
-  'a statement -> 'a -> 'e seq
+module Make(Machine : Monad.S) : sig
+  val notify :
+    unit Machine.t observations ->
+    'a statement -> 'a -> unit Machine.t
 
-val notify_if_observed :
-  'e observations ->
-  'a statement -> (('a -> 'e seq) -> 'e seq) -> 'e seq
-
+  val notify_if_observed :
+    unit Machine.t observations ->
+    'a statement ->
+    (('a -> unit Machine.t) -> unit Machine.t) -> unit Machine.t
+end
 val empty : 'e observations
 
 val list_providers : unit -> provider list

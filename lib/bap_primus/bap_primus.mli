@@ -360,7 +360,6 @@ module Std : sig
 
         (** Observations interface.  *)
         module Observation : sig
-          type posted
 
           (** [observe obs on_observation] subscribes to the given
               observation [obs]. Every time the observation [obs] is
@@ -377,7 +376,7 @@ module Std : sig
               given [event].  *)
           val make : 'a statement -> 'a -> unit t
 
-          val post : 'a statement -> f:(('a -> posted) -> posted) -> unit t
+          val post : 'a statement -> f:(('a -> unit t) -> unit t) -> unit t
 
         end
 

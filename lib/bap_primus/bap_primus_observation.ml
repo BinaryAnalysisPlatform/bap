@@ -1,6 +1,7 @@
 open Core_kernel
 open Bap.Std
 open Bap_future.Std
+open Monads.Std
 
 type 'a observation = 'a Univ_map.Key.t
 type 'a statement = 'a observation
@@ -64,61 +65,46 @@ let add_observer observers key obs =
 let add_watcher observers {key} obs =
   add_observer observers key obs
 
-
-let notify_provider key x =
-  let p = Hashtbl.find_exn providers (name key) in
-  if Stream.has_subscribers p.data
-  then Signal.send p.newdata (inspect key x);
-  Signal.send p.newtrigger ()
-
-let notify_observer os key x =
-  match Map.find os key with
-  | None -> Seq.empty
-  | Some (Observers os) -> Seq.(map ~f:(fun ob -> ob x) @@ of_list os)
-
-let notify_watchers os key x =
-  let p = Hashtbl.find_exn providers (name key) in
-  match Map.find os p.key with
-  | None | Some (Observers []) -> Seq.empty
-  | Some (Observers os) ->
-    let data = inspect key x in
-    Seq.(map ~f:(fun ob -> ob data) @@ of_list os)
-
-let notify os key x =
-  notify_provider key x;
-  Seq.append
-    (notify_observer os key x)
-    (notify_watchers os key x)
-
 let callbacks os key =
   match Map.find_exn os key with
   | exception _ -> []
   | Observers obs -> obs
 
-let apply inj x = function
-  | [] -> Seq.empty
-  | xs ->
-    let data = inj x in
-    Seq.of_list xs |>
-    Seq.map ~f:(fun ob -> ob data)
+module Make(Machine : Monad.S) = struct
+  open Machine.Syntax
 
-let notify_if_observed os key k =
-  let p = Hashtbl.find_exn providers (name key) in
-  Signal.send p.newtrigger ();
-  match callbacks os key, callbacks os p.key  with
-  | [], [] ->
-    if Stream.has_subscribers p.data
-    then k @@ fun x ->
-      Signal.send p.newdata (inspect key x);
-      Seq.empty
-    else Seq.empty
-  | os, ws -> k @@ fun x ->
+  let apply inj x = function
+    | [] -> Machine.return ()
+    | xs ->
+      let data = inj x in
+      Machine.List.iter xs ~f:(fun ob -> ob data)
+
+  let push_data p key os ws x =
     let sexp = lazy (inspect key x) in
     if Stream.has_subscribers p.data
     then Signal.send p.newdata (Lazy.force sexp);
-    Seq.append
-      (apply ident x os)
-      (apply Lazy.force sexp ws)
+    apply ident x os >>= fun () ->
+    apply Lazy.force sexp ws
+
+  let notify os key x =
+    let p = Hashtbl.find_exn providers (name key) in
+    let os = callbacks os key and ws = callbacks os p.key in
+    Signal.send p.newtrigger ();
+    push_data p key os ws x
+
+  let notify_if_observed os key k =
+    let p = Hashtbl.find_exn providers (name key) in
+    Signal.send p.newtrigger ();
+    match callbacks os key, callbacks os p.key with
+    | [], [] ->
+      if Stream.has_subscribers p.data
+      then k @@ fun x ->
+        Signal.send p.newdata (inspect key x);
+        Machine.return ()
+      else Machine.return ()
+    | os, ws -> k @@ fun x ->
+      push_data p key os ws x
+end
 
 let empty = Map.empty
 

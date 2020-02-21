@@ -271,9 +271,11 @@ module Interpreter(Machine : Machine) = struct
     | None -> false
     | Some names -> List.mem ~equal:String.equal names name
 
-  let notify_when cond obs name args =
-    if cond
-    then Machine.Observation.make obs (name,args)
+  let notify_when ?rval cond obs name args =
+    if cond then Machine.Observation.post obs ~f:(fun notify ->
+        match rval with
+        | None -> notify (name, args)
+        | Some r -> notify (name, args@[r]))
     else Machine.return ()
 
   (* Still an open question. Shall we register an call to an external
@@ -310,7 +312,7 @@ module Interpreter(Machine : Machine) = struct
       Machine.Local.put state (Vars.push_frame bs s) >>= fun () ->
       eval_exp (Lisp.Def.Func.body fn) >>= fun r ->
       Machine.Local.update state ~f:(Vars.pop frame_size) >>= fun () ->
-      notify_when is_external Trace.call_returned name (args @ [r]) >>= fun () ->
+      notify_when is_external Trace.call_returned name args ~rval:r >>= fun () ->
       eval_advices Advice.After r name args
 
   and eval_advices stage init primary args =
@@ -634,12 +636,12 @@ module Make(Machine : Machine) = struct
           Eval.const Word.b0 >>= fun init ->
           Interp.eval_advices Advice.Before init name args >>= fun _ ->
           Machine.Local.update state ~f:(Vars.push_frame bs) >>= fun () ->
-          Machine.Observation.make Trace.call_entered (name,args) >>= fun () ->
-          Machine.Observation.make  Trace.lisp_call_entered (name,args) >>= fun () ->
+          Interp.notify_when true Trace.call_entered name args >>= fun () ->
+          Interp.notify_when true Trace.lisp_call_entered name args >>= fun () ->
           Interp.eval_exp (Lisp.Def.Func.body fn) >>= fun r ->
           Machine.Local.update state ~f:(Vars.pop frame_size) >>= fun () ->
-          Machine.Observation.make Trace.lisp_call_returned (name,(args @ [r])) >>= fun () ->
-          Machine.Observation.make Trace.call_returned (name,args @ [r]) >>= fun () ->
+          Interp.notify_when true Trace.lisp_call_returned name args ~rval:r >>= fun () ->
+          Interp.notify_when true Trace.call_returned name args ~rval:r >>= fun () ->
           Interp.eval_advices Advice.After r name args >>= fun r ->
           eval_ret r
       end in
