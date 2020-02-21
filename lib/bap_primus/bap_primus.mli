@@ -76,6 +76,8 @@ module Std : sig
     (** [a statement] is used to make an observation of type [a].    *)
     type 'a statement
 
+    type subscription
+
     (** a result of computation  *)
     type value [@@deriving bin_io, compare, sexp]
 
@@ -369,6 +371,9 @@ module Std : sig
               other components via their interfaces.  *)
           val observe : 'a observation -> ('a -> unit t) -> unit t
 
+          val subscribe : 'a observation -> ('a -> unit t) -> subscription t
+
+          val cancel : subscription -> unit t
 
           val watch : Observation.provider -> (Sexp.t -> unit t) -> unit t
 

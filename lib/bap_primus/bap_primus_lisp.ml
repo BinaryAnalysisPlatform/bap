@@ -36,6 +36,7 @@ type bindings = {
 type state = {
   program : Lisp.Program.t;
   typeenv : Lisp.Program.Type.env;
+  signals : subscription String.Map.t;
   width : int;
   env : bindings;
   cur : Id.t;
@@ -57,6 +58,7 @@ let state = Bap_primus_state.declare ~inspect
          cur = Id.null;
          program = Lisp.Program.empty;
          typeenv = Lisp.Program.Type.empty;
+         signals = String.Map.empty;
          width = width_of_ctxt proj;
        })
 
@@ -658,8 +660,8 @@ module Make(Machine : Machine) = struct
 
   let link_program program =
     Machine.Local.get state >>= fun s ->
-    let program = Lisp.Program.merge s.program program in
-    Machine.Local.put state {s with program} >>= fun () ->
+    let s = {s with program = Lisp.Program.merge s.program program} in
+    Machine.Local.put state s >>= fun () ->
     link_features ()
 
   let program = Machine.Local.get state >>| fun s -> s.program
@@ -691,11 +693,13 @@ module Make(Machine : Machine) = struct
       | Some (`Gen (ts,t)) ->
         Lisp.Type.signature (specialize ts) ~rest:(t arch) Any in
     let r = Lisp.Def.Signal.create ~types ~docs:doc name in
+    Machine.Observation.subscribe obs (fun x ->
+        proj x >>= Self.eval_signal name) >>= fun sub ->
     Machine.Local.update state ~f:(fun s -> {
-          s with program = Lisp.Program.add s.program signal r
-        }) >>= fun () ->
-    Machine.Observation.observe obs (fun x ->
-        proj x >>= Self.eval_signal name)
+          s with program = Lisp.Program.add s.program signal r;
+                 signals = Map.add_exn s.signals name sub;
+        })
+
 
   (* this is a deprecated interface for the backward compatibility,
      we can't efficiently translate a list of primitives to the code
@@ -720,6 +724,18 @@ module Make(Machine : Machine) = struct
 
   let eval_method = Self.eval_signal
   let eval_fun = Self.eval_lisp
+
+  let optimize () =
+    Machine.Local.get state >>= fun s ->
+    let known_methods =
+      Lisp.Program.get s.program meth |>
+      List.fold ~init:String.Set.empty ~f:(fun mets met ->
+          Set.add mets (Lisp.Def.name met)) in
+    let useless_subscriptions =
+      Map.fold s.signals ~init:[] ~f:(fun ~key:name ~data:sub subs ->
+          if Set.mem known_methods name then subs
+          else sub::subs) in
+    Machine.List.iter useless_subscriptions ~f:Machine.Observation.cancel
 end
 
 module Doc = struct

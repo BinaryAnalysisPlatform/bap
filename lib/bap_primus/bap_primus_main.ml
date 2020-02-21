@@ -35,11 +35,11 @@ module Main(Machine : Machine) = struct
   let finish () =
     Machine.Observation.make finish ()
 
-
   let run ?(envp=[| |]) ?(args=[| |]) proj m =
     let comp =
       init_components () >>= fun () ->
       Lisp.typecheck >>= fun () ->
+      Lisp.optimize () >>= fun () ->
       init () >>= fun () ->
       Link.run () >>= fun () ->
       Machine.catch m (fun err ->

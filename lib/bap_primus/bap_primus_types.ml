@@ -12,6 +12,7 @@ type pos = Pos.t [@@deriving sexp_of]
 type 'a observation = 'a Bap_primus_observation.t
 type provider = Bap_primus_observation.provider
 type 'a statement = 'a Bap_primus_observation.statement
+type subscription = Bap_primus_observation.subscription
 type 'a state = 'a Bap_primus_state.t
 type exit_status =
   | Normal
@@ -42,6 +43,8 @@ module type Machine = sig
 
   module Observation : sig
     val observe : 'a observation -> ('a -> unit t) -> unit t
+    val subscribe : 'a observation -> ('a -> unit t) -> subscription t
+    val cancel : subscription -> unit t
     val watch : provider -> (Sexp.t -> unit t) -> unit t
     val make : 'a statement -> 'a -> unit t
     val post : 'a statement -> f:(('a -> unit t) -> unit t) -> unit t

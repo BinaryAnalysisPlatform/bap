@@ -120,6 +120,8 @@ module Make (Machine : Machine) : sig
 
   val eval_method  : string -> value list -> unit Machine.t
 
+  val optimize : unit -> unit Machine.t
+
   (* deprecated *)
   val link_primitives : primitives -> unit Machine.t
 end

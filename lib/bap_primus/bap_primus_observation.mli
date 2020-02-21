@@ -6,7 +6,9 @@ open Monads.Std
 type 'a t
 type 'a statement
 type 'e observations
+type subscription
 type provider
+
 
 val provide : ?inspect:('a -> Sexp.t) -> string -> 'a t * 'a statement
 
@@ -14,8 +16,12 @@ val name : 'a t -> string
 val inspect : 'a t -> 'a -> Sexp.t
 val of_statement : 'a statement -> 'a t
 
-val add_observer : 'e observations -> 'a t -> ('a -> 'e) -> 'e observations
-val add_watcher : 'e observations -> provider -> (Sexp.t -> 'e) -> 'e observations
+
+val add_observer : 'e observations -> 'a t -> ('a -> 'e) -> 'e observations * subscription
+val add_watcher : 'e observations -> provider -> (Sexp.t -> 'e) ->
+  'e observations * subscription
+
+val cancel : subscription -> 'e observations -> 'e observations
 
 module Make(Machine : Monad.S) : sig
   val notify :
@@ -27,6 +33,7 @@ module Make(Machine : Monad.S) : sig
     'a statement ->
     (('a -> unit Machine.t) -> unit Machine.t) -> unit Machine.t
 end
+
 val empty : 'e observations
 
 val list_providers : unit -> provider list

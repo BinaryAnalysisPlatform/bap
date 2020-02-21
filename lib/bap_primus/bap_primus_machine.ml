@@ -113,15 +113,25 @@ module Make(M : Monad.S) = struct
     let set_observations observations = with_global_context @@ fun () ->
       lifts (SM.update @@ fun s -> {s with observations})
 
-    let observe key observer =
+    let subscribe key observer =
       with_global_context @@ fun () ->
       observations () >>= fun os ->
-      set_observations (Observation.add_observer os key observer)
+      let obs,sub = Observation.add_observer os key observer in
+      set_observations obs >>| fun () -> sub
+
+    let observe key observer =
+      subscribe key observer >>| fun _ -> ()
 
     let watch prov watcher =
       with_global_context @@ fun () ->
       observations () >>= fun os ->
-      set_observations (Observation.add_watcher os prov watcher)
+      let obs,_ = Observation.add_watcher os prov watcher in
+      set_observations obs
+
+    let cancel sub =
+      with_global_context @@ fun () ->
+      observations () >>= fun os ->
+      set_observations (Observation.cancel sub os)
 
     module Observation = Observation.Make(struct
         type 'a t = 'a machine
