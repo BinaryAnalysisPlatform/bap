@@ -17,8 +17,16 @@ end
 
 open Primus
 
+module Time = struct
+  include Int
+  let clocks = ident
+  let of_clocks = of_int
+end
 
 open Bap_primus_sexp
+
+let clock,tick =
+  Observation.provide ~inspect:Time.sexp_of_t "clock"
 
 let memory_switch,switching_memory =
   let inspect = Primus.Memory.Descriptor.sexp_of_t in
@@ -194,6 +202,7 @@ type scope = {
 }
 
 type state = {
+  time : Time.t;
   addr : addr;
   curr : pos;
   lets : scope; (* lexical context *)
@@ -219,6 +228,7 @@ let state = Primus.Machine.State.declare
     (fun proj  ->
        let prog = Project.program proj in
        Pos.{
+         time = Time.zero;
          addr = null proj;
          curr = Top {me=prog; up=Nil};
          lets = empty_scope;
@@ -399,6 +409,16 @@ module Make (Machine : Machine) = struct
       !!switching_memory m >>= fun () ->
       Memory.switch m
 
+  let tick =
+    Machine.Local.get state >>= fun s ->
+    !!tick s.time >>= fun () ->
+    Machine.Local.put state {
+      s with time = Time.succ s.time;
+    }
+
+  let time =
+    Machine.Local.get state >>| fun s -> s.time
+
 
   let rec eval_exp x =
     let eval = function
@@ -415,6 +435,7 @@ module Make (Machine : Machine) = struct
       | Bil.Ite (cond, yes, no) -> eval_ite cond yes no
       | Bil.Let (v,x,y) -> eval_let v x y in
     !!exp_entered x >>= fun () ->
+    tick >>= fun () ->
     eval x >>= fun r ->
     !!exp_left x >>| fun () -> r
   and eval_let v x y =

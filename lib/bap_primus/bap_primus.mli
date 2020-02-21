@@ -779,6 +779,15 @@ module Std : sig
 
     end
 
+    module Time : sig
+      type t [@@deriving sexp_of]
+      val clocks : t -> int
+      val of_clocks : int -> t
+      val to_string : t -> string
+      val pp : Format.formatter -> t -> unit
+      include Base.Comparable.S with type t := t
+    end
+
 
     (** The Interpreter.
 
@@ -795,6 +804,8 @@ module Std : sig
         with the [(x,y,z)] tuple, that in fact corresponds to
         [observation >>> fun (x,y,z)] -> ... *)
     module Interpreter : sig
+
+      val clock : Time.t observation
 
       (** [pc_change x] happens every time a code at address [x] is executed.  *)
       val pc_change : addr observation
@@ -1017,6 +1028,8 @@ module Std : sig
           given [Machine].  *)
       module Make (Machine : Machine.S) : sig
         type 'a m = 'a Machine.t
+
+        val time : Time.t m
 
         (** [halt] halts the machine by raise the [Halt] exception.  *)
         val halt : never_returns m

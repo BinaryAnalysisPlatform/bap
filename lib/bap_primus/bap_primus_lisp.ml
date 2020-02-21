@@ -366,6 +366,7 @@ module Interpreter(Machine : Machine) = struct
       | {data=Msg (fmt,es)} -> msg fmt es
       | {data=Err msg} -> Machine.raise (Runtime_error msg)
     and rep c e =
+      Eval.tick >>= fun () ->
       eval c >>= function {value} as r ->
         if Word.is_zero value then Machine.return r
         else eval e >>= fun _ -> rep c e
@@ -384,7 +385,8 @@ module Interpreter(Machine : Machine) = struct
       Machine.Local.get state >>= fun {env; width; program} ->
       let v = Vars.of_lisp width v in
       if Map.mem env.vars v
-      then Machine.return @@
+      then
+        Machine.return @@
         List.Assoc.find_exn ~equal:Var.equal env.stack v
       else Env.has v >>= function
         | true -> Eval.get v
@@ -400,7 +402,8 @@ module Interpreter(Machine : Machine) = struct
       Machine.List.map args ~f:eval >>= fun args -> match n with
       | Static _ -> assert false
       | Dynamic "invoke-subroutine" -> eval_sub args
-      | Dynamic n -> eval_lisp n args
+      | Dynamic n ->
+        eval_lisp n args
     and seq es =
       let rec loop = function
         | [] -> Eval.const Word.b0
@@ -411,7 +414,9 @@ module Interpreter(Machine : Machine) = struct
       Machine.Local.get state >>= fun s ->
       let v = Vars.of_lisp s.width v in
       if Map.mem s.env.vars v
-      then Machine.Local.put state (Vars.replace v w s) >>| fun () -> w
+      then
+        Machine.Local.put state (Vars.replace v w s) >>| fun () ->
+        w
       else Eval.set v w >>| fun () -> w
     and msg fmt es =
       let buf = Buffer.create 64 in
