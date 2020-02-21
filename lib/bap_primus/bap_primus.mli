@@ -5,6 +5,8 @@ open Monads.Std
 open Bap_future.Std
 open Bap_strings.Std
 
+[@@@warning "-D"]
+
 module Std : sig
   (** Primus - The Microexecution Framework.
 
@@ -60,7 +62,6 @@ module Std : sig
       it can modify other components (depending on their interface).
 
   *)
-  [@@@warning "-D"]
 
   module Primus : sig
     (** Machine Exception.
@@ -99,7 +100,7 @@ module Std : sig
     (** Machine Observation.
 
         The Primus Framework is built on top of the Machine
-        observation. The Machine components make their own
+        observations. The Machine components make their own
         observations, based on observation made by other components.
 
         A value of type ['a observation] is a first-class
@@ -143,7 +144,7 @@ module Std : sig
       (** Data interface to the provider.
 
           This interface provides access to the data stream of all
-          providers expresses as a stream of s-expressions.
+          providers. The data stream is expressed as a stream of s-expressions.
       *)
       module Provider : sig
         type t = provider
@@ -154,7 +155,7 @@ module Std : sig
         (** a total number of observers that subscribed to this provider  *)
         val observers : t -> int
 
-        (** triggers a stream of occurrences of this observation  *)
+        (** a stream of occurrences of this observation  *)
         val triggers : t -> unit stream
 
         (** a data stream from this observation *)
@@ -359,6 +360,7 @@ module Std : sig
 
         (** Observations interface.  *)
         module Observation : sig
+          type posted
 
           (** [observe obs on_observation] subscribes to the given
               observation [obs]. Every time the observation [obs] is
@@ -374,6 +376,9 @@ module Std : sig
           (** [make observation event] make an [observation] of the
               given [event].  *)
           val make : 'a statement -> 'a -> unit t
+
+          val post : 'a statement -> f:(('a -> posted) -> posted) -> unit t
+
         end
 
 

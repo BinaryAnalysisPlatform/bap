@@ -20,6 +20,10 @@ val notify :
   'e observations ->
   'a statement -> 'a -> 'e seq
 
+val notify_if_observed :
+  'e observations ->
+  'a statement -> (('a -> 'e seq) -> 'e seq) -> 'e seq
+
 val empty : 'e observations
 
 val list_providers : unit -> provider list

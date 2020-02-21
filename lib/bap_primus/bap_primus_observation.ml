@@ -64,6 +64,7 @@ let add_observer observers key obs =
 let add_watcher observers {key} obs =
   add_observer observers key obs
 
+
 let notify_provider key x =
   let p = Hashtbl.find_exn providers (name key) in
   if Stream.has_subscribers p.data
@@ -78,9 +79,9 @@ let notify_observer os key x =
 let notify_watchers os key x =
   let p = Hashtbl.find_exn providers (name key) in
   match Map.find os p.key with
-  | None -> Seq.empty
+  | None | Some (Observers []) -> Seq.empty
   | Some (Observers os) ->
-    let data = (inspect key x) in
+    let data = inspect key x in
     Seq.(map ~f:(fun ob -> ob data) @@ of_list os)
 
 let notify os key x =
@@ -89,6 +90,35 @@ let notify os key x =
     (notify_observer os key x)
     (notify_watchers os key x)
 
+let callbacks os key =
+  match Map.find_exn os key with
+  | exception _ -> []
+  | Observers obs -> obs
+
+let apply inj x = function
+  | [] -> Seq.empty
+  | xs ->
+    let data = inj x in
+    Seq.of_list xs |>
+    Seq.map ~f:(fun ob -> ob data)
+
+let notify_if_observed os key k =
+  let p = Hashtbl.find_exn providers (name key) in
+  Signal.send p.newtrigger ();
+  match callbacks os key, callbacks os p.key  with
+  | [], [] ->
+    if Stream.has_subscribers p.data
+    then k @@ fun x ->
+      Signal.send p.newdata (inspect key x);
+      Seq.empty
+    else Seq.empty
+  | os, ws -> k @@ fun x ->
+    let sexp = lazy (inspect key x) in
+    if Stream.has_subscribers p.data
+    then Signal.send p.newdata (Lazy.force sexp);
+    Seq.append
+      (apply ident x os)
+      (apply Lazy.force sexp ws)
 
 let empty = Map.empty
 
