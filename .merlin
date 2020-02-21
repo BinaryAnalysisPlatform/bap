@@ -39,6 +39,37 @@ B _build/lib/regular
 B _build/lib/text_tags
 B _build/lib/knowledge
 
+B lib/bap
+B lib/bap_main
+B lib/bap_recipe
+B lib/bap_abi
+B lib/bap_api
+B lib/bitvec
+B lib/bitvec_order
+B lib/bitvec_sexp
+B lib/bap_bundle
+B lib/bap_c
+B lib/bap_config
+B lib/bap_disasm
+B lib/bap_dwarf
+B lib/bap_elf
+B lib/bap_future
+B lib/bap_image
+B lib/bap_plugins
+B lib/bap_primus
+B lib/bap_sema
+B lib/bap_types
+B lib/bap_core_theory
+B lib/graphlib
+B lib/monads
+B lib/ogre
+B lib/bap_primus
+B lib/bap_llvm
+B lib/regular
+B lib/text_tags
+B lib/knowledge
+
+
 S lib/bap
 S lib/bap_main
 S lib/bap_recipe

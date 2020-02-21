@@ -7,7 +7,8 @@ Library mips_plugin
   Path:                 plugins/mips
   FindlibName:          bap-plugin-mips
   Build$:               flag(everything) || flag (mips)
-  BuildDepends:         bap, bap-abi, bap-c, bap-core-theory
+  BuildDepends:         bap, bap-abi, bap-c, bap-core-theory, core_kernel,
+                        ppx_jane, regular, zarith, bap-knowledge, bap-main, bap-api
   InternalModules:
                         Mips,
                         Mips_main,
@@ -27,5 +28,4 @@ Library mips_plugin
                         Mips_divide,
                         Mips_shift_and_rot,
                         Mips_store
-
   XMETAExtraLines:      tags="mips,lifter,arch,abi"

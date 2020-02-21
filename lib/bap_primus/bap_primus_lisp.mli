@@ -37,6 +37,7 @@ end
 
 module Type : sig
   type t
+  type env
   type signature
   type error
 
@@ -67,6 +68,9 @@ module Type : sig
     val (@->) : [< parameters] -> t -> signature
   end
 
+  val error : error observation
+
+  val errors : env -> error list
   val check : Var.t seq -> program -> error list
   val pp_error : Format.formatter -> error -> unit
 end
@@ -100,10 +104,14 @@ module Make (Machine : Machine) : sig
 
   val program : program Machine.t
 
+  val typecheck : unit Machine.t
+
+  val types : Type.env Machine.t
+
   val define : ?types:Type.signature -> ?docs:string -> string -> closure -> unit Machine.t
 
   val signal :
-    ?params:Type.parameters ->
+    ?params:[< Type.parameters] ->
     ?doc:string ->
     'a observation ->
     ('a -> value list Machine.t) -> unit Machine.t

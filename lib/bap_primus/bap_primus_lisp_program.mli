@@ -1,6 +1,7 @@
 open Bap.Std
 
 open Bap_primus_lisp_types
+open Bap_primus_lisp_type
 module Def = Bap_primus_lisp_def
 module Context = Bap_primus_lisp_context
 
@@ -9,6 +10,7 @@ type program = t
 type 'a item
 
 val empty : t
+val merge : t -> t -> t
 val add : t -> 'a item -> 'a Def.t -> t
 val get : t -> 'a item -> 'a Def.t list
 val context : t -> Context.t
@@ -25,11 +27,16 @@ module Items : sig
   val meth  : Def.meth  item
   val para  : Def.para item
   val primitive  : Def.prim item
+  val signal : Def.signal item
 end
 
 module Type : sig
+  type env
   type error
+  val empty : env
+  val infer : ?externals:(string * signature) list -> Var.t seq -> program -> env
   val check : Var.t seq -> program -> error list
+  val errors : env -> error list
   val pp_error : Format.formatter -> error -> unit
 end
 

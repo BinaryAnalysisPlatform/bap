@@ -8,6 +8,6 @@ Library optimization_plugin
   Path: plugins/optimization
   FindlibName: bap-plugin-optimization
   CompiledObject: best
-  BuildDepends: bap
+  BuildDepends: bap, core_kernel, ppx_jane, regular
   InternalModules: Optimization_main, Optimization_data
   XMETAExtraLines: tags="pass,analysis,optimization"

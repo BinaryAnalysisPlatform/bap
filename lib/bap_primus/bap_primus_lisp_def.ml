@@ -46,6 +46,8 @@ type para = {
   default : ast;
 }
 
+type signal = Type.signature
+
 type 'a primitive = (value list -> 'a)
 
 
@@ -93,6 +95,22 @@ module Func = struct
 end
 
 module Meth = Func
+
+module Signal = struct
+  type nonrec t = signal t
+
+  let create ?(docs="") ~types name : t = {
+    data = {
+      meta = {name; docs; attrs=Attribute.Set.empty};
+      code = types;
+    };
+    id = Source.Id.null;
+    eq = Source.Eq.null;
+  }
+
+  let signature {data={code}} = code
+end
+
 
 module Para =  struct
   let create : 'a def =
@@ -195,6 +213,7 @@ module Primitive = struct
 end
 
 
+
 module type Primitives = functor (Machine : Machine) ->  sig
   val defs : unit -> value Machine.t Primitive.t list
 end
@@ -219,6 +238,7 @@ module Closure = struct
     id = Id.null;
     eq = Eq.null;
   }
+
   let body p = p.data.code.lambda
 
   let signature p = p.data.code.types

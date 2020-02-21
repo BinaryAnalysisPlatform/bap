@@ -8,6 +8,8 @@ Library disassemble_plugin
   Path: plugins/disassemble
   FindlibName: bap-plugin-disassemble
   CompiledObject: best
-  BuildDepends: bap
+  BuildDepends: bap, bap-knowledge, bap-core-theory, core_kernel,
+                regular, monads, bap-plugins, bap-bundle, bap-main,
+                ppx_jane
   InternalModules: Disassemble_main
   XMETAExtraLines: tags="command, analysis, disassemble"

@@ -8,6 +8,7 @@ Library trace_plugin
   FindlibName:    bap-plugin-trace
   CompiledObject: best
   Modules: Trace_main
-  BuildDepends:   bap, bap-traces
+  BuildDepends:   bap, bap-traces, core_kernel, ppx_jane, bap-plugins,
+                  bap-future, uri, regular
   XMETADescription: manage execution traces
   XMETAExtraLines:  tags="dynamic, pass, printer, trace"

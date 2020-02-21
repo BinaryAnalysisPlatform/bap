@@ -2,7 +2,9 @@ open Bap.Std
 open Bap_primus.Std
 include Self()
 
-let init _ = Primus_x86_loader.init () ;;
+let init _ =
+  Primus.Machine.add_component (module Primus_x86_loader.InitializeFlags);
+  Primus.Machine.add_component (module Primus_x86_loader.SetupPLT);;
 
 Config.manpage [
   `S "DESCRIPTION";

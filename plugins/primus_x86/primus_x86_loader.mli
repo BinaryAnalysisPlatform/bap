@@ -1,2 +1,4 @@
+open Bap_primus.Std
 
-val init : unit -> unit
+module InitializeFlags : Primus.Machine.Component
+module SetupPLT : Primus.Machine.Component

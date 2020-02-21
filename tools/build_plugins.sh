@@ -11,12 +11,12 @@ if [ $OS = "macosx" ]; then
 fi
 
 built_plugins=_build/built_plugins
-[ -d $built_plugins ] || mkdir $built_plugins
+[ -d $built_plugins ] || mkdir -p $built_plugins
 
 compute_digest() {
     plugin_lib=$1
     output=$2
-    $md5sum `ocamlfind query -predicates byte -a-format -r $plugin_lib` > $output
+    $md5sum $(ocamlfind query -predicates byte -a-format -r $plugin_lib) > $output
 }
 
 build_plugin() {
@@ -33,15 +33,14 @@ build_plugin() {
 
     if cmp -s digest new_digest
     then
-        echo "$1: cache hit"
+        echo "$1: is up-to-date"
     else
-        echo "$1: cache miss"
         touch $plugin.ml
         bapbuild -clean
         bapbuild -package bap-plugin-$1 $plugin.plugin
-        DESC=`ocamlfind query -format "%D" bap-plugin-$1`
-        CONS=`ocamlfind query -format "%(constraints)" bap-plugin-$1`
-        TAGS=`ocamlfind query -format "%(tags)" bap-plugin-$1`
+        DESC=$(ocamlfind query -format "%D" bap-plugin-$1)
+        CONS=$(ocamlfind query -format "%(constraints)" bap-plugin-$1)
+        TAGS=$(ocamlfind query -format "%(tags)" bap-plugin-$1)
         if [ -z $CONS ]; then
             bapbundle update -name $1 -desc "$DESC" -tags "core,$TAGS" $plugin.plugin
         else
@@ -53,12 +52,10 @@ build_plugin() {
     mv new_digest digest
 }
 
-
-for plugin in `ls _build/plugins`; do
-    (build_plugin $plugin)&
-    echo `pwd`
+for plugin in $(ls plugins); do
+    if [ -d plugins/$plugin ]; then
+        (build_plugin $plugin)&
+    fi
 done
 wait
-
-
 echo "Finished updating plugins"

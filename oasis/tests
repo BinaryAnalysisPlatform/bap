@@ -3,7 +3,7 @@ Library types_test
   Build$:         (flag(everything) || flag(bap_std)) && flag(tests)
   Install:        false
   CompiledObject: best
-  BuildDepends:   bap, oUnit
+  BuildDepends:   bap, oUnit, core_kernel, regular, graphlib, ocamlgraph, bap-future, ppx_jane
   Modules:        Test_bitvector,
                   Test_bili,
                   Test_bytes,
@@ -15,7 +15,7 @@ Library image_test
   Path:           lib_test/bap_image
   Build$:         (flag(everything) || flag(bap_std)) && flag(tests)
   CompiledObject: best
-  BuildDepends:   bap, oUnit
+  BuildDepends:   bap, oUnit, core_kernel, bap-future
   Install:        false
   Modules:        Test_image,
                   Test_memmap,
@@ -25,7 +25,7 @@ Library project_test
   Path:           lib_test/bap_project
   Build$:         (flag(everything) || flag(bap_std)) && flag(tests)
   CompiledObject: best
-  BuildDepends:   bap, oUnit
+  BuildDepends:   bap, oUnit, core_kernel, bap-core-theory, bap-future, bap-knowledge
   Install:        false
   Modules:        Test_project
 
@@ -33,7 +33,7 @@ Library disasm_test
   Path:           lib_test/bap_disasm
   Build$:         (flag(everything) || flag(bap_std)) && flag(tests)
   CompiledObject: best
-  BuildDepends:   bap, oUnit, str
+  BuildDepends:   bap, oUnit, str, core_kernel, regular, ppx_jane
   Install:        false
   Modules:        Test_disasm
 
@@ -41,7 +41,7 @@ Library sema_test
   Path:           lib_test/bap_sema
   Build$:         (flag(everything) || flag(bap_std)) && flag(tests)
   CompiledObject: best
-  BuildDepends:   bap, oUnit
+  BuildDepends:   bap, oUnit, core_kernel
   Install:        false
   Modules:        Test_ir
 
@@ -56,6 +56,9 @@ Executable run_tests
                 sema_test,
                 types_test,
                 project_test,
+                core_kernel,
+                bap-plugins,
+                bap-main,
                 findlib.dynload
   CompiledObject: best
 

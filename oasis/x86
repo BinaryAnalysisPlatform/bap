@@ -7,7 +7,7 @@ Library "bap-x86-cpu"
  XMETADescription: provide x86 lifter
  Path:             lib/x86_cpu
  FindlibName:      bap-x86-cpu
- BuildDepends:     bap
+ BuildDepends:     bap, core_kernel, ppx_jane
  Modules:          X86_cpu,
                    X86_env,
                    X86_asm,
@@ -21,7 +21,8 @@ Library x86_plugin
  XMETADescription: provide x86 lifter
  Path:             plugins/x86
  FindlibName:      bap-plugin-x86
- BuildDepends:     bap, bap-abi, bap-c, bap-x86-cpu, bap-llvm
+ BuildDepends:     bap, bap-abi, bap-c, bap-x86-cpu, bap-llvm, core_kernel,
+                   ppx_jane, bap-main, bap-future, bap-api
  Modules:          X86_backend, X86_prefix
  InternalModules:  X86_abi,
                    X86_btx,
@@ -61,7 +62,7 @@ Library x86_test
   Path:           lib_test/x86
   Build$:         flag(tests) && (flag(everything) || flag(x86))
   CompiledObject: best
-  BuildDepends:   bap, oUnit, bap-x86-cpu
+  BuildDepends:   bap, oUnit, bap-x86-cpu, core_kernel
   Install:        false
   Modules:        Test_pshufb, Test_pcmp
 
@@ -69,7 +70,7 @@ Executable run_x86_tests
   Path:		  lib_test/x86
   Build$:	  flag(tests) && (flag(everything) || flag(x86))
   CompiledObject: best
-  BuildDepends:	  bap-plugins, findlib.dynload, oUnit, x86_test
+  BuildDepends:	  bap-plugins, findlib.dynload, oUnit, x86_test, bap-main, bap-future
   Install:	  false
   MainIs: run_x86_tests.ml
 

@@ -8,9 +8,13 @@ let is_section name v =
   | Some x -> String.(x = name)
   | _ -> false
 
-module Plt_jumps(Machine : Primus.Machine.S) = struct
+module SetupPLT(Machine : Primus.Machine.S) = struct
   module Linker = Primus.Linker.Make(Machine)
   open Machine.Syntax
+
+  module Value = Primus.Value.Make(Machine)
+  module Interpreter = Primus.Interpreter.Make(Machine)
+  module Env = Primus.Env.Make(Machine)
 
   let section_memory sec_name =
     Machine.get () >>| fun proj ->
@@ -33,27 +37,12 @@ module Plt_jumps(Machine : Primus.Machine.S) = struct
         Seq.exists memory ~f:(fun mem -> Memory.contains mem a))
 
   let unlink addrs =
-    Machine.List.iter addrs ~f:(fun addr -> Linker.unlink (`addr addr))
+    Machine.List.iter addrs ~f:(fun a -> Linker.unlink (`addr a))
 
-  let unresolve  =
+  let unresolve =
     load_table >>=
     filter_plt >>=
     unlink
-end
-
-
-module Component(Machine : Primus.Machine.S) = struct
-  open Machine.Syntax
-  module Env = Primus.Env.Make(Machine)
-  module Value = Primus.Value.Make(Machine)
-  module Interpreter = Primus.Interpreter.Make(Machine)
-  module Plt_jumps = Plt_jumps(Machine)
-
-  let zero = Primus.Generator.static 0
-
-  let initialize_flags flags =
-    Machine.Seq.iter (Set.to_sequence flags) ~f:(fun reg ->
-        Env.add reg zero)
 
   let correct_sp sp addend _ =
     Env.get sp >>= fun x ->
@@ -64,24 +53,36 @@ module Component(Machine : Primus.Machine.S) = struct
     | Unk | Mem _ -> Machine.return ()
     | Imm width ->
       Value.of_int ~width addend >>= fun addend ->
-      Machine.sequence [
-        Primus.Linker.Trace.lisp_call_return >>> correct_sp sp addend; ]
+      Primus.Linker.Trace.lisp_call_return >>> correct_sp sp addend
 
-  let init () =
-    Machine.get () >>= fun proj ->
-    Machine.sequence @@
-    match Project.arch proj with
-    | `x86 ->
-      [initialize_flags IA32.flags;
-       correct_sp IA32.sp 4;
-       Plt_jumps.unresolve ]
-    | `x86_64 ->
-      [initialize_flags AMD64.flags;
-       correct_sp AMD64.sp 8;
-       Plt_jumps.unresolve ]
-    | _ -> []
+  let run () =
+    Machine.gets Project.arch >>= function
+    | `x86 -> Machine.sequence [
+        correct_sp IA32.sp 4;
+        unresolve
+      ]
+    | `x86_64 -> Machine.sequence [
+        correct_sp AMD64.sp 8;
+        unresolve
+      ]
+    | _ -> Machine.return ()
+
+  let init () = Primus.Machine.init >>> run
 
 end
 
-let init () =
-  Primus.Machine.add_component (module Component)
+module InitializeFlags(Machine : Primus.Machine.S) = struct
+  open Machine.Syntax
+  module Env = Primus.Env.Make(Machine)
+
+  let zero = Primus.Generator.static 0
+
+  let initialize_flags flags =
+    Machine.Seq.iter (Set.to_sequence flags) ~f:(fun reg ->
+        Env.add reg zero)
+  let init () =
+    Machine.gets Project.arch >>= function
+    | `x86 -> initialize_flags IA32.flags
+    | `x86_64 -> initialize_flags AMD64.flags
+    | _ -> Machine.return ()
+end
