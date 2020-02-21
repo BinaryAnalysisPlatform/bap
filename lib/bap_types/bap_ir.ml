@@ -831,7 +831,7 @@ module Ir_phi = struct
       (String.concat ~sep:", " @@
        List.map ~f:(fun (id,exp) ->
            let exp = Rhs.exp exp in
-           Format.asprintf "[%a, %%%a]" Bap_exp.pp exp Tid.pp id)
+           Format.asprintf "[%a, %a]" Bap_exp.pp exp Tid.pp id)
          (Map.to_alist map))
 
   let pp_self_slots ds ppf {Phi.var; map} =

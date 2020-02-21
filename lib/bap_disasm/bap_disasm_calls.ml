@@ -45,7 +45,7 @@ end
     v}
 
     Usually, dominators are computed using a transfer function that is
-    defined as [transfer node ps = (node) U ps], which our third node,
+    defined as [transfer node ps = (node) U ps], which our third clause,
     however we specialized our tranfer function for two reasons
 
     1) efficiency - the first clause removes an explicit entry node,

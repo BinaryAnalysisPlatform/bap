@@ -22,6 +22,32 @@
    of the last evaluation of BODY becomes the value of the whole expression."
   (while (not c) b))
 
+(defmacro case (k x xs)
+  "(case K K1 X1 K2 X2 ... Kn Xn [DEF]) evaluates K then consequently
+   evaluates keys K1 ...Kn until a key Ki such that (= K Ki) is found.
+   If such key is found then the whole form evaluates to Xi.
+   If no matching key was found, then if the number of keys is equal to
+   the number of expressions, nil is returned, otherwise, i.e., if an
+   extra expression DEF is provided, then it becomes the value of the
+   whole form.
+
+   Examples:
+
+       (defun dispatch-with-default-case (c)
+         (case c
+           1 'hello
+           2 'cruel
+           3 'world
+           'unknown))
+
+       (defun dispatch-with-no-default (c)
+         (case c
+           1 'hello
+           2 'cruel
+           3 'world))"
+  (let ((k k))
+    (case/dispatch k x xs)))
+
 (defun non-zero (x)
   "(non-zero X) is true if X is not zero"
   (not (is-zero x)))
@@ -103,3 +129,8 @@
   x)
 (defmacro max (p q)    (let ((x p) (y q)) (if (> x y) x y)))
 (defmacro max (x y ys) (max (max x y) ys))
+
+(defmacro case/dispatch (k x) x)
+(defmacro case/dispatch (k k' x) (when (= k k') x))
+(defmacro case/dispatch (k k' x xs)
+  (if (= k k') x (case/dispatch k xs)))

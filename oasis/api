@@ -7,7 +7,7 @@ Library bap_api
   Path:             lib/bap_api
   FindlibName:      bap-api
   CompiledObject:   best
-  BuildDepends:     bap
+  BuildDepends:     bap, core_kernel, ppx_jane
   Modules:          Bap_api
 
 
@@ -16,7 +16,7 @@ Library api_plugin
   Path:             plugins/api
   FindlibName:      bap-plugin-api
   CompiledObject:   best
-  BuildDepends:     bap, bap-api, fileutils
+  BuildDepends:     bap, bap-api, fileutils, core_kernel, ppx_jane, regular
   InternalModules:  Api_main, Api_config
   XMETADescription: add parameters to subroutines based on known API
   DataFiles:        api/c/*.h ($datadir/bap-api/c)

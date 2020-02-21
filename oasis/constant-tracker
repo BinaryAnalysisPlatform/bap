@@ -6,7 +6,7 @@ Flag constant_tracker
 Library constant_tracker_plugin
   Build$:       flag(everything) || flag(constant_tracker)
   Path:         plugins/constant_tracker
-  BuildDepends: bap-primus
+  BuildDepends: bap-primus, bap, core_kernel
   FindlibName:     bap-plugin-constant_tracker
   CompiledObject:  best
   InternalModules: Constant_tracker_main

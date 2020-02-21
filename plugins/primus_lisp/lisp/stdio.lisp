@@ -1,5 +1,6 @@
 (require libc-init)
 (require memory)
+(require types)
 
 
 (defun fputc (char stream)
@@ -13,7 +14,7 @@
 (defun fputs (p stream)
   (declare (external "fputs"))
   (while (not (points-to-null p))
-    (fputc (memory-read p) stream)
+    (fputc (cast int (memory-read p)) stream)
     (incr p))
   (fputc 0xA stream))
 
@@ -109,6 +110,6 @@
   (declare (external "getchar"))
   (fgetc *standard-input*))
 
-(defmethod finished ()
+(defmethod fini ()
   (channel-flush *standard-output*)
   (channel-flush *standard-error*))

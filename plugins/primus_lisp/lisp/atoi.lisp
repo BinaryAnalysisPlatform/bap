@@ -1,3 +1,4 @@
+(require types)
 (require ascii)
 
 (defmacro skip-all (pred s)
@@ -7,7 +8,7 @@
   (or (ascii-special s) (ascii-whitespace s)))
 
 (defun atoi-read-digit (s)
-  (coerce 0 (word-size) (- (memory-read s) ?0)))
+  (cast ptr_t (- (memory-read s) ?0)))
 
 (defun read-ascii-word (s)
   (skip-all atoi-prefix s)
@@ -18,6 +19,9 @@
       (incr s))
     (* sign v)))
 
-(defun atoi  (s) (c-int (read-ascii-word s)))
-(defun atol  (s) (c-long (read-ascii-word s)))
-(defun atoll (s) (c-long-long (read-ascii-word s)))
+(defmacro make-converter (type s)
+  (cast type (read-ascii-word s)))
+
+(defun atoi  (s) (make-converter int s))
+(defun atol  (s) (make-converter long s))
+(defun atoll (s) (make-converter long-long s))

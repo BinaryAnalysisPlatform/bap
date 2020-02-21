@@ -71,7 +71,7 @@ let init redirs = {
 
 let try_open path = Or_error.try_with (fun () -> {
       input = Some (In_channel.create path);
-      output = Some (Out_channel.create path)
+      output = Some (Out_channel.create ~append:true path)
     })
 
 let try_flush {output} = Or_error.try_with @@ fun () ->
@@ -264,7 +264,7 @@ let init redirections =
             channel that has the descriptor DESCR to be outputted to the
             associated destination. Returns -1 if no such channel exists or
             if in case of an IO error.|};
-        def "channel-input"  (one int @-> int) (module Input)
+        def "channel-input"  (one int @-> byte) (module Input)
           {|(channel-input DESC) reads one byte from a channel that
             has the descriptor DESC. Returns -1 if no such channel
             exists, or if any IO error occurs, if the channel is not

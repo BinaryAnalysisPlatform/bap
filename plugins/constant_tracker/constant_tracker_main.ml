@@ -56,6 +56,23 @@ module IsConstBuffer(Machine : Primus.Machine.S) = struct
 end
 
 
+module Primitives(Machine : Primus.Machine.S) = struct
+  module Lisp = Primus.Lisp.Make(Machine)
+  open Primus.Lisp.Type.Spec
+
+  let init () = Machine.sequence [
+      Lisp.define "all-static-constant" (module IsConst)
+        ~types:(all any @-> bool)
+        ~docs:"(all-static-constant X Y ..) is true if X,Y,... are static constants.
+    A value is a static constant if it was initialized from a constant
+    value or computed from static constant values. ";
+      Lisp.define "points-to-static-data" (module IsConstBuffer)
+        ~types:(tuple [int; int] @-> bool)
+        ~docs: "(points-to-static-data PTR LEN) is true iff
+          (all-static-constant *PTR .. *(PTR+LEN-1))"
+    ]
+end
+
 module Tracker(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
 
@@ -67,26 +84,12 @@ module Tracker(Machine : Primus.Machine.S) = struct
     then Machine.Local.put state (declare_const output s)
     else Machine.return ()
 
-  let prop_binop ((op,x,y),z) = propagate [x;y] z
-  let prop_unop ((op,x),z) = propagate [x] z
-  let prop_cast ((c,_,x),z) = propagate [x] z
+  let prop_binop ((_,x,y),z) = propagate [x;y] z
+  let prop_unop ((_,x),z) = propagate [x] z
+  let prop_cast ((_,_,x),z) = propagate [x] z
   let prop_extract ((_,_,x),z) = propagate [x] z
   let prop_concat ((x,y),z) = propagate [x;y] z
 
-  let declare_interface =
-    let module Lisp = Primus.Lisp.Make(Machine) in
-    let open Primus.Lisp.Type.Spec in
-    Machine.sequence [
-      Lisp.define "all-static-constant" (module IsConst)
-        ~types:(all int @-> bool)
-        ~docs:"(all-static-constant X Y ..) is true if X,Y,... are static constants.
-    A value is a static constant if it was initialized from a constant
-    value or computed from static constant values. ";
-      Lisp.define "points-to-static-data" (module IsConstBuffer)
-        ~types:(tuple [int; int] @-> bool)
-        ~docs: "(points-to-static-data PTR LEN) is true iff
-          (all-static-constant *PTR .. *(PTR+LEN-1))"
-    ]
 
   let init () = Machine.sequence Primus.Interpreter.[
       const >>> intro;
@@ -95,12 +98,12 @@ module Tracker(Machine : Primus.Machine.S) = struct
       cast  >>> prop_cast;
       extract >>> prop_extract;
       concat >>> prop_concat;
-      declare_interface;
     ]
 end
 
 let enable = Config.flag "enable"
 
 let () = Config.when_ready (fun {Config.get} ->
+    Primus.Machine.add_component (module Primitives);
     if get enable then
       Primus.Machine.add_component (module Tracker))

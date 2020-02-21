@@ -2,3 +2,7 @@ REC
 B ../../_build/plugins/primus_taint
 B ../../_build/lib/bap_primus
 B ../../_build/lib/bap_taint
+
+B .
+B ../../lib/bap_primus
+B ../../lib/bap_taint

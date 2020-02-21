@@ -9,5 +9,5 @@ Library bap_primus_machine
   Path: lib/bap_primus_machine
   FindlibName: bap-primus-machine
   CompiledObject: best
-  BuildDepends: bap-knowledge, core_kernel
+  BuildDepends: bap-knowledge, core_kernel, monads, ppx_jane
   Modules: Bap_primus_machine

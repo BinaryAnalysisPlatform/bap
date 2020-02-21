@@ -41,6 +41,8 @@ let kinds = Primus.Machine.State.declare
 module Object = struct
   type Primus.exn += Bad_object of Primus.value
 
+  let t = Primus.Lisp.Type.Spec.word 63
+
   module Make(Machine : Primus.Machine.S) = struct
     module Value = Primus.Value.Make(Machine)
 
@@ -253,12 +255,12 @@ module Taint = struct
       change v r ~f:(function
           | None -> None
           | Some ts ->
-             let ts = Set.filter ts ~f:(fun t ->
+            let ts = Set.filter ts ~f:(fun t ->
                 match Map.find objects t with
                 | None -> false
                 | Some k' -> Kind.(k <> k')) in
-             if Set.is_empty ts then None
-             else Some ts)
+            if Set.is_empty ts then None
+            else Some ts)
   end
 end
 
@@ -405,7 +407,7 @@ module Gc = struct
 
     let init () = Machine.sequence Primus.Interpreter.[
         leave_blk >>> main;
-        Primus.Machine.finished >>> finalize;
+        Primus.Interpreter.halting >>> finalize;
       ]
 
 
