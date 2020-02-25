@@ -120,7 +120,8 @@ let main proj =
   printf "ratio = %d/%d = %g\n" jmps total (float jmps /. float total)
 
 let () = Extension.declare @@ fun _ctxt -> 
-   Project.register_pass' main
+   Project.register_pass' main;
+   Ok ()
 ```
 Now we can build, install, and run our analysis using the following commands:
 ```
