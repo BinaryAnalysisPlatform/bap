@@ -6,6 +6,7 @@ module Std = struct
     module Env = Bap_primus_env
     module Generator = Bap_primus_generator
     module Interpreter = Bap_primus_interpreter
+    module Time = Interpreter.Time
     module Linker = Bap_primus_linker
     module Machine = struct
       module type State = State

@@ -13,6 +13,7 @@ type counter =
   | Insn
   | Term
   | Exp
+  | Clk
 
 type bound = {
   counter : counter;
@@ -30,26 +31,28 @@ module Bound = struct
     | 'i' -> Some Insn
     | 't' -> Some Term
     | 'e' -> Some Exp
+    | 'c' -> Some Clk
     | _ -> None
 
   let suffix_of_counter = function
     | Blk -> "b"
     | Insn -> "i"
     | Term -> "t"
-    | Exp -> ""
+    | Exp -> "e"
+    | Clk -> ""
 
   let make_bound counter s = match parse_int s with
     | Ok limit -> `Ok {counter; limit}
     | Error s -> `Error s
 
   let parse s = match counter_of_suffix s with
-    | None -> make_bound Exp s
+    | None -> make_bound Clk s
     | Some cnt -> make_bound cnt s
 
   let print ppf {limit; counter} =
     Format.fprintf ppf "%d%s" limit (suffix_of_counter counter)
 
-  let converter = Config.converter parse print {limit=0; counter=Exp}
+  let converter = Config.converter parse print {limit=0; counter=Clk}
 end
 
 module Cfg = struct
@@ -102,27 +105,23 @@ module Main(Machine : Primus.Machine.S) = struct
     | Insn -> "instructions"
     | Term -> "terms"
     | Exp -> "expressions"
+    | Clk -> "clocks"
 
 
   let check_bound _ = match get Cfg.max_length with
     | None -> Machine.return ()
     | Some {limit; counter} ->
       Machine.Local.get state >>= fun s ->
-      report_progress ~task:"limit max path length" ~stage:s.length ~total:limit ();
       if s.length > limit
       then terminate (string_of_counter counter)
       else Machine.Local.put state {
           s with length = s.length + 1;
         }
 
-
-
   let check_max_visits name visited = match get Cfg.max_visited with
     | None -> Machine.return ()
     | Some max_visited -> match Map.find visited name with
       | Some visits ->
-        report_progress ~task:"limit max visits"
-          ~stage:visits ~total:max_visited ();
         if visits > max_visited
         then terminate
             (sprintf "visits of the %s destination" (Tid.name name))
@@ -143,16 +142,10 @@ module Main(Machine : Primus.Machine.S) = struct
     let open Primus.Interpreter in
     match get Cfg.max_length with
     | None -> Machine.return ()
+    | Some {counter=(Clk|Exp)}  -> clock >>> check_bound
     | Some {counter=Blk}  -> enter_blk >>> check_bound
     | Some {counter=Insn} -> pc_change >>> check_bound
     | Some {counter=Term} -> enter_term >>> check_bound
-    | Some {counter=Exp}  -> Machine.sequence [
-        loading >>> check_bound;
-        storing >>> check_bound;
-        binop >>> check_bound;
-        unop >>> check_bound;
-        Primus.Linker.exec >>> check_bound;
-      ]
 
   let init () =
     Machine.sequence [

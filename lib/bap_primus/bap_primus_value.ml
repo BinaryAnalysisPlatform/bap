@@ -5,9 +5,6 @@ open Bap_strings.Std
 open Format
 open Bap_primus_types
 
-module Observation = Bap_primus_observation
-
-
 module Id = struct
   type t = Int63.t
   include Regular.Make(struct

@@ -202,9 +202,9 @@ module Taint = struct
     let attach v r ts = change v r ~f:(function
         | None -> Some ts
         | Some ts' -> Some (Set.union ts ts')) >>= fun () ->
-      Set.to_sequence ts |>
-      Machine.Seq.iter ~f:(fun o ->
-          Machine.Observation.make attach (r,o,v))
+      Machine.Observation.post attach ~f:(fun report ->
+          Set.to_sequence ts |>
+          Machine.Seq.iter ~f:(fun o -> report (r,o,v)))
 
 
     let detach v r ts = change v r ~f:(function
