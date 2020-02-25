@@ -79,6 +79,28 @@ let print_passes () =
 let pass = Type.enum
     (List.map (Bil.passes ()) ~f:(fun p -> Bil.Pass.to_string p, p))
 
+type ispec = Bil_lifter.ispec
+
+let ispec = Type.define
+    ~parse:(fun s -> match String.split ~on:':' s with
+        | [""; "any"] -> `any
+        | [""; "unknown"] -> `unk
+        | [""; "special"] -> `special
+        | [("tag"|"kind"); name] -> `tag (String.uppercase name)
+        | ["asm"; str] -> `asm (String.uppercase str)
+        | [""; kw] -> invalid_argf "unknown keyword `%s', expects \
+                                    any | unknown | special" kw ()
+        | [pref; code] -> `insn (String.uppercase pref,String.uppercase code)
+        | _ -> invalid_argf "ill-formed specification: %s" s ())
+    ~print:(function
+        | `any -> ":any"
+        | `unk -> ":unknown"
+        | `special -> ":special"
+        | `tag name -> "tag:" ^ name
+        | `asm str -> "asm:" ^ str
+        | `insn (pref,code) -> sprintf "%s:%s" pref code)
+    `any
+
 let () =
   let norml =
     let doc = "Selects a BIL normalization level.
@@ -109,10 +131,29 @@ let () =
       in terms of bitvector arithmetic. This may lead to very large
       denotations." in
 
-  let enable_intrinsics = Configuration.flag "lift-unknown"
-      ~doc:"Translate unknown instructions into intrinsic calls. \
-            Warning! This feature is experimental and could be \
-            renamed, moved, or removed in the future." in
+  let enable_intrinsics = Configuration.parameters Type.(list ispec)
+      "enable-intrinsics"
+      ~doc:"Translate the specified instructions into calls to \
+            intrinsic functions. The option accepts a list of \
+            instruction specifications and can be specified multiple \
+            times. Each element of the list is either a keyword \
+            or a parametrized predicate. If an instuction matches any \
+            of the specifications than it will be translated into a call to \
+            an intrinsic function. The following keywords are \
+            recognized, $(b,:any) - matches with any instruction, \
+            $(b,:unknown) - matches with instructions that have \
+            unknown (to our lifters) semantics, $(b,:special) - \
+            matches with instructions that have special semantics \
+            (expressed with the special statement by our lifters). \
+            The following predicates are recognized, $(b,asm:<str>) \
+            matches with instructions which assembly strings start \
+            with $(b,<str>), $(b,tag:<str>) - matches with \
+            instructions that have a tag (kind) that starts with \
+            $(b,<str>), $(b,<s1>:<s2>) - matches with instructions \
+            that have opcodes starting with $(b,<s2>) in the \
+            encoding that starts with $(b,<s3>). For predicates, \
+            all string comparisons are made case-insensitive. \
+            Example, $(b,:unknown,:special,asm:addsd,llvm:trap)." in
 
   declare ~provides:["bil"; "core-theory"; "lifter"] @@ fun ctxt ->
   let open Syntax in
@@ -121,7 +162,7 @@ let () =
     Bil.select_passes (ctxt-->norml @ ctxt-->optim @ ctxt-->passes);
     Bil_lifter.init ()
       ~with_fp:(ctxt-->enable_fp_emu)
-      ~with_intrinsics:(ctxt-->enable_intrinsics);
+      ~enable_intrinsics:(List.concat@@ctxt-->enable_intrinsics);
     Bil_ir.init();
     let open KB.Syntax in
     Theory.declare !!(module Bil_semantics.Core : Theory.Core)

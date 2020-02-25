@@ -362,16 +362,80 @@ let create_intrinsic arch mem insn =
                      (Insn.name insn));
     ]
 
-let lift ~with_intrinsics arch mem insn =
-  let module Target = (val target_of_arch arch) in
-  match Target.lift mem insn with
-  | Error _ when with_intrinsics ->
-    Ok (create_intrinsic arch mem insn)
-  | other -> other
+type predicate = [
+  | `tag of string
+  | `asm of string
+  | `insn of string * string
+]
+
+type ispec = [
+  | `any | `unk
+  | `special
+  | predicate
+]
+
+let matches ~pat str =
+  String.is_prefix ~prefix:pat @@
+  String.(uppercase@@strip str)
+
+let string_of_kind k =
+  Format.asprintf "%a" Sexp.pp (sexp_of_kind k)
+
+let matches_spec specs insn =
+  let module Insn = Disasm_expert.Basic.Insn in
+  List.exists specs ~f:(function
+      | `tag t ->
+        List.exists (Insn.kinds insn) ~f:(fun k ->
+            matches ~pat:t (string_of_kind k))
+      | `asm t -> matches ~pat:t (Insn.asm insn)
+      | `insn (ns,opcode) ->
+        matches ~pat:ns (Insn.encoding insn) &&
+        matches ~pat:opcode (Insn.name insn))
+
+let with_unknown = List.exists ~f:(function `unk -> true | _ -> false)
 
 
+type enable_intrinsic = {
+  for_all : bool;
+  for_unk : bool;
+  for_special : bool;
+  predicates : predicate list;
+}
 
-let provide_lifter ~with_intrinsics ~with_fp () =
+let split_specs =
+  List.fold
+    ~init:{for_all=false; for_unk=false; for_special=false; predicates=[]}
+    ~f:(fun spec -> function
+        | `any -> {spec with for_all = true}
+        | `unk -> {spec with for_unk = true}
+        | `special -> {spec with for_special=true}
+        | #predicate as p ->
+          {spec with predicates = p :: spec.predicates})
+
+let rec is_special = function
+  | Bil.Special _ -> true
+  | Move _ | CpuExn _ | Jmp _ -> false
+  | Bil.While (_, xs) -> has_special xs
+  | Bil.If (_, xs, ys) -> has_special xs || has_special ys
+and has_special = List.exists ~f:is_special
+
+let lift ~enable_intrinsics:{for_all; for_unk; for_special; predicates}
+    arch mem insn =
+  if for_all || matches_spec predicates insn
+  then Ok (create_intrinsic arch mem insn)
+  else
+    let module Target = (val target_of_arch arch) in
+    match Target.lift mem insn with
+    | Error _ as err ->
+      if for_unk
+      then Ok (create_intrinsic arch mem insn)
+      else err
+    | Ok bil ->
+      if for_special && has_special bil
+      then Ok (create_intrinsic arch mem insn)
+      else Ok bil
+
+let provide_lifter ~enable_intrinsics ~with_fp () =
   info "providing a lifter for all BIL lifters";
   let relocations = Relocations.subscribe () in
   let unknown = Theory.Program.Semantics.empty in
@@ -383,13 +447,14 @@ let provide_lifter ~with_intrinsics ~with_fp () =
   let (>>?) x f = x >>= function
     | None -> KB.return unknown
     | Some x -> f x in
+  let enable_intrinsics = split_specs enable_intrinsics in
   let lifter obj =
     Knowledge.collect Arch.slot obj >>= fun arch ->
     Theory.instance ~context:(context arch) () >>=
     Theory.require >>= fun (module Core) ->
     Knowledge.collect Memory.slot obj >>? fun mem ->
     Knowledge.collect Disasm_expert.Basic.Insn.slot obj >>? fun insn ->
-    match lift ~with_intrinsics arch mem insn with
+    match lift ~enable_intrinsics arch mem insn with
     | Error _ ->
       Knowledge.return (Insn.of_basic insn)
     | Ok bil ->
@@ -406,8 +471,8 @@ let provide_lifter ~with_intrinsics ~with_fp () =
   Knowledge.promise Theory.Program.Semantics.slot lifter
 
 
-let init ~with_intrinsics ~with_fp () =
-  provide_lifter ~with_intrinsics ~with_fp ();
+let init ~enable_intrinsics ~with_fp () =
+  provide_lifter ~enable_intrinsics ~with_fp ();
   provide_bir ();
   Theory.declare !!(module Brancher : Theory.Core)
     ~package:"bap.std" ~name:"jump-dests"
