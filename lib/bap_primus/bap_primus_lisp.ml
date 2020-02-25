@@ -345,7 +345,8 @@ module Interpreter(Machine : Machine) = struct
       Eval.const Word.b0 >>= fun init ->
       eval_advices Advice.Before init name args >>= fun _ ->
       Code.run args >>= fun r ->
-      Machine.Observation.make primitive_called (name,args@[r]) >>= fun () ->
+      Machine.Observation.post primitive_called ~f:(fun k ->
+          k (name,args@[r])) >>= fun () ->
       eval_advices Advice.After r name args
 
   and eval_exp exp  =

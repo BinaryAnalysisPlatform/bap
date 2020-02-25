@@ -137,7 +137,7 @@ let () =
             intrinsic functions. The option accepts a list of \
             instruction specifications and can be specified multiple \
             times. Each element of the list is either a keyword \
-            or a parametrized predicate. If an instuction matches any \
+            or a parametrized predicate. If an instruction matches any \
             of the specifications than it will be translated into a call to \
             an intrinsic function. The following keywords are \
             recognized, $(b,:any) - matches with any instruction, \
