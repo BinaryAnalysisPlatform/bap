@@ -68,7 +68,7 @@
 ;; pre: both old-ptr and new-len are not null
 (defun realloc/update-chunk (old-ptr new-len)
   (let ((old-len (malloc/get-chunk-size old-ptr)))
-    (if (>= old-len len) (realloc/shrink-chunk ptr len)
+    (if (>= old-len new-len) (realloc/shrink-chunk old-ptr new-len)
       (let ((new-ptr (malloc new-len)))
         (when new-ptr
           (memcpy new-ptr old-ptr old-len)
