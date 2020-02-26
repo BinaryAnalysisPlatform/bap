@@ -4,7 +4,6 @@ open Format
 
 open Bap_primus_types
 
-module Observation = Bap_primus_observation
 module Iterator = Bap_primus_iterator
 module Random  = Bap_primus_random
 module Generator = Bap_primus_generator
@@ -151,8 +150,6 @@ module Make(Machine : Machine) = struct
 
   module Generate = Generator.Make(Machine)
   module Value = Bap_primus_value.Make(Machine)
-  let (!!) = Machine.Observation.make
-
 
   let memory =
     Machine.Local.get state >>| fun s -> s.curr

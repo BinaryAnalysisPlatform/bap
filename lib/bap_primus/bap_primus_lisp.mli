@@ -96,6 +96,7 @@ end
 type primitives = (module Primitives)
 type exn += Runtime_error of string
 
+val primitive : (string * value list) observation
 
 module Make (Machine : Machine) : sig
   val failf : ('a, unit, string, unit -> 'b Machine.t) format4 -> 'a
@@ -119,6 +120,8 @@ module Make (Machine : Machine) : sig
   val eval_fun : string -> value list -> value Machine.t
 
   val eval_method  : string -> value list -> unit Machine.t
+
+  val optimize : unit -> unit Machine.t
 
   (* deprecated *)
   val link_primitives : primitives -> unit Machine.t

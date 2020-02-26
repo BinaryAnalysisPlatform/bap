@@ -45,8 +45,8 @@
            1 'hello
            2 'cruel
            3 'world))"
-  (let ((k k))
-    (case/dispatch k x xs)))
+  (let ((key k))
+    (case/dispatch key x xs)))
 
 (defun non-zero (x)
   "(non-zero X) is true if X is not zero"

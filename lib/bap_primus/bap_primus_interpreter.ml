@@ -17,8 +17,16 @@ end
 
 open Primus
 
+module Time = struct
+  include Int
+  let clocks = ident
+  let of_clocks = of_int
+end
 
 open Bap_primus_sexp
+
+let clock,tick =
+  Observation.provide ~inspect:Time.sexp_of_t "clock"
 
 let memory_switch,switching_memory =
   let inspect = Primus.Memory.Descriptor.sexp_of_t in
@@ -194,6 +202,7 @@ type scope = {
 }
 
 type state = {
+  time : Time.t;
   addr : addr;
   curr : pos;
   lets : scope; (* lexical context *)
@@ -219,6 +228,7 @@ let state = Primus.Machine.State.declare
     (fun proj  ->
        let prog = Project.program proj in
        Pos.{
+         time = Time.zero;
          addr = null proj;
          curr = Top {me=prog; up=Nil};
          lets = empty_scope;
@@ -262,6 +272,8 @@ module Make (Machine : Machine) = struct
 
   let (!!) = Machine.Observation.make
 
+  let post = Machine.Observation.post
+
   let failf fmt = Format.ksprintf (fun msg ->
       fun () -> Machine.raise (Runtime_error msg)) fmt
 
@@ -279,13 +291,12 @@ module Make (Machine : Machine) = struct
   let set v x =
     !!on_writing v >>= fun () ->
     Env.set v x >>= fun () ->
-    !!on_written (v,x)
-
+    post on_written ~f:(fun k -> k (v,x))
 
   let get v =
     !!on_reading v >>= fun () ->
     Env.get v >>= fun r ->
-    !!on_read (v,r) >>| fun () -> r
+    post on_read ~f:(fun k -> k (v,r)) >>| fun () -> r
 
   let call_when_provided name =
     Code.is_linked (`symbol name) >>= fun provided ->
@@ -303,23 +314,23 @@ module Make (Machine : Machine) = struct
       else Machine.raise Division_by_zero
     | _ ->
       value (Bil.Apply.binop op x.value y.value) >>= fun r ->
-      !!on_binop ((op,x,y),r) >>| fun () -> r
+      post on_binop ~f:(fun k -> k ((op,x,y),r)) >>| fun () -> r
 
   let unop op x =
     value (Bil.Apply.unop op x.value) >>= fun r ->
-    !!on_unop ((op,x),r) >>| fun () -> r
+    post on_unop ~f:(fun k -> k ((op,x),r)) >>| fun () -> r
 
   let cast t s x =
     value (Bil.Apply.cast t s x.value) >>= fun r ->
-    !!on_cast ((t,s,x),r) >>| fun () -> r
+    post on_cast ~f:(fun k -> k ((t,s,x),r)) >>| fun () -> r
 
   let concat x y =
     value (Word.concat x.value y.value) >>= fun r ->
-    !!on_concat ((x,y),r) >>| fun () -> r
+    post on_concat ~f:(fun k -> k ((x,y),r)) >>| fun () -> r
 
   let extract ~hi ~lo x =
     value (Word.extract_exn ~hi ~lo x.value) >>= fun r ->
-    !!on_extract ((hi,lo,x),r) >>| fun () -> r
+    post on_extract ~f:(fun k -> k ((hi,lo,x),r)) >>| fun () -> r
 
   let const c =
     value c >>= fun r ->
@@ -339,16 +350,16 @@ module Make (Machine : Machine) = struct
   let load_byte a =
     !!on_loading a >>= fun () ->
     trapped_memory_access (Memory.get a.value) >>= fun r ->
-    !!on_loaded (a,r) >>| fun () -> r
+    post on_loaded ~f:(fun k -> k (a,r)) >>| fun () -> r
 
   let store_byte a x =
     !!on_storing a >>= fun () ->
     trapped_memory_access (Memory.set a.value x) >>= fun () ->
-    !!on_stored (a,x)
+    post on_stored ~f:(fun k -> k (a,x))
 
   let ite cond yes no =
     value (if Word.is_one cond.value then yes.value else no.value) >>= fun r ->
-    !!on_ite ((cond, yes, no), r) >>| fun () -> r
+    post on_ite ~f:(fun k -> k ((cond, yes, no), r)) >>| fun () -> r
 
 
   let get_lexical scope v =
@@ -398,6 +409,16 @@ module Make (Machine : Machine) = struct
       !!switching_memory m >>= fun () ->
       Memory.switch m
 
+  let tick =
+    Machine.Local.get state >>= fun s ->
+    !!tick s.time >>= fun () ->
+    Machine.Local.put state {
+      s with time = Time.succ s.time;
+    }
+
+  let time =
+    Machine.Local.get state >>| fun s -> s.time
+
 
   let rec eval_exp x =
     let eval = function
@@ -414,6 +435,7 @@ module Make (Machine : Machine) = struct
       | Bil.Ite (cond, yes, no) -> eval_ite cond yes no
       | Bil.Let (v,x,y) -> eval_let v x y in
     !!exp_entered x >>= fun () ->
+    tick >>= fun () ->
     eval x >>= fun r ->
     !!exp_left x >>| fun () -> r
   and eval_let v x y =
@@ -564,7 +586,7 @@ module Make (Machine : Machine) = struct
     | None -> Machine.return ()
     | Some addr ->
       Value.of_word addr >>= fun addr ->
-      !!will_jump (cond,addr)
+      post will_jump ~f:(fun k -> k (cond,addr))
 
   let exec_to_prompt dst =
     Machine.Local.get state >>= function
@@ -578,7 +600,7 @@ module Make (Machine : Machine) = struct
       exec_to_prompt dst
     | Indirect x ->
       eval_exp x >>= fun ({value} as dst) ->
-      !!will_jump (cond,dst) >>= fun () ->
+      post will_jump ~f:(fun k -> k (cond,dst)) >>= fun () ->
       Code.resolve_tid (`addr value) >>= function
       | None -> Code.exec (`addr value)
       | Some dst -> exec_to_prompt dst
@@ -683,12 +705,14 @@ module Make (Machine : Machine) = struct
       let name = Sub.name t in
       iter_args t arg_def >>= fun () ->
       get_args ~input:true t >>| Seq.to_list_rev >>= fun inputs ->
-      !!Linker.Trace.call_entered (name,List.rev inputs) >>= fun () ->
+      post Linker.Trace.call_entered ~f:(fun k ->
+          k (name,List.rev inputs)) >>= fun () ->
       blk entry >>= fun () ->
       iter_args t arg_use >>= fun () ->
-      get_args ~input:false t >>| Seq.to_list >>= fun rets ->
-      let args = List.rev_append inputs rets in
-      !!Linker.Trace.call_returned (name,args)
+      post Linker.Trace.call_returned ~f:(fun k ->
+          get_args ~input:false t >>| Seq.to_list >>= fun rets ->
+          let args = List.rev_append inputs rets in
+          k (name,args))
 
 
   let sub = term normal sub_t sub

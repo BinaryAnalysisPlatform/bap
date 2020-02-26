@@ -36,6 +36,7 @@ type bindings = {
 type state = {
   program : Lisp.Program.t;
   typeenv : Lisp.Program.Type.env;
+  signals : subscription String.Map.t;
   width : int;
   env : bindings;
   cur : Id.t;
@@ -57,9 +58,13 @@ let state = Bap_primus_state.declare ~inspect
          cur = Id.null;
          program = Lisp.Program.empty;
          typeenv = Lisp.Program.Type.empty;
+         signals = String.Map.empty;
          width = width_of_ctxt proj;
        })
 
+
+let lisp_primitive,primitive_called = Bap_primus_observation.provide
+    ~inspect:Bap_primus_linker.sexp_of_call "lisp-primitive"
 
 module Errors(Machine : Machine) = struct
   open Machine.Syntax
@@ -231,7 +236,7 @@ module Interpreter(Machine : Machine) = struct
       Seq.find ~f:(fun sub -> match Term.get_attr sub address with
           | None -> false
           | Some addr -> Word.(addr = sub_addr.value)) |> function
-      | None ->
+      | None  ->
         failf "invoke-subroutine: no function for %a" Addr.pps
           sub_addr.value ()
       | Some sub ->
@@ -271,9 +276,11 @@ module Interpreter(Machine : Machine) = struct
     | None -> false
     | Some names -> List.mem ~equal:String.equal names name
 
-  let notify_when cond obs name args =
-    if cond
-    then Machine.Observation.make obs (name,args)
+  let notify_when ?rval cond obs name args =
+    if cond then Machine.Observation.post obs ~f:(fun notify ->
+        match rval with
+        | None -> notify (name, args)
+        | Some r -> notify (name, args@[r]))
     else Machine.return ()
 
   (* Still an open question. Shall we register an call to an external
@@ -310,7 +317,7 @@ module Interpreter(Machine : Machine) = struct
       Machine.Local.put state (Vars.push_frame bs s) >>= fun () ->
       eval_exp (Lisp.Def.Func.body fn) >>= fun r ->
       Machine.Local.update state ~f:(Vars.pop frame_size) >>= fun () ->
-      notify_when is_external Trace.call_returned name (args @ [r]) >>= fun () ->
+      notify_when is_external Trace.call_returned name args ~rval:r >>= fun () ->
       eval_advices Advice.After r name args
 
   and eval_advices stage init primary args =
@@ -338,6 +345,8 @@ module Interpreter(Machine : Machine) = struct
       Eval.const Word.b0 >>= fun init ->
       eval_advices Advice.Before init name args >>= fun _ ->
       Code.run args >>= fun r ->
+      Machine.Observation.post primitive_called ~f:(fun k ->
+          k (name,args@[r])) >>= fun () ->
       eval_advices Advice.After r name args
 
   and eval_exp exp  =
@@ -362,6 +371,7 @@ module Interpreter(Machine : Machine) = struct
       | {data=Msg (fmt,es)} -> msg fmt es
       | {data=Err msg} -> Machine.raise (Runtime_error msg)
     and rep c e =
+      Eval.tick >>= fun () ->
       eval c >>= function {value} as r ->
         if Word.is_zero value then Machine.return r
         else eval e >>= fun _ -> rep c e
@@ -380,7 +390,8 @@ module Interpreter(Machine : Machine) = struct
       Machine.Local.get state >>= fun {env; width; program} ->
       let v = Vars.of_lisp width v in
       if Map.mem env.vars v
-      then Machine.return @@
+      then
+        Machine.return @@
         List.Assoc.find_exn ~equal:Var.equal env.stack v
       else Env.has v >>= function
         | true -> Eval.get v
@@ -396,7 +407,8 @@ module Interpreter(Machine : Machine) = struct
       Machine.List.map args ~f:eval >>= fun args -> match n with
       | Static _ -> assert false
       | Dynamic "invoke-subroutine" -> eval_sub args
-      | Dynamic n -> eval_lisp n args
+      | Dynamic n ->
+        eval_lisp n args
     and seq es =
       let rec loop = function
         | [] -> Eval.const Word.b0
@@ -407,7 +419,9 @@ module Interpreter(Machine : Machine) = struct
       Machine.Local.get state >>= fun s ->
       let v = Vars.of_lisp s.width v in
       if Map.mem s.env.vars v
-      then Machine.Local.put state (Vars.replace v w s) >>| fun () -> w
+      then
+        Machine.Local.put state (Vars.replace v w s) >>| fun () ->
+        w
       else Eval.set v w >>| fun () -> w
     and msg fmt es =
       let buf = Buffer.create 64 in
@@ -537,13 +551,20 @@ module Make(Machine : Machine) = struct
       Seq.map ~f:(fun s -> Sub.name s, signature_of_sub s) |>
       Seq.to_list
 
+    let vars_of_prog prog =
+      (object inherit [Var.Set.t] Term.visitor
+        method! enter_var v vs = Set.add vs v
+      end)#run prog Var.Set.empty |> Set.to_sequence
+
     let invoke_subroutine_signature =
       "invoke-subroutine", Type.Spec.(one int // all any @-> any)
 
     let run =
       Machine.get () >>= fun proj ->
       Machine.Local.get state >>= fun s ->
-      Env.all >>= fun vars ->
+      Env.all >>= fun evars ->
+      let pvars = vars_of_prog (Project.program proj) in
+      let vars = Seq.append evars pvars in
       let arch = Project.arch proj in
       let externals =
         invoke_subroutine_signature ::
@@ -634,12 +655,12 @@ module Make(Machine : Machine) = struct
           Eval.const Word.b0 >>= fun init ->
           Interp.eval_advices Advice.Before init name args >>= fun _ ->
           Machine.Local.update state ~f:(Vars.push_frame bs) >>= fun () ->
-          Machine.Observation.make Trace.call_entered (name,args) >>= fun () ->
-          Machine.Observation.make  Trace.lisp_call_entered (name,args) >>= fun () ->
+          Interp.notify_when true Trace.call_entered name args >>= fun () ->
+          Interp.notify_when true Trace.lisp_call_entered name args >>= fun () ->
           Interp.eval_exp (Lisp.Def.Func.body fn) >>= fun r ->
           Machine.Local.update state ~f:(Vars.pop frame_size) >>= fun () ->
-          Machine.Observation.make Trace.lisp_call_returned (name,(args @ [r])) >>= fun () ->
-          Machine.Observation.make Trace.call_returned (name,args @ [r]) >>= fun () ->
+          Interp.notify_when true Trace.lisp_call_returned name args ~rval:r >>= fun () ->
+          Interp.notify_when true Trace.call_returned name args ~rval:r >>= fun () ->
           Interp.eval_advices Advice.After r name args >>= fun r ->
           eval_ret r
       end in
@@ -656,8 +677,8 @@ module Make(Machine : Machine) = struct
 
   let link_program program =
     Machine.Local.get state >>= fun s ->
-    let program = Lisp.Program.merge s.program program in
-    Machine.Local.put state {s with program} >>= fun () ->
+    let s = {s with program = Lisp.Program.merge s.program program} in
+    Machine.Local.put state s >>= fun () ->
     link_features ()
 
   let program = Machine.Local.get state >>| fun s -> s.program
@@ -689,11 +710,13 @@ module Make(Machine : Machine) = struct
       | Some (`Gen (ts,t)) ->
         Lisp.Type.signature (specialize ts) ~rest:(t arch) Any in
     let r = Lisp.Def.Signal.create ~types ~docs:doc name in
+    Machine.Observation.subscribe obs (fun x ->
+        proj x >>= Self.eval_signal name) >>= fun sub ->
     Machine.Local.update state ~f:(fun s -> {
-          s with program = Lisp.Program.add s.program signal r
-        }) >>= fun () ->
-    Machine.Observation.observe obs (fun x ->
-        proj x >>= Self.eval_signal name)
+          s with program = Lisp.Program.add s.program signal r;
+                 signals = Map.add_exn s.signals name sub;
+        })
+
 
   (* this is a deprecated interface for the backward compatibility,
      we can't efficiently translate a list of primitives to the code
@@ -718,6 +741,18 @@ module Make(Machine : Machine) = struct
 
   let eval_method = Self.eval_signal
   let eval_fun = Self.eval_lisp
+
+  let optimize () =
+    Machine.Local.get state >>= fun s ->
+    let known_methods =
+      Lisp.Program.get s.program meth |>
+      List.fold ~init:String.Set.empty ~f:(fun mets met ->
+          Set.add mets (Lisp.Def.name met)) in
+    let useless_subscriptions =
+      Map.fold s.signals ~init:[] ~f:(fun ~key:name ~data:sub subs ->
+          if Set.mem known_methods name then subs
+          else sub::subs) in
+    Machine.List.iter useless_subscriptions ~f:Machine.Observation.cancel
 end
 
 module Doc = struct
@@ -787,3 +822,5 @@ module Doc = struct
       index s.program
   end
 end
+
+let primitive = lisp_primitive

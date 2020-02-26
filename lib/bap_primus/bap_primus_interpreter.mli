@@ -2,6 +2,16 @@ open Core_kernel
 open Bap.Std
 open Bap_primus_types
 
+module Time : sig
+  type t [@@deriving sexp_of]
+  val clocks : t -> int
+  val of_clocks : int -> t
+  val to_string : t -> string
+  val pp : Format.formatter -> t -> unit
+  include Base.Comparable.S with type t := t
+end
+
+val clock : Time.t observation
 val pc_change : addr observation
 val halting : unit observation
 val interrupt : int observation
@@ -87,6 +97,9 @@ module Make (Machine : Machine) : sig
   val const : word -> value m
   val load : value -> endian -> size -> value m
   val store : value -> value -> endian -> size -> unit m
+
+  val tick : unit m
+  val time : Time.t m
 end
 
 

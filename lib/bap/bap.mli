@@ -6079,6 +6079,13 @@ module Std : sig
             the opcode (and thus to [code]).  *)
         val name : ('a,'k) t -> string
 
+        (** returns the name of the backend that encoded this instruction.
+
+            @since 2.1.0
+        *)
+        val encoding : ('a,'k) t -> string
+
+
         (** [kinds insn] returns a high-level semantic information
             about the instruction. See {!Kind} for the description of
             semantic codes.  *)

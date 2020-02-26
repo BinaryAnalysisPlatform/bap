@@ -57,6 +57,7 @@ module Make(M : Monad.S) = struct
     observations : unit t Observation.observations;
   }
 
+  type 'a machine = 'a t
   type 'a c = 'a t
   type 'a m = 'a M.t
   type 'a e = (exit_status * project) m effect
@@ -112,20 +113,39 @@ module Make(M : Monad.S) = struct
     let set_observations observations = with_global_context @@ fun () ->
       lifts (SM.update @@ fun s -> {s with observations})
 
-    let make key obs =
-      (* let event = Observation.of_statement key in *)
-      with_global_context observations >>= fun os ->
-      Seq.sequence @@ Observation.notify os key obs
-
-    let observe key observer =
+    let subscribe key observer =
       with_global_context @@ fun () ->
       observations () >>= fun os ->
-      set_observations (Observation.add_observer os key observer)
+      let obs,sub = Observation.add_observer os key observer in
+      set_observations obs >>| fun () -> sub
+
+    let observe key observer =
+      subscribe key observer >>| fun _ -> ()
 
     let watch prov watcher =
       with_global_context @@ fun () ->
       observations () >>= fun os ->
-      set_observations (Observation.add_watcher os prov watcher)
+      let obs,_ = Observation.add_watcher os prov watcher in
+      set_observations obs
+
+    let cancel sub =
+      with_global_context @@ fun () ->
+      observations () >>= fun os ->
+      set_observations (Observation.cancel sub os)
+
+    module Observation = Observation.Make(struct
+        type 'a t = 'a machine
+        include CM
+      end)
+
+    let make key obs =
+      with_global_context observations >>= fun os ->
+      Observation.notify os key obs
+
+    let post key ~f =
+      with_global_context observations >>= fun os ->
+      Observation.notify_if_observed os key @@ fun k ->
+      f (fun x -> k x)
   end
 
   module Make_state(S : sig
@@ -268,15 +288,15 @@ module Make(M : Monad.S) = struct
 
   let run : 'a t -> 'a e =
     fun m proj args envp ->
-      M.bind
-        (SM.run
-           (C.run m (function
-                | Ok _ -> extract @@ fun s -> Ok s.proj
-                | Error err -> extract @@ fun _ -> Error err))
-           (init proj args envp))
-        (fun (r,{proj}) -> match r with
-           | Ok _ -> M.return (Normal, proj)
-           | Error e -> M.return (Exn e, proj))
+    M.bind
+      (SM.run
+         (C.run m (function
+              | Ok _ -> extract @@ fun s -> Ok s.proj
+              | Error err -> extract @@ fun _ -> Error err))
+         (init proj args envp))
+      (fun (r,{proj}) -> match r with
+         | Ok _ -> M.return (Normal, proj)
+         | Error e -> M.return (Exn e, proj))
 
 
   module Syntax = struct

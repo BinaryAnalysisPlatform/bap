@@ -137,8 +137,10 @@ module IR = struct
       blks = [{name=entry; jmps=[]; defs=[Def.reify ~tid v x]}]
     }
 
-  let goto ?cnd ~tid dst =
-    Jmp.reify ?cnd ~tid ~dst:(Jmp.resolved dst) ()
+  let goto ?(is_call=false) ?cnd ~tid dst =
+    if is_call
+    then Jmp.reify ?cnd ~tid ~alt:(Jmp.resolved dst) ()
+    else Jmp.reify ?cnd ~tid ~dst:(Jmp.resolved dst) ()
 
   (** reifies a [while (<cnd>) <body>] loop to
 
@@ -291,9 +293,10 @@ module IR = struct
   let do_goto dst =
     fresh >>= fun entry ->
     fresh >>= fun tid ->
+    KB.collect Theory.Label.is_subroutine dst >>= fun is_call ->
     ctrl {
       entry;
-      blks = [blk entry ++ goto ~tid dst]
+      blks = [blk entry ++ goto ?is_call ~tid dst]
     }
 
 
