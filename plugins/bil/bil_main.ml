@@ -151,7 +151,7 @@ let () =
             instructions that have a tag (kind) that starts with \
             $(b,<str>), $(b,<s1>:<s2>) - matches with instructions \
             that have opcodes starting with $(b,<s2>) in the \
-            encoding that starts with $(b,<s3>). For predicates, \
+            encoding that starts with $(b,<s1>). For predicates, \
             all string comparisons are made case-insensitive. \
             Example, $(b,:unknown,:special,asm:addsd,llvm:trap)." in
 
