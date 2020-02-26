@@ -2,12 +2,26 @@ open Core_kernel
 open Bap.Std
 open Bap_primus.Std
 
-module Lib(Machine : Primus.Machine.S) = struct
+let registers = Primus.Machine.State.declare
+    ~uuid:"3dd2b905-c019-4466-800f-95b13d7da85e"
+    ~name:"backend-registers" @@ fun proj ->
+  Project.disasm proj |> Disasm.insns |>
+  Seq.fold ~init:Int.Map.empty ~f:(fun regs (_,insn) ->
+      Insn.ops insn |>
+      Array.fold ~init:regs ~f:(fun regs -> function
+          | Op.Reg r ->
+            Map.set regs (Reg.code r) (Reg.name r)
+          | _ -> regs))
+
+module Make(Machine : Primus.Machine.S) = struct
   module Eval = Primus.Interpreter.Make(Machine)
   module Lisp = Primus.Lisp.Make(Machine)
   module Memory = Primus.Memory.Make(Machine)
   module Value = Primus.Value.Make(Machine)
-  include Machine.Syntax
+  module Linker = Primus.Linker.Make(Machine)
+
+  open Machine.Syntax
+
   let all f args = List.exists args ~f |> Value.of_bool
   let addr_width =
     Machine.arch >>| Arch.addr_size >>| Size.in_bits
@@ -30,26 +44,77 @@ module Lib(Machine : Primus.Machine.S) = struct
       | [] | [_] -> true
       | x :: (y :: _ as rest) -> order x y && ordered rest in
     if ordered xs then true_ else false_
+end
 
+module RegName(Machine : Primus.Machine.S) = struct
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+  let run = function
+    | [] | _::_::_ ->
+      Lisp.failf "reg-name expects only one argument" ()
+    | [code] ->
+      Machine.Local.get registers >>= fun regs ->
+      let code = Word.to_int_exn @@ Primus.Value.to_word code in
+      match Map.find regs code with
+      | None -> Lisp.failf "unresolved intruction register %#x" code ()
+      | Some name -> Value.Symbol.to_value name
+end
+
+
+module ExecAddr(Machine : Primus.Machine.S) = struct
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+  let run = function
+    | _ :: _ :: _ | [] ->
+      Lisp.failf "Lisp Type Error: exec-address expects one argument" ()
+    | [addr] ->
+      Linker.exec (`addr (Primus.Value.to_word addr)) >>= fun () ->
+      Eval.halt >>=
+      never_returns
+end
+
+module ExecSym(Machine : Primus.Machine.S) = struct
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+  let run = function
+    | _ :: _ :: _ | [] ->
+      Lisp.failf "Lisp Type Error: exec-address expects one argument" ()
+    | [name] ->
+      Value.Symbol.of_value name >>= fun name ->
+      Linker.exec (`symbol name) >>= fun () ->
+      Eval.halt >>=
+      never_returns
 end
 
 module IsZero(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
   let run = all Value.is_zero
 end
 
 module IsPositive(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
   let run = all Value.is_positive
 end
 
 module IsNegative(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
   let run = all Value.is_negative
 end
 
 module WordWidth(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run args =
     addr_width >>= fun width ->
     match args with
@@ -58,7 +123,10 @@ module WordWidth(Machine : Primus.Machine.S) = struct
 end
 
 module ExitWith(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = all Value.is_negative
   let run _ =
     Eval.halt >>|
@@ -67,7 +135,10 @@ module ExitWith(Machine : Primus.Machine.S) = struct
 end
 
 module MemoryAllocate(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let negone = Value.one 8
   let zero = Value.zero 8
 
@@ -94,7 +165,10 @@ end
 
 
 module MemoryRead(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = function
     | [x] ->
       endian >>= fun e -> Eval.load x e `r8
@@ -102,7 +176,10 @@ module MemoryRead(Machine : Primus.Machine.S) = struct
 end
 
 module MemoryWrite(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = function
     | [a;x] ->
       endian >>= fun e ->
@@ -112,104 +189,159 @@ module MemoryWrite(Machine : Primus.Machine.S) = struct
 end
 
 module GetPC(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = function
     | [] -> Eval.pc >>= Value.of_word
     | _ -> Lisp.failf
              "get-current-program-counter requires zero arguments" ()
 end
 
+
 module Add(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = reduce null (Eval.binop Bil.PLUS)
 end
 
 module Sub(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = reduce null (Eval.binop Bil.MINUS)
 end
 
 module Div(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = reduce null (Eval.binop Bil.DIVIDE)
 end
 
 module SDiv(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = signed_reduce null (Eval.binop Bil.SDIVIDE)
 end
 
 module Mul(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = reduce null (Eval.binop Bil.TIMES)
 end
 
 module Mod(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = reduce null (Eval.binop Bil.MOD)
 end
 
 module SignedMod(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = signed_reduce null (Eval.binop Bil.SMOD)
 end
 
 module Lshift(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = function
     | [x;y] -> Eval.binop Bil.lshift x y
     | _ -> Lisp.failf "Type error: lshift expects two arguments" ()
 end
 
 module Rshift(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = function
     | [x;y] -> Eval.binop Bil.rshift x y
     | _ -> Lisp.failf "Type error: rshift expects two arguments" ()
 end
 
 module Arshift(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = function
     | [x;y] -> Eval.binop Bil.arshift x y
     | _ -> Lisp.failf "Type error: arshift expects two arguments" ()
 end
 
 module Equal(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = function
     | [] -> true_
     | x :: xs -> all (Value.equal x) xs
 end
 
 module NotEqual(Machine : Primus.Machine.S) = struct
-  include Equal(Machine)
-  let run xs = run xs >>= (Eval.unop Bil.NOT)
+  module Lib = Make(Machine)
+  module Equal = Equal(Machine)
+  open Machine.Syntax
+
+  let run xs = Equal.run xs >>= (Lib.Eval.unop Bil.NOT)
 end
 
 
 module Logand(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = reduce negone (Eval.binop Bil.AND)
 end
 
 module Logor(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = reduce null (Eval.binop Bil.OR)
 end
 
 module Logxor(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = reduce null (Eval.binop Bil.XOR)
 end
 
 module Concat(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = reduce false_ Eval.concat
 end
 
 module Extract(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
 
   let to_int e = match Word.to_int (Value.to_word e) with
     | Ok x -> Machine.return x
@@ -224,56 +356,96 @@ module Extract(Machine : Primus.Machine.S) = struct
 end
 
 module Not(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = function
     | [x] -> if Value.is_zero x then Value.b1 else Value.b0
     | _ -> Lisp.failf "not expects only one argument" ()
 end
 
 module Lnot(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = function
     | [x] -> Eval.unop Bil.NOT x
     | _ -> Lisp.failf "lnot expects only one argument" ()
 end
 
 module Neg(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run = function
     | [x] -> Eval.unop Bil.NEG x
     | _ -> Lisp.failf "neg expects only one argument" ()
 end
 
 module Less(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let rec run = ordered Value.(<)
 end
 
 module Greater(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let rec run = ordered Value.(>)
 end
 
 module LessEqual(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let rec run = ordered Value.(<=)
 end
 
 module GreaterEqual(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let rec run = ordered Value.(>=)
 end
 
 module SymbolConcat(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
   let run syms =
     Machine.List.map syms ~f:Value.Symbol.of_value >>= fun strs ->
     Value.Symbol.to_value (String.concat strs)
-
 end
 
+module SetSymbol(Machine : Primus.Machine.S) = struct
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
+
+  let run = function
+    | [reg; x] ->
+      Value.Symbol.of_value reg >>= fun reg ->
+      let typ = Type.imm (Word.bitwidth (Value.to_word x)) in
+      let var = Var.create reg typ in
+      Eval.set var x >>| fun () -> x
+    | _ -> Lisp.failf "set-symbol-value expects exactly two arguments" ()
+end
+
+
 module Stub(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
+  module Lib = Make(Machine)
+  open Machine.Syntax
+  open Lib
   let run = Lisp.failf "not implemented"
 end
 
@@ -286,6 +458,10 @@ module Primitives(Machine : Primus.Machine.S) = struct
     let def name types closure docs =
       Lisp.define ~types ~docs name closure  in
     Machine.sequence [
+      def "exec-addr" (one int @-> any) (module ExecAddr)
+        "(exec-addr D) passes the control flow to D and never returns";
+      def "exec-symbol" (one sym @-> any) (module ExecSym)
+        "(exec-symbol D) passes the control flow to D and never returns";
       def "is-zero" (all any @-> bool) (module IsZero)
         "(is-zero X Y ...) returns true if all arguments are zeros";
       def "is-positive" (all any @-> bool) (module IsPositive)
@@ -312,7 +488,7 @@ module Primitives(Machine : Primus.Machine.S) = struct
         "(- X Y Z ...) returns X - Y - Z - ..., or 0 if there are no
          arguments.";
       def "*" (all a @-> a) (module Mul)
-        "(* X Y Z ...) returns the product of arguments or 1 if the list
+        "(* X Y Z ...) returns the product of arguments or 0 if the list
         of arguments is empty";
       def "/" (all a @-> a) (module Div)
         "(/ X Y Z ...) returns X / Y / Z / ... or 0 if the list of
@@ -375,9 +551,16 @@ module Primitives(Machine : Primus.Machine.S) = struct
          descending chain or if it is empty";
       def "symbol-concat" (all sym @-> sym) (module SymbolConcat)
         "(symbol-concat X Y Z ...) returns a new symbol that is a
-        concatenation of symbols X,Y,Z,... "
+        concatenation of symbols X,Y,Z,... ";
+      def "set-symbol-value" (tuple [sym; a] @-> a) (module SetSymbol)
+        "(set-symbol-value S X) sets the value of the symbol S to X.
+         Returns X";
+      def "reg-name" (one int @-> sym) (module RegName)
+        "(reg-name N) returns the name of the register with the index N"
       ;
     ]
 end
 
-let init () = Primus.Machine.add_component (module Primitives)
+let init () =
+  Primus.Machine.add_component (module Primitives);
+  Primus_lisp_ieee754.init ()

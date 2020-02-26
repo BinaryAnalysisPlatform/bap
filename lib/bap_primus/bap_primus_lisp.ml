@@ -63,6 +63,9 @@ let state = Bap_primus_state.declare ~inspect
        })
 
 
+let lisp_primitive,primitive_called = Bap_primus_observation.provide
+    ~inspect:Bap_primus_linker.sexp_of_call "lisp-primitive"
+
 module Errors(Machine : Machine) = struct
   open Machine.Syntax
 
@@ -233,7 +236,7 @@ module Interpreter(Machine : Machine) = struct
       Seq.find ~f:(fun sub -> match Term.get_attr sub address with
           | None -> false
           | Some addr -> Word.(addr = sub_addr.value)) |> function
-      | None ->
+      | None  ->
         failf "invoke-subroutine: no function for %a" Addr.pps
           sub_addr.value ()
       | Some sub ->
@@ -342,6 +345,8 @@ module Interpreter(Machine : Machine) = struct
       Eval.const Word.b0 >>= fun init ->
       eval_advices Advice.Before init name args >>= fun _ ->
       Code.run args >>= fun r ->
+      Machine.Observation.post primitive_called ~f:(fun k ->
+          k (name,args@[r])) >>= fun () ->
       eval_advices Advice.After r name args
 
   and eval_exp exp  =
@@ -546,13 +551,20 @@ module Make(Machine : Machine) = struct
       Seq.map ~f:(fun s -> Sub.name s, signature_of_sub s) |>
       Seq.to_list
 
+    let vars_of_prog prog =
+      (object inherit [Var.Set.t] Term.visitor
+        method! enter_var v vs = Set.add vs v
+      end)#run prog Var.Set.empty |> Set.to_sequence
+
     let invoke_subroutine_signature =
       "invoke-subroutine", Type.Spec.(one int // all any @-> any)
 
     let run =
       Machine.get () >>= fun proj ->
       Machine.Local.get state >>= fun s ->
-      Env.all >>= fun vars ->
+      Env.all >>= fun evars ->
+      let pvars = vars_of_prog (Project.program proj) in
+      let vars = Seq.append evars pvars in
       let arch = Project.arch proj in
       let externals =
         invoke_subroutine_signature ::
@@ -810,3 +822,5 @@ module Doc = struct
       index s.program
   end
 end
+
+let primitive = lisp_primitive

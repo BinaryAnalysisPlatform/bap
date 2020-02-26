@@ -445,6 +445,7 @@ module Make(S : Core) = struct
         let call name =
           newlabel >>= fun lbl ->
           Label.for_name name >>= fun dst ->
+          Knowledge.provide Label.is_subroutine dst (Some true) >>= fun () ->
           seq (blk lbl pass (goto dst)) (next xs)
 
         let goto addr =
