@@ -25,8 +25,8 @@ module Main(Machine : Machine) = struct
       Sys.init System.default >>= fun () ->
       Lisp.typecheck >>= fun () ->
       Lisp.optimize () >>= fun () ->
-      Machine.Observation.make System.inited () >>= fun () ->
       Machine.catch user (fun exn ->
+          Machine.Observation.make System.inited () >>= fun () ->
           Machine.Observation.make System.finish () >>= fun () ->
           Machine.raise exn) >>= fun () ->
       Machine.Observation.make System.finish () in
