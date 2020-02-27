@@ -25,6 +25,21 @@ type t = {
 
 type system = t
 
+
+
+let pp_components =
+  Format.pp_print_list ~pp_sep:Format.pp_print_space @@ fun ppf c ->
+  if c.drop
+  then Format.fprintf ppf "(exclude %a)" Name.pp c.name
+  else Format.fprintf ppf "%a" Name.pp c.name
+
+let pp ppf {name; components; desc} =
+  Format.fprintf ppf
+    "@[<v2>(defsystem %a@\n\
+     :description %s@\n\
+     :components @[<v2>(%a)@])@]"
+    Name.pp name desc pp_components components
+
 let component ?package name = {
   drop = false;
   name = Name.create ?package name;
@@ -48,7 +63,7 @@ let name t = t.name
 
 let has_component {components} name =
   List.exists components ~f:(fun c ->
-      Name.equal c.name all_components.name &&
+      Name.equal c.name all_components.name ||
       Name.equal c.name name)
   && List.for_all components ~f:(fun c ->
       not (Name.equal c.name name && c.drop))
@@ -333,15 +348,8 @@ let pp_parse_error = Parser.pp_error_with_loc
 
 let from_file = Parser.from_file
 
-let pp_components =
-  Format.pp_print_list ~pp_sep:Format.pp_print_space @@ fun ppf c ->
-  if c.drop
-  then Format.fprintf ppf "(exclude %a)" Name.pp c.name
-  else Format.fprintf ppf "%a" Name.pp c.name
-
-let pp ppf {name; components; desc} =
-  Format.fprintf ppf
-    "@[<v2>(defsystem %a@\n\
-     :description %s@\n\
-     :components @[<v2>(%a)@])@]"
-    Name.pp name desc pp_components components
+let () = Components.register_generic
+    "binary-program"
+    (module Bap_primus_interpreter.LinkBinaryProgram)
+    ~package:"primus"
+    ~desc:"links the binary program into the Primus machine"
