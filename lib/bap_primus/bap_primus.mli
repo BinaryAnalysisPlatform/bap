@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_knowledge
 open Regular.Std
 open Bap.Std
 open Monads.Std
@@ -80,9 +81,12 @@ module Std : sig
         @since 2.1.0 *)
     type subscription
 
+
+    (** a system definition  *)
+    type system
+
     (** a result of computation  *)
     type value [@@deriving bin_io, compare, sexp]
-
 
     (** Machine exit status.
         A machine may terminate normally, or abnormally with the
@@ -566,14 +570,354 @@ module Std : sig
       val add_component : component -> unit
     end
 
-    (** type abbreviation for the Machine.state  *)
-    type 'a state = 'a Machine.state
+    (** A runnable instance of Primus Machine.
 
+            A collection of components defines a runnable instance of Primus
+            Machine. Systems could be defined programmatically, using this
+            interface, or in system description files.
+
+            The system definition holds enough information to initialize
+            and run the system.
+
+        @since 2.1.0
+    *)
+    module System : sig
+      type t = system
+
+      (** a component specification denotes a set of components *)
+      type component_specification
+
+
+      (** [default] the default system is composed of all components
+          known to Primus.  *)
+      val default : system
+
+
+      (** [define name] defnines a new system.
+
+          The system designator is built from [package] and [name] and
+          could be used to reference this system from the user
+          interface. The designator is not required to be unique and
+          is not registered anywhere in the library.
+
+          @param desc a human-readable description of the system, its
+          task and purposes
+
+          @param components a list of components that comprise the
+          system.
+      *)
+      val define :
+        ?desc:string ->
+        ?components:component_specification list ->
+        ?package:string -> string -> t
+
+
+      (** [run system project state] runs the analysis defined by [system].
+
+          Initializes all components and triggers the [init]
+          observation after that. Once the observation is processed
+          runs the [fini] event.
+
+          The components that comprise the [system] must schedule
+          their evaluation on one of the observations.
+
+          The [project] and [state] are passed as the initial static
+          representation of the program and the initial knowledge. The
+          result of the analysis is either a failure that indicates a
+          conflicting knowledge or a success that includes an updated
+          program representation, computation exit status, and possibly
+          extend knowledge.
+
+          See the [Job.run] function if you want to run Primus
+          instances in a batch mode.
+
+          @param env an array of environment variables that are passed
+          to the program
+          @param argv an array of program parameters, with the first
+          element of array being the program name.
+      *)
+      val run :
+        ?env:string array ->
+        ?argv:string array ->
+        system -> project -> Knowledge.state ->
+        (exit_status * project * Knowledge.state, Knowledge.conflict) result
+
+
+      (** [init ()] is posted when all components finished their
+          initializations. It is not posted if components failed to
+          initialize the system.  *)
+      val init : unit observation
+
+
+      (** [fini ()] is posted when all computations are
+          finished. This observation is posted only if [init] was posted,
+          i.e., if the system wasn't initialized then neither [init]
+          nor [fini] will happen. *)
+      val fini : unit observation
+
+
+      (** [name system] is the system designator.  *)
+      val name : system -> Knowledge.Name.t
+
+      (** prints the system definition.  *)
+      val pp : Format.formatter -> system -> unit
+
+      (** {3 Component specification language}  *)
+
+
+      (** specifies all components known to Primus.  *)
+      val all_components : component_specification
+
+
+      (** [exclude spec] excludes the component defined by [spec]
+          from the specification.   *)
+      val exclude : component_specification -> component_specification
+
+
+      (** [component ?package name] specifies the component with the
+          given designator.
+
+          @param package defaults to [user].
+      *)
+      val component : ?package:string -> string -> component_specification
+
+
+      (** {3 Parsing system descriptions from files}
+
+          A system can be described in a system description file that
+          has the following format (closely follows Common Lisp's asdf
+          format)
+
+          {v
+             systems ::= <system-definition> ...
+             system-definition ::= (defsystem <ident> <option> ...)
+             option ::=
+               | :description <string>
+               | :components (<component> ...)
+             component ::= <ident> | (exclude <ident>)
+          v}
+      *)
+
+
+      (** a parsing error description  *)
+      type parse_error
+
+      (** [from_file name] parses a list of system descriptions from
+          the file with the given [name].   *)
+      val from_file : string -> (system list,parse_error) result
+
+      (** prints the parse error  *)
+      val pp_parse_error : Format.formatter -> parse_error -> unit
+
+      (** {3 Interface to generic systems}
+
+          Generic systems are not specialized to the Knowledge monad
+          and could be run on any instance of the Primus monad.
+
+          Unlike the specialized [run] function the generic [run]
+          function is a functor parameterized by a monad and returns a
+          value wrapped into that monad.
+      *)
+      module Generic(Machine : Machine.S) : sig
+
+
+        (** [run system project] runs the [system] on the specified [project].
+
+            @param env an array of environment variables that are passed
+            to the program;
+
+            @param argv an array of program parameters, with the first
+            element of array being the program name.
+        *)
+        val run :
+          ?env:string array ->
+          ?argv:string array ->
+          t -> project -> (exit_status * project) Machine.m
+      end
+    end
+
+
+    (** A facility to register and run multiple instances of Primus.
+
+        This interface allows only the analysis (specialized) systems.
+
+        @since 2.1.0
+    *)
+    module Jobs : sig
+
+      (** an action to take after each job.  *)
+      type action = Stop | Continue
+
+      (** the final result of running the job queue.  *)
+      type result
+
+
+      (** [enqueue system] enqueues a new system to be run as job.  *)
+      val enqueue : system -> unit
+
+
+      (** [pending ()] is the number of jobs still waiting to be run.  *)
+      val pending : unit -> int
+
+
+      (** [run project state] runs until there are no more jobs queued
+          or until explicitly stopped.
+
+          The [project] and [state] values are used as the initial
+          static program representation and knowledge base.
+
+          Every time a job is finised either [on_success] or
+          [on_conflict] is called. These callbacks shall return either
+          [Stop] or [Continue]. If either returns [Stop] then [run]
+          also stops even if there are more jobs in the queue (the
+          jobs are not cleared, so [pending ()] might be non-zero).
+
+          Both of the callbacks return [Continue] by default.
+
+          @param on_conflict is called as [on_conflict sys conflict]
+          when the system [sys] failes to converge and stops with the
+          knowledge [conflict]. The returned value should indicate
+          what to do next.
+
+          @param on_success is called as [on_success sys status kb]
+          when the system [sys] terminates without knowledge conflicts
+          with the exit [status] and the knowledge stored in [kb]. The
+          returned value prescribes what to do next.
+
+          Note that the job queue could be extended during analysis,
+          the [run] function will execute all jobs in the FIFO order,
+          unless explicitly stopped.
+      *)
+      val run :
+        ?env:string array ->
+        ?argv:string array ->
+        ?on_conflict:(system -> Knowledge.conflict -> action) ->
+        ?on_success:(system -> exit_status -> Knowledge.state -> action) ->
+        project -> Knowledge.state -> result
+
+
+
+      (** [knowledge result] is the knowledge obtained from running
+          the jobs.  *)
+      val knowledge : result -> Knowledge.state
+
+
+      (** [project result] is the final static representation of program.  *)
+      val project : result -> project
+
+
+      (** [conflicts result] is the list of failed jobs.
+          Each failed job is represented by the description of the
+          system that has failed and the description of the conflict
+          that prevented system from convering.
+
+          The conflicts are specified in the order in which they happened.
+      *)
+      val conflicts : result -> (system * Knowledge.conflict) list
+
+
+      (** [systems result] is the final list of systems that were run
+          in the order in which they were run.  *)
+      val systems : result -> system list
+
+    end
 
     (** The Machine component.  *)
     type component = Machine.component
 
 
+    (** A Primus Machine parameterized with the Knowledge monad.
+
+        This is an instance of the Primus machine that is
+        parameterized by the Knowledge monad that gives accecss to the
+        knowledge base directly from the Primus computation.
+
+        The knowledge base should be used by analyses to store their
+        results as well as a communication media between different analyses.
+
+        New analyses are added in the form of machine components
+        using the [Components.register] function.
+
+        @since 2.1.0
+    *)
+    module Analysis : sig
+      open Knowledge
+      include Machine.S with type 'a m = 'a Knowledge.t
+                         and type 'a t = 'a Machine.Make(Knowledge).t
+
+
+      (** {3 Common knowledge operations lifted into the Primus monad}
+
+          Note, that any Knowledge computation could be used in the
+          Analysis monad using the [lift] function, e.g.,
+
+          [lift@@Knowledge.Object.create Theory.Program.cls]
+
+          The functions below are lifted covenience.
+      *)
+
+      (** [collect p x] is lifted {!Knowledge.collect}.  *)
+      val collect : ('a,'p) slot -> 'a obj -> 'p t
+
+
+      (** [resove p x] is lifted {!Knowledge.resolve}.  *)
+      val resolve : ('a,'p opinions) slot -> 'a obj -> 'p t
+
+
+      (** [provide p x v] is lifted {!Knowledge.provide}.  *)
+      val provide : ('a,'p) slot -> 'a obj -> 'p -> unit t
+
+
+      (** [suggest a p x v] is lifted {!Knowledge.suggest}.  *)
+      val suggest : agent -> ('a,'p opinions) slot -> 'a obj -> 'p -> unit t
+
+    end
+
+
+    (** A registry of machine components.
+
+        We distinguish between two kinds of machine components:
+        - analyses (aka specialized components)
+        - generics (aka general components).
+
+        Analyses are specialized components that can have access to
+        the knowledge base and are much easier to write, contrary to
+        generics that are represented as functors.
+
+        Generic components are applicable to any instantiation of the
+        Primus monad, while analyses are only applicable to the Primus
+        monad parameterized by the Knowledge Monad. If you are not
+        sure which to use, then use analyses.
+
+        When a specialized instance of the Primus monad is run (via
+        [System.run] any specialized component overrides a generic
+        component with the same name).
+
+        @since 2.1.0
+    *)
+    module Components : sig
+
+
+      (** [register name analysis] registers an analysis under given name.
+
+          Fails, if there is already a component with the same name.
+      *)
+      val register :
+        ?desc:string ->
+        ?package:string ->
+        string -> unit Analysis.t ->
+        unit
+
+      (** [register_generic name comp] registers a generic component.   *)
+      val register_generic :
+        ?desc:string ->
+        ?package:string ->
+        string -> Bap_primus_types.component ->
+        unit
+    end
+
+    (** type abbreviation for the Machine.state  *)
+    type 'a state = 'a Machine.state
 
     (** A result of computation.
 

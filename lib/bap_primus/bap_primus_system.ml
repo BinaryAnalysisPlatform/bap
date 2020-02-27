@@ -6,13 +6,13 @@ open Core_kernel
 module Name = Knowledge.Name
 module Observation = Bap_primus_observation
 
-let finished,finish =
+let fini,finish =
   Observation.provide ~inspect:sexp_of_unit "fini"
 
 let init,inited =
   Observation.provide ~inspect:sexp_of_unit "init"
 
-type component = {
+type component_specification = {
   name : Name.t;
   drop : bool;
 }
@@ -20,24 +20,28 @@ type component = {
 type t = {
   name : Name.t;
   desc : string;
-  components : component list;
+  components : component_specification list;
 }
 
 type system = t
 
-let component name = {drop=false; name}
+let component ?package name = {
+  drop = false;
+  name = Name.create ?package name;
+}
+
 let exclude item = {item with drop=true}
 
 let all_components =
-  component @@ Name.create ~package:"keyword" "all-components"
+  component ~package:"keyword" "all-components"
 
 let define
     ?(desc="")
     ?(components=[all_components])
-    name = {name; desc; components}
+    ?package name = {name = Name.create ?package name; desc; components}
 
-let default = define
-    (Name.create ~package:"bap-primus" "default-system")
+let default = define "default-system"
+    ~package:"bap-primus"
     ~desc:"the default system that includes everything"
 
 let name t = t.name
@@ -327,7 +331,7 @@ module Generic = Components.Generic
 type parse_error = Parser.error_with_loc
 let pp_parse_error = Parser.pp_error_with_loc
 
-let parse = Parser.from_file
+let from_file = Parser.from_file
 
 let pp_components =
   Format.pp_print_list ~pp_sep:Format.pp_print_space @@ fun ppf c ->

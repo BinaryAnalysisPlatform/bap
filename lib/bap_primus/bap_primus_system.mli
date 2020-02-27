@@ -6,23 +6,23 @@ module Observation = Bap_primus_observation
 
 type t
 
-type component
+type component_specification
 type parse_error
 
 val define :
   ?desc:string ->
-  ?components:component list ->
-  Knowledge.Name.t -> t
+  ?components:component_specification list ->
+  ?package:string -> string -> t
 
 val default : t
 
-val component : Knowledge.Name.t -> component
-val exclude : component -> component
+val component : ?package:string -> string -> component_specification
+val exclude : component_specification -> component_specification
 
 val name : t -> Knowledge.Name.t
-val parse : string -> (t list,parse_error) Result.t
+val from_file : string -> (t list,parse_error) Result.t
 
-val all_components : component
+val all_components : component_specification
 
 val pp : Format.formatter -> t -> unit
 val pp_parse_error : Format.formatter -> parse_error -> unit
@@ -59,7 +59,7 @@ val run :
   t -> project -> Knowledge.state ->
   (exit_status * project * Knowledge.state, Knowledge.conflict) result
 
-val finished : unit Observation.t
+val fini : unit Observation.t
 val finish : unit Observation.statement
 
 val init : unit Observation.t

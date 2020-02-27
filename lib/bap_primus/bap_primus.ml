@@ -12,7 +12,7 @@ module Std = struct
     module Memory = Bap_primus_memory
     module Observation = Bap_primus_observation
     module Lisp = Bap_primus_lisp
-    module Analysis = Bap_primus_analysis
+    module Analysis = Bap_primus_analysis.Machine
     module System = Bap_primus_system
     module Jobs = System.Jobs
     module Components = System.Components
@@ -21,7 +21,7 @@ module Std = struct
       include Bap_primus_machine
       type 'a state = 'a State.t
       include Bap_primus_main
-      let finished = System.finished
+      let finished = System.fini
       let init = System.init
     end
     type generator = Generator.t
