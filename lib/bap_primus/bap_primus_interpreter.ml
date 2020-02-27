@@ -726,7 +726,7 @@ module Make (Machine : Machine) = struct
   let pc = Machine.Local.get state >>| fun {addr} -> addr
 end
 
-module Init(Machine : Machine) = struct
+module LinkBinaryProgram(Machine : Machine) = struct
   open Machine.Syntax
   module Linker = Linker.Make(Machine)
 
@@ -767,7 +767,7 @@ module Init(Machine : Machine) = struct
   end
 
 
-  let run () =
+  let init () =
     Machine.get () >>= fun proj ->
     linker#run (Project.program proj) (Machine.return ())
 end

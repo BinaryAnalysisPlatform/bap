@@ -568,6 +568,7 @@ module Std : sig
           See also a more general [register_component] function.
       *)
       val add_component : component -> unit
+      [@@deprecated "[since 2020-03] use Components.register* instead"]
     end
 
     (** A runnable instance of Primus Machine.
@@ -912,7 +913,7 @@ module Std : sig
       val register_generic :
         ?desc:string ->
         ?package:string ->
-        string -> Bap_primus_types.component ->
+        string -> component ->
         unit
     end
 

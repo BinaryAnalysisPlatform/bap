@@ -103,6 +103,6 @@ module Make (Machine : Machine) : sig
 end
 
 
-module Init (Machine : Machine) : sig
-  val run : unit -> unit Machine.t
+module LinkBinaryProgram (Machine : Machine) : sig
+  val init : unit -> unit Machine.t
 end
