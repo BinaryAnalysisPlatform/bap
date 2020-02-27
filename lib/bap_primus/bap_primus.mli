@@ -549,6 +549,7 @@ module Std : sig
           (exit_status * project) M.m
       end
 
+
       (** [add_component comp] registers the machine component [comp] in the
           Primus Framework.
           The component's [init] function will be run every time the

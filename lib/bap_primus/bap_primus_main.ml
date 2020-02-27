@@ -1,52 +1,34 @@
 open Core_kernel
+open Bap_knowledge
 open Bap.Std
 open Bap_primus_types
 open Format
 
-module Observation = Bap_primus_observation
 
+module System = Bap_primus_system
 
-let finished,finish =
-  Observation.provide ~inspect:sexp_of_unit "fini"
+let components = ref 0
 
-let init,inited =
-  Observation.provide ~inspect:sexp_of_unit "init"
-
-
-let components : component list ref = ref []
-let add_component comp = components := comp :: !components
-
+let add_component component =
+  incr components;
+  let name = sprintf "unnamed-component-%d" !components in
+  System.Components.register_generic name component
+    ~desc:"an unnamed user component"
 
 module Main(Machine : Machine) = struct
   open Machine.Syntax
-
-  module Mach = Bap_primus_machine
-  module Link = Bap_primus_interpreter.Init(Machine)
   module Lisp = Bap_primus_lisp.Make(Machine)
+  module Sys = System.Generic(Machine)
 
-  let init_components () =
-    Machine.List.iter !components ~f:(fun (module Component) ->
-        let module Comp = Component(Machine) in
-        Comp.init ())
-
-  let init () =
-    Machine.Observation.make inited ()
-
-  let finish () =
-    Machine.Observation.make finish ()
-
-  let run ?(envp=[| |]) ?(args=[| |]) proj m =
+  let run ?(envp=[| |]) ?(args=[| |]) proj user =
     let comp =
-      init_components () >>= fun () ->
+      Sys.init System.default >>= fun () ->
       Lisp.typecheck >>= fun () ->
       Lisp.optimize () >>= fun () ->
-      init () >>= fun () ->
-      Link.run () >>= fun () ->
-      Machine.catch m (fun err ->
-          finish () >>= fun () ->
-          Machine.raise err)
-      >>= fun x ->
-      finish () >>= fun () ->
-      Machine.return x in
+      Machine.Observation.make System.inited () >>= fun () ->
+      Machine.catch user (fun exn ->
+          Machine.Observation.make System.finish () >>= fun () ->
+          Machine.raise exn) >>= fun () ->
+      Machine.Observation.make System.finish () in
     Machine.run comp proj args envp
 end
