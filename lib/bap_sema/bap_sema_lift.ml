@@ -313,6 +313,7 @@ let program symtab =
       let addr = Block.addr entry in
       let blk_tid = Tid.for_addr addr in
       let sub_tid = tid_for_sub name in
+      Tid.set_addr sub_tid addr;
       let sub = lift_sub ~symtab ~tid:sub_tid entry cfg in
       Ir_program.Builder.add_sub b (Ir_sub.with_name sub name);
       Hashtbl.add_exn sub_of_blk ~key:blk_tid ~data:sub_tid;);

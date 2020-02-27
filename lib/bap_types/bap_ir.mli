@@ -58,6 +58,7 @@ module Tid : sig
 
   val create : unit -> t Bap_toplevel.t
   val set_name : t -> string -> unit Bap_toplevel.t
+  val set_addr : t -> word -> unit Bap_toplevel.t
   val name : t -> string Bap_toplevel.t
   val from_string : string -> tid Or_error.t
   val from_string_exn : string -> tid
