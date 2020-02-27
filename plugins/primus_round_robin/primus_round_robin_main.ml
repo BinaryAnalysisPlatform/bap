@@ -13,12 +13,12 @@ type t = {
 }
 
 let state = Primus.Machine.State.declare
-              ~uuid:"d1b33e16-bf5d-48d5-a174-3901dff3d123"
-              ~name:"round-robin-scheduler"
-              (fun _ -> {
-                   pending = Fqueue.empty;
-                   finished = Mid.Set.empty;
-                 })
+    ~uuid:"d1b33e16-bf5d-48d5-a174-3901dff3d123"
+    ~name:"round-robin-scheduler"
+    (fun _ -> {
+         pending = Fqueue.empty;
+         finished = Mid.Set.empty;
+       })
 
 
 module RR(Machine : Primus.Machine.S) = struct
@@ -35,7 +35,7 @@ module RR(Machine : Primus.Machine.S) = struct
       else schedule {
           t with
           pending = Seq.fold fs ~init:Fqueue.empty ~f:Fqueue.enqueue
-      }
+        }
     | Some (next,pending) ->
       Machine.status next >>= function
       | `Dead ->
@@ -69,7 +69,9 @@ end
 
 let enable () =
   info "enabling the scheduler";
-  Primus.Machine.add_component (module RR)
+  Primus.Components.register_generic "round-robin-scheduler" (module RR)
+    ~package:"primus"
+    ~desc:"enables the round-robin scheduler"
 
 open Config;;
 manpage [

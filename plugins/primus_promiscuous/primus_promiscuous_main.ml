@@ -248,4 +248,6 @@ let enabled = flag "mode" ~doc:"Enable the mode."
 
 let () = when_ready (fun {get=(!!)} ->
     if !!enabled then
-      Primus.Machine.add_component (module Main))
+      Primus.Components.register_generic
+        ~package:"primus" "promiscuous-mode" (module Main)
+        ~desc:"enables the promiscuous mode.")

@@ -88,4 +88,8 @@ manpage [
      execution, but only after a machine finishes."
 ]
 
-let () = when_ready (fun _ -> Primus.Machine.add_component (module Main))
+let () = when_ready (fun _ ->
+    Primus.Components.register_generic "mark-visited" (module Main)
+      ~package:"primus"
+      ~desc:"marks visited program terms with the [visited] attribute"
+  )

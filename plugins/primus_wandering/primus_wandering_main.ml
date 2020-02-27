@@ -77,7 +77,8 @@ let enable seed =
     let generator = Primus.Generator.Random.lcg seed
   end in
   let module Scheduler = Make(Random) in
-  Primus.Machine.add_component (module Scheduler)
+  Primus.Components.register_generic "wondering-scheduler" (module Scheduler)
+    ~package:"primus"
 
 open Config;;
 manpage [

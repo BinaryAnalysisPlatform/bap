@@ -158,4 +158,6 @@ end
 
 
 let () = Config.when_ready (fun _ ->
-    Primus.Machine.add_component (module Main))
+    Primus.Components.register_generic "limit" (module Main)
+      ~package:"primus"
+      ~desc:"enables program termination")

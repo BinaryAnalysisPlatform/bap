@@ -193,16 +193,19 @@ module Marker(Machine : Primus.Machine.S) = struct
     Primus.Interpreter.leave_blk >>> mark
 end
 
-let markers : Primus.component list = [
-  (module Mapper);
-  (module Marker);
+let markers : (string * Primus.component) list = [
+  "mapper",(module Mapper);
+  "marker", (module Marker);
 ]
 
 let enable_projection () =
-  List.iter markers ~f:Primus.Machine.add_component
+  List.iter markers ~f:(fun (name,comp) ->
+      Primus.Components.register_generic name comp
+        ~package:"primus-propagate-taint")
 
 let enable_injection () =
-  Primus.Machine.add_component (module Intro)
+  Primus.Components.register_generic "intro" (module Intro)
+    ~package:"primus-propagate-taint"
 
 
 

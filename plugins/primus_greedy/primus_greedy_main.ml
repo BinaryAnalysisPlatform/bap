@@ -67,7 +67,7 @@ end
 
 let enable () =
   info "enabling the scheduler";
-  Primus.Machine.add_component (module Greedy)
+  Primus.Components.register_generic "greedy-scheduler" (module Greedy)
 
 open Config;;
 manpage [

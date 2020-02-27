@@ -89,7 +89,8 @@ end
 
 let enable () =
   info "enabling the scheduler";
-  Primus.Machine.add_component (module Scheduler)
+  Primus.Components.register_generic "exploring-scheduler" (module Scheduler)
+    ~package:"primus"
 
 open Config;;
 manpage [

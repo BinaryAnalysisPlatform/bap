@@ -184,6 +184,9 @@ let start_monitoring {Config.get=(!)} =
             (print_event out m));
       Machine.return ()
   end in
-  Primus.Machine.add_component (module Monitor)
+  Primus.Components.register_generic "monitor" (module Monitor)
+    ~package:"primus"
+    ~desc:"monitors the specified set of observations and prints
+    a trace of recorded observations when a machine finishes."
 
 let () = Config.when_ready start_monitoring

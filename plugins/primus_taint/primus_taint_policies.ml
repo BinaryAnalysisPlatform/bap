@@ -94,11 +94,13 @@ module Exact(Machine : Primus.Machine.S) = struct
     ]
 end
 
-let components : Primus.Machine.component list = [
-  (module Exact);
-  (module Computation)
+let components : (string * Primus.Machine.component) list = [
+  "propagate-exact",(module Exact);
+  "propagate-by-computation", (module Computation)
 ]
 
 
 let init () =
-  List.iter ~f:Primus.Machine.add_component components
+  List.iter components ~f:(fun (name,comp) ->
+      Primus.Components.register_generic name comp
+        ~package:"primus-taint")
