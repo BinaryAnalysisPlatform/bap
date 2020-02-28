@@ -146,6 +146,7 @@ module Interface = struct
   ];;
 
   Config.when_ready (fun _ ->
+      Primus.Machine.add_component (module Main) [@warning "-D"];
       Primus.Components.register_generic "regions" (module Main)
         ~package:"primus-lisp"
         ~desc:"provides interval-trees to Primus Lisp")

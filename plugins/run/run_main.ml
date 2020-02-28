@@ -237,5 +237,6 @@ let deps = [
 let () =
   Config.when_ready (fun conf ->
       Project.register_pass ~deps (main conf);
+      Primus.Machine.add_component (module Visited) [@warning "-D"];
       Primus.Components.register_generic "records-visited" (module Visited)
         ~package:"primus-run-internal")

@@ -89,6 +89,7 @@ manpage [
 ]
 
 let () = when_ready (fun _ ->
+    Primus.Machine.add_component (module Main) [@warning "-D"];
     Primus.Components.register_generic "mark-visited" (module Main)
       ~package:"primus"
       ~desc:"marks visited program terms with the [visited] attribute"

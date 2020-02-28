@@ -67,8 +67,9 @@ module RR(Machine : Primus.Machine.S) = struct
     ]
 end
 
-let enable () =
-  info "enabling the scheduler";
+let register enabled =
+  if enabled
+  then Primus.Machine.add_component (module RR) [@warning "-D"];
   Primus.Components.register_generic "round-robin-scheduler" (module RR)
     ~package:"primus"
     ~desc:"enables the round-robin scheduler"
@@ -89,4 +90,4 @@ manpage [
 let enabled = flag "scheduler" ~doc:"Enable the scheduler."
 
 
-let () = when_ready (fun {get=(!!)} -> if !!enabled then enable ())
+let () = when_ready (fun {get=(!!)} -> register !!enabled)

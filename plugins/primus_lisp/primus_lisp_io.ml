@@ -280,5 +280,6 @@ let init redirections =
             (channel-flush DESCR) is called. |};
       ]
   end in
+  Primus.Machine.add_component (module Primitives) [@warning "-D"];
   Primus.Components.register_generic "basic-io" (module Primitives)
     ~desc:"provides basic IO primitives to Primus Lisp"

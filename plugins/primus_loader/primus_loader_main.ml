@@ -10,9 +10,11 @@ let init s b =
     let stack_size = s
     let stack_base = b
   end in
+  let module Loader = Primus_loader_basic.Make(Param) in
+  Primus.Machine.add_component (module Loader) [@warning "-D"];
   Primus.Components.register_generic
     ~package:"primus" "loader"
-    (module Primus_loader_basic.Make(Param))
+    (module Loader)
     ~desc:"initializes runtime environment.
     sets up stack, heap and some global variables."
 ;;

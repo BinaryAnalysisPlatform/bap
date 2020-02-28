@@ -102,5 +102,6 @@ let components : (string * Primus.Machine.component) list = [
 
 let init () =
   List.iter components ~f:(fun (name,comp) ->
+      Primus.Machine.add_component comp [@warning "-D"];
       Primus.Components.register_generic name comp
         ~package:"primus-taint")

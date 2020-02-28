@@ -136,6 +136,7 @@ let load_lisp_program dump paths features =
       if dump then dump_program prog;
       Lisp.link_program prog;
   end in
+  Primus.Machine.add_component (module Loader) [@warning "-D"];
   Primus.Components.register_generic "lisp-library" (module Loader)
     ~desc:"loads the Primus Library"
 
@@ -193,6 +194,7 @@ module TypeErrorSummary(Machine : Primus.Machine.S) = struct
         errors (if errors > 1 then "s" else "")
 end
 
+
 let typecheck proj =
   let module Machine = struct
     type 'a m = 'a
@@ -200,9 +202,7 @@ let typecheck proj =
   end in
   let module Main = Primus.Machine.Main(Machine) in
   let module Lisp = Primus.Lisp.Make(Machine) in
-  Primus.Components.register_generic "type-checker"
-    (module TypeErrorSummary)
-    ~desc:"typechecks program and outputs the summary in the standard output";
+  Primus.Machine.add_component (module TypeErrorSummary) [@warning "-D"];
   match Main.run proj @@ Machine.return () with
   | Normal,_ -> ()
   | Exn err,_ ->
@@ -273,14 +273,17 @@ let () =
         Project.register_pass' ~deps:["api"] ~autorun:true typecheck;
       let paths = [Filename.current_dir_name] @ !!libs @ [Lisp_config.library] in
       let features = "init" :: !!features in
+      Primus.Components.register_generic "type-checker"
+        (module TypeErrorSummary)
+        ~desc:"typechecks program and outputs the summary in the standard output";
+      Primus.Machine.add_component (module LispCore) [@warning "-D"];
       Primus.Components.register_generic "core" (module LispCore)
         ~package:"primus-lisp"
         ~desc:"initializes Primus Lisp core";
+      Primus.Machine.add_component (module TypeErrorPrinter) [@warning "-D"];
       Primus.Components.register_generic ~package:"primus-lisp" "type-error-printer"
         (module TypeErrorPrinter)
         ~desc:"prints Primus Lisp type errors into the standard output";
-
-
       Channels.init !!redirects;
       Primitives.init ();
       load_lisp_program !!dump paths features)

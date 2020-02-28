@@ -3,11 +3,17 @@ open Bap_primus.Std
 include Self()
 
 let init _ =
+  Primus.Machine.add_component
+    (module Primus_x86_loader.InitializeFlags)
+  [@warning "-D"];
   Primus.Components.register_generic
     ~package:"primus-x86" "flag-initializer"
     (module Primus_x86_loader.InitializeFlags)
     ~desc:"intializes x86 flags to zero";
 
+  Primus.Machine.add_component
+    (module Primus_x86_loader.SetupPLT)
+  [@warning "-D"];
   Primus.Components.register_generic
     ~package:"primus-x86" "setup-plt"
     (module Primus_x86_loader.SetupPLT)

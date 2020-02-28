@@ -201,10 +201,8 @@ let set_default_policy name =
       Policy.of_value v >>=
       Policy.set_default
   end in
-  Primus.Components.register_generic "set-default-policy" (module Init)
-    ~package:"primus-taint"
+  Primus.Machine.add_component (module Init) [@warning "-D"]
 
-    ~desc:"initializes the default taint propagation policy"
 open Config;;
 manpage [
   `S "DESCRIPTION";
@@ -254,17 +252,21 @@ let enable_gc = param (enum collectors) ~default:false "gc"
     ~doc:"Picks a taint garbage collector"
 
 let () = when_ready (fun {get=(!!)} ->
+    Primus.Machine.add_component (module Setup) [@warning "-D"];
     Primus.Components.register_generic "taint-primitives"
       (module Setup)
       ~package:"primus-taint"
       ~desc:"exposes Primus Taint to Primus Lisp" ;
+    Primus.Machine.add_component (module Signals) [@warning "-D"];
     Primus.Components.register_generic
       ~package:"primus-taint" "taint-signals"
       (module Signals)
       ~desc:"reflects Primus Taint observations to Lisp signals" ;
     Primus_taint_policies.init ();
+    Primus.Components.register_generic
+      ~package:"primus-taing" "conservative-garbage-collector"
+      (module Taint.Gc.Conservative);
     set_default_policy !!policy;
     if !!enable_gc
-    then Primus.Components.register_generic
-        ~package:"primus-taing" "conservative-garbage-collector"
-        (module Taint.Gc.Conservative))
+    then Primus.Machine.add_component
+        (module Taint.Gc.Conservative) [@warning "-D"])

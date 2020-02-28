@@ -71,12 +71,16 @@ module Make
 
 end
 
-let enable seed =
-  info "enabling the scheduler, using %d as the seed" seed;
+let register enabled seed =
   let module Random = struct
     let generator = Primus.Generator.Random.lcg seed
   end in
   let module Scheduler = Make(Random) in
+  if enabled
+  then begin
+    info "enabling the scheduler, using %d as the seed" seed;
+    Primus.Machine.add_component (module Scheduler) [@warning "-D"];
+  end;
   Primus.Components.register_generic "wondering-scheduler" (module Scheduler)
     ~package:"primus"
 
@@ -96,4 +100,4 @@ let seed = param ~doc:"random generator seed" int "seed"
 
 
 
-let () = when_ready (fun {get=(!!)} -> if !!enabled then enable !!seed)
+let () = when_ready (fun {get=(!!)} -> register !!enabled !!seed)

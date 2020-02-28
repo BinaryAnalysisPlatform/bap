@@ -103,13 +103,15 @@ end
 
 let enable = Config.flag "enable"
 
-let () = Config.when_ready (fun {Config.get} ->
-    Primus.Components.register_generic "constant-tracker-primitives"
-      (module Primitives)
-      ~package:"bap"
-      ~desc:"exposes the constant tracker to Primus Lisp";
-    if get enable then
-      Primus.Components.register_generic "constant-tracker"
-        (module Tracker)
-        ~package:"bap"
-        ~desc:"tracks constants")
+let () = Config.when_ready @@ fun {Config.get} ->
+  Primus.Machine.add_component (module Primitives) [@warning "-D"];
+  Primus.Components.register_generic "constant-tracker-primitives"
+    (module Primitives)
+    ~package:"bap"
+    ~desc:"exposes the constant tracker to Primus Lisp";
+  Primus.Components.register_generic "constant-tracker"
+    (module Tracker)
+    ~package:"bap"
+    ~desc:"tracks constants";
+  if get enable then
+    Primus.Machine.add_component (module Tracker) [@warning "-D"]

@@ -87,8 +87,9 @@ module Scheduler(Machine : Primus.Machine.S) = struct
     ]
 end
 
-let enable () =
-  info "enabling the scheduler";
+let register enabled =
+  if enabled
+  then Primus.Machine.add_component (module Scheduler) [@warning "-D"];
   Primus.Components.register_generic "exploring-scheduler" (module Scheduler)
     ~package:"primus"
 
@@ -110,4 +111,4 @@ manpage [
 let enabled = flag "scheduler" ~doc:"Enable the scheduler."
 
 
-let () = when_ready (fun {get=(!!)} -> if !!enabled then enable ())
+let () = when_ready (fun {get=(!!)} -> register !!enabled)

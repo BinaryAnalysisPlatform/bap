@@ -127,7 +127,8 @@ Config.manpage [
   dictionaries.";
 ];;
 
-let () = Config.when_ready @@
-  fun _ -> Primus.Components.register_generic "dictionary" (module Main)
+let () = Config.when_ready @@ fun _ ->
+  Primus.Machine.add_component (module Main) [@warning "-D"];
+  Primus.Components.register_generic "dictionary" (module Main)
     ~package:"primus-lisp"
     ~desc:"provides a key-value storage primitives to Primus Lisp"

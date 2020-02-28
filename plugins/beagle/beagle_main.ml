@@ -254,9 +254,10 @@ module Hunter(Machine : Primus.Machine.S) = struct
       ]
 end
 
-let main proj =
-  Primus.Components.register_generic "hunter" (module Hunter)
-    ~package:"beagle"
+let main _proj =
+  Primus.Machine.add_component (module Hunter) [@warning "-D"]
 
 let () = (Config.when_ready (fun _ ->
+    Primus.Components.register_generic "hunter" (module Hunter)
+      ~package:"beagle";
     Project.register_pass' ~deps:["strings-collect"] main))

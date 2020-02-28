@@ -6,23 +6,27 @@ open Format
 
 
 module System = Bap_primus_system
+module Interpreter = Bap_primus_interpreter
 
-let components = ref 0
+let components : component list ref = ref []
 
 let add_component component =
-  incr components;
-  let name = sprintf "unnamed-component-%d" !components in
-  System.Components.register_generic name component
-    ~desc:"an unnamed user component"
+  components := component :: !components
 
 module Main(Machine : Machine) = struct
   open Machine.Syntax
   module Lisp = Bap_primus_lisp.Make(Machine)
-  module Sys = System.Generic(Machine)
+  module Link = Interpreter.LinkBinaryProgram(Machine)
+
+  let init_components () =
+    Machine.List.iter !components ~f:(fun (module Component) ->
+        let module Comp = Component(Machine) in
+        Comp.init ())
 
   let run ?(envp=[| |]) ?(args=[| |]) proj user =
     let comp =
-      Sys.init System.default >>= fun () ->
+      init_components () >>= fun () ->
+      Link.init () >>= fun () ->
       Lisp.typecheck >>= fun () ->
       Lisp.optimize () >>= fun () ->
       Machine.catch user (fun exn ->

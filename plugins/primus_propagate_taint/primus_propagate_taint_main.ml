@@ -199,15 +199,11 @@ let markers : (string * Primus.component) list = [
 ]
 
 let enable_projection () =
-  List.iter markers ~f:(fun (name,comp) ->
-      Primus.Components.register_generic name comp
-        ~package:"primus-propagate-taint")
+  List.iter markers ~f:(fun (_,comp) ->
+      Primus.Machine.add_component comp [@warning "-D"])
 
 let enable_injection () =
-  Primus.Components.register_generic "intro" (module Intro)
-    ~package:"primus-propagate-taint"
-
-
+  Primus.Machine.add_component (module Intro) [@warning "-D"]
 
 open Config;;
 manpage [
@@ -289,6 +285,13 @@ when_ready begin fun {get=is} ->
   if is marking_disabled && not (is enabled)
   then invalid_arg "The no-marks option is only valid if \
                     the run option is specified";
+
+  List.iter markers ~f:(fun (name,comp) ->
+      Primus.Components.register_generic name comp
+        ~package:"primus-propagate-taint");
+
+  Primus.Components.register_generic "intro" (module Intro)
+    ~package:"primus-propagate-taint";
 
   (* Modern interface *)
   if is injection_enabled

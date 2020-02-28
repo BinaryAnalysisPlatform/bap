@@ -65,8 +65,9 @@ module Greedy(Machine : Primus.Machine.S) = struct
     Primus.Machine.finished >>> halt
 end
 
-let enable () =
-  info "enabling the scheduler";
+let register enabled =
+  if enabled
+  then Primus.Machine.add_component (module Greedy) [@warning "-D"];
   Primus.Components.register_generic "greedy-scheduler" (module Greedy)
 
 open Config;;
@@ -91,4 +92,4 @@ manpage [
 let enabled = flag "scheduler" ~doc:"Enable the scheduler."
 
 
-let () = when_ready (fun {get=(!!)} -> if !!enabled then enable ())
+let () = when_ready (fun {get=(!!)} -> register !!enabled)
