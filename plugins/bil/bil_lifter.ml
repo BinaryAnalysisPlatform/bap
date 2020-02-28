@@ -10,18 +10,7 @@ open Knowledge.Syntax
 open Theory.Parser
 include Self()
 
-module Call = struct
-  let prefix = "bil-fixup:"
-  let extern name =
-    let dst = sprintf "%s%s" prefix name in
-    Bil.special dst
-
-  let is_extern name =
-    String.is_prefix name ~prefix
-
-  let dst =
-    String.chop_prefix_exn ~prefix
-end
+module Call = Bil_semantics.Call
 
 module BilParser = struct
   type context = [`Bitv | `Bool | `Mem ] [@@deriving sexp]
@@ -170,23 +159,24 @@ module BilParser = struct
       let n = Var.name v in
       match Var.typ v with
       | Unk ->
-         error "can't reify the variable %s: unknown type" (Var.name v);
-         S.error
+        error "can't reify the variable %s: unknown type" (Var.name v);
+        S.error
       | Imm 1 -> S.set_bit n x
       | Imm m -> S.set_reg n m x
       | Mem (ks,vs) ->
         S.set_mem n (Size.in_bits ks) (Size.in_bits vs) x in
-    function
-    | Move (v,x) -> set v x
-    | Jmp (Int x) -> S.goto (Word.to_bitvec x)
-    | Jmp x -> S.jmp x
-    | Special s when Call.is_extern s ->
-      S.call (Call.dst s)
-    | Special s -> S.special s
-    | While (c,xs) -> S.while_ c xs
-    | If (c,xs,ys) -> S.if_ c xs ys
-    | CpuExn n -> S.cpuexn n
-
+    fun s -> match Call.dst s with
+      | Some dst ->
+        info "translating a special to call(%s)" dst;
+        S.call dst
+      | None -> match s with
+        | Move (v,x) -> set v x
+        | Jmp (Int x) -> S.goto (Word.to_bitvec x)
+        | Jmp x -> S.jmp x
+        | Special s -> S.special s
+        | While (c,xs) -> S.while_ c xs
+        | If (c,xs,ys) -> S.if_ c xs ys
+        | CpuExn n -> S.cpuexn n
 
   let t = {bitv; mem; stmt; bool; float; rmode}
 end
@@ -284,7 +274,7 @@ module Relocations = struct
 
   let override_external name =
     Stmt.map (object inherit Stmt.mapper
-      method! map_jmp _ = [Call.extern name]
+      method! map_jmp _ = [Call.create name]
     end)
 
 
@@ -351,7 +341,101 @@ let base_context = [
   "bil-lifter";
 ]
 
-let provide_lifter ~with_fp () =
+
+let create_intrinsic arch mem insn =
+  let module Insn = Disasm_expert.Basic.Insn in
+  let width = Size.in_bits (Arch.addr_size arch) in
+  let module Target = (val target_of_arch arch) in
+  let pre = Insn.ops insn |> Array.to_list |> List.mapi ~f:(fun p op ->
+      let name = sprintf "insn:op%d" (p+1) in
+      let v = Var.create name (Imm width) in
+      Bil.move v @@ match op with
+      | Op.Imm x -> Bil.int (Option.value_exn (Imm.to_word ~width x))
+      | Op.Fmm x -> Bil.int @@ Word.of_int64 @@
+        Int64.bits_of_float (Fmm.to_float x)
+      | Op.Reg r -> Bil.int (Word.of_int ~width (Reg.code r))) in
+  pre @ Bil.[
+      Var.create ("insn:next_address") (Imm width) :=
+        int (Addr.succ (Memory.max_addr mem));
+      Call.create (sprintf "%s:%s"
+                     (Insn.encoding insn)
+                     (Insn.name insn));
+    ]
+
+type predicate = [
+  | `tag of string
+  | `asm of string
+  | `insn of string * string
+]
+
+type ispec = [
+  | `any | `unk
+  | `special
+  | predicate
+]
+
+let matches ~pat str =
+  String.is_prefix ~prefix:pat @@
+  String.(uppercase@@strip str)
+
+let string_of_kind k =
+  Format.asprintf "%a" Sexp.pp (sexp_of_kind k)
+
+let matches_spec specs insn =
+  let module Insn = Disasm_expert.Basic.Insn in
+  List.exists specs ~f:(function
+      | `tag t ->
+        List.exists (Insn.kinds insn) ~f:(fun k ->
+            matches ~pat:t (string_of_kind k))
+      | `asm t -> matches ~pat:t (Insn.asm insn)
+      | `insn (ns,opcode) ->
+        matches ~pat:ns (Insn.encoding insn) &&
+        matches ~pat:opcode (Insn.name insn))
+
+let with_unknown = List.exists ~f:(function `unk -> true | _ -> false)
+
+
+type enable_intrinsic = {
+  for_all : bool;
+  for_unk : bool;
+  for_special : bool;
+  predicates : predicate list;
+}
+
+let split_specs =
+  List.fold
+    ~init:{for_all=false; for_unk=false; for_special=false; predicates=[]}
+    ~f:(fun spec -> function
+        | `any -> {spec with for_all = true}
+        | `unk -> {spec with for_unk = true}
+        | `special -> {spec with for_special=true}
+        | #predicate as p ->
+          {spec with predicates = p :: spec.predicates})
+
+let rec is_special = function
+  | Bil.Special _ -> true
+  | Move _ | CpuExn _ | Jmp _ -> false
+  | Bil.While (_, xs) -> has_special xs
+  | Bil.If (_, xs, ys) -> has_special xs || has_special ys
+and has_special = List.exists ~f:is_special
+
+let lift ~enable_intrinsics:{for_all; for_unk; for_special; predicates}
+    arch mem insn =
+  if for_all || matches_spec predicates insn
+  then Ok (create_intrinsic arch mem insn)
+  else
+    let module Target = (val target_of_arch arch) in
+    match Target.lift mem insn with
+    | Error _ as err ->
+      if for_unk
+      then Ok (create_intrinsic arch mem insn)
+      else err
+    | Ok bil ->
+      if for_special && has_special bil
+      then Ok (create_intrinsic arch mem insn)
+      else Ok bil
+
+let provide_lifter ~enable_intrinsics ~with_fp () =
   info "providing a lifter for all BIL lifters";
   let relocations = Relocations.subscribe () in
   let unknown = Theory.Program.Semantics.empty in
@@ -363,14 +447,14 @@ let provide_lifter ~with_fp () =
   let (>>?) x f = x >>= function
     | None -> KB.return unknown
     | Some x -> f x in
+  let enable_intrinsics = split_specs enable_intrinsics in
   let lifter obj =
     Knowledge.collect Arch.slot obj >>= fun arch ->
     Theory.instance ~context:(context arch) () >>=
     Theory.require >>= fun (module Core) ->
     Knowledge.collect Memory.slot obj >>? fun mem ->
     Knowledge.collect Disasm_expert.Basic.Insn.slot obj >>? fun insn ->
-    let module Target = (val target_of_arch arch) in
-    match Target.lift mem insn with
+    match lift ~enable_intrinsics arch mem insn with
     | Error _ ->
       Knowledge.return (Insn.of_basic insn)
     | Ok bil ->
@@ -387,8 +471,8 @@ let provide_lifter ~with_fp () =
   Knowledge.promise Theory.Program.Semantics.slot lifter
 
 
-let init ~with_fp () =
-  provide_lifter ~with_fp ();
+let init ~enable_intrinsics ~with_fp () =
+  provide_lifter ~enable_intrinsics ~with_fp ();
   provide_bir ();
   Theory.declare !!(module Brancher : Theory.Core)
     ~package:"bap.std" ~name:"jump-dests"

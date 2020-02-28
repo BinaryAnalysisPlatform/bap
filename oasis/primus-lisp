@@ -12,6 +12,7 @@ Library primus_lisp_library_plugin
   InternalModules: Primus_lisp_main,
                    Primus_lisp_config,
                    Primus_lisp_primitives,
+                   Primus_lisp_ieee754,
                    Primus_lisp_io
   XMETADescription: install and load Primus lisp libraries
   DataFiles:        lisp/*.lisp ($primus_lisp_library_path)

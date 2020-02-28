@@ -72,11 +72,11 @@ module IrBuilder = struct
   let append xs ys = match xs, ys with
     | [],xs | xs,[] -> xs
     | x :: xs, y :: ys when def_only x ->
-       List.rev_append ys (append_def_only x y :: xs)
+      List.rev_append ys (append_def_only x y :: xs)
     | x::xs, y::_ ->
-       let jmp = Ir_jmp.reify ~dst:(Ir_jmp.resolved @@ Term.tid y) () in
-       let x = Term.append jmp_t x jmp in
-       List.rev_append ys (x::xs)
+      let jmp = Ir_jmp.reify ~dst:(Ir_jmp.resolved @@ Term.tid y) () in
+      let x = Term.append jmp_t x jmp in
+      List.rev_append ys (x::xs)
 
   let ir_of_insn insn = KB.Value.get Term.slot insn
 
@@ -102,16 +102,16 @@ module IrBuilder = struct
     | [] -> []
     | b :: bs -> Term.set_attr b address addr :: bs
 
-  let is_conditional jmp = match Ir_jmp.cond jmp with
-    | Bil.Int _ ->  false
-    | _ -> true
+  let is_unconditional jmp = match Ir_jmp.cond jmp with
+    | Bil.Int _ ->  true
+    | _ -> false
 
   let turn_into_call ret blk =
     Term.map jmp_t blk ~f:(fun jmp ->
-        update_jmp jmp ~f:(fun dst _ make ->
-            if is_conditional jmp
-            then make ~dst:None ~alt:dst
-            else make ~dst:ret ~alt:dst))
+        update_jmp jmp ~f:(fun dst alt make ->
+            make
+              ~dst:(if is_unconditional jmp then ret else None)
+              ~alt:(Option.first_some alt dst)))
 
   let landing_pad return jmp =
     match Ir_jmp.kind jmp with
@@ -142,13 +142,18 @@ module IrBuilder = struct
   let insert_inter_fall alt blk =
     Term.append jmp_t blk @@ Ir_jmp.reify ~alt ()
 
-  let is_last_jump_nonconditional blk =
+  let is_last_jump_unconditional blk =
     match Term.last jmp_t blk with
     | None -> false
-    | Some jmp -> not (is_conditional jmp)
+    | Some jmp -> is_unconditional jmp
+
+  let has_call blk =
+    Term.enum jmp_t blk |>
+    Seq.exists ~f:(fun jmp ->
+        Option.is_some (Ir_jmp.alt jmp))
 
   let fall_if_possible dst blk =
-    if is_last_jump_nonconditional blk
+    if is_last_jump_unconditional blk
     then blk
     else
       Term.append jmp_t blk @@
@@ -176,14 +181,14 @@ module IrBuilder = struct
     | x -> match fall with
       | Some dst -> [
           fall_if_possible dst @@
-          if is_call
+          if is_call || has_call x
           then turn_into_call fall x
           else x
         ]
       | None -> match inter_fall symtab block with
-        | None -> [if is_call then turn_into_call None x else x]
+        | None -> [if is_call || has_call x then turn_into_call None x else x]
         | Some dst ->
-          if is_call then
+          if is_call || has_call x then
             let next = Ir_blk.create () in
             let fall = Ir_jmp.resolved (Term.tid next) in
             let next = insert_inter_fall dst next in [

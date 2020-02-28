@@ -24,6 +24,12 @@
 (require incident)
 
 ;; Public Interface
+
+(defun memcheck-is-tracked (heap ptr)
+  (or
+   (region-contains (symbol-concat 'memcheck/live heap) ptr)
+   (region-contains (symbol-concat 'memcheck/dead heap) ptr)))
+
 (defun memcheck-release (heap ptr)
   (let ((dead (region-contains (symbol-concat 'memcheck/dead heap) ptr)))
     (if dead (memcheck/report-double-release ptr)

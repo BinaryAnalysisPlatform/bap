@@ -32,18 +32,52 @@
       (memory-allocate ptr len *malloc-initial-value*)
     (memory-allocate ptr len)))
 
+(defun malloc/put-chunk-size (ptr len)
+  (write-word ptr_t ptr len))
+
+(defun malloc/get-chunk-size (ptr)
+  (let ((header-size (/ (word-width) 8)))
+    (read-word ptr_t (- ptr header-size))))
+
 (defun malloc (n)
   "allocates a memory region of size N"
   (declare (external "malloc"))
   (if (= n 0) *malloc-zero-sentinel*
     (if (malloc-will-reach-limit n) 0
-      (let ((n (+ n (* 2 *malloc-guard-edges*)))
+      (let ((header-size (/ (word-width) 8))
+            (chunk-size (+ n (* 2 *malloc-guard-edges*) header-size))
             (ptr brk)
-            (failed (memory/allocate ptr n)))
+            (failed (memory/allocate ptr chunk-size)))
         (if failed 0
-          (set brk (+ brk n))
-          (malloc/fill-edges ptr n)
-          (+ ptr *malloc-guard-edges*))))))
+          (set brk (+ brk chunk-size))
+          (malloc/fill-edges ptr chunk-size)
+          (set ptr (+ ptr *malloc-guard-edges*))
+          (malloc/put-chunk-size ptr n)
+          (+ ptr header-size))))))
+
+(defun realloc (ptr len)
+  (declare (external "realloc"))
+  (if (not ptr) (malloc len)
+    (if (not len) (realloc/as-free ptr)
+      (realloc/update-chunk ptr len))))
+
+(defun realloc/shrink-chunk (ptr len)
+  (malloc/put-chunk-size ptr len)
+  ptr)
+
+;; pre: both old-ptr and new-len are not null
+(defun realloc/update-chunk (old-ptr new-len)
+  (let ((old-len (malloc/get-chunk-size old-ptr)))
+    (if (>= old-len new-len) (realloc/shrink-chunk old-ptr new-len)
+      (let ((new-ptr (malloc new-len)))
+        (when new-ptr
+          (memcpy new-ptr old-ptr old-len)
+          (free old-ptr))
+        new-ptr))))
+
+(defun realloc/as-free (ptr)
+  (free ptr)
+  *malloc-zero-sentinel*)
 
 
 ;; in our simplistic malloc implementation, free is just a nop

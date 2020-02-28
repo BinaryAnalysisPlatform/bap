@@ -96,7 +96,8 @@ module Location = struct
       Machine.Global.put state {
         incidents = Map.set incidents ~key ~data:trace
       } >>= fun () ->
-      Machine.Observation.make report_location (key,trace) >>| fun () ->
+      Machine.Observation.post report_location ~f:(fun report ->
+          report (key,trace)) >>| fun () ->
       key
   end
 
@@ -120,8 +121,9 @@ module Incident = struct
 
     [@@@warning "-P"]
     let run (name :: locations) =
-      Value.Symbol.of_value name >>= fun name ->
-      Machine.Observation.make report (name,locations) >>= fun () ->
+      Machine.Observation.post report ~f:(fun report ->
+          Value.Symbol.of_value name >>= fun name ->
+          report (name,locations)) >>= fun () ->
       Value.b1
 
   end

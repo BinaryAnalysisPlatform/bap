@@ -5,6 +5,8 @@ open Monads.Std
 open Bap_future.Std
 open Bap_strings.Std
 
+[@@@warning "-D"]
+
 module Std : sig
   (** Primus - The Microexecution Framework.
 
@@ -60,7 +62,6 @@ module Std : sig
       it can modify other components (depending on their interface).
 
   *)
-  [@@@warning "-D"]
 
   module Primus : sig
     (** Machine Exception.
@@ -74,6 +75,10 @@ module Std : sig
 
     (** [a statement] is used to make an observation of type [a].    *)
     type 'a statement
+
+    (** a cancelable subscription to an observation.
+        @since 2.1.0 *)
+    type subscription
 
     (** a result of computation  *)
     type value [@@deriving bin_io, compare, sexp]
@@ -99,7 +104,7 @@ module Std : sig
     (** Machine Observation.
 
         The Primus Framework is built on top of the Machine
-        observation. The Machine components make their own
+        observations. The Machine components make their own
         observations, based on observation made by other components.
 
         A value of type ['a observation] is a first-class
@@ -143,7 +148,7 @@ module Std : sig
       (** Data interface to the provider.
 
           This interface provides access to the data stream of all
-          providers expresses as a stream of s-expressions.
+          providers. The data stream is expressed as a stream of s-expressions.
       *)
       module Provider : sig
         type t = provider
@@ -154,7 +159,7 @@ module Std : sig
         (** a total number of observers that subscribed to this provider  *)
         val observers : t -> int
 
-        (** triggers a stream of occurrences of this observation  *)
+        (** a stream of occurrences of this observation  *)
         val triggers : t -> unit stream
 
         (** a data stream from this observation *)
@@ -369,13 +374,65 @@ module Std : sig
           val observe : 'a observation -> ('a -> unit t) -> unit t
 
 
+          (** [subscribe obs handler] creates a cancelable
+              subscription to the observation [obs].
+
+              Returns a subscription handler that could be used to
+              cancel the subscription.
+
+              @since 2.1.0 *)
+          val subscribe : 'a observation -> ('a -> unit t) -> subscription t
+
+          (** [cancel sub] cancels the given subscription.
+
+              An observation that was registered under this
+              subscription won't be called anymore.
+
+              @since 2.1.0  *)
+          val cancel : subscription -> unit t
+
+
+          (** [watch prov data] watches for the data provider.
+
+              This function is the same as [observe] except that it
+              uses the provider to access the observation and gets the
+              observation in the sexp-serialized form. *)
           val watch : Observation.provider -> (Sexp.t -> unit t) -> unit t
 
           (** [make observation event] make an [observation] of the
               given [event].  *)
           val make : 'a statement -> 'a -> unit t
-        end
 
+          (** [post observation k] makes observation if necessary.
+
+              The continuation [k] is a function that is called only
+              when the given statement has subscribers.
+
+              Use this function to skip creating an observation if
+              nobody is interested in it. This is useful, when the
+              observation has some cost to construct, so when there no
+              subscribers no machine cycles will be lost.
+
+              The function [k] receives a [provide] function that could
+              be used to provide observation once it is ready, e.g.,
+              {[
+
+                Observation.post big_thing ~f:(fun provide ->
+                    some_costly_function1 >>= fun x ->
+                    some_costly_function2 >>= fun y ->
+                    some_costly_function3 >>= fun z ->
+                    provide (x,y,z))
+              ]}
+
+              Note: even for observations that are tuples this
+              function is efficient as sometimes the compiler
+              can optimize the closure creation or the closure
+              itself might be smaller than the created observation.
+
+              @since 2.1.0
+          *)
+          val post : 'a statement -> f:(('a -> unit t) -> unit t) -> unit t
+        end
 
         (** Computation Syntax.*)
         module Syntax : sig
@@ -770,6 +827,35 @@ module Std : sig
 
     end
 
+    (** Machine time.
+
+        Each machine has its own clock that is incremented on each
+        operation. When machine is forked, the derived machine
+        inherits the clock value from the parent machine.
+
+        @since 2.1.0
+    *)
+    module Time : sig
+      type t [@@deriving sexp_of]
+
+      (** [clocks t] is the time [t] expressed in clocks from the start of machine.
+
+          @since 2.1.0
+      *)
+      val clocks : t -> int
+
+      (** [of_clocks clk] represents a time duration equal to the
+          specified number of clocks.  *)
+      val of_clocks : int -> t
+
+      (** a string representation of time  *)
+      val to_string : t -> string
+
+      (** time printer  *)
+      val pp : Format.formatter -> t -> unit
+      include Base.Comparable.S with type t := t
+    end
+
 
     (** The Interpreter.
 
@@ -786,6 +872,9 @@ module Std : sig
         with the [(x,y,z)] tuple, that in fact corresponds to
         [observation >>> fun (x,y,z)] -> ... *)
     module Interpreter : sig
+
+      (** [clock] occurs every time the machine clock changes its value.  *)
+      val clock : Time.t observation
 
       (** [pc_change x] happens every time a code at address [x] is executed.  *)
       val pc_change : addr observation
@@ -1008,6 +1097,13 @@ module Std : sig
           given [Machine].  *)
       module Make (Machine : Machine.S) : sig
         type 'a m = 'a Machine.t
+
+
+        (** [time] returns the value of the machine clock.
+
+            @since 2.1.0
+        *)
+        val time : Time.t m
 
         (** [halt] halts the machine by raise the [Halt] exception.  *)
         val halt : never_returns m
@@ -2611,6 +2707,16 @@ ident ::= ?any atom that is not recognized as a <word>?
         (** [run args] performs the computation.  *)
         val run : value list -> value Machine.t
       end
+
+
+      (** [(lisp-primitive <name> <arg1> ... <argM> <rval>)] is posted
+          when the Lisp primitive with the given <name> is called with
+          the list of arguments [(<arg1> .... <argM>)] and evaluates
+          to the [<rval>] value.
+
+          @since 2.1.0
+      *)
+      val primitive : (string * value list) observation
 
       (** a closure packed as an OCaml value *)
       type closure = (module Closure)
