@@ -1,0 +1,5 @@
+let () =
+  add_variable ~doc:"build id" "build_id"
+    ~define:(function
+        | None -> ""
+        | Some p -> p)
