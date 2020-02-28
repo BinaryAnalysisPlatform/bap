@@ -31,7 +31,7 @@ depends: [
   "conf-bap-llvm" {>= "1.1"}
   "parsexp"
   "bap-signatures"
-  "result" {= "1.4.0"}
+  "result" {= "1.4"}
 ]
 depopts: ["conf-ida" "conf-binutils"]
 flags: light-uninstall
