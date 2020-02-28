@@ -1,5 +1,14 @@
+
+let build_id () : unit =
+  BaseEnv.var_define
+    ~hide:false
+    ~dump:true
+    ~cli:BaseEnv.CLIWith
+    ~short_desc:(fun () -> "build-id")
+    "build_id"
+    (fun () -> BaseEnv.var_get "build-id") |>
+  definition_end
+
+
 let () =
-  add_variable ~doc:"build id" "build_id"
-    ~define:(function
-        | None -> ""
-        | Some p -> p)
+  define [build_id]
