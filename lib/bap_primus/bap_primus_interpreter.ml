@@ -303,6 +303,13 @@ module Make (Machine : Machine) = struct
     if provided then Code.exec (`symbol name) >>| fun () -> true
     else Machine.return false
 
+  let tick =
+    Machine.Local.get state >>= fun s ->
+    !!tick s.time >>= fun () ->
+    Machine.Local.put state {
+      s with time = Time.succ s.time;
+    }
+
   let binop op x y = match op with
     | Bil.DIVIDE | Bil.SDIVIDE
     | Bil.MOD | Bil.SMOD
@@ -314,10 +321,12 @@ module Make (Machine : Machine) = struct
       else Machine.raise Division_by_zero
     | _ ->
       value (Bil.Apply.binop op x.value y.value) >>= fun r ->
+      tick >>= fun () ->
       post on_binop ~f:(fun k -> k ((op,x,y),r)) >>| fun () -> r
 
   let unop op x =
     value (Bil.Apply.unop op x.value) >>= fun r ->
+    tick >>= fun () ->
     post on_unop ~f:(fun k -> k ((op,x),r)) >>| fun () -> r
 
   let cast t s x =
@@ -350,11 +359,13 @@ module Make (Machine : Machine) = struct
   let load_byte a =
     !!on_loading a >>= fun () ->
     trapped_memory_access (Memory.get a.value) >>= fun r ->
+    tick >>= fun () ->
     post on_loaded ~f:(fun k -> k (a,r)) >>| fun () -> r
 
   let store_byte a x =
     !!on_storing a >>= fun () ->
     trapped_memory_access (Memory.set a.value x) >>= fun () ->
+    tick >>= fun () ->
     post on_stored ~f:(fun k -> k (a,x))
 
   let ite cond yes no =
@@ -409,12 +420,6 @@ module Make (Machine : Machine) = struct
       !!switching_memory m >>= fun () ->
       Memory.switch m
 
-  let tick =
-    Machine.Local.get state >>= fun s ->
-    !!tick s.time >>= fun () ->
-    Machine.Local.put state {
-      s with time = Time.succ s.time;
-    }
 
   let time =
     Machine.Local.get state >>| fun s -> s.time
@@ -435,7 +440,6 @@ module Make (Machine : Machine) = struct
       | Bil.Ite (cond, yes, no) -> eval_ite cond yes no
       | Bil.Let (v,x,y) -> eval_let v x y in
     !!exp_entered x >>= fun () ->
-    tick >>= fun () ->
     eval x >>= fun r ->
     !!exp_left x >>| fun () -> r
   and eval_let v x y =
@@ -586,6 +590,7 @@ module Make (Machine : Machine) = struct
     | None -> Machine.return ()
     | Some addr ->
       Value.of_word addr >>= fun addr ->
+      tick >>= fun () ->
       post will_jump ~f:(fun k -> k (cond,addr))
 
   let exec_to_prompt dst =
@@ -600,6 +605,7 @@ module Make (Machine : Machine) = struct
       exec_to_prompt dst
     | Indirect x ->
       eval_exp x >>= fun ({value} as dst) ->
+      tick >>= fun () ->
       post will_jump ~f:(fun k -> k (cond,dst)) >>= fun () ->
       Code.resolve_tid (`addr value) >>= function
       | None -> Code.exec (`addr value)
