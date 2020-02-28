@@ -47,7 +47,8 @@ module Bound = struct
 
   let parse s = match counter_of_suffix s with
     | None -> make_bound Clk s
-    | Some cnt -> make_bound cnt s
+    | Some cnt ->
+      make_bound cnt (String.subo s ~len:(String.length s - 1))
 
   let print ppf {limit; counter} =
     Format.fprintf ppf "%d%s" limit (suffix_of_counter counter)
