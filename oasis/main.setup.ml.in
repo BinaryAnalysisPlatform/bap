@@ -1,20 +1,13 @@
 
-let build_id () : unit =
-  BaseEnv.var_define
-    ~hide:false
-    ~dump:true
-    ~cli:BaseEnv.CLIWith
-    ~short_desc:(fun () -> "Adds a build id to bap version")
-    "build_id"
-    (fun () ->
-       try
-         ignore @@ OASISFileUtil.which ~ctxt "git";
-         OASISExec.run_read_one_line ~ctxt
-           ~f_exit_code:ignore
-           "git" ["rev-parse"; "--short=7"; "HEAD"]
-       with Not_found -> "") |>
-  definition_end
-
-
 let () =
-  define [build_id]
+  add_variable "build_id"
+    ~doc:"Adds a build id to bap version"
+    ~define:(function
+        | Some x -> x
+        | None ->
+          try
+            ignore @@ OASISFileUtil.which ~ctxt "git";
+            OASISExec.run_read_one_line ~ctxt
+              ~f_exit_code:ignore
+              "git" ["rev-parse"; "--short=7"; "HEAD"]
+          with Not_found -> "")
