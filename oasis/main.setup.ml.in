@@ -10,4 +10,4 @@ let () =
             OASISExec.run_read_one_line ~ctxt
               ~f_exit_code:ignore
               "git" ["rev-parse"; "--short=7"; "HEAD"; "2>/dev/null" ]
-          with Not_found -> "")
+          with _ -> "")
