@@ -6,7 +6,11 @@ let build_id () : unit =
     ~cli:BaseEnv.CLIWith
     ~short_desc:(fun () -> "build-id")
     "build_id"
-    (fun () -> BaseEnv.var_get "build-id") |>
+    (fun () ->
+       try
+         ignore @@ OASISFileUtil.which ~ctxt "git";
+         OASISExec.run_read_one_line ~ctxt "git" ["--version"]
+       with Not_found -> "") |>
   definition_end
 
 
