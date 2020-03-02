@@ -52,7 +52,6 @@ build: [
     "--%{conf-binutils:enable}%-objdump"
     "--objdump-path=%{conf-binutils:objdump}%" {conf-binutils:installed}
     "--objdump-targets=%{conf-binutils:targets}%" {conf-binutils:installed}
-    "--with-build-id=`git rev-parse --short=7 HEAD`"
   ]
   [make]
 ]

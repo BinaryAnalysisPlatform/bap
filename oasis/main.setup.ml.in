@@ -4,7 +4,7 @@ let build_id () : unit =
     ~hide:false
     ~dump:true
     ~cli:BaseEnv.CLIWith
-    ~short_desc:(fun () -> "build-id")
+    ~short_desc:(fun () -> "Adds a build id to bap version")
     "build_id"
     (fun () ->
        try
