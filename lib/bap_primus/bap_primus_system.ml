@@ -12,10 +12,11 @@ let fini,finish =
 let init,inited =
   Observation.provide ~inspect:sexp_of_unit "init"
 
-type component_specification = {
-  name : Name.t;
-  drop : bool;
-}
+let start = Bap_primus_machine.start
+let stop = Bap_primus_machine.stop
+
+type component_specification = Name.t
+
 
 type t = {
   name : Name.t;
@@ -25,13 +26,8 @@ type t = {
 
 type system = t
 
-
-
 let pp_components =
-  Format.pp_print_list ~pp_sep:Format.pp_print_space @@ fun ppf c ->
-  if c.drop
-  then Format.fprintf ppf "(exclude %a)" Name.pp c.name
-  else Format.fprintf ppf "%a" Name.pp c.name
+  Format.pp_print_list ~pp_sep:Format.pp_print_space Name.pp
 
 let pp ppf {name; components; desc} =
   Format.fprintf ppf
@@ -40,33 +36,21 @@ let pp ppf {name; components; desc} =
      :components @[<v2>(%a)@])@]"
     Name.pp name desc pp_components components
 
-let component ?package name = {
-  drop = false;
-  name = Name.create ?package name;
-}
-
-let exclude item = {item with drop=true}
-
-let all_components =
-  component ~package:"keyword" "all-components"
+let component = Name.create
 
 let define
     ?(desc="")
-    ?(components=[all_components])
+    ?(components=[])
     ?package name = {name = Name.create ?package name; desc; components}
-
-let default = define "default-system"
-    ~package:"bap-primus"
-    ~desc:"the default system that includes everything"
 
 let name t = t.name
 
+let add_component ?package s c = {
+  s with components = Name.create ?package c :: s.components}
+
 let has_component {components} name =
   List.exists components ~f:(fun c ->
-      Name.equal c.name all_components.name ||
-      Name.equal c.name name)
-  && List.for_all components ~f:(fun c ->
-      not (Name.equal c.name name && c.drop))
+      Name.equal c name)
 
 module Components = struct
   open Bap_primus_types
@@ -80,7 +64,7 @@ module Components = struct
     let name = Name.create ~package name in
     if Hashtbl.mem table name
     then invalid_argf
-        "A %s component named %s is already registered,\
+        "A %s component named %s is already registered, \
          please choose a unique name" ns (Name.show name) ();
     Hashtbl.add_exn table name {init; desc}
 
@@ -91,7 +75,6 @@ module Components = struct
   module Generic(Machine : Machine) = struct
     open Machine.Syntax
     module Lisp = Bap_primus_lisp.Make(Machine)
-
 
     let inited () =
       Machine.Observation.make inited ()
@@ -108,20 +91,32 @@ module Components = struct
             let module Comp = Gen(Machine) in
             Comp.init ()
           else Machine.return ())
-    let init s = do_init s (Set.empty (module Name))
 
-    let run_components components = Machine.run @@begin
-        components >>= fun () ->
-        Lisp.typecheck >>= fun () ->
-        Lisp.optimize () >>= fun () ->
-        Machine.catch (inited ()) (fun exn ->
+    let init_system s =
+      do_init s (Set.empty (module Name))
+
+    let run_internal ~boot ~init ~start =
+      Machine.run ~boot @@ begin
+        let startup = Machine.sequence [
+            Lisp.typecheck >>= fun () ->
+            Lisp.optimize () >>= fun () ->
+            init >>= fun () ->
+            inited () >>= fun () ->
+            start
+          ] in
+        Machine.catch startup (fun exn ->
             finish () >>= fun () ->
             Machine.raise exn) >>= fun () ->
         finish ()
       end
 
-    let run ?(env=[||]) ?(argv=[||]) sys proj =
-      Machine.run (init sys) proj env argv
+    let run
+        ?envp
+        ?args
+        ?(init=Machine.return ())
+        ?(start=Machine.return ())
+        sys proj =
+      run_internal ?envp ?args ~boot:(init_system sys) ~init ~start proj
   end
 
   module Machine = struct
@@ -132,7 +127,7 @@ module Components = struct
   module Generics = Generic(Machine)
   open Machine.Syntax
 
-  let init system =
+  let init_system system =
     Hashtbl.to_alist analyses |>
     Machine.List.fold ~init:(Set.empty (module Name))
       ~f:(fun loaded (name,{init}) ->
@@ -152,11 +147,19 @@ module Components = struct
   let result = Knowledge.Class.property system "result" result_t
       ~package:"primus"
 
-  let run ?(env=[||]) ?(argv=[||]) sys proj state =
+  let run ?envp ?args
+      ?(init=Machine.return ())
+      ?(start=Machine.return ())
+      sys proj state =
     let comp =
       let open Knowledge.Syntax in
       Knowledge.Object.create system >>= fun obj ->
-      Generics.run_components (init sys) proj env argv >>= fun x ->
+      Generics.run_internal proj
+        ?envp
+        ?args
+        ~boot:(init_system sys)
+        ~init
+        ~start >>= fun x ->
       Knowledge.provide result obj (Some x) >>| fun () ->
       obj in
     match Knowledge.run system comp state with
@@ -202,15 +205,13 @@ module Parser = struct
 
   let empty name = {name; desc=""; components=[]}
 
-  let push_name ?(drop=false) name s =
-    {s with components = {name=Name.read name; drop} :: s.components}
+  let push_name name s =
+    {s with components = Name.read name :: s.components}
 
   let rec parse_components : t -> Sexp.t list -> (t,error) Result.t =
     fun sys -> function
       | [] -> Ok sys
       | Atom name :: comps -> parse_components (push_name name sys) comps
-      | List [Atom "exclude"; Atom name] :: comps ->
-        parse_components (push_name ~drop:true name sys) comps
       | other :: _ ->
         Error {expects=Component; got=other}
 
@@ -271,7 +272,7 @@ module Parser = struct
       pr ppf "expects option ::= :description | :components, \
               got an unknown option %a" Sexp.pp unknown
     | {expects=Component; got=problem} ->
-      pr ppf "expects component ::= <name> | (exclude <name>), \
+      pr ppf "expects component ::= <ident>, \
               got %a" Sexp.pp problem
 
   let pp_error_with_loc ppf {file; system; error} =
@@ -311,11 +312,11 @@ module Jobs = struct
     conflicts = (system,conflict) :: result.conflicts
   }
 
-  let run ?env ?argv
+  let run ?envp ?args
       ?(on_conflict = fun _ _ -> Continue)
       ?(on_success = fun _ _ _ -> Continue) =
     let rec process result system =
-      match Components.run ?env ?argv system result.project result.state with
+      match Components.run ?envp ?args system result.project result.state with
       | Ok (status,proj,state) ->
         handle_success system status proj state result
       | Error conflict ->

@@ -456,6 +456,9 @@ module Std : sig
                                      and type id := id
                                      and module Syntax := Syntax
                                      and type 'a e =
+                                           ?args:string array ->
+                                           ?envp:string array ->
+                                           ?boot:unit t ->
                                            (exit_status * project) m effect
 
         (** Local state of the machine.  *)
@@ -528,9 +531,11 @@ module Std : sig
       (** The Machine component.  *)
       type component = (module Component)
 
+
       (** [Make(Monad)] a monad transformer that wraps the Machine
           into an arbitrary [Monad].  *)
       module Make(M : Monad.S) : S with type 'a m := 'a M.t
+
 
       (** Primus Entry Point.  *)
       module Main(M : S) : sig
@@ -552,6 +557,7 @@ module Std : sig
           unit M.t ->
           (exit_status * project) M.m
       end
+      [@@@deprecated ["[since 2020-03] use Primus.System instead"]]
 
 
       (** [add_component comp] registers the machine component [comp] in the
@@ -573,12 +579,110 @@ module Std : sig
 
     (** A runnable instance of Primus Machine.
 
-            A collection of components defines a runnable instance of Primus
-            Machine. Systems could be defined programmatically, using this
-            interface, or in system description files.
+        A collection of components defines a runnable instance of Primus
+        Machine. Systems could be defined programmatically, using this
+        interface, or in system description files.
 
-            The system definition holds enough information to initialize
-            and run the system.
+        The system definition holds enough information to initialize
+        and run the system.
+
+        {2 System's timeline}
+
+        A system consequently passes through three main phases of its
+        life:
+        - initialization;
+        - post-init;
+        - running;
+        - post-running;
+        - stopped.
+
+        {3 The initialization phase}
+
+        During the initialization phase, the [init] method of all
+        components is run. The observations are blocked in this phase
+        and other components might be unitialized in this phase
+        (components are initialized in an unspecified order).
+        Components should subscribe to other observations and register
+        their Lisp primitives in this phase.
+
+        Components should minimize the side-effects on the Primus
+        machine and do not use Interpreter, Linker, and/or any
+        observable operations. In this phase the Primus Machine
+        operates in a deterministic mode and fork/switch operators are
+        disabled.
+
+        Once this phase is complete, the [init] observation is posted
+        and the system enters the post-init phase.
+
+
+        {3 The post-init phase}
+
+        The post-init phase starts after the [init] observation is
+        posted. During this phase observation and non-determinism are
+        enabled. This phase is used by the components that would like
+        to change the initial state of the Machine (i.e., initialize
+        variables, possibly non-deterministically, link code, etc).
+
+        Components that need this kind of initialization shall
+        subscribe to the [init] observation and perform the necessary
+        post-initialization in the handler.
+
+        This stage is used to prepare the Machine for the execution. Once
+        it is finished the [start] observation is posted.
+
+        {3 The running phase}
+
+        The [start] observation designates the start of the execution
+        and the code that is attached to this observation denotes the
+        main function of the system. It is possible that there is more
+        than one component attach their behavior to the [start] event,
+        in that case all the components will be run in an unspecified
+        order.
+
+        It is not strictly required that a system should have
+        components that are executed in the running phase, as when a
+        system is run it is possible to provide the code that is run,
+        during the start phase (as well as the code that is run
+        during, the post-init phase), see {!System.run} below.
+
+        {3 The post-running phase}
+
+        After the code attached to the start phase terminates, either
+        normally or via the Primus exception, the [fini] observation
+        is posted and the system enters the post-running phase. This
+        is a non-deterministic phase and components of the system
+        might resume running by switching the computation to another
+        fork, therefore, the system can enter this phase multiple
+        times (but exit only once).
+
+        Once the post-running phase is finally finished, the machine
+        enters the final [stopped] phases.
+
+        {3 The stopped phase}
+
+        This is the final phase and, like the initial phase,
+        observations and non-determinism are disabled. This phase
+        could be used to summarize the information that was obtained
+        during the system run.
+
+        When the system enters the stopped state it is no longer
+        possible to restart it and all computations that are run
+        during this phase will not be observable.
+
+        {2 Non-determinism and machine stopping}
+
+        Since Primus Machine is non-deterministic, for the given
+        system we can observe more than one finalizations of
+        computations. Usually, schedulers use the [fini] observation
+        to kill the finished machine and switch to another machine.
+
+        When a machine is killed the [killed] observation is posted
+        that could be used to summarize the machine. After the
+        [killed] observation is posted, the machine (not the system)
+        enters the machine stopped phase in which observations and
+        non-determinism are blocked (it is only possible to update
+        the project data structure or record the information in the
+        knowledge base).
 
         @since 2.1.0
     *)
@@ -587,12 +691,6 @@ module Std : sig
 
       (** a component specification denotes a set of components *)
       type component_specification
-
-
-      (** [default] the default system is composed of all components
-          known to Primus.  *)
-      val default : system
-
 
       (** [define name] defnines a new system.
 
@@ -613,6 +711,13 @@ module Std : sig
         ?package:string -> string -> t
 
 
+      (** [add_component ?package system name] adds a component to the
+          system.
+
+          Adds the component designated by the given package and name
+          to the [system]. *)
+      val add_component : ?package:string -> t -> string -> t
+
       (** [run system project state] runs the analysis defined by [system].
 
           Initializes all components and triggers the [init]
@@ -632,14 +737,16 @@ module Std : sig
           See the [Job.run] function if you want to run Primus
           instances in a batch mode.
 
-          @param env an array of environment variables that are passed
+          @param envp an array of environment variables that are passed
           to the program
-          @param argv an array of program parameters, with the first
+          @param args an array of program parameters, with the first
           element of array being the program name.
       *)
       val run :
-        ?env:string array ->
-        ?argv:string array ->
+        ?envp:string array ->
+        ?args:string array ->
+        ?init:unit Machine.Make(Knowledge).t ->
+        ?start:unit Machine.Make(Knowledge).t ->
         system -> project -> Knowledge.state ->
         (exit_status * project * Knowledge.state, Knowledge.conflict) result
 
@@ -650,11 +757,18 @@ module Std : sig
       val init : unit observation
 
 
+      (** [start ()] occurs after the system initialization is
+          finished   *)
+      val start : unit observation
+
+
       (** [fini ()] is posted when all computations are
           finished. This observation is posted only if [init] was posted,
           i.e., if the system wasn't initialized then neither [init]
           nor [fini] will happen. *)
       val fini : unit observation
+
+      val stop : unit observation
 
 
       (** [name system] is the system designator.  *)
@@ -664,16 +778,6 @@ module Std : sig
       val pp : Format.formatter -> system -> unit
 
       (** {3 Component specification language}  *)
-
-
-      (** specifies all components known to Primus.  *)
-      val all_components : component_specification
-
-
-      (** [exclude spec] excludes the component defined by [spec]
-          from the specification.   *)
-      val exclude : component_specification -> component_specification
-
 
       (** [component ?package name] specifies the component with the
           given designator.
@@ -695,7 +799,7 @@ module Std : sig
              option ::=
                | :description <string>
                | :components (<component> ...)
-             component ::= <ident> | (exclude <ident>)
+             component ::= <ident>
           v}
       *)
 
@@ -724,15 +828,21 @@ module Std : sig
 
         (** [run system project] runs the [system] on the specified [project].
 
-            @param env an array of environment variables that are passed
+            @param envp an array of environment variables that are passed
             to the program;
 
-            @param argv an array of program parameters, with the first
-            element of array being the program name.
+            @param args an array of program parameters, with the first
+            element of array being the program name
+
+            @param init is a computation that will be run just after
+            the system is initialized but before the [init]
+            observation is posted.
         *)
         val run :
-          ?env:string array ->
-          ?argv:string array ->
+          ?envp:string array ->
+          ?args:string array ->
+          ?init:unit Machine.t ->
+          ?start:unit Machine.t ->
           t -> project -> (exit_status * project) Machine.m
       end
     end
@@ -790,8 +900,8 @@ module Std : sig
           unless explicitly stopped.
       *)
       val run :
-        ?env:string array ->
-        ?argv:string array ->
+        ?envp:string array ->
+        ?args:string array ->
         ?on_conflict:(system -> Knowledge.conflict -> action) ->
         ?on_success:(system -> exit_status -> Knowledge.state -> action) ->
         project -> Knowledge.state -> result

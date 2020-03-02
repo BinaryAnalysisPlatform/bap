@@ -70,7 +70,8 @@ module Main(Machine : Primus.Machine.S) = struct
         Project.with_program proj @@
         marker#run (Project.program proj))
 
-  let init () = Machine.sequence [
+  let init () =
+    Machine.sequence [
       Primus.Interpreter.enter_blk >>> visit;
       Primus.Machine.finished >>> mark;
       Primus.Linker.Trace.lisp_call >>> visit_stub;
@@ -92,5 +93,4 @@ let () = when_ready (fun _ ->
     Primus.Machine.add_component (module Main) [@warning "-D"];
     Primus.Components.register_generic "mark-visited" (module Main)
       ~package:"primus"
-      ~desc:"marks visited program terms with the [visited] attribute"
-  )
+      ~desc:"marks visited program terms with the [visited] attribute")

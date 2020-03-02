@@ -6,33 +6,27 @@ open Format
 
 
 module System = Bap_primus_system
-module Interpreter = Bap_primus_interpreter
 
-let components : component list ref = ref []
+let components = ref 0
+let system = ref @@ System.define "legacy-main"
+    ~package:"primus"
+    ~components:[
+      System.component ~package:"primus" "binary-program";
+    ]
+    ~desc:"The legacy Primus system that contains
+all components registered with the Machine.add_component
+function."
 
 let add_component component =
-  components := component :: !components
+  let package = "primus-internal" in
+  incr components;
+  let name = sprintf "legacy-main-component-%d" !components in
+  system := System.add_component !system ~package name;
+  System.Components.register_generic ~package name component
+    ~desc:"an anonymous component registered via the legacy interface"
 
 module Main(Machine : Machine) = struct
-  open Machine.Syntax
-  module Lisp = Bap_primus_lisp.Make(Machine)
-  module Link = Interpreter.LinkBinaryProgram(Machine)
-
-  let init_components () =
-    Machine.List.iter !components ~f:(fun (module Component) ->
-        let module Comp = Component(Machine) in
-        Comp.init ())
-
-  let run ?(envp=[| |]) ?(args=[| |]) proj user =
-    let comp =
-      init_components () >>= fun () ->
-      Link.init () >>= fun () ->
-      Lisp.typecheck >>= fun () ->
-      Lisp.optimize () >>= fun () ->
-      Machine.catch user (fun exn ->
-          Machine.Observation.make System.inited () >>= fun () ->
-          Machine.Observation.make System.finish () >>= fun () ->
-          Machine.raise exn) >>= fun () ->
-      Machine.Observation.make System.finish () in
-    Machine.run comp proj args envp
+  module System = System.Generic(Machine)
+  let run ?envp ?args proj user =
+    System.run ?envp ?args ~start:user !system proj
 end

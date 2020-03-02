@@ -26,7 +26,6 @@ let fork,forked =
       ])
     "machine-fork"
 
-
 let switch,switched =
   Observation.provide
     ~inspect:(fun (parent,child) -> Sexp.List [
@@ -34,6 +33,15 @@ let switch,switched =
         Monad.State.Multi.Id.sexp_of_t child;
       ])
     "machine-switch"
+
+let kill,killed = Observation.provide "machine-killed"
+    ~inspect:Monad.State.Multi.Id.sexp_of_t
+
+let stop,stopped =
+  Observation.provide ~inspect:sexp_of_unit "system-stopped"
+
+let start,started =
+  Observation.provide ~inspect:sexp_of_unit "system-started"
 
 module Make(M : Monad.S) = struct
   module PE = struct
@@ -55,12 +63,17 @@ module Make(M : Monad.S) = struct
     global  : State.Bag.t;
     deathrow : id list;
     observations : unit t Observation.observations;
+    restricted : bool;
   }
 
   type 'a machine = 'a t
   type 'a c = 'a t
   type 'a m = 'a M.t
-  type 'a e = (exit_status * project) m effect
+  type 'a e =
+    ?args:string array ->
+    ?envp:string array ->
+    ?boot:unit t ->
+    (exit_status * project) m effect
 
   module C = Monad.Cont.Make(PE)(struct
       type 'a t = 'a sm
@@ -103,12 +116,18 @@ module Make(M : Monad.S) = struct
   let set_global global = with_global_context @@ fun () ->
     lifts (SM.update @@ fun s -> {s with global})
 
+  let is_restricted () : bool t = lifts (SM.gets @@ fun s -> s.restricted)
+
   module Observation = struct
     type 'a m = 'a t
     type nonrec 'a observation = 'a observation
     type nonrec 'a statement = 'a statement
 
     let observations () = lifts (SM.gets @@ fun s -> s.observations)
+    let unrestricted () =
+      lifts (SM.gets @@ fun s ->
+             if s.restricted then None
+             else Some s.observations)
 
     let set_observations observations = with_global_context @@ fun () ->
       lifts (SM.update @@ fun s -> {s with observations})
@@ -139,13 +158,21 @@ module Make(M : Monad.S) = struct
       end)
 
     let make key obs =
+      with_global_context unrestricted >>= function
+      | None -> return ()
+      | Some os -> Observation.notify os key obs
+
+    let make_even_if_restricted key obs =
       with_global_context observations >>= fun os ->
       Observation.notify os key obs
 
+
     let post key ~f =
-      with_global_context observations >>= fun os ->
-      Observation.notify_if_observed os key @@ fun k ->
-      f (fun x -> k x)
+      with_global_context unrestricted >>= function
+      | None -> return ()
+      | Some os ->
+        Observation.notify_if_observed os key @@ fun k ->
+        f (fun x -> k x)
   end
 
   module Make_state(S : sig
@@ -215,49 +242,77 @@ module Make(M : Monad.S) = struct
               s with deathrow = id :: s.deathrow
             }))
 
+  let restrict x = lifts @@ SM.update (fun s -> {
+        s with restricted = x;
+      })
+
+  let do_kill id =
+    restrict true >>= fun () ->
+    Observation.make_even_if_restricted killed id >>= fun () ->
+    lifts @@ SM.kill id
+
+
   let execute_sentenced =
     with_global_context (fun () ->
         lifts @@ SM.get () >>= fun s ->
-        lifts @@ SM.List.iter s.deathrow ~f:SM.kill >>= fun () ->
+        CM.List.iter s.deathrow ~f:do_kill >>= fun () ->
         lifts @@ SM.put {s with deathrow = []})
 
   let switch id : unit c =
-    C.call ~f:(fun ~cc:k ->
-        current () >>= fun pid ->
-        store_curr k >>= fun () ->
-        switch_state id >>= fun () ->
-        lifts (SM.get ()) >>= fun s ->
-        execute_sentenced >>= fun () ->
-        Observation.make switched (pid,id) >>= fun () ->
-        s.curr ())
+    is_restricted () >>= function
+    | true -> failwith "a non-determistic operation in the restricted mode"
+    | false ->
+      C.call ~f:(fun ~cc:k ->
+          current () >>= fun pid ->
+          store_curr k >>= fun () ->
+          switch_state id >>= fun () ->
+          lifts (SM.get ()) >>= fun s ->
+          execute_sentenced >>= fun () ->
+          Observation.make switched (pid,id) >>= fun () ->
+          s.curr ())
 
 
   let fork () : unit c =
-    C.call ~f:(fun ~cc:k ->
-        current () >>= fun pid ->
-        store_curr k >>=
-        fork_state >>= fun () ->
-        execute_sentenced >>= fun () ->
-        notify_fork pid)
+    is_restricted () >>= function
+    | true ->
+      failwith "a non-deterministic operation in the restricted mode"
+    | false ->
+      C.call ~f:(fun ~cc:k ->
+          current () >>= fun pid ->
+          store_curr k >>=
+          fork_state >>= fun () ->
+          execute_sentenced >>= fun () ->
+          notify_fork pid)
 
+  let die next =
+    is_restricted () >>= function
+    | true ->
+      failwith "a non-deterministic operation in the restricted mode"
+    | false ->
+      current () >>= fun pid ->
+      switch_state next >>= fun () ->
+      lifts (SM.get ()) >>= fun s ->
+      do_kill pid >>= fun () ->
+      s.curr ()
 
   let kill id =
-    if Id.(id = global) then return ()
-    else
-      current () >>= fun cid ->
-      if Id.(id = cid) then sentence_to_death id
-      else lifts @@ SM.kill id
+    is_restricted () >>= function
+    | true ->
+      failwith "a non-deterministic operation in the restricted mode"
+    | false ->
+      if Id.(id = global) then return ()
+      else
+        current () >>= fun cid ->
+        if Id.(id = cid)
+        then sentence_to_death id
+        else do_kill id
 
-  (* we can't make it public as it will change the interface
-     and will require us to bump Primus version to 2.0
-  *)
-  let die next =
-    current () >>= fun pid ->
-    switch_state next >>= fun () ->
-    lifts (SM.get ()) >>= fun s ->
-    lifts (SM.kill pid) >>= fun () ->
-    s.curr ()
+  let start =
+    Observation.make started ()
 
+  let stop  =
+    restrict true >>= fun () ->
+    Observation.make_even_if_restricted stopped ()
 
   let raise exn =
     Observation.make raise_exn exn >>= fun () ->
@@ -271,7 +326,7 @@ module Make(M : Monad.S) = struct
   let envp = lifts (SM.gets @@ fun s -> s.envp)
 
 
-  let init proj args envp = {
+  let init_state proj ~args ~envp = {
     args;
     envp;
     curr = return;
@@ -279,7 +334,9 @@ module Make(M : Monad.S) = struct
     local = State.Bag.empty;
     observations = Bap_primus_observation.empty;
     deathrow = [];
-    proj}
+    proj;
+    restricted = true;
+  }
 
   let extract f =
     let open SM.Syntax in
@@ -287,16 +344,27 @@ module Make(M : Monad.S) = struct
     SM.gets f
 
   let run : 'a t -> 'a e =
-    fun m proj args envp ->
-    M.bind
-      (SM.run
-         (C.run m (function
-              | Ok _ -> extract @@ fun s -> Ok s.proj
-              | Error err -> extract @@ fun _ -> Error err))
-         (init proj args envp))
-      (fun (r,{proj}) -> match r with
-         | Ok _ -> M.return (Normal, proj)
-         | Error e -> M.return (Exn e, proj))
+    fun user
+      ?(args=[||])
+      ?(envp=[||])
+      ?(boot=return ())
+      proj ->
+      let machine =
+        boot >>= fun () ->
+        restrict false >>= fun () ->
+        user >>= fun x ->
+        start >>= fun () ->
+        stop >>= fun () ->
+        return x in
+      M.bind
+        (SM.run
+           (C.run machine (function
+                | Ok _ -> extract @@ fun s -> Ok s.proj
+                | Error err -> extract @@ fun _ -> Error err))
+           (init_state proj ~args ~envp))
+        (fun (r,{proj}) -> match r with
+           | Ok _ -> M.return (Normal, proj)
+           | Error e -> M.return (Exn e, proj))
 
 
   module Syntax = struct
