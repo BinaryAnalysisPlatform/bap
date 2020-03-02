@@ -6,8 +6,9 @@ let () =
         | Some x -> x
         | None ->
           try
-            ignore @@ OASISFileUtil.which ~ctxt "git";
-            OASISExec.run_read_one_line ~ctxt
-              ~f_exit_code:ignore
-              "git" ["rev-parse"; "--short=7"; "HEAD"; "2>/dev/null" ]
+            if Sys.file_exists ".git" && Sys.is_directory ".git" then
+              OASISExec.run_read_one_line ~ctxt
+                ~f_exit_code:ignore
+                "git" ["rev-parse"; "--verify"; "--quiet"; "--short=7"; "HEAD"; ]
+            else ""
           with _ -> "")
