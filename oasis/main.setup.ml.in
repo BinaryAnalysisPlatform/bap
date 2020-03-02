@@ -9,7 +9,9 @@ let build_id () : unit =
     (fun () ->
        try
          ignore @@ OASISFileUtil.which ~ctxt "git";
-         OASISExec.run_read_one_line ~ctxt "git" ["rev-parse"; "--short=7"; "HEAD"]
+         OASISExec.run_read_one_line ~ctxt
+           ~f_exit_code:ignore
+           "git" ["rev-parse"; "--short=7"; "HEAD"]
        with Not_found -> "") |>
   definition_end
 
