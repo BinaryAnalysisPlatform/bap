@@ -15,11 +15,19 @@ let count_blks p = (object
 end)#run p 0
 
 
+let init_visited prog =
+  (object inherit [Tid.Set.t] Term.visitor
+    method! enter_blk blk visited =
+      if Term.has_attr blk Term.visited
+      then Set.add visited (Term.tid blk)
+      else visited
+  end)#run prog Tid.Set.empty
+
 let state = Primus.Machine.State.declare
     ~name:"primus-mark-visitor"
     ~uuid:"6edf3c44-3665-4ec1-8537-ef7fbba78d3d"
     (fun p -> {
-         visited = Tid.Set.empty;
+         visited = init_visited (Project.program p);
          total = count_blks (Project.program p)
        })
 
@@ -38,12 +46,12 @@ let mark_block {mark} t =
 let marker p marker = object
   inherit Term.mapper
   method! map_blk t =
-    if not@@p (Term.tid t) then t
+    if not (p t) then t
     else mark_block marker t
 end
 
-let always _ = true
-let is_mem xs x = Set.mem xs x
+let unvisited t = not (Term.has_attr t Term.visited)
+let is_mem xs x = Set.mem xs (Term.tid x)
 
 module Main(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
@@ -78,7 +86,7 @@ module Main(Machine : Primus.Machine.S) = struct
 
   let mark_dead _ =
     Machine.update (fun proj ->
-        let marker = marker always dead in
+        let marker = marker unvisited dead in
         Project.with_program proj @@
         marker#run (Project.program proj))
 

@@ -46,7 +46,7 @@ type assn = {
 type id = Primus.Machine.id
 type state = {
   conflicts : assn list;
-  forkpoints : Tid.Set.t;
+  visited : Tid.Set.t;
 }
 
 let inspect_assn {use; var; res} =
@@ -59,11 +59,22 @@ let inspect_conflict (assn) =
 let inspect_conflicts cs =
   Sexp.List (List.map ~f:inspect_conflict cs)
 
+let init_visited prog =
+  (object inherit [Tid.Set.t] Term.visitor
+    method! enter_blk blk visited =
+      if Term.has_attr blk Term.visited
+      then Set.add visited (Term.tid blk)
+      else visited
+  end)#run prog Tid.Set.empty
 
 let state = Primus.Machine.State.declare
     ~name:"conflicts"
-    ~uuid:"58bb35f4-f259-4712-8d15-bdde1be3caa8"
-    (fun _ -> {conflicts=[]; forkpoints = Tid.Set.empty})
+    ~uuid:"58bb35f4-f259-4712-8d15-bdde1be3caa8" @@
+  fun proj ->
+  {
+    conflicts=[];
+    visited = init_visited (Project.program proj)
+  }
 
 let neg = List.map ~f:(fun assn -> {assn with res = not assn.res})
 
@@ -115,7 +126,7 @@ module Main(Machine : Primus.Machine.S) = struct
   let do_fork blk ~child =
     Machine.current () >>= fun pid ->
     Machine.Global.get state >>= fun t ->
-    if Set.mem t.forkpoints (Term.tid blk)
+    if Set.mem t.visited (Term.tid blk)
     then Machine.return pid
     else
       Machine.fork () >>= fun () ->
@@ -144,8 +155,8 @@ module Main(Machine : Primus.Machine.S) = struct
       do_fork blk ~child:Machine.return >>= fun id ->
       if Id.(id = pid) then Machine.return ()
       else
-        Machine.Global.get state >>= fun {forkpoints} ->
-        if Set.mem forkpoints dst
+        Machine.Global.get state >>= fun {visited} ->
+        if Set.mem visited dst
         then Eval.halt >>= never_returns
         else
           Linker.exec (`tid dst) >>= fun () ->
@@ -199,8 +210,8 @@ module Main(Machine : Primus.Machine.S) = struct
 
   let mark_visited blk =
     Machine.Global.update state ~f:(fun t -> {
-          t with forkpoints =
-                   Set.add t.forkpoints (Term.tid blk)
+          t with visited =
+                   Set.add t.visited (Term.tid blk)
         })
 
   let free_vars proj =

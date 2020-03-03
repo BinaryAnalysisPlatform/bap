@@ -595,9 +595,9 @@ module Std : sig
 
         {2 System's timeline}
 
-        A system consequently passes through three main phases of its
+        A system consequently passes through the following main phases of its
         life:
-        - initialization;
+        - initialization (booting);
         - post-init;
         - running;
         - post-running;
