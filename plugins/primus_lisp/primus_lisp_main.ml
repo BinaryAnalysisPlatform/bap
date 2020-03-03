@@ -117,11 +117,21 @@ module Signals(Machine : Primus.Machine.S) = struct
           X,Y,... and return value R.|};
         signal interrupt int one Type.(one int)
           {|(interrupt N) is emitted when the hardware interrupt N occurs|};
+        signal Primus.System.stop sym one Type.(one sym)
+          "(system-stop NAME) occurs when the system with the given
+           name finished its execution. The machine is in the
+           restricted mode in the body of the methods" ;
         Lisp.signal Primus.Machine.init (fun () -> Machine.return [])
           ~doc: {|(init) occurs when the Primus Machine is initialized|}
           ~params:Type.unit;
         Lisp.signal Primus.Machine.finished (fun () -> Machine.return [])
           ~doc:{|(fini) occurs when the Primus Machine is finished|}
+          ~params:Type.unit;
+        Lisp.signal Primus.Machine.kill (fun _ -> Machine.return [])
+          ~doc:"(machine-kill) occurs when Machine is killed and could be
+          used for machine cleanup/teardown and analysis summaries.
+          The machine is in the resticted mode in the body of the
+          methods."
           ~params:Type.unit;
       ]
 end

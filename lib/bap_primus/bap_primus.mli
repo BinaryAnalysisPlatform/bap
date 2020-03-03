@@ -257,6 +257,9 @@ module Std : sig
         and is registered with the [register_component] function.*)
     module Machine : sig
 
+      (** Machine identifier type.   *)
+      type id = Monad.State.Multi.id
+
       (** [init] event occurs just after all components have been
           initialized, and before the execution starts*)
       val init : unit observation
@@ -269,8 +272,13 @@ module Std : sig
       val exn_raised : exn observation
 
 
-      (** Machine identifier type.   *)
-      type id = Monad.State.Multi.id
+      (** [kill id] occurs when the machine [id] is killed.
+
+          When this observation is made the machine enters the
+          restricted mode with non-determinism and observations
+          disabled.  *)
+      val kill : id observation
+
 
       (** Machine State.
 

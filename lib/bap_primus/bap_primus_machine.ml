@@ -34,15 +34,15 @@ let switch,switched =
       ])
     "machine-switch"
 
-let kill,killed = Observation.provide "machine-killed"
+let kill,killed = Observation.provide "machine-kill"
     ~inspect:Monad.State.Multi.Id.sexp_of_t
 
 
 let stop,stopped =
-  Observation.provide ~inspect:sexp_of_string "system-stopped"
+  Observation.provide ~inspect:sexp_of_string "system-stop"
 
 let start,started =
-  Observation.provide ~inspect:sexp_of_string "system-started"
+  Observation.provide ~inspect:sexp_of_string "system-start"
 
 module Make(M : Monad.S) = struct
   module PE = struct
