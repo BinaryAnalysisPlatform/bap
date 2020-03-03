@@ -73,6 +73,7 @@ module Make(M : Monad.S) = struct
     ?args:string array ->
     ?envp:string array ->
     ?boot:unit t ->
+    ?init:unit t ->
     (exit_status * project) m effect
 
   module C = Monad.Cont.Make(PE)(struct
@@ -348,12 +349,15 @@ module Make(M : Monad.S) = struct
       ?(args=[||])
       ?(envp=[||])
       ?(boot=return ())
+      ?(init=return ())
       proj ->
       let machine =
         boot >>= fun () ->
         restrict false >>= fun () ->
-        user >>= fun x ->
-        start >>= fun () ->
+        init >>= fun () ->
+        catch
+          (start >>= fun () -> user)
+          (fun exn -> stop >>= fun () -> raise exn) >>= fun x ->
         stop >>= fun () ->
         return x in
       M.bind

@@ -96,17 +96,12 @@ module Components = struct
       do_init s (Set.empty (module Name))
 
     let run_internal ~boot ~init ~start =
-      Machine.run ~boot @@ begin
-        let startup = Machine.sequence [
-            Lisp.typecheck >>= fun () ->
-            Lisp.optimize () >>= fun () ->
-            init >>= fun () ->
-            inited () >>= fun () ->
-            start
-          ] in
-        Machine.catch startup (fun exn ->
-            finish () >>= fun () ->
-            Machine.raise exn) >>= fun () ->
+      Machine.run ~boot
+        ~init:(Lisp.typecheck >>= Lisp.optimize >>= fun () ->
+               init >>= inited)
+      @@begin Machine.catch start (fun exn ->
+          finish () >>= fun () ->
+          Machine.raise exn) >>= fun () ->
         finish ()
       end
 

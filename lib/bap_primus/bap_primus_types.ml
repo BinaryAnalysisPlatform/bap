@@ -63,6 +63,7 @@ module type Machine = sig
                                      ?args:string array ->
                                      ?envp:string array ->
                                      ?boot:unit t ->
+                                     ?init:unit t ->
                                      (exit_status * project) m effect
   module Local  : State with type 'a m := 'a t
                          and type 'a t := 'a state

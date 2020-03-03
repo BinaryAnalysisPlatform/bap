@@ -459,6 +459,7 @@ module Std : sig
                                            ?args:string array ->
                                            ?envp:string array ->
                                            ?boot:unit t ->
+                                           ?init:unit t ->
                                            (exit_status * project) m effect
 
         (** Local state of the machine.  *)
