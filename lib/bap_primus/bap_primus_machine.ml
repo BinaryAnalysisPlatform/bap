@@ -37,11 +37,12 @@ let switch,switched =
 let kill,killed = Observation.provide "machine-killed"
     ~inspect:Monad.State.Multi.Id.sexp_of_t
 
+
 let stop,stopped =
-  Observation.provide ~inspect:sexp_of_unit "system-stopped"
+  Observation.provide ~inspect:sexp_of_string "system-stopped"
 
 let start,started =
-  Observation.provide ~inspect:sexp_of_unit "system-started"
+  Observation.provide ~inspect:sexp_of_string "system-started"
 
 module Make(M : Monad.S) = struct
   module PE = struct
@@ -70,8 +71,6 @@ module Make(M : Monad.S) = struct
   type 'a c = 'a t
   type 'a m = 'a M.t
   type 'a e =
-    ?args:string array ->
-    ?envp:string array ->
     ?boot:unit t ->
     ?init:unit t ->
     (exit_status * project) m effect
@@ -308,12 +307,12 @@ module Make(M : Monad.S) = struct
         then sentence_to_death id
         else do_kill id
 
-  let start =
-    Observation.make started ()
+  let start sys =
+    Observation.make started sys
 
-  let stop  =
+  let stop sys =
     restrict true >>= fun () ->
-    Observation.make_even_if_restricted stopped ()
+    Observation.make_even_if_restricted stopped sys
 
   let raise exn =
     Observation.make raise_exn exn >>= fun () ->
@@ -346,19 +345,20 @@ module Make(M : Monad.S) = struct
 
   let run : 'a t -> 'a e =
     fun user
-      ?(args=[||])
-      ?(envp=[||])
       ?(boot=return ())
       ?(init=return ())
+      ?(envp=[||])
+      ?(args=[||])
+      sys
       proj ->
       let machine =
         boot >>= fun () ->
         restrict false >>= fun () ->
         init >>= fun () ->
         catch
-          (start >>= fun () -> user)
-          (fun exn -> stop >>= fun () -> raise exn) >>= fun x ->
-        stop >>= fun () ->
+          (start sys >>= fun () -> user)
+          (fun exn -> stop sys >>= fun () -> raise exn) >>= fun x ->
+        stop sys >>= fun () ->
         return x in
       M.bind
         (SM.run

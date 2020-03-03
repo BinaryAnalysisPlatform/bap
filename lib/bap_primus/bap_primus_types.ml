@@ -18,7 +18,11 @@ type exit_status =
   | Normal
   | Exn of exn
 
-type 'a effect = project -> 'a
+type 'a effect =
+  ?envp:string array ->
+  ?args:string array ->
+  string ->
+  project -> 'a
 
 module type State = sig
   type 'a m
@@ -60,8 +64,6 @@ module type Machine = sig
                                and type id := id
                                and module Syntax := Syntax
                                and type 'a e =
-                                     ?args:string array ->
-                                     ?envp:string array ->
                                      ?boot:unit t ->
                                      ?init:unit t ->
                                      (exit_status * project) m effect

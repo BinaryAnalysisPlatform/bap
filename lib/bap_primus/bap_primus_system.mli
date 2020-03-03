@@ -60,10 +60,10 @@ val run :
   t -> project -> Knowledge.state ->
   (exit_status * project * Knowledge.state, Knowledge.conflict) result
 
-val start : unit Observation.t
+val start : string Observation.t
 val init : unit Observation.t
 val fini : unit Observation.t
-val stop : unit Observation.t
+val stop : string Observation.t
 
 
 module Jobs : sig

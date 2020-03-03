@@ -111,7 +111,9 @@ module Components = struct
         ?(init=Machine.return ())
         ?(start=Machine.return ())
         sys proj =
-      run_internal ?envp ?args ~boot:(init_system sys) ~init ~start proj
+      run_internal (Name.show sys.name) proj
+        ?envp ?args ~boot:(init_system sys) ~init ~start
+
   end
 
   module Machine = struct
@@ -149,7 +151,7 @@ module Components = struct
     let comp =
       let open Knowledge.Syntax in
       Knowledge.Object.create system >>= fun obj ->
-      Generics.run_internal proj
+      Generics.run_internal (Name.show sys.name) proj
         ?envp
         ?args
         ~boot:(init_system sys)

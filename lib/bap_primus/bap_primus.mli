@@ -456,8 +456,6 @@ module Std : sig
                                      and type id := id
                                      and module Syntax := Syntax
                                      and type 'a e =
-                                           ?args:string array ->
-                                           ?envp:string array ->
                                            ?boot:unit t ->
                                            ?init:unit t ->
                                            (exit_status * project) m effect
@@ -758,9 +756,8 @@ module Std : sig
       val init : unit observation
 
 
-      (** [start ()] occurs after the system initialization is
-          finished   *)
-      val start : unit observation
+      (** [start sys] occurs after the system [sys] starts   *)
+      val start : string observation
 
 
       (** [fini ()] is posted when all computations are
@@ -769,7 +766,7 @@ module Std : sig
           nor [fini] will happen. *)
       val fini : unit observation
 
-      val stop : unit observation
+      val stop : string observation
 
 
       (** [name system] is the system designator.  *)
