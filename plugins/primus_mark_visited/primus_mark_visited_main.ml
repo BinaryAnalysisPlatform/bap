@@ -23,19 +23,27 @@ let state = Primus.Machine.State.declare
          total = count_blks (Project.program p)
        })
 
+type marker = { mark : 'a. 'a term -> 'a term}
 
-let mark_visited t = Term.set_attr t Term.visited ()
+let dead = {mark = fun t -> Term.set_attr t Term.dead ()}
+let live = {mark = fun t ->
+    Term.set_attr (Term.del_attr t Term.dead) Term.visited ()
+  }
 
-let marker visited = object
-  inherit Term.mapper as super
+let mark_block {mark} t =
+  mark t |>
+  Term.map def_t ~f:mark |>
+  Term.map jmp_t ~f:mark
+
+let marker p marker = object
+  inherit Term.mapper
   method! map_blk t =
-    if Set.mem visited (Term.tid t) then
-      mark_visited t |>
-      Term.map def_t ~f:mark_visited |>
-      Term.map jmp_t ~f:mark_visited
-    else t
+    if not@@p (Term.tid t) then t
+    else mark_block marker t
 end
 
+let always _ = true
+let is_mem xs x = Set.mem xs x
 
 module Main(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
@@ -61,20 +69,25 @@ module Main(Machine : Primus.Machine.S) = struct
         Term.enum blk_t sub |>
         Machine.Seq.iter ~f:visit
 
-
-
-  let mark () =
+  let mark_live _ =
     Machine.Global.get state >>= fun {visited} ->
     Machine.update (fun proj ->
-        let marker = marker visited in
+        let marker = marker (is_mem visited) live  in
+        Project.with_program proj @@
+        marker#run (Project.program proj))
+
+  let mark_dead _ =
+    Machine.update (fun proj ->
+        let marker = marker always dead in
         Project.with_program proj @@
         marker#run (Project.program proj))
 
   let init () =
     Machine.sequence [
       Primus.Interpreter.enter_blk >>> visit;
-      Primus.Machine.finished >>> mark;
+      Primus.System.stop >>> mark_live;
       Primus.Linker.Trace.lisp_call >>> visit_stub;
+      Primus.System.start >>> mark_dead;
     ]
 end
 
@@ -85,8 +98,9 @@ manpage [
   `S "DESCRIPTION";
   `P
     "Marks all terms visited by any Primus machine with the
-     [Term.visited] attribute. Terms will not be marked during the
-     execution, but only after a machine finishes."
+     [Term.visited] attribute and terms that weren't visited.
+     with [Term.dead]. Terms will not be marked visited during the
+     execution, but only after a system finishes."
 ]
 
 let () = when_ready (fun _ ->
