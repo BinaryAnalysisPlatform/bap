@@ -1,0 +1,14 @@
+
+let () =
+  add_variable "build_id"
+    ~doc:"Adds a build id to bap version"
+    ~define:(function
+        | Some x -> x
+        | None ->
+          try
+            if Sys.file_exists ".git" && Sys.is_directory ".git" then
+              OASISExec.run_read_one_line ~ctxt
+                ~f_exit_code:ignore
+                "git" ["rev-parse"; "--verify"; "--quiet"; "--short=7"; "HEAD"; ]
+            else ""
+          with _ -> "")
