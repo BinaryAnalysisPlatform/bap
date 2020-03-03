@@ -183,7 +183,8 @@ let is_visited = function
   | _ -> Machine.return false
 
 let run need_repeat entries =
-  let rec loop = function
+  let total = List.length entries in
+  let rec loop stage = function
     | [] ->
       info "all toplevel machines done, halting";
       Eval.halt >>=
@@ -193,7 +194,7 @@ let run need_repeat entries =
       Machine.fork ()    >>= fun () ->
       Machine.current () >>= fun cid ->
       if Id.(pid = cid)
-      then loop xs
+      then loop (stage+1) xs
       else
         is_visited x >>= fun is_visited ->
         if is_visited && not need_repeat then
@@ -201,26 +202,41 @@ let run need_repeat entries =
           never_returns
         else
           exec x >>= fun () ->
+          report_progress ~stage ~total ();
           Eval.halt >>=
           never_returns in
-  loop entries
+  loop 0 entries
 
 let run_all need_repeat envp args proj xs =
   Main.run ~envp ~args proj @@
   run need_repeat xs
 
-let run_sep envp args proj xs =
-  List.fold xs ~init:(Primus.Normal,proj) ~f:(fun (_,proj) p ->
-      Main.run ~envp ~args proj @@ begin
-        exec p >>=
-        fun () -> Eval.halt >>=
-        never_returns
-      end)
+let is_visited proj = function
+  | `addr _ | `symbol _ -> false
+  | `tid t ->
+    match Term.find sub_t (Project.program proj) t with
+    | None -> true
+    | Some sub -> match Term.first blk_t sub with
+      | None -> true
+      | Some blk -> Term.has_attr blk Term.visited
 
+
+let run_sep need_repeat envp args proj xs =
+  let total = List.length xs in
+  List.foldi xs ~init:(Primus.Normal,proj) ~f:(fun stage (s,proj) p ->
+      report_progress ~stage ~total ();
+      if not need_repeat && is_visited proj p then (s,proj)
+      else Main.run ~envp ~args proj @@ begin
+          exec p >>=
+          fun () -> Eval.halt >>=
+          never_returns
+        end)
 
 let main {Config.get=(!)} proj =
   let open Param in
-  let run = if !in_isolation then run_sep else run_all !with_repetitions in
+  let run = if !in_isolation
+    then run_sep !with_repetitions
+    else run_all !with_repetitions in
   parse_entry_points proj !entry |> run !envp !argv proj |> function
   | (Primus.Normal,proj)
   | (Primus.Exn Primus.Interpreter.Halt,proj) ->
