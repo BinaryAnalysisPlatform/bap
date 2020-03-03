@@ -37,7 +37,6 @@ let switch,switched =
 let kill,killed = Observation.provide "machine-kill"
     ~inspect:Monad.State.Multi.Id.sexp_of_t
 
-
 let stop,stopped =
   Observation.provide ~inspect:sexp_of_string "system-stop"
 
@@ -236,21 +235,18 @@ module Make(M : Monad.S) = struct
     current () >>= fun cid ->
     Observation.make forked (pid,cid)
 
+  let restrict x = lifts @@ SM.update (fun s -> {
+        s with restricted = x;
+      })
+
   let sentence_to_death id =
     with_global_context (fun () ->
         lifts @@ SM.update (fun s -> {
               s with deathrow = id :: s.deathrow
             }))
 
-  let restrict x = lifts @@ SM.update (fun s -> {
-        s with restricted = x;
-      })
-
   let do_kill id =
-    restrict true >>= fun () ->
-    Observation.make_even_if_restricted killed id >>= fun () ->
     lifts @@ SM.kill id
-
 
   let execute_sentenced =
     with_global_context (fun () ->
@@ -260,7 +256,7 @@ module Make(M : Monad.S) = struct
 
   let switch id : unit c =
     is_restricted () >>= function
-    | true -> failwith "a non-determistic operation in the restricted mode"
+    | true -> failwith "switch in the restricted mode"
     | false ->
       C.call ~f:(fun ~cc:k ->
           current () >>= fun pid ->
@@ -274,8 +270,7 @@ module Make(M : Monad.S) = struct
 
   let fork () : unit c =
     is_restricted () >>= function
-    | true ->
-      failwith "a non-deterministic operation in the restricted mode"
+    | true -> failwith "fork in the restricted mode"
     | false ->
       C.call ~f:(fun ~cc:k ->
           current () >>= fun pid ->
@@ -284,28 +279,27 @@ module Make(M : Monad.S) = struct
           execute_sentenced >>= fun () ->
           notify_fork pid)
 
-  let die next =
-    is_restricted () >>= function
-    | true ->
-      failwith "a non-deterministic operation in the restricted mode"
-    | false ->
-      current () >>= fun pid ->
-      switch_state next >>= fun () ->
-      lifts (SM.get ()) >>= fun s ->
-      do_kill pid >>= fun () ->
-      s.curr ()
 
   let kill id =
     is_restricted () >>= function
-    | true ->
-      failwith "a non-deterministic operation in the restricted mode"
+    | true -> failwith "kill in the restricted mode"
     | false ->
       if Id.(id = global) then return ()
       else
         current () >>= fun cid ->
         if Id.(id = cid)
-        then sentence_to_death id
-        else do_kill id
+        then
+          restrict true >>= fun () ->
+          Observation.make_even_if_restricted killed id >>= fun () ->
+          restrict false >>= fun () ->
+          sentence_to_death id
+        else
+          switch id >>= fun () ->
+          restrict true >>= fun () ->
+          Observation.make_even_if_restricted killed id >>= fun () ->
+          restrict false >>= fun () ->
+          switch cid >>= fun () ->
+          do_kill id
 
   let start sys =
     Observation.make started sys
