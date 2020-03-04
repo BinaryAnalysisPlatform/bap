@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_knowledge
 open Bap.Std
 open Bap_primus.Std
 open Graphlib.Std
@@ -67,13 +68,9 @@ end
 
 let pp_id = Monad.State.Multi.Id.pp
 
-module Machine = struct
-  type 'a m = 'a
-  include Primus.Machine.Make(Monad.Ident)
-end
+module Machine = Primus.Analysis
 open Machine.Syntax
 
-module Main = Primus.Machine.Main(Machine)
 module Eval = Primus.Interpreter.Make(Machine)
 module Linker = Primus.Linker.Make(Machine)
 module Env = Primus.Env.Make(Machine)
@@ -207,8 +204,8 @@ let run need_repeat entries =
           never_returns in
   loop 0 entries
 
-let run_all need_repeat envp args proj xs =
-  Main.run ~envp ~args proj @@
+let run_all need_repeat envp args proj state xs =
+  Primus.Machine.run ~envp ~args proj state @@
   run need_repeat xs
 
 let is_visited proj = function
@@ -221,29 +218,44 @@ let is_visited proj = function
       | Some blk -> Term.has_attr blk Term.visited
 
 
-let run_sep need_repeat envp args proj xs =
+let run_sep need_repeat envp args proj state xs =
   let total = List.length xs in
-  List.foldi xs ~init:(Primus.Normal,proj) ~f:(fun stage (s,proj) p ->
+  let init = Primus.Normal,proj,state in
+  Result.return @@
+  List.foldi xs ~init ~f:(fun stage (status,proj,state) p ->
       report_progress ~stage ~total ();
-      if not need_repeat && is_visited proj p then (s,proj)
-      else Main.run ~envp ~args proj @@ begin
+      if not need_repeat && is_visited proj p then (status,proj,state)
+      else match Primus.Machine.run ~envp ~args proj state @@ begin
           exec p >>=
           fun () -> Eval.halt >>=
           never_returns
-        end)
+        end with Error err ->
+        info "exec %a finished with a conflict: %a"
+          Primus.Linker.Name.pp p
+          Knowledge.Conflict.pp err;
+        info "discarding the result and proceeding to the next entry";
+        (status,proj,state)
+               | Ok s -> s)
 
 let main {Config.get=(!)} proj =
   let open Param in
+  let state = Toplevel.current () in
   let run = if !in_isolation
     then run_sep !with_repetitions
     else run_all !with_repetitions in
-  parse_entry_points proj !entry |> run !envp !argv proj |> function
-  | (Primus.Normal,proj)
-  | (Primus.Exn Primus.Interpreter.Halt,proj) ->
+  parse_entry_points proj !entry |> run !envp !argv proj state |> function
+  | Ok (Primus.Normal,proj,state)
+  | Ok (Primus.Exn Primus.Interpreter.Halt,proj,state) ->
+    Toplevel.set state;
     info "Ok, we've terminated normally";
     proj
-  | (Primus.Exn exn,proj) ->
+  | Ok (Primus.Exn exn,proj,state) ->
+    Toplevel.set state;
     info "program terminated by a signal: %s" (Primus.Exn.to_string exn);
+    proj
+  | Error conflict ->
+    info "The computation was terminated because of a conflict: %a"
+      Knowledge.Conflict.pp conflict;
     proj
 
 let deps = [
