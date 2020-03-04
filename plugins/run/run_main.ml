@@ -204,8 +204,10 @@ let run need_repeat entries =
           never_returns in
   loop 0 entries
 
-let run_all need_repeat envp args sys proj state xs =
-  Primus.System.run ~envp ~args sys proj state
+let enqueue_super_job need_repeat envp args sys xs =
+  Primus.Jobs.enqueue sys ~envp ~args
+    ~name:"super-job"
+    ~desc:"runs all entries in one system"
     ~start:(run need_repeat xs)
 
 let is_visited proj = function
@@ -217,47 +219,40 @@ let is_visited proj = function
       | None -> true
       | Some blk -> Term.has_attr blk Term.visited
 
-
-let run_sep need_repeat envp args sys proj state xs =
+let enqueue_separate_jobs need_repeat envp args sys xs =
   let total = List.length xs in
-  let init = Primus.Normal,proj,state in
-  Result.return @@
-  List.foldi xs ~init ~f:(fun stage (status,proj,state) p ->
-      report_progress ~stage ~total ();
-      if not need_repeat && is_visited proj p then (status,proj,state)
-      else match Primus.System.run ~envp ~args sys proj state ~start:(begin
-          exec p >>=
-          fun () -> Eval.halt >>=
-          never_returns
-        end) with Error err ->
-        info "exec %a finished with a conflict: %a"
-          Primus.Linker.Name.pp p
-          Knowledge.Conflict.pp err;
-        info "discarding the result and proceeding to the next entry";
-        (status,proj,state)
-                | Ok s -> s)
+  List.iteri xs ~f:(fun stage p ->
+      Primus.Jobs.enqueue sys
+        ~args ~envp
+        ~name:(Primus.Linker.Name.to_string p)
+        ~start:begin
+          Machine.get () >>= fun proj ->
+          report_progress ~stage ~total ();
+          if not need_repeat && is_visited proj p
+          then Machine.return ()
+          else exec p
+        end)
+
+let on_success job _ _ : Primus.Jobs.action =
+  info "job %s finished successfully" (Primus.Job.name job);
+  Continue
+
+let on_failure job conflict : Primus.Jobs.action =
+  info "job %s failed to converge and exited with conflict: %a"
+    (Primus.Job.name job) Knowledge.Conflict.pp conflict;
+  Continue
 
 let main {Config.get=(!)} proj =
   let open Param in
   let state = Toplevel.current () in
-  let sys = Primus.Machine.legacy_main_system () in
-  let run = if !in_isolation
-    then run_sep !with_repetitions
-    else run_all !with_repetitions in
-  parse_entry_points proj !entry |> run !envp !argv sys proj state |> function
-  | Ok (Primus.Normal,proj,state)
-  | Ok (Primus.Exn Primus.Interpreter.Halt,proj,state) ->
-    Toplevel.set state;
-    info "Ok, we've terminated normally";
-    proj
-  | Ok (Primus.Exn exn,proj,state) ->
-    Toplevel.set state;
-    info "program terminated by a signal: %s" (Primus.Exn.to_string exn);
-    proj
-  | Error conflict ->
-    info "The computation was terminated because of a conflict: %a"
-      Knowledge.Conflict.pp conflict;
-    proj
+  let sys = Primus.Machine.legacy_main_system () [@warning "-D"] in
+  let enqueue_jobs = if !in_isolation
+    then enqueue_separate_jobs else enqueue_super_job in
+  let inputs = parse_entry_points proj !entry in
+  enqueue_jobs !with_repetitions !envp !argv sys inputs;
+  let result = Primus.Jobs.run ~on_failure ~on_success proj state in
+  Toplevel.set (Primus.Jobs.knowledge result);
+  Primus.Jobs.project result
 
 let deps = [
   "trivial-condition-form"

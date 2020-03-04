@@ -936,8 +936,8 @@ module Std : sig
         ?desc:string ->
         ?envp:string array ->
         ?args:string array ->
-        ?init:unit Bap_primus_machine.Make(Knowledge).t ->
-        ?start:unit Bap_primus_machine.Make(Knowledge).t ->
+        ?init:unit Machine.Make(Knowledge).t ->
+        ?start:unit Machine.Make(Knowledge).t ->
         system -> unit
 
 
