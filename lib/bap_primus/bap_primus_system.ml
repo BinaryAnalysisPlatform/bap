@@ -142,6 +142,7 @@ module Components = struct
       ~package:"primus" ()
 
   let result = Knowledge.Class.property system "result" result_t
+      ~public:false
       ~package:"primus"
 
   let run ?envp ?args

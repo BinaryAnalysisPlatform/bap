@@ -548,16 +548,19 @@ module Std : sig
 
           This module together with the {!add_component} function
           builds the legacy main system ([primus:legacy-main]).  The
-          [add_component] function adds a component to this system,
-          and [Machine.Main(M).run] or [Machine.run] functions could
-          be used to run the [primus:legacy-main] system in the monad
-          [M] or in the [Machine.Make(Knowledge)] monad.
+          [add_component] function adds a component to this system.
+
+          The built system could be obtained with the
+          {!legacy_main_system} function and run as usual via the
+          {!System} module. The old [Main(M).run] interface is still
+          provided for backward compatibility.
 
           This interface is deprecated and is provided for backward
           compatibility. Use the {!System} interface to define and
           run Primus systems.
       *)
       module Main(M : S) : sig
+
         (** [run ?envp ?args proj] returns a computation that will
             run a program represented with the [proj] data structure.
 
@@ -598,20 +601,11 @@ module Std : sig
       [@@deprecated "[since 2020-03] use Components.register* instead"]
 
 
-      (** runs the legacy main system in the [Make(Knowledge)] monad.
-
-          This function is provided for the backward compatibility so
-          that the legacy main system could also be run in the
-          [Make(Knowledge)] monad without any hassle. It is advised to
-          use the [System.run] or [Jobs.run] functions instead.
+      (** returns the [primus:legacy-main] system that is composed of
+          all components added via the {!add_component} function.
       *)
-      val run :
-        ?envp:string array ->
-        ?args:string array ->
-        project -> Knowledge.state ->
-        unit Make(Knowledge).t ->
-        (exit_status * project * Knowledge.state, Knowledge.conflict) result
-      [@@deprecated "[since 2020-03] use [System.run] instead"]
+      val legacy_main_system : unit -> system
+      [@@deprecated "[since 2020-03] use the System interface"]
 
     end
 

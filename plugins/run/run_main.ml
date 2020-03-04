@@ -204,9 +204,9 @@ let run need_repeat entries =
           never_returns in
   loop 0 entries
 
-let run_all need_repeat envp args proj state xs =
-  Primus.Machine.run ~envp ~args proj state @@
-  run need_repeat xs
+let run_all need_repeat envp args sys proj state xs =
+  Primus.System.run ~envp ~args sys proj state
+    ~start:(run need_repeat xs)
 
 let is_visited proj = function
   | `addr _ | `symbol _ -> false
@@ -218,32 +218,33 @@ let is_visited proj = function
       | Some blk -> Term.has_attr blk Term.visited
 
 
-let run_sep need_repeat envp args proj state xs =
+let run_sep need_repeat envp args sys proj state xs =
   let total = List.length xs in
   let init = Primus.Normal,proj,state in
   Result.return @@
   List.foldi xs ~init ~f:(fun stage (status,proj,state) p ->
       report_progress ~stage ~total ();
       if not need_repeat && is_visited proj p then (status,proj,state)
-      else match Primus.Machine.run ~envp ~args proj state @@ begin
+      else match Primus.System.run ~envp ~args sys proj state ~start:(begin
           exec p >>=
           fun () -> Eval.halt >>=
           never_returns
-        end with Error err ->
+        end) with Error err ->
         info "exec %a finished with a conflict: %a"
           Primus.Linker.Name.pp p
           Knowledge.Conflict.pp err;
         info "discarding the result and proceeding to the next entry";
         (status,proj,state)
-               | Ok s -> s)
+                | Ok s -> s)
 
 let main {Config.get=(!)} proj =
   let open Param in
   let state = Toplevel.current () in
+  let sys = Primus.Machine.legacy_main_system () in
   let run = if !in_isolation
     then run_sep !with_repetitions
     else run_all !with_repetitions in
-  parse_entry_points proj !entry |> run !envp !argv proj state |> function
+  parse_entry_points proj !entry |> run !envp !argv sys proj state |> function
   | Ok (Primus.Normal,proj,state)
   | Ok (Primus.Exn Primus.Interpreter.Halt,proj,state) ->
     Toplevel.set state;

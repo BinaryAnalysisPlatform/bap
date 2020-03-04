@@ -11,11 +11,6 @@ module Main(M : Machine) : sig
     (exit_status * project) M.m
 end
 
-val run :
-  ?envp:string array ->
-  ?args:string array ->
-  project -> Knowledge.state ->
-  unit Bap_primus_machine.Make(Knowledge).t ->
-  (exit_status * project * Knowledge.state, Knowledge.conflict) result
+val legacy_main_system : unit -> Bap_primus_system.t
 
 val add_component : component -> unit

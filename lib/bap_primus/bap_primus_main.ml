@@ -31,5 +31,4 @@ module Main(Machine : Machine) = struct
     System.run ?envp ?args ~start:user !system proj
 end
 
-let run ?envp ?args proj state user =
-  System.run ?envp ?args ~start:user !system proj state
+let legacy_main_system () = !system
