@@ -8,16 +8,19 @@ type t
 type system = t
 
 type component_specification
+type system_specification
 type parse_error
 
 val define :
   ?desc:string ->
+  ?depends_on:system_specification list ->
   ?components:component_specification list ->
   ?package:string -> string -> t
 
 val add_component : ?package:string -> t -> string -> t
 
 val component : ?package:string -> string -> component_specification
+val depends_on : ?package:string -> string -> system_specification
 
 val name : t -> Knowledge.Name.t
 
@@ -26,6 +29,10 @@ val from_file : string -> (t list,parse_error) Result.t
 val pp : Format.formatter -> t -> unit
 val pp_parse_error : Format.formatter -> parse_error -> unit
 
+module Repository : sig
+  val add : system -> unit
+  val get : ?package:string -> string -> system
+end
 
 module Components : sig
   open Bap_primus_types

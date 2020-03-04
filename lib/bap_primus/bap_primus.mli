@@ -721,8 +721,11 @@ module Std : sig
     module System : sig
       type t = system
 
-      (** a component specification denotes a set of components *)
+      (** designates some component *)
       type component_specification
+
+      (** designates a system  *)
+      type system_specification
 
       (** [define name] defnines a new system.
 
@@ -739,6 +742,7 @@ module Std : sig
       *)
       val define :
         ?desc:string ->
+        ?depends_on:system_specification list ->
         ?components:component_specification list ->
         ?package:string -> string -> t
 
@@ -818,6 +822,11 @@ module Std : sig
       val component : ?package:string -> string -> component_specification
 
 
+      (** [depends_on ?package name] specifies a dependency on a
+          system with the given designator.
+      *)
+      val depends_on : ?package:string -> string -> system_specification
+
       (** {3 Parsing system descriptions from files}
 
           A system can be described in a system description file that
@@ -875,6 +884,11 @@ module Std : sig
           ?init:unit Machine.t ->
           ?start:unit Machine.t ->
           t -> project -> (exit_status * project) Machine.m
+      end
+
+      module Repository : sig
+        val add : system -> unit
+        val get : ?package:string -> string -> system
       end
     end
 

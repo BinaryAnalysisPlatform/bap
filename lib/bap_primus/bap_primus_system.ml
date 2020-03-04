@@ -17,41 +17,69 @@ let start = Bap_primus_machine.start
 let stop = Bap_primus_machine.stop
 
 type component_specification = Name.t
+type system_specification = Name.t
 
 
 type t = {
   name : Name.t;
   desc : string;
+  depends_on : system_specification list;
   components : component_specification list;
 }
 
 type system = t
 
-let pp_components =
+module Repository = struct
+  let self = Hashtbl.create (module Name)
+
+  let add sys =
+    if Hashtbl.mem self sys.name
+    then invalid_argf "System named %s is already present in the repository"
+        (Name.show sys.name) ();
+    Hashtbl.add_exn self sys.name sys
+
+  let get ?package name =
+    Hashtbl.find_exn self (Name.create ?package name)
+
+  let find = Hashtbl.find self
+  let lookup = Hashtbl.find_exn self
+end
+
+let pp_names =
   Format.pp_print_list ~pp_sep:Format.pp_print_space Name.pp
 
-let pp ppf {name; components; desc} =
+let pp ppf {name; components; depends_on; desc} =
   Format.fprintf ppf
     "@[<v2>(defsystem %a@\n\
      :description %s@\n\
+     :depends-on @[<v2>(%a)@]
      :components @[<v2>(%a)@])@]"
-    Name.pp name desc pp_components components
+    Name.pp name desc
+    pp_names depends_on
+    pp_names components
 
 let component = Name.create
+let depends_on = Name.create
 
 let define
     ?(desc="")
+    ?(depends_on=[])
     ?(components=[])
-    ?package name = {name = Name.create ?package name; desc; components}
+    ?package name = {
+  name = Name.create ?package name; desc;
+  components; depends_on
+}
 
 let name t = t.name
 
 let add_component ?package s c = {
   s with components = Name.create ?package c :: s.components}
 
-let has_component {components} name =
-  List.exists components ~f:(fun c ->
-      Name.equal c name)
+let rec components sys =
+  let init = Set.of_list (module Name) sys.components in
+  List.fold sys.depends_on ~init ~f:(fun comps sys ->
+      Set.union comps @@ components (Repository.lookup sys))
+
 
 module Components = struct
   open Bap_primus_types
@@ -84,14 +112,13 @@ module Components = struct
       Machine.Observation.make finish ()
 
     let do_init system loaded =
-      Hashtbl.to_alist generics |>
-      Machine.List.iter ~f:(fun (name,{init=(module Gen : Component)}) ->
-          if has_component system name
-          && not (Set.mem loaded name)
-          then
-            let module Comp = Gen(Machine) in
-            Comp.init ()
-          else Machine.return ())
+      let comps = Set.diff (components system) loaded in
+      Set.to_list comps |>
+      Machine.List.iter ~f:(fun name ->
+          let {init=(module Gen : Component)} =
+            Hashtbl.find_exn generics name in
+          let module Comp = Gen(Machine) in
+          Comp.init ())
 
     let init_system s =
       do_init s (Set.empty (module Name))
@@ -126,12 +153,12 @@ module Components = struct
   open Machine.Syntax
 
   let init_system system =
-    Hashtbl.to_alist analyses |>
+    components system |>
+    Set.to_list |>
     Machine.List.fold ~init:(Set.empty (module Name))
-      ~f:(fun loaded (name,{init}) ->
-          if has_component system name
-          then init >>| fun () -> Set.add loaded name
-          else Machine.return loaded) >>=
+      ~f:(fun loaded name -> match Hashtbl.find analyses name with
+          | Some {init} -> init >>| fun () -> Set.add loaded name
+          | None -> Machine.return loaded) >>=
     Generics.do_init system
 
   let result_t =
@@ -202,7 +229,7 @@ module Parser = struct
     error with file
   }
 
-  let empty name = {name; desc=""; components=[]}
+  let empty name = {name; desc=""; components=[]; depends_on=[]}
 
   let push_name name s =
     {s with components = Name.read name :: s.components}
