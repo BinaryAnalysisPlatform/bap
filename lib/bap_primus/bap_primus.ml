@@ -14,6 +14,7 @@ module Std = struct
     module Lisp = Bap_primus_lisp
     module Analysis = Bap_primus_analysis.Machine
     module System = Bap_primus_system
+    module Job = System.Job
     module Jobs = System.Jobs
     module Components = System.Components
     module Machine = struct

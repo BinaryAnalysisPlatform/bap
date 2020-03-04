@@ -879,6 +879,34 @@ module Std : sig
     end
 
 
+    (** A task to run a Primus system.
+
+        A is a system together with input parameters that is run via
+        the {!Jobs} module.x
+
+        @since 2.1.0
+    *)
+    module Job : sig
+
+      (** an abstract type for jobs  *)
+      type t
+
+      (** the job name, doesn't have to be unique a bears any sense  *)
+      val name : t -> string
+
+      (** desc describes what the job is doing  *)
+      val desc : t -> string
+
+      (** an array of environment variables  *)
+      val envp : t -> string array
+
+      (** an array of execve parameters   *)
+      val args : t -> string array
+
+      (** the system that this job runs  *)
+      val system : t -> system
+    end
+
     (** A facility to register and run multiple instances of Primus.
 
         This interface allows only the analysis (specialized) systems.
@@ -894,8 +922,23 @@ module Std : sig
       type result
 
 
-      (** [enqueue system] enqueues a new system to be run as job.  *)
-      val enqueue : system -> unit
+      (** [enqueue system] creates a new job and enqueues it for future run.
+
+          @param name a short name of the job for logging (defaults to unnamed)
+          @param desc a short description of the job task (defaults to [""])
+          @param envp the array of environment variables
+          @param argv the array of commandline arguments
+          @param init runs after machine boots
+          @param start runs after machine is initialized
+      *)
+      val enqueue :
+        ?name:string ->
+        ?desc:string ->
+        ?envp:string array ->
+        ?args:string array ->
+        ?init:unit Bap_primus_machine.Make(Knowledge).t ->
+        ?start:unit Bap_primus_machine.Make(Knowledge).t ->
+        system -> unit
 
 
       (** [pending ()] is the number of jobs still waiting to be run.  *)
@@ -931,13 +974,9 @@ module Std : sig
           unless explicitly stopped.
       *)
       val run :
-        ?envp:string array ->
-        ?args:string array ->
-        ?on_conflict:(system -> Knowledge.conflict -> action) ->
-        ?on_success:(system -> exit_status -> Knowledge.state -> action) ->
+        ?on_failure:(Job.t -> Knowledge.conflict -> action) ->
+        ?on_success:(Job.t -> exit_status -> Knowledge.state -> action) ->
         project -> Knowledge.state -> result
-
-
 
       (** [knowledge result] is the knowledge obtained from running
           the jobs.  *)
@@ -948,19 +987,19 @@ module Std : sig
       val project : result -> project
 
 
-      (** [conflicts result] is the list of failed jobs.
-          Each failed job is represented by the description of the
-          system that has failed and the description of the conflict
-          that prevented system from convering.
+      (** [failures result] is the list of failed jobs.
 
-          The conflicts are specified in the order in which they happened.
+          Each failed is a pair of the job and and the description of
+          the conflict that prevented system from convering.
+
+          The failures are specified in the order in which they happened.
       *)
-      val conflicts : result -> (system * Knowledge.conflict) list
+      val failures : result -> (Job.t * Knowledge.conflict) list
 
 
-      (** [systems result] is the final list of systems that were run
+      (** [finished result] is the final list of jobs that were run
           in the order in which they were run.  *)
-      val systems : result -> system list
+      val finished : result -> Job.t list
 
     end
 

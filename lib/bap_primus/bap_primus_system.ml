@@ -5,6 +5,7 @@ open Core_kernel
 
 module Name = Knowledge.Name
 module Observation = Bap_primus_observation
+module Machine = Bap_primus_machine
 
 let fini,finish =
   Observation.provide ~inspect:sexp_of_unit "fini"
@@ -118,7 +119,7 @@ module Components = struct
 
   module Machine = struct
     type 'a m = 'a Knowledge.t
-    include Bap_primus_machine.Make(Knowledge)
+    include Machine.Make(Knowledge)
   end
 
   module Generics = Generic(Machine)
@@ -279,15 +280,39 @@ module Parser = struct
 end
 
 
+module Job = struct
+  type t = {
+    name : string;
+    desc : string;
+    envp : string array;
+    args : string array;
+    init : unit Machine.Make(Knowledge).t;
+    start : unit Machine.Make(Knowledge).t;
+    system : system;
+  } [@@deriving fields]
+
+  module Analysis = Components.Machine
+
+  let create
+      ?(name="unnamed")
+      ?(desc="")
+      ?(envp=[||]) ?(args=[||])
+      ?(init=Analysis.return ())
+      ?(start=Analysis.return ())
+      system = {name; desc; envp; args; init; start; system}
+end
+
 module Jobs = struct
-  let jobs = Queue.create ()
-  let enqueue sys = Queue.enqueue jobs sys
+  let jobs : Job.t Queue.t = Queue.create ()
+  let enqueue ?name ?desc ?envp ?args ?init ?start sys =
+    Queue.enqueue jobs @@ Job.create ?name ?desc ?envp ?args ?init ?start sys
+
   let pending () = Queue.length jobs
 
   type result = {
     project : project;
-    conflicts : (system * Knowledge.conflict) list;
-    systems : system list;
+    failures : (Job.t * Knowledge.conflict) list;
+    jobs : Job.t list;
     state : Knowledge.state
   }
 
@@ -295,37 +320,38 @@ module Jobs = struct
 
   let knowledge t = t.state
   let project t = t.project
-  let conflicts t = List.rev t.conflicts
-  let systems t = List.rev t.systems
+  let failures t = List.rev t.failures
+  let finished t = List.rev t.jobs
 
-  let success system project state result = {
+  let success job project state result = {
     result with project;
-                systems = system :: result.systems;
+                jobs = job :: result.jobs;
                 state;
   }
 
-  let conflict system conflict result = {
+  let conflict job conflict result = {
     result with
-    systems = system :: result.systems;
-    conflicts = (system,conflict) :: result.conflicts
+    jobs = job :: result.jobs;
+    failures = (job,conflict) :: result.failures;
   }
 
-  let run ?envp ?args
-      ?(on_conflict = fun _ _ -> Continue)
+  let run
+      ?(on_failure = fun _ _ -> Continue)
       ?(on_success = fun _ _ _ -> Continue) =
-    let rec process result system =
-      match Components.run ?envp ?args system result.project result.state with
+    let rec process result ({Job.envp; args; init; start; system} as job) =
+      Components.run system result.project result.state
+        ~envp ~args ~init ~start |> function
       | Ok (status,proj,state) ->
-        handle_success system status proj state result
+        handle_success job status proj state result
       | Error conflict ->
-        handle_conflict system conflict result
-    and handle_success system status proj state result =
-      match on_success system status state with
-      | Continue -> continue (success system proj state result)
+        handle_failure job conflict result
+    and handle_success job status proj state result =
+      match on_success job status state with
+      | Continue -> continue (success job proj state result)
       | Stop -> result
-    and handle_conflict system problem result =
-      match on_conflict system problem with
-      | Continue -> continue (conflict system problem result)
+    and handle_failure job problem result =
+      match on_failure job problem with
+      | Continue -> continue (conflict job problem result)
       | Stop -> result
     and continue result = match Queue.dequeue jobs with
       | None -> result
@@ -333,8 +359,8 @@ module Jobs = struct
     fun project state -> continue {
         project;
         state;
-        conflicts = [];
-        systems = [];
+        failures = [];
+        jobs = [];
       }
 end
 

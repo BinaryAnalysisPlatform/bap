@@ -5,6 +5,7 @@ open Bap_primus_types
 module Observation = Bap_primus_observation
 
 type t
+type system = t
 
 type component_specification
 type parse_error
@@ -65,9 +66,25 @@ val init : unit Observation.t
 val fini : unit Observation.t
 val stop : string Observation.t
 
+module Job : sig
+  type t
+
+  val name : t -> string
+  val desc : t -> string
+  val envp : t -> string array
+  val args : t -> string array
+  val system : t -> system
+end
 
 module Jobs : sig
-  val enqueue : t -> unit
+  val enqueue :
+    ?name:string ->
+    ?desc:string ->
+    ?envp:string array ->
+    ?args:string array ->
+    ?init:unit Bap_primus_machine.Make(Knowledge).t ->
+    ?start:unit Bap_primus_machine.Make(Knowledge).t ->
+    system -> unit
   val pending : unit -> int
 
   type action = Stop | Continue
@@ -75,13 +92,11 @@ module Jobs : sig
 
   val knowledge : result -> Knowledge.state
   val project : result -> project
-  val conflicts : result -> (t * Knowledge.conflict) list
-  val systems : result -> t list
+  val failures : result -> (Job.t * Knowledge.conflict) list
+  val finished : result -> Job.t list
 
   val run :
-    ?envp:string array ->
-    ?args:string array ->
-    ?on_conflict:(t -> Knowledge.conflict -> action) ->
-    ?on_success:(t -> exit_status -> Knowledge.state -> action) ->
+    ?on_failure:(Job.t -> Knowledge.conflict -> action) ->
+    ?on_success:(Job.t -> exit_status -> Knowledge.state -> action) ->
     project -> Knowledge.state -> result
 end
