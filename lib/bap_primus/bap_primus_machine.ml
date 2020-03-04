@@ -34,6 +34,12 @@ let switch,switched =
       ])
     "machine-switch"
 
+let block,blocked = Observation.provide "observation-blocked"
+    ~inspect:sexp_of_string
+
+let restrict,restricted = Observation.provide "machine-restricted"
+    ~inspect:sexp_of_bool
+
 let kill,killed = Observation.provide "machine-kill"
     ~inspect:Monad.State.Multi.Id.sexp_of_t
 
@@ -115,7 +121,9 @@ module Make(M : Monad.S) = struct
   let set_global global = with_global_context @@ fun () ->
     lifts (SM.update @@ fun s -> {s with global})
 
-  let is_restricted () : bool t = lifts (SM.gets @@ fun s -> s.restricted)
+  let is_restricted () : bool t =
+    with_global_context @@ fun () ->
+    lifts (SM.gets @@ fun s -> s.restricted)
 
   module Observation = struct
     type 'a m = 'a t
@@ -124,6 +132,7 @@ module Make(M : Monad.S) = struct
 
     let observations () = lifts (SM.gets @@ fun s -> s.observations)
     let unrestricted () =
+      with_global_context @@ fun () ->
       lifts (SM.gets @@ fun s ->
              if s.restricted then None
              else Some s.observations)
@@ -151,6 +160,8 @@ module Make(M : Monad.S) = struct
       observations () >>= fun os ->
       set_observations (Observation.cancel sub os)
 
+    let obsname x = Observation.(name@@of_statement x)
+
     module Observation = Observation.Make(struct
         type 'a t = 'a machine
         include CM
@@ -172,6 +183,19 @@ module Make(M : Monad.S) = struct
       | Some os ->
         Observation.notify_if_observed os key @@ fun k ->
         f (fun x -> k x)
+
+
+    let make key obs =
+      with_global_context unrestricted >>= function
+      | Some _ -> make key obs
+      | None ->
+        make_even_if_restricted blocked (obsname key)
+
+    let post key ~f =
+      with_global_context unrestricted >>= function
+      | Some _ -> post key ~f
+      | None ->
+        make_even_if_restricted blocked (obsname key)
   end
 
   module Make_state(S : sig
@@ -235,9 +259,12 @@ module Make(M : Monad.S) = struct
     current () >>= fun cid ->
     Observation.make forked (pid,cid)
 
-  let restrict x = lifts @@ SM.update (fun s -> {
-        s with restricted = x;
-      })
+  let restrict x =
+    with_global_context @@ fun () ->
+    Observation.make_even_if_restricted restricted true >>= fun () ->
+    lifts @@ SM.update (fun s -> {
+          s with restricted = x;
+        })
 
   let sentence_to_death id =
     with_global_context (fun () ->
