@@ -544,7 +544,19 @@ module Std : sig
       module Make(M : Monad.S) : S with type 'a m := 'a M.t
 
 
-      (** Primus Entry Point.  *)
+      (** The Legacy Main System.
+
+          This module together with the {!add_component} function
+          builds the legacy main system ([primus:legacy-main]).  The
+          [add_component] function adds a component to this system,
+          and [Machine.Main(M).run] or [Machine.run] functions could
+          be used to run the [primus:legacy-main] system in the monad
+          [M] or in the [Machine.Make(Knowledge)] monad.
+
+          This interface is deprecated and is provided for backward
+          compatibility. Use the {!System} interface to define and
+          run Primus systems.
+      *)
       module Main(M : S) : sig
         (** [run ?envp ?args proj] returns a computation that will
             run a program represented with the [proj] data structure.
@@ -567,6 +579,8 @@ module Std : sig
       [@@@deprecated ["[since 2020-03] use Primus.System instead"]]
 
 
+      (** {3 The Deprecated Legacy Main system interface}  *)
+
       (** [add_component comp] registers the machine component [comp] in the
           Primus Framework.
           The component's [init] function will be run every time the
@@ -582,6 +596,23 @@ module Std : sig
       *)
       val add_component : component -> unit
       [@@deprecated "[since 2020-03] use Components.register* instead"]
+
+
+      (** runs the legacy main system in the [Make(Knowledge)] monad.
+
+          This function is provided for the backward compatibility so
+          that the legacy main system could also be run in the
+          [Make(Knowledge)] monad without any hassle. It is advised to
+          use the [System.run] or [Jobs.run] functions instead.
+      *)
+      val run :
+        ?envp:string array ->
+        ?args:string array ->
+        project -> Knowledge.state ->
+        unit Make(Knowledge).t ->
+        (exit_status * project * Knowledge.state, Knowledge.conflict) result
+      [@@deprecated "[since 2020-03] use [System.run] instead"]
+
     end
 
     (** A runnable instance of Primus Machine.

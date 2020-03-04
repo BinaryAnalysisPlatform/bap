@@ -30,3 +30,6 @@ module Main(Machine : Machine) = struct
   let run ?envp ?args proj user =
     System.run ?envp ?args ~start:user !system proj
 end
+
+let run ?envp ?args proj state user =
+  System.run ?envp ?args ~start:user !system proj state
