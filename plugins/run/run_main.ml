@@ -14,7 +14,12 @@ module Param = struct
 
   manpage [
     `S "DESCRIPTION";
-    `P "Run a program in the Primus emulator. ";
+    `P "Populates and run the Primus Jobs queue.
+      Creates new job for each specified system and runs the queued
+    jobs (including those that were already added to the queue by
+    other analyses). After the job queue is emptied, commits the
+    obtained knowledge and passes the resulting project data structure
+    downstream.";
   ];;
 
   let argv = param (array string)  "argv"
@@ -24,35 +29,36 @@ module Param = struct
       ~doc:"Program environemt as a comma separated list of VAR=VAL pairs";;
 
   let entry = param (list string) "entry-points"
-      ~doc:
+      ~doc:"Can be a list of entry points or a special keyword
+      $(b,all-subroutines) or $(b,marked-subroutines). An entry point
+      is either a string denoting a function name, a tid starting with
+      the $(b,%) percent, or an address in a hexadecimal format
+      prefixed with $(b,0x).  When the option is specified, the Primus
+      Machine will start the execution from the specified entry
+      point(s). Otherwise the execution will be started from all
+      program terms that are marked with the [entry_point]
+      attribute. If there are several entry points, then the execution
+      will be started from all of them in parallel, i.e., by forking
+      the machine and starting each machine from its own entry
+      point. Consider enabling corresponding scheduler. If neither the
+      argument nor there any entry points in the program, then a
+      function called $(b,_start) is called. If $(b,all-subroutines)
+      are specified then Primus will execute all subroutines in
+      the topological order. If $(b,marked-subroutines) is specified,
+      then Primus will execute the specified systems on all
+      subroutines that has the $(b,mark) attribute."
 
-        "Can be a list of entry points or a special keyword
-      $(b,all-subroutines). An entry point is either a string denoting
-      a function name, a tid starting with the $(b,%) percent, or an
-      address in a hexadecimal format prefixed with $(b,0x).
-      When the option is specified, the Primus Machine will start the
-      execution from the specified entry point(s). Otherwise the
-      execution will be started from all program terms that are marked
-      with the [entry_point] attribute. If there are several entry
-      points, then the execution will be started from all of them in
-      parallel, i.e., by forking the machine and starting each machine
-      from its own entry point. Consider enabling corresponding
-      scheduler. If neither the argument nor there any entry points in
-      the program, then a function called $(b,_start) is called. If
-      $(b,all-subroutines) are specified then Primus will execute all
-      subroutines in topological order"
 
   let in_isolation = flag "in-isolation"
-      ~doc:"Run each entry point as an isolated machine.
+      ~doc:"Run each entry point as new system.
 
-      Each entry point is started in a separate machine and run
-      sequentially, with the project data structure passed between them."
+      Each entry point is enqueued as a job and run in a separate
+      systems. The project and knowledge is passed between each
+      system, the rest of the state is discarded."
 
 
   let with_repetitions = flag "with-repetitions"
-      ~doc:
-
-        "The pass runs subroutines in the topological order meaning
+      ~doc:"The pass runs subroutines in the topological order meaning
       the farther a subroutine is in a callgraph from the roots the
       later it will be run as an entry point and higher chances it
       will be called before that from some other subroutine. And
@@ -62,7 +68,6 @@ module Param = struct
       were visited during the run of other ones.
       And this option disables this behavior and runs all the
       subroutines in a row. "
-
 end
 
 
@@ -120,29 +125,39 @@ let callgraph start prog =
   connect_inputs |>
   connect_unreachable_scc
 
-let all_subroutines prog =
+let all_subroutines ?(marked=false) prog =
   let entries = entry_points prog in
   let start = Tid.create () in
-  let non_entry =
-    let roots = Tid.Set.of_list (start :: entries) in
-    fun t -> if Set.mem roots t then None else Some (`tid t) in
-  List.map entries ~f:(fun t -> `tid t) @
+  let roots = Tid.Set.of_list (start :: entries) in
+  let unmarked = if not marked then Tid.Set.empty else
+      Term.enum sub_t prog |>
+      Seq.fold ~init:Tid.Set.empty ~f:(fun unmarked sub ->
+          if Term.has_attr sub mark then unmarked
+          else Set.add unmarked (Term.tid sub)) in
+  let marked_non_root_to_entry t =
+    if Set.mem roots t || Set.mem unmarked t then None
+    else Some (`tid t) in
+  List.filter_map entries ~f:(fun t ->
+      if Set.mem unmarked t then None else Some (`tid t)) @
   Seq.to_list @@
-  Seq.filter_map ~f:non_entry @@
+  Seq.filter_map ~f:marked_non_root_to_entry @@
   Graphlib.reverse_postorder_traverse (module Graphs.Callgraph)
     ~start @@
   callgraph start prog
 
-let parse_entry_points proj entry = match entry with
-  | ["all-subroutines"] -> all_subroutines (Project.program proj)
-  | [] -> List.map (entry_points (Project.program proj)) ~f:(fun x ->
-      `tid x)
-  | xs -> List.map ~f:(name_of_entry (Project.arch proj)) xs
-
 let parse_entry_points proj entry =
-  match parse_entry_points proj entry with
-  | [] -> [`symbol "_start"]
-  | xs -> xs
+  let prog = Project.program proj in
+  match entry with
+  | ["all-subroutines"] -> all_subroutines prog
+  | ["marked-subroutines"] -> all_subroutines ~marked:true prog
+  | [] -> List.(entry_points prog >>| fun x -> `tid x)
+  | xs -> List.(xs >>| name_of_entry (Project.arch proj))
+
+let parse_entry_points proj entries =
+  match entries,parse_entry_points proj entries with
+  | ["marked-subroutines"],[] -> []
+  | _,[] -> [`symbol "_start"]
+  | _,xs -> xs
 
 let exec x =
   Machine.current () >>= fun cid ->
@@ -154,7 +169,6 @@ let exec x =
          (string_of_name x)
          (Primus.Exn.to_string exn);
        Machine.return ())
-
 
 let visited = Primus.Machine.State.declare
     ~uuid:"c6028425-a8c7-48cf-b6d9-57a44ed9a08a"
