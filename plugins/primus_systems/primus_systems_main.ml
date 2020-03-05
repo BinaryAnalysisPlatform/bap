@@ -4,6 +4,18 @@ open Bap_main
 open Bap_primus.Std
 open Format
 
+
+let doc what =
+  sprintf "
+# DESCRIPTION
+
+Prints a list of Primus %ss. If an argument is specified,
+then prints the detailed information about the %s with
+that name. If several arguments are specified then prints
+information (not detailed) about only those %ss that have
+the specified names" what what what
+
+
 let sys_path = Primus_systems_config.path
 let paths = Extension.Configuration.parameters
     Extension.Type.(list dir) "add-path"
@@ -32,7 +44,9 @@ let names =
   Extension.(Command.argument Type.(list string))
 
 let make_info_command list name =
-  Extension.Command.(declare name (args $ names)) @@ fun names _ctxt ->
+  let doc = doc name in
+  let name = sprintf "primus-%ss" name in
+  Extension.Command.(declare ~doc name (args $ names)) @@ fun names _ctxt ->
   let detailed = match names with [_] -> true | _ -> false in
   let names = List.map names Knowledge.Name.of_string |>
               Set.of_list (module Knowledge.Name) in
@@ -48,7 +62,5 @@ let make_info_command list name =
 
 
 let () =
-  make_info_command
-    Primus.System.Repository.list "primus-systems";
-  make_info_command
-    Primus.Components.list "primus-components"
+  make_info_command Primus.System.Repository.list "system";
+  make_info_command Primus.Components.list "component"

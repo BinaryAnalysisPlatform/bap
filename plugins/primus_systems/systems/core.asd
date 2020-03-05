@@ -36,7 +36,7 @@
                bap:mark-visited))
 
 (defsystem bap:base-taint-analyzer
-  :description "Uses greedy-promiscuous-executor for taint analysis.
+  :description "Uses greedy-promiscuous-executor for taint analysis. \
                 No policy is specified"
   :depends-on (bap:greedy-promiscuous-executor)
   :components (bap:taint-primitives
