@@ -241,12 +241,15 @@ end
 
 open Config;;
 
+let desc =
+  "When this mode is enabled the Primus Machine will venture into \
+   paths with unsatisfied constraints. Basically, it means that on \
+   every branch the state is duplicated."
+;;
+
 manpage [
   `S "DESCRIPTION";
-  `P
-    "When this mode is enabled the Primus Machine will venture into
-     paths with unsatisfied constraints. Basically, it means that on
-     every branch the state is duplicated.";
+  `P desc ;
   `P
     "The program will be translated into the Trivial Condition Form,
   where each compound condition expression is trivialized to a
@@ -261,5 +264,6 @@ let () = when_ready (fun {get=(!!)} ->
     if !!enabled then
       Primus.Machine.add_component (module Main) [@warning "-D"];
     Primus.Components.register_generic
-      ~package:"primus" "promiscuous-mode" (module Main)
-      ~desc:"enables the promiscuous mode.")
+      ~package:"bap" "promiscuous-mode" (module Main)
+      ~desc:("Enables the promiscuous mode. Requires the \
+              Trivial Condition Form. " ^ desc))

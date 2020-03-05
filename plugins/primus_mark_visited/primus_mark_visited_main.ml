@@ -114,5 +114,8 @@ manpage [
 let () = when_ready (fun _ ->
     Primus.Machine.add_component (module Main) [@warning "-D"];
     Primus.Components.register_generic "mark-visited" (module Main)
-      ~package:"primus"
-      ~desc:"marks visited program terms with the [visited] attribute")
+      ~package:"bap"
+      ~desc:"Marks visited (by Primus) program terms with the \
+             [Term.visited] attribute and unvisited with the \
+             [Term.dead] attribute. Note, that the attributes \
+             are attached only when the system exits")

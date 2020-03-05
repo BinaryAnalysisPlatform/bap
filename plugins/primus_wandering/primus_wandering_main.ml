@@ -82,7 +82,9 @@ let register enabled seed =
     Primus.Machine.add_component (module Scheduler) [@warning "-D"];
   end;
   Primus.Components.register_generic "wondering-scheduler" (module Scheduler)
-    ~package:"primus"
+    ~package:"bap"
+    ~desc: "Enables the random wonderning scheduler (experimental). The \
+            scheduler will pick between the states randomly."
 
 open Config;;
 manpage [

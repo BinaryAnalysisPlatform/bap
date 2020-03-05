@@ -255,17 +255,22 @@ let () = when_ready (fun {get=(!!)} ->
     Primus.Machine.add_component (module Setup) [@warning "-D"];
     Primus.Components.register_generic "taint-primitives"
       (module Setup)
-      ~package:"primus-taint"
-      ~desc:"exposes Primus Taint to Primus Lisp" ;
+      ~package:"bap"
+      ~desc:"Exposes Primus Lisp primitives that controls the \
+             Primus Taint Engine." ;
     Primus.Machine.add_component (module Signals) [@warning "-D"];
     Primus.Components.register_generic
-      ~package:"primus-taint" "taint-signals"
+      ~package:"bap" "taint-signals"
       (module Signals)
-      ~desc:"reflects Primus Taint observations to Lisp signals" ;
+      ~desc:"Reflects Primus Taint observations to Lisp signals." ;
     Primus_taint_policies.init ();
     Primus.Components.register_generic
-      ~package:"primus-taing" "conservative-garbage-collector"
-      (module Taint.Gc.Conservative);
+      ~package:"bap" "conservative-garbage-collector"
+      (module Taint.Gc.Conservative)
+      ~desc:"Enables taint garbage collector. The component scans \
+             the memory and registers and deletes taints that are no \
+             longer reachable.";
+
     set_default_policy !!policy;
     if !!enable_gc
     then Primus.Machine.add_component

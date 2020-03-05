@@ -85,6 +85,12 @@ module Std : sig
     (** a system definition  *)
     type system
 
+
+    (** an abstracted information about Primus feature,
+        either a system or a component.
+    *)
+    type info
+
     (** a result of computation  *)
     type value [@@deriving bin_io, compare, sexp]
 
@@ -547,7 +553,7 @@ module Std : sig
       (** The Legacy Main System.
 
           This module together with the {!add_component} function
-          builds the legacy main system ([primus:legacy-main]).  The
+          builds the legacy main system ([bap:legacy-main]).  The
           [add_component] function adds a component to this system.
 
           The built system could be obtained with the
@@ -883,7 +889,15 @@ module Std : sig
         val get : ?package:string -> string -> system
         val update : ?package:string -> string -> f:(system -> system) -> unit
         val find : Knowledge.Name.t -> system option
+        val list : unit -> info list
       end
+    end
+
+    module Info : sig
+      val name : info -> Knowledge.Name.t
+      val desc : info -> string
+      val long : info -> string
+      val pp : Format.formatter -> info -> unit
     end
 
 
@@ -1009,8 +1023,8 @@ module Std : sig
           in the order in which they were run.  *)
       val finished : result -> Job.t list
 
-    end
 
+    end
     (** The Machine component.  *)
     type component = Machine.component
 
@@ -1092,6 +1106,7 @@ module Std : sig
           Fails, if there is already a component with the same name.
       *)
       val register :
+        ?internal:bool ->
         ?desc:string ->
         ?package:string ->
         string -> unit Analysis.t ->
@@ -1099,10 +1114,13 @@ module Std : sig
 
       (** [register_generic name comp] registers a generic component.   *)
       val register_generic :
+        ?internal:bool ->
         ?desc:string ->
         ?package:string ->
         string -> component ->
         unit
+
+      val list : unit -> info list
     end
 
     (** type abbreviation for the Machine.state  *)

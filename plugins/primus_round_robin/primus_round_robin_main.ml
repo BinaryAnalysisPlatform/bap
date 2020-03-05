@@ -71,8 +71,8 @@ let register enabled =
   if enabled
   then Primus.Machine.add_component (module RR) [@warning "-D"];
   Primus.Components.register_generic "round-robin-scheduler" (module RR)
-    ~package:"primus"
-    ~desc:"enables the round-robin scheduler"
+    ~package:"bap"
+    ~desc:"Enables the round-robin scheduler (experimental)."
 
 open Config;;
 manpage [

@@ -9,6 +9,7 @@ let paths = Extension.Configuration.parameters
     ~doc:"adds the path to the list of paths where Primus systems \
           are searched"
 
+
 let () = Extension.declare @@ fun ctxt ->
   let usr_paths = Extension.Configuration.get ctxt paths |>
                   List.concat in
@@ -23,6 +24,16 @@ let () = Extension.declare @@ fun ctxt ->
               eprintf "Failed to parse system %s: %a@\n%!"
                 file Primus.System.pp_parse_error failed
             | Ok systems ->
-              List.iter systems ~f:(Primus.System.Repository.add);
-              printf "loaded %d systems@\n%!" (List.length systems)));
+              List.iter systems ~f:(Primus.System.Repository.add)));
+  Ok ()
+
+
+let () = Extension.Command.(declare "primus-systems" args) @@ fun _ctxt ->
+  Primus.System.Repository.list () |>
+  List.iter ~f:(Primus.Info.pp Format.std_formatter);
+  Ok ()
+
+let () = Extension.Command.(declare "primus-components" args) @@ fun _ctxt ->
+  Primus.Components.list () |>
+  List.iter ~f:(Primus.Info.pp Format.std_formatter);
   Ok ()

@@ -259,7 +259,7 @@ let on_failure job conflict : Primus.Jobs.action =
 let main {Config.get=(!)} proj =
   let open Param in
   let state = Toplevel.current () in
-  let sys = Primus.System.Repository.get ~package:"primus" "legacy-main" in
+  let sys = Primus.System.Repository.get ~package:"bap" "legacy-main" in
   let enqueue_jobs = if !in_isolation
     then enqueue_separate_jobs else enqueue_super_job in
   let inputs = parse_entry_points proj !entry in
@@ -277,4 +277,5 @@ let () =
       Project.register_pass ~deps (main conf);
       Primus.Machine.add_component (module Visited) [@warning "-D"];
       Primus.Components.register_generic "records-visited" (module Visited)
-        ~package:"primus-run-internal")
+        ~internal:true
+        ~package:"run")

@@ -16,6 +16,7 @@ module Std = struct
     module System = Bap_primus_system
     module Job = System.Job
     module Jobs = System.Jobs
+    module Info = System.Info
     module Components = System.Components
     module Machine = struct
       module type State = State
@@ -30,5 +31,6 @@ module Std = struct
     let value_of_sexp = Value.t_of_sexp
     let compare_value = Value.compare
     type system = System.t
+    type info = System.info
   end
 end

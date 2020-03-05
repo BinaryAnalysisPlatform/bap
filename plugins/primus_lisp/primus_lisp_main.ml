@@ -147,8 +147,12 @@ let load_lisp_program dump paths features =
       Lisp.link_program prog;
   end in
   Primus.Machine.add_component (module Loader) [@warning "-D"];
-  Primus.Components.register_generic "lisp-library" (module Loader)
-    ~desc:"loads the Primus Library"
+  Primus.Components.register_generic "load-library" (module Loader)
+    ~package:"lisp"
+    ~desc:"Loads the Primus Library. Links all functions defined as \
+           external into the Primus Machine. Symbols are assumed to \
+           be strong, i.e., if the symbol is already linked, then \
+           it will be overriden by the corresponding Lisp implemenetation"
 
 module LispCore(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
@@ -283,17 +287,19 @@ let () =
         Project.register_pass' ~deps:["api"] ~autorun:true typecheck;
       let paths = [Filename.current_dir_name] @ !!libs @ [Lisp_config.library] in
       let features = "init" :: !!features in
-      Primus.Components.register_generic "type-checker"
+      Primus.Components.register_generic ~package:"lisp" "type-checker"
         (module TypeErrorSummary)
-        ~desc:"typechecks program and outputs the summary in the standard output";
+        ~desc:"Typechecks program and outputs the summary in the standard output.";
       Primus.Machine.add_component (module LispCore) [@warning "-D"];
       Primus.Components.register_generic "core" (module LispCore)
-        ~package:"primus-lisp"
-        ~desc:"initializes Primus Lisp core";
+        ~package:"lisp"
+        ~desc:"Initializes Primus Lisp core. Forwards Lisp message to \
+               the BAP log subsystem and enables propagation of \
+               observations to signals.";
       Primus.Machine.add_component (module TypeErrorPrinter) [@warning "-D"];
-      Primus.Components.register_generic ~package:"primus-lisp" "type-error-printer"
+      Primus.Components.register_generic ~package:"lisp" "type-error-printer"
         (module TypeErrorPrinter)
-        ~desc:"prints Primus Lisp type errors into the standard output";
+        ~desc:"Prints Primus Lisp type errors into the standard output.";
       Channels.init !!redirects;
       Primitives.init ();
       load_lisp_program !!dump paths features)

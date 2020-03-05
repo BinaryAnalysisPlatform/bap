@@ -87,25 +87,26 @@ module Scheduler(Machine : Primus.Machine.S) = struct
     ]
 end
 
+let desc =
+  "The exploring scheduler will prioritize clones that will wonder \
+   into not yet explored or less explored areas. More specifically, \
+   from a set of machine clones, it will choose those, that will \
+   proceed to a basic block that was visited the least amount of \
+   times. The round-robin scheduler will switch the context after \
+   each basic block. It will count the number of time the block was \
+   evaluated"
+
 let register enabled =
   if enabled
   then Primus.Machine.add_component (module Scheduler) [@warning "-D"];
   Primus.Components.register_generic "exploring-scheduler" (module Scheduler)
-    ~package:"primus"
+    ~package:"bap"
+    ~desc:("Enables the exploring scheduler (experimental). " ^ desc)
 
 open Config;;
 manpage [
   `S "DESCRIPTION";
-
-  `P
-    "The exploring scheduler will prioritize clones that will wonder
-    into not yet explored or less explored areas. More specifically,
-    from a set of machine clones, it will choose those, that will
-    proceed to a basic block that was visited the least amount of times";
-
-  `P
-    "The round-robin scheduler will switch the context after each
-    basic block. It will count the number of time the block was evaluated."
+  `P desc;
 ];;
 
 let enabled = flag "scheduler" ~doc:"Enable the scheduler."

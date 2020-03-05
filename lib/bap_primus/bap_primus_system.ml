@@ -29,6 +29,14 @@ type t = {
 
 type system = t
 
+type info =
+  | Sys of system
+  | Com of {
+      name : Name.t;
+      desc : string;
+      spec : bool;
+    }
+
 module Repository = struct
   let self = Hashtbl.create (module Name)
 
@@ -50,6 +58,9 @@ module Repository = struct
     Hashtbl.update self (Name.create ?package name) ~f:(function
         | None -> raise Not_found
         | Some s -> f s)
+
+  let list () = Hashtbl.data self |>
+                List.map ~f:(fun s -> Sys s)
 end
 
 let pp_names =
@@ -91,22 +102,31 @@ let rec components sys =
 module Components = struct
   open Bap_primus_types
 
-  type 'a item = {init : 'a; desc : string}
+  type 'a item = {init : 'a; desc : string; hide : bool}
 
   let generics = Hashtbl.create (module Name)
   let analyses = Hashtbl.create (module Name)
 
-  let add_component ns table ?(desc="") ?(package="user") name init =
+  let add_component ns table
+      ?(internal=false) ?(desc="") ?(package="user") name init =
     let name = Name.create ~package name in
     if Hashtbl.mem table name
     then invalid_argf
         "A %s component named %s is already registered, \
          please choose a unique name" ns (Name.show name) ();
-    Hashtbl.add_exn table name {init; desc}
+    Hashtbl.add_exn table name {init; desc; hide=internal}
 
 
   let register_generic = add_component "generic" generics
   let register = add_component "specialized" analyses
+
+  let info ~spec repo =
+    Hashtbl.to_alist repo |> List.filter_map ~f:(fun (name,{desc;hide}) ->
+        if hide then None
+        else Some (Com {name; desc; spec}))
+
+  let list () = info ~spec:true analyses @
+                info ~spec:false generics
 
   module Generic(Machine : Machine) = struct
     open Machine.Syntax
@@ -408,7 +428,30 @@ let pp_parse_error = Parser.pp_error_with_loc
 let from_file = Parser.from_file
 
 let () = Components.register_generic
-    "binary-program"
+    "load-binary"
     (module Bap_primus_interpreter.LinkBinaryProgram)
-    ~package:"primus"
-    ~desc:"links the binary program into the Primus machine"
+    ~package:"bap"
+    ~desc: "Links the binary program into the Primus machine. \
+            All symbols of the binary program are linked weakly, \
+            i.e., if a symbol is already linked, then this component \
+            will not override it."
+
+
+module Info = struct
+  let name (Sys {name} | Com {name}) = name
+  let desc (Sys {desc} | Com {desc}) = desc
+  let long = function
+    | Sys s -> Format.asprintf "%a" pp s
+    | Com c -> c.desc
+
+  let pp ppf = function
+    | Sys {name; desc} ->
+      Format.fprintf ppf "@[<hov3>-  %-40s:@\n%a@]@\n"
+        (Name.show name)
+        Format.pp_print_text desc
+    | Com {name; desc; spec} ->
+      Format.fprintf ppf "@[<hov2>- %a %s:@\n%a@]@\n@\n"
+        Name.pp name
+        (if spec then "[analysis]" else "[generic]")
+        Format.pp_print_text desc
+end

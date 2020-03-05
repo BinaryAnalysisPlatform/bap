@@ -125,29 +125,20 @@ module Main(Machine : Primus.Machine.S) = struct
     ]
 end
 
+let desc =
+  "Provides a set of operations to store and manipulate interval \
+   trees. The module provides a persistent storage for intervals, \
+   denoted in the module as regions, since these intervals \
+   often represent memory regions. Intervals are stored in interval \
+   sets, that are implemented as efficient interval tree data \
+   structures (using AVL trees underneath the hood). Each interval \
+   set is denoted with a symbol, and it is possible to create \
+   arbitrary number of sets, as well as move regions from one set to \
+   another."
 
-module Interface = struct
-  open Config
-
-  ;;
-
-  Config.manpage [
-    `S "DESCRIPTION";
-    `P
-      "Provides a set of operations to store and manipulate interval
-    trees. The module provides a persistent storage for intervals,
-    denoted in the module as regions, since these intervals
-    often represent memory regions. Intervals are stored in interval
-    sets, that are implemented as efficient interval tree data
-    structures (using AVL trees underneath the hood). Each interval
-    set is denoted with a symbol, and it is possible to create
-    arbitrary number of sets, as well as move regions from one set to
-    another."
-  ];;
-
-  Config.when_ready (fun _ ->
-      Primus.Machine.add_component (module Main) [@warning "-D"];
-      Primus.Components.register_generic "regions" (module Main)
-        ~package:"primus-lisp"
-        ~desc:"provides interval-trees to Primus Lisp")
-end
+let () = Config.manpage [`S "DESCRIPTION"; `P desc]
+let () = Config.when_ready @@ fun _ ->
+  Primus.Machine.add_component (module Main) [@warning "-D"];
+  Primus.Components.register_generic "regions" (module Main)
+    ~package:"lisp"
+    ~desc

@@ -108,10 +108,12 @@ let () = Config.when_ready @@ fun {Config.get} ->
   Primus.Components.register_generic "constant-tracker-primitives"
     (module Primitives)
     ~package:"bap"
-    ~desc:"exposes the constant tracker to Primus Lisp";
+    ~desc:"Exposes the constant tracker primitives to Primus Lisp.";
   Primus.Components.register_generic "constant-tracker"
     (module Tracker)
     ~package:"bap"
-    ~desc:"tracks constants";
+    ~desc:"Tracks constants, using the following policy. A value \
+           is a static constant if it was initialized from a \
+           constant value or computed from static constant values. ";
   if get enable then
     Primus.Machine.add_component (module Tracker) [@warning "-D"]

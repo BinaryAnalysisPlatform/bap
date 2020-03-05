@@ -259,5 +259,7 @@ let main _proj =
 
 let () = (Config.when_ready (fun _ ->
     Primus.Components.register_generic "hunter" (module Hunter)
-      ~package:"beagle";
+      ~package:"beagle"
+      ~desc:"Monitors execution and detects data that looks like \
+             words from the provided dictionary.";
     Project.register_pass' ~deps:["strings-collect"] main))
