@@ -4,31 +4,35 @@ open Bap.Std
 open Bap_primus_types
 open Format
 
+let package = "primus"
+
 
 module System = Bap_primus_system
 
 let components = ref 0
-let system = ref @@ System.define "legacy-main"
-    ~package:"primus"
+
+let () = System.Repository.add @@ System.define "legacy-main"
+    ~package
     ~components:[
-      System.component ~package:"primus" "binary-program";
+      System.component ~package "binary-program";
     ]
     ~desc:"The legacy Primus system that contains
-all components registered with the Machine.add_component
-function."
+           all components registered with the Machine.add_component
+           function."
+
 
 let add_component component =
-  let package = "primus-internal" in
   incr components;
   let name = sprintf "legacy-main-component-%d" !components in
-  system := System.add_component !system ~package name;
-  System.Components.register_generic ~package name component
-    ~desc:"an anonymous component registered via the legacy interface"
+  System.Components.register_generic name component
+    ~package
+    ~desc:"an anonymous component of the legacy main system";
+  System.Repository.update ~package "legacy-main" ~f:(fun system ->
+      System.add_component system ~package name)
 
 module Main(Machine : Machine) = struct
-  module System = System.Generic(Machine)
+  include System.Generic(Machine)
   let run ?envp ?args proj user =
-    System.run ?envp ?args ~start:user !system proj
+    let main = System.Repository.get ~package "legacy-main" in
+    run ?envp ?args ~start:user main proj
 end
-
-let legacy_main_system () = !system

@@ -259,7 +259,7 @@ let on_failure job conflict : Primus.Jobs.action =
 let main {Config.get=(!)} proj =
   let open Param in
   let state = Toplevel.current () in
-  let sys = Primus.Machine.legacy_main_system () [@warning "-D"] in
+  let sys = Primus.System.Repository.get ~package:"primus" "legacy-main" in
   let enqueue_jobs = if !in_isolation
     then enqueue_separate_jobs else enqueue_super_job in
   let inputs = parse_entry_points proj !entry in

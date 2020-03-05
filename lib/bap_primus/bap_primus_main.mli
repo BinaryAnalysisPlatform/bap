@@ -11,6 +11,4 @@ module Main(M : Machine) : sig
     (exit_status * project) M.m
 end
 
-val legacy_main_system : unit -> Bap_primus_system.t
-
 val add_component : component -> unit

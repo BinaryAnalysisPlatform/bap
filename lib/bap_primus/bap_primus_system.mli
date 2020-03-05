@@ -32,6 +32,8 @@ val pp_parse_error : Format.formatter -> parse_error -> unit
 module Repository : sig
   val add : system -> unit
   val get : ?package:string -> string -> system
+  val find : Knowledge.Name.t -> system option
+  val update : ?package:string -> string -> f:(system -> system) -> unit
 end
 
 module Components : sig

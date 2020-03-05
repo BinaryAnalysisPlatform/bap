@@ -32,6 +32,8 @@ type system = t
 module Repository = struct
   let self = Hashtbl.create (module Name)
 
+  exception Not_found
+
   let add sys =
     if Hashtbl.mem self sys.name
     then invalid_argf "System named %s is already present in the repository"
@@ -42,7 +44,12 @@ module Repository = struct
     Hashtbl.find_exn self (Name.create ?package name)
 
   let find = Hashtbl.find self
-  let lookup = Hashtbl.find_exn self
+  let require = Hashtbl.find_exn self
+
+  let update ?package name ~f =
+    Hashtbl.update self (Name.create ?package name) ~f:(function
+        | None -> raise Not_found
+        | Some s -> f s)
 end
 
 let pp_names =
@@ -78,7 +85,7 @@ let add_component ?package s c = {
 let rec components sys =
   let init = Set.of_list (module Name) sys.components in
   List.fold sys.depends_on ~init ~f:(fun comps sys ->
-      Set.union comps @@ components (Repository.lookup sys))
+      Set.union comps @@ components (Repository.require sys))
 
 
 module Components = struct

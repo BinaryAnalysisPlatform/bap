@@ -599,14 +599,6 @@ module Std : sig
       *)
       val add_component : component -> unit
       [@@deprecated "[since 2020-03] use Components.register* instead"]
-
-
-      (** returns the [primus:legacy-main] system that is composed of
-          all components added via the {!add_component} function.
-      *)
-      val legacy_main_system : unit -> system
-      [@@deprecated "[since 2020-03] use the System interface"]
-
     end
 
     (** A runnable instance of Primus Machine.
@@ -889,6 +881,8 @@ module Std : sig
       module Repository : sig
         val add : system -> unit
         val get : ?package:string -> string -> system
+        val update : ?package:string -> string -> f:(system -> system) -> unit
+        val find : Knowledge.Name.t -> system option
       end
     end
 
