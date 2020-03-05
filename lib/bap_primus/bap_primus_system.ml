@@ -69,10 +69,11 @@ let pp_names =
 let pp ppf {name; components; depends_on; desc} =
   Format.fprintf ppf
     "@[<v2>(defsystem %a@\n\
-     :description %s@\n\
-     :depends-on @[<v2>(%a)@]
-     :components @[<v2>(%a)@])@]"
-    Name.pp name desc
+     :description \"@[<hov>%a@]\"@\n\
+     :depends-on (@[<v>%a@])@\n\
+     :components (@[<v>%a@]))@]"
+    Name.pp name
+    Format.pp_print_text desc
     pp_names depends_on
     pp_names components
 
@@ -229,6 +230,7 @@ module Parser = struct
     | Defsystem
     | Literal_description
     | List_of_components
+    | List_of_systems
     | Keyword
     | Known_keyword
     | Component
@@ -258,13 +260,16 @@ module Parser = struct
 
   let empty name = {name; desc=""; components=[]; depends_on=[]}
 
-  let push_name name s =
+  let comp name s =
     {s with components = Name.read name :: s.components}
 
-  let rec parse_components : t -> Sexp.t list -> (t,error) Result.t =
+  let deps name s =
+    {s with depends_on = Name.read name :: s.depends_on}
+
+  let rec parse_specs push : t -> Sexp.t list -> (t,error) Result.t =
     fun sys -> function
       | [] -> Ok sys
-      | Atom name :: comps -> parse_components (push_name name sys) comps
+      | Atom name :: comps -> parse_specs push (push name sys) comps
       | other :: _ ->
         Error {expects=Component; got=other}
 
@@ -280,12 +285,19 @@ module Parser = struct
       | Atom ":description" :: [] ->
         Error {expects=Literal_description; got=List []}
       | Atom ":components" :: List comps :: items ->
-        Result.bind (parse_components sys comps)
+        Result.bind (parse_specs comp sys comps)
+          ~f:(fun sys -> parse_items sys items)
+      | Atom ":depends-on" :: List comps :: items ->
+        Result.bind (parse_specs deps sys comps)
           ~f:(fun sys -> parse_items sys items)
       | Atom ":components" :: (Atom _ as atom) :: _ ->
         Error {expects=List_of_components; got=atom}
       | Atom ":components" :: [] ->
         Error {expects=List_of_components; got=List []}
+      | Atom ":depends-on" :: (Atom _ as atom) :: _ ->
+        Error {expects=List_of_systems; got=atom}
+      | Atom ":depends-on" :: [] ->
+        Error {expects=List_of_systems; got=List []}
       | Atom _ as unknown :: _ ->
         Error {expects=Known_keyword; got=unknown}
 
@@ -316,8 +328,13 @@ module Parser = struct
       pr ppf "expected: :description <string>, got %a" Sexp.pp other
     | {expects=List_of_components; got=List []} ->
       pr ppf "expects a list of components, got nothing"
+    | {expects=List_of_systems; got=List []} ->
+      pr ppf "expects a list of systems, got nothing"
     | {expects=List_of_components; got=atom} ->
       pr ppf "expects a list of components, got an atom %a\
+              (add parentheses)" Sexp.pp atom
+    | {expects=List_of_systems; got=atom} ->
+      pr ppf "expects a list of systems, got an atom %a\
               (add parentheses)" Sexp.pp atom
     | {expects=Keyword; got=list} ->
       pr ppf "expects an option name, got list %a" Sexp.pp list
@@ -442,11 +459,20 @@ module Info = struct
   let desc (Sys {desc} | Com {desc}) = desc
   let long = function
     | Sys s -> Format.asprintf "%a" pp s
-    | Com c -> c.desc
+    | Com {name} ->
+      let uses =
+        Hashtbl.data Repository.self |>
+        List.filter_map ~f:(fun sys ->
+            if Set.mem (components sys) name
+            then Some (Format.asprintf "- %a" Name.pp sys.name)
+            else None) in
+      let pp_uses = Format.pp_print_list Format.pp_print_string in
+      Format.asprintf "@[<v2>Used in the following systems:@\n%a@]"
+        pp_uses uses
 
   let pp ppf = function
     | Sys {name; desc} ->
-      Format.fprintf ppf "@[<hov3>-  %-40s:@\n%a@]@\n"
+      Format.fprintf ppf "@[<hov2>- %s:@\n%a@]@\n@\n"
         (Name.show name)
         Format.pp_print_text desc
     | Com {name; desc; spec} ->

@@ -6,7 +6,7 @@ Flag primus_systems
 Library primus_systems_plugin
   Build$:       flag(everything) || flag(primus_systems)
   Path:         plugins/primus_systems
-  BuildDepends: bap-primus, bap-main, core_kernel
+  BuildDepends: bap-primus, bap-main, core_kernel, bap-knowledge
   FindlibName:     bap-plugin-primus_systems
   CompiledObject:  best
   InternalModules: Primus_systems_main,

@@ -95,12 +95,12 @@ module Exact(Machine : Primus.Machine.S) = struct
 end
 
 let components : (string * Primus.Machine.component * string) list = [
-  "propagate-exact",(module Exact),
+  "propagate-taint-exact",(module Exact),
   "Enables the exact taint propagation policy. In this policy, a \
    taint is only propagated between values when one value is \
    derived from another using some transparent (not changing the \
    value computation), e.g., store, load, cast, concat, extract.";
-  "propagate-by-computation", (module Computation),
+  "propagate-taint-by-computation", (module Computation),
   "Enables the propagate-by-computation taint propagation policy. \
    In this policy, a value is tainted if it was computed using a \
    tainted value."

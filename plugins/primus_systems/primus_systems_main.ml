@@ -1,3 +1,4 @@
+open Bap_knowledge
 open Core_kernel
 open Bap_main
 open Bap_primus.Std
@@ -27,13 +28,27 @@ let () = Extension.declare @@ fun ctxt ->
               List.iter systems ~f:(Primus.System.Repository.add)));
   Ok ()
 
+let names =
+  Extension.(Command.argument Type.(list string))
 
-let () = Extension.Command.(declare "primus-systems" args) @@ fun _ctxt ->
-  Primus.System.Repository.list () |>
-  List.iter ~f:(Primus.Info.pp Format.std_formatter);
+let make_info_command list name =
+  Extension.Command.(declare name (args $ names)) @@ fun names _ctxt ->
+  let detailed = match names with [_] -> true | _ -> false in
+  let names = List.map names Knowledge.Name.of_string |>
+              Set.of_list (module Knowledge.Name) in
+  let selected info =
+    Set.is_empty names || Set.mem names (Primus.Info.name info) in
+  list () |> List.iter ~f:(fun info ->
+      if selected info then begin
+        Format.printf "%a" Primus.Info.pp info;
+        if detailed
+        then Format.printf "%s@\n" (Primus.Info.long info);
+      end);
   Ok ()
 
-let () = Extension.Command.(declare "primus-components" args) @@ fun _ctxt ->
-  Primus.Components.list () |>
-  List.iter ~f:(Primus.Info.pp Format.std_formatter);
-  Ok ()
+
+let () =
+  make_info_command
+    Primus.System.Repository.list "primus-systems";
+  make_info_command
+    Primus.Components.list "primus-components"

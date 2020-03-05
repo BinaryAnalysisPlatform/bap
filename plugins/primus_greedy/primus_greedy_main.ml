@@ -79,8 +79,8 @@ let desc =
 let register enabled =
   if enabled
   then Primus.Machine.add_component (module Greedy) [@warning "-D"];
-  Primus.Components.register_generic "greedy-scheduler"
-    (module Greedy)
+  Primus.Components.register_generic "greedy-scheduler" (module Greedy)
+    ~package:"bap"
     ~desc:("Enables the greedy scheduler. " ^ desc)
 
 
