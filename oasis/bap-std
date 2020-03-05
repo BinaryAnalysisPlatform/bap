@@ -195,11 +195,3 @@ Library sema
                  Bap_sema_ssa,
                  Bap_sema_taint,
                  Bap_sema_free_vars
-
-Executable "postinstall"
-  Build$:         flag(everything) || flag(bap_std)
-  Path:           tools
-  MainIs:         postinstall.ml
-  Install:        false
-  CompiledObject: best
-  BuildDepends:   fileutils
