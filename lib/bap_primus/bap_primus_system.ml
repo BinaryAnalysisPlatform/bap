@@ -48,16 +48,19 @@ module Repository = struct
         (Name.show sys.name) ();
     Hashtbl.add_exn self sys.name sys
 
+  let require name =
+    match Hashtbl.find self name with
+    | Some sys -> sys
+    | None -> failwithf "Unknown system %s" (Name.show name) ()
+
   let get ?package name =
-    Hashtbl.find_exn self (Name.create ?package name)
+    require @@ Name.create ?package name
 
   let find = Hashtbl.find self
-  let require = Hashtbl.find_exn self
 
   let update ?package name ~f =
-    Hashtbl.update self (Name.create ?package name) ~f:(function
-        | None -> raise Not_found
-        | Some s -> f s)
+    let name = Name.create ?package name in
+    Hashtbl.set self name (f (require name))
 
   let list () = Hashtbl.data self |>
                 List.map ~f:(fun s -> Sys s)
@@ -143,10 +146,16 @@ module Components = struct
       let comps = Set.diff (components system) loaded in
       Set.to_list comps |>
       Machine.List.iter ~f:(fun name ->
-          let {init=(module Gen : Component)} =
-            Hashtbl.find_exn generics name in
-          let module Comp = Gen(Machine) in
-          Comp.init ())
+          match Hashtbl.find generics name with
+          | Some {init=(module Gen : Component)} ->
+            let module Comp = Gen(Machine) in
+            Comp.init ()
+          | None ->
+            failwithf "failed to find a component %s \
+                       required for system %s"
+              (Name.show name)
+              (Name.show system.name)
+              ())
 
     let init_system s =
       do_init s (Set.empty (module Name))

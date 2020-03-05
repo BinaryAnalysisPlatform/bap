@@ -7,7 +7,7 @@
 
 (defsystem bap:base-lisp-machine
   :description "Executes Primus Lisp program."
-  :components (lisp:load-binary
+  :components (lisp:load-library
                lisp:core
                lisp:primitives
                lisp:ieee754

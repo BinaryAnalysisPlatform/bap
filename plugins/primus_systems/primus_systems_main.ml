@@ -48,7 +48,7 @@ let make_info_command list name =
   let name = sprintf "primus-%ss" name in
   Extension.Command.(declare ~doc name (args $ names)) @@ fun names _ctxt ->
   let detailed = match names with [_] -> true | _ -> false in
-  let names = List.map names Knowledge.Name.of_string |>
+  let names = List.map names Knowledge.Name.read |>
               Set.of_list (module Knowledge.Name) in
   let selected info =
     Set.is_empty names || Set.mem names (Primus.Info.name info) in

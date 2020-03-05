@@ -68,8 +68,13 @@ module Param = struct
       were visited during the run of other ones.
       And this option disables this behavior and runs all the
       subroutines in a row. "
-end
 
+  let systems = param_all (list string) "systems"
+      ~default:[["bap:legacy-main"]]
+      ~doc:"Runs the specified Primus systems. If several systems \
+            are specified then runs all entry points for each \
+            specified system."
+end
 
 let pp_id = Monad.State.Multi.Id.pp
 
@@ -259,11 +264,15 @@ let on_failure job conflict : Primus.Jobs.action =
 let main {Config.get=(!)} proj =
   let open Param in
   let state = Toplevel.current () in
-  let sys = Primus.System.Repository.get ~package:"bap" "legacy-main" in
   let enqueue_jobs = if !in_isolation
     then enqueue_separate_jobs else enqueue_super_job in
   let inputs = parse_entry_points proj !entry in
-  enqueue_jobs !with_repetitions !envp !argv sys inputs;
+  List.concat !systems |> List.iter ~f:(fun sys ->
+      let name = Knowledge.Name.read sys in
+      match Primus.System.Repository.find name with
+      | None -> invalid_argf "Unknown system: %s" sys ()
+      | Some sys ->
+        enqueue_jobs !with_repetitions !envp !argv sys inputs) ;
   let result = Primus.Jobs.run ~on_failure ~on_success proj state in
   Toplevel.set (Primus.Jobs.knowledge result);
   Primus.Jobs.project result
