@@ -147,8 +147,8 @@ let load_lisp_program dump paths features =
       Lisp.link_program prog;
   end in
   Primus.Machine.add_component (module Loader) [@warning "-D"];
-  Primus.Components.register_generic "load-library" (module Loader)
-    ~package:"lisp"
+  Primus.Components.register_generic "load-lisp-library" (module Loader)
+    ~package:"bap"
     ~desc:"Loads the Primus Library. Links all functions defined as \
            external into the Primus Machine. Symbols are assumed to \
            be strong, i.e., if the symbol is already linked, then \
@@ -287,17 +287,17 @@ let () =
         Project.register_pass' ~deps:["api"] ~autorun:true typecheck;
       let paths = [Filename.current_dir_name] @ !!libs @ [Lisp_config.library] in
       let features = "init" :: !!features in
-      Primus.Components.register_generic ~package:"lisp" "type-checker"
+      Primus.Components.register_generic ~package:"bap" "lisp-type-checker"
         (module TypeErrorSummary)
         ~desc:"Typechecks program and outputs the summary in the standard output.";
       Primus.Machine.add_component (module LispCore) [@warning "-D"];
-      Primus.Components.register_generic "core" (module LispCore)
-        ~package:"lisp"
+      Primus.Components.register_generic "lisp-core" (module LispCore)
+        ~package:"bap"
         ~desc:"Initializes Primus Lisp core. Forwards Lisp message to \
                the BAP log subsystem and enables propagation of \
                observations to signals.";
       Primus.Machine.add_component (module TypeErrorPrinter) [@warning "-D"];
-      Primus.Components.register_generic ~package:"lisp" "type-error-printer"
+      Primus.Components.register_generic ~package:"bap" "lisp-type-error-printer"
         (module TypeErrorPrinter)
         ~desc:"Prints Primus Lisp type errors into the standard output.";
       Channels.init !!redirects;

@@ -110,8 +110,8 @@ module Jobs : sig
   val finished : result -> Job.t list
 
   val run :
-    ?on_failure:(Job.t -> Knowledge.conflict -> action) ->
-    ?on_success:(Job.t -> exit_status -> Knowledge.state -> action) ->
+    ?on_failure:(Job.t -> Knowledge.conflict -> result -> action) ->
+    ?on_success:(Job.t -> exit_status -> Knowledge.state -> result -> action) ->
     project -> Knowledge.state -> result
 end
 

@@ -996,8 +996,8 @@ module Std : sig
           unless explicitly stopped.
       *)
       val run :
-        ?on_failure:(Job.t -> Knowledge.conflict -> action) ->
-        ?on_success:(Job.t -> exit_status -> Knowledge.state -> action) ->
+        ?on_failure:(Job.t -> Knowledge.conflict -> result -> action) ->
+        ?on_success:(Job.t -> exit_status -> Knowledge.state -> result -> action) ->
         project -> Knowledge.state -> result
 
       (** [knowledge result] is the knowledge obtained from running
@@ -1007,7 +1007,6 @@ module Std : sig
 
       (** [project result] is the final static representation of program.  *)
       val project : result -> project
-
 
       (** [failures result] is the list of failed jobs.
 

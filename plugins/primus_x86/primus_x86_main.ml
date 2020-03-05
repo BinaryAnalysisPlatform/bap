@@ -7,7 +7,7 @@ let init _ =
     (module Primus_x86_loader.InitializeFlags)
   [@warning "-D"];
   Primus.Components.register_generic
-    ~package:"x86" "flag-initializer"
+    ~package:"bap" "x86-flag-initializer"
     (module Primus_x86_loader.InitializeFlags)
     ~desc:"Intializes x86 flags to zero.";
 
@@ -15,7 +15,7 @@ let init _ =
     (module Primus_x86_loader.SetupPLT)
   [@warning "-D"];
   Primus.Components.register_generic
-    ~package:"x86" "setup-plt"
+    ~package:"bap" "x86-setup-plt"
     (module Primus_x86_loader.SetupPLT)
     ~desc:"Sets up PLT entries."
 ;;

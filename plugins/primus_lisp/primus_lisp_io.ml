@@ -281,6 +281,6 @@ let init redirections =
       ]
   end in
   Primus.Machine.add_component (module Primitives) [@warning "-D"];
-  Primus.Components.register_generic "basic-io" (module Primitives)
-    ~package:"lisp"
+  Primus.Components.register_generic "lisp-basic-io" (module Primitives)
+    ~package:"bap"
     ~desc:"Provides basic IO primitives to Primus Lisp."

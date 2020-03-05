@@ -2,19 +2,19 @@
   :description "Executes a binary program."
   :components (bap:load-binary
                bap:program-loader
-               x86:flag-initializer
-               powerpc:init))
+               bap:x86-flag-initializer
+               bap:powerpc-init))
 
 (defsystem bap:base-lisp-machine
   :description "Executes Primus Lisp program."
-  :components (lisp:load-library
-               lisp:core
-               lisp:primitives
-               lisp:ieee754
-               lisp:type-error-printer
-               lisp:basic-io
-               lisp:dictionary
-               lisp:regions))
+  :components (bap:load-lisp-library
+               bap:lisp-core
+               bap:lisp-primitives
+               bap:lisp-ieee754
+               bap:lisp-type-error-printer
+               bap:lisp-basic-io
+               bap:lisp-dictionary
+               bap:lisp-regions))
 
 (defsystem bap:stubbed-executor
   :description "Executes a binary together with the Lisp Machine"
@@ -33,7 +33,10 @@
   :depends-on (bap:terminating-stubbed-executor)
   :components (bap:greedy-scheduler
                bap:promiscuous-mode
+               bap:incident-location-recorder
+               bap:lisp-incidents
                bap:mark-visited))
+
 
 (defsystem bap:base-taint-analyzer
   :description "Uses greedy-promiscuous-executor for taint analysis. \

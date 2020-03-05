@@ -416,8 +416,8 @@ module Jobs = struct
   }
 
   let run
-      ?(on_failure = fun _ _ -> Continue)
-      ?(on_success = fun _ _ _ -> Continue) =
+      ?(on_failure = fun _ _ _ -> Continue)
+      ?(on_success = fun _ _ _ _ -> Continue) =
     let rec process result ({Job.envp; args; init; start; system} as job) =
       Components.run system result.project result.state
         ~envp ~args ~init ~start |> function
@@ -426,11 +426,11 @@ module Jobs = struct
       | Error conflict ->
         handle_failure job conflict result
     and handle_success job status proj state result =
-      match on_success job status state with
+      match on_success job status state result with
       | Continue -> continue (success job proj state result)
       | Stop -> result
     and handle_failure job problem result =
-      match on_failure job problem with
+      match on_failure job problem result with
       | Continue -> continue (conflict job problem result)
       | Stop -> result
     and continue result = match Queue.dequeue jobs with

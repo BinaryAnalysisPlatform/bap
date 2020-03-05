@@ -128,6 +128,6 @@ let () = Config.manpage [
 
 let () = Config.when_ready @@ fun _ ->
   Primus.Machine.add_component (module Main) [@warning "-D"];
-  Primus.Components.register_generic "dictionary" (module Main)
-    ~package:"lisp"
+  Primus.Components.register_generic "lisp-dictionary" (module Main)
+    ~package:"bap"
     ~desc

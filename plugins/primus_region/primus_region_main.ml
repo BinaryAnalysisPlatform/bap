@@ -139,6 +139,6 @@ let desc =
 let () = Config.manpage [`S "DESCRIPTION"; `P desc]
 let () = Config.when_ready @@ fun _ ->
   Primus.Machine.add_component (module Main) [@warning "-D"];
-  Primus.Components.register_generic "regions" (module Main)
-    ~package:"lisp"
+  Primus.Components.register_generic "lisp-regions" (module Main)
+    ~package:"bap"
     ~desc

@@ -218,14 +218,14 @@ let run need_repeat entries =
           never_returns
         else
           exec x >>= fun () ->
-          report_progress ~stage ~total ();
+          report_progress ~task:"multi-task-job" ~stage ~total ();
           Eval.halt >>=
           never_returns in
   loop 0 entries
 
 let enqueue_super_job need_repeat envp args sys xs =
   Primus.Jobs.enqueue sys ~envp ~args
-    ~name:"super-job"
+    ~name:"multi-task"
     ~desc:"runs all entries in one system"
     ~start:(run need_repeat xs)
 
@@ -239,26 +239,31 @@ let is_visited proj = function
       | Some blk -> Term.has_attr blk Term.visited
 
 let enqueue_separate_jobs need_repeat envp args sys xs =
-  let total = List.length xs in
-  List.iteri xs ~f:(fun stage p ->
+  List.iter xs ~f:(fun p ->
       Primus.Jobs.enqueue sys
         ~args ~envp
         ~name:(Primus.Linker.Name.to_string p)
         ~start:begin
           Machine.get () >>= fun proj ->
-          report_progress ~stage ~total ();
           if not need_repeat && is_visited proj p
           then Machine.return ()
           else exec p
         end)
 
-let on_success job _ _ : Primus.Jobs.action =
+let update_progress result =
+  let finished = List.length@@Primus.Jobs.finished result in
+  let total = finished + Primus.Jobs.pending () + 1 in
+  report_progress ~stage:finished ~total ()
+
+let on_success job _ _ result : Primus.Jobs.action =
   info "job %s finished successfully" (Primus.Job.name job);
+  update_progress result;
   Continue
 
-let on_failure job conflict : Primus.Jobs.action =
+let on_failure job conflict result : Primus.Jobs.action =
   info "job %s failed to converge and exited with conflict: %a"
     (Primus.Job.name job) Knowledge.Conflict.pp conflict;
+  update_progress result;
   Continue
 
 let main {Config.get=(!)} proj =
@@ -273,6 +278,7 @@ let main {Config.get=(!)} proj =
       | None -> invalid_argf "Unknown system: %s" sys ()
       | Some sys ->
         enqueue_jobs !with_repetitions !envp !argv sys inputs) ;
+  report_progress ~total:(Primus.Jobs.pending ()) ();
   let result = Primus.Jobs.run ~on_failure ~on_success proj state in
   Toplevel.set (Primus.Jobs.knowledge result);
   Primus.Jobs.project result
