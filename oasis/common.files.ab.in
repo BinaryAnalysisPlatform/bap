@@ -1,2 +1,2 @@
-FilesAB:  tools/bap_config.ab,
-          tools/postinstall.ml.ab
+FilesAB:  tools/bap_config.ab
+        , tools/postinstall.ml.ab
