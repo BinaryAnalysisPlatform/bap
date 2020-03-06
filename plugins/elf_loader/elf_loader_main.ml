@@ -15,7 +15,7 @@ let () = Config.manpage [
     `S "DESCRIPTION";
     `P "An ELF image loader written in pure OCaml.";
     `S "SEE ALSO";
-    `P "$(b,bap-elf)(3), $(bap-plugin-llvm)(1)"
+    `P "$(b,bap-elf)(3), $(b,bap-plugin-llvm)(1)"
   ]
 
 let name = "bap-elf"
