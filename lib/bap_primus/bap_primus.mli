@@ -11,12 +11,61 @@ open Bap_strings.Std
 module Std : sig
   (** Primus - The Microexecution Framework.
 
+      {2 Overview}
+
       Primus is a microexecution framework that can be used to implement
-      CPU and full system emulators, symbolic executers, static
+      CPU and full system emulators, symbolic executors, static
       fuzzers, policy checkers, tracers, quickcheck-like test suites,
       etc.
 
-      Primus is an extensible non-deterministic interpreter of BAP IR.
+      The core of Primus is the Primus Machine monad transformer that
+      implements the observable non-deterministic computation
+      model. The core functionality is extended by libraries and
+      components. A Primus library doesn't change the behavior of the
+      Primus Machine, but it extends the set of operations. The core
+      libraries are:
+
+      - Interpreter - interprets programs in BAP IR;
+      - Env - provides a mapping from variables to values
+      - Memory - provides a mapping from memory locations to values;
+      - Linker - provides a mapping from program labels to code;
+      - Lisp - provides the Primus Lisp interpreter.
+
+      The behavior of the Primus Machine is defined by the components
+      that comprise that machine. A particular buld of the Machine is
+      called a _system_. A system could be seen as an Primus
+      application and as an application it could be run.
+
+      To summarize, components use libraries to implement analysis,
+      that is as a system and could be run to obtain the results of
+      the analysis or to observe its side-effects.
+
+      The next few sections will elaborate on certain features of the
+      Primus framework.
+
+      {2 Observations}
+
+      An important part of the Primus Machine computational model is
+      that it is extensible through user callbacks. The callbacks are
+      inserted at predefined extension points, called _observations_.
+      Observations are made during computation, e.g., when an
+      Interperter evaluates a binary operation it posts an
+      observation, that includes the operation operands and the
+      computed value. All parties interested in this observation are
+      invoked and they then can change the state of the machine using
+      other machine operations, post their own observations, and, in
+      general can do anything that Primus Machine allows, since an
+      observer callback is a Primus Machine computation.
+
+
+
+
+
+      Components are the main building blocks of Primus. They change
+      the behavior of the Primus Machine. A particular build of the
+      Primus Machine, i.e.
+
+
       Primus provides a set of extension points through which it is
       possible to track what it interpreter is doing, examine its
       state, and even change the semantics of operatons (to a limited
@@ -35,11 +84,6 @@ module Std : sig
       not observable as every thread of execution (called `machine' in
       our parlance) sees a totally deterministic word.
 
-      Primus is built from components. The core components are:
-      - Env - provides mapping from variables to values
-      - Memory - provides mapping from memory locations to values;
-      - Linker - provides mapping from labels to code;
-      - Lisp - enables Lisp-like DSL.
 
 
       A new component could be added to Primus to extend its
@@ -140,7 +184,9 @@ module Std : sig
           an observed value, that will be used for introspection and
           pretty-printing (it is not required, and if it is provided, it
           is not necessary to disclose everything *)
-      val provide : ?inspect:('a -> Sexp.t) -> string -> 'a observation * 'a statement
+      val provide : ?desc:string -> ?inspect:('a -> Sexp.t) ->
+        ?package:string ->
+        string -> 'a observation * 'a statement
 
 
       (** [name observation] is a name of the observed attribute.  *)
@@ -154,6 +200,9 @@ module Std : sig
       (** enumerate all currently available observation providers  *)
       val list_providers : unit -> provider list
 
+
+      (** [list ()] introspects all available observations.  *)
+      val list : unit -> info list
 
       (** Data interface to the provider.
 

@@ -4,6 +4,7 @@ open Bap_knowledge
 open Core_kernel
 
 module Name = Knowledge.Name
+module Info = Bap_primus_info
 module Observation = Bap_primus_observation
 module Machine = Bap_primus_machine
 
@@ -28,14 +29,6 @@ type t = {
 }
 
 type system = t
-
-type info =
-  | Sys of system
-  | Com of {
-      name : Name.t;
-      desc : string;
-      spec : bool;
-    }
 
 module Repository = struct
   let self = Hashtbl.create (module Name)
@@ -62,8 +55,9 @@ module Repository = struct
     let name = Name.create ?package name in
     Hashtbl.set self name (f (require name))
 
-  let list () = Hashtbl.data self |>
-                List.map ~f:(fun s -> Sys s)
+  let list () =
+    Hashtbl.data self |> List.map ~f:(fun {desc; name}  ->
+        Info.create ~desc name)
 end
 
 let pp_names =
@@ -97,11 +91,11 @@ let name t = t.name
 let add_component ?package s c = {
   s with components = Name.create ?package c :: s.components}
 
+
 let rec components sys =
   let init = Set.of_list (module Name) sys.components in
   List.fold sys.depends_on ~init ~f:(fun comps sys ->
       Set.union comps @@ components (Repository.require sys))
-
 
 module Components = struct
   open Bap_primus_types
@@ -124,10 +118,25 @@ module Components = struct
   let register_generic = add_component "generic" generics
   let register = add_component "specialized" analyses
 
+  let long name =
+    let uses =
+      Hashtbl.data Repository.self |>
+      List.filter_map ~f:(fun sys ->
+          if Set.mem (components sys) name
+          then Some (Format.asprintf "- %a" Name.pp sys.name)
+          else None) in
+    let pp_uses = Format.pp_print_list Format.pp_print_string in
+    Format.asprintf "@[<v2>Used in the following systems:@\n%a@]"
+      pp_uses uses
+
+
   let info ~spec repo =
     Hashtbl.to_alist repo |> List.filter_map ~f:(fun (name,{desc;hide}) ->
         if hide then None
-        else Some (Com {name; desc; spec}))
+        else
+          let desc = sprintf "[%s]\n%s"
+              (if spec then "analysis" else "generic") desc in
+          Some (Info.create ~desc name ~long:(fun () -> long name)))
 
   let list () = info ~spec:true analyses @
                 info ~spec:false generics
@@ -461,32 +470,3 @@ let () = Components.register_generic
             All symbols of the binary program are linked weakly, \
             i.e., if a symbol is already linked, then this component \
             will not override it."
-
-
-module Info = struct
-  let name (Sys {name} | Com {name}) = name
-  let desc (Sys {desc} | Com {desc}) = desc
-  let long = function
-    | Sys s -> Format.asprintf "%a" pp s
-    | Com {name} ->
-      let uses =
-        Hashtbl.data Repository.self |>
-        List.filter_map ~f:(fun sys ->
-            if Set.mem (components sys) name
-            then Some (Format.asprintf "- %a" Name.pp sys.name)
-            else None) in
-      let pp_uses = Format.pp_print_list Format.pp_print_string in
-      Format.asprintf "@[<v2>Used in the following systems:@\n%a@]"
-        pp_uses uses
-
-  let pp ppf = function
-    | Sys {name; desc} ->
-      Format.fprintf ppf "@[<hov2>- %s:@\n%a@]@\n@\n"
-        (Name.show name)
-        Format.pp_print_text desc
-    | Com {name; desc; spec} ->
-      Format.fprintf ppf "@[<hov2>- %a %s:@\n%a@]@\n@\n"
-        Name.pp name
-        (if spec then "[analysis]" else "[generic]")
-        Format.pp_print_text desc
-end

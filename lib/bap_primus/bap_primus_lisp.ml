@@ -762,38 +762,18 @@ module Doc = struct
     val pp : formatter -> t -> unit
   end
 
+  open Bap_knowledge
+
+  module Info = Bap_primus_info
+
   module Category = String
-  module Name = String
+  module Name = Knowledge.Name
   module Descr = String
 
-  type index = (string * (string * string) list) list
-
-
-  let unquote s =
-    if String.is_prefix s ~prefix:{|"|} &&
-       String.is_suffix s ~suffix:{|"|}
-    then String.sub s ~pos:1 ~len:(String.length s - 2)
-    else s
-
-  let dedup_whitespace str =
-    let buf = Buffer.create (String.length str) in
-    let push = Buffer.add_char buf in
-    String.fold str ~init:`white ~f:(fun state c ->
-        let ws = Char.is_whitespace c in
-        if not ws then push c;
-        match state,ws with
-        | `white,true  -> `white
-        | `white,false -> `black
-        | `black,true  -> push c; `white
-        | `black,false -> `black) |> ignore;
-    Buffer.contents buf
-
-  let normalize_descr s =
-    dedup_whitespace (unquote (String.strip s))
+  type index = (string * (Name.t * string) list) list
 
   let normalize xs =
-    List.Assoc.map xs ~f:normalize_descr |>
-    String.Map.of_alist_reduce ~f:(fun x y -> match x,y with
+    Map.of_alist_reduce (module Name) xs ~f:(fun x y -> match x,y with
         | "", y -> y
         | x, "" -> x
         | x,y when String.equal x y -> x
@@ -802,8 +782,9 @@ module Doc = struct
 
   let describe prog item =
     Lisp.Program.get prog item |> List.map ~f:(fun x ->
-        Lisp.Def.name x, Lisp.Def.docs x) |> normalize
-
+        let name = Name.create (Lisp.Def.name x) in
+        let info = Info.create ~desc:(Lisp.Def.docs x) name in
+        name,Info.desc info) |> normalize
 
   let index p = Lisp.Program.Items.[
       "Macros", describe p macro;

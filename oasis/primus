@@ -16,6 +16,7 @@ Library bap_primus
            Bap_primus_exn,
            Bap_primus_generator,
            Bap_primus_generator_types,
+           Bap_primus_info,
            Bap_primus_interpreter,
            Bap_primus_iterator,
            Bap_primus_linker,

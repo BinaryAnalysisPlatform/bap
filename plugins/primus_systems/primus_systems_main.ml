@@ -63,4 +63,5 @@ let make_info_command list name =
 
 let () =
   make_info_command Primus.System.Repository.list "system";
-  make_info_command Primus.Components.list "component"
+  make_info_command Primus.Components.list "component";
+  make_info_command Primus.Observation.list "observation"

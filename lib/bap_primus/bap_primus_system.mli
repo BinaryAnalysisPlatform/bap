@@ -3,10 +3,10 @@ open Bap_knowledge
 open Bap_primus_types
 
 module Observation = Bap_primus_observation
+module Info = Bap_primus_info
 
 type t
 type system = t
-type info
 
 type component_specification
 type system_specification
@@ -35,7 +35,7 @@ module Repository : sig
   val get : ?package:string -> string -> system
   val find : Knowledge.Name.t -> system option
   val update : ?package:string -> string -> f:(system -> system) -> unit
-  val list : unit -> info list
+  val list : unit -> Info.t list
 end
 
 module Components : sig
@@ -55,7 +55,7 @@ module Components : sig
     string -> unit Bap_primus_machine.Make(Knowledge).t ->
     unit
 
-  val list : unit -> info list
+  val list : unit -> Info.t list
 end
 
 module Generic(Machine : Bap_primus_types.Machine) : sig
@@ -113,11 +113,4 @@ module Jobs : sig
     ?on_failure:(Job.t -> Knowledge.conflict -> result -> action) ->
     ?on_success:(Job.t -> exit_status -> Knowledge.state -> result -> action) ->
     project -> Knowledge.state -> result
-end
-
-module Info : sig
-  val name : info -> Knowledge.Name.t
-  val desc : info -> string
-  val long : info -> string
-  val pp : Format.formatter -> info -> unit
 end

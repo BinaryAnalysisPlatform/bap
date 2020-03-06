@@ -22,7 +22,7 @@
                bap:base-lisp-machine))
 
 (defsystem bap:terminating-stubbed-executor
-  :description "Executes a binary together with the Lisp Machine that \
+  :description "Executes a binary together with the Lisp Machine that
                 is guaranteed to terminate."
   :depends-on (bap:binary-executor
                bap:base-lisp-machine)
@@ -39,14 +39,14 @@
 
 
 (defsystem bap:base-taint-analyzer
-  :description "Uses greedy-promiscuous-executor for taint analysis. \
+  :description "Uses greedy-promiscuous-executor for taint analysis.
                 No policy is specified"
   :depends-on (bap:greedy-promiscuous-executor)
   :components (bap:taint-primitives
                bap:taint-signals))
 
 (defsystem bap:taint-analyzer
-  :description "Uses greedy-promiscuous-executor for taint analysis. \
+  :description "Uses greedy-promiscuous-executor for taint analysis.
                 Propagates taint by computation."
   :depends-on (bap:base-taint-analyzer)
   :components (bap:propagate-taint-by-computation))
@@ -61,7 +61,7 @@
 
 
 (defsystem bap:exact-taint-analyzer
-  :description "Uses greedy-promiscuous-executor for taint analysis. \
+  :description "Uses greedy-promiscuous-executor for taint analysis.
                 Propagates taint exactly."
   :depends-on (bap:base-taint-analyzer)
   :components (bap:propagate-taint-exact))
