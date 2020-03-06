@@ -20,15 +20,16 @@ let man_of_help prog =
   man
 
 let bin_exists prog =
-  try ignore (FileUtil.which prog); true with Not_found -> false
+  Sys.command (sprintf "which %s" prog) = 0
 
 let create_man prog =
   if bin_exists prog then [man_of_help prog] else []
 
+let cp file = ignore @@ Sys.command (sprintf "cp %s %s" file mandir)
 
 let main () =
   let helps = List.map create_man tools |> List.concat in
-  FileUtil.mkdir ~parent:true mandir;
-  FileUtil.cp (manpages @ helps) mandir
+  if Sys.file_exists mandir && Sys.is_directory mandir then
+    List.iter cp (manpages @ helps)
 
 let () = main ()
