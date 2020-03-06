@@ -34,103 +34,160 @@ let memory_switch,switching_memory =
 
 let enter_term, term_entered =
   Observation.provide ~inspect:sexp_of_tid "enter-term"
+    ~desc:"Occurs before the given term.
+"
 let leave_term, term_left =
   Observation.provide ~inspect:sexp_of_tid "leave-term"
+    ~desc:"Occurs after the given term is evaluated."
+
 let enter_pos,pos_entered =
   Observation.provide ~inspect:Pos.sexp_of_t "enter-pos"
+    ~desc:"Occurs before the given position is evaluated."
+
 let leave_pos,pos_left =
   Observation.provide ~inspect:Pos.sexp_of_t "leave-pos"
+    ~desc:"Occurs after the given position is evaluated."
+
 let sexp_of_term term = sexp_of_tid (Term.tid term)
+
 let enter_sub,sub_entered =
   Observation.provide ~inspect:sexp_of_term "enter-sub"
+    ~desc:"Occurs before the given term is evaluated."
+
 let enter_arg,arg_entered =
   Observation.provide ~inspect:sexp_of_term "enter-arg"
+    ~desc:"Occurs before the given term is evaluated."
+
 let enter_blk,blk_entered =
   Observation.provide ~inspect:sexp_of_term "enter-blk"
+    ~desc:"Occurs before the given term is evaluated."
+
 let enter_phi,phi_entered =
   Observation.provide ~inspect:sexp_of_term "enter-phi"
+    ~desc:"Occurs before the given term is evaluated."
+
 let enter_def,def_entered =
   Observation.provide ~inspect:sexp_of_term "enter-def"
+    ~desc:"Occurs before the given term is evaluated."
+
 let enter_jmp,jmp_entered =
   Observation.provide ~inspect:sexp_of_term "enter-jmp"
+    ~desc:"Occurs before the given term is evaluated."
+
 let enter_top,top_entered =
   Observation.provide ~inspect:sexp_of_term "enter-top"
+    ~desc:"Occurs before the given term is evaluated."
+
 let leave_sub,sub_left =
   Observation.provide ~inspect:sexp_of_term "leave-sub"
+    ~desc:"Occurs after the given term is evaluated."
+
 let leave_arg,arg_left =
   Observation.provide ~inspect:sexp_of_term "leave-arg"
+    ~desc:"Occurs after the given term is evaluated."
+
 let leave_blk,blk_left =
   Observation.provide ~inspect:sexp_of_term "leave-blk"
+    ~desc:"Occurs after the given term is evaluated."
+
 let leave_phi,phi_left =
   Observation.provide ~inspect:sexp_of_term "leave-phi"
+    ~desc:"Occurs after the given term is evaluated."
+
 let leave_def,def_left =
   Observation.provide ~inspect:sexp_of_term "leave-def"
+    ~desc:"Occurs after the given term is evaluated."
+
 let leave_jmp,jmp_left =
   Observation.provide ~inspect:sexp_of_term "leave-jmp"
+    ~desc:"Occurs after the given term is evaluated."
+
 let leave_top,top_left =
   Observation.provide ~inspect:sexp_of_term "leave-top"
+    ~desc:"Occurs after the given term is evaluated."
 
 let enter_exp,exp_entered =
   Observation.provide ~inspect:sexp_of_exp "enter-exp"
+    ~desc:"Occurs before the given exp is evaluated."
 
 let leave_exp,exp_left =
   Observation.provide ~inspect:sexp_of_exp "leave-exp"
+    ~desc:"Occurs after the given exp is evaluated."
 
 let pc_change,pc_changed =
   Observation.provide ~inspect:sexp_of_word "pc-changed"
+    ~desc:"Occurs after the program counter is changed."
 
 let halting,will_halt =
   Observation.provide ~inspect:sexp_of_unit "halting"
+    ~desc:"Occurs before the halt operation is posted."
+
 
 let division_by_zero,will_divide_by_zero =
   Observation.provide ~inspect:sexp_of_unit "division-by-zero"
+    ~desc:"Occurs before the division by zero happens."
 
 let cfi_violation,cfi_will_diverge =
   Observation.provide ~inspect:sexp_of_word "cfi-violation"
+    ~desc:"Occurs before the control flow violation is commited."
 
 let segfault, will_segfault =
   Observation.provide ~inspect:sexp_of_word "segfault"
+    ~desc:"Occurs just before the segmentation fault."
 
 let pagefault,page_fail =
   Observation.provide ~inspect:sexp_of_word "pagefault"
+    ~desc:"Occurs on pagefault."
 
 let interrupt,will_interrupt =
   Observation.provide ~inspect:sexp_of_int "interrupt"
+    ~desc:"Occurs before an interrupt."
 
 let sexp_of_insn insn = Sexp.Atom (Insn.to_string insn)
 
 let loading,on_loading =
   Observation.provide ~inspect:sexp_of_value "loading"
+    ~desc:"Occurs just before the given address is dereferenced."
 
 let loaded,on_loaded =
   Observation.provide ~inspect:sexp_of_values "loaded"
+    ~desc:"Occurs after the given address is read."
 
 let storing,on_storing =
   Observation.provide ~inspect:sexp_of_value "storing"
+    ~desc:"Occurs before the value is stored at the address."
 
 let stored,on_stored =
   Observation.provide ~inspect:sexp_of_values "stored"
+    ~desc:"Occurs after the value is stored at the address."
 
 let reading,on_reading =
   Observation.provide ~inspect:sexp_of_var "reading"
+    ~desc:"Occurs before the given variable is read."
 
 let read,on_read =
   Observation.provide ~inspect:sexp_of_binding "read"
+    ~desc:"Occurs after the given variable is evaluated to the value."
 
 let writing,on_writing =
   Observation.provide ~inspect:sexp_of_var "writing"
+    ~desc:"Occurs before the value is assigned to the variable."
 
 let written,on_written =
   Observation.provide ~inspect:sexp_of_binding "written"
+    ~desc:"Occurs after the value is assigned to the variable."
 
 let undefined,on_undefined =
   Observation.provide ~inspect:sexp_of_value "undefined"
+    ~desc:"Occurs when an undefined value is created."
 
 let jumping,will_jump =
   Observation.provide ~inspect:sexp_of_values "jumping"
+    ~desc:"Occurs before the jump to the given destination."
 
 let eval_cond,on_cond =
   Observation.provide ~inspect:sexp_of_value "eval-cond"
+    ~desc:"Occurs when the jump condition is evaluated."
 
 
 let results r op = Sexp.List [op; sexp_of_value r]
@@ -172,24 +229,32 @@ let sexp_of_ite ((cond, yes, no), r) = results r @@ sexps [
 
 let binop,on_binop =
   Observation.provide ~inspect:sexp_of_binop "binop"
+    ~desc:"Occurs on each binary operation."
 
 let unop,on_unop =
   Observation.provide ~inspect:sexp_of_unop "unop"
+    ~desc:"Occurs on each unary operation."
 
 let cast,on_cast =
   Observation.provide ~inspect:sexp_of_cast "cast"
+    ~desc:"Occurs on each cast."
 
 let extract,on_extract =
   Observation.provide ~inspect:sexp_of_extract "extract"
+    ~desc:"Occurs on each extract operation."
 
 let concat,on_concat =
   Observation.provide ~inspect:sexp_of_concat "concat"
+    ~desc:"Occurs on each concat operation."
 
 let const,on_const =
   Observation.provide ~inspect:sexp_of_value "const"
+    ~desc:"Occurs on each constant."
 
 let ite, on_ite =
   Observation.provide ~inspect:sexp_of_ite "ite"
+    ~desc:"Occurs on each ite expression."
+
 
 let sexp_of_name = function
   | `symbol name -> Sexp.Atom name
