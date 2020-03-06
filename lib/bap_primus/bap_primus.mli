@@ -6,10 +6,11 @@ open Monads.Std
 open Bap_future.Std
 open Bap_strings.Std
 
-[@@@warning "-D"]
-
 module Std : sig
-  (** Primus - The Microexecution Framework.
+
+  [@@@warning "-D"]
+
+  (** {1 The Primus Framework}
 
       {2 Overview}
 
@@ -18,22 +19,23 @@ module Std : sig
       fuzzers, policy checkers, tracers, quickcheck-like test suites,
       and other analyses that rely on program evaluation.
 
-      The core of Primus is the Primus Machine monad transformer that
-      implements the observable non-deterministic computation
-      model. The core functionality is extended by libraries and
-      components. A Primus library doesn't change the behavior of the
-      Primus Machine, but it extends the set of operations. The core
-      libraries are:
+      The core of Primus is the {{!Primus.Machine.Make}Primus Machine}
+      monad transformer that implements the observable
+      non-deterministic computation. The core functionality is
+      extended by libraries and components. A Primus library doesn't
+      change the behavior of the Primus Machine, but it extends the
+      set of operations available to components and other libraries.
+      The core libraries are:
 
-      - Interpreter - interprets programs in BAP IR;
-      - Env - provides a mapping from variables to values
-      - Memory - provides a mapping from memory locations to values;
-      - Linker - provides a mapping from program labels to code;
-      - Lisp - provides the Primus Lisp interpreter.
+      - {!Primus.Env} - provides a mapping from variables to values
+      - {!Primus.Memory} - provides a mapping from memory locations to values;
+      - {!Primus.Linker} - provides a mapping from program labels to code;
+      - {!Primus.Interpreter} - interprets programs in BAP IR;
+      - {!Primus.Lisp} - provides the Primus Lisp interpreter.
 
       The behavior of the Primus Machine is defined by the components
-      that comprise that machine. A particular buld of the Machine is
-      called a _system_. A system could be seen as an Primus
+      that comprise that machine. A particular build of the Machine is
+      called a {i system }. A system could be seen as an Primus
       application and as an application it could be run.
 
       To summarize, components use libraries to implement analysis,
@@ -46,19 +48,19 @@ module Std : sig
       {2 Observations}
 
       An important part of the Primus Machine computational model is
-      that it is extensible through user callbacks. The callbacks are
-      inserted at predefined extension points, called _observations_.
-      Observations are made during computation, e.g., when an
+      that it is extensible through the user callbacks. The callbacks are
+      inserted at predefined extension points, called {i observations}.
+      Observations are made during a computation, e.g., when an
       Interperter evaluates a binary operation it posts an
       observation, that includes the operation operands and the
       computed value. All parties interested in this observation are
       invoked and they then can change the state of the machine using
       other machine operations, post their own observations, and, in
-      general can do anything that Primus Machine allows, since an
+      general can do anything that the Primus Machine allows, since an
       observer callback is a Primus Machine computation.
 
       To list all known observations use the [bap primus-observations]
-      command.
+      command or use the {!Primus.Observation.list} function.
 
       {2 Non-determinism}
 
@@ -70,25 +72,26 @@ module Std : sig
       computation, so that each machine observes the world
       deterministically.
 
-      Two non-deterministic operations are provided: [fork] that
-      creates a clone of the current machine and its state but with
-      different identifier and [switch] that switches between
+      Two non-deterministic operations are provided:
+      {{!Primus.Machine.Make.fork}fork} that creates a clone of the
+      current machine and its state but with different identifier and
+      {{!Primus.Machine.Make.switch}switch} that switches between
       machines.
 
       At any point of time there could be many forks of the machine,
       but only one will be active. A component that is responsible for
       selecting a machine fork that is currently active is called
-      _scheduler_. Since there are few different scheduling strategies
+      {i scheduler}. Since there are few different scheduling strategies
       avaiable, there are also a few schedulers.
 
       {2 Components and Systems}
 
       Components are the main building blocks of the Primus
       machine. Components subscribe to the observations provided by
-      Primus libraries and other components and attach their behavior
-      to those observations thus affecting the semantics of the Primus
-      machine. A particular composition of components is called a
-      _system_. Therefore a system is a Primus application that could
+      Primus libraries and other components. The attached callbacks
+      changes the behavior of the Machine thusaffecting its semantics.
+      A particular composition of components is called a
+      {i system}. Therefore a system is a Primus application that could
       be run. The Primus Framework provides an extenisble repository
       of Primus systems and components, that could be queried using
       [bap primus-systems] and [bap primus-components] commmands.
@@ -103,24 +106,26 @@ module Std : sig
       {!Primus.System} interface.
 
       A new component could be added to the components repository
-      using {!Components.register} or {!Components.register_generic}.
-      The main difference between regular components (also called
-      _analyses_) and generic components is that the latter work with
-      any instantiation of the Primus Monad Transofmer (recall that
-      Primus Machine is not a monad, but a monad transformer, that is
-      it is a monad constructor that creates infinitely many Primus
-      Machine monads) and the former works only with the
-      [Machine.Make(Analysis)] monad, which is a concrete instance of
-      the Primus Machine monad parameterized with the Knowledge
-      monad. A regular component is a Primus computation that also has
-      full access to the knowledge base. A generic component is a
+      using {!Primus.Components.register} or
+      {!Primus.Components.register_generic}.  The main difference
+      between regular components (also called {i analyses}) and
+      generic components is that the latter work with any
+      instantiation of the Primus Monad Transofmer (recall that Primus
+      Machine is not a monad, but a monad transformer, i.e., it is a
+      monad constructor that creates infinitely many Primus Machine
+      monads) and the former works only with the {!Primus.Analysis}
+      monad, which is a concrete instance of the Primus Machine monad
+      parameterized with the Knowledge monad, i.e.,
+      [Primus.Machine.Make(Knowledge)]. A regular component is a
+      Primus computation that also has full access to the
+      {{!Bap_knowledge.Knowledge}knowledge base}. A generic component is a
       functor that creates a computation, which can only access Primus
       Machine operations.
 
       The legacy {!Primus.Machine.add_component} interface is also
       provided to enable backward compatibility with the old way of
       defining the Primus machine in which there was only one system,
-      {!Primus.Main} that was built using the [add_component] function
+      {!Primus.Machine.Main} that was built using the [add_component] function
       and the system composition was defined by the command line
       parameters. This old style is fully supported (but deprecated)
       and the old main system is available under the [bap:legacy-main]
@@ -130,14 +135,17 @@ module Std : sig
 
       To run the specified system, either use {!Primus.System.run} to
       run it in the Knowledge monad or use
-      {!Primus.System.Generic(M).run} to run the Machine in the monad
-      [M].
+      {!Primus.System.Generic.run} to run the Machine in the monad
+      some other monad.
 
       It is also possible to create a {!Primus.Job} and enqueue it in
       the Primus Jobs queue with the {!Primus.Jobs.enqueue}
       function. This queue could be run either directly with
       {!Primus.Jobs.run} or using the [run] plugin.
   *)
+
+
+  (** The Primus Framework inteface.  *)
   module Primus : sig
 
     (** Machine Exception.
@@ -664,9 +672,6 @@ module Std : sig
       end
       [@@@deprecated ["[since 2020-03] use Primus.System instead"]]
 
-
-      (** {3 The Deprecated Legacy Main system interface}  *)
-
       (** [add_component comp] registers the machine component [comp] in the
           Primus Framework.
           The component's [init] function will be run every time the
@@ -684,117 +689,119 @@ module Std : sig
       [@@deprecated "[since 2020-03] use Components.register* instead"]
     end
 
-    (** A runnable instance of the Primus Machine.
 
-        A collection of components defines a runnable instance of Primus
-        Machine. Systems could be defined programmatically, using this
-        interface, or in system description files.
-
-        The system definition holds enough information to initialize
-        and run the system.
-
-        {2 System's timeline}
-
-        A system consequently passes through the following main phases of its
-        life:
-        - initialization (booting);
-        - post-init;
-        - running;
-        - post-running;
-        - stopped.
-
-
-        {3 The initialization phase}
-
-        During the initialization phase, the [init] method of all
-        components is run. The observations and non-determism are
-        blocked in this phase and other components might be
-        unitialized in this phase (components are initialized in an
-        unspecified order). Components should subscribe to other
-        observations and register their Lisp primitives in this phase.
-
-        Components should minimize the side-effects on the Primus
-        machine and do not use Interpreter, Linker, and/or any
-        observable operations. In this phase the Primus Machine
-        operates in a deterministic mode and fork/switch operators are
-        disabled.
-
-        Once this phase is complete, the [init] observation is posted
-        and the system enters the post-init phase.
-
-        {3 The post-init phase}
-
-        The post-init phase starts after the [init] observation is
-        posted. During this phase observation and non-determinism are
-        enabled. This phase is used by the components that would like
-        to change the initial state of the Machine (i.e., initialize
-        variables, possibly non-deterministically, link code, etc).
-
-        Components that need this kind of initialization shall
-        subscribe to the [init] observation and perform the necessary
-        post-initialization in the handler.
-
-        This stage is used to prepare the Machine for the execution. Once
-        it is finished the [start] observation is posted.
-
-        {3 The running phase}
-
-        The [start] observation designates the start of the execution
-        and the code that is attached to this observation denotes the
-        main function of the system. It is possible that there is more
-        than one component attach their behavior to the [start] event,
-        in that case all the components will be run in an unspecified
-        order.
-
-        It is not strictly required that a system should have
-        components that are executed in the running phase, as when a
-        system is run it is possible to provide the code that is run,
-        during the start phase (as well as the code that is run
-        during, the post-init phase), see {!System.run} below.
-
-        {3 The post-running phase}
-
-        After the code attached to the start phase terminates, either
-        normally or via the Primus exception, the [fini] observation
-        is posted and the system enters the post-running phase. This
-        is a non-deterministic phase and components of the system
-        might resume running by switching the computation to another
-        fork, therefore, the system can enter this phase multiple
-        times (but exit only once).
-
-        Once the post-running phase is finally finished, the machine
-        enters the final [stopped] phases.
-
-        {3 The stopped phase}
-
-        This is the final phase and, like the initial phase,
-        observations and non-determinism are disabled. This phase
-        could be used to summarize the information that was obtained
-        during the system run.
-
-        When the system enters the stopped state it is no longer
-        possible to restart it and all computations that are run
-        during this phase will not be observable.
-
-        {2 Non-determinism and machine stopping}
-
-        Since Primus Machine is non-deterministic, for the given
-        system we can observe more than one finalizations of
-        computations. Usually, schedulers use the [fini] observation
-        to kill the finished machine and switch to another machine.
-
-        When a machine is killed the [killed] observation is posted
-        that could be used to summarize the machine. After the
-        [killed] observation is posted, the machine (not the system)
-        enters the machine stopped phase in which observations and
-        non-determinism are blocked (it is only possible to update
-        the project data structure or record the information in the
-        knowledge base).
-
-        @since 2.1.0
-    *)
     module System : sig
 
+
+      (** {1 An instance of the Primus Machine}
+
+          A collection of components defines a runnable instance of Primus
+          Machine. Systems could be defined programmatically, using this
+          interface, or in system description files.
+
+          The system definition holds enough information to initialize
+          and run the system.
+
+          {2 System's timeline}
+
+          A system consequently passes through the following main phases of its
+          life:
+          - initialization (booting);
+          - post-init;
+          - running;
+          - post-running;
+          - stopped.
+
+
+          {3 The initialization phase}
+
+          During the initialization phase, the [init] method of all
+          components is run. The observations and non-determism are
+          blocked in this phase and other components might be
+          unitialized in this phase (components are initialized in an
+          unspecified order). Components should subscribe to other
+          observations and register their Lisp primitives in this phase.
+
+          Components should minimize the side-effects on the Primus
+          machine and do not use Interpreter, Linker, and/or any
+          observable operations. In this phase the Primus Machine
+          operates in a deterministic mode and fork/switch operators are
+          disabled.
+
+          Once this phase is complete, the [init] observation is posted
+          and the system enters the post-init phase.
+
+          {3 The post-init phase}
+
+          The post-init phase starts after the [init] observation is
+          posted. During this phase observation and non-determinism are
+          enabled. This phase is used by the components that would like
+          to change the initial state of the Machine (i.e., initialize
+          variables, possibly non-deterministically, link code, etc).
+
+          Components that need this kind of initialization shall
+          subscribe to the [init] observation and perform the necessary
+          post-initialization in the handler.
+
+          This stage is used to prepare the Machine for the execution. Once
+          it is finished the [start] observation is posted.
+
+          {3 The running phase}
+
+          The [start] observation designates the start of the execution
+          and the code that is attached to this observation denotes the
+          main function of the system. It is possible that there is more
+          than one component attach their behavior to the [start] event,
+          in that case all the components will be run in an unspecified
+          order.
+
+          It is not strictly required that a system should have
+          components that are executed in the running phase, as when a
+          system is run it is possible to provide the code that is run,
+          during the start phase (as well as the code that is run
+          during, the post-init phase), see {!System.run} below.
+
+          {3 The post-running phase}
+
+          After the code attached to the start phase terminates, either
+          normally or via the Primus exception, the [fini] observation
+          is posted and the system enters the post-running phase. This
+          is a non-deterministic phase and components of the system
+          might resume running by switching the computation to another
+          fork, therefore, the system can enter this phase multiple
+          times (but exit only once).
+
+          Once the post-running phase is finally finished, the machine
+          enters the final [stopped] phases.
+
+          {3 The stopped phase}
+
+          This is the final phase and, like the initial phase,
+          observations and non-determinism are disabled. This phase
+          could be used to summarize the information that was obtained
+          during the system run.
+
+          When the system enters the stopped state it is no longer
+          possible to restart it and all computations that are run
+          during this phase will not be observable.
+
+          {2 Non-determinism and machine stopping}
+
+          Since Primus Machine is non-deterministic, for the given
+          system we can observe more than one finalizations of
+          computations. Usually, schedulers use the [fini] observation
+          to kill the finished machine and switch to another machine.
+
+          When a machine is killed the [killed] observation is posted
+          that could be used to summarize the machine. After the
+          [killed] observation is posted, the machine (not the system)
+          enters the machine stopped phase in which observations and
+          non-determinism are blocked (it is only possible to update
+          the project data structure or record the information in the
+          knowledge base).
+
+          @since 2.1.0
+      *)
 
       (** the system definition  *)
       type t = system
@@ -929,11 +936,15 @@ module Std : sig
       *)
       val depends_on : ?package:string -> string -> system_specification
 
-      (** {3 Parsing system descriptions from files}
 
-          A system can be described in a system description file that
-          has the following format (closely follows Common Lisp's asdf
-          format)
+      (** a parsing error description  *)
+      type parse_error
+
+      (** [from_file name] parses a list of system descriptions from
+          the file with the given [name].
+
+          The file should have the following format (closely follows
+          Common Lisp's asdf format)
 
           {v
              systems ::= <system-definition> ...
@@ -947,13 +958,8 @@ module Std : sig
           The [primus-systems] plugin will search and load system
           definition files, see [bap --primus-systems-help] for more
           information.
+
       *)
-
-      (** a parsing error description  *)
-      type parse_error
-
-      (** [from_file name] parses a list of system descriptions from
-          the file with the given [name].   *)
       val from_file : string -> (system list,parse_error) result
 
       (** prints the parse error  *)
@@ -1079,7 +1085,7 @@ module Std : sig
     (** A task to run a Primus system.
 
         A is a system together with input parameters that is run via
-        the {!Jobs} module.x
+        the {!Jobs} module.
 
         @since 2.1.0
     *)
@@ -1216,6 +1222,13 @@ module Std : sig
         New analyses are added in the form of machine components
         using the [Components.register] function.
 
+        This module lifts some common operations from the Knowledge
+        monad, however any other Knowledge computation could be lifted
+        in the Primus monad using the {!Analysis.lift} function.
+
+        This module is fully compatible with modules produced with
+        [Primus.Machine.Make(Knowledge)] application.
+
         @since 2.1.0
     *)
     module Analysis : sig
@@ -1223,30 +1236,32 @@ module Std : sig
       include Machine.S with type 'a m = 'a Knowledge.t
                          and type 'a t = 'a Machine.Make(Knowledge).t
 
+      (** [collect p x] is lifted [Knowledge.collect].
 
-      (** {3 Common knowledge operations lifted into the Primus monad}
-
-          Note, that any Knowledge computation could be used in the
-          Analysis monad using the [lift] function, e.g.,
-
-          [lift@@Knowledge.Object.create Theory.Program.cls]
-
-          The functions below are lifted covenience.
+          See also {{!Bap_knowledge.Knowledge.collect}Knowledge.collect}.
       *)
-
-      (** [collect p x] is lifted {!Knowledge.collect}.  *)
       val collect : ('a,'p) slot -> 'a obj -> 'p t
 
 
-      (** [resove p x] is lifted {!Knowledge.resolve}.  *)
+      (** [resove p x] is lifted [Knowledge.resolve].
+
+           See also {{!Bap_knowledge.Knowledge.resolve}Knowledge.resolve}.
+      *)
       val resolve : ('a,'p opinions) slot -> 'a obj -> 'p t
 
 
-      (** [provide p x v] is lifted {!Knowledge.provide}.  *)
+      (** [provide p x v] is lifted [Knowledge.provide].
+
+
+          See also {{!Bap_knowledge.Knowledge.provide}Knowledge.provide}.
+      *)
       val provide : ('a,'p) slot -> 'a obj -> 'p -> unit t
 
 
-      (** [suggest a p x v] is lifted {!Knowledge.suggest}.  *)
+      (** [suggest a p x v] is lifted [!Knowledge.suggest].
+
+          See also {{!Bap_knowledge.Knowledge.suggest}Knowledge.suggest}.
+      *)
       val suggest : agent -> ('a,'p opinions) slot -> 'a obj -> 'p -> unit t
 
     end
@@ -1268,7 +1283,7 @@ module Std : sig
         sure which to use, then use analyses.
 
         When a specialized instance of the Primus monad is run (via
-        [System.run] any specialized component overrides a generic
+        {!Primus.System.run} any specialized component overrides a generic
         component with the same name).
 
         @since 2.1.0
