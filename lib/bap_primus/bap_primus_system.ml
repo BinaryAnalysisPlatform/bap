@@ -92,8 +92,12 @@ let define
 let name t = t.name
 
 let add_component ?package s c = {
-  s with components = Name.create ?package c :: s.components}
+  s with components = Name.create ?package c :: s.components
+}
 
+let add_dependency ?package s c = {
+  s with depends_on = Name.create ?package c :: s.depends_on
+}
 
 let rec components sys =
   let init = Set.of_list (module Name) sys.components in

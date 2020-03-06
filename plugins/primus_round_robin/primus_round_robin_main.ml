@@ -63,7 +63,7 @@ module RR(Machine : Primus.Machine.S) = struct
   let init () =
     Machine.sequence [
       Primus.Interpreter.leave_blk >>> step;
-      Primus.Machine.finished >>> finish;
+      Primus.System.fini >>> finish;
     ]
 end
 

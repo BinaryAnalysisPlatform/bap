@@ -74,8 +74,8 @@
                bap:constant-tracker))
 
 
-(defsystem bap:super-analyzer
-  :description "Runs several analysis at once."
+(defsystem bap:multi-analyzer
+  :description "Runs several analyses in parallel."
   :depends-on (bap:taint-analyzer
                bap:constant-tracker)
   :components (bap:conservative-garbage-collector))

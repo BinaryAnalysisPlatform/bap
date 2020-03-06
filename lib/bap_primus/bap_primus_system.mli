@@ -19,6 +19,7 @@ val define :
   ?package:string -> string -> t
 
 val add_component : ?package:string -> t -> string -> t
+val add_dependency : ?package:string -> t -> string -> t
 
 val component : ?package:string -> string -> component_specification
 val depends_on : ?package:string -> string -> system_specification

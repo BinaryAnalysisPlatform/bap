@@ -1,11 +1,52 @@
+let doc = {|
+# DESCRIPTION
+
+Loads Primus systems and registers them in the system repository.
+The systems are searched in the following directories:
+
+  - the current working directory;
+
+  - the directories specified by $(b,--primus-system-add-path);
+
+  - the directory specified at the configuration time, usually
+    (\$share/primus)
+
+The directories are searched and all files that have the [.asd]
+extension are loaded. Each file may define more than one system and
+reference other systems (via the [depends-on]) no matter whether they
+are loaded before or after (systems and components are resolved when
+the system is run). Each system should have a distinctive name and if
+there are systems with repetetive names an exception is raised.
+
+The system description file has the following grammar:
+
+```
+   systems ::= <system-definition> ...
+   system-definition ::= (defsystem <ident> <option> ...)
+   option ::=
+     | :description <string>
+     | :components (<ident> ...)
+     | :depends-on (<ident> ...)
+   ident ::= <string> | <string>:<string>
+
+The $(b,:components) option is the list of components that comprise the
+system. And the $(b, :depends-on) option specifies the list of
+systems on which the defined system depends. The components of those
+systems are essentially copied to the defined system.
+
+This plugin also provides introspection commands $(b,primus-systems),
+$(b,primus-components), and $(b,primus-observations) that provides the
+lists of currently known systems, components, and observations. See
+corresponding command help pages for more information.
+```
+|}
 open Bap_knowledge
 open Core_kernel
 open Bap_main
 open Bap_primus.Std
 open Format
 
-
-let doc what =
+let command what =
   sprintf "
 # DESCRIPTION
 
@@ -22,8 +63,12 @@ let paths = Extension.Configuration.parameters
     ~doc:"adds the path to the list of paths where Primus systems \
           are searched"
 
+let provides = [
+  "primus";
+  "primus-systems";
+]
 
-let () = Extension.declare @@ fun ctxt ->
+let () = Extension.declare ~provides ~doc @@ fun ctxt ->
   let usr_paths = Extension.Configuration.get ctxt paths |>
                   List.concat in
   [Filename.current_dir_name] @ usr_paths @ [sys_path] |>
@@ -44,7 +89,7 @@ let names =
   Extension.(Command.argument Type.(list string))
 
 let make_info_command list name =
-  let doc = doc name in
+  let doc = command name in
   let name = sprintf "primus-%ss" name in
   Extension.Command.(declare ~doc name (args $ names)) @@ fun names _ctxt ->
   let detailed = match names with [_] -> true | _ -> false in

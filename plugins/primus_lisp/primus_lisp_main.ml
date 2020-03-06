@@ -121,10 +121,10 @@ module Signals(Machine : Primus.Machine.S) = struct
           "(system-stop NAME) occurs when the system with the given
            name finished its execution. The machine is in the
            restricted mode in the body of the methods" ;
-        Lisp.signal Primus.Machine.init (fun () -> Machine.return [])
+        Lisp.signal Primus.System.init (fun () -> Machine.return [])
           ~doc: {|(init) occurs when the Primus Machine is initialized|}
           ~params:Type.unit;
-        Lisp.signal Primus.Machine.finished (fun () -> Machine.return [])
+        Lisp.signal Primus.System.fini (fun () -> Machine.return [])
           ~doc:{|(fini) occurs when the Primus Machine is finished|}
           ~params:Type.unit;
         Lisp.signal Primus.Machine.kill (fun _ -> Machine.return [])
@@ -199,7 +199,7 @@ module TypeErrorSummary(Machine : Primus.Machine.S) = struct
   module Lisp = Primus.Lisp.Make(Machine)
 
   let init () =
-    Primus.Machine.init >>> fun () ->
+    Primus.System.init >>> fun () ->
     Lisp.types >>| fun env ->
     let errors = List.length (Primus.Lisp.Type.errors env) in
     if errors = 0

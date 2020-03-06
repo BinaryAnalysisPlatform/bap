@@ -163,7 +163,7 @@ let start_monitoring {Config.get=(!)} =
       Machine.Local.update state ~f:(fun s ->
           {trace = p :: s.trace})
 
-    let print_trace () =
+    let print_trace _ =
       Machine.Local.get state >>| fun {trace} ->
       print_trace out trace
 
@@ -171,7 +171,7 @@ let start_monitoring {Config.get=(!)} =
       if Option.is_some !Param.traceback
       then Machine.List.sequence [
           Primus.Interpreter.enter_pos >>> record_trace;
-          Primus.Machine.finished >>> print_trace;
+          Primus.System.stop >>> print_trace;
         ]
       else Machine.return ()
 

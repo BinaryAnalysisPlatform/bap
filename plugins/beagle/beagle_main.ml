@@ -181,7 +181,7 @@ module Hunter(Machine : Primus.Machine.S) = struct
     let prey = Beagle_prey.create (Seq.of_list terms) chars in
     Machine.Observation.make Beagle_prey.finished prey
 
-  let gohome () =
+  let gohome _ =
     Machine.Local.get beagle >>= fun (Beagle b) ->
     match Strings.Detector.abort b with
     | None -> Machine.return ()
@@ -247,7 +247,7 @@ module Hunter(Machine : Primus.Machine.S) = struct
         (* variable_read    >>> process_variable; *)
         (* variable_written >>> process_variable; *)
         stored >>> process_memory;
-        Primus.Machine.finished >>> gohome;
+        Primus.Machine.kill >>> gohome;
         Beagle_prey.detected >>> print_prey;
         Beagle_prey.detected >>> hunt;
         Beagle_prey.caught >>> print_result;

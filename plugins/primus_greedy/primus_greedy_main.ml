@@ -62,7 +62,7 @@ module Greedy(Machine : Primus.Machine.S) = struct
 
 
   let init () =
-    Primus.Machine.finished >>> halt
+    Primus.System.fini >>> halt
 end
 
 let desc =
