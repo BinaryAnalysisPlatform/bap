@@ -944,9 +944,10 @@ module Std : sig
                | :depends-on (<ident> ...)
           v}
 
-          The [primus_system] plugin provides
+          The [primus-systems] plugin will search and load system
+          definition files, see [bap --primus-systems-help] for more
+          information.
       *)
-
 
       (** a parsing error description  *)
       type parse_error
@@ -981,6 +982,9 @@ module Std : sig
             @param init is a computation that will be run just after
             the system is initialized but before the [init]
             observation is posted.
+
+            @param start is a computation that is evaluated just after
+            the [System.start] observation is posted.
         *)
         val run :
           ?envp:string array ->
@@ -990,22 +994,87 @@ module Std : sig
           t -> project -> (exit_status * project) Machine.m
       end
 
+
+      (** The systems repository.
+
+          Maintains the mapping between system names and system
+          definitions.
+
+          The [primus-systems] plugin is populating this repository
+          with the systems found in the predefined search paths. See
+          [bap --primus-systems-help] for more information.
+
+          It is also possible to add new systems manually. The system
+          that is guaranteed to be in the repository is the
+          [bap:legacy-main] system that denotes the system that is
+          composed of the components added via the
+          {!Machine.add_component} function.
+
+          @since 2.1.0
+      *)
       module Repository : sig
+
+
+        (** [add system] registers the [system] in the repository.
+
+            The function fails if a system with the same name is
+            already registered.
+        *)
         val add : system -> unit
+
+        (** [get ?package string] is the system designated by the specified name.
+
+            The function fails if there is no such system is in the repository.
+        *)
         val get : ?package:string -> string -> system
+
+
+        (** [update ?package name ~f] calls [f] on the system
+            desingated by the name.
+
+            The function fails if there is no such system is in the repository.
+        *)
         val update : ?package:string -> string -> f:(system -> system) -> unit
+
+
+        (** [find name] looks up a system with the given name.
+
+            Returns [None] if there is no system with the given name
+            in the repository. *)
         val find : Knowledge.Name.t -> system option
+
+        (** [list ()] provides information about all systems in the repository.  *)
         val list : unit -> info list
       end
     end
 
+    (** Information about entities registered in the framework.
+
+        The Primus Framework is extended by registering in it certain
+        entities, e.g., systems, components, observations. The list of
+        registered items could be obtained and introspected using the
+        [info] data structure.
+
+        The [primus-systems], [primus-components], and
+        [primus-observations] commands provide the command line
+        interface to this information.
+
+        @since 2.1.0
+    *)
     module Info : sig
+
+      (** the item name  *)
       val name : info -> Knowledge.Name.t
+
+      (** the item description  *)
       val desc : info -> string
+
+      (** extended information about the item  *)
       val long : info -> string
+
+      (** prints the item  *)
       val pp : Format.formatter -> info -> unit
     end
-
 
     (** A task to run a Primus system.
 
@@ -1128,8 +1197,9 @@ module Std : sig
           in the order in which they were run.  *)
       val finished : result -> Job.t list
 
-
     end
+
+
     (** The Machine component.  *)
     type component = Machine.component
 
@@ -1225,6 +1295,8 @@ module Std : sig
         string -> component ->
         unit
 
+
+      (** provides information about registered components.  *)
       val list : unit -> info list
     end
 
