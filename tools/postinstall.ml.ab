@@ -20,12 +20,12 @@ let man_of_help prog =
   man
 
 let bin_exists prog =
-  Sys.command (sprintf "which %s" prog) = 0
+  Sys.command (sprintf "which %S" prog) = 0
 
 let create_man prog =
   if bin_exists prog then [man_of_help prog] else []
 
-let cp file = ignore @@ Sys.command (sprintf "cp %s %s" file mandir)
+let cp file = ignore @@ Sys.command (sprintf "cp %S %S" file mandir)
 
 let main () =
   let helps = List.map create_man tools |> List.concat in
