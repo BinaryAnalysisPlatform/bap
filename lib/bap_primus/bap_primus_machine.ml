@@ -34,10 +34,7 @@ let switch,switched =
       ])
     "machine-switch"
 
-let block,blocked = Observation.provide "observation-blocked"
-    ~inspect:sexp_of_string
-
-let restrict,restricted = Observation.provide "machine-restricted"
+let restrict,restricted = Observation.provide "machine-restrict"
     ~inspect:sexp_of_bool
 
 let kill,killed = Observation.provide "machine-kill"
@@ -183,19 +180,6 @@ module Make(M : Monad.S) = struct
       | Some os ->
         Observation.notify_if_observed os key @@ fun k ->
         f (fun x -> k x)
-
-
-    let make key obs =
-      with_global_context unrestricted >>= function
-      | Some _ -> make key obs
-      | None ->
-        make_even_if_restricted blocked (obsname key)
-
-    let post key ~f =
-      with_global_context unrestricted >>= function
-      | Some _ -> post key ~f
-      | None ->
-        make_even_if_restricted blocked (obsname key)
   end
 
   module Make_state(S : sig
