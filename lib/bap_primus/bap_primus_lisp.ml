@@ -65,6 +65,7 @@ let state = Bap_primus_state.declare ~inspect
 
 let lisp_primitive,primitive_called = Bap_primus_observation.provide
     ~inspect:Bap_primus_linker.sexp_of_call "lisp-primitive"
+    ~desc:"Occurs when the Lisp primitive is invoked."
 
 module Errors(Machine : Machine) = struct
   open Machine.Syntax
@@ -163,6 +164,7 @@ end
 let message,new_message =
   Bap_primus_observation.provide
     ~inspect:sexp_of_string "lisp-message"
+    ~desc:"Occurs with X when (msg x) is evaluated."
 
 
 module Trace = Bap_primus_linker.Trace
@@ -484,6 +486,8 @@ module Type = struct
 
   let error,notify_error =
     Bap_primus_observation.provide "lisp-type-error"
+      ~desc:"Occurs when the Lisp type error is detected \
+             by the type checker"
 
   module Spec = struct
     let any _ = Lisp.Type.any

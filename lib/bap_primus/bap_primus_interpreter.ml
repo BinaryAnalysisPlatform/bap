@@ -27,15 +27,17 @@ open Bap_primus_sexp
 
 let clock,tick =
   Observation.provide ~inspect:Time.sexp_of_t "clock"
+    ~desc:"Occurs on each clock (operation) of the interpreter."
 
 let memory_switch,switching_memory =
   let inspect = Primus.Memory.Descriptor.sexp_of_t in
   Observation.provide ~inspect "memory-switch"
+    ~desc:"Occurs when the memory bank is switched."
 
 let enter_term, term_entered =
   Observation.provide ~inspect:sexp_of_tid "enter-term"
-    ~desc:"Occurs before the given term.
-"
+    ~desc:"Occurs before the given term."
+
 let leave_term, term_left =
   Observation.provide ~inspect:sexp_of_tid "leave-term"
     ~desc:"Occurs after the given term is evaluated."

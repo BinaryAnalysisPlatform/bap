@@ -186,6 +186,7 @@ module Taint = struct
 
   let attached,attach =
     Primus.Observation.provide ~inspect "taint-attached"
+      ~desc:"Occurs when a taint is attached to the value."
 
   module Make(Machine : Primus.Machine.S) = struct
     module Value = Primus.Value.Make(Machine)
@@ -363,6 +364,7 @@ module Gc = struct
   let taint_finalize,taint_finished =
     Primus.Observation.provide
       ~inspect:sexp_of_finish "taint-finalize"
+      ~desc:"Occurs when the taint becomes unreachable."
 
   module Conservative(Machine : Primus.Machine.S) = struct
     open Machine.Syntax

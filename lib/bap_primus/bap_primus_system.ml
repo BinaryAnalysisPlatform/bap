@@ -10,9 +10,12 @@ module Machine = Bap_primus_machine
 
 let fini,finish =
   Observation.provide ~inspect:sexp_of_unit "fini"
+    ~desc:"Occurs when machine finishes."
+
 
 let init,inited =
   Observation.provide ~inspect:sexp_of_unit "init"
+    ~desc:"Occurs when all components of the machine are initialized."
 
 let start = Bap_primus_machine.start
 let stop = Bap_primus_machine.stop

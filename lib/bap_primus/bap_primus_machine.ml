@@ -17,6 +17,7 @@ let exn_raised,raise_exn =
   Observation.provide
     ~inspect:(fun exn -> Sexp.Atom (Bap_primus_exn.to_string exn))
     "exception"
+    ~desc:"Occurs just before the Machine exception is raised."
 
 let fork,forked =
   Observation.provide
@@ -25,6 +26,7 @@ let fork,forked =
         Monad.State.Multi.Id.sexp_of_t child;
       ])
     "machine-fork"
+    ~desc:"Occurs after a machine fork is created."
 
 let switch,switched =
   Observation.provide
@@ -33,18 +35,22 @@ let switch,switched =
         Monad.State.Multi.Id.sexp_of_t child;
       ])
     "machine-switch"
+    ~desc:"Occurs when machines are switched."
 
-let restrict,restricted = Observation.provide "machine-restrict"
-    ~inspect:sexp_of_bool
 
 let kill,killed = Observation.provide "machine-kill"
     ~inspect:Monad.State.Multi.Id.sexp_of_t
+    ~desc:"Occurs after the given machine is killed.
+Observations are in the restricted mode."
 
 let stop,stopped =
   Observation.provide ~inspect:sexp_of_string "system-stop"
+    ~desc:"Occurs after the system is stopped. Observations
+are in the restricted mode"
 
 let start,started =
   Observation.provide ~inspect:sexp_of_string "system-start"
+    ~desc:"Occurs after the system start."
 
 module Make(M : Monad.S) = struct
   module PE = struct
@@ -245,7 +251,6 @@ module Make(M : Monad.S) = struct
 
   let restrict x =
     with_global_context @@ fun () ->
-    Observation.make_even_if_restricted restricted true >>= fun () ->
     lifts @@ SM.update (fun s -> {
           s with restricted = x;
         })
