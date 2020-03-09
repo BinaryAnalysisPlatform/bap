@@ -33,6 +33,7 @@ include _oasis_lib.om
 OCAMLFLAGS_ANNOT = -annot -bin-annot
 OCAMLFLAGS += $(OCAMLFLAGS_ANNOT)
 OCAMLFLAGS += -opaque
+OCAMLOPTFLAGS += -O3
 
 # Until this point we allow to override variables via the command-line.
 # That means all initializations from above can be changed by omake arguments

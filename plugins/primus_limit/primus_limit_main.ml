@@ -158,4 +158,8 @@ end
 
 
 let () = Config.when_ready (fun _ ->
-    Primus.Machine.add_component (module Main))
+    Primus.Machine.add_component (module Main) [@warning "-D"];
+    Primus.Components.register_generic "limit" (module Main)
+      ~package:"bap"
+      ~desc: "Enables program termination by limiting the maximum \
+              life time of each Primus Machine.")

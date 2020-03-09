@@ -1,52 +1,39 @@
 open Core_kernel
+open Bap_knowledge
 open Bap.Std
 open Bap_primus_types
 open Format
 
-module Observation = Bap_primus_observation
+let package = "bap"
 
 
-let finished,finish =
-  Observation.provide ~inspect:sexp_of_unit "fini"
+module System = Bap_primus_system
 
-let init,inited =
-  Observation.provide ~inspect:sexp_of_unit "init"
+let components = ref 0
+
+let () = System.Repository.add @@ System.define "legacy-main"
+    ~package
+    ~components:[
+      System.component ~package "load-binary";
+    ]
+    ~desc:"The legacy Primus system that contains \
+           all components registered with the Machine.add_component \
+           function."
 
 
-let components : component list ref = ref []
-let add_component comp = components := comp :: !components
-
+let add_component component =
+  incr components;
+  let name = sprintf "legacy-main-component-%d" !components in
+  System.Components.register_generic name component
+    ~internal:true
+    ~package:"bap-internal"
+    ~desc:"an anonymous component of the legacy main system";
+  System.Repository.update ~package "legacy-main" ~f:(fun system ->
+      System.add_component system ~package:"bap-internal" name)
 
 module Main(Machine : Machine) = struct
-  open Machine.Syntax
-
-  module Mach = Bap_primus_machine
-  module Link = Bap_primus_interpreter.Init(Machine)
-  module Lisp = Bap_primus_lisp.Make(Machine)
-
-  let init_components () =
-    Machine.List.iter !components ~f:(fun (module Component) ->
-        let module Comp = Component(Machine) in
-        Comp.init ())
-
-  let init () =
-    Machine.Observation.make inited ()
-
-  let finish () =
-    Machine.Observation.make finish ()
-
-  let run ?(envp=[| |]) ?(args=[| |]) proj m =
-    let comp =
-      init_components () >>= fun () ->
-      Lisp.typecheck >>= fun () ->
-      Lisp.optimize () >>= fun () ->
-      init () >>= fun () ->
-      Link.run () >>= fun () ->
-      Machine.catch m (fun err ->
-          finish () >>= fun () ->
-          Machine.raise err)
-      >>= fun x ->
-      finish () >>= fun () ->
-      Machine.return x in
-    Machine.run comp proj args envp
+  include System.Generic(Machine)
+  let run ?envp ?args proj user =
+    let main = System.Repository.get ~package "legacy-main" in
+    run ?envp ?args ~start:user main proj
 end

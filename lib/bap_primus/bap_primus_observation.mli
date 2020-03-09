@@ -9,8 +9,11 @@ type 'e observations
 type subscription
 type provider
 
+module Info = Bap_primus_info
 
-val provide : ?inspect:('a -> Sexp.t) -> string -> 'a t * 'a statement
+
+val provide : ?desc:string -> ?inspect:('a -> Sexp.t) -> ?package:string ->
+  string -> 'a t * 'a statement
 
 val name : 'a t -> string
 val inspect : 'a t -> 'a -> Sexp.t
@@ -37,6 +40,7 @@ end
 val empty : 'e observations
 
 val list_providers : unit -> provider list
+val list : unit -> Info.t list
 
 module Provider : sig
   type t = provider

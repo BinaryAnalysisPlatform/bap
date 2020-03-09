@@ -7,7 +7,7 @@ Library run_plugin
   Path: plugins/run
   FindlibName: bap-plugin-run
   CompiledObject: best
-  BuildDepends: bap, bap-primus, core_kernel, graphlib, monads, regular
+  BuildDepends: bap, bap-primus, core_kernel, graphlib, monads, regular, bap-knowledge
   InternalModules: Run_main
   XMETADescription: a pass that will run a program
   XMETAExtraLines:  tags="emulator, pass, primus"

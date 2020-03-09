@@ -13,12 +13,12 @@ type t = {
 }
 
 let state = Primus.Machine.State.declare
-              ~uuid:"d1b33e16-bf5d-48d5-a174-3901dff3d123"
-              ~name:"round-robin-scheduler"
-              (fun _ -> {
-                   pending = Fqueue.empty;
-                   finished = Mid.Set.empty;
-                 })
+    ~uuid:"d1b33e16-bf5d-48d5-a174-3901dff3d123"
+    ~name:"round-robin-scheduler"
+    (fun _ -> {
+         pending = Fqueue.empty;
+         finished = Mid.Set.empty;
+       })
 
 
 module RR(Machine : Primus.Machine.S) = struct
@@ -35,7 +35,7 @@ module RR(Machine : Primus.Machine.S) = struct
       else schedule {
           t with
           pending = Seq.fold fs ~init:Fqueue.empty ~f:Fqueue.enqueue
-      }
+        }
     | Some (next,pending) ->
       Machine.status next >>= function
       | `Dead ->
@@ -63,13 +63,16 @@ module RR(Machine : Primus.Machine.S) = struct
   let init () =
     Machine.sequence [
       Primus.Interpreter.leave_blk >>> step;
-      Primus.Machine.finished >>> finish;
+      Primus.System.fini >>> finish;
     ]
 end
 
-let enable () =
-  info "enabling the scheduler";
-  Primus.Machine.add_component (module RR)
+let register enabled =
+  if enabled
+  then Primus.Machine.add_component (module RR) [@warning "-D"];
+  Primus.Components.register_generic "round-robin-scheduler" (module RR)
+    ~package:"bap"
+    ~desc:"Enables the round-robin scheduler (experimental)."
 
 open Config;;
 manpage [
@@ -87,4 +90,4 @@ manpage [
 let enabled = flag "scheduler" ~doc:"Enable the scheduler."
 
 
-let () = when_ready (fun {get=(!!)} -> if !!enabled then enable ())
+let () = when_ready (fun {get=(!!)} -> register !!enabled)
