@@ -9,13 +9,14 @@ Library bap_primus
   FindlibName: bap-primus
   CompiledObject: best
   BuildDepends: bap, bap-abi, bap-c, uuidm, bap-future, parsexp, bap-strings,
-                core_kernel, ppx_jane, regular, monads, graphlib
+                core_kernel, ppx_jane, regular, monads, graphlib, bap-knowledge
   Modules: Bap_primus
   InternalModules:
            Bap_primus_env,
            Bap_primus_exn,
            Bap_primus_generator,
            Bap_primus_generator_types,
+           Bap_primus_info,
            Bap_primus_interpreter,
            Bap_primus_iterator,
            Bap_primus_linker,
@@ -34,6 +35,7 @@ Library bap_primus
            Bap_primus_lisp_types,
            Bap_primus_lisp_var,
            Bap_primus_lisp_word,
+           Bap_primus_analysis,
            Bap_primus_machine,
            Bap_primus_main,
            Bap_primus_memory,
@@ -42,5 +44,6 @@ Library bap_primus
            Bap_primus_random,
            Bap_primus_sexp,
            Bap_primus_state,
+           Bap_primus_system,
            Bap_primus_types,
            Bap_primus_value

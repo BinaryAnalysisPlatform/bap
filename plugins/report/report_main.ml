@@ -86,8 +86,9 @@ let render_stage_only s =
   pp "( %d )" (s+1)
 
 let render_progress = function
+  | {total=(None| Some 0); stage=Some s} -> render_stage_only s
+  | {total=Some s'; stage=None} -> render_percentbar (-1) s'
   | {total=Some s'; stage=Some s} -> render_percentbar s s'
-  | {total=None;    stage=Some s} -> render_stage_only s
   | t -> render_ping t
 
 let render_note = function

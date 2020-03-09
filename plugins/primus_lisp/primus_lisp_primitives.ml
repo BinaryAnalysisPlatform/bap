@@ -562,5 +562,8 @@ module Primitives(Machine : Primus.Machine.S) = struct
 end
 
 let init () =
-  Primus.Machine.add_component (module Primitives);
+  Primus.Machine.add_component (module Primitives) [@warning "-D"];
+  Primus.Components.register_generic "lisp-primitives" (module Primitives)
+    ~package:"bap"
+    ~desc:"Provides the core set of Primus Lisp primitives.";
   Primus_lisp_ieee754.init ()

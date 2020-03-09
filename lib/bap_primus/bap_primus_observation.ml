@@ -1,7 +1,11 @@
 open Core_kernel
 open Bap.Std
+open Bap_knowledge
 open Bap_future.Std
 open Monads.Std
+
+module Name = Knowledge.Name
+module Info = Bap_primus_info
 
 type 'a observation = 'a Univ_map.Key.t
 type 'a statement = 'a observation
@@ -11,7 +15,7 @@ type ('m,'a) observers = {
   subs : (int * ('a -> 'm)) list
 }
 type provider = {
-  name : string;
+  info : Info.t;
   newdata : Sexp.t signal;
   data : Sexp.t stream;
   newtrigger : unit signal;
@@ -24,13 +28,15 @@ type 'a mstream = {
   providers : provider list;
 }
 
-let providers : provider String.Table.t = String.Table.create ()
+let providers : (string,provider) Hashtbl.t = Hashtbl.create (module String)
 
-let provider name =
+let provider ?desc ?package name =
   let data,newdata = Stream.create () in
   let triggers,newtrigger = Stream.create () in
-  let key = Univ_map.Key.create ~name:("watch-"^name) ident in
-  {name; newdata; data; triggers; newtrigger; observers=0; key}
+  let name = Name.create ?package name in
+  let info = Info.create ?desc name in
+  let key = Univ_map.Key.create ~name:("watch-"^Name.show name) ident in
+  {info; newdata; data; triggers; newtrigger; observers=0; key}
 
 let update_provider provider ~f =
   Hashtbl.update providers provider ~f:(function
@@ -40,11 +46,13 @@ let update_provider provider ~f =
 let register_observer =
   update_provider ~f:(fun p -> {p with observers = p.observers + 1})
 
-let provide ?(inspect=sexp_of_opaque) name =
+let provide ?desc ?(inspect=sexp_of_opaque) ?package name =
+  let provider = provider ?desc ?package name in
+  let name = Name.show @@ Info.name provider.info in
   if Hashtbl.mem providers name then
     failwithf "Observation name `%s' is already used by another \
                component. Please, choose a different name" name ();
-  Hashtbl.add_exn providers ~key:name ~data:(provider name);
+  Hashtbl.add_exn providers ~key:name ~data:provider;
   let k = Univ_map.Key.create ~name inspect in
   k,k
 
@@ -131,10 +139,12 @@ end
 let empty = Map.empty
 
 let list_providers () = Hashtbl.data providers
+let list () = list_providers () |>
+              List.map ~f:(fun {info} -> info)
 
 module Provider = struct
   type t = provider
-  let name t = t.name
+  let name t = Name.show @@ Info.name t.info
   let data t = t.data
   let triggers t = t.triggers
   let observers t = t.observers

@@ -1,3 +1,4 @@
+open Bap_knowledge
 open Bap.Std
 open Bap_primus_types
 
@@ -10,6 +11,4 @@ module Main(M : Machine) : sig
     (exit_status * project) M.m
 end
 
-val finished : unit observation
-val init : unit observation
 val add_component : component -> unit

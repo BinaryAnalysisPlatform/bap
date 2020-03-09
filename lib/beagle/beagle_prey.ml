@@ -11,7 +11,7 @@ module Words = struct
   let pp ppf set =
     let words = Set.to_list set |> String.concat ~sep:", " in
     let words = if String.length words < max then words
-        else String.subo ~len:max words in
+      else String.subo ~len:max words in
     fprintf ppf "%s" (String.escaped words)
 
   let to_string set = asprintf "%a" pp set
@@ -61,6 +61,7 @@ let inspect_prey {chars} = Sexp.Atom chars
 
 let detected,finished =
   Primus.Observation.provide ~inspect:inspect_prey "beagle-prey"
+    ~desc:"Occurs when the sequence of characters is detected."
 
 let inspect (prey,words) =
   Sexp.List [
@@ -69,3 +70,4 @@ let inspect (prey,words) =
   ]
 
 let caught,catch = Primus.Observation.provide ~inspect "beagle"
+    ~desc:"Occurs when the sequence of characters is classified as text."

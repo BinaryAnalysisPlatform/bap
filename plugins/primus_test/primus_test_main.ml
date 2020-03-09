@@ -43,6 +43,7 @@ module Location = struct
 
   let location,report_location =
     Primus.Observation.provide ~inspect "incident-location"
+      ~desc:"Occurs when the location of a possible incident is created."
 
   let trace = Primus.Machine.State.declare
       ~uuid:"41ed6b21-5ebd-4853-9797-30caff63c9ce"
@@ -113,6 +114,8 @@ module Incident = struct
 
   let t,report =
     Primus.Observation.provide ~inspect "incident"
+      ~desc:"Occurs when the incident is reported that \
+             involves the given locations."
 
   module Report(Machine : Primus.Machine.S) = struct
     open Machine.Syntax
@@ -144,8 +147,16 @@ module Lisp(Machine : Primus.Machine.S) = struct
 end
 
 let main () =
-  Primus.Machine.add_component (module Location.Record);
-  Primus.Machine.add_component (module Lisp)
+  Primus.Machine.add_component (module Location.Record) [@warning "-D"];
+  Primus.Machine.add_component (module Lisp) [@warning "-D"];
+  Primus.Components.register_generic
+    ~package:"bap" "incident-location-recorder"
+    (module Location.Record)
+    ~desc:"Records tracepoints for incident reporting.";
+  Primus.Components.register_generic
+    ~package:"bap" "lisp-incidents"
+    (module Lisp)
+    ~desc:"Exposes the incident reporting facitilites to Primus Lisp."
 
 ;;
 

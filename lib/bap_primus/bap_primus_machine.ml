@@ -17,6 +17,7 @@ let exn_raised,raise_exn =
   Observation.provide
     ~inspect:(fun exn -> Sexp.Atom (Bap_primus_exn.to_string exn))
     "exception"
+    ~desc:"Occurs just before the Machine exception is raised."
 
 let fork,forked =
   Observation.provide
@@ -25,7 +26,7 @@ let fork,forked =
         Monad.State.Multi.Id.sexp_of_t child;
       ])
     "machine-fork"
-
+    ~desc:"Occurs after a machine fork is created."
 
 let switch,switched =
   Observation.provide
@@ -34,6 +35,22 @@ let switch,switched =
         Monad.State.Multi.Id.sexp_of_t child;
       ])
     "machine-switch"
+    ~desc:"Occurs when machines are switched."
+
+
+let kill,killed = Observation.provide "machine-kill"
+    ~inspect:Monad.State.Multi.Id.sexp_of_t
+    ~desc:"Occurs after the given machine is killed.
+Observations are in the restricted mode."
+
+let stop,stopped =
+  Observation.provide ~inspect:sexp_of_string "system-stop"
+    ~desc:"Occurs after the system is stopped. Observations
+are in the restricted mode"
+
+let start,started =
+  Observation.provide ~inspect:sexp_of_string "system-start"
+    ~desc:"Occurs after the system start."
 
 module Make(M : Monad.S) = struct
   module PE = struct
@@ -55,12 +72,16 @@ module Make(M : Monad.S) = struct
     global  : State.Bag.t;
     deathrow : id list;
     observations : unit t Observation.observations;
+    restricted : bool;
   }
 
   type 'a machine = 'a t
   type 'a c = 'a t
   type 'a m = 'a M.t
-  type 'a e = (exit_status * project) m effect
+  type 'a e =
+    ?boot:unit t ->
+    ?init:unit t ->
+    (exit_status * project) m effect
 
   module C = Monad.Cont.Make(PE)(struct
       type 'a t = 'a sm
@@ -103,12 +124,21 @@ module Make(M : Monad.S) = struct
   let set_global global = with_global_context @@ fun () ->
     lifts (SM.update @@ fun s -> {s with global})
 
+  let is_restricted () : bool t =
+    with_global_context @@ fun () ->
+    lifts (SM.gets @@ fun s -> s.restricted)
+
   module Observation = struct
     type 'a m = 'a t
     type nonrec 'a observation = 'a observation
     type nonrec 'a statement = 'a statement
 
     let observations () = lifts (SM.gets @@ fun s -> s.observations)
+    let unrestricted () =
+      with_global_context @@ fun () ->
+      lifts (SM.gets @@ fun s ->
+             if s.restricted then None
+             else Some s.observations)
 
     let set_observations observations = with_global_context @@ fun () ->
       lifts (SM.update @@ fun s -> {s with observations})
@@ -133,19 +163,29 @@ module Make(M : Monad.S) = struct
       observations () >>= fun os ->
       set_observations (Observation.cancel sub os)
 
+    let obsname x = Observation.(name@@of_statement x)
+
     module Observation = Observation.Make(struct
         type 'a t = 'a machine
         include CM
       end)
 
     let make key obs =
+      with_global_context unrestricted >>= function
+      | None -> return ()
+      | Some os -> Observation.notify os key obs
+
+    let make_even_if_restricted key obs =
       with_global_context observations >>= fun os ->
       Observation.notify os key obs
 
+
     let post key ~f =
-      with_global_context observations >>= fun os ->
-      Observation.notify_if_observed os key @@ fun k ->
-      f (fun x -> k x)
+      with_global_context unrestricted >>= function
+      | None -> return ()
+      | Some os ->
+        Observation.notify_if_observed os key @@ fun k ->
+        f (fun x -> k x)
   end
 
   module Make_state(S : sig
@@ -209,55 +249,80 @@ module Make(M : Monad.S) = struct
     current () >>= fun cid ->
     Observation.make forked (pid,cid)
 
+  let restrict x =
+    with_global_context @@ fun () ->
+    lifts @@ SM.update (fun s -> {
+          s with restricted = x;
+        })
+
   let sentence_to_death id =
     with_global_context (fun () ->
         lifts @@ SM.update (fun s -> {
               s with deathrow = id :: s.deathrow
             }))
 
+  let do_kill id =
+    lifts @@ SM.kill id
+
   let execute_sentenced =
     with_global_context (fun () ->
         lifts @@ SM.get () >>= fun s ->
-        lifts @@ SM.List.iter s.deathrow ~f:SM.kill >>= fun () ->
+        CM.List.iter s.deathrow ~f:do_kill >>= fun () ->
         lifts @@ SM.put {s with deathrow = []})
 
   let switch id : unit c =
-    C.call ~f:(fun ~cc:k ->
-        current () >>= fun pid ->
-        store_curr k >>= fun () ->
-        switch_state id >>= fun () ->
-        lifts (SM.get ()) >>= fun s ->
-        execute_sentenced >>= fun () ->
-        Observation.make switched (pid,id) >>= fun () ->
-        s.curr ())
+    is_restricted () >>= function
+    | true -> failwith "switch in the restricted mode"
+    | false ->
+      C.call ~f:(fun ~cc:k ->
+          current () >>= fun pid ->
+          store_curr k >>= fun () ->
+          switch_state id >>= fun () ->
+          lifts (SM.get ()) >>= fun s ->
+          execute_sentenced >>= fun () ->
+          Observation.make switched (pid,id) >>= fun () ->
+          s.curr ())
 
 
   let fork () : unit c =
-    C.call ~f:(fun ~cc:k ->
-        current () >>= fun pid ->
-        store_curr k >>=
-        fork_state >>= fun () ->
-        execute_sentenced >>= fun () ->
-        notify_fork pid)
+    is_restricted () >>= function
+    | true -> failwith "fork in the restricted mode"
+    | false ->
+      C.call ~f:(fun ~cc:k ->
+          current () >>= fun pid ->
+          store_curr k >>=
+          fork_state >>= fun () ->
+          execute_sentenced >>= fun () ->
+          notify_fork pid)
 
 
   let kill id =
-    if Id.(id = global) then return ()
-    else
-      current () >>= fun cid ->
-      if Id.(id = cid) then sentence_to_death id
-      else lifts @@ SM.kill id
+    is_restricted () >>= function
+    | true -> failwith "kill in the restricted mode"
+    | false ->
+      if Id.(id = global) then return ()
+      else
+        current () >>= fun cid ->
+        if Id.(id = cid)
+        then
+          restrict true >>= fun () ->
+          Observation.make_even_if_restricted killed id >>= fun () ->
+          restrict false >>= fun () ->
+          sentence_to_death id
+        else
+          switch id >>= fun () ->
+          restrict true >>= fun () ->
+          Observation.make_even_if_restricted killed id >>= fun () ->
+          restrict false >>= fun () ->
+          switch cid >>= fun () ->
+          do_kill id
 
-  (* we can't make it public as it will change the interface
-     and will require us to bump Primus version to 2.0
-  *)
-  let die next =
-    current () >>= fun pid ->
-    switch_state next >>= fun () ->
-    lifts (SM.get ()) >>= fun s ->
-    lifts (SM.kill pid) >>= fun () ->
-    s.curr ()
+  let start sys =
+    Observation.make started sys
 
+  let stop sys =
+    restrict true >>= fun () ->
+    Observation.make_even_if_restricted stopped sys
 
   let raise exn =
     Observation.make raise_exn exn >>= fun () ->
@@ -271,7 +336,7 @@ module Make(M : Monad.S) = struct
   let envp = lifts (SM.gets @@ fun s -> s.envp)
 
 
-  let init proj args envp = {
+  let init_state proj ~args ~envp = {
     args;
     envp;
     curr = return;
@@ -279,7 +344,9 @@ module Make(M : Monad.S) = struct
     local = State.Bag.empty;
     observations = Bap_primus_observation.empty;
     deathrow = [];
-    proj}
+    proj;
+    restricted = true;
+  }
 
   let extract f =
     let open SM.Syntax in
@@ -287,16 +354,31 @@ module Make(M : Monad.S) = struct
     SM.gets f
 
   let run : 'a t -> 'a e =
-    fun m proj args envp ->
-    M.bind
-      (SM.run
-         (C.run m (function
-              | Ok _ -> extract @@ fun s -> Ok s.proj
-              | Error err -> extract @@ fun _ -> Error err))
-         (init proj args envp))
-      (fun (r,{proj}) -> match r with
-         | Ok _ -> M.return (Normal, proj)
-         | Error e -> M.return (Exn e, proj))
+    fun user
+      ?(boot=return ())
+      ?(init=return ())
+      ?(envp=[||])
+      ?(args=[||])
+      sys
+      proj ->
+      let machine =
+        boot >>= fun () ->
+        restrict false >>= fun () ->
+        init >>= fun () ->
+        catch
+          (start sys >>= fun () -> user)
+          (fun exn -> stop sys >>= fun () -> raise exn) >>= fun x ->
+        stop sys >>= fun () ->
+        return x in
+      M.bind
+        (SM.run
+           (C.run machine (function
+                | Ok _ -> extract @@ fun s -> Ok s.proj
+                | Error err -> extract @@ fun _ -> Error err))
+           (init_state proj ~args ~envp))
+        (fun (r,{proj}) -> match r with
+           | Ok _ -> M.return (Normal, proj)
+           | Error e -> M.return (Exn e, proj))
 
 
   module Syntax = struct
