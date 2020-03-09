@@ -402,14 +402,14 @@ module Gc = struct
         ~f:(finish ~live:false) >>= fun () ->
       Machine.Local.put gc {old = cur}
 
-    let finalize () =
+    let finalize _ =
       Machine.Local.get tainter >>= fun cur ->
       Set.to_sequence (objects cur) |>
       Machine.Seq.iter ~f:(finish ~live:true)
 
     let init () = Machine.sequence Primus.Interpreter.[
         leave_blk >>> main;
-        Primus.Interpreter.halting >>> finalize;
+        Primus.Machine.kill >>> finalize;
       ]
 
 
