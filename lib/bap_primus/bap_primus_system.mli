@@ -26,7 +26,7 @@ val depends_on : ?package:string -> string -> system_specification
 
 val name : t -> Knowledge.Name.t
 
-val from_file : string -> (t list,parse_error) Result.t
+val from_file : string -> (t list,parse_error) result
 
 val pp : Format.formatter -> t -> unit
 val pp_parse_error : Format.formatter -> parse_error -> unit
