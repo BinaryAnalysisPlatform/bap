@@ -130,24 +130,24 @@ let generate_man3_redirection lib =
   let name = sprintf "man3/%s.3.html" lib in
   Out_channel.write_all name ~data:redirection
 
-let build_man cmd out =
-  sprintf "%s | man2html -r > %s" cmd out
+let connect_with_pipes cmds = String.concat cmds ~sep:" | "
+let dump_to_file f cmd = sprintf "%s > %s" cmd f
 
-let repair_links out =
-  sprintf {|sed "s/\\\N'45'/-/g" -i %s|} out
+let repair_links = {|sed "s/\\\N'45'/-/g"|}
+let redirect_index = sprintf {|sed "s#../index.html#../odoc/index.html#g"|}
+let man2html = sprintf "man2html -r"
 
-let redirect_index out =
-  sprintf {|sed "s#../index.html#../odoc/index.html#g" -i %s|} out
 
 let build_manual {man; help} tool =
   mkdir "man1";
   match Sys.command @@ sprintf "%s >/dev/null" (help tool) with
   | 0 ->
     let out = sprintf "man1/%s.1.html" (man tool) in
-    List.iter ~f:run [
-      build_man (help tool) out;
-      repair_links out;
-      redirect_index out
+    run @@ dump_to_file out @@ connect_with_pipes [
+      help tool;
+      repair_links;
+      man2html;
+      redirect_index;
     ]
   | _ ->
     eprintf "Warning: can't render manpage for %s\n" tool;
