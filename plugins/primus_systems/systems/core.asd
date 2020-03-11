@@ -3,7 +3,8 @@
   :components (bap:load-binary
                bap:program-loader
                bap:x86-flag-initializer
-               bap:powerpc-init))
+               bap:powerpc-init
+               bap:observation-printer))
 
 (defsystem bap:base-lisp-machine
   :description "Executes Primus Lisp program."
