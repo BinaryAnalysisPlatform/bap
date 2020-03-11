@@ -8,15 +8,6 @@ open Bap_plugins.Std
 module Filename = Caml.Filename
 
 let libraries = [
-  "Foundation Libraries", [
-    "monads", "Monads.Std", "The Monads library";
-    "regular", "Regular.Std", "Regular Data Library";
-    "graphlib", "Graphlib.Std", "Algorithms on graphs";
-    "bitvec", "Bitvec", "Bitvectors and modular arithmetic";
-    "bap-future", "Bap_future.Std", "Futures and Streams";
-    "ogre", "Ogre", "A sexp-based NoSQL database";
-  ];
-
   "Core libraries", [
     "bap-main", "Bap_main", "the entry point to BAP";
     "bap-knowledge", "Bap_knowledge.Knowledge", "The Knowledge Representation library";
@@ -24,6 +15,15 @@ let libraries = [
     "bap", "Bap.Std", "The Standard Library";
     "bap-taint", "Bap_taint.Std", "The Taint Analysis Framework";
     "bap-primus", "Bap_primus.Std", "The Microexecution Framework";
+  ];
+
+  "Foundation Libraries", [
+    "monads", "Monads.Std", "The Monads library";
+    "regular", "Regular.Std", "Regular Data Library";
+    "graphlib", "Graphlib.Std", "Algorithms on graphs";
+    "bitvec", "Bitvec", "Bitvectors and modular arithmetic";
+    "bap-future", "Bap_future.Std", "Futures and Streams";
+    "ogre", "Ogre", "A sexp-based NoSQL database";
   ];
 
   "Hardware Specific Libraries", [
