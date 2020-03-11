@@ -9,48 +9,48 @@ module Filename = Caml.Filename
 
 let libraries = [
   "Core libraries", [
-    "bap-main", "Bap_main", "the entry point to BAP";
-    "bap-knowledge", "Bap_knowledge.Knowledge", "The Knowledge Representation library";
-    "bap-core-theory", "Bap_core_theory", "The Core Theory Library";
-    "bap", "Bap.Std", "The Standard Library";
-    "bap-taint", "Bap_taint.Std", "The Taint Analysis Framework";
-    "bap-primus", "Bap_primus.Std", "The Microexecution Framework";
+    "bap-main", "Bap_main", "", "the entry point to BAP";
+    "bap-knowledge", "Bap_knowledge.Knowledge", "Bap_knowledge", "The Knowledge Representation library";
+    "bap-core-theory", "Bap_core_theory", "", "The Core Theory Library";
+    "bap", "Bap.Std", "", "The Standard Library";
+    "bap-taint", "Bap_taint.Std", "Bap_taint", "The Taint Analysis Framework";
+    "bap-primus", "Bap_primus.Std", "Bap_primus", "The Microexecution Framework";
   ];
 
   "Foundation Libraries", [
-    "monads", "Monads.Std", "The Monads library";
-    "regular", "Regular.Std", "Regular Data Library";
-    "graphlib", "Graphlib.Std", "Algorithms on graphs";
-    "bitvec", "Bitvec", "Bitvectors and modular arithmetic";
-    "bap-future", "Bap_future.Std", "Futures and Streams";
-    "ogre", "Ogre", "A sexp-based NoSQL database";
+    "monads", "Monads.Std", "Monads", "The Monads library";
+    "regular", "Regular.Std", "Regular", "Regular Data Library";
+    "graphlib", "Graphlib.Std", "Graphlib", "Algorithms on graphs";
+    "bitvec", "Bitvec", "", "Bitvectors and modular arithmetic";
+    "bap-future", "Bap_future.Std", "Bap_future", "Futures and Streams";
+    "ogre", "Ogre", "", "A sexp-based NoSQL database";
   ];
 
   "Hardware Specific Libraries", [
-    "bap-arm", "ARM", "ARM-specific definitions";
-    "bap-x86-cpu", "X86_cpu", "x86/x86-64 specific definitions";
+    "bap-arm", "ARM", "", "ARM-specific definitions";
+    "bap-x86-cpu", "X86_cpu", "", "x86/x86-64 specific definitions";
   ];
 
   "Language and API/ABI Specific Libraries", [
-    "bap-abi", "Bap_abi", "Interface for specifying ABI";
-    "bap-api", "Bap_api", "Interface for defining API";
-    "bap-c", "Bap_c.Std", "Basic definitions of the C language";
+    "bap-abi", "Bap_abi", "", "Interface for specifying ABI";
+    "bap-api", "Bap_api", "", "Interface for defining API";
+    "bap-c", "Bap_c.Std", "Bap_c", "Basic definitions of the C language";
   ];
 
   "Utility Libraries", [
-    "bap-bml", "Bap_bml", "writing term transformations";
-    "bare", "Bare", "writing rules for matching for Primus observations";
-    "bap-bundle", "Bap_bundle.Std", "creating and opening bundles";
-    "bap-byteweight", "Bap_byteweight", "interface to the Byteweight subsystem";
-    "bap-demangle", "Bap_demangle.Std", "writing name demanglers";
-    "bap-dwarf", "Bap_dwarf.Std", "a native DWARF parser";
-    "bap-ida", "Bap_ida.Std","an interface to IDA Pro";
-    "bap-llvm", "Bap_llvm.Std", "an inteface to LLVM disassemblers and loaders";
-    "bap-plugins", "Bap_plugins.Std", "loading plugins";
-    "bap-recipe", "Bap_recipe", "loading recipes (packs of command line arguments)";
-    "bap-strings", "Bap_strings.Std", "various text utilities";
-    "bap-traces", "Bap_traces.Std", "working with execution traces";
-    "text-tags", "Text_tags", "Extension of Format's semantic tags";
+    "bap-bml", "Bap_bml", "", "writing term transformations";
+    "bare", "Bare", "", "writing rules for matching for Primus observations";
+    "bap-bundle", "Bap_bundle.Std", "Bap_bundle", "creating and opening bundles";
+    "bap-byteweight", "Bap_byteweight", "", "interface to the Byteweight subsystem";
+    "bap-demangle", "Bap_demangle.Std", "Bap_demangle", "writing name demanglers";
+    "bap-dwarf", "Bap_dwarf.Std", "Bap_dwarf", "a native DWARF parser";
+    "bap-ida", "Bap_ida.Std", "Bap_ida","an interface to IDA Pro";
+    "bap-llvm", "Bap_llvm.Std", "Bap_llvm", "an inteface to LLVM disassemblers and loaders";
+    "bap-plugins", "Bap_plugins.Std", "Bap_plugins", "loading plugins";
+    "bap-recipe", "Bap_recipe", "", "loading recipes (packs of command line arguments)";
+    "bap-strings", "Bap_strings.Std", "Bap_strings", "various text utilities";
+    "bap-traces", "Bap_traces.Std", "Bap_traces", "working with execution traces";
+    "text-tags", "Text_tags", "", "Extension of Format's semantic tags";
   ];
 ]
 
@@ -81,7 +81,7 @@ Finally, you can access a man page for a plugin using
 |}
 
 let packages =
-  List.concat_map ~f:(fun (_,ps) -> List.map ~f:(fun (p,_,_) -> p) ps) libraries
+  List.concat_map ~f:(fun (_,ps) -> List.map ~f:(fun (p,_,_,_) -> p) ps) libraries
 
 let mkdir path =
   if not (Sys.file_exists path) then
@@ -92,14 +92,11 @@ let run cmd =
   if res <> 0 then
     failwith ("Command: '" ^ cmd ^ "' failed")
 
-let dedot name =
-  match String.split name ~on:'.' with
-  | name' :: _ when name' = "Bap" -> name
-  | name :: _ -> name
-  | _ -> name
-
-let render_entry (_,entry,desc) =
-  sprintf "- {{!%s}%s} - %s" entry (dedot entry) desc
+let render_entry (_,entry,short,desc) =
+  let name_to_display = match short with
+    | "" -> entry
+    | _  -> short in
+  sprintf "- {{!%s}%s} - %s" entry name_to_display desc
 
 let render_section (name,entries) =
   sprintf "{1 %s}\n%s" name
@@ -120,7 +117,7 @@ let plugin = {
   help = sprintf "bap --%s-help=groff";
 }
 
-let man3_redirection lib =
+let generate_man3_redirection lib =
   mkdir "man3";
   let redirection = sprintf {|
     <!doctype html>
@@ -133,18 +130,25 @@ let man3_redirection lib =
   let name = sprintf "man3/%s.3.html" lib in
   Out_channel.write_all name ~data:redirection
 
+let build_man cmd out =
+  sprintf "%s | man2html -r > %s" cmd out
+
+let repair_links out =
+  sprintf {|sed "s/\\\N'45'/-/g" -i %s|} out
+
+let redirect_index out =
+  sprintf {|sed "s#../index.html#../odoc/index.html#g" -i %s|} out
+
 let build_manual {man; help} tool =
-  let repair_links x =
-    sprintf {|%s | sed "s/\\\N'45'/-/g" | man2html -r > %s|}
-      (help tool) x in
-  let redirect_index x =
-    sprintf {|sed "s#../index.html#../odoc/index.html#g" -i %s|} x in
   mkdir "man1";
   match Sys.command @@ sprintf "%s >/dev/null" (help tool) with
   | 0 ->
-    let output = sprintf "man1/%s.1.html" (man tool) in
-    run @@ repair_links output;
-    run @@ redirect_index output
+    let out = sprintf "man1/%s.1.html" (man tool) in
+    List.iter ~f:run [
+      build_man (help tool) out;
+      repair_links out;
+      redirect_index out
+    ]
   | _ ->
     eprintf "Warning: can't render manpage for %s\n" tool;
     eprintf "Called as %S, got:\n" (help tool);
@@ -157,7 +161,7 @@ let generate_manual () =
   let _plugins =
     Plugins.list () |> List.iter ~f:(fun p ->
         build_manual plugin (Plugin.name p))in
-  List.iter packages ~f:(fun lib -> man3_redirection lib)
+  List.iter packages ~f:generate_man3_redirection
 
 let odig_pkgs () =
   let f = Filename.temp_file "odig" ".pkgs" in
@@ -171,17 +175,6 @@ let odig_pkgs () =
   Sys.remove f;
   pkgs
 
-let odig intro =
-  let pkgs' = odig_pkgs () in
-  let pkgs =
-    List.filter packages
-      ~f:(fun p -> List.mem pkgs' p ~equal:(=)) |>
-    String.concat ~sep:" " in
-  run @@ sprintf
-    {|odig odoc --index-title="BAP API" --no-tag-index --index-intro=%s %s|}
-    intro pkgs;
-  run @@ "ln -s $(odig cache path)/html odoc"
-
 let plugins =
   let by_plugin_name p1 p2 =
     String.compare (Plugin.name p1) (Plugin.name p2) in
@@ -189,25 +182,37 @@ let plugins =
   List.fold ~init:"" ~f:(fun s p ->
       Format.sprintf "%s%-24s %s\n" s (Plugin.name p) (Plugin.desc p))
 
+let plugins_index =
+  sprintf "\n\n{1 Plugins}\n{[%s]}\n" plugins
+
+let library_index =
+  sprintf "\n{2 Libraries}\n%s"
+    (List.map ~f:render_section libraries
+     |> String.concat ~sep:"\n\n")
+
+let remove_unresolved pkgs =
+  let pkgs_known_to_odig = odig_pkgs () in
+  List.filter pkgs ~f:(fun p ->
+      List.mem pkgs_known_to_odig p ~equal:(=))
+
 let generate () =
-  let plugins = sprintf "\n\n{1 Plugins}\n{[%s]}\n" plugins in
-  let library_index =
-    sprintf "\n{2 Libraries}\n%s"
-      (List.map ~f:render_section libraries
-       |> String.concat ~sep:"\n\n") in
   let intro,out = Filename.open_temp_file "intro" ".mld" in
   Out_channel.output_string out introduction;
   Out_channel.output_string out library_index;
-  Out_channel.output_string out plugins;
+  Out_channel.output_string out plugins_index;
   Out_channel.close out;
-  odig intro;
+  let pkgs = remove_unresolved packages |> String.concat ~sep:" " in
+  run @@ sprintf
+    {|odig odoc --index-title="BAP API" --no-tag-index --index-intro=%s %s|}
+    intro pkgs;
+  run @@ "ln -s $(odig cache path)/html odoc";
   Sys.remove intro
 
-let hand_written_man () =
+let install_handwritten_manpages () =
   mkdir "man1";
   run "cp ../man/* man1/"
 
-let lisp_documentation () =
+let install_lisp_documentation () =
   mkdir "lisp";
   run "bap /bin/true --primus-lisp-documentation > lisp/index.org";
   run "emacs lisp/index.org --batch --eval '(org-html-export-to-html)'"
@@ -220,13 +225,14 @@ let check_installed x =
 
 let check () =
   check_installed "bap";
+  check_installed "emacs";
   check_installed "man2html";
   check_installed "odig";
-  check_installed "emacs"
+  check_installed "sed"
 
 let () =
   check ();
   generate_manual ();
-  hand_written_man ();
-  lisp_documentation ();
+  install_handwritten_manpages ();
+  install_lisp_documentation ();
   generate ()
