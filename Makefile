@@ -9,7 +9,7 @@ build: setup.ml
 
 .PHONY: doc
 doc:
-	@ocamlbuild -pkg bap bapdoc.native
+	@ocamlbuild -pkgs bap,bap-plugins,core_kernel tools/bapdoc.native
 	make -C doc
 
 all:
