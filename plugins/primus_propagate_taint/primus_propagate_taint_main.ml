@@ -193,18 +193,20 @@ module Marker(Machine : Primus.Machine.S) = struct
     Primus.Interpreter.leave_blk >>> mark
 end
 
-let markers : Primus.component list = [
-  (module Mapper);
-  (module Marker);
+let markers : (string * Primus.component * string) list = [
+  "taint-mapper",(module Mapper),
+  "Maintains a mapping between tainted objects and term identifiers.";
+  "taint-marker", (module Marker),
+  "Translates tainted values of the Taint engine to tainted-regs and \
+   tainted-ptrs term attributes of the IR.";
 ]
 
 let enable_projection () =
-  List.iter markers ~f:Primus.Machine.add_component
+  List.iter markers ~f:(fun (_,comp,_) ->
+      Primus.Machine.add_component comp [@warning "-D"])
 
 let enable_injection () =
-  Primus.Machine.add_component (module Intro)
-
-
+  Primus.Machine.add_component (module Intro) [@warning "-D"]
 
 open Config;;
 manpage [
@@ -286,6 +288,16 @@ when_ready begin fun {get=is} ->
   if is marking_disabled && not (is enabled)
   then invalid_arg "The no-marks option is only valid if \
                     the run option is specified";
+
+  List.iter markers ~f:(fun (name,comp,desc) ->
+      Primus.Components.register_generic name comp
+        ~package:"bap"
+        ~desc);
+
+  Primus.Components.register_generic "taint-intro" (module Intro)
+    ~package:"bap"
+    ~desc:"Introduces a taint when a term marked with tainted-reg or \
+           tainted-ptr is entered.";
 
   (* Modern interface *)
   if is injection_enabled

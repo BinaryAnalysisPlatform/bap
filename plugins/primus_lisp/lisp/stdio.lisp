@@ -110,6 +110,6 @@
   (declare (external "getchar"))
   (fgetc *standard-input*))
 
-(defmethod fini ()
+(defmethod machine-kill ()
   (channel-flush *standard-output*)
   (channel-flush *standard-error*))

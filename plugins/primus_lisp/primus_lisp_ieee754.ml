@@ -137,4 +137,8 @@ module Primitives(Machine : Primus.Machine.S) = struct
 end
 
 
-let init () = Primus.Machine.add_component (module Primitives)
+let init () =
+  Primus.Machine.add_component (module Primitives) [@warning "-D"];
+  Primus.Components.register_generic "lisp-ieee754" (module Primitives)
+    ~package:"bap"
+    ~desc:"Provides primitives for IEE754 floating-point arithemtic."

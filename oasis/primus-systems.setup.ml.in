@@ -1,0 +1,8 @@
+let (/) = Filename.concat
+
+let () =
+  add_variable ~doc:"where to install the Primus system defininitions"
+    "primus_systems_path"
+    ~define:(function
+        | None -> BaseEnv.var_get "datadir" / "primus"
+        | Some path -> path)

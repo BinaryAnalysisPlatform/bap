@@ -31,4 +31,3 @@ Executable "postinstall"
   MainIs:         postinstall.ml
   Install:        false
   CompiledObject: best
-  BuildDepends:   fileutils

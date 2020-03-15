@@ -34,9 +34,6 @@
   (when (is-in name 'memchr 'memrchr)
     (memcheck-bounds 'malloc ptr len)))
 
-
-
-
 (defun check/both (dst src len)
   (memcheck-bounds 'malloc src len)
   (memcheck-bounds 'malloc dst len))

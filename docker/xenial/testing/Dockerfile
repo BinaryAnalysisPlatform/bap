@@ -1,40 +1,17 @@
-FROM ubuntu:xenial
-MAINTAINER Ivan Gotovchits <ivg@ieee.org>
+FROM ocaml/opam2:ubuntu-16.04
 
-RUN apt-get -y update && apt-get -y install \
-    build-essential \
-    curl \
-    git \
-    libx11-dev \
-    m4 \
-    pkg-config \
-    python-pip \
-    software-properties-common \
-    sudo \
-    unzip \
-    wget \
-    libcap-dev \
-    gcc \
-    make \
-    libncurses5-dev
+WORKDIR /home/opam
 
-RUN useradd -m bap && echo "bap:bap" | chpasswd && adduser bap sudo
-RUN sed -i.bkp -e \
-      's/%sudo\s\+ALL=(ALL\(:ALL\)\?)\s\+ALL/%sudo ALL=NOPASSWD:ALL/g' \
-      /etc/sudoers
-USER bap
-WORKDIR /home/bap
+RUN sudo apt-get update && sudo apt-get install --yes python-pip \
+ && opam switch 4.09 \
+ && eval "$(opam env)" \
+ && opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing --all \
+ && opam update \
+ && opam depext --install bap --yes \
+ && opam clean -acrs \
+ && rm -rf /home/opam/.opam/4.0[2-8] \
+ && rm -rf /home/opam/.opam/4.09/.opam-switch/sources/* \
+ && rm -rf /home/opam/opam-repository \
+ && sudo pip install bap
 
-RUN wget https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh
-RUN echo "" | sh ./install.sh
-RUN opam --version
-
-RUN opam init --yes --compiler=4.05.0 --disable-sandboxing
-RUN eval "$(opam env)"
-RUN opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
-RUN opam update
-RUN opam install depext --yes
-RUN OPAMJOBS=1 opam depext --install bap --yes
-RUN sudo pip install bap
-
-ENTRYPOINT ["opam", "config", "exec", "--"]
+ENTRYPOINT ["opam", "config", "exec", "--]"
