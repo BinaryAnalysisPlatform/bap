@@ -4,107 +4,145 @@ open Bap_core_theory
 open Bap_knowledge
 include Self ()
 
-let is_section name v =
-  match Value.get Image.section v with
-  | Some x -> String.(x = name)
-  | _ -> false
+open Bap_main
+open KB.Syntax
 
-let eval slot exp =
-  let cls = Knowledge.Slot.cls slot in
-  match Knowledge.run cls exp (Toplevel.current ()) with
-  | Ok (v,_) -> Ok (Knowledge.Value.get slot v)
-  | Error conflict -> Error conflict
+type t = {
+  aliases : tid option String.Map.t;
+  symbols : tid String.Map.t;
+}
 
-let find_aliases (tid : tid) =
-  match eval Theory.Label.aliases (Knowledge.return tid) with
-  | Ok names -> names
-  | Error _ -> Set.empty (module String)
+let empty = {
+  aliases = Map.empty (module String);
+  symbols = Map.empty (module String);
+}
 
-let section_memory proj sec_name =
-  let collect_addresses addrs (mem,_ )=
-    Memory.foldi mem ~word_size:`r8 ~init:addrs
-      ~f:(fun addr _ acc -> Set.add acc addr) in
-  Memmap.filter (Project.memory proj) ~f:(is_section sec_name) |>
-  Memmap.to_sequence |>
-  Seq.fold ~init:(Set.empty (module Addr)) ~f:collect_addresses
+let is_stub sub =
+  KB.collect (Value.Tag.slot Sub.stub) (Term.tid sub) >>= function
+  | None -> KB.return false
+  | Some () -> KB.return true
 
+let at_most_one t key data =
+  Map.update t key ~f:(function
+      | None -> Some data
+      | Some _ -> None)
 
-module Plt_resolver = struct
+let add_alias t name s = at_most_one t name (Term.tid s)
 
-  let memory_contains m sub =
-    match Term.get_attr sub address with
-    | None -> false
-    | Some addr -> Set.mem m addr
+let update_aliases aliases sub =
+  KB.collect Theory.Label.aliases (Term.tid sub) >>|
+  Set.fold ~init:aliases ~f:(fun als name -> add_alias als name sub)
 
-  (* pre: all functions have different names
-     pre: there aren't any stubs with the same alias *)
-  let partition mem prog =
-    let add_aliases stubs stub =
-      let tid = Term.tid stub in
-      Set.fold ~init:stubs (find_aliases tid)
-        ~f:(fun stubs alias -> Map.set stubs alias tid) in
-    let add_sym syms s = Map.set syms (Sub.name s) (Term.tid s) in
-    let names = Map.empty (module String) in
-    Term.to_sequence sub_t prog |>
-    Seq.fold ~init:(names,names) ~f:(fun (stubs, syms) sub ->
-        if memory_contains mem sub
-        then add_aliases stubs sub, syms
-        else stubs, add_sym syms sub)
+let partition prog =
+  Term.to_sequence sub_t prog |>
+  Knowledge.Seq.fold ~init:empty
+    ~f:(fun {symbols; aliases} s ->
+        is_stub s >>= fun is_stub ->
+        if is_stub then
+          update_aliases aliases s >>= fun aliases ->
+          KB.return {symbols;aliases}
+        else
+          let symbols = Map.set symbols (Sub.name s) (Term.tid s) in
+          KB.return {symbols; aliases})
 
-  let find_unambiguous_pairs syms stubs =
-    Map.fold stubs ~init:(Map.empty (module Tid))
-      ~f:(fun ~key:name ~data:tid pairs ->
-          match Map.find syms name with
-          | None -> pairs
-          | Some tid' -> Map.add_multi pairs tid tid') |>
-    Map.filter_map ~f:(function
-        | [tid] -> Some tid
-        | _ -> None)
+let resolve prog =
+  partition prog >>= fun {symbols; aliases} ->
+  Map.fold aliases
+    ~init:(Map.empty (module Tid))
+    ~f:(fun ~key:alias ~data:stub_tid pairs ->
+        match Map.find symbols alias, stub_tid with
+        | Some tid', Some stub_tid -> at_most_one pairs stub_tid tid'
+        | _ -> pairs) |>
+  KB.return
 
-  let run proj =
-    let mem = section_memory proj ".plt" in
-    if Set.is_empty mem
-    then Map.empty (module Tid)
-    else
-      let stubs, subs = partition mem (Project.program proj) in
-      find_unambiguous_pairs subs stubs
-end
+let tids = Knowledge.Domain.mapping (module Tid) "tids"
+    ~equal:(Option.equal Tid.equal)
+    ~inspect:(Option.sexp_of_t sexp_of_tid)
 
-let relink prog links =
+let slot = Knowledge.Class.property Theory.Program.cls "stubs"
+    tids
+    ~persistent:(Knowledge.Persistent.of_binable (module struct
+                   type t = tid option Tid.Map.t
+                   [@@deriving bin_io]
+                 end))
+    ~public:true
+    ~desc:"The mapping from program stubs to real symbols"
+
+let cls = Knowledge.Slot.cls slot
+
+let provide prog =
+  Knowledge.Object.create cls >>= fun obj ->
+  resolve prog >>= fun pairs ->
+  KB.provide slot obj pairs >>= fun () ->
+  KB.return obj
+
+let find prog =
+  match Knowledge.run cls (provide prog) (Toplevel.current ()) with
+  | Ok (v,_) -> Knowledge.Value.get slot v
+  | Error cnf ->
+    error "%a\n" Knowledge.Conflict.pp cnf;
+    Map.empty (module Tid)
+
+let relink prog pairs =
   (object
     inherit Term.mapper
 
     method! map_jmp jmp =
-      match Jmp.kind jmp with
-      | Goto _ | Int _ | Ret _ -> jmp
-      | Call c ->
-        match Call.target c with
-        | Indirect _ -> jmp
-        | Direct tid ->
-          match Map.find links tid with
-          | None -> jmp
-          | Some tid' ->
-            Jmp.with_kind jmp (Call (Call.with_target c (Direct tid')))
+      match Jmp.alt jmp with
+      | None -> jmp
+      | Some alt -> match Jmp.resolve alt with
+        | Second _ -> jmp
+        | First tid -> match Map.find pairs tid with
+          | Some (Some tid') ->
+            Jmp.reify
+              ?cnd:(Jmp.guard jmp)
+              ?dst:(Jmp.dst jmp)
+              ~alt:(Jmp.resolved tid')
+              ~tid:(Term.tid jmp)
+              ()
+          | _ -> jmp
   end)#run prog
 
+module Plt = struct
+
+  let is_section name v =
+    match Value.get Image.section v with
+    | Some x -> String.(x = name)
+    | _ -> false
+
+  let section_memory proj sec_name =
+    let collect_addresses addrs (mem,_ )=
+      Memory.foldi mem ~word_size:`r8 ~init:addrs
+        ~f:(fun addr _ acc -> Set.add acc (Word.to_bitvec addr)) in
+    Memmap.filter (Project.memory proj) ~f:(is_section sec_name) |>
+    Memmap.to_sequence |>
+    Seq.fold ~init:(Set.empty (module Bitvec_order)) ~f:collect_addresses
+
+  let provide proj =
+    let stubs = section_memory proj ".plt" in
+    KB.promise (Value.Tag.slot Sub.stub) @@ fun label ->
+    KB.collect Theory.Label.addr label >>| function
+    | Some addr when Set.mem stubs addr -> Some ()
+    | _ ->    None
+end
+
 let run proj =
-  let links = Plt_resolver.run proj in
-  if Map.is_empty links then proj
-  else
-    Project.with_program proj (relink (Project.program proj) links)
+  let prog = Project.program proj in
+  Plt.provide proj;
+  let prog' = relink prog (find prog) in
+  Project.with_program proj prog'
 
-let () =
-  let _man = Config.manpage [
-      `S "DESCRIPTION";
+let () = Extension.documentation {|
+  # DESCRIPTION
 
-      `P "This plugin provides an abi pass that transforms a program
-          by substituting calls to stubs with calls to real
-          subroutines.";
+  Provides an abi pass that transforms a program by substituting calls
+  to stubs with calls to real subroutines, when they are present in
+  the binary.
 
-      `P "Thus, for stubs in .plt section, the correspondence is
-          based on symbols names: if a stub from plt section has the
-          same name as any other subroutine, then all calls to this stub
-          will be replaced with calls to the subroutine."
+|}
 
-    ] in
-  Config.when_ready (fun _ -> Bap_abi.register_pass run)
+
+
+let () = Extension.declare @@ fun _ctxt ->
+  Bap_abi.register_pass run;
+  Ok ()

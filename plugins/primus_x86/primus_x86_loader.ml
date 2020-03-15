@@ -37,7 +37,7 @@ module SetupPLT(Machine : Primus.Machine.S) = struct
         Seq.exists memory ~f:(fun mem -> Memory.contains mem a))
 
   let unlink addrs =
-    Machine.List.iter addrs ~f:(fun addr -> Linker.unlink (`addr addr))
+    Machine.List.iter addrs ~f:(fun a -> Linker.unlink (`addr a))
 
   let unresolve =
     load_table >>=

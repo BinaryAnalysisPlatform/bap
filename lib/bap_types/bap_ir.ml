@@ -58,7 +58,7 @@ module Tid = struct
       KB.provide slot tid (Some name)
     end
 
-  let set_addr = set Theory.Label.addr
+  let set_addr t w = set Theory.Label.addr t (Bap_bitvector.to_bitvec w)
   let set_ivec = set Theory.Label.ivec
 
 
