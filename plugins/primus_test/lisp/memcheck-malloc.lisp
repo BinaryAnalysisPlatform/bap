@@ -3,6 +3,8 @@
 (defmethod call (name ptr)
   (when (and ptr (= name 'free)
              (not (= ptr *malloc-zero-sentinel*)))
+    (unless (memcheck-is-tracked 'malloc ptr)
+      (memcheck-acquire 'malloc ptr 1))
     (memcheck-release 'malloc ptr)))
 
 (defmethod loaded (ptr)
@@ -31,9 +33,6 @@
 (defmethod call (name ptr c len)
   (when (is-in name 'memchr 'memrchr)
     (memcheck-bounds 'malloc ptr len)))
-
-
-
 
 (defun check/both (dst src len)
   (memcheck-bounds 'malloc src len)

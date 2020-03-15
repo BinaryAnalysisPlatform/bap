@@ -102,7 +102,7 @@ module Signals(Machine : Primus.Machine.S) = struct
         signal pc_change word one Type.(one int)
           {|(pc-change PC) is emitted when PC is updated|};
         signal eval_cond value one Type.(one bool)
-          {|(eval_cond V) is emitted after evaluating a conditional to V|};
+          {|(eval-cond V) is emitted after evaluating a conditional to V|};
         signal jumping (value,value) pair Type.(tuple [bool; int])
           {|(jumping C D) is emitted before jump to D occurs under the
           condition C|};
@@ -117,11 +117,21 @@ module Signals(Machine : Primus.Machine.S) = struct
           X,Y,... and return value R.|};
         signal interrupt int one Type.(one int)
           {|(interrupt N) is emitted when the hardware interrupt N occurs|};
-        Lisp.signal Primus.Machine.init (fun () -> Machine.return [])
+        signal Primus.System.stop sym one Type.(one sym)
+          "(system-stop NAME) occurs when the system with the given
+           name finished its execution. The machine is in the
+           restricted mode in the body of the methods" ;
+        Lisp.signal Primus.System.init (fun () -> Machine.return [])
           ~doc: {|(init) occurs when the Primus Machine is initialized|}
           ~params:Type.unit;
-        Lisp.signal Primus.Machine.finished (fun () -> Machine.return [])
+        Lisp.signal Primus.System.fini (fun () -> Machine.return [])
           ~doc:{|(fini) occurs when the Primus Machine is finished|}
+          ~params:Type.unit;
+        Lisp.signal Primus.Machine.kill (fun _ -> Machine.return [])
+          ~doc:"(machine-kill) occurs when Machine is killed and could be
+          used for machine cleanup/teardown and analysis summaries.
+          The machine is in the resticted mode in the body of the
+          methods."
           ~params:Type.unit;
       ]
 end
@@ -136,7 +146,13 @@ let load_lisp_program dump paths features =
       if dump then dump_program prog;
       Lisp.link_program prog;
   end in
-  Primus.Machine.add_component (module Loader)
+  Primus.Machine.add_component (module Loader) [@warning "-D"];
+  Primus.Components.register_generic "load-lisp-library" (module Loader)
+    ~package:"bap"
+    ~desc:"Loads the Primus Library. Links all functions defined as \
+           external into the Primus Machine. Symbols are assumed to \
+           be strong, i.e., if the symbol is already linked, then \
+           it will be overriden by the corresponding Lisp implemenetation"
 
 module LispCore(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
@@ -183,7 +199,7 @@ module TypeErrorSummary(Machine : Primus.Machine.S) = struct
   module Lisp = Primus.Lisp.Make(Machine)
 
   let init () =
-    Primus.Machine.init >>> fun () ->
+    Primus.System.init >>> fun () ->
     Lisp.types >>| fun env ->
     let errors = List.length (Primus.Lisp.Type.errors env) in
     if errors = 0
@@ -192,6 +208,7 @@ module TypeErrorSummary(Machine : Primus.Machine.S) = struct
         errors (if errors > 1 then "s" else "")
 end
 
+
 let typecheck proj =
   let module Machine = struct
     type 'a m = 'a
@@ -199,7 +216,7 @@ let typecheck proj =
   end in
   let module Main = Primus.Machine.Main(Machine) in
   let module Lisp = Primus.Lisp.Make(Machine) in
-  Primus.Machine.add_component (module TypeErrorSummary);
+  Primus.Machine.add_component (module TypeErrorSummary) [@warning "-D"];
   match Main.run proj @@ Machine.return () with
   | Normal,_ -> ()
   | Exn err,_ ->
@@ -270,8 +287,19 @@ let () =
         Project.register_pass' ~deps:["api"] ~autorun:true typecheck;
       let paths = [Filename.current_dir_name] @ !!libs @ [Lisp_config.library] in
       let features = "init" :: !!features in
-      Primus.Machine.add_component (module LispCore);
-      Primus.Machine.add_component (module TypeErrorPrinter);
+      Primus.Components.register_generic ~package:"bap" "lisp-type-checker"
+        (module TypeErrorSummary)
+        ~desc:"Typechecks program and outputs the summary in the standard output.";
+      Primus.Machine.add_component (module LispCore) [@warning "-D"];
+      Primus.Components.register_generic "lisp-core" (module LispCore)
+        ~package:"bap"
+        ~desc:"Initializes Primus Lisp core. Forwards Lisp message to \
+               the BAP log subsystem and enables propagation of \
+               observations to signals.";
+      Primus.Machine.add_component (module TypeErrorPrinter) [@warning "-D"];
+      Primus.Components.register_generic ~package:"bap" "lisp-type-error-printer"
+        (module TypeErrorPrinter)
+        ~desc:"Prints Primus Lisp type errors into the standard output.";
       Channels.init !!redirects;
       Primitives.init ();
       load_lisp_program !!dump paths features)

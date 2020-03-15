@@ -34,6 +34,7 @@ module Std = struct
     let ssa = Ssa.sub
     let is_ssa = Ssa.is_transformed
     let free_vars = FV.free_vars_of_sub
+    let compute_liveness = FV.compute_liveness
   end
 
   module Taint = Bap_sema_taint

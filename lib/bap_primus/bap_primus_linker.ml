@@ -60,31 +60,33 @@ include struct
     List (Atom dst :: sexp_of_args args)
 end
 
-let unbound_name,needs_unbound =
-  Bap_primus_observation.provide ~inspect:sexp_of_name
-    "linker-unbound"
-
 module Trace = struct
   module Observation = Bap_primus_observation
   let exec,will_exec = Observation.provide
       ~inspect:sexp_of_name
       "linker-exec"
+      ~desc:"Occurs before code with the given name is executed."
 
   let unresolved,will_fail = Observation.provide
       ~inspect:sexp_of_name
       "linker-unresolved"
+      ~desc:"Occurs when a linker hits the unresolved name."
 
   let call,call_entered =
     Observation.provide ~inspect:sexp_of_call "call"
+      ~desc:"Occurs when the call is made."
 
   let return,call_returned =
     Observation.provide ~inspect:sexp_of_call "call-return"
+      ~desc:"Occurs when the call returns."
 
   let lisp_call,lisp_call_entered =
     Observation.provide ~inspect:sexp_of_call "lisp-call"
+      ~desc:"Occurs when the call to Lisp code is made."
 
   let lisp_call_return,lisp_call_returned =
     Observation.provide ~inspect:sexp_of_call "lisp-call-return"
+      ~desc:"OCcurs when the call to Lisp code returns."
 
 end
 include Trace

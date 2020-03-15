@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_knowledge
 open Bap.Std
 open Bap_primus.Std
 open Graphlib.Std
@@ -13,7 +14,12 @@ module Param = struct
 
   manpage [
     `S "DESCRIPTION";
-    `P "Run a program in the Primus emulator. ";
+    `P "Populates and run the Primus Jobs queue.
+      Creates new job for each specified system and runs the queued
+    jobs (including those that were already added to the queue by
+    other analyses). After the job queue is emptied, commits the
+    obtained knowledge and passes the resulting project data structure
+    downstream.";
   ];;
 
   let argv = param (array string)  "argv"
@@ -23,35 +29,36 @@ module Param = struct
       ~doc:"Program environemt as a comma separated list of VAR=VAL pairs";;
 
   let entry = param (list string) "entry-points"
-      ~doc:
+      ~doc:"Can be a list of entry points or a special keyword
+      $(b,all-subroutines) or $(b,marked-subroutines). An entry point
+      is either a string denoting a function name, a tid starting with
+      the $(b,%) percent, or an address in a hexadecimal format
+      prefixed with $(b,0x).  When the option is specified, the Primus
+      Machine will start the execution from the specified entry
+      point(s). Otherwise the execution will be started from all
+      program terms that are marked with the [entry_point]
+      attribute. If there are several entry points, then the execution
+      will be started from all of them in parallel, i.e., by forking
+      the machine and starting each machine from its own entry
+      point. Consider enabling corresponding scheduler. If neither the
+      argument nor there any entry points in the program, then a
+      function called $(b,_start) is called. If $(b,all-subroutines)
+      are specified then Primus will execute all subroutines in
+      the topological order. If $(b,marked-subroutines) is specified,
+      then Primus will execute the specified systems on all
+      subroutines that has the $(b,mark) attribute."
 
-        "Can be a list of entry points or a special keyword
-      $(b,all-subroutines). An entry point is either a string denoting
-      a function name, a tid starting with the $(b,%) percent, or an
-      address in a hexadecimal format prefixed with $(b,0x).
-      When the option is specified, the Primus Machine will start the
-      execution from the specified entry point(s). Otherwise the
-      execution will be started from all program terms that are marked
-      with the [entry_point] attribute. If there are several entry
-      points, then the execution will be started from all of them in
-      parallel, i.e., by forking the machine and starting each machine
-      from its own entry point. Consider enabling corresponding
-      scheduler. If neither the argument nor there any entry points in
-      the program, then a function called $(b,_start) is called. If
-      $(b,all-subroutines) are specified then Primus will execute all
-      subroutines in topological order"
 
   let in_isolation = flag "in-isolation"
-      ~doc:"Run each entry point as an isolated machine.
+      ~doc:"Run each entry point as new system.
 
-      Each entry point is started in a separate machine and run
-      sequentially, with the project data structure passed between them."
+      Each entry point is enqueued as a job and run in a separate
+      systems. The project and knowledge is passed between each
+      system, the rest of the state is discarded."
 
 
   let with_repetitions = flag "with-repetitions"
-      ~doc:
-
-        "The pass runs subroutines in the topological order meaning
+      ~doc:"The pass runs subroutines in the topological order meaning
       the farther a subroutine is in a callgraph from the roots the
       later it will be run as an entry point and higher chances it
       will be called before that from some other subroutine. And
@@ -62,18 +69,18 @@ module Param = struct
       And this option disables this behavior and runs all the
       subroutines in a row. "
 
+  let systems = param_all (list string) "systems"
+      ~default:[["bap:legacy-main"]]
+      ~doc:"Runs the specified Primus systems. If several systems \
+            are specified then runs all entry points for each \
+            specified system."
 end
-
 
 let pp_id = Monad.State.Multi.Id.pp
 
-module Machine = struct
-  type 'a m = 'a
-  include Primus.Machine.Make(Monad.Ident)
-end
+module Machine = Primus.Analysis
 open Machine.Syntax
 
-module Main = Primus.Machine.Main(Machine)
 module Eval = Primus.Interpreter.Make(Machine)
 module Linker = Primus.Linker.Make(Machine)
 module Env = Primus.Env.Make(Machine)
@@ -123,29 +130,39 @@ let callgraph start prog =
   connect_inputs |>
   connect_unreachable_scc
 
-let all_subroutines prog =
+let all_subroutines ?(marked=false) prog =
   let entries = entry_points prog in
   let start = Tid.create () in
-  let non_entry =
-    let roots = Tid.Set.of_list (start :: entries) in
-    fun t -> if Set.mem roots t then None else Some (`tid t) in
-  List.map entries ~f:(fun t -> `tid t) @
+  let roots = Tid.Set.of_list (start :: entries) in
+  let unmarked = if not marked then Tid.Set.empty else
+      Term.enum sub_t prog |>
+      Seq.fold ~init:Tid.Set.empty ~f:(fun unmarked sub ->
+          if Term.has_attr sub mark then unmarked
+          else Set.add unmarked (Term.tid sub)) in
+  let marked_non_root_to_entry t =
+    if Set.mem roots t || Set.mem unmarked t then None
+    else Some (`tid t) in
+  List.filter_map entries ~f:(fun t ->
+      if Set.mem unmarked t then None else Some (`tid t)) @
   Seq.to_list @@
-  Seq.filter_map ~f:non_entry @@
+  Seq.filter_map ~f:marked_non_root_to_entry @@
   Graphlib.reverse_postorder_traverse (module Graphs.Callgraph)
     ~start @@
   callgraph start prog
 
-let parse_entry_points proj entry = match entry with
-  | ["all-subroutines"] -> all_subroutines (Project.program proj)
-  | [] -> List.map (entry_points (Project.program proj)) ~f:(fun x ->
-      `tid x)
-  | xs -> List.map ~f:(name_of_entry (Project.arch proj)) xs
-
 let parse_entry_points proj entry =
-  match parse_entry_points proj entry with
-  | [] -> [`symbol "_start"]
-  | xs -> xs
+  let prog = Project.program proj in
+  match entry with
+  | ["all-subroutines"] -> all_subroutines prog
+  | ["marked-subroutines"] -> all_subroutines ~marked:true prog
+  | [] -> List.(entry_points prog >>| fun x -> `tid x)
+  | xs -> List.(xs >>| name_of_entry (Project.arch proj))
+
+let parse_entry_points proj entries =
+  match entries,parse_entry_points proj entries with
+  | ["marked-subroutines"],[] -> []
+  | _,[] -> [`symbol "_start"]
+  | _,xs -> xs
 
 let exec x =
   Machine.current () >>= fun cid ->
@@ -157,7 +174,6 @@ let exec x =
          (string_of_name x)
          (Primus.Exn.to_string exn);
        Machine.return ())
-
 
 let visited = Primus.Machine.State.declare
     ~uuid:"c6028425-a8c7-48cf-b6d9-57a44ed9a08a"
@@ -183,7 +199,8 @@ let is_visited = function
   | _ -> Machine.return false
 
 let run need_repeat entries =
-  let rec loop = function
+  let total = List.length entries in
+  let rec loop stage = function
     | [] ->
       info "all toplevel machines done, halting";
       Eval.halt >>=
@@ -193,7 +210,7 @@ let run need_repeat entries =
       Machine.fork ()    >>= fun () ->
       Machine.current () >>= fun cid ->
       if Id.(pid = cid)
-      then loop xs
+      then loop (stage+1) xs
       else
         is_visited x >>= fun is_visited ->
         if is_visited && not need_repeat then
@@ -201,34 +218,70 @@ let run need_repeat entries =
           never_returns
         else
           exec x >>= fun () ->
+          report_progress ~task:"multi-task-job" ~stage ~total ();
           Eval.halt >>=
           never_returns in
-  loop entries
+  loop 0 entries
 
-let run_all need_repeat envp args proj xs =
-  Main.run ~envp ~args proj @@
-  run need_repeat xs
+let enqueue_super_job need_repeat envp args sys xs =
+  Primus.Jobs.enqueue sys ~envp ~args
+    ~name:"multi-task"
+    ~desc:"runs all entries in one system"
+    ~start:(run need_repeat xs)
 
-let run_sep envp args proj xs =
-  List.fold xs ~init:(Primus.Normal,proj) ~f:(fun (_,proj) p ->
-      Main.run ~envp ~args proj @@ begin
-        exec p >>=
-        fun () -> Eval.halt >>=
-        never_returns
-      end)
+let is_visited proj = function
+  | `addr _ | `symbol _ -> false
+  | `tid t ->
+    match Term.find sub_t (Project.program proj) t with
+    | None -> true
+    | Some sub -> match Term.first blk_t sub with
+      | None -> true
+      | Some blk -> Term.has_attr blk Term.visited
 
+let enqueue_separate_jobs need_repeat envp args sys xs =
+  List.iter xs ~f:(fun p ->
+      Primus.Jobs.enqueue sys
+        ~args ~envp
+        ~name:(Primus.Linker.Name.to_string p)
+        ~start:begin
+          Machine.get () >>= fun proj ->
+          if not need_repeat && is_visited proj p
+          then Machine.return ()
+          else exec p
+        end)
+
+let update_progress result =
+  let finished = List.length@@Primus.Jobs.finished result in
+  let total = finished + Primus.Jobs.pending () + 1 in
+  report_progress ~stage:finished ~total ()
+
+let on_success job _ _ result : Primus.Jobs.action =
+  info "job %s finished successfully" (Primus.Job.name job);
+  update_progress result;
+  Continue
+
+let on_failure job conflict result : Primus.Jobs.action =
+  info "job %s failed to converge and exited with conflict: %a"
+    (Primus.Job.name job) Knowledge.Conflict.pp conflict;
+  update_progress result;
+  Continue
 
 let main {Config.get=(!)} proj =
   let open Param in
-  let run = if !in_isolation then run_sep else run_all !with_repetitions in
-  parse_entry_points proj !entry |> run !envp !argv proj |> function
-  | (Primus.Normal,proj)
-  | (Primus.Exn Primus.Interpreter.Halt,proj) ->
-    info "Ok, we've terminated normally";
-    proj
-  | (Primus.Exn exn,proj) ->
-    info "program terminated by a signal: %s" (Primus.Exn.to_string exn);
-    proj
+  let state = Toplevel.current () in
+  let enqueue_jobs = if !in_isolation
+    then enqueue_separate_jobs else enqueue_super_job in
+  let inputs = parse_entry_points proj !entry in
+  List.concat !systems |> List.iter ~f:(fun sys ->
+      let name = Knowledge.Name.read sys in
+      match Primus.System.Repository.find name with
+      | None -> invalid_argf "Unknown system: %s" sys ()
+      | Some sys ->
+        enqueue_jobs !with_repetitions !envp !argv sys inputs) ;
+  report_progress ~total:(Primus.Jobs.pending ()) ();
+  let result = Primus.Jobs.run ~on_failure ~on_success proj state in
+  Toplevel.set (Primus.Jobs.knowledge result);
+  Primus.Jobs.project result
 
 let deps = [
   "trivial-condition-form"
@@ -237,4 +290,7 @@ let deps = [
 let () =
   Config.when_ready (fun conf ->
       Project.register_pass ~deps (main conf);
-      Primus.Machine.add_component (module Visited))
+      Primus.Machine.add_component (module Visited) [@warning "-D"];
+      Primus.Components.register_generic "records-visited" (module Visited)
+        ~internal:true
+        ~package:"run")

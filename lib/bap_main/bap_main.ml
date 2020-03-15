@@ -1161,6 +1161,9 @@ let init
       List.partition_map result ~f:(function
           | Ok p -> `Fst p
           | Error (p,e) -> `Snd (p,e)) in
+    let version = match Bap_main_config.build_id with
+      | "" -> version
+      | id -> sprintf "%s+%s" version id in
     if List.is_empty failures
     then match Grammar.eval argv
                  ?name ~version ?env ?help:out

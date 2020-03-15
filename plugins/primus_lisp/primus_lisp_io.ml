@@ -71,7 +71,7 @@ let init redirs = {
 
 let try_open path = Or_error.try_with (fun () -> {
       input = Some (In_channel.create path);
-      output = Some (Out_channel.create path)
+      output = Some (Out_channel.create ~append:true path)
     })
 
 let try_flush {output} = Or_error.try_with @@ fun () ->
@@ -280,4 +280,7 @@ let init redirections =
             (channel-flush DESCR) is called. |};
       ]
   end in
-  Primus.Machine.add_component (module Primitives)
+  Primus.Machine.add_component (module Primitives) [@warning "-D"];
+  Primus.Components.register_generic "lisp-basic-io" (module Primitives)
+    ~package:"bap"
+    ~desc:"Provides basic IO primitives to Primus Lisp."

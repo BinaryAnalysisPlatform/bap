@@ -10,7 +10,23 @@ let init s b =
     let stack_size = s
     let stack_base = b
   end in
-  Primus.Machine.add_component (module Primus_loader_basic.Make(Param));;
+  let module Loader = Primus_loader_basic.Make(Param) in
+  Primus.Machine.add_component (module Loader) [@warning "-D"];
+  Primus.Components.register_generic
+    ~package:"bap" "program-loader" (module Loader)
+    ~desc:"Initializes the runtime environment. \
+           This is a generic loader that should work with most of \
+           the ABIs. It loads memory segments, including virtual,  \
+           sets up [brk], [end], [edata], [etext], and [environ] \
+           variables (see any unix man page for the description \
+           of these symbols). Note that ([edata] and [etext] are \
+           not guaranteed, while [end] and [brk] are). The loader \
+           also initializes all CPU registers to zero and setups \
+           and alloocates the main stack frame (copies arguments \
+           from the ctxt to the stack), and points the stack-pointer \
+           register to the command line arguments. (The environment \
+           variables follows the arguments)."
+;;
 
 
 Config.manpage [

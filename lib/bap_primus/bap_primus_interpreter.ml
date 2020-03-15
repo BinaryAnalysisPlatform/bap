@@ -17,112 +17,179 @@ end
 
 open Primus
 
+module Time = struct
+  include Int
+  let clocks = ident
+  let of_clocks = of_int
+end
 
 open Bap_primus_sexp
+
+let clock,tick =
+  Observation.provide ~inspect:Time.sexp_of_t "clock"
+    ~desc:"Occurs on each clock (operation) of the interpreter."
 
 let memory_switch,switching_memory =
   let inspect = Primus.Memory.Descriptor.sexp_of_t in
   Observation.provide ~inspect "memory-switch"
+    ~desc:"Occurs when the memory bank is switched."
 
 let enter_term, term_entered =
   Observation.provide ~inspect:sexp_of_tid "enter-term"
+    ~desc:"Occurs before the given term."
+
 let leave_term, term_left =
   Observation.provide ~inspect:sexp_of_tid "leave-term"
+    ~desc:"Occurs after the given term is evaluated."
+
 let enter_pos,pos_entered =
   Observation.provide ~inspect:Pos.sexp_of_t "enter-pos"
+    ~desc:"Occurs before the given position is evaluated."
+
 let leave_pos,pos_left =
   Observation.provide ~inspect:Pos.sexp_of_t "leave-pos"
+    ~desc:"Occurs after the given position is evaluated."
+
 let sexp_of_term term = sexp_of_tid (Term.tid term)
+
 let enter_sub,sub_entered =
   Observation.provide ~inspect:sexp_of_term "enter-sub"
+    ~desc:"Occurs before the given term is evaluated."
+
 let enter_arg,arg_entered =
   Observation.provide ~inspect:sexp_of_term "enter-arg"
+    ~desc:"Occurs before the given term is evaluated."
+
 let enter_blk,blk_entered =
   Observation.provide ~inspect:sexp_of_term "enter-blk"
+    ~desc:"Occurs before the given term is evaluated."
+
 let enter_phi,phi_entered =
   Observation.provide ~inspect:sexp_of_term "enter-phi"
+    ~desc:"Occurs before the given term is evaluated."
+
 let enter_def,def_entered =
   Observation.provide ~inspect:sexp_of_term "enter-def"
+    ~desc:"Occurs before the given term is evaluated."
+
 let enter_jmp,jmp_entered =
   Observation.provide ~inspect:sexp_of_term "enter-jmp"
+    ~desc:"Occurs before the given term is evaluated."
+
 let enter_top,top_entered =
   Observation.provide ~inspect:sexp_of_term "enter-top"
+    ~desc:"Occurs before the given term is evaluated."
+
 let leave_sub,sub_left =
   Observation.provide ~inspect:sexp_of_term "leave-sub"
+    ~desc:"Occurs after the given term is evaluated."
+
 let leave_arg,arg_left =
   Observation.provide ~inspect:sexp_of_term "leave-arg"
+    ~desc:"Occurs after the given term is evaluated."
+
 let leave_blk,blk_left =
   Observation.provide ~inspect:sexp_of_term "leave-blk"
+    ~desc:"Occurs after the given term is evaluated."
+
 let leave_phi,phi_left =
   Observation.provide ~inspect:sexp_of_term "leave-phi"
+    ~desc:"Occurs after the given term is evaluated."
+
 let leave_def,def_left =
   Observation.provide ~inspect:sexp_of_term "leave-def"
+    ~desc:"Occurs after the given term is evaluated."
+
 let leave_jmp,jmp_left =
   Observation.provide ~inspect:sexp_of_term "leave-jmp"
+    ~desc:"Occurs after the given term is evaluated."
+
 let leave_top,top_left =
   Observation.provide ~inspect:sexp_of_term "leave-top"
+    ~desc:"Occurs after the given term is evaluated."
 
 let enter_exp,exp_entered =
   Observation.provide ~inspect:sexp_of_exp "enter-exp"
+    ~desc:"Occurs before the given exp is evaluated."
 
 let leave_exp,exp_left =
   Observation.provide ~inspect:sexp_of_exp "leave-exp"
+    ~desc:"Occurs after the given exp is evaluated."
 
 let pc_change,pc_changed =
   Observation.provide ~inspect:sexp_of_word "pc-changed"
+    ~desc:"Occurs after the program counter is changed."
 
 let halting,will_halt =
   Observation.provide ~inspect:sexp_of_unit "halting"
+    ~desc:"Occurs before the halt operation is posted."
+
 
 let division_by_zero,will_divide_by_zero =
   Observation.provide ~inspect:sexp_of_unit "division-by-zero"
+    ~desc:"Occurs before the division by zero happens."
 
 let cfi_violation,cfi_will_diverge =
   Observation.provide ~inspect:sexp_of_word "cfi-violation"
+    ~desc:"Occurs before the control flow violation is commited."
 
 let segfault, will_segfault =
   Observation.provide ~inspect:sexp_of_word "segfault"
+    ~desc:"Occurs just before the segmentation fault."
 
 let pagefault,page_fail =
   Observation.provide ~inspect:sexp_of_word "pagefault"
+    ~desc:"Occurs on pagefault."
 
 let interrupt,will_interrupt =
   Observation.provide ~inspect:sexp_of_int "interrupt"
+    ~desc:"Occurs before an interrupt."
 
 let sexp_of_insn insn = Sexp.Atom (Insn.to_string insn)
 
 let loading,on_loading =
   Observation.provide ~inspect:sexp_of_value "loading"
+    ~desc:"Occurs just before the given address is dereferenced."
 
 let loaded,on_loaded =
   Observation.provide ~inspect:sexp_of_values "loaded"
+    ~desc:"Occurs after the given address is read."
 
 let storing,on_storing =
   Observation.provide ~inspect:sexp_of_value "storing"
+    ~desc:"Occurs before the value is stored at the address."
 
 let stored,on_stored =
   Observation.provide ~inspect:sexp_of_values "stored"
+    ~desc:"Occurs after the value is stored at the address."
 
 let reading,on_reading =
   Observation.provide ~inspect:sexp_of_var "reading"
+    ~desc:"Occurs before the given variable is read."
 
 let read,on_read =
   Observation.provide ~inspect:sexp_of_binding "read"
+    ~desc:"Occurs after the given variable is evaluated to the value."
 
 let writing,on_writing =
   Observation.provide ~inspect:sexp_of_var "writing"
+    ~desc:"Occurs before the value is assigned to the variable."
 
 let written,on_written =
   Observation.provide ~inspect:sexp_of_binding "written"
+    ~desc:"Occurs after the value is assigned to the variable."
 
 let undefined,on_undefined =
   Observation.provide ~inspect:sexp_of_value "undefined"
+    ~desc:"Occurs when an undefined value is created."
 
 let jumping,will_jump =
   Observation.provide ~inspect:sexp_of_values "jumping"
+    ~desc:"Occurs before the jump to the given destination."
 
 let eval_cond,on_cond =
   Observation.provide ~inspect:sexp_of_value "eval-cond"
+    ~desc:"Occurs when the jump condition is evaluated."
 
 
 let results r op = Sexp.List [op; sexp_of_value r]
@@ -164,24 +231,32 @@ let sexp_of_ite ((cond, yes, no), r) = results r @@ sexps [
 
 let binop,on_binop =
   Observation.provide ~inspect:sexp_of_binop "binop"
+    ~desc:"Occurs on each binary operation."
 
 let unop,on_unop =
   Observation.provide ~inspect:sexp_of_unop "unop"
+    ~desc:"Occurs on each unary operation."
 
 let cast,on_cast =
   Observation.provide ~inspect:sexp_of_cast "cast"
+    ~desc:"Occurs on each cast."
 
 let extract,on_extract =
   Observation.provide ~inspect:sexp_of_extract "extract"
+    ~desc:"Occurs on each extract operation."
 
 let concat,on_concat =
   Observation.provide ~inspect:sexp_of_concat "concat"
+    ~desc:"Occurs on each concat operation."
 
 let const,on_const =
   Observation.provide ~inspect:sexp_of_value "const"
+    ~desc:"Occurs on each constant."
 
 let ite, on_ite =
   Observation.provide ~inspect:sexp_of_ite "ite"
+    ~desc:"Occurs on each ite expression."
+
 
 let sexp_of_name = function
   | `symbol name -> Sexp.Atom name
@@ -194,6 +269,7 @@ type scope = {
 }
 
 type state = {
+  time : Time.t;
   addr : addr;
   curr : pos;
   lets : scope; (* lexical context *)
@@ -219,6 +295,7 @@ let state = Primus.Machine.State.declare
     (fun proj  ->
        let prog = Project.program proj in
        Pos.{
+         time = Time.zero;
          addr = null proj;
          curr = Top {me=prog; up=Nil};
          lets = empty_scope;
@@ -262,6 +339,8 @@ module Make (Machine : Machine) = struct
 
   let (!!) = Machine.Observation.make
 
+  let post = Machine.Observation.post
+
   let failf fmt = Format.ksprintf (fun msg ->
       fun () -> Machine.raise (Runtime_error msg)) fmt
 
@@ -279,18 +358,24 @@ module Make (Machine : Machine) = struct
   let set v x =
     !!on_writing v >>= fun () ->
     Env.set v x >>= fun () ->
-    !!on_written (v,x)
-
+    post on_written ~f:(fun k -> k (v,x))
 
   let get v =
     !!on_reading v >>= fun () ->
     Env.get v >>= fun r ->
-    !!on_read (v,r) >>| fun () -> r
+    post on_read ~f:(fun k -> k (v,r)) >>| fun () -> r
 
   let call_when_provided name =
     Code.is_linked (`symbol name) >>= fun provided ->
     if provided then Code.exec (`symbol name) >>| fun () -> true
     else Machine.return false
+
+  let tick =
+    Machine.Local.get state >>= fun s ->
+    !!tick s.time >>= fun () ->
+    Machine.Local.put state {
+      s with time = Time.succ s.time;
+    }
 
   let binop op x y = match op with
     | Bil.DIVIDE | Bil.SDIVIDE
@@ -303,23 +388,25 @@ module Make (Machine : Machine) = struct
       else Machine.raise Division_by_zero
     | _ ->
       value (Bil.Apply.binop op x.value y.value) >>= fun r ->
-      !!on_binop ((op,x,y),r) >>| fun () -> r
+      tick >>= fun () ->
+      post on_binop ~f:(fun k -> k ((op,x,y),r)) >>| fun () -> r
 
   let unop op x =
     value (Bil.Apply.unop op x.value) >>= fun r ->
-    !!on_unop ((op,x),r) >>| fun () -> r
+    tick >>= fun () ->
+    post on_unop ~f:(fun k -> k ((op,x),r)) >>| fun () -> r
 
   let cast t s x =
     value (Bil.Apply.cast t s x.value) >>= fun r ->
-    !!on_cast ((t,s,x),r) >>| fun () -> r
+    post on_cast ~f:(fun k -> k ((t,s,x),r)) >>| fun () -> r
 
   let concat x y =
     value (Word.concat x.value y.value) >>= fun r ->
-    !!on_concat ((x,y),r) >>| fun () -> r
+    post on_concat ~f:(fun k -> k ((x,y),r)) >>| fun () -> r
 
   let extract ~hi ~lo x =
     value (Word.extract_exn ~hi ~lo x.value) >>= fun r ->
-    !!on_extract ((hi,lo,x),r) >>| fun () -> r
+    post on_extract ~f:(fun k -> k ((hi,lo,x),r)) >>| fun () -> r
 
   let const c =
     value c >>= fun r ->
@@ -339,16 +426,18 @@ module Make (Machine : Machine) = struct
   let load_byte a =
     !!on_loading a >>= fun () ->
     trapped_memory_access (Memory.get a.value) >>= fun r ->
-    !!on_loaded (a,r) >>| fun () -> r
+    tick >>= fun () ->
+    post on_loaded ~f:(fun k -> k (a,r)) >>| fun () -> r
 
   let store_byte a x =
     !!on_storing a >>= fun () ->
     trapped_memory_access (Memory.set a.value x) >>= fun () ->
-    !!on_stored (a,x)
+    tick >>= fun () ->
+    post on_stored ~f:(fun k -> k (a,x))
 
   let ite cond yes no =
     value (if Word.is_one cond.value then yes.value else no.value) >>= fun r ->
-    !!on_ite ((cond, yes, no), r) >>| fun () -> r
+    post on_ite ~f:(fun k -> k ((cond, yes, no), r)) >>| fun () -> r
 
 
   let get_lexical scope v =
@@ -397,6 +486,10 @@ module Make (Machine : Machine) = struct
     else
       !!switching_memory m >>= fun () ->
       Memory.switch m
+
+
+  let time =
+    Machine.Local.get state >>| fun s -> s.time
 
 
   let rec eval_exp x =
@@ -564,7 +657,8 @@ module Make (Machine : Machine) = struct
     | None -> Machine.return ()
     | Some addr ->
       Value.of_word addr >>= fun addr ->
-      !!will_jump (cond,addr)
+      tick >>= fun () ->
+      post will_jump ~f:(fun k -> k (cond,addr))
 
   let exec_to_prompt dst =
     Machine.Local.get state >>= function
@@ -578,7 +672,8 @@ module Make (Machine : Machine) = struct
       exec_to_prompt dst
     | Indirect x ->
       eval_exp x >>= fun ({value} as dst) ->
-      !!will_jump (cond,dst) >>= fun () ->
+      tick >>= fun () ->
+      post will_jump ~f:(fun k -> k (cond,dst)) >>= fun () ->
       Code.resolve_tid (`addr value) >>= function
       | None -> Code.exec (`addr value)
       | Some dst -> exec_to_prompt dst
@@ -683,12 +778,14 @@ module Make (Machine : Machine) = struct
       let name = Sub.name t in
       iter_args t arg_def >>= fun () ->
       get_args ~input:true t >>| Seq.to_list_rev >>= fun inputs ->
-      !!Linker.Trace.call_entered (name,List.rev inputs) >>= fun () ->
+      post Linker.Trace.call_entered ~f:(fun k ->
+          k (name,List.rev inputs)) >>= fun () ->
       blk entry >>= fun () ->
       iter_args t arg_use >>= fun () ->
-      get_args ~input:false t >>| Seq.to_list >>= fun rets ->
-      let args = List.rev_append inputs rets in
-      !!Linker.Trace.call_returned (name,args)
+      post Linker.Trace.call_returned ~f:(fun k ->
+          get_args ~input:false t >>| Seq.to_list >>= fun rets ->
+          let args = List.rev_append inputs rets in
+          k (name,args))
 
 
   let sub = term normal sub_t sub
@@ -696,7 +793,7 @@ module Make (Machine : Machine) = struct
   let pc = Machine.Local.get state >>| fun {addr} -> addr
 end
 
-module Init(Machine : Machine) = struct
+module LinkBinaryProgram(Machine : Machine) = struct
   open Machine.Syntax
   module Linker = Linker.Make(Machine)
 
@@ -737,7 +834,7 @@ module Init(Machine : Machine) = struct
   end
 
 
-  let run () =
+  let init () =
     Machine.get () >>= fun proj ->
     linker#run (Project.program proj) (Machine.return ())
 end

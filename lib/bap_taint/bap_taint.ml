@@ -186,6 +186,7 @@ module Taint = struct
 
   let attached,attach =
     Primus.Observation.provide ~inspect "taint-attached"
+      ~desc:"Occurs when a taint is attached to the value."
 
   module Make(Machine : Primus.Machine.S) = struct
     module Value = Primus.Value.Make(Machine)
@@ -202,9 +203,9 @@ module Taint = struct
     let attach v r ts = change v r ~f:(function
         | None -> Some ts
         | Some ts' -> Some (Set.union ts ts')) >>= fun () ->
-      Set.to_sequence ts |>
-      Machine.Seq.iter ~f:(fun o ->
-          Machine.Observation.make attach (r,o,v))
+      Machine.Observation.post attach ~f:(fun report ->
+          Set.to_sequence ts |>
+          Machine.Seq.iter ~f:(fun o -> report (r,o,v)))
 
 
     let detach v r ts = change v r ~f:(function
@@ -363,6 +364,7 @@ module Gc = struct
   let taint_finalize,taint_finished =
     Primus.Observation.provide
       ~inspect:sexp_of_finish "taint-finalize"
+      ~desc:"Occurs when the taint becomes unreachable."
 
   module Conservative(Machine : Primus.Machine.S) = struct
     open Machine.Syntax
@@ -400,14 +402,14 @@ module Gc = struct
         ~f:(finish ~live:false) >>= fun () ->
       Machine.Local.put gc {old = cur}
 
-    let finalize () =
+    let finalize _ =
       Machine.Local.get tainter >>= fun cur ->
       Set.to_sequence (objects cur) |>
       Machine.Seq.iter ~f:(finish ~live:true)
 
     let init () = Machine.sequence Primus.Interpreter.[
         leave_blk >>> main;
-        Primus.Interpreter.halting >>> finalize;
+        Primus.Machine.kill >>> finalize;
       ]
 
 

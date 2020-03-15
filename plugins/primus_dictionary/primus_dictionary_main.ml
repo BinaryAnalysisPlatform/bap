@@ -116,16 +116,18 @@ module Main(Machine : Primus.Machine.S) = struct
 end
 
 
-open Config;;
+let desc = "Provides a key-value storage for Primus Lisp \
+            programs. Dictionaries are represented with symbols and it is a \
+            responsibility of user to prevent name clashing between different \
+            dictionaries."
 
-Config.manpage [
-  `S "DESCRIPTION";
-  `P
-    "Provides a key-value storage for Primus Lisp
-  programs. Dictionaries are represented with symbols and it is a
-  responsibility of user to prevent name clashing between different
-  dictionaries.";
-];;
+let () = Config.manpage [
+    `S "DESCRIPTION";
+    `P desc;
+  ]
 
-let () = Config.when_ready @@
-  fun _ -> Primus.Machine.add_component (module Main)
+let () = Config.when_ready @@ fun _ ->
+  Primus.Machine.add_component (module Main) [@warning "-D"];
+  Primus.Components.register_generic "lisp-dictionary" (module Main)
+    ~package:"bap"
+    ~desc

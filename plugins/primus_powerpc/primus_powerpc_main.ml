@@ -45,4 +45,7 @@ let () = Config.when_ready @@ fun _ ->
       | _ -> Machine.return ()
 
   end in
-  Primus.Machine.add_component (module Component)
+  Primus.Machine.add_component (module Component) [@warning "-D"];
+  Primus.Components.register_generic "powerpc-init" (module Component)
+    ~package:"bap"
+    ~desc:"Initializes PPC registers."

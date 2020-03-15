@@ -67,7 +67,7 @@ module SetupPLT(Machine : Primus.Machine.S) = struct
       ]
     | _ -> Machine.return ()
 
-  let init () = Primus.Machine.init >>> run
+  let init () = Primus.System.init >>> run
 
 end
 

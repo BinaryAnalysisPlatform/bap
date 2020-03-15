@@ -62,33 +62,35 @@ module Greedy(Machine : Primus.Machine.S) = struct
 
 
   let init () =
-    Primus.Machine.finished >>> halt
+    Primus.System.fini >>> halt
 end
 
-let enable () =
-  info "enabling the scheduler";
-  Primus.Machine.add_component (module Greedy)
+let desc =
+  "The greedy scheduling strategy will continue with the same state, \
+   unless the machine reaches a termination state, i.e., when the \
+   $(b,next) value in a context becomes $(b,None). In that case \
+   another alive state that has a $(b,next) value that is not $(b,None) is \
+   chosen. If such state doesn't exist, then the Machine finally \
+   terminates. Thus this strategy will perform a depth-first \
+   traversal of the state tree, and guarantees that all paths \
+   are explored. The greedy scheduler will attempt to reschedule \
+   every time a basic block is evaluated."
+
+let register enabled =
+  if enabled
+  then Primus.Machine.add_component (module Greedy) [@warning "-D"];
+  Primus.Components.register_generic "greedy-scheduler" (module Greedy)
+    ~package:"bap"
+    ~desc:("Enables the greedy scheduler. " ^ desc)
+
 
 open Config;;
-manpage [
-  `S "DESCRIPTION";
-
-  `P
-    "The greedy scheduling strategy will continue with the same state,
-     unless the machine reaches a termination state, i.e., when the
-     $(b,next) value in a context becomes $(b,None). In that case
-     another alive state that has a $(b,next) value that is not $(b,None) is
-     chosen. If such state doesn't exist, then the Machine finally
-     terminates. Thus this strategy will perform a depth-first
-     traversal of the state tree, and guarantees that all paths
-     are explored";
-
-  `P
-    "The greedy scheduler will attempt to reschedule every time a basic
-    block is evaluated."
-];;
+let () = manpage [
+    `S "DESCRIPTION";
+    `P desc;
+  ];;
 
 let enabled = flag "scheduler" ~doc:"Enable the scheduler."
 
 
-let () = when_ready (fun {get=(!!)} -> if !!enabled then enable ())
+let () = when_ready (fun {get=(!!)} -> register !!enabled)

@@ -31,6 +31,7 @@ depends: [
   "conf-bap-llvm" {>= "1.1"}
   "parsexp"
   "bap-signatures"
+  "result" {= "1.4"}
 ]
 depopts: ["conf-ida" "conf-binutils"]
 flags: light-uninstall
@@ -101,6 +102,7 @@ install: [
   ["ocamlfind" "remove" "bap-plugin-primus_limit"]
   ["ocamlfind" "remove" "bap-plugin-primus_print"]
   ["ocamlfind" "remove" "bap-plugin-primus_region"]
+  ["ocamlfind" "remove" "bap-plugin-primus_systems"]
   ["ocamlfind" "remove" "bap-plugin-primus_taint"]
   ["ocamlfind" "remove" "bap-plugin-primus_test"]
   ["ocamlfind" "remove" "bap-plugin-constant_tracker"]
@@ -209,6 +211,7 @@ remove: [
   ["ocamlfind" "remove" "bap-plugin-primus_limit"]
   ["ocamlfind" "remove" "bap-plugin-primus_print"]
   ["ocamlfind" "remove" "bap-plugin-primus_region"]
+  ["ocamlfind" "remove" "bap-plugin-primus_systems"]
   ["ocamlfind" "remove" "bap-plugin-primus_taint"]
   ["ocamlfind" "remove" "bap-plugin-primus_test"]
   ["ocamlfind" "remove" "bap-plugin-constant_tracker"]

@@ -4,7 +4,7 @@ open Bap_primus.Std
 
 include Self()
 
-module Region = struct 
+module Region = struct
   type point = Primus.Value.t [@@deriving compare, sexp_of]
   type t = {
     lower : point;
@@ -26,7 +26,7 @@ let state = Primus.Machine.State.declare
          regions = Primus.Value.Map.empty;
        })
 
-module Pre(Machine : Primus.Machine.S) = struct 
+module Pre(Machine : Primus.Machine.S) = struct
   include Machine.Syntax
   module Lisp = Primus.Lisp.Make(Machine)
   module Value = Primus.Value.Make(Machine)
@@ -37,7 +37,7 @@ module Pre(Machine : Primus.Machine.S) = struct
   let failf = Lisp.failf
 end
 
-module Create(Machine : Primus.Machine.S) = struct 
+module Create(Machine : Primus.Machine.S) = struct
   include Pre(Machine)
   [@@@warning "-P"]
 
@@ -49,12 +49,12 @@ module Create(Machine : Primus.Machine.S) = struct
         }) >>| fun () -> reg
 end
 
-module Contains(Machine : Primus.Machine.S) = struct 
+module Contains(Machine : Primus.Machine.S) = struct
   include Pre(Machine)
   [@@@warning "-P"]
 
   let run [reg; addr] =
-    Machine.Local.get state >>= (fun {regions} -> 
+    Machine.Local.get state >>= (fun {regions} ->
         match Map.find regions reg with
         | None -> nil
         | Some map -> match Seq.hd (Regions.lookup map addr) with
@@ -62,35 +62,35 @@ module Contains(Machine : Primus.Machine.S) = struct
           | Some ({lower},()) -> Machine.return lower)
 end
 
-module Move(Machine : Primus.Machine.S) = struct 
+module Move(Machine : Primus.Machine.S) = struct
   include Pre(Machine)
   [@@@warning "-P"]
-  let run [dst; src; addr] = 
-    Machine.Local.get state >>= fun {regions} -> 
+  let run [dst; src; addr] =
+    Machine.Local.get state >>= fun {regions} ->
     match Map.find regions src with
     | None -> nil
-    | Some reg -> 
+    | Some reg ->
       let reg' = match Map.find regions dst with
         | None -> Regions.empty
         | Some reg' -> reg' in
-      let reg,reg',n = 
+      let reg,reg',n =
         Regions.lookup reg addr |>
-        Seq.fold ~init:(reg,reg',0) ~f:(fun (reg,reg',n) (r,()) -> 
+        Seq.fold ~init:(reg,reg',0) ~f:(fun (reg,reg',n) (r,()) ->
             Regions.remove reg r,
             Regions.add reg' r (),
             n + 1) in
-      let regions = 
+      let regions =
         Map.set (Map.set regions ~key:src ~data:reg) ~key:dst ~data:reg' in
-      Machine.Local.put state {regions} >>= fun () -> 
+      Machine.Local.put state {regions} >>= fun () ->
       Value.of_bool (n > 0)
 end
 
-module Main(Machine : Primus.Machine.S) = struct 
+module Main(Machine : Primus.Machine.S) = struct
   module Lisp = Primus.Lisp.Make(Machine)
-  open Primus.Lisp.Type.Spec 
+  open Primus.Lisp.Type.Spec
   let def name types closure docs =
-    Lisp.define ~docs ~types name closure 
-  let init () = 
+    Lisp.define ~docs ~types name closure
+  let init () =
     Machine.sequence [
       def "region-create" (tuple [sym; int; int] @-> sym)
         (module Create)
@@ -100,7 +100,7 @@ module Main(Machine : Primus.Machine.S) = struct
           set of regions denoted by the symbol ID. Values LOWER
           and UPPER are included into the interval.
 
-          If the set of regions ID doesn't exist, then it is created. 
+          If the set of regions ID doesn't exist, then it is created.
         |};
 
 
@@ -110,14 +110,14 @@ module Main(Machine : Primus.Machine.S) = struct
 
           Returns the lower bound of the first region that contains
           value X in the set of regions with the given ID. Returns nil
-          otherwise. 
+          otherwise.
 
           Returns nil if a set with the given ID doesn't exist.
         |};
 
 
-      def "region-move" (tuple [sym; sym; int] @-> bool) 
-        (module Move) 
+      def "region-move" (tuple [sym; sym; int] @-> bool)
+        (module Move)
         {|(region-move DST SRC P) moves all regions that contain the point
           P from the set SRC to the set DST. Returns nil if SRC didn't
           contain any such region, otherwise returns t.
@@ -125,26 +125,20 @@ module Main(Machine : Primus.Machine.S) = struct
     ]
 end
 
+let desc =
+  "Provides a set of operations to store and manipulate interval \
+   trees. The module provides a persistent storage for intervals, \
+   denoted in the module as regions, since these intervals \
+   often represent memory regions. Intervals are stored in interval \
+   sets, that are implemented as efficient interval tree data \
+   structures (using AVL trees underneath the hood). Each interval \
+   set is denoted with a symbol, and it is possible to create \
+   arbitrary number of sets, as well as move regions from one set to \
+   another."
 
-module Interface = struct
-  open Config
-
-  ;;
-
-  Config.manpage [
-    `S "DESCRIPTION";
-    `P
-      "Provides a set of operations to store and manipulate interval
-    trees. The module provides a persistent storage for intervals,
-    denoted in the module as regions, since these intervals
-    often represent memory regions. Intervals are stored in interval
-    sets, that are implemented as efficient interval tree data
-    structures (using AVL trees underneath the hood). Each interval
-    set is denoted with a symbol, and it is possible to create
-    arbitrary number of sets, as well as move regions from one set to
-    another."
-  ];;
-
-  Config.when_ready (fun _ -> 
-      Primus.Machine.add_component (module Main))
-end
+let () = Config.manpage [`S "DESCRIPTION"; `P desc]
+let () = Config.when_ready @@ fun _ ->
+  Primus.Machine.add_component (module Main) [@warning "-D"];
+  Primus.Components.register_generic "lisp-regions" (module Main)
+    ~package:"bap"
+    ~desc

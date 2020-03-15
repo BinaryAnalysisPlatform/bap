@@ -19,11 +19,19 @@ let read id eq = function
     Error Not_a_var
   | x -> match String.split x ~on:':' with
     | [] -> assert false
-    | _::_::_::_ -> Error Bad_format
+    | _::_::_::_::_ -> Error Bad_format
+    | [ns;name;sz] -> begin match Type.read sz with
+        | None -> Error Bad_type
+        | Some typ ->
+          let x = ns ^ ":" ^ name in
+          Ok {data={exp=x; typ}; id; eq}
+      end
     | [x] -> Ok {data={exp=x; typ=Any}; id; eq}
     | [x;sz] -> match Type.read sz with
-      | None -> Error Bad_type
       | Some typ -> Ok {data={exp=x; typ}; id; eq}
+      | None ->
+        let x = x ^ ":" ^ sz in
+        Ok {data={exp=x; typ=Any}; id; eq}
 
 include Comparable.Make_plain(struct
     type t = var [@@deriving compare,sexp_of]

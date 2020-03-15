@@ -9,7 +9,7 @@ let main proj =
 Config.manpage [
   `S "SYNOPSIS";
   `Pre "
-    $(b,$mname)
+    $(b,mname)
 ";
   `S "DESCRIPTION";
   `P "Translates the whole program into the SSA form";

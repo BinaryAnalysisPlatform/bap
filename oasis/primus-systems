@@ -1,0 +1,16 @@
+Flag primus_systems
+  Description: Build Primus Systems Plugin
+  Default: false
+
+
+Library primus_systems_plugin
+  Build$:       flag(everything) || flag(primus_systems)
+  Path:         plugins/primus_systems
+  BuildDepends: bap-primus, bap-main, core_kernel, bap-knowledge
+  FindlibName:     bap-plugin-primus_systems
+  CompiledObject:  best
+  InternalModules: Primus_systems_main,
+                   Primus_systems_config
+  XMETADescription: installs, parses, and loads Primus systems
+  DataFiles:        systems/*.asd ($primus_systems_path)
+  XMETAExtraLines:  tags="primus, systems"

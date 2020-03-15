@@ -312,7 +312,7 @@ let _disassemble_command_registered : unit =
   import_knowledge_from_cache digest;
   let state = load_project_state_from_cache digest in
   let input = Project.Input.file ~loader ~filename:input in
-  Project.create
+  Project.create ?state
     input |> proj_error >>= fun proj ->
   if Option.is_none state then begin
     store_knowledge_in_cache digest;

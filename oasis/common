@@ -24,3 +24,10 @@ Flag everything
 Flag development
   Description: Enable development mode
   Default: false
+
+
+Executable "postinstall"
+  Path:           tools
+  MainIs:         postinstall.ml
+  Install:        false
+  CompiledObject: best

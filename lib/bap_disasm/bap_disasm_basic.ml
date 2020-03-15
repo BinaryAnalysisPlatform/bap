@@ -274,6 +274,7 @@ let cpred_of_pred : pred -> C.pred = function
 
 module Insn = struct
   type ins_info = {
+    encoding : string;
     code : int;
     name : string;
     asm  : string;
@@ -326,8 +327,9 @@ module Insn = struct
           | C.Imm -> Op.Imm Imm.(create dis ~insn ~oper)
           | C.Fmm -> Op.Fmm Fmm.(create dis ~insn ~oper)
           | C.Insn -> assert false) in
-    {code; name; asm; kinds; opers }
+    {code; name; asm; kinds; opers; encoding = dis.name }
 
+  let encoding x = x.encoding
 
   let domain =
     KB.Domain.optional ~inspect:sexp_of_t "insn"
@@ -500,7 +502,7 @@ let back s data =
   step { s with current; history} data
 
 let create ?(debug_level=0) ?(cpu="") ?(backend="llvm") triple =
-  let name = sprintf "%s:%s%s" backend triple cpu in
+  let name = sprintf "%s-%s%s" backend triple cpu in
   match Hashtbl.find disassemblers name with
   | Some d ->
     d.users <- d.users + 1;

@@ -12,13 +12,17 @@ type pos = Pos.t [@@deriving sexp_of]
 type 'a observation = 'a Bap_primus_observation.t
 type provider = Bap_primus_observation.provider
 type 'a statement = 'a Bap_primus_observation.statement
+type subscription = Bap_primus_observation.subscription
 type 'a state = 'a Bap_primus_state.t
 type exit_status =
   | Normal
   | Exn of exn
 
 type 'a effect =
-  project -> string array -> string array -> 'a
+  ?envp:string array ->
+  ?args:string array ->
+  string ->
+  project -> 'a
 
 module type State = sig
   type 'a m
@@ -42,8 +46,11 @@ module type Machine = sig
 
   module Observation : sig
     val observe : 'a observation -> ('a -> unit t) -> unit t
+    val subscribe : 'a observation -> ('a -> unit t) -> subscription t
+    val cancel : subscription -> unit t
     val watch : provider -> (Sexp.t -> unit t) -> unit t
     val make : 'a statement -> 'a -> unit t
+    val post : 'a statement -> f:(('a -> unit t) -> unit t) -> unit t
   end
 
   module Syntax : sig
@@ -56,7 +63,10 @@ module type Machine = sig
                                and type env := project
                                and type id := id
                                and module Syntax := Syntax
-                               and type 'a e = (exit_status * project) m effect
+                               and type 'a e =
+                                     ?boot:unit t ->
+                                     ?init:unit t ->
+                                     (exit_status * project) m effect
   module Local  : State with type 'a m := 'a t
                          and type 'a t := 'a state
   module Global : State with type 'a m := 'a t

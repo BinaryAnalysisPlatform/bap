@@ -5,6 +5,20 @@ open Bap_core_theory
 
 [@@@warning "-40"]
 
+
+module Call : sig
+  val create : string -> Stmt.t
+  val dst : Stmt.t -> string option
+end = struct
+  let prefix = "bil-call:"
+  let create name =
+    Bil.special @@ sprintf "%s%s" prefix name
+
+  let dst = function
+    | Bil.Special p -> String.chop_prefix ~prefix p
+    | _ -> None
+end
+
 type context = Context
 let package = "bil-plugin-internal"
 let cls = KB.Class.declare ~package "context" Context
@@ -487,11 +501,11 @@ module Basic : Theory.Basic = struct
     | _ -> KB.collect Theory.Label.ivec lbl >>= function
       | Some ivec -> ctrl Bil.[CpuExn ivec]
       | None -> KB.collect Theory.Label.name lbl >>= fun name ->
-        let dst = match name with
-          | Some name -> sprintf "(call %s)" name
-          | None -> (Format.asprintf "(goto %a)" Tid.pp lbl) in
-        ctrl Bil.[Special dst]
+        ctrl @@ match name with
+        | Some name -> [Call.create name]
+        | None -> [Bil.special (Format.asprintf "(goto %a)" Tid.pp lbl)]
 end
+
 
 
 module Core : Theory.Core = struct
