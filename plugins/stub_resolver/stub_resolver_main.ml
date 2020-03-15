@@ -40,7 +40,7 @@ let partition prog =
         is_stub s >>= fun is_stub ->
         if is_stub then
           update_aliases aliases s >>= fun aliases ->
-          KB.return {symbols;aliases}
+          KB.return {symbols; aliases}
         else
           let symbols = Map.set symbols (Sub.name s) (Term.tid s) in
           KB.return {symbols; aliases})
@@ -49,41 +49,42 @@ let resolve prog =
   partition prog >>= fun {symbols; aliases} ->
   Map.fold aliases
     ~init:(Map.empty (module Tid))
-    ~f:(fun ~key:alias ~data:stub_tid pairs ->
+    ~f:(fun ~key:alias ~data:stub_tid links ->
         match Map.find symbols alias, stub_tid with
-        | Some tid', Some stub_tid -> at_most_one pairs stub_tid tid'
-        | _ -> pairs) |>
+        | Some tid', Some stub_tid -> at_most_one links stub_tid tid'
+        | _ -> links) |>
   KB.return
 
 let tids = Knowledge.Domain.mapping (module Tid) "tids"
     ~equal:(Option.equal Tid.equal)
     ~inspect:(Option.sexp_of_t sexp_of_tid)
 
-let slot = Knowledge.Class.property Theory.Program.cls "stubs"
+let slot = Knowledge.Class.property
+    Theory.Program.cls "stubs"
     tids
     ~persistent:(Knowledge.Persistent.of_binable (module struct
                    type t = tid option Tid.Map.t
                    [@@deriving bin_io]
                  end))
     ~public:true
-    ~desc:"The mapping from program stubs to real symbols"
+    ~desc:"The mapping from stubs to real symbols"
 
 let cls = Knowledge.Slot.cls slot
 
 let provide prog =
   Knowledge.Object.create cls >>= fun obj ->
-  resolve prog >>= fun pairs ->
-  KB.provide slot obj pairs >>= fun () ->
+  resolve prog >>= fun links ->
+  KB.provide slot obj links >>= fun () ->
   KB.return obj
 
-let find prog =
+let find_links prog =
   match Knowledge.run cls (provide prog) (Toplevel.current ()) with
   | Ok (v,_) -> Knowledge.Value.get slot v
   | Error cnf ->
     error "%a\n" Knowledge.Conflict.pp cnf;
     Map.empty (module Tid)
 
-let relink prog pairs =
+let relink prog links =
   (object
     inherit Term.mapper
 
@@ -92,7 +93,7 @@ let relink prog pairs =
       | None -> jmp
       | Some alt -> match Jmp.resolve alt with
         | Second _ -> jmp
-        | First tid -> match Map.find pairs tid with
+        | First tid -> match Map.find links tid with
           | Some (Some tid') ->
             Jmp.reify
               ?cnd:(Jmp.guard jmp)
@@ -126,23 +127,22 @@ module Plt = struct
     | _ ->    None
 end
 
-let run proj =
-  let prog = Project.program proj in
+let update prog = relink prog (find_links prog)
+
+let main proj =
   Plt.provide proj;
-  let prog' = relink prog (find prog) in
-  Project.with_program proj prog'
+  Project.with_program proj (update @@ Project.program proj)
 
 let () = Extension.documentation {|
   # DESCRIPTION
 
   Provides an abi pass that transforms a program by substituting calls
-  to stubs with calls to real subroutines, when they are present in
+  to stubs with calls to real subroutines when they are present in
   the binary.
 
 |}
 
 
-
 let () = Extension.declare @@ fun _ctxt ->
-  Bap_abi.register_pass run;
+  Bap_abi.register_pass main;
   Ok ()
