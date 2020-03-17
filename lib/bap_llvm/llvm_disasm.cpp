@@ -617,11 +617,10 @@ private:
 
 
 bool is_error_prone_arch(const char *triple) {
-#if LLVM_VERSION_MAJOR >= 4 && LLVM_VERSION_MAJOR < 8
-    return std::string(triple) == "aarch64";
-#else
-    return false;
-#endif
+    if (LLVM_VERSION_MAJOR < 8)
+        return std::string(triple) == "aarch64";
+    else
+        return false;
 }
 
 
