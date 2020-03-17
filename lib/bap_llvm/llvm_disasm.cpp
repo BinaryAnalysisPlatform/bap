@@ -615,7 +615,8 @@ private:
     }
 };
 
-
+// See https://github.com/BinaryAnalysisPlatform/bap/issues/1081
+// for details
 bool is_error_prone_arch(const char *triple) {
     if (LLVM_VERSION_MAJOR < 8)
         return std::string(triple) == "aarch64";
