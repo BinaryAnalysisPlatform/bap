@@ -14,4 +14,4 @@ RUN sudo apt-get update && sudo apt-get install --yes python-pip \
  && rm -rf /home/opam/opam-repository \
  && sudo pip install bap
 
-ENTRYPOINT ["opam", "config", "exec", "--]"
+ENTRYPOINT ["opam", "config", "exec", "--" ]
