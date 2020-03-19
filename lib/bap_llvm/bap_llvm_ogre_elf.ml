@@ -32,6 +32,49 @@ module Make(Fact : Ogre.S) = struct
   include Sections(Fact)
   include Symbols(Fact)
   include Code_regions(Fact)
+
+  let code_of_segments =
+    Fact.require base_address >>= fun base ->
+    Fact.foreach Ogre.Query.(begin
+        select (from
+                  program_header
+                $ virtual_program_header
+                $ program_header_flags)
+          ~join:[[field name]]
+      end)
+      ~f:(fun hdr vhdr hdr_flags -> hdr, vhdr, hdr_flags) >>=
+    Fact.Seq.iter
+      ~f:(fun ((_,off,size), (_, relative_addr, _), (_,_,_,_,x)) ->
+          if x then
+            let addr = Int64.(relative_addr + base) in
+            Fact.provide code_region addr size off
+          else Fact.return ())
+
+  let sections_of_segments =
+    Fact.require base_address >>= fun base ->
+    Fact.foreach Ogre.Query.(begin
+        select (from virtual_program_header)
+      end) ~f:ident >>=
+    Fact.Seq.iter
+      ~f:(fun (_,relative_addr,vsize) ->
+          let addr = Int64.(relative_addr + base) in
+          Fact.provide section addr vsize)
+
+  let provide ~depends_on ~if_absent x =
+    Fact.collect Ogre.Query.(select (from depends_on)) >>= fun s ->
+    if Seq.is_empty s then if_absent
+    else x
+
+  let code_regions =
+    provide code_regions
+      ~depends_on:section_entry
+      ~if_absent:code_of_segments
+
+  let sections =
+    provide sections
+      ~depends_on:section_entry
+      ~if_absent:sections_of_segments
+
 end
 
 module Relocatable = struct
