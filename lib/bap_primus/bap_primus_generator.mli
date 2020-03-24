@@ -4,6 +4,15 @@ open Bap_primus_types
 
 type t [@@deriving sexp_of]
 
+val of_iterator :
+  ?width:int ->
+  ?seed:(int -> 'a) ->
+  to_bitvec:('d -> Bitvec.t) ->
+  (module Iterator.Infinite
+    with type t = 'a
+     and type dom = 'd) -> 'a ->
+  t
+
 val create :
   ?width:int ->
   (module Iterator.Infinite

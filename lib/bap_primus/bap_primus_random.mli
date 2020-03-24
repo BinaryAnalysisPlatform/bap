@@ -1,57 +1,17 @@
-open Core_kernel
-
 module Iterator = Bap_primus_iterator
 
-
-module LCG : sig
+module MCG : sig
   module type S = sig
-    include Iterator.Infinite.S with type dom = int
-    val create : dom -> t
-  end
-  include S
-end
-
-
-module Unit : sig
-  module type S = sig
-    include Iterator.Infinite.S with type dom = float
-    type u
-    val create : u -> t
-  end
-  module Make (U : Iterator.Infinite.S with type dom = int)
-    : S with type u = U.t
-  include S with type u = LCG.t
-end
-
-module Geometric : sig
-  module type S = sig
-    include Iterator.Infinite.S
-    type u
-    val create : p:float -> u -> t
-    val param : t -> float
+    include Iterator.Infinite.S with type dom = Bitvec.t
+    val size : int
+    val create : int -> t
   end
 
-  module type Dom = sig
-    include Floatable
-    val max_value : t
-  end
+  val create : ?min:Bitvec.t -> ?max:Bitvec.t -> int -> (module S)
+  val create_small : ?min:int -> ?max:int -> int -> (module S)
 
-  module Make(D : Dom)(U : Iterator.Infinite.S with type dom = int) :
-    S with type dom = D.t and type u = U.t
-
-  module Float : S with type dom = float and type u = LCG.t
-  module Int   : S with type dom = int   and type u = LCG.t
-end
-
-
-
-module Byte : sig
-  module type S = sig
-    include Iterator.Infinite.S with type dom = int
-    type rng
-    val create : rng -> t
-  end
-  module Make(Rng : Iterator.Infinite.S with type dom = int)
-    : S with type rng = Rng.t
-  include S with type rng = LCG.t
+  module M8  : S
+  module M16 : S
+  module M32 : S
+  module M64 : S
 end

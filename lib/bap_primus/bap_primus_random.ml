@@ -1,157 +1,193 @@
-open Core_kernel
-open Bap_primus_types
-
 module Iterator = Bap_primus_iterator
 module type S = Iterator.Infinite.S
 
-module LCG = struct
+(* Taken from arXiv:2001.05304   *)
+let mcg16 = "0x7dc5"
+let mcg32 = "0xae3cc725"
+let mcg64 = "0xcc62fceb9202faad"
+let mcg128 = "0xace2628409311ff16a545ebdff0d414d"
+
+(* Multiplicative Congruental Generator with power of two moduli.
+
+   A generator with modulus m=2^s generates s-3 bits of
+   pseudorandomness with the period m/4, given that the seed is an odd
+   number.
+
+   To build an p-bit generator we use k r-bit sub-generators, where k
+   is $ceil (p / (r-3))$. Each generator is having a different seed
+   obtained from the seed provided to the p-bit generator.
+*)
+module MCG = struct
+  module type Size = sig
+    val size : int
+  end
   module type S = sig
-    include S with type dom = int
-    val create : dom -> t
+    include S with type dom = Bitvec.t
+    include Size
+    val create : int -> t
   end
-  module M31 = struct
-    type t = int
-    type dom = int
-    type seed = int
-    let a = 0x41C64E6D
-    let c = 12345
-    let m = 31
-    let min = 0
-    let max = 1 lsl m - 1
-    let next x = (a * x + c) mod (max + 1)
-    let create seed = next seed
-    let value = ident
+
+  module type Z = Bitvec.S with type 'a m = 'a
+
+  let ceil_div m n = (m + n - 1) / n
+  let odd_hash seed = max (Hashtbl.hash seed * 2 + 1) 1
+
+  module Make(Z : Z)(P : sig val m : int val a : string end) : S = struct
+    module Z = Z
+    let a = Bitvec.of_string P.a
+    let size = P.m - 3
+    type t = Bitvec.t
+    type dom = Bitvec.t
+
+    let noise = Z.int 3
+    let min = Z.zero
+    let max = Z.(ones lsr noise)
+    let value x = Z.(x lsr noise)
+    let next x : t = Z.(a * x)
+    let create seed = next @@ Z.int @@ odd_hash seed
+
   end
-  let t = Iterator.Infinite.create (module M31)
-  include M31
-end
 
-module Unit = struct
+  module Bitvec_M16 =
+    Bitvec.Make(struct let modulus = Bitvec.modulus 16 end)
 
-  module type S = sig
-    include S with type dom = float
-    type u
-    val create : u -> t
+  (* Pre: Output.Size > Sub.size *)
+  module Cat(Output : Size)(Sub : S) : S = struct
+    type t = Sub.t array
+    type dom = Bitvec.t
+
+    module Z = Bitvec.Make(struct
+        let modulus = Bitvec.modulus Output.size
+      end)
+
+    let size = Output.size
+    let min = Bitvec.zero
+    let max = Z.ones
+    let generators = ceil_div Output.size Sub.size
+    let noise = Output.size - generators
+
+    let create seed : t =
+      Array.init generators (fun salt ->
+          Sub.create (seed + salt))
+
+    let next = Array.map Sub.next
+
+    let value xs =
+      Array.fold_left (fun y x ->
+          Z.(y lsl int Sub.size lor Sub.value x)) Z.zero xs
   end
-  module Make(Rng : Iterator.Infinite.S with type dom = int)
-    : S with type u = Rng.t =
-  struct
-    module Gen = struct
-      type dom = float
-      type u = Rng.t
-      type t = {
-        base : u;
-        value : float;
-      }
-      let factor = 1. /. (float Rng.max -. float Rng.min +. 1.)
 
-      let rec next {base;value} =
-        let base = Rng.next base in
-        let value =
-          (float (Rng.value base) -. float Rng.min) *. factor in
-        if Float.(value < 1.) then {base; value}
-        else next {base;value}
 
-      let value t = t.value
-      let min = 0.0
-      let max = 1.0
-      let create base = next {base ; value=1.0}
-    end
-    let t = Iterator.Infinite.create (module Gen)
+  (* Pre: Output.Size < Sub.size  *)
+  module Cut(Output : Size)(Sub : S) : S = struct
+    type t = Sub.t
+    type dom = Sub.dom
+    module Z = Bitvec.Make(struct
+        let modulus = Bitvec.modulus Output.size
+      end)
+    let min = Bitvec.zero
+    let max = Z.ones
+    let size = Output.size
+    let noise = Z.int @@ Sub.size - Output.size
+    let next = Sub.next
+    let value x = Z.(Sub.value x lsr noise)
+    let create = Sub.create
+  end
+
+  module type Range = sig
+    include Size
+    val min : Bitvec.t
+    val max : Bitvec.t
+  end
+
+
+  (* pre:
+     - R.size >= Gen.size
+     - Gen.size = 2^(max-min+1)
+     - Gen.min = 0
+     - Gen.max = 2^Gen.size
+  *)
+  module Range(R : Range)(Gen : S) = struct
     include Gen
-  end
-  include Make(LCG)
-end
-
-module Geometric = struct
-
-  module type Dom = sig
-    include Floatable
-    val  max_value : t
-  end
-
-  module type S = sig
-    include S
-    type u
-    val create : p:float -> u -> t
-    val param : t -> float
+    module Z = Bitvec.Make(struct
+        let modulus = Bitvec.modulus R.size
+      end)
+    let value x =
+      let u = Gen.value x in
+      Z.(R.min + u % (R.max-R.min+one))
+    let min = R.min
+    let max = R.max
+    let size = R.size
   end
 
-  module Make
-      (Dom : Dom)
-      (Uniform : Iterator.Infinite.S with type dom = int) :
-    S with type u = Uniform.t
-       and type dom = Dom.t = struct
-    module Gen = struct
-      type dom = Dom.t
-      type u = Uniform.t
-      module Unit = Unit.Make(Uniform)
-      type t = {
-        rng : Unit.t;
-        value  : dom;
-        log1mp  : float;
-        p : float;
-      }
+  (* Basis Generators *)
+  module M13 = Make(Bitvec_M16)(struct let m = 16 let a = mcg16 end)
+  module M29 = Make(Bitvec.M32)(struct let m = 32 let a = mcg32 end)
+  module M61 = Make(Bitvec.M64)(struct let m = 64 let a = mcg64 end)
 
-      let next t =
-        let rng = Unit.next t.rng in
-        let x = 1.0 -. Unit.value rng in
-        let y = Float.round (log x /. t.log1mp) in
-        if Float.(y >= Dom.to_float Dom.max_value)
-        then {t with rng; value = Dom.max_value}
-        else {t with rng; value = Dom.of_float y}
+  (* Common Generators *)
+  module M8  = Cut(struct let size = 8 end)(M13)
+  module M16 = Cut(struct let size = 16 end)(M29)
+  module M32 = Cut(struct let size = 32 end)(M61)
+  module M64 = Cat(struct let size = 64 end)(M29)
 
-      let create ~p rng =
-        let open Float in
-        if p < 0. || p > 1.
-        then invalid_arg
-            "Geometric distribution: \
-             parameter p must be in (0,1] interval";
-        let log1mp = Float.log1p(-.p) in
-        if log1mp = 0.0 then invalid_arg
-            "Geometric distribution: \
-             parameter p is too small";
-        next {
-          rng = Unit.create rng;
-          value = Dom.of_float 0.;
-          log1mp;
-          p;
-        }
+  let tabulate (module Gen : S) ~n seed =
+    let rec loop i g =
+      if i < n then begin
+        Format.printf "%3d: %a@\n" i Bitvec.pp (Gen.value g);
+        loop (i+1) (Gen.next g)
+      end in
+    loop 0 (Gen.create seed)
 
-      let value t = t.value
+  let tabulate_ints (module Gen : S) ~n seed =
+    let rec loop i g =
+      if i < n then begin
+        Format.printf "%3d: %2ld@\n" i (Bitvec.to_int32 (Gen.value g));
+        loop (i+1) (Gen.next g)
+      end in
+    loop 0 (Gen.create seed)
 
-      let min = Dom.of_float 0.
-      let max = Dom.max_value
-      let param t = t.p
-    end
-    let t = Iterator.Infinite.create (module Gen)
-    include Gen
-  end
+  let cut m (module G : S) : (module S) =
+    (module Cut(struct let size = m end)(G))
 
-  module Float = Make(Float)(LCG)
-  module Int   = Make(Int)(LCG)
-end
+  let cat m (module G : S) : (module S) =
+    (module Cat(struct let size = m end)(G))
 
+  let make_for_width : int -> (module S) = function
+    | 8  -> (module M8)
+    | 13 -> (module M13)
+    | 16 -> (module M16)
+    | 29 -> (module M29)
+    | 32 -> (module M32)
+    | 64 -> (module M64)
+    | n when n < 13 -> cut n (module M13)
+    | n when n < 29 -> cut n (module M29)
+    | n when n < 61 -> cut n (module M61)
+    | n -> cat n (module M61)
 
-module Byte = struct
-  module type S = sig
-    include Iterator.Infinite.S with type dom = int
-    type rng
-    val create : rng -> t
-  end
-  module Make(Rng : Iterator.Infinite.S with type dom = int)
-  = struct
-    type dom = int
-    type rng = Rng.t
-    type t = Rng.t
+  let create ?min ?max width =
+    if Option.is_none min && Option.is_none max
+    then make_for_width width
+    else
+      let module Z = Bitvec.Make(struct
+          let modulus = Bitvec.modulus width
+        end) in
+      let module R = struct
+        let min = match min with
+          | None -> Bitvec.zero
+          | Some min -> min
+        let max = match max with
+          | None -> Z.ones
+          | Some max -> max
+        let size = width
+      end in
+      let bits = Bitvec.to_int Z.(R.max - R.min + one) in
+      let module Gen = (val make_for_width bits) in
+      (module Range(R)(Gen))
 
-    let min = 0
-    let max = 255
-    let size = max - min + 1
-    let create = ident
-    let next = Rng.next
-    let value rng = Rng.value rng mod size
-  end
-  module Basic = Make(LCG)
-  include Basic
+  let create_small ?min ?max width =
+    let int x = Bitvec.(int x mod modulus width) in
+    let min = Option.map int min
+    and max = Option.map int max in
+    create ?min ?max width
 end
