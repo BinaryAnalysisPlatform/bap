@@ -51,8 +51,14 @@
   (when (and beg len)
     (let ((end (-1 (+ beg len)))
           (r1 (region-contains (symbol-concat 'memcheck/live heap) beg))
-          (r2 (region-contains (symbol-concat 'memcheck/live heap) end)))
-      (when (not (= r1 r2))
+          (r2 (region-contains (symbol-concat 'memcheck/live heap) end))
+          (b1 (region-contains 'buffer beg))
+          (b2 (region-contains 'buffer end)))
+      (unless b1
+        (memcheck-acquire 'buffer beg len))
+      (when (/= b1 b2)
+        (memcheck/report-out-of-bound b1 b2))
+      (when (/= r1 r2)
         (memcheck/report-out-of-bound r1 r2)))))
 
 ;; Private
@@ -73,10 +79,12 @@
 
 
 (defun memcheck/report-out-of-bound (r1 r2)
-  (incident-report 'memcheck-out-of-bound
-                   (dict-get 'memcheck/site/acquire r1)
-                   (dict-get 'memcheck/site/acquire r2)
-                   (incident-location)))
+  (let ((r1 (dict-get 'memcheck/site/acquire r1))
+        (r2 (dict-get 'memcheck/site/acquire r2)))
+    (incident-report 'memcheck-out-of-bound
+                   (or r1 r2)
+                   (or r2 r1)
+                   (incident-location))))
 
 (defun memcheck/register (ptr site)
   (dict-add site ptr (incident-location)))
