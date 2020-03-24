@@ -41,27 +41,37 @@ type 'a wait = {
   init : int -> 'a gen
 }
 
-type t =
-  | Static : int -> t
-  | Ready : 'a ready -> t
-  | Wait : 'a wait -> t
+type mode =
+  | Static : int -> mode
+  | Ready : 'a ready -> mode
+  | Wait : 'a wait -> mode
+and t = {
+  size : int;
+  mode : mode;
+}
+
+let width x = x.size
 
 let rec sexp_of_t = function
-  | Static x -> Sexp.(List [Atom "static"; sexp_of_int x])
+  | {mode=Static x} -> Sexp.(List [Atom "static"; sexp_of_int x])
   | _ -> Sexp.Atom "<generator>"
 
-let make key init iter = Ready {key; gen={iter; self=init}}
+let make ?(width=8) key init iter = {
+  size = width;
+  mode = Ready {key; gen={iter; self=init}}
+}
 
-let create iter init =
+let create ?width iter init =
   let state = States.Key.create
       ~name:"rng-state" sexp_of_opaque in
-  make state init iter
+  make ?width state init iter
 
 let unfold (type gen)
+    ?width
     ?(min=Int.min_value)
     ?(max=Int.max_value)
     ?(seed=0)
-    ~f init  =
+    ~f init =
   let module Gen = struct
     type t = gen * int
     type dom = int
@@ -70,9 +80,9 @@ let unfold (type gen)
     let next = f
     let value = snd
   end in
-  create (module Gen) (init,seed)
+  create ?width (module Gen) (init,seed)
 
-let static value = Static value
+let static ?(width=8)value = {mode=Static value; size=width}
 
 
 module Random = struct
@@ -82,14 +92,15 @@ module Random = struct
     States.Key.create ~name:"linear-congruent-generator"
       sexp_of_opaque
 
-  let lcg ?(min=LCG.min) ?(max=LCG.max) seed =
+  let lcg ?width ?(min=LCG.min) ?(max=LCG.max) seed =
     let next (gen,_) =
       let gen = LCG.next gen in
-      let x = min + LCG.value gen mod (max-min+1) in
+      let r = Int.abs @@ LCG.value gen in
+      let x = min + r mod (max-min+1) in
       gen,x in
     let value = snd in
     let init = next (LCG.create seed,0) in
-    make lcg_key init (module struct
+    make ?width lcg_key init (module struct
       type t = LCG.t * int
       type dom = int
       let min = min
@@ -107,22 +118,22 @@ module Random = struct
 
 
   module Seeded = struct
-    let unpack_make key make =
+    let unpack_make ?(width=8) key make =
       let init seed  = match make seed with
-        | Wait _
-        | Static _ -> failwith "Generator.Seeded: invalid initializer"
-        | Ready g -> match cast_gen key g with
+        | {mode=Wait _|Static _} ->
+          failwith "Generator.Seeded: invalid initializer"
+        | {mode=Ready g} -> match cast_gen key g with
           | Some g -> g
           | None -> invalid_arg "Seeded.create changed its type" in
-      Wait {key; init}
+      {mode = Wait {key; init}; size = width}
 
-    let create make = match make 0 with
-      | Ready {key} -> unpack_make key make
+    let create ?width make = match make 0 with
+      | {mode=Ready {key}} -> unpack_make ?width key make
       | _ -> invalid_arg "Seeded.create must always create \
                           an iterator of the same type"
 
-    let lcg ?min ?max () = unpack_make lcg_key (fun seed ->
-        lcg ?min ?max seed)
+    let lcg ?width ?min ?max () = unpack_make ?width lcg_key (fun seed ->
+        lcg ?width ?min ?max seed)
 
     let byte = lcg ~min:0 ~max:255 ()
   end
@@ -146,7 +157,7 @@ module Make(Machine : Machine) = struct
     Machine.Local.put generators states >>| fun () ->
     Iter.value iter.self
 
-  let rec next = function
+  let rec next gen = match gen.mode with
     | Static n -> Machine.return n
     | Ready {key; gen} -> call key gen
     | Wait {key; init} ->
@@ -154,11 +165,11 @@ module Make(Machine : Machine) = struct
       match States.find states key with
       | None ->
         Machine.current () >>= fun id ->
-        call key (init (Machine.Id.hash id))
+        call key (init (Machine.Id.hash id mod 4096))
       | Some iter -> call key iter
 
   let word gen width =
-    let word = Word.of_int ~width:8 in
+    let word = Word.of_int ~width:gen.size in
     assert (width > 0);
     let rec loop x =
       if Word.bitwidth x >= width

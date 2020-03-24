@@ -5,21 +5,25 @@ open Bap_primus_types
 type t [@@deriving sexp_of]
 
 val create :
+  ?width:int ->
   (module Iterator.Infinite
     with type t = 'a
      and type dom = int) -> 'a -> t
 
-val static : int -> t
+val static : ?width:int -> int -> t
 
-val unfold : ?min:int -> ?max:int -> ?seed:int ->
+val width : t -> int
+
+val unfold : ?width:int -> ?min:int -> ?max:int -> ?seed:int ->
   f:('a * int -> 'a * int) -> 'a -> t
 
 module Random : sig
-  val lcg : ?min:int -> ?max:int -> int -> t
+  val lcg : ?width:int -> ?min:int -> ?max:int -> int -> t
   val byte : int -> t
+
   module Seeded : sig
-    val create : (int -> t) -> t
-    val lcg : ?min:int -> ?max:int -> unit -> t
+    val create : ?width:int -> (int -> t) -> t
+    val lcg : ?width:int -> ?min:int -> ?max:int -> unit -> t
     val byte : t
   end
 end

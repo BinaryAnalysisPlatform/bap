@@ -2178,15 +2178,23 @@ module Std : sig
     end
 
 
-    (** Value generators *)
+    (** Value generators. *)
     module Generator : sig
       type t = generator [@@deriving sexp_of]
 
 
       (** [create (module Iterator) seed] creates a integer generator
           from the provided [Iterator], and initializes it with the
-          given seed.  *)
+          given seed.
+
+          @param width is the width in bits of the generated words.
+
+          Note, that the generator domain is defined by the [Iterator]
+          domain, not by the [width] parameter of the the
+          generator.
+      *)
       val create :
+        ?width:int ->
         (module Iterator.Infinite
           with type t = 'a
            and type dom = int) -> 'a -> t
@@ -2194,14 +2202,17 @@ module Std : sig
 
       (** [static value] returns a generator that always produces the
           same [value].  *)
-      val static : int -> t
+      val static : ?width:int -> int -> t
 
       (** [unfold ~min ~max ~seed ~f] creates a generator that
           generates values by applying a function [f] to a pair of
           a generator state and previous value.   *)
-      val unfold : ?min:int -> ?max:int -> ?seed:int ->
+      val unfold : ?width:int -> ?min:int -> ?max:int -> ?seed:int ->
         f:('a * int -> 'a * int) -> 'a -> t
 
+
+      (** [width] the size in bits of the generated words.  *)
+      val width : t -> int
 
       (** Random Number Generators  *)
       module Random : sig
@@ -2214,17 +2225,15 @@ module Std : sig
             @param min (defaults to 0)
             @param max (defaults to 1^30)
         *)
-        val lcg : ?min:int -> ?max:int -> int -> t
-
+        val lcg : ?width:int -> ?min:int -> ?max:int -> int -> t
 
         (** [byte seed] the same as [lcg ~min:0 ~max:255 seed]  *)
         val byte : int -> t
 
-
         (** Self seeded generators.
 
             These generators will be seeded by a value derived from
-            the Machine clone identifier.  *)
+            the Machine identifier.  *)
         module Seeded : sig
 
           (** [create init] creates a self-seeded generator from a
@@ -2237,11 +2246,11 @@ module Std : sig
               - [Random.lcg]
               - [Random.byte]
           *)
-          val create : (int -> t) -> t
+          val create : ?width:int -> (int -> t) -> t
 
 
           (** [lcg ~min ~max ()] a linear congruential generator.  *)
-          val lcg : ?min:int -> ?max:int -> unit -> t
+          val lcg : ?width:int -> ?min:int -> ?max:int -> unit -> t
 
 
           (** [byte] is the same as [lcg ~min:0 ~max:255 ()]  *)
@@ -2261,7 +2270,13 @@ module Std : sig
 
 
         (** [word iter bitwidth] constructs a word of the given [bitwidth],
-            with bytes obtained from consequitive calls to [next].*)
+            from words obtained from consequitive calls to [next].
+
+            The generator is called [ceil (bitwidth / width)] times
+            and the generated words are concatenated in the order of
+            the increasing significance with any excessive most
+            significant bits truncated.
+        *)
         val word : t -> int -> word Machine.t
       end
     end
