@@ -24,13 +24,23 @@
 (defparameter *malloc-initialize-memory* false
   "if true then initialize allocated memory with *malloc-initial-value*")
 
+(defparameter *malloc-uniform-min-value* nil
+  "if set then defines the lower bound of the uniformely distributed
+   random value that is used to represent an unitialized memory ")
+
+(defparameter *malloc-uniform-max-value* nil
+  "if set then defines the lower bound of the uniformely distributed
+   random value that is used to represent an unitialized memory ")
+
 (defparameter *malloc-initial-value* 0
   "initialize allocated memory with the said value")
 
 (defun memory/allocate (ptr len)
   (if *malloc-initialize-memory*
       (memory-allocate ptr len *malloc-initial-value*)
-    (memory-allocate ptr len)))
+    (memory-allocate ptr len
+                     *malloc-uniform-min-value*
+                     *malloc-uniform-max-value*)))
 
 (defun malloc/put-chunk-size (ptr len)
   (write-word ptr_t ptr len))

@@ -142,17 +142,35 @@ module MemoryAllocate(Machine : Primus.Machine.S) = struct
   let negone = Value.one 8
   let zero = Value.zero 8
 
-  let make_static_generator x = match Word.to_int x with
-    | Ok x when x >= 0 && x < 256 ->
-      Ok (Some (Primus.Generator.static x))
-    | _ -> Or_error.errorf "memory-allocate: fill in value must fit into byte"
+  let value_to_int x = Value.to_word x |> Word.to_int
+
+  let make_static_generator width x = match Word.to_int x with
+    | Ok x -> Ok (Some (Primus.Generator.static ~width x))
+    | _ -> Or_error.errorf "memory-allocate: fill in value must fit into int"
+
+  let is_nil x = Word.equal Word.b0 (Value.to_word x)
+
+  let make_uniform_generator ~width ~min ~max =
+    let nomin = is_nil min and nomax = is_nil max in
+    if nomin && nomax then Ok None
+    else match value_to_int  min, value_to_int max with
+      | Ok min, Ok max ->
+        let min = if nomin then None else Some min
+        and max = if nomax then None else Some max in
+        let g = Primus.Generator.Random.Seeded.lcg ~width ?min ?max () in
+        Ok (Some g)
+      | _ -> Or_error.errorf "memory-allocate: random values do not fit into int"
+
 
   let run = function
     | addr :: size :: gen ->
+      Machine.gets Project.arch >>= fun arch ->
+      let width = Arch.addr_size arch |> Size.in_bits in
       let n = Word.to_int (Value.to_word size) in
       let gen = match gen with
         | []  -> Ok None
-        | [x] -> make_static_generator (Value.to_word x)
+        | [x] -> make_static_generator width (Value.to_word x)
+        | [min; max] -> make_uniform_generator width min max
         | _ -> Or_error.errorf "memory-allocate requires two or three arguments" in
       if Result.is_error n || Result.is_error gen
       then negone
