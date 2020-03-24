@@ -184,7 +184,6 @@ module Main(Machine : Primus.Machine.S) = struct
 
 
   let default_page_size = 4096
-  let default_generator = Primus.Generator.Random.Seeded.byte
 
   let map_page already_mapped addr =
     let rec map len =
@@ -192,7 +191,7 @@ module Main(Machine : Primus.Machine.S) = struct
       already_mapped last >>= function
       | true -> map (len / 2)
       | false ->
-        Mem.allocate ~generator:default_generator addr len in
+        Mem.allocate addr len in
     map default_page_size
 
   let trap () =
@@ -222,9 +221,11 @@ module Main(Machine : Primus.Machine.S) = struct
 
   let setup_vars =
     Machine.get () >>= fun proj ->
+    let width = Project.arch proj |> Arch.addr_size |> Size.in_bits in
     Set.to_sequence (free_vars proj) |>
     Machine.Seq.iter ~f:(fun var ->
-        Env.add var (Primus.Generator.static 0))
+        Env.add var (Primus.Generator.Random.Seeded.lcg ()
+                       ~width ~min:0 ~max:256))
 
   let ignore_division_by_zero =
     Linker.link ~name:Primus.Interpreter.division_by_zero_handler
