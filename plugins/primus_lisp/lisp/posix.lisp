@@ -1,4 +1,5 @@
 (require stdlib)
 (require stdio)
 (require string)
+(require errno)
 (require primus)
