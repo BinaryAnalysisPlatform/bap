@@ -31,33 +31,25 @@ let valid_first_char = function
   | '0'..'9' | '#' | '$' -> false
   | _ -> true
 
-let valid_char c =
-  valid_first_char c || match c with
-  | '0' .. '9' | '\'' | '.' -> true
-  | _ -> false
+let escapeworthy = Char.all |> List.filter ~f:(function
+    | '.' -> true
+    | c -> Char.is_whitespace c || not (Char.is_print c))
 
-let non_empty name =
-  if String.length name = 0
-  then invalid_arg "Invalid var literal: a variable can't be empty"
+let escape_char = '\\'
 
-let all_chars_valid name =
-  if not (valid_first_char name.[0])
-  then invalid_argf
-      "Invalid var literal: a variable can't start from %c" name.[0] ();
-  match String.find name ~f:(Fn.non valid_char) with
-  | None -> ()
-  | Some c ->
-    invalid_argf
-      "Invalid var literal: a variable can't contain char %c" c ()
+let escape =
+  Staged.unstage @@
+  String.Escaping.escape ~escapeworthy ~escape_char
 
-let validate_variable name =
-  non_empty name;
-  all_chars_valid name
+let mangle_if_necessary name =
+  let name = escape name in
+  if String.is_empty name then "_"
+  else if not (valid_first_char name.[0])
+  then "_" ^ name
+  else name
 
 let define sort name : 'a var =
-  validate_variable name;
-  non_empty name;
-  sort, Reg {name; ver=0}
+  sort, Reg {name=mangle_if_necessary name; ver=0}
 
 let create sort ident = sort,ident
 
@@ -118,7 +110,7 @@ module Ident = struct
     failwithf "`%s' is not a valid temporary value" s ()
 
   let split_version s =
-    match String.rfindi s ~f:(fun _ c -> Char.(c = '.')) with
+    match String.Escaping.rindex s ~escape_char '.' with
     | None -> s,0
     | Some n ->
       String.subo ~len:n s,
@@ -134,7 +126,6 @@ module Ident = struct
       let s,ver = split_version s in
       Var {num = num s; ver}
     | _ -> fun _ ->
-      validate_variable x;
       let name,ver = split_version x in
       Reg {name; ver}
 
