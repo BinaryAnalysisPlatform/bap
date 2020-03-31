@@ -2256,7 +2256,6 @@ module Std : sig
           (** [byte] is the same as [lcg ~min:0 ~max:255 ()]  *)
           val byte : t
         end
-
       end
 
 
@@ -2290,15 +2289,12 @@ module Std : sig
           environment.  *)
       type exn += Undefined_var of var
 
+      val generated : (var * value) observation
 
       (** [Env = Make(Machine)]  *)
       module Make(Machine : Machine.S) : sig
 
-        (** [get var] returns a value associated with the variable.
-            Todo: it looks like that the interface doesn't allow
-            anyone to save bottom or memory values in the environment,
-            thus the [get] operation should not return the
-            [Bil.result].*)
+        (** [get var] returns a value associated with the variable. *)
         val get : var -> value Machine.t
 
         (** [set var value] binds a variable [var] to the given [value].  *)
@@ -2372,6 +2368,8 @@ module Std : sig
 
       (** occurs when a memory operation for the given addr cannot be satisfied. *)
       type exn += Pagefault of addr
+
+      val generated : (addr * value) observation
 
 
       (** [Make(Machine)] lifts the memory interface into the

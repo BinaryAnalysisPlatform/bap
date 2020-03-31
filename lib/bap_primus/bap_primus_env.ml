@@ -19,6 +19,16 @@ type t = {
   random : Generator.t Var.Map.t;
 }
 
+let inspect_generated (v,x) = Sexp.List [
+    sexp_of_var v;
+    sexp_of_value x
+  ]
+
+let generated,on_generated =
+  Observation.provide "var-generated"
+    ~inspect:inspect_generated
+    ~package:"bap"
+
 let sexp_of_values values =
   Sexp.List (Map.to_sequence values |> Seq.map ~f:(fun (v,{value}) ->
       Sexp.List [
@@ -100,7 +110,9 @@ module Make(Machine : Machine) = struct
         | None -> Machine.raise (Undefined_var var)
         | Some gen ->
           Generator.word gen width >>= Value.of_word >>= fun x ->
-          set var x >>| fun () -> x
+          set var x >>= fun () ->
+          Machine.Observation.make on_generated (var,x) >>| fun () ->
+          x
 
   let has var =
     Machine.Local.get state >>| fun t ->

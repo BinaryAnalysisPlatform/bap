@@ -105,6 +105,17 @@ let inspect_memory {curr; mems} = Sexp.List [
     Descriptor.Map.sexp_of_t inspect_state mems;
   ]
 
+let inspect_generated (ptr,x) = Sexp.List [
+    sexp_of_addr ptr;
+    sexp_of_value x;
+  ]
+
+
+let generated,on_generated =
+  Bap_primus_observation.provide "load-generated"
+    ~inspect:inspect_generated
+    ~package:"bap"
+
 
 let virtual_memory arch =
   let module Target = (val target_of_arch arch) in
@@ -225,16 +236,22 @@ module Make(Machine : Machine) = struct
     let addr,next = match Arch.endian arch with
       | LittleEndian -> addr,Addr.succ
       | BigEndian -> Addr.nsucc addr (bytes-1),Addr.pred in
+    let notify_if_generated key x values =
+      if not (Map.mem values key)
+      then Machine.Observation.make on_generated (key,x)
+      else Machine.return () in
     let rec loop written ~key word values =
       if written < bytes then
         Value.of_word (bite word) >>= fun data ->
+        notify_if_generated key data values >>= fun () ->
         loop
           (written+1)
           ~key:(next key)
           (shift word)
           (Map.update values key ~f:(function
                | None -> data
-               | Some data -> data))      else Machine.return values in
+               | Some data -> data))
+      else Machine.return values in
     loop 0 ~key:addr word values
 
   let remembered {values; layers} addr word =

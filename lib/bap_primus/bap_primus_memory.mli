@@ -4,6 +4,8 @@ open Bap_primus_types
 
 module Generator = Bap_primus_generator
 
+val generated : (addr * value) Bap_primus_observation.t
+
 type exn += Pagefault of addr
 type memory
 module Descriptor : sig

@@ -5,6 +5,8 @@ module Generator = Bap_primus_generator
 
 type exn += Undefined_var of var
 
+val generated : (var * value) Bap_primus_observation.t
+
 module Make(Machine : Machine) : sig
   val get : var -> value Machine.t
   val set : var -> value -> unit Machine.t
