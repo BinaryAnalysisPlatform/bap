@@ -3,6 +3,19 @@ open Bap_main
 open Bap.Std
 open Bap_primus.Std
 
+
+let is_keyword = String.is_prefix ~prefix:":"
+let is_numeral s =
+  String.length s > 0 && Char.is_digit s.[0]
+
+let parse_exp ~width s =
+  if is_numeral s then
+    let m = Bitvec.modulus width in
+    let x = Bitvec.(bigint (Z.of_string s) mod m) in
+    Bil.int (Word.create x width)
+  else Bil.var (Var.create s (Type.Imm width))
+
+
 module Generator = struct
 
   type region =
@@ -35,8 +48,6 @@ module Generator = struct
         (Sexp.to_string_hum xs) ()
 
   let atoms = List.map ~f:atom
-
-  let is_keyword = String.is_prefix ~prefix:":"
 
   let predicate_of_sexp : Sexp.t -> predicate = function
     | Atom "_" -> Any
@@ -137,13 +148,13 @@ module Generator = struct
       end) 0 ~to_bitvec:ident ?width
 
 
-  let of_spec ?width n ps = match n with
+  let create ?width n ps = match n with
     | Random -> create_uniform ?width ps
     | Static -> create_const ?width ps
 
   let first_match ?width matches = List.find_map ~f:(fun s ->
       if matches s.predicate
-      then Some (of_spec ?width s.distribution s.parameters)
+      then Some (create ?width s.distribution s.parameters)
       else None)
 
   let for_var ?width v = first_match ?width @@ function
@@ -188,9 +199,101 @@ let main ctxt =
     let init () = randomize_vars
   end in
 
-  Primus.Components.register_generic "randomize-environment"
+  let module TrapPageFault(Machine : Primus.Machine.S) = struct
+    module Code = Primus.Linker.Make(Machine)
+    let exec =
+      Code.unlink (`symbol Primus.Interpreter.pagefault_handler)
+  end in
+
+
+  let module RandomizeMemory(Machine : Primus.Machine.S) = struct
+    open Machine.Syntax
+
+    module Eval = Primus.Interpreter.Make(Machine)
+    module Memory = Primus.Memory.Make(Machine)
+    module Linker = Primus.Linker.Make(Machine)
+
+    let allocate ?upper ~width lower generator =
+      let eval s =
+        Eval.exp (parse_exp ~width s) >>| Primus.Value.to_word in
+      eval lower >>= fun lower ->
+      match upper with
+      | None -> Memory.allocate ~generator lower 1
+      | Some upper ->
+        eval upper >>= fun upper ->
+        let diff = Word.(upper - lower) in
+        match Word.to_int diff with
+        | Ok diff -> Memory.allocate ~generator lower (diff+1)
+        | Error _ ->
+          invalid_argf "The specified interval (%s) is too large and \
+                        is currently not supported by Primus Random"
+            (Word.to_string diff) ()
+
+
+    (* in memory the last added layer has precedence over the
+       previously added, so we start with the last specified region
+       and then add more specific on top of it.
+    *)
+    let initialize_regions =
+      Machine.arch >>= fun arch ->
+      let width = Arch.addr_size arch |> Size.in_bits in
+      List.rev generators |>
+      Machine.List.iter ~f:(function
+          | {Generator.predicate=Mem Default} -> Machine.return ()
+          | {predicate = Mem region; distribution; parameters} ->
+            let generator = Generator.create distribution parameters in
+            let lower,upper = match region with
+              | Address lower -> lower,None
+              | Section name ->
+                sprintf "bap%s-lower" name,
+                Some (sprintf "bap%s-upper" name)
+              | Interval (lower,upper) -> lower, Some upper
+              | Default -> assert false in
+            allocate ~width lower ?upper generator
+          | _ -> Machine.return ())
+
+    let default_page_size = 4096
+
+    let map_page ?generator already_mapped addr =
+      let rec map len =
+        let last = Addr.nsucc addr (len - 1) in
+        already_mapped last >>= function
+        | true -> map (len / 2)
+        | false ->
+          Memory.allocate ?generator addr len in
+      map default_page_size
+
+    let trap () =
+      Linker.link ~name:Primus.Interpreter.pagefault_handler
+        (module TrapPageFault)
+
+    let pagefault ?generator x =
+      Memory.is_mapped x >>= function
+      | false -> map_page ?generator Memory.is_mapped x >>= trap
+      | true ->
+        Memory.is_writable x >>= function
+        | false -> map_page ?generator Memory.is_writable x >>= trap
+        | true -> Machine.return ()
+
+    let init () =
+      Machine.arch >>= fun arch ->
+      let width = Arch.addr_size arch |> Size.in_bits in
+      let generator = Generator.first_match ~width (function
+          | Mem Default -> true
+          | _ -> false) generators in
+      Machine.sequence [
+        Primus.Interpreter.pagefault >>> pagefault ?generator;
+        initialize_regions;
+      ]
+  end in
+
+  Primus.Components.register_generic "var-randomizer"
     (module RandomizeEnvironment) ~package:"bap"
     ~desc:"Randomizes registers.";
+
+  Primus.Components.register_generic "mem-randomizer"
+    (module RandomizeMemory) ~package:"bap"
+    ~desc:"Randomizes process memory.";
   Ok ()
 
 let () = Extension.declare main
