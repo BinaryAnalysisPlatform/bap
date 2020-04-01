@@ -65,6 +65,8 @@ end
 
 module Formula : sig
   type t
+  type formula = t
+  type model
 
   val word : Word.t -> t
   val var : string -> int -> t
@@ -75,6 +77,14 @@ module Formula : sig
   val concat : t -> t -> t
   val ite : t -> t -> t -> t
   val cast : cast -> int -> t -> t
+
+  val solve : ?inverse:bool -> t -> model option
+
+  module Model : sig
+    type t = model
+    val get : model -> Input.t -> formula option
+  end
+
   val to_string : t -> string
 end = struct
   module Bitv = Z3.BitVector
@@ -83,13 +93,11 @@ end = struct
   module Sort = Z3.Sort
 
   type t = Expr.expr
+  type formula = t
 
   let ctxt = Z3.mk_context [
       "model", "true";
     ]
-
-  let solver = Z3.Solver.mk_simple_solver ctxt
-
 
   let to_string = Expr.to_string
 
@@ -135,8 +143,6 @@ end = struct
     if Bool.is_bool x
     then do_simpl @@ Bool.mk_ite ctxt x bit1 bit0
     else x
-
-
 
   let z3_of_unop : unop -> _ = function
     | NEG -> Bitv.mk_neg
@@ -198,14 +204,38 @@ end = struct
       | 1 -> Bool.mk_sort ctxt
       | n -> Bitv.mk_sort ctxt n in
     Expr.mk_const_s ctxt name sort
+
+  type model = {
+    model : Z3.Model.model;
+  }
+
+  let solve ?(inverse=false) expr =
+    let solver = Z3.Solver.mk_simple_solver ctxt in
+    let lhs = Expr.mk_numeral_int ctxt 0 (Expr.get_sort expr) in
+    let formula = Bool.mk_eq ctxt lhs expr in
+    let formula = if inverse then formula
+      else Bool.mk_not ctxt formula in
+    match Z3.Solver.check solver [formula] with
+    | UNSATISFIABLE | UNKNOWN -> None
+    | SATISFIABLE -> match Z3.Solver.get_model solver with
+      | None -> None
+      | Some model -> Some {model}
+
+  module Model = struct
+    type t = model
+    let get {model} input =
+      let var = var (Input.to_symbol input) (Input.size input) in
+      Z3.Model.eval model var true
+  end
+
 end
 
-type worker = {
+type executor = {
   inputs : Set.M(Input).t;
   formulae : Formula.t Primus.Value.Id.Map.t;
 }
 
-let worker = Primus.Machine.State.declare
+let executor = Primus.Machine.State.declare
     ~uuid:"e21aa0fe-bc37-48e3-b398-ce7e764843c8"
     ~name:"symbolic-executor-formulae" @@ fun _ -> {
     formulae = Primus.Value.Id.Map.empty;
@@ -221,7 +251,11 @@ let new_formula,on_formula = Primus.Observation.provide "new-formula"
         sexp_of_formula x;
       ])
 
-module Worker(Machine : Primus.Machine.S) = struct
+module Executor(Machine : Primus.Machine.S) : sig
+  val formula : Primus.Value.t -> Formula.t Machine.t
+  val inputs : Input.t seq Machine.t
+  val init : unit -> unit Machine.t
+end = struct
   open Machine.Syntax
 
   let get_formula s v k =
@@ -234,42 +268,42 @@ module Worker(Machine : Primus.Machine.S) = struct
 
   let add_formula s v f =
     Machine.Observation.make on_formula (v,f) >>= fun () ->
-    Machine.Local.put worker {
+    Machine.Local.put executor {
       s with
       formulae = Map.add_exn s.formulae (Primus.Value.id v) f
     }
 
   let on_binop ((op,x,y),z) =
-    Machine.Local.get worker >>= fun s ->
+    Machine.Local.get executor >>= fun s ->
     get_formula s x @@ fun s x ->
     get_formula s y @@ fun s y ->
     add_formula s z (Formula.binop op x y)
 
   let on_unop ((op,x),z) =
-    Machine.Local.get worker >>= fun s ->
+    Machine.Local.get executor >>= fun s ->
     get_formula s x @@ fun s x ->
     add_formula s z (Formula.unop op x)
 
   let on_extract ((hi,lo,x),z) =
-    Machine.Local.get worker >>= fun s ->
+    Machine.Local.get executor >>= fun s ->
     get_formula s x @@ fun s x ->
     add_formula s z (Formula.extract hi lo x)
 
   let on_concat ((x,y),z) =
-    Machine.Local.get worker >>= fun s ->
+    Machine.Local.get executor >>= fun s ->
     get_formula s x @@ fun s x ->
     get_formula s y @@ fun s y ->
     add_formula s z (Formula.concat x y)
 
   let on_ite ((c,x,y),z) =
-    Machine.Local.get worker >>= fun s ->
+    Machine.Local.get executor >>= fun s ->
     get_formula s c @@ fun s c ->
     get_formula s x @@ fun s x ->
     get_formula s y @@ fun s y ->
     add_formula s z (Formula.ite c x y)
 
   let on_cast ((c,w,x),z) =
-    Machine.Local.get worker >>= fun s ->
+    Machine.Local.get executor >>= fun s ->
     get_formula s x @@ fun s x ->
     add_formula s z (Formula.cast c w x)
 
@@ -277,7 +311,7 @@ module Worker(Machine : Primus.Machine.S) = struct
     let id = Primus.Value.id x in
     let size = Input.size origin  in
     let x = Formula.var (Input.to_symbol origin) size in
-    Machine.Local.update worker ~f:(fun s -> {
+    Machine.Local.update executor ~f:(fun s -> {
           inputs = Set.add s.inputs origin;
           formulae = Map.add_exn s.formulae id x;
         })
@@ -285,6 +319,16 @@ module Worker(Machine : Primus.Machine.S) = struct
   let on_memory_input (p,x) = set_input (Input.ptr p) x
 
   let on_env_input (v,x) = set_input (Input.var v) x
+
+  let formula v =
+    Machine.Local.get executor >>= fun s ->
+    get_formula s v @@ fun s x ->
+    Machine.Local.put executor s >>| fun () ->
+    x
+
+  let inputs =
+    Machine.Local.get executor >>| fun s ->
+    Set.to_sequence s.inputs
 
   let init () = Machine.sequence Primus.Interpreter.[
       binop >>> on_binop;
@@ -298,7 +342,42 @@ module Worker(Machine : Primus.Machine.S) = struct
     ]
 end
 
+
+module Forker(Machine : Primus.Machine.S) = struct
+  open Machine.Syntax
+
+  module Executor = Executor(Machine)
+  module Eval = Primus.Interpreter.Make(Machine)
+
+  let on_branch cnd =
+    Executor.formula cnd >>= fun expr ->
+    let inverse = Word.is_one (Primus.Value.to_word cnd) in
+    Eval.pc >>= fun pc ->
+    match Formula.solve ~inverse expr with
+    | None ->
+      Format.eprintf "%a: unreachable branch@\n%!" Addr.pp pc;
+      Machine.return ()
+    | Some model ->
+      Format.eprintf "%a: constraint@\n%!" Addr.pp pc;
+      Executor.inputs >>| fun inputs ->
+      Seq.iter inputs ~f:(fun input ->
+          let var = Input.to_symbol input in
+          match Formula.Model.get model input with
+          | None ->
+            Format.eprintf "  %s -> SKIP@\n%!" var
+          | Some x ->
+            Format.eprintf "  %s -> %s@\n%!" var (Formula.to_string x))
+
+
+
+  let init () = Machine.sequence Primus.Interpreter.[
+      eval_cond >>> on_branch;
+    ]
+
+end
 let () = Bap_main.Extension.declare  @@ fun _ ->
-  Primus.Machine.add_component (module Worker)
+  Primus.Machine.add_component (module Executor)
+  [@warning "-D"];
+  Primus.Machine.add_component (module Forker)
   [@warning "-D"];
   Ok ()
