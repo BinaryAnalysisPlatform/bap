@@ -1,0 +1,14 @@
+Flag primus_symbolic_executor
+  Description: Build Primus Symbolic Executor
+  Default: false
+
+
+Library primus_symbolic_executor_plugin
+  Build$:       flag(everything) || flag(primus_symbolic_executor)
+  Path:         plugins/primus_symbolic_executor
+  BuildDepends: bap-primus, bap, core_kernel, bitvec, zarith, z3, regular, bap-main, threads.posix
+  FindlibName:     bap-plugin-primus_symbolic_executor
+  CompiledObject:  best
+  InternalModules: Primus_symbolic_executor_main
+  XMETADescription: Explores path with symbolic execution
+  XMETAExtraLines:  tags="primus, lisp"
