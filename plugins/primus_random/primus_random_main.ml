@@ -4,30 +4,106 @@ open Bap.Std
 open Bap_primus.Std
 
 module Generator = struct
+
+  type region =
+    | Default
+    | Address of string
+    | Section of string
+    | Interval of string * string
+
   type predicate =
     | Any
-    | Var of string
-    | Mem of Bitvec_sexp.t list
-  [@@deriving sexp]
+    | Var of string list
+    | Mem of region
 
   type name =
-    | Const
-    | Uniform
+    | Static
+    | Random
   [@@deriving sexp]
 
-  type generator = predicate * name * string list [@@deriving sexp]
+
+  type generator = {
+    predicate : predicate;
+    distribution : name;
+    parameters : string list;
+  }
+
+  let atom = function
+    | Sexp.Atom x -> x
+    | xs ->
+      invalid_argf "Expected a flat list of atoms, got %s"
+        (Sexp.to_string_hum xs) ()
+
+  let atoms = List.map ~f:atom
+
+  let is_keyword = String.is_prefix ~prefix:":"
+
+  let predicate_of_sexp : Sexp.t -> predicate = function
+    | Atom "_" -> Any
+    | List [Atom "var"; Atom "_"] -> Var []
+    | List (Atom "var" :: vars) -> Var (atoms vars)
+    | List [Atom "mem"; Atom "_"] -> Mem Default
+    | List [Atom "mem"; Atom loc] ->
+      Mem (if is_keyword loc then Section loc else Address loc)
+    | List [Atom "mem"; Atom lower; Atom upper] ->
+      Mem (Interval (lower,upper))
+    | other -> invalid_argf "Expected a generator specification got %s"
+                 (Sexp.to_string_hum other) ()
+
+  let of_sexp : Sexp.t -> generator = function
+    | Atom ("static"|"random") as dis -> {
+        predicate = Any;
+        distribution = name_of_sexp dis;
+        parameters=[]
+      }
+    | List ((Atom ("static"|"random") as dis) :: ps) -> {
+        predicate = Any;
+        distribution = name_of_sexp dis;
+        parameters = atoms ps
+      }
+    | List (pred :: dis :: pars) -> {
+        predicate = predicate_of_sexp pred;
+        distribution = name_of_sexp dis;
+        parameters = atoms pars;
+      }
+    | other ->
+      invalid_argf "expected layout specification, got %s"
+        (Sexp.to_string_hum other) ()
+
+  let pp_name ppf = function
+    | Static -> Format.fprintf ppf "Static"
+    | Random -> Format.fprintf ppf "Random"
+
+  let pp_strings = Format.pp_print_list Format.pp_print_string
+      ~pp_sep:Format.pp_print_space
+
+  let pp_predicate ppf = function
+    | Any -> Format.fprintf ppf "_"
+    | Var vars -> Format.fprintf ppf "(var %a)" pp_strings vars
+    | Mem Default -> Format.fprintf ppf "(mem _)"
+    | Mem (Address str | Section str) ->
+      Format.fprintf ppf "(mem %s)" str
+    | Mem (Interval (lower,upper)) ->
+      Format.fprintf ppf "(mem %s %s)" lower upper
+
+  let pp ppf {predicate=p; distribution=d; parameters=ps} =
+    Format.fprintf ppf "(%a %a %a)"
+      pp_predicate p
+      pp_name d
+      pp_strings ps
+
+  let to_string = Format.asprintf "%a" pp
 
   let from_file filename =
-    Sexp.load_sexps_conv_exn filename generator_of_sexp
+    Sexp.load_sexps_conv_exn filename of_sexp
+
+  let parse str =
+    Sexp.of_string str |> of_sexp
 
   let t =
     Extension.Type.define
-      ~name:"GEN"
-      ~parse:(fun str ->
-          generator_of_sexp @@ Sexp.of_string str)
-      ~print:(fun gen ->
-          Sexp.to_string_hum (sexp_of_generator gen))
-      (Any,Const,[])
+      ~name:"GEN" ~parse ~print:to_string
+      {predicate=Any; distribution=Static; parameters=[]}
 
   let list = Extension.Type.(list t)
 
@@ -62,23 +138,18 @@ module Generator = struct
 
 
   let of_spec ?width n ps = match n with
-    | Uniform -> create_uniform ?width ps
-    | Const -> create_const ?width ps
+    | Random -> create_uniform ?width ps
+    | Static -> create_const ?width ps
 
-  let first_match ?width matches = List.find_map ~f:(fun (p,g,ps) ->
-      if matches p then Some (of_spec ?width g ps)
+  let first_match ?width matches = List.find_map ~f:(fun s ->
+      if matches s.predicate
+      then Some (of_spec ?width s.distribution s.parameters)
       else None)
 
   let for_var ?width v = first_match ?width @@ function
-    | Var n -> (String.equal (Var.name v) n)
+    | Var [] -> true
+    | Var names -> List.mem names ~equal:String.equal (Var.name v)
     | _ -> false
-
-  let for_mem ?width p = first_match ?width @@ function
-    | Mem [p'] -> Bitvec.equal p p'
-    | Mem [lower; upper] ->
-      Bitvec.(p >= lower) && Bitvec.(p <= upper)
-    | _ -> invalid_argf
-             "The MEM predicate expects one or two parameters" ()
 end
 
 let generators = Extension.Configuration.parameter
@@ -116,6 +187,7 @@ let main ctxt =
             | Some gen -> Env.add var gen)
     let init () = randomize_vars
   end in
+
   Primus.Components.register_generic "randomize-environment"
     (module RandomizeEnvironment) ~package:"bap"
     ~desc:"Randomizes registers.";
