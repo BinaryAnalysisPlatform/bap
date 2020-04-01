@@ -2182,6 +2182,15 @@ module Std : sig
     module Generator : sig
       type t = generator [@@deriving sexp_of]
 
+      val of_iterator :
+        ?width:int ->
+        ?seed:(int -> 'a) ->
+        to_bitvec:('d -> Bitvec.t) ->
+        (module Iterator.Infinite
+          with type t = 'a
+           and type dom = 'd) -> 'a ->
+        t
+
 
       (** [create (module Iterator) seed] creates a integer generator
           from the provided [Iterator], and initializes it with the
