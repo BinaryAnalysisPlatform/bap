@@ -35,7 +35,33 @@ open Bap_primus.Std
 *)
 
 
-type origin = Ptr of word | Var of var
+module Input : sig
+  type t
+  val ptr : addr -> t
+  val var : var -> t
+  val to_symbol : t -> string
+  val size : t -> int
+  include Base.Comparable.S with type t := t
+end = struct
+  type t = Ptr of word | Var of var [@@deriving compare, sexp]
+
+  let ptr p = Ptr p
+  let var p = Var p
+
+  let to_symbol = function
+    | Var v -> Format.asprintf "R_%a" Var.pp v
+    | Ptr p -> Format.asprintf "M_%a" Addr.pp_hex p
+
+  let size = function
+    | Ptr _ -> 8
+    | Var v -> match Var.typ v with
+      | Imm m -> m
+      | _ -> 1
+
+  include Base.Comparable.Make(struct
+      type nonrec t = t [@@deriving compare, sexp]
+    end)
+end
 
 module Formula : sig
   type t
@@ -175,7 +201,7 @@ end = struct
 end
 
 type worker = {
-  inputs : origin String.Map.t;
+  inputs : Set.M(Input).t;
   formulae : Formula.t Primus.Value.Id.Map.t;
 }
 
@@ -183,7 +209,7 @@ let worker = Primus.Machine.State.declare
     ~uuid:"e21aa0fe-bc37-48e3-b398-ce7e764843c8"
     ~name:"symbolic-executor-formulae" @@ fun _ -> {
     formulae = Primus.Value.Id.Map.empty;
-    inputs = String.Map.empty;
+    inputs = Set.empty (module Input);
   }
 
 let sexp_of_formula x = Sexp.Atom (Formula.to_string x)
@@ -248,20 +274,17 @@ module Worker(Machine : Primus.Machine.S) = struct
     add_formula s z (Formula.cast c w x)
 
   let set_input origin x =
-    let name = match origin with
-      | Var v -> Format.asprintf "R_%a" Var.pp v
-      | Ptr p -> Format.asprintf "M_%a" Addr.pp_hex p in
     let id = Primus.Value.id x in
-    let size = Word.bitwidth (Primus.Value.to_word x) in
-    let x = Formula.var name size in
+    let size = Input.size origin  in
+    let x = Formula.var (Input.to_symbol origin) size in
     Machine.Local.update worker ~f:(fun s -> {
-          inputs = Map.add_exn s.inputs name origin;
+          inputs = Set.add s.inputs origin;
           formulae = Map.add_exn s.formulae id x;
         })
 
-  let on_memory_input (p,x) = set_input (Ptr p) x
+  let on_memory_input (p,x) = set_input (Input.ptr p) x
 
-  let on_env_input (v,x) = set_input (Var v) x
+  let on_env_input (v,x) = set_input (Input.var v) x
 
   let init () = Machine.sequence Primus.Interpreter.[
       binop >>> on_binop;
@@ -276,5 +299,6 @@ module Worker(Machine : Primus.Machine.S) = struct
 end
 
 let () = Bap_main.Extension.declare  @@ fun _ ->
-  Primus.Machine.add_component (module Worker);
+  Primus.Machine.add_component (module Worker)
+  [@warning "-D"];
   Ok ()
