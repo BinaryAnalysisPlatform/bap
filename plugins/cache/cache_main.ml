@@ -14,7 +14,6 @@ type entry = {
   size    : int64;
 } [@@deriving bin_io, compare, sexp]
 
-
 type entries = entry Data.Cache.Digest.Map.t
 
 let t = Unix.gettimeofday
@@ -45,6 +44,18 @@ type index = {
   entries : entry Data.Cache.Digest.Map.t;
 } [@@deriving bin_io, compare, sexp]
 
+
+let default_config = {
+  max_size = 4_000_000_000L;
+  overhead = 0.2;
+  gc_enabled = true;
+}
+
+let empty = {
+  config = default_config;
+  entries = Data.Cache.Digest.Map.empty;
+  current_size  = 0L;
+}
 
 let (/) = Filename.concat
 
@@ -140,44 +151,7 @@ module GC = struct
 
 end
 
-module Index = struct
-
-  let index_version = 3
-  let supported_versions = [3;2;1]
-  let index_file = sprintf "index.%d" index_version
-  let lock_file = "lock"
-
-  let default_config = {
-    max_size = 4_000_000_000L;
-    overhead = 0.2;
-    gc_enabled = true;
-  }
-
-  let empty = {
-    config = default_config;
-    entries = Data.Cache.Digest.Map.empty;
-    current_size  = 0L;
-  }
-
-  let is_index path =
-    String.is_prefix ~prefix:"index" (Filename.basename path)
-
-  let get_version path =
-    let file = Filename.basename path in
-    match String.chop_prefix file "index." with
-    | None -> Ok 1
-    | Some v ->
-      try Ok (int_of_string v)
-      with _ ->
-        Error (Error.of_string (sprintf "unknown version %s" v))
-
-  let size (entries : entries) =
-    Map.fold entries ~init:0L ~f:(fun ~key:_ ~data:e size ->
-        Int64.(size + e.size))
-
-  let save_to_index idx key entry =
-    let current_size = Int64.(idx.current_size + entry.size) in
-    { idx with entries = Map.set idx.entries key entry; current_size }
+module IO = struct
 
   module T = struct
     type t = index [@@deriving bin_io]
@@ -231,7 +205,9 @@ module Index = struct
       GC.clean idx
     else idx
 
-  let index_of_file =
+  let read = index_of_file
+
+  let read'' =
     let index = ref empty in
     let mtime = ref 0.0 in
     let update s index' =
@@ -246,9 +222,78 @@ module Index = struct
         let () = update stat index' in
         index'
 
-  let index_to_file file index =
+  let write file index =
     try to_file (module T) file index
     with e -> warning "store index: %s" (Exn.to_string e)
+
+end
+
+module Buffered_io = struct
+  type t = {
+    index  : index;
+    file   : string;
+    age    : int;
+  }
+
+  let max_age = 256
+  let state = ref None
+
+  let init file index =
+    state := Some {index; file; age=0}
+
+  let flush () = match !state with
+    | None -> ()
+    | Some s -> IO.write s.file s.index
+
+  let write file index =
+    match !state with
+    | None -> init file index;
+    | Some s ->
+      if s.age mod max_age = 0 then
+        flush ();
+      state := Some { s with index; age = s.age + 1}
+
+  let read file =
+    match !state with
+    | None ->
+      let index = IO.read file in
+      init file index;
+      index
+    | Some s -> s.index
+
+  let () = at_exit flush
+
+end
+
+module BIO = Buffered_io
+
+
+module Index = struct
+
+  let index_version = 3
+  let supported_versions = [3;2;1]
+  let index_file = sprintf "index.%d" index_version
+  let lock_file = "lock"
+
+  let is_index path =
+    String.is_prefix ~prefix:"index" (Filename.basename path)
+
+  let get_version path =
+    let file = Filename.basename path in
+    match String.chop_prefix file "index." with
+    | None -> Ok 1
+    | Some v ->
+      try Ok (int_of_string v)
+      with _ ->
+        Error (Error.of_string (sprintf "unknown version %s" v))
+
+  let size (entries : entries) =
+    Map.fold entries ~init:0L ~f:(fun ~key:_ ~data:e size ->
+        Int64.(size + e.size))
+
+  let save_to_index idx key entry =
+    let current_size = Int64.(idx.current_size + entry.size) in
+    { idx with entries = Map.set idx.entries key entry; current_size }
 
   let with_index ~f =
     let cache_dir = cache_dir () in
@@ -257,10 +302,10 @@ module Index = struct
     let lock = Unix.openfile lock Unix.[O_RDWR; O_CREAT] 0o640 in
     Unix.lockf lock Unix.F_LOCK 0;
     protect ~f:(fun () ->
-        let index = index_of_file file in
+        let index = BIO.read file in
         let index',data = f cache_dir index in
         if not (phys_equal index index') then
-          index_to_file file index';
+          BIO.write file index';
         data)
       ~finally:(fun () ->
           Unix.(lockf lock F_ULOCK 0; close lock))
@@ -283,16 +328,16 @@ module Index = struct
     let () = match version with
       | 1 ->
         warning "can't load index, version 1 is not supported anymore";
-        index_to_file (cache_dir () / index_file) empty;
+        BIO.write (cache_dir () / index_file) empty;
       | 2 ->
-        let index = from_file (module Compatibility.V2) file in
+        let index = IO.from_file (module Compatibility.V2) file in
         let size = size index.entries in
         let index' = {
           config = default_config;
           current_size = size;
           entries = index.entries;
         } in
-        index_to_file (cache_dir () / index_file) index'
+        BIO.write (cache_dir () / index_file) index'
       | x ->
         warning
           "can't update index version from %d to %d" x index_version in
