@@ -124,13 +124,17 @@ end = struct
     | AND -> Bitv.mk_and
     | OR -> Bitv.mk_or
     | XOR -> Bitv.mk_xor
-    | EQ -> Bool.mk_eq
     | LT -> Bitv.mk_ult
     | LE -> Bitv.mk_ule
     | SLT -> Bitv.mk_slt
     | SLE -> Bitv.mk_sle
-    | NEQ -> fun ctxt x y ->  (* should we use distinct? *)
-      Bool.mk_not ctxt @@ Bool.mk_eq ctxt x y
+    | EQ -> fun ctxt x y ->
+      Bitv.mk_not ctxt @@
+      Bitv.mk_redor ctxt @@
+      Bitv.mk_xor ctxt x y
+    | NEQ -> fun ctxt x y ->
+      Bitv.mk_redor ctxt @@
+      Bitv.mk_xor ctxt x y
 
   let do_simpl x = Expr.simplify x None
 
@@ -349,29 +353,36 @@ module Forker(Machine : Primus.Machine.S) = struct
   module Executor = Executor(Machine)
   module Eval = Primus.Interpreter.Make(Machine)
 
-  let on_branch cnd =
+  let is_branch = function
+    | Primus.Pos.Jmp {up={me=blk}} -> Term.length jmp_t blk > 1
+    | _ -> false
+
+
+  let on_cond cnd =
     Executor.formula cnd >>= fun expr ->
     let inverse = Word.is_one (Primus.Value.to_word cnd) in
     Eval.pc >>= fun pc ->
-    match Formula.solve ~inverse expr with
-    | None ->
-      Format.eprintf "%a: unreachable branch@\n%!" Addr.pp pc;
-      Machine.return ()
-    | Some model ->
-      Format.eprintf "%a: constraint@\n%!" Addr.pp pc;
-      Executor.inputs >>| fun inputs ->
-      Seq.iter inputs ~f:(fun input ->
-          let var = Input.to_symbol input in
-          match Formula.Model.get model input with
-          | None ->
-            Format.eprintf "  %s -> SKIP@\n%!" var
-          | Some x ->
-            Format.eprintf "  %s -> %s@\n%!" var (Formula.to_string x))
+    Eval.pos >>= fun pos ->
+    if is_branch pos then match Formula.solve ~inverse expr with
+      | None ->
+        Format.eprintf "%a: unreachable branch@\n%!" Addr.pp pc;
+        Machine.return ()
+      | Some model ->
+        Format.eprintf "%a: constraint@\n%!" Addr.pp pc;
+        Executor.inputs >>| fun inputs ->
+        Seq.iter inputs ~f:(fun input ->
+            let var = Input.to_symbol input in
+            match Formula.Model.get model input with
+            | None ->
+              Format.eprintf "  %s -> SKIP@\n%!" var
+            | Some x ->
+              Format.eprintf "  %s -> %s@\n%!" var (Formula.to_string x))
+    else Machine.return ()
 
 
 
   let init () = Machine.sequence Primus.Interpreter.[
-      eval_cond >>> on_branch;
+      eval_cond >>> on_cond;
     ]
 
 end
