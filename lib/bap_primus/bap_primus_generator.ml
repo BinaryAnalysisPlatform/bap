@@ -18,12 +18,14 @@ type iterator = Iter : {
 
 type iterators = {
   iterators : iterator Int.Map.t;
+  salt : int;
 }
 
 let iterators = Bap_primus_machine.State.declare
     ~name:"iterators"
     ~uuid:"9927004d-fe57-4de9-8705-c3d6862238cf" @@ fun _ -> {
     iterators = Int.Map.empty;
+    salt = 1;
   }
 
 type constructor =
@@ -138,7 +140,7 @@ module Make(Machine : Machine) = struct
   open Machine.Syntax
 
   let rec call gen =
-    Machine.Local.get iterators >>= fun {iterators=iters} ->
+    Machine.Local.get iterators >>= fun {iterators=iters; salt} ->
     match Map.find iters gen.id with
     | Some Iter {ctrl=(module Iter); self; seed} ->
       let value = Iter.value self in
@@ -149,21 +151,24 @@ module Make(Machine : Machine) = struct
         } in
       Machine.Local.put iterators {
         iterators = Map.set iters gen.id next;
+        salt;
       } >>| fun () ->
       value
     | None ->
       Machine.current () >>= fun id ->
-      let seed = Machine.Id.hash id mod 4096 in
+      let seed = Machine.Id.hash id + salt in
       match gen.init with
       | Const Iter it ->
         let iter = Iter {it with self = it.seed seed} in
         Machine.Local.put iterators {
-          iterators = Map.set iters gen.id iter
+          iterators = Map.set iters gen.id iter;
+          salt = salt + 1;
         } >>= fun () ->
         call gen
       | Seeded init ->
         Machine.Local.put iterators {
-          iterators = Map.set iters gen.id (init seed)
+          iterators = Map.set iters gen.id (init seed);
+          salt;
         } >>= fun () ->
         call gen
 
