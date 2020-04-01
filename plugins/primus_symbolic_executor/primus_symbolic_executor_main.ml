@@ -384,11 +384,14 @@ module Forker(Machine : Primus.Machine.S) = struct
   let init () = Machine.sequence Primus.Interpreter.[
       eval_cond >>> on_cond;
     ]
-
 end
+
 let () = Bap_main.Extension.declare  @@ fun _ ->
-  Primus.Machine.add_component (module Executor)
-  [@warning "-D"];
-  Primus.Machine.add_component (module Forker)
-  [@warning "-D"];
+  Primus.Components.register_generic  "symbolic-excutor"
+    (module Executor) ~package:"bap"
+    ~desc:"Computes a symbolic formula for each Primus value.";
+  Primus.Components.register_generic "symbolic-execution-enforcer"
+    (module Forker) ~package:"bap"
+    ~desc:"Computes a path constraint for each branch and forks a \
+           new machine if the constraint is satisfiable.";
   Ok ()
