@@ -67,6 +67,15 @@ end = struct
 
   let to_string = Expr.to_string
 
+  let coerce_shift op ctxt x y =
+    let sx = Bitv.get_size (Expr.get_sort x)
+    and sy = Bitv.get_size (Expr.get_sort y) in
+    if sx = sy then op ctxt x y
+    else
+      let y = Bitv.mk_zero_ext ctxt (sx-sy) y in
+      op ctxt x y
+
+
   let z3_of_binop : binop -> _ = function
     | PLUS -> Bitv.mk_add
     | MINUS -> Bitv.mk_sub
@@ -75,9 +84,9 @@ end = struct
     | SDIVIDE -> Bitv.mk_sdiv
     | MOD -> Bitv.mk_srem
     | SMOD -> Bitv.mk_urem
-    | LSHIFT -> Bitv.mk_shl
-    | RSHIFT -> Bitv.mk_lshr
-    | ARSHIFT -> Bitv.mk_ashr
+    | LSHIFT -> coerce_shift Bitv.mk_shl
+    | RSHIFT -> coerce_shift Bitv.mk_lshr
+    | ARSHIFT -> coerce_shift Bitv.mk_ashr
     | AND -> Bitv.mk_and
     | OR -> Bitv.mk_or
     | XOR -> Bitv.mk_xor
@@ -89,19 +98,49 @@ end = struct
     | NEQ -> fun ctxt x y ->  (* should we use distinct? *)
       Bool.mk_not ctxt @@ Bool.mk_eq ctxt x y
 
+  let do_simpl x = Expr.simplify x None
+
+  let bit0 = Expr.mk_numeral_int ctxt 0 (Bitv.mk_sort ctxt 1)
+  let bit1 = Expr.mk_numeral_int ctxt 1 (Bitv.mk_sort ctxt 1)
+
+  let is_bool = Bool.is_bool
+
+  let bit_of_bool x =
+    if Bool.is_bool x
+    then do_simpl @@ Bool.mk_ite ctxt x bit1 bit0
+    else x
+
+
+
   let z3_of_unop : unop -> _ = function
     | NEG -> Bitv.mk_neg
     | NOT -> Bitv.mk_not
 
-  let simpl x = Expr.simplify x None
+  let coerce_to_bit_if_necessary x =
+    if is_bool x then bit_of_bool x
+    else x
+
+  let simpl x = Expr.simplify x None |>
+                coerce_to_bit_if_necessary
 
   let binop op x y = simpl (z3_of_binop op ctxt x y)
   let unop op x = simpl (z3_of_unop op ctxt x)
 
+  (* let binop op x y =
+   *   Format.eprintf "(%s %s:%s %s:%s)@\n%!"
+   *     (Bil.string_of_binop op)
+   *     (to_string x) (Z3.Sort.to_string (Expr.get_sort x))
+   *     (to_string y) (Z3.Sort.to_string (Expr.get_sort y));
+   *   binop op x y
+   *
+   * let unop op x =
+   *   Format.eprintf "(%s %s:%s)@\n%!"
+   *     (Bil.string_of_unop op)
+   *     (to_string x) (Z3.Sort.to_string (Expr.get_sort x));
+   *   unop op x *)
+
   let word x =
-    let s = match Word.bitwidth x with
-      | 1 -> Bool.mk_sort ctxt
-      | n -> Bitv.mk_sort ctxt n in
+    let s = Bitv.mk_sort ctxt (Word.bitwidth x) in
     let x = Word.to_bitvec x in
     if Bitvec.fits_int x
     then Expr.mk_numeral_int ctxt (Bitvec.to_int x) s
@@ -120,10 +159,10 @@ end = struct
     let old = Bitv.get_size (Expr.get_sort x) in
     simpl @@ match c with
     | SIGNED -> if old < s
-      then Bitv.mk_sign_ext ctxt s x
+      then Bitv.mk_sign_ext ctxt (s-old) x
       else extract (s-1) 0 x
     | UNSIGNED -> if old < s
-      then Bitv.mk_zero_ext ctxt s x
+      then Bitv.mk_zero_ext ctxt (s-old) x
       else extract (s-1) 0 x
     | HIGH -> extract (old-1) (old-s) x
     | LOW -> extract (s-1) 0 x
@@ -210,8 +249,8 @@ module Worker(Machine : Primus.Machine.S) = struct
 
   let set_input origin x =
     let name = match origin with
-      | Var v -> Var.to_string v
-      | Ptr p -> Format.asprintf "VAL%a" Addr.pp_hex p in
+      | Var v -> Format.asprintf "R_%a" Var.pp v
+      | Ptr p -> Format.asprintf "M_%a" Addr.pp_hex p in
     let id = Primus.Value.id x in
     let size = Word.bitwidth (Primus.Value.to_word x) in
     let x = Formula.var name size in
