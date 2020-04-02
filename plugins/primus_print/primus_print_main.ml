@@ -175,19 +175,18 @@ let start_monitoring {Config.get=(!)} =
         ]
       else Machine.return ()
 
-    let init () =
-      setup_tracing () >>= fun () ->
-      parse_monitors !Param.monitors |>
-      List.iter ~f:(fun m ->
-          info "monitoring %s" (Primus.Observation.Provider.name m);
-          Stream.observe (Primus.Observation.Provider.data m)
-            (print_event out m));
-      Machine.return ()
+    let init () = setup_tracing ()
+
   end in
   Primus.Machine.add_component (module Monitor) [@warning "-D"];
   Primus.Components.register_generic "observation-printer" (module Monitor)
     ~package:"bap"
     ~desc:"Prints the specified set of observations. Controlled via \
-           the primus-print plugin."
+           the primus-print plugin.";
+  parse_monitors !Param.monitors |>
+  List.iter ~f:(fun m ->
+      info "monitoring %s" (Primus.Observation.Provider.name m);
+      Stream.observe (Primus.Observation.Provider.data m)
+        (print_event out m))
 
 let () = Config.when_ready start_monitoring
