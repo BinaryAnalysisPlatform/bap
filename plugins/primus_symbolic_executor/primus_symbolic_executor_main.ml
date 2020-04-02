@@ -36,6 +36,16 @@ open Monads.Std
 *)
 
 module Id = Monad.State.Multi.Id
+let debug_msg,post_msg = Primus.Observation.provide "executor-debug"
+    ~inspect:sexp_of_string
+
+module Debug(Machine : Primus.Machine.S) = struct
+  open Machine.Syntax
+  let msg fmt = Format.kasprintf (fun msg ->
+      Machine.current () >>= fun id ->
+      let msg = Format.asprintf "%a: %s" Id.pp id msg in
+      Machine.Observation.make post_msg msg) fmt
+end
 
 module Input : sig
   type t
@@ -179,16 +189,22 @@ end = struct
     then do_simpl @@ Bool.mk_ite ctxt x bit1 bit0
     else x
 
+  let bool_of_bit x =
+    do_simpl @@ Bool.mk_eq ctxt x bit1
+
   let z3_of_unop : unop -> _ = function
     | NEG -> Bitv.mk_neg
     | NOT -> Bitv.mk_not
 
-  let coerce_to_bit_if_necessary x =
-    if is_bool x then bit_of_bool x
-    else x
+  let coerce_to_bit x =
+    if is_bool x then bit_of_bool x else x
+
+  let coerce_to_bool x =
+    if is_bool x then x else bool_of_bit x
+
 
   let simpl x = Expr.simplify x None |>
-                coerce_to_bit_if_necessary
+                coerce_to_bit
 
   let binop op x y = simpl (z3_of_binop op ctxt x y)
   let unop op x = simpl (z3_of_unop op ctxt x)
@@ -216,11 +232,21 @@ end = struct
       Expr.mk_numeral_string ctxt (Z.to_string x) s
 
   let extract hi lo x =
-    simpl @@ Bitv.mk_extract ctxt hi lo x
+    let xs = Bitv.get_size (Expr.get_sort x)
+    and ns = hi-lo+1 in
+    simpl @@
+    if ns > xs
+    then if lo = 0
+      then Bitv.mk_zero_ext ctxt (ns-xs) x
+      else
+        Bitv.mk_extract ctxt hi lo @@
+        Bitv.mk_zero_ext ctxt (ns-xs) x
+    else
+      Bitv.mk_extract ctxt hi lo x
 
   let concat x y = simpl @@ Bitv.mk_concat ctxt x y
 
-  let ite c x y = simpl @@ Bool.mk_ite ctxt c x y
+  let ite c x y = simpl @@ Bool.mk_ite ctxt (coerce_to_bool c) x y
 
   let cast (c:cast) s x =
     let old = Bitv.get_size (Expr.get_sort x) in
@@ -235,10 +261,7 @@ end = struct
     | LOW -> extract (s-1) 0 x
 
   let var name size =
-    let sort = match size with
-      | 1 -> Bool.mk_sort ctxt
-      | n -> Bitv.mk_sort ctxt n in
-    Expr.mk_const_s ctxt name sort
+    Expr.mk_const_s ctxt name (Bitv.mk_sort ctxt size)
 
   type model = {
     model : Z3.Model.model;
@@ -310,17 +333,6 @@ let new_formula,on_formula = Primus.Observation.provide "new-formula"
         Primus.Value.sexp_of_t id;
         sexp_of_formula x;
       ])
-
-let debug_msg,post_msg = Primus.Observation.provide "executor-debug"
-    ~inspect:sexp_of_string
-
-module Debug(Machine : Primus.Machine.S) = struct
-  open Machine.Syntax
-  let msg fmt = Format.kasprintf (fun msg ->
-      Machine.current () >>= fun id ->
-      let msg = Format.asprintf "%a: %s" Id.pp id msg in
-      Machine.Observation.make post_msg msg) fmt
-end
 
 module Executor(Machine : Primus.Machine.S) : sig
   val formula : Primus.Value.t -> Formula.t Machine.t
