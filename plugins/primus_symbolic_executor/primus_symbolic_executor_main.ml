@@ -387,10 +387,10 @@ module Forker(Machine : Primus.Machine.S) = struct
 end
 
 let () = Bap_main.Extension.declare  @@ fun _ ->
-  Primus.Components.register_generic  "symbolic-excutor"
+  Primus.Components.register_generic "symbolic-computer"
     (module Executor) ~package:"bap"
     ~desc:"Computes a symbolic formula for each Primus value.";
-  Primus.Components.register_generic "symbolic-execution-enforcer"
+  Primus.Components.register_generic "symbolic-path-explorer"
     (module Forker) ~package:"bap"
     ~desc:"Computes a path constraint for each branch and forks a \
            new machine if the constraint is satisfiable.";
