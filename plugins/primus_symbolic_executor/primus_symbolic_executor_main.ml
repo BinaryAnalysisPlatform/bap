@@ -67,6 +67,7 @@ module Formula : sig
   type t
   type formula = t
   type model
+  type value
 
   val word : Word.t -> t
   val var : string -> int -> t
@@ -80,9 +81,17 @@ module Formula : sig
 
   val solve : ?inverse:bool -> t -> model option
 
+
   module Model : sig
     type t = model
-    val get : model -> Input.t -> formula option
+    val get : model -> Input.t -> value option
+  end
+
+  module Value : sig
+    type t = value
+    val to_word : value -> word
+    val to_formula : value -> formula
+    val to_string : value -> string
   end
 
   val to_string : t -> string
@@ -94,6 +103,7 @@ end = struct
 
   type t = Expr.expr
   type formula = t
+  type value = t
 
   let ctxt = Z3.mk_context [
       "model", "true";
@@ -231,6 +241,31 @@ end = struct
       let var = var (Input.to_symbol input) (Input.size input) in
       Z3.Model.eval model var true
   end
+
+  module Value = struct
+    type t = value
+    let to_formula = ident
+    let to_bigint x =
+      let s = Expr.to_string x in
+      let len = String.length s in
+      if String.length s > 2 && Char.(s.[0] = '#')
+      then
+        let base = match s.[1] with
+          | 'b' -> 2
+          | 'x' -> 16
+          | _ -> failwithf "Not a literal value %s" s () in
+        Z.of_substring_base base s ~pos:2 ~len:(len-2)
+      else Z.of_string s
+
+    let to_word x =
+      let s = Bitv.get_size (Expr.get_sort x)
+      and z = to_bigint x in
+      Word.create Bitvec.(bigint z mod modulus s) s
+
+    let to_string x = Expr.to_string x
+  end
+
+
 
 end
 
@@ -376,7 +411,9 @@ module Forker(Machine : Primus.Machine.S) = struct
             | None ->
               Format.eprintf "  %s -> SKIP@\n%!" var
             | Some x ->
-              Format.eprintf "  %s -> %s@\n%!" var (Formula.to_string x))
+              let s = Formula.Value.to_string x
+              and w = Formula.Value.to_word x in
+              Format.eprintf "  %s -> %s(%a)@\n%!" var s Word.pp w)
     else Machine.return ()
 
 
