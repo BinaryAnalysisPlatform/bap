@@ -242,6 +242,6 @@ let () = when_ready (fun {get=(!!)} ->
       ~desc:"Forces execution of all linearly independent paths \
              by forcefully flipping the branch conditions.";
     Primus.Components.register_generic "division-by-zero-handler"
-      (module EnableDivisionByZero)
+      (module EnableDivisionByZero) ~package
       ~desc:"Disables division by zero errors.";
     if !!enabled then enable_legacy_promiscuous_mode ());

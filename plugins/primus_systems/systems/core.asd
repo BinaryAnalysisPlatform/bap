@@ -29,15 +29,28 @@
                bap:base-lisp-machine)
   :components (bap:limit))
 
-(defsystem bap:greedy-promiscuous-executor
-  :description "Executes all linearly independent paths and never fails."
+(defsystem bap:microexecutor-base
+  :description "The base system for microexecution systems."
   :depends-on (bap:terminating-stubbed-executor)
   :components (bap:greedy-scheduler
-               bap:promiscuous-mode
                bap:incident-location-recorder
                bap:lisp-incidents
-               bap:mark-visited))
+               bap:mark-visited
+               bap:var-randomizer
+               bap:mem-randomizer
+               bap:division-by-zero-handler))
 
+(defsystem bap:promiscuous-executor
+  :description "Executes all linearly independent paths and never fails."
+  :depends-on (bap:microexecutor-base)
+  :components (bap:promiscuous-path-explorer))
+
+(defsystem bap:symbolic-executor
+  :description "Uses symbolic execution to analyze all feasible and
+                linearly independent paths."
+  :depends-on (bap:microexecutor-base)
+  :components (bap:symbolic-computer
+               bap:symbolic-path-explorer))
 
 (defsystem bap:base-taint-analyzer
   :description "Uses greedy-promiscuous-executor for taint analysis.
