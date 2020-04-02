@@ -1,6 +1,7 @@
 open Core_kernel
 open Bap.Std
 open Bap_primus.Std
+open Monads.Std
 
 (* Algorithm.
 
@@ -34,6 +35,7 @@ open Bap_primus.Std
 
 *)
 
+module Id = Monad.State.Multi.Id
 
 module Input : sig
   type t
@@ -41,6 +43,11 @@ module Input : sig
   val var : var -> t
   val to_symbol : t -> string
   val size : t -> int
+
+  module Make(Machine : Primus.Machine.S) : sig
+    val set : t -> word -> unit Machine.t
+  end
+
   include Base.Comparable.S with type t := t
 end = struct
   type t = Ptr of word | Var of var [@@deriving compare, sexp]
@@ -57,6 +64,20 @@ end = struct
     | Var v -> match Var.typ v with
       | Imm m -> m
       | _ -> 1
+
+  module Make(Machine : Primus.Machine.S) = struct
+    open Machine.Syntax
+    module Eval = Primus.Interpreter.Make(Machine)
+    module Value = Primus.Value.Make(Machine)
+
+    let set input value =
+      Value.of_word value >>= fun value ->
+      match input with
+      | Ptr p ->
+        Value.of_word p >>= fun p ->
+        Eval.store p value BigEndian `r8
+      | Var v -> Eval.set v value
+  end
 
   include Base.Comparable.Make(struct
       type nonrec t = t [@@deriving compare, sexp]
@@ -290,6 +311,17 @@ let new_formula,on_formula = Primus.Observation.provide "new-formula"
         sexp_of_formula x;
       ])
 
+let debug_msg,post_msg = Primus.Observation.provide "executor-debug"
+    ~inspect:sexp_of_string
+
+module Debug(Machine : Primus.Machine.S) = struct
+  open Machine.Syntax
+  let msg fmt = Format.kasprintf (fun msg ->
+      Machine.current () >>= fun id ->
+      let msg = Format.asprintf "%a: %s" Id.pp id msg in
+      Machine.Observation.make post_msg msg) fmt
+end
+
 module Executor(Machine : Primus.Machine.S) : sig
   val formula : Primus.Value.t -> Formula.t Machine.t
   val inputs : Input.t seq Machine.t
@@ -381,45 +413,166 @@ end = struct
     ]
 end
 
+type task = {
+  inputs : Input.t Seq.t;
+  inverse : bool;
+  rhs : Formula.t;
+  src : jmp term;
+  dst : Jmp.dst;
+}
+
+type master = {
+  self : Id.t option;
+  worklist : task list;
+  forks : Set.M(Tid).t;
+  dests : Set.M(Tid).t;
+}
+
+let master = Primus.Machine.State.declare
+    ~uuid:"8d2b41d4-4852-40e9-917a-33f1f5af01a1"
+    ~name:"symbolic-executor-master" @@ fun _ -> {
+    self = None;
+    worklist = [];
+    forks = Tid.Set.empty;      (* queued or finished forks *)
+    dests = Tid.Set.empty;      (* queued of finished dests *)
+  }
+
+let pp_dst ppf dst = match Jmp.resolve dst with
+  | First tid -> Format.fprintf ppf "%a" Tid.pp tid
+  | Second _ -> Format.fprintf ppf "unk"
+
+let pp_task ppf {rhs; src; dst; inverse} =
+  Format.fprintf ppf "%a -> %a s.t.%s:@\n%s"
+    Tid.pp (Term.tid src) pp_dst dst
+    (if inverse then " not" else "")
+    (Formula.to_string rhs)
+
 
 module Forker(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
 
   module Executor = Executor(Machine)
   module Eval = Primus.Interpreter.Make(Machine)
+  module Debug = Debug(Machine)
 
-  let is_branch = function
-    | Primus.Pos.Jmp {up={me=blk}} -> Term.length jmp_t blk > 1
-    | _ -> false
+  let is_conditional jmp = match Jmp.cond jmp with
+    | Bil.Int _ -> false
+    | _ -> true
 
+  (* is some jmp when the current position is a branch point *)
+  let branch_point = function
+    | Primus.Pos.Jmp {up={me=blk}; me=jmp}
+      when Term.length jmp_t blk > 1 &&
+           is_conditional jmp ->
+      Some (blk,jmp)
+    | _ -> None
+
+
+  let other_dst ~taken blk jmp =
+    let is_other = if taken
+      then Fn.non (Term.same jmp)
+      else Term.same jmp in
+    Term.enum jmp_t blk |>
+    Seq.find_map ~f:(fun jmp ->
+        if not (is_other jmp) then None
+        else match Jmp.alt jmp with
+          | None -> Jmp.dst jmp
+          | dst -> dst) |> function
+    | Some dst -> dst
+    | None ->
+      failwithf "Broken branch %a at:@\n%a"
+        Jmp.pps jmp Blk.pps blk ()
+
+  let is_retired master src dst =
+    Set.mem master.forks (Term.tid src) ||
+    match Jmp.resolve dst with
+    | First tid -> Set.mem master.dests tid
+    | Second _ -> true
+
+  let is_actual master src dst = not (is_retired master src dst)
 
   let on_cond cnd =
-    Executor.formula cnd >>= fun expr ->
-    let inverse = Word.is_one (Primus.Value.to_word cnd) in
-    Eval.pc >>= fun pc ->
+    let taken = Word.is_one (Primus.Value.to_word cnd) in
     Eval.pos >>= fun pos ->
-    if is_branch pos then match Formula.solve ~inverse expr with
-      | None ->
-        Format.eprintf "%a: unreachable branch@\n%!" Addr.pp pc;
+    match branch_point pos with
+    | None -> Machine.return ()
+    | Some (blk,src) ->
+      Machine.Global.get master >>= fun s ->
+      let dst = other_dst ~taken blk src in
+      if is_retired s src dst
+      then Machine.return ()
+      else
+        Executor.formula cnd >>= fun rhs ->
+        Executor.inputs >>= fun inputs ->
+        let task = {inverse = taken; inputs; rhs; src; dst} in
+        Machine.Global.put master {
+          s with
+          worklist = task :: s.worklist;
+          forks = Set.add s.forks (Term.tid src);
+          dests = match Jmp.resolve dst with
+            | First dst -> Set.add s.dests dst
+            | Second _ -> s.dests
+        }
+
+  let worklist s = s.worklist   (* TODO retire *)
+
+
+  let exec_task ({inputs; inverse; rhs} as task) =
+    Debug.msg "starting a new task %a" pp_task task >>= fun () ->
+    match Formula.solve ~inverse rhs with
+    | None ->
+      Debug.msg "can't find a solution!" >>= fun () ->
+      Machine.return ()
+    | Some model ->
+      let string_of_input = Input.to_symbol in
+      let module Input = Input.Make(Machine) in
+      Debug.msg "solution was found!" >>= fun () ->
+      Machine.Seq.iter inputs ~f:(fun input ->
+          match Formula.Model.get model input with
+          | None -> assert false
+          | Some value ->
+            Debug.msg "path-constraint %s = %s"
+              (string_of_input input)
+              (Formula.Value.to_string value) >>= fun () ->
+            Input.set input (Formula.Value.to_word value))
+
+  let rec run_master system =
+    Machine.Global.get master >>= fun s ->
+    match s.self with
+    | None ->
+      Machine.current () >>= fun master_pid ->
+      Debug.msg "starting the master process with pid %a"
+        Id.pp master_pid >>= fun () ->
+      Machine.Global.put master {
+        s with self = Some master_pid
+      } >>= fun () ->
+      Machine.fork () >>= fun () ->
+      Machine.current () >>= fun client_pid ->
+      Debug.msg "the first fork returns at %a"
+        Id.pp client_pid >>= fun () ->
+      if Id.equal master_pid client_pid
+      then run_master system
+      else Machine.return ()
+    | Some master_pid -> match worklist s with
+      | [] ->
+        Debug.msg "Worklist is empty, finishing" >>= fun () ->
         Machine.return ()
-      | Some model ->
-        Format.eprintf "%a: constraint@\n%!" Addr.pp pc;
-        Executor.inputs >>| fun inputs ->
-        Seq.iter inputs ~f:(fun input ->
-            let var = Input.to_symbol input in
-            match Formula.Model.get model input with
-            | None ->
-              Format.eprintf "  %s -> SKIP@\n%!" var
-            | Some x ->
-              let s = Formula.Value.to_string x
-              and w = Formula.Value.to_word x in
-              Format.eprintf "  %s -> %s(%a)@\n%!" var s Word.pp w)
-    else Machine.return ()
-
-
+      | t :: ts ->
+        Debug.msg "We have some tasks" >>= fun () ->
+        Machine.fork () >>= fun () ->
+        Machine.current () >>= fun client_pid ->
+        if Id.equal master_pid client_pid
+        then
+          Debug.msg "Client is finished, master is resumed" >>= fun () ->
+          run_master system
+        else
+          Debug.msg "Forked a new machine" >>= fun () ->
+          Machine.Global.put master {s with worklist = ts} >>= fun () ->
+          exec_task t
 
   let init () = Machine.sequence Primus.Interpreter.[
       eval_cond >>> on_cond;
+      Primus.System.start >>> run_master;
     ]
 end
 
