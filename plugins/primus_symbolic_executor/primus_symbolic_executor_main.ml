@@ -57,7 +57,6 @@ module Input : sig
   module Make(Machine : Primus.Machine.S) : sig
     val set : t -> Primus.Value.t -> unit Machine.t
   end
-
   include Base.Comparable.S with type t := t
 end = struct
   type t = Ptr of word | Var of var [@@deriving compare, sexp]
@@ -429,6 +428,7 @@ type task = {
   inputs : Input.t Seq.t;
   inverse : bool;
   rhs : Formula.t;
+  blk : blk term;
   src : jmp term;
   dst : Jmp.dst;
 }
@@ -438,12 +438,14 @@ type master = {
   worklist : task list;
   forks : Set.M(Tid).t;
   dests : Set.M(Tid).t;
+  visited : Set.M(Tid).t;       (* inv: visited <= dests *)
 }
 
 let master = Primus.Machine.State.declare
     ~uuid:"8d2b41d4-4852-40e9-917a-33f1f5af01a1"
     ~name:"symbolic-executor-master" @@ fun _ -> {
     self = None;
+    visited = Tid.Set.empty;
     worklist = [];
     forks = Tid.Set.empty;      (* queued or finished forks *)
     dests = Tid.Set.empty;      (* queued of finished dests *)
@@ -453,8 +455,9 @@ let pp_dst ppf dst = match Jmp.resolve dst with
   | First tid -> Format.fprintf ppf "%a" Tid.pp tid
   | Second _ -> Format.fprintf ppf "unk"
 
-let pp_task ppf {rhs; src; dst; inverse} =
-  Format.fprintf ppf "%a -> %a s.t.%s:@\n%s"
+let pp_task ppf {rhs; blk; src; dst; inverse} =
+  Format.fprintf ppf "%a(%a) -> %a s.t.%s:@\n%s"
+    Tid.pp (Term.tid blk)
     Tid.pp (Term.tid src) pp_dst dst
     (if inverse then " not" else "")
     (Formula.to_string rhs)
@@ -472,7 +475,7 @@ module Forker(Machine : Primus.Machine.S) = struct
     | Bil.Int _ -> false
     | _ -> true
 
-  (* is some jmp when the current position is a branch point *)
+  (* is Some (blk,jmp) when the current position is a branch point *)
   let branch_point = function
     | Primus.Pos.Jmp {up={me=blk}; me=jmp}
       when Term.length jmp_t blk > 1 &&
@@ -517,7 +520,7 @@ module Forker(Machine : Primus.Machine.S) = struct
       else
         Executor.formula cnd >>= fun rhs ->
         Executor.inputs >>= fun inputs ->
-        let task = {inverse = taken; inputs; rhs; src; dst} in
+        let task = {inverse = taken; inputs; rhs; src; dst; blk} in
         Machine.Global.put master {
           s with
           worklist = task :: s.worklist;
@@ -527,10 +530,21 @@ module Forker(Machine : Primus.Machine.S) = struct
             | Second _ -> s.dests
         }
 
-  (* let worklist s = List.filter s.worklist ~f:(fun {src; dst} ->
-   *     is_actual s src dst) *)
-
-  let worklist s = s.worklist
+  let pop_task () =
+    let rec pop s = function
+      | [] -> None
+      | t :: ts -> match Jmp.resolve t.dst with
+        | First dst when Set.mem s.visited dst -> pop s ts
+        | _ -> Some (t, ts) in
+    Machine.Global.get master >>= fun s ->
+    match pop s s.worklist with
+    | None -> Machine.Global.put master {
+        s with worklist=[]
+      } >>| fun () -> None
+    | Some (t,ts) -> Machine.Global.put master {
+        s with worklist = ts
+      } >>| fun () ->
+      Some t
 
   let exec_task ({inputs; inverse; rhs} as task) =
     Debug.msg "starting a new task %a" pp_task task >>= fun () ->
@@ -570,11 +584,12 @@ module Forker(Machine : Primus.Machine.S) = struct
       if Id.equal master_pid client_pid
       then run_master system
       else Machine.return ()
-    | Some master_pid -> match worklist s with
-      | [] ->
+    | Some master_pid ->
+      pop_task () >>= function
+      | None ->
         Debug.msg "Worklist is empty, finishing" >>= fun () ->
         Machine.return ()
-      | t :: ts ->
+      | Some t  ->
         Debug.msg "We have some tasks" >>= fun () ->
         Machine.fork () >>= fun () ->
         Machine.current () >>= fun client_pid ->
@@ -584,11 +599,16 @@ module Forker(Machine : Primus.Machine.S) = struct
           run_master system
         else
           Debug.msg "Forked a new machine" >>= fun () ->
-          Machine.Global.put master {s with worklist = ts} >>= fun () ->
           exec_task t
+
+  let visit_blk blk =
+    Machine.Global.update master ~f:(fun s -> {
+          s with visited = Set.add s.visited (Term.tid blk)
+        })
 
   let init () = Machine.sequence Primus.Interpreter.[
       eval_cond >>> on_cond;
+      enter_blk >>> visit_blk;
       Primus.System.start >>> run_master;
     ]
 end
