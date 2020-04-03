@@ -73,16 +73,26 @@ Library primus_print_plugin
   Modules: Primus_print_main
   XMETAExtraLines: tags="primus, printer"
 
+
+Library bap_primus_track_visited
+  Path: lib/bap_primus_track_visited
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-primus-track-visited
+  CompiledObject: best
+  BuildDepends: bap-primus, bap, core_kernel, ppx_jane
+  XMETADescription: tracks basic blocks visited by Primus
+  Modules: Bap_primus_track_visited
+  XMETAExtraLines: tags="primus"
+
 Library primus_mark_visited_plugin
   Path: plugins/primus_mark_visited
   Build$: flag(everything) || flag(primus_support)
   FindlibName: bap-plugin-primus_mark_visited
   CompiledObject: best
-  BuildDepends: bap-primus, bap, core_kernel, monads
-  XMETADescription: marks terms that were visited by Primus
-  Modules: Primus_mark_visited_main
+  BuildDepends: bap-main, bap, bap-primus, bap-primus-track-visited
+  XMETADescription: registers the bap:mark-visited component
+  InternalModules: Primus_mark_visited_main
   XMETAExtraLines: tags="primus"
-
 
 Library primus_limit
   Path: plugins/primus_limit

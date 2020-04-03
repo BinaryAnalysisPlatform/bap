@@ -210,7 +210,7 @@ let legacy_promiscous_mode_components = [
 ]
 
 let enable_legacy_promiscuous_mode () =
-  Primus.System.Repository.update "legacy-main" ~f:(fun init ->
+  Primus.System.Repository.update ~package "legacy-main" ~f:(fun init ->
       List.fold legacy_promiscous_mode_components ~init
         ~f:(fun system component ->
             Primus.System.add_component system ~package component))

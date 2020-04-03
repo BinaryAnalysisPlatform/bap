@@ -47,7 +47,7 @@ module Repository = struct
   let require name =
     match Hashtbl.find self name with
     | Some sys -> sys
-    | None -> failwithf "Unknown system %s" (Name.show name) ()
+    | None -> invalid_argf "Unknown system %s" (Name.show name) ()
 
   let get ?package name =
     require @@ Name.create ?package name

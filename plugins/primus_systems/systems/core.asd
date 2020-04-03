@@ -34,10 +34,11 @@
   :depends-on (bap:terminating-stubbed-executor)
   :components (bap:greedy-scheduler
                bap:incident-location-recorder
-               bap:lisp-incidents
                bap:mark-visited
+               bap:report-visited
                bap:var-randomizer
                bap:mem-randomizer
+               bap:lisp-incidents
                bap:division-by-zero-handler))
 
 (defsystem bap:promiscuous-executor
