@@ -74,6 +74,13 @@ module Param = struct
       ~doc:"Runs the specified Primus systems. If several systems \
             are specified then runs all entry points for each \
             specified system."
+
+  let until_visited = flag "until-visited-all"
+      ~doc:"Runs Primus until all subroutines and blocks are visited.
+      When this mode is enabled and run plugin finishes it finds
+      the first unvisited subroutine (or if no such found the first
+      unvisited block) and spawns a new system with it as an entry
+      point. This continues until there are no more unvisited blocks."
 end
 
 let pp_id = Monad.State.Multi.Id.pp
@@ -238,6 +245,7 @@ let is_visited proj = function
       | None -> true
       | Some blk -> Term.has_attr blk Term.visited
 
+
 let enqueue_separate_jobs need_repeat envp args sys xs =
   List.iter xs ~f:(fun p ->
       Primus.Jobs.enqueue sys
@@ -250,10 +258,13 @@ let enqueue_separate_jobs need_repeat envp args sys xs =
           else exec p
         end)
 
+let finished = ref 0
+let total = ref 0
+
 let update_progress result =
-  let finished = List.length@@Primus.Jobs.finished result in
-  let total = finished + Primus.Jobs.pending () + 1 in
-  report_progress ~stage:finished ~total ()
+  finished := List.length (Primus.Jobs.finished result) + !finished;
+  let total = !finished + Primus.Jobs.pending () + 1 in
+  report_progress ~stage:!finished ~total ()
 
 let on_success job _ _ result : Primus.Jobs.action =
   info "job %s finished successfully" (Primus.Job.name job);
@@ -266,22 +277,63 @@ let on_failure job conflict result : Primus.Jobs.action =
   update_progress result;
   Continue
 
+let find_first_unvisited_sub prog =
+  Term.enum sub_t prog |>
+  Seq.find ~f:(fun sub -> match Term.first blk_t sub with
+      | None -> false
+      | Some blk -> not (Term.has_attr blk Term.visited))
+
+let find_first_unvisited_blk prog =
+  Term.enum sub_t prog |>
+  Seq.find_map ~f:(fun sub ->
+      Graphlib.reverse_postorder_traverse (module Graphs.Ir)
+        (Sub.to_cfg sub) |>
+      Seq.find_map ~f:(fun blk ->
+          let blk = Graphs.Ir.Node.label blk in
+          if not (Term.has_attr blk Term.visited)
+          then Some blk
+          else None))
+
 let main {Config.get=(!)} proj =
   let open Param in
   let state = Toplevel.current () in
+  let run_until_visited = !until_visited in
   let enqueue_jobs = if !in_isolation
     then enqueue_separate_jobs else enqueue_super_job in
   let inputs = parse_entry_points proj !entry in
-  List.concat !systems |> List.iter ~f:(fun sys ->
-      let name = Knowledge.Name.read sys in
-      match Primus.System.Repository.find name with
-      | None -> invalid_argf "Unknown system: %s" sys ()
-      | Some sys ->
-        enqueue_jobs !with_repetitions !envp !argv sys inputs) ;
+  let systems =
+    List.concat !systems |> List.map ~f:(fun sys ->
+        let name = Knowledge.Name.read sys in
+        match Primus.System.Repository.find name with
+        | None -> invalid_argf "Unknown system: %s" sys ()
+        | Some sys -> sys) in
+  List.iter systems ~f:(fun sys ->
+      enqueue_jobs !with_repetitions !envp !argv sys inputs) ;
   report_progress ~total:(Primus.Jobs.pending ()) ();
-  let result = Primus.Jobs.run ~on_failure ~on_success proj state in
-  Toplevel.set (Primus.Jobs.knowledge result);
-  Primus.Jobs.project result
+  let enqueue_term p =
+    let p = `tid (Term.tid p) in
+    List.iter systems ~f:(fun sys ->
+        Primus.Jobs.enqueue sys
+          ~args:!argv ~envp:!envp
+          ~name:(Primus.Linker.Name.to_string p)
+          ~start:(exec p)) in
+  let rec run proj state =
+    let result = Primus.Jobs.run ~on_failure ~on_success proj state in
+    let state = Primus.Jobs.knowledge result in
+    Toplevel.set state;
+    let proj = Primus.Jobs.project result in
+    let prog = Project.program proj in
+    if run_until_visited
+    then match find_first_unvisited_sub prog with
+      | Some sub ->
+        enqueue_term sub; run proj state
+      | None -> match find_first_unvisited_blk prog with
+        | Some blk ->
+          enqueue_term blk;
+          run proj state
+        | None -> proj
+    else proj in
+  run proj state
 
 let deps = [
   "trivial-condition-form"

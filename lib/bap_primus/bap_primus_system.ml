@@ -438,16 +438,18 @@ module Jobs = struct
       Components.run system result.project result.state
         ~envp ~args ~init ~start |> function
       | Ok (status,proj,state) ->
-        handle_success job status proj state result
-      | Error conflict ->
-        handle_failure job conflict result
-    and handle_success job status proj state result =
+        handle_success job status state @@
+        success job proj state result
+      | Error problem ->
+        handle_failure job problem @@
+        conflict job problem result
+    and handle_success job status state result =
       match on_success job status state result with
-      | Continue -> continue (success job proj state result)
+      | Continue -> continue result
       | Stop -> result
     and handle_failure job problem result =
       match on_failure job problem result with
-      | Continue -> continue (conflict job problem result)
+      | Continue -> continue result
       | Stop -> result
     and continue result = match Queue.dequeue jobs with
       | None -> result

@@ -54,7 +54,7 @@ let () = Exn.add_printer (function
          No transition is defined from the %s level to the %s level"
         (to_string level)
         (string_of_sexp (sexp_of_name dst))
-    | exn -> None)
+    | _ -> None)
 
 let accept level args = Ok (level args)
 let reject level dst = Error (Broken_invariant {level; dst})
@@ -63,7 +63,7 @@ let reject level dst = Error (Broken_invariant {level; dst})
 let level name f x = Sexp.List [
     Sexp.Atom name;
     Sexp.Atom (f x)
-]
+  ]
 let (>>) = Fn.compose
 let leaf name str t = Sexp.List [
     Sexp.Atom name;
@@ -78,6 +78,13 @@ let sexp_of_t = function
   | Phi {me} -> leaf "phi" Phi.to_string me
   | Def {me} -> leaf "def" Def.to_string me
   | Jmp {me} -> leaf "jmp" Jmp.to_string me
+
+let parent prog blk =
+  Term.enum sub_t prog |>
+  Seq.find ~f:(fun sub ->
+      Option.is_some @@ Term.find blk_t sub (Term.tid blk))  |>
+  function None -> assert false
+         | Some sub -> sub
 
 let next level cls t  =
   let reject = reject level in
@@ -94,6 +101,7 @@ let next level cls t  =
         | _ -> reject `arg)
     ~blk:(fun me -> match level with
         | Jmp {up={up}} | Sub up | Arg {up} -> accept blk {me;up}
+        | Top ({me=prog} as top) -> accept blk {me; up={me=parent prog me; up=top} }
         | _ -> reject `blk)
     ~phi:(fun me -> match level with
         | Blk up | Phi {up} -> accept phi {me;up}
