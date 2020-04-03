@@ -438,14 +438,12 @@ type master = {
   worklist : task list;
   forks : Set.M(Tid).t;
   dests : Set.M(Tid).t;
-  visited : Set.M(Tid).t;       (* inv: visited <= dests *)
 }
 
 let master = Primus.Machine.State.declare
     ~uuid:"8d2b41d4-4852-40e9-917a-33f1f5af01a1"
     ~name:"symbolic-executor-master" @@ fun _ -> {
     self = None;
-    visited = Tid.Set.empty;
     worklist = [];
     forks = Tid.Set.empty;      (* queued or finished forks *)
     dests = Tid.Set.empty;      (* queued of finished dests *)
@@ -469,6 +467,7 @@ module Forker(Machine : Primus.Machine.S) = struct
   module Executor = Executor(Machine)
   module Eval = Primus.Interpreter.Make(Machine)
   module Value = Primus.Value.Make(Machine)
+  module Visited = Bap_primus_track_visited.Set.Make(Machine)
   module Debug = Debug(Machine)
 
   let is_conditional jmp = match Jmp.cond jmp with
@@ -499,13 +498,14 @@ module Forker(Machine : Primus.Machine.S) = struct
       failwithf "Broken branch %a at:@\n%a"
         Jmp.pps jmp Blk.pps blk ()
 
-  let is_retired master src dst =
+  let is_retired visited master src dst =
     Set.mem master.forks (Term.tid src) ||
     match Jmp.resolve dst with
-    | First tid -> Set.mem master.dests tid
+    | First tid -> Set.mem master.dests tid || Set.mem visited tid
     | Second _ -> true
 
-  let is_actual master src dst = not (is_retired master src dst)
+  let is_actual visited master src dst =
+    not (is_retired visited master src dst)
 
   let on_cond cnd =
     let taken = Word.is_one (Primus.Value.to_word cnd) in
@@ -514,8 +514,9 @@ module Forker(Machine : Primus.Machine.S) = struct
     | None -> Machine.return ()
     | Some (blk,src) ->
       Machine.Global.get master >>= fun s ->
+      Visited.all >>= fun visited ->
       let dst = other_dst ~taken blk src in
-      if is_retired s src dst
+      if is_retired visited s src dst
       then Machine.return ()
       else
         Executor.formula cnd >>= fun rhs ->
@@ -531,13 +532,14 @@ module Forker(Machine : Primus.Machine.S) = struct
         }
 
   let pop_task () =
-    let rec pop s = function
+    let rec pop visited = function
       | [] -> None
       | t :: ts -> match Jmp.resolve t.dst with
-        | First dst when Set.mem s.visited dst -> pop s ts
+        | First dst when Set.mem visited dst -> pop visited ts
         | _ -> Some (t, ts) in
     Machine.Global.get master >>= fun s ->
-    match pop s s.worklist with
+    Visited.all >>= fun visited ->
+    match pop visited s.worklist with
     | None -> Machine.Global.put master {
         s with worklist=[]
       } >>| fun () -> None
@@ -601,14 +603,8 @@ module Forker(Machine : Primus.Machine.S) = struct
           Debug.msg "Forked a new machine" >>= fun () ->
           exec_task t
 
-  let visit_blk blk =
-    Machine.Global.update master ~f:(fun s -> {
-          s with visited = Set.add s.visited (Term.tid blk)
-        })
-
   let init () = Machine.sequence Primus.Interpreter.[
       eval_cond >>> on_cond;
-      enter_blk >>> visit_blk;
       Primus.System.start >>> run_master;
     ]
 end

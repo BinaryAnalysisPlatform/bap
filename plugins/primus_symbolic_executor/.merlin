@@ -1,2 +1,3 @@
 REC
+B ../../lib/bap_primus_track_visited
 PKG z3 zarith
