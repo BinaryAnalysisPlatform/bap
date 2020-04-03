@@ -55,7 +55,7 @@ module Input : sig
   val size : t -> int
 
   module Make(Machine : Primus.Machine.S) : sig
-    val set : t -> word -> unit Machine.t
+    val set : t -> Primus.Value.t -> unit Machine.t
   end
 
   include Base.Comparable.S with type t := t
@@ -81,7 +81,6 @@ end = struct
     module Value = Primus.Value.Make(Machine)
 
     let set input value =
-      Value.of_word value >>= fun value ->
       match input with
       | Ptr p ->
         Value.of_word p >>= fun p ->
@@ -338,6 +337,7 @@ module Executor(Machine : Primus.Machine.S) : sig
   val formula : Primus.Value.t -> Formula.t Machine.t
   val inputs : Input.t seq Machine.t
   val init : unit -> unit Machine.t
+  val set_input : Input.t -> Primus.Value.t -> unit Machine.t
 end = struct
   open Machine.Syntax
 
@@ -396,7 +396,7 @@ end = struct
     let x = Formula.var (Input.to_symbol origin) size in
     Machine.Local.update executor ~f:(fun s -> {
           inputs = Set.add s.inputs origin;
-          formulae = Map.add_exn s.formulae id x;
+          formulae = Map.set s.formulae id x;
         })
 
   let on_memory_input (p,x) = set_input (Input.ptr p) x
@@ -465,6 +465,7 @@ module Forker(Machine : Primus.Machine.S) = struct
 
   module Executor = Executor(Machine)
   module Eval = Primus.Interpreter.Make(Machine)
+  module Value = Primus.Value.Make(Machine)
   module Debug = Debug(Machine)
 
   let is_conditional jmp = match Jmp.cond jmp with
@@ -526,8 +527,10 @@ module Forker(Machine : Primus.Machine.S) = struct
             | Second _ -> s.dests
         }
 
-  let worklist s = s.worklist   (* TODO retire *)
+  (* let worklist s = List.filter s.worklist ~f:(fun {src; dst} ->
+   *     is_actual s src dst) *)
 
+  let worklist s = s.worklist
 
   let exec_task ({inputs; inverse; rhs} as task) =
     Debug.msg "starting a new task %a" pp_task task >>= fun () ->
@@ -546,7 +549,9 @@ module Forker(Machine : Primus.Machine.S) = struct
             Debug.msg "path-constraint %s = %s"
               (string_of_input input)
               (Formula.Value.to_string value) >>= fun () ->
-            Input.set input (Formula.Value.to_word value))
+            Value.of_word (Formula.Value.to_word value) >>= fun value ->
+            Executor.set_input input value  >>= fun () ->
+            Input.set input value)
 
   let rec run_master system =
     Machine.Global.get master >>= fun s ->
