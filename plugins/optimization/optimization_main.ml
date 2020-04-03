@@ -133,13 +133,38 @@ let process_sub free can_touch sub =
   let sub', dead = loop Tid.Set.empty (Sub.ssa sub) in
   O.create dead sub'
 
+let digest_of_tid _ = "tid"
+
+let digest_of_label = function
+  | Indirect exp -> Exp.to_string exp
+  | Direct tid -> digest_of_tid tid
+
+let digest_of_kind = function
+  | Goto dst -> sprintf "goto %s" (digest_of_label dst)
+  | Call sub -> sprintf "%a" Call.pps  sub
+  | Ret  dst -> sprintf "return %S" (digest_of_label dst)
+  | Int (n,t) ->
+    sprintf "interrupt 0x%X return %s" n (digest_of_tid t)
+
+let digest_of_jmp jmp =
+  sprintf "%a%s" Exp.pps (Jmp.cond jmp)
+    (digest_of_kind @@ Jmp.kind jmp)
+
+let digest_of_arg a =
+  sprintf "%s := %a"
+    (Var.to_string @@ Arg.lhs a) Exp.pps (Arg.rhs a)
+
+let digest_of_def d =
+  sprintf "%s := %a"
+    (Var.name @@ Def.lhs d) Exp.pps (Def.rhs d)
+
 let digest_of_sub sub level =
   let digest =
     (object
       inherit [Digest.t] Term.visitor
-      method! enter_arg t dst = Digest.add dst "%a" Arg.pp t
-      method! enter_def t dst = Digest.add dst "%a" Def.pp t
-      method! enter_jmp t dst = Digest.add dst "%a" Jmp.pp t
+      method! enter_arg t dst = Digest.add dst "%s" (digest_of_arg t)
+      method! enter_def t dst = Digest.add dst "%s" (digest_of_def t)
+      method! enter_jmp t dst = Digest.add dst "%s" (digest_of_jmp t)
     end)#visit_sub sub
       (Digest.create ~namespace:"optimization") in
   let digest = Digest.add digest "%s" (Sub.name sub) in
