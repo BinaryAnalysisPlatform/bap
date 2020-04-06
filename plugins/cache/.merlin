@@ -1,2 +1,7 @@
 PKG cmdliner
+PKG mmap
+
+S .
+B ../../_build/plugins/cache
+
 REC

@@ -31,10 +31,10 @@ type index = {
   entries : entry Data.Cache.Digest.Map.t;
 } [@@deriving bin_io, compare, sexp]
 
-
+(* TODO: fix it 0.22 *)
 let default_config = {
   max_size = 4_000_000_000L;
-  overhead = 0.25;
+  overhead = 0.22;
   gc_enabled = true;
 }
 
@@ -96,36 +96,25 @@ module GC = struct
       let current_size = Int64.(idx.current_size - entry.size) in
       { idx with entries = Map.remove idx.entries key; current_size }
 
-  let remove_less_used_entry idx =
-    Map.to_sequence idx.entries |>
-    Seq.min_elt ~compare:(fun (_,e1) (_,e2) ->
-        Float.compare (freq e1) (freq e2))
-    |> function
-    | None -> idx
-    | Some (key,entry) ->
-      remove entry;
-      remove_from_index idx key
-
   let () = Random.self_init ()
 
-  let remove_random_entry idx =
-    let size = Map.length idx.entries in
-    let n = Random.int size in
-    match Map.nth idx.entries n with
-    | None -> idx
-    | Some (key,entry) ->
-      remove entry;
-      remove_from_index idx key
-
-  let remove_random_entry x =
-    Bench.with_args1 remove_random_entry x "remove"
+  let remove_entries idx keys =
+    let rec loop idx size =
+      if idx.current_size <= idx.config.max_size then idx
+      else
+        let last = size - 1 in
+        Array.swap keys (Random.int size) last;
+        let entry = Map.find_exn idx.entries keys.(last) in
+        remove entry;
+        let idx = remove_from_index idx keys.(last) in
+        loop idx (size - 1) in
+    loop idx (Array.length keys)
 
   let clean idx =
-    let rec loop idx =
-      if Int64.(idx.current_size > idx.config.max_size)
-      then loop (remove_random_entry idx)
-      else idx in
-    loop idx
+    Map.to_sequence idx.entries |>
+    Seq.map ~f:fst |>
+    Seq.to_array |>
+    remove_entries idx
 
   let clean x = Bench.with_args1 clean x "clean"
 
@@ -180,52 +169,6 @@ module IO = struct
     Sys.rename tmp file
   [@@warning "-D"]
 
-  let read_from_channel chan buf ~pos ~len =
-    printf "creating buffewr of size %d\n%!" len;
-    let s = Bytes.create len in
-    match In_channel.really_input chan ~buf:s ~pos:0 ~len with
-    | None -> raise End_of_file
-    | Some () ->
-      Bigstring.From_bytes.blito ~src:s ~dst:buf ~dst_pos:pos ()
-
-  let from_file' : type t.
-    (module Binable.S with type t = t) -> string -> t = fun b file ->
-    let module T = (val b) in
-    let ch = In_channel.create file in
-    try
-      let read = read_from_channel ch in
-      printf "reading ... \n%!";
-      let t = Bin_prot.Utils.bin_read_stream ~read T.bin_reader_t in
-      printf "read! \n%!";
-      In_channel.close ch;
-      t
-    with e -> In_channel.close ch; raise e
-  [@@warning "-D"]
-
-  let open_temp' () =
-    let tmp =
-      Filename.temp_file ~temp_dir:(cache_dir ()) "tmp" "index" in
-    try tmp, Out_channel.create tmp
-    with e -> Sys.remove tmp; raise e
-
-  let to_file' : type t.
-    (module Binable.S with type t = t) -> string -> t -> unit =
-    fun b file data ->
-    let module T = (val b) in
-    let tmp,ch = open_temp' () in
-    let () =
-      try
-        let buf = Bin_prot.Utils.bin_dump ~header:true T.bin_writer_t data in
-        Out_channel.output_string ch (Bigstring.to_string buf);
-        Out_channel.close ch
-      with e -> Out_channel.close ch; Sys.remove tmp; raise e in
-    Sys.rename tmp file
-  [@@warning "-D"]
-
-  let from_file = from_file'
-  let to_file = to_file'
-
-
   let read file =
     try from_file (module T) file
     with e ->
@@ -235,8 +178,6 @@ module IO = struct
   let write file index =
     try to_file (module T) file index
     with e -> warning "store index: %s" (Exn.to_string e)
-
-
 
   let read x = Bench.with_args1 read x "read"
   let write x y = Bench.with_args2 write x y "write"
@@ -255,7 +196,6 @@ module Index = struct
         config  : config;
         entries : entry Data.Cache.Digest.Map.t;
       } [@@deriving bin_io, compare, sexp]
-
     end
   end
 
@@ -290,7 +230,6 @@ module Index = struct
         warning "can't load index, version 1 is not supported anymore";
         IO.write (cache_dir () / index_file) empty;
       | 2 ->
-        printf "upgrading \n %!";
         let index = IO.from_file (module Compatibility.V2) file in
         let size = size index.entries in
         let index' = {
@@ -298,8 +237,7 @@ module Index = struct
           current_size = size;
           entries = index.entries;
         } in
-        IO.write (cache_dir () / index_file) index';
-        printf "upgraded!\n%!"
+        IO.write (cache_dir () / index_file) index'
       | x ->
         warning
           "can't update index version from %d to %d" x index_version in
@@ -348,24 +286,47 @@ end
 
 module Global = struct
 
+  type t = {
+    index : index;
+    mtime : float;
+  }
+
   let t = ref None
 
-  let read () =
-    match !t with
+  let index_mtime () =
+    let s = Unix.stat @@ Index.index_file () in
+    Unix.(s.st_mtime)
+
+  let update index =
+    let mtime = index_mtime () in
+    t := Some {index; mtime }
+
+  let read () = match !t with
     | None ->
       let index = Index.read () in
-      t := Some index;
+      update index;
       index
-    | Some index -> index
+    | Some {index} -> index
+
+  let force_read () =
+    t := None;
+    read ()
 
   let write index =
     Index.write index;
-    t := Some index
+    update index
+
+  let reload () =
+    match !t with
+    | None -> read ()
+    | Some t ->
+      if t.mtime = index_mtime () then t.index
+      else force_read ()
 
   let store ~f =
     let cache_dir = cache_dir () in
     Index.with_lock ~f:(fun () ->
-        let index = read () in
+        let index = reload () in
         let index',data = f cache_dir index in
         write index';
         data)
@@ -380,7 +341,7 @@ module Global = struct
 
   let iter ~f = match !t with
     | None -> ()
-    | Some idx -> f idx
+    | Some {index} -> f index
 end
 
 let size file = Unix.LargeFile.((stat file).st_size)
