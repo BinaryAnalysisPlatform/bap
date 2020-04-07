@@ -7,21 +7,16 @@ include Self()
 module Filename = Caml.Filename
 
 type entry = {
-  atime   : float;
-  ctime   : float;
-  hits    : int;
   path    : string;
   size    : int64;
 } [@@deriving bin_io, compare, sexp]
-
-type entries = entry Data.Cache.Digest.Map.t
 
 let tm = Unix.gettimeofday
 module Bench = My_bench
 
 type config = {
   max_size : int64;
-  overhead : float;
+  limit    : int64;
   gc_enabled : bool;
 } [@@deriving bin_io, compare, sexp]
 
@@ -31,10 +26,9 @@ type index = {
   entries : entry Data.Cache.Digest.Map.t;
 } [@@deriving bin_io, compare, sexp]
 
-(* TODO: fix it 0.22 *)
 let default_config = {
   max_size = 4_000_000_000L;
-  overhead = 0.22;
+  limit    = 5_000_000_000L;
   gc_enabled = true;
 }
 
@@ -77,17 +71,11 @@ module GC = struct
     with exn ->
       warning "unable to remove entry: %s" (Exn.to_string exn)
 
-  let limit_of_config c =
-    Int64.(c.max_size + of_float (to_float c.max_size *. c.overhead))
+  let limit_of_config c = c.limit
 
   let time_to_clean idx =
     let limit = limit_of_config idx.config in
     Int64.(idx.current_size > limit)
-
-  (* freq is a frequence of accesses to the cache entry in
-     access per second. *)
-  let freq e =
-    Float.(of_int e.hits / (e.atime - e.ctime))
 
   let remove_from_index idx key =
     match Map.find idx.entries key with
@@ -118,7 +106,7 @@ module GC = struct
 
   let clean x = Bench.with_args1 clean x "clean"
 
-  let clean idx =
+  let run idx =
     if time_to_clean idx
     then clean idx
     else idx
@@ -188,6 +176,14 @@ module Index = struct
 
   module Compatibility = struct
     module V2 = struct
+      type entry = {
+        atime   : float;
+        ctime   : float;
+        hits    : int;
+        path    : string;
+        size    : int64;
+      } [@@deriving bin_io, compare, sexp]
+
       type config = {
         max_size : int64;
       } [@@deriving bin_io, compare, sexp]
@@ -200,7 +196,7 @@ module Index = struct
   end
 
   let index_version = 3
-  let supported_versions = [3;2;1]
+  let all_versions = [3;2;1]
   let index_file = sprintf "index.%d" index_version
   let lock_file = "lock"
 
@@ -216,7 +212,7 @@ module Index = struct
       with _ ->
         Error (Error.of_string (sprintf "unknown version %s" v))
 
-  let size (entries : entries) =
+  let size entries =
     Map.fold entries ~init:0L ~f:(fun ~key:_ ~data:e size ->
         Int64.(size + e.size))
 
@@ -231,11 +227,13 @@ module Index = struct
         IO.write (cache_dir () / index_file) empty;
       | 2 ->
         let index = IO.from_file (module Compatibility.V2) file in
-        let size = size index.entries in
+        let entries = Map.map index.entries
+            ~f:(fun e -> {path = e.path; size = e.size}) in
+        let current_size = size entries in
         let index' = {
           config = default_config;
-          current_size = size;
-          entries = index.entries;
+          current_size;
+          entries;
         } in
         IO.write (cache_dir () / index_file) index'
       | x ->
@@ -244,7 +242,7 @@ module Index = struct
     Sys.remove file
 
   let versions =
-    List.map supported_versions ~f:(sprintf "index.%d")
+    List.map all_versions ~f:(sprintf "index.%d")
 
   let find_index () =
     let dir = cache_dir () in
@@ -260,8 +258,6 @@ module Index = struct
       | Error er ->
         error "unknown index version: %s" (Error.to_string_hum er)
 
-  let size idx = size idx.entries
-
   let index_file () =
     cache_dir () / index_file
 
@@ -271,7 +267,7 @@ module Index = struct
   let read () =
     let idx = IO.read @@ index_file () in
     if idx.config.gc_enabled then
-      GC.clean idx
+      GC.run idx
     else idx
 
   let with_lock ~f =
@@ -281,6 +277,10 @@ module Index = struct
     protect ~f
       ~finally:(fun () ->
           Unix.(lockf lock F_ULOCK 0; close lock))
+
+  let mtime () =
+    let s = Unix.stat @@ index_file () in
+    Unix.(s.st_mtime)
 
 end
 
@@ -293,12 +293,8 @@ module Global = struct
 
   let t = ref None
 
-  let index_mtime () =
-    let s = Unix.stat @@ Index.index_file () in
-    Unix.(s.st_mtime)
-
   let update index =
-    let mtime = index_mtime () in
+    let mtime = Index.mtime () in
     t := Some {index; mtime }
 
   let read () = match !t with
@@ -320,7 +316,7 @@ module Global = struct
     match !t with
     | None -> read ()
     | Some t ->
-      if t.mtime = index_mtime () then t.index
+      if t.mtime = Index.mtime () then t.index
       else force_read ()
 
   let store ~f =
@@ -340,7 +336,7 @@ module Global = struct
   let update ~f = store ~f:(fun dir idx -> f dir idx, ())
 
   let iter ~f = match !t with
-    | None -> ()
+    | None -> f (read ())
     | Some {index} -> f index
 end
 
@@ -348,34 +344,46 @@ let size file = Unix.LargeFile.((stat file).st_size)
 
 let cleanup () =
   Global.update ~f:(fun _ idx ->
-      Map.iter idx.entries ~f:(fun e -> GC.remove e);
+      Map.iter idx.entries ~f:GC.remove;
       {idx with entries = Data.Cache.Digest.Map.empty});
   exit 0
 
+let overhead c =
+  let open Int64 in
+  of_float @@ (((to_float c.limit /. to_float c.max_size) -. 1.0) *. 100.)
+
+let limit max_size overhead =
+  Int64.(max_size + max_size * overhead / 100L)
+
 let set_size size =
   Global.update ~f:(fun _ idx ->
-      {idx with config = {idx.config with max_size = Int64.(size * 1024L * 1024L)}})
+      let overhead = overhead idx.config in
+      let max_size = Int64.(size * 1024L * 1024L) in
+      let limit = limit max_size overhead in
+      {idx with config = {idx.config with max_size; limit}})
 
 let set_overhead overhead =
   if Float.(overhead >= 0.0 && overhead < 1.0)
   then
+    let overhead = Int64.of_float @@ overhead *. 100. in
     Global.update ~f:(fun _ idx ->
-        {idx with config = {idx.config with overhead}})
+        let limit = limit idx.config.max_size overhead in
+        {idx with config = {idx.config with limit}})
   else
     raise (Invalid_argument "Cache overhead should be in the range [0.0; 1.0) ")
 
 let run_gc () =
-  Global.update ~f:(fun _ idx -> GC.clean idx)
+  Global.update ~f:(fun _ idx -> GC.run idx)
 
-let disable_gc flag =
+let disable_gc x =
   Global.update ~f:(fun _ idx ->
-      {idx with config = {idx.config with gc_enabled = not flag}})
+      {idx with config = {idx.config with gc_enabled = not x}})
 
 let print_info () =
   Global.iter ~f:(fun idx ->
       let mb s = Int64.(s / 1024L / 1024L) in
       printf "Maximum size: %5Ld MB@\n" @@ mb idx.config.max_size;
-      printf "Current size: %5Ld MB@\n" @@ mb (Index.size idx));
+      printf "Current size: %5Ld MB@\n" @@ mb idx.current_size);
   exit 0
 
 let set_dir dir = match dir with
@@ -385,13 +393,12 @@ let set_dir dir = match dir with
 let create reader writer =
   let save id proj =
     Global.update ~f:(fun cache_dir index ->
-        let ctime = Unix.time () in
         let path,ch = Filename.open_temp_file ~temp_dir:cache_dir
             "entry" ".cache" in
         Data.Write.to_channel writer ch proj;
         Out_channel.close ch;
         let entry = {
-          size = size path; path; atime = ctime; ctime; hits = 1
+          size = size path; path;
         } in
         Index.save_entry index id entry) in
   let load src =
