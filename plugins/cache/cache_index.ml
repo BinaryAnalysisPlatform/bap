@@ -43,7 +43,7 @@ let versions =
 
 let default_config = {
   max_size = 4_000_000_000L;
-  limit    = 5_000_000_000L;
+  overhead = 0.25;
   gc_enabled = true;
 }
 
@@ -54,7 +54,6 @@ let empty = {
 }
 
 let index_file () = cache_dir () / index_file
-
 
 module IO = struct
 
@@ -96,18 +95,16 @@ module IO = struct
     Sys.rename tmp file
   [@@warning "-D"]
 
-
 end
 
 let read t file =
-  try
-    Some (IO.from_file t file)
+  try Some (IO.from_file t file)
   with e ->
     warning "read index: %s" (Exn.to_string e);
     None
 
-let write t file index =
-  try IO.to_file t file index
+let write index =
+  try IO.to_file (module T) (index_file ()) index
   with e -> warning "store index: %s" (Exn.to_string e)
 
 let with_lock ~f =
@@ -125,23 +122,23 @@ module Upgrade = struct
         Int64.(size + e.size))
 
   let upgrade_index old_file version =
-    let new_file = index_file () in
     let () = match version with
       | 1 ->
         warning "can't load index, version 1 is not supported anymore";
-        write (module T) new_file empty;
+        write empty;
       | 2 ->
         let index =
           match read (module Compatibility.V2) old_file with
           | None -> empty
           | Some index ->
             let entries = Map.map index.entries
-                ~f:(fun e -> {path = e.path; size = e.size}) in
-            let current_size = size entries in
-            { config = default_config;
+                ~f:(fun e -> { path = e.path; size = e.size }) in
+            let current_size = size entries in {
+              config = default_config;
               current_size;
-              entries; } in
-        write (module T) new_file index
+              entries;
+            } in
+        write index
       | x ->
         warning
           "can't update index version from %d to %d" x index_version in
@@ -172,8 +169,6 @@ module Upgrade = struct
 end
 
 let upgrade = Upgrade.run
-
-let write idx = write (module T) (index_file ()) idx
 
 let read () =
   match read (module T) (index_file ()) with

@@ -8,7 +8,7 @@ type entry = {
 
 type config = {
   max_size : int64;
-  limit    : int64;
+  overhead : float;
   gc_enabled : bool;
 } [@@deriving bin_io, compare, sexp]
 

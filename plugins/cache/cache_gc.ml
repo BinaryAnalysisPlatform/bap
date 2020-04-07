@@ -4,17 +4,16 @@ open Cache_types
 
 include Self()
 
-
 let remove_entry e =
   try Sys.remove e.path
   with exn ->
     warning "unable to remove entry: %s" (Exn.to_string exn)
 
-let limit_of_config c = c.limit
+let threshold c =
+  Int64.(c.max_size + of_float (to_float c.max_size *. c.overhead))
 
 let time_to_clean idx =
-  let limit = limit_of_config idx.config in
-  Int64.(idx.current_size > limit)
+  Int64.(idx.current_size > threshold idx.config)
 
 let remove_from_index idx key =
   match Map.find idx.entries key with
