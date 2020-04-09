@@ -40,23 +40,22 @@ module GC = struct
     with exn ->
       warning "unable to remove entry: %s" (Exn.to_string exn)
 
-  let entry_size e =
-    let s = Unix.stat e in
-    Unix.(s.st_size)
+  let entry_size e = Unix.LargeFile.( (stat e).st_size )
 
   let remove_entries size_to_free entries =
     let dir = cache_dir () in
     let cfg = Config.config_file in
-    let rec loop entries freed n =
-      if freed < size_to_free && n <> 0 then
-        let elt = Random.int n in
-        if entries.(elt) = cfg then loop entries freed n
+    let rec loop entries freed len =
+      if freed < size_to_free && len > 1 then
+        let elt = Random.int len in
+        if entries.(elt) = cfg then loop entries freed len
         else
-          let () = Array.swap entries (Random.int n) (n - 1) in
-          let path = dir / entries.(n - 1) in
+          let last = len - 1 in
+          let () = Array.swap entries elt (last) in
+          let path = dir / entries.(last) in
           let size = entry_size path in
           remove_entry path;
-          loop entries Int64.(freed + of_int size) (n - 1) in
+          loop entries Int64.(freed + size) last in
     loop entries 0L (Array.length entries)
 
   let remove size =

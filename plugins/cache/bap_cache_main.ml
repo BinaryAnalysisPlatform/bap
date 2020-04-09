@@ -24,13 +24,24 @@ module Global = struct
 
   let t = ref None
 
+  let lock_file = "lock"
+
+  let with_lock ~f =
+    let lock = Cfg.cache_dir () / lock_file in
+    let lock = Unix.openfile lock Unix.[O_RDWR; O_CREAT] 0o640 in
+    Unix.lockf lock Unix.F_LOCK 0;
+    protect ~f
+      ~finally:(fun () ->
+          Unix.(lockf lock F_ULOCK 0; close lock))
+
   let threshold c =
     Int64.(c.max_size + of_float (to_float c.max_size *. c.overhead))
 
   let run_gc t =
     if t.cfg.gc_enabled && Int64.(t.size > threshold t.cfg) then
-      let () = GC.remove Int64.(t.size - t.cfg.max_size) in
-      {t with size = Cache.size ()}
+      with_lock ~f:(fun () ->
+          let () = GC.remove Int64.(t.size - t.cfg.max_size) in
+          {t with size = Cache.size ()})
     else t
 
   let read () = match !t with
@@ -50,41 +61,39 @@ module Global = struct
   let size file = Unix.( (stat file).st_size )
 
   let update t' entry =
-    let size = size @@ Cfg.cache_dir () / entry in
+    let size = size entry in
     let size = Int64.(t'.size + of_int size) in
     t := Some {t' with size;  mtime = Cache.mtime ()}
 
-  let store_entry filename writer data =
-    let cache_dir = Cfg.cache_dir () in
-    let tmp,ch = Filename.open_temp_file ~temp_dir:cache_dir
-        "entry" ".cache" in
+  let store writer data =
+    let tmp,ch = Filename.open_temp_file "entry" ".cache" in
     Data.Write.to_channel writer ch data;
     Out_channel.close ch;
-    Sys.rename tmp (cache_dir / filename)
+    tmp
 
   let store_entry digest writer data =
+    let t' = match !t with
+      | None -> read ()
+      | Some t ->
+        let tm = Cache.mtime () in
+        let t =
+          if Float.(t.mtime < tm)
+          then force_read ()
+          else t in
+        run_gc t in
     let filename = Data.Cache.Digest.to_string digest in
-    let tm = Cache.mtime () in
-    match !t with
-    | None ->
-      let t = read () in
-      store_entry filename writer data;
-      update t filename
-    | Some t ->
-      let t' =
-        if Float.(t.mtime < tm)
-        then force_read ()
-        else t in
-      let t' = run_gc t' in
-      store_entry filename writer data;
-      update t' filename
+    let tmp = store writer data in
+    let size = size tmp in
+    Sys.rename tmp (Cfg.cache_dir () / filename);
+    t := Some {t' with size = Int64.(t'.size + of_int size);
+                       mtime = Cache.mtime ()}
 
   let load_entry reader filename =
     let path = Cfg.cache_dir () / Data.Cache.Digest.to_string filename in
-    if Sys.file_exists path then
+    try
       Some (In_channel.with_file path
               ~f:(Data.Read.of_channel reader))
-    else None
+    with _ -> None
 
   let iter ~f = match !t with
     | None -> f (read ())
@@ -169,10 +178,10 @@ let () =
                                  between different runs of the program") in
   let set_overhead =
     Config.(param (some float) "overhead"
-              ~doc:"Set overhead of maximum total size of cached data,
-              so the size after GC will start to clean cache directory
-              is size + size * overhead.The option value will persist
-                                  between different runs of the program") in
+              ~doc:"Controls the aggressiveness of the garbage collector.
+                    The higher the number the more space will be
+                    wasted but the cache system will run faster. It is
+                    expressed as a percentage of the max-size parameter") in
   let disable_gc = Config.(param (some bool) "disable-gc"
                              ~as_flag:(Some true)
                              ~doc:"Disables the garbage collector
