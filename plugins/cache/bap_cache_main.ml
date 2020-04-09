@@ -6,154 +6,148 @@ include Self()
 
 module Filename = Caml.Filename
 
-open Cache_types
+open Bap_cache_types
 
-module Index = Cache_index
-module GC = Cache_gc
+module Cfg = Bap_cache_config
+module Cache = Bap_cache
+module GC = Cache.GC
 
 let (/) = Filename.concat
 
 module Global = struct
 
+  open Cache
+
   type t = {
-    index : index;
-    mtime : float option;
+    mtime : float;
+    size  : int64;
+    cfg   : config;
   }
 
   let t = ref None
 
-  let mtime () =
-    let index = Index.index_file () in
-    if Sys.file_exists index then
-      let s = Unix.stat index in
-      Some Unix.(s.st_mtime)
-    else None
+  let threshold c =
+    Int64.(c.max_size + of_float (to_float c.max_size *. c.overhead))
 
-  let update index =
-    let mtime = mtime () in
-    t := Some {index; mtime }
+  let run_gc t =
+    if t.cfg.gc_enabled then
+      if Int64.(t.size  > threshold t.cfg) then
+        let () = GC.remove Int64.(t.size - t.cfg.max_size) in
+        {t with size = Cache.size ()}
+      else t
+    else t
 
   let read () = match !t with
     | None ->
-      let idx = Index.read () in
-      let idx =
-        if idx.config.gc_enabled then
-          GC.run idx
-        else idx in
-      update idx;
-      idx
-    | Some {index} -> index
+      let cfg = Cfg.read () in
+      let mtime = mtime () in
+      let size  = size () in
+      let t' = {mtime; size; cfg} in
+      t := Some t';
+      t'
+    | Some t -> t
 
   let force_read () =
     t := None;
     read ()
 
-  let write index =
-    Index.write index;
-    update index
+  let store_entry filename writer data =
+    let cache_dir = Cfg.cache_dir () in
+    let tmp,ch = Filename.open_temp_file ~temp_dir:cache_dir
+        "entry" ".cache" in
+    Data.Write.to_channel writer ch data;
+    Out_channel.close ch;
+    Sys.rename tmp (cache_dir / filename)
 
-  let reload () =
+  let update t' entry =
+    let s = Unix.stat @@ Cfg.cache_dir () / entry in
+    let mtime = Unix.(s.st_mtime) in
+    let size = Unix.(s.st_size) in
+    t := Some {t' with size = Int64.(t'.size + of_int size); mtime}
+
+  let store_entry digest writer data =
+    let filename = Data.Cache.Digest.to_string digest in
+    let tm = mtime () in
     match !t with
-    | None -> read ()
+    | None ->
+      let t = read () in
+      store_entry filename writer data;
+      update t filename
     | Some t ->
-      if t.mtime = mtime () then t.index
-      else force_read ()
+      let t' =
+        if Float.(t.mtime < tm) then
+          force_read ()
+        else t in
+      let t' = run_gc t' in
+      store_entry filename writer data;
+      update t' filename
 
-  let store ~f =
-    Index.with_lock ~f:(fun () ->
-        let index = reload () in
-        let index',data = f index in
-        write index';
-        data)
+  let load_entry reader filename =
+    let path = Cfg.cache_dir () / Data.Cache.Digest.to_string filename in
+    if Sys.file_exists path then
+      Some (In_channel.with_file path
+              ~f:(Data.Read.of_channel reader))
+    else None
 
-  let load key ~f =
-    let idx = read () in
-    match Map.find idx.entries key with
-    | None -> None
-    | Some entry -> f entry
-
-  let update ~f = store ~f:(fun idx -> f idx, ())
+  let update_config ~f =
+    let t' = read () in
+    let cfg = f t'.cfg in
+    Cfg.write cfg;
+    t := Some {t' with cfg }
 
   let iter ~f = match !t with
     | None -> f (read ())
-    | Some {index} -> f index
+    | Some t -> f t
+
 end
 
 let size file = Unix.LargeFile.((stat file).st_size)
 
 let cleanup () =
-  Global.update ~f:(fun idx ->
-      Map.iter idx.entries ~f:GC.remove_entry;
-      {idx with entries = Data.Cache.Digest.Map.empty});
+  GC.remove_all ();
   exit 0
 
 let set_size size =
-  Global.update ~f:(fun idx ->
+  Global.update_config ~f:(fun cfg ->
       let max_size = Int64.(size * 1024L * 1024L) in
-      {idx with config = {idx.config with max_size;}})
+      {cfg with max_size;})
 
 let set_overhead overhead =
-  if Float.(overhead >= 0.0 && overhead < 1.0)
-  then
-    Global.update ~f:(fun idx ->
-        {idx with config = {idx.config with overhead}})
-  else
-    raise (Invalid_argument "Cache overhead should be in the range [0.0; 1.0) ")
+  Global.update_config ~f:(fun cfg -> {cfg with overhead})
 
 let run_gc () =
-  Global.update ~f:(fun idx -> GC.run idx);
+  let t = Global.read () in
+  if Int64.(t.size > t.cfg.max_size) then
+    GC.remove Int64.(t.size - t.cfg.max_size);
   exit 0
 
 let disable_gc x =
-  Global.update ~f:(fun idx ->
-      {idx with config = {idx.config with gc_enabled = not x}})
-
-
-let limit_of_config c =
-  Int64.(c.max_size + of_float (to_float c.max_size *. c.overhead))
+  Global.update_config ~f:(fun cfg -> {cfg with gc_enabled = not x})
 
 let print_info () =
-  Global.iter ~f:(fun idx ->
+  Global.iter ~f:(fun {cfg;size} ->
       let mb s = Int64.(s / 1024L / 1024L) in
-      printf "Maximum size: %5Ld MB@\n" @@ mb idx.config.max_size;
-      printf "Current size: %5Ld MB@\n" @@ mb idx.current_size;
-      printf "GC threshold: %5Ld MB@\n" @@ mb (GC.threshold idx.config);
-      printf "Overhead:     %g %%@\n" (idx.config.overhead *. 100.0);
-      printf "GC enabled:   %b@\n" idx.config.gc_enabled);
+      printf "Maximum size: %5Ld MB@\n" @@ mb cfg.max_size;
+      printf "Current size: %5Ld MB@\n" @@ mb size;
+      printf "GC threshold: %5Ld MB@\n" @@ mb (Global.threshold cfg);
+      printf "Overhead:     %g %%@\n" (cfg.overhead *. 100.0);
+      printf "GC enabled:   %b@\n" cfg.gc_enabled);
   exit 0
 
 let set_dir dir = match dir with
   | None -> ()
-  | Some dir -> Index.set_cache_dir dir
+  | Some dir -> Cfg.set_cache_dir dir
 
 let create reader writer =
-  let save id proj =
-    Global.update ~f:(fun idx ->
-        let cache_dir = Index.cache_dir () in
-        let path,ch = Filename.open_temp_file ~temp_dir:cache_dir
-            "entry" ".cache" in
-        Data.Write.to_channel writer ch proj;
-        Out_channel.close ch;
-        let entry = { size = size path; path; } in
-        let current_size = Int64.(idx.current_size + entry.size) in
-        { idx with entries =
-                     Map.set idx.entries id entry; current_size }) in
-  let load src =
-    Global.load src ~f:(fun e ->
-        try
-          report_progress ~note:"loading" ();
-          let proj = In_channel.with_file e.path
-              ~f:(Data.Read.of_channel reader) in
-          report_progress ~note:"reindexing" ();
-          Some proj
-        with _exn -> None) in
+  let save id proj = Global.store_entry id writer proj in
+  let load src = Global.load_entry reader src in
   Data.Cache.create ~load ~save
 
 let main clean show_info dir gc =
   set_dir dir;
   if clean then cleanup ();
   if show_info then print_info ();
-  info "caching to %s" (Index.cache_dir ());
+  info "caching to %s" (Cfg.cache_dir ());
   if gc then run_gc ();
   Data.Cache.Service.provide {Data.Cache.create}
 
@@ -199,6 +193,6 @@ let () =
   let print_info = Config.(flag "info" ~doc:"Print information about the
                                              cache and exit") in
   Config.when_ready (fun {Config.get=(!)} ->
-      Index.upgrade ();
+      Cache.upgrade ();
       update_config !set_size !set_overhead !disable_gc;
       main !clean !print_info !dir !run_gc)
