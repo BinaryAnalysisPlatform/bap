@@ -43,8 +43,9 @@ let default = {
   gc_enabled = true;
 }
 
-let config_path () =
-  cache_dir () / sprintf "config.%d" version
+let config_file = sprintf "config.%d" version
+
+let config_path () = cache_dir () / config_file
 
 let read () =
   try Utils.from_file (module T) @@ config_path ()

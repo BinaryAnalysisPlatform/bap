@@ -16,7 +16,6 @@ let (/) = Filename.concat
 
 let cache_dir = Config.cache_dir
 
-
 let mtime () =
   let s = Unix.stat @@ cache_dir () in
   Unix.(s.st_mtime)
@@ -33,8 +32,9 @@ let read_cache ~f ~init =
   r
 
 let size () =
+  let dir = cache_dir () in
   read_cache ~init:0L ~f:(fun size e ->
-      let s = Unix.stat (cache_dir () / e) in
+      let s = Unix.stat (dir / e) in
       Int64.(size + of_int Unix.(s.st_size)))
 
 let size x = My_bench.with_args1 size x "size"
@@ -57,7 +57,7 @@ module GC = struct
 
   let remove_entries entries size_to_free =
     let dir = cache_dir () in
-    let cfg = Config.config_path () in
+    let cfg = Config.config_file in
     let rec loop entries freed n =
       if freed < size_to_free && n <> 0 then
         let elt = Random.int n in
@@ -77,7 +77,7 @@ module GC = struct
 
   let remove_all () =
     let dir = cache_dir () in
-    let cfg = Config.config_path () in
+    let cfg = Config.config_file in
     List.iter (entries ()) ~f:(fun e ->
         if e <> cfg then remove_entry @@ dir / e)
 

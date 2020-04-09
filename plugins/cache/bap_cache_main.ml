@@ -51,6 +51,12 @@ module Global = struct
     t := None;
     read ()
 
+  let update t' entry =
+    let s = Unix.stat @@ Cfg.cache_dir () / entry in
+    let mtime = Unix.(s.st_mtime) in
+    let size = Unix.(s.st_size) in
+    t := Some {t' with size = Int64.(t'.size + of_int size); mtime}
+
   let store_entry filename writer data =
     let cache_dir = Cfg.cache_dir () in
     let tmp,ch = Filename.open_temp_file ~temp_dir:cache_dir
@@ -58,12 +64,6 @@ module Global = struct
     Data.Write.to_channel writer ch data;
     Out_channel.close ch;
     Sys.rename tmp (cache_dir / filename)
-
-  let update t' entry =
-    let s = Unix.stat @@ Cfg.cache_dir () / entry in
-    let mtime = Unix.(s.st_mtime) in
-    let size = Unix.(s.st_size) in
-    t := Some {t' with size = Int64.(t'.size + of_int size); mtime}
 
   let store_entry digest writer data =
     let filename = Data.Cache.Digest.to_string digest in
