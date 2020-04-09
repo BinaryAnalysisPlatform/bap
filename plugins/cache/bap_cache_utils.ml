@@ -2,6 +2,12 @@ open Core_kernel
 
 module Filename = Caml.Filename
 
+let open_temp temp_dir =
+  let tmp =
+    Filename.temp_file ~temp_dir "tmp" "" in
+  try tmp, Unix.(openfile tmp [O_RDWR] 0o600)
+  with e -> Sys.remove tmp; raise e
+
 let from_file : type t.
   (module Binable.S with type t = t) -> string -> t = fun b file ->
   let module T = (val b) in
@@ -15,12 +21,6 @@ let from_file : type t.
     t
   with e -> Unix.close fd; raise e
 [@@warning "-D"]
-
-let open_temp temp_dir =
-  let tmp =
-    Filename.temp_file ~temp_dir "tmp" "" in
-  try tmp, Unix.(openfile tmp [O_RDWR] 0o600)
-  with e -> Sys.remove tmp; raise e
 
 let to_file : type t.
   (module Binable.S with type t = t) -> string -> t -> unit =

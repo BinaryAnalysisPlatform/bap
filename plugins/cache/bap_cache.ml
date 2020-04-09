@@ -20,27 +20,16 @@ let mtime () =
   let s = Unix.stat @@ cache_dir () in
   Unix.(s.st_mtime)
 
-let read_cache ~f ~init =
-  let rec loop dir acc =
-    try
-      let e = Unix.readdir dir in
-      loop dir (f acc e)
-    with End_of_file -> acc in
-  let dir = Unix.opendir @@ cache_dir () in
-  let r = loop dir init in
-  Unix.closedir dir;
-  r
+let entries () = Sys.readdir @@ cache_dir ()
 
 let size () =
   let dir = cache_dir () in
-  read_cache ~init:0L ~f:(fun size e ->
+  entries () |>
+  Array.fold ~init:0L ~f:(fun size e ->
       let s = Unix.stat (dir / e) in
       Int64.(size + of_int Unix.(s.st_size)))
 
 let size x = My_bench.with_args1 size x "size"
-
-let entries () =
-  read_cache ~init:[] ~f:(fun acc e -> e :: acc)
 
 module GC = struct
 
@@ -52,10 +41,10 @@ module GC = struct
       warning "unable to remove entry: %s" (Exn.to_string exn)
 
   let entry_size e =
-    let s = Unix.stat @@ cache_dir () / e in
+    let s = Unix.stat e in
     Unix.(s.st_size)
 
-  let remove_entries entries size_to_free =
+  let remove_entries size_to_free entries =
     let dir = cache_dir () in
     let cfg = Config.config_file in
     let rec loop entries freed n =
@@ -64,21 +53,21 @@ module GC = struct
         if entries.(elt) = cfg then loop entries freed n
         else
           let () = Array.swap entries (Random.int n) (n - 1) in
-          let size = entry_size entries.(n - 1) in
-          remove_entry @@ dir / entries.(n - 1);
+          let path = dir / entries.(n - 1) in
+          let size = entry_size path in
+          remove_entry path;
           loop entries Int64.(freed + of_int size) (n - 1) in
     loop entries 0L (Array.length entries)
 
   let remove size =
-    let entries = Array.of_list (entries ()) in
-    remove_entries entries size
+    entries () |> remove_entries size
 
-  let remove sz  = My_bench.with_args1 remove sz "remove"
+  let remove sz = My_bench.with_args1 remove sz "remove"
 
   let remove_all () =
     let dir = cache_dir () in
     let cfg = Config.config_file in
-    List.iter (entries ()) ~f:(fun e ->
+    Array.iter (entries ()) ~f:(fun e ->
         if e <> cfg then remove_entry @@ dir / e)
 
 end

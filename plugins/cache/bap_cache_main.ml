@@ -16,8 +16,6 @@ let (/) = Filename.concat
 
 module Global = struct
 
-  open Cache
-
   type t = {
     mtime : float;
     size  : int64;
@@ -30,18 +28,16 @@ module Global = struct
     Int64.(c.max_size + of_float (to_float c.max_size *. c.overhead))
 
   let run_gc t =
-    if t.cfg.gc_enabled then
-      if Int64.(t.size  > threshold t.cfg) then
-        let () = GC.remove Int64.(t.size - t.cfg.max_size) in
-        {t with size = Cache.size ()}
-      else t
+    if t.cfg.gc_enabled && Int64.(t.size > threshold t.cfg) then
+      let () = GC.remove Int64.(t.size - t.cfg.max_size) in
+      {t with size = Cache.size ()}
     else t
 
   let read () = match !t with
     | None ->
       let cfg = Cfg.read () in
-      let mtime = mtime () in
-      let size  = size () in
+      let mtime = Cache.mtime () in
+      let size  = Cache.size () in
       let t' = {mtime; size; cfg} in
       t := Some t';
       t'
@@ -51,11 +47,12 @@ module Global = struct
     t := None;
     read ()
 
+  let size file = Unix.( (stat file).st_size )
+
   let update t' entry =
-    let s = Unix.stat @@ Cfg.cache_dir () / entry in
-    let mtime = Unix.(s.st_mtime) in
-    let size = Unix.(s.st_size) in
-    t := Some {t' with size = Int64.(t'.size + of_int size); mtime}
+    let size = size @@ Cfg.cache_dir () / entry in
+    let size = Int64.(t'.size + of_int size) in
+    t := Some {t' with size;  mtime = Cache.mtime ()}
 
   let store_entry filename writer data =
     let cache_dir = Cfg.cache_dir () in
@@ -67,7 +64,7 @@ module Global = struct
 
   let store_entry digest writer data =
     let filename = Data.Cache.Digest.to_string digest in
-    let tm = mtime () in
+    let tm = Cache.mtime () in
     match !t with
     | None ->
       let t = read () in
@@ -75,8 +72,8 @@ module Global = struct
       update t filename
     | Some t ->
       let t' =
-        if Float.(t.mtime < tm) then
-          force_read ()
+        if Float.(t.mtime < tm)
+        then force_read ()
         else t in
       let t' = run_gc t' in
       store_entry filename writer data;
@@ -89,31 +86,25 @@ module Global = struct
               ~f:(Data.Read.of_channel reader))
     else None
 
-  let update_config ~f =
-    let t' = read () in
-    let cfg = f t'.cfg in
-    Cfg.write cfg;
-    t := Some {t' with cfg }
-
   let iter ~f = match !t with
     | None -> f (read ())
     | Some t -> f t
 
 end
 
-let size file = Unix.LargeFile.((stat file).st_size)
-
 let cleanup () =
   GC.remove_all ();
   exit 0
 
+let update_config ~f = Cfg.write @@ f (Cfg.read ())
+
 let set_size size =
-  Global.update_config ~f:(fun cfg ->
+  update_config ~f:(fun cfg ->
       let max_size = Int64.(size * 1024L * 1024L) in
       {cfg with max_size;})
 
 let set_overhead overhead =
-  Global.update_config ~f:(fun cfg -> {cfg with overhead})
+  update_config ~f:(fun cfg -> {cfg with overhead})
 
 let run_gc () =
   let t = Global.read () in
@@ -122,7 +113,7 @@ let run_gc () =
   exit 0
 
 let disable_gc x =
-  Global.update_config ~f:(fun cfg -> {cfg with gc_enabled = not x})
+  update_config ~f:(fun cfg -> {cfg with gc_enabled = not x})
 
 let print_info () =
   Global.iter ~f:(fun {cfg;size} ->
