@@ -13,7 +13,7 @@ open Monads.Std
    empty model, that starts the pioneer machine.
 
    Each worker (including the pioneer) runs from the entry point and
-   builds the path formular. With each value we associate a
+   builds the path formula. With each value we associate a
    formula, which we optimize on the fly. We designate certain values
    as inputs and keep them symbolic. When we hit the branch that we
    didn't see before and that leads to the desitantion which we
@@ -22,10 +22,8 @@ open Monads.Std
    its negation to the queue.
 
    When a worker finishes, the control is passed back to the init
-   machine that, first, clears the queue from formulae that are not
-   actual anymore, and then, pick then pick the first actual formula
-   finds a satisfying model for it, and spawns a new worker process,
-   that works as above.
+   machine that picks the first actual formula and finds a satisfying
+   model for it, then spawns a new worker process, that works as above.
 
    To identify which formula is actual, we associate with each
    formula the branch destination that will be taken if the formula
@@ -206,19 +204,6 @@ end = struct
 
   let binop op x y = simpl (z3_of_binop op ctxt x y)
   let unop op x = simpl (z3_of_unop op ctxt x)
-
-  (* let binop op x y =
-   *   Format.eprintf "(%s %s:%s %s:%s)@\n%!"
-   *     (Bil.string_of_binop op)
-   *     (to_string x) (Z3.Sort.to_string (Expr.get_sort x))
-   *     (to_string y) (Z3.Sort.to_string (Expr.get_sort y));
-   *   binop op x y
-   *
-   * let unop op x =
-   *   Format.eprintf "(%s %s:%s)@\n%!"
-   *     (Bil.string_of_unop op)
-   *     (to_string x) (Z3.Sort.to_string (Expr.get_sort x));
-   *   unop op x *)
 
   let word x =
     let s = Bitv.mk_sort ctxt (Word.bitwidth x) in
