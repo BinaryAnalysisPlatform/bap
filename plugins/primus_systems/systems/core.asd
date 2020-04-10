@@ -40,7 +40,7 @@
                bap:mem-randomizer
                bap:lisp-incidents
                bap:division-by-zero-handler
-               bap:unresolved-call-handler))
+               bap:unresolved-calls-handler))
 
 (defsystem bap:promiscuous-executor
   :description "Executes all linearly independent paths and never fails."
