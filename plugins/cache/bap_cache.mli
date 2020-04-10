@@ -7,6 +7,10 @@ val size : unit -> int64
 val mtime : unit -> float
 
 module GC : sig
-  val remove : int64 -> unit
-  val remove_all : unit -> unit
+
+  val shrink : upto:int64 -> unit
+
+  val clean : unit -> unit
+
+
 end

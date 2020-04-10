@@ -57,33 +57,45 @@ module GC = struct
     List.mem [dir / Config.config_file; dir / lock_file] s
       ~equal:String.equal
 
-  let remove_entries size_to_free entries =
+  let remove_entries protected size_to_free entries =
+    let is_entry = Fn.non @@ List.mem ~equal:String.equal protected in
+    let min_length = List.length protected in
     let dir = cache_dir () in
-    let _cfg = Config.config_file in
     let rec loop entries freed len =
-      if freed < size_to_free && len > 1 then
+      if freed < size_to_free && len > min_length then
         let elt = Random.int len in
-        if is_protected(entries.(elt)) then loop entries freed len
-        else
+        if is_entry @@ entries.(elt) then
           let last = len - 1 in
           let () = Array.swap entries elt (last) in
           let path = dir / entries.(last) in
           let size = entry_size path in
           remove_entry path;
-          loop entries Int64.(freed + size) last in
+          loop entries Int64.(freed + size) last
+        else loop entries freed len in
     loop entries 0L (Array.length entries)
+
+  let remove_entries size_to_free entries =
+    let dir = cache_dir () in
+    let protected = [dir / Config.config_file; dir / lock_file] in
+    remove_entries protected size_to_free entries
 
   let remove size =
     cache_content () |> remove_entries size
 
   let remove sz = My_bench.with_args1 remove sz "remove"
 
-  let remove_all () =
+  let clean () =
     let dir = cache_dir () in
     let cfg = Config.config_file in
     Array.iter (cache_content ()) ~f:(fun e ->
         if e <> cfg then remove_entry @@ dir / e)
 
+  let shrink ~upto =
+    let open Int64 in
+    with_lock ~f:(fun () ->
+        let size = size () in
+        if size > upto then
+          remove (size - upto))
 end
 
 module Upgrade = struct

@@ -24,14 +24,13 @@ module Global = struct
 
   let t = ref None
 
-
   let threshold c =
     Int64.(c.max_size + of_float (to_float c.max_size *. c.overhead))
 
   let run_gc t =
     if t.cfg.gc_enabled && Int64.(t.size > threshold t.cfg) then
-      let () = GC.remove Int64.(t.size - t.cfg.max_size) in
-      {t with size = Cache.size ()}
+      let () = GC.shrink ~upto:t.cfg.max_size in
+      {t with size = Cache.size (); }
     else t
 
   let read () = match !t with
@@ -48,18 +47,15 @@ module Global = struct
     t := None;
     read ()
 
-  let size file = Unix.( (stat file).st_size )
-
-  let update t' entry =
-    let size = size entry in
-    let size = Int64.(t'.size + of_int size) in
-    t := Some {t' with size;  mtime = Cache.mtime ()}
+  let size file = Unix.LargeFile.( (stat file).st_size )
 
   let store writer data =
     let tmp,ch = Filename.open_temp_file "entry" ".cache" in
     Data.Write.to_channel writer ch data;
     Out_channel.close ch;
     tmp
+
+  let filename_of_digest = Data.Cache.Digest.to_string
 
   let store_entry digest writer data =
     let t' = match !t with
@@ -71,18 +67,15 @@ module Global = struct
           then force_read ()
           else t in
         run_gc t in
-    let filename = Data.Cache.Digest.to_string digest in
     let tmp = store writer data in
-    let size = size tmp in
-    Sys.rename tmp (Cfg.cache_dir () / filename);
-    t := Some {t' with size = Int64.(t'.size + of_int size);
-                       mtime = Cache.mtime ()}
+    let t' = {t' with size = Int64.(t'.size + size tmp) } in
+    Sys.rename tmp (Cfg.cache_dir () / filename_of_digest digest);
+    t := Some {t' with mtime = Cache.mtime ()}
 
-  let load_entry reader filename =
-    let path = Cfg.cache_dir () / Data.Cache.Digest.to_string filename in
+  let load_entry reader digest =
+    let path = Cfg.cache_dir () / filename_of_digest digest in
     try
-      Some (In_channel.with_file path
-              ~f:(Data.Read.of_channel reader))
+      Some (In_channel.with_file path ~f:(Data.Read.of_channel reader))
     with _ -> None
 
   let iter ~f = match !t with
@@ -91,9 +84,7 @@ module Global = struct
 
 end
 
-let cleanup () =
-  GC.remove_all ();
-  exit 0
+let cleanup () = GC.clean (); exit 0
 
 let update_config ~f = Cfg.write @@ f (Cfg.read ())
 
@@ -106,9 +97,8 @@ let set_overhead overhead =
   update_config ~f:(fun cfg -> {cfg with overhead})
 
 let run_gc () =
-  let t = Global.read () in
-  if Int64.(t.size > t.cfg.max_size) then
-    GC.remove Int64.(t.size - t.cfg.max_size);
+  let cfg = Cfg.read () in
+  GC.shrink ~upto:cfg.max_size;
   exit 0
 
 let disable_gc x =
