@@ -29,9 +29,11 @@
   (declare (external "atexit"))
   0)
 
+(defun abs (x)
+  (if (is-negative x) (neg x) x))
 
 (defun stub ()
-  "stubs that does nothing"
+  "stubs that do nothing"
   (declare (external
             "setlocale"
             "bindtextdomain"
