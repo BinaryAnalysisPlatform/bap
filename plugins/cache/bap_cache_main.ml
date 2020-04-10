@@ -24,24 +24,14 @@ module Global = struct
 
   let t = ref None
 
-  let lock_file = "lock"
-
-  let with_lock ~f =
-    let lock = Cfg.cache_dir () / lock_file in
-    let lock = Unix.openfile lock Unix.[O_RDWR; O_CREAT] 0o640 in
-    Unix.lockf lock Unix.F_LOCK 0;
-    protect ~f
-      ~finally:(fun () ->
-          Unix.(lockf lock F_ULOCK 0; close lock))
 
   let threshold c =
     Int64.(c.max_size + of_float (to_float c.max_size *. c.overhead))
 
   let run_gc t =
     if t.cfg.gc_enabled && Int64.(t.size > threshold t.cfg) then
-      with_lock ~f:(fun () ->
-          let () = GC.remove Int64.(t.size - t.cfg.max_size) in
-          {t with size = Cache.size ()})
+      let () = GC.remove Int64.(t.size - t.cfg.max_size) in
+      {t with size = Cache.size ()}
     else t
 
   let read () = match !t with
@@ -130,8 +120,8 @@ let print_info () =
       printf "Maximum size: %5Ld MB@\n" @@ mb cfg.max_size;
       printf "Current size: %5Ld MB@\n" @@ mb size;
       printf "GC threshold: %5Ld MB@\n" @@ mb (Global.threshold cfg);
-      printf "Overhead:     %g %%@\n" (cfg.overhead *. 100.0);
-      printf "GC enabled:   %b@\n" cfg.gc_enabled);
+      printf "Overhead:     %5g %%@\n" (cfg.overhead *. 100.0);
+      printf "GC enabled:   %5b @\n" cfg.gc_enabled);
   exit 0
 
 let set_dir dir = match dir with

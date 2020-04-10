@@ -20,11 +20,11 @@ let mtime () =
   let s = Unix.stat @@ cache_dir () in
   Unix.(s.st_mtime)
 
-let entries () = Sys.readdir @@ cache_dir ()
+let cache_content () = Sys.readdir @@ cache_dir ()
 
 let size () =
   let dir = cache_dir () in
-  entries () |>
+  cache_content () |>
   Array.fold ~init:0L ~f:(fun size e ->
       let s = Unix.stat (dir / e) in
       Int64.(size + of_int Unix.(s.st_size)))
@@ -35,6 +35,16 @@ module GC = struct
 
   let () = Random.self_init ()
 
+  let lock_file = "lock"
+
+  let with_lock ~f =
+    let lock = Config.cache_dir () / lock_file in
+    let lock = Unix.openfile lock Unix.[O_RDWR; O_CREAT] 0o640 in
+    Unix.lockf lock Unix.F_LOCK 0;
+    protect ~f
+      ~finally:(fun () ->
+          Unix.(lockf lock F_ULOCK 0; close lock))
+
   let remove_entry path =
     try Sys.remove path
     with exn ->
@@ -42,13 +52,18 @@ module GC = struct
 
   let entry_size e = Unix.LargeFile.( (stat e).st_size )
 
+  let is_protected s =
+    let dir = cache_dir () in
+    List.mem [dir / Config.config_file; dir / lock_file] s
+      ~equal:String.equal
+
   let remove_entries size_to_free entries =
     let dir = cache_dir () in
-    let cfg = Config.config_file in
+    let _cfg = Config.config_file in
     let rec loop entries freed len =
       if freed < size_to_free && len > 1 then
         let elt = Random.int len in
-        if entries.(elt) = cfg then loop entries freed len
+        if is_protected(entries.(elt)) then loop entries freed len
         else
           let last = len - 1 in
           let () = Array.swap entries elt (last) in
@@ -59,14 +74,14 @@ module GC = struct
     loop entries 0L (Array.length entries)
 
   let remove size =
-    entries () |> remove_entries size
+    cache_content () |> remove_entries size
 
   let remove sz = My_bench.with_args1 remove sz "remove"
 
   let remove_all () =
     let dir = cache_dir () in
     let cfg = Config.config_file in
-    Array.iter (entries ()) ~f:(fun e ->
+    Array.iter (cache_content ()) ~f:(fun e ->
         if e <> cfg then remove_entry @@ dir / e)
 
 end

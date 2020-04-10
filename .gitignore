@@ -67,6 +67,7 @@ _oasis
 /plugins/primus_lisp/primus_lisp_config.ml
 /plugins/primus_greedy/.merlin
 /plugins/primus_lisp/primus_lisp_config.ml
+/plugins/primus_systems/primus_systems_config.ml
 /setup.exe
 /tools/bap_config
 /lib/bap_bundle/bap_bundle_config.ml

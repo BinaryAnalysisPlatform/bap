@@ -15,7 +15,7 @@ let (/) = Filename.concat
 let version = 3
 
 let default = {
-  max_size = 4_000_000_000L;
+  max_size = Int64.(4L * 1024L * 1024L * 1024L);
   overhead = 0.25;
   gc_enabled = true;
 }
