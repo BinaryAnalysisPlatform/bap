@@ -283,6 +283,7 @@ module Make(Machine : Machine) = struct
         values = Map.set values ~key:addr ~data:value;
       }
 
+
   let add_layer layer t = {t with layers = layer :: t.layers}
   let (++) = add_layer
 
@@ -327,6 +328,11 @@ module Make(Machine : Machine) = struct
     get_curr >>=
     write addr value >>=
     put_curr
+
+  let del addr = update state @@ fun s -> {
+      s with values = Map.remove s.values addr
+    }
+
 
   let load addr = get addr >>| Value.to_word
   let store addr value = Value.of_word value >>= set addr

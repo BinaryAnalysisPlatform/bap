@@ -100,6 +100,12 @@ module Make(Machine : Machine) = struct
   let null = Machine.get () >>| Project.arch >>| Arch.addr_size >>= fun s ->
     Value.zero (Size.in_bits s)
 
+
+  let del var =
+    Machine.Local.update state ~f:(fun s -> {
+          s with values = Map.remove s.values var;
+        })
+
   let get var =
     Machine.Local.get state >>= fun t ->
     match Map.find t.values var with

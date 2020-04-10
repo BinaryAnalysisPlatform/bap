@@ -2318,6 +2318,13 @@ module Std : sig
         val add : var -> Generator.t -> unit Machine.t
 
 
+        (** [del v] deletes the variable [v] from the environment.
+
+            The variable [v] will no longer be bound.
+        *)
+        val del : var -> unit Machine.t
+
+
         (** [all] is a sequence of all variables defined in the
             environment. Note, the word _defined_ doesn't mean
             initialized.   *)
@@ -2411,6 +2418,10 @@ module Std : sig
             Precondition: [Value.bitwidth x = 8].
         *)
         val set : addr -> value -> unit Machine.t
+
+
+        (** [del p] removes the value associated with the pointer [p].  *)
+        val del : addr -> unit Machine.t
 
         (** [load a] loads a byte from the given address [a].
 

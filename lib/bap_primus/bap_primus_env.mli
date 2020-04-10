@@ -11,6 +11,7 @@ module Make(Machine : Machine) : sig
   val get : var -> value Machine.t
   val set : var -> value -> unit Machine.t
   val add : var -> Generator.t -> unit Machine.t
+  val del : var -> unit Machine.t
   val has : var -> bool Machine.t
   val all : var seq Machine.t
 end
