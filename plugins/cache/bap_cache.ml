@@ -20,14 +20,14 @@ let mtime () =
   let s = Unix.stat @@ cache_dir () in
   Unix.(s.st_mtime)
 
-let cache_content () = Sys.readdir @@ cache_dir ()
+let read_cache () = Sys.readdir @@ cache_dir ()
 
 let size () =
+  let (+) = Int64.(+) in
   let dir = cache_dir () in
-  cache_content () |>
-  Array.fold ~init:0L ~f:(fun size e ->
-      let s = Unix.stat (dir / e) in
-      Int64.(size + of_int Unix.(s.st_size)))
+  read_cache () |>
+  Array.fold ~init:0L
+    ~f:(fun sz e -> sz + Unix.LargeFile.( (stat @@ dir / e).st_size ))
 
 let size x = My_bench.with_args1 size x "size"
 
@@ -50,16 +50,9 @@ module GC = struct
     with exn ->
       warning "unable to remove entry: %s" (Exn.to_string exn)
 
-  let entry_size e = Unix.LargeFile.( (stat e).st_size )
+  let file_size e = Unix.LargeFile.( (stat e).st_size )
 
-  let is_protected s =
-    let dir = cache_dir () in
-    List.mem [dir / Config.config_file; dir / lock_file] s
-      ~equal:String.equal
-
-  let remove_entries protected size_to_free entries =
-    let is_entry = Fn.non @@ List.mem ~equal:String.equal protected in
-    let min_length = List.length protected in
+  let remove_entries is_entry min_length size_to_free =
     let dir = cache_dir () in
     let rec loop entries freed len =
       if freed < size_to_free && len > min_length then
@@ -68,34 +61,48 @@ module GC = struct
           let last = len - 1 in
           let () = Array.swap entries elt (last) in
           let path = dir / entries.(last) in
-          let size = entry_size path in
+          let size = file_size path in
           remove_entry path;
           loop entries Int64.(freed + size) last
         else loop entries freed len in
-    loop entries 0L (Array.length entries)
-
-  let remove_entries size_to_free entries =
-    let dir = cache_dir () in
-    let protected = [dir / Config.config_file; dir / lock_file] in
-    remove_entries protected size_to_free entries
+    let files = read_cache () in
+    loop files 0L (Array.length files)
 
   let remove size =
-    cache_content () |> remove_entries size
+    let dir = cache_dir () in
+    let protected = [dir / Config.config_file; dir / lock_file] in
+    let is_entry = Fn.non @@ List.mem ~equal:String.equal protected in
+    remove_entries is_entry (List.length protected) size
 
   let remove sz = My_bench.with_args1 remove sz "remove"
 
   let clean () =
-    let dir = cache_dir () in
-    let cfg = Config.config_file in
-    Array.iter (cache_content ()) ~f:(fun e ->
-        if e <> cfg then remove_entry @@ dir / e)
+    with_lock ~f:(fun () ->
+        let dir = cache_dir () in
+        let cfg = Config.config_file in
+        Array.iter (read_cache ()) ~f:(fun e ->
+            if e <> cfg then remove_entry @@ dir / e))
+
+  let with_size ~f =
+    with_lock ~f:(fun () ->
+        let size = size () in
+        f size)
 
   let shrink ~upto =
     let open Int64 in
-    with_lock ~f:(fun () ->
-        let size = size () in
+    with_size ~f:(fun size ->
         if size > upto then
           remove (size - upto))
+
+  let shrink_by_threshold c =
+    let open Int64 in
+    with_size ~f:(fun size ->
+        let th = Config.gc_threshold c in
+        if size > th then
+          remove (size - c.max_size))
+
+  let size () = with_size ~f:ident
+
 end
 
 module Upgrade = struct

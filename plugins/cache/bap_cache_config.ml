@@ -59,3 +59,6 @@ let read () =
     default
 
 let write cfg = write (config_path ()) cfg
+
+let gc_threshold c =
+  Int64.(c.max_size + of_float (to_float c.max_size *. c.overhead))

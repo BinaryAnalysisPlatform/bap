@@ -12,3 +12,5 @@ val write : config -> unit
 val default : config
 
 val config_file : string
+
+val gc_threshold : config -> int64

@@ -10,7 +10,8 @@ module GC : sig
 
   val shrink : upto:int64 -> unit
 
-  val clean : unit -> unit
+  val shrink_by_threshold : config -> unit
 
+  val clean : unit -> unit
 
 end
