@@ -133,40 +133,13 @@ let process_sub free can_touch sub =
   let sub', dead = loop Tid.Set.empty (Sub.ssa sub) in
   O.create dead sub'
 
-let digest_of_label = function
-  | Indirect exp -> Exp.to_string exp
-  | Direct _tid -> "direct"
-
-let digest_of_kind = function
-  | Goto dst -> sprintf "goto %s" (digest_of_label dst)
-  | Call sub -> sprintf "%a" Call.pps  sub
-  | Ret  dst -> sprintf "return %S" (digest_of_label dst)
-  | Int (n,_t) -> sprintf "interrupt 0x%X" n
-
-let digest_of_jmp jmp =
-  sprintf "%a%s" Exp.pps (Jmp.cond jmp)
-    (digest_of_kind @@ Jmp.kind jmp)
-
-let digest_of_arg a =
-  sprintf "%s := %a"
-    (Var.to_string @@ Arg.lhs a) Exp.pps (Arg.rhs a)
-
-let digest_of_def d =
-  sprintf "%s := %a"
-    (Var.name @@ Def.lhs d) Exp.pps (Def.rhs d)
-
-let digest_of_blk b = match Term.get_attr b address with
-  | None -> Tid.to_string (Term.tid b)
-  | Some a -> Addr.to_string a
-
 let digest_of_sub sub level =
   let digest =
     (object
       inherit [Digest.t] Term.visitor
-      method! enter_blk t dst = Digest.add dst "%s" (digest_of_blk t)
-      method! enter_arg t dst = Digest.add dst "%s" (digest_of_arg t)
-      method! enter_def t dst = Digest.add dst "%s" (digest_of_def t)
-      method! enter_jmp t dst = Digest.add dst "%s" (digest_of_jmp t)
+      method! enter_arg t dst = Digest.add dst "%a" Arg.pp t
+      method! enter_def t dst = Digest.add dst "%a" Def.pp t
+      method! enter_jmp t dst = Digest.add dst "%a" Jmp.pp t
     end)#visit_sub sub
       (Digest.create ~namespace:"optimization") in
   let digest = Digest.add digest "%s" (Sub.name sub) in
@@ -226,7 +199,6 @@ let () =
     `S "SEE ALSO";
     `P "$(b,bap-plugin-api)(1), $(b,bap-plugin-ssa)(1)";
   ];
-
   let level =
     let doc =
       "Specifies the optimization level. The higher the value the more
@@ -245,5 +217,4 @@ let () =
 
   Config.when_ready (fun {Config.get=(!)} ->
       if !level > 0
-      then Project.register_pass ~deps:["api"] ~autorun:true
-          (run !level))
+      then Project.register_pass ~deps:["api"] ~autorun:true (run !level))
