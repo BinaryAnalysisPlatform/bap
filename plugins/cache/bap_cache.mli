@@ -7,11 +7,6 @@ val size : unit -> int64
 val mtime : unit -> float
 
 module GC : sig
-
-  val shrink : upto:int64 -> unit
-
-  val shrink_by_threshold : config -> unit
-
+  val shrink : ?threshold:int64 -> upto:int64 -> unit -> unit
   val clean : unit -> unit
-
 end

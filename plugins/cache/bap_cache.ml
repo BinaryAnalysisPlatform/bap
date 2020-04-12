@@ -29,8 +29,6 @@ let size () =
   Array.fold ~init:0L
     ~f:(fun sz e -> sz + Unix.LargeFile.( (stat @@ dir / e).st_size ))
 
-let size x = My_bench.with_args1 size x "size"
-
 module GC = struct
 
   let () = Random.self_init ()
@@ -74,8 +72,6 @@ module GC = struct
     let is_entry = Fn.non @@ List.mem ~equal:String.equal protected in
     remove_entries is_entry (List.length protected) size
 
-  let remove sz = My_bench.with_args1 remove sz "remove"
-
   let clean () =
     with_lock ~f:(fun () ->
         let dir = cache_dir () in
@@ -83,23 +79,16 @@ module GC = struct
         Array.iter (read_cache ()) ~f:(fun e ->
             if e <> cfg then remove_entry @@ dir / e))
 
-  let with_size ~f =
-    with_lock ~f:(fun () ->
-        let size = size () in
-        f size)
+  let with_size ~f = with_lock ~f:(fun () -> f @@ size ())
 
-  let shrink ~upto =
+  let shrink ?threshold ~upto () =
     let open Int64 in
     with_size ~f:(fun size ->
-        if size > upto then
+        let upper_bound = match threshold with
+          | None -> upto
+          | Some t -> t in
+        if size > upper_bound then
           remove (size - upto))
-
-  let shrink_by_threshold c =
-    let open Int64 in
-    with_size ~f:(fun size ->
-        let th = Config.gc_threshold c in
-        if size > th then
-          remove (size - c.max_size))
 
   let size () = with_size ~f:ident
 
@@ -124,7 +113,7 @@ module Upgrade = struct
       with _ ->
         Error (Error.of_string (sprintf "unknown version %s" v))
 
-  let upgrade_from_index_2 file =
+  let upgrade_from_index_v2 file =
     let open Compatibility.V2 in
     try
       let idx = Utils.from_file (module Compatibility.V2) file in
@@ -141,7 +130,7 @@ module Upgrade = struct
       Config.(write default);
       match get_version file with
       | Ok 2   ->
-        upgrade_from_index_2 file;
+        upgrade_from_index_v2 file;
         Sys.remove file
       | Ok ver -> warning "can't read entries from index version %d" ver
       | Error er ->

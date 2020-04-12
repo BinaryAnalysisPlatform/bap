@@ -16,12 +16,13 @@ let (/) = Filename.concat
 
 let run_gc () =
   let cfg = Cfg.read () in
-  GC.shrink ~upto:cfg.max_size
+  GC.shrink ~upto:cfg.max_size ()
 
 let run_gc_with_threshold () =
   let cfg = Cfg.read () in
   if cfg.gc_enabled then
-    GC.shrink_by_threshold cfg
+    GC.shrink ~threshold:(Cfg.gc_threshold cfg)
+      ~upto:cfg.max_size ()
 
 let filename_of_digest = Data.Cache.Digest.to_string
 
@@ -48,7 +49,8 @@ let create reader writer =
   let load id =
     let path = Cfg.cache_dir () / filename_of_digest id in
     try
-      Some (In_channel.with_file path ~f:(Data.Read.of_channel reader))
+      Some (In_channel.with_file path
+              ~f:(Data.Read.of_channel reader))
     with _ -> None in
   Data.Cache.create ~load ~save
 
@@ -76,7 +78,7 @@ let update_config sz ov gc =
   let cfg' = set size sz cfg |> set overhead ov |> set disable_gc gc in
   if cfg <> cfg'
   then
-    let () = Cfg.write cfg in
+    let () = Cfg.write cfg' in
     let () = printf "Config updated, exiting ...\n" in
     exit 0
 
