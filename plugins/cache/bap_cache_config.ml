@@ -10,6 +10,10 @@ open Bap_cache_types
 module Filename = Caml.Filename
 module Utils = Bap_cache_utils
 
+module T = struct
+  type t = config [@@deriving bin_io, compare, sexp]
+end
+
 let (/) = Filename.concat
 
 let version = 3

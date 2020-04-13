@@ -7,10 +7,6 @@ type config = {
   gc_enabled : bool;
 } [@@deriving bin_io, compare, sexp]
 
-module T = struct
-  type t = config [@@deriving bin_io, compare, sexp]
-end
-
 module Compatibility = struct
   module V2 = struct
     type entry = {
