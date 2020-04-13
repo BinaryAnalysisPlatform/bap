@@ -1,14 +1,11 @@
 open Core_kernel
 open Regular.Std
 open Bap.Std
-open Format
+open Bap_cache_types
 
 include Self ()
 
 module Filename = Caml.Filename
-
-open Bap_cache_types
-
 module Utils = Bap_cache_utils
 module Config = Bap_cache_config
 
@@ -16,16 +13,12 @@ let (/) = Filename.concat
 
 let cache_dir = Config.cache_dir
 
-let mtime () =
-  let s = Unix.stat @@ cache_dir () in
-  Unix.(s.st_mtime)
-
-let read_cache () = Sys.readdir @@ cache_dir ()
+let read () = Sys.readdir @@ cache_dir ()
 
 let size () =
   let (+) = Int64.(+) in
   let dir = cache_dir () in
-  read_cache () |>
+  read () |>
   Array.fold ~init:0L
     ~f:(fun sz e -> sz + Unix.LargeFile.( (stat @@ dir / e).st_size ))
 
@@ -63,7 +56,7 @@ module GC = struct
           remove_entry path;
           loop entries Int64.(freed + size) last
         else loop entries freed len in
-    let files = read_cache () in
+    let files = read () in
     loop files 0L (Array.length files)
 
   let remove size =
@@ -76,7 +69,7 @@ module GC = struct
     with_lock ~f:(fun () ->
         let dir = cache_dir () in
         let cfg = Config.config_file in
-        Array.iter (read_cache ()) ~f:(fun e ->
+        Array.iter (read ()) ~f:(fun e ->
             if e <> cfg then remove_entry @@ dir / e))
 
   let with_size ~f = with_lock ~f:(fun () -> f @@ size ())

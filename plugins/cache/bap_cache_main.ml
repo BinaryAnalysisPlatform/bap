@@ -2,12 +2,11 @@ open Core_kernel
 open Regular.Std
 open Bap.Std
 open Format
+open Bap_cache_types
+
 include Self()
 
 module Filename = Caml.Filename
-
-open Bap_cache_types
-
 module Cfg = Bap_cache_config
 module Cache = Bap_cache
 module GC = Cache.GC
