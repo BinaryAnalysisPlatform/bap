@@ -7,11 +7,11 @@ include Self ()
 
 module Filename = Caml.Filename
 module Utils = Bap_cache_utils
-module Config = Bap_cache_config
+module Cfg = Bap_cache_config
 
 let (/) = Filename.concat
 
-let cache_dir = Config.cache_dir
+let cache_dir = Cfg.cache_dir
 
 let read () = Sys.readdir @@ cache_dir ()
 
@@ -29,7 +29,7 @@ module GC = struct
   let lock_file = "lock"
 
   let with_lock ~f =
-    let lock = Config.cache_dir () / lock_file in
+    let lock = cache_dir () / lock_file in
     let lock = Unix.openfile lock Unix.[O_RDWR; O_CREAT] 0o640 in
     Unix.lockf lock Unix.F_LOCK 0;
     protect ~f
@@ -61,14 +61,14 @@ module GC = struct
 
   let remove size =
     let dir = cache_dir () in
-    let protected = [dir / Config.config_file; dir / lock_file] in
+    let protected = [dir / Cfg.config_file; dir / lock_file] in
     let is_entry = Fn.non @@ List.mem ~equal:String.equal protected in
     remove_entries is_entry (List.length protected) size
 
   let clean () =
     with_lock ~f:(fun () ->
         let dir = cache_dir () in
-        let cfg = Config.config_file in
+        let cfg = Cfg.config_file in
         Array.iter (read ()) ~f:(fun e ->
             if e <> cfg then remove_entry @@ dir / e))
 
@@ -120,7 +120,7 @@ module Upgrade = struct
   let from_index () = match find_index () with
     | None -> ()
     | Some file ->
-      Config.(write default);
+      Cfg.(write default);
       match get_version file with
       | Ok 2   ->
         upgrade_from_index_v2 file;
