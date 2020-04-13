@@ -615,14 +615,30 @@ private:
     }
 };
 
+// See https://github.com/BinaryAnalysisPlatform/bap/issues/1081
+// for details
+bool is_error_prone_arch(const char *triple) {
+    if (LLVM_VERSION_MAJOR < 8)
+        return std::string(triple) == "aarch64";
+    else
+        return false;
+}
+
+
 struct create_llvm_disassembler : disasm_factory {
     result<disassembler_interface>
     create(const char *triple, const char *cpu, int debug_level) {
-        auto llvm = llvm_disassembler::create(triple, cpu, debug_level);
         result<disassembler_interface> r;
-        r.dis = llvm.dis;
-        if (!r.dis)
-            r.err = llvm.err;
+        if (is_error_prone_arch(triple)) {
+            if (debug_level > 0)
+                output_error(triple, cpu, "unsupported target", "consider to update to llvm version >= 8.0");
+            r.err = bap_disasm_unsupported_target;
+        } else {
+            auto llvm = llvm_disassembler::create(triple, cpu, debug_level);
+            r.dis = llvm.dis;
+            if (!r.dis)
+                r.err = llvm.err;
+        }
         return r;
     }
 };
