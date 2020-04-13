@@ -8,6 +8,13 @@ let is_section name v =
   | Some x -> String.(x = name)
   | _ -> false
 
+module Make_unresolved(Machine : Primus.Machine.S) = struct
+  module Linker = Primus.Linker.Make(Machine)
+
+  let exec =
+    Linker.exec (`symbol Primus.Linker.unresolved_handler)
+end
+
 module SetupPLT(Machine : Primus.Machine.S) = struct
   module Linker = Primus.Linker.Make(Machine)
   open Machine.Syntax
@@ -37,7 +44,8 @@ module SetupPLT(Machine : Primus.Machine.S) = struct
         Seq.exists memory ~f:(fun mem -> Memory.contains mem a))
 
   let unlink addrs =
-    Machine.List.iter addrs ~f:(fun a -> Linker.unlink (`addr a))
+    Machine.List.iter addrs ~f:(fun addr ->
+        Linker.link ~addr (module Make_unresolved))
 
   let unresolve =
     load_table >>=
