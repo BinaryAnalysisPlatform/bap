@@ -12,6 +12,7 @@ module Cfg = Bap_cache_config
 let (/) = Filename.concat
 
 let cache_dir = Cfg.cache_dir
+let lock_file = "lock"
 
 let read () = Sys.readdir @@ cache_dir ()
 
@@ -22,26 +23,24 @@ let size () =
   Array.fold ~init:0L
     ~f:(fun sz e -> sz + Unix.LargeFile.( (stat @@ dir / e).st_size ))
 
+let with_lock ~f =
+  let lock = cache_dir () / lock_file in
+  let lock = Unix.openfile lock Unix.[O_RDWR; O_CREAT] 0o640 in
+  Unix.lockf lock Unix.F_LOCK 0;
+  protect ~f
+    ~finally:(fun () -> Unix.(lockf lock F_ULOCK 0; close lock))
+
+
 module GC = struct
 
   let () = Random.self_init ()
-
-  let lock_file = "lock"
-
-  let with_lock ~f =
-    let lock = cache_dir () / lock_file in
-    let lock = Unix.openfile lock Unix.[O_RDWR; O_CREAT] 0o640 in
-    Unix.lockf lock Unix.F_LOCK 0;
-    protect ~f
-      ~finally:(fun () ->
-          Unix.(lockf lock F_ULOCK 0; close lock))
 
   let remove_entry path =
     try Sys.remove path
     with exn ->
       warning "unable to remove entry: %s" (Exn.to_string exn)
 
-  let file_size e = Unix.LargeFile.( (stat e).st_size )
+  let file_size x = Unix.LargeFile.( (stat x).st_size )
 
   let remove_entries is_entry min_length size_to_free =
     let dir = cache_dir () in
@@ -50,7 +49,7 @@ module GC = struct
         let elt = Random.int len in
         if is_entry @@ entries.(elt) then
           let last = len - 1 in
-          let () = Array.swap entries elt (last) in
+          let () = Array.swap entries elt last in
           let path = dir / entries.(last) in
           let size = file_size path in
           remove_entry path;
@@ -68,9 +67,8 @@ module GC = struct
   let clean () =
     with_lock ~f:(fun () ->
         let dir = cache_dir () in
-        let cfg = Cfg.config_file in
         Array.iter (read ()) ~f:(fun e ->
-            if e <> cfg then remove_entry @@ dir / e))
+            if e <> Cfg.config_file then remove_entry @@ dir / e))
 
   let with_size ~f = with_lock ~f:(fun () -> f @@ size ())
 
@@ -122,14 +120,15 @@ module Upgrade = struct
     | Some file ->
       Cfg.(write default);
       match get_version file with
-      | Ok 2   ->
+      | Ok 2 ->
         upgrade_from_index_v2 file;
         Sys.remove file
-      | Ok ver -> warning "can't read entries from index version %d" ver
+      | Ok ver ->
+        warning "can't read entries from index version %d" ver;
       | Error er ->
         error "unknown index version: %s" (Error.to_string_hum er)
 
-  let run = from_index
+  let run () = with_lock ~f:from_index
 
 end
 
