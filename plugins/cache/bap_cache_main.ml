@@ -65,8 +65,8 @@ let main clean show_info dir gc =
   if gc then run_and_exit run_gc;
   Data.Cache.Service.provide {Data.Cache.create}
 
-let size s cfg = {cfg with max_size=s;}
-let overhead o cfg = {cfg with overhead=o}
+let size sz cfg = {cfg with max_size=sz;}
+let overhead ov cfg = {cfg with overhead = float ov /. 100.}
 let disable_gc x cfg = {cfg with gc_enabled = not x}
 
 let update_config sz ov gc =
@@ -97,7 +97,7 @@ let () =
                                  $(docv) MB. The option value will persist
                                  between different runs of the program") in
   let set_overhead =
-    Config.(param (some float) "overhead"
+    Config.(param (some int) "overhead"
               ~doc:"Controls the aggressiveness of the garbage collector.
                     The higher the number the more space will be
                     wasted but the cache system will run faster. It is
