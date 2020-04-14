@@ -7,10 +7,10 @@ open Monads.Std
 
    For each system, just when we start, we create the init machine
    that will be used to fork all other machines and re-execute the
-   path N times, where N is then number of linearly independent paths
+   path N times, where N is the number of linearly independent paths
    that are reachable from the entry point. The init machine spawns
    a new worker for each model in its queue. We start with an initial
-   empty model, that starts the pioneer machine.
+   empty model that starts the pioneer machine.
 
    Each worker (including the pioneer) runs from the entry point and
    builds the path formula. With each value we associate a
@@ -23,7 +23,7 @@ open Monads.Std
 
    When a worker finishes, the control is passed back to the init
    machine that picks the first actual formula and finds a satisfying
-   model for it, then spawns a new worker process, that works as above.
+   model for it, then spawns a new worker process, which works as above.
 
    To identify which formula is actual, we associate with each
    formula the branch destination that will be taken if the formula
@@ -106,7 +106,7 @@ module Formula : sig
   val ite : t -> t -> t -> t
   val cast : cast -> int -> t -> t
 
-  val solve : ?inverse:bool -> t -> model option
+  val solve : ?constraints:t list -> ?inverse:bool -> t -> model option
 
 
   module Model : sig
@@ -250,13 +250,14 @@ end = struct
     model : Z3.Model.model;
   }
 
-  let solve ?(inverse=false) expr =
+  let solve ?(constraints=[]) ?(inverse=false) expr =
     let solver = Z3.Solver.mk_simple_solver ctxt in
+    let constraints = List.map constraints ~f:bool_of_bit in
     let lhs = Expr.mk_numeral_int ctxt 0 (Expr.get_sort expr) in
     let formula = Bool.mk_eq ctxt lhs expr in
     let formula = if inverse then formula
       else Bool.mk_not ctxt formula in
-    match Z3.Solver.check solver [formula] with
+    match Z3.Solver.check solver (formula::constraints) with
     | UNSATISFIABLE | UNKNOWN -> None
     | SATISFIABLE -> match Z3.Solver.get_model solver with
       | None -> None
@@ -291,13 +292,11 @@ end = struct
 
     let to_string x = Expr.to_string x
   end
-
-
-
 end
 
 type executor = {
   inputs : Set.M(Input).t;
+  constraints : Formula.t list;
   formulae : Formula.t Primus.Value.Id.Map.t;
 }
 
@@ -306,6 +305,7 @@ let executor = Primus.Machine.State.declare
     ~name:"symbolic-executor-formulae" @@ fun _ -> {
     formulae = Primus.Value.Id.Map.empty;
     inputs = Set.empty (module Input);
+    constraints = [];
   }
 
 let sexp_of_formula x = Sexp.Atom (Formula.to_string x)
@@ -322,6 +322,8 @@ module Executor(Machine : Primus.Machine.S) : sig
   val inputs : Input.t seq Machine.t
   val init : unit -> unit Machine.t
   val set_input : Input.t -> Primus.Value.t -> unit Machine.t
+  val constraints : Formula.t list Machine.t
+  val add_constraint : Primus.Value.t -> unit Machine.t
 end = struct
   open Machine.Syntax
 
@@ -379,6 +381,7 @@ end = struct
     let size = Input.size origin  in
     let x = Formula.var (Input.to_symbol origin) size in
     Machine.Local.update executor ~f:(fun s -> {
+          s with
           inputs = Set.add s.inputs origin;
           formulae = Map.set s.formulae id x;
         })
@@ -396,6 +399,14 @@ end = struct
   let inputs =
     Machine.Local.get executor >>| fun s ->
     Set.to_sequence s.inputs
+
+  let add_constraint x =
+    Machine.Local.get executor >>= fun s ->
+    get_formula s x @@ fun s _ ->
+    Machine.Local.put executor s
+
+  let constraints =
+    Machine.Local.get executor >>| fun s -> s.constraints
 
   let init () = Machine.sequence Primus.Interpreter.[
       binop >>> on_binop;
