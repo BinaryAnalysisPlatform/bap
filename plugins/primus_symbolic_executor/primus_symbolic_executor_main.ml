@@ -643,6 +643,7 @@ module Assert(Machine : Primus.Machine.S) = struct
   module Executor = Executor(Machine)
   module Value = Primus.Value.Make(Machine)
   module Lisp = Primus.Lisp.Make(Machine)
+  module Debug = Debug(Machine)
 
   let run args = match args with
     | [] -> Lisp.failf "assert requires at least two arguments: \
@@ -652,10 +653,15 @@ module Assert(Machine : Primus.Machine.S) = struct
       Machine.List.iter assertions ~f:(fun assertion ->
           Executor.constraints >>= fun constraints ->
           Executor.formula assertion >>= fun x ->
+          Debug.msg "checking that %s holds"
+            (Formula.to_string x) >>= fun () ->
           Machine.Observation.post failed_assertion ~f:(fun report ->
               match Formula.solve ~constraints ~inverse:true x with
-              | None -> Machine.return ()
+              | None ->
+                Debug.msg "it holds!" >>= fun () ->
+                Machine.return ()
               | Some model ->
+                Debug.msg "it doesn't hold!" >>= fun () ->
                 Executor.inputs >>| Seq.to_list >>= fun inputs ->
                 report (name,model,x,inputs))) >>= fun () ->
       Value.b1
@@ -667,10 +673,10 @@ module Primitives(Machine : Primus.Machine.S) = struct
   open Primus.Lisp.Type.Spec
 
   let init () = Machine.sequence [
-      Lisp.define "assume" (module Assume)
+      Lisp.define "symbolic-assume" (module Assume)
         ~types:(all bool @-> bool)
         ~docs:"Assumes the specified list of constraints.";
-      Lisp.define "assert" (module Assert)
+      Lisp.define "symbolic-assert" (module Assert)
         ~types:(one sym // all bool @-> bool)
         ~docs:"(assert NAME C1 ... CM) verifies the specified
          list of assertions C1 and posts the assert-failure observation
