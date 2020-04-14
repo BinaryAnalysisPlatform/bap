@@ -606,6 +606,79 @@ module Forker(Machine : Primus.Machine.S) = struct
     ]
 end
 
+module Assume(Machine : Primus.Machine.S) = struct
+  open Machine.Syntax
+  module Executor = Executor(Machine)
+  module Value = Primus.Value.Make(Machine)
+
+  let run assumptions =
+    Machine.List.iter assumptions ~f:Executor.add_constraint
+    >>= fun () ->
+    Value.b1
+
+end
+
+
+let sexp_of_assert_failure (name,model,formula,inputs) =
+  Sexp.List (
+    Atom name ::
+    sexp_of_formula formula ::
+    List.filter_map inputs ~f:(fun input ->
+        match Formula.Model.get model input with
+        | None -> None
+        | Some value -> Option.some @@ Sexp.List [
+            Sexp.Atom (Input.to_symbol input);
+            Sexp.Atom (Formula.Value.to_string value)
+          ]))
+
+let assert_failure,failed_assertion =
+  Primus.Observation.provide "assert-failure"
+    ~inspect:sexp_of_assert_failure
+    ~desc:"occurs when a symbolic executor assertion doesn't hold"
+
+
+
+module Assert(Machine : Primus.Machine.S) = struct
+  open Machine.Syntax
+  module Executor = Executor(Machine)
+  module Value = Primus.Value.Make(Machine)
+  module Lisp = Primus.Lisp.Make(Machine)
+
+  let run args = match args with
+    | [] -> Lisp.failf "assert requires at least two arguments: \
+                        the name and the assertions" ()
+    | name :: assertions ->
+      Value.Symbol.of_value name >>= fun name ->
+      Machine.List.iter assertions ~f:(fun assertion ->
+          Executor.constraints >>= fun constraints ->
+          Executor.formula assertion >>= fun x ->
+          Machine.Observation.post failed_assertion ~f:(fun report ->
+              match Formula.solve ~constraints ~inverse:true x with
+              | None -> Machine.return ()
+              | Some model ->
+                Executor.inputs >>| Seq.to_list >>= fun inputs ->
+                report (name,model,x,inputs))) >>= fun () ->
+      Value.b1
+
+end
+
+module Primitives(Machine : Primus.Machine.S) = struct
+  module Lisp = Primus.Lisp.Make(Machine)
+  open Primus.Lisp.Type.Spec
+
+  let init () = Machine.sequence [
+      Lisp.define "assume" (module Assume)
+        ~types:(all bool @-> bool)
+        ~docs:"Assumes the specified list of constraints.";
+      Lisp.define "assert" (module Assert)
+        ~types:(one sym // all bool @-> bool)
+        ~docs:"(assert NAME C1 ... CM) verifies the specified
+         list of assertions C1 and posts the assert-failure observation
+         for each condition that doesn't hold.";
+    ]
+
+end
+
 let () = Bap_main.Extension.declare  @@ fun _ ->
   Primus.Components.register_generic "symbolic-computer"
     (module Executor) ~package:"bap"
@@ -614,4 +687,8 @@ let () = Bap_main.Extension.declare  @@ fun _ ->
     (module Forker) ~package:"bap"
     ~desc:"Computes a path constraint for each branch and forks a \
            new machine if the constraint is satisfiable.";
+  Primus.Components.register_generic "symbolic-lisp-primitives"
+    ~package:"bap"
+    ~desc:"Provides assume and assert primitives."
+    (module Primitives);
   Ok ()
