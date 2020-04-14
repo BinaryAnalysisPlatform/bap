@@ -417,6 +417,7 @@ end = struct
       cast >>> on_cast;
       Primus.Memory.generated >>> on_memory_input;
       Primus.Env.generated >>> on_env_input;
+      eval_cond >>> add_constraint;
     ]
 end
 
