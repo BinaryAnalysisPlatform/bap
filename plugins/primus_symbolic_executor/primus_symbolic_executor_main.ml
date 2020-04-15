@@ -402,8 +402,10 @@ end = struct
 
   let add_constraint x =
     Machine.Local.get executor >>= fun s ->
-    get_formula s x @@ fun s _ ->
-    Machine.Local.put executor s
+    get_formula s x @@ fun s x ->
+    Machine.Local.put executor {
+      s with constraints = x :: s.constraints;
+    }
 
   let constraints =
     Machine.Local.get executor >>| fun s -> s.constraints
