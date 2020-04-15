@@ -31,6 +31,7 @@ depends: [
   "conf-bap-llvm" {>= "1.1"}
   "parsexp"
   "bap-signatures"
+  "z3"
   "result" {= "1.4"}
 ]
 depopts: ["conf-ida" "conf-binutils"]
