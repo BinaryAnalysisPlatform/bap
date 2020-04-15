@@ -252,7 +252,7 @@ let legacy_promiscous_mode_components = [
   "mem-randomizer";
   "promiscuous-path-explorer";
   "division-by-zero-handler";
-  "unresolved-call-handler";
+  "unresolved-calls-handler";
 ]
 
 let enable_legacy_promiscuous_mode () =
