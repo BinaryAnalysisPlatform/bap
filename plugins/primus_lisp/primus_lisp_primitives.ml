@@ -14,13 +14,15 @@ let registers = Primus.Machine.State.declare
           | _ -> regs))
 
 module Make(Machine : Primus.Machine.S) = struct
-  module Eval = Primus.Interpreter.Make(Machine)
   module Lisp = Primus.Lisp.Make(Machine)
-  module Memory = Primus.Memory.Make(Machine)
   module Value = Primus.Value.Make(Machine)
-  module Linker = Primus.Linker.Make(Machine)
+  module Eval = Primus.Interpreter.Make(Machine)
+  type value = Value.t
+  type 'a m = 'a Machine.t
 
   open Machine.Syntax
+
+  let failf = Lisp.failf
 
   let addr_width =
     Machine.arch >>| Arch.addr_size >>| Size.in_bits
@@ -34,19 +36,30 @@ module Make(Machine : Primus.Machine.S) = struct
     | [] -> null
     | x :: xs -> Machine.List.fold xs ~init:x ~f:op
 
-  let signed_reduce null op xs =
-    Machine.List.map xs ~f:Value.signed >>=
-    reduce (null >>= Value.signed) op
+  let msb x =
+    let hi = Value.bitwidth x - 1 in
+    Value.extract ~hi ~lo:hi x
 
-  let all f args = List.exists args ~f |> Value.of_bool
+  let rec all f = function
+    | [] -> true_
+    | x :: xs ->
+      f x >>= fun x ->
+      if Value.is_one x
+      then
+        all f xs >>= fun xs ->
+        Eval.binop AND x xs
+      else Machine.return x
+
 
   let ordered order xs =
     let rec ordered = function
       | [] | [_] -> true_
       | x :: (y :: _ as rest) ->
         order x y >>= fun r ->
-        if Value.is_one r then Machine.return r
-        else ordered rest in
+        if Value.is_one r
+        then ordered rest >>= fun r' ->
+          Eval.binop AND r r'
+        else Machine.return r in
     ordered xs
 end
 
@@ -56,23 +69,25 @@ module RegName(Machine : Primus.Machine.S) = struct
   open Lib
   let run = function
     | [] | _::_::_ ->
-      Lisp.failf "reg-name expects only one argument" ()
+      failf "reg-name expects only one argument" ()
     | [code] ->
       Machine.Local.get registers >>= fun regs ->
       let code = Word.to_int_exn @@ Primus.Value.to_word code in
       match Map.find regs code with
-      | None -> Lisp.failf "unresolved intruction register %#x" code ()
+      | None -> failf "unresolved intruction register %#x" code ()
       | Some name -> Value.Symbol.to_value name
 end
 
 
 module ExecAddr(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
+  module Linker = Primus.Linker.Make(Machine)
+  module Eval = Primus.Interpreter.Make(Machine)
   open Machine.Syntax
   open Lib
   let run = function
     | _ :: _ :: _ | [] ->
-      Lisp.failf "Lisp Type Error: exec-address expects one argument" ()
+      failf "Lisp Type Error: exec-address expects one argument" ()
     | [addr] ->
       Linker.exec (`addr (Primus.Value.to_word addr)) >>= fun () ->
       Eval.halt >>=
@@ -81,11 +96,13 @@ end
 
 module ExecSym(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
+  module Linker = Primus.Linker.Make(Machine)
+
   open Machine.Syntax
   open Lib
   let run = function
     | _ :: _ :: _ | [] ->
-      Lisp.failf "Lisp Type Error: exec-address expects one argument" ()
+      failf "Lisp Type Error: exec-address expects one argument" ()
     | [name] ->
       Value.Symbol.of_value name >>= fun name ->
       Linker.exec (`symbol name) >>= fun () ->
@@ -97,21 +114,24 @@ module IsZero(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
   open Machine.Syntax
   open Lib
-  let run = all Value.is_zero
+  let run = all @@ fun x ->
+    Value.zero (Value.bitwidth x) >>= fun z ->
+    Eval.binop EQ x z
 end
 
 module IsPositive(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
   open Machine.Syntax
   open Lib
-  let run = all Value.is_positive
+  let run = all @@ fun x ->
+    msb x >>= Eval.unop NOT
 end
 
 module IsNegative(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
   open Machine.Syntax
   open Lib
-  let run = all Value.is_negative
+  let run = all msb
 end
 
 module WordWidth(Machine : Primus.Machine.S) = struct
@@ -131,7 +151,6 @@ module ExitWith(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
   open Lib
 
-  let run = all Value.is_negative
   let run _ =
     Eval.halt >>|
     Nothing.unreachable_code >>= fun () ->
@@ -140,6 +159,7 @@ end
 
 module MemoryAllocate(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
+  module Memory = Primus.Memory.Make(Machine)
   open Machine.Syntax
   open Lib
 
@@ -182,7 +202,7 @@ module MemoryAllocate(Machine : Primus.Machine.S) = struct
         let generator = Or_error.ok_exn gen in
         Memory.allocate ?generator (Value.to_word addr) (Or_error.ok_exn n) >>=
         fun () -> zero
-    | _ -> Lisp.failf "allocate requires two arguments" ()
+    | _ -> failf "allocate requires two arguments" ()
 end
 
 
@@ -194,7 +214,7 @@ module MemoryRead(Machine : Primus.Machine.S) = struct
   let run = function
     | [x] ->
       endian >>= fun e -> Eval.load x e `r8
-    | _ -> Lisp.failf "memory-read requires one argument" ()
+    | _ -> failf "memory-read requires one argument" ()
 end
 
 module MemoryWrite(Machine : Primus.Machine.S) = struct
@@ -207,7 +227,7 @@ module MemoryWrite(Machine : Primus.Machine.S) = struct
       endian >>= fun e ->
       Eval.store a x e `r8 >>= fun () ->
       Value.succ a
-    | _ -> Lisp.failf "memory-write requires two arguments" ()
+    | _ -> failf "memory-write requires two arguments" ()
 end
 
 module GetPC(Machine : Primus.Machine.S) = struct
@@ -217,14 +237,14 @@ module GetPC(Machine : Primus.Machine.S) = struct
 
   let run = function
     | [] -> Eval.pc >>= Value.of_word
-    | _ -> Lisp.failf
+    | _ -> failf
              "get-current-program-counter requires zero arguments" ()
 end
 
 
 module Add(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  open Machine.Syntax
+  module Eval = Primus.Interpreter.Make(Machine)
   open Lib
 
   let run = reduce null (Eval.binop Bil.PLUS)
@@ -232,7 +252,6 @@ end
 
 module Sub(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  open Machine.Syntax
   open Lib
 
   let run = reduce null (Eval.binop Bil.MINUS)
@@ -240,7 +259,6 @@ end
 
 module Div(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  open Machine.Syntax
   open Lib
 
   let run = reduce null (Eval.binop Bil.DIVIDE)
@@ -248,15 +266,13 @@ end
 
 module SDiv(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  open Machine.Syntax
   open Lib
 
-  let run = signed_reduce null (Eval.binop Bil.SDIVIDE)
+  let run = reduce null (Eval.binop Bil.SDIVIDE)
 end
 
 module Mul(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  open Machine.Syntax
   open Lib
 
   let run = reduce null (Eval.binop Bil.TIMES)
@@ -264,7 +280,6 @@ end
 
 module Mod(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  open Machine.Syntax
   open Lib
 
   let run = reduce null (Eval.binop Bil.MOD)
@@ -272,10 +287,9 @@ end
 
 module SignedMod(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  open Machine.Syntax
   open Lib
 
-  let run = signed_reduce null (Eval.binop Bil.SMOD)
+  let run = reduce null (Eval.binop Bil.SMOD)
 end
 
 module Lshift(Machine : Primus.Machine.S) = struct
@@ -285,51 +299,43 @@ module Lshift(Machine : Primus.Machine.S) = struct
 
   let run = function
     | [x;y] -> Eval.binop Bil.lshift x y
-    | _ -> Lisp.failf "Type error: lshift expects two arguments" ()
+    | _ -> failf "Type error: lshift expects two arguments" ()
 end
 
 module Rshift(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  open Machine.Syntax
   open Lib
 
   let run = function
     | [x;y] -> Eval.binop Bil.rshift x y
-    | _ -> Lisp.failf "Type error: rshift expects two arguments" ()
+    | _ -> failf "Type error: rshift expects two arguments" ()
 end
 
 module Arshift(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  open Machine.Syntax
   open Lib
 
   let run = function
     | [x;y] -> Eval.binop Bil.arshift x y
-    | _ -> Lisp.failf "Type error: arshift expects two arguments" ()
+    | _ -> failf "Type error: arshift expects two arguments" ()
 end
 
 module Equal(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  open Machine.Syntax
   open Lib
 
-  let run = function
-    | [] -> true_
-    | x :: xs -> all (Value.equal x) xs
+  let run = ordered @@ Eval.binop EQ
 end
 
 module NotEqual(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  module Equal = Equal(Machine)
-  open Machine.Syntax
-
-  let run xs = Equal.run xs >>= (Lib.Eval.unop Bil.NOT)
+  open Lib
+  let run = ordered @@ Eval.binop NEQ
 end
 
 
 module Logand(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  open Machine.Syntax
   open Lib
 
   let run = reduce negone (Eval.binop Bil.AND)
@@ -337,7 +343,6 @@ end
 
 module Logor(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  open Machine.Syntax
   open Lib
 
   let run = reduce null (Eval.binop Bil.OR)
@@ -345,7 +350,6 @@ end
 
 module Logxor(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  open Machine.Syntax
   open Lib
 
   let run = reduce null (Eval.binop Bil.XOR)
@@ -353,7 +357,6 @@ end
 
 module Concat(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  open Machine.Syntax
   open Lib
 
   let run = reduce false_ Eval.concat
@@ -367,57 +370,45 @@ module Extract(Machine : Primus.Machine.S) = struct
 
   let to_int e = match Word.to_int (Value.to_word e) with
     | Ok x -> Machine.return x
-    | Error _ -> Lisp.failf "expected smallint" ()
+    | Error _ -> failf "expected smallint" ()
 
   let run = function
     | [hi; lo; x] ->
       to_int hi >>= fun hi ->
       to_int lo >>= fun lo ->
       Eval.extract ~hi ~lo x
-    | _ -> Lisp.failf "extract expects exactly three arguments" ()
+    | _ -> failf "extract expects exactly three arguments" ()
 end
 
-module Not(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Machine.Syntax
-  open Lib
-
-  let run = function
-    | [x] -> if Value.is_zero x then Value.b1 else Value.b0
-    | _ -> Lisp.failf "not expects only one argument" ()
-end
+module Not = IsZero
 
 module Lnot(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  open Machine.Syntax
   open Lib
 
   let run = function
     | [x] -> Eval.unop Bil.NOT x
-    | _ -> Lisp.failf "lnot expects only one argument" ()
+    | _ -> failf "lnot expects only one argument" ()
 end
 
 module Neg(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  open Machine.Syntax
   open Lib
 
   let run = function
     | [x] -> Eval.unop Bil.NEG x
-    | _ -> Lisp.failf "neg expects only one argument" ()
+    | _ -> failf "neg expects only one argument" ()
 end
 
 module Less(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  open Machine.Syntax
   open Lib
 
-  let rec run = ordered @@ Eval.binop LT
+  let run = ordered @@ Eval.binop LT
 end
 
 module Greater(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  open Machine.Syntax
   open Lib
 
   let rec run = ordered @@ fun x y ->
@@ -427,18 +418,16 @@ end
 
 module LessEqual(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  open Machine.Syntax
   open Lib
 
-  let rec run = ordered (Eval.binop LE)
+  let run = ordered (Eval.binop LE)
 end
 
 module GreaterEqual(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
-  open Machine.Syntax
   open Lib
 
-  let rec run = ordered @@ fun x y ->
+  let run = ordered @@ fun x y ->
     Eval.binop LE y x
 end
 
@@ -454,6 +443,7 @@ end
 
 module SetSymbol(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
+  module Eval = Primus.Interpreter.Make(Machine)
   open Machine.Syntax
   open Lib
 
@@ -463,7 +453,7 @@ module SetSymbol(Machine : Primus.Machine.S) = struct
       let typ = Type.imm (Word.bitwidth (Value.to_word x)) in
       let var = Var.create reg typ in
       Eval.set var x >>| fun () -> x
-    | _ -> Lisp.failf "set-symbol-value expects exactly two arguments" ()
+    | _ -> failf "set-symbol-value expects exactly two arguments" ()
 end
 
 
@@ -471,12 +461,13 @@ module Stub(Machine : Primus.Machine.S) = struct
   module Lib = Make(Machine)
   open Machine.Syntax
   open Lib
-  let run = Lisp.failf "not implemented"
+  let run = failf "not implemented"
 end
 
 module Primitives(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
   module Lisp = Primus.Lisp.Make(Machine)
+  module Eval = Primus.Interpreter.Make(Machine)
 
   let init () =
     let open Primus.Lisp.Type.Spec in
