@@ -52,7 +52,8 @@
                 linearly independent paths."
   :depends-on (bap:microexecutor-base)
   :components (bap:symbolic-computer
-               bap:symbolic-path-explorer))
+               bap:symbolic-path-explorer
+               bap:symbolic-lisp-primitives))
 
 (defsystem bap:base-taint-analyzer
   :description "Uses greedy-promiscuous-executor for taint analysis.
