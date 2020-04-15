@@ -1,1 +1,1 @@
-let path = "/home/ivg/.opam/4.09.0/share/primus"
+let path = "/Users/yana/.opam/fresh/share/primus"

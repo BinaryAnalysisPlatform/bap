@@ -1,0 +1,5 @@
+PKG core_kernel
+PKG oUnit
+PKG bap
+S .
+B ../../_build/plugins/stub_resolver

@@ -338,6 +338,8 @@ module Ir_jmp : sig
   val cond : t -> exp
   val with_cond : t -> exp -> t
   val with_kind : t -> jmp_kind -> t
+  val with_alt : t -> dst option -> t
+  val with_dst : t -> dst option -> t
   val exps : t -> exp Sequence.t
   val map_exp : t -> f:(exp -> exp) -> t
   val substitute : t -> exp -> exp -> t
