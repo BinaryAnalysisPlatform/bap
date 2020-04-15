@@ -22,7 +22,6 @@ module Make(Machine : Primus.Machine.S) = struct
 
   open Machine.Syntax
 
-  let all f args = List.exists args ~f |> Value.of_bool
   let addr_width =
     Machine.arch >>| Arch.addr_size >>| Size.in_bits
   let endian =
@@ -39,11 +38,16 @@ module Make(Machine : Primus.Machine.S) = struct
     Machine.List.map xs ~f:Value.signed >>=
     reduce (null >>= Value.signed) op
 
+  let all f args = List.exists args ~f |> Value.of_bool
+
   let ordered order xs =
     let rec ordered = function
-      | [] | [_] -> true
-      | x :: (y :: _ as rest) -> order x y && ordered rest in
-    if ordered xs then true_ else false_
+      | [] | [_] -> true_
+      | x :: (y :: _ as rest) ->
+        order x y >>= fun r ->
+        if Value.is_one r then Machine.return r
+        else ordered rest in
+    ordered xs
 end
 
 module RegName(Machine : Primus.Machine.S) = struct
@@ -408,7 +412,7 @@ module Less(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
   open Lib
 
-  let rec run = ordered Value.(<)
+  let rec run = ordered @@ Eval.binop LT
 end
 
 module Greater(Machine : Primus.Machine.S) = struct
@@ -416,7 +420,9 @@ module Greater(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
   open Lib
 
-  let rec run = ordered Value.(>)
+  let rec run = ordered @@ fun x y ->
+    Eval.binop LT y x
+
 end
 
 module LessEqual(Machine : Primus.Machine.S) = struct
@@ -424,7 +430,7 @@ module LessEqual(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
   open Lib
 
-  let rec run = ordered Value.(<=)
+  let rec run = ordered (Eval.binop LE)
 end
 
 module GreaterEqual(Machine : Primus.Machine.S) = struct
@@ -432,7 +438,8 @@ module GreaterEqual(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
   open Lib
 
-  let rec run = ordered Value.(>=)
+  let rec run = ordered @@ fun x y ->
+    Eval.binop LE y x
 end
 
 module SymbolConcat(Machine : Primus.Machine.S) = struct
