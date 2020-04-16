@@ -50,7 +50,7 @@ module Plt = struct
     | _ ->    None
 end
 
-let update prog = relink prog (Stub_resolver.find_pairs prog)
+let update prog = relink prog (Stub_resolver.run prog)
 
 let main proj =
   Plt.provide proj;
