@@ -2,29 +2,21 @@ Flag stub_resolver
   Description: Build Stub Resolver plugin
   Default: false
 
-Library stub_resolver
- Build$:       flag(everything) || flag(stub_resolver)
-  Path:         plugins/stub_resolver/
-  BuildDepends: bap, bap-knowledge, bap-core-theory, core_kernel, bitvec, bitvec-order
-  FindlibName:     stub_resolver
-  CompiledObject:  best
-  Modules:  Stub_resolver
-
 Library stub_resolver_library_plugin
   Build$:       flag(everything) || flag(stub_resolver)
   Path:         plugins/stub_resolver/
   BuildDepends: bap, bap-abi, bap-knowledge, bap-core-theory, core_kernel, bitvec, bitvec-order, bap-main
   FindlibName:     bap-plugin-stub_resolver
-  FindlibParent:   stub_resolver
   CompiledObject:  best
+  Modules:         Stub_resolver
   InternalModules: Stub_resolver_main
   XMETADescription: Substitutes calls to stubs with calls to real functions
   XMETAExtraLines:  tags="abi"
 
-Library stub_resolver_test
+Library stub_resolver_tests
   Path:           plugins/stub_resolver
-  FindLibParent:  stub_resolver
-  FindlibName:    stub_resolver_test
+  FindLibParent:  stub_resolver_library_plugin
+  FindlibName:    tests
   Build$:         flag(tests) && (flag(everything) || flag(stub_resolver))
   CompiledObject: best
   BuildDepends:   bap, oUnit, core_kernel, ppx_jane
@@ -35,7 +27,7 @@ Executable run_stub_resolver_tests
   Path:		  plugins/stub_resolver
   Build$:	  flag(tests) && (flag(everything) || flag(stub_resolver))
   CompiledObject: best
-  BuildDepends:	  findlib.dynload, oUnit, bap-main, stub_resolver.stub_resolver_test
+  BuildDepends:	  findlib.dynload, oUnit, bap-main, bap-plugin-stub_resolver.tests
   Install:	  false
   MainIs:         run_stub_resolver_tests.ml
 

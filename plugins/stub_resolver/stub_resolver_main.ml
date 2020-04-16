@@ -18,12 +18,7 @@ let relink prog links =
         | Second _ -> jmp
         | First tid -> match Map.find links tid with
           | Some tid' ->
-            Jmp.reify
-              ?cnd:(Jmp.guard jmp)
-              ?dst:(Jmp.dst jmp)
-              ~alt:(Jmp.resolved tid')
-              ~tid:(Term.tid jmp)
-              ()
+            Jmp.with_alt jmp (Some (Jmp.resolved tid'))
           | _ -> jmp
   end)#run prog
 
