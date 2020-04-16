@@ -182,10 +182,9 @@ let stage2 stage1 = object
     else prog
 end
 
-module StringMap = Map.Make(String)
-let registry = ref StringMap.empty
-let register name abi = registry := StringMap.set !registry ~key:name ~data:abi
-let get_processor name = StringMap.find !registry name
+let registry = Hashtbl.create (module String)
+let register name abi = Hashtbl.set registry ~key:name ~data:abi
+let get_processor name = Hashtbl.find registry name
 
 let create_api_processor size abi : Bap_api.t =
   let addr_size = size#pointer in
