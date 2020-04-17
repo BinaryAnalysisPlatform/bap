@@ -122,8 +122,7 @@ let run name symbols expected should_fail _ctxt =
             (tid_for_name_exn prog impl)) in
   let pairs = Stub_resolver.run prog in
   let equal = Map.equal Tid.equal expected pairs in
-  let equal = if should_fail then not equal else equal in
-  assert_bool name equal
+  assert_bool name (equal || should_fail)
 
 let real name aliases = name, {is_stub = false; aliases}
 let stub name aliases = name, {is_stub = true; aliases}
@@ -138,7 +137,7 @@ let suite = "stub-resolver" >::: [
       stub "a1" ["a0"];
     ] ~expected:["a1", "a0"];
 
-    test "simple case: stub goes first" [
+    test "simple case: mapping should be from stub to impl" [
       real "a0"  [];
       stub "a1" ["a0"];
     ] ~expected:["a0", "a1"] ~should_fail:true;
