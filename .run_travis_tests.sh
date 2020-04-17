@@ -22,6 +22,7 @@ if [ "$TASK" == "unit_tests" ]; then
     bap_powerpc_tests
     bap_piqi_tests
     bap_traces_tests
+    bap_stub_resolver_tests
 fi
 
 if [ "$TASK" == "veri" ]; then
