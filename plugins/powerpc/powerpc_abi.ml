@@ -80,6 +80,7 @@ let main proj = match Project.arch proj with
         insert_args = dispatch (module Abi32);
         apply_attrs = fun _ -> ident
       } in
+    C.Abi.register Abi32.name abi;
     let api = C.Abi.create_api_processor Abi32.size abi in
     Bap_api.process api;
     let prog = Project.program proj in

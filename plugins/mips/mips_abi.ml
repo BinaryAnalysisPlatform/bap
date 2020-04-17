@@ -105,6 +105,7 @@ let set_abi proj m =
       insert_args = dispatch m (Project.arch proj);
       apply_attrs = fun _ -> ident
     } in
+  C.Abi.register A.name abi;
   let api = C.Abi.create_api_processor A.size abi in
   Bap_api.process api;
   let prog = Project.program proj in
