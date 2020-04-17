@@ -316,23 +316,19 @@ end = struct
     let addr = Dict.find s.dict Bap_attributes.address in
     let name = mangle_name addr s.tid s.self.name in
     Tid.add_name s.tid s.self.name;
-    Tid.add_name s.tid name;
+    Tid.set_name s.tid name;
     let self = {s.self with name} in
     {s with self}
 
-  let fix_names olds news =
-    let is_new tid name =
-      match Array.find olds ~f:(fun s -> Tid.equal s.tid tid) with
-      | Some s -> String.(name <> s.self.name)
-      | None -> true in
+  let fix_names news =
+    let is_new sub = sub.tid <> Tid.for_name sub.self.name in
     let keep_name tids name tid = Map.set tids ~key:name ~data:tid in
     let tids = Array.fold news ~init:String.Map.empty ~f:(fun tids sub ->
         match Map.find tids sub.self.name with
         | None -> keep_name tids sub.self.name sub.tid
         | Some _ ->
-          if is_new sub.tid sub.self.name then
-            keep_name tids sub.self.name sub.tid
-          else tids) in
+          if is_new sub then tids
+          else keep_name tids sub.self.name sub.tid) in
     if Array.length news = Map.length tids then news
     else
       Array.map news ~f:(fun sub ->
@@ -342,7 +338,7 @@ end = struct
 
   let empty () = {subs = [| |] ;  paths = Tid.Table.create () }
 
-  let update p subs = { p with subs = fix_names p.subs subs }
+  let update p subs = { p with subs = fix_names subs }
 
   let compare x y =
     let compare x y = [%compare:sub term array] x y in

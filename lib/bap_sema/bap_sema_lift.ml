@@ -306,7 +306,6 @@ let program symtab =
       | Ok () -> tid
       | Error _ ->
         let tid = Tid.create () in
-        Tid.set_name tid name;
         Hash_set.strict_add_exn tids tid;
         tid in
   Seq.iter (Symtab.to_sequence symtab) ~f:(fun (name,entry,cfg) ->
