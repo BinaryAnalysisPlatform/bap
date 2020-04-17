@@ -107,7 +107,7 @@ let tid_for_name_exn prog name =
         else None) |>
   Option.value_exn
 
-let run name symbols expected _ctxt =
+let run name symbols expected should_fail _ctxt =
   let syms =
     List.fold symbols ~init:(Map.empty (module String))
       ~f:(fun syms (name,data) ->
@@ -121,99 +121,113 @@ let run name symbols expected _ctxt =
             (tid_for_name_exn prog stub)
             (tid_for_name_exn prog impl)) in
   let pairs = Stub_resolver.run prog in
-  assert_bool name (Map.equal Tid.equal expected pairs)
+  let equal = Map.equal Tid.equal expected pairs in
+  let equal = if should_fail then not equal else equal in
+  assert_bool name equal
 
-let symbol ?(is_stub=false) ?(aliases=[]) name =
-  name, {is_stub; aliases}
+let real name aliases = name, {is_stub = false; aliases}
+let stub name aliases = name, {is_stub = true; aliases}
 
-let test name ~symbols ~expected =
-  name >:: run name symbols expected
+let test name ?(should_fail=false) ~expected symbols  =
+  name >:: run name symbols expected should_fail
 
 let suite = "stub-resolver" >::: [
 
-    test "simple case: we have pairs"
-      ~symbols:[
-        symbol "alpha";
-        symbol "alpha_2" ~is_stub:true ~aliases:["alpha"];
-      ]
-      ~expected:["alpha_2", "alpha"];
+    test "simple case: we have pairs" [
+      real "a0"  [];
+      stub "a1" ["a0"];
+    ] ~expected:["a1", "a0"];
 
-    test "simple case: no pairs"
-      ~symbols:[
-        symbol "bravo";
-        symbol "bravo_2" ~is_stub:true;
-      ]
-      ~expected:[];
+    test "simple case: stub goes first" [
+      real "a0"  [];
+      stub "a1" ["a0"];
+    ] ~expected:["a0", "a1"] ~should_fail:true;
 
-    test "simple case: still no pairs"
-      ~symbols:[
-        symbol "charlie";
-        symbol "charlie_2" ~is_stub:true ~aliases:["some-sym"];
-      ]
-      ~expected:[];
+    test "simple case: no pairs" [
+      real "b0" [];
+      stub "b1" [];
+    ] ~expected:[];
 
-    test "stubs only"
-      ~symbols:[
-        symbol "delta" ~is_stub:true;
-        symbol "delta_2" ~is_stub:true ~aliases:["delta"];
-      ]
-      ~expected:[];
+    test "simple case: still no pairs" [
+      real "c0" [];
+      stub "c1" ["c2"];
+    ] ~expected:[];
 
-    test "impl only"
-      ~symbols:[
-        symbol "echo";
-        symbol "echo_2" ~aliases:["echo"];
-      ]
-      ~expected:[];
+    test "stubs only" [
+      stub "d0" [];
+      stub "d1" ["d0"];
+    ] ~expected:[];
 
-    test "impl can be aliases as well"
-      ~symbols:[
-        symbol "foxtrot" ~aliases:["golf"];
-        symbol "golf" ~is_stub:true;
-      ]
-      ~expected:["golf", "foxtrot"];
+    test "impl only" [
+      real "e0" [];
+      real "e1" ["e0"];
+    ] ~expected:[];
 
-    test "many alias"
-      ~symbols:[
-        symbol "hotel" ~aliases:["india"; "juliet"];
-        symbol "india" ~is_stub:true;
-      ]
-      ~expected:["india", "hotel"];
+    test "impl can be aliased as well" [
+      real "f0" ["f1"];
+      stub "f1" [];
+    ] ~expected:["f1", "f0"];
 
-    test "ambiguous impl"
-      ~symbols:[
-        symbol "kilo" ~aliases:["kilo_2"; "kilo_3"];
-        symbol "kilo_2" ~is_stub:true;
-        symbol "kilo_3" ~is_stub:true;
-      ]
-      ~expected:[];
+    test "many aliases" [
+      real "g0" ["g1"; "g2"];
+      stub "g1" [];
+    ] ~expected:["g1", "g0"];
 
-    test "ambiguous stubs"
-      ~symbols:[
-        symbol "lima";
-        symbol "lima_2" ~is_stub:true ~aliases:["lima"];
-        symbol "lima_3" ~is_stub:true ~aliases:["lima"];
-      ]
-      ~expected:[];
+    test "ambiguous impl" [
+      real "h0" ["h1"; "h2"];
+      stub "h1" [];
+      stub "h2" [];
+    ] ~expected:[];
 
-    test "crossreference"
-      ~symbols:[
-        symbol "mike" ~aliases:["november"];
-        symbol "november" ~is_stub:true ~aliases:["mike"];
-      ]
-      ~expected:["november", "mike"];
+    test "ambiguous stubs" [
+      real "i0" [];
+      stub "i1" ["i0"];
+      stub "i2" ["i0"];
+    ] ~expected:[];
 
-    test "many pairs"
-      ~symbols:[
-        symbol "papa" ;
-        symbol "quebec";
-        symbol "romeo";
-        symbol "siera" ~is_stub:true ~aliases:["papa"];
-        symbol "tango" ~is_stub:true ~aliases:["quebec"];
-        symbol "uniform" ~is_stub:true ~aliases:["romeo"];
+    test "crossreference" [
+      real "j0" ["j1"];
+      stub "j1" ["j0"];
+    ] ~expected:["j1", "j0"];
 
-      ]
-      ~expected:["siera",   "papa";
-                 "tango",   "quebec";
-                 "uniform", "romeo";];
+    test "many pairs" [
+      real "k0" [];
+      real "k1" [];
+      real "k2" [];
+      stub "k3" ["k0"];
+      stub "k4" ["k1"];
+      stub "k5" ["k2"];
+    ] ~expected:[
+      "k3", "k0";
+      "k4", "k1";
+      "k5", "k2";
+    ];
+
+    test "several intersections 1" [
+      stub "m0" ["m2"; "m3"; "m4"];
+      real "m1" ["m0"];
+      stub "m5" ["m6"; "m7"; "m8"];
+      real "m6" ["m5"; "m9"];
+      real "m9" ["m10"];
+      stub "m10" [];
+    ] ~expected:["m0", "m1"; ];
+
+    test "several intersections 2" [
+      stub "n0" ["n1"; "n2"; "n3"];
+      real "n1" [];
+      real "n4" ["n5"];
+      stub "n5" [];
+      real "n6" [];
+      stub "n7" ["n6"];
+      real "n8" ["n1"; "n5"]
+    ] ~expected:["n7", "n6" ];
+
+    test "several intersections 3" [
+      stub "p0" ["p1"; "p2"; "p3"];
+      stub "p4" ["p5"; "p6"; "p7"];
+      real "p5" [];
+      stub "p6" ["p8"; "p9"; "p10"; "p4"];
+      real "p11" ["p12"; "p13"; "p1"];
+    ] ~expected:["p0", "p11" ];
+
   ]

@@ -2,6 +2,7 @@ open Core_kernel
 open Bap.Std
 open Bap_core_theory
 open Bap_knowledge
+open Bap_future.Std
 include Self ()
 
 open Bap_main
@@ -29,16 +30,16 @@ module Plt = struct
     | Some x -> String.(x = name)
     | _ -> false
 
-  let section_memory proj sec_name =
+  let section_memory mem sec_name =
     let collect_addresses addrs (mem,_ )=
       Memory.foldi mem ~word_size:`r8 ~init:addrs
         ~f:(fun addr _ acc -> Set.add acc (Word.to_bitvec addr)) in
-    Memmap.filter (Project.memory proj) ~f:(is_section sec_name) |>
+    Memmap.filter mem ~f:(is_section sec_name) |>
     Memmap.to_sequence |>
     Seq.fold ~init:(Set.empty (module Bitvec_order)) ~f:collect_addresses
 
-  let provide proj =
-    let stubs = section_memory proj ".plt" in
+  let provide mem =
+    let stubs = section_memory mem ".plt" in
     KB.promise (Value.Tag.slot Sub.stub) @@ fun label ->
     KB.collect Theory.Label.addr label >>| function
     | Some addr when Set.mem stubs addr -> Some ()
@@ -48,7 +49,6 @@ end
 let update prog = relink prog (Stub_resolver.run prog)
 
 let main proj =
-  Plt.provide proj;
   Project.with_program proj (update @@ Project.program proj)
 
 let () = Extension.documentation {|
@@ -60,7 +60,7 @@ let () = Extension.documentation {|
 
 |}
 
-
 let () = Extension.declare @@ fun _ctxt ->
+  Stream.observe Project.Info.data @@ Plt.provide;
   Bap_abi.register_pass main;
   Ok ()

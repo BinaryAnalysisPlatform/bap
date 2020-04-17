@@ -7806,16 +7806,24 @@ module Std : sig
         that occur in jump [jmp] expressions.*)
     val substitute : t -> exp -> exp -> t
 
-    (** [with_cond jmp c] updates jump's guard condition  *)
+    (** [with_cond jmp c] updates jump's guard condition
+
+        @since 2.0.0 *)
     val with_cond : t -> exp -> t
 
-    (** [with_kind jmp k] updates jump's kind  *)
+    (** [with_kind jmp k] updates jump's kind
+
+        @since 2.0.0 *)
     val with_kind : t -> jmp_kind -> t
 
-    (** [with_alt jmp d] updates jump's inter-procedural destination  *)
+    (** [with_alt jmp d] updates jump's inter-procedural destination
+
+        @since 2.1.0 *)
     val with_alt : t -> dst option -> t
 
-    (** [with_dst jmp d] updates jump's intra-procedural destination  *)
+    (** [with_dst jmp d] updates jump's intra-procedural destination
+
+        @since 2.1.0 *)
     val with_dst : t -> dst option -> t
 
     (** [pp_slots names] prints slots that are in [names].  *)
