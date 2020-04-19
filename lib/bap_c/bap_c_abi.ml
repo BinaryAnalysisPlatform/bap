@@ -182,6 +182,10 @@ let stage2 stage1 = object
     else prog
 end
 
+let registry = Hashtbl.create (module String)
+let register name abi = Hashtbl.set registry ~key:name ~data:abi
+let get_processor name = Hashtbl.find registry name
+
 let create_api_processor size abi : Bap_api.t =
   let addr_size = size#pointer in
   let stage1 gamma = object(self)

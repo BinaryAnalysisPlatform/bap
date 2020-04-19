@@ -117,6 +117,7 @@ install: [
   ["ocamlfind" "remove" "bap-plugin-print"]
   ["ocamlfind" "remove" "bap-plugin-report"]
   ["ocamlfind" "remove" "bap-plugin-read_symbols"]
+  ["ocamlfind" "remove" "bap-plugin-stub_resolver"]
   ["ocamlfind" "remove" "bap-plugin-x86"]
   ["ocamlfind" "remove" "bap-traces"]
   ["ocamlfind" "remove" "bap-taint"]
@@ -161,6 +162,7 @@ install: [
   ["cp" "run_powerpc_tests.native" "%{bin}%/bap_powerpc_tests"]
   ["cp" "run_piqi_tests.native" "%{bin}%/bap_piqi_tests"]
   ["cp" "run_traces_tests.native" "%{bin}%/bap_traces_tests"]
+  ["cp" "run_stub_resolver_tests.native" "%{bin}%/bap_stub_resolver_tests"]
 ]
 remove: [
   ["ocamlfind" "remove" "bap-main"]
@@ -226,6 +228,7 @@ remove: [
   ["ocamlfind" "remove" "bap-plugin-raw"]
   ["ocamlfind" "remove" "bap-plugin-report"]
   ["ocamlfind" "remove" "bap-plugin-read_symbols"]
+  ["ocamlfind" "remove" "bap-plugin-stub_resolver"]
   ["ocamlfind" "remove" "bap-plugin-x86"]
   ["ocamlfind" "remove" "bap-traces"]
   ["ocamlfind" "remove" "bap-taint"]
@@ -281,6 +284,8 @@ remove: [
   ["rm" "-f" "%{bin}%/bap_powerpc_tests"]
   ["rm" "-f" "%{bin}%/bap_piqi_tests"]
   ["rm" "-f" "%{bin}%/bap_traces_tests"]
+  ["rm" "-f" "%{bin}%/bap_stub_resolver_tests"]
+
 ]
 depexts: [
   [
