@@ -40,30 +40,28 @@ module GC = struct
 
   let () = Random.self_init ()
 
-  let remove_entry path =
+  let remove path =
     try Sys.remove path
     with exn ->
       warning "unable to remove entry: %s" (Exn.to_string exn)
 
-  let remove size_to_free =
-    let dir = cache_data () in
-    let rec loop entries freed len =
-      if freed < size_to_free && len > 0 then
+  let remove_random dir size_to_free entries =
+    let entries_number = Array.length entries in
+    let rec loop freed_size removed =
+      if removed < entries_number && freed_size < size_to_free
+      then
+        let len = entries_number - removed in
         let elt = Random.int len in
-        let last = len - 1 in
-        let () = Array.swap entries elt last in
-        let path = dir / entries.(last) in
+        let () = Array.swap entries elt (len - 1) in
+        let path = dir / entries.(len - 1) in
         let size = file_size path in
-        remove_entry path;
-        loop entries Int64.(freed + size) (len - 1) in
-    let files = Sys.readdir dir in
-    loop files 0L (Array.length files)
-
-  let remove s = with_lock ~f:(fun () -> remove s)
+        remove path;
+        loop Int64.(freed_size + size) (removed + 1) in
+    loop 0L 0
 
   let clean () =
     with_lock ~f:(fun () ->
-        fold_entries ~init:() ~f:(fun _ -> remove_entry))
+        fold_entries ~init:() ~f:(fun _ -> remove))
 
   let shrink ?threshold ~upto () =
     let open Int64 in
@@ -71,10 +69,9 @@ module GC = struct
         let upper_bound = match threshold with
           | None -> upto
           | Some t -> t in
-        let () = printf "upper bound %Ld, size %Ld\n"
-            upper_bound size in
         if size > upper_bound then
-          remove (size - upto))
+          let dir = cache_data () in
+          remove_random dir (size - upto) (Sys.readdir dir))
 
 end
 
