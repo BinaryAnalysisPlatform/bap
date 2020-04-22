@@ -1,3 +1,11 @@
+let doc = {|
+# DESCRIPTION
+
+
+
+
+|}
+
 open Core_kernel
 open Bap_main
 open Bap.Std
@@ -14,7 +22,6 @@ let parse_exp ~width s =
     let x = Bitvec.(bigint (Z.of_string s) mod m) in
     Bil.int (Word.create x width)
   else Bil.var (Var.create s (Type.Imm width))
-
 
 module Generator = struct
 
@@ -33,7 +40,6 @@ module Generator = struct
     | Static
     | Random
   [@@deriving sexp]
-
 
   type generator = {
     predicate : predicate;
@@ -90,6 +96,7 @@ module Generator = struct
 
   let pp_predicate ppf = function
     | Any -> Format.fprintf ppf "_"
+    | Var [] -> Format.fprintf ppf "(var _)"
     | Var vars -> Format.fprintf ppf "(var %a)" pp_strings vars
     | Mem Default -> Format.fprintf ppf "(mem _)"
     | Mem (Address str | Section str) ->
@@ -111,12 +118,18 @@ module Generator = struct
   let parse str =
     Sexp.of_string str |> of_sexp
 
+  let default_generator = {
+    predicate=Any;
+    distribution=Random;
+    parameters=[]
+  }
+
   let t =
     Extension.Type.define
-      ~name:"GEN" ~parse ~print:to_string
-      {predicate=Any; distribution=Static; parameters=[]}
+      ~name:"GEN" ~parse ~print:to_string default_generator
 
-  let list = Extension.Type.(list t)
+
+  let list = Extension.Type.(list t =? [default_generator])
 
   let create_uniform ?width ps =
     let min, max = match ps with
@@ -158,7 +171,7 @@ module Generator = struct
       else None)
 
   let for_var ?width v = first_match ?width @@ function
-    | Var [] -> true
+    | Var [] | Any -> true
     | Var names -> List.mem names ~equal:String.equal (Var.name v)
     | _ -> false
 end
@@ -171,12 +184,45 @@ let init = Extension.Configuration.parameters
     Extension.Type.(list file) "init"
     ~doc:"A list of generator initialization scripts."
 
+
+type arg_generators = {
+  args : Primus.Generator.t Var.Map.t
+}
+
+
+let debug_msg,post_msg = Primus.Observation.provide "random-debug"
+    ~inspect:sexp_of_string
+
+module Debug(Machine : Primus.Machine.S) = struct
+  open Machine.Syntax
+  let msg fmt = Format.kasprintf (fun msg ->
+      let msg = Format.asprintf "%s" msg in
+      Machine.Observation.make post_msg msg) fmt
+end
+
 let main ctxt =
   let open Extension.Syntax in
   let generators =
     ctxt-->generators @
     List.concat_map (ctxt-->init) ~f:(fun files ->
         List.concat_map files ~f:Generator.from_file) in
+
+  let args = Primus.Machine.State.declare
+      ~uuid:"2d9a70fb-8433-4a53-a750-3151f9366cb6"
+      ~name:"generators-for-arguments" @@ fun proj ->
+    let prog = Project.program proj in
+    Term.enum sub_t prog |>
+    Seq.fold ~init:{args=Var.Map.empty} ~f:(fun init sub ->
+        Term.enum arg_t sub |>
+        Seq.fold ~init ~f:(fun {args} arg ->
+            if Arg.intent arg = Some In then {args}
+            else match Var.typ (Arg.lhs arg) with
+              | Unk | Mem _ -> {args}
+              | Imm width ->
+                let var = Arg.lhs arg in
+                match Generator.for_var ~width var generators with
+                | None -> {args}
+                | Some gen -> {args = Map.set args var gen})) in
   let module RandomizeEnvironment(Machine : Primus.Machine.S) = struct
     open Machine.Syntax
 
@@ -239,7 +285,7 @@ let main ctxt =
       let width = Arch.addr_size arch |> Size.in_bits in
       List.rev generators |>
       Machine.List.iter ~f:(function
-          | {Generator.predicate=Mem Default} -> Machine.return ()
+          | {Generator.predicate=Mem Default|Any} -> Machine.return ()
           | {predicate = Mem region; distribution; parameters} ->
             let generator = Generator.create distribution parameters in
             let lower,upper = match region with
@@ -279,12 +325,80 @@ let main ctxt =
       Machine.arch >>= fun arch ->
       let width = Arch.addr_size arch |> Size.in_bits in
       let generator = Generator.first_match ~width (function
-          | Mem Default -> true
+          | Mem Default | Any -> true
           | _ -> false) generators in
       Machine.sequence [
         Primus.Interpreter.pagefault >>> pagefault ?generator;
         initialize_regions;
       ]
+  end in
+
+  let module PertubeOutputs(Machine : Primus.Machine.S) = struct
+    open Machine.Syntax
+
+    module Eval = Primus.Interpreter.Make(Machine)
+    module Val = Primus.Value.Make(Machine)
+    module Env = Primus.Env.Make(Machine)
+    module Mem = Primus.Memory.Make(Machine)
+    module Gen = Primus.Generator.Make(Machine)
+    module Debug = Debug(Machine)
+
+    let pertube_var gen v = match Var.typ v with
+      | Mem _ | Unk -> Machine.return ()
+      | Imm m ->
+        let n = Primus.Generator.width gen in
+        Gen.word gen n >>|
+        Word.extract_exn ~hi:(m-1) >>=
+        Val.of_word >>= Eval.set v
+
+    let is_entry sub blk = match Term.first blk_t sub with
+      | Some entry -> Term.same blk entry
+      | None -> false
+
+    let pertube gen : exp -> unit Machine.t = function
+      | Var v -> pertube_var gen v
+      | Load (_,ptr,endian,size) ->
+        Eval.exp ptr >>= fun ptr ->
+        Gen.word gen (Size.in_bits size) >>=
+        Val.of_word >>= fun value ->
+        Eval.store ptr value endian size
+      | exp ->
+        Exp.free_vars exp |>
+        Set.to_sequence |>
+        Machine.Seq.iter ~f:(pertube_var gen)
+
+    let exec =
+      Debug.msg "the unresolved handler is called" >>= fun () ->
+      Eval.pos >>= function
+      | Primus.Pos.Jmp {up={me=blk; up={me=sub}}}
+        when is_entry sub blk ->
+        Machine.Local.get args >>= fun {args} ->
+        Term.enum arg_t sub |>
+        Machine.Seq.iter ~f:(fun arg ->
+            match Map.find args (Arg.lhs arg) with
+            | Some gen ->
+              Debug.msg "pertubing argument %a" Arg.pp arg >>= fun () ->
+              pertube gen (Arg.rhs arg)
+            | None ->
+              Debug.msg
+                "skipping %a as there is no matching generator"
+                Arg.pp arg
+              >>= fun () ->
+              Machine.return ())
+      | p ->
+        Debug.msg "called in a wrong position: %s"
+          (Primus.Pos.to_string  p)
+
+  end in
+
+  let module HandleUnresolvedCalls(Machine : Primus.Machine.S) = struct
+    open Machine.Syntax
+    module Linker = Primus.Linker.Make(Machine)
+
+    let name = Primus.Linker.unresolved_handler
+
+    let init () =
+      Linker.link ~name (module PertubeOutputs)
   end in
 
   Primus.Components.register_generic "var-randomizer"
@@ -294,6 +408,13 @@ let main ctxt =
   Primus.Components.register_generic "mem-randomizer"
     (module RandomizeMemory) ~package:"bap"
     ~desc:"Randomizes process memory.";
+
+  Primus.Components.register_generic "arg-randomizer"
+    (module HandleUnresolvedCalls) ~package:"bap"
+    ~desc:"Randomizes output arguments of unbound procedures, as well
+      as prevents failures when such procedures are called by trapping
+      the unresolved handler.";
+
   Ok ()
 
 let () = Extension.declare main

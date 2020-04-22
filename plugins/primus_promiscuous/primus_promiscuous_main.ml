@@ -202,57 +202,12 @@ module EnableDivisionByZero(Machine : Primus.Machine.S) = struct
       (module DoNothing)
 end
 
-
-module UnbindOutputs(Machine : Primus.Machine.S) = struct
-  open Machine.Syntax
-
-  module Eval = Primus.Interpreter.Make(Machine)
-  module Env = Primus.Env.Make(Machine)
-  module Mem = Primus.Memory.Make(Machine)
-
-  let is_entry sub blk = match Term.first blk_t sub with
-    | Some entry -> Term.same blk entry
-    | None -> false
-
-  let undefine : exp -> unit Machine.t = function
-    | Var v -> Env.del v
-    | Load (_,p,_,sz) ->
-      Eval.exp p >>| Primus.Value.to_word >>= fun p ->
-      Seq.range 0 (Size.in_bytes sz) |>
-      Machine.Seq.iter ~f:(fun off ->
-          Mem.del Addr.(p ++ off))
-    | exp ->
-      Exp.free_vars exp |>
-      Set.to_sequence |>
-      Machine.Seq.iter ~f:Env.del
-
-  let exec =
-    Eval.pos >>= function
-    | Primus.Pos.Blk {me=blk; up={me=sub}} when is_entry sub blk ->
-      Term.enum arg_t sub |>
-      Machine.Seq.iter ~f:(fun arg ->
-          match Arg.intent arg with
-          | Some (Out | Both) | None -> undefine (Arg.rhs arg)
-          | Some In -> Machine.return ())
-    | _ -> Machine.return ()
-end
-
-module HandleUnresolvedCalls(Machine : Primus.Machine.S) = struct
-  open Machine.Syntax
-  module Linker = Primus.Linker.Make(Machine)
-
-  let name = Primus.Linker.unresolved_handler
-
-  let init () =
-    Linker.link ~name (module UnbindOutputs)
-end
-
 let legacy_promiscous_mode_components = [
   "var-randomizer";
   "mem-randomizer";
+  "arg-randomizer";
   "promiscuous-path-explorer";
   "division-by-zero-handler";
-  "unresolved-calls-handler";
 ]
 
 let enable_legacy_promiscuous_mode () =
@@ -281,7 +236,6 @@ manpage [
 
 let enabled = flag "mode" ~doc:"(DEPRECATED) Enable the mode."
 
-
 let () = when_ready (fun {get=(!!)} ->
     Primus.Components.register_generic "promiscuous-path-explorer"
       (module Forker) ~package
@@ -291,9 +245,4 @@ let () = when_ready (fun {get=(!!)} ->
       (module EnableDivisionByZero) ~package
       ~desc:"Disables division by zero errors.";
 
-    Primus.Components.register_generic "unresolved-calls-handler"
-      (module HandleUnresolvedCalls) ~package
-      ~desc:"Prevents failures on unresolved calls, but unbinds
-      registers and memory locations that should be defined by
-      an unresolved call.";
     if !!enabled then enable_legacy_promiscuous_mode ());
