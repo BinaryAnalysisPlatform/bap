@@ -266,10 +266,17 @@ let update_progress result =
   let total = !finished + Primus.Jobs.pending () + 1 in
   report_progress ~stage:!finished ~total ()
 
-let on_success job _ _ result : Primus.Jobs.action =
-  info "job %s finished successfully" (Primus.Job.name job);
+let on_success job status _ result : Primus.Jobs.action =
   update_progress result;
-  Continue
+  match status with
+  | Primus.Normal | Exn Primus.Interpreter.Halt ->
+    info "job %s finished successfully" (Primus.Job.name job);
+    Continue
+  | Primus.Exn e ->
+    error "job %s finished abnormally with exception: %s"
+      (Primus.Job.name job)
+      (Primus.Exn.to_string e);
+    Continue
 
 let on_failure job conflict result : Primus.Jobs.action =
   info "job %s failed to converge and exited with conflict: %a"
