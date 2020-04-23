@@ -108,15 +108,13 @@ let static ?(width=8) value =
 
 module Random = struct
   module MCG = Bap_primus_random.MCG
-  let create_lcg ~don't_seed ?(width=8) ?min ?max start =
+  let create_lcg ?(width=8) ?min ?max start =
     let module Gen = (val MCG.create_small ?min ?max width) in
-    let seed = if don't_seed
-      then fun _ -> Gen.create start
-      else Gen.create in
+    let seed s = Gen.create (s + start) in
     of_iterator ~width ~to_bitvec:ident ~seed
       (module Gen) (Gen.create start)
 
-  let lcg = create_lcg ~don't_seed:true
+  let lcg = create_lcg
   let byte seed = lcg ~min:0 ~max:255 seed
 
   module Seeded = struct
@@ -128,11 +126,10 @@ module Random = struct
       {size=width; init = Seeded init; id = !last_id}
 
     let lcg ?width ?min ?max () =
-      create_lcg ~don't_seed:false ?width ?min ?max 0
+      create_lcg ?width ?min ?max 0
 
     let byte = lcg ()
   end
-
 end
 
 

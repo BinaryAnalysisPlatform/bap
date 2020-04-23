@@ -131,7 +131,7 @@ module Generator = struct
 
   let list = Extension.Type.(list t =? [default_generator])
 
-  let create_uniform ?width ps =
+  let create_uniform ?(seed=0) ?width ps =
     let min, max = match ps with
       | [] -> None, None
       | [max] -> None, Some (int_of_string max)
@@ -141,7 +141,7 @@ module Generator = struct
       | _ ->
         invalid_argf "Generator Uniform expects less \
                       than 3 arguments" () in
-    Primus.Generator.Random.Seeded.lcg ()
+    Primus.Generator.Random.lcg seed
       ?width ?min ?max
 
   let create_const ?width = function
@@ -161,16 +161,16 @@ module Generator = struct
       end) 0 ~to_bitvec:ident ?width
 
 
-  let create ?width n ps = match n with
-    | Random -> create_uniform ?width ps
+  let create ?seed ?width n ps = match n with
+    | Random -> create_uniform ?seed ?width ps
     | Static -> create_const ?width ps
 
-  let first_match ?width matches = List.find_map ~f:(fun s ->
+  let first_match ?seed ?width matches = List.find_map ~f:(fun s ->
       if matches s.predicate
-      then Some (create ?width s.distribution s.parameters)
+      then Some (create ?seed ?width s.distribution s.parameters)
       else None)
 
-  let for_var ?width v = first_match ?width @@ function
+  let for_var ?seed ?width v = first_match ?seed ?width @@ function
     | Var [] | Any -> true
     | Var names -> List.mem names ~equal:String.equal (Var.name v)
     | _ -> false
@@ -184,6 +184,9 @@ let init = Extension.Configuration.parameters
     Extension.Type.(list file) "init"
     ~doc:"A list of generator initialization scripts."
 
+let seed = Extension.Configuration.parameter
+    Extension.Type.int "seed"
+    ~doc:"The seed that will be used to initialize all generators"
 
 type arg_generators = {
   args : Primus.Generator.t Var.Map.t
@@ -206,7 +209,7 @@ let main ctxt =
     ctxt-->generators @
     List.concat_map (ctxt-->init) ~f:(fun files ->
         List.concat_map files ~f:Generator.from_file) in
-
+  let seed = ctxt-->seed in
   let args = Primus.Machine.State.declare
       ~uuid:"2d9a70fb-8433-4a53-a750-3151f9366cb6"
       ~name:"generators-for-arguments" @@ fun proj ->
@@ -220,7 +223,7 @@ let main ctxt =
               | Unk | Mem _ -> {args}
               | Imm width ->
                 let var = Arg.lhs arg in
-                match Generator.for_var ~width var generators with
+                match Generator.for_var ~seed ~width var generators with
                 | None -> {args}
                 | Some gen -> {args = Map.set args var gen})) in
   let module RandomizeEnvironment(Machine : Primus.Machine.S) = struct
@@ -239,7 +242,8 @@ let main ctxt =
       Set.to_sequence |>
       Machine.Seq.iter ~f:(fun var -> match Var.typ var with
           | Mem _ | Unk -> Machine.return ()
-          | Imm width -> match Generator.for_var ~width var generators with
+          | Imm width ->
+            match Generator.for_var ~seed ~width var generators with
             | None -> Machine.return ()
             | Some gen -> Env.add var gen)
     let init () = randomize_vars
@@ -287,7 +291,8 @@ let main ctxt =
       Machine.List.iter ~f:(function
           | {Generator.predicate=Mem Default|Any} -> Machine.return ()
           | {predicate = Mem region; distribution; parameters} ->
-            let generator = Generator.create distribution parameters in
+            let generator =
+              Generator.create ~seed ~width distribution parameters in
             let lower,upper = match region with
               | Address lower -> lower,None
               | Section name ->
@@ -324,7 +329,7 @@ let main ctxt =
     let init () =
       Machine.arch >>= fun arch ->
       let width = Arch.addr_size arch |> Size.in_bits in
-      let generator = Generator.first_match ~width (function
+      let generator = Generator.first_match ~seed ~width (function
           | Mem Default | Any -> true
           | _ -> false) generators in
       Machine.sequence [
