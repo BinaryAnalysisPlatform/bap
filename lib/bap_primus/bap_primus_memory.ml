@@ -308,7 +308,7 @@ module Make(Machine : Machine) = struct
       perms={readonly; executable};
       mem = Dynamic {base;len; value = match generator with
           | Some g -> g
-          | None -> Generator.Random.Seeded.lcg ~width ~min:0 ~max:256 ()}
+          | None -> Generator.Random.Seeded.lcg ~width ()}
     } >>= fun s ->
     match init with
     | None -> put_curr s

@@ -1,8 +1,181 @@
 let doc = {|
 # DESCRIPTION
 
+Provides components for Primus state randomization and controls their
+parameters.
 
+This module provides three highly customizable components for state
+randomization:
 
+- bap:var-randomizer;
+
+- bap:mem-randomizer;
+
+- bap:arg-randomizer.
+
+The $(b,bap:var-randomizer) component randomizes unbound
+variables. When this component is enabled a read operation from a
+variable that wasn't set before will produce a random value instead
+of terminating the program with the unbound value exception.
+
+The $(b,mem-randomizer) does the same for the Primus memory. It may
+also preload pages of memory with user specified properties, as well
+as hot-load pages on each page fault. This component is also disabling
+the page protection mechanism, thus preventing the segmentation
+faults. The memory protection can be re-enabled with the
+$(b,--primus-random-preserve-protection) flag.
+
+The $(b,arg-randomizer) component traps the unresolved call exception
+and enables randomization of the output parameters of the unresolved
+functions. It employs the unresolved handler mechanism of the
+Primus Linker library. For arguments it uses IR arg terms, which are
+commonly provided by the api pass (make sure that you provide the
+header file with prototypes for missing functions). Note, that if a
+C ABI is detected by one of the ABI modules and function is missing a
+prototype, the the $(b, int(void)) prototype is assumed.
+
+All three components use Primus generators to produce random or static
+values. It is possible to set a specific generator for each variable,
+subroutine argument, or memory region. The generators can be specified
+with the $(b,--primus-random-generators) command line argument or put
+in files and loaded with $(b,--primus-random-init).
+
+The specification is a list of generator specifications, with each
+generator specification consisting of two parts: an optional
+predicate and the generator parameters. The generators are checked in
+order and the first matching generator is used. Each generator
+specification is an s-expression. When no predicates or parameters are
+specified, then it could be just the name of the generator, e.g.,
+$(b,random) - matches with all values and uses a uniform pseudo-random
+generator, and $(b,static) also matches with any value and use
+the static value (zero by default). The more general form of the
+specification is
+
+```
+(<predicate>? <name> <params>...)
+```
+
+E.g.,
+
+```
+((var RAX) random -5 5)
+```
+
+will create a generator which when the $(b,RAX) variable is read without
+being set generates a random number uniformely distributed in the
+range -5..5 (bounds included). If the predicate is omitted, then the
+specification will match with any read or load target. There are two
+kind of predicates, predicates for variables and predicates for memory
+regions. The variable predicate accepts a list of variable names and
+matches if the variable that is being read is in the list, the
+underscore ($(b,_)) denotes the set of all possible variables (i.e.,
+it will match with any symbol), example,
+
+```
+((var RAX RDI RBX) static 42) ; if RAX or RDI or RBX is read return 42
+((var _) static 56) ; for all others return 56
+```
+
+The memory predicate also accepts the underscore symbol ($(b,_)) as
+the wildcard that will match with any address. It is also possible to
+specify the memory interval or just a single address. The addresses
+could be specified either as a numeral, that will match literally, or
+as a variable, that will be evaluated for a concrete value, when the
+machine is initialized. It is also possible to specify the a section
+by name, e.g., $(b,:<name>), which is a short-hand for the interval
+denoted by two variables, $(b,bap:<name>-lower) and
+$(b,bap:<name>-upper). Example,
+
+```
+((mem 0xC0000000 0xFFFFFFFF) static 0xA5A5A5A5) ; color the kernel space
+((mem brk RSP) random -1 0x100) ; randomize the heap with -1, 0, ... 256
+((mem RSP 0xC0000000) static 0) ; zero the unitialized stack
+((mem _) static 0x5A5A5A5A)     ; color the rest of the memory
+```
+
+There are currently only two generators, the $(b,static) generator
+that is parameterized by the list of values that will be enumerated
+when this generator is used more than once (e.g., when it is used to
+generate a subroutine argument or a memory region) , and the
+$(b,random) generator that will produce a uniformely distributed
+pseudo-random sequence of numbers. The initial value of the sequence,
+(the seed) is the sum of the hash of the Machine identifier, the
+sequential number of the generator (each generator has its own
+number), the global seed value, specified with the
+$(b,--primus-random-seed) option, and the local seed that could be
+specified for each generator individually. To accomodate this variety
+of options, the $(b,random) generator accepts from zero to three
+parameters:
+
+- $(b,(random)) - the whole range of numbers;
+
+- $(b,(random <upper>)) - between $(b,0) and $(b,<upper>);
+
+- $(b,(random <lower> <upper>)) - between $(b,<lower>) and
+  $(b,<upper>);
+
+- $(b,(random <lower> <upper> <seed>)) - between $(b,<lower>)
+  and $(b,<upper>) with the specified $(b,<seed>) mixin.
+
+Generator specifications are take either directly from the command
+line via the $(b,--primus-random-generators) option (in that case
+don't forget to delimit it with quotes to prevent your shell program
+from misinterpreting the parentheses) or from the initialization
+files, specified with the $(b,--primus-random-init) option. If no
+generators are specified, then is is the same as specifying the
+$(b,random) generator, i.e., all data will be randomized by the
+components using the uniform generator.
+
+# GRAMMAR
+
+Below is the formal grammar specified in the EBNF notation. Keep in
+mind, that $(b, ",") stands for term concatenation in EBNF, and that
+terms are separated with whitespaces. The specification syntax is a
+subset of the s-expression grammar with common lexical rules, e.g.,
+multi-word atoms could be delimited with double quotes ($(b,")) and
+comments start with the semicolon ($(b,;)).
+
+```
+specification = {generator};
+generator =
+          | "random"
+          | "static"
+          | "(" [predicate], constructor, ")";
+predicate =
+          | "_"
+          | "(", "var", "_", ")"
+          | "(", "var", ident, {ident}, ")"
+          | "(", "mem", "_", ")"
+          | "(", "mem", section, ")"
+          | "(", "mem", expression, [expression], ")"
+constructor =
+          | "static", {numeral}
+          | "random", {numeral};
+expression =
+          | numeral
+          | ident;
+section = ? a literal that starts with ':' ?;
+numeral = ? a number of arbitrary length ?;
+ident   = ? a string of characters that is not a numeral or section ?;
+```
+
+# NOTES
+
+The section specification relies on the presence of the corresponding
+runtime variables that denote their boundaries, which are expected to
+be provided by the corresponding loader components.
+
+Also, this plugin has control only on generators created by the
+three components that this plugin provides and has no control on the
+user created generators (in particular the seed parameter has no
+effect on user generators) or generators created by other plugins (for
+example primus-loader and architecture specific plugins may have their
+own randomization policies).
+
+For backward compatibility the
+$(b,bap:var-randomizer),$(b,bap:mem-randomizer), and
+$(b,bap:arg-randomizer) are added to the $(b,bap:legacy-main) system
+when the $(b,--primus-promiscuous-mode) is enabled.
 
 |}
 
@@ -84,7 +257,7 @@ module Generator = struct
         parameters = atoms pars;
       }
     | other ->
-      invalid_argf "expected layout specification, got %s"
+      invalid_argf "expected a generator specification, got %s"
         (Sexp.to_string_hum other) ()
 
   let pp_name ppf = function
@@ -118,7 +291,7 @@ module Generator = struct
   let parse str =
     Sexp.of_string str |> of_sexp
 
-  let default_generator = {
+  let default = {
     predicate=Any;
     distribution=Random;
     parameters=[]
@@ -126,22 +299,27 @@ module Generator = struct
 
   let t =
     Extension.Type.define
-      ~name:"GEN" ~parse ~print:to_string default_generator
+      ~name:"GEN" ~parse ~print:to_string default
 
 
-  let list = Extension.Type.(list t =? [default_generator])
+  let list = Extension.Type.(list t)
 
   let create_uniform ?(seed=0) ?width ps =
-    let min, max = match ps with
-      | [] -> None, None
-      | [max] -> None, Some (int_of_string max)
+    let min, max,local_seed = match ps with
+      | [] -> None, None, 0
+      | [max] -> None, Some (int_of_string max), seed
       | [min; max] ->
         Some (int_of_string min),
-        Some (int_of_string max)
+        Some (int_of_string max),
+        0
+      | [min; max; seed] ->
+        Some (int_of_string min),
+        Some (int_of_string max),
+        int_of_string seed
       | _ ->
         invalid_argf "Generator Uniform expects less \
                       than 3 arguments" () in
-    Primus.Generator.Random.lcg seed
+    Primus.Generator.Random.lcg (seed+local_seed)
       ?width ?min ?max
 
   let create_const ?width = function
@@ -178,15 +356,27 @@ end
 
 let generators = Extension.Configuration.parameter
     Generator.list "generators"
-    ~doc:"Random number generator"
+    ~doc:"A list of generator specifications. The generators are
+          processed in order, with the first matching operator having
+          the precedence. This option also has precedence over the
+          generators specified via the initialization files."
 
 let init = Extension.Configuration.parameters
     Extension.Type.(list file) "init"
-    ~doc:"A list of generator initialization scripts."
+    ~doc:
+      "A list of generator initialization scripts. Files are processed
+    in order, with the first matching operator having the precedence."
 
 let seed = Extension.Configuration.parameter
     Extension.Type.int "seed"
-    ~doc:"The seed that will be used to initialize all generators"
+    ~doc:"The seed that will be used to initialize all generators."
+
+let keep_protected = Extension.Configuration.flag
+    "preserve-protection"
+    ~doc: "Preserves page protection flags when a new page \
+           is swapped in. When this flag is not set the \
+           $(b,bap:mem-randomizer) will map missing memory pages \
+           as writable."
 
 type arg_generators = {
   args : Primus.Generator.t Var.Map.t
@@ -208,7 +398,8 @@ let main ctxt =
   let generators =
     ctxt-->generators @
     List.concat_map (ctxt-->init) ~f:(fun files ->
-        List.concat_map files ~f:Generator.from_file) in
+        List.concat_map files ~f:Generator.from_file) @
+    [Generator.default] in
   let seed = ctxt-->seed in
   let args = Primus.Machine.State.declare
       ~uuid:"2d9a70fb-8433-4a53-a750-3151f9366cb6"
@@ -236,7 +427,7 @@ let main ctxt =
       method! enter_var v vs = Set.add vs v
     end
 
-    let randomize_vars =
+    let randomize_vars _ =
       Machine.get () >>= fun proj ->
       vars_collector#run (Project.program proj) Var.Set.empty |>
       Set.to_sequence |>
@@ -246,7 +437,9 @@ let main ctxt =
             match Generator.for_var ~seed ~width var generators with
             | None -> Machine.return ()
             | Some gen -> Env.add var gen)
-    let init () = randomize_vars
+    let init () =
+      Primus.System.start >>>
+      randomize_vars
   end in
 
   let module TrapPageFault(Machine : Primus.Machine.S) = struct
@@ -284,7 +477,7 @@ let main ctxt =
        previously added, so we start with the last specified region
        and then add more specific on top of it.
     *)
-    let initialize_regions =
+    let initialize_regions _ =
       Machine.arch >>= fun arch ->
       let width = Arch.addr_size arch |> Size.in_bits in
       List.rev generators |>
@@ -323,8 +516,9 @@ let main ctxt =
       | false -> map_page ?generator Memory.is_mapped x >>= trap
       | true ->
         Memory.is_writable x >>= function
-        | false -> map_page ?generator Memory.is_writable x >>= trap
-        | true -> Machine.return ()
+        | false when not (ctxt-->keep_protected) ->
+          map_page ?generator Memory.is_writable x >>= trap
+        | _ -> Machine.return ()
 
     let init () =
       Machine.arch >>= fun arch ->
@@ -334,7 +528,7 @@ let main ctxt =
           | _ -> false) generators in
       Machine.sequence [
         Primus.Interpreter.pagefault >>> pagefault ?generator;
-        initialize_regions;
+        Primus.System.start >>> initialize_regions;
       ]
   end in
 
@@ -422,4 +616,5 @@ let main ctxt =
 
   Ok ()
 
-let () = Extension.declare main
+let () = Extension.declare ~doc main
+    ~provides:["primus"]
