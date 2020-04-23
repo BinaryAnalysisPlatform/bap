@@ -53,21 +53,21 @@ module Bound = struct
   let print ppf {limit; counter} =
     Format.fprintf ppf "%d%s" limit (suffix_of_counter counter)
 
-  let converter = Config.converter parse print {limit=0; counter=Clk}
+  let t = Config.converter parse print {limit=32768; counter=Clk}
 end
 
 module Cfg = struct
   open Config
 
-  let max_length = param (some Bound.converter) "max-length"
+  let max_length = param (some Bound.t) "max-length"
       ~doc:
         "Limits the maximum number of basic blocks a single machinine
-      can execute"
+      can execute."
 
   let max_visited = param (some int) "max-visited"
       ~doc:
         "Limits the maximum number of executions of the same block in
-      a given machine"
+      a given machine."
 
 end
 
@@ -109,15 +109,13 @@ module Main(Machine : Primus.Machine.S) = struct
     | Clk -> "clocks"
 
 
-  let check_bound _ = match get Cfg.max_length with
-    | None -> Machine.return ()
-    | Some {limit; counter} ->
-      Machine.Local.get state >>= fun s ->
-      if s.length > limit
-      then terminate (string_of_counter counter)
-      else Machine.Local.put state {
-          s with length = s.length + 1;
-        }
+  let check {limit; counter} _ =
+    Machine.Local.get state >>= fun s ->
+    if s.length > limit
+    then terminate (string_of_counter counter)
+    else Machine.Local.put state {
+        s with length = s.length + 1;
+      }
 
   let check_max_visits name visited = match get Cfg.max_visited with
     | None -> Machine.return ()
@@ -141,24 +139,26 @@ module Main(Machine : Primus.Machine.S) = struct
 
   let register_counter =
     let open Primus.Interpreter in
-    match get Cfg.max_length with
-    | None -> Machine.return ()
-    | Some {counter=(Clk|Exp)}  -> clock >>> check_bound
-    | Some {counter=Blk}  -> enter_blk >>> check_bound
-    | Some {counter=Insn} -> pc_change >>> check_bound
-    | Some {counter=Term} -> enter_term >>> check_bound
+    let bound = match get Cfg.max_length with
+      | None -> {counter=Clk; limit=32768}
+      | Some bound -> bound in
+    match bound.counter with
+    | (Clk|Exp)  -> clock >>> check bound
+    | Blk  -> enter_blk >>> check bound
+    | Insn -> pc_change >>> check bound
+    | Term -> enter_term >>> check bound
 
   let init () =
     Machine.sequence [
       Primus.Interpreter.enter_blk >>> on_blk;
       register_counter;
     ]
-
 end
 
-
-let () = Config.when_ready (fun _ ->
-    Primus.Machine.add_component (module Main) [@warning "-D"];
+let () = Config.when_ready (fun {get} ->
+    if Option.is_some (get Cfg.max_length) ||
+       Option.is_some (get Cfg.max_visited)
+    then Primus.Machine.add_component (module Main) [@warning "-D"];
     Primus.Components.register_generic "limit" (module Main)
       ~package:"bap"
       ~desc: "Enables program termination by limiting the maximum \
