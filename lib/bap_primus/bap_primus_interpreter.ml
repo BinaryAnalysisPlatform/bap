@@ -355,11 +355,6 @@ module Make (Machine : Machine) = struct
     value (word_of_type t) >>= fun r ->
     !!on_undefined r >>| fun () -> r
 
-  let set v x =
-    !!on_writing v >>= fun () ->
-    Env.set v x >>= fun () ->
-    post on_written ~f:(fun k -> k (v,x))
-
   let get v =
     !!on_reading v >>= fun () ->
     Env.get v >>= fun r ->
@@ -377,19 +372,6 @@ module Make (Machine : Machine) = struct
       s with time = Time.succ s.time;
     }
 
-  let binop op x y = match op with
-    | Bil.DIVIDE | Bil.SDIVIDE
-    | Bil.MOD | Bil.SMOD
-      when Word.is_zero y.value ->
-      !!will_divide_by_zero () >>= fun () ->
-      call_when_provided division_by_zero_handler >>= fun called ->
-      if called
-      then undefined (Type.Imm (Word.bitwidth x.value))
-      else Machine.raise Division_by_zero
-    | _ ->
-      value (Bil.Apply.binop op x.value y.value) >>= fun r ->
-      tick >>= fun () ->
-      post on_binop ~f:(fun k -> k ((op,x,y),r)) >>| fun () -> r
 
   let unop op x =
     value (Bil.Apply.unop op x.value) >>= fun r ->
@@ -408,9 +390,44 @@ module Make (Machine : Machine) = struct
     value (Word.extract_exn ~hi ~lo x.value) >>= fun r ->
     post on_extract ~f:(fun k -> k ((hi,lo,x),r)) >>| fun () -> r
 
+
+  let coerce s x =
+    if Value.bitwidth x <> s
+    then extract ~hi:(s-1) ~lo:0 x
+    else Machine.return x
+
+  let binop op x y = match op with
+    | Bil.DIVIDE | Bil.SDIVIDE
+    | Bil.MOD | Bil.SMOD
+      when Word.is_zero y.value ->
+      !!will_divide_by_zero () >>= fun () ->
+      call_when_provided division_by_zero_handler >>= fun called ->
+      if called
+      then undefined (Type.Imm (Word.bitwidth x.value))
+      else Machine.raise Division_by_zero
+    | _ ->
+      let s = max (Value.bitwidth x) (Value.bitwidth y) in
+      coerce s x >>= fun x ->
+      coerce s y >>= fun y ->
+      value (Bil.Apply.binop op x.value y.value) >>= fun r ->
+      tick >>= fun () ->
+      post on_binop ~f:(fun k -> k ((op,x,y),r)) >>| fun () -> r
+
   let const c =
     value c >>= fun r ->
     !!on_const r >>| fun () -> r
+
+  let set v x =
+    !!on_writing v >>= fun () ->
+    let x = match Var.typ v with
+      | Unk | Mem _ -> Machine.return x
+      | Imm m ->
+        if Value.bitwidth x <> m
+        then extract ~hi:(m-1) ~lo:0 x
+        else Machine.return x in
+    x >>= fun x ->
+    Env.set v x >>= fun () ->
+    post on_written ~f:(fun k -> k (v,x))
 
   let trapped_memory_access access =
     Machine.catch access (function
@@ -592,6 +609,11 @@ module Make (Machine : Machine) = struct
   let store a x e s =
     let open Bil.Types in
     let s = Size.in_bits s in
+    let x =
+      if Value.bitwidth x <> s
+      then extract ~hi:(s-1) ~lo:0 x
+      else Machine.return x in
+    x >>= fun x ->
     match e with
     | LittleEndian -> do_store a x s LOW HIGH
     | BigEndian    -> do_store a x s HIGH LOW
