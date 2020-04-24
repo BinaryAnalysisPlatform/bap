@@ -339,6 +339,18 @@ let pp_guesses ppf badname =
     Format.fprintf ppf "did you mean %a?"
       (Format.pp_print_list ~pp_sep Format.pp_print_string) guesses
 
+let is_verbose = Option.is_some (Sys.getenv_opt "BAP_DEBUG")
+
+let pp_backtrace ppf bt =
+  if is_verbose then fprintf ppf "Backtrace:@\n%s" bt
+
+let pp_exn ppf = function
+  | Invalid_argument s ->
+    fprintf ppf "%s" s
+  | Failure s ->
+    fprintf ppf "%s" s
+  | other -> fprintf ppf "%a" Exn.pp other
+
 let nice_pp_error fmt er =
   let module R = Info.Internal_repr in
   let rec pp_sexp fmt = function
@@ -348,37 +360,37 @@ let nice_pp_error fmt er =
     let open R in
     match r with
     | With_backtrace (r, backtrace) ->
-      Format.fprintf fmt "%a\n" pp r;
-      Format.fprintf fmt "Backtrace:\n%s" @@ String.strip backtrace
+      Format.fprintf fmt "%a@\n%a" pp r
+        pp_backtrace (String.strip backtrace);
     | String s -> Format.fprintf fmt "%s" s
     | r -> pp_sexp fmt (R.sexp_of_t r) in
   Format.fprintf fmt "%a" pp (R.of_info (Error.to_info er))
 
 let string_of_failure = function
   | Expects_a_regular_file ->
-    "expected a regular file as input"
+    "Unable to open the specified file."
   | Old_and_new_style_passes ->
-    "passes are specified in both old an new style, \
+    "Bad invocation: passes are specified in both old an new style, \
      please switch to the new style, e.g., `-p<p1>,<p2>,<p3>'"
   | Unknown_pass name ->
-    asprintf "failed to find the pass named %S, %a" name pp_guesses name
+    asprintf "Bad invocation: failed to find the pass named %S, %a" name pp_guesses name
   | Incompatible_options (o1,o2) ->
-    sprintf "options `%s' and `%s' can not be used together" o1 o2
+    sprintf "Bad invocation: the options `%s' and `%s' can not be used together" o1 o2
   | Project err ->
-    asprintf "failed to build a project: %a" nice_pp_error err
+    asprintf "Failed to build the project:@\n %a" nice_pp_error err
   | Pass (Project.Pass.Unsat_dep (p,s)) ->
-    sprintf "dependency %S of pass %S is not available"
+    sprintf "Can't run passes - the dependency %S of pass %S is not available."
       s (Project.Pass.name p)
   | Pass (Project.Pass.Runtime_error (p, Exn.Reraised (bt,exn))) ->
-    asprintf "pass %S failed in runtime with %a@\nBacktrace:@\n%s@\n"
-      (Project.Pass.name p) Exn.pp exn bt
+    asprintf "The pass %S failed with:@\n%a@\n%a"
+      (Project.Pass.name p) pp_exn exn pp_backtrace bt
   | Pass (Project.Pass.Runtime_error (p, exn)) ->
-    asprintf "pass %S failed at runtime with %a"
-      (Project.Pass.name p) Exn.pp exn
+    asprintf "The pass %S failed with:@\n%a"
+      (Project.Pass.name p) pp_exn exn
   | Unknown_format fmt ->
-    sprintf "unknown format %S" fmt
+    sprintf "The format %S is not known." fmt
   | Unavailable_format_version fmt ->
-    sprintf "unsupported version of the format %S" fmt
+    sprintf "The selected version of the format %S is not supported." fmt
 
 let () = Extension.Error.register_printer @@ function
   | Fail err -> Some (string_of_failure err)
