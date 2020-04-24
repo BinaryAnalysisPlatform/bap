@@ -422,3 +422,8 @@ int posix_spawnp(pid_t *pid, const char *file,
 // errno.h
 
 int *__errno_location(void);
+
+// unistd.h
+
+int brk(void *addr);
+void *sbrk(int increment);
