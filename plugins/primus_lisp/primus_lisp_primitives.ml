@@ -195,14 +195,16 @@ module MemoryAllocate(Machine : Primus.Machine.S) = struct
         | []  -> Ok None
         | [x] -> make_static_generator width (Value.to_word x)
         | [min; max] -> make_uniform_generator width min max
-        | _ -> Or_error.errorf "memory-allocate requires two or three arguments" in
-      if Result.is_error n || Result.is_error gen
-      then negone
+        | _ -> Or_error.errorf "bad generator" in
+      if Result.is_error n
+      then failf "memory-allocate: bad number" () else
+      if Result.is_error gen
+      then failf "memory-allocate: bad generator specification" ()
       else
         let generator = Or_error.ok_exn gen in
         Memory.allocate ?generator (Value.to_word addr) (Or_error.ok_exn n) >>=
         fun () -> zero
-    | _ -> failf "allocate requires two arguments" ()
+    | _ -> failf "allocate requires at least two arguments" ()
 end
 
 

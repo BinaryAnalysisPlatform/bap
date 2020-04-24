@@ -1,4 +1,5 @@
 (require string)
+(require types)
 
 (defparameter *malloc-max-chunk-size* nil
   "the maximum size of a single memory chunk,
@@ -8,7 +9,14 @@
   "the maximum number of bytes totally allocated by malloc,
    if not set, then there is no limit")
 
+(defparameter *malloc-arena-initial-size* 0x40000
+  "the maximum number of bytes totally allocated by malloc,
+   if not set, then there is no limit")
+
 (defparameter *malloc-arena-start* brk
+  "the starting address of the malloc arena")
+
+(defparameter *malloc-arena-end* brk
   "the starting address of the malloc arena")
 
 (defparameter *malloc-guard-edges* 0
@@ -35,35 +43,34 @@
 (defparameter *malloc-initial-value* 0
   "initialize allocated memory with the said value")
 
-(defun memory/allocate (ptr len)
-  (if *malloc-initialize-memory*
-      (memory-allocate ptr len *malloc-initial-value*)
-    (memory-allocate ptr len
-                     *malloc-uniform-min-value*
-                     *malloc-uniform-max-value*)))
+(defparameter *malloc/brk* brk)
 
-(defun malloc/put-chunk-size (ptr len)
-  (write-word ptr_t ptr len))
-
-(defun malloc/get-chunk-size (ptr)
-  (let ((header-size (/ (word-width) 8)))
-    (read-word ptr_t (- ptr header-size))))
+(defparameter *malloc/total-bytes-allocated* 0)
 
 (defun malloc (n)
   "allocates a memory region of size N"
   (declare (external "malloc"))
   (if (= n 0) *malloc-zero-sentinel*
     (if (malloc-will-reach-limit n) 0
-      (let ((header-size (/ (word-width) 8))
+      (malloc/grow-arena-if-needed n)
+      (+= *malloc/total-bytes-allocated* n)
+      (let ((header-size (sizeof int))
             (chunk-size (+ n (* 2 *malloc-guard-edges*) header-size))
-            (ptr brk)
-            (failed (memory/allocate ptr chunk-size)))
-        (if failed 0
-          (set brk (+ brk chunk-size))
-          (malloc/fill-edges ptr chunk-size)
-          (set ptr (+ ptr *malloc-guard-edges*))
-          (malloc/put-chunk-size ptr n)
-          (+ ptr header-size))))))
+            (ptr *malloc/brk*))
+        (malloc/initialize ptr chunk-size)
+        (+= *malloc/brk* chunk-size)
+        (malloc/fill-edges ptr chunk-size)
+        (+= ptr *malloc-guard-edges*)
+        (malloc/put-chunk-size ptr n)
+        (+ ptr header-size)))))
+
+(defun brk ()
+  (declare (external "brk"))
+  brk)
+
+(defun sbrk (increment)
+  (declare (external "sbrk"))
+  (+= brk increment))
 
 (defun realloc (ptr len)
   (declare (external "realloc"))
@@ -71,9 +78,6 @@
     (if (not len) (realloc/as-free ptr)
       (realloc/update-chunk ptr len))))
 
-(defun realloc/shrink-chunk (ptr len)
-  (malloc/put-chunk-size ptr len)
-  ptr)
 
 ;; pre: both old-ptr and new-len are not null
 (defun realloc/update-chunk (old-ptr new-len)
@@ -98,11 +102,13 @@
 (defun calloc (n s)
   "allocates memory and initializes it with zero"
   (declare (external "calloc"))
-  (malloc (* n s))) ; in our implementation malloc zeros memory
+  (let ((*malloc-initialize-memory* true)
+        (*malloc-initial-value* 0))
+    (malloc (* n s))))
 
 
 (defun malloc-heap-size ()
-  (- brk *malloc-arena-start*))
+  *malloc/total-bytes-allocated*)
 
 
 (defun malloc-will-reach-limit (n)
@@ -119,3 +125,41 @@
     (memset (- (+ ptr n) *malloc-guard-edges*)
             *malloc-guard-pattern*
             *malloc-guard-edges*)))
+
+
+(defun malloc/allocate-arena (len)
+  (set *malloc-arena-start* brk)
+  (+= brk len)
+  (set *malloc-arena-end* brk)
+  (if *malloc-initialize-memory*
+      (memory-allocate *malloc-arena-start*
+                       len
+                       *malloc-initial-value*)
+    (memory-allocate *malloc-arena-start*
+                     len
+                     *malloc-uniform-min-value*
+                     *malloc-uniform-max-value*)))
+
+(defun malloc/initialize (ptr len)
+  (if *malloc-initialize-memory*
+      (memory-allocate ptr len *malloc-initial-value*)
+    (when (or *malloc-uniform-min-value*
+              *malloc-uniform-max-value*)
+      (memory-allocate ptr len
+                       *malloc-uniform-min-value*
+                       *malloc-uniform-max-value*))))
+
+(defun malloc/grow-arena-if-needed (len)
+  (let ((free-space (- *malloc-arena-end* *malloc/brk*)))
+    (when (> len free-space)
+      (malloc/allocate-arena (max *malloc-arena-initial-size* len)))))
+
+(defun realloc/shrink-chunk (ptr len)
+  (malloc/put-chunk-size ptr len)
+  ptr)
+
+(defun malloc/put-chunk-size (ptr len)
+  (write-word int ptr len))
+
+(defun malloc/get-chunk-size (ptr)
+  (read-word int (- ptr (sizeof int))))
