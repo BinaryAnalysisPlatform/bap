@@ -208,6 +208,7 @@ let legacy_promiscous_mode_components = [
   "arg-randomizer";
   "promiscuous-path-explorer";
   "division-by-zero-handler";
+  "limit";
 ]
 
 let enable_legacy_promiscuous_mode () =
