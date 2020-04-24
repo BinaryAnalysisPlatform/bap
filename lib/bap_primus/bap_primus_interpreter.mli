@@ -95,6 +95,7 @@ module Make (Machine : Machine) : sig
   val concat : value -> value -> value m
   val extract : hi:int -> lo:int -> value -> value m
   val const : word -> value m
+  val ite : value -> value -> value -> value m
   val load : value -> endian -> size -> value m
   val store : value -> value -> endian -> size -> unit m
 

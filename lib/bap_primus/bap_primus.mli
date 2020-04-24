@@ -1902,6 +1902,9 @@ module Std : sig
         (** [const x] computes the constant expression [x]  *)
         val const : word -> value m
 
+        (** [ite c x y] if [c] evals to [b1] then [x] else [y]  *)
+        val ite : value -> value -> value -> value m
+
         (** [load a d s] computes a load operation, that loads a word
             of size [s] using an order specified by the endianness [d]
             from address [a].
