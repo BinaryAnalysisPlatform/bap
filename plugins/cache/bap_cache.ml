@@ -61,15 +61,7 @@ module Upgrade = struct
       | Error er ->
         error "unknown index version: %s" (Error.to_string_hum er)
 
-  let from_index x = My_bench.with_args1 from_index x "from-index"
-
 end
-
-let with_lock ~f lock =
-  let lock = Unix.openfile lock Unix.[O_RDWR; O_CREAT] 0o640 in
-  Unix.lockf lock Unix.F_LOCK 0;
-  protect ~f
-    ~finally:(fun () -> Unix.(lockf lock F_ULOCK 0; close lock))
 
 let size () =
   let path = cache_data () in
@@ -98,11 +90,5 @@ let init_cache_dir () =
   then Cfg.(write default)
 
 let init () =
-  let lock = "bap_cache_init.lock" in
-  let lock = Filename.get_temp_dir_name () // lock in
-  with_lock lock ~f:(fun () ->
-      init_cache_dir ();
-      Upgrade.from_index ())
-
-
-let init x = My_bench.with_args1 init x "init"
+  init_cache_dir ();
+  Upgrade.from_index ()

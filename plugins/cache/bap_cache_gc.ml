@@ -96,7 +96,6 @@ let entry path name =
     Some {path; size;}
   with _ -> None
 
-(* TODO: think here *)
 let read_cache path =
   Sys.readdir path |> Array.filter_map ~f:(entry path)
 
@@ -150,13 +149,6 @@ let shrink ?threshold ~upto () =
     let selected = select entries total (total - to_Kb upto) in
     shuffle selected;
     Array.iter selected ~f:(fun i -> remove entries.(i))
-
-
-let shrink ?threshold ~upto () =
-  let t0 = Unix.gettimeofday () in
-  shrink ?threshold ~upto ();
-  let t1 = Unix.gettimeofday () in
-  My_bench.update "gc" t0 t1
 
 let clean () =
   Array.iter (read_cache @@ Cfg.cache_data ()) ~f:remove

@@ -49,9 +49,6 @@ let load reader dgst =
   try Some (Utils.from_file' reader path)
   with _exn -> None
 
-let load x y = My_bench.with_args2 load x y "load"
-let save x y z = My_bench.with_args3 save x y z "save"
-
 let create reader writer =
   Data.Cache.create
     ~load:(load reader)
@@ -67,9 +64,6 @@ let main clean show_info gc =
   if show_info then run_and_exit print_info;
   if gc then run_and_exit run_gc;
   Data.Cache.Service.provide {Data.Cache.create}
-
-
-let main x y z = My_bench.with_args3 main x y z "main"
 
 let size sz cfg = {cfg with max_size = Int64.(sz * 1024L * 1024L);}
 let overhead ov cfg = {cfg with overhead = float ov /. 100.}

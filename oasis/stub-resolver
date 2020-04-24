@@ -5,7 +5,7 @@ Flag stub_resolver
 Library stub_resolver_library_plugin
   Build$:       flag(everything) || flag(stub_resolver)
   Path:         plugins/stub_resolver/
-  BuildDepends: bap, bap-abi, bap-knowledge, bap-core-theory, core_kernel, bitvec, bitvec-order, bap-main
+  BuildDepends: bap, bap-abi, bap-knowledge, bap-core-theory, core_kernel, bitvec, bitvec-order, bap-main, ppx_jane, bap-future
   FindlibName:     bap-plugin-stub_resolver
   CompiledObject:  best
   Modules:         Stub_resolver
@@ -15,7 +15,7 @@ Library stub_resolver_library_plugin
 
 Library stub_resolver_tests
   Path:           plugins/stub_resolver
-  FindLibParent:  stub_resolver_library_plugin
+  FindLibParent:  bap-plugin-stub_resolver
   FindlibName:    tests
   Build$:         flag(tests) && (flag(everything) || flag(stub_resolver))
   CompiledObject: best
