@@ -212,6 +212,44 @@ module Error = struct
   let register_printer = Caml.Printexc.register_printer
   let pp ppf e =
     Format.pp_print_string ppf (Caml.Printexc.to_string e)
+
+  let str fmt = Format.kasprintf Option.some fmt
+
+  let () = register_printer @@ function
+    | Configuration ->
+      str "Failed to process command-line options and configuration \
+           paratemers."
+    | Invalid msg -> str "Invalid parameter: %s" msg
+    | Bug (exn,backtrace) ->
+      str "Internal error: %a@\nBacktrace:@\n%s"
+        Exn.pp exn backtrace
+    | Already_initialized ->
+      str "The system was already initialized"
+    | Already_failed e ->
+      str "The system was left in an inconsistent state after \
+           the last attempt to initialize, which failed \
+           with:@\n%a" pp e
+    | Recursive_init ->
+      str "The system initialization procedure was called during \
+           the initialization. Aborting the infinite cycle."
+    | Broken_plugins errors ->
+      let pp_error ppf (name,err) =
+        Format.fprintf ppf
+          "The plugin `%s' has failed with \
+           the following error:@\n%a@\n" name Error.pp err in
+      let pp_errors =
+        Format.pp_print_list ~pp_sep:Format.pp_print_newline pp_error in
+      str "Failed to load %d plugins, details follow:@\n%a"
+        (List.length errors)
+        pp_errors errors
+    | Unknown_plugin p ->
+      str "There is no plugin %S in the search path." p
+    | Exit_requested 0 -> str "All is good."
+    | Exit_requested n -> str "Exiting with %d." n
+    | Bad_recipe err ->
+      str "Can't load the specified recipe:@\n%a"
+        Bap_recipe.pp_error err
+    | _ -> None
 end
 
 module Markdown : sig
