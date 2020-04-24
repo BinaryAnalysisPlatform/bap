@@ -171,7 +171,6 @@ module Trace = Bap_primus_linker.Trace
 
 type dir = [`down | `up] [@@deriving equal]
 
-
 module Interpreter(Machine : Machine) = struct
   open Machine.Syntax
   module Linker = Bap_primus_linker.Make(Machine)
@@ -226,6 +225,10 @@ module Interpreter(Machine : Machine) = struct
   let is_out_intent a = match Arg.intent a with
     | Some Out -> true
     | _ -> false
+
+  let is_zero x =
+    Value.zero (Value.bitwidth x) >>= fun zero ->
+    Eval.binop Bil.EQ x zero
 
   (* we won't notify linker about a call, since the callee will
      notify it itself. Basically, it is the responsibility of a
@@ -375,12 +378,14 @@ module Interpreter(Machine : Machine) = struct
       | {data=Err msg} -> Machine.raise (Runtime_error msg)
     and rep c e =
       Eval.tick >>= fun () ->
-      eval c >>= function {value} as r ->
-        if Word.is_zero value then Machine.return r
-        else eval e >>= fun _ -> rep c e
+      eval c >>= fun r ->
+      is_zero r >>= fun yes ->
+      if Value.is_one yes
+      then Machine.return r
+      else eval e >>= fun _ -> rep c e
     and ite c e1 e2 =
-      eval c >>= fun {value=w} ->
-      if Word.is_zero w then eval e2 else eval e1
+      eval c >>= is_zero >>= fun c ->
+      if Value.is_one c then eval e2 else eval e1
     and let_ v e1 e2 =
       Machine.Local.get state >>= fun {width} ->
       eval e1 >>= fun w ->
@@ -630,6 +635,7 @@ module Make(Machine : Machine) = struct
       let module Code(Machine : Machine) = struct
         open Machine.Syntax
         module Eval = Bap_primus_interpreter.Make(Machine)
+        module Value = Bap_primus_value.Make(Machine)
         module Interp = Interpreter(Machine)
 
         let failf ppf = Format.ksprintf
@@ -652,12 +658,12 @@ module Make(Machine : Machine) = struct
               Eval.extract ~hi:(vsize-1) ~lo:rsize lhs >>= fun high ->
               Eval.concat high r >>= fun r ->
               Eval.set reg r
-            | e -> failf "unknown return semantics: %a" Exp.pps e ()
+            | e -> failf "an unsupported return semantics: %a" Exp.pps e ()
 
         let exec =
           eval_args >>= fun bs ->
           let args = List.rev_map ~f:snd bs in
-          Eval.const Word.b0 >>= fun init ->
+          Value.b0 >>= fun init ->
           Interp.eval_advices Advice.Before init name args >>= fun _ ->
           Machine.Local.update state ~f:(Vars.push_frame bs) >>= fun () ->
           Interp.notify_when true Trace.call_entered name args >>= fun () ->
