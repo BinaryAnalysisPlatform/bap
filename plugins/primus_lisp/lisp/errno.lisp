@@ -4,7 +4,8 @@
 (defparameter *errno-location* nil)
 
 (defmethod init ()
-  (set *errno-location* (malloc (sizeof int))))
+  (set *errno-location* brk)
+  (+= brk (sizeof int)))
 
 (defun errno-location ()
   (declare (external "__errno_location"))
