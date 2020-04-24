@@ -9,71 +9,10 @@ module Filename = Caml.Filename
 module Utils = Bap_cache_utils
 module Cfg = Bap_cache_config
 
-let (/) = Filename.concat
+let (//) = Filename.concat
 
 let cache_dir = Cfg.cache_dir
 let cache_data = Cfg.cache_data
-
-let with_lock' ~f lock =
-  let lock = Unix.openfile lock Unix.[O_RDWR; O_CREAT] 0o640 in
-  Unix.lockf lock Unix.F_LOCK 0;
-  protect ~f
-    ~finally:(fun () -> Unix.(lockf lock F_ULOCK 0; close lock))
-
-let with_lock ~f =
-  let lock = Cfg.lock_file () in
-  with_lock' ~f lock
-
-let file_size x = Unix.LargeFile.( (stat x).st_size )
-
-let fold_entries ~f ~init =
-  let dir = cache_data () in
-  Sys.readdir dir |>
-  Array.fold ~init ~f:(fun acc e -> f acc @@ dir/e )
-
-let unsafe_size () =
-  fold_entries ~init:0L ~f:(fun sz e -> Int64.(sz + file_size e))
-
-let with_size ~f = with_lock ~f:(fun () -> f @@ unsafe_size ())
-
-module GC = struct
-
-  let () = Random.self_init ()
-
-  let remove path =
-    try Sys.remove path
-    with exn ->
-      warning "unable to remove entry: %s" (Exn.to_string exn)
-
-  let remove_random dir size_to_free entries =
-    let entries_number = Array.length entries in
-    let rec loop freed_size removed =
-      if removed < entries_number && freed_size < size_to_free
-      then
-        let len = entries_number - removed in
-        let elt = Random.int len in
-        let () = Array.swap entries elt (len - 1) in
-        let path = dir / entries.(len - 1) in
-        let size = file_size path in
-        remove path;
-        loop Int64.(freed_size + size) (removed + 1) in
-    loop 0L 0
-
-  let clean () =
-    with_lock ~f:(fun () ->
-        fold_entries ~init:() ~f:(fun _ -> remove))
-
-  let shrink ?threshold ~upto () =
-    let open Int64 in
-    with_size ~f:(fun size ->
-        let upper_bound = match threshold with
-          | None -> upto
-          | Some t -> t in
-        if size > upper_bound then
-          let dir = cache_data () in
-          remove_random dir (size - upto) (Sys.readdir dir))
-
-end
 
 module Upgrade = struct
 
@@ -82,7 +21,7 @@ module Upgrade = struct
   let index_files = List.map index_versions ~f:index_file
 
   let find_index () =
-    let files = List.map index_files ~f:(fun x -> cache_dir () / x) in
+    let files = List.map index_files ~f:(fun x -> cache_dir () // x) in
     List.find files ~f:Sys.file_exists
 
   let get_version path =
@@ -94,13 +33,17 @@ module Upgrade = struct
       with _ ->
         Error (Error.of_string (sprintf "unknown version %s" v))
 
+  let rename from to_ =
+    Sys.rename from to_;
+    Unix.chmod to_ 0o444
+
   let upgrade_from_index_v2 file =
     let open Compatibility.V2 in
     try
-      let idx = Utils.unsafe_from_file (module Compatibility.V2) file in
+      let idx = Utils.from_file (module Compatibility.V2) file in
       let dir = cache_data () in
       Map.iteri idx.entries ~f:(fun ~key ~data:{path} ->
-          Sys.rename path @@ dir / Data.Cache.Digest.to_string key)
+          rename path (dir // Data.Cache.Digest.to_string key))
     with e ->
       warning "can't read entries from index version 2: %s"
         (Exn.to_string e)
@@ -108,7 +51,7 @@ module Upgrade = struct
   let from_index () = match find_index () with
     | None -> ()
     | Some file ->
-      Cfg.(unsafe_write default);
+      Cfg.(write default);
       match get_version file with
       | Ok 2 ->
         upgrade_from_index_v2 file;
@@ -118,15 +61,48 @@ module Upgrade = struct
       | Error er ->
         error "unknown index version: %s" (Error.to_string_hum er)
 
+  let from_index x = My_bench.with_args1 from_index x "from-index"
+
 end
 
-let size () = with_size ~f:ident
-let read_config () = with_lock ~f:Cfg.unsafe_read
-let write_config cfg = with_lock ~f:(fun () -> Cfg.unsafe_write cfg)
+let with_lock ~f lock =
+  let lock = Unix.openfile lock Unix.[O_RDWR; O_CREAT] 0o640 in
+  Unix.lockf lock Unix.F_LOCK 0;
+  protect ~f
+    ~finally:(fun () -> Unix.(lockf lock F_ULOCK 0; close lock))
+
+let size () =
+  let path = cache_data () in
+  Sys.readdir path |>
+  Array.fold ~init:0L ~f:(fun s f ->
+      try
+        let file = path // f in
+        Int64.(s + Unix.LargeFile.( (stat file).st_size ))
+      with _ -> s)
+
+let dir_exists dir =
+  Sys.file_exists dir && Sys.is_directory dir
+
+let rec mkdir path =
+  let par = Filename.dirname path in
+  if not(Sys.file_exists par) then mkdir par;
+  if not(Sys.file_exists path) then
+    Unix.mkdir path 0o700
+
+let init_cache_dir () =
+  let data = Cfg.cache_data () in
+  let conf = Cfg.config_path () in
+  if not (dir_exists data)
+  then mkdir data;
+  if not (Sys.file_exists conf)
+  then Cfg.(write default)
 
 let init () =
   let lock = "bap_cache_init.lock" in
-  let lock = Filename.get_temp_dir_name () / lock in
-  with_lock' lock ~f:(fun () ->
-      Cfg.unsafe_init ();
+  let lock = Filename.get_temp_dir_name () // lock in
+  with_lock lock ~f:(fun () ->
+      init_cache_dir ();
       Upgrade.from_index ())
+
+
+let init x = My_bench.with_args1 init x "init"

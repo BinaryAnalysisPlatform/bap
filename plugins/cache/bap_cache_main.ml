@@ -9,16 +9,17 @@ include Self()
 module Filename = Caml.Filename
 module Cfg = Bap_cache_config
 module Cache = Bap_cache
-module GC = Cache.GC
+module Utils = Bap_cache_utils
+module GC = Bap_cache_gc
 
 let (/) = Filename.concat
 
 let run_gc () =
-  let cfg = Cache.read_config () in
+  let cfg = Cfg.read () in
   GC.shrink ~upto:cfg.max_size ()
 
 let run_gc_with_threshold () =
-  let cfg = Cache.read_config () in
+  let cfg = Cfg.read () in
   if cfg.gc_enabled then
     GC.shrink ~threshold:(Cfg.gc_threshold cfg)
       ~upto:cfg.max_size ()
@@ -28,8 +29,9 @@ let filename_of_digest = Data.Cache.Digest.to_string
 let run_and_exit cmd = cmd (); exit 0
 
 let print_info () =
-  let cfg = Cache.read_config () in
+  let cfg  = Cfg.read () in
   let size = Cache.size () in
+  printf "size is %Ld\n" size;
   let mb s = Int64.(s / 1024L / 1024L) in
   printf "Maximum size: %5Ld MB@\n" @@ mb cfg.max_size;
   printf "Current size: %5Ld MB@\n" @@ mb size;
@@ -40,17 +42,15 @@ let print_info () =
 let save writer dgst data =
   let dir = Cfg.cache_data () in
   let file = dir / filename_of_digest dgst in
-  let tmp,ch = Filename.open_temp_file "entry" ".cache" in
-  Data.Write.to_channel writer ch data;
-  Out_channel.close ch;
-  Sys.rename tmp file
+  Utils.to_file' ~temp_dir:dir writer file data
 
 let load reader dgst =
   let path = Cfg.cache_data () / filename_of_digest dgst in
-  try
-    Some (In_channel.with_file path
-            ~f:(Data.Read.of_channel reader))
-  with _ -> None
+  try Some (Utils.from_file' reader path)
+  with _exn -> None
+
+let load x y = My_bench.with_args2 load x y "load"
+let save x y z = My_bench.with_args3 save x y z "save"
 
 let create reader writer =
   Data.Cache.create
@@ -68,6 +68,9 @@ let main clean show_info gc =
   if gc then run_and_exit run_gc;
   Data.Cache.Service.provide {Data.Cache.create}
 
+
+let main x y z = My_bench.with_args3 main x y z "main"
+
 let size sz cfg = {cfg with max_size = Int64.(sz * 1024L * 1024L);}
 let overhead ov cfg = {cfg with overhead = float ov /. 100.}
 let disable_gc x cfg = {cfg with gc_enabled = not x}
@@ -76,11 +79,11 @@ let update_config sz ov gc =
   let set f x y = match x with
     | None -> y
     | Some x -> f x y in
-  let cfg = Cache.read_config () in
+  let cfg = Cfg.read () in
   let cfg' = set size sz cfg |> set overhead ov |> set disable_gc gc in
   if cfg <> cfg'
   then
-    let () = Cache.write_config cfg' in
+    let () = Cfg.write cfg' in
     let () = printf "Config updated, exiting ...\n" in
     exit 0
 

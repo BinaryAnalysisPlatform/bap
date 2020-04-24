@@ -26,33 +26,10 @@ let default = {
   gc_enabled = true;
 }
 
-let lock_file = "lock"
 let config_file = sprintf "config.%d" version
 let cache_data  = "data"
 
 let getenv opt = try Some (Sys.getenv opt) with Caml.Not_found -> None
-
-let dir_exists dir =
-  Sys.file_exists dir && Sys.is_directory dir
-
-let write path cfg =
-  try Utils.unsafe_to_file (module T) path cfg
-  with e ->
-    warning "store config: %s" (Exn.to_string e)
-
-let rec mkdir path =
-  let par = Filename.dirname path in
-  if not(Sys.file_exists par) then mkdir par;
-  if not(Sys.file_exists path) then
-    Unix.mkdir path 0o700
-
-let init path =
-  let data = path / cache_data in
-  let conf = path / config_file in
-  if not (dir_exists data)
-  then mkdir data;
-  if not (Sys.file_exists conf)
-  then write conf default
 
 let default_cache_dir = ref None
 
@@ -68,24 +45,20 @@ let cache_dir () =
         | Some home -> home / ".cache" / "bap" in
   cache_dir
 
-let unsafe_init () = init @@ cache_dir ()
-
 let config_path () = cache_dir () / config_file
-
-let cache_data () = cache_dir () / cache_data
-
-let lock_file () = cache_dir () / lock_file
+let cache_data  () = cache_dir () / cache_data
 
 let gc_threshold c =
   Int64.(c.max_size + of_float (to_float c.max_size *. c.overhead))
 
-let unsafe_write cfg =
-  try Utils.unsafe_to_file (module T) (config_path ()) cfg
+let write cfg =
+  let path = config_path () in
+  try Utils.to_file (module T) ~temp_dir:path path cfg
   with e ->
     warning "store config: %s" (Exn.to_string e)
 
-let unsafe_read () =
-  try Utils.unsafe_from_file (module T) @@ config_path ()
+let read () =
+  try Utils.from_file (module T) @@ config_path ()
   with e ->
     warning "read config: %s" (Exn.to_string e);
     default
