@@ -69,7 +69,7 @@
 
    And finally, we don't want to make our recursive selection depend
    from |n|, so instead of selecting |n| files for removal we will
-   select as many files as we need to remove requested size,
+   select as many files as we need to remove requested size.
 *)
 
 open Core_kernel
@@ -77,7 +77,7 @@ open Bap.Std
 
 include Self ()
 
-module Cfg = Bap_cache_config
+module Cache = Bap_cache
 module CDF = Int.Map
 
 type entry = {
@@ -111,17 +111,17 @@ let cdf entries =
         CDF.add_exn m prev i, f_i)
 
 let select entries total_size size_to_free =
-  let size i = entries.(i).size in
-  let rec loop cdf indexes freed =
+  let cdf = cdf entries in
+  let rec loop indexes freed =
     if freed < size_to_free then
       let u = Random.int total_size in
       let (_,i) =
         Option.value_exn (CDF.closest_key cdf `Less_than u) in
-      if Set.mem indexes i then loop cdf indexes freed
-      else loop cdf (Set.add indexes i) (freed + size i)
+      if Set.mem indexes i
+      then loop indexes freed
+      else loop (Set.add indexes i) (freed + entries.(i).size)
     else indexes in
-  let cdf = cdf entries in
-  loop cdf (Set.empty (module Int)) 0 |> Set.to_array
+  loop (Set.empty (module Int)) 0 |> Set.to_array
 
 let remove e =
   try Sys.remove e.path
@@ -140,7 +140,7 @@ let shuffle fs =
 let to_Kb s = Int64.(to_int_exn @@ s / 1024L)
 
 let shrink ?threshold ~upto () =
-  let entries = read_cache @@ Cfg.cache_data () in
+  let entries = read_cache @@ Cache.data () in
   let total = total_size entries in
   let upper_bound = match threshold with
     | None -> to_Kb upto
@@ -151,4 +151,4 @@ let shrink ?threshold ~upto () =
     Array.iter selected ~f:(fun i -> remove entries.(i))
 
 let clean () =
-  Array.iter (read_cache @@ Cfg.cache_data ()) ~f:remove
+  Array.iter (read_cache @@ Cache.data ()) ~f:remove
