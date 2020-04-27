@@ -1,4 +1,4 @@
 
-val shrink : ?threshold:int64 -> upto:int64 -> unit -> unit
+val shrink : ?threshold:int -> upto:int -> unit -> unit
 
 val clean : unit -> unit

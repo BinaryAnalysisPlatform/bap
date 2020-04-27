@@ -11,12 +11,13 @@
    4. p(i) = s(i)/T - the discrete probability distrubution of the file
       sizes in cache, likelihood that a randomly chosen file from the
       cache will have size s(i).
-   5. F(i) = p(i - 1) + p(i) cumulative discrete distribution function
-      (CDF). F(i) we can generate a random number u in range 0..1,
+   5. F(i) = p(i) + p(i-1) + ... + p(0)
+      cumulative discrete distribution function (CDF).
+      F(i) we can generate a random number u in range 0..1,
       using a uniform random number generator, and then find such k that
       F(k-1) < u <= F(k).
    6. |s| = Sum(p(i) * s(i)) = (1/T) * Sum(s(i)^2) - the expected value
-      of the size in cache
+      of the size of a cache entry
    7. |n| = t/|s| - the expected number of deletions that we need to
       make to delete t bytes, e.g. if we want to delete half:
       |n| = T^2 / (2*Sum(s(i)^2)
@@ -129,15 +130,9 @@ let remove e =
     warning "unable to remove entry: %s" (Exn.to_string exn)
 
 let shuffle fs =
-  let gen = Random.State.make_self_init () in
-  let len = Array.length fs in
-  let rec loop n =
-    if n < len then
-      let () = Array.swap fs n (Random.State.int gen len) in
-      loop (n + 1) in
-  loop 0
+  Array.permute ~random_state:(Random.State.make_self_init ()) fs
 
-let to_Kb s = Int64.(to_int_exn @@ s / 1024L)
+let to_Kb s = s * 1024
 
 let shrink ?threshold ~upto () =
   let entries = read_cache @@ Cache.data () in

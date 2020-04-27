@@ -7,12 +7,18 @@ let ( / ) = Filename.concat
 
 let write ?temp_dir file ~f =
   let temp_dir = Option.value ~default:(Filename.dirname file) temp_dir in
-  let tmp,ch = Filename.open_temp_file ~temp_dir "tmp" "" in
+  let tmp,ch = Filename.open_temp_file
+      ~mode:[Open_wronly; Open_creat]
+      ~perms:0o640
+      ~temp_dir "tmp" "" in
   protect ~f:(fun () -> f ch)
     ~finally:(fun () ->
         Out_channel.close ch;
         Unix.chmod tmp 0o444;
-        Sys.rename tmp file)
+        Sys.rename tmp file;
+        printf "renaming %s %s\n" tmp file;
+
+      )
 
 let read file ~f = In_channel.with_file file ~f
 
@@ -43,8 +49,40 @@ let to_file : type t.
           Bigarray.char Bigarray.c_layout true [|size|] in
       ignore @@ T.bin_write_t (Bigarray.array1_of_genarray buf) ~pos:0
         data)
-[@@warning "-D"]
+
 
 let to_file' ?temp_dir writer file data =
   write ?temp_dir file ~f:(fun ch ->
       Data.Write.to_channel writer ch data)
+
+
+(* let write ?temp_dir file ~f =
+ *   let temp_dir = Option.value ~default:(Filename.dirname file) temp_dir in
+ *   let tmp = Filename.temp_file ~temp_dir "tmp" "" in
+ *   let fd = Unix.openfile tmp [O_WRONLY] 0o777 in
+ *   protect ~f:(fun () -> f fd)
+ *     ~finally:(fun () ->
+ *         Unix.close fd;
+ *         Unix.chmod tmp 0o444;
+ *         Sys.rename tmp file)
+ *
+ *
+ * let to_file : type t.
+ *   ?temp_dir:string ->
+ *   (module Binable.S with type t = t) ->
+ *   string -> t -> unit =
+ *   fun ?temp_dir b file data ->
+ *   let temp_dir = Option.value ~default:(Filename.dirname file) temp_dir in
+ *   let tmp = Filename.temp_file ~temp_dir "tmp" "" in
+ *   let fd = Unix.openfile tmp [O_RDWR; O_CREAT] 0o640 in
+ *   let module T = (val b) in
+ *   let size = T.bin_size_t data in
+ *   let buf =
+ *     Mmap.V1.map_file
+ *       fd
+ *       Bigarray.char Bigarray.c_layout true [|size|] in
+ *   ignore @@ T.bin_write_t (Bigarray.array1_of_genarray buf) ~pos:0
+ *     data;
+ *   Unix.close fd;
+ *   Unix.chmod tmp 0o444;
+ *   Sys.rename tmp file *)

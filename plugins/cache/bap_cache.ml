@@ -17,7 +17,7 @@ module Cfg = struct
   end
 
   let default = {
-    max_size = Int64.(4L * 1024L * 1024L * 1024L);
+    max_size = 4 * 1024; (* 4 Gb  *)
     overhead = 0.5;
     gc_enabled = true;
   }
@@ -30,7 +30,7 @@ module Cfg = struct
   let data  path = path // cache_data
 
   let gc_threshold c =
-    Int64.(c.max_size + of_float (to_float c.max_size *. c.overhead))
+    c.max_size + Int.of_float (float c.max_size *. c.overhead)
 
   let default_root = ref None
 
@@ -66,7 +66,14 @@ let root () =
 let dir_exists dir = Sys.file_exists dir && Sys.is_directory dir
 let mkdir path = FileUtil.mkdir ~parent:true ~mode:(`Octal 0o700) path
 let rmdir path = FileUtil.rm ~recurse:true [path]
+
 let rename x y = Result.try_with (fun () -> Unix.rename x y)
+
+let rename_if_absent x y =
+  match rename x y with
+  | Ok () -> Ok ()
+  | Error Unix.(Unix_error (ENOTEMPTY,_,_))  -> Ok ()
+  | er -> er
 
 let with_temp_dir parent ~f =
   let tmp = Filename.temp_file "tmp" "" in
@@ -76,8 +83,8 @@ let with_temp_dir parent ~f =
       f tmp_dir)
     ~finally:(fun () ->
         Sys.remove tmp;
-        if dir_exists tmp_dir then
-          rmdir tmp_dir)
+        if dir_exists tmp_dir
+        then rmdir tmp_dir)
 
 let init_cache_dir path =
   mkdir (Cfg.data path);
@@ -90,11 +97,8 @@ let init_cache_dir () =
     let parent = Filename.dirname root in
     with_temp_dir parent ~f:(fun tmp_root ->
         init_cache_dir tmp_root;
-        match rename tmp_root root with
+        match rename_if_absent tmp_root root with
         | Ok () -> ()
-        | Error (Unix.Unix_error (Unix.ENOTEMPTY,_,_)) ->
-          (* ok, we inited in another process *)
-          ()
         | Error exn ->
           error "can't init cache: %s\n" (Exn.to_string exn);
           raise exn)
@@ -102,7 +106,8 @@ let init_cache_dir () =
 let config_file () = config_file @@ root ()
 let data () = data @@ root ()
 let write_config = Cfg.write @@ config_file ()
-let read_config () = Cfg.read @@ config_file ()
+let read_config () =
+  Cfg.read @@ config_file ()
 
 module Upgrade = struct
 
@@ -139,11 +144,8 @@ module Upgrade = struct
   let upgrade_from_index_v2 file =
     with_temp_dir (root ()) ~f:(fun tmp_dir ->
         upgrade_from_index_v2 file tmp_dir;
-        match rename tmp_dir (data ()) with
+        match rename_if_absent tmp_dir (data ()) with
         | Ok () -> ()
-        | Error (Unix.Unix_error (ENOTEMPTY,_,_)) ->
-          (* ok, we upgraded index in another process *)
-          ()
         | Error exn ->
           warning "can't read entries from index version 2: %s"
             (Exn.to_string exn))
@@ -155,21 +157,23 @@ module Upgrade = struct
       | Ok 2 ->
         upgrade_from_index_v2 file;
         Sys.remove file
-      | Ok ver ->
-        warning "can't read entries from index version %d" ver;
-      | Error er ->
-        error "unknown index version: %s" (Error.to_string_hum er)
+      | Ok _ ->
+        Sys.remove file;
+        warning "unknown index version"
+      | _  -> warning "unknown index version"
 
 end
 
 let size () =
   let path = data () in
-  Sys.readdir path |>
-  Array.fold ~init:0L ~f:(fun s f ->
-      try
-        let file = path // f in
-        Int64.(s + Unix.LargeFile.( (stat file).st_size ))
-      with _ -> s)
+  let size =
+    Sys.readdir path |>
+    Array.fold ~init:0L ~f:(fun s f ->
+        try
+          let file = path // f in
+          Int64.(s + Unix.LargeFile.( (stat file).st_size ))
+        with _ -> s) in
+  Int64.(to_int_exn (size / 1024L / 1024L))
 
 let init () =
   init_cache_dir ();
