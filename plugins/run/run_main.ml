@@ -270,16 +270,16 @@ let on_success job status _ result : Primus.Jobs.action =
   update_progress result;
   match status with
   | Primus.Normal | Exn Primus.Interpreter.Halt ->
-    info "job %s finished successfully" (Primus.Job.name job);
+    info "The job `%s' finished successfully" (Primus.Job.name job);
     Continue
   | Primus.Exn e ->
-    error "job %s finished abnormally with exception: %s"
+    error "The job `%s' finished abnormally with an exception:@\n%s"
       (Primus.Job.name job)
       (Primus.Exn.to_string e);
     Continue
 
 let on_failure job conflict result : Primus.Jobs.action =
-  info "job %s failed to converge and exited with conflict: %a"
+  info "The job `%s' failed to converge and exited with conflict: %a"
     (Primus.Job.name job) Knowledge.Conflict.pp conflict;
   update_progress result;
   Continue
