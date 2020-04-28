@@ -13,7 +13,7 @@
   "(unless CND BODY) if CND evaluates to false, then BODY is evaluated and
    the value of the last expression in BODY becomes the value of the
    whole expression. Otherwise, if CND evaluates to true, nil is returned."
-  (if (not cnd) () body))
+  (if cnd () body))
 
 (defmacro until (c b)
   "(until COND BODY) if COND evaluates to true, then the whole expression
