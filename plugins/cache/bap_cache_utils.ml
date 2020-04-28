@@ -28,18 +28,16 @@ let binable_to_file : type t.
   let temp_dir = Option.value ~default:(Filename.dirname file) temp_dir in
   let tmp,fd = open_temp temp_dir in
   let size = T.bin_size_t data in
-  let () =
-    try
+  protect ~f:(fun () ->
       let buf =
         Mmap.V1.map_file
           fd Bigarray.char Bigarray.c_layout true [|size|] in
-      let _ = T.bin_write_t (Bigarray.array1_of_genarray buf) ~pos:0 data in
-      Unix.close fd
-    with e -> Unix.close fd; Sys.remove tmp; raise e in
-
-  Unix.chmod tmp 0o444;
-  Sys.rename tmp file
-[@@warning "-D"]
+      ignore @@
+      T.bin_write_t (Bigarray.array1_of_genarray buf) ~pos:0 data)
+    ~finally:(fun () ->
+        Unix.close fd;
+        Unix.chmod tmp 0o444;
+        Sys.rename tmp file)
 
 let binable_from_file : type t.
   (module Binable.S with type t = t) -> string -> t = fun b file ->

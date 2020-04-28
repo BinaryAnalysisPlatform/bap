@@ -144,7 +144,7 @@ let () =
 
 let opts = ref String.Map.empty
 
-let update name ?arg short_descr doc =
+let add name ?arg short_descr doc =
   let name = match arg with
     | None -> name
     | Some arg -> sprintf "%s=%s" name arg in
@@ -152,17 +152,16 @@ let update name ?arg short_descr doc =
   opts := Map.add_exn !opts name descr
 
 let parameter ?arg ?aliases ?as_flag ?short_descr ~doc typ name =
-  update name ?arg short_descr doc;
+  add name ?arg short_descr doc;
   Command.parameter ?aliases ?as_flag ~doc typ name
 
 let flag ?short_descr ~doc name =
-  update name short_descr doc;
+  add name short_descr doc;
   Command.flag ~doc name
 
 let dir =
-  let arg = "DIR" in
-  parameter ~arg ~doc:"use <DIR> as a cache directory"
-    Extension.Type.(arg %: some string) "dir"
+  parameter ~arg:"DIR" ~doc:"use <DIR> as a cache directory"
+    Extension.Type.("DIR" %: some string) "dir"
 
 let clean  = flag ~doc:"cleanup the cache" "clean"
 let run_gc = flag ~doc:"runs garbage collector and exits" "run-gc"
@@ -201,7 +200,7 @@ let overhead =
      expressed as a percentage of the capacity parameter.
      The option value will persist between different runs of
      the program"
-    Extension.Type.("P" %: some int) "overhead"
+    Extension.Type.("N" %: some int) "overhead"
 
 let print_command_options () =
   Format.printf "Command options:\n";
@@ -223,5 +222,4 @@ let _cmd =
           run clean info run_gc;
           print_command_options ();
           Ok ())
-
     end)
