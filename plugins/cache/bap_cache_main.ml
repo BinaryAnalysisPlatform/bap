@@ -93,8 +93,41 @@ let init dir =
 
 open Extension
 
+
+let doc = "
+# DESCRIPTION
+
+Provide caching service for all data types. The caching entry
+point is defined in the [Data] module of the [Regular] library.
+
+The cache plugin implements lock-free store/loading operations with
+O(1) complexity: the same cache folder can be safely shared
+between different processes without any performance impact and
+these operations don't depend from the cache size.
+
+Also, the plugin maintain the cache size below the certain level,
+unless the garbage collector is manually disabled via
+$(b,--disable-gc) option.
+The maximum occupied size of the cache is controlled by
+the $(b,size) and $(b,overhead) parameters and can be expressed
+as $(b, total-size = size + overhead * size),
+where $(b,size) is a cache capacity in Mb and $(b,overhead)
+is the percentage of allowed excess. Once the cache size reaches
+this maximum, $(b, 2 * capacity * overhead) of entries will be
+removed by GC on the next program run.
+
+GC is also lock-free and removes cache entries randomly with
+prioritizing larger ones.
+
+# SEE ALSO
+
+$(b,regular)(3)
+"
+
+
 let () =
   let open Syntax in
+  documentation doc;
   let dir = Configuration.parameter
       ~doc:"Use provided folder as a cache directory"
       Extension.Type.("DIR" %: some string) "dir" in
@@ -109,15 +142,17 @@ let () =
   provide_service ();
   Ok ()
 
+let opts = ref String.Map.empty
 
-let all = ref String.Map.empty
-
-let update name short_descr doc =
+let update name ?arg short_descr doc =
+  let name = match arg with
+    | None -> name
+    | Some arg -> sprintf "%s=%s" name arg in
   let descr = Option.value ~default:doc short_descr in
-  all := Map.add_exn !all name descr
+  opts := Map.add_exn !opts name descr
 
-let parameter ?aliases ?as_flag ?short_descr ~doc typ name =
-  update name short_descr doc;
+let parameter ?arg ?aliases ?as_flag ?short_descr ~doc typ name =
+  update name ?arg short_descr doc;
   Command.parameter ?aliases ?as_flag ~doc typ name
 
 let flag ?short_descr ~doc name =
@@ -125,81 +160,60 @@ let flag ?short_descr ~doc name =
   Command.flag ~doc name
 
 let dir =
-  parameter ~doc:"use <DIR> as a cache directory"
-    Extension.Type.("DIR" %: some string) "dir"
+  let arg = "DIR" in
+  parameter ~arg ~doc:"use <DIR> as a cache directory"
+    Extension.Type.(arg %: some string) "dir"
 
-let clean = flag ~doc:"cleanup all cache" "clean"
-let run_gc = flag ~doc:"runs garbage collector" "run-gc"
+let clean  = flag ~doc:"cleanup the cache" "clean"
+let run_gc = flag ~doc:"runs garbage collector and exits" "run-gc"
+let info = flag ~doc:"prints information about the cache and exits" "info"
 
 let enable_gc =
   parameter ~as_flag:(Some true)
-    ~doc:"enables garbage collector"
-    Extension.Type.( some bool) "enable-gc"
+    ~short_descr:"enables garbage collector"
+    ~doc:"enables garbage collector. The option value will persist
+          between different runs of the program"
+    Extension.Type.(some bool) "enable-gc"
 
 let disable_gc =
   parameter ~as_flag:(Some true)
-    ~doc:"disables garbage collector"
-    Extension.Type.( some bool) "disable-gc"
+    ~short_descr:"disables garbage collector"
+    ~doc:"disables garbage collector. The option value will persist
+          between different runs of the program"
+    Extension.Type.(some bool) "disable-gc"
 
 let size =
   parameter
-    ~short_descr:"set the capacity of cached data in Mb"
+    ~arg:"N"
+    ~short_descr:"sets the capacity of the cached data to <N> Mb"
     ~doc:"Set the capacity of cached data in Mb.
           The option value will persist
           between different runs of the program"
     Extension.Type.("N" %: some int) ~aliases:["size"] "capacity"
 
-let info =
-  flag ~doc:"prints information about the cache and exit" "info"
-
 let overhead =
   parameter
-    ~short_descr:"Controls the aggressiveness of the garbage collector"
+    ~arg:"P"
+    ~short_descr:"sets capacity overhead to <P> percents"
     ~doc:"Controls the aggressiveness of the garbage collector.
      The higher the number the more space will be
      wasted but the cache system will run faster. It is
-     expressed as a percentage of the max-size parameter"
-    Extension.Type.("N" %: some int) "overhead"
+     expressed as a percentage of the capacity parameter.
+     The option value will persist between different runs of
+     the program"
+    Extension.Type.("P" %: some int) "overhead"
 
-let print_all () =
+let print_command_options () =
   Format.printf "Command options:\n";
-  Map.iteri !all ~f:(fun ~key:name ~data:descr ->
+  Map.iteri !opts ~f:(fun ~key:name ~data:descr ->
       Format.printf  "  --%-24s %s@\n" name descr)
 
-let man = "
-# DESCRIPTION
-
-Provide caching service for all data types. The caching entry
-point is defined in the [Data] module of the [Regular] library.
-
-The cache plugin implements store/loading operations that:
- - have O(1) complexity, i.e they don't depend from the cache size
- - are lock-free: the same cache folder can be safely shared between
-   different processes without any performance impact.
-
-Also, the plugin maintain the cache size on a certain level
-(unless the garbage collector is manually disabled via
-$(b,--disable-gc) option.
-The maximum occupied size of the cache is controlled by
-the $(b,size) and $(b,overhead) parameters and can be expressed
-with the next formula: $(b, total-size = size + overhead * size),
-where $(b,size) is a max cache size in Mb and $(b,overhead)
-is allowed percentage of excess.
-
-Finally, GC is automatically launched once per every bap process and
-randomly removes $(b, 2 * size * overhead) of cache entries with
-prioritizing larger ones.
-
-# SEE ALSO
-
-$(b,regular)(3)
-"
-
-
 let _cmd =
+  let doc =
+    "provides options to control cache size and cache garbage collector." in
   Extension.Command.(
     begin
-      declare ~doc:man "cache"
+      declare ~doc "cache"
         (args $dir $clean $size $overhead $run_gc $disable_gc
          $enable_gc $info)
         (fun dir clean size overhead run_gc disable_gc enable_gc info
@@ -207,7 +221,7 @@ let _cmd =
           init dir;
           update_config size overhead disable_gc enable_gc;
           run clean info run_gc;
-          print_all ();
+          print_command_options ();
           Ok ())
 
     end)

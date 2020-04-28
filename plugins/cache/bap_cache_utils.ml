@@ -8,16 +8,14 @@ let ( / ) = Filename.concat
 let write_to_file ?temp_dir writer file data =
   let temp_dir = Option.value ~default:(Filename.dirname file) temp_dir in
   let tmp,ch = Filename.open_temp_file ~temp_dir "tmp" "" in
-  protect ~f:(fun () ->
-      Data.Write.to_channel writer ch data)
+  protect ~f:(fun () -> Data.Write.to_channel writer ch data)
     ~finally:(fun () ->
         Out_channel.close ch;
         Unix.chmod tmp 0o444;
         Sys.rename tmp file)
 
 let open_temp temp_dir =
-  let tmp =
-    Filename.temp_file ~temp_dir "tmp" "index" in
+  let tmp = Filename.temp_file ~temp_dir "tmp" "index" in
   try tmp, Unix.(openfile tmp [O_RDWR;] 0o600)
   with e -> Sys.remove tmp; raise e
 

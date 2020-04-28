@@ -55,7 +55,7 @@ let getenv opt = try Some (Sys.getenv opt) with Caml.Not_found -> None
 
 let root () =
   let root = match !default_root with
-    | Some dir -> dir
+    | Some dir -> dir // ".cache" // "bap"
     | None -> match getenv "XDG_CACHE_HOME" with
       | Some cache -> cache
       | None -> match getenv "HOME" with
@@ -63,19 +63,41 @@ let root () =
         | Some home -> home // ".cache" // "bap" in
   root
 
+let ensure_dir_exists path =
+  try
+    Unix.mkdir path 0o700
+  with
+  | Unix.(Unix_error (EEXIST,_,_)) -> ()
+  | exn -> raise exn
+
+let rec mkdir path =
+  let par = Filename.dirname path in
+  if not (Sys.file_exists par) then mkdir par;
+  if not (Sys.file_exists path) then
+    ensure_dir_exists path
+
 let dir_exists dir = Sys.file_exists dir && Sys.is_directory dir
-let mkdir path = FileUtil.mkdir ~parent:true ~mode:(`Octal 0o700) path
+let _mkdir path = FileUtil.mkdir ~parent:true ~mode:(`Octal 0o700) path
 let rmdir path = FileUtil.rm ~recurse:true [path]
 
-let rename x y = Result.try_with (fun () -> Unix.rename x y)
+let rename x y =
+  Result.try_with (fun () -> Unix.rename x y)
 
+(* todo: bad!! *)
 let is_not_empty_error = function
   | Unix.(Unix_error (ENOTEMPTY,_,_))  -> true
   | _ -> false
 
-let with_temp_dir parent ~f =
+let try_rename x y =
+  try
+    Unix.rename x y
+  with
+  | Unix.(Unix_error (ENOTEMPTY,_,_)) -> ()
+  | exn -> raise exn
+
+let with_temp_dir path ~f =
   let tmp = Filename.temp_file "tmp" "" in
-  let tmp_dir = parent // tmp in
+  let tmp_dir = path // Filename.basename tmp in
   protect ~f:(fun () ->
       mkdir tmp_dir;
       f tmp_dir)
@@ -83,6 +105,15 @@ let with_temp_dir parent ~f =
         Sys.remove tmp;
         if dir_exists tmp_dir
         then rmdir tmp_dir)
+
+let mkdir_from_tmp ~target ~f path =
+  with_temp_dir path
+    ~f:(fun tmp_dir ->
+        f tmp_dir;
+        try Unix.rename tmp_dir target
+        with
+        | Unix.(Unix_error (ENOTEMPTY,_,_)) -> ()
+        | exn -> raise exn)
 
 let init_cache_dir path =
   mkdir (Cfg.data path);
@@ -94,21 +125,12 @@ let init_cache_dir () =
   if not (dir_exists data)
   then
     let parent = Filename.dirname root in
-    with_temp_dir parent ~f:(fun tmp_root ->
-        init_cache_dir tmp_root;
-        match rename tmp_root root with
-        | Ok () -> ()
-        | Error e when is_not_empty_error e -> ()
-        | Error exn ->
-          error "can't init cache: %s\n" (Exn.to_string exn);
-          raise exn)
-
+    mkdir_from_tmp ~target:root ~f:init_cache_dir parent
 
 let config_file () = config_file @@ root ()
 let data () = data @@ root ()
-let write_config cfg = Cfg.write  (config_file ()) cfg
-let read_config () =
-  Cfg.read @@ config_file ()
+let write_config cfg = Cfg.write (config_file ()) cfg
+let read_config () = Cfg.read @@ config_file ()
 
 module Upgrade = struct
 
@@ -143,24 +165,17 @@ module Upgrade = struct
         (Exn.to_string e)
 
   let upgrade_from_index_v2 file =
-    with_temp_dir (root ()) ~f:(fun tmp_dir ->
-        upgrade_from_index_v2 file tmp_dir;
-        match rename tmp_dir (data ()) with
-        | Ok () -> ()
-        | Error e when is_not_empty_error e -> ()
-        | Error exn ->
-          warning "can't read entries from index version 2: %s"
-            (Exn.to_string exn))
-
-  let run file =
-    match get_version file with
-    | Ok 2 -> upgrade_from_index_v2 file;
-    | _  -> warning "unknown index version"
+    mkdir_from_tmp ~target:(data ())
+      ~f:(upgrade_from_index_v2 file) (root ())
 
   let run () = match find_index () with
     | None -> ()
     | Some file ->
-      run file;
+      begin
+        match get_version file with
+        | Ok 2 -> upgrade_from_index_v2 file;
+        | _  -> warning "unknown index version"
+      end;
       Sys.remove file
 end
 
