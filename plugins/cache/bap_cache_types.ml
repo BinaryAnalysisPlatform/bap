@@ -2,7 +2,7 @@ open Core_kernel
 open Regular.Std
 
 type config = {
-  max_size : int;  (* Mb  *)
+  capacity : int;  (* Mb  *)
   overhead : float;
   gc_enabled : bool;
 } [@@deriving bin_io, compare, sexp]

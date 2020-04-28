@@ -104,11 +104,10 @@ let total_size =
   Array.fold ~init:0 ~f:(fun s e -> s + e.size)
 
 let cdf entries =
-  let prob e = max min_entry_size e.size in
   fst @@
   Array.foldi entries ~init:(Map.empty (module Int),0)
     ~f:(fun i (m,prev) e ->
-        let f_i = prev + prob e in
+        let f_i = prev + max min_entry_size e.size in
         CDF.add_exn m prev i, f_i)
 
 let select entries total_size size_to_free =
@@ -134,14 +133,21 @@ let shuffle fs =
 
 let to_Kb s = s * 1024
 
-let shrink ?threshold ~upto () =
+let lower_bound c =
+  let open Bap_cache_types in
+  to_Kb @@
+  max 0
+    (c.capacity - Int.of_float (float c.capacity *. c.overhead))
+
+let shrink ?(by_threshold=false) cfg =
   let entries = read_cache @@ Cache.data () in
   let total = total_size entries in
-  let upper_bound = match threshold with
-    | None -> to_Kb upto
-    | Some t -> to_Kb t in
-  if total > upper_bound then
-    let selected = select entries total (total - to_Kb upto) in
+  let lower_bound = lower_bound cfg in
+  let max_size =
+    if by_threshold then to_Kb @@ Cache.gc_threshold cfg
+    else lower_bound in
+  if total > max_size then
+    let selected = select entries total (total - lower_bound) in
     shuffle selected;
     Array.iter selected ~f:(fun i -> remove entries.(i))
 

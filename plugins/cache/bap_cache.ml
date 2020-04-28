@@ -17,8 +17,8 @@ module Cfg = struct
   end
 
   let default = {
-    max_size = 4 * 1024; (* 4 Gb  *)
-    overhead = 0.5;
+    capacity = 4 * 1024; (* 4 Gb  *)
+    overhead = 0.25;
     gc_enabled = true;
   }
 
@@ -30,19 +30,19 @@ module Cfg = struct
   let data  path = path // cache_data
 
   let gc_threshold c =
-    c.max_size + Int.of_float (float c.max_size *. c.overhead)
+    c.capacity + Int.of_float (float c.capacity *. c.overhead)
 
   let default_root = ref None
 
   let set_root dir = default_root := Some dir
 
   let write path cfg =
-    try Utils.to_file (module T) path cfg
+    try Utils.binable_to_file (module T) path cfg
     with e ->
       warning "storing config: %s" (Exn.to_string e)
 
   let read path =
-    try Utils.from_file (module T) path
+    try Utils.binable_from_file (module T) path
     with e ->
       warning "read config: %s" (Exn.to_string e);
       default
@@ -69,11 +69,9 @@ let rmdir path = FileUtil.rm ~recurse:true [path]
 
 let rename x y = Result.try_with (fun () -> Unix.rename x y)
 
-let rename_if_absent x y =
-  match rename x y with
-  | Ok () -> Ok ()
-  | Error Unix.(Unix_error (ENOTEMPTY,_,_))  -> Ok ()
-  | er -> er
+let is_not_empty_error = function
+  | Unix.(Unix_error (ENOTEMPTY,_,_))  -> true
+  | _ -> false
 
 let with_temp_dir parent ~f =
   let tmp = Filename.temp_file "tmp" "" in
@@ -92,20 +90,23 @@ let init_cache_dir path =
 
 let init_cache_dir () =
   let root = root () in
-  if not (dir_exists root)
+  let data = data root in
+  if not (dir_exists data)
   then
     let parent = Filename.dirname root in
     with_temp_dir parent ~f:(fun tmp_root ->
         init_cache_dir tmp_root;
-        match rename_if_absent tmp_root root with
+        match rename tmp_root root with
         | Ok () -> ()
+        | Error e when is_not_empty_error e -> ()
         | Error exn ->
           error "can't init cache: %s\n" (Exn.to_string exn);
           raise exn)
 
+
 let config_file () = config_file @@ root ()
 let data () = data @@ root ()
-let write_config = Cfg.write @@ config_file ()
+let write_config cfg = Cfg.write  (config_file ()) cfg
 let read_config () =
   Cfg.read @@ config_file ()
 
@@ -134,7 +135,7 @@ module Upgrade = struct
       Sys.rename from to_;
       Unix.chmod to_ 0o444 in
     try
-      let idx = Utils.from_file (module Compatibility.V2) index in
+      let idx = Utils.binable_from_file (module Compatibility.V2) index in
       Map.iteri idx.entries ~f:(fun ~key ~data:{path} ->
           rename path (dst // Data.Cache.Digest.to_string key))
     with e ->
@@ -144,24 +145,23 @@ module Upgrade = struct
   let upgrade_from_index_v2 file =
     with_temp_dir (root ()) ~f:(fun tmp_dir ->
         upgrade_from_index_v2 file tmp_dir;
-        match rename_if_absent tmp_dir (data ()) with
+        match rename tmp_dir (data ()) with
         | Ok () -> ()
+        | Error e when is_not_empty_error e -> ()
         | Error exn ->
           warning "can't read entries from index version 2: %s"
             (Exn.to_string exn))
 
+  let run file =
+    match get_version file with
+    | Ok 2 -> upgrade_from_index_v2 file;
+    | _  -> warning "unknown index version"
+
   let run () = match find_index () with
     | None -> ()
     | Some file ->
-      match get_version file with
-      | Ok 2 ->
-        upgrade_from_index_v2 file;
-        Sys.remove file
-      | Ok _ ->
-        Sys.remove file;
-        warning "unknown index version"
-      | _  -> warning "unknown index version"
-
+      run file;
+      Sys.remove file
 end
 
 let size () =

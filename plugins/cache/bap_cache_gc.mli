@@ -1,4 +1,5 @@
+open Bap_cache_types
 
-val shrink : ?threshold:int -> upto:int -> unit -> unit
+val shrink : ?by_threshold:bool -> config -> unit
 
 val clean : unit -> unit
