@@ -77,23 +77,6 @@ let rec mkdir path =
     ensure_dir_exists path
 
 let dir_exists dir = Sys.file_exists dir && Sys.is_directory dir
-let _mkdir path = FileUtil.mkdir ~parent:true ~mode:(`Octal 0o700) path
-let rmdir path = FileUtil.rm ~recurse:true [path]
-
-let rename x y =
-  Result.try_with (fun () -> Unix.rename x y)
-
-(* todo: bad!! *)
-let is_not_empty_error = function
-  | Unix.(Unix_error (ENOTEMPTY,_,_))  -> true
-  | _ -> false
-
-let try_rename x y =
-  try
-    Unix.rename x y
-  with
-  | Unix.(Unix_error (ENOTEMPTY,_,_)) -> ()
-  | exn -> raise exn
 
 let with_temp_dir path ~f =
   let tmp = Filename.temp_file "tmp" "" in
@@ -104,7 +87,7 @@ let with_temp_dir path ~f =
     ~finally:(fun () ->
         Sys.remove tmp;
         if dir_exists tmp_dir
-        then rmdir tmp_dir)
+        then FileUtil.rm ~recurse:true [tmp_dir])
 
 let mkdir_from_tmp ~target ~f path =
   with_temp_dir path
