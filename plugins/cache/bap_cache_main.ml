@@ -63,7 +63,7 @@ let run clean show_info gc =
   if show_info then run_and_exit print_info;
   if gc then run_and_exit run_gc
 
-let size sz cfg = {cfg with capacity = sz}
+let capacity sz cfg = {cfg with capacity = sz}
 let overhead ov cfg = {cfg with overhead = float ov /. 100.}
 let disable_gc x cfg = {cfg with gc_enabled = not x}
 let enable_gc x cfg = {cfg with gc_enabled = x}
@@ -75,7 +75,7 @@ let update_config sz ov no_gc gc =
   let is_set = Option.is_some in
   let cfg = Cache.read_config () in
   let cfg' =
-    set size sz cfg |>
+    set capacity sz cfg |>
     set overhead ov |>
     set disable_gc no_gc |>
     set enable_gc gc in
@@ -92,7 +92,7 @@ let init dir =
   run_gc_with_threshold ()
 
 open Extension
-
+open Syntax
 
 let doc = "
 # DESCRIPTION
@@ -124,19 +124,18 @@ prioritizing larger ones.
 $(b,regular)(3)
 "
 
+let cache_dir = Configuration.parameter
+    ~doc:"Use provided folder as a cache directory"
+    Extension.Type.("DIR" %: some string) "dir"
 
 let () =
-  let open Syntax in
   documentation doc;
-  let dir = Configuration.parameter
-      ~doc:"Use provided folder as a cache directory"
-      Extension.Type.("DIR" %: some string) "dir" in
   let clean = Configuration.flag
       ~doc:
         "Cleanup all caches.
          Deprecated, use $(b, bap cache --clean) instead" "clean" in
   Bap_main.Extension.declare @@ fun ctxt ->
-  init (ctxt --> dir);
+  init (ctxt --> cache_dir);
   if ctxt --> clean then
     run_and_exit GC.clean;
   provide_service ();
@@ -144,63 +143,59 @@ let () =
 
 let opts = ref String.Map.empty
 
-let add name ?arg short_descr doc =
+let add_description ?arg name descr  =
   let name = match arg with
     | None -> name
     | Some arg -> sprintf "%s=%s" name arg in
-  let descr = Option.value ~default:doc short_descr in
+  let name = "--" ^ name in
   opts := Map.add_exn !opts name descr
 
-let parameter ?arg ?aliases ?as_flag ?short_descr ~doc typ name =
-  add name ?arg short_descr doc;
-  Command.parameter ?aliases ?as_flag ~doc typ name
-
-let flag ?short_descr ~doc name =
-  add name short_descr doc;
+let flag doc name =
+  add_description name doc;
   Command.flag ~doc name
 
-let dir =
-  parameter ~arg:"DIR" ~doc:"use <DIR> as a cache directory"
-    Extension.Type.("DIR" %: some string) "dir"
-
-let clean  = flag ~doc:"cleanup the cache" "clean"
-let run_gc = flag ~doc:"runs garbage collector and exits" "run-gc"
-let info = flag ~doc:"prints information about the cache and exits" "info"
+let clean = flag "cleanup the cache" "clean"
+let run_gc = flag "runs garbage collector and exits" "run-gc"
+let info = flag "prints information about the cache and exits" "info"
 
 let enable_gc =
-  parameter ~as_flag:(Some true)
-    ~short_descr:"enables garbage collector"
+  let name = "enable-gc" in
+  add_description name "enables garbage collector";
+  Command.parameter ~as_flag:(Some true)
     ~doc:"enables garbage collector. The option value will persist
           between different runs of the program"
-    Extension.Type.(some bool) "enable-gc"
+    Extension.Type.(some bool) name
 
 let disable_gc =
-  parameter ~as_flag:(Some true)
-    ~short_descr:"disables garbage collector"
+  let name = "disable-gc" in
+  add_description name "disables garbage collector";
+  Command.parameter ~as_flag:(Some true)
     ~doc:"disables garbage collector. The option value will persist
           between different runs of the program"
-    Extension.Type.(some bool) "disable-gc"
+    Extension.Type.(some bool) name
 
-let size =
-  parameter
-    ~arg:"N"
-    ~short_descr:"sets the capacity of the cached data to <N> Mb"
+let capacity =
+  let name = "capacity" in
+  add_description ~arg:"N" name
+    "sets the capacity of the cached data to <N> Mb";
+  Command.parameter
     ~doc:"Set the capacity of cached data in Mb.
           The option value will persist
           between different runs of the program"
-    Extension.Type.("N" %: some int) ~aliases:["size"] "capacity"
+    Extension.Type.("N" %: some int) ~aliases:["size"] name
 
 let overhead =
-  parameter
-    ~arg:"P"
-    ~short_descr:"sets capacity overhead to <P> percents"
+  let name = "overhead" in
+  add_description ~arg:"P" name
+    "sets capacity overhead to <P> percents";
+  Command.parameter
     ~doc:"Controls the aggressiveness of the garbage collector.
      The higher the number the more space will be
      wasted but the cache system will run faster. It is
      expressed as a percentage of the capacity parameter.
      The option value will persist between different runs of
      the program"
-    Extension.Type.("N" %: some int) "overhead"
+    Extension.Type.("N" %: some int) name
 
 let print_command_options () =
   Format.printf "Command options:\n";
@@ -213,12 +208,12 @@ let _cmd =
   Extension.Command.(
     begin
       declare ~doc "cache"
-        (args $dir $clean $size $overhead $run_gc $disable_gc
+        (args $clean $capacity $overhead $run_gc $disable_gc
          $enable_gc $info)
-        (fun dir clean size overhead run_gc disable_gc enable_gc info
-          _ctxt ->
-          init dir;
-          update_config size overhead disable_gc enable_gc;
+        (fun clean capacity overhead run_gc disable_gc enable_gc info
+          ctxt ->
+          init (ctxt --> cache_dir);
+          update_config capacity overhead disable_gc enable_gc;
           run clean info run_gc;
           print_command_options ();
           Ok ())
