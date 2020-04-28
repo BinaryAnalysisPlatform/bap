@@ -58,6 +58,48 @@ module Get(Machine : Primus.Machine.S) = struct
       | Some x -> Machine.return x
 end
 
+module Next(Machine : Primus.Machine.S) = struct
+  [@@@warning "-P"]
+  include Pre(Machine)
+
+  let run [dic; key] =
+    Machine.Local.get state >>= fun s ->
+    match Map.find s.dicts dic with
+    | None -> nil
+    | Some {dict} ->
+      match Map.closest_key dict `Greater_than key with
+      | None -> nil
+      | Some (x,_) -> Machine.return x
+end
+
+module First(Machine : Primus.Machine.S) = struct
+  [@@@warning "-P"]
+  include Pre(Machine)
+
+  let run [dic] =
+    Machine.Local.get state >>= fun s ->
+    match Map.find s.dicts dic with
+    | None -> nil
+    | Some {dict} -> match Map.min_elt dict with
+      | None -> nil
+      | Some (x,_) -> Machine.return x
+end
+
+
+module Length(Machine : Primus.Machine.S) = struct
+  [@@@warning "-P"]
+  include Pre(Machine)
+
+  let run [dic] =
+    Machine.gets Project.arch >>|
+    Arch.addr_size >>|
+    Size.in_bits >>= fun width ->
+    Machine.Local.get state >>= fun s ->
+    match Map.find s.dicts dic with
+    | None -> nil
+    | Some {dict} -> Value.of_int ~width (Map.length dict)
+end
+
 module Del(Machine : Primus.Machine.S) = struct
   [@@@warning "-P"]
   include Pre(Machine)
@@ -112,6 +154,18 @@ module Main(Machine : Primus.Machine.S) = struct
       def "dict-del" (tuple [sym; a] @-> bool) (module Del)
         {|(dict-del DIC KEY) deletes any association with KEY in the
           dictionary DIC|};
+
+      def "dict-first" (tuple [sym] @-> a) (module First)
+        {|(dict-first DIC) is the first key in DIC or nil if DIC is empty.|};
+
+      def "dict-next" (tuple [sym; a] @-> a) (module Next)
+        {|(dict-next DIC KEY) returns the next key after KEY
+
+        Returns nil if KEY was the last key in the dictionary.
+        Could be used together with DICT-FIRST for iterating.|};
+
+      def "dict-length" (tuple [sym] @-> int) (module First)
+        {|(dict-first DIC) is the total number of keys in DIC.|};
     ]
 end
 
