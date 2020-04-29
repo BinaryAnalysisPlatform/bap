@@ -9,6 +9,20 @@
   (declare (external "__libc_start_main"))
   (exit-with (invoke-subroutine main argc argv)))
 
+(defun setup-stack-canary ()
+  (declare (context (abi "sysv")))
+  (set FS_BASE (- brk 0x28))
+  (memory-allocate brk (sizeof ptr_t))
+  (write-word ptr_t brk 0xDEADBEEFBEAFDEAD)
+  (+= brk (sizeof ptr_t)))
+
+(defun init (main argc argv auxv)
+  "GNU libc initialization stub"
+  (declare (external "__libc_start_main")
+           (context (abi "sysv")))
+  (setup-stack-canary)
+  (exit-with (invoke-subroutine main argc argv)))
+
 (defun init (args on-exit main)
   "bionic initialization function"
   (declare (external "__libc_init"))

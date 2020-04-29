@@ -2,7 +2,7 @@
   :description "Executes a binary program."
   :components (bap:load-binary
                bap:program-loader
-               bap:x86-flag-initializer
+               bap:x86-registers-initializer
                bap:powerpc-init
                bap:observation-printer))
 

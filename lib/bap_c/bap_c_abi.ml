@@ -111,14 +111,9 @@ let proj_int = function Bil.Int x -> Some x | _ -> None
 let is_sub_exists prog name = Option.is_some @@ find_by_name prog name
 let is_sub_absent prog name = not (is_sub_exists prog name)
 
-let has_libc_runtime prog =
-  is_sub_exists prog "__libc_csu_fini" &&
-  is_sub_exists prog "__libc_csu_init"
-
 let find_entry_point prog =
   Term.enum sub_t prog |>
   Seq.find ~f:(fun sub -> Term.has_attr sub Sub.entry_point)
-
 
 let find_libc_start_main prog =
   let open Monad.Option.Syntax in
@@ -128,8 +123,19 @@ let find_libc_start_main prog =
   match Jmp.kind jmp with
   | Goto _ | Ret _ | Int _ -> None
   | Call call -> match Call.target call with
-    | Indirect _ -> None
-    | Direct tid -> Some tid
+    | Direct tid -> Some (tid,prog)
+    | Indirect _ ->
+      let name = "__libc_start_main" in
+      let tid = Tid.for_name name in
+      let sub = Sub.create ~tid ~name () in
+      let prog = Term.append sub_t prog sub in
+      let entry = Term.remove jmp_t entry (Term.tid jmp) in
+      let call = Call.create (Direct (Term.tid sub)) () in
+      let jmp = Jmp.create_call call in
+      let entry = Term.prepend jmp_t entry jmp in
+      let start = Term.update blk_t start entry in
+      let prog = Term.update sub_t prog start in
+      Some (Term.tid sub, prog)
 
 let detect_main_address prog =
   let open Monad.Option.Syntax in
@@ -148,23 +154,33 @@ let detect_main_address prog =
         | _ -> None) >>= proj_int
   | _ -> None
 
+
+let reinsert_args_for_new_name abi sub name =
+  let sub = Term.filter arg_t sub ~f:(fun _ -> false) in
+  let sub = Term.del_attr sub Attrs.proto in
+  abi#map_sub @@
+  Sub.with_name sub name
+
 let rename_main abi prog = match detect_main_address prog with
   | None -> prog
   | Some addr ->
     Term.map sub_t prog ~f:(fun sub ->
         match Term.get_attr sub address with
         | Some a when Addr.equal addr a ->
-          abi#map_sub (Sub.with_name sub "main")
+          reinsert_args_for_new_name abi sub "main"
         | _ -> sub)
+
 
 let rename_libc_start_main abi prog =
   if is_sub_absent prog "__libc_start_main"
   then match find_libc_start_main prog with
     | None -> prog
-    | Some tid ->
+    | Some (tid,prog) ->
       Term.change sub_t prog tid @@ function
       | None -> None
-      | Some sub -> Some (abi#map_sub (Sub.with_name sub "__libc_start_main"))
+      | Some sub ->
+        Option.some @@
+        reinsert_args_for_new_name abi sub "__libc_start_main"
   else prog
 
 let fix_libc_runtime abi prog =
@@ -175,9 +191,8 @@ let stage2 stage1 = object
   inherit Term.mapper
   method! run prog =
     let prog = stage1#run prog in
-    if has_libc_runtime prog &&
-       (is_sub_absent prog "main" ||
-        (is_sub_absent prog "__libc_start_main"))
+    if is_sub_absent prog "main" ||
+       is_sub_absent prog "__libc_start_main"
     then fix_libc_runtime stage1 prog
     else prog
 end
