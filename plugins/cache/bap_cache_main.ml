@@ -200,7 +200,7 @@ let overhead =
 let print_command_options () =
   Format.printf "Command options:\n";
   Map.iteri !opts ~f:(fun ~key:name ~data:descr ->
-      Format.printf  "  --%-24s %s@\n" name descr)
+      Format.printf  "  %-24s %s@\n" name descr)
 
 let _cmd =
   let doc =
