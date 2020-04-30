@@ -49,13 +49,14 @@ let (++) = Set.union
 let dead_jmps_of_blk b =
   Term.to_sequence jmp_t b |>
   Seq.fold ~init:(Set.empty (module Tid), false)
-    ~f:(fun (deads, b1) jmp ->
-        if b1 then Set.add deads (Term.tid jmp), b1
+    ~f:(fun (deads, is_taken) jmp ->
+        if is_taken then Set.add deads (Term.tid jmp), is_taken
         else
           match Jmp.cond jmp with
           | Bil.Int x when x = Word.b1 -> deads, true
-          | Bil.Int x when x = Word.b0 -> Set.add deads (Term.tid jmp), b1
-          | _ -> deads, b1) |> fst
+          | Bil.Int x when x = Word.b0 ->
+            Set.add deads (Term.tid jmp), is_taken
+          | _ -> deads, is_taken) |> fst
 
 let dead_jmps sub =
   Term.to_sequence blk_t sub |>
