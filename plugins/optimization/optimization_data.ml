@@ -1,6 +1,7 @@
 open Core_kernel
 open Bap.Std
 open Regular.Std
+open Graphlib.Std
 
 type jmp_update = {
   cond : exp;
@@ -43,24 +44,87 @@ let updates_of_sub sub =
 
 let create ~deads sub = {deads; updates = updates_of_sub sub}
 
-let apply sub {deads; updates} =
-  let apply_to_def d =
-    if Set.mem deads (Term.tid d) then None
-    else
-      match Map.find updates (Term.tid d) with
-      | None -> Some d
-      | Some (Rhs e) -> Some (Def.with_rhs d e)
-      | _ -> assert false in
-  let apply_to_jmp j =
-    match Map.find updates (Term.tid j) with
-    | None -> j
-    | Some (Jmp {cond; kind}) ->
-      let j = Jmp.with_cond j cond in
-      Jmp.with_kind j kind
-    | _ -> assert false in
+let intra_dst jmp =
+  let open Option.Monad_infix in
+  Jmp.dst jmp >>= fun dst ->
+  Either.First.to_option (Jmp.resolve dst)
+
+let (++) = Set.union
+
+let dead_jmps_of_blk b =
+  Term.to_sequence jmp_t b |>
+  Seq.fold ~init:(Set.empty (module Tid), false)
+    ~f:(fun (deads, b1) jmp ->
+        if b1 then Set.add deads (Term.tid jmp), b1
+        else
+          match Jmp.cond jmp with
+          | Bil.Int x when x = Word.b1 -> deads, true
+          | Bil.Int x when x = Word.b0 -> Set.add deads (Term.tid jmp), b1
+          | _ -> deads, b1) |> fst
+
+let dead_jmps sub =
+  Term.to_sequence blk_t sub |>
+  Seq.fold ~init:(Set.empty (module Tid))
+    ~f:(fun tids b -> tids ++ dead_jmps_of_blk b)
+
+let remove_dead_edges g dead_jmps =
+  let module G = Graphs.Tid in
+  Seq.fold (G.edges g)
+    ~init:g ~f:(fun g edge ->
+        if Set.mem dead_jmps (Graphs.Tid.Edge.label edge)
+        then G.Edge.remove edge g
+        else g)
+
+let dead_blks sub g =
+  let module G = Graphs.Tid in
+  Term.to_sequence blk_t sub |>
+  Seq.fold ~init:(Set.empty (module Tid)) ~f:(fun deads b ->
+      if Graphlib.is_reachable (module G) g G.start (Term.tid b)
+      then deads
+      else Set.add deads (Term.tid b))
+
+let find_unreachable sub t =
+  let dead_jmps = dead_jmps sub in
+  let dead_blks =
+    remove_dead_edges (Sub.to_graph sub) dead_jmps |>
+    dead_blks sub in
+  {t with deads = t.deads ++ dead_jmps ++ dead_blks }
+
+let update_def updates d =
+  match Map.find updates (Term.tid d) with
+  | None -> d
+  | Some (Rhs e) -> Def.with_rhs d e
+  | _ -> assert false
+
+let update_jmp updates j =
+  match Map.find updates (Term.tid j) with
+  | None -> j
+  | Some (Jmp {cond; kind}) ->
+    let j = Jmp.with_cond j cond in
+    Jmp.with_kind j kind
+  | _ -> assert false
+
+let update sub {updates} =
   Term.map blk_t sub ~f:(fun b ->
-      Term.filter_map def_t b ~f:apply_to_def |>
-      Term.map jmp_t ~f:apply_to_jmp)
+      Term.map def_t b ~f:(update_def updates) |>
+      Term.map jmp_t ~f:(update_jmp updates))
+
+let map_alive deads cls ?(f=ident) x =
+  Term.filter_map cls x ~f:(fun t ->
+      if Set.mem deads (Term.tid t) then None
+      else Some (f t))
+
+let remove_dead_code sub {deads} =
+  let update_blk b =
+    map_alive deads def_t b |>
+    map_alive deads jmp_t in
+  map_alive deads blk_t sub ~f:update_blk
+
+let apply sub {deads; updates} =
+  let update_blk b =
+    map_alive deads def_t b ~f:(update_def updates) |>
+    map_alive deads jmp_t ~f:(update_jmp updates) in
+  map_alive deads blk_t sub ~f:update_blk
 
 include Data.Make(struct
     type nonrec t = t
