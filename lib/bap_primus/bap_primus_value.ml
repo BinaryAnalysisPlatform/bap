@@ -133,13 +133,13 @@ module Make(Machine : Machine) = struct
 
   module Symbol = struct
     let to_value sym =
-      Machine.Local.get symbols >>= fun index ->
+      Machine.Global.get symbols >>= fun index ->
       let index = Index.register index sym in
-      Machine.Local.put symbols index >>| fun () ->
+      Machine.Global.put symbols index >>| fun () ->
       Index.key index sym
 
     let of_value value =
-      Machine.Local.get symbols >>| fun index ->
+      Machine.Global.get symbols >>| fun index ->
       Index.string index value
   end
 
