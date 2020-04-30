@@ -191,6 +191,9 @@ let eval_cond,on_cond =
   Observation.provide ~inspect:sexp_of_value "eval-cond"
     ~desc:"Occurs when the jump condition is evaluated."
 
+let assumption,assume =
+  Observation.provide ~inspect:sexp_of_value "assumption"
+    ~desc:"Occurs when a branch dependent on the value is taken"
 
 let results r op = Sexp.List [op; sexp_of_value r]
 
@@ -199,7 +202,6 @@ let sexp_of_binop ((op,x,y),r) = results r @@ sexps [
     string_of_value x;
     string_of_value y;
   ]
-
 
 let sexp_of_unop ((op,x),r) = results r @@ sexps [
     Bil.string_of_unop op;
@@ -653,6 +655,21 @@ module Make (Machine : Machine) = struct
     !!pos_left curr
 
 
+  let branch cnd yes no =
+    Value.zero (Value.bitwidth cnd) >>= fun zero ->
+    binop Bil.EQ cnd zero >>= fun is_zero ->
+    !!on_cond is_zero >>= fun () ->
+    if Value.is_one is_zero then no else yes
+
+  let rec repeat cnd body =
+    cnd >>= fun x ->
+    Value.zero (Value.bitwidth x) >>= fun zero ->
+    binop Bil.EQ x zero >>= fun stop ->
+    !!on_cond stop >>= fun () ->
+    if Value.is_one stop
+    then Machine.return stop
+    else body >>= fun _ -> repeat cnd body
+
   let term return cls f t =
     Machine.Local.get state >>= fun s ->
     match Pos.next s.curr cls t with
@@ -756,6 +773,7 @@ module Make (Machine : Machine) = struct
   let jmp t = eval_exp (Jmp.cond t) >>= fun ({value} as cond) ->
     !!on_cond cond >>| fun () ->
     Option.some_if (Word.is_one value) (cond,t)
+
   let jmp = term normal jmp_t jmp
 
   let blk t =
@@ -766,7 +784,7 @@ module Make (Machine : Machine) = struct
     | None -> Machine.return ()  (* return from sub *)
     | Some (cond,code) -> jump cond code
 
-  let blk = term finish blk_t blk
+  let blk : blk term -> unit m = term finish blk_t blk
 
   let arg_def t = match Arg.intent t with
     | None | Some (In|Both) -> Arg.lhs t := Arg.rhs t
@@ -809,6 +827,7 @@ module Make (Machine : Machine) = struct
           let args = List.rev_append inputs rets in
           k (name,args))
 
+  let assume x = !!on_cond x
 
   let sub = term normal sub_t sub
   let pos = Machine.Local.get state >>| fun {curr} -> curr

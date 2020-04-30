@@ -376,16 +376,10 @@ module Interpreter(Machine : Machine) = struct
       | {data=Set (v,e)} -> eval e >>= set v
       | {data=Msg (fmt,es)} -> msg fmt es
       | {data=Err msg} -> Machine.raise (Runtime_error msg)
-    and rep c e =
-      Eval.tick >>= fun () ->
-      eval c >>= fun r ->
-      is_zero r >>= fun yes ->
-      if Value.is_one yes
-      then Machine.return r
-      else eval e >>= fun _ -> rep c e
+    and rep c e = Eval.repeat (eval c) (eval e)
     and ite c e1 e2 =
-      eval c >>= is_zero >>= fun c ->
-      if Value.is_one c then eval e2 else eval e1
+      eval c >>= fun c ->
+      Eval.branch c (eval e1) (eval e2)
     and let_ v e1 e2 =
       Machine.Local.get state >>= fun {width} ->
       eval e1 >>= fun w ->

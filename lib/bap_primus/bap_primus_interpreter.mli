@@ -32,6 +32,7 @@ val jumping : (value * value) observation
 val eval_cond : value observation
 val undefined : value observation
 val const : value observation
+val assumption : value observation
 
 val binop : ((binop * value * value) * value) observation
 val unop : ((unop * value) * value) observation
@@ -98,7 +99,8 @@ module Make (Machine : Machine) : sig
   val ite : value -> value -> value -> value m
   val load : value -> endian -> size -> value m
   val store : value -> value -> endian -> size -> unit m
-
+  val branch : value -> 'a m -> 'a m -> 'a m
+  val repeat : value m -> 'a m -> value m
   val tick : unit m
   val time : Time.t m
 end

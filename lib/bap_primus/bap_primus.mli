@@ -1926,6 +1926,16 @@ module Std : sig
             invoked and the operation is repeated. Otherwise the
             [Segmentation_fault] machine exception is raised.  *)
         val store : value -> value -> endian -> size -> unit m
+
+        (** [branch cnd yes no] if [cnd] evaluates to [zero] then
+            [yes] else [no]. *)
+        val branch : value -> 'a m -> 'a m -> 'a m
+
+
+        (** [repeat cnd body] evaluates [body] until [cnd] evaluates
+            to [zero]. Returns the value of [cnd].  *)
+        val repeat : value m -> 'a m -> value m
+
       end
     end
 
