@@ -106,7 +106,7 @@ module Formula : sig
   val ite : t -> t -> t -> t
   val cast : cast -> int -> t -> t
 
-  val solve : ?constraints:t list -> ?inverse:bool -> t -> model option
+  val solve : ?constraints:t list -> ?refute:bool -> t -> model option
 
 
   module Model : sig
@@ -250,12 +250,12 @@ end = struct
     model : Z3.Model.model;
   }
 
-  let solve ?(constraints=[]) ?(inverse=false) expr =
+  let solve ?(constraints=[]) ?(refute=false) expr =
     let solver = Z3.Solver.mk_simple_solver ctxt in
     let constraints = List.map constraints ~f:bool_of_bit in
     let lhs = Expr.mk_numeral_int ctxt 0 (Expr.get_sort expr) in
     let formula = Bool.mk_eq ctxt lhs expr in
-    let formula = if inverse then formula
+    let formula = if refute then formula
       else Bool.mk_not ctxt formula in
     match Z3.Solver.check solver (formula::constraints) with
     | UNSATISFIABLE | UNKNOWN -> None
@@ -326,6 +326,8 @@ module Executor(Machine : Primus.Machine.S) : sig
   val add_constraint : Primus.Value.t -> unit Machine.t
 end = struct
   open Machine.Syntax
+
+  module Value = Primus.Value.Make(Machine)
 
   let get_formula s v k =
     let id = Primus.Value.id v in
@@ -401,8 +403,10 @@ end = struct
     Set.to_sequence s.inputs
 
   let add_constraint x =
+    let inverse = Value.is_zero x in
     Machine.Local.get executor >>= fun s ->
     get_formula s x @@ fun s x ->
+    let x = if inverse then Formula.unop NOT x else x in
     Machine.Local.put executor {
       s with constraints = x :: s.constraints;
     }
@@ -425,7 +429,7 @@ end
 
 type task = {
   inputs : Input.t Seq.t;
-  inverse : bool;
+  refute : bool;
   rhs : Formula.t;
   blk : blk term;
   src : jmp term;
@@ -452,11 +456,11 @@ let pp_dst ppf dst = match Jmp.resolve dst with
   | First tid -> Format.fprintf ppf "%a" Tid.pp tid
   | Second _ -> Format.fprintf ppf "unk"
 
-let pp_task ppf {rhs; blk; src; dst; inverse} =
+let pp_task ppf {rhs; blk; src; dst; refute} =
   Format.fprintf ppf "%a(%a) -> %a s.t.%s:@\n%s"
     Tid.pp (Term.tid blk)
     Tid.pp (Term.tid src) pp_dst dst
-    (if inverse then " not" else "")
+    (if refute then " not" else "")
     (Formula.to_string rhs)
 
 
@@ -520,7 +524,7 @@ module Forker(Machine : Primus.Machine.S) = struct
       else
         Executor.formula cnd >>= fun rhs ->
         Executor.inputs >>= fun inputs ->
-        let task = {inverse = taken; inputs; rhs; src; dst; blk} in
+        let task = {refute = taken; inputs; rhs; src; dst; blk} in
         Machine.Global.put master {
           s with
           worklist = task :: s.worklist;
@@ -547,9 +551,9 @@ module Forker(Machine : Primus.Machine.S) = struct
       } >>| fun () ->
       Some t
 
-  let exec_task ({inputs; inverse; rhs} as task) =
+  let exec_task ({inputs; refute; rhs} as task) =
     Debug.msg "starting a new task %a" pp_task task >>= fun () ->
-    match Formula.solve ~inverse rhs with
+    match Formula.solve ~refute rhs with
     | None ->
       Debug.msg "can't find a solution!" >>= fun () ->
       Machine.return ()
@@ -657,8 +661,10 @@ module Assert(Machine : Primus.Machine.S) = struct
           Executor.formula assertion >>= fun x ->
           Debug.msg "checking that %s holds"
             (Formula.to_string x) >>= fun () ->
+          Machine.List.iter constraints ~f:(fun constr ->
+              Debug.msg "s.t. %s" (Formula.to_string constr)) >>= fun () ->
           Machine.Observation.post failed_assertion ~f:(fun report ->
-              match Formula.solve ~constraints ~inverse:true x with
+              match Formula.solve ~constraints ~refute:true x with
               | None ->
                 Debug.msg "it holds!" >>= fun () ->
                 Machine.return ()
