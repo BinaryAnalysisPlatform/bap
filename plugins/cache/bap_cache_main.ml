@@ -103,9 +103,9 @@ point is defined in the [Data] module of the [Regular] library.
 The cache plugin implements lock-free store/loading operations with
 O(1) complexity: the same cache folder can be safely shared
 between different processes without any performance impact and
-these operations don't depend from the cache size.
+these operations don't depend on the cache size.
 
-Also, the plugin maintain the cache size below the certain level,
+Also, the plugin maintains the cache size below the certain level,
 unless the garbage collector is manually disabled via
 $(b,--disable-gc) option.
 The maximum occupied size of the cache is controlled by
