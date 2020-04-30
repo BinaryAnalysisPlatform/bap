@@ -44,11 +44,6 @@ let updates_of_sub sub =
 
 let create ~deads sub = {deads; updates = updates_of_sub sub}
 
-let intra_dst jmp =
-  let open Option.Monad_infix in
-  Jmp.dst jmp >>= fun dst ->
-  Either.First.to_option (Jmp.resolve dst)
-
 let (++) = Set.union
 
 let dead_jmps_of_blk b =
