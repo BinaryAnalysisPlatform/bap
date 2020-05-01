@@ -33,6 +33,17 @@ open Monads.Std
 
 *)
 
+type memory = {
+  bank : Primus.Memory.Descriptor.t;
+  ptr : Word.t;
+  len : int;
+} [@@deriving compare, equal]
+
+let memories = Primus.Machine.State.declare
+    ~uuid:"15dbb89a-3bfb-421c-8b19-16605425c3f5"
+    ~name:"symbolic-memories" @@ fun _ ->
+  String.Map.empty
+
 module Id = Monad.State.Multi.Id
 let debug_msg,post_msg = Primus.Observation.provide "executor-debug"
     ~inspect:sexp_of_string
@@ -47,7 +58,7 @@ end
 
 module Input : sig
   type t
-  val ptr : addr -> t
+  val ptr : Primus.Memory.Descriptor.t -> addr -> t
   val var : var -> t
   val to_symbol : t -> string
   val size : t -> int
@@ -57,36 +68,58 @@ module Input : sig
   end
   include Base.Comparable.S with type t := t
 end = struct
-  type t = Ptr of word | Var of var [@@deriving compare, sexp]
+  type t =
+    | Var of var
+    | Ptr of {
+        bank : Primus.Memory.Descriptor.t;
+        addr : addr;
+      } [@@deriving compare, sexp_of]
 
-  let ptr p = Ptr p
+  let ptr bank addr = Ptr {bank; addr}
   let var p = Var p
 
   let to_symbol = function
-    | Var v -> Format.asprintf "R_%a" Var.pp v
-    | Ptr p -> Format.asprintf "M_%a" Addr.pp_hex p
+    | Var v -> Format.asprintf "%a" Var.pp v
+    | Ptr {bank;addr} ->
+      Format.asprintf "%s[%a]"
+        (Primus.Memory.Descriptor.name bank)
+        Addr.pp_hex addr
 
   let size = function
-    | Ptr _ -> 8
+    | Ptr {bank} -> Primus.Memory.Descriptor.data_size bank
     | Var v -> match Var.typ v with
       | Imm m -> m
       | _ -> 1
 
   module Make(Machine : Primus.Machine.S) = struct
     open Machine.Syntax
-    module Eval = Primus.Interpreter.Make(Machine)
-    module Value = Primus.Value.Make(Machine)
+    module Mems = Primus.Memory.Make(Machine)
+    module Env = Primus.Env.Make(Machine)
+    module Lisp = Primus.Lisp.Make(Machine)
 
-    let set input value =
-      match input with
-      | Ptr p ->
-        Value.of_word p >>= fun p ->
-        Eval.store p value BigEndian `r8
-      | Var v -> Eval.set v value
+    let allocate_if_not bank addr =
+      Mems.is_mapped addr >>= function
+      | true -> Machine.return ()
+      | false ->
+        let name = Primus.Memory.Descriptor.name bank in
+        Machine.Global.get memories >>= fun memories ->
+        match Map.find memories name with
+        | None -> Lisp.failf "unknown symbolic memory %s" name ()
+        | Some {ptr; len} -> Mems.allocate ptr len
+
+    let set input value = match input with
+      | Ptr {bank; addr} ->
+        Mems.memory >>= fun current ->
+        Mems.switch bank >>= fun () ->
+        allocate_if_not bank addr >>= fun () ->
+        Mems.set addr value >>= fun () ->
+        Mems.switch current
+      | Var v ->
+        Env.set v value
   end
 
   include Base.Comparable.Make(struct
-      type nonrec t = t [@@deriving compare, sexp]
+      type nonrec t = t [@@deriving compare, sexp_of]
     end)
 end
 
@@ -328,6 +361,7 @@ end = struct
   open Machine.Syntax
 
   module Value = Primus.Value.Make(Machine)
+  module Mems = Primus.Memory.Make(Machine)
 
   let get_formula s v k =
     let id = Primus.Value.id v in
@@ -388,7 +422,9 @@ end = struct
           formulae = Map.set s.formulae id x;
         })
 
-  let on_memory_input (p,x) = set_input (Input.ptr p) x
+  let on_memory_input (p,x) =
+    Mems.memory >>= fun desc ->
+    set_input (Input.ptr desc p) x
 
   let on_env_input (v,x) = set_input (Input.var v) x
 
@@ -612,19 +648,6 @@ module Forker(Machine : Primus.Machine.S) = struct
     ]
 end
 
-module Assume(Machine : Primus.Machine.S) = struct
-  open Machine.Syntax
-  module Executor = Executor(Machine)
-  module Value = Primus.Value.Make(Machine)
-
-  let run assumptions =
-    Machine.List.iter assumptions ~f:Executor.add_constraint
-    >>= fun () ->
-    Value.b1
-
-end
-
-
 let sexp_of_assert_failure (name,model,formula,inputs) =
   Sexp.List (
     Atom name ::
@@ -642,55 +665,187 @@ let assert_failure,failed_assertion =
     ~inspect:sexp_of_assert_failure
     ~desc:"occurs when a symbolic executor assertion doesn't hold"
 
+let to_word x = Primus.Value.to_word x
+let to_int x = to_word x |> Word.to_int_exn
 
-
-module Assert(Machine : Primus.Machine.S) = struct
+module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
-  module Executor = Executor(Machine)
-  module Value = Primus.Value.Make(Machine)
+
   module Lisp = Primus.Lisp.Make(Machine)
+  module Mems = Primus.Memory.Make(Machine)
+  module Val = Primus.Value.Make(Machine)
+  module Env = Primus.Env.Make(Machine)
+  module Executor = Executor(Machine)
+  module Bank = Primus.Memory.Descriptor
+  module Closure = Primus.Lisp.Closure.Make(Machine)
   module Debug = Debug(Machine)
 
-  let run args = match args with
-    | [] -> Lisp.failf "assert requires at least two arguments: \
-                        the name and the assertions" ()
-    | name :: assertions ->
-      Value.Symbol.of_value name >>= fun name ->
-      Machine.List.iter assertions ~f:(fun assertion ->
-          Executor.constraints >>= fun constraints ->
-          Executor.formula assertion >>= fun x ->
-          Debug.msg "checking that %s holds"
-            (Formula.to_string x) >>= fun () ->
-          Machine.List.iter constraints ~f:(fun constr ->
-              Debug.msg "s.t. %s" (Formula.to_string constr)) >>= fun () ->
-          Machine.Observation.post failed_assertion ~f:(fun report ->
-              match Formula.solve ~constraints ~refute:true x with
-              | None ->
-                Debug.msg "it holds!" >>= fun () ->
-                Machine.return ()
-              | Some model ->
-                Debug.msg "it doesn't hold!" >>= fun () ->
-                Executor.inputs >>| Seq.to_list >>= fun inputs ->
-                report (name,model,x,inputs))) >>= fun () ->
-      Value.b1
+  let addr_size arch_addr_size = function
+    | [addr_size; _data_size] -> to_int addr_size
+    | [] | [_] -> arch_addr_size
+    | _ -> failwith "symbolic-memory: expects 3 to 5 arguments"
 
+  let data_size = function
+    | [_addr_size; data_size] -> to_int data_size
+    | _ -> 8
+
+  let rec set_inputs bank data_size lower upper =
+    if Word.(lower > upper) then Machine.return ()
+    else
+      Val.zero data_size >>=
+      Executor.set_input (Input.ptr bank lower) >>= fun () ->
+      set_inputs bank data_size (Word.succ lower) upper
+
+  let register_memory m =
+    let name = Bank.name m.bank in
+    Machine.Global.update memories ~f:(fun mem ->
+        Map.update mem name ~f:(function
+            | None -> m
+            | Some m' when equal_memory m m' -> m
+            | _ ->
+              invalid_argf "symbolic-memory: %s was previously \
+                            define with different parameters"
+                name ()))
+
+  let with_memory {bank} perform =
+    Mems.memory >>= fun current ->
+    Mems.switch bank >>= fun () ->
+    perform >>= fun x ->
+    Mems.switch current >>| fun () ->
+    x
+
+  let open_bank id =
+    Machine.Global.get memories >>= fun mems ->
+    Val.Symbol.of_value id >>= fun name ->
+    match Map.find mems name with
+    | None ->
+      Lisp.failf "unknown memory %s" name ()
+    | Some bank -> Machine.return bank
+
+  let read id ptr =
+    open_bank id >>= fun bank ->
+    with_memory bank (Mems.get (to_word ptr))
+
+  let write id ptr data =
+    open_bank id >>= fun bank ->
+    with_memory bank (Mems.set (to_word ptr) data) >>| fun () ->
+    ptr
+
+  let width default_width = function
+    | [] -> default_width
+    | s :: _ -> to_int s
+
+  let value width = function
+    | [_; x] -> Machine.return x
+    | _ -> Val.of_int ~width 0
+
+  let arch_addr_size =
+    Machine.gets Project.arch >>|
+    Arch.addr_size >>|
+    Size.in_bits
+
+  let create_value var rest =
+    arch_addr_size >>= fun default_width ->
+    let width = width default_width rest in
+    Val.Symbol.of_value var >>= fun name ->
+    let var = Var.create ("R_" ^ name) (Imm width) in
+    Env.has var >>= function
+    | true -> Env.get var
+    | false ->
+      value width rest >>= fun x ->
+      Executor.set_input (Input.var var) x >>= fun () ->
+      Env.set var x >>| fun () ->
+      x
+
+  let create_memory id lower upper rest =
+    arch_addr_size >>= fun arch_addr_size ->
+    Val.Symbol.of_value id >>= fun name ->
+    Machine.Global.get memories >>= fun memories ->
+    if Map.mem memories name then Machine.return id
+    else
+      let bank = Bank.create name
+          ~addr_size:(addr_size arch_addr_size rest)
+          ~data_size:(data_size rest) in
+      let lower = to_word lower and upper = to_word upper in
+      let len = match Word.(to_int (upper - lower)) with
+        | Error _ ->
+          invalid_arg "symbolic-memory: the region is too large"
+        | Ok diff -> diff + 1 in
+      let memory = {bank; ptr=lower; len} in
+      register_memory memory >>= fun () ->
+      with_memory memory (Mems.allocate lower len) >>= fun () ->
+      set_inputs bank (data_size rest) lower upper >>| fun () ->
+      id
+
+  let assume assumptions =
+    Machine.List.iter assumptions ~f:Executor.add_constraint
+    >>= fun () ->
+    Val.b1
+
+  let assert_ name assertions =
+    Val.Symbol.of_value name >>= fun name ->
+    Machine.List.iter assertions ~f:(fun assertion ->
+        Executor.constraints >>= fun constraints ->
+        Executor.formula assertion >>= fun x ->
+        Debug.msg "checking that %s holds"
+          (Formula.to_string x) >>= fun () ->
+        Machine.List.iter constraints ~f:(fun constr ->
+            Debug.msg "s.t. %s" (Formula.to_string constr)) >>= fun () ->
+        Machine.Observation.post failed_assertion ~f:(fun report ->
+            match Formula.solve ~constraints ~refute:true x with
+            | None ->
+              Debug.msg "it holds!" >>= fun () ->
+              Machine.return ()
+            | Some model ->
+              Debug.msg "it doesn't hold!" >>= fun () ->
+              Executor.inputs >>| Seq.to_list >>= fun inputs ->
+              report (name,model,x,inputs))) >>= fun () ->
+    Val.b1
+
+  let run args =
+    Closure.name >>= fun name -> match name,args with
+    | "symbolic-memory", (id :: lower :: upper :: rest) ->
+      create_memory id lower upper rest
+    | "symbolic-memory-read", [id; ptr] -> read id ptr
+    | "symbolic-memory-write", [id; ptr; data] -> write id ptr data
+    | "symbolic-assume", args -> assume args
+    | "symbolic-assert", name :: args -> assert_ name args
+    | _ -> Lisp.failf "%s: invalid number of arguments" name ()
 end
 
 module Primitives(Machine : Primus.Machine.S) = struct
   module Lisp = Primus.Lisp.Make(Machine)
   open Primus.Lisp.Type.Spec
 
+  let def name types docs =
+    Lisp.define name (module SymbolicPrimitives) ~types ~docs
+
   let init () = Machine.sequence [
-      Lisp.define "symbolic-assume" (module Assume)
-        ~types:(all bool @-> bool)
-        ~docs:"Assumes the specified list of constraints.";
-      Lisp.define "symbolic-assert" (module Assert)
-        ~types:(one sym // all bool @-> bool)
-        ~docs:"(assert NAME C1 ... CM) verifies the specified
+      def "symbolic-assume" (all bool @-> bool)
+        "Assumes the specified list of constraints.";
+      def "symbolic-assert" (one sym // all bool @-> bool)
+        "(assert NAME C1 ... CM) verifies the specified
          list of assertions C1 and posts the assert-failure observation
          for each condition that doesn't hold.";
+      def "symbolic-value" (one sym // all int @-> a)
+        "(symbolic-value NAME &rest) creates a new symbolic value.
+        Accepts up to two optional arguments. The first argument
+        denotes the bitwidth of the created value and the second is
+        the initial value.";
+      def "symbolic-memory" (tuple [sym; int; int] // all int @-> sym)
+        "(symbolic-memory NAME LOWER UPPER &rest) creates a new
+        symbolic memory region with the given NAME and LOWER and UPPER
+        bounds. The symbolic memory could be read and written with
+        the SYMBOLIC-MEMORY-READ and SYMBOLIC-MEMORY-WRITE primitives.
+        Optionally accepts one or two more arguments. If two optional
+        arguments are provided, then the first one stands for the
+        address bus size of the symbolic memory and the second for the
+        data bus size, all in bits. If only one is provided then it is
+        interpreted as the data bus size and the address size defaults
+        to the architecture-specific address size (e.g., 64 bits for
+        amd64). If none are provided then the address size is
+        architecture-specific and the data size defaults to 8 bits."
     ]
-
 end
 
 let () = Bap_main.Extension.declare  @@ fun _ ->
