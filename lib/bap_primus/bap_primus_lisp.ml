@@ -166,6 +166,15 @@ let message,new_message =
     ~inspect:sexp_of_string "lisp-message"
     ~desc:"Occurs with X when (msg x) is evaluated."
 
+type closure_frame = {
+  name : string;
+  args : value list;
+}
+
+let closure_context = Bap_primus_state.declare
+    ~uuid:"b31c12fc-a131-4966-bcc9-e360ed76fb8e"
+    ~name:"lisp-closure-context" @@ fun _ -> []
+
 
 module Trace = Bap_primus_linker.Trace
 
@@ -288,6 +297,15 @@ module Interpreter(Machine : Machine) = struct
         | Some r -> notify (name, args@[r]))
     else Machine.return ()
 
+  let push_context name args =
+    Machine.Local.update closure_context ~f:(fun frames ->
+        {name; args} :: frames)
+
+  let pop_context =
+    Machine.Local.update closure_context ~f:(function
+        | [] -> failwith "Bug: empty closure context"
+        | _ :: frames -> frames)
+
   (* Still an open question. Shall we register an call to an external
      function, that is done not directly from a program, but
      internally from other lisp function?
@@ -349,7 +367,26 @@ module Interpreter(Machine : Machine) = struct
       let module Code = Body(Machine) in
       Eval.const Word.b0 >>= fun init ->
       eval_advices Advice.Before init name args >>= fun _ ->
-      Code.run args >>= fun r ->
+      let run_code =
+        try
+          Code.run args >>= fun r ->
+          Machine.return r
+        with
+        | Match_failure _ ->
+          failf "%s: invalid number of arguments" name ()
+        | Invalid_argument msg ->
+          failf "%s: invalid application - %s" name msg ()
+        | Failure msg ->
+          failf "%s: unexpected error - %s" name msg ()
+        | exn ->
+          failf "%s: unexpected exception - %s\nBacktrace:\n%s"
+            name
+            (Caml.Printexc.to_string exn)
+            (Caml.Printexc.get_backtrace ())
+            () in
+      push_context name args >>= fun () ->
+      run_code >>= fun r ->
+      pop_context >>= fun () ->
       Eval.tick >>= fun () ->
       Machine.Observation.post primitive_called ~f:(fun k ->
           k (name,args@[r])) >>= fun () ->
@@ -464,10 +501,25 @@ end
 let init ?log:_ ?paths:_ _features  =
   failwith "Lisp library no longer requires initialization"
 
+module Closure = struct
+  module type S = Lisp.Def.Closure
+  type t = (module S)
+  module Make(Machine : Machine) = struct
+    open Machine.Syntax
+    module Lisp = Interpreter(Machine)
+    let name =
+      Machine.Local.get closure_context >>= function
+      | [] -> Lisp.failf "Closure.name is called not from a closure" ()
+      | {name} :: _ -> Machine.return name
+  end
+end
+
+module type Closure = Closure.S
+
+
 type primitives = Lisp.Def.primitives
 module type Primitives = Lisp.Def.Primitives
 module Primitive = Lisp.Def.Primitive
-module type Closure = Lisp.Def.Closure
 type closure = Lisp.Def.closure
 type program = Lisp.Program.t
 module Load = Lisp.Parse

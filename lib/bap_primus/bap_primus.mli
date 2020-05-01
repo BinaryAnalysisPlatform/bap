@@ -3486,17 +3486,29 @@ ident ::= ?any atom that is not recognized as a <word>?
         val pp : Format.formatter -> t -> unit
       end
 
+
       (** Machine independent closure.
 
           A closure is an anonymous function, that performs some
           computation in the Machine Monad. Closures are used to
           extend the Lisp Machine with arbitrary primitive operations
           implemented in OCaml. *)
-      module type Closure = functor (Machine : Machine.S) -> sig
+      module Closure : sig
+        module type S = functor (Machine : Machine.S) -> sig
 
-        (** [run args] performs the computation.  *)
-        val run : value list -> value Machine.t
+          (** [run args] performs the computation.  *)
+          val run : value list -> value Machine.t
+        end
+
+        type t = (module S)
+        module Make(Machine : Machine.S) : sig
+          val name : string Machine.t
+        end
+
       end
+
+      module type Closure = Closure.S
+
 
 
       (** [(lisp-primitive <name> <arg1> ... <argM> <rval>)] is posted

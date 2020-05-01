@@ -75,9 +75,18 @@ module Type : sig
   val pp_error : Format.formatter -> error -> unit
 end
 
-module type Closure = functor(Machine : Machine) -> sig
-  val run : value list -> value Machine.t
+module Closure : sig
+  module type S = functor(Machine : Machine) -> sig
+    val run : value list -> value Machine.t
+  end
+
+  type t = (module S)
+
+  module Make(Machine : Machine) : sig
+    val name : string Machine.t
+  end
 end
+module type Closure = Closure.S
 
 type closure = (module Closure)
 
