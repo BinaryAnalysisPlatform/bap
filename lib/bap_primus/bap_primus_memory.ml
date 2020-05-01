@@ -45,8 +45,8 @@ module Descriptor = struct
     create addr_size data_size "unknown"
 
   let name d = d.name
-
-
+  let addr_size d = d.addr
+  let data_size d = d.size
   include Comparable.Make(struct
       type t = memory [@@deriving bin_io, compare, sexp]
     end)

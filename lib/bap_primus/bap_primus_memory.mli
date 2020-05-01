@@ -14,7 +14,8 @@ module Descriptor : sig
   val create : addr_size:int -> data_size:int -> string -> memory
   val unknown : addr_size:int -> data_size:int -> memory
   val name : memory -> string
-
+  val addr_size : memory -> int
+  val data_size : memory -> int
   include Comparable.S with type t := memory
 end
 

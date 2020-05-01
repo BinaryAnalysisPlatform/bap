@@ -2395,8 +2395,20 @@ module Std : sig
         val unknown : addr_size:int -> data_size:int -> memory
 
 
-        (** [name memory] returns [memory] identifier. *)
+        (** [name memory] returns [memory] identifier.
+            @since 2.1.0
+        *)
         val name : memory -> string
+
+
+        (** [addr_size memory] the number of bits in the address bus.
+            @since 2.1.0
+        *)
+        val addr_size : memory -> int
+
+
+        (** [data_size memory] is the the number of bits in the data bus.  *)
+        val data_size : memory -> int
 
         include Comparable.S with type t := t
       end
@@ -2434,7 +2446,8 @@ module Std : sig
             raises the [Pagefault] machine exception if [a] is not mapped,
             or not writable.
 
-            Precondition: [Value.bitwidth x = 8].
+            Precondition: the size of the address and the size of the
+            datum match with the current [memory] sizes.
         *)
         val set : addr -> value -> unit Machine.t
 
@@ -3527,7 +3540,7 @@ ident ::= ?any atom that is not recognized as a <word>?
       val primitive : (string * value list) observation
 
       (** a closure packed as an OCaml value *)
-      type closure = (module Closure)
+      type closure = Closure.t
 
       (* dedocumented due to deprecation *)
       module Primitive : sig
