@@ -2338,6 +2338,12 @@ module Std : sig
         val del : var -> unit Machine.t
 
 
+        (** [has v] evaluates to [true] if [v] is bound.
+
+            @since 2.1.0
+        *)
+        val has : var -> bool Machine.t
+
         (** [all] is a sequence of all variables defined in the
             environment. Note, the word _defined_ doesn't mean
             initialized.   *)
