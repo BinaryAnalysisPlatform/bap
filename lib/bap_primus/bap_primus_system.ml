@@ -8,6 +8,9 @@ module Info = Bap_primus_info
 module Observation = Bap_primus_observation
 module Machine = Bap_primus_machine
 
+
+let package = "bap"
+
 let fini,finish =
   Observation.provide ~inspect:sexp_of_unit "fini"
     ~desc:"Occurs when machine finishes."
@@ -286,10 +289,10 @@ module Parser = struct
   let empty name = {name; desc=""; components=[]; depends_on=[]}
 
   let comp name s =
-    {s with components = Name.read name :: s.components}
+    {s with components = Name.read ~package name :: s.components}
 
   let deps name s =
-    {s with depends_on = Name.read name :: s.depends_on}
+    {s with depends_on = Name.read ~package name :: s.depends_on}
 
   let rec parse_specs push : t -> Sexp.t list -> (t,error) Result.t =
     fun sys -> function
@@ -328,7 +331,7 @@ module Parser = struct
 
   let of_sexp : Sexp.t -> (t,error_with_loc) Result.t = function
     | List (Atom "defsystem" :: Atom name :: items) ->
-      parse_items (empty (Name.read name)) items |>
+      parse_items (empty (Name.read ~package name)) items |>
       Result.map_error ~f:(in_system name)
     | other -> Error (in_system "unknown" {expects=Defsystem; got=other})
 
