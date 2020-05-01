@@ -399,7 +399,8 @@ module Interpreter(Machine : Machine) = struct
         | Symbol -> Machine.return Lisp.Type.symbol_size
         | Any | Name _ -> width () in
       width >>= fun width ->
-      Eval.const (Word.of_int64 ~width v) in
+      let bv = Bitvec.(bigint v mod modulus width) in
+      Eval.const (Word.create bv width) in
     let sym v = Value.Symbol.to_value v.data in
     let rec eval = function
       | {data=Int {data={exp;typ}}} -> int exp typ

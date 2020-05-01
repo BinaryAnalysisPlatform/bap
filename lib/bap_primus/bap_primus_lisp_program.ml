@@ -161,7 +161,7 @@ let pp_term pp_exp ppf = function
     fprintf ppf "@[<v2>%a@]" pp_exp exp
   | {data={exp; typ}} ->
     fprintf ppf "@[<v2>%a:%a@]" pp_exp exp Lisp.Type.pp typ
-let pp_word = pp_term Int64.pp
+let pp_word = pp_term Z.pp_print
 let pp_var = pp_term String.pp
 
 let rec concat_prog p =

@@ -22,7 +22,7 @@ type typ =
   | Name of string
   | Type of int [@@deriving sexp, compare]
 type 'a term = {exp : 'a; typ : typ} [@@deriving compare]
-type word = int64 term indexed [@@deriving compare]
+type word = Z.t term indexed [@@deriving compare]
 type var = string term indexed [@@deriving compare]
 type sym = string indexed [@@deriving compare]
 type loc = Loc.t

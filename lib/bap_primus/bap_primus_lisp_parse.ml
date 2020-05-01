@@ -84,7 +84,7 @@ module Parse = struct
   let fails err s = raise (Parse_error (err,s))
   let fail err s = fails err [s]
   let bad_form op got = fail (Bad_form op) got
-  let nil = {exp=0L; typ=Type.word 1}
+  let nil = {exp=Z.zero; typ=Type.word 1}
 
 
   let expand prog cs =
