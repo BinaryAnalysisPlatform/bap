@@ -215,7 +215,7 @@
           dynamic order.
 
 
-     - Do not introduce any mechanism but rely on the advice mechanism
+    - Do not introduce any mechanism but rely on the advice mechanism
        instead. In Common Lisp terminology this will only leave us
        with auxiliary methods, except that the after method allows us
        to override the return value. Thus, if someone would like to
@@ -246,6 +246,8 @@ val t : t Attribute.t
 
 (** [of_project p] initializes a context from the project [p].  *)
 val of_project : project -> t
+
+val create : (string * string list) list -> t
 
 val empty : t
 

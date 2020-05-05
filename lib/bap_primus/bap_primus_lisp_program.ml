@@ -51,6 +51,7 @@ let merge p1 p2 =
     p2 with
     sigs = p1.sigs @ p2.sigs;
     codes = p1.codes @ p2.codes;
+    context = Lisp.Context.merge p1.context p2.context;
   }
 
 

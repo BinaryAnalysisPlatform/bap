@@ -811,6 +811,17 @@ module Make(Machine : Machine) = struct
           if Set.mem known_methods name then subs
           else sub::subs) in
     Machine.List.iter useless_subscriptions ~f:Machine.Observation.cancel
+
+
+  let refine ctxt =
+    Machine.Local.update state ~f:(fun s -> {
+          s with program =
+                   Lisp.Program.with_context s.program
+                     (Lisp.Context.merge
+                        ctxt
+                        (Lisp.Program.context s.program))
+        })
+
 end
 
 module Doc = struct

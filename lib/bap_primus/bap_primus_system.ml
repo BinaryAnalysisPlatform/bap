@@ -154,6 +154,7 @@ module Components = struct
   module Generic(Machine : Machine) = struct
     open Machine.Syntax
     module Lisp = Bap_primus_lisp.Make(Machine)
+    module Context = Bap_primus_lisp_context
 
     let inited () =
       Machine.Observation.make inited ()
@@ -161,8 +162,14 @@ module Components = struct
     let finish () =
       Machine.Observation.make finish ()
 
-    let do_init system loaded =
-      let comps = Set.diff (components system) loaded in
+    let do_init s loaded =
+      let comps = Set.diff (components s) loaded in
+      let context = Context.create [
+          "system", [Knowledge.Name.show s.name];
+          "component", Set.to_list (components s) |>
+                       List.map ~f:Knowledge.Name.show
+        ] in
+      Lisp.refine context >>= fun () ->
       Set.to_list comps |>
       Machine.List.iter ~f:(fun name ->
           match Hashtbl.find generics name with
@@ -173,7 +180,7 @@ module Components = struct
             failwithf "failed to find a component %s \
                        required for system %s"
               (Name.show name)
-              (Name.show system.name)
+              (Name.show s.name)
               ())
 
     let init_system s =

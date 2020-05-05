@@ -37,6 +37,10 @@ let of_project proj = Name.Map.of_alist_exn [
     "endian", features [endian proj]
   ]
 
+let create descs =
+  List.map descs ~f:(fun (name,xs) -> name,features xs) |>
+  Name.Map.of_alist_reduce ~f:Set.union
+
 let merge xs ys : t = Map.merge xs ys ~f:(fun ~key:_ -> function
     | `Left v | `Right v -> Some v
     | `Both (x,y) -> Some (Feature.Set.union x y) )

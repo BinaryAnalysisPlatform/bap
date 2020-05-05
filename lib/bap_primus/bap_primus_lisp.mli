@@ -132,6 +132,8 @@ module Make (Machine : Machine) : sig
 
   val optimize : unit -> unit Machine.t
 
+  val refine : Bap_primus_lisp_context.t -> unit Machine.t
+
   (* deprecated *)
   val link_primitives : primitives -> unit Machine.t
 end
