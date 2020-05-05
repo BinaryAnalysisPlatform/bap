@@ -166,6 +166,20 @@ module Closure(Machine : Primus.Machine.S) = struct
     let var = Var.create reg typ in
     Eval.set var x >>| fun () -> x
 
+  let symbol_of_cstring ptr =
+    let buf = Buffer.create 8 in
+    let module Mem = Primus.Memory.Make(Machine) in
+    let rec build ptr =
+      Mem.load ptr >>= fun x ->
+      if Word.is_zero x then Machine.return ()
+      else
+        let () =
+          Buffer.add_char buf
+            (Word.to_int_exn x |> char_of_int) in
+        build (Word.succ ptr) in
+    build (Value.to_word ptr) >>= fun () ->
+    Value.Symbol.to_value (Buffer.contents buf)
+
   let run args =
     Closure.name >>= fun name -> match name, args with
     | "reg-name",[arg] -> reg_name arg
@@ -206,6 +220,7 @@ module Closure(Machine : Primus.Machine.S) = struct
     | ">=", args -> ordered (fun x y -> Eval.binop LE y x) args
     | "symbol-concat",args -> symbol_concat args
     | "set-symbol-value", [reg; x] -> set_value reg x
+    | "symbol-of-string", [ptr] -> symbol_of_cstring ptr
     | name,_ -> Lisp.failf "%s: invalid number of arguments" name ()
 end
 
@@ -318,6 +333,10 @@ module Primitives(Machine : Primus.Machine.S) = struct
          Returns X";
       def "reg-name" (one int @-> sym)
         "(reg-name N) returns the name of the register with the index N";
+      def "symbol-of-string" (one int @-> sym)
+        "(symbol-of-string ptr) returns a symbol from a
+         null-terminated string."
+
     ]
 end
 

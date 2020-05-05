@@ -13,4 +13,5 @@ Library primus_symbolic_executor_plugin
   CompiledObject:  best
   InternalModules: Primus_symbolic_executor_main
   XMETADescription: Enables symbolic execution in Primus
+  DataFiles:        lisp/*.lisp ($primus_symbolic_executor_lisp_path)
   XMETAExtraLines:  tags="primus, lisp"

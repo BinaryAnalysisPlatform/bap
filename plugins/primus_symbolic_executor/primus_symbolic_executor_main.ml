@@ -844,7 +844,13 @@ module Primitives(Machine : Primus.Machine.S) = struct
         interpreted as the data bus size and the address size defaults
         to the architecture-specific address size (e.g., 64 bits for
         amd64). If none are provided then the address size is
-        architecture-specific and the data size defaults to 8 bits."
+        architecture-specific and the data size defaults to 8 bits.";
+      def "symbolic-memory-read" (tuple [sym; int] @-> byte)
+        "(symbolic-memory-read MEM POS) reads the value of the
+         symbolic memory MEM at the specified position POS.";
+      def "symbolic-memory-write" (tuple [sym; int; byte] @-> byte)
+        "(symbolic-memory-write MEM POS X) writes X to the symbolic
+         memory MEM at the specified position POS."
     ]
 end
 
