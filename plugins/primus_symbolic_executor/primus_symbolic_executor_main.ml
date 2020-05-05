@@ -543,9 +543,6 @@ module Forker(Machine : Primus.Machine.S) = struct
     | First tid -> Set.mem master.dests tid || Set.mem visited tid
     | Second _ -> true
 
-  let is_actual visited master src dst =
-    not (is_retired visited master src dst)
-
   let on_cond cnd =
     let taken = Word.is_one (Primus.Value.to_word cnd) in
     Eval.pos >>= fun pos ->
@@ -592,7 +589,8 @@ module Forker(Machine : Primus.Machine.S) = struct
     match Formula.solve ~refute rhs with
     | None ->
       Debug.msg "can't find a solution!" >>= fun () ->
-      Machine.return ()
+      Eval.halt >>|
+      never_returns
     | Some model ->
       let string_of_input = Input.to_symbol in
       let module Input = Input.Make(Machine) in
