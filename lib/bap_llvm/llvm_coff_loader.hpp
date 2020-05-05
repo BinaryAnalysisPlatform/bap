@@ -9,6 +9,9 @@
 #include "llvm_loader_utils.hpp"
 #include "llvm_primitives.hpp"
 
+#include "llvm_pdb_loader.hpp"
+
+
 namespace loader {
 namespace coff_loader {
 
@@ -407,9 +410,7 @@ error_or<uint64_t> symbol_value(const coff_obj &obj, const SymbolRef &s) {
 #error LLVM version is not supported
 #endif
 
-
 } // namespace coff_loader
-
 
 error_or<std::string> load(const llvm::object::COFFObjectFile &obj) {
     using namespace coff_loader;
@@ -424,6 +425,7 @@ error_or<std::string> load(const llvm::object::COFFObjectFile &obj) {
     symbols(obj, s);
     relocations(obj, s);
     exported_symbols(obj, s);
+    pdb_loader::load(obj, "/Users/yana/factory/sandbox/pdb-investigation/examples/pageant.pdb",s);
     return s.str();
 }
 
