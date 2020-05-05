@@ -8,6 +8,7 @@ open Bap_primus_sexp
 
 module Lisp = struct
   module Attribute = Bap_primus_lisp_attribute
+  module Attributes = Bap_primus_lisp_attributes
   module Def = Bap_primus_lisp_def
   module Var = Bap_primus_lisp_var
   module Parse = Bap_primus_lisp_parse
@@ -24,7 +25,6 @@ open Bap_primus_lisp_attributes
 open Lisp.Program.Items
 
 module Pos = Bap_primus_pos
-
 
 type exn += Runtime_error of string
 type exn += Unresolved of string * Lisp.Resolve.resolution
@@ -85,18 +85,20 @@ module Errors(Machine : Machine) = struct
   let failf fmt = error (fun m -> Runtime_error m) fmt
 end
 
+
+let var_of_lisp_var width {data={exp;typ}} =
+  match typ with
+  | Type t -> Var.create exp (Type.Imm t)
+  | _ -> Var.create exp (Type.Imm width)
+
 module Locals(Machine : Machine) = struct
   open Machine.Syntax
   include Errors(Machine)
 
-  let of_lisp width {data={exp;typ}} =
-    match typ with
-    | Type t -> Var.create exp (Type.Imm t)
-    | _ -> Var.create exp (Type.Imm width)
 
   let make_frame width bs =
     List.fold ~init:([],0) bs ~f:(fun (xs,n) (v,x) ->
-        (of_lisp width v,x)::xs, n+1)
+        (var_of_lisp_var width v,x)::xs, n+1)
 
   let rec update xs x ~f = match xs with
     | [] -> []
@@ -421,14 +423,14 @@ module Interpreter(Machine : Machine) = struct
     and let_ v e1 e2 =
       Machine.Local.get state >>= fun {width} ->
       eval e1 >>= fun w ->
-      let v = Vars.of_lisp width v in
+      let v = var_of_lisp_var width v in
       Machine.Local.update state ~f:(Vars.push v w) >>=  fun () ->
       eval e2 >>= fun r ->
       Machine.Local.update state ~f:(Vars.pop 1) >>= fun () ->
       Machine.return r
     and lookup v =
       Machine.Local.get state >>= fun {env; width; program} ->
-      let v = Vars.of_lisp width v in
+      let v = var_of_lisp_var width v in
       if Map.mem env.vars v
       then
         Machine.return @@
@@ -457,7 +459,7 @@ module Interpreter(Machine : Machine) = struct
       loop es
     and set v w =
       Machine.Local.get state >>= fun s ->
-      let v = Vars.of_lisp s.width v in
+      let v = var_of_lisp_var s.width v in
       if Map.mem s.env.vars v
       then
         Machine.Local.put state (Vars.replace v w s) >>| fun () ->
@@ -583,6 +585,7 @@ module Make(Machine : Machine) = struct
   module Eval = Bap_primus_interpreter.Make(Machine)
   module Value = Bap_primus_value.Make(Machine)
   module Vars = Locals(Machine)
+  module Env = Bap_primus_env.Make(Machine)
   include Errors(Machine)
 
 
@@ -649,6 +652,31 @@ module Make(Machine : Machine) = struct
         | _ -> toload) |>
     Map.to_sequence
 
+
+  let collect_globals arch s =
+    let open Lisp.Attributes in
+    let default_width = Size.in_bits (Arch.addr_size arch) in
+    let add attr def vars =
+      match Attribute.Set.get (Lisp.Def.attributes def) attr with
+      | None -> vars
+      | Some vars' -> Set.union vars @@
+        Var.Set.of_list @@
+        List.map ~f:(var_of_lisp_var default_width) vars' in
+    Lisp.Program.get s.program Lisp.Program.Items.func |>
+    List.fold ~init:Var.Set.empty  ~f:(fun vars def ->
+        add Variables.global def vars |>
+        add Variables.static def) |>
+    Set.to_sequence
+
+
+  let link_global var =
+    Env.add var @@
+    Bap_primus_generator.static 0
+
+  let link_globals () =
+    Machine.gets Project.arch >>= fun arch ->
+    Machine.Local.get state >>| collect_globals arch >>=
+    Machine.Seq.iter ~f:link_global
 
   let find_sub prog name =
     Term.enum sub_t prog |>
@@ -737,7 +765,8 @@ module Make(Machine : Machine) = struct
     Machine.Local.get state >>= fun s ->
     let s = {s with program = Lisp.Program.merge s.program program} in
     Machine.Local.put state s >>= fun () ->
-    link_features ()
+    link_globals () >>=
+    link_features
 
   let program = Machine.Local.get state >>| fun s -> s.program
 
