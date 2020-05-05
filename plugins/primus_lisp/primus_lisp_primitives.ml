@@ -13,10 +13,13 @@ let registers = Primus.Machine.State.declare
             Map.set regs (Reg.code r) (Reg.name r)
           | _ -> regs))
 
-module Make(Machine : Primus.Machine.S) = struct
+module Closure(Machine : Primus.Machine.S) = struct
   module Lisp = Primus.Lisp.Make(Machine)
   module Value = Primus.Value.Make(Machine)
   module Eval = Primus.Interpreter.Make(Machine)
+  module Closure = Primus.Lisp.Closure.Make(Machine)
+  module Linker = Primus.Linker.Make(Machine)
+
   type value = Value.t
   type 'a m = 'a Machine.t
 
@@ -40,6 +43,10 @@ module Make(Machine : Primus.Machine.S) = struct
     let hi = Value.bitwidth x - 1 in
     Value.extract ~hi ~lo:hi x
 
+  let to_int e = match Word.to_int (Value.to_word e) with
+    | Ok x -> Machine.return x
+    | Error _ -> failf "expected smallint" ()
+
   let rec all f = function
     | [] -> true_
     | x :: xs ->
@@ -49,7 +56,6 @@ module Make(Machine : Primus.Machine.S) = struct
         all f xs >>= fun xs ->
         Eval.binop AND x xs
       else Machine.return x
-
 
   let ordered order xs =
     let rec ordered = function
@@ -61,107 +67,42 @@ module Make(Machine : Primus.Machine.S) = struct
           Eval.binop AND r r'
         else Machine.return r in
     ordered xs
-end
 
-module RegName(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Machine.Syntax
-  open Lib
-  let run = function
-    | [] | _::_::_ ->
-      failf "reg-name expects only one argument" ()
-    | [code] ->
-      Machine.Local.get registers >>= fun regs ->
-      let code = Word.to_int_exn @@ Primus.Value.to_word code in
-      match Map.find regs code with
-      | None -> failf "unresolved intruction register %#x" code ()
-      | Some name -> Value.Symbol.to_value name
-end
+  let reg_name code =
+    Machine.Local.get registers >>= fun regs ->
+    let code = Word.to_int_exn @@ Primus.Value.to_word code in
+    match Map.find regs code with
+    | None -> failf "unresolved intruction register %#x" code ()
+    | Some name -> Value.Symbol.to_value name
 
+  let exec_addr addr =
+    Linker.exec (`addr (Primus.Value.to_word addr)) >>= fun () ->
+    Eval.halt >>=
+    never_returns
 
-module ExecAddr(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  module Linker = Primus.Linker.Make(Machine)
-  module Eval = Primus.Interpreter.Make(Machine)
-  open Machine.Syntax
-  open Lib
-  let run = function
-    | _ :: _ :: _ | [] ->
-      failf "Lisp Type Error: exec-address expects one argument" ()
-    | [addr] ->
-      Linker.exec (`addr (Primus.Value.to_word addr)) >>= fun () ->
-      Eval.halt >>=
-      never_returns
-end
+  let exec_symbol name =
+    Value.Symbol.of_value name >>= fun name ->
+    Linker.exec (`symbol name) >>= fun () ->
+    Eval.halt >>=
+    never_returns
 
-module ExecSym(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  module Linker = Primus.Linker.Make(Machine)
-
-  open Machine.Syntax
-  open Lib
-  let run = function
-    | _ :: _ :: _ | [] ->
-      failf "Lisp Type Error: exec-address expects one argument" ()
-    | [name] ->
-      Value.Symbol.of_value name >>= fun name ->
-      Linker.exec (`symbol name) >>= fun () ->
-      Eval.halt >>=
-      never_returns
-end
-
-module IsZero(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Machine.Syntax
-  open Lib
-  let run = all @@ fun x ->
+  let is_zero = all @@ fun x ->
     Value.zero (Value.bitwidth x) >>= fun z ->
     Eval.binop EQ x z
-end
 
-module IsPositive(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Machine.Syntax
-  open Lib
-  let run = all @@ fun x ->
+  let is_positive = all @@ fun x ->
     msb x >>= Eval.unop NOT
-end
 
-module IsNegative(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Machine.Syntax
-  open Lib
-  let run = all msb
-end
-
-module WordWidth(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Machine.Syntax
-  open Lib
-
-  let run args =
+  let word_width args =
     addr_width >>= fun width ->
     match args with
     | [] -> Value.of_int ~width width
     | x :: _ -> Value.of_int ~width (Value.bitwidth x)
-end
 
-module ExitWith(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Machine.Syntax
-  open Lib
-
-  let run _ =
+  let exit_with _ =
     Eval.halt >>|
     Nothing.unreachable_code >>= fun () ->
     Value.b0
-end
-
-module MemoryAllocate(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  module Memory = Primus.Memory.Make(Machine)
-  open Machine.Syntax
-  open Lib
 
   let negone = Value.one 8
   let zero = Value.zero 8
@@ -186,284 +127,86 @@ module MemoryAllocate(Machine : Primus.Machine.S) = struct
       | _ -> Or_error.errorf "memory-allocate: random values do not fit into int"
 
 
-  let run = function
-    | addr :: size :: gen ->
-      Machine.gets Project.arch >>= fun arch ->
-      let width = Arch.addr_size arch |> Size.in_bits in
-      let n = Word.to_int (Value.to_word size) in
-      let gen = match gen with
-        | []  -> Ok None
-        | [x] -> make_static_generator width (Value.to_word x)
-        | [min; max] -> make_uniform_generator width min max
-        | _ -> Or_error.errorf "bad generator" in
-      if Result.is_error n
-      then failf "memory-allocate: bad number" () else
-      if Result.is_error gen
-      then failf "memory-allocate: bad generator specification" ()
-      else
-        let generator = Or_error.ok_exn gen in
-        Memory.allocate ?generator (Value.to_word addr) (Or_error.ok_exn n) >>=
-        fun () -> zero
-    | _ -> failf "allocate requires at least two arguments" ()
-end
+  let memory_allocate addr size rest =
+    let module Memory = Primus.Memory.Make(Machine) in
+    Machine.gets Project.arch >>= fun arch ->
+    let width = Arch.addr_size arch |> Size.in_bits in
+    let n = Word.to_int (Value.to_word size) in
+    let gen = match rest with
+      | []  -> Ok None
+      | [x] -> make_static_generator width (Value.to_word x)
+      | [min; max] -> make_uniform_generator width min max
+      | _ -> Or_error.errorf "bad generator" in
+    if Result.is_error n
+    then failf "memory-allocate: bad number" () else
+    if Result.is_error gen
+    then failf "memory-allocate: bad generator specification" ()
+    else
+      let generator = Or_error.ok_exn gen in
+      Memory.allocate ?generator (Value.to_word addr) (Or_error.ok_exn n) >>=
+      fun () -> zero
 
+  let memory_read addr = Eval.load addr BigEndian `r8
+  let memory_write a x =
+    Eval.store a x BigEndian `r8 >>= fun () ->
+    Value.succ a
 
-module MemoryRead(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Machine.Syntax
-  open Lib
+  let extract hi lo x =
+    to_int hi >>= fun hi ->
+    to_int lo >>= fun lo ->
+    Eval.extract ~hi ~lo x
 
-  let run = function
-    | [x] ->
-      endian >>= fun e -> Eval.load x e `r8
-    | _ -> failf "memory-read requires one argument" ()
-end
-
-module MemoryWrite(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Machine.Syntax
-  open Lib
-
-  let run = function
-    | [a;x] ->
-      endian >>= fun e ->
-      Eval.store a x e `r8 >>= fun () ->
-      Value.succ a
-    | _ -> failf "memory-write requires two arguments" ()
-end
-
-module GetPC(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Machine.Syntax
-  open Lib
-
-  let run = function
-    | [] -> Eval.pc >>= Value.of_word
-    | _ -> failf
-             "get-current-program-counter requires zero arguments" ()
-end
-
-
-module Add(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  module Eval = Primus.Interpreter.Make(Machine)
-  open Lib
-
-  let run = reduce null (Eval.binop Bil.PLUS)
-end
-
-module Sub(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Lib
-
-  let run = reduce null (Eval.binop Bil.MINUS)
-end
-
-module Div(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Lib
-
-  let run = reduce null (Eval.binop Bil.DIVIDE)
-end
-
-module SDiv(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Lib
-
-  let run = reduce null (Eval.binop Bil.SDIVIDE)
-end
-
-module Mul(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Lib
-
-  let run = reduce null (Eval.binop Bil.TIMES)
-end
-
-module Mod(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Lib
-
-  let run = reduce null (Eval.binop Bil.MOD)
-end
-
-module SignedMod(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Lib
-
-  let run = reduce null (Eval.binop Bil.SMOD)
-end
-
-module Lshift(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Machine.Syntax
-  open Lib
-
-  let run = function
-    | [x;y] -> Eval.binop Bil.lshift x y
-    | _ -> failf "Type error: lshift expects two arguments" ()
-end
-
-module Rshift(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Lib
-
-  let run = function
-    | [x;y] -> Eval.binop Bil.rshift x y
-    | _ -> failf "Type error: rshift expects two arguments" ()
-end
-
-module Arshift(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Lib
-
-  let run = function
-    | [x;y] -> Eval.binop Bil.arshift x y
-    | _ -> failf "Type error: arshift expects two arguments" ()
-end
-
-module Equal(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Lib
-
-  let run = ordered @@ Eval.binop EQ
-end
-
-module NotEqual(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Lib
-  let run = ordered @@ Eval.binop NEQ
-end
-
-
-module Logand(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Lib
-
-  let run = reduce negone (Eval.binop Bil.AND)
-end
-
-module Logor(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Lib
-
-  let run = reduce null (Eval.binop Bil.OR)
-end
-
-module Logxor(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Lib
-
-  let run = reduce null (Eval.binop Bil.XOR)
-end
-
-module Concat(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Lib
-
-  let run = reduce false_ Eval.concat
-end
-
-module Extract(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Machine.Syntax
-  open Lib
-
-
-  let to_int e = match Word.to_int (Value.to_word e) with
-    | Ok x -> Machine.return x
-    | Error _ -> failf "expected smallint" ()
-
-  let run = function
-    | [hi; lo; x] ->
-      to_int hi >>= fun hi ->
-      to_int lo >>= fun lo ->
-      Eval.extract ~hi ~lo x
-    | _ -> failf "extract expects exactly three arguments" ()
-end
-
-module Not = IsZero
-
-module Lnot(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Lib
-
-  let run = function
-    | [x] -> Eval.unop Bil.NOT x
-    | _ -> failf "lnot expects only one argument" ()
-end
-
-module Neg(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Lib
-
-  let run = function
-    | [x] -> Eval.unop Bil.NEG x
-    | _ -> failf "neg expects only one argument" ()
-end
-
-module Less(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Lib
-
-  let run = ordered @@ Eval.binop LT
-end
-
-module Greater(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Lib
-
-  let rec run = ordered @@ fun x y ->
-    Eval.binop LT y x
-
-end
-
-module LessEqual(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Lib
-
-  let run = ordered (Eval.binop LE)
-end
-
-module GreaterEqual(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Lib
-
-  let run = ordered @@ fun x y ->
-    Eval.binop LE y x
-end
-
-module SymbolConcat(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Machine.Syntax
-  open Lib
-
-  let run syms =
+  let symbol_concat syms =
     Machine.List.map syms ~f:Value.Symbol.of_value >>= fun strs ->
     Value.Symbol.to_value (String.concat strs)
-end
 
-module SetSymbol(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  module Eval = Primus.Interpreter.Make(Machine)
-  open Machine.Syntax
-  open Lib
+  let set_value reg x =
+    Value.Symbol.of_value reg >>= fun reg ->
+    let typ = Type.imm (Word.bitwidth (Value.to_word x)) in
+    let var = Var.create reg typ in
+    Eval.set var x >>| fun () -> x
 
-  let run = function
-    | [reg; x] ->
-      Value.Symbol.of_value reg >>= fun reg ->
-      let typ = Type.imm (Word.bitwidth (Value.to_word x)) in
-      let var = Var.create reg typ in
-      Eval.set var x >>| fun () -> x
-    | _ -> failf "set-symbol-value expects exactly two arguments" ()
-end
-
-
-module Stub(Machine : Primus.Machine.S) = struct
-  module Lib = Make(Machine)
-  open Machine.Syntax
-  open Lib
-  let run = failf "not implemented"
+  let run args =
+    Closure.name >>= fun name -> match name, args with
+    | "reg-name",[arg] -> reg_name arg
+    | "exec-addr", [addr] -> exec_addr addr
+    | "exec-symbol", [dst] -> exec_symbol dst
+    | "is-zero", args -> is_zero args
+    | "is-positive", args -> is_positive args
+    | "is-negative", args -> all msb args
+    | "word-width", args -> word_width args
+    | "exit-with", [arg] -> exit_with arg
+    | "memory-allocate", x :: y :: rest -> memory_allocate x y rest
+    | "memory-read", [x] -> memory_read x
+    | "memory-write", [a;x] -> memory_write a x
+    | "get-current-program-counter",[] -> Eval.pc >>= Value.of_word
+    | "+",args -> reduce null (Eval.binop Bil.PLUS) args
+    | "-",args -> reduce null (Eval.binop Bil.MINUS) args
+    | "/",args -> reduce null (Eval.binop Bil.DIVIDE) args
+    | "s/",args -> reduce null (Eval.binop Bil.SDIVIDE) args
+    | "*",args -> reduce null (Eval.binop Bil.TIMES) args
+    | "mod",args -> reduce null (Eval.binop Bil.MOD) args
+    | "signed-mod",args -> reduce null (Eval.binop Bil.SMOD) args
+    | "lshift", [x;y] -> Eval.binop Bil.lshift x y
+    | "rshift", [x;y] -> Eval.binop Bil.rshift x y
+    | "arshift", [x;y] -> Eval.binop Bil.arshift x y
+    | "=",args -> ordered (Eval.binop EQ) args
+    | "/=",args -> ordered (Eval.binop NEQ) args
+    | "logand",args -> reduce negone (Eval.binop Bil.AND) args
+    | "logor",args -> reduce negone (Eval.binop Bil.OR) args
+    | "logxor",args -> reduce negone (Eval.binop Bil.XOR) args
+    | "concat", args -> reduce false_ Eval.concat args
+    | "extract", [hi; lo; x] -> extract hi lo x
+    | "not", [x] -> is_zero [x]
+    | "lnot", [x] -> Eval.unop Bil.NOT x
+    | "neg", [x] -> Eval.unop Bil.NEG x
+    | "<", args -> ordered (Eval.binop LT) args
+    | ">", args -> ordered (fun x y -> Eval.binop LT y x) args
+    | "<=", args -> ordered (Eval.binop LE) args
+    | ">=", args -> ordered (fun x y -> Eval.binop LE y x) args
+    | "symbol-concat",args -> symbol_concat args
+    | "set-symbol-value", [reg; x] -> set_value reg x
+    | name,_ -> Lisp.failf "%s: invalid number of arguments" name ()
 end
 
 module Primitives(Machine : Primus.Machine.S) = struct
@@ -473,109 +216,108 @@ module Primitives(Machine : Primus.Machine.S) = struct
 
   let init () =
     let open Primus.Lisp.Type.Spec in
-    let def name types closure docs =
-      Lisp.define ~types ~docs name closure  in
+    let def name types docs =
+      Lisp.define ~types ~docs name (module Closure)  in
     Machine.sequence [
-      def "exec-addr" (one int @-> any) (module ExecAddr)
+      def "exec-addr" (one int @-> any)
         "(exec-addr D) passes the control flow to D and never returns";
-      def "exec-symbol" (one sym @-> any) (module ExecSym)
+      def "exec-symbol" (one sym @-> any)
         "(exec-symbol D) passes the control flow to D and never returns";
-      def "is-zero" (all any @-> bool) (module IsZero)
+      def "is-zero" (all any @-> bool)
         "(is-zero X Y ...) returns true if all arguments are zeros";
-      def "is-positive" (all any @-> bool) (module IsPositive)
+      def "is-positive" (all any @-> bool)
         "(is-positive X Y ...) returns true if all arguments are positive";
-      def "is-negative" (all any @-> bool) (module IsNegative)
+      def "is-negative" (all any @-> bool)
         "(is-negative X Y ...) returns true if all arguments are negative";
-      def "word-width" (unit @-> int)  (module WordWidth)
+      def "word-width" (unit @-> int)
         "(word-width) returns machine word width in bits";
-      def "exit-with" (one int @-> any) (module ExitWith)
+      def "exit-with" (one int @-> any)
         "(exit-with N) terminates program with the exit codeN";
-      def "memory-read" (one int @-> byte) (module MemoryRead)
+      def "memory-read" (one int @-> byte)
         "(memory-read A) loads one byte from the address A";
-      def "memory-write" (tuple [int; byte] @-> int) (module MemoryWrite)
+      def "memory-write" (tuple [int; byte] @-> int)
         "(memory-write A X) stores by X to A";
-      def "memory-allocate" (tuple [int; int] // all byte @-> byte) (module MemoryAllocate)
+      def "memory-allocate" (tuple [int; int] // all byte @-> byte)
         "(memory-allocate P N V?) maps memory region [P,P+N), if V is
          provided, then fills the newly mapped region with the value V";
-      def "get-current-program-counter" (unit @-> int) (module GetPC)
+      def "get-current-program-counter" (unit @-> int)
         "(get-current-program-counter) returns current program cunnter";
-      def "+" (all a @-> a) (module Add)
+      def "+" (all a @-> a)
         "(+ X Y ...) returns the sum of arguments, or 0 if there are
          no arguments,";
-      def "-" (all a @-> a) (module Sub)
+      def "-" (all a @-> a)
         "(- X Y Z ...) returns X - Y - Z - ..., or 0 if there are no
          arguments.";
-      def "*" (all a @-> a) (module Mul)
+      def "*" (all a @-> a)
         "(* X Y Z ...) returns the product of arguments or 0 if the list
         of arguments is empty";
-      def "/" (all a @-> a) (module Div)
+      def "/" (all a @-> a)
         "(/ X Y Z ...) returns X / Y / Z / ... or 0 if the list of
          arguments is empty";
-      def "s/" (all a @-> a) (module SDiv)
+      def "s/" (all a @-> a)
         "(s/ X Y Z ...) returns X s/ Y s/ Z s/ ... or 0 if the list of
          arguments is empty, where s/ is the signed division operation";
-      def "mod" (all a @-> a) (module Mod)
+      def "mod" (all a @-> a)
         "(mod X Y Z ...) returns X % Y % Z % ... or 0 if the list of
          arguments is empty, where % is the modulo operation";
-      def "signed-mod" (all a @-> a) (module SignedMod)
+      def "signed-mod" (all a @-> a)
         "(signed-mod X Y Z ...) returns X % Y % Z % ... or 0 if the list of
          arguments is empty, where % is the signed modulo operation";
-      def "lshift" (tuple [a; b] @-> a) (module Lshift)
+      def "lshift" (tuple [a; b] @-> a)
         "(lshift X N) logically shifts X left by N bits";
-      def "rshift" (tuple [a; b] @-> a) (module Rshift)
+      def "rshift" (tuple [a; b] @-> a)
         "(rshift X N) logically shifts X right by N bits";
-      def "arshift" (tuple [a; b] @-> a) (module Arshift)
+      def "arshift" (tuple [a; b] @-> a)
         "(arshift X N) arithmetically shifts X right by N bits";
-      def "=" (all a @-> bool) (module Equal)
+      def "=" (all a @-> bool)
         "(= X Y Z ...) returns true if all arguments are equal. True
         if the list of arguments is empty";
-      def "/=" (all a @-> bool) (module NotEqual)
+      def "/=" (all a @-> bool)
         "(/= X Y Z ...) returns true if at least one argument is not
          equal to another argument. Returns false if the list of
          arguments is empty";
-      def "logand" (all a @-> a) (module Logand)
+      def "logand" (all a @-> a)
         "(logand X Y Z ...) returns X & Y & Z & ... or 0 if the list of
          arguments is empty, where & is the bitwise AND
          operation. Returns ~0 if the list of arguments is empty";
-      def "logor" (all a @-> a) (module Logor)
+      def "logor" (all a @-> a)
         "(logor X Y Z ...) returns X | Y | Z | ... or 0 if the list of
          arguments is empty, where | is the bitwise OR operation";
-      def "logxor" (all a @-> a) (module Logxor)
+      def "logxor" (all a @-> a)
         "(logxor X Y Z ...) returns X ^ Y ^ Z ^ ... or 0 if the list of
          arguments is empty, where ^ is the bitwise XOR operation";
-      def "concat" (all any @-> any) (module Concat)
+      def "concat" (all any @-> any)
         "(concat X Y Z ...) concatenates words X, Y, Z, ... into one
          big word";
-      def "extract" (tuple [any; any; any] @-> any) (module Extract)
+      def "extract" (tuple [any; any; any] @-> any)
         "(extract HI LO X) extracts bits from HI to LO (including
            both) from the word X ";
-      def "lnot" (one a @-> a) (module Lnot)
+      def "lnot" (one a @-> a)
         "(lnot X) returns the one complement of X";
-      def "not" (one a @-> a) (module Not)
+      def "not" (one a @-> a)
         "(not X) returns true if X is zero";
-      def "neg" (one a @-> a) (module Neg)
+      def "neg" (one a @-> a)
         "(neg X) returns the two complement of X";
-      def "<" (all a @-> bool) (module Less)
+      def "<" (all a @-> bool)
         "(< X Y Z ...) is true if the list of arguments is an
          strict ascending chain or if it is empty";
-      def ">" (all a @-> bool) (module Greater)
+      def ">" (all a @-> bool)
         "(< X Y Z ...) is true if the list of arguments is a
          strict descending chain or if it is empty";
-      def "<=" (all a @-> bool) (module LessEqual)
+      def "<=" (all a @-> bool)
         "(< X Y Z ...) is true if the list of arguments is an
          ascending chain or if it is empty";
-      def ">=" (all a @-> bool) (module GreaterEqual)
+      def ">=" (all a @-> bool)
         "(< X Y Z ...) is true if the list of arguments is a
          descending chain or if it is empty";
-      def "symbol-concat" (all sym @-> sym) (module SymbolConcat)
+      def "symbol-concat" (all sym @-> sym)
         "(symbol-concat X Y Z ...) returns a new symbol that is a
         concatenation of symbols X,Y,Z,... ";
-      def "set-symbol-value" (tuple [sym; a] @-> a) (module SetSymbol)
+      def "set-symbol-value" (tuple [sym; a] @-> a)
         "(set-symbol-value S X) sets the value of the symbol S to X.
          Returns X";
-      def "reg-name" (one int @-> sym) (module RegName)
-        "(reg-name N) returns the name of the register with the index N"
-      ;
+      def "reg-name" (one int @-> sym)
+        "(reg-name N) returns the name of the register with the index N";
     ]
 end
 
