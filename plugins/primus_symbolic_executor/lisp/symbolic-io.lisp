@@ -2,17 +2,21 @@
 
 (defparameter *symbolic-io-bufer-size* 4096)
 (defparameter *symbolic-stdin-size* 32768)
+(defparameter *symbolic-initial-file-size* 16)
 
 (defun symbolic-open (name flags)
   (declare (external "open")
            (context (component bap:symbolic-computer)))
+  (puts name)
   (incr opened-descriptors)
   (let ((name (symbol-of-string name))
-        (desc (symbolic-value (symbol-concat 'open-desc name))))
+        (desc (symbolic-value (symbol-concat 'open-desc- name))))
     (symbolic-assume (or (= desc -1)
                          (= desc opened-descriptors)))
     (if (= desc -1) -1
-      (let ((size (symbolic-value  (symbol-concat 'open-size name)))
+      (let ((size (symbolic-value  (symbol-concat 'open-size name)
+                                   (word-width)
+                                   *symbolic-initial-file-size*))
             (data (symbolic-memory (symbol-concat 'open-data name)
                                    0 (-1 size))))
         (dict-add 'symbolic-open-size desc size)
@@ -48,9 +52,10 @@
 
 (defun init-symbolic-stdin ()
   (dict-add 'symbolic-open-fpos 0 0)
-  (dict-add 'symbolic-open-size 0 *symbolic-io-bufer-size*)
+  (dict-add 'symbolic-open-size 0 *symbolic-initial-file-size*)
   (dict-add 'symbolic-open-data 0
-            (symbolic-memory 'symbolic-stdin 0 *symbolic-io-bufer-size*)))
+            (symbolic-memory 'symbolic-stdin 0 *symbolic-initial-file-size*))
+  (set opened-descriptors 2))
 
 
 (defmethod init ()

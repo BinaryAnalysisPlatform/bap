@@ -804,6 +804,7 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
 
   let run args =
     Closure.name >>= fun name -> match name,args with
+    | "symbolic-value", id :: rest -> create_value id rest
     | "symbolic-memory", (id :: lower :: upper :: rest) ->
       create_memory id lower upper rest
     | "symbolic-memory-read", [id; ptr] -> read id ptr
