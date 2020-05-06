@@ -480,6 +480,7 @@ type edge = {
 }
 
 type task = {
+  parent : task option;
   inputs : Input.t Seq.t;
   refute : bool;
   rhs : Formula.t;
@@ -497,6 +498,7 @@ type master = {
 
 type worker = {
   ctxt : int;                   (* the hash of the trace *)
+  task : task option;
 }
 
 let master = Primus.Machine.State.declare
@@ -512,7 +514,8 @@ let master = Primus.Machine.State.declare
 let worker = Primus.Machine.State.declare
     ~uuid:"92f3042c-ba8f-465a-9d57-4c1b9ec7c186"
     ~name:"symbolic-executor-worker" @@ fun _ -> {
-    ctxt = Hashtbl.hash 0
+    ctxt = Hashtbl.hash 0;
+    task = None
   }
 
 let pp_dst ppf dst = match Jmp.resolve dst with
@@ -622,8 +625,8 @@ let forker ctxt : Primus.component =
       let edge = compute_edge taken pos in
       Visited.all >>= fun visited ->
       Machine.Global.get master >>= fun s ->
-      Machine.Local.get worker >>= fun {ctxt} ->
-      let known = obtained_knowledge visited s ctxt edge in
+      Machine.Local.get worker >>= fun {ctxt=hash; task=parent} ->
+      let known = obtained_knowledge visited s hash edge in
       if known > cutoff
       then Machine.return ()
       else
@@ -631,7 +634,7 @@ let forker ctxt : Primus.component =
         | None -> Machine.return ()
         | Some rhs ->
           Executor.inputs >>= fun inputs ->
-          let task = {refute = taken; inputs; rhs; edge; hash=ctxt} in
+          let task = {refute = taken; inputs; rhs; edge; hash; parent} in
           Machine.Global.update master ~f:(push_task task)
 
     let pop_task () =
@@ -652,12 +655,21 @@ let forker ctxt : Primus.component =
         } >>| fun () ->
         Some t
 
-    let exec_task {inputs; refute; rhs} =
-      match Formula.solve ~refute rhs with
+    let assert_parents task =
+      let rec collect asserts = function
+        | None -> asserts
+        | Some {rhs; parent} -> collect (rhs::asserts) parent in
+      collect [] task
+
+    let exec_task ({inputs; refute; rhs} as task) =
+      let constraints = assert_parents task.parent in
+      match Formula.solve ~constraints ~refute rhs with
       | None ->
         Eval.halt >>|
         never_returns
       | Some model ->
+        Machine.Local.update worker ~f:(fun t ->
+            {t with task = Some task}) >>= fun () ->
         let string_of_input = Input.to_symbol in
         let module Input = Input.Make(Machine) in
         Machine.Seq.iter inputs ~f:(fun input ->
@@ -668,7 +680,6 @@ let forker ctxt : Primus.component =
                 (string_of_input input)
                 (Formula.Value.to_string value) >>= fun () ->
               Value.of_word (Formula.Value.to_word value) >>= fun value ->
-              Executor.set_input input value >>= fun () ->
               Input.set input value)
 
     let rec run_master system =
@@ -757,10 +768,6 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
     if Word.(lower > upper)
     then Machine.return ()
     else
-      Debug.msg "set-input %s %a <= %a"
-        (Bank.name bank)
-        Word.pp lower
-        Word.pp upper >>= fun () ->
       Val.zero data_size >>=
       Executor.set_input (Input.ptr bank lower) >>= fun () ->
       set_inputs bank data_size (Word.succ lower) upper
