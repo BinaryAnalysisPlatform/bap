@@ -167,18 +167,18 @@ module Closure(Machine : Primus.Machine.S) = struct
     Eval.set var x >>| fun () -> x
 
   let symbol_of_cstring ptr =
-    let buf = Buffer.create 8 in
     let module Mem = Primus.Memory.Make(Machine) in
-    let rec build ptr =
+    let rec build chars ptr =
       Mem.load ptr >>= fun x ->
-      if Word.is_zero x then Machine.return ()
+      if Word.is_zero x
+      then
+        Machine.return @@
+        String.of_char_list (List.rev chars)
       else
-        let () =
-          Buffer.add_char buf
-            (Word.to_int_exn x |> char_of_int) in
-        build (Word.succ ptr) in
-    build (Value.to_word ptr) >>= fun () ->
-    Value.Symbol.to_value (Buffer.contents buf)
+        let char = Word.to_int_exn x |> Char.of_int_exn in
+        build (char::chars) (Word.succ ptr) in
+    build [] (Value.to_word ptr) >>=
+    Value.Symbol.to_value
 
   let run args =
     Closure.name >>= fun name -> match name, args with
