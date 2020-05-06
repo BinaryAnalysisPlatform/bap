@@ -355,7 +355,7 @@ let new_formula,on_formula = Primus.Observation.provide "new-formula"
       ])
 
 module Executor(Machine : Primus.Machine.S) : sig
-  val formula : Primus.Value.t -> Formula.t Machine.t
+  val formula : Primus.Value.t -> Formula.t option Machine.t
   val inputs : Input.t seq Machine.t
   val init : unit -> unit Machine.t
   val set_input : Input.t -> Primus.Value.t -> unit Machine.t
@@ -368,54 +368,55 @@ end = struct
   module Mems = Primus.Memory.Make(Machine)
   module Debug = Debug(Machine)
 
-  let get_formula s v k =
-    let id = Primus.Value.id v in
-    match Map.find s.formulae id with
-    | Some e -> k s e
-    | None ->
-      let x = Formula.word @@ Primus.Value.to_word v in
-      k {s with formulae = Map.add_exn s.formulae id x} x
+  let id = Primus.Value.id
 
-  let add_formula s v f =
-    Machine.Observation.make on_formula (v,f) >>= fun () ->
-    Machine.Local.put executor {
-      s with
-      formulae = Map.add_exn s.formulae (Primus.Value.id v) f
-    }
+  let formula s x = Map.find s.formulae (id x)
+  let word x = Formula.word @@ Primus.Value.to_word x
+  let to_formula x = function
+    | None -> word x
+    | Some x -> x
 
-  let on_binop ((op,x,y),z) =
+  let lift1 x r f =
     Machine.Local.get executor >>= fun s ->
-    get_formula s x @@ fun s x ->
-    get_formula s y @@ fun s y ->
-    add_formula s z (Formula.binop op x y)
+    match formula s x with
+    | None -> Machine.return ()
+    | Some x ->
+      Machine.Local.put executor {
+        s with
+        formulae = Map.add_exn s.formulae (id r) (f x)
+      }
 
-  let on_unop ((op,x),z) =
+  let lift2 x y r f =
     Machine.Local.get executor >>= fun s ->
-    get_formula s x @@ fun s x ->
-    add_formula s z (Formula.unop op x)
+    match formula s x, formula s y with
+    | None,None -> Machine.return ()
+    | fx,fy ->
+      let x = to_formula x fx
+      and y = to_formula y fy in
+      Machine.Local.put executor {
+        s with
+        formulae = Map.add_exn s.formulae (id r) (f x y)
+      }
 
-  let on_extract ((hi,lo,x),z) =
+  let lift3 x y z r f =
     Machine.Local.get executor >>= fun s ->
-    get_formula s x @@ fun s x ->
-    add_formula s z (Formula.extract hi lo x)
+    match formula s x, formula s y, formula s z with
+    | None,None,None -> Machine.return ()
+    | fx,fy,fz ->
+      let x = to_formula x fx
+      and y = to_formula y fy
+      and z = to_formula z fz in
+      Machine.Local.put executor {
+        s with
+        formulae = Map.add_exn s.formulae (id r) (f x y z)
+      }
 
-  let on_concat ((x,y),z) =
-    Machine.Local.get executor >>= fun s ->
-    get_formula s x @@ fun s x ->
-    get_formula s y @@ fun s y ->
-    add_formula s z (Formula.concat x y)
-
-  let on_ite ((c,x,y),z) =
-    Machine.Local.get executor >>= fun s ->
-    get_formula s c @@ fun s c ->
-    get_formula s x @@ fun s x ->
-    get_formula s y @@ fun s y ->
-    add_formula s z (Formula.ite c x y)
-
-  let on_cast ((c,w,x),z) =
-    Machine.Local.get executor >>= fun s ->
-    get_formula s x @@ fun s x ->
-    add_formula s z (Formula.cast c w x)
+  let on_binop ((op,x,y),z) = lift2 x y z @@ Formula.binop op
+  let on_unop ((op,x),z) = lift1 x z @@ Formula.unop op
+  let on_extract ((hi,lo,x),z) = lift1 x z @@ Formula.extract hi lo
+  let on_concat ((x,y),z) = lift2 x y z @@ Formula.concat
+  let on_ite ((c,x,y),z) = lift3 c x y z @@ Formula.ite
+  let on_cast ((c,w,x),z) = lift1 x z @@ Formula.cast c w
 
   let set_input origin x =
     let id = Primus.Value.id x in
@@ -433,27 +434,28 @@ end = struct
 
   let on_env_input (v,x) = set_input (Input.var v) x
 
-  let formula v =
-    Machine.Local.get executor >>= fun s ->
-    get_formula s v @@ fun s x ->
-    Machine.Local.put executor s >>| fun () ->
-    x
 
   let inputs =
     Machine.Local.get executor >>| fun s ->
     Set.to_sequence s.inputs
 
   let add_constraint x =
-    let inverse = Value.is_zero x in
+    let refute = Value.is_zero x in
     Machine.Local.get executor >>= fun s ->
-    get_formula s x @@ fun s x ->
-    let x = if inverse then Formula.unop NOT x else x in
-    Machine.Local.put executor {
-      s with constraints = x :: s.constraints;
-    }
+    match formula s x with
+    | None -> Machine.return ()
+    | Some x ->
+      let x = if refute then Formula.unop NOT x else x in
+      Machine.Local.put executor {
+        s with constraints = x :: s.constraints;
+      }
 
   let constraints =
     Machine.Local.get executor >>| fun s -> s.constraints
+
+  let formula v =
+    Machine.Local.get executor >>| fun s ->
+    formula s v
 
   let init () = Machine.sequence Primus.Interpreter.[
       binop >>> on_binop;
@@ -622,10 +624,12 @@ let forker ctxt : Primus.component =
       if known > cutoff
       then Machine.return ()
       else
-        Executor.formula cnd >>= fun rhs ->
-        Executor.inputs >>= fun inputs ->
-        let task = {refute = taken; inputs; rhs; edge; hash=ctxt} in
-        Machine.Global.update master ~f:(push_task task)
+        Executor.formula cnd >>= function
+        | None -> Machine.return ()
+        | Some rhs ->
+          Executor.inputs >>= fun inputs ->
+          let task = {refute = taken; inputs; rhs; edge; hash=ctxt} in
+          Machine.Global.update master ~f:(push_task task)
 
     let pop_task () =
       let rec pop visited s = function
@@ -846,13 +850,15 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
     >>= fun () ->
     Val.b1
 
+
   let assert_ name assertions =
     Val.Symbol.of_value name >>= fun name ->
     Machine.List.iter assertions ~f:(fun assertion ->
         Executor.constraints >>= fun constraints ->
         Executor.formula assertion >>= fun x ->
-        Debug.msg "checking that %s holds"
-          (Formula.to_string x) >>= fun () ->
+        let x = match x with
+          | None -> Formula.word (Primus.Value.to_word assertion)
+          | Some x -> x in
         Machine.List.iter constraints ~f:(fun constr ->
             Debug.msg "s.t. %s" (Formula.to_string constr)) >>= fun () ->
         Machine.Observation.post failed_assertion ~f:(fun report ->
