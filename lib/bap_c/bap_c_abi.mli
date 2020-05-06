@@ -82,6 +82,14 @@ val data : #Bap_c_size.base -> Bap_c_type.t -> Bap_c_data.t
 *)
 val arg_intent : Bap_c_type.t -> intent
 
+(** [register name t] registers an abi processor [t] named [name] that
+    may be used by subroutines in this project.*)
+val register : string -> t -> unit
+
+(** [get_processor name] is used to access an abi processor with its
+    name.*)
+val get_processor : string -> t option
+
 
 (** An abstraction of a stack, commonly used in C compilers.   *)
 module Stack : sig
