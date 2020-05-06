@@ -62,7 +62,7 @@
     (or failure written)))
 
 (defun input-item-nth-char (ptr size item desc i)
-  (let ((c (channel-input desc)))
+  (let ((c (fgetc desc)))
     (if (= c -1) 0
       (memory-write (+ ptr (* size item) i) (cast char c))
       1)))
@@ -89,10 +89,11 @@
 
 (defun fgetc (stream)
   (declare (external "fgetc" "getc"))
+  (msg "the concrete fgets is called")
   (channel-input stream))
 
 (defun fgets-step (ptr len str i)
-  (let ((c (channel-input str)))
+  (let ((c (fgetc str)))
     (if (= c -1) 0
       (memory-write (+ ptr i) (cast char c))
       (not (= c 0xA:8)))))
@@ -104,7 +105,7 @@
                 (fgets-step ptr len str i))
       (incr i))
     (memory-write (+ ptr (min (-1 len) (+ ptr i))) 0:8)
-    ptr))
+    (if (= i 0) 0 ptr)))
 
 (defun getchar ()
   (declare (external "getchar"))
