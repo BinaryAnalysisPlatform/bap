@@ -266,13 +266,12 @@ module Make(Machine : Machine) = struct
     | Some layer -> match Map.find values addr with
       | Some v -> Machine.return v
       | None ->
-        let read_value =
-          memory >>= fun {size} ->
-          match layer.mem with
-          | Dynamic {value=g} ->
-            Generate.word g (Generator.width g)
-          | Static mem -> Machine.return (read_word mem addr size) in
-        read_value >>= remembered {values; layers} addr
+        memory >>= fun {size} ->
+        match layer.mem with
+        | Static mem -> Value.of_word (read_word mem addr size)
+        | Dynamic {value=g} ->
+          Generate.word g (Generator.width g) >>=
+          remembered {values; layers} addr
 
   let write addr value {values;layers} =
     match find_layer addr layers with
