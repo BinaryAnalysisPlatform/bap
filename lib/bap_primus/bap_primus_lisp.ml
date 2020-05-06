@@ -369,25 +369,8 @@ module Interpreter(Machine : Machine) = struct
       let module Code = Body(Machine) in
       Eval.const Word.b0 >>= fun init ->
       eval_advices Advice.Before init name args >>= fun _ ->
-      let run_code =
-        try
-          Code.run args >>= fun r ->
-          Machine.return r
-        with
-        | Match_failure _ ->
-          failf "%s: invalid number of arguments" name ()
-        | Invalid_argument msg ->
-          failf "%s: invalid application - %s" name msg ()
-        | Failure msg ->
-          failf "%s: unexpected error - %s" name msg ()
-        | exn ->
-          failf "%s: unexpected exception - %s\nBacktrace:\n%s"
-            name
-            (Caml.Printexc.to_string exn)
-            (Caml.Printexc.get_backtrace ())
-            () in
       push_context name args >>= fun () ->
-      run_code >>= fun r ->
+      Code.run args >>= fun r ->
       pop_context >>= fun () ->
       Eval.tick >>= fun () ->
       Machine.Observation.post primitive_called ~f:(fun k ->
