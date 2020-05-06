@@ -2,6 +2,7 @@ open Core_kernel
 open Bap.Std
 open Bap_primus.Std
 open Monads.Std
+open Bap_main
 
 (* Algorithm.
 
@@ -30,8 +31,11 @@ open Monads.Std
    is satisfiable. A formula is actual if this destination wasn't
    visited by a worker before. An unresolved destination is treated
    as unvisited, therefore it is always actual.
-
 *)
+
+let cutoff = Extension.Configuration.parameter
+    Extension.Type.(int =? 1)
+    "cutoff-level"
 
 type memory = {
   bank : Primus.Memory.Descriptor.t;
@@ -98,7 +102,7 @@ end = struct
     module Lisp = Primus.Lisp.Make(Machine)
 
     let allocate_if_not bank addr =
-      Mems.is_mapped addr >>= function
+      Mems.is_writable addr >>= function
       | true -> Machine.return ()
       | false ->
         let name = Primus.Memory.Descriptor.name bank in
@@ -362,6 +366,7 @@ end = struct
 
   module Value = Primus.Value.Make(Machine)
   module Mems = Primus.Memory.Make(Machine)
+  module Debug = Debug(Machine)
 
   let get_formula s v k =
     let id = Primus.Value.id v in
@@ -463,20 +468,30 @@ end = struct
     ]
 end
 
-type task = {
-  inputs : Input.t Seq.t;
-  refute : bool;
-  rhs : Formula.t;
+type edge = {
   blk : blk term;
   src : jmp term;
   dst : Jmp.dst;
 }
 
+type task = {
+  inputs : Input.t Seq.t;
+  refute : bool;
+  rhs : Formula.t;
+  edge : edge option;
+  hash : int;
+}
+
 type master = {
   self : Id.t option;
   worklist : task list;
-  forks : Set.M(Tid).t;
-  dests : Set.M(Tid).t;
+  forks : int Map.M(Tid).t;
+  dests : int Map.M(Tid).t;
+  ctxts : int Map.M(Int).t;
+}
+
+type worker = {
+  ctxt : int;                   (* the hash of the trace *)
 }
 
 let master = Primus.Machine.State.declare
@@ -484,167 +499,211 @@ let master = Primus.Machine.State.declare
     ~name:"symbolic-executor-master" @@ fun _ -> {
     self = None;
     worklist = [];
-    forks = Tid.Set.empty;      (* queued or finished forks *)
-    dests = Tid.Set.empty;      (* queued of finished dests *)
+    forks = Tid.Map.empty;      (* queued or finished forks *)
+    dests = Tid.Map.empty;      (* queued of finished dests *)
+    ctxts = Int.Map.empty;      (* evaluated contexts *)
+  }
+
+let worker = Primus.Machine.State.declare
+    ~uuid:"92f3042c-ba8f-465a-9d57-4c1b9ec7c186"
+    ~name:"symbolic-executor-worker" @@ fun _ -> {
+    ctxt = Hashtbl.hash 0
   }
 
 let pp_dst ppf dst = match Jmp.resolve dst with
   | First tid -> Format.fprintf ppf "%a" Tid.pp tid
   | Second _ -> Format.fprintf ppf "unk"
 
-let pp_task ppf {rhs; blk; src; dst; refute} =
-  Format.fprintf ppf "%a(%a) -> %a s.t.%s:@\n%s"
+let pp_edge ppf {blk; src; dst} =
+  Format.fprintf ppf "%a(%a) -> %as"
     Tid.pp (Term.tid blk)
     Tid.pp (Term.tid src) pp_dst dst
+
+let pp_edge_option ppf = function
+  | None -> Format.fprintf ppf "sporadic"
+  | Some edge -> pp_edge ppf edge
+
+let pp_task ppf {rhs; refute; edge; hash} =
+  Format.fprintf ppf "%08x: %a s.t.%s:@\n%s"
+    hash
+    pp_edge_option edge
     (if refute then " not" else "")
     (Formula.to_string rhs)
 
+let forker ctxt : Primus.component =
+  let cutoff = Extension.Configuration.get ctxt cutoff in
+  let module Forker(Machine : Primus.Machine.S) = struct
+    open Machine.Syntax
 
-module Forker(Machine : Primus.Machine.S) = struct
-  open Machine.Syntax
+    module Executor = Executor(Machine)
+    module Eval = Primus.Interpreter.Make(Machine)
+    module Value = Primus.Value.Make(Machine)
+    module Visited = Bap_primus_track_visited.Set.Make(Machine)
+    module Debug = Debug(Machine)
 
-  module Executor = Executor(Machine)
-  module Eval = Primus.Interpreter.Make(Machine)
-  module Value = Primus.Value.Make(Machine)
-  module Visited = Bap_primus_track_visited.Set.Make(Machine)
-  module Debug = Debug(Machine)
+    let is_conditional jmp = match Jmp.cond jmp with
+      | Bil.Int _ -> false
+      | _ -> true
 
-  let is_conditional jmp = match Jmp.cond jmp with
-    | Bil.Int _ -> false
-    | _ -> true
-
-  (* is Some (blk,jmp) when the current position is a branch point *)
-  let branch_point = function
-    | Primus.Pos.Jmp {up={me=blk}; me=jmp}
-      when Term.length jmp_t blk > 1 &&
-           is_conditional jmp ->
-      Some (blk,jmp)
-    | _ -> None
+    (* is Some (blk,jmp) when the current position is a branch point *)
+    let branch_point = function
+      | Primus.Pos.Jmp {up={me=blk}; me=jmp}
+        when Term.length jmp_t blk > 1 &&
+             is_conditional jmp ->
+        Some (blk,jmp)
+      | _ -> None
 
 
-  let other_dst ~taken blk jmp =
-    let is_other = if taken
-      then Fn.non (Term.same jmp)
-      else Term.same jmp in
-    Term.enum jmp_t blk |>
-    Seq.find_map ~f:(fun jmp ->
-        if not (is_other jmp) then None
-        else match Jmp.alt jmp with
-          | None -> Jmp.dst jmp
-          | dst -> dst) |> function
-    | Some dst -> dst
-    | None ->
-      failwithf "Broken branch %a at:@\n%a"
-        Jmp.pps jmp Blk.pps blk ()
+    let other_dst ~taken blk jmp =
+      let is_other = if taken
+        then Fn.non (Term.same jmp)
+        else Term.same jmp in
+      Term.enum jmp_t blk |>
+      Seq.find_map ~f:(fun jmp ->
+          if not (is_other jmp) then None
+          else match Jmp.alt jmp with
+            | None -> Jmp.dst jmp
+            | dst -> dst) |> function
+      | Some dst -> dst
+      | None ->
+        failwithf "Broken branch %a at:@\n%a"
+          Jmp.pps jmp Blk.pps blk ()
 
-  let is_retired visited master src dst =
-    Set.mem master.forks (Term.tid src) ||
-    match Jmp.resolve dst with
-    | First tid -> Set.mem master.dests tid || Set.mem visited tid
-    | Second _ -> true
+    let count table key = match Map.find table key with
+      | None -> 0
+      | Some x -> x
 
-  let on_cond cnd =
-    let taken = Word.is_one (Primus.Value.to_word cnd) in
-    Eval.pos >>= fun pos ->
-    match branch_point pos with
-    | None -> Machine.return ()
-    | Some (blk,src) ->
-      Machine.Global.get master >>= fun s ->
+    let incr table key = Map.update table key ~f:(function
+        | None -> 1
+        | Some n -> n + 1)
+
+    let edge_knowledge visited master {src;dst} =
+      count master.forks (Term.tid src) +
+      match Jmp.resolve dst with
+      | Second _ -> 0
+      | First tid ->
+        count master.dests tid +
+        if Set.mem visited tid then 1 else 0
+
+    let obtained_knowledge visited master hash edge =
+      count master.ctxts hash + match edge with
+      | None -> 0
+      | Some e -> edge_knowledge visited master e
+
+    let compute_edge taken pos = match branch_point pos with
+      | None -> None
+      | Some (blk,src) ->
+        let dst = other_dst ~taken blk src in
+        Some {blk;src;dst}
+
+    let push_task task s =
+      let s = {
+        s with ctxts = incr s.ctxts task.hash;
+               worklist = task :: s.worklist;
+      } in
+      match task.edge with
+      | None -> s
+      | Some {src; dst} -> {
+          s with
+          forks = incr s.forks (Term.tid src);
+          dests = match Jmp.resolve dst with
+            | First dst -> incr s.dests dst
+            | Second _ -> s.dests
+        }
+
+    let on_cond cnd =
+      let taken = Word.is_one (Primus.Value.to_word cnd) in
+      Eval.pos >>= fun pos ->
+      let edge = compute_edge taken pos in
       Visited.all >>= fun visited ->
-      let dst = other_dst ~taken blk src in
-      if is_retired visited s src dst
+      Machine.Global.get master >>= fun s ->
+      Machine.Local.get worker >>= fun {ctxt} ->
+      let known = obtained_knowledge visited s ctxt edge in
+      if known > cutoff
       then Machine.return ()
       else
         Executor.formula cnd >>= fun rhs ->
         Executor.inputs >>= fun inputs ->
-        let task = {refute = taken; inputs; rhs; src; dst; blk} in
-        Machine.Global.put master {
-          s with
-          worklist = task :: s.worklist;
-          forks = Set.add s.forks (Term.tid src);
-          dests = match Jmp.resolve dst with
-            | First dst -> Set.add s.dests dst
-            | Second _ -> s.dests
-        }
+        let task = {refute = taken; inputs; rhs; edge; hash=ctxt} in
+        Machine.Global.update master ~f:(push_task task)
 
-  let pop_task () =
-    let rec pop visited = function
-      | [] -> None
-      | t :: ts -> match Jmp.resolve t.dst with
-        | First dst when Set.mem visited dst -> pop visited ts
-        | _ -> Some (t, ts) in
-    Machine.Global.get master >>= fun s ->
-    Visited.all >>= fun visited ->
-    match pop visited s.worklist with
-    | None -> Machine.Global.put master {
-        s with worklist=[]
-      } >>| fun () -> None
-    | Some (t,ts) -> Machine.Global.put master {
-        s with worklist = ts
-      } >>| fun () ->
-      Some t
+    let pop_task () =
+      let rec pop visited s = function
+        | [] -> None
+        | t :: ts ->
+          if obtained_knowledge visited s t.hash t.edge > cutoff
+          then pop visited s ts
+          else Some (t, ts) in
+      Machine.Global.get master >>= fun s ->
+      Visited.all >>= fun visited ->
+      match pop visited s s.worklist with
+      | None -> Machine.Global.put master {
+          s with worklist=[]
+        } >>| fun () -> None
+      | Some (t,ts) -> Machine.Global.put master {
+          s with worklist = ts
+        } >>| fun () ->
+        Some t
 
-  let exec_task ({inputs; refute; rhs} as task) =
-    Debug.msg "starting a new task %a" pp_task task >>= fun () ->
-    match Formula.solve ~refute rhs with
-    | None ->
-      Debug.msg "can't find a solution!" >>= fun () ->
-      Eval.halt >>|
-      never_returns
-    | Some model ->
-      let string_of_input = Input.to_symbol in
-      let module Input = Input.Make(Machine) in
-      Debug.msg "solution was found!" >>= fun () ->
-      Machine.Seq.iter inputs ~f:(fun input ->
-          match Formula.Model.get model input with
-          | None -> assert false
-          | Some value ->
-            Debug.msg "path-constraint %s = %s"
-              (string_of_input input)
-              (Formula.Value.to_string value) >>= fun () ->
-            Value.of_word (Formula.Value.to_word value) >>= fun value ->
-            Executor.set_input input value  >>= fun () ->
-            Input.set input value)
-
-  let rec run_master system =
-    Machine.Global.get master >>= fun s ->
-    match s.self with
-    | None ->
-      Machine.current () >>= fun master_pid ->
-      Debug.msg "starting the master process with pid %a"
-        Id.pp master_pid >>= fun () ->
-      Machine.Global.put master {
-        s with self = Some master_pid
-      } >>= fun () ->
-      Machine.fork () >>= fun () ->
-      Machine.current () >>= fun client_pid ->
-      Debug.msg "the first fork returns at %a"
-        Id.pp client_pid >>= fun () ->
-      if Id.equal master_pid client_pid
-      then run_master system
-      else Machine.return ()
-    | Some master_pid ->
-      pop_task () >>= function
+    let exec_task {inputs; refute; rhs} =
+      match Formula.solve ~refute rhs with
       | None ->
-        Debug.msg "Worklist is empty, finishing" >>= fun () ->
-        Machine.return ()
-      | Some t  ->
-        Debug.msg "We have some tasks" >>= fun () ->
+        Eval.halt >>|
+        never_returns
+      | Some model ->
+        let string_of_input = Input.to_symbol in
+        let module Input = Input.Make(Machine) in
+        Machine.Seq.iter inputs ~f:(fun input ->
+            match Formula.Model.get model input with
+            | None -> assert false
+            | Some value ->
+              Debug.msg "%s = %s"
+                (string_of_input input)
+                (Formula.Value.to_string value) >>= fun () ->
+              Value.of_word (Formula.Value.to_word value) >>= fun value ->
+              Executor.set_input input value >>= fun () ->
+              Input.set input value)
+
+    let rec run_master system =
+      Machine.Global.get master >>= fun s ->
+      match s.self with
+      | None ->
+        Machine.current () >>= fun master_pid ->
+        Debug.msg "starting the master process with pid %a"
+          Id.pp master_pid >>= fun () ->
+        Machine.Global.put master {
+          s with self = Some master_pid
+        } >>= fun () ->
         Machine.fork () >>= fun () ->
         Machine.current () >>= fun client_pid ->
+        Debug.msg "the first fork returns at %a"
+          Id.pp client_pid >>= fun () ->
         if Id.equal master_pid client_pid
-        then
-          Debug.msg "Client is finished, master is resumed" >>= fun () ->
-          run_master system
-        else
-          Debug.msg "Forked a new machine" >>= fun () ->
-          exec_task t
+        then run_master system
+        else Machine.return ()
+      | Some master_pid ->
+        pop_task () >>= function
+        | None ->
+          Debug.msg "Worklist is empty, finishing" >>= fun () ->
+          Eval.halt >>| never_returns
+        | Some t  ->
+          Debug.msg "We have some tasks" >>= fun () ->
+          Machine.fork () >>= fun () ->
+          Machine.current () >>= fun client_pid ->
+          if Id.equal master_pid client_pid
+          then
+            Debug.msg "Client is finished, master is resumed" >>= fun () ->
+            run_master system
+          else
+            Debug.msg "Forked a new machine" >>= fun () ->
+            exec_task t
 
-  let init () = Machine.sequence Primus.Interpreter.[
-      eval_cond >>> on_cond;
-      Primus.System.start >>> run_master;
-    ]
-end
+    let init () = Machine.sequence Primus.Interpreter.[
+        eval_cond >>> on_cond;
+        Primus.System.start >>> run_master;
+      ]
+  end in (module Forker)
+
 
 let sexp_of_assert_failure (name,model,formula,inputs) =
   Sexp.List (
@@ -688,8 +747,13 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
     | _ -> 8
 
   let rec set_inputs bank data_size lower upper =
-    if Word.(lower > upper) then Machine.return ()
+    if Word.(lower > upper)
+    then Machine.return ()
     else
+      Debug.msg "set-input %s %a <= %a"
+        (Bank.name bank)
+        Word.pp lower
+        Word.pp upper >>= fun () ->
       Val.zero data_size >>=
       Executor.set_input (Input.ptr bank lower) >>= fun () ->
       set_inputs bank data_size (Word.succ lower) upper
@@ -702,7 +766,7 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
             | Some m' when equal_memory m m' -> m
             | _ ->
               invalid_argf "symbolic-memory: %s was previously \
-                            define with different parameters"
+                            defined with different parameters"
                 name ()))
 
   let with_memory {bank} perform =
@@ -761,9 +825,10 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
     Machine.Global.get memories >>= fun memories ->
     if Map.mem memories name then Machine.return id
     else
+      let data_size = data_size rest in
       let bank = Bank.create name
           ~addr_size:(addr_size arch_addr_size rest)
-          ~data_size:(data_size rest) in
+          ~data_size in
       let lower = to_word lower and upper = to_word upper in
       let len = match Word.(to_int (upper - lower)) with
         | Error _ ->
@@ -771,8 +836,9 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
         | Ok diff -> diff + 1 in
       let memory = {bank; ptr=lower; len} in
       register_memory memory >>= fun () ->
-      with_memory memory (Mems.allocate lower len) >>= fun () ->
-      set_inputs bank (data_size rest) lower upper >>| fun () ->
+      let generator = Primus.Generator.static ~width:data_size 0 in
+      with_memory memory (Mems.allocate ~generator lower len) >>= fun () ->
+      set_inputs bank data_size lower upper >>| fun () ->
       id
 
   let assume assumptions =
@@ -853,12 +919,12 @@ module Primitives(Machine : Primus.Machine.S) = struct
     ]
 end
 
-let () = Bap_main.Extension.declare  @@ fun _ ->
+let () = Extension.declare  @@ fun ctxt ->
   Primus.Components.register_generic "symbolic-computer"
     (module Executor) ~package:"bap"
     ~desc:"Computes a symbolic formula for each Primus value.";
   Primus.Components.register_generic "symbolic-path-explorer"
-    (module Forker) ~package:"bap"
+    (forker ctxt) ~package:"bap"
     ~desc:"Computes a path constraint for each branch and forks a \
            new machine if the constraint is satisfiable.";
   Primus.Components.register_generic "symbolic-lisp-primitives"
