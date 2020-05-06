@@ -652,9 +652,10 @@ module Make(Machine : Machine) = struct
     Set.to_sequence
 
 
-  let link_global var =
-    Env.add var @@
-    Bap_primus_generator.static 0
+  let link_global var = match Var.typ var with
+    | Imm m ->
+      Value.zero m >>= Env.set var
+    | _ -> Machine.return ()
 
   let link_globals () =
     Machine.gets Project.arch >>= fun arch ->
