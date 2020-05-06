@@ -48,6 +48,7 @@ let memories = Primus.Machine.State.declare
     ~name:"symbolic-memories" @@ fun _ ->
   String.Map.empty
 
+module Bank = Primus.Memory.Descriptor
 module Id = Monad.State.Multi.Id
 let debug_msg,post_msg = Primus.Observation.provide "executor-debug"
     ~inspect:sexp_of_string
@@ -59,6 +60,7 @@ module Debug(Machine : Primus.Machine.S) = struct
       let msg = Format.asprintf "%a: %s" Id.pp id msg in
       Machine.Observation.make post_msg msg) fmt
 end
+
 
 module Input : sig
   type t
@@ -101,6 +103,12 @@ end = struct
     module Env = Primus.Env.Make(Machine)
     module Lisp = Primus.Lisp.Make(Machine)
 
+    let allocate bank ptr len =
+      let width = Bank.data_size bank in
+      let seed = Hashtbl.hash (Bank.name bank) in
+      let generator = Primus.Generator.Random.lcg ~width seed in
+      Mems.allocate ~generator ptr len
+
     let allocate_if_not bank addr =
       Mems.is_writable addr >>= function
       | true -> Machine.return ()
@@ -109,7 +117,7 @@ end = struct
         Machine.Global.get memories >>= fun memories ->
         match Map.find memories name with
         | None -> Lisp.failf "unknown symbolic memory %s" name ()
-        | Some {ptr; len} -> Mems.allocate ptr len
+        | Some {ptr; len} -> allocate bank ptr len
 
     let set input value = match input with
       | Ptr {bank; addr} ->
@@ -751,7 +759,6 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
   module Val = Primus.Value.Make(Machine)
   module Env = Primus.Env.Make(Machine)
   module Executor = Executor(Machine)
-  module Bank = Primus.Memory.Descriptor
   module Closure = Primus.Lisp.Closure.Make(Machine)
   module Debug = Debug(Machine)
 
@@ -850,7 +857,9 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
         | Ok diff -> diff + 1 in
       let memory = {bank; ptr=lower; len} in
       register_memory memory >>= fun () ->
-      let generator = Primus.Generator.static ~width:data_size 0 in
+      let width = Bank.data_size bank in
+      let seed = Hashtbl.hash (Bank.name bank) in
+      let generator = Primus.Generator.Random.lcg ~width seed in
       with_memory memory (Mems.allocate ~generator lower len) >>= fun () ->
       set_inputs bank data_size lower upper >>| fun () ->
       id
