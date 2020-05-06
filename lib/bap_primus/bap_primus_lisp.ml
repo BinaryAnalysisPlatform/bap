@@ -449,21 +449,21 @@ module Interpreter(Machine : Machine) = struct
         w
       else Eval.set v w >>| fun () -> w
     and msg fmt es =
-      let buf = Buffer.create 64 in
-      let ppf = formatter_of_buffer buf in
-      let pp_exp e =
+      let str e =
         Machine.catch
-          (eval e >>| fun {value=x} -> fprintf ppf "%a" Word.pp x)
+          (eval e >>= fun v ->
+           Value.Symbol.of_value v >>| function
+           | "" -> asprintf "%a" Word.pp v.value
+           | s  -> asprintf "#<%s %a>" s Word.pp v.value)
           (fun err ->
-             fprintf ppf "<%s>" (Exn.to_string err);
-             Machine.return ()) in
-      Machine.List.iter fmt ~f:(function
-          | Lit s -> Machine.return (pp_print_string ppf s)
+             Machine.return (asprintf "<%s>" (Exn.to_string err))) in
+      Machine.List.map fmt ~f:(function
+          | Lit s -> Machine.return s
           | Pos n -> match List.nth es n with
             | None -> failf "bad positional argument $%d" n ()
-            | Some e -> pp_exp e) >>= fun () ->
-      pp_print_flush ppf ();
-      Machine.Observation.make new_message (Buffer.contents buf) >>= fun () ->
+            | Some e -> str e) >>= fun contents ->
+      let msg = String.concat contents in
+      Machine.Observation.make new_message msg >>= fun () ->
       Eval.const Word.b0 in
     Machine.Local.update state (fun s -> {s with cur = exp.id}) >>= fun () ->
     eval exp
