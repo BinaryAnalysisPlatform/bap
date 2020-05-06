@@ -304,7 +304,10 @@ end = struct
     type t = model
     let get {model} input =
       let var = var (Input.to_symbol input) (Input.size input) in
-      Z3.Model.eval model var true
+      match Z3.Model.eval model var false with
+      | Some x when Expr.is_numeral x ->  Some x
+      | _ -> None
+
   end
 
   module Value = struct
@@ -659,7 +662,7 @@ let forker ctxt : Primus.component =
         let module Input = Input.Make(Machine) in
         Machine.Seq.iter inputs ~f:(fun input ->
             match Formula.Model.get model input with
-            | None -> assert false
+            | None -> Machine.return ()
             | Some value ->
               Debug.msg "%s = %s"
                 (string_of_input input)
