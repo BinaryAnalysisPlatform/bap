@@ -724,8 +724,15 @@ let forker ctxt : Primus.component =
             Debug.msg "Forked a new machine" >>= fun () ->
             exec_task t
 
+    let update_hash t =
+      Machine.Local.update worker ~f:(fun s -> {
+            s with
+            ctxt = Tid.hash t lxor s.ctxt
+          })
+
     let init () = Machine.sequence Primus.Interpreter.[
         eval_cond >>> on_cond;
+        enter_term >>> update_hash;
         Primus.System.start >>> run_master;
       ]
   end in (module Forker)
