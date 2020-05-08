@@ -81,6 +81,7 @@ module Make(M : Monad.S) = struct
   type 'a e =
     ?boot:unit t ->
     ?init:unit t ->
+    ?fini:unit t ->
     (exit_status * project) m effect
 
   module C = Monad.Cont.Make(PE)(struct
@@ -357,6 +358,7 @@ module Make(M : Monad.S) = struct
     fun user
       ?(boot=return ())
       ?(init=return ())
+      ?(fini=return ())
       ?(envp=[||])
       ?(args=[||])
       sys
@@ -367,7 +369,11 @@ module Make(M : Monad.S) = struct
         init >>= fun () ->
         catch
           (start sys >>= fun () -> user)
-          (fun exn -> stop sys >>= fun () -> raise exn) >>= fun x ->
+          (fun exn ->
+             fini >>= fun () ->
+             stop sys >>= fun () ->
+             raise exn) >>= fun x ->
+        fini >>= fun () ->
         stop sys >>= fun () ->
         return x in
       M.bind

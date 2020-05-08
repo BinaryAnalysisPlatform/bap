@@ -186,24 +186,23 @@ module Components = struct
     let init_system s =
       do_init s (Set.empty (module Name))
 
-    let run_internal ~boot ~init ~start =
+    let run_internal ~boot ~init ~fini ~start =
       Machine.run ~boot
         ~init:(Lisp.typecheck >>= Lisp.optimize >>= fun () ->
                init >>= inited)
-      @@begin Machine.catch start (fun exn ->
-          finish () >>= fun () ->
-          Machine.raise exn) >>= fun () ->
-        finish ()
-      end
+        ~fini:(fini >>= finish)
+        start
+
 
     let run
         ?envp
         ?args
         ?(init=Machine.return ())
+        ?(fini=Machine.return ())
         ?(start=Machine.return ())
         sys proj =
       run_internal (Name.show sys.name) proj
-        ?envp ?args ~boot:(init_system sys) ~init ~start
+        ?envp ?args ~boot:(init_system sys) ~init ~fini ~start
 
   end
 
@@ -238,6 +237,7 @@ module Components = struct
 
   let run ?envp ?args
       ?(init=Machine.return ())
+      ?(fini=Machine.return ())
       ?(start=Machine.return ())
       sys proj state =
     let comp =
@@ -248,6 +248,7 @@ module Components = struct
         ?args
         ~boot:(init_system sys)
         ~init
+        ~fini
         ~start >>= fun x ->
       Knowledge.provide result obj (Some x) >>| fun () ->
       obj in
@@ -393,6 +394,7 @@ module Job = struct
     envp : string array;
     args : string array;
     init : unit Machine.Make(Knowledge).t;
+    fini : unit Machine.Make(Knowledge).t;
     start : unit Machine.Make(Knowledge).t;
     system : system;
   } [@@deriving fields]
@@ -404,14 +406,15 @@ module Job = struct
       ?(desc="")
       ?(envp=[||]) ?(args=[||])
       ?(init=Analysis.return ())
+      ?(fini=Analysis.return ())
       ?(start=Analysis.return ())
-      system = {name; desc; envp; args; init; start; system}
+      system = {name; desc; envp; args; init; fini; start; system}
 end
 
 module Jobs = struct
   let jobs : Job.t Queue.t = Queue.create ()
-  let enqueue ?name ?desc ?envp ?args ?init ?start sys =
-    Queue.enqueue jobs @@ Job.create ?name ?desc ?envp ?args ?init ?start sys
+  let enqueue ?name ?desc ?envp ?args ?init ?fini ?start sys =
+    Queue.enqueue jobs @@ Job.create ?name ?desc ?envp ?args ?init ?fini ?start sys
 
   let pending () = Queue.length jobs
 
@@ -444,9 +447,9 @@ module Jobs = struct
   let run
       ?(on_failure = fun _ _ _ -> Continue)
       ?(on_success = fun _ _ _ _ -> Continue) =
-    let rec process result ({Job.envp; args; init; start; system} as job) =
+    let rec process result ({Job.envp; args; init; fini; start; system} as job) =
       Components.run system result.project result.state
-        ~envp ~args ~init ~start |> function
+        ~envp ~args ~init ~fini ~start |> function
       | Ok (status,proj,state) ->
         handle_success job status state @@
         success job proj state result

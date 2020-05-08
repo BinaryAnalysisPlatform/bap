@@ -549,6 +549,7 @@ module Std : sig
                                      and type 'a e =
                                            ?boot:unit t ->
                                            ?init:unit t ->
+                                           ?fini:unit t ->
                                            (exit_status * project) m effect
 
         (** Local state of the machine.  *)
@@ -725,7 +726,7 @@ module Std : sig
           Components should minimize the side-effects on the Primus
           machine and do not use Interpreter, Linker, and/or any
           observable operations. In this phase the Primus Machine
-          operates in a deterministic mode and fork/switch operators are
+          operates in the deterministic mode and fork/switch operators are
           disabled.
 
           Once this phase is complete, the [init] observation is posted
@@ -745,6 +746,10 @@ module Std : sig
 
           This stage is used to prepare the Machine for the execution. Once
           it is finished the [start] observation is posted.
+
+          Any exception that is thrown in this phase will prevent
+          machine from running and terminate the computation
+          immediately.
 
           {3 The running phase}
 
@@ -886,6 +891,7 @@ module Std : sig
         ?envp:string array ->
         ?args:string array ->
         ?init:unit Machine.Make(Knowledge).t ->
+        ?fini:unit Machine.Make(Knowledge).t ->
         ?start:unit Machine.Make(Knowledge).t ->
         system -> project -> Knowledge.state ->
         (exit_status * project * Knowledge.state, Knowledge.conflict) result
@@ -996,6 +1002,7 @@ module Std : sig
           ?envp:string array ->
           ?args:string array ->
           ?init:unit Machine.t ->
+          ?fini:unit Machine.t ->
           ?start:unit Machine.t ->
           t -> project -> (exit_status * project) Machine.m
       end
@@ -1140,6 +1147,7 @@ module Std : sig
         ?envp:string array ->
         ?args:string array ->
         ?init:unit Machine.Make(Knowledge).t ->
+        ?fini:unit Machine.Make(Knowledge).t ->
         ?start:unit Machine.Make(Knowledge).t ->
         system -> unit
 

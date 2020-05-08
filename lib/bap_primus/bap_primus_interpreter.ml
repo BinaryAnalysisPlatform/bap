@@ -314,7 +314,7 @@ type exn += Runtime_error of string
 let () =
   Exn.add_printer (function
       | Runtime_error msg ->
-        Some (sprintf "Bap_primus runtime error: %s" msg)
+        Some (sprintf "Primus interpreter runtime error: %s" msg)
       | Halt -> Some "Halt"
       | Segmentation_fault x ->
         Some (asprintf "Segmentation fault at %a" Addr.pp_hex x)
