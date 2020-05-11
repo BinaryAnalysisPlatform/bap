@@ -412,7 +412,7 @@ error_or<uint64_t> symbol_value(const coff_obj &obj, const SymbolRef &s) {
 
 } // namespace coff_loader
 
-error_or<std::string> load(const llvm::object::COFFObjectFile &obj) {
+error_or<std::string> load(const llvm::object::COFFObjectFile &obj, const char* pdb_path) {
     using namespace coff_loader;
     ogre_doc s;
     s.raw_entry(coff_declarations);
@@ -425,7 +425,11 @@ error_or<std::string> load(const llvm::object::COFFObjectFile &obj) {
     symbols(obj, s);
     relocations(obj, s);
     exported_symbols(obj, s);
-    pdb_loader::load(obj, "/Users/yana/factory/sandbox/pdb-investigation/examples/pageant.pdb",s);
+    if (pdb_path) {
+        std::cout << "we are here 001" << std::endl << std::flush;
+        std::cout << "got " << std::string(pdb_path) << std::endl;
+    }
+    pdb_loader::load(obj, pdb_path, s);
     return s.str();
 }
 

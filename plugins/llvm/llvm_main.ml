@@ -33,13 +33,16 @@ to a file type will be used. For example, for any executable file a
 default image base is equal to lowest image virtual address.
 For relocatable files a default image base is equal to 0xC0000000." in
     Config.(param (some int64) ~default:None "base" ~doc) in
+  let pdb_path =
+    let doc = "Path a directory with pdb files" in
+    Config.(param dir ~default:(Sys.getcwd ()) "pdb-path" ~doc) in
   let version =
     let doc ="Prints LLVM version and exits" in
     Config.(flag "version" ~doc) in
   Config.when_ready (fun {Config.get=(!)} ->
       if !version then
         print_version();
-      let () = init_loader ?base:!base_addr () in
+      let () = init_loader ?base:!base_addr ~pdb_dir:!pdb_path () in
       match !x86_syntax with
       | "att" | "intel" as s ->
         let syn = x86_syntax_of_sexp (Sexp.of_string s) in

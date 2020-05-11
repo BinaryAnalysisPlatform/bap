@@ -24,5 +24,5 @@ module Std : sig
       @param base a base address to use. If not specified, then a base
       address specified by the binary is used. If there is no such
       address, then some arbitrary constant will be used. *)
-  val init_loader : ?base:int64 -> unit -> unit
+  val init_loader : ?base:int64 -> pdb_dir:string -> unit -> unit
 end

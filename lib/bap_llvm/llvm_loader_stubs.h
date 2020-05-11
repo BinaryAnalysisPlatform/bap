@@ -4,7 +4,7 @@
 extern "C" {
 #endif
 
-    value bap_llvm_load_stub(value);
+    value bap_llvm_load_stub(value, value);
 
 #ifdef __cplusplus
 }

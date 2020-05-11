@@ -9,6 +9,8 @@
 #include "llvm_loader.h"
 #include "llvm_loader_stubs.h"
 
+#include <stdio.h>
+
 static void failn(int n) {
     caml_raise_with_arg(*caml_named_value("Llvm_loader_fail"), Val_int(n));
 }
@@ -18,14 +20,17 @@ static void loader_fail(const struct bap_llvm_loader *loader, int n) {
     failn(n);
 }
 
-value bap_llvm_load_stub(value arg) {
-    CAMLparam1(arg);
+value bap_llvm_load_stub(value arg, value pdb_path) {
+    CAMLparam2(arg, pdb_path);
     CAMLlocal1(result);
     const struct caml_ba_array* array = Caml_ba_array_val(arg);
     if ((!array->dim[0]) || (array->num_dims != 1))
         failn(1);
+    int a = caml_string_length(pdb_path);
+    const char * pdb = String_val(pdb_path);
+    printf ("stubs: %s; len %d\n", pdb, a);
     const struct bap_llvm_loader *loader =
-        bap_llvm_loader_create((const char*)(array->data), array->dim[0]);
+        bap_llvm_loader_create((const char*)(array->data), array->dim[0], pdb);
     if (bap_llvm_file_not_supported(loader))
         loader_fail(loader, 2);
     if (bap_llvm_loader_failed(loader))
