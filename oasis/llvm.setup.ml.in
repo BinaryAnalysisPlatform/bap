@@ -1,5 +1,28 @@
-let strip_patch ver = String.sub ver 0 3
 
+
+module Version = struct
+  let find_dot s = String.index_opt s '.'
+
+  let major v =
+    match find_dot v with
+    | None -> v
+    | Some x -> String.sub v 0 x
+
+  let strip_patch ver =
+    match find_dot ver with
+    | Some 2 ->  String.sub ver 0 4
+    | _ -> String.sub ver 0 3
+
+  let compare ver ver' =
+    match find_dot ver, find_dot ver' with
+    | Some x, Some y when x <> y ->
+      compare (int_of_string (major ver)) (int_of_string (major ver'))
+    | _ -> compare ver ver'
+
+  let (<) x y = compare x y = -1
+  let (>) x y = compare x y = 1
+  let (=) x y = compare x y = 0
+end
 
 let llvm var () : unit =
   BaseEnv.var_define
@@ -12,15 +35,15 @@ let llvm var () : unit =
        let llvm_version = BaseEnv.var_get "llvm_version" in
        let link_mode =
          let llvm_static = BaseEnv.var_get "llvm_static" in
-         if strip_patch llvm_version > "3.8" && llvm_static = "true"
+         if Version.(strip_patch llvm_version > "3.8") && llvm_static = "true"
          then "--link-static"
          else "" in
        let extract v =
 	 OASISExec.run_read_one_line ~ctxt llvm_config [link_mode; "--"^v] in
-       if strip_patch llvm_version > "3.4" && var = "ldflags"
+       if Version.(strip_patch llvm_version > "3.4") && var = "ldflags"
        then extract var ^ " " ^ extract "system-libs"
        else extract var) |>
-    definition_end
+  definition_end
 
 let llvm_version () : unit =
   BaseEnv.var_define
@@ -48,8 +71,8 @@ let llvm_config () : unit =
        let macosx = BaseEnv.var_get "system" = "macosx" in
        let vers = match BaseEnv.var_get "llvm_version" with
          | "" -> []
-         | ver when macosx -> ["-mp-" ^ strip_patch ver; "-" ^ strip_patch ver]
-         | ver -> ["-" ^ ver; "-" ^ strip_patch ver] in
+         | ver when macosx -> ["-mp-" ^ Version.strip_patch ver; "-" ^ Version.strip_patch ver]
+         | ver -> ["-" ^ ver; "-" ^ Version.strip_patch ver] in
        find_map vers ~f:(fun ver ->
            try Some (OASISFileUtil.which ~ctxt ("llvm-config" ^ ver))
            with Not_found -> None) |> function
