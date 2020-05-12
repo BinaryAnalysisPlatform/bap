@@ -23,7 +23,7 @@
 //
 
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+#if LLVM_VERSION_MAJOR < 5
 namespace loader {
 namespace pdb_loader {
 
