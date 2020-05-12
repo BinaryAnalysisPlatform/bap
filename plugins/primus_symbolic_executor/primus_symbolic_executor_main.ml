@@ -135,24 +135,25 @@ end = struct
     end)
 end
 
-module Formula : sig
-  type t
-  type formula = t
-  type model
+module SMT : sig
+  type formula
+  type expr
   type value
+  type model
 
-  val word : Word.t -> t
-  val var : string -> int -> t
+  val formula : ?refute:bool -> expr -> formula
 
-  val binop : binop -> t -> t -> t
-  val unop : unop -> t -> t
-  val extract : int -> int -> t -> t
-  val concat : t -> t -> t
-  val ite : t -> t -> t -> t
-  val cast : cast -> int -> t -> t
+  val word : Word.t -> expr
+  val var : string -> int -> expr
 
-  val solve : ?constraints:t list -> ?refute:bool -> t -> model option
+  val binop : binop -> expr -> expr -> expr
+  val unop : unop -> expr -> expr
+  val extract : int -> int -> expr -> expr
+  val concat : expr -> expr -> expr
+  val ite : expr -> expr -> expr -> expr
+  val cast : cast -> int -> expr -> expr
 
+  val check : formula list -> model option
 
   module Model : sig
     type t = model
@@ -166,22 +167,27 @@ module Formula : sig
     val to_string : value -> string
   end
 
-  val to_string : t -> string
+  val pp_expr : Format.formatter -> expr -> unit
+  val pp_formula : Format.formatter -> formula -> unit
+  val pp_value : Format.formatter -> value -> unit
 end = struct
   module Bitv = Z3.BitVector
   module Bool = Z3.Boolean
   module Expr = Z3.Expr
   module Sort = Z3.Sort
 
-  type t = Expr.expr
-  type formula = t
-  type value = t
+  type expr = Expr.expr
+  type formula = expr
+  type value = expr
 
   let ctxt = Z3.mk_context [
       "model", "true";
     ]
 
   let to_string = Expr.to_string
+  let pp_expr ppf expr = Format.fprintf ppf "%s" (to_string expr)
+  let pp_formula = pp_expr
+  let pp_value = pp_expr
 
   let coerce_shift op ctxt x y =
     let sx = Bitv.get_size (Expr.get_sort x)
@@ -295,29 +301,32 @@ end = struct
     model : Z3.Model.model;
   }
 
-  let solve ?(constraints=[]) ?(refute=false) expr =
-    let solver = Z3.Solver.mk_simple_solver ctxt in
-    let constraints = List.map constraints ~f:bool_of_bit in
+  let formula ?(refute=false) expr =
     let lhs = Expr.mk_numeral_int ctxt 0 (Expr.get_sort expr) in
     let formula = Bool.mk_eq ctxt lhs expr in
-    let formula = if refute then formula
-      else Bool.mk_not ctxt formula in
-    Z3.Solver.add solver constraints;
-    match Z3.Solver.check solver [formula] with
-    | UNSATISFIABLE | UNKNOWN -> None
-    | SATISFIABLE -> match Z3.Solver.get_model solver with
-      | None -> None
-      | Some model -> Some {model}
+    if refute then formula else Bool.mk_not ctxt formula
 
   module Model = struct
     type t = model
     let get {model} input =
       let var = var (Input.to_symbol input) (Input.size input) in
       match Z3.Model.eval model var false with
-      | Some x when Expr.is_numeral x ->  Some x
+      | Some x when Expr.is_numeral x -> Some x
       | _ -> None
-
   end
+
+  let solver = Z3.Solver.mk_simple_solver ctxt
+
+  let check assertions =
+    Z3.Solver.push solver;
+    Z3.Solver.add solver assertions;
+    let result = match Z3.Solver.check solver [] with
+      | UNSATISFIABLE | UNKNOWN -> None
+      | SATISFIABLE -> match Z3.Solver.get_model solver with
+        | None -> None
+        | Some model -> Some {model} in
+    Z3.Solver.pop solver 1;
+    result
 
   module Value = struct
     type t = value
@@ -345,33 +354,32 @@ end
 
 type executor = {
   inputs : Set.M(Input).t;
-  constraints : Formula.t list;
-  formulae : Formula.t Primus.Value.Id.Map.t;
+  values : SMT.expr Primus.Value.Id.Map.t;
+  lemmas : SMT.formula list;
 }
 
 let executor = Primus.Machine.State.declare
     ~uuid:"e21aa0fe-bc37-48e3-b398-ce7e764843c8"
     ~name:"symbolic-executor-formulae" @@ fun _ -> {
-    formulae = Primus.Value.Id.Map.empty;
+    values = Primus.Value.Id.Map.empty;
     inputs = Set.empty (module Input);
-    constraints = [];
+    lemmas = []
   }
 
-let sexp_of_formula x = Sexp.Atom (Formula.to_string x)
+let sexp_of_formula x =
+  Sexp.Atom (Format.asprintf "%a" SMT.pp_formula x)
 
-let new_formula,on_formula = Primus.Observation.provide "new-formula"
-    ~package:"bap"
-    ~inspect:(fun (id,x) -> Sexp.List [
-        Primus.Value.sexp_of_t id;
-        sexp_of_formula x;
-      ])
+let before_constraint,on_constraint =
+  Primus.Observation.provide
+    ~inspect:sexp_of_formula "before-constraint"
+
 
 module Executor(Machine : Primus.Machine.S) : sig
-  val formula : Primus.Value.t -> Formula.t option Machine.t
+  val value : Primus.Value.t -> SMT.expr option Machine.t
   val inputs : Input.t seq Machine.t
   val init : unit -> unit Machine.t
   val set_input : Input.t -> Primus.Value.t -> unit Machine.t
-  val constraints : Formula.t list Machine.t
+  val constraints : SMT.formula list Machine.t
   val add_constraint : Primus.Value.t -> unit Machine.t
 end = struct
   open Machine.Syntax
@@ -382,37 +390,37 @@ end = struct
 
   let id = Primus.Value.id
 
-  let formula s x = Map.find s.formulae (id x)
-  let word x = Formula.word @@ Primus.Value.to_word x
+  let value s x = Map.find s.values (id x)
+  let word x = SMT.word @@ Primus.Value.to_word x
   let to_formula x = function
     | None -> word x
     | Some x -> x
 
   let lift1 x r f =
     Machine.Local.get executor >>= fun s ->
-    match formula s x with
+    match value s x with
     | None -> Machine.return ()
     | Some x ->
       Machine.Local.put executor {
         s with
-        formulae = Map.add_exn s.formulae (id r) (f x)
+        values = Map.add_exn s.values (id r) (f x)
       }
 
   let lift2 x y r f =
     Machine.Local.get executor >>= fun s ->
-    match formula s x, formula s y with
+    match value s x, value s y with
     | None,None -> Machine.return ()
     | fx,fy ->
       let x = to_formula x fx
       and y = to_formula y fy in
       Machine.Local.put executor {
         s with
-        formulae = Map.add_exn s.formulae (id r) (f x y)
+        values = Map.add_exn s.values (id r) (f x y)
       }
 
   let lift3 x y z r f =
     Machine.Local.get executor >>= fun s ->
-    match formula s x, formula s y, formula s z with
+    match value s x, value s y, value s z with
     | None,None,None -> Machine.return ()
     | fx,fy,fz ->
       let x = to_formula x fx
@@ -420,24 +428,24 @@ end = struct
       and z = to_formula z fz in
       Machine.Local.put executor {
         s with
-        formulae = Map.add_exn s.formulae (id r) (f x y z)
+        values = Map.add_exn s.values (id r) (f x y z)
       }
 
-  let on_binop ((op,x,y),z) = lift2 x y z @@ Formula.binop op
-  let on_unop ((op,x),z) = lift1 x z @@ Formula.unop op
-  let on_extract ((hi,lo,x),z) = lift1 x z @@ Formula.extract hi lo
-  let on_concat ((x,y),z) = lift2 x y z @@ Formula.concat
-  let on_ite ((c,x,y),z) = lift3 c x y z @@ Formula.ite
-  let on_cast ((c,w,x),z) = lift1 x z @@ Formula.cast c w
+  let on_binop ((op,x,y),z) = lift2 x y z @@ SMT.binop op
+  let on_unop ((op,x),z) = lift1 x z @@ SMT.unop op
+  let on_extract ((hi,lo,x),z) = lift1 x z @@ SMT.extract hi lo
+  let on_concat ((x,y),z) = lift2 x y z @@ SMT.concat
+  let on_ite ((c,x,y),z) = lift3 c x y z @@ SMT.ite
+  let on_cast ((c,w,x),z) = lift1 x z @@ SMT.cast c w
 
   let set_input origin x =
     let id = Primus.Value.id x in
     let size = Input.size origin  in
-    let x = Formula.var (Input.to_symbol origin) size in
+    let x = SMT.var (Input.to_symbol origin) size in
     Machine.Local.update executor ~f:(fun s -> {
           s with
           inputs = Set.add s.inputs origin;
-          formulae = Map.set s.formulae id x;
+          values = Map.set s.values id x;
         })
 
   let on_memory_input (p,x) =
@@ -446,7 +454,6 @@ end = struct
 
   let on_env_input (v,x) = set_input (Input.var v) x
 
-
   let inputs =
     Machine.Local.get executor >>| fun s ->
     Set.to_sequence s.inputs
@@ -454,20 +461,21 @@ end = struct
   let add_constraint x =
     let refute = Value.is_zero x in
     Machine.Local.get executor >>= fun s ->
-    match formula s x with
+    match value s x with
     | None -> Machine.return ()
     | Some x ->
-      let x = if refute then Formula.unop NOT x else x in
+      let x = SMT.formula ~refute x in
+      Machine.Observation.make on_constraint x >>= fun () ->
       Machine.Local.put executor {
-        s with constraints = x :: s.constraints;
+        s with lemmas = x :: s.lemmas;
       }
 
   let constraints =
-    Machine.Local.get executor >>| fun s -> s.constraints
+    Machine.Local.get executor >>| fun s -> s.lemmas
 
-  let formula v =
+  let value v =
     Machine.Local.get executor >>| fun s ->
-    formula s v
+    value s v
 
   let init () = Machine.sequence Primus.Interpreter.[
       binop >>> on_binop;
@@ -491,8 +499,7 @@ type edge = {
 type task = {
   parent : task option;
   inputs : Input.t Seq.t;
-  refute : bool;
-  rhs : Formula.t;
+  constr : SMT.formula;
   edge : edge option;
   hash : int;
 }
@@ -540,12 +547,11 @@ let pp_edge_option ppf = function
   | None -> Format.fprintf ppf "sporadic"
   | Some edge -> pp_edge ppf edge
 
-let pp_task ppf {rhs; refute; edge; hash} =
-  Format.fprintf ppf "%08x: %a s.t.%s:@\n%s"
+let pp_task ppf {constr; edge; hash} =
+  Format.fprintf ppf "%08x: %a s.t.@\n%a"
     hash
     pp_edge_option edge
-    (if refute then " not" else "")
-    (Formula.to_string rhs)
+    SMT.pp_formula constr
 
 let forker ctxt : Primus.component =
   let cutoff = Extension.Configuration.get ctxt cutoff in
@@ -629,21 +635,27 @@ let forker ctxt : Primus.component =
         }
 
     let on_cond cnd =
-      let taken = Word.is_one (Primus.Value.to_word cnd) in
+      let refute = Word.is_one (Primus.Value.to_word cnd) in
       Eval.pos >>= fun pos ->
-      let edge = compute_edge taken pos in
+      let edge = compute_edge refute pos in
       Visited.all >>= fun visited ->
       Machine.Global.get master >>= fun s ->
       Machine.Local.get worker >>= fun {ctxt=hash; task=parent} ->
       let known = obtained_knowledge visited s hash edge in
+      Debug.msg "considering task %8x" hash >>= fun () ->
       if known > cutoff
-      then Machine.return ()
+      then
+        Debug.msg "above cutoff, dropping."
       else
-        Executor.formula cnd >>= function
-        | None -> Machine.return ()
-        | Some rhs ->
+        Executor.value cnd >>= function
+        | None ->
+          Debug.msg "doesn't depend on input, dropping"
+        | Some expr ->
+          let constr = SMT.formula ~refute expr in
+          Debug.msg "queueing %a" SMT.pp_formula constr >>=
+          fun () ->
           Executor.inputs >>= fun inputs ->
-          let task = {refute = taken; inputs; rhs; edge; hash; parent} in
+          let task = {inputs; constr; edge; hash; parent} in
           Machine.Global.update master ~f:(push_task task)
 
     let pop_task () =
@@ -667,11 +679,7 @@ let forker ctxt : Primus.component =
     let assert_parents task =
       let rec collect asserts = function
         | None -> asserts
-        | Some {rhs; parent; refute} ->
-          let formula = if refute
-            then Formula.unop NOT rhs
-            else rhs in
-          collect (formula::asserts) parent in
+        | Some {constr; parent} -> collect (constr::asserts) parent in
       collect [] task
 
     let rec parent_inputs = function
@@ -686,13 +694,12 @@ let forker ctxt : Primus.component =
         Format.fprintf ppf "%a@\n" pp_task task;
         pp_parents ppf task.parent
 
-    let exec_task ({inputs; refute; rhs} as task) =
+    let exec_task ({inputs; constr} as task) =
       let constraints = assert_parents task.parent in
       Debug.msg "exec_task: %a@\nparents:@\n%a"
         pp_task task pp_parents task.parent
       >>= fun () ->
-
-      match Formula.solve ~constraints ~refute rhs with
+      match SMT.check (constr::constraints) with
       | None ->
         Debug.msg "UNSAT" >>= fun () ->
         Eval.halt >>|
@@ -708,13 +715,13 @@ let forker ctxt : Primus.component =
           Set.to_sequence in
         let module Input = Input.Make(Machine) in
         Machine.Seq.iter inputs ~f:(fun input ->
-            match Formula.Model.get model input with
+            match SMT.Model.get model input with
             | None -> Machine.return ()
             | Some value ->
-              Debug.msg "%s = %s"
+              Debug.msg "%s = %a"
                 (string_of_input input)
-                (Formula.Value.to_string value) >>= fun () ->
-              Value.of_word (Formula.Value.to_word value) >>= fun value ->
+                SMT.pp_value value >>= fun () ->
+              Value.of_word (SMT.Value.to_word value) >>= fun value ->
               Input.set input value)
 
     let rec run_master system =
@@ -764,17 +771,15 @@ let forker ctxt : Primus.component =
       ]
   end in (module Forker)
 
-
-let sexp_of_assert_failure (name,model,formula,inputs) =
+let sexp_of_assert_failure (name,model,inputs) =
   Sexp.List (
     Atom name ::
-    sexp_of_formula formula ::
     List.filter_map inputs ~f:(fun input ->
-        match Formula.Model.get model input with
+        match SMT.Model.get model input with
         | None -> None
         | Some value -> Option.some @@ Sexp.List [
             Sexp.Atom (Input.to_symbol input);
-            Sexp.Atom (Formula.Value.to_string value)
+            Sexp.Atom (SMT.Value.to_string value)
           ]))
 
 let assert_failure,failed_assertion =
@@ -865,7 +870,7 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
     arch_addr_size >>= fun default_width ->
     let width = width default_width rest in
     Val.Symbol.of_value var >>= fun name ->
-    let var = Var.create ("R_" ^ name) (Imm width) in
+    let var = Var.create name (Imm width) in
     Env.has var >>= function
     | true -> Env.get var
     | false ->
@@ -903,26 +908,22 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
     >>= fun () ->
     Val.b1
 
-
   let assert_ name assertions =
-    Val.Symbol.of_value name >>= fun name ->
-    Machine.List.iter assertions ~f:(fun assertion ->
+    Machine.Observation.post failed_assertion ~f:(fun report ->
         Executor.constraints >>= fun constraints ->
-        Executor.formula assertion >>= fun x ->
-        let x = match x with
-          | None -> Formula.word (Primus.Value.to_word assertion)
-          | Some x -> x in
-        Machine.List.iter constraints ~f:(fun constr ->
-            Debug.msg "s.t. %s" (Formula.to_string constr)) >>= fun () ->
-        Machine.Observation.post failed_assertion ~f:(fun report ->
-            match Formula.solve ~constraints ~refute:true x with
-            | None ->
-              Debug.msg "it holds!" >>= fun () ->
-              Machine.return ()
-            | Some model ->
-              Debug.msg "it doesn't hold!" >>= fun () ->
-              Executor.inputs >>| Seq.to_list >>= fun inputs ->
-              report (name,model,x,inputs))) >>= fun () ->
+        Machine.List.fold assertions ~init:constraints
+          ~f:(fun constraints assertion ->
+              Executor.value assertion >>| function
+              | None -> constraints
+              | Some expr ->
+                SMT.formula ~refute:true expr :: constraints) >>|
+        SMT.check >>= function
+        | None -> Machine.return ()
+        | Some model ->
+          Val.Symbol.of_value name >>= fun name ->
+          Debug.msg "%s doesn't hold!" name >>= fun () ->
+          Executor.inputs >>| Seq.to_list >>= fun inputs ->
+          report (name,model,inputs)) >>= fun () ->
     Val.b1
 
   let run args =
