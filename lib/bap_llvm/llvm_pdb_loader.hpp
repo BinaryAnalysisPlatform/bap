@@ -71,7 +71,7 @@ struct section_info {
     uint64_t offset;
 };
 
-typedef std::map<int, section_info> sections;
+typedef std::map<int, section_info> coff_sections;
 
 // still not uniform among llvm versions
 uint64_t section_offset(const object::COFFObjectFile &obj, const object::SectionRef &sec) {
@@ -80,9 +80,9 @@ uint64_t section_offset(const object::COFFObjectFile &obj, const object::Section
 }
 
 // sections indexes start from 1
-sections collect_sections(const object::COFFObjectFile &obj) {
+coff_sections collect_sections(const object::COFFObjectFile &obj) {
     std::size_t i = 1;
-    sections secs;
+    coff_sections secs;
     auto base = obj.getImageBase();
     for (auto sec : prim::sections(obj)) {
         if (auto addr = prim::section_address(sec)) {
@@ -99,12 +99,12 @@ sections collect_sections(const object::COFFObjectFile &obj) {
 // For PE-formatted executables, the segment field is interpreted as the PE section number.
 struct myvisitor : public codeview::SymbolVisitorCallbacks {
 
-    myvisitor(const sections &secs, ogre_doc &s) : sections(secs), doc(s) {}
+    myvisitor(const coff_sections &secs, ogre_doc &s) : sections(secs), doc(s) {}
 
     // S_GPROC32, S_LPROC32, S_GPROC32_ID, S_LPROC32_ID, S_LPROC32_DPC or
     // S_LPROC32_DPC_ID
     virtual Error visitKnownRecord(codeview::CVSymbol &CVR, codeview::ProcSym &proc) override {
-         auto it = sections.find(proc.Segment);
+        auto it = sections.find(proc.Segment);
         if (it == sections.end())
             return Error::success();;
 
@@ -118,7 +118,7 @@ struct myvisitor : public codeview::SymbolVisitorCallbacks {
     }
 
 private:
-    const sections &sections;
+    const coff_sections &sections;
     ogre_doc &doc;
 
 };
