@@ -34,7 +34,9 @@ default image base is equal to lowest image virtual address.
 For relocatable files a default image base is equal to 0xC0000000." in
     Config.(param (some int64) ~default:None "base" ~doc) in
   let pdb_path =
-    let doc = "Path a directory with pdb files" in
+    let doc =
+      "Path a directory with pdb files. The default is the current
+       working directory." in
     Config.(param dir ~default:(Sys.getcwd ()) "pdb-path" ~doc) in
   let version =
     let doc ="Prints LLVM version and exits" in

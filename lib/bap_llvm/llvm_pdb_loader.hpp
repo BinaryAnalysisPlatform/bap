@@ -1,22 +1,46 @@
 #ifndef LLVM_PDB_LOADER_HPP
 #define LLVM_PDB_LOADER_HPP
 
-// loads symbol information from pdb file
+//
+// # Loads symbol information from pdb file
 //
 // Briefly, PDB is multi-stream file format, where each
-// stream can represent arbitary data.
-// The most important for us is debug information stream - DBI,
+// stream (aka file) can represent arbitary data [1].
+//
+// The hard part is that the PDB format has not been officially documented
+// [2] . Probably, the information on llvm page [1] is the best one
+// found so far, although it doesn't cover the format in full.
+//
+// The code bellow is inspired by llvm-pdbtool that dumps
+// pdb files content. There are two kind of dumpers:
+// - dia, which stands for Debug Interface Access - Windows tool
+//   to access pdb files content
+// - native -  which is pure llvm-ish dumpers
+//
+// For obvious reasons we ned to stick to the second one.
+//
+// ## Implementation.
+//
+// The good news is that we need to extract the next information
+// only: symbol names, theirs sizes and addresses. That's why
+// we don't need to dive deep in the format specification, to analyse
+// different streams and etc. The only stream we need is
+// DBI - debug information stream. It references modules - aka object
+// files. And finally, for each module we have a symbols stream.
+// There are lot's of symbol's kinds, but we need only those of them
+// that mean procedure start.
+// Thus, the last thing we need is to write a visitor with only one
+// method that accepts records for symbols of the next kinds:
+// S_GPROC32, S_LPROC32, S_GPROC32_ID, S_LPROC32_ID, S_LPROC32_DPC and
+// S_LPROC32_DPC_ID.
+//
+// These records contains information like symbol name, symbol size,
+// offset from the section start and index of the segment.
+// For PE-formatted executables, the segment field is interpreted as
+// the PE section number, where numbers start from 1. [3]
 //
 //
-//
-//
-//
-// Basicaly, llvm's pdb dumpers supports two kinds of sessions:
-// - dia
-// - native
-//
-//
-// Links:
+// ### Links:
 // [1] https://llvm.org/docs/PDB/index.html
 // [2] https://github.com/microsoft/microsoft-pdb
 // [3] https://pierrelib.pagesperso-orange.fr/exec_formats/MS_Symbol_Type_v1.0.pdf
@@ -95,11 +119,9 @@ coff_sections collect_sections(const object::COFFObjectFile &obj) {
     return secs;
 }
 
+struct symbol_visitor : public codeview::SymbolVisitorCallbacks {
 
-// For PE-formatted executables, the segment field is interpreted as the PE section number.
-struct myvisitor : public codeview::SymbolVisitorCallbacks {
-
-    myvisitor(const coff_sections &secs, ogre_doc &s) : sections(secs), doc(s) {}
+    symbol_visitor(const coff_sections &secs, ogre_doc &s) : sections(secs), doc(s) {}
 
     // S_GPROC32, S_LPROC32, S_GPROC32_ID, S_LPROC32_ID, S_LPROC32_DPC or
     // S_LPROC32_DPC_ID
@@ -136,7 +158,7 @@ void load(const llvm::object::COFFObjectFile &obj, const std::string &path, ogre
 
     const pdb::DbiModuleList &modules = stream.get().modules();
     auto sections = collect_sections(obj);
-    myvisitor vis(sections, s);
+    symbol_visitor vis(sections, s);
 
     for (uint32_t i = 0; i <  modules.getModuleCount(); ++i) {
         auto module_i = modules.getModuleDescriptor(i);
@@ -167,6 +189,6 @@ void load(const llvm::object::COFFObjectFile &obj, const std::string &path, ogre
 }  // namespace pdb_loader
 }  // namespace loader
 
-#endif // LLVM 3.4
+#endif // LLVM >= 5
 
 #endif // LLVM_PDB_LOADER_HPP
