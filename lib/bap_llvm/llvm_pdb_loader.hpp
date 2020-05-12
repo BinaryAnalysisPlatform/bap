@@ -23,6 +23,16 @@
 //
 
 
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+namespace loader {
+namespace pdb_loader {
+
+void load(const llvm::object::COFFObjectFile &obj, const std::string &path, ogre_doc &s) {}
+
+}
+}
+#else
+
 #include <map>
 
 #include <llvm/Object/COFF.h>
@@ -156,5 +166,7 @@ void load(const llvm::object::COFFObjectFile &obj, const std::string &path, ogre
 
 }  // namespace pdb_loader
 }  // namespace loader
+
+#endif // LLVM 3.4
 
 #endif // LLVM_PDB_LOADER_HPP
