@@ -1,6 +1,5 @@
 open Core_kernel
 open OUnit2
-open Bap_plugins.Std
 
 let suite = "Stub_resolver" >::: [
     Stub_resolver_tests.suite;
