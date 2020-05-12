@@ -45,6 +45,13 @@ error_or<SymbolRef::Type> symbol_type(const SymbolRef &s) {
 #endif
 
 
+
+
+// 4.0 or 3.8
+#if LLVM_VERSION_MAJOR >= 4 \
+    || LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+
+
 #if LLVM_VERSION_MAJOR >= 10
 error_or<std::string> section_name(const SectionRef &sec) {
     auto name = sec.getName();
@@ -72,11 +79,6 @@ error_or<section_iterator> relocated_section(const SectionRef &sec) {
 }
 
 #endif
-
-
-// 4.0 or 3.8
-#if LLVM_VERSION_MAJOR >= 4 \
-    || LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 
 const char* get_raw_data(const ObjectFile &obj) {
     return obj.getMemoryBufferRef().getBufferStart();

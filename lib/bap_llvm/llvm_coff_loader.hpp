@@ -365,14 +365,14 @@ error_or<int> section_number(const coff_obj &obj, const SymbolRef &s) {
     symbol_iterator it(s);
     if (auto sym = obj.getCOFFSymbol(it))
         return success(int(sym->SectionNumber));
-    else failure("Failed to obtain coff symbol");
+    else return failure("Failed to obtain coff symbol");
 }
 
 error_or<uint64_t> symbol_value(const coff_obj &obj, const SymbolRef &s) {
     symbol_iterator it(s);
     if (auto sym = obj.getCOFFSymbol(it))
         return success(uint64_t(sym->Value));
-    else failure("Failed to obtain coff symbol");
+    else return failure("Failed to obtain coff symbol");
 }
 
 #else
