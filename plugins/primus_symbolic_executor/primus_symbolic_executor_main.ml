@@ -302,7 +302,8 @@ end = struct
     let formula = Bool.mk_eq ctxt lhs expr in
     let formula = if refute then formula
       else Bool.mk_not ctxt formula in
-    match Z3.Solver.check solver (formula::constraints) with
+    Z3.Solver.add solver constraints;
+    match Z3.Solver.check solver [formula] with
     | UNSATISFIABLE | UNKNOWN -> None
     | SATISFIABLE -> match Z3.Solver.get_model solver with
       | None -> None
@@ -666,19 +667,45 @@ let forker ctxt : Primus.component =
     let assert_parents task =
       let rec collect asserts = function
         | None -> asserts
-        | Some {rhs; parent} -> collect (rhs::asserts) parent in
+        | Some {rhs; parent; refute} ->
+          let formula = if refute
+            then Formula.unop NOT rhs
+            else rhs in
+          collect (formula::asserts) parent in
       collect [] task
+
+    let rec parent_inputs = function
+      | None -> Seq.empty
+      | Some {inputs;parent} ->
+        Seq.append inputs @@
+        parent_inputs parent
+
+    let rec pp_parents ppf = function
+      | None -> ()
+      | Some task ->
+        Format.fprintf ppf "%a@\n" pp_task task;
+        pp_parents ppf task.parent
 
     let exec_task ({inputs; refute; rhs} as task) =
       let constraints = assert_parents task.parent in
+      Debug.msg "exec_task: %a@\nparents:@\n%a"
+        pp_task task pp_parents task.parent
+      >>= fun () ->
+
       match Formula.solve ~constraints ~refute rhs with
       | None ->
+        Debug.msg "UNSAT" >>= fun () ->
         Eval.halt >>|
         never_returns
       | Some model ->
+        Debug.msg "SAT" >>= fun () ->
         Machine.Local.update worker ~f:(fun t ->
             {t with task = Some task}) >>= fun () ->
         let string_of_input = Input.to_symbol in
+        let inputs =
+          Seq.append inputs @@ parent_inputs task.parent |>
+          Seq.fold ~init:(Set.empty (module Input)) ~f:Set.add |>
+          Set.to_sequence in
         let module Input = Input.Make(Machine) in
         Machine.Seq.iter inputs ~f:(fun input ->
             match Formula.Model.get model input with
@@ -782,7 +809,7 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
     if Word.(lower > upper)
     then Machine.return ()
     else
-      Val.zero data_size >>=
+      Mems.get lower >>=
       Executor.set_input (Input.ptr bank lower) >>= fun () ->
       set_inputs bank data_size (Word.succ lower) upper
 
