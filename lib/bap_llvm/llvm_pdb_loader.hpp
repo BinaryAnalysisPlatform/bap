@@ -2,7 +2,7 @@
 #define LLVM_PDB_LOADER_HPP
 
 //
-// # Loads symbol information from pdb file
+// Loads symbol information from pdb file
 //
 // Briefly, PDB is multi-stream file format, where each
 // stream (aka file) can represent arbitary data [1].
@@ -18,6 +18,7 @@
 // - native -  which is pure llvm-ish dumpers
 //
 // For obvious reasons we ned to stick to the second one.
+//
 //
 // ## Implementation.
 //

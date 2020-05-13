@@ -9,8 +9,6 @@
 #include "llvm_loader.h"
 #include "llvm_loader_stubs.h"
 
-#include <stdio.h>
-
 static void failn(int n) {
     caml_raise_with_arg(*caml_named_value("Llvm_loader_fail"), Val_int(n));
 }
