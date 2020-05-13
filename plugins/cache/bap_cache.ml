@@ -18,7 +18,7 @@ module Cfg = struct
 
   let default = {
     capacity = 4 * 1024; (* 4 Gb  *)
-    overhead = 0.25;
+    overhead = 25;
     gc_enabled = true;
   }
 
@@ -30,7 +30,7 @@ module Cfg = struct
   let data  path = path // cache_data
 
   let gc_threshold c =
-    c.capacity + Int.of_float (float c.capacity *. c.overhead)
+    c.capacity + (c.capacity * c.overhead / 100)
 
   let default_root = ref None
 
@@ -39,12 +39,12 @@ module Cfg = struct
   let write path cfg =
     try Utils.binable_to_file (module T) path cfg
     with e ->
-      warning "storing config: %s" (Exn.to_string e)
+      warning "Failed to store config file: %s" (Exn.to_string e)
 
   let read path =
     try Utils.binable_from_file (module T) path
     with e ->
-      warning "read config: %s" (Exn.to_string e);
+      warning "Failed to read config file: %s" (Exn.to_string e);
       default
 
 end
@@ -95,6 +95,8 @@ let mkdir_from_tmp ~target ~f path =
         f tmp_dir;
         try Unix.rename tmp_dir target
         with
+        (* these errors occur if the destination exists and is not empty *)
+        | Unix.(Unix_error (EEXIST,_,_))
         | Unix.(Unix_error (ENOTEMPTY,_,_)) -> ()
         | exn -> raise exn)
 

@@ -32,7 +32,7 @@ let print_info () =
   printf "Capacity:     %5d MB@\n" cfg.capacity;
   printf "Current size: %5d MB@\n" size;
   printf "GC threshold: %5d MB@\n" (Cache.gc_threshold cfg);
-  printf "Overhead:     %5g %%@\n" (cfg.overhead *. 100.0);
+  printf "Overhead:     %5d %%@\n" cfg.overhead;
   printf "GC enabled:   %5b @\n" cfg.gc_enabled
 
 let save writer dgst data =
@@ -64,7 +64,7 @@ let run clean show_info gc =
   if gc then run_and_exit run_gc
 
 let capacity sz cfg = {cfg with capacity = sz}
-let overhead ov cfg = {cfg with overhead = float ov /. 100.}
+let overhead ov cfg = {cfg with overhead = ov}
 let disable_gc x cfg = {cfg with gc_enabled = not x}
 let enable_gc x cfg = {cfg with gc_enabled = x}
 

@@ -3,7 +3,7 @@ open Regular.Std
 
 type config = {
   capacity : int;  (* Mb  *)
-  overhead : float;
+  overhead : int;  (* % *)
   gc_enabled : bool;
 } [@@deriving bin_io, compare, sexp]
 

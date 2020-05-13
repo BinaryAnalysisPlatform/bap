@@ -137,7 +137,7 @@ let lower_bound c =
   let open Bap_cache_types in
   to_Kb @@
   max 0
-    (c.capacity - Int.of_float (float c.capacity *. c.overhead))
+    (c.capacity - (c.capacity * c.overhead / 100))
 
 let shrink ?(by_threshold=false) cfg =
   let entries = read_cache @@ Cache.data () in
