@@ -574,7 +574,7 @@ type task = {
 
 type master = {
   self : Id.t option;
-  worklist : task list;
+  tasks : task Map.M(Int).t;
   forks : int Map.M(Tid).t;
   dests : int Map.M(Tid).t;
   ctxts : int Map.M(Int).t;
@@ -589,7 +589,7 @@ let master = Primus.Machine.State.declare
     ~uuid:"8d2b41d4-4852-40e9-917a-33f1f5af01a1"
     ~name:"symbolic-executor-master" @@ fun _ -> {
     self = None;
-    worklist = [];
+    tasks = Int.Map.empty;
     forks = Tid.Map.empty;      (* queued or finished forks *)
     dests = Tid.Map.empty;      (* queued of finished dests *)
     ctxts = Int.Map.empty;      (* evaluated contexts *)
@@ -696,10 +696,14 @@ let forker ctxt : Primus.component =
         let dst = other_dst ~taken blk src in
         Some {blk;src;dst}
 
+    let append xs x = match Map.max_elt xs with
+      | None -> Map.add_exn xs 0 x
+      | Some (k,_) -> Map.add_exn xs (k+1) x
+
     let push_task task s =
       let s = {
         s with ctxts = incr s.ctxts task.hash;
-               worklist = task :: s.worklist;
+               tasks = append s.tasks task;
       } in
       match task.edge with
       | None -> s
@@ -739,9 +743,11 @@ let forker ctxt : Primus.component =
           Machine.Global.update master ~f:(push_task task)
 
     let pop_task () =
-      let rec pop visited s = function
-        | [] -> None
-        | t :: ts ->
+      let rec pop visited s ts =
+        match Map.max_elt ts with
+        | None -> None
+        | Some (k,t) ->
+          let ts = Map.remove ts k in
           if obtained_knowledge visited s t.hash t.edge > cutoff
           then pop visited s ts
           else match SMT.check (Set.to_list t.constraints) with
@@ -749,12 +755,12 @@ let forker ctxt : Primus.component =
             | Some m -> Some (m,t, ts) in
       Machine.Global.get master >>= fun s ->
       Visited.all >>= fun visited ->
-      match pop visited s s.worklist with
+      match pop visited s s.tasks with
       | None -> Machine.Global.put master {
-          s with worklist=[]
+          s with tasks = Int.Map.empty
         } >>| fun () -> None
       | Some (m,t,ts) -> Machine.Global.put master {
-          s with worklist = ts
+          s with tasks = ts
         } >>| fun () ->
         Some (m,t)
 
