@@ -744,42 +744,37 @@ let forker ctxt : Primus.component =
         | t :: ts ->
           if obtained_knowledge visited s t.hash t.edge > cutoff
           then pop visited s ts
-          else Some (t, ts) in
+          else match SMT.check (Set.to_list t.constraints) with
+            | None -> pop visited s ts
+            | Some m -> Some (m,t, ts) in
       Machine.Global.get master >>= fun s ->
       Visited.all >>= fun visited ->
       match pop visited s s.worklist with
       | None -> Machine.Global.put master {
           s with worklist=[]
         } >>| fun () -> None
-      | Some (t,ts) -> Machine.Global.put master {
+      | Some (m,t,ts) -> Machine.Global.put master {
           s with worklist = ts
         } >>| fun () ->
-        Some t
+        Some (m,t)
 
-    let exec_task ({inputs; constraints} as task) =
-      Debug.msg "exec_task: %a" pp_task task >>= fun () ->
-      match SMT.check (Set.to_list constraints) with
-      | None ->
-        Debug.msg "UNSAT" >>= fun () ->
-        Eval.halt >>|
-        never_returns
-      | Some model ->
-        Debug.msg "SAT" >>= fun () ->
-        Machine.Local.update worker ~f:(fun t ->
-            {t with task}) >>= fun () ->
-        let string_of_input = Input.to_symbol in
-        let inputs = Set.to_sequence inputs in
-        let module Input = Input.Make(Machine) in
-        Machine.Seq.iter inputs ~f:(fun input ->
-            match SMT.Model.get model input with
-            | None -> Machine.return ()
-            | Some value ->
-              Debug.msg "%s = %a"
-                (string_of_input input)
-                SMT.pp_value value >>= fun () ->
-              Value.of_word (SMT.Value.to_word value) >>= fun value ->
-              Executor.set_input input value >>= fun () ->
-              Input.set input value)
+    let exec_task model task =
+      Debug.msg "SAT" >>= fun () ->
+      Machine.Local.update worker ~f:(fun t ->
+          {t with task}) >>= fun () ->
+      let string_of_input = Input.to_symbol in
+      let inputs = Set.to_sequence task.inputs in
+      let module Input = Input.Make(Machine) in
+      Machine.Seq.iter inputs ~f:(fun input ->
+          match SMT.Model.get model input with
+          | None -> Machine.return ()
+          | Some value ->
+            Debug.msg "%s = %a"
+              (string_of_input input)
+              SMT.pp_value value >>= fun () ->
+            Value.of_word (SMT.Value.to_word value) >>= fun value ->
+            Executor.set_input input value >>= fun () ->
+            Input.set input value)
 
     let rec run_master system =
       Machine.Global.get master >>= fun s ->
@@ -803,7 +798,7 @@ let forker ctxt : Primus.component =
         | None ->
           Debug.msg "Worklist is empty, finishing" >>= fun () ->
           Eval.halt >>| never_returns
-        | Some t  ->
+        | Some (m,t)  ->
           Debug.msg "We have some tasks" >>= fun () ->
           Machine.fork () >>= fun () ->
           Machine.current () >>= fun client_pid ->
@@ -813,7 +808,7 @@ let forker ctxt : Primus.component =
             run_master system
           else
             Debug.msg "Forked a new machine" >>= fun () ->
-            exec_task t
+            exec_task m t
 
     let update_hash t =
       Machine.Local.update worker ~f:(fun s -> {
