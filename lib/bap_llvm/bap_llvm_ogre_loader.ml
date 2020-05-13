@@ -94,12 +94,11 @@ module Loader(P : Parameters) = struct
       "Llvm_loader_fail" (Llvm_loader_fail 0)
 
   let pdb_file filename =
-    let open Filename in
     let file =
       if Sys.is_directory P.pdb_path then
         let pdb_file = sprintf "%s.pdb"
-            (remove_extension @@ basename filename) in
-        concat P.pdb_path pdb_file
+            Filename.(remove_extension @@ basename filename) in
+        Filename.concat P.pdb_path pdb_file
       else P.pdb_path in
     if Sys.file_exists file then file
     else ""
@@ -128,9 +127,10 @@ module Loader(P : Parameters) = struct
           fd Bigarray.char Bigarray.c_layout false [|-1|] in
       Unix.close fd;
       Ok (Bigarray.array1_of_genarray data)
-    with _exn ->
+    with exn ->
       Unix.close fd;
-      Or_error.errorf "unable to process file %s" path
+      Or_error.errorf "unable to process file %s: %s"
+        path (Exn.to_string exn)
   [@@warning "-D"]
 
   let from_file path =
