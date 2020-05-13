@@ -88,11 +88,11 @@
     (exec-addr insn:next_address)))
 
 (defun fadd-scalar-double/rm ()
-  (declare (external llvm-x86_64:ADDSDrm))
+  (declare (external llvm-x86_64:ADDSDrm llvm-x86_64:ADDSDrm_Int))
   (fadd-scalar/rm double))
 
 (defun fdiv-scalar-double/rr ()
-  (declare (external llvm-x86_64:DIVSDrr))
+  (declare (external llvm-x86_64:DIVSDrr llvm-x86_64:DIVSDrr_Int))
   (fdiv-scalar/rr double))
 
 (defun fcmp-scalar-double/rm ()
