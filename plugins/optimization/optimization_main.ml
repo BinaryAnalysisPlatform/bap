@@ -134,47 +134,21 @@ let process_sub free can_touch sub =
   O.create dead sub'
 
 let digest_of_sub sub level =
-  let digest =
-    (object
-      inherit [Digest.t] Term.visitor
-      method! enter_arg t dst = Digest.add dst "%a" Arg.pp t
-      method! enter_def t dst = Digest.add dst "%a" Def.pp t
-      method! enter_jmp t dst = Digest.add dst "%a" Jmp.pp t
-    end)#visit_sub sub
-      (Digest.create ~namespace:"optimization") in
-  let digest = Digest.add digest "%s" (Sub.name sub) in
-  Digest.add digest "%s" (string_of_int level)
-
-let first = Either.First.to_option
-
-let blks sub =
-  let blks = Hashtbl.create (module Tid) in
-  Seq.iter (Term.to_sequence blk_t sub) ~f:(fun blk ->
-      match Term.get_attr blk address with
-      | None -> ()
-      | Some a -> Hashtbl.add_exn blks (Term.tid blk) a);
-  Hashtbl.find blks
-
-let digest_of_sub sub level =
-  let open Option.Monad_infix in
-  let find_addr = blks sub in
-  let digest =
-    (object
-      inherit [Digest.t] Term.visitor
-      method! enter_blk t digest =
-        match find_addr (Term.tid t) with
-        | None -> digest
-        | Some addr -> Digest.add digest "%a" Addr.pp addr
-      method! enter_jmp t digest =
-        Option.value ~default:digest @@
-        begin
-          Term.get_attr t address >>= fun from ->
-          Jmp.dst t >>= fun dst ->
-          first (Jmp.resolve dst) >>= fun tid ->
-          find_addr tid >>= fun to_ ->
-          Some (Digest.add digest "%a%a" Addr.pp from Addr.pp to_)
-        end
-    end)#visit_sub sub (Digest.create ~namespace:"optimization") in
+  let add addrs t = match Term.get_attr t address with
+    | None -> addrs
+    | Some a -> Set.add addrs a in
+  let addrs =
+    Term.to_sequence blk_t sub |>
+    Seq.fold ~init:(Set.empty (module Addr))
+      ~f:(fun addrs b ->
+          Seq.fold (Blk.elts b) ~init:(add addrs b)
+            ~f:(fun addrs -> function
+                | `Def d -> add addrs d
+                | `Jmp j -> add addrs j
+                | `Phi p -> add addrs p)) in
+  let digest = Digest.create ~namespace:"optimization" in
+  let digest = Set.fold addrs ~init:digest ~f:(fun d a ->
+      Digest.add d "%a" Addr.pp a) in
   let digest = Digest.add digest "%s" (Sub.name sub) in
   Digest.add digest "%s" (string_of_int level)
 
