@@ -6,6 +6,7 @@
 (defparameter *symbolic-stdin-size* 0x100)
 (defparameter *symbolic-initial-file-size* 0x100)
 (defconstant minimum-stream-number 0x8000)
+(defconstant symbolic-stdin minimum-stream-number)
 
 (defun symbolic-open-input (name)
   (let ((next-desc (+1 opened-descriptors))
@@ -63,6 +64,9 @@
       (dict-add 'symbolic-streams opened-streams desc)
       opened-streams)))
 
+;; we return 0 for all unassociated streams thus treating
+;; them as stdin. We could, instead, open some symbolic
+;; file for an unknown stream.
 (defun desc-of-stream (stream)
   (if (= stream 0) -1
     (or (dict-get 'symbolic-streams stream) 0)))
@@ -75,9 +79,12 @@
           (size (dict-get 'symbolic-open-size fd))
           (data (dict-get 'symbolic-open-data fd)))
       (if (= fpos size) -1
-        (msg "fgetc($0) -> fpos($1) < size($2)" fd fpos size)
         (dict-add 'symbolic-open-fpos fd (+1 fpos))
         (symbolic-memory-read data fpos))))))
+
+(defun getchar ()
+  (declare (external "getchar"))
+  (fgetc symbolic-stdin))
 
 (defun init-symbolic-stdin ()
   (dict-add 'symbolic-open-fpos 0 0)
@@ -89,4 +96,5 @@
 
 (defmethod init ()
   (init-symbolic-stdin)
-  (set opened-streams minimum-stream-number))
+  (dict-add 'symbolic-streams opened-streams 0)
+  (set opened-streams (+1 minimum-stream-number)))
