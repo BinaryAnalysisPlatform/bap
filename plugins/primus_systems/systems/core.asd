@@ -53,6 +53,7 @@
   :depends-on (bap:microexecutor-base)
   :components (bap:symbolic-computer
                bap:symbolic-path-explorer
+               bap:symbolic-path-constraints
                bap:symbolic-lisp-primitives))
 
 (defsystem bap:base-taint-analyzer

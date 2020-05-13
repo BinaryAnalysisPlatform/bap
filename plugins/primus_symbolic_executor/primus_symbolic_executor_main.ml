@@ -371,7 +371,6 @@ end
 type executor = {
   inputs : Set.M(Input).t;
   values : SMT.expr Primus.Value.Id.Map.t;
-  lemmas : SMT.formula list;
 }
 
 let executor = Primus.Machine.State.declare
@@ -379,33 +378,84 @@ let executor = Primus.Machine.State.declare
     ~name:"symbolic-executor-formulae" @@ fun _ -> {
     values = Primus.Value.Id.Map.empty;
     inputs = Set.empty (module Input);
-    lemmas = []
   }
 
-let sexp_of_formula x =
-  Sexp.Atom (Format.asprintf "%a" SMT.pp_formula x)
-
-let sexp_of_path_constraint (_,x) =
-  sexp_of_formula x
 
 
-let path_constraint,on_constraint =
-  Primus.Observation.provide
-    ~inspect:sexp_of_path_constraint "path-constraint"
+module Context : sig
+  type scope
+
+  module Scope : sig
+    type t = scope
+    val declare : string -> scope
+    val user : scope
+    val path : scope
+
+    include Base.Comparable.S with type t := t
+  end
+
+  module Make(Machine : Primus.Machine.S) : sig
+    val add : scope -> SMT.formula -> unit Machine.t
+    val get : scope -> Set.M(SMT.Formula).t Machine.t
+  end
+end = struct
+
+  type scope = string
+
+  type context = {
+    assertions : Set.M(SMT.Formula).t Map.M(String).t
+  }
+
+  let context = Primus.Machine.State.declare
+      ~uuid:"9538b1fa-b6c0-464a-b11e-22377a10b0b6"
+      ~name:"symbolic-context" @@ fun _ -> {
+      assertions = Map.empty (module String);
+    }
+
+
+  module Scope = struct
+    let scopes = String.Hash_set.create ()
+
+    let declare scope =
+      if Hash_set.mem scopes scope
+      then invalid_argf "the scope named %s \
+                         is already declared" scope ();
+      scope
+
+    let user = declare "user"
+    let path = declare "path"
+    include (String : Base.Comparable.S with type t = scope)
+  end
+
+  module Make(Machine : Primus.Machine.S) = struct
+    open Machine.Syntax
+
+    let add scope x = Machine.Local.update context ~f:(fun s -> {
+          assertions = Map.update s.assertions scope ~f:(function
+              | None -> Set.singleton (module SMT.Formula) x
+              | Some xs -> Set.add xs x)
+        })
+
+    let get scope =
+      Machine.Local.get context >>| fun s ->
+      match Map.find s.assertions scope with
+      | None -> Set.empty (module SMT.Formula)
+      | Some xs -> xs
+  end
+end
 
 module Executor(Machine : Primus.Machine.S) : sig
   val value : Primus.Value.t -> SMT.expr option Machine.t
   val inputs : Input.t seq Machine.t
   val init : unit -> unit Machine.t
   val set_input : Input.t -> Primus.Value.t -> unit Machine.t
-  val constraints : SMT.formula list Machine.t
-  val add_lemma : SMT.formula -> unit Machine.t
 end = struct
   open Machine.Syntax
 
   module Value = Primus.Value.Make(Machine)
   module Mems = Primus.Memory.Make(Machine)
   module Debug = Debug(Machine)
+  module Ctxt = Context.Make(Machine)
 
   let id = Primus.Value.id
 
@@ -462,7 +512,6 @@ end = struct
     let size = Input.size origin  in
     let x = SMT.var (Input.to_symbol origin) size in
     Machine.Local.update executor ~f:(fun s -> {
-          s with
           inputs = Set.add s.inputs origin;
           values = Map.set s.values id x;
         })
@@ -477,24 +526,6 @@ end = struct
     Machine.Local.get executor >>| fun s ->
     Set.to_sequence s.inputs
 
-  let add_lemma lemma =
-    Machine.Local.update executor ~f:(fun s -> {
-          s with lemmas = lemma :: s.lemmas
-        })
-
-  let add_constraint x =
-    let refute = Value.is_zero x in
-    Machine.Local.get executor >>= fun s ->
-    match value s x with
-    | None -> Machine.return ()
-    | Some x ->
-      let x = SMT.formula ~refute x in
-      Machine.Observation.make on_constraint (refute,x) >>= fun () ->
-      add_lemma x
-
-  let constraints =
-    Machine.Local.get executor >>| fun s -> s.lemmas
-
   let value v =
     Machine.Local.get executor >>| fun s ->
     value s v
@@ -508,8 +539,24 @@ end = struct
       cast >>> on_cast;
       Primus.Memory.generated >>> on_memory_input;
       Primus.Env.generated >>> on_env_input;
-      eval_cond >>> add_constraint;
     ]
+end
+
+module Paths(Machine : Primus.Machine.S) = struct
+  open Machine.Syntax
+  module Constraints = Context.Make(Machine)
+  module Executor = Executor(Machine)
+  module Value = Primus.Value.Make(Machine)
+
+  let add_constraint x =
+    Executor.value x >>= function
+    | None -> Machine.return ()
+    | Some v ->
+      Constraints.add Context.Scope.path @@
+      SMT.formula ~refute:(Value.is_zero x) v
+
+  let init () =
+    Primus.Interpreter.eval_cond >>> add_constraint
 end
 
 type edge = {
@@ -557,7 +604,7 @@ let worker = Primus.Machine.State.declare
       edge = None;
       constraints = Set.empty (module SMT.Formula);
       inputs = Set.empty (module Input);
-    }
+    };
   }
 
 let pp_dst ppf dst = match Jmp.resolve dst with
@@ -591,6 +638,7 @@ let forker ctxt : Primus.component =
     module Eval = Primus.Interpreter.Make(Machine)
     module Value = Primus.Value.Make(Machine)
     module Visited = Bap_primus_track_visited.Set.Make(Machine)
+    module Constraints = Context.Make(Machine)
     module Debug = Debug(Machine)
 
     let is_conditional jmp = match Jmp.cond jmp with
@@ -663,34 +711,32 @@ let forker ctxt : Primus.component =
             | Second _ -> s.dests
         }
 
-    let spawn_task (skipped,constr) =
-      let taken = not skipped in
-      Eval.pos >>= fun pos ->
-      let edge = compute_edge ~taken pos in
-      Visited.all >>= fun visited ->
-      Machine.Global.get master >>= fun s ->
-      Machine.Local.get worker >>= fun {ctxt=hash; task=parent} ->
-      let known = obtained_knowledge visited s hash edge in
-      Debug.msg "considering task %8x" hash >>= fun () ->
-      if known > cutoff
-      then Debug.msg "above cutoff, dropping."
-      else
-        Executor.constraints >>= fun cs ->
-        Debug.msg "adding constraint: %a" SMT.pp_formula
-          (SMT.inverse constr) >>= fun () ->
-        let constraints =
-          SMT.inverse constr::cs |>
-          List.fold ~init:parent.constraints ~f:Set.add in
-        Debug.msg "%d new constraints added"
-          (Set.length (Set.diff constraints parent.constraints)) >>=
-        fun () ->
-        Executor.inputs >>= fun inputs ->
-        let inputs =
-          Seq.fold inputs ~init:parent.inputs ~f:Set.add in
-        let task = {inputs; constraints; edge; hash} in
-        Debug.msg "queueing %a" pp_task task >>=
-        fun () ->
-        Machine.Global.update master ~f:(push_task task)
+    let on_cond constr =
+      let taken = Value.is_one constr in
+      Executor.value constr >>= function
+      | None -> Machine.return ()
+      | Some constr ->
+        Machine.Local.get worker >>= fun self ->
+        Eval.pos >>= fun pos ->
+        let edge = compute_edge ~taken pos in
+        Visited.all >>= fun visited ->
+        Machine.Global.get master >>= fun s ->
+        let known = obtained_knowledge visited s self.ctxt edge in
+        if known > cutoff ||
+           Set.mem self.task.constraints
+             (SMT.formula ~refute:(not taken) constr)
+        then Machine.return ()
+        else
+          Constraints.get Context.Scope.user >>= fun cs ->
+          let constr = SMT.formula ~refute:taken constr in
+          let constraints =
+            let (++) = Set.union in
+            Set.add (cs ++ self.task.constraints) constr in
+          Executor.inputs >>= fun inputs ->
+          let inputs =
+            Seq.fold inputs ~init:self.task.inputs ~f:Set.add in
+          let task = {inputs; constraints; edge; hash=self.ctxt} in
+          Machine.Global.update master ~f:(push_task task)
 
     let pop_task () =
       let rec pop visited s = function
@@ -732,6 +778,7 @@ let forker ctxt : Primus.component =
                 (string_of_input input)
                 SMT.pp_value value >>= fun () ->
               Value.of_word (SMT.Value.to_word value) >>= fun value ->
+              Executor.set_input input value >>= fun () ->
               Input.set input value)
 
     let rec run_master system =
@@ -775,7 +822,7 @@ let forker ctxt : Primus.component =
           })
 
     let init () = Machine.sequence Primus.Interpreter.[
-        path_constraint >>> spawn_task;
+        eval_cond >>> on_cond;
         enter_term >>> update_hash;
         Primus.System.start >>> run_master;
       ]
@@ -809,6 +856,7 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
   module Env = Primus.Env.Make(Machine)
   module Executor = Executor(Machine)
   module Closure = Primus.Lisp.Closure.Make(Machine)
+  module Constraints = Context.Make(Machine)
   module Debug = Debug(Machine)
 
   let addr_size arch_addr_size = function
@@ -912,21 +960,29 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
     Machine.List.iter assumptions ~f:(fun x ->
         Executor.value x >>= function
         | Some x ->
-          Executor.add_lemma (SMT.formula x)
+          Constraints.add Context.Scope.user (SMT.formula x)
         | None ->
           (* should we raise on assert false? *)
-          Executor.add_lemma (SMT.formula (SMT.word (Val.to_word x))))
+          if Val.is_zero x then
+            let false_ = SMT.word Word.b0 in
+            Constraints.add Context.Scope.user (SMT.formula false_)
+          else Machine.return ())
     >>= fun () ->
     Val.b1
 
+  (* we can later add operators that manipulate the scopes
+     in which the assertion is checked *)
   let assert_ name assertions =
     Machine.Observation.post failed_assertion ~f:(fun report ->
-        Executor.constraints >>= fun constraints ->
+        Constraints.get Context.Scope.user >>= fun user ->
+        Constraints.get Context.Scope.path >>= fun path ->
+        let constraints = Set.to_list @@ Set.union user path in
         Machine.List.fold assertions ~init:constraints
           ~f:(fun constraints assertion ->
               Executor.value assertion >>| function
               | None -> constraints
               | Some expr ->
+
                 SMT.formula ~refute:true expr :: constraints) >>|
         SMT.check >>= function
         | None -> Machine.return ()
@@ -1002,4 +1058,9 @@ let () = Extension.declare  @@ fun ctxt ->
     ~package:"bap"
     ~desc:"Provides assume and assert primitives."
     (module Primitives);
+  Primus.Components.register_generic "symbolic-path-constraints"
+    ~package:"bap"
+    ~desc:"tracks the path constraint and records them in the \
+           machine's symbolic context"
+    (module Paths) ;
   Ok ()
