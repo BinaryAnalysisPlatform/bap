@@ -125,6 +125,8 @@ int getchar(void);
 int putchar(int c);
 int putc(int c, FILE *stream);
 int puts(const char *s);
+int remove(const char *);
+int rename(const char *, const char *);
 int ungetc(int c, FILE *stream);
 
 size_t fread(void * restrict ptr, size_t size, size_t nmemb, FILE * restrict stream)
@@ -132,6 +134,15 @@ size_t fread(void * restrict ptr, size_t size, size_t nmemb, FILE * restrict str
 size_t fwrite(const void * restrict ptr, size_t size, size_t nmemb, FILE * restrict stream)
     __attribute__((warn_unused_result, storage(1,2,3)));
 void clearerr(FILE *stream);
+
+int __isoc99_fscanf (FILE *__restrict __stream, const char *__restrict __format, ...)  __attribute__((warn_unused_result));
+int __isoc99_scanf (const char *__restrict __format, ...)  __attribute__((warn_unused_result));
+int __isoc99_sscanf (const char *__restrict __s, const char *__restrict __format, ...)  __attribute__((warn_unused_result));
+
+int _IO_feof(FILE *stream);
+int _IO_getc(FILE *stream);
+int _IO_putc(int c, FILE *stream);
+int _IO_puts(const char *s);
 
 
 // string.h
