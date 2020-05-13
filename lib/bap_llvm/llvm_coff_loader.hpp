@@ -425,11 +425,8 @@ error_or<std::string> load(const llvm::object::COFFObjectFile &obj, const char* 
     symbols(obj, s);
     relocations(obj, s);
     exported_symbols(obj, s);
-    if (pdb_path) {
-        std::cout << "we are here 001" << std::endl << std::flush;
-        std::cout << "got " << std::string(pdb_path) << std::endl;
-    }
-    pdb_loader::load(obj, pdb_path, s);
+    if (pdb_path)
+        pdb_loader::load(obj, pdb_path, s);
     return s.str();
 }
 
