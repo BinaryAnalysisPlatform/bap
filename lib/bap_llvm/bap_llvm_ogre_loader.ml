@@ -13,7 +13,7 @@ module Filename = Caml.Filename
 
 module type Parameters = sig
   val image_base : int64 option
-  val pdb_dir   : string
+  val pdb_path   : string
 end
 
 (** default image base for relocatable files *)
@@ -93,12 +93,15 @@ module Loader(P : Parameters) = struct
   let _ = Callback.register_exception
       "Llvm_loader_fail" (Llvm_loader_fail 0)
 
-  let pdb_path filename =
+  let pdb_file filename =
     let open Filename in
-    let pdb_file = sprintf "%s.pdb"
-        (remove_extension @@ basename filename) in
-    let path = concat P.pdb_dir pdb_file in
-    if Sys.file_exists path then path
+    let file =
+      if Sys.is_directory P.pdb_path then
+        let pdb_file = sprintf "%s.pdb"
+            (remove_extension @@ basename filename) in
+        concat P.pdb_path pdb_file
+      else P.pdb_path in
+    if Sys.file_exists file then file
     else ""
 
   let to_image_doc doc =
@@ -106,9 +109,9 @@ module Loader(P : Parameters) = struct
     | Ok doc -> Ok (Some doc)
     | Error er -> Error er
 
-  let from_data path data =
+  let from_data filename data =
     try
-      let doc = Bap_llvm_binary.bap_llvm_load data (pdb_path path) in
+      let doc = Bap_llvm_binary.bap_llvm_load data (pdb_file filename) in
       Ogre.Doc.from_string doc >>= fun doc ->
       to_image_doc doc
     with Llvm_loader_fail n -> match n with
@@ -125,7 +128,7 @@ module Loader(P : Parameters) = struct
           fd Bigarray.char Bigarray.c_layout false [|-1|] in
       Unix.close fd;
       Ok (Bigarray.array1_of_genarray data)
-    with exn ->
+    with _exn ->
       Unix.close fd;
       Or_error.errorf "unable to process file %s" path
   [@@warning "-D"]
@@ -137,9 +140,9 @@ module Loader(P : Parameters) = struct
 
 end
 
-let init ?base ~pdb_dir () =
+let init ?base ?(pdb_path=Sys.getcwd ()) () =
   Image.register_loader ~name:"llvm"
     (module Loader(struct
          let image_base = base
-         let pdb_dir = pdb_dir
+         let pdb_path = pdb_path
        end))

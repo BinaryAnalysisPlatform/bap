@@ -1,6 +1,7 @@
 open Core_kernel
 open Bap.Std
 open Bap_llvm.Std
+open Bap_main
 
 include Self()
 
@@ -14,39 +15,55 @@ let print_version () =
   printf "%s\n" llvm_version ;
   exit 0
 
-let () =
-  let () = Config.manpage [
-      `S "DESCRIPTION";
-      `P "Uses LLVM library to provide disassembler and file loader" ;
-      `S "SEE ALSO";
-      `P "$(b,bap-plugin-elf-loader)(1), $(b,bap-plugin-relocatable)(1)";
-    ] in
-  let x86_syntax =
-    let names = ["att", "att"; "intel", "intel"] in
-    let doc = sprintf "Choose style of code for x86 syntax between %s"
-      @@ Config.doc_enum names in
-    Config.(param (enum names) ~default:"att" "x86-syntax" ~doc) in
-  let base_addr =
-    let doc ="\
+open Extension
+
+let doc =
+  "# DESCRIPTION
+
+   Uses LLVM library to provide disassembler and file loader
+
+   # SEE ALSO
+   $(b,bap-plugin-elf-loader)(1), $(b,bap-plugin-relocatable)(1)"
+
+
+let x86_syntax =
+  let typ = Type.define
+      ~parse:(fun s ->
+          try
+            x86_syntax_of_sexp (Sexp.of_string s)
+          with _ -> raise (Invalid_argument s))
+      ~print:(fun x -> Sexp.to_string (sexp_of_x86_syntax x))
+      `att in
+  let doc =
+    "Choose style of code for x86 syntax between att and intel" in
+  Configuration.parameter ~doc typ "x86-syntax"
+
+let base_addr =
+  let doc ="\
 Replace image base address. If not set, a reasonable default corresponded
 to a file type will be used. For example, for any executable file a
 default image base is equal to lowest image virtual address.
 For relocatable files a default image base is equal to 0xC0000000." in
-    Config.(param (some int64) ~default:None "base" ~doc) in
-  let pdb_path =
-    let doc =
-      "Path a directory with pdb files. The default is the current
-       working directory." in
-    Config.(param dir ~default:(Sys.getcwd ()) "pdb-path" ~doc) in
-  let version =
-    let doc ="Prints LLVM version and exits" in
-    Config.(flag "version" ~doc) in
-  Config.when_ready (fun {Config.get=(!)} ->
-      if !version then
-        print_version();
-      let () = init_loader ?base:!base_addr ~pdb_dir:!pdb_path () in
-      match !x86_syntax with
-      | "att" | "intel" as s ->
-        let syn = x86_syntax_of_sexp (Sexp.of_string s) in
-        disasm_init syn
-      | s -> eprintf "unknown x86-asm-syntax: %s" s)
+  Configuration.parameter Type.(some int64) "base" ~doc
+
+let pdb_path =
+  let doc =
+    "A path to a directory with pdb files OR a path to a PDB file.
+     In the first case the file with the matching name to the target
+     executable will be selected if present. The default is the path
+     to a current working directory." in
+  Configuration.parameter Type.(some string) "pdb-path" ~doc
+
+let version =
+  let doc ="Prints LLVM version and exits" in
+  Configuration.flag "version" ~doc
+
+let () =
+  let open Syntax in
+  Extension.declare @@ fun ctxt ->
+  let (!) x = ctxt --> x in
+  if !version then
+    print_version();
+  init_loader ?base:!base_addr ?pdb_path:!pdb_path ();
+  disasm_init !x86_syntax;
+  Ok ()
