@@ -6,32 +6,34 @@ open Bap_main
 
 (* Algorithm.
 
-   For each system, just when we start, we create the init machine
-   that will be used to fork all other machines and re-execute the
-   path N times, where N is the number of linearly independent paths
-   that are reachable from the entry point. The init machine spawns
-   a new worker for each model in its queue. We start with an initial
-   empty model that starts the pioneer machine.
+   For each system, just when we start it, we create the master
+   machine that will be used to fork all other machines and re-execute
+   the path N times, where N is bounded by cutoff times the number of
+   linearly independent paths starting fromt the entry point. The master
+   machine spawns a new worker for each task in its queue. Each task
+   denotes a set of constraints that should be satisfied under the
+   given set of inputs. The first worker machine starts with an empty
+   set of constraints and inputs.
 
    Each worker (including the pioneer) runs from the entry point and
-   builds the path formula. With each value we associate a
-   formula, which we optimize on the fly. We designate certain values
-   as inputs and keep them symbolic. When we hit the branch that we
-   didn't see before and that leads to the desitantion which we
-   neither saw nor plan to see, we take the formula associated with
-   that branch condition and switch back to the init machine, and push
-   its negation to the queue.
+   builds the path formula. With each value we associate a formula,
+   which we optimize on the fly. We designate certain values as inputs
+   and keep them symbolic. When we hit the branch that we didn't see
+   before and that leads to the desitantion which we neither saw nor
+   plan to see, we take the formula associated with that branch
+   condition and switch back to the init machine, and push its
+   negation to the queue.
 
    When a worker finishes, the control is passed back to the init
    machine that picks the first actual formula and finds a satisfying
-   model for it, then spawns a new worker process, which works as above.
+   model for it, then spawns a new worker process, which works as
+   above.
 
-   To identify which formula is actual, we associate with each
-   formula the branch destination that will be taken if the formula
-   is satisfiable. A formula is actual if this destination wasn't
-   visited by a worker before. An unresolved destination is treated
-   as unvisited, therefore it is always actual.
-*)
+   To identify which formula is actual, we associate with each formula
+   the branch destination that will be taken if the formula is
+   satisfiable. A formula is actual if this destination wasn't visited
+   by a worker before. An unresolved destination is treated as
+   unvisited, therefore it is always actual.  *)
 
 let cutoff = Extension.Configuration.parameter
     Extension.Type.(int =? 1)
@@ -142,6 +144,7 @@ module SMT : sig
   type model
 
   val formula : ?refute:bool -> expr -> formula
+  val inverse : formula -> formula
 
   val word : Word.t -> expr
   val var : string -> int -> expr
@@ -166,6 +169,8 @@ module SMT : sig
     val to_formula : value -> formula
     val to_string : value -> string
   end
+
+  module Formula : Base.Comparable.S with type t = formula
 
   val pp_expr : Format.formatter -> expr -> unit
   val pp_formula : Format.formatter -> formula -> unit
@@ -196,7 +201,6 @@ end = struct
     else
       let y = Bitv.mk_zero_ext ctxt (sx-sy) y in
       op ctxt x y
-
 
   let z3_of_binop : binop -> _ = function
     | PLUS -> Bitv.mk_add
@@ -301,10 +305,13 @@ end = struct
     model : Z3.Model.model;
   }
 
+  let inverse x = do_simpl@@Bool.mk_not ctxt x
+
   let formula ?(refute=false) expr =
     let lhs = Expr.mk_numeral_int ctxt 0 (Expr.get_sort expr) in
     let formula = Bool.mk_eq ctxt lhs expr in
-    if refute then formula else Bool.mk_not ctxt formula
+    if refute then do_simpl@@formula else inverse formula
+
 
   module Model = struct
     type t = model
@@ -350,6 +357,15 @@ end = struct
 
     let to_string x = Expr.to_string x
   end
+
+  module Formula = struct
+    type t = formula
+    include Base.Comparable.Make(struct
+        type t = formula
+        let compare = Expr.compare
+        let sexp_of_t x = Sexp.Atom (to_string x)
+      end)
+  end
 end
 
 type executor = {
@@ -369,10 +385,13 @@ let executor = Primus.Machine.State.declare
 let sexp_of_formula x =
   Sexp.Atom (Format.asprintf "%a" SMT.pp_formula x)
 
-let before_constraint,on_constraint =
-  Primus.Observation.provide
-    ~inspect:sexp_of_formula "before-constraint"
+let sexp_of_path_constraint (_,x) =
+  sexp_of_formula x
 
+
+let path_constraint,on_constraint =
+  Primus.Observation.provide
+    ~inspect:sexp_of_path_constraint "path-constraint"
 
 module Executor(Machine : Primus.Machine.S) : sig
   val value : Primus.Value.t -> SMT.expr option Machine.t
@@ -380,7 +399,7 @@ module Executor(Machine : Primus.Machine.S) : sig
   val init : unit -> unit Machine.t
   val set_input : Input.t -> Primus.Value.t -> unit Machine.t
   val constraints : SMT.formula list Machine.t
-  val add_constraint : Primus.Value.t -> unit Machine.t
+  val add_lemma : SMT.formula -> unit Machine.t
 end = struct
   open Machine.Syntax
 
@@ -458,6 +477,11 @@ end = struct
     Machine.Local.get executor >>| fun s ->
     Set.to_sequence s.inputs
 
+  let add_lemma lemma =
+    Machine.Local.update executor ~f:(fun s -> {
+          s with lemmas = lemma :: s.lemmas
+        })
+
   let add_constraint x =
     let refute = Value.is_zero x in
     Machine.Local.get executor >>= fun s ->
@@ -465,10 +489,8 @@ end = struct
     | None -> Machine.return ()
     | Some x ->
       let x = SMT.formula ~refute x in
-      Machine.Observation.make on_constraint x >>= fun () ->
-      Machine.Local.put executor {
-        s with lemmas = x :: s.lemmas;
-      }
+      Machine.Observation.make on_constraint (refute,x) >>= fun () ->
+      add_lemma x
 
   let constraints =
     Machine.Local.get executor >>| fun s -> s.lemmas
@@ -497,9 +519,8 @@ type edge = {
 }
 
 type task = {
-  parent : task option;
-  inputs : Input.t Seq.t;
-  constr : SMT.formula;
+  constraints : Set.M(SMT.Formula).t;
+  inputs : Set.M(Input).t;
   edge : edge option;
   hash : int;
 }
@@ -514,7 +535,7 @@ type master = {
 
 type worker = {
   ctxt : int;                   (* the hash of the trace *)
-  task : task option;
+  task : task;
 }
 
 let master = Primus.Machine.State.declare
@@ -531,7 +552,12 @@ let worker = Primus.Machine.State.declare
     ~uuid:"92f3042c-ba8f-465a-9d57-4c1b9ec7c186"
     ~name:"symbolic-executor-worker" @@ fun _ -> {
     ctxt = Hashtbl.hash 0;
-    task = None
+    task = {
+      hash = Hashtbl.hash 0;
+      edge = None;
+      constraints = Set.empty (module SMT.Formula);
+      inputs = Set.empty (module Input);
+    }
   }
 
 let pp_dst ppf dst = match Jmp.resolve dst with
@@ -547,11 +573,14 @@ let pp_edge_option ppf = function
   | None -> Format.fprintf ppf "sporadic"
   | Some edge -> pp_edge ppf edge
 
-let pp_task ppf {constr; edge; hash} =
+let pp_constraints ppf constrs =
+  Set.iter constrs ~f:(Format.fprintf ppf "%a@\n" SMT.pp_formula)
+
+let pp_task ppf {constraints=cs; edge; hash} =
   Format.fprintf ppf "%08x: %a s.t.@\n%a"
     hash
     pp_edge_option edge
-    SMT.pp_formula constr
+    pp_constraints cs
 
 let forker ctxt : Primus.component =
   let cutoff = Extension.Configuration.get ctxt cutoff in
@@ -613,7 +642,7 @@ let forker ctxt : Primus.component =
       | None -> 0
       | Some e -> edge_knowledge visited master e
 
-    let compute_edge taken pos = match branch_point pos with
+    let compute_edge ~taken pos = match branch_point pos with
       | None -> None
       | Some (blk,src) ->
         let dst = other_dst ~taken blk src in
@@ -634,29 +663,34 @@ let forker ctxt : Primus.component =
             | Second _ -> s.dests
         }
 
-    let on_cond cnd =
-      let refute = Word.is_one (Primus.Value.to_word cnd) in
+    let spawn_task (skipped,constr) =
+      let taken = not skipped in
       Eval.pos >>= fun pos ->
-      let edge = compute_edge refute pos in
+      let edge = compute_edge ~taken pos in
       Visited.all >>= fun visited ->
       Machine.Global.get master >>= fun s ->
       Machine.Local.get worker >>= fun {ctxt=hash; task=parent} ->
       let known = obtained_knowledge visited s hash edge in
       Debug.msg "considering task %8x" hash >>= fun () ->
       if known > cutoff
-      then
-        Debug.msg "above cutoff, dropping."
+      then Debug.msg "above cutoff, dropping."
       else
-        Executor.value cnd >>= function
-        | None ->
-          Debug.msg "doesn't depend on input, dropping"
-        | Some expr ->
-          let constr = SMT.formula ~refute expr in
-          Debug.msg "queueing %a" SMT.pp_formula constr >>=
-          fun () ->
-          Executor.inputs >>= fun inputs ->
-          let task = {inputs; constr; edge; hash; parent} in
-          Machine.Global.update master ~f:(push_task task)
+        Executor.constraints >>= fun cs ->
+        Debug.msg "adding constraint: %a" SMT.pp_formula
+          (SMT.inverse constr) >>= fun () ->
+        let constraints =
+          SMT.inverse constr::cs |>
+          List.fold ~init:parent.constraints ~f:Set.add in
+        Debug.msg "%d new constraints added"
+          (Set.length (Set.diff constraints parent.constraints)) >>=
+        fun () ->
+        Executor.inputs >>= fun inputs ->
+        let inputs =
+          Seq.fold inputs ~init:parent.inputs ~f:Set.add in
+        let task = {inputs; constraints; edge; hash} in
+        Debug.msg "queueing %a" pp_task task >>=
+        fun () ->
+        Machine.Global.update master ~f:(push_task task)
 
     let pop_task () =
       let rec pop visited s = function
@@ -676,30 +710,9 @@ let forker ctxt : Primus.component =
         } >>| fun () ->
         Some t
 
-    let assert_parents task =
-      let rec collect asserts = function
-        | None -> asserts
-        | Some {constr; parent} -> collect (constr::asserts) parent in
-      collect [] task
-
-    let rec parent_inputs = function
-      | None -> Seq.empty
-      | Some {inputs;parent} ->
-        Seq.append inputs @@
-        parent_inputs parent
-
-    let rec pp_parents ppf = function
-      | None -> ()
-      | Some task ->
-        Format.fprintf ppf "%a@\n" pp_task task;
-        pp_parents ppf task.parent
-
-    let exec_task ({inputs; constr} as task) =
-      let constraints = assert_parents task.parent in
-      Debug.msg "exec_task: %a@\nparents:@\n%a"
-        pp_task task pp_parents task.parent
-      >>= fun () ->
-      match SMT.check (constr::constraints) with
+    let exec_task ({inputs; constraints} as task) =
+      Debug.msg "exec_task: %a" pp_task task >>= fun () ->
+      match SMT.check (Set.to_list constraints) with
       | None ->
         Debug.msg "UNSAT" >>= fun () ->
         Eval.halt >>|
@@ -707,12 +720,9 @@ let forker ctxt : Primus.component =
       | Some model ->
         Debug.msg "SAT" >>= fun () ->
         Machine.Local.update worker ~f:(fun t ->
-            {t with task = Some task}) >>= fun () ->
+            {t with task}) >>= fun () ->
         let string_of_input = Input.to_symbol in
-        let inputs =
-          Seq.append inputs @@ parent_inputs task.parent |>
-          Seq.fold ~init:(Set.empty (module Input)) ~f:Set.add |>
-          Set.to_sequence in
+        let inputs = Set.to_sequence inputs in
         let module Input = Input.Make(Machine) in
         Machine.Seq.iter inputs ~f:(fun input ->
             match SMT.Model.get model input with
@@ -765,7 +775,7 @@ let forker ctxt : Primus.component =
           })
 
     let init () = Machine.sequence Primus.Interpreter.[
-        eval_cond >>> on_cond;
+        path_constraint >>> spawn_task;
         enter_term >>> update_hash;
         Primus.System.start >>> run_master;
       ]
@@ -802,21 +812,13 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
   module Debug = Debug(Machine)
 
   let addr_size arch_addr_size = function
-    | [addr_size; _data_size] -> to_int addr_size
-    | [] | [_] -> arch_addr_size
-    | _ -> failwith "symbolic-memory: expects 3 to 5 arguments"
+    | [addr_size; _data_size] -> Ok (to_int addr_size)
+    | [] | [_] -> Ok arch_addr_size
+    | _ ->  Error "symbolic-memory: expects 3 to 5 arguments"
 
   let data_size = function
     | [_addr_size; data_size] -> to_int data_size
     | _ -> 8
-
-  let rec set_inputs bank data_size lower upper =
-    if Word.(lower > upper)
-    then Machine.return ()
-    else
-      Mems.get lower >>=
-      Executor.set_input (Input.ptr bank lower) >>= fun () ->
-      set_inputs bank data_size (Word.succ lower) upper
 
   let register_memory m =
     let name = Bank.name m.bank in
@@ -857,9 +859,11 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
     | [] -> default_width
     | s :: _ -> to_int s
 
-  let value width = function
-    | [_; x] -> Machine.return x
-    | _ -> Val.of_int ~width 0
+  let generator width = function
+    | [_; x] ->
+      let x = Word.to_int_exn @@ Primus.Value.to_word x in
+      Primus.Generator.static ~width x
+    | _ -> Primus.Generator.static ~width 0
 
   let arch_addr_size =
     Machine.gets Project.arch >>|
@@ -874,37 +878,44 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
     Env.has var >>= function
     | true -> Env.get var
     | false ->
-      value width rest >>= fun x ->
-      Executor.set_input (Input.var var) x >>= fun () ->
-      Env.set var x >>| fun () ->
-      x
+      Env.add var (generator width rest) >>= fun () ->
+      Env.get var
 
   let create_memory id lower upper rest =
+    let lower = to_word lower and upper = to_word upper in
+    let data_size = data_size rest in
     arch_addr_size >>= fun arch_addr_size ->
     Val.Symbol.of_value id >>= fun name ->
     Machine.Global.get memories >>= fun memories ->
-    if Map.mem memories name then Machine.return id
-    else
-      let data_size = data_size rest in
-      let bank = Bank.create name
-          ~addr_size:(addr_size arch_addr_size rest)
-          ~data_size in
-      let lower = to_word lower and upper = to_word upper in
-      let len = match Word.(to_int (upper - lower)) with
+    if Map.mem memories name
+    then Machine.return id
+    else match addr_size arch_addr_size rest with
+      | Error err -> Lisp.failf "symbolic-memory: %s" err ()
+      | Ok addr_size ->
+        let bank = Bank.create name ~addr_size ~data_size in
+        match Word.(to_int (upper - lower)) with
         | Error _ ->
-          invalid_arg "symbolic-memory: the region is too large"
-        | Ok diff -> diff + 1 in
-      let memory = {bank; ptr=lower; len} in
-      register_memory memory >>= fun () ->
-      let width = Bank.data_size bank in
-      let seed = Hashtbl.hash (Bank.name bank) in
-      let generator = Primus.Generator.Random.lcg ~width seed in
-      with_memory memory (Mems.allocate ~generator lower len) >>= fun () ->
-      set_inputs bank data_size lower upper >>| fun () ->
-      id
+          Lisp.failf "symbolic-memory: unable to create \
+                      a symbolic memory region, it is too large" ()
+        | Ok diff ->
+          let len = diff + 1 in
+          let memory = {bank; ptr=lower; len} in
+          register_memory memory >>= fun () ->
+          let width = Bank.data_size bank in
+          let seed = Hashtbl.hash (Bank.name bank) in
+          let generator = Primus.Generator.Random.lcg ~width seed in
+          let region = Mems.allocate ~generator lower len in
+          with_memory memory region >>| fun () ->
+          id
 
   let assume assumptions =
-    Machine.List.iter assumptions ~f:Executor.add_constraint
+    Machine.List.iter assumptions ~f:(fun x ->
+        Executor.value x >>= function
+        | Some x ->
+          Executor.add_lemma (SMT.formula x)
+        | None ->
+          (* should we raise on assert false? *)
+          Executor.add_lemma (SMT.formula (SMT.word (Val.to_word x))))
     >>= fun () ->
     Val.b1
 
