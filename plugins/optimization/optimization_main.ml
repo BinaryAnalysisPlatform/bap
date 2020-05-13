@@ -150,7 +150,7 @@ let digest_of_sub sub level =
   let digest = Set.fold addrs ~init:digest ~f:(fun d a ->
       Digest.add d "%a" Addr.pp a) in
   let digest = Digest.add digest "%s" (Sub.name sub) in
-  Digest.add digest "%s" (string_of_int level)
+  Digest.add digest "%d" level
 
 let run level proj =
   let arch = Project.arch proj in

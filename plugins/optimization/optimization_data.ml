@@ -71,19 +71,22 @@ let remove_dead_edges g dead_jmps =
         then G.Edge.remove edge g
         else g)
 
-let dead_blks sub g =
+let dead_blks g =
   let module G = Graphs.Tid in
-  Term.to_sequence blk_t sub |>
-  Seq.fold ~init:(Set.empty (module Tid)) ~f:(fun deads b ->
-      if Graphlib.is_reachable (module G) g G.start (Term.tid b)
-      then deads
-      else Set.add deads (Term.tid b))
+  fst @@
+  Graphlib.depth_first_search (module G) g
+    ~init:(Set.empty (module Tid), false)
+    ~start_tree:(fun node (deads, _) ->
+        deads, Tid.equal node G.start)
+    ~enter_node:(fun _ node (deads, is_reachable) ->
+        if is_reachable then deads, is_reachable
+        else Set.add deads node, is_reachable)
 
 let find_unreachable sub t =
   let dead_jmps = dead_jmps sub in
   let dead_blks =
     remove_dead_edges (Sub.to_graph sub) dead_jmps |>
-    dead_blks sub in
+    dead_blks in
   {t with deads = t.deads ++ dead_jmps ++ dead_blks }
 
 let update_def updates d =
@@ -105,22 +108,22 @@ let update sub {updates} =
       Term.map def_t b ~f:(update_def updates) |>
       Term.map jmp_t ~f:(update_jmp updates))
 
-let map_alive deads cls ?(f=ident) x =
+let filter_map_alive deads cls ?(f=ident) x =
   Term.filter_map cls x ~f:(fun t ->
       if Set.mem deads (Term.tid t) then None
       else Some (f t))
 
 let remove_dead_code sub {deads} =
   let update_blk b =
-    map_alive deads def_t b |>
-    map_alive deads jmp_t in
-  map_alive deads blk_t sub ~f:update_blk
+    filter_map_alive deads def_t b |>
+    filter_map_alive deads jmp_t in
+  filter_map_alive deads blk_t sub ~f:update_blk
 
 let apply sub {deads; updates} =
   let update_blk b =
-    map_alive deads def_t b ~f:(update_def updates) |>
-    map_alive deads jmp_t ~f:(update_jmp updates) in
-  map_alive deads blk_t sub ~f:update_blk
+    filter_map_alive deads def_t b ~f:(update_def updates) |>
+    filter_map_alive deads jmp_t ~f:(update_jmp updates) in
+  filter_map_alive deads blk_t sub ~f:update_blk
 
 include Data.Make(struct
     type nonrec t = t
