@@ -168,6 +168,7 @@ module SMT : sig
     val to_word : value -> word
     val to_formula : value -> formula
     val to_string : value -> string
+    include Base.Comparable.S with type t := value
   end
 
   module Formula : Base.Comparable.S with type t = formula
@@ -335,6 +336,15 @@ end = struct
     Z3.Solver.pop solver 1;
     result
 
+  module Formula = struct
+    type t = formula
+    include Base.Comparable.Make(struct
+        type t = formula
+        let compare = Expr.compare
+        let sexp_of_t x = Sexp.Atom (to_string x)
+      end)
+  end
+
   module Value = struct
     type t = value
     let to_formula = ident
@@ -356,15 +366,8 @@ end = struct
       Word.create Bitvec.(bigint z mod modulus s) s
 
     let to_string x = Expr.to_string x
-  end
 
-  module Formula = struct
-    type t = formula
-    include Base.Comparable.Make(struct
-        type t = formula
-        let compare = Expr.compare
-        let sexp_of_t x = Sexp.Atom (to_string x)
-      end)
+    include (Formula : Base.Comparable.S with type t := value)
   end
 end
 
