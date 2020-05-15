@@ -34,8 +34,13 @@
 ;; file descriptors, as they both are represented as integers. We are currently
 ;; ignoring modes, we will add them later, of course.
 (defun fopen (path mode)
-  (declare (external "fopen" "open"))
+  (declare (external "fopen" "open" "fdopen"))
   (channel-open path))
+
+(defun fileno (stream)
+  (declare (external "fileno"))
+  stream)
+
 
 (defun open3 (path flags mode)
   (declare (external "open"))
