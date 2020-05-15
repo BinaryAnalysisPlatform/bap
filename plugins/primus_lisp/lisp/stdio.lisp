@@ -16,11 +16,18 @@
   (while (not (points-to-null p))
     (fputc (cast int (memory-read p)) stream)
     (incr p))
-  (fputc 0xA stream))
+  (let ((r (fputc 0xA stream)))
+    (fflush stream)
+    r))
 
 (defun puts (p)
   (declare (external "puts"))
   (fputs p *standard-output*))
+
+(defun fflush (s)
+  (declare (external "fflush"))
+  (channel-flush s))
+
 
 
 ;; the channel module have rough equality between streams and
