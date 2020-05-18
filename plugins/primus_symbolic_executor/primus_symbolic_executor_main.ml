@@ -3,6 +3,7 @@ open Bap.Std
 open Bap_primus.Std
 open Monads.Std
 open Bap_main
+include Self()
 
 (* Algorithm.
 
@@ -577,6 +578,7 @@ type task = {
 
 type master = {
   self : Id.t option;
+  ready : int;
   tasks : task Map.M(Int).t;
   forks : int Map.M(Tid).t;
   dests : int Map.M(Tid).t;
@@ -596,6 +598,7 @@ let master = Primus.Machine.State.declare
     forks = Tid.Map.empty;      (* queued or finished forks *)
     dests = Tid.Map.empty;      (* queued of finished dests *)
     ctxts = Int.Map.empty;      (* evaluated contexts *)
+    ready = 0;
   }
 
 let worker = Primus.Machine.State.declare
@@ -759,11 +762,21 @@ let forker ctxt : Primus.component =
       Machine.Global.get master >>= fun s ->
       Visited.all >>= fun visited ->
       match pop visited s s.tasks with
-      | None -> Machine.Global.put master {
+      | None ->
+        report_progress ~stage:(s.ready-1) ~total:s.ready ();
+        Machine.Global.put master {
           s with tasks = Int.Map.empty
         } >>| fun () -> None
-      | Some (m,t,ts) -> Machine.Global.put master {
-          s with tasks = ts
+      | Some (m,t,ts) ->
+        let queued = Map.length s.tasks in
+        let left = Map.length ts in
+        let processed = queued - left in
+        report_progress
+          ~stage:(s.ready + processed - 1)
+          ~total:(s.ready + queued) ();
+        Machine.Global.put master {
+          s with tasks = ts;
+                 ready = s.ready + processed;
         } >>| fun () ->
         Some (m,t)
 
