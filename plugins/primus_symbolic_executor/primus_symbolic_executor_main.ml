@@ -691,6 +691,10 @@ let forker ctxt : Primus.component =
         count master.dests tid +
         if Set.mem visited tid then 1 else 0
 
+    let is_visited visited dst = match Jmp.resolve dst with
+      | Second _ -> false
+      | First tid -> Set.mem visited tid
+
     let obtained_knowledge visited master hash edge =
       count master.ctxts hash + match edge with
       | None -> 0
@@ -702,14 +706,17 @@ let forker ctxt : Primus.component =
         let dst = other_dst ~taken blk src in
         Some {blk;src;dst}
 
+    let is_edge_dst_visited visited = function
+      | None -> false
+      | Some {dst} -> is_visited visited dst
+
     let append xs x = match Map.max_elt xs with
       | None -> Map.add_exn xs 0 x
       | Some (k,_) -> Map.add_exn xs (k+1) x
 
     let push_task task s =
       let s = {
-        s with ctxts = incr s.ctxts task.hash;
-               tasks = append s.tasks task;
+        s with tasks = append s.tasks task;
       } in
       match task.edge with
       | None -> s
@@ -724,15 +731,17 @@ let forker ctxt : Primus.component =
     let on_cond constr =
       let taken = Value.is_one constr in
       Executor.value constr >>= function
-      | None -> Machine.return ()
+      | None ->
+        Debug.msg "constraint doesn't depend on the input" >>= fun () ->
+        Machine.return ()
       | Some constr ->
         Machine.Local.get worker >>= fun self ->
         Eval.pos >>= fun pos ->
         let edge = compute_edge ~taken pos in
         Visited.all >>= fun visited ->
         Machine.Global.get master >>= fun s ->
-        let known = obtained_knowledge visited s self.ctxt edge in
-        if known > cutoff ||
+        if is_edge_dst_visited visited edge ||
+           count s.ctxts self.ctxt > cutoff ||
            Set.mem self.task.constraints
              (SMT.formula ~refute:(not taken) constr)
         then Machine.return ()
@@ -754,16 +763,18 @@ let forker ctxt : Primus.component =
         | None -> None
         | Some (k,t) ->
           let ts = Map.remove ts k in
-          if obtained_knowledge visited s t.hash t.edge > cutoff
+          if count s.ctxts t.hash > cutoff ||
+             is_edge_dst_visited visited t.edge
           then pop visited s ts
           else match SMT.check (Set.to_list t.constraints) with
             | None -> pop visited s ts
-            | Some m -> Some (m,t, ts) in
+            | Some m -> Some (m,t,ts) in
       Machine.Global.get master >>= fun s ->
       Visited.all >>= fun visited ->
       match pop visited s s.tasks with
       | None ->
-        report_progress ~stage:(s.ready-1) ~total:s.ready ();
+        let ready = s.ready + Map.length s.tasks in
+        report_progress ~stage:(ready-1) ~total:ready ();
         Machine.Global.put master {
           s with tasks = Int.Map.empty
         } >>| fun () -> None
@@ -772,11 +783,12 @@ let forker ctxt : Primus.component =
         let left = Map.length ts in
         let processed = queued - left in
         report_progress
-          ~stage:(s.ready + processed - 1)
+          ~stage:(max 0 (s.ready + processed - 2))
           ~total:(s.ready + queued) ();
         Machine.Global.put master {
           s with tasks = ts;
                  ready = s.ready + processed;
+                 ctxts = incr s.ctxts t.hash;
         } >>| fun () ->
         Some (m,t)
 
@@ -835,7 +847,7 @@ let forker ctxt : Primus.component =
     let update_hash t =
       Machine.Local.update worker ~f:(fun s -> {
             s with
-            ctxt = Tid.hash t lxor s.ctxt
+            ctxt = Tid.hash t
           })
 
     let init () = Machine.sequence Primus.Interpreter.[
