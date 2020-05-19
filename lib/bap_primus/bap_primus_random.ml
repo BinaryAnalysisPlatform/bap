@@ -1,3 +1,4 @@
+open Core_kernel
 module Iterator = Bap_primus_iterator
 module type S = Iterator.Infinite.S
 
@@ -70,11 +71,11 @@ module MCG = struct
       Array.init generators (fun salt ->
           Sub.create (seed + salt))
 
-    let next = Array.map Sub.next
+    let next = Array.map ~f:Sub.next
 
     let value xs =
-      Array.fold_left (fun y x ->
-          Z.(y lsl int Sub.size lor Sub.value x)) Z.zero xs
+      Array.fold ~f:(fun y x ->
+          Z.(y lsl int Sub.size lor Sub.value x)) ~init:Z.zero xs
   end
 
 
@@ -187,7 +188,7 @@ module MCG = struct
 
   let create_small ?min ?max width =
     let int x = Bitvec.(int x mod modulus width) in
-    let min = Option.map int min
-    and max = Option.map int max in
+    let min = Option.map ~f:int min
+    and max = Option.map ~f:int max in
     create ?min ?max width
 end
