@@ -94,13 +94,12 @@ module Loader(P : Parameters) = struct
       "Llvm_loader_fail" (Llvm_loader_fail 0)
 
   let pdb_file filename =
-    let file =
+    if Sys.file_exists P.pdb_path then
       if Sys.is_directory P.pdb_path then
         let pdb_file = sprintf "%s.pdb"
             Filename.(remove_extension @@ basename filename) in
         Filename.concat P.pdb_path pdb_file
-      else P.pdb_path in
-    if Sys.file_exists file then file
+      else P.pdb_path
     else ""
 
   let to_image_doc doc =

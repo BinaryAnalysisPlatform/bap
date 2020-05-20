@@ -26,7 +26,7 @@ value bap_llvm_load_stub(value arg, value pdb_path) {
         failn(1);
     const char * pdb = NULL;
     if (caml_string_length(pdb_path))
-        pdb = String_val(pdb_path);
+        pdb = strdup(String_val(pdb_path));
     const struct bap_llvm_loader *loader =
         bap_llvm_loader_create((const char*)(array->data), array->dim[0], pdb);
     if (bap_llvm_file_not_supported(loader))
@@ -36,5 +36,7 @@ value bap_llvm_load_stub(value arg, value pdb_path) {
     const char *d = bap_llvm_loader_data(loader);
     result = caml_copy_string(d);
     bap_llvm_loader_destroy(loader);
+    if (pdb)
+        free(pdb);
     CAMLreturn(result);
 }
