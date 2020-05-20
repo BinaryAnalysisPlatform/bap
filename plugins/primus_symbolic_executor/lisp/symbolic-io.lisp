@@ -18,8 +18,6 @@
     (symbolic-assume (or (= desc -1)
                          (= desc next-desc)))
     (if (= desc -1) -1
-      (msg "opened-descriptors = $0, next-desc = $1, desc = $2"
-           opened-descriptors next-desc desc)
       (set opened-descriptors next-desc)
       (let ((size (symbolic-value  (symbol-concat name '-size)
                                    (word-width)
@@ -74,7 +72,6 @@
         (desc (symbolic-open-input name)))
     (if (= desc -1) 0
       (incr opened-streams)
-      (msg "associating stream $0 with fd $1" opened-streams desc)
       (dict-add 'symbolic-streams opened-streams desc)
       opened-streams)))
 
@@ -91,7 +88,6 @@
 (defun fileno (stream)
   (declare (external "fileno"))
   (if (= stream 0) -1
-    (msg "stream $0 has fd $1" stream (dict-get 'symbolic-streams stream))
     (or (dict-get 'symbolic-streams stream) 0)))
 
 (defun fgetc (file)
@@ -110,7 +106,6 @@
   (fgetc symbolic-stdin))
 
 (defun init-symbolic-stdin ()
-  (msg "initializing stdin")
   (dict-add 'symbolic-open-fpos 0 0)
   (dict-add 'symbolic-open-size 0 *symbolic-initial-file-size*)
   (dict-add 'symbolic-open-data 0

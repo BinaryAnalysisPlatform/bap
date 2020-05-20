@@ -5,40 +5,10 @@ open Monads.Std
 open Bap_main
 include Self()
 
-(* Algorithm.
-
-   For each system, just when we start it, we create the master
-   machine that will be used to fork all other machines and re-execute
-   the path N times, where N is bounded by cutoff times the number of
-   linearly independent paths starting fromt the entry point. The master
-   machine spawns a new worker for each task in its queue. Each task
-   denotes a set of constraints that should be satisfied under the
-   given set of inputs. The first worker machine starts with an empty
-   set of constraints and inputs.
-
-   Each worker (including the pioneer) runs from the entry point and
-   builds the path formula. With each value we associate a formula,
-   which we optimize on the fly. We designate certain values as inputs
-   and keep them symbolic. When we hit the branch that we didn't see
-   before and that leads to the desitantion which we neither saw nor
-   plan to see, we take the formula associated with that branch
-   condition and switch back to the init machine, and push its
-   negation to the queue.
-
-   When a worker finishes, the control is passed back to the init
-   machine that picks the first actual formula and finds a satisfying
-   model for it, then spawns a new worker process, which works as
-   above.
-
-   To identify which formula is actual, we associate with each formula
-   the branch destination that will be taken if the formula is
-   satisfiable. A formula is actual if this destination wasn't visited
-   by a worker before. An unresolved destination is treated as
-   unvisited, therefore it is always actual.  *)
-
 let cutoff = Extension.Configuration.parameter
     Extension.Type.(int =? 1)
     "cutoff-level"
+    ~doc:"The number of times the same branch is retried."
 
 type memory = {
   bank : Primus.Memory.Descriptor.t;
@@ -63,7 +33,6 @@ module Debug(Machine : Primus.Machine.S) = struct
       let msg = Format.asprintf "%a: %s" Id.pp id msg in
       Machine.Observation.make post_msg msg) fmt
 end
-
 
 module Input : sig
   type t
@@ -187,8 +156,11 @@ end = struct
   type formula = expr
   type value = expr
 
+  let () = Z3.set_global_param "parallel.enable" "true"
+
   let ctxt = Z3.mk_context [
       "model", "true";
+      "timeout", "16";
     ]
 
   let to_string = Expr.to_string
@@ -230,7 +202,8 @@ end = struct
       Bitv.mk_redor ctxt @@
       Bitv.mk_xor ctxt x y
 
-  let do_simpl x = Expr.simplify x None
+  let do_simpl x = try Expr.simplify x None with
+    | Z3.Error "canceled" -> x
 
   let bit0 = Expr.mk_numeral_int ctxt 0 (Bitv.mk_sort ctxt 1)
   let bit1 = Expr.mk_numeral_int ctxt 1 (Bitv.mk_sort ctxt 1)
@@ -256,7 +229,7 @@ end = struct
     if is_bool x then x else bool_of_bit x
 
 
-  let simpl x = Expr.simplify x None |>
+  let simpl x = do_simpl x |>
                 coerce_to_bit
 
   let binop op x y = simpl (z3_of_binop op ctxt x y)
@@ -330,6 +303,7 @@ end = struct
     Z3.Solver.push solver;
     Z3.Solver.add solver assertions;
     let result = match Z3.Solver.check solver [] with
+      | exception Z3.Error "canceled" -> None
       | UNSATISFIABLE | UNKNOWN -> None
       | SATISFIABLE -> match Z3.Solver.get_model solver with
         | None -> None
@@ -573,20 +547,18 @@ type task = {
   constraints : Set.M(SMT.Formula).t;
   inputs : Set.M(Input).t;
   edge : edge option;
-  hash : int;
+  id : tid;
 }
 
 type master = {
   self : Id.t option;
   ready : int;
   tasks : task Map.M(Int).t;
-  forks : int Map.M(Tid).t;
-  dests : int Map.M(Tid).t;
-  ctxts : int Map.M(Int).t;
+  tries : int Map.M(Tid).t;
 }
 
 type worker = {
-  ctxt : int;                   (* the hash of the trace *)
+  tid : tid;
   task : task;
 }
 
@@ -595,18 +567,18 @@ let master = Primus.Machine.State.declare
     ~name:"symbolic-executor-master" @@ fun _ -> {
     self = None;
     tasks = Int.Map.empty;
-    forks = Tid.Map.empty;      (* queued or finished forks *)
-    dests = Tid.Map.empty;      (* queued of finished dests *)
-    ctxts = Int.Map.empty;      (* evaluated contexts *)
+    tries = Tid.Map.empty;      (* queued or finished forks *)
     ready = 0;
   }
+
+let null = Tid.create ()
 
 let worker = Primus.Machine.State.declare
     ~uuid:"92f3042c-ba8f-465a-9d57-4c1b9ec7c186"
     ~name:"symbolic-executor-worker" @@ fun _ -> {
-    ctxt = Hashtbl.hash 0;
+    tid = null;
     task = {
-      hash = Hashtbl.hash 0;
+      id = null;
       edge = None;
       constraints = Set.empty (module SMT.Formula);
       inputs = Set.empty (module Input);
@@ -629,9 +601,9 @@ let pp_edge_option ppf = function
 let pp_constraints ppf constrs =
   Set.iter constrs ~f:(Format.fprintf ppf "%a@\n" SMT.pp_formula)
 
-let pp_task ppf {constraints=cs; edge; hash} =
-  Format.fprintf ppf "%08x: %a s.t.@\n%a"
-    hash
+let pp_task ppf {constraints=cs; edge; id} =
+  Format.fprintf ppf "%a: %a s.t.@\n%a"
+    Tid.pp id
     pp_edge_option edge
     pp_constraints cs
 
@@ -683,22 +655,9 @@ let forker ctxt : Primus.component =
         | None -> 1
         | Some n -> n + 1)
 
-    let edge_knowledge visited master {src;dst} =
-      count master.forks (Term.tid src) +
-      match Jmp.resolve dst with
-      | Second _ -> 0
-      | First tid ->
-        count master.dests tid +
-        if Set.mem visited tid then 1 else 0
-
     let is_visited visited dst = match Jmp.resolve dst with
       | Second _ -> false
       | First tid -> Set.mem visited tid
-
-    let obtained_knowledge visited master hash edge =
-      count master.ctxts hash + match edge with
-      | None -> 0
-      | Some e -> edge_knowledge visited master e
 
     let compute_edge ~taken pos = match branch_point pos with
       | None -> None
@@ -714,26 +673,14 @@ let forker ctxt : Primus.component =
       | None -> Map.add_exn xs 0 x
       | Some (k,_) -> Map.add_exn xs (k+1) x
 
-    let push_task task s =
-      let s = {
-        s with tasks = append s.tasks task;
-      } in
-      match task.edge with
-      | None -> s
-      | Some {src; dst} -> {
-          s with
-          forks = incr s.forks (Term.tid src);
-          dests = match Jmp.resolve dst with
-            | First dst -> incr s.dests dst
-            | Second _ -> s.dests
-        }
+    let push_task task s = {
+      s with tasks = append s.tasks task;
+    }
 
     let on_cond constr =
       let taken = Value.is_one constr in
       Executor.value constr >>= function
-      | None ->
-        Debug.msg "constraint doesn't depend on the input" >>= fun () ->
-        Machine.return ()
+      | None -> Machine.return ()
       | Some constr ->
         Machine.Local.get worker >>= fun self ->
         Eval.pos >>= fun pos ->
@@ -741,7 +688,7 @@ let forker ctxt : Primus.component =
         Visited.all >>= fun visited ->
         Machine.Global.get master >>= fun s ->
         if is_edge_dst_visited visited edge ||
-           count s.ctxts self.ctxt > cutoff ||
+           count s.tries self.tid > cutoff ||
            Set.mem self.task.constraints
              (SMT.formula ~refute:(not taken) constr)
         then Machine.return ()
@@ -754,7 +701,7 @@ let forker ctxt : Primus.component =
           Executor.inputs >>= fun inputs ->
           let inputs =
             Seq.fold inputs ~init:self.task.inputs ~f:Set.add in
-          let task = {inputs; constraints; edge; hash=self.ctxt} in
+          let task = {inputs; constraints; edge; id=self.tid} in
           Machine.Global.update master ~f:(push_task task)
 
     let pop_task () =
@@ -763,7 +710,7 @@ let forker ctxt : Primus.component =
         | None -> None
         | Some (k,t) ->
           let ts = Map.remove ts k in
-          if count s.ctxts t.hash > cutoff ||
+          if count s.tries t.id > cutoff ||
              is_edge_dst_visited visited t.edge
           then pop visited s ts
           else match SMT.check (Set.to_list t.constraints) with
@@ -783,12 +730,12 @@ let forker ctxt : Primus.component =
         let left = Map.length ts in
         let processed = queued - left in
         report_progress
-          ~stage:(max 0 (s.ready + processed - 2))
+          ~stage:(s.ready + processed - 2)
           ~total:(s.ready + queued) ();
         Machine.Global.put master {
           s with tasks = ts;
                  ready = s.ready + processed;
-                 ctxts = incr s.ctxts t.hash;
+                 tries = incr s.tries t.id;
         } >>| fun () ->
         Some (m,t)
 
@@ -844,15 +791,15 @@ let forker ctxt : Primus.component =
             Debug.msg "Forked a new machine" >>= fun () ->
             exec_task m t
 
-    let update_hash t =
+    let update_id t =
       Machine.Local.update worker ~f:(fun s -> {
             s with
-            ctxt = Tid.hash t
+            tid = t
           })
 
     let init () = Machine.sequence Primus.Interpreter.[
         eval_cond >>> on_cond;
-        enter_term >>> update_hash;
+        enter_term >>> update_id;
         Primus.System.start >>> run_master;
       ]
   end in (module Forker)

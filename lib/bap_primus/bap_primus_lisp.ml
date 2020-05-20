@@ -147,7 +147,7 @@ end
 
 
 let () = Exn.add_printer (function
-    | Runtime_error msg -> Some ("primus runtime error - " ^ msg)
+    | Runtime_error msg -> Some ("Primus Lisp runtime error - " ^ msg)
     | Unresolved (name,res) ->
       let msg = asprintf "unable to resolve function %s, because %a"
           name Lisp.Resolve.pp_resolution res in
