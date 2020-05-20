@@ -134,16 +134,23 @@ let process_sub free can_touch sub =
   O.create dead sub'
 
 let digest_of_sub sub level =
-  let digest =
-    (object
-      inherit [Digest.t] Term.visitor
-      method! enter_arg t dst = Digest.add dst "%a" Arg.pp t
-      method! enter_def t dst = Digest.add dst "%a" Def.pp t
-      method! enter_jmp t dst = Digest.add dst "%a" Jmp.pp t
-    end)#visit_sub sub
-      (Digest.create ~namespace:"optimization") in
+  let add addrs t = match Term.get_attr t address with
+    | None -> addrs
+    | Some a -> Set.add addrs a in
+  let addrs =
+    Term.to_sequence blk_t sub |>
+    Seq.fold ~init:(Set.empty (module Addr))
+      ~f:(fun addrs b ->
+          Seq.fold (Blk.elts b) ~init:(add addrs b)
+            ~f:(fun addrs -> function
+                | `Def d -> add addrs d
+                | `Jmp j -> add addrs j
+                | `Phi p -> add addrs p)) in
+  let digest = Digest.create ~namespace:"optimization" in
+  let digest = Set.fold addrs ~init:digest ~f:(fun d a ->
+      Digest.add d "%a" Addr.pp a) in
   let digest = Digest.add digest "%s" (Sub.name sub) in
-  Digest.add digest "%s" (string_of_int level)
+  Digest.add digest "%d" level
 
 let run level proj =
   let arch = Project.arch proj in
@@ -153,13 +160,14 @@ let run level proj =
   Project.with_program proj @@
   Term.map sub_t prog ~f:(fun sub ->
       let digest = digest_of_sub sub level in
-      let data = match O.Cache.load digest with
-        | Some data -> data
-        | None ->
-          let data = process_sub free can_touch sub in
-          O.Cache.save digest data;
-          data in
-      O.apply sub data)
+      match O.Cache.load digest with
+      | Some data -> O.apply sub data
+      | None ->
+        let data = process_sub free can_touch sub in
+        let sub = O.update sub data in
+        let data = O.find_unreachable sub data in
+        O.Cache.save digest data;
+        O.remove_dead_code sub data)
 
 let () =
   Config.manpage [
