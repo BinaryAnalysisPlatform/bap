@@ -56,7 +56,6 @@ void symbol(const std::string &name, int64_t relative_addr, uint64_t size, uint6
         s.entry("code-entry") << name << off << size;
 }
 
-error_or<pe32plus_header> get_pe32plus_header(const coff_obj& obj);
 error_or<uint64_t> get_image_base(const coff_obj &obj);
 bool is_relocatable(const coff_obj &obj);
 bool is_external_symbol(const coff_obj &obj, symbol_iterator s);
@@ -86,12 +85,11 @@ void entry_point(const coff_obj &obj, ogre_doc &s) {
         return;
     }
     if (obj.getBytesInAddress() == 4) {
-        const pe32_header* hdr = 0;
-        if (auto ec = obj.getPE32Header(hdr)) { s.fail(ec.message()); return; }
+        error_or<pe32_header> hdr = prim::get_pe32_header(obj);
         if (!hdr) { s.fail("PE header not found"); return; }
         s.entry("entry") << hdr->AddressOfEntryPoint;
     } else {
-        error_or<pe32plus_header> hdr = get_pe32plus_header(obj);
+        error_or<pe32plus_header> hdr = prim::get_pe32plus_header(obj);
         if (!hdr) { s.fail("PE+ header not found"); return; }
         s.entry("entry") << hdr->AddressOfEntryPoint;
     }
@@ -142,8 +140,10 @@ void symbols(const coff_obj &obj, ogre_doc &s) {
 
 void relocations(const coff_obj &obj, ogre_doc &s) {
     for (auto sec : prim::sections(obj))
-        for (auto rel : prim::relocations(sec))
-            symbol_reference(obj, rel, sec.getRelocatedSection(), s);
+        for (auto rel : prim::relocations(sec)) {
+            if (auto rel_sec = prim::relocated_section(sec))
+                symbol_reference(obj, rel, *rel_sec, s);
+        }
 }
 
 
@@ -314,14 +314,6 @@ error_or<uint64_t> get_image_base(const coff_obj &obj) {
     return success(obj.getImageBase());
 }
 
-error_or<pe32plus_header> get_pe32plus_header(const coff_obj &obj) {
-    const pe32plus_header *hdr = 0;
-    auto ec = obj.getPE32PlusHeader(hdr);
-    if (ec) return failure(ec.message());
-    else if (!hdr) { return failure("PE+ header not found"); }
-    else return success(*hdr);
-}
-
 #elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
 
 // symbol address for 3.4 is already relative, i.e. doesn't include image base
@@ -355,26 +347,6 @@ error_or<uint64_t> symbol_file_offset(const coff_obj &obj, const SymbolRef &sym)
     return success(off);
 }
 
-error_or<pe32plus_header> get_pe32plus_header(const coff_obj &obj) {
-    uint64_t cur_ptr = 0;
-    const char *buf = (obj.getData()).data();
-    const uint8_t *start = reinterpret_cast<const uint8_t *>(buf);
-    uint8_t b0 = start[0];
-    uint8_t b1 = start[1];
-    if (b0 == 0x4d && b1 == 0x5a) { // check if this is a PE/COFF file
-        // a pointer at offset 0x3C points to the
-        cur_ptr += *reinterpret_cast<const uint16_t *>(start + 0x3c);
-        // check the PE magic bytes.
-        if (std::memcmp(start + cur_ptr, "PE\0\0", 4) != 0)
-            return failure("PE Plus header not found");
-        cur_ptr += 4; // skip the PE magic bytes.
-        cur_ptr += sizeof(llvm::object::coff_file_header);
-        auto p = reinterpret_cast<const pe32plus_header *>(start + cur_ptr);
-        return error_or<pe32plus_header>(*p);
-    }
-    return failure("Failed to extract PE32+ header");
-}
-
 error_or<uint64_t> get_image_base(const COFFObjectFile &obj) {
     if (is_relocatable(obj)) return success(uint64_t(0));
     if (obj.getBytesInAddress() == 4) {
@@ -383,7 +355,7 @@ error_or<uint64_t> get_image_base(const COFFObjectFile &obj) {
             return failure(ec.message());
         return error_or<uint64_t>(hdr->ImageBase);
     } else {
-        error_or<pe32plus_header> hdr = get_pe32plus_header(obj);
+        error_or<pe32plus_header> hdr = prim::get_pe32plus_header(obj);
         if (!hdr) return hdr;
         return std::move(error_or<uint64_t>(hdr->ImageBase) << hdr.warnings());
     }
@@ -393,14 +365,14 @@ error_or<int> section_number(const coff_obj &obj, const SymbolRef &s) {
     symbol_iterator it(s);
     if (auto sym = obj.getCOFFSymbol(it))
         return success(int(sym->SectionNumber));
-    else failure("Failed to obtain coff symbol");
+    else return failure("Failed to obtain coff symbol");
 }
 
 error_or<uint64_t> symbol_value(const coff_obj &obj, const SymbolRef &s) {
     symbol_iterator it(s);
     if (auto sym = obj.getCOFFSymbol(it))
         return success(uint64_t(sym->Value));
-    else failure("Failed to obtain coff symbol");
+    else return failure("Failed to obtain coff symbol");
 }
 
 #else

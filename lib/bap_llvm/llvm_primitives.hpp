@@ -7,6 +7,7 @@
 
 #include <llvm/Object/ObjectFile.h>
 #include <llvm/Object/ELF.h>
+#include <llvm/Object/COFF.h>
 
 #include "llvm_error_or.hpp"
 
@@ -28,6 +29,7 @@ section_iterator end_sections(const ObjectFile &obj);
 error_or<std::string> section_name(const SectionRef &sec);
 error_or<uint64_t> section_address(const SectionRef &sec);
 error_or<uint64_t> section_size(const SectionRef &sec);
+error_or<section_iterator> relocated_section(const SectionRef &sec);
 
 // symbols
 symbol_iterator begin_symbols(const ObjectFile &obj);
@@ -60,6 +62,10 @@ std::vector<typename ELFFile<T>::Elf_Shdr> elf_sections(const ELFFile<T> &elf);
 
 template <typename T>
 error_or<std::string> elf_section_name(const ELFFile<T> &elf, const typename ELFFile<T>::Elf_Shdr *sec);
+
+error_or<pe32_header> get_pe32_header(const COFFObjectFile &);
+error_or<pe32plus_header> get_pe32plus_header(const COFFObjectFile &);
+
 
 // template functions
 
