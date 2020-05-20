@@ -1,5 +1,18 @@
-let strip_patch ver = String.sub ver 0 3
 
+let strip_patch ver =
+  match String.index_opt ver '.' with
+  | Some n -> String.sub ver 0 (n + 2)
+  | None -> ver
+
+let extract config link_static v =
+  let link_mode = if link_static then "--link-static" else "" in
+  OASISExec.run_read_one_line ~ctxt config [link_mode; "--"^v]
+
+let extract_ldflags config link_static = function
+  | "3.4" -> extract config link_static "ldflags"
+  | _ ->
+    extract config link_static "ldflags" ^
+    " " ^ extract config link_static "system-libs"
 
 let llvm var () : unit =
   BaseEnv.var_define
@@ -8,19 +21,15 @@ let llvm var () : unit =
     ~short_desc:(fun () -> "llvm-config --"^var)
     ("llvm_"^var)
     (fun () ->
-       let llvm_config = BaseEnv.var_get "llvm_config" in
-       let llvm_version = BaseEnv.var_get "llvm_version" in
-       let link_mode =
-         let llvm_static = BaseEnv.var_get "llvm_static" in
-         if strip_patch llvm_version > "3.8" && llvm_static = "true"
-         then "--link-static"
-         else "" in
-       let extract v =
-	 OASISExec.run_read_one_line ~ctxt llvm_config [link_mode; "--"^v] in
-       if strip_patch llvm_version > "3.4" && var = "ldflags"
-       then extract var ^ " " ^ extract "system-libs"
-       else extract var) |>
-    definition_end
+       let config = BaseEnv.var_get "llvm_config" in
+       let version = strip_patch @@ BaseEnv.var_get "llvm_version" in
+       let link_static = match version with
+         | "3.4" | "3.8" -> false
+         | _ -> BaseEnv.var_get "llvm_static" = "true" in
+       if var = "ldflags"
+       then extract_ldflags config link_static version
+       else extract config link_static var) |>
+  definition_end
 
 let llvm_version () : unit =
   BaseEnv.var_define

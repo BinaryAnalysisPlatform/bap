@@ -300,7 +300,8 @@ error_or<int64_t> symbol_address(const macho &obj, const SymbolRef &sym) {
 void relocations(const macho &obj, ogre_doc &s) {
     for (auto sec : prim::sections(obj))
         for (auto rel : prim::relocations(sec))
-            symbol_reference(obj, rel, sec.getRelocatedSection(), s);
+            if (auto rel_sec = prim::relocated_section(sec))
+                symbol_reference(obj, rel, *rel_sec, s);
 }
 
 bool is_code_section(const macho &obj, const SectionRef &sec) {
