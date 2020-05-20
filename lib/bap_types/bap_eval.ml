@@ -26,6 +26,11 @@ let is_shift = function
   | Binop.LSHIFT | Binop.RSHIFT | Binop.ARSHIFT -> true
   | _ -> false
 
+let infer_value_size m =
+  match Bil.Type.infer m with
+  | Ok (Type.Mem (_,x)) -> x
+  | _ -> invalid_arg "type error"
+
 module Make2(State : Monad.S2) = struct
   open State.Syntax
 
@@ -61,7 +66,7 @@ module Make2(State : Monad.S2) = struct
 
     method division_by_zero () = self#bot
 
-    method type_error (err : TE.t) = self#bot
+    method type_error (_err : TE.t) = self#bot
 
     method eval_exp x = self#eval (Bil.Simpl.exp (Bil.Exp.normalize x))
 
@@ -88,7 +93,7 @@ module Make2(State : Monad.S2) = struct
       self#eval exp >>= self#storage_of_value
 
     method eval_load ~mem ~addr endian sz =
-      if Size.(sz <> `r8)
+      if Size.(sz <> infer_value_size mem)
       then self#eval_exp (Exp.Load (mem,addr,endian,sz))
       else self#eval_mem mem >>= function
         | None -> self#type_error TE.bad_mem
@@ -99,7 +104,7 @@ module Make2(State : Monad.S2) = struct
 
 
     method eval_store ~mem ~addr word (e : endian) s =
-      if Size.(s <> `r8)
+      if Size.(s <> infer_value_size mem)
       then self#eval_exp (Exp.Store (mem,addr,word,e,s))
       else self#eval_mem  mem >>= function
         | None -> self#type_error TE.bad_mem
@@ -137,7 +142,7 @@ module Make2(State : Monad.S2) = struct
     method private eval_cast' ct sz u : word option =
       let open Bitvector in
       try Option.return @@ Bil.Apply.cast ct sz u
-      with exn -> None
+      with _exn -> None
 
     method eval_let var u body =
       self#eval_exp u >>= fun u ->
@@ -164,7 +169,7 @@ module Make2(State : Monad.S2) = struct
       | None -> self#type_error TE.bad_imm
       | Some w ->
         try self#value_of_word (Bitvector.extract_exn ~hi ~lo w)
-        with exn -> self#type_error `bad_cast
+        with _exn -> self#type_error `bad_cast
 
     method eval_concat u w =
       self#eval_imm u >>= fun u ->
