@@ -28,8 +28,8 @@ let is_shift = function
 
 let infer_value_size m =
   match Bil.Type.infer m with
-  | Ok (Type.Mem (_,x)) -> x
-  | _ -> invalid_arg "type error"
+  | Ok (Type.Mem (_,x)) -> Some x
+  | _ -> None
 
 module Make2(State : Monad.S2) = struct
   open State.Syntax
@@ -93,28 +93,34 @@ module Make2(State : Monad.S2) = struct
       self#eval exp >>= self#storage_of_value
 
     method eval_load ~mem ~addr endian sz =
-      if Size.(sz <> infer_value_size mem)
-      then self#eval_exp (Exp.Load (mem,addr,endian,sz))
-      else self#eval_mem mem >>= function
-        | None -> self#type_error TE.bad_mem
-        | Some mem ->
-          self#eval_imm addr >>= function
-          | None -> self#type_error TE.bad_imm
-          | Some addr -> self#load mem addr
+      match infer_value_size mem with
+      | None -> self#type_error TE.bad_mem
+      | Some vs ->
+        if Size.(sz <> vs)
+        then self#eval_exp (Exp.Load (mem,addr,endian,sz))
+        else self#eval_mem mem >>= function
+          | None -> self#type_error TE.bad_mem
+          | Some mem ->
+            self#eval_imm addr >>= function
+            | None -> self#type_error TE.bad_imm
+            | Some addr -> self#load mem addr
 
 
     method eval_store ~mem ~addr word (e : endian) s =
-      if Size.(s <> infer_value_size mem)
-      then self#eval_exp (Exp.Store (mem,addr,word,e,s))
-      else self#eval_mem  mem >>= function
-        | None -> self#type_error TE.bad_mem
-        | Some mem ->
-          self#eval_imm addr >>= function
-          | None -> self#type_error TE.bad_imm
-          | Some addr ->
-            self#eval_imm word >>= function
+      match infer_value_size mem with
+      | None -> self#type_error TE.bad_mem
+      | Some vs ->
+        if Size.(s <> vs)
+        then self#eval_exp (Exp.Store (mem,addr,word,e,s))
+        else self#eval_mem  mem >>= function
+          | None -> self#type_error TE.bad_mem
+          | Some mem ->
+            self#eval_imm addr >>= function
             | None -> self#type_error TE.bad_imm
-            | Some word -> self#store mem addr word
+            | Some addr ->
+              self#eval_imm word >>= function
+              | None -> self#type_error TE.bad_imm
+              | Some word -> self#store mem addr word
 
     method eval_var var = self#lookup var
 
