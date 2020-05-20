@@ -78,14 +78,23 @@ let rec mkdir path =
 
 let dir_exists dir = Sys.file_exists dir && Sys.is_directory dir
 
+let temp_dir path =
+  let s = Random.State.make_self_init () in
+  let rec loop () =
+    let tmp_dir = path // sprintf "tmp-%d" (Random.State.int s 0xFFFFFF) in
+    match Unix.mkdir tmp_dir 0o700 with
+    | () -> tmp_dir
+    | exception Unix.(Unix_error (EEXIST,_,_)) -> loop ()
+    | exception exn -> raise exn in
+  mkdir path;
+  loop ()
+
 let with_temp_dir path ~f =
-  let tmp = Filename.temp_file "tmp" "" in
-  let tmp_dir = path // Filename.basename tmp in
+  let tmp_dir = temp_dir path in
   protect ~f:(fun () ->
       mkdir tmp_dir;
       f tmp_dir)
     ~finally:(fun () ->
-        Sys.remove tmp;
         if dir_exists tmp_dir
         then FileUtil.rm ~recurse:true [tmp_dir])
 
