@@ -16,6 +16,7 @@ int64_t relative_address(uint64_t base, uint64_t abs) {
     return (abs - base);
 }
 
+
 #if LLVM_VERSION_MAJOR >= 4
 
 template <typename T>
@@ -42,6 +43,36 @@ error_or<SymbolRef::Type> symbol_type(const SymbolRef &s) {
 }
 
 #endif
+
+
+#if LLVM_VERSION_MAJOR >= 10
+error_or<std::string> section_name(const SectionRef &sec) {
+    auto name = sec.getName();
+    if (name) return success(name->str());
+    else return failure(error_message(name));
+}
+
+error_or<section_iterator> relocated_section(const SectionRef &sec) {
+    auto rel_sec = sec.getRelocatedSection();
+    if (rel_sec) return success(*rel_sec);
+    else return failure(error_message(rel_sec));
+}
+
+#else
+
+error_or<std::string> section_name(const SectionRef &sec) {
+    StringRef name;
+    auto er = sec.getName(name);
+    if (!er) return success(name.str());
+    else return failure(er.message());
+}
+
+error_or<section_iterator> relocated_section(const SectionRef &sec) {
+    return success(sec.getRelocatedSection());
+}
+
+#endif
+
 
 // 4.0 or 3.8
 #if LLVM_VERSION_MAJOR >= 4 \
@@ -91,13 +122,6 @@ std::vector<SectionRef> sections(const ObjectFile &obj) {
 std::vector<SymbolRef> symbols(const ObjectFile &obj) {
     auto s = obj.symbols();
     return std::vector<SymbolRef>(s.begin(), s.end());
-}
-
-error_or<std::string> section_name(const SectionRef &sec) {
-    StringRef name;
-    auto er = sec.getName(name);
-    if (!er) return success(name.str());
-    else return failure(er.message());
 }
 
 error_or<uint64_t> section_address(const SectionRef &sec) {
@@ -176,14 +200,6 @@ error_or<section_iterator> symbol_section(const ObjectFile &obj, const SymbolRef
     else return failure(er.message());
 }
 
-
-error_or<std::string> section_name(const SectionRef &sec) {
-    StringRef name;
-    auto er = sec.getName(name);
-    if (!er) return success(name.str());
-    else return failure(er.message());
-}
-
 error_or<uint64_t> section_address(const SectionRef &sec) {
     uint64_t addr;
     auto er = sec.getAddress(addr);
@@ -258,5 +274,76 @@ symbols_sizes get_symbols_sizes(const ObjectFile &obj) {
     }
     return sizes;
 }
+
+
+
+#if LLVM_VERSION_MAJOR >= 10
+
+error_or<pe32_header> get_pe32_header(const COFFObjectFile &obj) {
+    const pe32_header *hdr = obj.getPE32Header();
+    if (!hdr) { return failure("PE header not found"); }
+    else return success(*hdr);
+}
+
+error_or<pe32plus_header> get_pe32plus_header(const COFFObjectFile &obj) {
+    const pe32plus_header *hdr = obj.getPE32PlusHeader();
+    if (!hdr) { return failure("PE+ header not found"); }
+    else return success(*hdr);
+}
+
+#elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8 \
+    || LLVM_VERSION_MAJOR >= 4
+
+error_or<pe32_header> get_pe32_header(const COFFObjectFile &obj) {
+    const pe32_header *hdr = 0;
+    auto ec = obj.getPE32Header(hdr);
+    if (ec) return failure(ec.message());
+    else if (!hdr) { return failure("PE header not found"); }
+    else return success(*hdr);
+}
+
+error_or<pe32plus_header> get_pe32plus_header(const COFFObjectFile &obj) {
+    const pe32plus_header *hdr = 0;
+    auto ec = obj.getPE32PlusHeader(hdr);
+    if (ec) return failure(ec.message());
+    else if (!hdr) { return failure("PE+ header not found"); }
+    else return success(*hdr);
+}
+
+#elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+
+error_or<pe32_header> get_pe32_header(const COFFObjectFile &obj) {
+    const pe32_header* hdr = 0;
+    error_code ec = obj.getPE32Header(hdr);
+    if (ec || !hdr)
+        return failure("PE header not found");
+    return success(*hdr);
+}
+
+error_or<pe32plus_header> get_pe32plus_header(const COFFObjectFile &obj) {
+    uint64_t cur_ptr = 0;
+    const char *buf = (obj.getData()).data();
+    const uint8_t *start = reinterpret_cast<const uint8_t *>(buf);
+    uint8_t b0 = start[0];
+    uint8_t b1 = start[1];
+    if (b0 == 0x4d && b1 == 0x5a) { // check if this is a PE/COFF file
+        // a pointer at offset 0x3C points to the
+        cur_ptr += *reinterpret_cast<const uint16_t *>(start + 0x3c);
+        // check the PE magic bytes.
+        if (std::memcmp(start + cur_ptr, "PE\0\0", 4) != 0)
+            return failure("PE Plus header not found");
+        cur_ptr += 4; // skip the PE magic bytes.
+        cur_ptr += sizeof(llvm::object::coff_file_header);
+        auto p = reinterpret_cast<const pe32plus_header *>(start + cur_ptr);
+        return error_or<pe32plus_header>(*p);
+    }
+    return failure("Failed to extract PE32+ header");
+}
+#else
+#error LLVM version is not supported
+#endif
+
+
+
 
 } // namespace prim

@@ -152,10 +152,7 @@ using namespace llvm::object;
 typedef std::tuple<std::string, uint64_t, uint64_t> section_descr;
 
 error_or<std::string> getName(const SectionRef &sec) {
-    StringRef name;
-    if (error_code ec = sec.getName(name))
-        return failure(ec.message());
-    return success(name.str());
+    return prim::section_name(sec);
 }
 
 std::string getName(const coff_section &s) { return s.Name;           }
@@ -205,15 +202,11 @@ error_or<uint64_t> image_entry_macho(const MachOObjectFile& obj) {
 
 error_or<uint64_t> image_entry_coff(const COFFObjectFile& obj) {
     if (obj.getBytesInAddress() == 4) {
-        const pe32_header* hdr = 0;
-        if (error_code ec = obj.getPE32Header(hdr))
-            return failure(ec.message());
+        auto hdr = prim::get_pe32_header(obj);
         if (!hdr) return failure("PE header not found");
         return error_or<uint64_t>(hdr->AddressOfEntryPoint + hdr->ImageBase);
     } else {
-        const pe32plus_header *hdr = 0;
-        if (error_code ec = obj.getPE32PlusHeader(hdr))
-            return failure(ec.message());
+        auto hdr = prim::get_pe32plus_header(obj);
         if (!hdr) return failure("PE+ header not found");
         return error_or<uint64_t>(hdr->AddressOfEntryPoint + hdr->ImageBase);
     }

@@ -272,10 +272,10 @@ bool checked(const ELFObjectFile<T> &obj, SectionRef sec_ref) {
 template <typename T>
 void relocations(const ELFObjectFile<T> &obj, ogre_doc &s) {
     for (auto sec : obj.sections()) {
-        auto rel_sec = sec.getRelocatedSection();
-        if (!checked(obj, sec)) continue;
+        auto rel_sec = prim::relocated_section(sec);
+        if (!checked(obj, sec) || !rel_sec) continue;
         for (auto rel : sec.relocations())
-            symbol_reference(obj, rel, rel_sec, s);
+            symbol_reference(obj, rel, *rel_sec, s);
     }
 }
 
@@ -343,8 +343,10 @@ void symbol_entries(const ELFObjectFile<T> &obj, ogre_doc &s) {
 template <typename T>
 void relocations(const ELFObjectFile<T> &obj, ogre_doc &s) {
     for (auto sec : prim::sections(obj))
-        for (auto rel : prim::relocations(sec))
-            symbol_reference(obj, rel, sec.getRelocatedSection(), s);
+        for (auto rel : prim::relocations(sec)) {
+            if (auto rel_sec = prim::relocated_section(sec))
+                symbol_reference(obj, rel, *rel_sec, s);
+        }
 }
 
 #else

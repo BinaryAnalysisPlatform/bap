@@ -9,6 +9,10 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm-c/Target.h>
 
+#if LLVM_VERSION_MAJOR >= 10
+#include "llvm/MC/MCTargetOptions.h"
+#endif
+
 #if LLVM_VERSION_MAJOR < 6
 #include <llvm/Target/TargetInstrInfo.h>
 #endif
@@ -246,8 +250,15 @@ public:
             return {nullptr, {bap_disasm_unsupported_target} };
         }
 
+
+#if LLVM_VERSION_MAJOR >= 10
+        llvm::MCTargetOptions mcopts;
+        shared_ptr<const llvm::MCAsmInfo>
+            asm_info(target->createMCAsmInfo(*reg_info, triple, mcopts));
+#else
         shared_ptr<const llvm::MCAsmInfo>
             asm_info(target->createMCAsmInfo(*reg_info, triple));
+#endif
 
         if (!asm_info) {
             if (debug_level > 0)
@@ -406,10 +417,15 @@ public:
 
             auto status = llvm::MCDisassembler::Fail;
             if (len > 0) {
+#if LLVM_VERSION_MAJOR >= 10
                 status = dis->getInstruction
+                    (mcinst, size, view(pc), pc, llvm::nulls());
+#else
+                 status = dis->getInstruction
                     (mcinst, size, view(pc), pc,
                      (debug_level > 2 ? llvm::errs() : llvm::nulls()),
                      llvm::nulls());
+#endif
             }
 
             location loc = {
@@ -455,7 +471,10 @@ public:
         if (current.code != 0) {
             std::string data;
             llvm::raw_string_ostream stream(data);
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8          \
+#if LLVM_VERSION_MAJOR >= 10
+            auto pc = mem->getBase() + current.loc.off;
+            printer->printInst(&mcinst, pc, "", *sub_info, stream);
+#elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8          \
     || LLVM_VERSION_MAJOR >= 4
             printer->printInst(&mcinst, stream, "", *sub_info);
 #else
