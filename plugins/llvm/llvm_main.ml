@@ -49,7 +49,7 @@ For relocatable files a default image base is equal to 0xC0000000." in
 let pdb_path =
   let doc =
     "A path to a directory with pdb file OR a path to a PDB file.
-     In the first case the file with the matching name to the target
+     In the first case the file with the matching name of the target
      executable will be selected if present. The default is the path
      to a current working directory." in
   Configuration.parameter Type.(some string) "pdb-path" ~doc
