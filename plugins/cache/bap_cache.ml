@@ -6,6 +6,7 @@ open Bap_cache_types
 include Self ()
 
 module Filename = Caml.Filename
+module Random = Caml.Random
 module Utils = Bap_cache_utils
 
 let (//) = Filename.concat
@@ -78,19 +79,23 @@ let rec mkdir path =
 
 let dir_exists dir = Sys.file_exists dir && Sys.is_directory dir
 
-let temp_dir path =
-  let s = Random.State.make_self_init () in
-  let rec loop () =
-    let tmp_dir = path // sprintf "tmp-%d" (Random.State.int s 0xFFFFFF) in
-    match Unix.mkdir tmp_dir 0o700 with
-    | () -> tmp_dir
-    | exception Unix.(Unix_error (EEXIST,_,_)) -> loop ()
-    | exception exn -> raise exn in
-  mkdir path;
-  loop ()
+let mkdtemp ?(mode=0o0700) ?tmp_dir ?(prefix="") ?(suffix="") () =
+  let rng = Random.State.make_self_init () in
+  let genname () = Uuidm.v4_gen rng () |> Uuidm.to_string in
+  let rec create name =
+    let tmp = match tmp_dir with
+      | None -> Filename.get_temp_dir_name ()
+      | Some tmp -> tmp in
+    let path =
+      String.concat ~sep:Filename.dir_sep [tmp; prefix; name; suffix] in
+    match Unix.mkdir path mode with
+    | () -> path
+    | exception Unix.Unix_error(Unix.EEXIST,_,_) ->
+      genname () |> create in
+  genname () |> create
 
 let with_temp_dir path ~f =
-  let tmp_dir = temp_dir path in
+  let tmp_dir = mkdtemp ~tmp_dir:path () in
   protect ~f:(fun () ->
       mkdir tmp_dir;
       f tmp_dir)
@@ -119,6 +124,7 @@ let init_cache_dir () =
   if not (dir_exists data)
   then
     let parent = Filename.dirname root in
+    mkdir parent;
     mkdir_from_tmp ~target:root ~f:init_cache_dir parent
 
 let config_file () = config_file @@ root ()
