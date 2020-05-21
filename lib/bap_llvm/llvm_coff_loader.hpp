@@ -9,6 +9,9 @@
 #include "llvm_loader_utils.hpp"
 #include "llvm_primitives.hpp"
 
+#include "llvm_pdb_loader.hpp"
+
+
 namespace loader {
 namespace coff_loader {
 
@@ -379,11 +382,9 @@ error_or<uint64_t> symbol_value(const coff_obj &obj, const SymbolRef &s) {
 #error LLVM version is not supported
 #endif
 
-
 } // namespace coff_loader
 
-
-error_or<std::string> load(const llvm::object::COFFObjectFile &obj) {
+error_or<std::string> load(const llvm::object::COFFObjectFile &obj, const char* pdb_path) {
     using namespace coff_loader;
     ogre_doc s;
     s.raw_entry(coff_declarations);
@@ -396,6 +397,8 @@ error_or<std::string> load(const llvm::object::COFFObjectFile &obj) {
     symbols(obj, s);
     relocations(obj, s);
     exported_symbols(obj, s);
+    if (pdb_path)
+        pdb_loader::load(obj, pdb_path, s);
     return s.str();
 }
 

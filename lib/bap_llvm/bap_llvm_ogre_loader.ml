@@ -9,8 +9,12 @@ module Elf = Bap_llvm_ogre_elf
 module Coff = Bap_llvm_ogre_coff
 module Macho = Bap_llvm_ogre_macho
 
-let image_base = ref None
+module Filename = Caml.Filename
 
+module type Parameters = sig
+  val image_base : int64 option
+  val pdb_path   : string
+end
 
 (** default image base for relocatable files *)
 let relocatable_base = 0x0L
@@ -20,11 +24,10 @@ module Fact(M : Monad.S) = struct
   type 'a m = 'a M.t
 end
 
-module Dispatcher(M : Monad.S) = struct
-  module Fact = Fact(M)
-  open Fact.Syntax
-
+module Ogre_loader(P : Parameters) = struct
+  module Fact = Fact(Monad.Ident)
   module type S = Bap_llvm_ogre_types.S with type 'a m := 'a Fact.t
+  open Fact.Syntax
 
   type typ = Elf | Coff | Macho | Unknown [@@deriving sexp]
 
@@ -33,18 +36,13 @@ module Dispatcher(M : Monad.S) = struct
       typ_of_sexp (Sexp.of_string s)
     with _ -> Unknown
 
-  let make_relocatable x =
-    let module Target = (val x : Loader_target) in
-    let module S = Target.Relocatable.Make(Fact) in
-    if Option.is_none !image_base
-    then image_base := Some relocatable_base;
-    Fact.return (module S : S)
-
   let make x =
+    let module Target = (val x : Loader_target) in
     Fact.require is_relocatable >>= fun is_rel ->
-    if is_rel then make_relocatable x
+    if is_rel then
+      let module S = Target.Relocatable.Make(Fact) in
+      Fact.return (module S : S)
     else
-      let module Target = (val x : Loader_target) in
       Fact.return (module Target.Make(Fact) : S)
 
   let of_filetype =
@@ -55,17 +53,16 @@ module Dispatcher(M : Monad.S) = struct
     | Macho -> make (module Macho)
     | Unknown -> Fact.failf "file type is not supported" ()
 
-end
-
-module Make(M : Monad.S) = struct
-  module Dispatcher = Dispatcher(M)
-  include Dispatcher
-  open Fact.Syntax
+  let image_base =
+    Fact.require is_relocatable >>= fun is_rel ->
+    if Option.is_none P.image_base && is_rel
+    then Fact.return (Some relocatable_base)
+    else Fact.return P.image_base
 
   let provide_base =
-    Fact.require default_base_address >>= fun addr ->
-    match !image_base with
-    | None -> Fact.provide base_address addr
+    Fact.require default_base_address >>= fun default ->
+    image_base >>= function
+    | None -> Fact.provide base_address default
     | Some a -> Fact.provide base_address a
 
   let provide_entry =
@@ -82,13 +79,13 @@ module Make(M : Monad.S) = struct
     S.symbols  >>= fun () ->
     S.code_regions
 
-  let image = Dispatcher.of_filetype >>= provide
+  let image = of_filetype >>= provide
 
 end
 
-module Loader = struct
+module Loader(P : Parameters) = struct
 
-  module Ogre_loader = Make(Monad.Ident)
+  module Ogre_loader = Ogre_loader(P)
   open Ogre_loader
 
   exception Llvm_loader_fail of int
@@ -96,14 +93,23 @@ module Loader = struct
   let _ = Callback.register_exception
       "Llvm_loader_fail" (Llvm_loader_fail 0)
 
+  let pdb_file filename =
+    if Sys.file_exists P.pdb_path then
+      if Sys.is_directory P.pdb_path then
+        let pdb_file = sprintf "%s.pdb"
+            Filename.(remove_extension @@ basename filename) in
+        Filename.concat P.pdb_path pdb_file
+      else P.pdb_path
+    else ""
+
   let to_image_doc doc =
     match Fact.exec image doc with
     | Ok doc -> Ok (Some doc)
     | Error er -> Error er
 
-  let from_data data =
+  let from_data filename data =
     try
-      let doc = Bap_llvm_binary.bap_llvm_load data in
+      let doc = Bap_llvm_binary.bap_llvm_load data (pdb_file filename) in
       Ogre.Doc.from_string doc >>= fun doc ->
       to_image_doc doc
     with Llvm_loader_fail n -> match n with
@@ -122,14 +128,20 @@ module Loader = struct
       Ok (Bigarray.array1_of_genarray data)
     with exn ->
       Unix.close fd;
-      Or_error.errorf "unable to process file %s" path
+      Or_error.errorf "unable to process file %s: %s"
+        path (Exn.to_string exn)
   [@@warning "-D"]
 
   let from_file path =
-    Or_error.(map_file path >>= from_data)
+    Or_error.(map_file path >>= from_data path)
+
+  let from_data data = from_data "" data
 
 end
 
-let init ?base () =
-  image_base := base;
-  Image.register_loader ~name:"llvm" (module Loader)
+let init ?base ?(pdb_path=Sys.getcwd ()) () =
+  Image.register_loader ~name:"llvm"
+    (module Loader(struct
+         let image_base = base
+         let pdb_path = pdb_path
+       end))

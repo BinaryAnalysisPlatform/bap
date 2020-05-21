@@ -3,8 +3,8 @@
 
 extern "C" {
 
-    const loader::bap_llvm_loader * bap_llvm_loader_create(const char* data, size_t size) {
-        return loader::create(data, size);
+    const loader::bap_llvm_loader * bap_llvm_loader_create(const char* data, size_t size, const char* pdb_path) {
+        return loader::create(data, size, pdb_path);
     }
 
     const char * bap_llvm_loader_data(const loader::bap_llvm_loader *loader) {

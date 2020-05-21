@@ -57,6 +57,8 @@ Library bap_llvm
                  llvm_loader_stubs.h,
                  llvm_loader_utils.c,
                  llvm_loader_utils.h,
+                 llvm_pdb_loader.c,
+                 llvm_pdb_loader.h,
                  llvm_primitives.c,
                  llvm_primitives.h
 
@@ -66,7 +68,7 @@ Library llvm_plugin
   Build$:          flag(everything) || flag(llvm)
   FindlibName:     bap-plugin-llvm
   InternalModules: Llvm_main
-  BuildDepends:    bap, bap-llvm, core_kernel
+  BuildDepends:    bap, bap-llvm, bap-main, core_kernel
   XMETAExtraLines: tags="disassembler, llvm, loader, elf, macho, coff"
 
 Library legacy_llvm_plugin

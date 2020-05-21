@@ -74,8 +74,11 @@ error_or<std::string> load_elf(const object::Binary *binary) {
         return unsupported_filetype();
 }
 
-error_or<std::string> load_coff(const object::Binary *binary) {
-    return load_base<COFFObjectFile>(binary);
+error_or<std::string> load_coff(const object::Binary *binary, const char * pdb_path) {
+     if (auto bin = llvm::dyn_cast<COFFObjectFile>(binary))
+         return load(*bin, pdb_path);
+    else
+        return unsupported_filetype();
 }
 
 error_or<std::string> load_macho(const object::Binary *binary) {
@@ -93,10 +96,10 @@ void verbose_fails(const error_or<T> &loaded) {
     }
 }
 
-error_or<std::string> load(const char* data, std::size_t size) {
+error_or<std::string> load(const char* data, std::size_t size, const char * pdb_path) {
     error_or<object::Binary> bin = get_binary(data, size);
     if (!bin) { verbose_fails(bin); return unsupported_filetype(); }
-    else if (bin->isCOFF())   return load_coff(bin.get());
+    else if (bin->isCOFF())   return load_coff(bin.get(), pdb_path);
     else if (bin->isELF())    return load_elf(bin.get());
     else if (bin->isMachO())  return load_macho(bin.get());
     else return unsupported_filetype();
@@ -104,8 +107,8 @@ error_or<std::string> load(const char* data, std::size_t size) {
 
 typedef error_or<std::string> bap_llvm_loader;
 
-const bap_llvm_loader * create(const char* data, std::size_t size) {
-    auto loaded = load(data, size);
+const bap_llvm_loader * create(const char* data, std::size_t size, const char *pdb_path) {
+    auto loaded = load(data, size, pdb_path);
     verbose_fails(loaded);
     return new bap_llvm_loader(std::move(loaded));
 }

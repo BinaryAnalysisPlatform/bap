@@ -23,6 +23,11 @@ module Std : sig
 
       @param base a base address to use. If not specified, then a base
       address specified by the binary is used. If there is no such
-      address, then some arbitrary constant will be used. *)
-  val init_loader : ?base:int64 -> unit -> unit
+      address, then some arbitrary constant will be used.
+
+      @param pdb_path is either a path to the pdb file or a path to
+      a folder where it resides (by default, the current working
+      directory). In the latter case, the pdb file name will be
+      infered from the executable name. *)
+  val init_loader : ?base:int64 -> ?pdb_path:string -> unit -> unit
 end
