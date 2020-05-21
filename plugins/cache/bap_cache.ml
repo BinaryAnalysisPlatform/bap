@@ -11,6 +11,8 @@ module Utils = Bap_cache_utils
 
 let (//) = Filename.concat
 
+let rng = Random.State.make_self_init ()
+
 module Cfg = struct
 
   module T = struct
@@ -80,7 +82,6 @@ let rec mkdir path =
 let dir_exists dir = Sys.file_exists dir && Sys.is_directory dir
 
 let mkdtemp ?(mode=0o0700) ?tmp_dir ?(prefix="") ?(suffix="") () =
-  let rng = Random.State.make_self_init () in
   let genname () = Uuidm.v4_gen rng () |> Uuidm.to_string in
   let rec create name =
     let tmp = match tmp_dir with
