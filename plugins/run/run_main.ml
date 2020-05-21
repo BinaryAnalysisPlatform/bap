@@ -29,25 +29,29 @@ module Param = struct
       ~doc:"Program environemt as a comma separated list of VAR=VAL pairs";;
 
   let entry = param (list string) "entry-points"
-      ~doc:"Can be a list of entry points or a special keyword
-      $(b,all-subroutines) or $(b,marked-subroutines). An entry point
-      is either a string denoting a function name, a tid starting with
-      the $(b,%) percent, or an address in a hexadecimal format
-      prefixed with $(b,0x).  When the option is specified, the Primus
-      Machine will start the execution from the specified entry
-      point(s). Otherwise the execution will be started from all
-      program terms that are marked with the [entry_point]
-      attribute. If there are several entry points, then the execution
-      will be started from all of them in parallel, i.e., by forking
-      the machine and starting each machine from its own entry
-      point. Consider enabling corresponding scheduler. If neither the
+
+      ~doc:"Can be a list of $(i,entry points) or one of the following
+      keywords: $(b,all-subroutines), $(b,marked-subroutines),
+      $(b,only-queue). An $(i,entry point) is either a string denoting
+      a function name, a tid starting with the $(b,%) (percent)
+      symbol, or an address in a hexadecimal format prefixed with
+      $(b,0x).  When the option is specified, the Primus Machine will
+      start the execution from the specified entry point(s). Otherwise
+      the execution will be started from all program terms that are
+      marked with the [entry_point] attribute. If there are several
+      entry points, then they will be executed each in a separate
+      machine or, if $(b,--run-in-separation) is specified, in a
+      separate system.  In case when each entry point is run in a
+      separate machine it is necessary to add a scheduler component to
+      the system that is used to run the entry point. If neither the
       argument nor there any entry points in the program, then a
       function called $(b,_start) is called. If $(b,all-subroutines)
-      are specified then Primus will execute all subroutines in
-      the topological order. If $(b,marked-subroutines) is specified,
-      then Primus will execute the specified systems on all
-      subroutines that has the $(b,mark) attribute."
-
+      are specified then Primus will execute all subroutines in the
+      topological order. If $(b,marked-subroutines) is specified, then
+      Primus will execute the specified systems on all subroutines
+      that has the $(b,mark) attribute. If the $(b,only-queue) is
+      specified, then only jobs already queued in the Primus Job Queue
+      will be run and no entry points will be searched in the project."
 
   let in_isolation = flag "in-isolation"
       ~doc:"Run each entry point as new system.
@@ -165,11 +169,12 @@ let parse_entry_points proj entry =
   | [] -> List.(entry_points prog >>| fun x -> `tid x)
   | xs -> List.(xs >>| name_of_entry (Project.arch proj))
 
-let parse_entry_points proj entries =
-  match entries,parse_entry_points proj entries with
-  | ["marked-subroutines"],[] -> []
-  | _,[] -> [`symbol "_start"]
-  | _,xs -> xs
+let parse_entry_points proj entries = match entries with
+  | ["only-queue"] -> []
+  | _ -> match entries,parse_entry_points proj entries with
+    | ["marked-subroutines"],[] -> []
+    | _,[] -> [`symbol "_start"]
+    | _,xs -> xs
 
 let exec x =
   Machine.current () >>= fun cid ->
