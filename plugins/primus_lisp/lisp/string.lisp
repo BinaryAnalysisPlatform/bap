@@ -226,5 +226,6 @@
   len)
 
 (defun stpcpy (dst src)
+  (declare (external "stpcpy"))
   (let ((len (strlen src)))
-    (+ (memcpy dst src (+1 len)) len)))
+    (+ (memcpy dst src (+1 len)) (cast ptr_t len))))

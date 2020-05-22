@@ -57,14 +57,14 @@
                bap:symbolic-lisp-primitives))
 
 (defsystem bap:base-taint-analyzer
-  :description "Uses greedy-promiscuous-executor for taint analysis.
+  :description "Uses promiscuous-executor for taint analysis.
                 No policy is specified"
-  :depends-on (bap:greedy-promiscuous-executor)
+  :depends-on (bap:promiscuous-executor)
   :components (bap:taint-primitives
                bap:taint-signals))
 
 (defsystem bap:taint-analyzer
-  :description "Uses greedy-promiscuous-executor for taint analysis.
+  :description "Uses promiscuous-executor for taint analysis.
                 Propagates taint by computation."
   :depends-on (bap:base-taint-analyzer)
   :components (bap:propagate-taint-by-computation))
@@ -79,15 +79,15 @@
 
 
 (defsystem bap:exact-taint-analyzer
-  :description "Uses greedy-promiscuous-executor for taint analysis.
+  :description "Uses promiscuous-executor for taint analysis.
                 Propagates taint exactly."
   :depends-on (bap:base-taint-analyzer)
   :components (bap:propagate-taint-exact))
 
 
 (defsystem bap:constant-tracker
-  :description "Uses greedy-promiscuous-executor for constant tracking."
-  :depends-on (bap:greedy-promiscuous-executor)
+  :description "Uses promiscuous-executor for constant tracking."
+  :depends-on (bap:promiscuous-executor)
   :components (bap:constant-tracker-primitives
                bap:constant-tracker))
 
@@ -100,6 +100,6 @@
 
 
 (defsystem bap:string-deobfuscator
-  :description "Uses greedy-promiscuous-executor to find obfuscated strings."
-  :depends-on (bap:greedy-promiscuous-executor)
+  :description "Uses promiscuous-executor to find obfuscated strings."
+  :depends-on (bap:promiscuous-executor)
   :components (bap:beagle-hunter))
