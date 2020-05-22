@@ -98,12 +98,12 @@
 
 (defun strcat (dst src)
   (declare (external "strcat"))
-  (strcpy (+ dst (strlen dst)) src)
+  (strcpy (+ dst (cast ptr_t (strlen dst))) src)
   dst)
 
 (defun strncat (dst src len)
   (declare (external "strncat"))
-  (strncpy (+ dst (strlen dst)) src len)
+  (strncpy (+ dst (cast ptr_t (strlen dst))) src len)
   dst)
 
 
