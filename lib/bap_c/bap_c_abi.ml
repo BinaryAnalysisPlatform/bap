@@ -93,110 +93,6 @@ let create_arg i addr_size intent name t (data,exp) sub =
   let arg = Term.set_attr arg Attrs.t t in
   arg
 
-
-
-let find_by_name prog name =
-  Term.enum sub_t prog |> Seq.find ~f:(fun sub -> String.equal (Sub.name sub) name)
-
-let find_first_caller prog tid =
-  Term.enum sub_t prog |> Seq.find ~f:(fun sub ->
-      Term.enum blk_t sub |> Seq.exists ~f:(fun blk ->
-          Term.enum jmp_t blk |> Seq.exists ~f:(fun jmp ->
-              match Jmp.kind jmp with
-              | Call c -> Label.equal (Call.target c) (Direct tid)
-              | _ -> false)))
-
-let proj_int = function Bil.Int x -> Some x | _ -> None
-
-let is_sub_exists prog name = Option.is_some @@ find_by_name prog name
-let is_sub_absent prog name = not (is_sub_exists prog name)
-
-let find_entry_point prog =
-  Term.enum sub_t prog |>
-  Seq.find ~f:(fun sub -> Term.has_attr sub Sub.entry_point)
-
-let find_libc_start_main prog =
-  let open Monad.Option.Syntax in
-  find_entry_point prog >>= fun start ->
-  Term.first blk_t start >>= fun entry ->
-  Term.first jmp_t entry >>= fun jmp ->
-  match Jmp.kind jmp with
-  | Goto _ | Ret _ | Int _ -> None
-  | Call call -> match Call.target call with
-    | Direct tid -> Some (tid,prog)
-    | Indirect _ ->
-      let name = "__libc_start_main" in
-      let tid = Tid.for_name name in
-      let sub = Sub.create ~tid ~name () in
-      let prog = Term.append sub_t prog sub in
-      let entry = Term.remove jmp_t entry (Term.tid jmp) in
-      let call = Call.create (Direct (Term.tid sub)) () in
-      let jmp = Jmp.create_call call in
-      let entry = Term.prepend jmp_t entry jmp in
-      let start = Term.update blk_t start entry in
-      let prog = Term.update sub_t prog start in
-      Some (Term.tid sub, prog)
-
-let detect_main_address prog =
-  let open Monad.Option.Syntax in
-  find_by_name prog "__libc_start_main" >>= fun start ->
-  find_first_caller prog (Term.tid start) >>= fun caller ->
-  Term.first blk_t caller >>= fun entry ->
-  Term.first arg_t start >>= fun arg ->
-  let defs = Term.enum def_t ~rev:true entry in
-  match Arg.rhs arg with
-  | Bil.Var reg ->
-    Seq.find defs ~f:(fun def ->
-        Var.same (Def.lhs def) reg) >>| Def.rhs >>= proj_int
-  | Bil.Load (_,addr,_,_) ->
-    Seq.find_map defs ~f:(fun def -> match Def.rhs def with
-        | Bil.Store (_,a,e,_,_) when Exp.equal addr a -> Some e
-        | _ -> None) >>= proj_int
-  | _ -> None
-
-
-let reinsert_args_for_new_name abi sub name =
-  let sub = Term.filter arg_t sub ~f:(fun _ -> false) in
-  let sub = Term.del_attr sub Attrs.proto in
-  abi#map_sub @@
-  Sub.with_name sub name
-
-let rename_main abi prog = match detect_main_address prog with
-  | None -> prog
-  | Some addr ->
-    Term.map sub_t prog ~f:(fun sub ->
-        match Term.get_attr sub address with
-        | Some a when Addr.equal addr a ->
-          reinsert_args_for_new_name abi sub "main"
-        | _ -> sub)
-
-
-let rename_libc_start_main abi prog =
-  if is_sub_absent prog "__libc_start_main"
-  then match find_libc_start_main prog with
-    | None -> prog
-    | Some (tid,prog) ->
-      Term.change sub_t prog tid @@ function
-      | None -> None
-      | Some sub ->
-        Option.some @@
-        reinsert_args_for_new_name abi sub "__libc_start_main"
-  else prog
-
-let fix_libc_runtime abi prog =
-  rename_libc_start_main abi prog |>
-  rename_main abi
-
-let stage2 stage1 = object
-  inherit Term.mapper
-  method! run prog =
-    let prog = stage1#run prog in
-    if is_sub_absent prog "main" ||
-       is_sub_absent prog "__libc_start_main"
-    then fix_libc_runtime stage1 prog
-    else prog
-end
-
 let registry = Hashtbl.create (module String)
 let register name abi = Hashtbl.set registry ~key:name ~data:abi
 let get_processor name = Hashtbl.find registry name
@@ -274,7 +170,7 @@ let create_api_processor size abi : Bap_api.t =
             | Ok api ->
               List.iter api ~f:(fun (key,t) ->
                   Hashtbl.set gamma ~key ~data:t));
-      stage2 (stage1 (Hashtbl.find gamma))
+      stage1 (Hashtbl.find gamma)
 
     let parse get ifs = Or_error.try_with (fun () -> parse_exn get ifs)
 

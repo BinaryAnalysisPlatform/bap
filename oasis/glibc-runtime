@@ -1,0 +1,13 @@
+Flag glibc_runtime
+  Description: Builds glibc runtime supporing code
+  Default: false
+
+Library glibc_runtime_plugin
+  Build$:           flag(everything) || flag(glibc_runtime)
+  Path:             plugins/glibc_runtime
+  FindlibName:      bap-plugin-glibc_runtime
+  CompiledObject:   best
+  BuildDepends:     base, bap-main, bap, bap-abi, bap-c
+  InternalModules:  Glibc_runtime_main
+  XMETADescription: detects main and libc_start_main functions
+  XMETAExtraLines:  tags="abi, pass"

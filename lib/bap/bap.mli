@@ -680,7 +680,7 @@ module Std : sig
 
   (** Lazy sequence  *)
   module Seq : module type of Seq
-    with type 'a t = 'a Sequence.t
+    with type 'a t = 'a Base.Sequence.t
   (** type abbreviation for ['a Sequence.t]  *)
   type 'a seq = 'a Seq.t [@@deriving bin_io, compare, sexp]
 
