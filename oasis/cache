@@ -6,7 +6,7 @@ Library cache_plugin
   Build$:           flag(everything) || flag(cache)
   Path:             plugins/cache
   FindlibName:      bap-plugin-cache
-  BuildDepends:     bap, core_kernel, regular, ppx_jane, mmap
-  InternalModules:  Cache_main
+  BuildDepends:     bap, bap-main, core_kernel, regular, ppx_jane, mmap, fileutils, uuidm
+  InternalModules:  Bap_cache, Bap_cache_gc, Bap_cache_main, Bap_cache_types, Bap_cache_utils
   XMETADescription: provide caching services
   XMETAExtraLines:  tags="cache"
