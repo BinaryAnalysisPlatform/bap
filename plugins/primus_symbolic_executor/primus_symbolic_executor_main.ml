@@ -12,8 +12,8 @@ let cutoff = Extension.Configuration.parameter
 
 type memory = {
   bank : Primus.Memory.Descriptor.t;
-  ptr : Word.t;
-  len : int;
+  lower : Addr.t;
+  upper : Addr.t;
 } [@@deriving compare, equal]
 
 let memories = Primus.Machine.State.declare
@@ -75,11 +75,11 @@ end = struct
     module Env = Primus.Env.Make(Machine)
     module Lisp = Primus.Lisp.Make(Machine)
 
-    let allocate bank ptr len =
+    let allocate bank lower upper =
       let width = Bank.data_size bank in
       let seed = Hashtbl.hash (Bank.name bank) in
       let generator = Primus.Generator.Random.lcg ~width seed in
-      Mems.allocate ~generator ptr len
+      Mems.add_region ~generator ~lower ~upper ()
 
     let allocate_if_not bank addr =
       Mems.is_writable addr >>= function
@@ -89,7 +89,7 @@ end = struct
         Machine.Global.get memories >>= fun memories ->
         match Map.find memories name with
         | None -> Lisp.failf "unknown symbolic memory %s" name ()
-        | Some {ptr; len} -> allocate bank ptr len
+        | Some {lower; upper} -> allocate bank lower upper
 
     let set input value = match input with
       | Ptr {bank; addr} ->
@@ -917,20 +917,14 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
       | Error err -> Lisp.failf "symbolic-memory: %s" err ()
       | Ok addr_size ->
         let bank = Bank.create name ~addr_size ~data_size in
-        match Word.(to_int (upper - lower)) with
-        | Error _ ->
-          Lisp.failf "symbolic-memory: unable to create \
-                      a symbolic memory region, it is too large" ()
-        | Ok diff ->
-          let len = diff + 1 in
-          let memory = {bank; ptr=lower; len} in
-          register_memory memory >>= fun () ->
-          let width = Bank.data_size bank in
-          let seed = Hashtbl.hash (Bank.name bank) in
-          let generator = Primus.Generator.Random.lcg ~width seed in
-          let region = Mems.allocate ~generator lower len in
-          with_memory memory region >>| fun () ->
-          id
+        let memory = {bank; lower; upper} in
+        register_memory memory >>= fun () ->
+        let width = Bank.data_size bank in
+        let seed = Hashtbl.hash (Bank.name bank) in
+        let generator = Primus.Generator.Random.lcg ~width seed in
+        let region = Mems.add_region ~generator ~lower ~upper () in
+        with_memory memory region >>| fun () ->
+        id
 
   let assume assumptions =
     Machine.List.iter assumptions ~f:(fun x ->
