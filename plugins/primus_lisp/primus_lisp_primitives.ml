@@ -131,20 +131,19 @@ module Closure(Machine : Primus.Machine.S) = struct
     let module Memory = Primus.Memory.Make(Machine) in
     Machine.gets Project.arch >>= fun arch ->
     let width = Arch.addr_size arch |> Size.in_bits in
-    let n = Word.to_int (Value.to_word size) in
     let gen = match rest with
       | []  -> Ok None
       | [x] -> make_static_generator width (Value.to_word x)
       | [min; max] -> make_uniform_generator width min max
       | _ -> Or_error.errorf "bad generator" in
-    if Result.is_error n
-    then failf "memory-allocate: bad number" () else
     if Result.is_error gen
     then failf "memory-allocate: bad generator specification" ()
     else
       let generator = Or_error.ok_exn gen in
-      Memory.allocate ?generator (Value.to_word addr) (Or_error.ok_exn n) >>=
-      fun () -> zero
+      let lower = Value.to_word addr in
+      let upper = Word.(lower + pred (Value.to_word size)) in
+      Memory.add_region ?generator ~lower ~upper () >>= fun () ->
+      zero
 
   let memory_read addr = Eval.load addr BigEndian `r8
   let memory_write a x =
