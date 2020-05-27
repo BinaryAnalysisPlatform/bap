@@ -2203,6 +2203,16 @@ module Std : sig
     module Generator : sig
       type t = generator [@@deriving sexp_of]
 
+
+      (** [of_iterator iter init] creates a generator from a generic
+          iterator.
+
+          The generic iterator [iter] may use any type as its domain
+          (as long as it provides the projection to [Bitvec.t]). The
+          type of the generator state is also abstract.
+
+          @since 2.1.0
+      *)
       val of_iterator :
         ?width:int ->
         ?seed:(int -> 'a) ->
