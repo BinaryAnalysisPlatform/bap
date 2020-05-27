@@ -32,7 +32,6 @@ val jumping : (value * value) observation
 val eval_cond : value observation
 val undefined : value observation
 val const : value observation
-val assumption : value observation
 
 val binop : ((binop * value * value) * value) observation
 val unop : ((unop * value) * value) observation

@@ -191,10 +191,6 @@ let eval_cond,on_cond =
   Observation.provide ~inspect:sexp_of_value "eval-cond"
     ~desc:"Occurs when the jump condition is evaluated."
 
-let assumption,assume =
-  Observation.provide ~inspect:sexp_of_value "assumption"
-    ~desc:"Occurs when a branch dependent on the value is taken"
-
 let results r op = Sexp.List [op; sexp_of_value r]
 
 let sexp_of_binop ((op,x,y),r) = results r @@ sexps [
