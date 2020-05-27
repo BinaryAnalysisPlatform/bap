@@ -1,12 +1,12 @@
 (require posix)
 (require types)
 
-(defparameter *errno-location* nil)
+(declare (static errno-location))
 
 (defmethod init ()
-  (set *errno-location* brk)
+  (set errno-location brk)
   (+= brk (sizeof int)))
 
 (defun errno-location ()
   (declare (external "__errno_location"))
-  *errno-location*)
+  errno-location)
