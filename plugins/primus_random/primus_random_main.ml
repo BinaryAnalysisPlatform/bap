@@ -459,19 +459,13 @@ let main ctxt =
     let allocate ?upper ~width lower generator =
       let eval s =
         Eval.exp (parse_exp ~width s) >>| Primus.Value.to_word in
+
       eval lower >>= fun lower ->
       match upper with
       | None -> Memory.allocate ~generator lower 1
       | Some upper ->
         eval upper >>= fun upper ->
-        let diff = Word.(upper - lower) in
-        match Word.to_int diff with
-        | Ok diff -> Memory.allocate ~generator lower (diff+1)
-        | Error _ ->
-          invalid_argf "The specified interval (%s) is too large and \
-                        is currently not supported by Primus Random"
-            (Word.to_string diff) ()
-
+        Memory.add_region ~generator ~lower ~upper ()
 
     (* in memory the last added layer has precedence over the
        previously added, so we start with the last specified region
