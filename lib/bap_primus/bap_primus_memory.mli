@@ -34,6 +34,13 @@ module Make(Machine : Machine) : sig
   val add_text : mem -> unit Machine.t
   val add_data : mem -> unit Machine.t
 
+  val add_region :
+    ?readonly:bool ->
+    ?executable:bool ->
+    ?init:(addr -> word Machine.t) ->
+    ?generator:Generator.t ->
+    lower:addr -> upper:addr -> unit -> unit Machine.t
+
   val allocate :
     ?readonly:bool ->
     ?executable:bool ->

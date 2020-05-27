@@ -17,7 +17,12 @@ let () = Exn.add_printer (function
               Addr.pp_hex here)
     | _ -> None)
 
-type dynamic = {base : addr; len : int; value : Generator.t }
+type dynamic = {
+  lower : addr;
+  upper : addr;
+  value : Generator.t
+}
+
 type region =
   | Dynamic of dynamic
   | Static  of mem
@@ -64,11 +69,11 @@ type t = {
 
 let sexp_of_word w = Sexp.Atom (asprintf "%a" Word.pp_hex w)
 
-let sexp_of_dynamic {base; len; value} =
+let sexp_of_dynamic {lower; upper; value} =
   Sexp.(List [
       Sexp.Atom "dynamic";
-      sexp_of_word base;
-      sexp_of_int len;
+      sexp_of_word lower;
+      sexp_of_word upper;
       Generator.sexp_of_t value])
 
 let sexp_of_mem mem = Sexp.List [
@@ -137,11 +142,10 @@ let state = Bap_primus_machine.State.declare
     curr = virtual_memory (Project.arch p);
   }
 
-let inside {base;len} addr =
-  let high = Word.(base ++ len) in
-  if Addr.(high < base)
-  then Addr.(addr >= base) || Addr.(addr < high)
-  else Addr.(addr >= base) && Addr.(addr < high)
+let inside {lower; upper} addr =
+  if Addr.(lower <= upper)
+  then Addr.(addr >= lower) && Addr.(addr <= upper)
+  else Addr.(addr >= upper) || Addr.(addr <= lower)
 
 let find_layer addr = List.find ~f:(function
     | {mem=Dynamic mem} -> inside mem addr
@@ -286,34 +290,42 @@ module Make(Machine : Machine) = struct
   let add_layer layer t = {t with layers = layer :: t.layers}
   let (++) = add_layer
 
-  let initialize values base len f =
-    Machine.Seq.fold (Seq.range 0 len) ~init:values ~f:(fun values i ->
-        let addr = Addr.(base ++ i) in
-        f addr >>= fun data ->
-        Value.of_word data >>| fun data ->
-        Map.set values ~key:addr ~data)
+  let initialize values lower upper f =
+    let rec loop values addr =
+      if addr < upper
+      then f addr >>= fun data ->
+        Value.of_word data >>= fun data ->
+        loop (Map.set values ~key:addr ~data) (Addr.succ addr)
+      else Machine.return values in
+    loop values lower
 
-
-
-  let allocate
+  let add_region
       ?(readonly=false)
       ?(executable=false)
       ?init
       ?generator
-      base len =
+      ~lower ~upper () =
     Machine.gets Project.arch >>= fun arch ->
     let width = Arch.addr_size arch |> Size.in_bits in
     get_curr >>| add_layer {
       perms={readonly; executable};
-      mem = Dynamic {base;len; value = match generator with
+      mem = Dynamic {lower;upper; value = match generator with
           | Some g -> g
           | None -> Generator.Random.Seeded.lcg ~width ()}
     } >>= fun s ->
     match init with
     | None -> put_curr s
     | Some f ->
-      initialize s.values base len f >>= fun values ->
+      initialize s.values lower upper f >>= fun values ->
       put_curr {s with values}
+
+
+  let allocate
+      ?readonly ?executable ?init ?generator base len =
+    add_region ()
+      ?readonly ?executable ?init ?generator
+      ~lower:base
+      ~upper:(Addr.nsucc base (len-1))
 
   let map ?(readonly=false) ?(executable=false) mem =
     update state @@ add_layer ({mem=Static mem; perms={readonly; executable}})
