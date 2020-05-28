@@ -193,9 +193,15 @@ module T = Make(Ver_common)
 
 module Self = Self ()
 
+let normalize ver =
+  match String.index ver '.' with
+  | None -> ver
+  | Some i -> String.sub ver 0 (i + 2)
+
 let () =
   Bap_main.Extension.declare @@ fun _ctxt ->
-  let llvm_version = String.sub llvm_version 0 3 in
-  if String.equal llvm_version "3.4" then T_34.register ()
+  let ver = normalize llvm_version in
+  if String.equal ver "3.4"
+  then T_34.register ()
   else T.register ();
   Ok ()
