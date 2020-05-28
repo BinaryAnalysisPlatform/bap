@@ -680,7 +680,7 @@ module Std : sig
 
   (** Lazy sequence  *)
   module Seq : module type of Seq
-    with type 'a t = 'a Sequence.t
+    with type 'a t = 'a Base.Sequence.t
   (** type abbreviation for ['a Sequence.t]  *)
   type 'a seq = 'a Seq.t [@@deriving bin_io, compare, sexp]
 
@@ -776,7 +776,7 @@ module Std : sig
 
             will create a printer for a [String.Trie] that is populated by
             integers.  *)
-        val pp : 'a printer -> 'a t printer
+        val pp : (Format.formatter -> 'a -> unit) -> (Format.formatter -> 'a t -> unit)
       end
     end
     module V2 : sig
@@ -1339,7 +1339,7 @@ module Std : sig
         Note, the [printf] function from examples refers to the
         [Format.printf], thus it is assumed that the [Format] module
         is open in the scope. *)
-    val pp : t printer
+    val pp : Format.formatter -> t -> unit
 
     (** [printf "%a" pp_hex x] prints [x] in the hexadecimal format omitting
         suffixes, and the prefix if it is not necessary.
@@ -1353,7 +1353,7 @@ module Std : sig
         ]}
         @since 1.3
     *)
-    val pp_hex : t printer
+    val pp_hex : Format.formatter -> t -> unit
 
     (** [printf "%a" pp_dec x] prints [x] in the decimal format omitting
         suffixes and prefixes.
@@ -1367,7 +1367,7 @@ module Std : sig
         ]}
         @since 1.3
     *)
-    val pp_dec : t printer
+    val pp_dec : Format.formatter -> t -> unit
 
     (** [printf "%a" pp_oct x] prints [x] in the octal format omitting
         suffixes, and the prefix if it is not necessary.
@@ -1379,7 +1379,7 @@ module Std : sig
           # printf "%a\n" pp_oct (Word.of_int32 0x1);;
           1
         ]} *)
-    val pp_oct : t printer
+    val pp_oct : Format.formatter -> t -> unit
 
     (** [printf "%a" pp_bin x] prints [x] in the binary (0 and 1) format omitting
         suffixes, and the prefix if it is not necessary.
@@ -1393,7 +1393,7 @@ module Std : sig
         ]}
         @since 1.3
     *)
-    val pp_bin : t printer
+    val pp_bin : Format.formatter -> t -> unit
 
     (** [printf "%a" pp_hex x] prints [x] in the hexadecimal format omitting
         suffixes, and the prefix if it is not necessary.
@@ -1405,7 +1405,7 @@ module Std : sig
           # printf "%a\n" pp_hex (Word.of_int32 0x1);;
           1
         ]} *)
-    val pp_hex : t printer
+    val pp_hex : Format.formatter -> t -> unit
 
     (** [printf "%a" pp_dec x] prints [x] in the decimal format omitting
         suffixes and prefixes.
@@ -1419,7 +1419,7 @@ module Std : sig
         ]}
         @since 1.3
     *)
-    val pp_dec : t printer
+    val pp_dec : Format.formatter -> t -> unit
 
     (** [printf "%a" pp_oct x] prints [x] in the octal format omitting
         suffixes, and the prefix if it is not necessary.
@@ -1433,7 +1433,7 @@ module Std : sig
         ]}
         @since 1.3
     *)
-    val pp_oct : t printer
+    val pp_oct : Format.formatter -> t -> unit
 
     (** [printf "%a" pp_bin x] prints [x] in the binary (0 and 1)
         format omitting suffixes, and the prefix if it is not necessary.
@@ -1447,7 +1447,7 @@ module Std : sig
         ]}
         @since 1.3
     *)
-    val pp_bin : t printer
+    val pp_bin : Format.formatter -> t -> unit
 
     (** [printf "%a" pp_hex_full x] prints [x] in the hexadecimal format with
         suffixes, and the prefix if it is necessary.
@@ -1459,7 +1459,7 @@ module Std : sig
                        # printf "%a\n" pp_hex_full (Word.of_int32 0x1);;
           1:32u
         ]} *)
-    val pp_hex_full : t printer
+    val pp_hex_full : Format.formatter -> t -> unit
 
     (** [printf "%a" pp_dec_full x] prints [x] in the decimal format with
         suffixes and prefixes.
@@ -1473,7 +1473,7 @@ module Std : sig
         ]}
         @since 1.3
     *)
-    val pp_dec_full : t printer
+    val pp_dec_full : Format.formatter -> t -> unit
 
     (** [printf "%a" pp_oct_full x] prints [x] in the octal format with
         suffixes, and the prefix if it is necessary.
@@ -1485,7 +1485,7 @@ module Std : sig
                           # printf "%a\n" pp_oct_full (Word.of_int32 0x1);;
           1:32u
         ]} *)
-    val pp_oct_full : t printer
+    val pp_oct_full : Format.formatter -> t -> unit
 
     (** [printf "%a" pp_bin_full x] prints [x] in the binary (0 and 1)
         format omitting suffixes, and the prefix if it is necessary.
@@ -1497,7 +1497,7 @@ module Std : sig
           # printf "%a\n" pp_bin_full (Word.of_int32 0x1);;
           1:32u
         v} *)
-    val pp_bin_full : t printer
+    val pp_bin_full : Format.formatter -> t -> unit
 
     (** [pp_generic ?case ?prefix ?suffix ?format ppf x] - a printer
         to suit all tastes.
@@ -1534,7 +1534,7 @@ module Std : sig
       ?prefix:[`auto | `base | `none | `this of string ] ->
       ?suffix:[`none | `full | `size ] ->
       ?format:[`hex | `dec | `oct | `bin ] ->
-      t printer
+      Format.formatter -> t -> unit
 
     (** [string_of_value ?hex x] returns a textual representation of
         the [x] value, i.e., ignores size and signedness.  If [hex] is
@@ -1969,15 +1969,15 @@ module Std : sig
     val slot : (Theory.Program.Semantics.cls, stmt list) Knowledge.slot
 
     (** [printf "%a" pp_binop op] prints a binary operation [op].  *)
-    val pp_binop : binop printer
+    val pp_binop : Format.formatter -> binop -> unit
 
     (** [printf "%a" pp_unop op] prints an unary operation [op] *)
-    val pp_unop : unop printer
+    val pp_unop : Format.formatter -> unop -> unit
 
     (** [printf "%a" pp_cast t] prints a cast type [t]
         @since 1.3
     *)
-    val pp_cast : cast printer
+    val pp_cast : Format.formatter -> cast -> unit
 
     (** [string_of_binop op] is a textual representation of [op].
         @since 1.3
@@ -3614,7 +3614,7 @@ module Std : sig
     val eval : t -> Bil.value
 
     include Regular.S with type t := t
-    val pp_adt : t printer
+    val pp_adt : Format.formatter -> t -> unit
   end
 
   (** [Regular] interface for BIL statements  *)
@@ -3895,7 +3895,7 @@ module Std : sig
 
     include Regular.S with type t := t
 
-    val pp_adt : t printer
+    val pp_adt : Format.formatter -> t -> unit
   end
 
   (** Architecture  *)
@@ -4432,7 +4432,7 @@ module Std : sig
 
     (** [pp pp_elem] creates a vector printer that uses [pp_elem] to
         print elements.  *)
-    val pp : 'a printer -> 'a t printer
+    val pp : (Format.formatter -> 'a -> unit) -> (Format.formatter -> 'a t -> unit)
   end
 
   (** BAP IR.
@@ -5214,7 +5214,7 @@ module Std : sig
     val elements : ('a t -> 'a seq) ranged
 
     (** [pp printer] - creates a printer for table from value printer *)
-    val pp : 'a printer -> 'a t printer
+    val pp : (Format.formatter -> 'a -> unit) -> (Format.formatter -> 'a t -> unit)
   end
 
   (** A locations of a chunk of memory  *)
@@ -5687,7 +5687,7 @@ module Std : sig
     include Container.S1 with type 'a t := 'a t
 
     (** [pp pp_elem] constracts a printer for a memmap to the given element. *)
-    val pp : 'a printer -> 'a t printer
+    val pp : (Format.formatter -> 'a -> unit) -> (Format.formatter -> 'a t -> unit)
   end
 
   (** Symbolizer defines a method for assigning symbolic names to addresses  *)
@@ -6321,7 +6321,7 @@ module Std : sig
 
     (** [pp_adt] prints instruction in ADT format, suitable for reading
         by evaluating in many languages, e.g. Python, Js, etc *)
-    val pp_adt : t printer
+    val pp_adt : Format.formatter -> t -> unit
 
     (** {3 Prefix Tree}
         This module provides a trie data structure where a sequence of
@@ -8206,10 +8206,10 @@ module Std : sig
     include S with type ('a,'e) state = ('a,'e) Monad.State.t
 
     (** print a set of taints  *)
-    val pp_set : set printer
+    val pp_set : Format.formatter -> set -> unit
 
     (** print a taint map  *)
-    val pp_map : map printer
+    val pp_map : Format.formatter -> map -> unit
 
     module Map : Regular.S with type t = map
   end [@@deprecated "[since 2018-03] use the Bap Taint Framework instead"]
@@ -9052,7 +9052,7 @@ module Std : sig
           value for the ['a] type. *)
       type 'a converter
 
-      val converter : 'a parser -> 'a printer -> 'a -> 'a converter
+      val converter : 'a parser -> (Format.formatter -> 'a -> unit) -> 'a -> 'a converter
 
       (** Default deprecation warning message, for easy deprecation of
           parameters. *)

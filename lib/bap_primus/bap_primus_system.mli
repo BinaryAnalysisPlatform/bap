@@ -64,6 +64,7 @@ module Generic(Machine : Bap_primus_types.Machine) : sig
     ?envp:string array ->
     ?args:string array ->
     ?init:unit Machine.t ->
+    ?fini:unit Machine.t ->
     ?start:unit Machine.t ->
     t -> project -> (exit_status * project) Machine.m
 end
@@ -72,6 +73,7 @@ val run :
   ?envp:string array ->
   ?args:string array ->
   ?init:unit Bap_primus_machine.Make(Knowledge).t ->
+  ?fini:unit Bap_primus_machine.Make(Knowledge).t ->
   ?start:unit Bap_primus_machine.Make(Knowledge).t ->
   t -> project -> Knowledge.state ->
   (exit_status * project * Knowledge.state, Knowledge.conflict) result
@@ -98,6 +100,7 @@ module Jobs : sig
     ?envp:string array ->
     ?args:string array ->
     ?init:unit Bap_primus_machine.Make(Knowledge).t ->
+    ?fini:unit Bap_primus_machine.Make(Knowledge).t ->
     ?start:unit Bap_primus_machine.Make(Knowledge).t ->
     system -> unit
   val pending : unit -> int

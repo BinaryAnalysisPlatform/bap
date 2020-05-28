@@ -17,7 +17,12 @@ let () = Exn.add_printer (function
               Addr.pp_hex here)
     | _ -> None)
 
-type dynamic = {base : addr; len : int; value : Generator.t }
+type dynamic = {
+  lower : addr;
+  upper : addr;
+  value : Generator.t
+}
+
 type region =
   | Dynamic of dynamic
   | Static  of mem
@@ -45,8 +50,8 @@ module Descriptor = struct
     create addr_size data_size "unknown"
 
   let name d = d.name
-
-
+  let addr_size d = d.addr
+  let data_size d = d.size
   include Comparable.Make(struct
       type t = memory [@@deriving bin_io, compare, sexp]
     end)
@@ -62,15 +67,13 @@ type t = {
   mems : state Descriptor.Map.t
 }
 
-let zero = Word.of_int ~width:8 0
-
 let sexp_of_word w = Sexp.Atom (asprintf "%a" Word.pp_hex w)
 
-let sexp_of_dynamic {base; len; value} =
+let sexp_of_dynamic {lower; upper; value} =
   Sexp.(List [
       Sexp.Atom "dynamic";
-      sexp_of_word base;
-      sexp_of_int len;
+      sexp_of_word lower;
+      sexp_of_word upper;
       Generator.sexp_of_t value])
 
 let sexp_of_mem mem = Sexp.List [
@@ -107,6 +110,17 @@ let inspect_memory {curr; mems} = Sexp.List [
     Descriptor.Map.sexp_of_t inspect_state mems;
   ]
 
+let inspect_generated (ptr,x) = Sexp.List [
+    sexp_of_addr ptr;
+    sexp_of_value x;
+  ]
+
+
+let generated,on_generated =
+  Bap_primus_observation.provide "load-generated"
+    ~inspect:inspect_generated
+    ~package:"bap"
+
 
 let virtual_memory arch =
   let module Target = (val target_of_arch arch) in
@@ -128,11 +142,10 @@ let state = Bap_primus_machine.State.declare
     curr = virtual_memory (Project.arch p);
   }
 
-let inside {base;len} addr =
-  let high = Word.(base ++ len) in
-  if Addr.(high < base)
-  then Addr.(addr >= base) || Addr.(addr < high)
-  else Addr.(addr >= base) && Addr.(addr < high)
+let inside {lower; upper} addr =
+  if Addr.(lower <= upper)
+  then Addr.(addr >= lower) && Addr.(addr <= upper)
+  else Addr.(addr >= upper) || Addr.(addr <= lower)
 
 let find_layer addr = List.find ~f:(function
     | {mem=Dynamic mem} -> inside mem addr
@@ -219,26 +232,50 @@ module Make(Machine : Machine) = struct
     if size >= 8 then read start size
     else read_small mem base size
 
-  let remembered {values; layers} addr value =
-    put_curr {
-      layers;
-      values = Map.set values ~key:addr ~data:value;
-    } >>| fun () ->
-    value
+  let store_word arch bytesize ~addr word values =
+    let bytes = (Word.bitwidth word + bytesize - 1) / bytesize in
+    let bite x = Word.extract_exn ~hi:(bytesize-1) x in
+    let shift = let bits = Word.of_int ~width:8 bytesize in
+      fun x -> Word.lshift x bits in
+    let addr,next = match Arch.endian arch with
+      | LittleEndian -> addr,Addr.succ
+      | BigEndian -> Addr.nsucc addr (bytes-1),Addr.pred in
+    let notify_if_generated key x values =
+      if not (Map.mem values key)
+      then Machine.Observation.make on_generated (key,x)
+      else Machine.return () in
+    let rec loop written ~key word values =
+      if written < bytes then
+        Value.of_word (bite word) >>= fun data ->
+        notify_if_generated key data values >>= fun () ->
+        loop
+          (written+1)
+          ~key:(next key)
+          (shift word)
+          (Map.update values key ~f:(function
+               | None -> data
+               | Some data -> data))
+      else Machine.return values in
+    loop 0 ~key:addr word values
 
+  let remembered {values; layers} addr word =
+    memory >>= fun {size} ->
+    Machine.gets Project.arch >>= fun arch ->
+    store_word arch size addr word values >>= fun values ->
+    put_curr {layers; values} >>| fun () ->
+    Map.find_exn values addr
 
   let read addr {values;layers} = match find_layer addr layers with
     | None -> pagefault addr
     | Some layer -> match Map.find values addr with
       | Some v -> Machine.return v
       | None ->
-        let read_value =
-          memory >>= fun {size} ->
-          match layer.mem with
-          | Dynamic {value} ->
-            Generate.next value >>= Value.of_int ~width:8
-          | Static mem -> Value.of_word (read_word mem addr size) in
-        read_value >>= remembered {values; layers} addr
+        memory >>= fun {size} ->
+        match layer.mem with
+        | Static mem -> Value.of_word (read_word mem addr size)
+        | Dynamic {value=g} ->
+          Generate.word g (Generator.width g) >>=
+          remembered {values; layers} addr
 
   let write addr value {values;layers} =
     match find_layer addr layers with
@@ -249,33 +286,46 @@ module Make(Machine : Machine) = struct
         values = Map.set values ~key:addr ~data:value;
       }
 
+
   let add_layer layer t = {t with layers = layer :: t.layers}
   let (++) = add_layer
 
-  let initialize values base len f =
-    Machine.Seq.fold (Seq.range 0 len) ~init:values ~f:(fun values i ->
-        let addr = Addr.(base ++ i) in
-        f addr >>= fun data ->
-        Value.of_word data >>| fun data ->
-        Map.set values ~key:addr ~data)
+  let initialize values lower upper f =
+    let rec loop values addr =
+      if addr < upper
+      then f addr >>= fun data ->
+        Value.of_word data >>= fun data ->
+        loop (Map.set values ~key:addr ~data) (Addr.succ addr)
+      else Machine.return values in
+    loop values lower
 
-
-
-  let allocate
+  let add_region
       ?(readonly=false)
       ?(executable=false)
       ?init
-      ?(generator=Generator.Random.Seeded.byte)
-      base len =
+      ?generator
+      ~lower ~upper () =
+    Machine.gets Project.arch >>= fun arch ->
+    let width = Arch.addr_size arch |> Size.in_bits in
     get_curr >>| add_layer {
       perms={readonly; executable};
-      mem = Dynamic {base;len; value=generator}
+      mem = Dynamic {lower;upper; value = match generator with
+          | Some g -> g
+          | None -> Generator.Random.Seeded.lcg ~width ()}
     } >>= fun s ->
     match init with
     | None -> put_curr s
     | Some f ->
-      initialize s.values base len f >>= fun values ->
+      initialize s.values lower upper f >>= fun values ->
       put_curr {s with values}
+
+
+  let allocate
+      ?readonly ?executable ?init ?generator base len =
+    add_region ()
+      ?readonly ?executable ?init ?generator
+      ~lower:base
+      ~upper:(Addr.nsucc base (len-1))
 
   let map ?(readonly=false) ?(executable=false) mem =
     update state @@ add_layer ({mem=Static mem; perms={readonly; executable}})
@@ -289,6 +339,11 @@ module Make(Machine : Machine) = struct
     get_curr >>=
     write addr value >>=
     put_curr
+
+  let del addr = update state @@ fun s -> {
+      s with values = Map.remove s.values addr
+    }
+
 
   let load addr = get addr >>| Value.to_word
   let store addr value = Value.of_word value >>= set addr

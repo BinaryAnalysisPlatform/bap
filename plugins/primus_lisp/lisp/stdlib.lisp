@@ -29,14 +29,6 @@
   (declare (external "atexit"))
   0)
 
-
-(defun stub ()
-  "stubs that does nothing"
-  (declare (external
-            "setlocale"
-            "bindtextdomain"
-            "textdomain"
-            "__cxa_atexit"
-            "__ctype_get_mb_cur_max"
-            "__ctype_b_loc"
-            "__do_global_dtors_aux")))
+(defun abs (x)
+  (declare (external "abs"))
+  (if (is-negative x) (neg x) x))

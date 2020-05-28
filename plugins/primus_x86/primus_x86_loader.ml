@@ -79,18 +79,31 @@ module SetupPLT(Machine : Primus.Machine.S) = struct
 
 end
 
-module InitializeFlags(Machine : Primus.Machine.S) = struct
+module InitializeRegisters(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
   module Env = Primus.Env.Make(Machine)
 
+  let registers (module Vars : X86_env.ModeVars) = Vars.[
+      gdt;
+      ldt;
+      fs_base;
+      gs_base;
+    ] @ Array.to_list Vars.ymms
+
   let zero = Primus.Generator.static 0
 
-  let initialize_flags flags =
-    Machine.Seq.iter (Set.to_sequence flags) ~f:(fun reg ->
+  let initialize vars flags =
+    let registers = registers vars in
+    Seq.append (Seq.of_list registers) (Set.to_sequence flags) |>
+    Machine.Seq.iter ~f:(fun reg ->
         Env.add reg zero)
+
   let init () =
     Machine.gets Project.arch >>= function
-    | `x86 -> initialize_flags IA32.flags
-    | `x86_64 -> initialize_flags AMD64.flags
+    | `x86 -> initialize (module X86_env.R32) IA32.flags
+    | `x86_64 -> initialize (module X86_env.R64) AMD64.flags
     | _ -> Machine.return ()
+end
+
+module InitializeSpecialRegisters(Machine : Primus.Machine.S) = struct
 end

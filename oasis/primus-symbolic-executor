@@ -1,0 +1,17 @@
+Flag primus_symbolic_executor
+  Description: Build Primus Symbolic Executor
+  Default: false
+
+
+Library primus_symbolic_executor_plugin
+  Build$:       flag(everything) || flag(primus_symbolic_executor)
+  Path:         plugins/primus_symbolic_executor
+  BuildDepends: bap-primus, bap, core_kernel, bitvec, ppx_jane,
+                zarith, z3, regular, bap-main, monads,
+                bap-primus-track-visited
+  FindlibName:     bap-plugin-primus_symbolic_executor
+  CompiledObject:  best
+  InternalModules: Primus_symbolic_executor_main
+  XMETADescription: Enables symbolic execution in Primus
+  DataFiles:        lisp/*.lisp ($primus_symbolic_executor_lisp_path)
+  XMETAExtraLines:  tags="primus, lisp"

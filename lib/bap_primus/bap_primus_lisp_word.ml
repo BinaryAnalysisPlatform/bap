@@ -8,13 +8,13 @@ type t = word [@@deriving compare]
 type read_error = Empty | Not_an_int | Unclosed | Bad_literal | Bad_type
 
 let char_of_string s =
-  try Ok Char.(Int64.of_int @@ to_int @@ of_string s)
+  try Ok Char.(Z.of_int @@ to_int @@ of_string s)
   with _ -> Error Bad_literal
 
 let read_char str = char_of_string (String.subo ~pos:1 str)
 
 let read_int str =
-  try Ok (Int64.of_string (String.strip str))
+  try Ok (Z.of_string (String.strip str))
   with _ -> Error Bad_literal
 
 let char id eq s =
@@ -43,7 +43,7 @@ let read id eq x =
     | _ -> Error Bad_literal
   else Error Not_an_int
 
-let sexp_of_word {data={exp}} = sexp_of_int64 exp
+let sexp_of_word {data={exp}} = Sexp.Atom (Z.to_string exp)
 let sexp_of_t = sexp_of_word
 
 include Comparable.Make_plain(struct

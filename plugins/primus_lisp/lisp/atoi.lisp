@@ -5,7 +5,7 @@
   (while (pred (memory-read s)) (incr s)))
 
 (defun atoi-prefix (s)
-  (or (ascii-special s) (ascii-whitespace s)))
+  (or (ascii-is-special s) (ascii-is-whitespace s)))
 
 (defun atoi-read-digit (s)
   (cast ptr_t (- (memory-read s) ?0)))
@@ -14,7 +14,7 @@
   (skip-all atoi-prefix s)
   (let ((v 0)
         (sign (ascii-sign (memory-read s))))
-    (while (ascii-digit (memory-read s))
+    (while (ascii-is-digit (memory-read s))
       (set v (+ (* v 10) (atoi-read-digit s)))
       (incr s))
     (* sign v)))

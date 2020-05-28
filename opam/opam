@@ -31,6 +31,7 @@ depends: [
   "conf-bap-llvm" {>= "1.1"}
   "parsexp"
   "bap-signatures"
+  "z3"
   "result" {= "1.4"}
 ]
 depopts: ["conf-ida" "conf-binutils"]
@@ -88,6 +89,7 @@ install: [
   ["ocamlfind" "remove" "bap-plugin-relocatable"]
   ["ocamlfind" "remove" "bap-plugin-emit_ida_script"]
   ["ocamlfind" "remove" "bap-plugin-ida"]
+  ["ocamlfind" "remove" "bap-plugin-glibc_runtime"]
   ["ocamlfind" "remove" "bap-plugin-objdump"]
   ["ocamlfind" "remove" "bap-plugin-llvm"]
   ["ocamlfind" "remove" "bap-plugin-legacy_llvm"]
@@ -102,6 +104,7 @@ install: [
   ["ocamlfind" "remove" "bap-plugin-primus_limit"]
   ["ocamlfind" "remove" "bap-plugin-primus_print"]
   ["ocamlfind" "remove" "bap-plugin-primus_region"]
+  ["ocamlfind" "remove" "bap-plugin-primus_random"]
   ["ocamlfind" "remove" "bap-plugin-primus_systems"]
   ["ocamlfind" "remove" "bap-plugin-primus_taint"]
   ["ocamlfind" "remove" "bap-plugin-primus_test"]
@@ -197,6 +200,7 @@ remove: [
   ["ocamlfind" "remove" "bap-plugin-relocatable"]
   ["ocamlfind" "remove" "bap-plugin-emit_ida_script"]
   ["ocamlfind" "remove" "bap-plugin-ida"]
+  ["ocamlfind" "remove" "bap-plugin-glibc_runtime"]
   ["ocamlfind" "remove" "bap-plugin-objdump"]
   ["ocamlfind" "remove" "bap-plugin-llvm"]
   ["ocamlfind" "remove" "bap-plugin-legacy_llvm"]
@@ -212,6 +216,7 @@ remove: [
   ["ocamlfind" "remove" "bap-plugin-primus_limit"]
   ["ocamlfind" "remove" "bap-plugin-primus_print"]
   ["ocamlfind" "remove" "bap-plugin-primus_region"]
+  ["ocamlfind" "remove" "bap-plugin-primus_random"]
   ["ocamlfind" "remove" "bap-plugin-primus_systems"]
   ["ocamlfind" "remove" "bap-plugin-primus_taint"]
   ["ocamlfind" "remove" "bap-plugin-primus_test"]

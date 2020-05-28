@@ -301,5 +301,5 @@ module Cmdline = struct
         match Info.create ida_path is_headless with
         | Ok info -> Bap_ida_service.register info !mode; main ()
         | Error e ->
-          error "%S. Service not registered." (Error.to_string_hum e))
+          warning "%S. Service not registered." (Error.to_string_hum e))
 end

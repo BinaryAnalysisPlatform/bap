@@ -3,8 +3,6 @@
 (defmethod call (name ptr)
   (when (and ptr (= name 'free)
              (not (= ptr *malloc-zero-sentinel*)))
-    (unless (memcheck-is-tracked 'malloc ptr)
-      (memcheck-acquire 'malloc ptr 1))
     (memcheck-release 'malloc ptr)))
 
 (defmethod loaded (ptr)
@@ -19,8 +17,13 @@
 
 
 (defmethod call (name dst src len)
-  (when (is-in name 'strncpy 'memmove 'memcpy 'memcmp 'strncmp)
+  (when (is-in name 'memmove 'memcpy 'memcmp)
     (check/both dst src len)))
+
+(defmethod call (name dst src len)
+  (when (is-in name 'strncpy 'strncmp)
+    (check/strn* dst len)
+    (check/strn* src len)))
 
 (defmethod call (name dst src c len)
   (when (= name 'memccpy)
@@ -37,3 +40,6 @@
 (defun check/both (dst src len)
   (memcheck-bounds 'malloc src len)
   (memcheck-bounds 'malloc dst len))
+
+(defun check/strn* (str len)
+  (memcheck-bounds 'malloc str (min len (strlen str))))

@@ -29,25 +29,29 @@ module Param = struct
       ~doc:"Program environemt as a comma separated list of VAR=VAL pairs";;
 
   let entry = param (list string) "entry-points"
-      ~doc:"Can be a list of entry points or a special keyword
-      $(b,all-subroutines) or $(b,marked-subroutines). An entry point
-      is either a string denoting a function name, a tid starting with
-      the $(b,%) percent, or an address in a hexadecimal format
-      prefixed with $(b,0x).  When the option is specified, the Primus
-      Machine will start the execution from the specified entry
-      point(s). Otherwise the execution will be started from all
-      program terms that are marked with the [entry_point]
-      attribute. If there are several entry points, then the execution
-      will be started from all of them in parallel, i.e., by forking
-      the machine and starting each machine from its own entry
-      point. Consider enabling corresponding scheduler. If neither the
+
+      ~doc:"Can be a list of $(i,entry points) or one of the following
+      keywords: $(b,all-subroutines), $(b,marked-subroutines),
+      $(b,only-queue). An $(i,entry point) is either a string denoting
+      a function name, a tid starting with the $(b,%) (percent)
+      symbol, or an address in a hexadecimal format prefixed with
+      $(b,0x).  When the option is specified, the Primus Machine will
+      start the execution from the specified entry point(s). Otherwise
+      the execution will be started from all program terms that are
+      marked with the [entry_point] attribute. If there are several
+      entry points, then they will be executed each in a separate
+      machine or, if $(b,--run-in-separation) is specified, in a
+      separate system.  In case when each entry point is run in a
+      separate machine it is necessary to add a scheduler component to
+      the system that is used to run the entry point. If neither the
       argument nor there any entry points in the program, then a
       function called $(b,_start) is called. If $(b,all-subroutines)
-      are specified then Primus will execute all subroutines in
-      the topological order. If $(b,marked-subroutines) is specified,
-      then Primus will execute the specified systems on all
-      subroutines that has the $(b,mark) attribute."
-
+      are specified then Primus will execute all subroutines in the
+      topological order. If $(b,marked-subroutines) is specified, then
+      Primus will execute the specified systems on all subroutines
+      that has the $(b,mark) attribute. If the $(b,only-queue) is
+      specified, then only jobs already queued in the Primus Job Queue
+      will be run and no entry points will be searched in the project."
 
   let in_isolation = flag "in-isolation"
       ~doc:"Run each entry point as new system.
@@ -74,6 +78,13 @@ module Param = struct
       ~doc:"Runs the specified Primus systems. If several systems \
             are specified then runs all entry points for each \
             specified system."
+
+  let until_visited = flag "until-visited-all"
+      ~doc:"Runs Primus until all subroutines and blocks are visited.
+      When this mode is enabled and run plugin finishes it finds
+      the first unvisited subroutine (or if no such found the first
+      unvisited block) and spawns a new system with it as an entry
+      point. This continues until there are no more unvisited blocks."
 end
 
 let pp_id = Monad.State.Multi.Id.pp
@@ -158,11 +169,12 @@ let parse_entry_points proj entry =
   | [] -> List.(entry_points prog >>| fun x -> `tid x)
   | xs -> List.(xs >>| name_of_entry (Project.arch proj))
 
-let parse_entry_points proj entries =
-  match entries,parse_entry_points proj entries with
-  | ["marked-subroutines"],[] -> []
-  | _,[] -> [`symbol "_start"]
-  | _,xs -> xs
+let parse_entry_points proj entries = match entries with
+  | ["only-queue"] -> []
+  | _ -> match entries,parse_entry_points proj entries with
+    | ["marked-subroutines"],[] -> []
+    | _,[] -> [`symbol "_start"]
+    | _,xs -> xs
 
 let exec x =
   Machine.current () >>= fun cid ->
@@ -238,6 +250,7 @@ let is_visited proj = function
       | None -> true
       | Some blk -> Term.has_attr blk Term.visited
 
+
 let enqueue_separate_jobs need_repeat envp args sys xs =
   List.iter xs ~f:(fun p ->
       Primus.Jobs.enqueue sys
@@ -250,38 +263,89 @@ let enqueue_separate_jobs need_repeat envp args sys xs =
           else exec p
         end)
 
-let update_progress result =
-  let finished = List.length@@Primus.Jobs.finished result in
-  let total = finished + Primus.Jobs.pending () + 1 in
-  report_progress ~stage:finished ~total ()
+let finished = ref 0
+let total = ref 0
 
-let on_success job _ _ result : Primus.Jobs.action =
-  info "job %s finished successfully" (Primus.Job.name job);
+let update_progress result =
+  finished := List.length (Primus.Jobs.finished result) + !finished;
+  let total = !finished + Primus.Jobs.pending () + 1 in
+  report_progress ~stage:!finished ~total ()
+
+let on_success job status _ result : Primus.Jobs.action =
   update_progress result;
-  Continue
+  match status with
+  | Primus.Normal | Exn Primus.Interpreter.Halt ->
+    info "The job `%s' finished successfully" (Primus.Job.name job);
+    Continue
+  | Primus.Exn e ->
+    error "The job `%s' finished abnormally with an exception:@\n%s"
+      (Primus.Job.name job)
+      (Primus.Exn.to_string e);
+    Continue
 
 let on_failure job conflict result : Primus.Jobs.action =
-  info "job %s failed to converge and exited with conflict: %a"
+  info "The job `%s' failed to converge and exited with conflict: %a"
     (Primus.Job.name job) Knowledge.Conflict.pp conflict;
   update_progress result;
   Continue
 
+let find_first_unvisited_sub prog =
+  Term.enum sub_t prog |>
+  Seq.find ~f:(fun sub -> match Term.first blk_t sub with
+      | None -> false
+      | Some blk -> not (Term.has_attr blk Term.visited))
+
+let find_first_unvisited_blk prog =
+  Term.enum sub_t prog |>
+  Seq.find_map ~f:(fun sub ->
+      Graphlib.reverse_postorder_traverse (module Graphs.Ir)
+        (Sub.to_cfg sub) |>
+      Seq.find_map ~f:(fun blk ->
+          let blk = Graphs.Ir.Node.label blk in
+          if not (Term.has_attr blk Term.visited)
+          then Some blk
+          else None))
+
 let main {Config.get=(!)} proj =
   let open Param in
   let state = Toplevel.current () in
+  let run_until_visited = !until_visited in
   let enqueue_jobs = if !in_isolation
     then enqueue_separate_jobs else enqueue_super_job in
   let inputs = parse_entry_points proj !entry in
-  List.concat !systems |> List.iter ~f:(fun sys ->
-      let name = Knowledge.Name.read sys in
-      match Primus.System.Repository.find name with
-      | None -> invalid_argf "Unknown system: %s" sys ()
-      | Some sys ->
-        enqueue_jobs !with_repetitions !envp !argv sys inputs) ;
+  let systems =
+    List.concat !systems |> List.map ~f:(fun sys ->
+        let name = Knowledge.Name.read sys in
+        match Primus.System.Repository.find name with
+        | None -> invalid_argf "Unknown system: %s" sys ()
+        | Some sys -> sys) in
+  List.iter systems ~f:(fun sys ->
+      enqueue_jobs !with_repetitions !envp !argv sys inputs) ;
   report_progress ~total:(Primus.Jobs.pending ()) ();
-  let result = Primus.Jobs.run ~on_failure ~on_success proj state in
-  Toplevel.set (Primus.Jobs.knowledge result);
-  Primus.Jobs.project result
+  let enqueue_term p =
+    let p = `tid (Term.tid p) in
+    List.iter systems ~f:(fun sys ->
+        Primus.Jobs.enqueue sys
+          ~args:!argv ~envp:!envp
+          ~name:(Primus.Linker.Name.to_string p)
+          ~start:(exec p)) in
+  let rec run proj state =
+    let result = Primus.Jobs.run ~on_failure ~on_success proj state in
+    let state = Primus.Jobs.knowledge result in
+    Toplevel.set state;
+    let proj = Primus.Jobs.project result in
+    let prog = Project.program proj in
+    if run_until_visited
+    then match find_first_unvisited_sub prog with
+      | Some sub ->
+        enqueue_term sub; run proj state
+      | None -> match find_first_unvisited_blk prog with
+        | Some blk ->
+          enqueue_term blk;
+          run proj state
+        | None -> proj
+    else proj in
+  run proj state
 
 let deps = [
   "trivial-condition-form"

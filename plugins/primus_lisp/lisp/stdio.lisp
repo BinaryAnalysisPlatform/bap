@@ -16,19 +16,31 @@
   (while (not (points-to-null p))
     (fputc (cast int (memory-read p)) stream)
     (incr p))
-  (fputc 0xA stream))
+  (let ((r (fputc 0xA stream)))
+    (fflush stream)
+    r))
 
 (defun puts (p)
   (declare (external "puts"))
   (fputs p *standard-output*))
+
+(defun fflush (s)
+  (declare (external "fflush"))
+  (channel-flush s))
+
 
 
 ;; the channel module have rough equality between streams and
 ;; file descriptors, as they both are represented as integers. We are currently
 ;; ignoring modes, we will add them later, of course.
 (defun fopen (path mode)
-  (declare (external "fopen" "open"))
+  (declare (external "fopen" "open" "fdopen"))
   (channel-open path))
+
+(defun fileno (stream)
+  (declare (external "fileno"))
+  stream)
+
 
 (defun open3 (path flags mode)
   (declare (external "open"))
@@ -62,7 +74,7 @@
     (or failure written)))
 
 (defun input-item-nth-char (ptr size item desc i)
-  (let ((c (channel-input desc)))
+  (let ((c (fgetc desc)))
     (if (= c -1) 0
       (memory-write (+ ptr (* size item) i) (cast char c))
       1)))
@@ -89,22 +101,31 @@
 
 (defun fgetc (stream)
   (declare (external "fgetc" "getc"))
+  (msg "the concrete fgets is called")
   (channel-input stream))
 
-(defun fgets-step (ptr len str i)
-  (let ((c (channel-input str)))
-    (if (= c -1) 0
-      (memory-write (+ ptr i) (cast char c))
-      (not (= c 0xA:8)))))
+(defun terminate-string-and-return-null (ptr)
+  (memory-write ptr 0:8)
+  0)
 
 (defun fgets (ptr len str)
   (declare (external "fgets"))
-  (let ((i 0))
-    (while (and (< i len)
-                (fgets-step ptr len str i))
-      (incr i))
-    (memory-write (+ ptr (min (-1 len) (+ ptr i))) 0:8)
-    ptr))
+  (if (= len 0) (terminate-string-and-return-null ptr)
+    (let ((i 0)
+          (n (-1 len))
+          (continue true))
+      (while (and continue (< i n))
+        (let ((c (fgetc str)))
+          (if (= c -1)
+              (set continue false)
+            (memory-write (+ ptr i) (cast char c))
+            (set continue (/= c 0xA:8))
+            (incr i))))
+      (if (= i 0)
+          (terminate-string-and-return-null ptr)
+      (memory-write (+ ptr (min n i)) 0:8)
+      ptr))))
+
 
 (defun getchar ()
   (declare (external "getchar"))

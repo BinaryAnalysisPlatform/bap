@@ -6,62 +6,84 @@ open Bap_primus_generator_types
 
 module Iterator = Bap_primus_iterator
 
+type 'a iface =
+  (module Iterator.Infinite.S with type dom = Bitvec.t
+                               and type t = 'a)
 
-let uniform_coverage ~total ~trials =
-  ~-.(Float.expm1 (float trials *. Float.log1p( ~-.(1. /. float total))))
+type iterator = Iter : {
+    ctrl : 'a iface;
+    self : 'a;
+    seed : int -> 'a
+  } -> iterator
 
-
-
-let generators : Univ_map.t state = Bap_primus_machine.State.declare
-    ~name:"rng-states"
-    ~uuid:"7e81d5ae-46a2-42ff-918f-96c0c2dc95e3"
-    (fun _ -> Univ_map.empty)
-
-module States = Univ_map
-
-module type Iter =
-  Iterator.Infinite.S with type dom = int
-
-type 'a iter = (module Iter with type t = 'a)
-
-type 'a gen = {
-  iter : 'a iter;
-  self : 'a;
+type iterators = {
+  iterators : iterator Int.Map.t;
+  salt : int;
 }
 
-type 'a key = 'a gen States.Key.t
+let iterators = Bap_primus_machine.State.declare
+    ~name:"iterators"
+    ~uuid:"9927004d-fe57-4de9-8705-c3d6862238cf" @@ fun _ -> {
+    iterators = Int.Map.empty;
+    salt = 1;
+  }
 
-type 'a ready = {
-  key : 'a key;
-  gen : 'a gen;
+type constructor =
+  | Const of iterator
+  | Seeded of (int -> iterator)
+
+type t = {
+  size : int;
+  init : constructor;
+  id : int;
 }
 
-type 'a wait = {
-  key : 'a key;
-  init : int -> 'a gen
-}
+let last_id = ref 0
 
-type t =
-  | Static : int -> t
-  | Ready : 'a ready -> t
-  | Wait : 'a wait -> t
+let width x = x.size
+let sexp_of_t {id} = Sexp.List [
+    Atom "generator";
+    sexp_of_int id;
+  ]
 
-let rec sexp_of_t = function
-  | Static x -> Sexp.(List [Atom "static"; sexp_of_int x])
-  | _ -> Sexp.Atom "<generator>"
+let of_iterator (type dom) (type t)
+    ?(width=8)
+    ?seed
+    ~to_bitvec
+    (module Iter : Iterator.Infinite.S
+      with type t = t
+       and type dom = dom) self =
+  incr last_id;
+  let module Iface = struct
+    type t = Iter.t
+    type dom = Bitvec.t
+    let min = to_bitvec Iter.min
+    let max = to_bitvec Iter.max
+    let value self = to_bitvec @@ Iter.value self
+    let next self = Iter.next self
+  end in {
+    size=width;
+    id = !last_id;
+    init = Const (Iter {
+        ctrl = (module Iface);
+        self;
+        seed = match seed with
+          | Some seed -> seed
+          | None -> fun _ -> self
+      })
+  }
 
-let make key init iter = Ready {key; gen={iter; self=init}}
-
-let create iter init =
-  let state = States.Key.create
-      ~name:"rng-state" sexp_of_opaque in
-  make state init iter
+let create ?(width=8) iter init =
+  let m = Bitvec.modulus width in
+  of_iterator ~width iter init
+    ~to_bitvec:(fun x -> Bitvec.(int x mod m))
 
 let unfold (type gen)
+    ?width
     ?(min=Int.min_value)
     ?(max=Int.max_value)
     ?(seed=0)
-    ~f init  =
+    ~f init =
   let module Gen = struct
     type t = gen * int
     type dom = int
@@ -70,61 +92,43 @@ let unfold (type gen)
     let next = f
     let value = snd
   end in
-  create (module Gen) (init,seed)
+  create ?width (module Gen) (init,seed)
 
-let static value = Static value
+let static ?(width=8) value =
+  let value = Bitvec.(int value mod modulus width) in
+  of_iterator ~width ~to_bitvec:ident (module struct
+    type t = Bitvec.t
+    type dom = Bitvec.t
+    let min = value
+    let max = value
+    let next _ = value
+    let value _ = value
+  end) value
 
 
 module Random = struct
-  open Bap_primus_random
+  module MCG = Bap_primus_random.MCG
+  let create_lcg ?(width=8) ?min ?max start =
+    let module Gen = (val MCG.create_small ?min ?max width) in
+    let seed s = Gen.create (s + start) in
+    of_iterator ~width ~to_bitvec:ident ~seed
+      (module Gen) (Gen.create start)
 
-  let lcg_key : (LCG.t * int) gen States.Key.t =
-    States.Key.create ~name:"linear-congruent-generator"
-      sexp_of_opaque
-
-  let lcg ?(min=LCG.min) ?(max=LCG.max) seed =
-    let next (gen,_) =
-      let gen = LCG.next gen in
-      let x = min + LCG.value gen mod (max-min+1) in
-      gen,x in
-    let value = snd in
-    let init = next (LCG.create seed,0) in
-    make lcg_key init (module struct
-      type t = LCG.t * int
-      type dom = int
-      let min = min
-      let max = max
-      let next = next
-      let value = value
-    end)
-
+  let lcg = create_lcg
   let byte seed = lcg ~min:0 ~max:255 seed
 
-  let cast_gen : type a b. a key -> b ready -> a gen option =
-    fun k1 {key=k2; gen} -> match States.Key.same_witness k1 k2 with
-      | None -> None
-      | Some Type_equal.T -> Some gen
-
-
   module Seeded = struct
-    let unpack_make key make =
-      let init seed  = match make seed with
-        | Wait _
-        | Static _ -> failwith "Generator.Seeded: invalid initializer"
-        | Ready g -> match cast_gen key g with
-          | Some g -> g
-          | None -> invalid_arg "Seeded.create changed its type" in
-      Wait {key; init}
+    let create ?(width=8) init =
+      incr last_id;
+      let init seed = match init seed with
+        | {init=Const iter} -> iter
+        | {init=Seeded init} -> init seed in
+      {size=width; init = Seeded init; id = !last_id}
 
-    let create make = match make 0 with
-      | Ready {key} -> unpack_make key make
-      | _ -> invalid_arg "Seeded.create must always create \
-                          an iterator of the same type"
+    let lcg ?width ?min ?max () =
+      create_lcg ?width ?min ?max 0
 
-    let lcg ?min ?max () = unpack_make lcg_key (fun seed ->
-        lcg ?min ?max seed)
-
-    let byte = lcg ~min:0 ~max:255 ()
+    let byte = lcg ()
   end
 end
 
@@ -132,37 +136,51 @@ end
 module Make(Machine : Machine) = struct
   open Machine.Syntax
 
-  let call (type a) (state : a key) ({iter; self} : a gen) =
-    let module Iter : Iter with type t = a = (val iter) in
-    Machine.Local.get generators >>= fun states ->
-    let self = match States.find states state with
-      | None -> self
-      | Some {self} -> self in
-    let iter = {
-      iter;
-      self = Iter.next self;
-    } in
-    let states = States.set states state iter in
-    Machine.Local.put generators states >>| fun () ->
-    Iter.value iter.self
+  let rec call gen =
+    Machine.Local.get iterators >>= fun {iterators=iters; salt} ->
+    match Map.find iters gen.id with
+    | Some Iter {ctrl=(module Iter); self; seed} ->
+      let value = Iter.value self in
+      let next = Iter {
+          ctrl = (module Iter);
+          self = Iter.next self;
+          seed
+        } in
+      Machine.Local.put iterators {
+        iterators = Map.set iters gen.id next;
+        salt;
+      } >>| fun () ->
+      value
+    | None ->
+      Machine.current () >>= fun id ->
+      let seed = Machine.Id.hash id + salt in
+      match gen.init with
+      | Const Iter it ->
+        let iter = Iter {it with self = it.seed seed} in
+        Machine.Local.put iterators {
+          iterators = Map.set iters gen.id iter;
+          salt = salt + 1;
+        } >>= fun () ->
+        call gen
+      | Seeded init ->
+        Machine.Local.put iterators {
+          iterators = Map.set iters gen.id (init seed);
+          salt;
+        } >>= fun () ->
+        call gen
 
-  let rec next = function
-    | Static n -> Machine.return n
-    | Ready {key; gen} -> call key gen
-    | Wait {key; init} ->
-      Machine.Local.get generators >>= fun states ->
-      match States.find states key with
-      | None ->
-        Machine.current () >>= fun id ->
-        call key (init (Machine.Id.hash id))
-      | Some iter -> call key iter
+  let next gen = call gen >>| fun x ->
+    if Bitvec.fits_int x
+    then Bitvec.to_int x
+    else Int.max_value
 
   let word gen width =
-    let word = Word.of_int ~width:8 in
-    assert (width > 0);
-    let rec loop x =
-      if Word.bitwidth x >= width
-      then Machine.return (Word.extract_exn ~hi:(width-1) x)
-      else next gen >>= fun y -> loop (Word.concat x (word y)) in
-    next gen >>| word >>= loop
+    let rec loop built x =
+      if built >= width
+      then Machine.return (Word.create x width)
+      else
+        call gen >>= fun y ->
+        loop (built+gen.size) @@
+        Bitvec.append built gen.size x y in
+    call gen >>= loop gen.size
 end

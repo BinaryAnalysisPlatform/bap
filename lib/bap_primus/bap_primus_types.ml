@@ -66,6 +66,7 @@ module type Machine = sig
                                and type 'a e =
                                      ?boot:unit t ->
                                      ?init:unit t ->
+                                     ?fini:unit t ->
                                      (exit_status * project) m effect
   module Local  : State with type 'a m := 'a t
                          and type 'a t := 'a state

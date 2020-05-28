@@ -4,12 +4,12 @@ include Self()
 
 let init _ =
   Primus.Machine.add_component
-    (module Primus_x86_loader.InitializeFlags)
+    (module Primus_x86_loader.InitializeRegisters)
   [@warning "-D"];
   Primus.Components.register_generic
-    ~package:"bap" "x86-flag-initializer"
-    (module Primus_x86_loader.InitializeFlags)
-    ~desc:"Intializes x86 flags to zero.";
+    ~package:"bap" "x86-registers-initializer"
+    (module Primus_x86_loader.InitializeRegisters)
+    ~desc:"Intializes all x86/x86-64 registers to zero.";
 
   Primus.Machine.add_component
     (module Primus_x86_loader.SetupPLT)

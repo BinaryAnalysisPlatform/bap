@@ -49,7 +49,7 @@ module Create(Machine : Primus.Machine.S) = struct
         }) >>| fun () -> reg
 end
 
-module Contains(Machine : Primus.Machine.S) = struct
+module Lower(Machine : Primus.Machine.S) = struct
   include Pre(Machine)
   [@@@warning "-P"]
 
@@ -60,6 +60,33 @@ module Contains(Machine : Primus.Machine.S) = struct
         | Some map -> match Seq.hd (Regions.lookup map addr) with
           | None -> nil
           | Some ({lower},()) -> Machine.return lower)
+end
+
+module Upper(Machine : Primus.Machine.S) = struct
+  include Pre(Machine)
+  [@@@warning "-P"]
+
+  let run [reg; addr] =
+    Machine.Local.get state >>= (fun {regions} ->
+        match Map.find regions reg with
+        | None -> nil
+        | Some map ->
+          match Seq.to_list_rev (Regions.lookup map addr) with
+          | [] -> nil
+          | ({upper},())::_ -> Machine.return upper)
+end
+
+module Count(Machine : Primus.Machine.S) = struct
+  include Pre(Machine)
+  [@@@warning "-P"]
+
+  let run [reg] =
+    Machine.gets Project.arch >>= fun arch ->
+    let width = Size.in_bits @@ Arch.addr_size arch in
+    Machine.Local.get state >>= (fun {regions} ->
+        match Map.find regions reg with
+        | None -> nil
+        | Some map -> Value.of_int ~width (Regions.length map))
 end
 
 module Move(Machine : Primus.Machine.S) = struct
@@ -105,8 +132,8 @@ module Main(Machine : Primus.Machine.S) = struct
 
 
       def "region-contains" (tuple [sym; int] @-> int)
-        (module Contains)
-        {|(region-contains ID X) return if set ID has X.
+        (module Lower)
+        {|(region-contains ID X) return the region in ID that has X.
 
           Returns the lower bound of the first region that contains
           value X in the set of regions with the given ID. Returns nil
@@ -121,6 +148,37 @@ module Main(Machine : Primus.Machine.S) = struct
         {|(region-move DST SRC P) moves all regions that contain the point
           P from the set SRC to the set DST. Returns nil if SRC didn't
           contain any such region, otherwise returns t.
+        |};
+
+      def "region-lower" (tuple [sym; int] @-> int)
+        (module Lower)
+        {|(region-lower ID X) the lower bound of region that contains X.
+
+        Returns nil if ID doesn't exist or if it doesn't have a region
+        that includes X.
+
+        This fucntion is an alias for REGION-CONTAINS.
+        See also, REGION-UPPER.
+       |};
+
+      def "region-upper" (tuple [sym; int] @-> int)
+        (module Upper)
+        {|(region-upper ID X) the upper bound of the region that contains X.
+
+        Returns the upper bound of the region that contains point X or
+        nil if there is no such region or such set of regions.
+
+        See also, REGION-LOWER.|};
+
+      def "region-count" (tuple [sym] @-> int)
+        (module Count)
+        {|(region-count ID) the total number of regions in the set ID.
+
+        Counts the number of regions (including intersecting) stored
+        in the set of regions referenced by the symbol ID.
+
+        Returns nil if there is no set with the given ID, otherwise
+        returns the number of regions in that set.
         |}
     ]
 end

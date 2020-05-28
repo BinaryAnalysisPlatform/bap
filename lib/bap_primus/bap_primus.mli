@@ -549,6 +549,7 @@ module Std : sig
                                      and type 'a e =
                                            ?boot:unit t ->
                                            ?init:unit t ->
+                                           ?fini:unit t ->
                                            (exit_status * project) m effect
 
         (** Local state of the machine.  *)
@@ -725,7 +726,7 @@ module Std : sig
           Components should minimize the side-effects on the Primus
           machine and do not use Interpreter, Linker, and/or any
           observable operations. In this phase the Primus Machine
-          operates in a deterministic mode and fork/switch operators are
+          operates in the deterministic mode and fork/switch operators are
           disabled.
 
           Once this phase is complete, the [init] observation is posted
@@ -745,6 +746,10 @@ module Std : sig
 
           This stage is used to prepare the Machine for the execution. Once
           it is finished the [start] observation is posted.
+
+          Any exception that is thrown in this phase will prevent
+          machine from running and terminate the computation
+          immediately.
 
           {3 The running phase}
 
@@ -886,6 +891,7 @@ module Std : sig
         ?envp:string array ->
         ?args:string array ->
         ?init:unit Machine.Make(Knowledge).t ->
+        ?fini:unit Machine.Make(Knowledge).t ->
         ?start:unit Machine.Make(Knowledge).t ->
         system -> project -> Knowledge.state ->
         (exit_status * project * Knowledge.state, Knowledge.conflict) result
@@ -996,6 +1002,7 @@ module Std : sig
           ?envp:string array ->
           ?args:string array ->
           ?init:unit Machine.t ->
+          ?fini:unit Machine.t ->
           ?start:unit Machine.t ->
           t -> project -> (exit_status * project) Machine.m
       end
@@ -1140,6 +1147,7 @@ module Std : sig
         ?envp:string array ->
         ?args:string array ->
         ?init:unit Machine.Make(Knowledge).t ->
+        ?fini:unit Machine.Make(Knowledge).t ->
         ?start:unit Machine.Make(Knowledge).t ->
         system -> unit
 
@@ -1902,6 +1910,9 @@ module Std : sig
         (** [const x] computes the constant expression [x]  *)
         val const : word -> value m
 
+        (** [ite c x y] if [c] evals to [b1] then [x] else [y]  *)
+        val ite : value -> value -> value -> value m
+
         (** [load a d s] computes a load operation, that loads a word
             of size [s] using an order specified by the endianness [d]
             from address [a].
@@ -1923,6 +1934,16 @@ module Std : sig
             invoked and the operation is repeated. Otherwise the
             [Segmentation_fault] machine exception is raised.  *)
         val store : value -> value -> endian -> size -> unit m
+
+        (** [branch cnd yes no] if [cnd] evaluates to [zero] then
+            [yes] else [no]. *)
+        val branch : value -> 'a m -> 'a m -> 'a m
+
+
+        (** [repeat cnd body] evaluates [body] until [cnd] evaluates
+            to [zero]. Returns the value of [cnd].  *)
+        val repeat : value m -> 'a m -> value m
+
       end
     end
 
@@ -2178,15 +2199,42 @@ module Std : sig
     end
 
 
-    (** Value generators *)
+    (** Value generators. *)
     module Generator : sig
       type t = generator [@@deriving sexp_of]
 
 
+      (** [of_iterator iter init] creates a generator from a generic
+          iterator.
+
+          The generic iterator [iter] may use any type as its domain
+          (as long as it provides the projection to [Bitvec.t]). The
+          type of the generator state is also abstract.
+
+          @since 2.1.0
+      *)
+      val of_iterator :
+        ?width:int ->
+        ?seed:(int -> 'a) ->
+        to_bitvec:('d -> Bitvec.t) ->
+        (module Iterator.Infinite
+          with type t = 'a
+           and type dom = 'd) -> 'a ->
+        t
+
+
       (** [create (module Iterator) seed] creates a integer generator
           from the provided [Iterator], and initializes it with the
-          given seed.  *)
+          given seed.
+
+          @param width is the width in bits of the generated words.
+
+          Note, that the generator domain is defined by the [Iterator]
+          domain, not by the [width] parameter of the the
+          generator.
+      *)
       val create :
+        ?width:int ->
         (module Iterator.Infinite
           with type t = 'a
            and type dom = int) -> 'a -> t
@@ -2194,14 +2242,17 @@ module Std : sig
 
       (** [static value] returns a generator that always produces the
           same [value].  *)
-      val static : int -> t
+      val static : ?width:int -> int -> t
 
       (** [unfold ~min ~max ~seed ~f] creates a generator that
           generates values by applying a function [f] to a pair of
           a generator state and previous value.   *)
-      val unfold : ?min:int -> ?max:int -> ?seed:int ->
+      val unfold : ?width:int -> ?min:int -> ?max:int -> ?seed:int ->
         f:('a * int -> 'a * int) -> 'a -> t
 
+
+      (** [width] the size in bits of the generated words.  *)
+      val width : t -> int
 
       (** Random Number Generators  *)
       module Random : sig
@@ -2214,17 +2265,15 @@ module Std : sig
             @param min (defaults to 0)
             @param max (defaults to 1^30)
         *)
-        val lcg : ?min:int -> ?max:int -> int -> t
-
+        val lcg : ?width:int -> ?min:int -> ?max:int -> int -> t
 
         (** [byte seed] the same as [lcg ~min:0 ~max:255 seed]  *)
         val byte : int -> t
 
-
         (** Self seeded generators.
 
             These generators will be seeded by a value derived from
-            the Machine clone identifier.  *)
+            the Machine identifier.  *)
         module Seeded : sig
 
           (** [create init] creates a self-seeded generator from a
@@ -2237,17 +2286,16 @@ module Std : sig
               - [Random.lcg]
               - [Random.byte]
           *)
-          val create : (int -> t) -> t
+          val create : ?width:int -> (int -> t) -> t
 
 
           (** [lcg ~min ~max ()] a linear congruential generator.  *)
-          val lcg : ?min:int -> ?max:int -> unit -> t
+          val lcg : ?width:int -> ?min:int -> ?max:int -> unit -> t
 
 
           (** [byte] is the same as [lcg ~min:0 ~max:255 ()]  *)
           val byte : t
         end
-
       end
 
 
@@ -2261,7 +2309,13 @@ module Std : sig
 
 
         (** [word iter bitwidth] constructs a word of the given [bitwidth],
-            with bytes obtained from consequitive calls to [next].*)
+            from words obtained from consequitive calls to [next].
+
+            The generator is called [ceil (bitwidth / width)] times
+            and the generated words are concatenated in the order of
+            the increasing significance with any excessive most
+            significant bits truncated.
+        *)
         val word : t -> int -> word Machine.t
       end
     end
@@ -2275,15 +2329,12 @@ module Std : sig
           environment.  *)
       type exn += Undefined_var of var
 
+      val generated : (var * value) observation
 
       (** [Env = Make(Machine)]  *)
       module Make(Machine : Machine.S) : sig
 
-        (** [get var] returns a value associated with the variable.
-            Todo: it looks like that the interface doesn't allow
-            anyone to save bottom or memory values in the environment,
-            thus the [get] operation should not return the
-            [Bil.result].*)
+        (** [get var] returns a value associated with the variable. *)
         val get : var -> value Machine.t
 
         (** [set var value] binds a variable [var] to the given [value].  *)
@@ -2297,6 +2348,19 @@ module Std : sig
             variable and returned. *)
         val add : var -> Generator.t -> unit Machine.t
 
+
+        (** [del v] deletes the variable [v] from the environment.
+
+            The variable [v] will no longer be bound.
+        *)
+        val del : var -> unit Machine.t
+
+
+        (** [has v] evaluates to [true] if [v] is bound.
+
+            @since 2.1.0
+        *)
+        val has : var -> bool Machine.t
 
         (** [all] is a sequence of all variables defined in the
             environment. Note, the word _defined_ doesn't mean
@@ -2349,14 +2413,28 @@ module Std : sig
         val unknown : addr_size:int -> data_size:int -> memory
 
 
-        (** [name memory] returns [memory] identifier. *)
+        (** [name memory] returns [memory] identifier.
+            @since 2.1.0
+        *)
         val name : memory -> string
+
+
+        (** [addr_size memory] the number of bits in the address bus.
+            @since 2.1.0
+        *)
+        val addr_size : memory -> int
+
+
+        (** [data_size memory] is the the number of bits in the data bus.  *)
+        val data_size : memory -> int
 
         include Comparable.S with type t := t
       end
 
       (** occurs when a memory operation for the given addr cannot be satisfied. *)
       type exn += Pagefault of addr
+
+      val generated : (addr * value) observation
 
 
       (** [Make(Machine)] lifts the memory interface into the
@@ -2386,9 +2464,14 @@ module Std : sig
             raises the [Pagefault] machine exception if [a] is not mapped,
             or not writable.
 
-            Precondition: [Value.bitwidth x = 8].
+            Precondition: the size of the address and the size of the
+            datum match with the current [memory] sizes.
         *)
         val set : addr -> value -> unit Machine.t
+
+
+        (** [del p] removes the value associated with the pointer [p].  *)
+        val del : addr -> unit Machine.t
 
         (** [load a] loads a byte from the given address [a].
 
@@ -2412,17 +2495,35 @@ module Std : sig
             nonexecutable segment of machine memory.  *)
         val add_data : mem -> unit Machine.t
 
-
-        (** [allocate addr size] allocates a segment of the specified
-            [size]. An unitilialized reads from the segment will
+        (** [add_region ~lower ~upper] allocates a segment of memory
+            denoted by its [lower] and [upper] bounds (included).
+            An unitilialized reads from the segment will
             produce values generated by a generator (defaults to a
-            [Generator.Random.Seeded.byte]).
+            [Generator.Random.Seeded.lcg ~width ()], where width is
+            the data size of the currently selected memory bank ).
 
-            If [init] is provided then the region is initialized.
+            If [init] is provided then the region is initialized, it
+            is the responsibility of [init] to generates words of
+            correct size (matching the data size of the currently
+            selected memory bank).
 
             An attempt to write to a readonly segment, or an attempt to
             execute non-executable segment will generate a
-            segmentation fault. (TODO: provide more fine-granular traps).*)
+            segmentation fault.
+
+            @since 2.1.0
+        *)
+        val add_region :
+          ?readonly:bool ->
+          ?executable:bool ->
+          ?init:(addr -> word Machine.t) ->
+          ?generator:Generator.t ->
+          lower:addr -> upper:addr -> unit -> unit Machine.t
+
+        (** [allocate addr size] allocates a segment of the specified
+            [size]. This function uses {!add_region} underneath the
+            hood, please refer to it for more information.
+        *)
         val allocate :
           ?readonly:bool ->
           ?executable:bool ->
@@ -2437,7 +2538,6 @@ module Std : sig
           ?readonly:bool ->
           ?executable:bool ->
           mem -> unit Machine.t
-
 
         (** [is_mapped addr] a computation that evaluates to true,
             when the value is mapped, i.e., it is readable.  *)
@@ -3440,17 +3540,29 @@ ident ::= ?any atom that is not recognized as a <word>?
         val pp : Format.formatter -> t -> unit
       end
 
+
       (** Machine independent closure.
 
           A closure is an anonymous function, that performs some
           computation in the Machine Monad. Closures are used to
           extend the Lisp Machine with arbitrary primitive operations
           implemented in OCaml. *)
-      module type Closure = functor (Machine : Machine.S) -> sig
+      module Closure : sig
+        module type S = functor (Machine : Machine.S) -> sig
 
-        (** [run args] performs the computation.  *)
-        val run : value list -> value Machine.t
+          (** [run args] performs the computation.  *)
+          val run : value list -> value Machine.t
+        end
+
+        type t = (module S)
+        module Make(Machine : Machine.S) : sig
+          val name : string Machine.t
+        end
+
       end
+
+      module type Closure = Closure.S
+
 
 
       (** [(lisp-primitive <name> <arg1> ... <argM> <rval>)] is posted
@@ -3463,7 +3575,7 @@ ident ::= ?any atom that is not recognized as a <word>?
       val primitive : (string * value list) observation
 
       (** a closure packed as an OCaml value *)
-      type closure = (module Closure)
+      type closure = Closure.t
 
       (* dedocumented due to deprecation *)
       module Primitive : sig

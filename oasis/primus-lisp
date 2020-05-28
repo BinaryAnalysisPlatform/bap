@@ -6,14 +6,16 @@ Flag primus_lisp
 Library primus_lisp_library_plugin
   Build$:       flag(everything) || flag(primus_lisp)
   Path:         plugins/primus_lisp
-  BuildDepends: bap-primus, core_kernel, bap, ppx_jane, monads, regular
+  BuildDepends: bap-primus, core_kernel, bap, ppx_jane, monads, regular,
+                bap-knowledge, bap-main
   FindlibName:     bap-plugin-primus_lisp
   CompiledObject:  best
   InternalModules: Primus_lisp_main,
                    Primus_lisp_config,
                    Primus_lisp_primitives,
                    Primus_lisp_ieee754,
-                   Primus_lisp_io
+                   Primus_lisp_io,
+                   Primus_lisp_run
   XMETADescription: install and load Primus lisp libraries
   DataFiles:        lisp/*.lisp ($primus_lisp_library_path)
   XMETAExtraLines:  tags="primus, lisp"

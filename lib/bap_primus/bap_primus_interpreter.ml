@@ -191,7 +191,6 @@ let eval_cond,on_cond =
   Observation.provide ~inspect:sexp_of_value "eval-cond"
     ~desc:"Occurs when the jump condition is evaluated."
 
-
 let results r op = Sexp.List [op; sexp_of_value r]
 
 let sexp_of_binop ((op,x,y),r) = results r @@ sexps [
@@ -199,7 +198,6 @@ let sexp_of_binop ((op,x,y),r) = results r @@ sexps [
     string_of_value x;
     string_of_value y;
   ]
-
 
 let sexp_of_unop ((op,x),r) = results r @@ sexps [
     Bil.string_of_unop op;
@@ -312,7 +310,7 @@ type exn += Runtime_error of string
 let () =
   Exn.add_printer (function
       | Runtime_error msg ->
-        Some (sprintf "Bap_primus runtime error: %s" msg)
+        Some (sprintf "Primus interpreter runtime error: %s" msg)
       | Halt -> Some "Halt"
       | Segmentation_fault x ->
         Some (asprintf "Segmentation fault at %a" Addr.pp_hex x)
@@ -355,11 +353,6 @@ module Make (Machine : Machine) = struct
     value (word_of_type t) >>= fun r ->
     !!on_undefined r >>| fun () -> r
 
-  let set v x =
-    !!on_writing v >>= fun () ->
-    Env.set v x >>= fun () ->
-    post on_written ~f:(fun k -> k (v,x))
-
   let get v =
     !!on_reading v >>= fun () ->
     Env.get v >>= fun r ->
@@ -377,19 +370,6 @@ module Make (Machine : Machine) = struct
       s with time = Time.succ s.time;
     }
 
-  let binop op x y = match op with
-    | Bil.DIVIDE | Bil.SDIVIDE
-    | Bil.MOD | Bil.SMOD
-      when Word.is_zero y.value ->
-      !!will_divide_by_zero () >>= fun () ->
-      call_when_provided division_by_zero_handler >>= fun called ->
-      if called
-      then undefined (Type.Imm (Word.bitwidth x.value))
-      else Machine.raise Division_by_zero
-    | _ ->
-      value (Bil.Apply.binop op x.value y.value) >>= fun r ->
-      tick >>= fun () ->
-      post on_binop ~f:(fun k -> k ((op,x,y),r)) >>| fun () -> r
 
   let unop op x =
     value (Bil.Apply.unop op x.value) >>= fun r ->
@@ -408,9 +388,44 @@ module Make (Machine : Machine) = struct
     value (Word.extract_exn ~hi ~lo x.value) >>= fun r ->
     post on_extract ~f:(fun k -> k ((hi,lo,x),r)) >>| fun () -> r
 
+
+  let coerce s x =
+    if Value.bitwidth x <> s
+    then extract ~hi:(s-1) ~lo:0 x
+    else Machine.return x
+
+  let binop op x y = match op with
+    | Bil.DIVIDE | Bil.SDIVIDE
+    | Bil.MOD | Bil.SMOD
+      when Word.is_zero y.value ->
+      !!will_divide_by_zero () >>= fun () ->
+      call_when_provided division_by_zero_handler >>= fun called ->
+      if called
+      then undefined (Type.Imm (Word.bitwidth x.value))
+      else Machine.raise Division_by_zero
+    | _ ->
+      let s = max (Value.bitwidth x) (Value.bitwidth y) in
+      coerce s x >>= fun x ->
+      coerce s y >>= fun y ->
+      value (Bil.Apply.binop op x.value y.value) >>= fun r ->
+      tick >>= fun () ->
+      post on_binop ~f:(fun k -> k ((op,x,y),r)) >>| fun () -> r
+
   let const c =
     value c >>= fun r ->
     !!on_const r >>| fun () -> r
+
+  let set v x =
+    !!on_writing v >>= fun () ->
+    let x = match Var.typ v with
+      | Unk | Mem _ -> Machine.return x
+      | Imm m ->
+        if Value.bitwidth x <> m
+        then extract ~hi:(m-1) ~lo:0 x
+        else Machine.return x in
+    x >>= fun x ->
+    Env.set v x >>= fun () ->
+    post on_written ~f:(fun k -> k (v,x))
 
   let trapped_memory_access access =
     Machine.catch access (function
@@ -592,6 +607,11 @@ module Make (Machine : Machine) = struct
   let store a x e s =
     let open Bil.Types in
     let s = Size.in_bits s in
+    let x =
+      if Value.bitwidth x <> s
+      then extract ~hi:(s-1) ~lo:0 x
+      else Machine.return x in
+    x >>= fun x ->
     match e with
     | LittleEndian -> do_store a x s LOW HIGH
     | BigEndian    -> do_store a x s HIGH LOW
@@ -630,6 +650,21 @@ module Make (Machine : Machine) = struct
     !!term_left (Term.tid t) >>= fun () ->
     !!pos_left curr
 
+
+  let branch cnd yes no =
+    Value.zero (Value.bitwidth cnd) >>= fun zero ->
+    binop Bil.EQ cnd zero >>= fun is_zero ->
+    !!on_cond is_zero >>= fun () ->
+    if Value.is_one is_zero then no else yes
+
+  let rec repeat cnd body =
+    cnd >>= fun x ->
+    Value.zero (Value.bitwidth x) >>= fun zero ->
+    binop Bil.EQ x zero >>= fun stop ->
+    !!on_cond stop >>= fun () ->
+    if Value.is_one stop
+    then Machine.return stop
+    else body >>= fun _ -> repeat cnd body
 
   let term return cls f t =
     Machine.Local.get state >>= fun s ->
@@ -734,6 +769,7 @@ module Make (Machine : Machine) = struct
   let jmp t = eval_exp (Jmp.cond t) >>= fun ({value} as cond) ->
     !!on_cond cond >>| fun () ->
     Option.some_if (Word.is_one value) (cond,t)
+
   let jmp = term normal jmp_t jmp
 
   let blk t =
@@ -744,7 +780,7 @@ module Make (Machine : Machine) = struct
     | None -> Machine.return ()  (* return from sub *)
     | Some (cond,code) -> jump cond code
 
-  let blk = term finish blk_t blk
+  let blk : blk term -> unit m = term finish blk_t blk
 
   let arg_def t = match Arg.intent t with
     | None | Some (In|Both) -> Arg.lhs t := Arg.rhs t
@@ -787,6 +823,7 @@ module Make (Machine : Machine) = struct
           let args = List.rev_append inputs rets in
           k (name,args))
 
+  let assume x = !!on_cond x
 
   let sub = term normal sub_t sub
   let pos = Machine.Local.get state >>| fun {curr} -> curr

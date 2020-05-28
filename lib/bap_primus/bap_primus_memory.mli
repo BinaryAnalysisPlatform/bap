@@ -4,6 +4,8 @@ open Bap_primus_types
 
 module Generator = Bap_primus_generator
 
+val generated : (addr * value) Bap_primus_observation.t
+
 type exn += Pagefault of addr
 type memory
 module Descriptor : sig
@@ -12,7 +14,8 @@ module Descriptor : sig
   val create : addr_size:int -> data_size:int -> string -> memory
   val unknown : addr_size:int -> data_size:int -> memory
   val name : memory -> string
-
+  val addr_size : memory -> int
+  val data_size : memory -> int
   include Comparable.S with type t := memory
 end
 
@@ -26,9 +29,17 @@ module Make(Machine : Machine) : sig
 
   val get : addr -> value Machine.t
   val set : addr -> value -> unit Machine.t
+  val del : addr -> unit Machine.t
 
   val add_text : mem -> unit Machine.t
   val add_data : mem -> unit Machine.t
+
+  val add_region :
+    ?readonly:bool ->
+    ?executable:bool ->
+    ?init:(addr -> word Machine.t) ->
+    ?generator:Generator.t ->
+    lower:addr -> upper:addr -> unit -> unit Machine.t
 
   val allocate :
     ?readonly:bool ->

@@ -51,6 +51,7 @@ let merge p1 p2 =
     p2 with
     sigs = p1.sigs @ p2.sigs;
     codes = p1.codes @ p2.codes;
+    context = Lisp.Context.merge p1.context p2.context;
   }
 
 
@@ -161,7 +162,7 @@ let pp_term pp_exp ppf = function
     fprintf ppf "@[<v2>%a@]" pp_exp exp
   | {data={exp; typ}} ->
     fprintf ppf "@[<v2>%a:%a@]" pp_exp exp Lisp.Type.pp typ
-let pp_word = pp_term Int64.pp
+let pp_word = pp_term Z.pp_print
 let pp_var = pp_term String.pp
 
 let rec concat_prog p =

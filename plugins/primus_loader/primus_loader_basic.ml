@@ -20,7 +20,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
 
   let target = Machine.arch >>| target_of_arch
 
-  let make_addr addr =
+  let make_word addr =
     Machine.arch >>| Arch.addr_size >>| fun size ->
     Addr.of_int64 ~width:(Size.in_bits size) addr
 
@@ -38,7 +38,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
      user process *)
   let setup_stack () =
     target >>= fun (module Target) ->
-    make_addr stack_base >>= fun bottom ->
+    make_word stack_base >>= fun bottom ->
     let top = Addr.(bottom -- stack_size) in
     Val.of_word bottom >>= fun bottom ->
     Env.set Target.CPU.sp bottom >>= fun () ->
@@ -72,23 +72,24 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
 
   let load_segments () =
     Machine.project >>= fun proj ->
-    make_addr 0L >>= fun null ->
+    make_word 0L >>= fun null ->
     match get_segmentations proj with
     | Error _ -> assert false
     | Ok segs ->
       Machine.Seq.fold ~init:null segs
         ~f:(fun endp {Image.Scheme.addr; size; info=(_,w,x)} ->
-            make_addr addr >>= fun addr ->
-            let size = Int64.to_int_exn size in
-            Mem.allocate
+            make_word addr >>= fun lower ->
+            make_word Int64.(size-1L) >>= fun diff ->
+            let upper = Word.(lower + diff) in
+            Mem.add_region () ~lower ~upper
               ~readonly:(not w)
               ~executable:x
-              ~generator:(Generator.static 0) addr size >>| fun () ->
-            Addr.max endp Addr.(addr ++ size))
+              ~generator:(Generator.static 0) >>| fun () ->
+            Addr.max endp Addr.(succ upper))
 
   let map_segments () =
     Machine.project >>= fun proj ->
-    make_addr 0L >>= fun null ->
+    make_word 0L >>= fun null ->
     Memmap.to_sequence (Project.memory proj) |>
     Machine.Seq.fold ~init:null ~f:(fun endp (mem,tag) ->
         match Value.get Image.segment tag with
@@ -141,7 +142,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     Machine.arch >>= fun arch ->
     Machine.args >>= fun argv ->
     Machine.envp >>= fun envp ->
-    make_addr stack_base >>= fun sp ->
+    make_word stack_base >>= fun sp ->
     let endian = Arch.endian arch in
     let addr_size = Arch.addr_size arch in
     let argc = Array.length argv |>

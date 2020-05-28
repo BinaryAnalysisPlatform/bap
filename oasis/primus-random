@@ -1,0 +1,14 @@
+Flag primus_random
+  Description: Build Primus randomization components
+  Default: false
+
+Library primus_random_library_plugin
+  Build$:       flag(everything) || flag(primus_random)
+  Path:         plugins/primus_random
+  BuildDepends: bap-primus, bap, core_kernel, ppx_jane, bap-main,
+                bitvec, bitvec-sexp, zarith
+  FindlibName:     bap-plugin-primus_random
+  CompiledObject:  best
+  InternalModules: Primus_random_main
+  XMETADescription: primus randomization components
+  XMETAExtraLines:  tags="primus"

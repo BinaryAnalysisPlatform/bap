@@ -135,6 +135,8 @@ size_t fwrite(const void * restrict ptr, size_t size, size_t nmemb, FILE * restr
     __attribute__((warn_unused_result, storage(1,2,3)));
 void clearerr(FILE *stream);
 
+int fflush(FILE *stream);
+
 int __isoc99_fscanf (FILE *__restrict __stream, const char *__restrict __format, ...)  __attribute__((warn_unused_result));
 int __isoc99_scanf (const char *__restrict __format, ...)  __attribute__((warn_unused_result));
 int __isoc99_sscanf (const char *__restrict __s, const char *__restrict __format, ...)  __attribute__((warn_unused_result));
@@ -143,7 +145,6 @@ int _IO_feof(FILE *stream);
 int _IO_getc(FILE *stream);
 int _IO_putc(int c, FILE *stream);
 int _IO_puts(const char *s);
-
 
 // string.h
 
@@ -418,3 +419,29 @@ int posix_spawnp(pid_t *pid, const char *file,
                  const void *file_actions,
                  const void *attrp,
                  char *const argv[], char *const envp[]);
+
+// errno.h
+
+int *__errno_location(void);
+
+// unistd.h
+
+int brk(void *addr);
+void *sbrk(int increment);
+
+
+// ctypes.h
+int isalnum(int c);
+int isalpha(int c);
+int iscntrl(int c);
+int isdigit(int c);
+int isgraph(int c);
+int islower(int c);
+int isprint(int c);
+int ispunct(int c);
+int isspace(int c);
+int isupper(int c);
+int isxdigit(int c);
+
+int isascii(int c);
+int isblank(int c);

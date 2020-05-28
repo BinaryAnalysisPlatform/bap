@@ -74,7 +74,7 @@ let data (size : #Bap_c_size.base) (t : Bap_c_type.t) =
             | None ->  off', data t :: seq
             | Some pad -> off, data t :: Imm (pad,Set []) :: seq) in
       Seq (List.rev ss)
-    | `Union {Spec.t=fs} ->
+    | `Union {Spec.t=_} ->
       let sz = match size#bits t with
         | None -> Size.in_bits size#pointer
         | Some sz -> sz in
@@ -93,101 +93,35 @@ let create_arg i addr_size intent name t (data,exp) sub =
   let arg = Term.set_attr arg Attrs.t t in
   arg
 
-
-
-let find_by_name prog name =
-  Term.enum sub_t prog |> Seq.find ~f:(fun sub -> String.equal (Sub.name sub) name)
-
-let find_first_caller prog tid =
-  Term.enum sub_t prog |> Seq.find ~f:(fun sub ->
-      Term.enum blk_t sub |> Seq.exists ~f:(fun blk ->
-          Term.enum jmp_t blk |> Seq.exists ~f:(fun jmp ->
-              match Jmp.kind jmp with
-              | Call c -> Label.equal (Call.target c) (Direct tid)
-              | _ -> false)))
-
-let proj_int = function Bil.Int x -> Some x | _ -> None
-
-let is_sub_exists prog name = Option.is_some @@ find_by_name prog name
-let is_sub_absent prog name = not (is_sub_exists prog name)
-
-let has_libc_runtime prog =
-  is_sub_exists prog "__libc_csu_fini" &&
-  is_sub_exists prog "__libc_csu_init"
-
-let find_entry_point prog =
-  Term.enum sub_t prog |>
-  Seq.find ~f:(fun sub -> Term.has_attr sub Sub.entry_point)
-
-
-let find_libc_start_main prog =
-  let open Monad.Option.Syntax in
-  find_entry_point prog >>= fun start ->
-  Term.first blk_t start >>= fun entry ->
-  Term.first jmp_t entry >>= fun jmp ->
-  match Jmp.kind jmp with
-  | Goto _ | Ret _ | Int _ -> None
-  | Call call -> match Call.target call with
-    | Indirect _ -> None
-    | Direct tid -> Some tid
-
-let detect_main_address prog =
-  let open Monad.Option.Syntax in
-  find_by_name prog "__libc_start_main" >>= fun start ->
-  find_first_caller prog (Term.tid start) >>= fun caller ->
-  Term.first blk_t caller >>= fun entry ->
-  Term.first arg_t start >>= fun arg ->
-  let defs = Term.enum def_t ~rev:true entry in
-  match Arg.rhs arg with
-  | Bil.Var reg ->
-    Seq.find defs ~f:(fun def ->
-        Var.same (Def.lhs def) reg) >>| Def.rhs >>= proj_int
-  | Bil.Load (_,addr,_,_) ->
-    Seq.find_map defs ~f:(fun def -> match Def.rhs def with
-        | Bil.Store (m,a,e,_,_) when Exp.equal addr a -> Some e
-        | _ -> None) >>= proj_int
-  | _ -> None
-
-let rename_main abi prog = match detect_main_address prog with
-  | None -> prog
-  | Some addr ->
-    Term.map sub_t prog ~f:(fun sub ->
-        match Term.get_attr sub address with
-        | Some a when Addr.equal addr a ->
-          abi#map_sub (Sub.with_name sub "main")
-        | _ -> sub)
-
-let rename_libc_start_main abi prog =
-  if is_sub_absent prog "__libc_start_main"
-  then match find_libc_start_main prog with
-    | None -> prog
-    | Some tid ->
-      Term.change sub_t prog tid @@ function
-      | None -> None
-      | Some sub -> Some (abi#map_sub (Sub.with_name sub "__libc_start_main"))
-  else prog
-
-let fix_libc_runtime abi prog =
-  rename_libc_start_main abi prog |>
-  rename_main abi
-
-let stage2 stage1 = object
-  inherit Term.mapper
-  method! run prog =
-    let prog = stage1#run prog in
-    if has_libc_runtime prog &&
-        (is_sub_absent prog "main" ||
-        (is_sub_absent prog "__libc_start_main"))
-    then fix_libc_runtime stage1 prog
-    else prog
-end
-
 let registry = Hashtbl.create (module String)
 let register name abi = Hashtbl.set registry ~key:name ~data:abi
 let get_processor name = Hashtbl.find registry name
 
+let get_prototype gamma name = match gamma name with
+  | Some (`Function proto) -> proto
+  | _ ->
+    let open Bap_c_type in
+    Spec.{
+      qualifier = `no_qualifier;
+      attrs = [];
+      t = Proto.{
+          args = [];
+          variadic = false;
+          return = `Basic {
+              qualifier = Qualifier.{
+                  const = false;
+                  volatile = false;
+                  restrict = ();
+                };
+              attrs = [];
+              t = `sint;
+            }
+        }
+    }
+
 let create_api_processor size abi : Bap_api.t =
   let addr_size = size#pointer in
+
   let stage1 gamma = object(self)
     inherit Term.mapper as super
     method! map_sub sub =
@@ -196,13 +130,12 @@ let create_api_processor size abi : Bap_api.t =
 
     method private apply_proto sub =
       let name = Sub.name sub in
-      match gamma name with
-      | Some (`Function {Bap_c_type.Spec.t; attrs}) ->
-        let sub = self#apply_args sub attrs t in
-        let sub = Term.set_attr sub Attrs.proto t in
-        let sub = List.fold_right ~init:sub attrs ~f:Bap_c_attr.apply in
-        abi.apply_attrs attrs sub
-      | _ -> super#map_sub sub
+      let {Bap_c_type.Spec.t; attrs} = get_prototype gamma name in
+      let sub = self#apply_args sub attrs t in
+      let sub = Term.set_attr sub Attrs.proto t in
+      let sub = List.fold_right ~init:sub attrs ~f:Bap_c_attr.apply in
+      abi.apply_attrs attrs sub
+
 
     method private apply_args sub attrs t =
       match abi.insert_args sub attrs t with
@@ -237,7 +170,7 @@ let create_api_processor size abi : Bap_api.t =
             | Ok api ->
               List.iter api ~f:(fun (key,t) ->
                   Hashtbl.set gamma ~key ~data:t));
-      stage2 (stage1 (Hashtbl.find gamma))
+      stage1 (Hashtbl.find gamma)
 
     let parse get ifs = Or_error.try_with (fun () -> parse_exn get ifs)
 

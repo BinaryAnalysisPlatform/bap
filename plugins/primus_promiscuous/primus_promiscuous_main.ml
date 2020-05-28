@@ -5,6 +5,8 @@ open Bap_primus.Std
 open Format
 include Self()
 
+let package = "bap"
+
 (*
 
    In a general case a block is terminated by a sequence of jumps:
@@ -33,8 +35,6 @@ include Self()
    the interpreter requires a program to be in a trivial condition form
    (TCF). In TCF every jmp condition must be a single variable or a
    constant true.
-
-
 *)
 
 type assn = {
@@ -100,7 +100,7 @@ end
 
 module Id = Monad.State.Multi.Id
 
-module Main(Machine : Primus.Machine.S) = struct
+module Forker(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
   module Eval = Primus.Interpreter.Make(Machine)
   module Env = Primus.Env.Make(Machine)
@@ -182,62 +182,40 @@ module Main(Machine : Primus.Machine.S) = struct
     | Jmp {up={me=blk}; me=jmp} -> fork_on_calls blk jmp
     | _ -> Machine.return ()
 
-
-  let default_page_size = 4096
-  let default_generator = Primus.Generator.Random.Seeded.byte
-
-  let map_page already_mapped addr =
-    let rec map len =
-      let last = Addr.nsucc addr (len - 1) in
-      already_mapped last >>= function
-      | true -> map (len / 2)
-      | false ->
-        Mem.allocate ~generator:default_generator addr len in
-    map default_page_size
-
-  let trap () =
-    Linker.link ~name:Primus.Interpreter.pagefault_handler
-      (module TrapPageFault)
-
-  let pagefault x =
-    Mem.is_mapped x >>= function
-    | false -> map_page Mem.is_mapped x >>= trap
-    | true ->
-      Mem.is_writable x >>= function
-      | false -> map_page Mem.is_writable x >>= trap
-      | true -> Machine.return ()
-
-
   let mark_visited blk =
     Machine.Global.update state ~f:(fun t -> {
           t with visited =
                    Set.add t.visited (Term.tid blk)
         })
 
-  let free_vars proj =
-    Term.enum sub_t (Project.program proj) |>
-    Seq.map ~f:Sub.free_vars |>
-    Seq.to_list_rev |>
-    Var.Set.union_list
-
-  let setup_vars =
-    Machine.get () >>= fun proj ->
-    Set.to_sequence (free_vars proj) |>
-    Machine.Seq.iter ~f:(fun var ->
-        Env.add var (Primus.Generator.static 0))
-
-  let ignore_division_by_zero =
-    Linker.link ~name:Primus.Interpreter.division_by_zero_handler
-      (module DoNothing)
 
   let init () = Machine.sequence [
-      setup_vars;
-      ignore_division_by_zero;
-      Primus.Interpreter.pagefault >>> pagefault;
       Primus.Interpreter.leave_pos >>> step;
       Primus.Interpreter.leave_blk >>> mark_visited;
     ]
 end
+
+module EnableDivisionByZero(Machine : Primus.Machine.S) = struct
+  module Linker = Primus.Linker.Make(Machine)
+  let init () =
+    Linker.link ~name:Primus.Interpreter.division_by_zero_handler
+      (module DoNothing)
+end
+
+let legacy_promiscous_mode_components = [
+  "var-randomizer";
+  "mem-randomizer";
+  "arg-randomizer";
+  "promiscuous-path-explorer";
+  "division-by-zero-handler";
+  "limit";
+]
+
+let enable_legacy_promiscuous_mode () =
+  Primus.System.Repository.update ~package "legacy-main" ~f:(fun init ->
+      List.fold legacy_promiscous_mode_components ~init
+        ~f:(fun system component ->
+            Primus.System.add_component system ~package component))
 
 open Config;;
 
@@ -257,13 +235,15 @@ manpage [
 
 ]
 
-let enabled = flag "mode" ~doc:"Enable the mode."
-
+let enabled = flag "mode" ~doc:"(DEPRECATED) Enable the mode."
 
 let () = when_ready (fun {get=(!!)} ->
-    if !!enabled then
-      Primus.Machine.add_component (module Main) [@warning "-D"];
-    Primus.Components.register_generic
-      ~package:"bap" "promiscuous-mode" (module Main)
-      ~desc:("Enables the promiscuous mode. Requires the \
-              Trivial Condition Form. " ^ desc))
+    Primus.Components.register_generic "promiscuous-path-explorer"
+      (module Forker) ~package
+      ~desc:"Forces execution of all linearly independent paths \
+             by forcefully flipping the branch conditions.";
+    Primus.Components.register_generic "division-by-zero-handler"
+      (module EnableDivisionByZero) ~package
+      ~desc:"Disables division by zero errors.";
+
+    if !!enabled then enable_legacy_promiscuous_mode ());

@@ -27,8 +27,8 @@ include _oasis_lib.om
 # At this point you may fine-tune the configuration, and modify defaults:
 #
 # OCAML_LIB_MODULE_SUFFIXES += .ml       (install also .ml files with libs)
-# OCAMLFINDFLAGS += -verbose             (be verbose)
-# OCAMLFLAGS += -bin-annot               (create .cmt/.cmti files)
+# OCAMLFINDFLAGS += -thread
+OCAMLFLAGS += -bin-annot               # (create .cmt/.cmti files)
 
 OCAMLFLAGS_ANNOT = -annot -bin-annot
 OCAMLFLAGS += $(OCAMLFLAGS_ANNOT)

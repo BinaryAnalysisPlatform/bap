@@ -51,7 +51,6 @@ type error =
   | Format_error of format_error * Loc.t
   | Sexp_error of string * source * Source.error
   | Unresolved_feature of string * source
-  | Unknown_attr of string * Loc.t
 
 exception Fail of error
 
@@ -84,7 +83,7 @@ module Parse = struct
   let fails err s = raise (Parse_error (err,s))
   let fail err s = fails err [s]
   let bad_form op got = fail (Bad_form op) got
-  let nil = {exp=0L; typ=Type.word 1}
+  let nil = {exp=Z.zero; typ=Type.word 1}
 
 
   let expand prog cs =
@@ -721,8 +720,6 @@ let pp_error ppf err = match err with
   | Unresolved_feature (name,req) ->
     fprintf ppf "Error: no implementation provided for feature `%s' %a"
       name pp_request req
-  | Unknown_attr (attr,loc) ->
-    fprintf ppf "%a@\nError: unknown attribute %s@\n" Loc.pp loc attr
   | Format_error (err,loc) ->
     fprintf ppf "%a@\nFormat error: %a" Loc.pp loc pp_format_error err
 

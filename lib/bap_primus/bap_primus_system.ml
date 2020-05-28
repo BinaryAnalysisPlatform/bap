@@ -8,6 +8,9 @@ module Info = Bap_primus_info
 module Observation = Bap_primus_observation
 module Machine = Bap_primus_machine
 
+
+let package = "bap"
+
 let fini,finish =
   Observation.provide ~inspect:sexp_of_unit "fini"
     ~desc:"Occurs when machine finishes."
@@ -47,7 +50,7 @@ module Repository = struct
   let require name =
     match Hashtbl.find self name with
     | Some sys -> sys
-    | None -> failwithf "Unknown system %s" (Name.show name) ()
+    | None -> invalid_argf "Unknown system %s" (Name.show name) ()
 
   let get ?package name =
     require @@ Name.create ?package name
@@ -151,6 +154,7 @@ module Components = struct
   module Generic(Machine : Machine) = struct
     open Machine.Syntax
     module Lisp = Bap_primus_lisp.Make(Machine)
+    module Context = Bap_primus_lisp_context
 
     let inited () =
       Machine.Observation.make inited ()
@@ -158,8 +162,14 @@ module Components = struct
     let finish () =
       Machine.Observation.make finish ()
 
-    let do_init system loaded =
-      let comps = Set.diff (components system) loaded in
+    let do_init s loaded =
+      let comps = Set.diff (components s) loaded in
+      let context = Context.create [
+          "system", [Knowledge.Name.show s.name];
+          "component", Set.to_list (components s) |>
+                       List.map ~f:Knowledge.Name.show
+        ] in
+      Lisp.refine context >>= fun () ->
       Set.to_list comps |>
       Machine.List.iter ~f:(fun name ->
           match Hashtbl.find generics name with
@@ -170,30 +180,29 @@ module Components = struct
             failwithf "failed to find a component %s \
                        required for system %s"
               (Name.show name)
-              (Name.show system.name)
+              (Name.show s.name)
               ())
 
     let init_system s =
       do_init s (Set.empty (module Name))
 
-    let run_internal ~boot ~init ~start =
+    let run_internal ~boot ~init ~fini ~start =
       Machine.run ~boot
         ~init:(Lisp.typecheck >>= Lisp.optimize >>= fun () ->
                init >>= inited)
-      @@begin Machine.catch start (fun exn ->
-          finish () >>= fun () ->
-          Machine.raise exn) >>= fun () ->
-        finish ()
-      end
+        ~fini:(fini >>= finish)
+        start
+
 
     let run
         ?envp
         ?args
         ?(init=Machine.return ())
+        ?(fini=Machine.return ())
         ?(start=Machine.return ())
         sys proj =
       run_internal (Name.show sys.name) proj
-        ?envp ?args ~boot:(init_system sys) ~init ~start
+        ?envp ?args ~boot:(init_system sys) ~init ~fini ~start
 
   end
 
@@ -228,6 +237,7 @@ module Components = struct
 
   let run ?envp ?args
       ?(init=Machine.return ())
+      ?(fini=Machine.return ())
       ?(start=Machine.return ())
       sys proj state =
     let comp =
@@ -238,6 +248,7 @@ module Components = struct
         ?args
         ~boot:(init_system sys)
         ~init
+        ~fini
         ~start >>= fun x ->
       Knowledge.provide result obj (Some x) >>| fun () ->
       obj in
@@ -286,10 +297,10 @@ module Parser = struct
   let empty name = {name; desc=""; components=[]; depends_on=[]}
 
   let comp name s =
-    {s with components = Name.read name :: s.components}
+    {s with components = Name.read ~package name :: s.components}
 
   let deps name s =
-    {s with depends_on = Name.read name :: s.depends_on}
+    {s with depends_on = Name.read ~package name :: s.depends_on}
 
   let rec parse_specs push : t -> Sexp.t list -> (t,error) Result.t =
     fun sys -> function
@@ -328,7 +339,7 @@ module Parser = struct
 
   let of_sexp : Sexp.t -> (t,error_with_loc) Result.t = function
     | List (Atom "defsystem" :: Atom name :: items) ->
-      parse_items (empty (Name.read name)) items |>
+      parse_items (empty (Name.read ~package name)) items |>
       Result.map_error ~f:(in_system name)
     | other -> Error (in_system "unknown" {expects=Defsystem; got=other})
 
@@ -383,6 +394,7 @@ module Job = struct
     envp : string array;
     args : string array;
     init : unit Machine.Make(Knowledge).t;
+    fini : unit Machine.Make(Knowledge).t;
     start : unit Machine.Make(Knowledge).t;
     system : system;
   } [@@deriving fields]
@@ -394,14 +406,15 @@ module Job = struct
       ?(desc="")
       ?(envp=[||]) ?(args=[||])
       ?(init=Analysis.return ())
+      ?(fini=Analysis.return ())
       ?(start=Analysis.return ())
-      system = {name; desc; envp; args; init; start; system}
+      system = {name; desc; envp; args; init; fini; start; system}
 end
 
 module Jobs = struct
   let jobs : Job.t Queue.t = Queue.create ()
-  let enqueue ?name ?desc ?envp ?args ?init ?start sys =
-    Queue.enqueue jobs @@ Job.create ?name ?desc ?envp ?args ?init ?start sys
+  let enqueue ?name ?desc ?envp ?args ?init ?fini ?start sys =
+    Queue.enqueue jobs @@ Job.create ?name ?desc ?envp ?args ?init ?fini ?start sys
 
   let pending () = Queue.length jobs
 
@@ -434,20 +447,22 @@ module Jobs = struct
   let run
       ?(on_failure = fun _ _ _ -> Continue)
       ?(on_success = fun _ _ _ _ -> Continue) =
-    let rec process result ({Job.envp; args; init; start; system} as job) =
+    let rec process result ({Job.envp; args; init; fini; start; system} as job) =
       Components.run system result.project result.state
-        ~envp ~args ~init ~start |> function
+        ~envp ~args ~init ~fini ~start |> function
       | Ok (status,proj,state) ->
-        handle_success job status proj state result
-      | Error conflict ->
-        handle_failure job conflict result
-    and handle_success job status proj state result =
+        handle_success job status state @@
+        success job proj state result
+      | Error problem ->
+        handle_failure job problem @@
+        conflict job problem result
+    and handle_success job status state result =
       match on_success job status state result with
-      | Continue -> continue (success job proj state result)
+      | Continue -> continue result
       | Stop -> result
     and handle_failure job problem result =
       match on_failure job problem result with
-      | Continue -> continue (conflict job problem result)
+      | Continue -> continue result
       | Stop -> result
     and continue result = match Queue.dequeue jobs with
       | None -> result
