@@ -144,7 +144,7 @@ BAP also ships an interactive toplevel utility `baptop`. This is a shell-like ut
 
 ## Learning
 
-We understand that BAP is huge and it is easy to get lost. We're working constantly on improving documentation ensuring that every single function in [BAP API][api-master] is thoroughly documented. But writing higher-level guidelines in the form of manuals or [tutorials][bap-tutorial] is much harder and very time consuming, especially given how different the goals of our fellow researchers and users. Therefore we employ a backward-chaining approach and prefer to answer real questions rather than prematurely trying to address all possible questions. We will be happy to see you in your [chat][gitter] that features searchable, indexed by Google, archive.
+We understand that BAP is huge and it is easy to get lost. We're working constantly on improving documentation ensuring that every single function in [BAP API][docs] is thoroughly documented. But writing higher-level guidelines in the form of manuals or [tutorials][bap-tutorial] is much harder and very time consuming, especially given how different the goals of our fellow researchers and users. Therefore we employ a backward-chaining approach and prefer to answer real questions rather than prematurely trying to address all possible questions. We will be happy to see you in your [chat][gitter] that features searchable, indexed by Google, archive.
 
 We are writing, occasionally, to our [blog][blog] and [wiki][wiki] and are encouraging everyone to contribute to both of them. You can also post your questions on [stackoverflow][so-ocaml] or discuss BAP on the [OCaml][discuss-bap] board. We also have a cute [discord][discord-bap] channel, which has much less traffic than our [gitter][gitter].
 
