@@ -1,3 +1,97 @@
+2.1.0
+=====
+
+### Features
+
+- #957  switches to OCaml 4.0.{7,8,9} and core_kernel v0.12
+- #1024 optimizes the Knowledge run function
+- #1026 adds `--show-invalid` and `--stop-on-error` bap to mc/objdump
+- #1027 adds the `command` stanza to the recipes grammar
+- #1028 improves the build time
+- #1039 adds an optional omake backend
+- #1042 revamps Primus Lisp type checker
+- #1053 tweaks primus-mark-visited to mark called stubs as visited
+- #1051 adds liveness analysis
+- #1055 caches the dissasembler state
+- #1061 optimizes Primus observations
+- #1061 adds clocks to the Primus interpreter
+- #1061 switches to clock ticks as the default limited in primus-limit
+- #1059 adds an ability to lift instruction into intrinsics calls
+- #1059 adds IEEE754 Primus library
+- #1059 allows referencing any variable in a project from Primus Lisp
+- #1059 adds the `lisp-primitive` observation
+- #1035 adds stubs for `realloc` in Primus Lisp
+- #1071 exposes the commit ID in `bap --version`
+- #1075 integrates Primus with the Knowledge base
+- #1075 introduces Primus systems and components
+- #1075 adds restricted mode to Primus Machine monad
+- #1075 adds an option to run Primus on marked subroutines
+- #1075 refines the timeline of a Primus machine
+- #1075 adds an ability to run multiple instances of Primus
+- #1079 switches to odig
+- #1084 removes the outdated docker images
+- #1086 relaxes variables name restriction allowing any character
+- #1093 gives programmatic access to ABI processors
+- #1036 adds an ABI pass that redirects stubs to implementations
+- #1101 updates to LLVM 10
+- #1095 prunes unreachable code in the optimization pass
+- #1099 adds support for windows PDB files
+- #1105 adds support for modern C runtime
+- #1105 adds the default C prototype
+- #1105 better error reports, no backtraces unless BAP_DEBUG is set
+- #1105 adds `ite`, `branch`, and `repeat` Primus operations
+- #1105 complete rewrite of Primus generators (wide generators)
+- #1105 completely overhauls the random generators implementation
+- #1105 new primus-random plugin that controls Primus randomness
+- #1105 adds Primus.Env and Primus.Memory generated observations
+- #1105 extends the Priumus.Memory interface
+- #1105 extends the Primus.Env interface
+- #1105 new less heavy interface for Lisp primitives
+- #1105 relaxes Primus Interpreter typing rules
+- #1105 makes Primus Lisp interpreter more transparent
+- #1105 adds static and global variables to Primus Lisp
+- #1105 fixes Lisp msg operator
+- #1105 enables overloading based on systems and components
+- #1105 adds the Primus.Memory.add_region function
+- #1105 allows Primus execution from any basic block
+- #1105 makes values unique across different machines
+- #1105 adds the primus track visited library
+- #1105 adds the primus symbolic executor plugin
+- #1105 adds symblolic IO system
+- #1105 adds many new stubs
+- #1105 extends Primus Lisp's Dictionary interface
+- #1105 adds the default limit to Primus Limiter
+- #1105 reimplements Primus Lisp memory allocator (malloc)
+- #1105 adds the `symbol-of-string` primitive
+- #1105 adds the `eval-lisp` bap command
+- #1105 fixes the multisystem run observation subscription
+- #1105 splits the promiscuous mode into subcomponents
+- #1105 adds new primitives to the Primus region library
+- #1105 tweaks the core systems
+- #1105 fixes memcheck-malloc on strn* operations
+- #1105 adds incident deduplication
+- #1105 adds x86 non-standard registers intialization
+- #1105 extends the run plugin
+
+### Bug fixes
+
+- #1025 compels plugins to respect the Bap_main rules
+- #1026 fixes `--show-size` and `--show-kinds` in `bap mc`
+- #1027 removes the default command hack in `bap`
+- #1037 makes dynamic loading sound
+- #1042 fixes the visited attribute attaching in primus-mark-visited
+- #1045 prevents cmdliner from fetching plugins path from environment
+- #1034 fixes arguments attributes in the `callsites` plugin
+- #1032 fixes taint garbage collector
+- #1048 fixes the missing filename attribute
+- #1049 prevents overwriting of a file in the input channel redirection
+- #1054 fixes CFG partitioning based on call destinations information
+- #1073 fixes the installation of man pages
+- #1083 fixes the entry point in docker images
+- #1082 disables broken llvm (< 8.0) for aarch64 targets
+- #1085 handles correctly ELF files without sections
+- #1102 fixes Bil.eval with non-standard memory sizes
+
 2.0.0
 =====
 

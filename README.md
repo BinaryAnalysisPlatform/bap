@@ -1,9 +1,8 @@
 # Binary Analysis Platform
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/BinaryAnalysisPlatform/bap/blob/master/LICENSE)
 [![Join the chat at https://gitter.im/BinaryAnalysisPlatform/bap](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/BinaryAnalysisPlatform/bap?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-[![docs](https://img.shields.io/badge/doc-master-green.svg)][api-master]
-[![docs](https://img.shields.io/badge/doc-2.0.0-green.svg)][api-2.0]
-[![docs](https://img.shields.io/badge/doc-1.6.0-green.svg)][api-1.6]
+[![docs](https://img.shields.io/badge/doc-master-green.svg)][docs]
+[![docs](https://img.shields.io/badge/doc-2.1.0-green.svg)][docs]
 [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)][travis]
 
 ## Table of contents
@@ -16,7 +15,7 @@
 
 ## Overview
 
-The Carnegie Mellon University Binary Analysis Platform (CMU BAP) is a suite of utilities and libraries that enables analysis of programs in their machine representation. BAP supports x86, x86-64, ARM, MIPS, and PowerPC out of the box and could be easily extended to support new architectures. BAP includes an evergrowing set of ready to use [tools][toolkit] and provides various facilities for building custom tools, starting from various analysis-specific domain languages, such as, Primus Lisp, BML, BARE, Recipes, etc, which do not require sophisticated programming skills, and ending with implementing custom plugins in OCaml or even in Rust or C, via provided bindings.  The following short [demonstration][demo] of BAP capabilities is interactive, you can pause it at any moment and even copy the contents. 
+The Carnegie Mellon University Binary Analysis Platform (CMU BAP) is a suite of utilities and libraries that enables analysis of programs in the machine code representation. BAP supports x86, x86-64, ARM, MIPS, PowerPC and new architectures can be added as plugins. BAP includes various analyses, standard interpreter, microexecution interpreter, and symbolic executor. BAP features its own domain-specific language, [Primus Lisp][primus-lisp], that is used for implementing analyses, specifying verification conditions, modeling functions (writing stubs) and even interfacing with the SMT solver. The [toolkit][toolkit] repository includes various examples of program analysis tools that could be implemented with BAP and can be used as the starting point (in addition to the [tutorial][bap-tutorial]) for implementing custom analyses. BAP can be used as a framework with a single [bap][demo] utility that is [extended with plugins][extending] or it can be used as a library [embedded][embedding] in a user application, which could be written in OCaml or, in any other language, using [C bindings][bap-bindings]. We also provide some [minimal support for Python][bap-python] to make it easier to start learning BAP.
 
 BAP is developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by grants from the United States Department of Defense, Siemens, Boeing, ForAllSecure, and the Korea government, see [sponsors](#Sponsors) for more information. BAP is used in various institutions and serves as a backbone for many interesting projects, some are highlighted below:
 *   [The CGC winner][cgc] [ForAllSecure Mayhem][mayhem]
@@ -30,8 +29,8 @@ BAP is developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by
 We provide binary packages packed for Debian and Red Hat derivatives. For other distributions we provide tgz archives. To install bap on a Debian derivative:
 
 ```bash
-wget https://github.com/BinaryAnalysisPlatform/bap/releases/download/v2.0.0/{bap,libbap,libbap-dev}_2.0.0.deb
-sudo dpkg -i {bap,libbap,libbap-dev}_2.0.0.deb
+wget https://github.com/BinaryAnalysisPlatform/bap/releases/download/v2.1.0/{bap,libbap,libbap-dev}_2.1.0.deb
+sudo dpkg -i {bap,libbap,libbap-dev}_2.1.0.deb
 ```
 
 ### From sources
@@ -39,9 +38,9 @@ sudo dpkg -i {bap,libbap,libbap-dev}_2.0.0.deb
 Our binary packages do not include the OCaml development environment. If you are going to write an analysis in OCaml you need to install BAP from the source code using either [opam][opam-install] or by cloning and building this repository directly. The opam method is the recommended one. Once it is installed the following three commands should install the platform in a newly created switch.
 
 ```bash
-opam init --comp=4.07.0              # install the compiler
-eval `opam config env`               # activate opam environment
-opam depext --install bap            # install bap
+opam init --comp=4.09.0              # inits opam and install the OCaml compiler
+eval `opam config env`               # activates opam environment
+opam depext --install bap            # installs bap and its dependencies
 ```
 The `opam depext --install bap` command will try to fulfill the system dependencies of BAP, e.g., LLVM and is the common point of failure, especially on uncommon distributions or for rare versions of LLVM. If it fails, try to install the system dependencies manually, using your operating system package manager, and then use the common `opam install bap` command, to install BAP. If it still doesn't work, do not hesitate to drop by our [chat][gitter] and seek help there. It is manned with friendly people that will be happy to help.
 
@@ -56,7 +55,7 @@ If you insist on building BAP manually or just want to tackle with BAP internals
 ```bash
 ./configure --enable-everything
 make
-make install 
+make install
 ```
 
 The `configure` script lets you define a specific set of components that you need. We have nearly a hundred of components and naming them all will be too tedious, that's why we added the `--enable-everything` option. It plays nice with the `--disable-<feature>` component so that you can unselect components that are not relevant to your current task. For more tips and tricks see our [wiki][wiki] and do not hesitate to tip back. We encourage everyone to use our wiki for collaboration and information sharing. And as always, drop by [gitter][gitter] for a friendly chat.
@@ -119,7 +118,7 @@ let main proj =
   let jmps,total = counter#run (Project.program proj) (0,0) in
   printf "ratio = %d/%d = %g\n" jmps total (float jmps /. float total)
 
-let () = Extension.declare @@ fun _ctxt -> 
+let () = Extension.declare @@ fun _ctxt ->
    Project.register_pass' main;
    Ok ()
 ```
@@ -130,7 +129,9 @@ bapbundle install jmp.plugin
 bap /bin/echo --pass=jmp
 ```
 
-Let's briefly go through the code. The `counter` object is a visitor that has the state consisting of a pair of counters. The first counter keeps track of the number of jmp terms, and the second counter is incremented every time we enter any term.  The `main` function just runs the counter and prints the output. We declare our extension use the [Extension.declare][extension-declare] function from the [Bap_main][bap-main] library. An extension is just a function that receives the context (which could be used to obtain configuration parameters). In this function, we register our `main` function as a pass using the `Project.register_pass` function. 
+Let's briefly go through the code. The `counter` object is a visitor that has the state consisting of a pair of counters. The first counter keeps track of the number of jmp terms, and the second counter is incremented every time we enter any term.  The `main` function just runs the counter and prints the output. We declare our extension use the [Extension.declare][extension-declare] function from the [Bap_main][bap-main] library. An extension is just a function that receives the context (which could be used to obtain configuration parameters). In this function, we register our `main` function as a pass using the `Project.register_pass` function.
+
+A little bit more complex example, as well as an example that uses Python, can be found in our [tutorial][bap-tutorial].
 
 ### Interactive REPL
 
@@ -143,15 +144,15 @@ BAP also ships an interactive toplevel utility `baptop`. This is a shell-like ut
 
 ## Learning
 
-We understand that BAP is huge and it is easy to get lost. We're working constantly on improving documentation ensuring that every single function in [BAP API][api-master] is thoroughly documented. But writing higher-level guidelines in the form of manuals or tutorials is much harder, especially given how different the goals of our fellow researchers and users. Therefore we employ a backward-chaining approach and prefer to answer real questions rather than prematurely trying to address all possible questions. We will be happy to see you in your [chat][gitter] that features searchable, indexed by Google, archive.
+We understand that BAP is huge and it is easy to get lost. We're working constantly on improving documentation ensuring that every single function in [BAP API][docs] is thoroughly documented. But writing higher-level guidelines in the form of manuals or [tutorials][bap-tutorial] is much harder and very time consuming, especially given how different the goals of our fellow researchers and users. Therefore we employ a backward-chaining approach and prefer to answer real questions rather than prematurely trying to address all possible questions. We will be happy to see you in your [chat][gitter] that features searchable, indexed by Google, archive.
 
 We are writing, occasionally, to our [blog][blog] and [wiki][wiki] and are encouraging everyone to contribute to both of them. You can also post your questions on [stackoverflow][so-ocaml] or discuss BAP on the [OCaml][discuss-bap] board. We also have a cute [discord][discord-bap] channel, which has much less traffic than our [gitter][gitter].
 
 ## Contributing
 
-BAP is built by the community and we're welcome all contributions from authors that are willing to share them under the MIT license. If you don't think that your analysis or tool suits this repository (e.g., it has a limited use, not fully ready, doesn't meet our standards, etc), then you can consider contributing to our [bap-plugins][bap-plugins] repository that is a collection of useful BAP plugins that are not mature enough to be included in the main distribution. Alternatively, you can consider extending our [toolkit][toolkit] with your tool. 
+BAP is built by the community and we're welcome all contributions from authors that are willing to share them under the MIT license. If you don't think that your analysis or tool suits this repository (e.g., it has a limited use, not fully ready, doesn't meet our standards, etc), then you can consider contributing to our [bap-plugins][bap-plugins] repository that is a collection of useful BAP plugins that are not mature enough to be included in the main distribution. Alternatively, you can consider extending our [toolkit][toolkit] with your tool.
 
-Of course, there is no need to submit your work to one of our repositories. BAP is a plugin-based framework and your code could be hosted anywhere and have any license (including proprietary). If you want to make your work available to the community it would be a good idea to release it via [opam][opam-packaging]. 
+Of course, there is no need to submit your work to one of our repositories. BAP is a plugin-based framework and your code could be hosted anywhere and have any license (including proprietary). If you want to make your work available to the community it would be a good idea to release it via [opam][opam-packaging].
 
 ## Sponsors
 *   [ForAllSecure][fas]
@@ -163,11 +164,17 @@ Of course, there is no need to submit your work to one of our repositories. BAP 
 *   [Siemens AG](https://www.siemens.com/us/en/home.html)
 
 *   Institute for Information & communications Technology Promotion(IITP) grant funded by the Korea government(MSIT) (No.2015-0-00565, Development of Vulnerability Discovery Technologies for IoT Software Security)
- 
-Please, [contact us][contact-us] if you would like to become a sponsor or are seeking a deeper collaboration. 
-  
+
+Please, [contact us][contact-us] if you would like to become a sponsor or are seeking a deeper collaboration.
+
 [toolkit]: https://github.com/BinaryAnalysisPlatform/bap-toolkit
 [bap-plugins]: https://github.com/BinaryAnalysisPlatform/bap-plugins
+[bap-bindings]: https://github.com/BinaryAnalysisPlatform/bap-bindings
+[bap-tutorial]: https://github.com/BinaryAnalysisPlatform/bap-tutorial
+[bap-python]: https://github.com/BinaryAnalysisPlatform/bap-python
+[primus-lisp]: https://binaryanalysisplatform.github.io/bap/api/master/bap-primus/Bap_primus/Std/Primus/Lisp/index.html
+[extending]: https://binaryanalysisplatform.github.io/bap/api/master/bap-main/Bap_main/index.html#extending-bap
+[embedding]: https://binaryanalysisplatform.github.io/bap/api/master/bap-main/Bap_main/index.html#embedding-bap
 [demo]: https://binaryanalysisplatform.github.io/assets/playfull.svg
 [mayhem]: https://forallsecure.com/solutions/devsecops/
 [fas]: https://forallsecure.com/
@@ -189,7 +196,5 @@ Please, [contact us][contact-us] if you would like to become a sponsor or are se
 [bap-main]: http://binaryanalysisplatform.github.io/bap/api/master/bap-main/Bap_main/index.html
 [extension-declare]: http://binaryanalysisplatform.github.io/bap/api/master/bap-main/Bap_main/Extension/index.html#val-declare
 
-[api-1.6]: http://binaryanalysisplatform.github.io/bap/api/v1.6.0/argot_index.html
-[api-2.0]: http://binaryanalysisplatform.github.io/bap/api/odoc/index.html
-[api-master]: http://binaryanalysisplatform.github.io/bap/api/master/index.html
+[docs]: https://binaryanalysisplatform.github.io/bap/api/master/index.html
 [man-bap]: http://binaryanalysisplatform.github.io/bap/api/man/bap.1.html
