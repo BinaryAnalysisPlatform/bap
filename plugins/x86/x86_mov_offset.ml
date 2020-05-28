@@ -196,7 +196,9 @@ module Self = Self ()
 let normalize ver =
   match String.index ver '.' with
   | None -> ver
-  | Some i -> String.sub ver 0 (i + 2)
+  | Some i -> match String.sub ver 0 (i + 2) with
+    | x -> x
+    | exception _ -> ver
 
 let () =
   Bap_main.Extension.declare @@ fun _ctxt ->
