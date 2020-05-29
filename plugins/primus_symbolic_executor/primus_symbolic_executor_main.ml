@@ -940,6 +940,12 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
     >>= fun () ->
     Val.b1
 
+  let assertion_of_value x =
+    Executor.value x >>| (function
+        | None -> SMT.word (Primus.Value.to_word x)
+        | Some x -> x) >>|
+    SMT.formula ~refute:true
+
   (* we can later add operators that manipulate the scopes
      in which the assertion is checked *)
   let assert_ name assertions =
@@ -948,17 +954,12 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
         Constraints.get Context.Scope.path >>= fun path ->
         let constraints = Set.to_list @@ Set.union user path in
         Machine.List.fold assertions ~init:constraints
-          ~f:(fun constraints assertion ->
-              Executor.value assertion >>| function
-              | None -> constraints
-              | Some expr ->
-
-                SMT.formula ~refute:true expr :: constraints) >>|
-        SMT.check >>= function
+          ~f:(fun constraints x ->
+              assertion_of_value x >>| fun assertion ->
+              assertion :: constraints) >>| SMT.check >>= function
         | None -> Machine.return ()
         | Some model ->
           Val.Symbol.of_value name >>= fun name ->
-          Debug.msg "%s doesn't hold!" name >>= fun () ->
           Executor.inputs >>| Seq.to_list >>= fun inputs ->
           report (name,model,inputs)) >>= fun () ->
     Val.b1
