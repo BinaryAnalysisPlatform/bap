@@ -32,6 +32,8 @@ depends: [
   "parsexp"
   "bap-signatures"
   "z3"
+  "radare2"
+  "yojson"
   "result" {= "1.4"}
 ]
 depopts: ["conf-ida" "conf-binutils"]
@@ -90,6 +92,7 @@ install: [
   ["ocamlfind" "remove" "bap-plugin-emit_ida_script"]
   ["ocamlfind" "remove" "bap-plugin-ida"]
   ["ocamlfind" "remove" "bap-plugin-glibc_runtime"]
+  ["ocamlfind" "remove" "bap-plugin-radare2"]
   ["ocamlfind" "remove" "bap-plugin-objdump"]
   ["ocamlfind" "remove" "bap-plugin-llvm"]
   ["ocamlfind" "remove" "bap-plugin-legacy_llvm"]
@@ -201,6 +204,7 @@ remove: [
   ["ocamlfind" "remove" "bap-plugin-emit_ida_script"]
   ["ocamlfind" "remove" "bap-plugin-ida"]
   ["ocamlfind" "remove" "bap-plugin-glibc_runtime"]
+  ["ocamlfind" "remove" "bap-plugin-radare2"]
   ["ocamlfind" "remove" "bap-plugin-objdump"]
   ["ocamlfind" "remove" "bap-plugin-llvm"]
   ["ocamlfind" "remove" "bap-plugin-legacy_llvm"]

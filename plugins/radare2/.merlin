@@ -1,0 +1,4 @@
+PKG bap
+PKG radare2
+B ../../_build/plugins/radare2
+REC
