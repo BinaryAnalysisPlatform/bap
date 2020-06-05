@@ -3,7 +3,7 @@ Flag radare2
   Default: false
 
 Library objdump_plugin
-  Build$:           flag(everything) || flag(objdump)
+  Build$:           flag(everything)
   Path:             plugins/radare2
   FindlibName:      bap-plugin-radare2
   CompiledObject:   best
@@ -12,4 +12,4 @@ Library objdump_plugin
                     zarith, bitvec, radaer2, yojson
   InternalModules:  Radare2_main
   XMETADescription: use radare2 to provide a symbolizer
-  XMETAExtraLines:  tags="objdump, radare2"
+  XMETAExtraLines:  tags="symbol, radare2"
