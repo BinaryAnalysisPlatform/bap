@@ -55,7 +55,7 @@ let () =
     `P  "To view the symbols after running the plugin:";
     `P  "$(b, bap) $(i,executable) --no-objdump --dump-symbols ";
     `P  "To view symbols without this plugin:";
-    `P  "$(b, bap) $(i,executable) --no-objdump -no-radare2-main --dump-symbols";
+    `P  "$(b, bap) $(i,executable) --no-objdump --no-radare2 --dump-symbols";
     `S  "SEE ALSO";
     `P  "$(b,bap-plugin-objdump)(1)"
   ];
