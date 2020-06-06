@@ -2,14 +2,14 @@ Flag radare2
   Description: Build radare2 plugin
   Default: false
 
-Library objdump_plugin
-  Build$:           flag(everything)
+Library radare2_plugin
+  Build$:           flag(everything) || flag(radare2)
   Path:             plugins/radare2
   FindlibName:      bap-plugin-radare2
   CompiledObject:   best
   BuildDepends:     bap, re.pcre, regular, bap-core-theory,
                     bap-future, core_kernel, bap-knowledge,
-                    zarith, bitvec, radaer2, yojson
+                    zarith, bitvec, radare2, yojson
   InternalModules:  Radare2_main
   XMETADescription: use radare2 to provide a symbolizer
-  XMETAExtraLines:  tags="symbol, radare2"
+  XMETAExtraLines:  tags="symbolizer, radare2"
