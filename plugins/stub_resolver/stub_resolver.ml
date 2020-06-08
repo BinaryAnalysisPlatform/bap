@@ -4,6 +4,7 @@ open Bap_core_theory
 open Bap_knowledge
 
 include Self ()
+let package = "bap.std"
 
 open KB.Syntax
 
@@ -21,16 +22,17 @@ let tids = Knowledge.Domain.mapping (module Tid) "tids"
     ~equal:Tid.equal
     ~inspect:sexp_of_tid
 
-let slot = Knowledge.Class.property
-    Theory.Program.cls "stubs" tids
+let resolver = Knowledge.Class.declare
+    ~package "stub-resolver" ()
+
+let result = Knowledge.Class.property
+    resolver "result" tids
     ~persistent:(Knowledge.Persistent.of_binable (module struct
                    type t = tid Tid.Map.t
                    [@@deriving bin_io]
                  end))
-    ~public:true
+    ~package
     ~desc:"The mapping from stubs to real symbols"
-
-let cls = Knowledge.Slot.cls slot
 
 let empty = {
   groups = Map.empty (module Tid);
@@ -129,14 +131,14 @@ let resolve prog =
   find_pairs
 
 let provide prog =
-  Knowledge.Object.create cls >>= fun obj ->
+  Knowledge.Object.create resolver >>= fun obj ->
   resolve prog >>= fun links ->
-  KB.provide slot obj links >>= fun () ->
+  KB.provide result obj links >>= fun () ->
   KB.return obj
 
 let run prog =
-  match Knowledge.run cls (provide prog) (Toplevel.current ()) with
-  | Ok (v,_) -> Knowledge.Value.get slot v
+  match Knowledge.run resolver (provide prog) (Toplevel.current ()) with
+  | Ok (v,_) -> Knowledge.Value.get result v
   | Error cnf ->
     error "%a\n" Knowledge.Conflict.pp cnf;
     Map.empty (module Tid)
