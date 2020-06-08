@@ -2567,6 +2567,9 @@ module Knowledge = struct
                 >>| fun objects ->
                 Map.set classes clsid objects))
       >>= fun classes -> put {s with classes}
+
+    let package = get () >>| fun {Env.package} -> package
+    let set_package name = update @@ fun s -> {s with package = name}
   end
 
 

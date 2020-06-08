@@ -780,6 +780,18 @@ module Knowledge : sig
     val in_package : string -> (unit -> 'a knowledge) -> 'a knowledge
 
 
+    (** [set_package pkg] makes the package named [pkg] the current package.
+
+        @since 2.2.0
+    *)
+    val set_package : string -> unit knowledge
+
+    (** [package] is the name of the current package.
+
+        @since 2.2.0
+    *)
+    val package : string knowledge
+
     (** [import ?strict ?package:p names] imports all [names] into [p].
 
         The [names] elements could be either package names or
