@@ -26,12 +26,14 @@ module Kernel = struct
 
   type t = {
     default : arch;
+    package : string option;
     state : Driver.state;
     calls : Calls.t;
   } [@@deriving bin_io]
 
-  let empty arch = {
+  let empty ?package arch = {
     default = arch;
+    package;
     state = Driver.init;
     calls = Calls.empty;
   }
@@ -62,7 +64,6 @@ type state = Kernel.t [@@deriving bin_io]
 type t = {
   arch    : arch;
   core    : Kernel.t;
-
   disasm  : disasm;
   memory  : value memmap;
   storage : dict;
@@ -234,7 +235,7 @@ let pp_mem ppf mem =
 
 let pp_disasm_error ppf = function
   | `Failed_to_disasm mem ->
-    fprintf ppf "can't disassemble insnt at address %a" pp_mem mem
+    fprintf ppf "can't disassemble an instruction at address %a" pp_mem mem
   | `Failed_to_lift (_mem,insn,err) ->
     fprintf ppf "<%s>: %a"
       (Disasm_expert.Basic.Insn.asm insn) Error.pp err
@@ -243,12 +244,17 @@ let union_memory m1 m2 =
   Memmap.to_sequence m2 |> Seq.fold ~init:m1 ~f:(fun m1 (mem,v) ->
       Memmap.add m1 mem v)
 
+let set_package package = match package with
+  | None -> KB.return ()
+  | Some pkg -> KB.Symbol.set_package pkg
 
-let build ?state ~file ~code ~data arch =
+let build ?package ?state ~file ~code ~data arch =
   let init = match state with
-    | Some state -> state
-    | None -> Kernel.empty arch in
+    | Some state -> Kernel.{state with package}
+    | None -> Kernel.empty ?package arch in
   let kernel =
+    let open KB.Syntax in
+    set_package package >>= fun () ->
     Memmap.to_sequence code |> KB.Seq.fold ~init ~f:(fun k (mem,_) ->
         Kernel.update k mem) in
   let cfg,symbols,core = Kernel.Toplevel.run kernel in
@@ -263,8 +269,10 @@ let build ?state ~file ~code ~data arch =
   }
 
 let state {core} = core
+let package {core={Kernel.package}} = package
 
 let create_exn
+    ?package
     ?state
     ?disassembler:_
     ?brancher:_
@@ -277,13 +285,13 @@ let create_exn
   Signal.send Info.got_arch arch;
   Signal.send Info.got_data data;
   Signal.send Info.got_code code;
-  finish @@ build ?state ~file ~code ~data arch
+  finish @@ build ?package ?state ~file ~code ~data arch
 
 let create
-    ?state ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input =
+    ?package ?state ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input =
   Or_error.try_with ~backtrace:true (fun () ->
       create_exn
-        ?state ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input)
+        ?package ?state ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input)
 
 let restore_state _ =
   failwith "Project.restore_state: this function should no be used.

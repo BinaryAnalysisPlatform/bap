@@ -16,9 +16,11 @@ type state [@@deriving bin_io]
 type second = float
 
 val state : t -> state
+val package : t -> string option
 
 
 val create :
+  ?package:string ->
   ?state:state ->
   ?disassembler:string ->
   ?brancher:brancher source ->
