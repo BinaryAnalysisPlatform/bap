@@ -25,9 +25,9 @@ module Label : sig
   val aliases : (program, Set.M(String).t) Knowledge.slot
   val is_valid : (program, bool option) Knowledge.slot
   val is_subroutine : (program, bool option) Knowledge.slot
-  val for_addr : Bitvec.t -> t knowledge
-  val for_name : string -> t knowledge
-  val for_ivec : int -> t knowledge
+  val for_addr : ?package:string -> Bitvec.t -> t knowledge
+  val for_name : ?package:string -> string -> t knowledge
+  val for_ivec : ?package:string -> int -> t knowledge
 
   include Knowledge.Object.S with type t := t
 end

@@ -1159,26 +1159,58 @@ module Theory : sig
 
     (** [for_addr x] generates a link to address [x].
 
-        It is guaranteed that every call [for_addr x] with the same
-        [x] will return the same label.
+        It is guaranteed that every call [for_addr ~package x] with
+        the same arguments will return the same label.
+
+        The [addr] property of the created object is set to [x].
+
+        If the [package] parameter is not specified then the created
+        object is interned in the currently selected package otherwise
+        it is interned in the provided [package].
+
+        @since 2.2.0 the [package] parameter is added
+        @since 2.2.0 the object is interned in the currently selected package
     *)
-    val for_addr : Bitvec.t -> t knowledge
+    val for_addr : ?package:string -> Bitvec.t -> t knowledge
 
 
     (** [for_name x] generates a link to program with linkage name [x].
 
-        It is guaranteed that every call [for_name x] with the same
-        [x] will return the same label.
+        It is guaranteed that every call [for_name ~package x] with
+        the same arguments will return the same label, which is the
+        same object as the [Knowledge.Symbol.intern ?package name].
+
+        The [name] property of the created object is set to [x].
+
+        If the [package] parameter is not specified then the created
+        object is interned in the currently selected package otherwise
+        it is interned in the provided [package].
+
+        @since 2.2.0 the [package] parameter is added
+        @since 2.2.0 the object is interned in the currently selected package
+
     *)
-    val for_name : string -> t knowledge
+    val for_name : ?package:string -> string -> t knowledge
 
 
-    (** [for_name x] generates a link to an interrupt service number [x].
+    (** [for_ivec x] generates a link to an interrupt service number [x].
 
-        It is guaranteed that every call [for_name x] with the same
-        [x] will return the same label.
+        It is guaranteed that every call [for_addr ~package x] with
+        the same arguments will return the same label, which is the
+        same object as the [Knowledge.Symbol.intern ?package name],
+        where [name] is [sprintf "ivec-%x" x].
+
+        The [addr] property of the created object is set to [x].
+
+        If the [package] parameter is not specified then the created
+        object is interned in the currently selected package otherwise
+        it is interned in the provided [package].
+
+        @since 2.2.0 the [package] parameter is added
+        @since 2.2.0 the object is interned in the currently selected package
+
     *)
-    val for_ivec : int -> t knowledge
+    val for_ivec : ?package:string -> int -> t knowledge
 
     include Knowledge.Object.S with type t := t
   end
