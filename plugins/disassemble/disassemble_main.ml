@@ -304,15 +304,16 @@ let _disassemble_command_registered : unit =
   validate_passes_style old_style_passes (List.concat passes) >>=
   validate_passes >>= fun passes ->
   Dump_formats.parse outputs >>= fun outputs ->
+  let package = Caml.Digest.to_hex (Caml.Digest.file input) in
   let digest = make_digest [
       Extension.Configuration.digest ctxt;
-      Caml.Digest.file input;
+      package;
       loader;
     ] in
   import_knowledge_from_cache digest;
   let state = load_project_state_from_cache digest in
   let input = Project.Input.file ~loader ~filename:input in
-  Project.create ?state
+  Project.create ~package ?state
     input |> proj_error >>= fun proj ->
   if Option.is_none state then begin
     store_knowledge_in_cache digest;
