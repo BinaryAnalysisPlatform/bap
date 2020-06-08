@@ -18,8 +18,8 @@ let of_sub sub =
             let edge = G.Edge.create sid did jid in
             G.Edge.insert edge g))
 
-let start = Tid.for_name "%start-pseudo-node%"
-let exit = Tid.for_name "%exit-pseudo-node%"
+let start = Tid.for_name ~package:"bap.std" "start-pseudo-node"
+let exit = Tid.for_name ~package:"bap.std" "exit-pseudo-node"
 
 let connect_with_exit n =
   if Tid.equal n exit then ident
