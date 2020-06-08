@@ -44,15 +44,15 @@ module Tid = struct
   let addr = Toplevel.var "addr"
 
 
-  let generate f x =
-    Toplevel.put last (f x);
+  let generate ?package f x =
+    Toplevel.put last (f ?package x);
     Toplevel.get last
 
-  let for_ivec s = generate Theory.Label.for_ivec s
-  let for_addr s = generate Theory.Label.for_addr @@
+  let for_ivec ?package s =
+    generate ?package Theory.Label.for_ivec s
+  let for_addr ?package s =
+    generate ?package Theory.Label.for_addr @@
     Bap_bitvector.to_bitvec s
-
-
 
   let set slot tid name = Toplevel.exec begin
       KB.provide slot tid (Some name)
@@ -78,8 +78,8 @@ module Tid = struct
     add_name tid name
 
 
-  let for_name s =
-    let t = generate Theory.Label.for_name s in
+  let for_name ?package s =
+    let t = generate ?package Theory.Label.for_name s in
     set_name t s;
     t
 

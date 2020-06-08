@@ -7206,16 +7206,63 @@ module Std : sig
       target.  *)
   val register_target : arch -> (module Target) -> unit
 
-  (** Term identifier  *)
+  (** Term identifier.
+
+      A term identifier is a knowledge object of class
+      [core-theory:program] that represents a program. Objects of this
+      class have many properties that describe program syntax
+      (representation) and semantics. The set of properties is
+      extensible and each plugin/library can add its own properties,
+      for the current set of all properties of all classes, see
+      [bap list classes], or [bap list class -f core-theory:program]
+      to list the properties of the class to which Tid.t belongs.
+
+
+  *)
   module Tid : sig
     type t = tid
 
-    (** [create ()] creates a fresh newly term identifier  *)
+    (** [create ()] creates a fresh newly term identifier.
+
+        This function has a side-effect of changing the Toplevel
+        knowledge base.
+    *)
     val create : unit -> t
 
-    val for_name : string -> t
-    val for_addr : addr -> t
-    val for_ivec : int -> t
+
+    (** [for_name name] creates a Term identifier for the given [name].
+
+        Creates a new program object that denotes a program with the
+        given name. See [Theory.Label.for_name] from the
+        [Bap_core_theory] interface for more information.
+
+        @since 2.0.0
+        @since 2.2.0 has the optional [package] parameter.
+    *)
+    val for_name : ?package:string -> string -> t
+
+
+    (** [for_addr addr] creates a Term identifier for the given [addr].
+
+        Creates a new program object that denotes a program with the
+        given addr. See [Theory.Label.for_addr] from the
+        [Bap_core_theory] interface for more information.
+
+        @since 2.0.0
+        @since 2.2.0 has the optional [package] parameter.
+    *)
+    val for_addr : ?package:string -> addr -> t
+
+    (** [for_ivec ivec] creates a Term identifier for the given [ivec].
+
+        Creates a new program object that denotes a program with the
+        given ivec. See [Theory.Label.for_ivec] from the
+        [Bap_core_theory] interface for more information.
+
+        @since 2.0.0
+        @since 2.2.0 has the optional [package] parameter.
+    *)
+    val for_ivec : ?package:string -> int -> t
 
 
     (** [set_name tid name] associates a [name] with a given
