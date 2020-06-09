@@ -1,0 +1,38 @@
+name: Main workflow
+
+on:
+  - push
+  - pull_request
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - ubuntu-latest
+          - windows-latest
+        ocaml-version:
+          - 4.09.1
+          - 4.08.1
+          - 4.07.1
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - name: Use OCaml ${{ matrix.ocaml-version }}
+        uses: avsm/setup-ocaml@v1
+        with:
+          ocaml-version: ${{ matrix.ocaml-version }}
+
+      - run: opam pin add bap . --no-action
+      - run: opam depext bap --yes --with-doc --with-test
+      - run: opam install . --deps-only --with-doc --with-test
+      - run: opam install .
+      - run: opam pin add bap-veri testsuite/veri/bap-veri/ -y
