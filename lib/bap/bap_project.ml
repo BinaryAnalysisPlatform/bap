@@ -18,6 +18,18 @@ include Bap_self.Create()
 
 let find name = FileUtil.which name
 
+let with_arch arch mems =
+  let open KB.Syntax in
+  let width = Size.in_bits (Arch.addr_size arch) in
+  KB.promising Arch.slot ~promise:(fun label ->
+      KB.collect Theory.Label.addr label >>| function
+      | None -> `unknown
+      | Some p ->
+        let p = Word.create p width in
+        if Memmap.contains mems p
+        then arch
+        else `unknown)
+
 module Kernel = struct
   open KB.Syntax
   module Driver = Bap_disasm_driver
@@ -39,7 +51,7 @@ module Kernel = struct
   }
 
   let update self mem =
-    Disasm.scan self.default mem self.state >>= fun state ->
+    Driver.scan mem self.state >>= fun state ->
     Calls.update self.calls state >>| fun calls ->
     {self with state; calls}
 
@@ -49,8 +61,9 @@ module Kernel = struct
 
   module Toplevel = struct
     let result = Toplevel.var "result"
-    let run k =
+    let run arch code k =
       Toplevel.put result begin
+        with_arch arch code @@ fun () ->
         k >>= fun k ->
         disasm k >>= fun g ->
         symtab k >>| fun s -> g,s,k
@@ -257,7 +270,7 @@ let build ?package ?state ~file ~code ~data arch =
     set_package package >>= fun () ->
     Memmap.to_sequence code |> KB.Seq.fold ~init ~f:(fun k (mem,_) ->
         Kernel.update k mem) in
-  let cfg,symbols,core = Kernel.Toplevel.run kernel in
+  let cfg,symbols,core = Kernel.Toplevel.run arch code kernel in
   {
     core;
     disasm = Disasm.create cfg;

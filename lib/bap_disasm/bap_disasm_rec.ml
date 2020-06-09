@@ -108,25 +108,26 @@ let extract build disasm =
   Toplevel.get result
 
 
-let provide_arch arch mem =
+let with_arch arch mem =
   let width = Size.in_bits (Arch.addr_size arch) in
-  KB.promise Arch.slot @@ fun label ->
-  KB.collect Theory.Label.addr label >>| function
-  | None -> `unknown
-  | Some p ->
-    let p = Word.create p width in
-    if Memory.contains mem p then arch
-    else `unknown
+  KB.promising Arch.slot ~promise:(fun label ->
+      KB.collect Theory.Label.addr label >>| function
+      | None -> `unknown
+      | Some p ->
+        let p = Word.create p width in
+        if Memory.contains mem p then arch
+        else `unknown)
 
 let scan arch mem state =
-  provide_arch arch mem;
+  with_arch arch mem @@ fun () ->
   Driver.scan mem state
 
-let run ?backend ?(brancher=Brancher.empty) ?(rooter=Rooter.empty) arch mem =
+let run ?backend:_ ?(brancher=Brancher.empty) ?(rooter=Rooter.empty) arch mem =
   Brancher.provide brancher;
   Rooter.provide rooter;
-  provide_arch arch mem;
-  Ok (Driver.scan mem Driver.init)
+  Result.return @@
+  with_arch arch mem @@ fun () ->
+  Driver.scan mem Driver.init
 
 let cfg = extract global_cfg
 let errors _ = []
