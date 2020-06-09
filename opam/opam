@@ -297,7 +297,7 @@ depexts: [
     "libgmp-dev"
     "libzip-dev"
     "libcurl4-gnutls-dev"
-    "llvm-3.8-dev"
+    "llvm-9-dev"
     "time"
     "clang"
     "llvm"
@@ -310,14 +310,13 @@ depexts: [
     "dejagnu"
     "gmp"
     "libzip"
-    "llvm38-libs"
-    "llvm-libs38"
+    "llvm-libs"
     "m4"
     "time"
   ] {os-distribution = "archlinux"}
-  ["gmp" "llvm-3.8" "graphviz" "curl" "libzip"]
+  ["gmp" "llvm-9" "graphviz" "curl" "libzip"]
     {os = "macos" & os-distribution = "macports"}
-  ["gmp" "homebrew/versions/llvm38" "graphviz" "curl" "libzip" "dejagnu"]
+  ["gmp" "homebrew/versions/llvm9" "graphviz" "curl" "libzip" "dejagnu"]
     {os = "macos" & os-distribution = "homebrew"}
 ]
 dev-repo: "git://github.com/BinaryAnalysisPlatform/bap/"
