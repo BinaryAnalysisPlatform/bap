@@ -22,7 +22,7 @@ end
 type context = Context
 let package = "bil-plugin-internal"
 let cls = KB.Class.declare ~package "context" Context
-let context = KB.Symbol.intern ~package "context" cls
+let context = KB.Symbol.intern "context" cls
 let inherits slot =
   let name = KB.Name.unqualified @@KB.Slot.name slot in
   KB.Class.property cls ~package name
