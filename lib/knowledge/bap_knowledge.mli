@@ -203,13 +203,36 @@ module Knowledge : sig
   *)
   val promise : ('a,'p) slot -> ('a obj -> 'p t) -> unit
 
+
+  (** [promising p ~promise f] evaluates [f ()] under [promise] and
+      retracts it after [f] is evaluated.
+
+      The information provided by [promise] is only available during
+      evaluation of [f ()].
+
+      @since 2.2.0
+  *)
+  val promising : ('a,'p) slot -> promise:('a obj -> 'p t) ->
+    (unit -> 's t) -> 's t
+
   (** [propose p f] proposes the opinion computation.
 
       The same as [promise] except that it promises a value for
-      an opinion based property.
+      an opinion-based property.
   *)
   val propose : agent -> ('a, 'p opinions) slot -> ('a obj -> 'p t) -> unit
 
+
+  (** [proposing a p ~propose f] a scope-limited proposal.
+
+      The proposal is active only during the evaluation of [f ()]. The
+      function is the same as {!proposing} except that it promises a
+      value for an opinion-based property.
+
+      @since 2.2.0
+  *)
+  val proposing : agent -> ('a, 'p opinions) slot ->
+    propose:('a obj -> 'p t) -> (unit -> 's t) -> 's t
 
   (** state with no knowledge  *)
   val empty : state
@@ -1269,6 +1292,11 @@ module Knowledge : sig
   module Conflict : sig
     type t = conflict = ..
 
+
+    (** [to_string err] is the textual representation of the conflict [err]
+
+        @since 2.2.0  *)
+    val to_string : conflict -> string
 
     (** prints the conflict  *)
     val pp : Format.formatter -> conflict -> unit

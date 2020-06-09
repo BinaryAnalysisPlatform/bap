@@ -18,6 +18,7 @@ module Conflict = struct
   let pp = Exn.pp
   let register_printer pr = Caml.Printexc.register_printer pr
   let sexp_of_t = Exn.sexp_of_t
+  let to_string = Exn.to_string
 end
 
 module type Id = sig
@@ -500,13 +501,20 @@ module Domain = struct
 
   let is_empty {empty; order} x = Order.equal_partial (order empty x) EQ
 
-  exception Join of string * Sexp.t * Sexp.t [@@deriving sexp_of]
+  type conflict += Join : string * ('a -> Sexp.t) * 'a * 'a -> conflict
+
+  let () = Conflict.register_printer @@ function
+    | Join (dom,inspect, x, y) -> Option.some @@
+      Format.asprintf
+        "Domain %s doesn't have a join for values %a and %a"
+        dom Sexp.pp_hum (inspect x) Sexp.pp_hum (inspect y)
+    | _ -> None
 
   let make_join name inspect order x y =
     match order x y with
     | Order.GT -> Ok x
     | EQ | LT -> Ok y
-    | NC -> Error (Join (name, inspect x, inspect y))
+    | NC -> Error (Join (name, inspect, x, y))
 
   let define ?(inspect=sexp_of_opaque) ?join ~empty ~order name = {
     inspect; empty; order; name;
@@ -567,8 +575,7 @@ module Domain = struct
           | `Both (x,y) ->
             if equal x y then Some y
             else
-              let x = inspect x and y = inspect y in
-              let failed = Join (name,x,y) in
+              let failed = Join (name,inspect,x,y) in
               raise (Join.Conflict failed))
       with Join.Conflict err -> Error err in
     let inspect xs =
@@ -590,7 +597,7 @@ module Domain = struct
       | Some join -> join
       | None -> fun x y ->
         if equal x y then Ok y
-        else Error (Join (name, inspect x, inspect y)) in
+        else Error (Join (name, inspect, x, y)) in
     let inspect = sexp_of_option inspect in
     let join x y = match x,y with
       | None,x | x,None -> Ok x
@@ -2127,171 +2134,11 @@ module Knowledge = struct
   let gets f = Knowledge.lift (State.gets f)
   let update f = Knowledge.lift (State.update f)
 
-  exception Non_monotonic_update of Name.t * Conflict.t [@@deriving sexp]
-
-  let provide : type a p. (a,p) slot -> a obj -> p -> unit Knowledge.t =
-    fun slot obj x ->
-    if Domain.is_empty slot.dom x
-    then Knowledge.return ()
-    else
-      get () >>= function {classes} as s ->
-        let {Env.vals} as objs =
-          match Map.find classes slot.cls.id with
-          | None -> Env.empty_class
-          | Some objs -> objs in
-        try put {
-            s with classes = Map.set classes ~key:slot.cls.id ~data:{
-            objs with vals = Map.update vals obj ~f:(function
-            | None -> Record.(put slot.key empty x)
-            | Some v -> match Record.commit slot.dom slot.key v x with
-              | Ok r -> r
-              | Error err -> raise (Record.Merge_conflict err))}}
-        with Record.Merge_conflict err ->
-          Knowledge.fail (Non_monotonic_update (Slot.name slot, err))
-
-  let pids = ref Pid.zero
-
-  let register_promise (s : _ slot) run =
-    Pid.incr pids;
-    let pid = !pids in
-    Hashtbl.add_exn s.promises pid {run; pid}
-
-  let promise s get =
-    register_promise s @@ fun obj ->
-    get obj >>= fun x ->
-    if Domain.is_empty s.dom x
-    then Knowledge.return ()
-    else provide s obj x
-
   let objects {Class.id} =
     get () >>| fun {classes} ->
     match Map.find classes id with
     | None -> Env.empty_class
     | Some objs -> objs
-
-  let uid {Slot.key} = Dict.Key.uid key
-
-  let status
-    : ('a,_) slot -> 'a obj -> slot_status knowledge =
-    fun slot obj ->
-    objects slot.cls >>| fun {comp} ->
-    match Map.find comp obj with
-    | None -> Sleep
-    | Some slots -> match Map.find slots (uid slot) with
-      | None -> Sleep
-      | Some Work _ -> Awoke
-      | Some Done -> Ready
-
-  let update_slot
-    : ('a,_) slot -> 'a obj -> _ -> unit knowledge =
-    fun slot obj f ->
-    objects slot.cls >>= fun ({comp} as objs) ->
-    let comp = Map.update comp obj ~f:(fun slots ->
-        let slots = match slots with
-          | None -> Map.empty (module Dict.Key.Uid)
-          | Some slots -> slots in
-        Map.update slots (uid slot) ~f) in
-    get () >>= fun s ->
-    let classes = Map.set s.classes slot.cls.id {objs with comp} in
-    put {s with classes}
-
-  let enter_slot : ('a,_) slot -> 'a obj -> unit knowledge = fun s x ->
-    update_slot s x @@ function
-    | Some _ -> assert false
-    | None ->  Work {
-        waiting = Set.empty (module Pid);
-        current = Set.empty (module Pid)
-      }
-
-  let leave_slot : ('a,'p) slot -> 'a obj -> unit Knowledge.t = fun s x ->
-    update_slot s x @@ function
-    | Some (Work _) -> Done
-    | _ -> assert false
-
-  let update_work s x f =
-    update_slot s x @@ function
-    | Some (Work w) -> f w
-    | _ -> assert false
-
-  let enter_promise s x p =
-    update_work s x @@ fun {waiting; current} ->
-    Work {waiting; current = Set.add current p}
-
-  let leave_promise s x p =
-    update_work s x @@ fun {waiting; current} ->
-    Work {waiting; current = Set.remove current p}
-
-  let enqueue_promises s x =
-    update_work s x @@ fun {waiting; current} ->
-    Work {waiting = Set.union current waiting; current}
-
-  let collect_waiting
-    : ('a,'p) slot -> 'a obj -> _ Knowledge.t = fun s x ->
-    objects s.cls >>| fun {comp} ->
-    Map.find_exn (Map.find_exn comp x) (uid s)  |> function
-    | Env.Done -> assert false
-    | Env.Work {waiting} ->
-      Set.fold waiting ~init:[] ~f:(fun ps p ->
-          Hashtbl.find_exn s.Slot.promises p :: ps)
-
-  let dequeue_waiting s x = update_work s x @@ fun _ ->
-    Work {
-      waiting = Set.empty (module Pid);
-      current = Set.empty (module Pid)
-    }
-
-  let initial_promises {Slot.promises} = Hashtbl.data promises
-
-  let current : type a p. (a,p) slot -> a obj -> p Knowledge.t =
-    fun slot id ->
-    objects slot.cls >>| fun {Env.vals} ->
-    match Map.find vals id with
-    | None -> slot.dom.empty
-    | Some v -> Record.get slot.key slot.dom v
-
-  let rec collect_inner
-    : ('a,'p) slot -> 'a obj -> _ -> _ =
-    fun slot obj promises ->
-    current slot obj >>= fun was ->
-    Knowledge.List.iter promises ~f:(fun {Slot.run; pid} ->
-        enter_promise slot obj pid >>= fun () ->
-        run obj >>= fun () ->
-        leave_promise slot obj pid) >>= fun () ->
-    collect_waiting slot obj >>= fun waiting ->
-    dequeue_waiting slot obj >>= fun () ->
-    match waiting with
-    | [] -> Knowledge.return ()
-    | promises ->
-      current slot obj >>= fun now ->
-      match slot.dom.order now was with
-      | EQ | LT -> Knowledge.return ()
-      | GT | NC -> collect_inner slot obj promises
-
-
-  let collect : type a p. (a,p) slot -> a obj -> p Knowledge.t =
-    fun slot id ->
-    status slot id >>= function
-    | Ready ->
-      current slot id
-    | Awoke ->
-      enqueue_promises slot id >>= fun () ->
-      current slot id
-    | Sleep ->
-      enter_slot slot id >>= fun () ->
-      collect_inner slot id (initial_promises slot) >>= fun () ->
-      leave_slot slot id >>= fun () ->
-      current slot id
-
-  let resolve slot obj =
-    collect slot obj >>| Opinions.choice
-
-  let suggest agent slot obj x =
-    current slot obj >>= fun opinions ->
-    provide slot obj (Opinions.add agent x opinions)
-
-  let propose agent s get =
-    register_promise s @@ fun obj ->
-    get obj >>= suggest agent s obj
 
   module Object = struct
     type +'a t = 'a obj
@@ -2458,6 +2305,219 @@ module Knowledge = struct
       end in
       (module R)
   end
+
+  type conflict += Non_monotonic_update of {
+      slot : Name.t;
+      repr : string;
+      error : Conflict.t;
+      trace : Caml.Printexc.raw_backtrace;
+    }
+
+  let () = Conflict.register_printer (function
+      | Non_monotonic_update {slot; repr; error; trace} ->
+        Option.some @@
+        Format.asprintf
+          "Unable to update the slot %a of %s,\n%a\n\
+           Backtrace:\n%s"
+          Name.pp slot repr Conflict.pp error
+          (Caml.Printexc.raw_backtrace_to_string trace)
+      | _ -> None)
+
+
+  let non_monotonic slot obj error trace =
+    Object.repr (Slot.cls slot) obj >>= fun obj ->
+    Knowledge.fail (Non_monotonic_update {
+        slot = Slot.name slot;
+        repr = obj;
+        error;
+        trace;
+      })
+
+  let provide : type a p. (a,p) slot -> a obj -> p -> unit Knowledge.t =
+    fun slot obj x ->
+    if Domain.is_empty slot.dom x
+    then Knowledge.return ()
+    else
+      get () >>= function {classes} as s ->
+        let {Env.vals} as objs =
+          match Map.find classes slot.cls.id with
+          | None -> Env.empty_class
+          | Some objs -> objs in
+        try put {
+            s with classes = Map.set classes ~key:slot.cls.id ~data:{
+            objs with vals = Map.update vals obj ~f:(function
+            | None -> Record.(put slot.key empty x)
+            | Some v -> match Record.commit slot.dom slot.key v x with
+              | Ok r -> r
+              | Error err -> raise (Record.Merge_conflict err))}}
+        with Record.Merge_conflict err ->
+          non_monotonic slot obj err @@
+          Caml.Printexc.get_raw_backtrace ()
+
+
+  let pids = ref Pid.zero
+
+  let register_promise (s : _ slot) run =
+    Pid.incr pids;
+    let pid = !pids in
+    Hashtbl.add_exn s.promises pid {run; pid};
+    pid
+
+  let remove_promise (s : _ slot) pid =
+    Format.eprintf "Removing promise %a@\n%!" Pid.pp pid;
+    Hashtbl.remove s.promises pid
+
+  let promising s ~promise:get scoped =
+    let pid = register_promise s @@ fun obj ->
+      get obj >>= fun x ->
+      if Domain.is_empty s.dom x
+      then Knowledge.return ()
+      else provide s obj x in
+    Format.eprintf "Promise %a is registered@\n%!" Pid.pp pid;
+    scoped () >>= fun r ->
+    remove_promise s pid;
+    Knowledge.return r
+
+  let promise s get =
+    ignore @@
+    register_promise s @@ fun obj ->
+    get obj >>= fun x ->
+    if Domain.is_empty s.dom x
+    then Knowledge.return ()
+    else provide s obj x
+
+
+  let uid {Slot.key} = Dict.Key.uid key
+
+  let status
+    : ('a,_) slot -> 'a obj -> slot_status knowledge =
+    fun slot obj ->
+    objects slot.cls >>| fun {comp} ->
+    match Map.find comp obj with
+    | None -> Sleep
+    | Some slots -> match Map.find slots (uid slot) with
+      | None -> Sleep
+      | Some Work _ -> Awoke
+      | Some Done -> Ready
+
+  let update_slot
+    : ('a,_) slot -> 'a obj -> _ -> unit knowledge =
+    fun slot obj f ->
+    objects slot.cls >>= fun ({comp} as objs) ->
+    let comp = Map.update comp obj ~f:(fun slots ->
+        let slots = match slots with
+          | None -> Map.empty (module Dict.Key.Uid)
+          | Some slots -> slots in
+        Map.update slots (uid slot) ~f) in
+    get () >>= fun s ->
+    let classes = Map.set s.classes slot.cls.id {objs with comp} in
+    put {s with classes}
+
+  let enter_slot : ('a,_) slot -> 'a obj -> unit knowledge = fun s x ->
+    update_slot s x @@ function
+    | Some _ -> assert false
+    | None ->  Work {
+        waiting = Set.empty (module Pid);
+        current = Set.empty (module Pid)
+      }
+
+  let leave_slot : ('a,'p) slot -> 'a obj -> unit Knowledge.t = fun s x ->
+    update_slot s x @@ function
+    | Some (Work _) -> Done
+    | _ -> assert false
+
+  let update_work s x f =
+    update_slot s x @@ function
+    | Some (Work w) -> f w
+    | _ -> assert false
+
+  let enter_promise s x p =
+    update_work s x @@ fun {waiting; current} ->
+    Work {waiting; current = Set.add current p}
+
+  let leave_promise s x p =
+    update_work s x @@ fun {waiting; current} ->
+    Work {waiting; current = Set.remove current p}
+
+  let enqueue_promises s x =
+    update_work s x @@ fun {waiting; current} ->
+    Work {waiting = Set.union current waiting; current}
+
+  let collect_waiting
+    : ('a,'p) slot -> 'a obj -> _ Knowledge.t = fun s x ->
+    objects s.cls >>| fun {comp} ->
+    Map.find_exn (Map.find_exn comp x) (uid s)  |> function
+    | Env.Done -> assert false
+    | Env.Work {waiting} ->
+      Set.fold waiting ~init:[] ~f:(fun ps p ->
+          Hashtbl.find_exn s.Slot.promises p :: ps)
+
+  let dequeue_waiting s x = update_work s x @@ fun _ ->
+    Work {
+      waiting = Set.empty (module Pid);
+      current = Set.empty (module Pid)
+    }
+
+  let initial_promises {Slot.promises} = Hashtbl.data promises
+
+  let current : type a p. (a,p) slot -> a obj -> p Knowledge.t =
+    fun slot id ->
+    objects slot.cls >>| fun {Env.vals} ->
+    match Map.find vals id with
+    | None -> slot.dom.empty
+    | Some v -> Record.get slot.key slot.dom v
+
+  let rec collect_inner
+    : ('a,'p) slot -> 'a obj -> _ -> _ =
+    fun slot obj promises ->
+    current slot obj >>= fun was ->
+    Knowledge.List.iter promises ~f:(fun {Slot.run; pid} ->
+        enter_promise slot obj pid >>= fun () ->
+        run obj >>= fun () ->
+        leave_promise slot obj pid) >>= fun () ->
+    collect_waiting slot obj >>= fun waiting ->
+    dequeue_waiting slot obj >>= fun () ->
+    match waiting with
+    | [] -> Knowledge.return ()
+    | promises ->
+      current slot obj >>= fun now ->
+      match slot.dom.order now was with
+      | EQ | LT -> Knowledge.return ()
+      | GT | NC -> collect_inner slot obj promises
+
+
+  let collect : type a p. (a,p) slot -> a obj -> p Knowledge.t =
+    fun slot id ->
+    status slot id >>= function
+    | Ready ->
+      current slot id
+    | Awoke ->
+      enqueue_promises slot id >>= fun () ->
+      current slot id
+    | Sleep ->
+      enter_slot slot id >>= fun () ->
+      collect_inner slot id (initial_promises slot) >>= fun () ->
+      leave_slot slot id >>= fun () ->
+      current slot id
+
+  let resolve slot obj =
+    collect slot obj >>| Opinions.choice
+
+  let suggest agent slot obj x =
+    current slot obj >>= fun opinions ->
+    provide slot obj (Opinions.add agent x opinions)
+
+  let propose agent s get =
+    ignore @@
+    register_promise s @@ fun obj ->
+    get obj >>= suggest agent s obj
+
+  let proposing agent s ~propose:get scoped =
+    let pid = register_promise s @@ fun obj ->
+      get obj >>= suggest agent s obj in
+    scoped () >>= fun r ->
+    remove_promise s pid;
+    Knowledge.return r
 
   module Domain = struct
     include Domain
