@@ -1,9 +1,6 @@
 language: c
 dist: bionic
 
-
-sudo: required
-
 addons:
   apt:
     sources:
@@ -18,7 +15,7 @@ addons:
     - libssl-dev
     - libzip-dev
     - llvm
-    - llvm-3.8-dev
+    - llvm-9-dev
     - m4
     - ocaml
     - ocaml-base
