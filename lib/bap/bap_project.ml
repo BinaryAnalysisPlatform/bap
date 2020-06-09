@@ -505,6 +505,58 @@ end
 let passes () = DList.to_list passes
 let find_pass = Pass.find
 
+module Collator = struct
+  open Bap_knowledge
+
+  type info = {
+    name : Knowledge.Name.t;
+    desc : string option;
+  }
+
+  type t = Collator : {
+      prepare : project -> 's;
+      collate : int -> 's -> project -> 's;
+      summary : 's -> unit;
+    } -> t
+
+  let registry = Hashtbl.create (module Knowledge.Name)
+
+  let apply (Collator {prepare; collate; summary}) projects =
+    match Seq.split_n projects 1 with
+    | [base],rest ->
+      summary @@
+      Seq.foldi ~init:(prepare base) rest ~f:collate
+    | _ -> ()
+
+  let register ?desc ?package name ~prepare ~collate ~summary =
+    let name = Knowledge.Name.create ?package name in
+    if Hashtbl.mem registry name then
+      invalid_argf "A collator with name %s is already registered \
+                    please choose another unique name"
+        (Knowledge.Name.show name) ();
+    Hashtbl.add_exn registry name (desc,Collator {
+        prepare;
+        collate;
+        summary;
+      })
+
+  let find ?package name =
+    let name = Knowledge.Name.read ?package name in
+    match Hashtbl.find registry name with
+    | Some (_,x) -> Some x
+    | None -> None
+
+  let registered () =
+    Hashtbl.to_alist registry |>
+    List.map ~f:(fun (name,(desc,_)) -> {name; desc})
+
+
+  let name {name} = name
+  let desc = function
+    | {desc=None} -> "not provided"
+    | {desc=Some txt} -> txt
+end
+
 module type S = sig
   type t
   val empty : t

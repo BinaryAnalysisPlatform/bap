@@ -95,6 +95,23 @@ module Pass : sig
   val failures  : t -> second stream
 end
 
+module Collator : sig
+  type t
+  type info
+
+  val apply : t -> project seq -> unit
+  val find : ?package:string -> string -> t option
+  val name : info -> Knowledge.Name.t
+  val desc : info -> string
+
+  val register : ?desc:string -> ?package:string -> string ->
+    prepare:(project -> 's) ->
+    collate:(int -> 's -> project -> 's) ->
+    summary:('s -> unit) ->
+    unit
+
+  val registered : unit -> info list
+end
 
 val find_pass : string -> pass option
 
@@ -104,6 +121,7 @@ val register_pass :
 val register_pass':
   ?autorun:bool -> ?runonce:bool -> ?deps:string list -> ?name:string
   -> (t -> unit) -> unit
+
 
 
 val pass_registrations : pass stream
