@@ -189,7 +189,8 @@ let process passes outputs project =
         Out_channel.with_file dst ~f:(fun ch ->
             Project.Io.save ~fmt ?ver ch proj)
       | `stdout,fmt,ver ->
-        Project.Io.show ~fmt ?ver proj)
+        Project.Io.show ~fmt ?ver proj);
+  proj
 
 let old_style_passes =
   Extension.Command.switches
@@ -212,8 +213,15 @@ let outputs =
     Extension.Type.("[<FMT>[:<FILE>]]" %: string)
     "dump"
 
+
 let input = Extension.Command.argument
     ~doc:"The input file" Extension.Type.("FILE" %: string)
+
+let inputs = Extension.Command.arguments
+    ~doc:"The input files" Extension.Type.string
+
+let collator = Extension.Command.argument
+    ~doc:"The collator to use" Extension.Type.("COLLATOR" %: string)
 
 let loader =
   Extension.Command.parameter
@@ -290,20 +298,12 @@ let has_env var = match Sys.getenv var with
   | exception _ -> false
   | _ -> true
 
-let _disassemble_command_registered : unit =
-  Extension.Command.(begin
-      declare ~doc:man "disassemble"
-        ~requires:features_used
-        (args $input $outputs $old_style_passes $passes $loader)
-    end) @@
-  fun input outputs old_style_passes passes loader ctxt ->
+let setup_gc_unless_overriden () =
   if not (has_env "OCAMLRUNPARAM" || has_env "CAMLRUNPARAM")
   then setup_gc ()
-  else info "GC parameters are overriden by a user";
-  validate_input input >>= fun () ->
-  validate_passes_style old_style_passes (List.concat passes) >>=
-  validate_passes >>= fun passes ->
-  Dump_formats.parse outputs >>= fun outputs ->
+  else info "GC parameters are overriden by a user"
+
+let create_and_process input outputs passes loader ctxt =
   let package = Caml.Digest.to_hex (Caml.Digest.file input) in
   let digest = make_digest [
       Extension.Configuration.digest ctxt;
@@ -320,6 +320,42 @@ let _disassemble_command_registered : unit =
     save_project_state_to_cache digest (Project.state proj);
   end;
   process passes outputs proj
+
+let _disassemble_command_registered : unit =
+  Extension.Command.(begin
+      declare ~doc:man "disassemble"
+        ~requires:features_used
+        (args $input $outputs $old_style_passes $passes $loader)
+    end) @@
+  fun input outputs old_style_passes passes loader ctxt ->
+  setup_gc_unless_overriden ();
+  validate_input input >>= fun () ->
+  validate_passes_style old_style_passes (List.concat passes) >>=
+  validate_passes >>= fun passes ->
+  Dump_formats.parse outputs >>= fun outputs ->
+  create_and_process input outputs passes loader ctxt >>= fun _ ->
+  Ok ()
+
+let _collate_command_registered : unit =
+  Extension.Command.(begin
+      declare "collate"
+        ~requires:features_used
+        (args $collator $inputs $outputs $old_style_passes $passes $loader)
+    end) @@
+  fun collator inputs outputs old_style_passes passes loader ctxt ->
+  match Project.Collator.find collator with
+  | None -> invalid_argf "Unknown collator %s" collator ()
+  | Some collator ->
+    setup_gc_unless_overriden ();
+    Err.all_unit @@ List.map inputs ~f:validate_input >>= fun () ->
+    validate_passes_style old_style_passes (List.concat passes) >>=
+    validate_passes >>= fun passes ->
+    Dump_formats.parse outputs >>= fun outputs ->
+    Seq.map (Seq.of_list inputs) ~f:(fun input ->
+        create_and_process input outputs passes loader ctxt) |>
+    Err.Seq.all >>= fun projs ->
+    Project.Collator.apply collator projs;
+    Ok ()
 
 let pp_guesses ppf badname =
   let guess = String.map badname ~f:(function
