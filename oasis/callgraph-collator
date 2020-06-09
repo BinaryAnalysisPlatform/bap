@@ -1,0 +1,13 @@
+Flag callgraph_collator
+  Description: Builds a collator based on callgraph
+  Default: false
+
+Library callgraph_collator_plugin
+  Build$:       flag(everything) || flag(callgraph_collator)
+  Path:         plugins/callgraph_collator
+  BuildDepends: bap-main, bap, core_kernel, graphlib
+  FindlibName:     bap-plugin-callgraph_collator
+  CompiledObject:  best
+  InternalModules: Callgraph_collator_main
+  XMETADescription: Collates programs based on their callgraphs
+  XMETAExtraLines:  tags="collator, analysis"
