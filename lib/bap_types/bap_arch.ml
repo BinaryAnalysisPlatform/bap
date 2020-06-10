@@ -69,7 +69,7 @@ module T = struct
     KB.Domain.flat ~empty:`unknown ~equal ~inspect:sexp_of_t "arch"
 
 
-  let slot = KB.Class.property ~package:"bap.std"
+  let slot = KB.Class.property ~package:"bap"
       Theory.Program.cls "arch" domain
       ~persistent:(KB.Persistent.of_binable (module struct
                      type t = arch [@@deriving bin_io]

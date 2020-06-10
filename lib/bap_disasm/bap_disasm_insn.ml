@@ -5,7 +5,7 @@ open Bap_types.Std
 open Bap_disasm_types
 
 module Insn = Bap_disasm_basic.Insn
-let package = "bap.std"
+let package = "bap"
 
 type must = Must
 type may = May
@@ -69,7 +69,7 @@ module Props = struct
 
   let persistent = KB.Persistent.of_binable (module T)
 
-  let slot = KB.Class.property ~package:"bap.std"
+  let slot = KB.Class.property ~package:"bap"
       Theory.Program.Semantics.cls "insn-properties" domain
       ~persistent
       ~public:true
@@ -93,13 +93,13 @@ module Slot = struct
       ~equal:Int.equal
 
 
-  let name = KB.Class.property ~package:"bap.std"
+  let name = KB.Class.property ~package:"bap"
       Theory.Program.Semantics.cls "insn-opcode" text
       ~persistent:KB.Persistent.string
       ~public:true
       ~desc:"instruction opcode"
 
-  let asm = KB.Class.property ~package:"bap.std"
+  let asm = KB.Class.property ~package:"bap"
       Theory.Program.Semantics.cls "insn-asm" text
       ~persistent:KB.Persistent.string
       ~public:true
@@ -119,13 +119,13 @@ module Slot = struct
       type t = Op.t array option [@@deriving bin_io]
     end)
 
-  let ops = KB.Class.property ~package:"bap.std"
+  let ops = KB.Class.property ~package:"bap"
       Theory.Program.Semantics.cls "insn-ops" ops_domain
       ~persistent:ops_persistent
       ~public:true
       ~desc:"an array of instruction operands"
 
-  let delay = KB.Class.property ~package:"bap.std"
+  let delay = KB.Class.property ~package:"bap"
       Theory.Program.Semantics.cls "insn-delay" delay_t
       ~persistent:(KB.Persistent.of_binable (module struct
                      type t = int option [@@deriving bin_io]
@@ -155,7 +155,7 @@ module Slot = struct
     let inspect = IO.sexp_of_t in
     let data = KB.Domain.define ~empty ~order ~join ~inspect "dest-set" in
     let persistent = KB.Persistent.of_binable (module IO) in
-    KB.Class.property ~package:"bap.std" Theory.Program.Semantics.cls
+    KB.Class.property ~package:"bap" Theory.Program.Semantics.cls
       "insn-dests" data
       ~persistent
       ~public:true

@@ -160,7 +160,7 @@ let (>>=?) x f = x >>= function
   | Some x -> f x
 
 let provide =
-  KB.Rule.(declare ~package:"bap.std" "reflect-brancher" |>
+  KB.Rule.(declare ~package:"bap" "reflect-brancher" |>
            dynamic ["brancher"] |>
            require Memory.slot |>
            require Dis.Insn.slot |>

@@ -2,7 +2,7 @@ open Core_kernel
 open Bap_knowledge
 open Knowledge.Syntax
 
-let package = "bap.std-internal"
+let package = "bap-internal"
 type 'a t = 'a
 type env = Knowledge.state ref
 type main = Main

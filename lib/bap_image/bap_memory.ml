@@ -443,7 +443,7 @@ let domain = KB.Domain.optional ~inspect:sexp_of_t "mem"
         Addr.equal x.addr y.addr &&
         Int.equal x.size y.size)
 
-let slot = KB.Class.property ~package:"bap.std"
+let slot = KB.Class.property ~package:"bap"
     Theory.Program.cls "mem" domain
     ~public:true
     ~desc:"a memory region occupied by the program"

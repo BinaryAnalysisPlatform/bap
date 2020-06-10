@@ -61,7 +61,7 @@ let with_objdump_output demangler ~file ~f =
     ~finish:ident
 
 let agent =
-  KB.Agent.register ~package:"bap.std" "objdump-symbolizer"
+  KB.Agent.register ~package:"bap" "objdump-symbolizer"
     ~desc:"extracts symbols objdump"
 
 

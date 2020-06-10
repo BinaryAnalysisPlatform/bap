@@ -55,7 +55,7 @@ let of_blocks seq =
 module Factory = Factory.Make(struct type nonrec t = t end)
 
 let provide =
-  KB.Rule.(declare ~package:"bap.std" "reflect-symbolizers" |>
+  KB.Rule.(declare ~package:"bap" "reflect-symbolizers" |>
            dynamic ["symbolizer"] |>
            require Arch.slot |>
            require Theory.Label.addr |>

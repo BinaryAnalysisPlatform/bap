@@ -60,7 +60,7 @@ let extract path arch =
 let ida_symbolizer =
   let reliability = Knowledge.Agent.reliable in
   Knowledge.Agent.register ~reliability
-    ~package:"bap.std" "ida-symbolizer"
+    ~package:"bap" "ida-symbolizer"
     ~desc:"Provides information from IDA Pro"
 
 let register_source (module T : Target) =

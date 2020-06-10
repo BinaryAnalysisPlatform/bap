@@ -37,7 +37,7 @@ let of_blocks blocks =
   create (Hashtbl.data roots |> Seq.of_list)
 
 let provide =
-  KB.Rule.(declare ~package:"bap.std" "reflect-rooter" |>
+  KB.Rule.(declare ~package:"bap" "reflect-rooter" |>
            dynamic ["rooter"] |>
            require Theory.Label.addr |>
            provide Theory.Label.is_subroutine |>

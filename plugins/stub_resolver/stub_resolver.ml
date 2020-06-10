@@ -4,7 +4,7 @@ open Bap_core_theory
 open Bap_knowledge
 
 include Self ()
-let package = "bap.std"
+let package = "bap"
 
 open KB.Syntax
 

@@ -108,7 +108,7 @@ let extract build disasm =
   Toplevel.get result
 
 let with_arch =
-  KB.Rule.(declare ~package:"bap.std" "arch-for-mem" |>
+  KB.Rule.(declare ~package:"bap" "arch-for-mem" |>
            dynamic ["arch"; "mem"] |>
            require Theory.Label.addr |>
            provide Arch.slot |>

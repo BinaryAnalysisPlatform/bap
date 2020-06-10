@@ -24,7 +24,7 @@ end
 
 let agent =
   let reliability = Knowledge.Agent.authorative in
-  Knowledge.Agent.register ~package:"bap.std"
+  Knowledge.Agent.register ~package:"bap"
     ~reliability "user-symbolizer"
     ~desc:"reads symbols from the user provided file"
 

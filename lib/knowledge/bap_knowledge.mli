@@ -1503,6 +1503,8 @@ module Knowledge : sig
       This module defines an domain-specific language for specifying
       rules. The [Documentation] and [Documentation.Rule] modules
       could be used to introspect all available rules.
+
+      @since 2.2.0
   *)
   module Rule : sig
 

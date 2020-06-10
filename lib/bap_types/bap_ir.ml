@@ -1,4 +1,4 @@
-let package = "bap.std"
+let package = "bap"
 
 open Core_kernel
 open Bap_core_theory

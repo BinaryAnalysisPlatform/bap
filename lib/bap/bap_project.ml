@@ -135,7 +135,7 @@ module Input = struct
     KB.Agent.register "symtab"
       ~reliability
       ~desc:"extracts symbols from symbol tables"
-      ~package:"bap.std"
+      ~package:"bap"
 
   let provide_image image =
     let image_symbols = Symbolizer.of_image image in
@@ -291,7 +291,7 @@ let is_mapped arch map addr =
 
 
 ;;
-KB.Rule.(declare ~package:"bap.std" "project-filename" |>
+KB.Rule.(declare ~package:"bap" "project-filename" |>
          dynamic ["input"] |>
          dynamic ["data"; "code"; "path"] |>
          require Theory.Label.addr |>
@@ -309,7 +309,7 @@ let provide_filename arch data code path =
   else None
 
 ;;
-KB.Rule.(declare ~package:"bap.std" "project-arch" |>
+KB.Rule.(declare ~package:"bap" "project-arch" |>
          dynamic ["input"] |>
          dynamic ["arch"; "code"] |>
          require Theory.Label.addr |>

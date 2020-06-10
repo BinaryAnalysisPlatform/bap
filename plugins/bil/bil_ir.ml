@@ -84,7 +84,7 @@ let graph =
     ~persistent:(KB.Persistent.of_binable (module struct
                    type t = cfg option [@@deriving bin_io]
                  end))
-    ~package:"bap.std"
+    ~package:"bap"
     ~public:true
     ~desc:"the graphical representation of the program"
 
@@ -313,7 +313,7 @@ let reify = function
   | Some g -> BIR.reify g
 
 let init () = Theory.declare !!(module IR : Theory.Core)
-    ~package:"bap.std" ~name:"bir"
+    ~package:"bap" ~name:"bir"
     ~desc:"Builds the graphical representation of a program."
     ~provides:[
       "cfg";

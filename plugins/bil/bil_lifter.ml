@@ -11,7 +11,7 @@ open Theory.Parser
 include Self()
 
 module Call = Bil_semantics.Call
-let package = "bap.std"
+let package = "bap"
 
 module BilParser = struct
   type context = [`Bitv | `Bool | `Mem ] [@@deriving sexp]
