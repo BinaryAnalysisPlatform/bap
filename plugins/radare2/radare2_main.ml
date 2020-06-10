@@ -30,9 +30,9 @@ let provide_radare2 file =
     let accept name addr = Hashtbl.set funcs addr name in
     let extract name json = Yojson.Basic.Util.member name json in
     try
-     let symbol_list = Yojson.Basic.Util.to_list (R2.with_command_j "aaa;aflj" file) in
+     let symbol_list = Yojson.Basic.Util.to_list (R2.with_command_j "isj" file) in
      List.fold symbol_list ~init:() ~f:(fun () symbol -> 
-     accept (Yojson.Basic.Util.to_string (extract "name" symbol)) (Yojson.Basic.Util.to_int (extract "offset" symbol) |> Z.of_int)
+     accept (Yojson.Basic.Util.to_string (extract "name" symbol)) (Yojson.Basic.Util.to_int (extract "vaddr" symbol) |> Z.of_int)
      );
      if Hashtbl.length funcs = 0
      then warning "failed to obtain symbols";
@@ -53,9 +53,9 @@ let () =
     `P "This plugin provides a symbolizer based on radare2.";
     `S  "EXAMPLES";
     `P  "To view the symbols after running the plugin:";
-    `P  "$(b, bap) $(i,executable) --no-objdump --dump-symbols ";
+    `P  "$(b, bap) $(i,executable) --dump-symbols ";
     `P  "To view symbols without this plugin:";
-    `P  "$(b, bap) $(i,executable) --no-objdump --no-radare2 --dump-symbols";
+    `P  "$(b, bap) $(i,executable) --no-radare2 --dump-symbols";
     `S  "SEE ALSO";
     `P  "$(b,bap-plugin-objdump)(1)"
   ];
