@@ -30,6 +30,17 @@ let with_arch arch mems =
         then arch
         else `unknown)
 
+let with_filename arch data code path =
+  let open KB.Syntax in
+  let width = Size.in_bits (Arch.addr_size arch) in
+  KB.promising Theory.Label.path ~promise:(fun label ->
+      KB.collect Theory.Label.addr label >>|? fun addr ->
+      let addr = Word.create addr width in
+      if Memmap.contains data addr || Memmap.contains code addr
+      then Some path
+      else None)
+
+
 module Kernel = struct
   open KB.Syntax
   module Driver = Bap_disasm_driver
@@ -61,9 +72,10 @@ module Kernel = struct
 
   module Toplevel = struct
     let result = Toplevel.var "result"
-    let run arch code k =
+    let run arch ~code ~data file k =
       Toplevel.put result begin
         with_arch arch code @@ fun () ->
+        with_filename arch code data file @@ fun () ->
         k >>= fun k ->
         disasm k >>= fun g ->
         symtab k >>| fun s -> g,s,k
@@ -140,7 +152,8 @@ module Input = struct
   let provide_image image =
     let image_symbols = Symbolizer.of_image image in
     let image_roots = Rooter.of_image image in
-    info "providing rooter and symbolizer from image";
+    info "providing rooter and symbolizer from image of %a"
+      Sexp.pp_hum ([%sexp_of : string option] (Image.filename image));
     Symbolizer.provide symtab_agent image_symbols;
     Rooter.provide image_roots
 
@@ -270,7 +283,7 @@ let build ?package ?state ~file ~code ~data arch =
     set_package package >>= fun () ->
     Memmap.to_sequence code |> KB.Seq.fold ~init ~f:(fun k (mem,_) ->
         Kernel.update k mem) in
-  let cfg,symbols,core = Kernel.Toplevel.run arch code kernel in
+  let cfg,symbols,core = Kernel.Toplevel.run arch ~code ~data file kernel in
   {
     core;
     disasm = Disasm.create cfg;
@@ -284,47 +297,6 @@ let build ?package ?state ~file ~code ~data arch =
 let state {core} = core
 let package {core={Kernel.package}} = package
 
-let is_mapped arch map addr =
-  let addr = Word.create addr (Size.in_bits (Arch.addr_size arch)) in
-  not (Seq.is_empty (Memmap.lookup map addr))
-
-
-
-;;
-KB.Rule.(declare ~package:"bap" "project-filename" |>
-         dynamic ["input"] |>
-         dynamic ["data"; "code"; "path"] |>
-         require Theory.Label.addr |>
-         provide Theory.Label.path |>
-         comment {|
-On [Project.create input] provides [path] for the address [x]
-if [x] in [data] or [x] in [code].
-|})
-let provide_filename arch data code path =
-  let open KB.Syntax in
-  KB.promise Theory.Label.path @@ fun label ->
-  KB.collect Theory.Label.addr label >>|? fun addr ->
-  if is_mapped arch data addr || is_mapped arch code addr
-  then Some path
-  else None
-
-;;
-KB.Rule.(declare ~package:"bap" "project-arch" |>
-         dynamic ["input"] |>
-         dynamic ["arch"; "code"] |>
-         require Theory.Label.addr |>
-         provide Arch.slot |>
-         comment {|
-On [Project.create input] provides [arch] for the address [x]
-if [x] in [code].
-|})
-let provide_arch arch code  =
-  let open KB.Syntax in
-  KB.promise Arch.slot @@ fun label ->
-  KB.collect Theory.Label.addr label >>| function
-  | Some addr when is_mapped arch code addr -> arch
-  | _ -> `unknown
-
 let create_exn
     ?package
     ?state
@@ -335,8 +307,6 @@ let create_exn
     ?reconstructor:_
     (read : input)  =
   let {Input.arch; data; code; file; finish} = read () in
-  provide_filename arch data code file;
-  provide_arch arch code;
   Signal.send Info.got_file file;
   Signal.send Info.got_arch arch;
   Signal.send Info.got_data data;
@@ -635,4 +605,23 @@ include Data.Make(struct
     let version = "2.0.0"
   end)
 
-let () = Data.set_module_name instance "Bap.Std.Project"
+let () =
+  Data.set_module_name instance "Bap.Std.Project";
+  KB.Rule.(declare ~package:"bap" "project-filename" |>
+           dynamic ["input"] |>
+           dynamic ["data"; "code"; "path"] |>
+           require Theory.Label.addr |>
+           provide Theory.Label.path |>
+           comment {|
+On [Project.create input] provides [path] for the address [x]
+if [x] in [data] or [x] in [code].
+|});
+  KB.Rule.(declare ~package:"bap" "project-arch" |>
+           dynamic ["input"] |>
+           dynamic ["arch"; "code"] |>
+           require Theory.Label.addr |>
+           provide Arch.slot |>
+           comment {|
+On [Project.create input] provides [arch] for the address [x]
+if [x] in [code].
+|})
