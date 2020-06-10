@@ -8854,6 +8854,7 @@ module Std : sig
      republish it as a separate library.
   *)
   module Toplevel : sig
+    exception Conflict of Knowledge.conflict
     val set : Knowledge.state -> unit
     val reset : unit -> unit
     val current : unit -> Knowledge.state

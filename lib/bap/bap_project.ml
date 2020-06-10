@@ -301,10 +301,20 @@ let create_exn
   finish @@ build ?package ?state ~file ~code ~data arch
 
 let create
-    ?package ?state ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input =
-  Or_error.try_with ~backtrace:true (fun () ->
-      create_exn
-        ?package ?state ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input)
+    ?package ?state ?disassembler ?brancher ?symbolizer ?rooter ?
+    reconstructor input =
+  try
+    Ok (create_exn
+          ?package ?state ?disassembler ?brancher ?symbolizer ?rooter
+          ?reconstructor input)
+  with
+  | Toplevel.Conflict err ->
+    let open Error.Internal_repr in
+    let msg =
+      String (Format.asprintf "Knowledge Base Conflict: %a"
+                KB.Conflict.pp err) in
+    Error (to_info msg)
+  | exn -> Or_error.of_exn ~backtrace:`Get exn
 
 let restore_state _ =
   failwith "Project.restore_state: this function should no be used.
