@@ -35,7 +35,9 @@ let collate ver (base,diffs) proj =
   let diff = Map.symmetric_diff base (calls_of_project proj)
       ~data_equal:String.Set.equal in
   let is_different = not (Seq.is_empty diff) in
-  if is_different then printf "Version %d differs:@\n" ver;
+  if is_different
+  then printf "Version %d differs:@\n%!" ver
+  else printf "Version %d is not different@\n%!" ver;
   Seq.iter diff ~f:(fun (src,diff) -> match diff with
       | `Left dsts -> print_diffs '-' src dsts
       | `Right dsts -> print_diffs '+' src dsts
