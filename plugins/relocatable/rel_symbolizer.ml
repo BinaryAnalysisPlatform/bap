@@ -36,11 +36,13 @@ let agent = Knowledge.Agent.register
     ~desc:"extracts symbols from external relocations"
 
 let init () =
-  Stream.observe Project.Info.spec @@ fun spec ->
+  Stream.observe (Stream.zip Project.Info.spec Project.Info.file)
+  @@ fun (spec, file) ->
   let name = match Fact.eval Rel.external_symbols spec with
     | Ok exts -> Map.find exts
     | _ -> fun _ -> None in
-  Symbolizer.provide agent (Symbolizer.create name)
+  let symbolizer = Symbolizer.create name in
+  Symbolizer.provide agent (Symbolizer.set_path symbolizer file)
 
 let () =
   Config.manpage [

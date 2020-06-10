@@ -6,7 +6,11 @@ open Bap_disasm_source
 open KB.Syntax
 
 
-type t = Symbolizer of (addr -> string option)
+type t = {
+  path : string option;
+  find : addr -> string option;
+}
+
 type symbolizer = t
 
 let name_of_addr addr =
@@ -24,9 +28,15 @@ module Name = struct
     | false,true -> GT
 end
 
-let create fn = Symbolizer fn
+let create find = {
+  path = None;
+  find;
+}
 
-let run (Symbolizer f) a = f a
+let path s = s.path
+let set_path s p = {s with path = Some p}
+
+let run {find} a = find a
 let resolve sym addr = match run sym addr with
   | Some name -> name
   | None -> name_of_addr addr
@@ -44,7 +54,7 @@ let of_image img =
       and addr = Memory.min_addr mem in
       if not (Name.is_empty name)
       then Hashtbl.set names ~key:addr ~data:name);
-  create (Hashtbl.find names)
+  {find = Hashtbl.find names; path=Image.filename img}
 
 let of_blocks seq =
   let syms = Addr.Table.create () in
@@ -54,19 +64,28 @@ let of_blocks seq =
 
 module Factory = Factory.Make(struct type nonrec t = t end)
 
+
+let path_applies s path = match s.path with
+  | Some s -> String.equal s path
+  | _ -> true
+
 let provide =
   KB.Rule.(declare ~package:"bap" "reflect-symbolizers" |>
            dynamic ["symbolizer"] |>
            require Arch.slot |>
            require Theory.Label.addr |>
+           require Theory.Label.path |>
            provide Theory.Label.possible_name |>
            comment "[Symbolizer.provide s] reflects [s] to KB.");
-  fun agent (Symbolizer resolve) ->
+  fun agent s ->
     let open KB.Syntax in
     KB.propose agent Theory.Label.possible_name @@ fun label ->
     KB.collect Arch.slot label >>= fun arch ->
-    KB.collect Theory.Label.addr label >>|? fun addr ->
-    resolve @@ Addr.create addr @@ Size.in_bits (Arch.addr_size arch)
+    KB.collect Theory.Label.addr label >>=? fun addr ->
+    KB.collect Theory.Label.path label >>|? fun path ->
+    if path_applies s path
+    then s.find @@ Addr.create addr @@ Size.in_bits (Arch.addr_size arch)
+    else None
 
 let get_name addr =
   let data = Some (Word.to_bitvec addr) in

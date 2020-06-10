@@ -16,6 +16,10 @@ end
 
 val empty : t
 
+val set_path : t -> string -> t
+
+val path : t -> string option
+
 val create : (addr -> string option) -> t
 
 val of_blocks : (string * addr * addr) seq -> t

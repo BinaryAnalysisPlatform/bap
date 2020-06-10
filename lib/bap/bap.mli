@@ -5590,7 +5590,7 @@ module Std : sig
       val relocation :
         (int64 * addr, (addr -> addr -> 'a) -> 'a) Ogre.attribute
 
-      (** [extrenal_reference addr name] a piece of code at the
+      (** [external_reference addr name] a piece of code at the
           specified address [addr] references an external symbol with
           the given [name]. *)
       val external_reference :
@@ -8673,6 +8673,21 @@ module Std : sig
 
     (** [create fn] creates a symbolizer for a given function  *)
     val create : (addr -> string option) -> t
+
+
+    (** [set_path s] limits the symbolizer applicability only to
+        addresses that belong to a file/compilation unit with the
+        specified path.
+
+        @since 2.2.0
+    *)
+    val set_path : t -> string -> t
+
+
+    (** [path s] is the path to the file that this symbolizer serves.
+        @since 2.2.0
+    *)
+    val path : t -> string option
 
     (** [of_blocks] produces a symbolizer from a serialized
         sequence of blocks. Each element of the sequence is deconstructed
