@@ -218,7 +218,7 @@ let input = Extension.Command.argument
     ~doc:"The input file" Extension.Type.("FILE" %: string)
 
 let inputs = Extension.Command.arguments
-    ~doc:"The input files" Extension.Type.string
+    ~doc:"The input files" Extension.Type.("FILE" %: string)
 
 let collator = Extension.Command.argument
     ~doc:"The collator to use" Extension.Type.("COLLATOR" %: string)
@@ -340,22 +340,31 @@ let _collate_command_registered : unit =
   Extension.Command.(begin
       declare "collate"
         ~requires:features_used
-        (args $collator $inputs $outputs $old_style_passes $passes $loader)
+        (args $collator $input $inputs $outputs $old_style_passes $passes $loader)
     end) @@
-  fun collator inputs outputs old_style_passes passes loader ctxt ->
-  match Project.Collator.find collator with
+  fun collator input inputs outputs old_style_passes passes loader ctxt ->
+  match Project.Collator.find ~package:"bap" collator with
   | None -> invalid_argf "Unknown collator %s" collator ()
   | Some collator ->
     setup_gc_unless_overriden ();
-    Err.all_unit @@ List.map inputs ~f:validate_input >>= fun () ->
+    Err.all_unit @@ List.map (input::inputs) ~f:validate_input >>= fun () ->
     validate_passes_style old_style_passes (List.concat passes) >>=
     validate_passes >>= fun passes ->
     Dump_formats.parse outputs >>= fun outputs ->
-    Seq.map (Seq.of_list inputs) ~f:(fun input ->
-        create_and_process input outputs passes loader ctxt) |>
-    Err.Seq.all >>= fun projs ->
-    Project.Collator.apply collator projs;
-    Ok ()
+    let projs =
+      Seq.map (Seq.of_list inputs) ~f:(fun input ->
+          Format.printf "disassembling %s@\n%!" input;
+          create_and_process input outputs passes loader ctxt) in
+    Format.printf "Reducing projects@\n%!";
+    let exception Escape of Extension.Error.t in
+    try
+      let projs = Seq.map projs ~f:(function
+          | Ok proj -> proj
+          | Error e -> raise (Escape e))  in
+      Format.printf "Got all projects@\n%!";
+      Project.Collator.apply collator projs;
+      Ok ()
+    with Escape failed -> Error failed
 
 let pp_guesses ppf badname =
   let guess = String.map badname ~f:(function
@@ -388,20 +397,19 @@ let pp_exn ppf = function
     fprintf ppf "%s" s
   | other -> fprintf ppf "%a" Exn.pp other
 
-let nice_pp_error fmt er =
+let nice_pp_error ppf er =
   let module R = Info.Internal_repr in
-  let rec pp_sexp fmt = function
-    | Sexp.Atom x -> Format.fprintf fmt "%s\n" x
-    | Sexp.List xs -> List.iter ~f:(pp_sexp fmt) xs in
-  let rec pp fmt r =
+  let rec pp ppf r =
     let open R in
     match r with
     | With_backtrace (r, backtrace) ->
-      Format.fprintf fmt "%a@\n%a" pp r
+      Format.fprintf ppf "%a@\n%a" pp r
         pp_backtrace (String.strip backtrace);
-    | String s -> Format.fprintf fmt "%s" s
-    | r -> pp_sexp fmt (R.sexp_of_t r) in
-  Format.fprintf fmt "%a" pp (R.of_info (Error.to_info er))
+    | String s -> Format.fprintf ppf "%s" s
+    | _ ->
+      let msg = Error.to_string_hum er in
+      Format.fprintf ppf "%s" msg  in
+  Format.fprintf ppf "%a" pp (R.of_info (Error.to_info er))
 
 let string_of_failure = function
   | Expects_a_regular_file ->
@@ -414,7 +422,7 @@ let string_of_failure = function
   | Incompatible_options (o1,o2) ->
     sprintf "Bad invocation: the options `%s' and `%s' can not be used together" o1 o2
   | Project err ->
-    asprintf "Failed to build the project:@\n %a" nice_pp_error err
+    asprintf "Failed to build the project:@\n%a" nice_pp_error err
   | Pass (Project.Pass.Unsat_dep (p,s)) ->
     sprintf "Can't run passes - the dependency %S of pass %S is not available."
       s (Project.Pass.name p)
