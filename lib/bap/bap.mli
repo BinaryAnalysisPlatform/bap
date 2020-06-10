@@ -4215,7 +4215,7 @@ module Std : sig
     module Tag : sig
       type 'a t = 'a tag
       (** [register ~name ~uuid (module T)] creates a new variant
-          constructor, that accepts values of type [T.t]. Module [T]
+          constructor that accepts values of type [T.t]. Module [T]
           should implement [Binable.S] and [Sexpable.S] interfaces,
           provide [compare] and pretty-printing [pp] functions. This
           functions will be used to print, compare and serialize
@@ -4223,12 +4223,37 @@ module Std : sig
 
           The returned value of type [T.t tag] is a special key that
           can be used with [create] and [get] functions to pack and
-          unpack values of type [T.t] into [value]. *)
-      val register : name:string -> uuid:string ->
+          unpack values of type [T.t] into [value].
+
+          Registration of a value tag, automatically adds a
+          property slot to the [Theory.program] class. Then property
+          name is [package:name] where [package] defaults to
+          [uuid].
+
+          No matter of the [package] name the [uuid] parameter is used
+          as a [typeid] and to serialize and de-serialize values.
+
+
+          Note, this function delegates most of it work to {!register_slot}.
+
+          @since 2.2.0 adds [public], [desc], and [package] parameter
+          @since 2.2.0 changed the defined slot name to [package:name]
+      *)
+      val register :
+        ?public:bool ->
+        ?desc:string ->
+        ?package:string -> name:string -> uuid:string ->
         (module S with type t = 'a) -> 'a tag
 
-      (** [register_slot slot (module T)] reflects Knowledge property into BAP value.  *)
-      val register_slot : (Theory.program,'a option) KB.slot ->
+      (** [register_slot s f] registers a KB property as a value.
+
+          An existing property of the [Theory.program] class can be
+          also represented as BAP value and attached directly to
+          program attributes, memory locations, or stored in the
+          project dictionary.
+      *)
+      val register_slot : ?uuid:string ->
+        (Theory.program,'a option) KB.slot ->
         (module S with type t = 'a) -> 'a tag
 
       (** [slot tag] returns a slot associated with the tag. *)

@@ -157,7 +157,7 @@ let provide_function_starts_and_names ctxt : unit =
       with_objdump_output demangler ~file ~init
         ~f:(fun info line -> parse_func_start line accept info)) in
   let declare name input output =
-    KB.Rule.(declare ~package:"objdump" name |>
+    KB.Rule.(declare ~package:"bap" name |>
              dynamic ["objdump"] |>
              require input |>
              provide output |>

@@ -636,22 +636,27 @@ module Ir_arg = struct
     | None -> ""
 
   let warn_unused = Bap_value.Tag.register (module Unit)
+      ~package
       ~name:"warn-unused"
       ~uuid:"7aa17c89-cc9b-4ed2-8700-620cb9e09491"
 
   let format = Bap_value.Tag.register (module String)
+      ~package
       ~name:"format"
       ~uuid:"d864c411-73eb-48b2-a7e9-33b51fa540c9"
 
   let alloc_size = Bap_value.Tag.register (module Unit)
+      ~package
       ~name:"alloc-size"
       ~uuid:"b29905b3-4fb5-486e-8064-9b63cadc6174"
 
   let restricted = Bap_value.Tag.register (module Unit)
+      ~package
       ~name:"restricted"
       ~uuid:"5ee30262-aed9-4aa8-a8e3-34a061104420"
 
   let nonnull = Bap_value.Tag.register (module Unit)
+      ~package
       ~name:"nonnull"
       ~uuid:"3c0a6181-9a9c-4cf4-aa37-8ceebd773952"
 
@@ -1158,35 +1163,59 @@ module Term = struct
   let length t p = Array.length (t.get p.self)
 
   let origin = Bap_value.Tag.register (module Tid)
+      ~package
+      ~public:true
+      ~desc:"denotes an origin of a synthetic program"
       ~name:"origin"
       ~uuid:"fa804594-d2fc-4865-824a-3ad481963f54"
 
   let synthetic = Bap_value.Tag.register (module Unit)
+      ~package
+      ~public:true
+      ~desc:"denotes a synthetic program"
       ~name:"synthetic"
       ~uuid:"a83b26b5-902e-4aaf-bfa1-503e3ced0b1a"
 
 
   let live = Bap_value.Tag.register (module Unit)
+      ~package
+      ~public:true
+      ~desc:"marks program as live"
       ~name:"live"
       ~uuid:"4d3871ab-9481-4d41-97a3-cd3136acfa90"
 
   let dead = Bap_value.Tag.register (module Unit)
+      ~package
+      ~public:true
+      ~desc:"marks program as dead"
       ~name:"dead"
       ~uuid:"6009fb21-2a6c-4511-9aa4-92b2894debc7"
 
   let visited = Bap_value.Tag.register (module Unit)
+      ~package
+      ~public:true
+      ~desc:"marks program as dead"
       ~name:"visited"
       ~uuid:"0e162aa3-153f-44a3-88e7-6e42d876e760"
 
   let precondition = Bap_value.Tag.register (module Exp)
+      ~package
+      ~public:true
+      ~desc:"the program precondition"
       ~name:"precondition"
       ~uuid:"f08c88e1-56f5-4148-822a-ac2dff34bda5"
 
   let invariant = Bap_value.Tag.register (module Exp)
+      ~package
+      ~public:true
+      ~desc:"the program invariant"
       ~name:"invariant"
       ~uuid:"743d712b-7ee4-46da-b3b7-98d3ca5e618b"
 
   let postcondition = Bap_value.Tag.register (module Exp)
+      ~package
+      ~public:true
+      ~desc:"the program postcondition"
       ~name:"postcondition"
       ~uuid:"f248e4c1-9efc-4c70-a864-e34706e2082b"
 
@@ -1694,46 +1723,79 @@ module Ir_sub = struct
 
 
   let aliases = Bap_value.Tag.register (module Aliases)
+      ~package
+      ~public:true
+      ~desc:"alternative names of the program"
       ~name:"aliases"
       ~uuid:"ed73c040-d798-4fc9-96a0-d3c12a870955"
 
   let const = Bap_value.Tag.register (module Unit)
+      ~package
+      ~public:true
+      ~desc:"the program is pure and closed term"
       ~name:"const"
       ~uuid:"b8795164-2e19-4469-9776-d41a6e6afe2e"
 
   let pure = Bap_value.Tag.register (module Unit)
+      ~package
+      ~public:true
+      ~desc:"the program is pure"
       ~name:"pure"
       ~uuid:"2c477ecb-0de8-4e8e-8cba-052eb67c628a"
 
   let stub = Bap_value.Tag.register (module Unit)
+      ~package
+      ~public:true
+      ~desc:"the program is a stub that redirects to the real program"
       ~name:"stub"
       ~uuid:"c9eaf8a5-783d-4e01-9bf2-5d012602475f"
 
   let extern = Bap_value.Tag.register (module Unit)
+      ~package
+      ~public:true
+      ~desc:"the program is a part of the public interface"
       ~name:"extern"
       ~uuid:"7965a2ee-ae72-4eb6-88c1-6f2b6108915f"
 
   let leaf = Bap_value.Tag.register (module Unit)
+      ~package
+      ~public:true
+      ~desc:"the program is a leaf function"
       ~name:"leaf"
       ~uuid:"0688a9ac-9e55-4e37-a9e5-ac0a4e4af59e"
 
   let malloc = Bap_value.Tag.register (module Unit)
+      ~package
+      ~public:true
+      ~desc:"the program returns value that is allocated with malloc"
       ~name:"malloc"
       ~uuid:"b9237d20-07c2-462f-938d-91e4d438fd07"
 
   let noreturn = Bap_value.Tag.register (module Unit)
+      ~package
+      ~public:true
+      ~desc:"the program terminates the computation"
       ~name:"noreturn"
       ~uuid:"1f2941fb-d227-418d-a1d5-9f9d288a585f"
 
   let nothrow = Bap_value.Tag.register (module Unit)
+      ~package
+      ~public:true
+      ~desc:"the doesn't throw exceptions"
       ~name:"nothrow"
       ~uuid:"32058b19-95ca-46e3-bee0-d0a3694fd5b1"
 
   let returns_twice = Bap_value.Tag.register (module Unit)
+      ~package
+      ~public:true
+      ~desc:"the program is non-determinstic"
       ~name:"returns-twice"
       ~uuid:"40166004-ea98-431b-81b0-4e74a0b681ee"
 
   let entry_point = Bap_value.Tag.register (module Unit)
+      ~package
+      ~public:true
+      ~desc:"the program is the entry point to the compilation unit"
       ~name:"entry-point"
       ~uuid:"d1eaff96-4ed4-4405-9305-63508440ccc1"
 

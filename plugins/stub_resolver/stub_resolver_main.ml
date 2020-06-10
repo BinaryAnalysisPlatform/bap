@@ -38,12 +38,19 @@ module Plt = struct
     Memmap.to_sequence |>
     Seq.fold ~init:(Set.empty (module Bitvec_order)) ~f:collect_addresses
 
-  let provide mem =
-    let stubs = section_memory mem ".plt" in
-    KB.promise (Value.Tag.slot Sub.stub) @@ fun label ->
-    KB.collect Theory.Label.addr label >>| function
-    | Some addr when Set.mem stubs addr -> Some ()
-    | _ ->    None
+  let provide =
+    KB.Rule.(declare ~package:"bap" "stub-resolver" |>
+             dynamic ["code"] |>
+             require Theory.Label.addr |>
+             provide (Value.Tag.slot Sub.stub) |>
+             comment "Locates .plt entries in the project code
+                        sections and tags them as stubs.");
+    fun mem ->
+      let stubs = section_memory mem ".plt" in
+      KB.promise (Value.Tag.slot Sub.stub) @@ fun label ->
+      KB.collect Theory.Label.addr label >>| function
+      | Some addr when Set.mem stubs addr -> Some ()
+      | _ ->    None
 end
 
 let update prog = relink prog (Stub_resolver.run prog)
@@ -61,6 +68,6 @@ let () = Extension.documentation {|
 |}
 
 let () = Extension.declare @@ fun _ctxt ->
-  Stream.observe Project.Info.data @@ Plt.provide;
+  Stream.observe Project.Info.code @@ Plt.provide;
   Bap_abi.register_pass main;
   Ok ()
