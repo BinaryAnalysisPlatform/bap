@@ -53,5 +53,7 @@ let summary (_,diffs) =
 
 let () = Extension.declare ~provides:["collator"] @@ fun _ctxt ->
   Project.Collator.register ~package:"bap" "callgraph"
-    ~prepare ~collate ~summary;
+    ~prepare ~collate ~summary
+    ~desc:"compares binaries by their callgraphs";
+
   Ok ()
