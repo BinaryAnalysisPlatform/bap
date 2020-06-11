@@ -316,7 +316,7 @@ depexts: [
   ] {os-distribution = "archlinux"}
   ["gmp" "llvm-9" "graphviz" "curl" "libzip"]
     {os = "macos" & os-distribution = "macports"}
-  ["gmp" "homebrew/versions/llvm9" "graphviz" "curl" "libzip" "dejagnu"]
+  ["gmp" "llvm@9" "graphviz" "curl" "libzip" "dejagnu"]
     {os = "macos" & os-distribution = "homebrew"}
 ]
 dev-repo: "git://github.com/BinaryAnalysisPlatform/bap/"
