@@ -20,6 +20,7 @@ module Symbols = Data.Make(struct
 module type Target = sig
   type t
   val of_blocks : (string * addr * addr) seq -> t
+  val set_path : t -> string -> t
   val provide : Knowledge.agent -> t -> unit
 end
 
@@ -66,7 +67,8 @@ let ida_symbolizer =
 let register_source (module T : Target) =
   let inputs = Stream.zip Project.Info.file Project.Info.arch in
   Stream.observe inputs @@ fun (file,arch) ->
-  T.provide ida_symbolizer (T.of_blocks (extract file arch))
+  let provider = T.of_blocks (extract file arch) in
+  T.provide ida_symbolizer (T.set_path provider file)
 
 
 type perm = [`code | `data] [@@deriving sexp, equal]
