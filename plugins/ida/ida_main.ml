@@ -220,7 +220,8 @@ let register_brancher_source () =
   let inputs =
     Stream.zip Project.Info.file Project.Info.arch in
   Stream.observe inputs @@ fun (file,arch) ->
-  Brancher.provide @@ Brancher.create (get_resolve_fun file arch)
+  let brancher = Brancher.create (get_resolve_fun file arch) in
+  Brancher.provide @@ Brancher.set_path brancher file
 
 let main () =
   register_source (module struct include Rooter
