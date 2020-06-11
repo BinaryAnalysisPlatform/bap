@@ -304,10 +304,10 @@ let setup_gc_unless_overriden () =
   else info "GC parameters are overriden by a user"
 
 let create_and_process input outputs passes loader ctxt =
-  let package = Caml.Digest.to_hex (Caml.Digest.file input) in
+  let package = input in
   let digest = make_digest [
       Extension.Configuration.digest ctxt;
-      package;
+      Caml.Digest.file input;
       loader;
     ] in
   import_knowledge_from_cache digest;
