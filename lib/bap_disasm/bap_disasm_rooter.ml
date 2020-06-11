@@ -49,9 +49,10 @@ let of_blocks blocks =
           | _ -> Some sa));
   create (Hashtbl.data roots |> Seq.of_list)
 
-let path_applies s path = match s.path with
-  | Some s -> String.equal s path
-  | _ -> true
+let is_applicable s path = match s.path, path with
+  | None,_-> true
+  | Some p, Some p' -> String.equal p p'
+  | Some _, None -> false
 
 let provide =
   KB.Rule.(declare ~package:"bap" "reflect-rooter" |>
@@ -67,8 +68,8 @@ let provide =
       Seq.map ~f:Word.to_bitvec |>
       Seq.fold ~init ~f:Set.add in
     KB.promise Theory.Label.is_subroutine @@ fun label ->
-    KB.collect Theory.Label.path label >>=? fun path ->
+    KB.collect Theory.Label.path label >>= fun path ->
     KB.collect Theory.Label.addr label >>|? fun addr ->
-    if path_applies rooter path
+    if is_applicable rooter path
     then Option.some_if (Set.mem roots addr) true
     else None

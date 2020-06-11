@@ -16,7 +16,11 @@ type dest = addr option * edge [@@deriving sexp]
 type dests = dest list [@@deriving sexp]
 type full_insn = Bap_disasm_basic.full_insn
 
-type t = Brancher of (mem -> full_insn -> dests)
+type t = {
+  path : string option;
+  resolve : mem -> full_insn -> dests
+}
+
 type brancher = t
 
 module Rel_info = struct
@@ -92,10 +96,15 @@ let resolve_jumps rel_info mem dests =
       | Some addr, `Jump -> fixup rel_info mem addr, `Jump
       | x -> x) dests
 
-let create f = Brancher f
-let resolve (Brancher f) = f
+let create f = {path=None; resolve=f}
+let set_path b s = {b with path = Some s}
+let path b = b.path
+let resolve {resolve=f} = f
 
-let empty = Brancher (fun _ _ -> [])
+let empty = {
+  path = None;
+  resolve = fun _ _ -> []
+}
 
 let kind_of_dests = function
   | xs when List.for_all xs ~f:(fun (_,x) -> [%compare.equal : edge] x `Fall) -> `Fall
@@ -159,11 +168,17 @@ let (>>=?) x f = x >>= function
   | None -> KB.return Insn.empty
   | Some x -> f x
 
+let is_applicable s path = match s.path, path with
+  | None,_-> true
+  | Some p, Some p' -> String.equal p p'
+  | Some _, None -> false
+
 let provide =
   KB.Rule.(declare ~package:"bap" "reflect-brancher" |>
            dynamic ["brancher"] |>
            require Memory.slot |>
            require Dis.Insn.slot |>
+           require Theory.Label.path |>
            provide Insn.Slot.dests |>
            comment "[Brancher.provide b] provides [b] to KB");
   fun brancher ->
@@ -171,11 +186,14 @@ let provide =
     KB.promise Theory.Program.Semantics.slot @@ fun label ->
     KB.collect Memory.slot label >>=? fun mem ->
     KB.collect Dis.Insn.slot label >>=? fun insn ->
-    resolve brancher mem insn |>
-    KB.List.fold ~init ~f:(fun dsts dst ->
-        match dst with
-        | Some addr,_ ->
-          Theory.Label.for_addr (Word.to_bitvec addr) >>| fun dst ->
-          Set.add dsts dst
-        | None,_ -> KB.return dsts) >>| fun dests ->
-    KB.Value.put Insn.Slot.dests Insn.empty (Some dests)
+    KB.collect Theory.Label.path label >>= fun path ->
+    if is_applicable brancher path then
+      resolve brancher mem insn |>
+      KB.List.fold ~init ~f:(fun dsts dst ->
+          match dst with
+          | Some addr,_ ->
+            Theory.Label.for_addr (Word.to_bitvec addr) >>| fun dst ->
+            Set.add dsts dst
+          | None,_ -> KB.return dsts) >>| fun dests ->
+      KB.Value.put Insn.Slot.dests Insn.empty (Some dests)
+    else KB.return Insn.empty

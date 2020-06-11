@@ -8783,6 +8783,20 @@ module Std : sig
         instruction itself and returns a list of destination.  *)
     val create : (mem -> full_insn -> dests) -> t
 
+    (** [set_path s] limits the symbolizer applicability only to
+        addresses that belong to a file/compilation unit with the
+        specified path.
+
+        @since 2.2.0
+    *)
+    val set_path : t -> string -> t
+
+    (** [path s] is the path to the file that this symbolizer serves.
+        @since 2.2.0
+    *)
+    val path : t -> string option
+
+
     (** [of_bil arch] creates a brancher that will use a BIL code to
         statically deduce the instruction destinations.  *)
     val of_bil : arch -> t
@@ -8791,6 +8805,9 @@ module Std : sig
         the instruction [insn], that occupies memory region [mem].  *)
     val resolve : t -> mem -> full_insn -> dests
 
+
+    (** [provide brancher] provides the brancher information to the
+        knowledge base.    *)
     val provide : t -> unit
 
     module Factory : Source.Factory.S with type t = t
@@ -9358,21 +9375,62 @@ module Std : sig
       val autorun : t -> bool
     end
 
+
+    (** A pass that collates projects.
+
+        A collator is a pass that is folded over projects and computes
+        differences between the base version and the number of
+        alternative versions.
+    *)
     module Collator : sig
+
       type t
+
+
+      (** Information about a collator.  *)
       type info
 
-      val apply : t -> project seq -> unit
-      val find : ?package:string -> string -> t option
-      val name : info -> Knowledge.Name.t
-      val desc : info -> string
 
+      (** [register ~prepare ~collate ~summary name] registers a collator.
+
+          The [prepare] function is called on the base version and it
+          returns the collator's state that can be an arbitrary type
+          ['s]. Then the [collate] function is consequitevely applied
+          on alternative versions of the base version, with the
+          version number passed as the first argument (starting from
+          0). Finally, when all versions are compared with the base,
+          the summary function is called.
+
+          The collator fullname (package:name) must be unique,
+          otherwise a function terminates.
+      *)
       val register : ?desc:string -> ?package:string -> string ->
         prepare:(project -> 's) ->
         collate:(int -> 's -> project -> 's) ->
         summary:('s -> unit) ->
         unit
 
+
+      (** [apply collator projects] applies the [collator] to the
+          sequence of projects.
+
+          Projects are evaluated lazily, one project at time.
+      *)
+      val apply : t -> project seq -> unit
+
+
+      (** [find ?package name] looks up a collator in the registry.  *)
+      val find : ?package:string -> string -> t option
+
+
+      (** the collators name  *)
+      val name : info -> Knowledge.Name.t
+
+
+      (** the collators description.  *)
+      val desc : info -> string
+
+      (** information about registered collators  *)
       val registered : unit -> info list
     end
 

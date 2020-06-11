@@ -12,6 +12,10 @@ type dests = dest list [@@deriving sexp]
 
 val create : (mem -> full_insn -> dests) -> t
 
+val set_path : t -> string -> t
+
+val path : t -> string option
+
 val of_bil : arch -> t
 
 val of_image : image -> t

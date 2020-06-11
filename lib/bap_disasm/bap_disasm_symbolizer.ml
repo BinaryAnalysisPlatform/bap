@@ -64,10 +64,10 @@ let of_blocks seq =
 
 module Factory = Factory.Make(struct type nonrec t = t end)
 
-
-let path_applies s path = match s.path with
-  | Some s -> String.equal s path
-  | _ -> true
+let is_applicable s path = match s.path, path with
+  | None,_-> true
+  | Some p, Some p' -> String.equal p p'
+  | Some _, None -> false
 
 let provide =
   KB.Rule.(declare ~package:"bap" "reflect-symbolizers" |>
@@ -82,8 +82,8 @@ let provide =
     KB.propose agent Theory.Label.possible_name @@ fun label ->
     KB.collect Arch.slot label >>= fun arch ->
     KB.collect Theory.Label.addr label >>=? fun addr ->
-    KB.collect Theory.Label.path label >>|? fun path ->
-    if path_applies s path
+    KB.collect Theory.Label.path label >>| fun path ->
+    if is_applicable s path
     then s.find @@ Addr.create addr @@ Size.in_bits (Arch.addr_size arch)
     else None
 
