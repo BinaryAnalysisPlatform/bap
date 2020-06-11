@@ -59,11 +59,17 @@ let main path min_length max_length threshold comp =
         Ok (Rooter.create Seq.empty)
       | roots -> Ok (roots |> Set.to_sequence |> Rooter.create)  in
   if Sys.file_exists path then
-    let inputs = Stream.zip Project.Info.arch Project.Info.code in
-    Stream.observe inputs (fun (arch,mem) ->
+    let args = Stream.Variadic.(begin
+        args Project.Info.arch $Project.Info.code $Project.Info.file
+      end) in
+    Stream.Variadic.apply args ~f:(fun arch mem path ->
         match find_roots arch mem with
-        | Ok roots -> Rooter.provide roots
-        | Error _ -> ())
+        | Ok roots -> Ok (Rooter.set_path roots path)
+        | Error err -> Error err) |> fun rooters ->
+    Stream.observe rooters @@ function
+    | Ok rooter -> Rooter.provide rooter
+    | Error _ -> ()
+
   else begin
     warning "the signature database is not available";
     info "advice - use `bap-byteweight` to install signatures";
