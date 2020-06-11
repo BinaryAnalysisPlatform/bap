@@ -34,5 +34,5 @@ jobs:
       - run: opam pin add bap . --no-action
       - run: opam depext bap --yes --with-doc --with-test
       - run: opam install . --deps-only --with-doc --with-test
-      - run: opam install .
+#      - run: opam install .
       - run: opam pin add bap-veri testsuite/veri/bap-veri/ -y
