@@ -31,8 +31,19 @@ jobs:
         with:
           ocaml-version: ${{ matrix.ocaml-version }}
 
-      - run: opam pin add bap . --no-action
-      - run: opam depext bap --yes --with-doc --with-test
-      - run: opam install . --deps-only --with-doc --with-test
-#      - run: opam install .
-      - run: opam pin add bap-veri testsuite/veri/bap-veri/ -y
+      - name: Pinning BAP
+        run: opam pin add bap . --no-action
+
+      - name: Configuring Homebrew LLVM
+        if: matrix.os == 'macos-latest'
+        env:
+            LLVM_CONFIG_PATH: '/usr/local/opt/llvm/bin/llvm-config'
+
+      - name: Installing system dependencies
+        run: opam depext bap --yes --with-doc --with-test
+
+      - name: Installing opam dependencies
+        run: opam install . --deps-only --with-doc --with-test
+
+      - name: Installing BAP and running the testsuite
+        run: opam pin add bap-veri testsuite/veri/bap-veri/ -y
