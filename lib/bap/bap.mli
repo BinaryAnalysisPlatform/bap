@@ -8717,7 +8717,29 @@ module Std : sig
   module Rooter : sig
     type t = rooter
 
+
+    (** [provide r] reflects the rooter information to the knowledge
+        base.
+
+        @since 2.0.0
+    *)
     val provide : t -> unit
+
+
+    (** [set_path s] limits the symbolizer applicability only to
+        addresses that belong to a file/compilation unit with the
+        specified path.
+
+        @since 2.2.0
+    *)
+    val set_path : t -> string -> t
+
+
+    (** [path s] is the path to the file that this symbolizer serves.
+        @since 2.2.0
+    *)
+    val path : t -> string option
+
 
     (** [create seq] creates a rooter from a given sequence of addresses  *)
     val create : addr seq -> t

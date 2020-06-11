@@ -7,6 +7,10 @@ type rooter = t
 
 val create : addr seq -> t
 
+val set_path : t -> string -> t
+
+val path : t -> string option
+
 val of_image : image -> t
 
 val of_blocks : (string * addr * addr) seq -> t

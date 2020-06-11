@@ -9,24 +9,37 @@ open KB.Syntax
 module Source = Bap_disasm_source
 module Insn = Bap_disasm_insn
 
-type t = Rooter of addr seq
+type t = {
+  path : string option;
+  roots : addr seq
+}
+
 type rooter = t
 
-let create seq = Rooter seq
-let roots (Rooter seq) = seq
-let union (Rooter r1) (Rooter r2) =
-  Rooter (Seq.append r1 r2)
+let merge_paths = Option.first_some
+
+let create seq = {roots=seq; path=None}
+let roots {roots=x} = x
+let union x y = {
+  path = merge_paths x.path y.path;
+  roots = Seq.append x.roots y.roots;
+}
+
+let set_path r s = {r with path = Some s}
+let path {path=x} = x
+
 let empty = create Seq.empty
 
 module Factory = Source.Factory.Make(struct type nonrec t = t end)
 
-let of_image img =
-  Image.symbols img |>
-  Table.to_sequence |>
-  Seq.map ~f:fst    |>
-  Seq.map ~f:Memory.min_addr |>
-  Seq.cons (Image.entry_point img) |>
-  create
+let of_image img = {
+  path = Image.filename img;
+  roots = Image.symbols img |>
+          Table.to_sequence |>
+          Seq.map ~f:fst    |>
+          Seq.map ~f:Memory.min_addr |>
+          Seq.cons (Image.entry_point img)
+}
 
 let of_blocks blocks =
   let roots = String.Table.create () in
@@ -36,10 +49,15 @@ let of_blocks blocks =
           | _ -> Some sa));
   create (Hashtbl.data roots |> Seq.of_list)
 
+let path_applies s path = match s.path with
+  | Some s -> String.equal s path
+  | _ -> true
+
 let provide =
   KB.Rule.(declare ~package:"bap" "reflect-rooter" |>
            dynamic ["rooter"] |>
            require Theory.Label.addr |>
+           require Theory.Label.path |>
            provide Theory.Label.is_subroutine |>
            comment "[Rooter.provide r] provides [r] to KB.");
   fun rooter ->
@@ -49,7 +67,8 @@ let provide =
       Seq.map ~f:Word.to_bitvec |>
       Seq.fold ~init ~f:Set.add in
     KB.promise Theory.Label.is_subroutine @@ fun label ->
-    KB.collect Theory.Label.addr label >>| function
-    | None -> None
-    | Some addr ->
-      Option.some_if (Set.mem roots addr) true
+    KB.collect Theory.Label.path label >>=? fun path ->
+    KB.collect Theory.Label.addr label >>|? fun addr ->
+    if path_applies rooter path
+    then Option.some_if (Set.mem roots addr) true
+    else None
