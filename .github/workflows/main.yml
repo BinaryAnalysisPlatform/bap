@@ -12,7 +12,7 @@ jobs:
         os:
           - macos-latest
           - ubuntu-latest
-          - windows-latest
+            #- windows-latest
         ocaml-version:
           - 4.09.1
           - 4.08.1
@@ -37,7 +37,7 @@ jobs:
       - name: Configuring Homebrew LLVM
         if: matrix.os == 'macos-latest'
         env:
-            LLVM_CONFIG_PATH: '/usr/local/opt/llvm/bin/llvm-config'
+            LLVM_CONFIG: '/usr/local/opt/llvm/bin/llvm-config'
 
       - name: Installing system dependencies
         run: opam depext bap --yes --with-doc --with-test
