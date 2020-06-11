@@ -2487,7 +2487,6 @@ module Knowledge = struct
     pid
 
   let remove_promise (s : _ slot) pid =
-    Format.eprintf "Removing promise %a@\n%!" Pid.pp pid;
     Hashtbl.remove s.promises pid
 
   let promising s ~promise:get scoped =
@@ -2496,7 +2495,6 @@ module Knowledge = struct
       if Domain.is_empty s.dom x
       then Knowledge.return ()
       else provide s obj x in
-    Format.eprintf "Promise %a is registered@\n%!" Pid.pp pid;
     scoped () >>= fun r ->
     remove_promise s pid;
     Knowledge.return r
