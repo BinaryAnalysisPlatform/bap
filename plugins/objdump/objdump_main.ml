@@ -112,7 +112,7 @@ module Repository : sig
 end = struct
   type info = {
     names : string Map.M(Bitvec_order).t;
-    addrs : Bitvec.t Map.M(String).t;
+    addrs : Bitvec.t list Map.M(String).t;
   }
 
   type t = {
@@ -131,7 +131,7 @@ end = struct
     | None ->
       let accept name addr {names; addrs} = {
         names = Map.set names addr name;
-        addrs = Map.set addrs name addr;
+        addrs = Map.add_multi addrs name addr;
       } in
       let info = parse path accept {
           names = Map.empty (module Bitvec_order);
@@ -148,7 +148,9 @@ end = struct
 
   let addr repo ~path name =
     let {addrs} = lookup repo path in
-    Map.find addrs name
+    match Map.find addrs name with
+    | Some [addr] -> Some addr
+    | _ -> None
 end
 
 let provide_function_starts_and_names ctxt : unit =
