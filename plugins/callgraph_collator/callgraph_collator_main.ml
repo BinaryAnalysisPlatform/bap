@@ -12,8 +12,9 @@ indicates that in the alternative version there is no call from src to dst,
 and
 
 ```
-+ dst -> src
++ src -> dst
 ```
+
 means that in the base there is no call from src to dst.
 |}
 
@@ -36,14 +37,14 @@ include struct
             i.e., starting with $(b,_) (underscore) or $(b,.) (dot)."
 
   let ignore_unresolved = flag "ignore-unresolved"
-      ~doc:"Ignore functions with dummy names, i.e., starting with $(sub_)."
+      ~doc:"Ignore functions with dummy names, i.e., starting with $(b,sub_)."
 
   let ignore_matching = parameter (some ("REGEXP" %: string)) "ignore-matching"
       ~doc:"Ignore functions that partially match the speciefied PCRE \
             regular expression."
 
   let output = parameter (some ("FILE" %: string)) "output"
-      ~doc:"Outputs all information into the specified file"
+      ~doc:"Outputs all information into the specified file."
 end
 
 
@@ -57,7 +58,7 @@ let name_of_dst jmp = match Jmp.alt jmp with
       Tid.name tid
 
 
-let () = Extension.declare ~provides:["collator"] @@ fun ctxt ->
+let () = Extension.declare ~provides:["collator"] ~doc @@ fun ctxt ->
   let ppf,close = match ctxt-->output with
     | None -> std_formatter, ignore
     | Some file ->
