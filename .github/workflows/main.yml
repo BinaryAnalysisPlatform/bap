@@ -14,8 +14,8 @@ jobs:
           #- macos-latest
           #- windows-latest
         ocaml-version:
-          - 4.09.1
-          - 4.08.1
+          # - 4.09.1
+          # - 4.08.1
           - 4.07.1
 
     runs-on: ${{ matrix.os }}
@@ -39,20 +39,24 @@ jobs:
         run: echo '::set-env name=LLVM_CONFIG::/usr/local/opt/llvm/bin/llvm-config'
 
       - name: Installing system dependencies
-        run: opam depext bap --yes --with-doc --with-test
+        run: opam depext bap --yes
 
       - name: Installing opam dependencies
-        run: opam install . --deps-only --with-doc --with-test
+        run: opam install . --deps-only
 
       - name: Install BAP
         run: opam install bap -v --yes --with-test
+        env:
+          XDG_CACHE_HOME: .cache
 
       - name: running the testsuite
+        run: make check
+
+      - name: running bap-veri
         run: |
           eval $(opam env)
           cd testsuite
           git submodule init
           git submodule update
           opam pin add bap-veri veri/bap-veri/ -y
-          make check
           make veri
