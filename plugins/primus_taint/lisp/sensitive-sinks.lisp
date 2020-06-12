@@ -10,11 +10,10 @@
 (require types)
 (require pointers)
 
-(defmethod eval-cond (c)
+(defmethod jumping (c _)
   (let ((t (taint-get-direct 'untrusted c)))
     (when t
       (dict-add 'untrusted/checked t (incident-location)))))
-
 
 (defun must/check (v)
   (let ((t (taint-get-direct 'untrusted v))
