@@ -372,7 +372,7 @@ let _compare_command_registered : unit =
     validate_passes >>= fun passes ->
     Dump_formats.parse outputs >>= fun outputs ->
     let projs =
-      Seq.map (Seq.of_list inputs) ~f:(fun input ->
+      Seq.map (Seq.of_list (input::inputs)) ~f:(fun input ->
           create_and_process input outputs passes loader ctxt) in
     let exception Escape of Extension.Error.t in
     try
