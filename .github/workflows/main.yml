@@ -10,9 +10,9 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - macos-latest
           - ubuntu-latest
-            #- windows-latest
+          #- macos-latest
+          #- windows-latest
         ocaml-version:
           - 4.09.1
           - 4.08.1
@@ -44,5 +44,15 @@ jobs:
       - name: Installing opam dependencies
         run: opam install . --deps-only --with-doc --with-test
 
-      - name: Installing BAP and running the testsuite
-        run: opam pin add bap-veri testsuite/veri/bap-veri/ -y
+      - name: Install BAP
+        run: opam install bap -v --yes --with-test
+
+      - name: running the testsuite
+        run: |
+          eval $(opam env)
+          cd testsuite
+          git submodule init
+          git submodule update
+          opam pin add bap-veri veri/bap-veri/ -y
+          make check
+          make veri

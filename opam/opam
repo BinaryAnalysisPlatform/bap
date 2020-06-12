@@ -31,8 +31,8 @@ depends: [
   "conf-bap-llvm" {>= "1.1"}
   "parsexp"
   "bap-signatures"
+  "result"
   "z3"
-  "result" {= "1.4"}
 ]
 depopts: ["conf-ida" "conf-binutils"]
 flags: light-uninstall
@@ -56,6 +56,7 @@ build: [
   ]
   [make]
 ]
+run-test: [make "test"]
 install: [
   ["ocamlfind" "remove" "bap-main"]
   ["ocamlfind" "remove" "bap-plugins"]
