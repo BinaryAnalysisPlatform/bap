@@ -56,7 +56,6 @@ build: [
   ]
   [make]
 ]
-run-test: [make "test"]
 install: [
   ["ocamlfind" "remove" "bap-main"]
   ["ocamlfind" "remove" "bap-plugins"]
@@ -167,6 +166,7 @@ install: [
   ["cp" "run_piqi_tests.native" "%{bin}%/bap_piqi_tests"]
   ["cp" "run_traces_tests.native" "%{bin}%/bap_traces_tests"]
   ["cp" "run_stub_resolver_tests.native" "%{bin}%/bap_stub_resolver_tests"]
+  [make "test"] {with-test}
 ]
 remove: [
   ["ocamlfind" "remove" "bap-main"]
