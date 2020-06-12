@@ -68,6 +68,6 @@ let () = Extension.documentation {|
 |}
 
 let () = Extension.declare @@ fun _ctxt ->
-  Stream.observe Project.Info.code @@ Plt.provide;
+  Stream.observe Project.Info.data @@ Plt.provide;
   Bap_abi.register_pass main;
   Ok ()
