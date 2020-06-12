@@ -57,10 +57,17 @@ let of_image img =
   {find = Hashtbl.find names; path=Image.filename img}
 
 let of_blocks seq =
-  let syms = Addr.Table.create () in
-  Seq.iter seq ~f:(fun (name,addr,_) ->
-      Hashtbl.set syms ~key:addr ~data:name);
-  create (Hashtbl.find syms)
+  let names =
+    Seq.fold seq ~init:String.Map.empty ~f:(fun addrs (name,addr,_) ->
+        Map.update addrs name (function
+            | Some addr' -> Addr.min addr addr'
+            | None -> addr)) |>
+    Map.to_sequence |>
+    Seq.fold ~init:Addr.Map.empty ~f:(fun names (name,entry) ->
+        Map.add_multi names entry name) in
+  create @@ fun addr -> match Map.find names addr with
+  | Some [name] -> Some name
+  | _ -> None
 
 module Factory = Factory.Make(struct type nonrec t = t end)
 
