@@ -46,7 +46,7 @@ module Thumb(Core : Theory.Core) = struct
 
     let movei8 dest imm = match dest, imm with
     | `Reg d, `Imm v -> seq (set_reg d v) (Flags.set_nzf (reg d)) |> move
-    | _ -> raise (Lift_Error "incorrect oprands")
+    | _ -> raise (Lift_Error "incorrect operands")
 
     let addrr d s1 s2 = match d, s1, s2 with
     | `Reg d, `Reg s1, `Reg s2 -> 
@@ -55,7 +55,7 @@ module Thumb(Core : Theory.Core) = struct
             (set d (add (var s1) (var s2))) 
             (Flags.set_add (var s1) (var s2) d) 
             |> move
-    | _ -> raise (Lift_Error "oprends must be registers")
+    | _ -> raise (Lift_Error "operands must be registers")
 
     let lift_move insn ops =
     match insn, ops with
