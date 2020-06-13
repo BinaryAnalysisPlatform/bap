@@ -50,7 +50,9 @@ jobs:
           XDG_CACHE_HOME: .cache
 
       - name: running the testsuite
-        run: make check
+        run: |
+          eval $(opam env)
+          make check
 
       - name: running bap-veri
         run: |
