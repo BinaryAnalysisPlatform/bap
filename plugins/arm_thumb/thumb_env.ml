@@ -26,7 +26,7 @@ type half_byte
 
   let heap_type = Theory.Mem.define value byte
 
-  let heap = Theory.Var.define heap_type "mem"
+  let memory = Theory.Var.define heap_type "mem"
 
   (** define grps *)
   let r0 = Theory.Var.define value "r0"
@@ -37,6 +37,13 @@ type half_byte
   let r5 = Theory.Var.define value "r5"
   let r6 = Theory.Var.define value "r6"
   let r7 = Theory.Var.define value "r7"
+
+  (** grps which are not commonly accessible *)
+  let r8 = Theory.Var.define value "r8"
+  let r9 = Theory.Var.define value "r9"
+  let r10 = Theory.Var.define value "r10"
+  let r11 = Theory.Var.define value "r11"
+  let r12 = Theory.Var.define value "r12"
 
   let lr = Theory.Var.define value "lr"
   let pc = Theory.Var.define value "pc"
@@ -54,6 +61,28 @@ type half_byte
 
 exception Unbound_Reg
 module Defs = Thumb_defs
+
+  (* to elimiate ambiguity *)
+  let load_reg_wide (op : Defs.reg) = let open Thumb_defs in
+    match op with
+    | `R0 -> r0
+    | `R1 -> r1
+    | `R2 -> r2
+    | `R3 -> r3
+    | `R4 -> r4
+    | `R5 -> r5
+    | `R6 -> r6
+    | `R7 -> r7
+    | `R8 -> r8
+    | `R9 -> r9
+    | `R10 -> r10
+    | `R11 -> r11
+    | `R12 -> r12
+    | `LR -> lr
+    | `SP -> sp
+    | `PC -> pc
+    | _ -> raise Unbound_Reg
+
   let load_reg (op : Defs.reg) = let open Thumb_defs in
     match op with
     | `R0 -> r0

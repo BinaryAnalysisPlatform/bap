@@ -33,6 +33,12 @@ type gpr_reg = [
   | `R5
   | `R6
   | `R7
+(* all the ARM GRPs are still needed *)
+  | `R8
+  | `R9
+  | `R10
+  | `R11
+  | `R12
   | `LR
   | `PC
   | `SP
@@ -61,13 +67,19 @@ type op = [
   | `Reg of reg
   | `Imm of word
 ] [@@deriving bin_io, compare, sexp]
-
+(** all the `mov` series, registers marked with `e` means extended *)
 type move_insn = [
   | `tMOVi8 (* Rd imm8 *)
-  | `tMOVr (* Rd Rs *)
+  | `tMOVr (* Rde Rse *)
   | `tMOVSr (* Rd Rm affect CSPR *)
-  | `tADDrr (* Rd Rn Rm *)
+  | `tADC (* Rd Rn Rm *)
   | `tADDi3 (* Rd Rs imm *)
+  | `tADDi8 (* Rd imm *)
+  | `tADDrr (* Rd Rn Rm *)
+  | `tADDhirr (* Rde Rse *)
+  | `tADR (* Rd imm *)
+  | `tADDrSPi (* Rd imm *)
+  | `tADDspi (* imm *)
   | `tMUL (* Rd Rn *)
 ] [@@deriving bin_io, compare, sexp, enumerate]
 
