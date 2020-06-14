@@ -34,7 +34,7 @@ let set_vnzf_sub s1 s2 r =
 let set_sub s1 s2 r =
     seq
         (set Env.cf (sle s2 s1))
-        (set_vnzf_add s1 s2 r)
+        (set_vnzf_sub s1 s2 r)
 
 let as_bitv b = ite b (int value Bitvec.one) (int value Bitvec.zero)
 

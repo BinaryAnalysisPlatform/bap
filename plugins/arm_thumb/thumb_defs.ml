@@ -2,6 +2,8 @@ open Core_kernel
 open Regular.Std
 open Bap.Std
 
+exception Lift_Error of string
+
 type cond = [
   | `EQ
   | `NE
@@ -72,6 +74,7 @@ type move_insn = [
   | `tMOVi8 (* Rd imm8 *)
   | `tMOVr (* Rde Rse *)
   | `tMOVSr (* Rd Rm affect CSPR *)
+  | `tMVN (* Rd Rm *)
   | `tADC (* Rd Rn Rm *)
   | `tADDi3 (* Rd Rs imm *)
   | `tADDi8 (* Rd imm *)
@@ -80,6 +83,11 @@ type move_insn = [
   | `tADR (* Rd imm *)
   | `tADDrSPi (* Rd imm *)
   | `tADDspi (* imm *)
+  | `tSBC (* Rd Rm *)
+  | `tSUBi3 (* See the corresponding ADD insns. *)
+  | `tSUBi8
+  | `tSUBrr
+  | `tSUBspi
   | `tMUL (* Rd Rn *)
 ] [@@deriving bin_io, compare, sexp, enumerate]
 

@@ -58,6 +58,8 @@ type half_byte
   let vf = Theory.Var.define bit "vf"
   let qf = Theory.Var.define bit "qf"
   let ge = Theory.Var.define half_byte "ge"
+(* psuedo register storing temporary computations *)
+  let tmp = Theory.Var.define value "tmp"
 
 exception Unbound_Reg
 module Defs = Thumb_defs
