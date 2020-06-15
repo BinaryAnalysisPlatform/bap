@@ -31,17 +31,17 @@ jobs:
         with:
           ocaml-version: ${{ matrix.ocaml-version }}
 
-      - name: Pinning BAP
+      - name: Pin BAP
         run: opam pin add bap . --no-action
 
-      - name: Configuring Homebrew LLVM
+      - name: Configure Homebrew LLVM
         if: matrix.os == 'macos-latest'
         run: echo '::set-env name=LLVM_CONFIG::/usr/local/opt/llvm/bin/llvm-config'
 
-      - name: Installing system dependencies
+      - name: Install system dependencies
         run: opam depext bap --yes
 
-      - name: Installing opam dependencies
+      - name: Install opam dependencies
         run: opam install . --deps-only
 
       - name: Install BAP
@@ -49,12 +49,12 @@ jobs:
         env:
           XDG_CACHE_HOME: .cache
 
-      - name: running the testsuite
+      - name: Run the testsuite
         run: |
           eval $(opam env)
           make check
 
-      - name: running bap-veri
+      - name: Run bap-veri
         run: |
           eval $(opam env)
           cd testsuite
