@@ -8,9 +8,13 @@ type byte
 type reg_single
 type half_byte
 type half_word
+type bit_val
 
   let bit : Theory.Bool.t Theory.Value.sort =
     Theory.Bool.t
+
+  let bit_val : bit_val Theory.Bitv.t Theory.Value.sort =
+    Theory.Bitv.define 1
 
   (** grps are defined by 3-bit indices *)
   let reg_single : reg_single Theory.Bitv.t Theory.Value.sort =

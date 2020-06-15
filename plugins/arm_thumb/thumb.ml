@@ -49,6 +49,26 @@ module Thumb(Core : Theory.Core) = struct
     | `tSUBi8, [dest; imm] -> subi8 dest imm
     | `tSUBrr, [dest; src1; src2] -> subrr dest src1 src2
     | `tSUBspi, [imm] -> subspi imm
+    | `tAND, [dest; src] -> andrr dest src
+    | `tASRri, [dest; src; imm] -> asri dest src imm
+    | `tASRrr, [dest; src] -> asrr dest src
+    | `tBIC, [dest; src] -> bic dest src
+    | `tCMNz, [dest; src] -> cmnz dest src
+    | `tCMPi8, [dest; imm] -> cmpi8 dest imm
+    | `tCMPr, [dest; src] -> cmpr dest src
+    | `tCMPhir, [dest; src] -> cmphir dest src
+    | `tEOR, [dest; src] -> eor dest src
+    | `tLSLri, [dest; src; imm] -> lsli dest src imm
+    | `tLSLrr, [dest; src] -> lslr dest src
+    | `tLSRri, [dest; src; imm] -> lsri dest src imm
+    | `tLSRrr, [dest; src] -> lsrr dest src
+    | `tORR, [dest; src] -> orr dest src
+    | `tRSB, [dest; src; imm (* placeholder *)] -> rsb dest src imm
+    | `tREV, [dest; src] -> rev dest src
+    | `tREV16, [dest; src] -> rev16 dest src
+    | `tREVSH, [dest; src] -> revsh dest src
+    | `tROR, [dest; src] -> ror dest src
+    | `tTST, [dest; src] -> tst dest src
     | _ -> pass
 
     let lift_mem insn ops =

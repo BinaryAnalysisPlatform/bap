@@ -83,13 +83,37 @@ type move_insn = [
   | `tADR (* Rd imm *)
   | `tADDrSPi (* Rd imm *)
   | `tADDspi (* imm *)
+  | `tAND
+  | `tASRri
+  | `tASRrr
+  | `tBIC
+  | `tCMNz
+  | `tCMPi8
+  | `tCMPr
+  | `tCMPhir
+  | `tEOR
+  | `tLSLri
+  | `tLSLrr
+  | `tLSRri
+  | `tLSRrr
+  | `tORR
+  | `tRSB (* NEG *)
+  | `tREV
+  | `tREV16
+  | `tREVSH
+  | `tROR
   | `tSBC (* Rd Rm *)
   | `tSUBi3 (* See the corresponding ADD insns. *)
   | `tSUBi8
   | `tSUBrr
   | `tSUBspi
+  | `tTST
   | `tMUL (* Rd Rn *)
 ] [@@deriving bin_io, compare, sexp, enumerate]
+
+type bits_insn = [
+  | `NA
+]
 
 (** Rd [reglist] *)
 type mem_multi_insn = [
