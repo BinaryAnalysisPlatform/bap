@@ -20,17 +20,6 @@ module Thumb(Core : Theory.Core) = struct
 
     open Utils
 
-    let skip = perform Theory.Effect.Sort.bot
-    let pass = perform Theory.Effect.Sort.bot
-
-    let nop =
-        KB.return @@
-        Theory.Effect.empty Theory.Effect.Sort.top
-
-    let reg = Env.load_reg
-
-    let reg_wide = Env.load_reg_wide
-
     let move eff =
     KB.Object.create Theory.Program.cls >>= fun lbl ->
     blk lbl eff skip
@@ -100,6 +89,12 @@ module Thumb(Core : Theory.Core) = struct
         lift_mem_single dest src ~src2:imm St H
     | `tSTRHr, [dest; src1; src2] -> 
         lift_mem_single dest src1 ~src2 St H
+    | `tSTMIA, dest :: src_list ->
+        store_multiple dest src_list
+    | `tPUSH, src_list ->
+        push_multiple src_list
+    | `tPOP, src_list ->
+        pop_multiple src_list (* TODO: PC might have been changed *)
     | _ -> pass
 
     let lift ((ins, ops) : insns) : unit Theory.Effect.t KB.t = 

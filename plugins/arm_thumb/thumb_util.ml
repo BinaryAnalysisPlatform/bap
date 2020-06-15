@@ -6,6 +6,14 @@ module Env  = Thumb_env.Env
 
 module Utils(Core : Theory.Core) = struct
 open Core
+
+    let skip : Theory.ctrl Theory.eff = perform Theory.Effect.Sort.bot
+    let pass : Theory.data Theory.eff = perform Theory.Effect.Sort.bot
+
+    let nop =
+        KB.return @@
+        Theory.Effect.empty Theory.Effect.Sort.top
+
     let reg = Env.load_reg
 
     let reg_wide = Env.load_reg_wide

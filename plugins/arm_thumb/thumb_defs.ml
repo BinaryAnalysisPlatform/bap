@@ -95,6 +95,8 @@ type move_insn = [
 type mem_multi_insn = [
   | `tSTMIA
   | `tLDMIA
+  | `tPOP
+  | `tPUSH
 ] [@@deriving bin_io, compare, sexp, enumerate]
 
 

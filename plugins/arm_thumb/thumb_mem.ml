@@ -14,6 +14,59 @@ open Core
 
     open Utils
 
+    (* The original ARM lifter implement this in a BIL loop-style for some reason *)
+    let store_multiple dest src_list = 
+        match dest with
+        | `Reg r -> let r = reg r in List.fold src_list ~init:pass 
+                    ~f:(fun eff src -> match src with
+                        | `Reg s -> let src = reg s in seq eff
+                                (seq
+                                    (storew b0 (var Env.memory) (var r) (var src) |> set Env.memory)
+                                    (set r (add (var r) (bitv_of 4)))
+                                )
+                        | _ -> raise (Lift_Error "`src` must be a register")
+                    )
+        | _ -> raise (Lift_Error "`dest` must be a register")
+
+    let load_multiple dest src_list = 
+        match dest with
+        | `Reg r -> let r = reg r in List.fold src_list ~init:pass 
+                    ~f:(fun eff src -> match src with
+                        | `Reg s -> let src = reg s in seq eff
+                                (seq
+                                    (loadw Env.value b0 (var Env.memory) (var r) |> set src)
+                                    (set r (add (var r) (bitv_of 4)))
+                                )
+                        | _ -> raise (Lift_Error "`src` must be a register")
+                    )
+        | _ -> raise (Lift_Error "`dest` must be a register")
+    (* the `R` bit is automatically resolved *)
+    let push_multiple src_list =
+        let shift x = bitv_of 2 |> shiftl b0 x in
+        let offset = List.length src_list |> bitv_of |> shift in
+        let initial = set Env.tmp (sub (var Env.sp) offset) in
+        seq (List.fold src_list ~init:initial 
+            ~f:(fun eff src -> match src with
+                | `Reg s -> let src = reg s in seq eff
+                        (seq
+                            (storew b0 (var Env.memory) (var Env.tmp) (var src) |> set Env.memory)
+                            (set Env.tmp (add (var Env.tmp) (bitv_of 4)))
+                        )
+                | _ -> raise (Lift_Error "`src` must be a register")
+            )) (set Env.sp (sub (var Env.sp) offset))
+    (* TODO: PC might change here *)
+    let pop_multiple src_list =
+        let initial = set Env.tmp (var Env.sp) in
+        seq (List.fold src_list ~init:initial 
+            ~f:(fun eff src -> match src with
+                | `Reg s -> let src = reg s in seq eff
+                        (seq
+                            (loadw Env.value b0 (var Env.memory) (var Env.tmp) |> set src)
+                            (set Env.tmp (add (var Env.tmp) (bitv_of 4)))
+                        )
+                | _ -> raise (Lift_Error "`src` must be a register")
+            )) (set Env.sp (var Env.tmp))
+
     let lift_mem_single ?(sign = false) dest src1 ?src2 (op : Defs.operation) (size : Defs.size) =
         let open Defs in
         let dest = match dest with
