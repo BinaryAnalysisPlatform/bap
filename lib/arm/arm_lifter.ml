@@ -334,8 +334,12 @@ let lift_bits mem ops (insn : bits_insn ) =
     exec [assn (Env.of_reg dest) rev] cond
   | `REV16, [|`Reg dest; src; cond; _|] ->
     let s = exp_of_op src in
-    let i16 = int32 16 in
-    let rev = Bil.(s lsl i16 lor s lsr i16) in
+    let i8 = int32 8 in
+    let rev = Bil.((s land 0xff lsl i8) lor 
+                   (s land 0xff00 lsr i8) lor
+                   (s land 0xff0000 lsl i8) lor
+                   (s land 0xff000000 lsr i8)
+                  ) in
     exec [assn (Env.of_reg dest) rev] cond
   | `CLZ, [|`Reg dest; src; cond; _|] ->
     let shift = tmp ~name:"shift" reg32_t in
