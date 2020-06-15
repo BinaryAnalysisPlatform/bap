@@ -15,6 +15,10 @@ module Thumb(Core : Theory.Core) = struct
     module Env = Thumb_env.Env
 
     module Mov = Thumb_mov.Mov(Core)
+    module Mem = Thumb_mem.Mem(Core)
+    module Utils = Thumb_util.Utils(Core)
+
+    open Utils
 
     let skip = perform Theory.Effect.Sort.bot
     let pass = perform Theory.Effect.Sort.bot
@@ -58,9 +62,50 @@ module Thumb(Core : Theory.Core) = struct
     | `tSUBspi, [imm] -> subspi imm
     | _ -> pass
 
+    let lift_mem insn ops =
+    let open Defs in
+    let open Mem in
+    match insn, ops with
+    | `tLDRi, [dest; src; imm] -> 
+        lift_mem_single dest src ~src2:imm Ld W
+    | `tLDRr, [dest; src1; src2] -> 
+        lift_mem_single dest src1 ~src2 Ld W
+    | `tLDRpci, [dest; imm] -> 
+        lift_mem_single dest `PC ~src2:imm Ld W
+    | `tLDRspi, [dest; imm] -> 
+        lift_mem_single dest `SP ~src2:imm Ld W
+    | `tLDRBi, [dest; src; imm] -> 
+        lift_mem_single dest src ~src2:imm Ld B
+    | `tLDRBr, [dest; src1; src2] -> 
+        lift_mem_single dest src1 ~src2 Ld B
+    | `tLDRHi, [dest; src; imm] -> 
+        lift_mem_single dest src ~src2:imm Ld H
+    | `tLDRHr, [dest; src1; src2] -> 
+        lift_mem_single dest src1 ~src2 Ld H
+    | `tLDRSB, [dest; src1; src2] -> 
+        lift_mem_single dest src1 ~src2 Ld B ~sign:true
+    | `tLDRSH, [dest; src1; src2] -> 
+        lift_mem_single dest src1 ~src2 Ld H ~sign:true
+    | `tSTRi, [dest; src; imm] -> 
+        lift_mem_single dest src ~src2:imm St W
+    | `tSTRr, [dest; src1; src2] -> 
+        lift_mem_single dest src1 ~src2 St W
+    | `tSTRspi, [dest; imm] -> 
+        lift_mem_single dest `SP ~src2:imm St W
+    | `tSTRBi, [dest; src; imm] -> 
+        lift_mem_single dest src ~src2:imm St B
+    | `tSTRBr, [dest; src1; src2] -> 
+        lift_mem_single dest src1 ~src2 St B
+    | `tSTRHi, [dest; src; imm] -> 
+        lift_mem_single dest src ~src2:imm St H
+    | `tSTRHr, [dest; src1; src2] -> 
+        lift_mem_single dest src1 ~src2 St H
+    | _ -> pass
+
     let lift ((ins, ops) : insns) : unit Theory.Effect.t KB.t = 
     match ins with
     | #move_insn -> lift_move ins ops |> move
+    | #mem_insn -> lift_mem ins ops |> move
     | _ -> nop
 
 end

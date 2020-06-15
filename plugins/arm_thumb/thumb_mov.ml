@@ -10,22 +10,10 @@ exception Lift_Error = Thumb_defs.Lift_Error
 module Mov(Core : Theory.Core) = struct
 open Core
 
+    module Utils = Thumb_util.Utils(Core)
     module Flags = Flags(Core)
 
-    let reg = Env.load_reg
-
-    let reg_wide = Env.load_reg_wide
-
-    let bool_as_bitv b = ite b (int Env.value Bitvec.one) (int Env.value Bitvec.zero)
-
-    let word_as_bitv w = (int Env.value (Bap.Std.Word.to_bitvec w))
-
-    let bitv_of imm = word_as_bitv (Bap.Std.Word.of_int 32 imm)
-
-    let move_reg ?lreg:(lreg = reg) dest src = set (lreg dest) (var (lreg src))
-
-    let set_reg ?lreg:(lreg = reg) dest imm = 
-        set (lreg dest) (word_as_bitv imm)
+    open Utils
 
     let mover dest src = match dest, src with
     | `Reg d, `Reg s -> (move_reg ~lreg:reg_wide d s) 

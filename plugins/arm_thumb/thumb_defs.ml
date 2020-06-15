@@ -99,6 +99,23 @@ type mem_multi_insn = [
 
 
 type mem_insn = [
+  | `tLDRi
+  | `tLDRr
+  | `tLDRpci
+  | `tLDRspi
+  | `tLDRBi
+  | `tLDRBr
+  | `tLDRHi
+  | `tLDRHr
+  | `tLDRSB
+  | `tLDRSH
+  | `tSTRi
+  | `tSTRr
+  | `tSTRspi
+  | `tSTRBi
+  | `tSTRBr
+  | `tSTRHi
+  | `tSTRHr
   | mem_multi_insn
 ] [@@deriving bin_io, compare, sexp, enumerate]
 
@@ -118,7 +135,7 @@ type insn = [
 type mode_r = Offset | PreIndex | PostIndex
 type sign = Signed | Unsigned
 type operation = Ld | St
-type size = B | H | W | D
+type size = B | H | W
 [@@deriving compare]
 
 (** Types for multiple-register memory access *)

@@ -7,6 +7,7 @@ type value
 type byte
 type reg_single
 type half_byte
+type half_word
 
   let bit : Theory.Bool.t Theory.Value.sort =
     Theory.Bool.t
@@ -14,6 +15,9 @@ type half_byte
   (** grps are defined by 3-bit indices *)
   let reg_single : reg_single Theory.Bitv.t Theory.Value.sort =
     Theory.Bitv.define 3
+
+  let half_word : half_word Theory.Bitv.t Theory.Value.sort =
+    Theory.Bitv.define 32
 
   let value : value Theory.Bitv.t Theory.Value.sort =
     Theory.Bitv.define 32
