@@ -112,8 +112,11 @@ type move_insn = [
 ] [@@deriving bin_io, compare, sexp, enumerate]
 
 type bits_insn = [
-  | `NA
-]
+  | `tSXTB
+  | `tSXTH
+  | `tUXTB
+  | `tUXTH
+] [@@deriving bin_io, compare, sexp, enumerate]
 
 (** Rd [reglist] *)
 type mem_multi_insn = [
@@ -146,13 +149,19 @@ type mem_insn = [
 ] [@@deriving bin_io, compare, sexp, enumerate]
 
 type branch_insn = [
+  | `tBcc
+  | `tB
   | `tBL
+  | `tBLXi
+  | `tBLXr
+  | `tBX
 ] [@@deriving bin_io, compare, sexp, enumerate]
 
 type insn = [
   | move_insn
   | mem_insn
   | branch_insn
+  | bits_insn
 ] [@@deriving bin_io, compare, sexp, enumerate]
 
 (** Memory access operations *)
@@ -180,3 +189,21 @@ type shift = [`ASR | `LSL | `LSR | `ROR | `RRX]
 
 
 type smul_size = BB | BT | TB | TT | D | DX | WB | WT
+
+let of_int_exn = function
+  | 0 ->  `EQ
+  | 1 ->  `NE
+  | 2 ->  `CS
+  | 3 ->  `CC
+  | 4 ->  `MI
+  | 5 ->  `PL
+  | 6 ->  `VS
+  | 7 ->  `VC
+  | 8 ->  `HI
+  | 9 ->  `LS
+  | 10 -> `GE
+  | 11 -> `LT
+  | 12 -> `GT
+  | 13 -> `LE
+  | 14 -> `AL
+  | n -> raise @@ Lift_Error "input is not a condition"
