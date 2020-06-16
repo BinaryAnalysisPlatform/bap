@@ -28,10 +28,12 @@ module Machine : sig
   and slot = private
     | Ready of task option
     | Delay
+  [@@deriving bin_io]
 
   type state = private {
     stop : bool;
     work : task list;           (* work list*)
+    debt : task list;
     curr : task;
     addr : addr;                (* current address *)
     begs : Set.M(Addr).t;       (* begins of basic blocks *)
@@ -43,6 +45,7 @@ module Machine : sig
 
   val start :
     mem ->
+    debt:task list ->
     code:Set.M(Addr).t ->
     data:Set.M(Addr).t ->
     init:Set.M(Addr).t ->
@@ -67,16 +70,18 @@ end = struct
   and slot =
     | Ready of task option
     | Delay
+  [@@deriving bin_io]
 
 
-  let init_work roots =
+  let init_work init roots =
     Set.to_sequence ~order:`Decreasing roots |>
-    Seq.fold ~init:[] ~f:(fun work root ->
+    Seq.fold ~init ~f:(fun work root ->
         Dest {dst=root; parent=None} :: work)
 
   type state = {
     stop : bool;
     work : task list;           (* work list*)
+    debt : task list;
     curr : task;
     addr : addr;                (* current address *)
     begs : Set.M(Addr).t;       (* begins of basic blocks *)
@@ -229,20 +234,21 @@ end = struct
       let s = match s.curr with
         | Fall _ as task ->
           cancel task s
-        | _ -> s in
+        | t -> {s with debt = t :: s.debt} in
       match s.work with
       | [] -> empty (step s)
-      | _  -> view (step s) base ~empty ~ready
+      | _ -> view (step s) base ~empty ~ready
 
-  let start mem ~code ~data ~init =
+  let start mem ~debt ~code ~data ~init =
     let init = if Set.is_empty init
       then Set.singleton (module Addr) (Memory.min_addr mem)
       else init in
-    let work = init_work init in
+    let work = init_work debt init in
     let start = Set.min_elt_exn init in
     view {
       work; data; usat=code;
       addr = start;
+      debt = [];
       curr = Dest {dst = start; parent = None};
       stop = false;
       begs = Set.empty (module Addr);
@@ -314,17 +320,18 @@ let classify_mem mem =
         | Some true -> (code,data,Set.add root addr)
         | _ -> (code,data,root))
 
-let scan_mem arch disasm base : Machine.state KB.t =
+let scan_mem arch disasm debt base : Machine.state KB.t =
   classify_mem base >>= fun (code,data,init) ->
   let step d s =
     if Machine.is_ready s then KB.return s
     else Machine.view s base ~ready:(fun s mem -> Dis.jump d mem s)
         ~empty:KB.return in
-  Machine.start base ~code ~data ~init
+  Machine.start base ~debt ~code ~data ~init
     ~ready:(fun init mem ->
         Dis.run disasm mem ~stop_on:[`Valid]
           ~return:KB.return ~init
-          ~stopped:(fun d s -> step d (Machine.stopped s))
+          ~stopped:(fun d s ->
+              step d (Machine.stopped s))
           ~hit:(fun d mem insn s ->
               collect_dests arch mem insn >>= fun dests ->
               if Set.is_empty dests.resolved &&
@@ -333,7 +340,8 @@ let scan_mem arch disasm base : Machine.state KB.t =
               else
                 delay arch mem insn >>= fun delay ->
                 step d @@ Machine.jumped s mem dests delay)
-          ~invalid:(fun d _ s -> step d (Machine.failed s s.addr)))
+          ~invalid:(fun d _ s ->
+              step d (Machine.failed s s.addr)))
     ~empty:KB.return
 
 type insns = Theory.Label.t list
@@ -343,13 +351,15 @@ type state = {
   jmps : dsts Addr.Map.t;
   data : Addr.Set.t;
   mems : mem list;
+  debt : Machine.task list;
 } [@@deriving bin_io]
 
 let init = {
   begs = Set.empty (module Addr);
   jmps = Map.empty (module Addr);
   data = Set.empty (module Addr);
-  mems = []
+  mems = [];
+  debt = [];
 }
 
 let query_arch addr =
@@ -368,6 +378,7 @@ let commit_calls {jmps} =
         Set.to_sequence dsts.resolved |>
         KB.Seq.iter ~f:(fun addr ->
             Theory.Label.for_addr (Word.to_bitvec addr) >>= fun dst ->
+            KB.provide Theory.Label.is_valid dst (Some true) >>= fun () ->
             KB.provide Theory.Label.is_subroutine dst (Some true))
       else KB.return ())
 
@@ -381,12 +392,12 @@ let scan mem s =
     match Dis.create (Arch.to_string arch) with
     | Error _ -> KB.return s
     | Ok dis ->
-      scan_mem arch dis mem >>= fun {Machine.begs; jmps; data} ->
+      scan_mem arch dis s.debt mem >>= fun {Machine.begs; jmps; data; debt} ->
       let jmps = Map.merge s.jmps jmps ~f:(fun ~key:_ -> function
           | `Left dsts | `Right dsts | `Both (_,dsts) -> Some dsts) in
       let begs = Set.union s.begs begs in
       let data = Set.union s.data data in
-      let s = {begs; data; jmps; mems = mem :: s.mems} in
+      let s = {begs; data; jmps; mems = mem :: s.mems; debt} in
       commit_calls s >>| fun () ->
       s
 
@@ -394,6 +405,7 @@ let merge t1 t2 = {
   begs = Set.union t1.begs t2.begs;
   data = Set.union t1.data t2.data;
   mems = List.rev_append t2.mems t1.mems;
+  debt = List.rev_append t2.debt t1.debt;
   jmps = Map.merge t1.jmps t2.jmps ~f:(fun ~key:_ -> function
       | `Left dsts | `Right dsts -> Some dsts
       | `Both (d1,d2) -> Some {
