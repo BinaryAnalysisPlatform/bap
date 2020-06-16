@@ -48,6 +48,8 @@ jobs:
         run: opam install bap -v --yes --with-test
         env:
           XDG_CACHE_HOME: .cache
+          TMPDIR: /tmp
+          BAP_LOG_DIR: /tmp/bap-log
 
       - name: Run the testsuite
         run: |
