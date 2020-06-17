@@ -60,7 +60,7 @@ let root () =
   let root = match !default_root with
     | Some dir -> dir // ".cache" // "bap"
     | None -> match getenv "XDG_CACHE_HOME" with
-      | Some cache -> cache
+      | Some cache -> cache // "bap"
       | None -> match getenv "HOME" with
         | None -> Filename.get_temp_dir_name () // "bap" // "cache"
         | Some home -> home // ".cache" // "bap" in
