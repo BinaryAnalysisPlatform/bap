@@ -1,0 +1,64 @@
+name: Main workflow
+
+on:
+  - pull_request
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+        ocaml-version:
+          - 4.09.1
+          - 4.08.1
+          - 4.07.1
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - name: Use OCaml ${{ matrix.ocaml-version }}
+        uses: avsm/setup-ocaml@v1
+        with:
+          ocaml-version: ${{ matrix.ocaml-version }}
+
+      - name: Pin BAP
+        run: opam pin add bap . --no-action
+
+      - name: Configure Homebrew LLVM
+        if: matrix.os == 'macos-latest'
+        run: echo '::set-env name=LLVM_CONFIG::/usr/local/opt/llvm@9/bin/llvm-config'
+
+      - name: Install system dependencies
+        run: opam depext bap --yes
+
+      - name: Install opam dependencies
+        run: opam install . --deps-only
+
+      - name: Install BAP
+        run: opam install bap -v --yes --with-test
+        env:
+          XDG_CACHE_HOME: .cache
+          TMPDIR: /tmp
+          BAP_LOG_DIR: /tmp/bap-log
+
+      - name: Run the testsuite
+        run: |
+          eval $(opam env)
+          make check
+
+      - name: Run bap-veri
+        run: |
+          eval $(opam env)
+          cd testsuite
+          git submodule init
+          git submodule update
+          opam pin add bap-veri veri/bap-veri/ -y
+          make veri
