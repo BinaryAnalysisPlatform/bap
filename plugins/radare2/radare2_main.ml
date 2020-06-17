@@ -34,10 +34,11 @@ let provide_radare2 file =
      let strip str = let open String in
       match chop_prefix str ~prefix:"sym.imp." with
       | Some str -> str
-      | None -> str 
-     in
+      | None -> str in
+     let open Yojson.Basic.Util in
      List.fold symbol_list ~init:() ~f:(fun () symbol -> 
-     accept (Yojson.Basic.Util.to_string (extract "name" symbol) |> strip) (Yojson.Basic.Util.to_int (extract "vaddr" symbol) |> Z.of_int)
+     accept (to_string (extract "name" symbol) |> strip) 
+            (to_int (extract "vaddr" symbol) |> Z.of_int)
      );
      if Hashtbl.length funcs = 0
      then warning "failed to obtain symbols";
