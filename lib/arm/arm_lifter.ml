@@ -322,23 +322,21 @@ let lift_bits mem ops (insn : bits_insn ) =
     let s = exp_of_op src in
     let i24 = int32 24 in
     let i8 = int32 8 in
-    let umask = int32 0xff0000 in
-    let lmask = int32 0xff00 in
     let rev =
       let open Bil in
       s              lsl i24 lor
       s              lsr i24 lor
-      (s land umask) lsr i8  lor
-      (s land lmask) lsl i8
+      (extract 23 16 s) lsr i8  lor
+      (extract 15 8 s) lsl i8
     in
     exec [assn (Env.of_reg dest) rev] cond
   | `REV16, [|`Reg dest; src; cond; _|] ->
     let s = exp_of_op src in
     let i8 = int32 8 in
-    let rev = Bil.((s land 0xff lsl i8) lor 
-                   (s land 0xff00 lsr i8) lor
-                   (s land 0xff0000 lsl i8) lor
-                   (s land 0xff000000 lsr i8)
+    let rev = Bil.(((extract 7 0 s) lsl i8) lor 
+                   ((extract 15 8 s) lsr i8) lor
+                   ((extract 23 16 s) lsl i8) lor
+                   ((extract 31 24 s) lsr i8)
                   ) in
     exec [assn (Env.of_reg dest) rev] cond
   | `CLZ, [|`Reg dest; src; cond; _|] ->
