@@ -1,0 +1,12 @@
+
+
+S .
+B _build
+
+PKG core_kernel
+PKG fileutilss
+PKG uri
+PKG ppx_jane
+PKG camlzip
+PKG uuidm
+PKG bap
