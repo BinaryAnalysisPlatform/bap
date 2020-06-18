@@ -20,6 +20,19 @@ type registers_t = [
     | `X16 | `X17 | `X18
     | `X29 | `X30
 
+    (* parameter and result registers *)
+    | `W0 | `W1 | `W2 | `W3 | `W4 | `W5 | `W6 | `W7 
+    
+    (* caller saved temporary registers *)
+    | `W9 | `W10 | `W11 | `W12 | `W13 | `W14 | `W15 
+    
+    (* callee saved registers *) 
+    | `W19 | `W20 | `W21 | `W22 | `W23 | `W24 | `W25 | `W26 | `W27 | `W28
+
+    | `W8
+    | `W16 | `W17 | `W18
+    | `W29 | `W30
+
     | `WZR (* 32-bit zero register *)
     | `XZR (* 64-bit zero register *)
     | `WSP (* 32-bit stack pointer *)
@@ -28,6 +41,14 @@ type registers_t = [
     | `ELR (* exception link register *)
     | `SPSR (* saved processor state register *)
 ]
+
+type sign_t = Signed | Unsigned
+type operation_t = LD | ST
+type size_t = 
+    | B (* byte, 8 bits *) 
+    | H (* halfword, 16 bits *)
+    | W (* word, 32 bits *)
+    | D (* doubleword, 64 bits *)
 
 type conditon_t = [
     | `EQ
@@ -48,7 +69,7 @@ type conditon_t = [
     | `NV
 ]
 
-type op = [
+type operand_t = [
     | `Reg of registers_t
     | `Imm of word
 ]
@@ -141,7 +162,7 @@ type int_mult_div_insn_t = [
 ]
 
 (* floating points, SIMD *)
-type insn = [
+type simple_insn_t = [
     | branch_insn_t
     | mem_access_insn_t
     | arithmetic_insn_t
@@ -152,3 +173,5 @@ type insn = [
     | sign_zero_extend_insn_t
     | int_mult_div_insn_t
 ]
+
+exception Lift_Error of string
