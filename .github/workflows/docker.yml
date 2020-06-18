@@ -13,7 +13,7 @@ jobs:
         name: BinaryAnalysisPlatform/bap/alpine
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
-        dockerfile: alpine/docker/Dockerfile
+        dockerfile: docker/alpine/Dockerfile
 
     - name: Publish Debian image to Registry
       uses: elgohr/Publish-Docker-Github-Action@master
@@ -21,7 +21,7 @@ jobs:
         name: BinaryAnalysisPlatform/bap/debian
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
-        dockerfile: debian/testing/docker/Dockerfile
+        dockerfile: docker/debian/testing/Dockerfile
 
     - name: Publish Ubuntu image to Registry
       uses: elgohr/Publish-Docker-Github-Action@master
@@ -29,4 +29,4 @@ jobs:
         name: BinaryAnalysisPlatform/bap/ubuntu
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
-        dockerfile: xenial/testing/docker/Dockerfile
+        dockerfile: docker/xenial/testing/Dockerfile
