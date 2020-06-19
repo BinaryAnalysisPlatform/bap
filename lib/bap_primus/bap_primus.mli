@@ -1668,15 +1668,43 @@ module Std : sig
 
       (** [jumping (cond,dest)] happens just before a jump to [dest]
           is taken under the specified condition [cond].
-          Note: [cond] is always [true]
+          Note: the [cond] expression is always [true] and is computed
+          from the path constraints of all outcoming edges of a
+          block.
 
-          @since 1.5.0 *)
+          @since 1.5.0
+          @since 2.2.0 the condition is built from all edge
+          constraints. *)
       val jumping : (value * value) observation
 
-      (** [eval_cond v] occurs every time the [cond] part of a jump is
-          evaluated.
+      (** [eval_cond c] occurs on every decision making operation.
 
-          @since 1.5.0 *)
+          The conditional expression is a one bit wide bitvector
+          could be true or false (contrary to the jumping
+          observation).
+
+          The [eval_cond] observation is posted for all outcoming
+          edges of a basic block with proper edge constraints.
+
+          For example, for a block
+
+          {v
+           when c1 goto d1
+           when c2 goto d2
+                   goto d3
+          v}
+
+          which has three edges with constraints, correspondingly,
+
+          - [c1]
+          - [not c1 && c2]
+          - [not c1 && not c2 && true]
+
+          @since 1.5.0 introduced
+          @since 2.1.0 is posted by [branch] and [repeat] operations
+          @since 2.2.0 the condition is a disjunction of negations
+          of the previous conditions.
+      *)
       val eval_cond : value observation
 
       (** [undefined x] happens when a computation produces an
