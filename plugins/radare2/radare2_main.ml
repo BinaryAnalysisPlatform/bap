@@ -21,6 +21,8 @@ let provide_roots funcs =
   promise_property Theory.Label.is_valid;
   promise_property Theory.Label.is_subroutine
 
+exception Radare2_failed
+
 let provide_radare2 file = 
   let funcs = Hashtbl.create (module struct
       type t = Z.t
@@ -28,17 +30,35 @@ let provide_radare2 file =
       let sexp_of_t x = Sexp.Atom (Z.to_string x)
     end) in
     let accept name addr = Hashtbl.set funcs addr name in
-    let extract name json = Yojson.Basic.Util.member name json in
+    let extract name json = let open Yojson in
+      match json with
+      | `Assoc list -> 
+        (match List.find list ~f:(fun (key, _) -> String.equal key name) with
+        | Some (_, v) -> v
+        | _ -> raise Radare2_failed)
+      | _ -> raise Radare2_failed in
     try
-     let symbol_list = Yojson.Basic.Util.to_list (R2.with_command_j "isj" file) in
+     let symbol_list = let open Yojson in
+      match R2.with_command_j "isj" file with
+      | `List list -> list
+      | _ -> raise Radare2_failed in
      let strip str = let open String in
       match chop_prefix str ~prefix:"sym.imp." with
       | Some str -> str
       | None -> str in
-     let open Yojson.Basic.Util in
+     let open Yojson in
+     let to_string json = 
+      match json with
+      | `String str -> str
+      | _ -> raise Radare2_failed in
+     let to_int json = 
+      match json with
+      | `Int i -> Z.of_int i
+      | `Intlit s -> Z.of_string s
+      | _ -> raise Radare2_failed in
      List.fold symbol_list ~init:() ~f:(fun () symbol -> 
      accept (to_string (extract "name" symbol) |> strip) 
-            (to_int (extract "vaddr" symbol) |> Z.of_int)
+            (to_int (extract "vaddr" symbol))
      );
      if Hashtbl.length funcs = 0
      then warning "failed to obtain symbols";
