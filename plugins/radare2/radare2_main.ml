@@ -34,14 +34,14 @@ let provide_radare2 file =
       match json with
       | `Assoc list -> 
         (match List.find list ~f:(fun (key, _) -> String.equal key name) with
-        | Some (_, v) -> v
-        | _ -> raise Radare2_failed)
-      | _ -> raise Radare2_failed in
+        | Some (_, v) -> Some v
+        | _ -> None)
+      | _ -> None in
     try
      let symbol_list = let open Yojson in
       match R2.with_command_j "isj" file with
-      | `List list -> list
-      | _ -> raise Radare2_failed in
+      | `List list -> Some list
+      | _ -> None in
      let strip str = let open String in
       match chop_prefix str ~prefix:"sym.imp." with
       | Some str -> str
@@ -49,17 +49,19 @@ let provide_radare2 file =
      let open Yojson in
      let to_string json = 
       match json with
-      | `String str -> str
-      | _ -> raise Radare2_failed in
+      | `String str -> Some str
+      | _ -> None in
      let to_int json = 
       match json with
-      | `Int i -> Z.of_int i
-      | `Intlit s -> Z.of_string s
-      | _ -> raise Radare2_failed in
-     List.fold symbol_list ~init:() ~f:(fun () symbol -> 
-     accept (to_string (extract "name" symbol) |> strip) 
-            (to_int (extract "vaddr" symbol))
-     );
+      | `Int i -> Z.of_int i |> Some
+      | `Intlit s -> Z.of_string s |> Some
+      | _ -> None in
+     Option.(symbol_list >>| List.fold ~init:() ~f:(fun () symbol -> 
+            both
+            (extract "name" symbol >>= to_string >>| strip) 
+            (extract "vaddr" symbol >>= to_int) 
+            |> value_map ~default:() ~f:(fun (name, addr) -> accept name addr)
+     ) |> value ~default:());
      if Hashtbl.length funcs = 0
      then warning "failed to obtain symbols";
      let symbolizer = Symbolizer.create @@ fun addr ->
