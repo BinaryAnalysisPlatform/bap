@@ -284,11 +284,11 @@ let argv ?(argv=[||]) t = match command t with
   | None -> prepend_before_dash_dash argv (args t)
   | Some cmd ->
     let argv = Array.of_list @@ match Array.to_list argv with
-    | [] | [_] as argv -> argv @ [cmd]
-    | self :: arg :: rest when String.is_prefix ~prefix:arg cmd ->
-      self :: cmd :: rest
-    | self :: arg :: rest ->
-      self :: cmd :: arg :: rest in
+      | [] | [_] as argv -> argv @ [cmd]
+      | self :: arg :: rest when String.is_prefix ~prefix:arg cmd ->
+        self :: cmd :: rest
+      | self :: arg :: rest ->
+        self :: cmd :: arg :: rest in
     prepend_before_dash_dash argv (args t)
 
 

@@ -304,11 +304,11 @@ module Std : sig
       val (@>) : 'a future -> ('f, 'r) t -> ('a -> 'f, 'r) t
 
       (** [step t ~f] transforms argument values in some way.
-      For example, one can label a function argument like so:
+          For example, one can label a function argument like so:
 
-      {[
-        step ~f:(fun f x -> f ~foo:x) : ('a -> 'r1, 'r2) t -> (foo:'a -> 'r1, 'r2) t
-      ]} *)
+          {[
+            step ~f:(fun f x -> f ~foo:x) : ('a -> 'r1, 'r2) t -> (foo:'a -> 'r1, 'r2) t
+          ]} *)
       val step : ('f1, 'r) t -> f:('f2 -> 'f1) -> ('f2, 'r) t
 
       (** [applyN f args] applies function stored in future [f] to [args] *)
@@ -387,10 +387,10 @@ module Std : sig
       consists of two functions:
 
       - [wait] that should be called by a consumer, when it wants to ask
-      a producer to wait for a moment;
+        a producer to wait for a moment;
 
       - [on_wait] that is called when any consumer requested for a
-      pause.
+        pause.
 
       The pushback interface is not mandatory.
   *)

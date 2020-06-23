@@ -41,40 +41,40 @@ module Monad = struct
 
     module Lift = struct
       let nullary x = return x [@@inline]
-    let unary f a = a >>| f [@@inline]
-    let binary f a b = a >>= fun a -> b >>| fun b -> f a b [@@inline]
-    let ternary f a b c = a >>= fun a -> b >>= fun b -> c >>| fun c -> f a b c
-    let quaternary f a b c d =
-      a >>= fun a -> b >>= fun b -> c >>= fun c -> d >>| fun d ->
-      f a b c d
-    let quinary f a b c d e =
-      a >>= fun a -> b >>= fun b -> c >>= fun c -> d >>= fun d -> e >>| fun e ->
-      f a b c d e
+      let unary f a = a >>| f [@@inline]
+      let binary f a b = a >>= fun a -> b >>| fun b -> f a b [@@inline]
+      let ternary f a b c = a >>= fun a -> b >>= fun b -> c >>| fun c -> f a b c
+      let quaternary f a b c d =
+        a >>= fun a -> b >>= fun b -> c >>= fun c -> d >>| fun d ->
+        f a b c d
+      let quinary f a b c d e =
+        a >>= fun a -> b >>= fun b -> c >>= fun c -> d >>= fun d -> e >>| fun e ->
+        f a b c d e
 
-    module Syntax = struct
-      let (!!) x = nullary x [@@inline]
-    let (!$) = unary
-    let (!$$) = binary
-    let (!$$$) = ternary
-    let (!$$$$) = quaternary
-    let (!$$$$$) = quinary
-    end
+      module Syntax = struct
+        let (!!) x = nullary x [@@inline]
+        let (!$) = unary
+        let (!$$) = binary
+        let (!$$$) = ternary
+        let (!$$$$) = quaternary
+        let (!$$$$$) = quinary
+      end
     end
 
     open Lift.Syntax
 
     module Fn = struct
       let id x = return x [@@inline]
-    let nothing x = return x [@@inline]
-    let ignore m = m >>| ignore [@@inline]
-    let non f x = f x >>| not [@@inline]
-    let apply_n_times ~n f x =
-      let rec loop n x =
-        if n <= 0 then return x
-        else f x >>= loop (n-1) in
-      loop n x
+      let nothing x = return x [@@inline]
+      let ignore m = m >>| ignore [@@inline]
+      let non f x = f x >>| not [@@inline]
+      let apply_n_times ~n f x =
+        let rec loop n x =
+          if n <= 0 then return x
+          else f x >>= loop (n-1) in
+        loop n x
 
-    let compose f g x = g x >>= f [@@inline]
+      let compose f g x = g x >>= f [@@inline]
     end
 
     module Syntax = struct
@@ -423,14 +423,14 @@ module Ident
 
   module Syntax = struct
     let (>>=) x f = x |> f [@@inline]
-  let (>>|) x f = x |> f [@@inline]
-  let (>=>) f g x = g (f x) [@@inline]
-  let (!!) = ident
-  let (!$) = ident
-  let (!$$) = ident
-  let (!$$$) = ident
-  let (!$$$$) = ident
-  let (!$$$$$) = ident
+    let (>>|) x f = x |> f [@@inline]
+    let (>=>) f g x = g (f x) [@@inline]
+    let (!!) = ident
+    let (!$) = ident
+    let (!$$) = ident
+    let (!$$$) = ident
+    let (!$$$$) = ident
+    let (!$$$$$) = ident
   end
 
   module Let_syntax = struct

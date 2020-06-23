@@ -128,7 +128,7 @@ let main patts file proj =
       | Error err -> raise (Parse_error err) in
   let marker = new marker patts in
   Project.with_program proj @@
-    marker#run (Project.program proj)
+  marker#run (Project.program proj)
 
 module Cmdline = struct
 
@@ -159,9 +159,9 @@ module Cmdline = struct
           desc (enum attrs))
 
   let colors = [
-      "black"; "red"; "green"; "yellow"; "blue"; "magenta"; "cyan";
-      "white"; "gray"
-    ]
+    "black"; "red"; "green"; "yellow"; "blue"; "magenta"; "cyan";
+    "white"; "gray"
+  ]
 
   module Predicates = struct
 

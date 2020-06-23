@@ -231,11 +231,11 @@ module Doc = struct
   let merge doc {scheme; entries} =
     Map.to_sequence scheme |>
     Error.Seq.fold ~init:doc ~f:(fun doc (name,sign) ->
-      update_scheme name sign doc) >>= fun doc ->
+        update_scheme name sign doc) >>= fun doc ->
     Map.to_sequence entries |>
     Error.Seq.fold ~init:doc ~f:(fun doc (name,values) ->
         Error.List.fold values ~init:doc ~f:(fun doc value ->
-          update_entries name value doc))
+            update_entries name value doc))
 
 
   let put k attr =
@@ -623,7 +623,7 @@ module Exp = struct
     | [] | [_] -> True
     | x::y::vs ->
       List.fold vs ~init:Syntax.(var x = var y) ~f:(fun cs z ->
-        Syntax.(cs && var x = var z))
+          Syntax.(cs && var x = var z))
 
   let unify names scheme joins =
     List.fold joins ~init:True ~f:(fun cs cls ->
@@ -767,10 +767,10 @@ module Make(B : Monad.S) = struct
     M.get () >>| fun doc ->
     Sequence.map (Exp.eval names join where doc) ~f:(fun row ->
         read row f)
-    (* | Error err -> M.lift (B.return (Error err)) *)
-    (* | rows -> *)
-    (*   foldm rows ~init:[] ~f:(fun xs row -> read row f >>| fun x -> x :: xs) >>| *)
-    (*   Sequence.of_list *)
+  (* | Error err -> M.lift (B.return (Error err)) *)
+  (* | rows -> *)
+  (*   foldm rows ~init:[] ~f:(fun xs row -> read row f >>| fun x -> x :: xs) >>| *)
+  (*   Sequence.of_list *)
 
   let collect q = foreach q ~f:ident
 

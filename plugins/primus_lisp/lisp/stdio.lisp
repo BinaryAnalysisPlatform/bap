@@ -99,9 +99,9 @@
   (declare (external "read"))
   (fread buf 1 n fd))
 
+
 (defun fgetc (stream)
   (declare (external "fgetc" "getc"))
-  (msg "the concrete fgets is called")
   (channel-input stream))
 
 (defun terminate-string-and-return-null (ptr)
@@ -119,7 +119,7 @@
           (if (= c -1)
               (set continue false)
             (memory-write (+ ptr i) (cast char c))
-            (set continue (/= c 0xA:8))
+            (set continue (/= c 0xA))
             (incr i))))
       (if (= i 0)
           (terminate-string-and-return-null ptr)

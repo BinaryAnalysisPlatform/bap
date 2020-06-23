@@ -626,26 +626,9 @@ let forker ctxt : Primus.component =
     (* is Some (blk,jmp) when the current position is a branch point *)
     let branch_point = function
       | Primus.Pos.Jmp {up={me=blk}; me=jmp}
-        when Term.length jmp_t blk > 1 &&
-             is_conditional jmp ->
+        when Term.length jmp_t blk > 1 ->
         Some (blk,jmp)
       | _ -> None
-
-
-    let other_dst ~taken blk jmp =
-      let is_other = if taken
-        then Fn.non (Term.same jmp)
-        else Term.same jmp in
-      Term.enum jmp_t blk |>
-      Seq.find_map ~f:(fun jmp ->
-          if not (is_other jmp) then None
-          else match Jmp.alt jmp with
-            | None -> Jmp.dst jmp
-            | dst -> dst) |> function
-      | Some dst -> dst
-      | None ->
-        failwithf "Broken branch %a at:@\n%a"
-          Jmp.pps jmp Blk.pps blk ()
 
     let count table key = match Map.find table key with
       | None -> 0
@@ -659,15 +642,18 @@ let forker ctxt : Primus.component =
       | Second _ -> false
       | First tid -> Set.mem visited tid
 
-    let compute_edge ~taken pos = match branch_point pos with
+    let compute_edge pos = match branch_point pos with
       | None -> None
       | Some (blk,src) ->
-        let dst = other_dst ~taken blk src in
-        Some {blk;src;dst}
+        let dst = match Jmp.alt src with
+          | None -> Jmp.dst src
+          | dst -> dst in
+        match dst with
+        | None -> None
+        | Some dst -> Some {blk; src; dst}
 
-    let is_edge_dst_visited visited = function
-      | None -> false
-      | Some {dst} -> is_visited visited dst
+    let is_edge_dst_visited visited {dst} =
+      is_visited visited dst
 
     let append xs x = match Map.max_elt xs with
       | None -> Map.add_exn xs 0 x
@@ -677,32 +663,42 @@ let forker ctxt : Primus.component =
       s with tasks = append s.tasks task;
     }
 
-    let on_cond constr =
-      let taken = Value.is_one constr in
-      Executor.value constr >>= function
+    let new_task ?edge ~refute constr =
+      let constr = SMT.formula ~refute constr
+      and contra = SMT.formula ~refute:(not refute) constr in
+      Machine.Local.get worker >>= fun self ->
+      if Set.mem self.task.constraints contra
+      then Machine.return ()
+      else
+        Constraints.get Context.Scope.user >>= fun cs ->
+        let constraints =
+          let (++) = Set.union in
+          Set.add (cs ++ self.task.constraints) constr in
+        Executor.inputs >>= fun inputs ->
+        let inputs =
+          Seq.fold inputs ~init:self.task.inputs ~f:Set.add in
+        let task = {inputs; constraints; edge; id=self.tid} in
+        Machine.Global.update master ~f:(push_task task)
+
+    let require cnd body =
+      if cnd then body ()
+      else Machine.return ()
+
+    let on_cond cond =
+      Executor.value cond >>= function
       | None -> Machine.return ()
       | Some constr ->
-        Machine.Local.get worker >>= fun self ->
-        Eval.pos >>= fun pos ->
-        let edge = compute_edge ~taken pos in
-        Visited.all >>= fun visited ->
-        Machine.Global.get master >>= fun s ->
-        if is_edge_dst_visited visited edge ||
-           count s.tries self.tid > cutoff ||
-           Set.mem self.task.constraints
-             (SMT.formula ~refute:(not taken) constr)
-        then Machine.return ()
-        else
-          Constraints.get Context.Scope.user >>= fun cs ->
-          let constr = SMT.formula ~refute:taken constr in
-          let constraints =
-            let (++) = Set.union in
-            Set.add (cs ++ self.task.constraints) constr in
-          Executor.inputs >>= fun inputs ->
-          let inputs =
-            Seq.fold inputs ~init:self.task.inputs ~f:Set.add in
-          let task = {inputs; constraints; edge; id=self.tid} in
-          Machine.Global.update master ~f:(push_task task)
+        Eval.pos >>| compute_edge >>= function
+        | Some edge ->
+          require (Value.is_zero cond) @@ fun () ->
+          Visited.all >>= fun visited ->
+          require (not (is_edge_dst_visited visited edge)) @@ fun () ->
+          new_task ~refute:false ~edge constr
+        | None ->
+          Machine.Local.get worker >>= fun self ->
+          Machine.Global.get master >>= fun s ->
+          require (count s.tries self.tid < cutoff) @@ fun () ->
+          new_task ~refute:(Value.is_one cond) constr
 
     let pop_task () =
       let rec pop visited s ts =
@@ -710,8 +706,9 @@ let forker ctxt : Primus.component =
         | None -> None
         | Some (k,t) ->
           let ts = Map.remove ts k in
-          if count s.tries t.id > cutoff ||
-             is_edge_dst_visited visited t.edge
+          if count s.tries t.id > cutoff || match t.edge with
+            | None -> false
+            | Some e -> is_edge_dst_visited visited e
           then pop visited s ts
           else match SMT.check (Set.to_list t.constraints) with
             | None -> pop visited s ts

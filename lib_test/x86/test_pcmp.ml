@@ -1,12 +1,12 @@
 
 (**
-# rappel (don't forget -x option)
+   # rappel (don't forget -x option)
 
 
-## pcmpeqb, pcmpgtb, pcmpeqw, pcmpgtw ...  instructions
+   ## pcmpeqb, pcmpgtb, pcmpeqw, pcmpgtw ...  instructions
 
-move to xmm0 register a 128-bit value "0f 0e 0d 0c 0b 0a 09 08 07 06 05 04 03 02 01 00"
-move to xmm1 register a 128-bit value "0f 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+   move to xmm0 register a 128-bit value "0f 0e 0d 0c 0b 0a 09 08 07 06 05 04 03 02 01 00"
+   move to xmm1 register a 128-bit value "0f 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
 
     mov rax, 0x0706050403020100
     mov rbx, 0x0f0e0d0c0b0a0908
@@ -18,7 +18,7 @@ move to xmm1 register a 128-bit value "0f 00 00 00 00 00 00 00 00 00 00 00 00 00
     pinsrq xmm1, rax, 0
     pinsrq xmm1, rbx, 1
 
-Cases:
+   Cases:
    1) pcmpeqb xmm1, xmm0
       expected: first and last bytes in xmm1 should be 0xFF
 
@@ -26,10 +26,10 @@ Cases:
       expected: first and last bytes in xmm1 should be 0x00,
       all others bytes should be 0xFF
 
-## pminsb, pminub, pmaxsb, pmaxub, pminsw ... instructions
+   ## pminsb, pminub, pmaxsb, pmaxub, pminsw ... instructions
 
-move to xmm0 register a 128-bit value "0f 0e 0d 0c 0b 0a 09 08 07 06 05 04 03 02 01 00"
-move to xmm1 register a 128-bit value "ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ff"
+   move to xmm0 register a 128-bit value "0f 0e 0d 0c 0b 0a 09 08 07 06 05 04 03 02 01 00"
+   move to xmm1 register a 128-bit value "ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ff"
 
     mov rax, 0x0706050403020100
     mov rbx, 0x0f0e0d0c0b0a0908
@@ -41,7 +41,7 @@ move to xmm1 register a 128-bit value "ff 00 00 00 00 00 00 00 00 00 00 00 00 00
     pinsrq xmm1, rax, 0
     pinsrq xmm1, rbx, 1
 
-Cases:
+   Cases:
    1) pminub xmm1, xmm0
       expected: first byte in xmm1 should be 0x0f
    2) pminsb xmm1, xmm0

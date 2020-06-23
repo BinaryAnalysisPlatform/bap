@@ -44,9 +44,9 @@ let z = physical "z"
 
 let full_pipeline bil =
   Bil.fixpoint (fun b ->
-       Bil.fold_consts b |>
-       Bil.propagate_consts |>
-       Bil.prune_dead_virtuals) bil
+      Bil.fold_consts b |>
+      Bil.propagate_consts |>
+      Bil.prune_dead_virtuals) bil
 
 let random =
   let () = Random.self_init () in
@@ -91,9 +91,9 @@ let kill_virtual =
     could_be_dead := var always_alive + one;
     always_alive := one;
   ] ==> Bil.[
-    always_alive := zero;
-    always_alive := one;
-  ]
+      always_alive := zero;
+      always_alive := one;
+    ]
 
 let preserve_physical_anyway =
   Bil.[
@@ -101,9 +101,9 @@ let preserve_physical_anyway =
     always_alive := one;
     could_be_dead := var always_alive + one;
   ] ==> Bil.[
-    always_alive := zero;
-    always_alive := one;
-  ]
+      always_alive := zero;
+      always_alive := one;
+    ]
 
 let trivial_dead_1 =
   Bil.[
@@ -238,30 +238,30 @@ let preserves_loop_2 =
 
 let preserves_loop_3 =
   let bil = Bil.[
-    v1 := zero;
-    v := four;
-    while_ (var v > zero) [
-      y := var v1 + one;
-      v1 := one;
-      v := var v - one;
-    ] ] in
+      v1 := zero;
+      v := four;
+      while_ (var v > zero) [
+        y := var v1 + one;
+        v1 := one;
+        v := var v - one;
+      ] ] in
   bil ==> bil
 
 let deep_nesting =
   let bil = Bil.[
-    always_alive := one;
-    will_survive := two;
-    always_alive := four;
-    if_ (var will_survive > zero) [
-      while_ (var will_survive = two) [
-        if_ (var always_alive > zero) [
-          will_survive := one
-        ] [
-          could_be_dead := x42
-        ];
-      ]
-    ] []
-  ] in
+      always_alive := one;
+      will_survive := two;
+      always_alive := four;
+      if_ (var will_survive > zero) [
+        while_ (var will_survive = two) [
+          if_ (var always_alive > zero) [
+            will_survive := one
+          ] [
+            could_be_dead := x42
+          ];
+        ]
+      ] []
+    ] in
   bil ==> bil
 
 let with_jmp =
@@ -302,18 +302,18 @@ let trivial_propagate_1 =
     v := x42;
     x := var v + one
   ] $==> Bil.[
-    v := x42;
-    x := x42 + one
-  ]
+      v := x42;
+      x := x42 + one
+    ]
 
 let trivial_propagate_2 =
   Bil.[
     x := x42;
     y := var x + one
   ] $==> Bil.[
-    x := x42;
-    y := x42 + one
-  ]
+      x := x42;
+      y := x42 + one
+    ]
 
 let trivial_propagate_3 =
   Bil.[

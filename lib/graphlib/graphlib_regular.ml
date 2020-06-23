@@ -29,7 +29,7 @@ module Make(Node : Opaque.S)(Label : T) = struct
   } [@@deriving compare, fields]
 
   type graph = node_info Node.Map.t
-    [@@deriving compare]
+  [@@deriving compare]
 
   let empty_node = {inc = Node.Map.empty; out = Node.Map.empty}
 

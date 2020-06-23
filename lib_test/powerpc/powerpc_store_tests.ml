@@ -16,9 +16,9 @@ let st name opcode size ~d_addr arch ctxt =
   let ea = Word.of_int ~width (addr + d_addr) in
   let data = Word.of_int64 ~width 0xFFFFFFFFABCDEF42L in
   let init = Bil.[
-    r9 := int data;
-    r28 := int (Word.of_int ~width addr);
-  ] in
+      r9 := int data;
+      r28 := int (Word.of_int ~width addr);
+    ] in
   let bits = Size.in_bits size in
   let expected = Word.extract_exn ~hi:(bits - 1) ~lo:0 data in
   check_mem init bytes mem ~addr:ea ~size expected arch ctxt
@@ -34,8 +34,8 @@ let st_zero_reg name opcode size ~d_addr arch ctxt =
   let ea = Word.of_int ~width d_addr in
   let data = Word.of_int64 ~width 0xFFFFFFFFABCDEF42L in
   let init = Bil.[
-    r9 := int data;
-  ] in
+      r9 := int data;
+    ] in
   let bits = Size.in_bits size in
   let expected = Word.extract_exn ~hi:(bits - 1) ~lo:0 data in
   check_mem init bytes mem ~addr:ea ~size expected arch ctxt
@@ -96,9 +96,9 @@ let stu name opcode size arch ~d_addr ctxt =
   let ea = Word.of_int ~width (addr + d_addr) in
   let data = Word.of_int64 ~width 0xFFFFFFFFABCDEF42L in
   let init = Bil.[
-    r4 := int data;
-    r29 := int (Word.of_int ~width addr);
-  ] in
+      r4 := int data;
+      r29 := int (Word.of_int ~width addr);
+    ] in
   let bits = Size.in_bits size in
   let expected = Word.extract_exn ~hi:(bits - 1) ~lo:0 data in
   check_mem init bytes mem ~addr:ea ~size expected arch ctxt;
@@ -145,9 +145,9 @@ let std ctxt =
   let ea = Word.of_int ~width (addr + disp) in
   let data = Word.of_int64 ~width 0xCCABDD42_ABCDEF42L in
   let init = Bil.[
-    r9 := int (Word.of_int ~width:64 addr);
-    r1 := int data;
-  ] in
+      r9 := int (Word.of_int ~width:64 addr);
+      r1 := int data;
+    ] in
   let expected = data in
   check_mem init bytes mem ~addr:ea ~size:`r64 expected arch ctxt
 
@@ -183,7 +183,7 @@ let stdu ctxt =
   let init = Bil.[
       r9 := int (Word.of_int ~width:64 addr);
       r1 := int data;
-  ] in
+    ] in
   let expected = data in
   check_mem init bytes mem ~addr:ea ~size:`r64 expected arch ctxt;
   let expected_addr = Word.of_int ~width:64 (addr + disp) in

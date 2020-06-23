@@ -8,7 +8,7 @@ open SM.Monad_infix
 [@@@warning "-D"]
 
 type policy = [`Random | `Fixed of int64 | `Interval of int64 * int64 ]
-  [@@deriving sexp_of]
+[@@deriving sexp_of]
 
 let rand64 lo hi = Int64.(Random.int64 (hi+(hi-lo)) + lo)
 

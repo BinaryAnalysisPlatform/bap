@@ -21,7 +21,7 @@ type param
     If a recipe includes files, they are unpacked into a separate
     folder, which will be removed when {!close} is called on the
     recipe.
-  *)
+*)
 val load :
   ?paths:string list ->
   ?env:(string * string) list ->

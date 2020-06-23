@@ -9,7 +9,7 @@ type strain =
   | Addr of int64
   | Tid of string
   | Var of string
-  [@@deriving variants]
+[@@deriving variants]
 
 let grammar = {|
     strain ::= <tid>

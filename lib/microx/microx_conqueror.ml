@@ -34,7 +34,7 @@ let merge_visited = Map.merge ~f:(fun ~key -> function
 class context
     ?(max_steps=Int.max_value)
     ?(max_loop= min 10 (max_steps / 10)) p  = object(self : 's)
-    [@@@warning "-D"]
+  [@@@warning "-D"]
 
   inherit Biri.context p
 

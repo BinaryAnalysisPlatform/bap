@@ -51,7 +51,7 @@ type t = {
       semantics of the list of attributes, attached to it. See also,
       C.Attr.register
 
-*)
+  *)
   apply_attrs : attr list -> sub term -> sub term;
 }
 

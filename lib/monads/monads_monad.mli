@@ -240,8 +240,8 @@ module Reader : sig
   type ('a,'b) reader
 
   include S2 with type ('a,'e) t = ('a,'e) reader
-             and type 'a m = 'a
-             and type ('a,'e) e = 'e -> 'a
+              and type 'a m = 'a
+              and type ('a,'e) e = 'e -> 'a
 
   module T1(T : T)(M : Monad) : sig
     type env = T.t
