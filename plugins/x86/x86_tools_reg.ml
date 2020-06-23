@@ -12,8 +12,8 @@ module Make(CPU : X86CPU) : RR = struct
   let of_mc reg =
     let open Option in
     X86_asm.Reg.decode reg >>= (function
-    | #X86_asm.reg as t -> of_asm t
-    | _ -> None)
+        | #X86_asm.reg as t -> of_asm t
+        | _ -> None)
 
   let of_asm_exn reg = of_asm reg |> Option.value_exn
 

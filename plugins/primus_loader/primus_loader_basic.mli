@@ -7,12 +7,12 @@ open Bap_primus.Std
     The loader performs the following tasks:
 
     - Loads memory segments, including the virtual one, sets up brk,
-    end, edata, etext, and environ variables (see any unix man page
-    for the description of these symbols). Note (edata and etext are not
-    guaranteed, while end and brk are)
+      end, edata, etext, and environ variables (see any unix man page
+      for the description of these symbols). Note (edata and etext are not
+      guaranteed, while end and brk are)
 
     - Adds CPU registers to the environment and initializes them with
-    zero.
+      zero.
 
     - Set's the main frame (copies arguments from the ctxt to the
       stack)

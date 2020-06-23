@@ -11,7 +11,7 @@ module Make (CPU : X86CPU) (RR : RR) (IM : IM) : MM = struct
       type t =
         | GPR of RR.t
         | IP of word
-        [@@ deriving variants, sexp]
+      [@@ deriving variants, sexp]
       let create mem' base =
         let open Option in
         X86_asm.Reg.decode base >>=
@@ -120,7 +120,7 @@ module Make (CPU : X86CPU) (RR : RR) (IM : IM) : MM = struct
   type t =
     | Segment of Segment.t
     | Relative of Relative.t
-    [@@ deriving variants]
+  [@@ deriving variants]
 
   let of_mem ?seg ?base ?scale ?index ~disp mem =
     segment @@ Segment.create mem ?seg ?base ?scale ?index ~disp

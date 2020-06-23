@@ -107,7 +107,7 @@ open Format
 
      Will be rendered as:
 
-     {v
+    {v
       begin(main)
        r0 := r1 + r2
        r1 := r2 + r2
@@ -131,7 +131,7 @@ exception Unknown_mode of string
     In a default [mode] (named [none]), the semantics tags are
     ignored. Once a [mode] is installed, all tags will be rendered
     according to the mode.
-  *)
+*)
 val install : Format.formatter -> mode -> unit
 
 

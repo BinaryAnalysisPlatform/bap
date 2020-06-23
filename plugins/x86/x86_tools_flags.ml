@@ -1,7 +1,7 @@
 open Core_kernel
 open Bap.Std
 open X86_tools_types
-  
+
 module Make(CPU : X86CPU) : FR = struct
   type t = cpu_flag 
 
@@ -42,7 +42,7 @@ module Make(CPU : X86CPU) : FR = struct
       let open Bil in
       cast high 1 ((op1 lxor op2) land (op1 lxor diff)) in
     carry, overflow
-    
+
   let add =
     let carry sum op1 op2 =
       let open Bil in

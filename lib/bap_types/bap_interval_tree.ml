@@ -336,7 +336,7 @@ module Make_binable(Interval : Interval_binable) = struct
 
   type point = Interval.point [@@deriving compare, sexp, bin_io]
 
- type +'a node = 'a Base.node = {
+  type +'a node = 'a Base.node = {
     lhs : 'a node option;
     rhs : 'a node option;
     key : key;

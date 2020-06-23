@@ -95,7 +95,7 @@ let mem_shift ~src shift typ =
   let to_neg w exp =
     match Word.Int_err.(wordm 0x1000 land !$w) with
     | Ok x when Word.equal x (word 0x1000) ->
-       Bil.(int (Word.ones width) * exp)
+      Bil.(int (Word.ones width) * exp)
     | _ -> exp in
   let r = shift_typ shift >>= fun t -> shift_amt shift >>= fun amt ->
     return (t,amt) in

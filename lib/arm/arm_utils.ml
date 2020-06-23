@@ -36,7 +36,7 @@ let bitlen = function
   | Type.Imm len -> len
   | Type.Mem (_,size) -> Size.in_bits size
   | Type.Unk ->
-     fail [%here] "can't infer length from unknown type"
+    fail [%here] "can't infer length from unknown type"
 
 
 let is_move = function

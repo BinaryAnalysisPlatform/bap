@@ -30,7 +30,7 @@ class base :  model -> object
         - if type is structure or union, the the alignment of is
           the maximum alignment of a field;
         - if type is function, then alignment is equal to sizeof
-        pointer
+          pointer
         - if type is void then alignment is 8 bits.*)
     method alignment : t -> size
 
@@ -51,7 +51,7 @@ class base :  model -> object
     method union : (no_qualifier, compound) spec -> bits option
 
     (**  if spec is complete then returns a total size of the
-    structure, including padding. *)
+         structure, including padding. *)
     method structure : (no_qualifier, compound) spec -> bits option
 
     method integer : integer -> size

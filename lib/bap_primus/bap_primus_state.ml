@@ -46,7 +46,7 @@ module Bag = struct
     | Some uid when uid = Key.hash state.key -> ()
     | Some other ->
       invalid_argf "State invariant is broken - \
-            the same key witnesses different types.
+                    the same key witnesses different types.
             Key %s with uuid %s was created several times.
             The key must be created only once, consider moving the
             creation function from the scope of a functor."

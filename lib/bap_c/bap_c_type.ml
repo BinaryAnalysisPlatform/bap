@@ -14,53 +14,53 @@ open Core_kernel
 
 type char =
   [ `schar | `char | `uchar]
-  [@@deriving bin_io,compare,sexp,enumerate]
+[@@deriving bin_io,compare,sexp,enumerate]
 
 type short =
   [`sshort | `ushort]
-  [@@deriving bin_io,compare,sexp,enumerate]
+[@@deriving bin_io,compare,sexp,enumerate]
 
 type cint =
   [`uint | `sint]
-  [@@deriving bin_io,compare,sexp,enumerate]
+[@@deriving bin_io,compare,sexp,enumerate]
 
 type long =
   [`slong | `ulong]
-  [@@deriving bin_io,compare,sexp,enumerate]
+[@@deriving bin_io,compare,sexp,enumerate]
 
 type long_long =
   [`slong_long | `ulong_long]
-  [@@deriving bin_io,compare,sexp,enumerate]
+[@@deriving bin_io,compare,sexp,enumerate]
 
 type signed =
   [`schar | `sshort | `sint | `slong | `slong_long]
-  [@@deriving bin_io,compare,sexp,enumerate]
+[@@deriving bin_io,compare,sexp,enumerate]
 
 type unsigned =
   [`uchar | `ushort | `uint | `ulong | `ulong_long]
-  [@@deriving bin_io,compare,sexp,enumerate]
+[@@deriving bin_io,compare,sexp,enumerate]
 
 type enum =
   [`enum of (string * int64 option) list]
-  [@@deriving bin_io,compare,sexp]
+[@@deriving bin_io,compare,sexp]
 
 type integer =
   [char | signed | unsigned | enum]
-  [@@deriving bin_io,compare,sexp]
+[@@deriving bin_io,compare,sexp]
 
 type real =
   [`float | `double | `long_double]
-  [@@deriving bin_io,compare,sexp,enumerate]
+[@@deriving bin_io,compare,sexp,enumerate]
 
 type complex =
   [`cfloat | `cdouble | `clong_double]
-  [@@deriving bin_io,compare,sexp,enumerate]
+[@@deriving bin_io,compare,sexp,enumerate]
 
 type floating = [real | complex]
-  [@@deriving bin_io,compare,sexp,enumerate]
+[@@deriving bin_io,compare,sexp,enumerate]
 
 type basic = [integer | floating]
-  [@@deriving bin_io,compare,sexp]
+[@@deriving bin_io,compare,sexp]
 
 
 type cv = unit [@@deriving bin_io,compare,sexp]
@@ -84,7 +84,7 @@ module Attr = struct
 end
 
 type attr = Attr.t
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 module Spec = struct
   type ('a,'b) t = {
@@ -96,10 +96,10 @@ module Spec = struct
 end
 
 type ('a,'b) spec = ('a,'b) Spec.t
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 type no_qualifier = [`no_qualifier]
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 module Proto = struct
   type 'a t = {

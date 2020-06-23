@@ -168,7 +168,7 @@ let find_curses () =
 
 let register ida_info mode : unit =
   let curses = if Info.require_ncurses ida_info then find_curses ()
-               else None in
+    else None in
   let debug =
     try Int.of_string (Sys.getenv "BAP_IDA_DEBUG") with _exn -> 0 in
   let config = {
