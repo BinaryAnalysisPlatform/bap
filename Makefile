@@ -59,10 +59,13 @@ veri:
 	if [ -d .git ]; then git submodule init; git submodule update; 	fi
 	make -C testsuite veri
 
-.PHONY: indent check-style
+.PHONY: indent check-style status-clean
 
 indent:
 	sh tools/ocp-indent-all.sh
 
-check-style: indent
+status-clean:
+	git diff --quiet --exit-code
+
+check-style: status-clean indent
 	git diff --exit-code
