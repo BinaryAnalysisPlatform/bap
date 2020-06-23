@@ -79,9 +79,9 @@ module Rule = struct
 
   let vars_of_sexp ~get_pos init xs =
     sexp_fold_atoms ~get_pos ~init xs ~f:(fun atoms loc atom ->
-          if is_variable atom
-          then Map.set atoms ~key:atom ~data:loc
-          else atoms)
+        if is_variable atom
+        then Map.set atoms ~key:atom ~data:loc
+        else atoms)
 
   let collect_free_vars ~get_pos xs =
     List.fold ~init:String.Map.empty ~f:(vars_of_sexp ~get_pos) xs

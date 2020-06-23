@@ -15,9 +15,9 @@
     So proposed usage is just to open at the very beginning of your
     module:
 
-    {[
-      open Powerpc.Std
-    ]}
+   {[
+     open Powerpc.Std
+   ]}
 
     {2 RTL}
 
@@ -41,15 +41,15 @@
     {3 Expressions}
 
     There are only few ways to construct an expression:
-     - from instruction operand
-     - from constant
-     - from string
-     - by defining temporary variable
+   - from instruction operand
+   - from constant
+   - from string
+   - by defining temporary variable
 
     To construct an expression that denotes a register and treat
     its content as an unsigned value, one should write:
 
-    {v
+   {v
      let ra = unsigned cpu.reg op.(0)
               -------- ------- ------
                  ^         ^      ^
@@ -63,35 +63,35 @@
     Immediate instructions operands are constructed in the same
     way:
 
-    {[
-      let im = signed imm op.(1)
-    ]}
+   {[
+     let im = signed imm op.(1)
+   ]}
 
     Also one may create variables for convenience:
 
-    {[
-      let x = unsigned var halfword
-    ]}
+   {[
+     let x = unsigned var halfword
+   ]}
 
     that is a creation of variable of bitwidth 16. Other useful
     bitwidthes are bit, byte, word, doubleword, quadroword. And
     also it's possible to create a variable of arbitrary bitwidth:
 
-    {[
-      let x = signed var (bitwidth 10)
-    ]}
+   {[
+     let x = signed var (bitwidth 10)
+   ]}
 
     It's also possible to create an epxression from integer constant:
 
-    {[
-      let x = unsigned const word 42
-    ]}
+   {[
+     let x = unsigned const word 42
+   ]}
 
     And create an expression from string:
 
-    {[
-      let x = unsigned of_string "0xFFFF_FFFF_FFFF"
-    ]}
+   {[
+     let x = unsigned of_string "0xFFFF_FFFF_FFFF"
+   ]}
 
     {4 Extraction}
 
@@ -100,11 +100,11 @@
     bit than [to].
 
     Also, there are few more convenient and readable ways to extract, e.g.:
-    - [low word x]  - extract the last word from [x]
-    - [high byte x] - extract first (the most significant) byte
-    - [last x 5]    - extract last (the least significant) bits
-    - [first x 2]   - extract second bit
-    - [msb x]       - extract the most significant bit
+   - [low word x]  - extract the last word from [x]
+   - [high byte x] - extract first (the most significant) byte
+   - [last x 5]    - extract last (the least significant) bits
+   - [first x 2]   - extract second bit
+   - [msb x]       - extract the most significant bit
 
     Note, that extraction of a bigger width from expression is
     also possible, see example below.
@@ -115,23 +115,23 @@
     expression as it is where signedness matter.
 
     Example 1. Apply extract explicitly. The result is 0x0000_FFFF.
-    {[
+   {[
      let x = signed const halfword 0xFFFF in
      let y = signed var word in
      RTL.[
        y := last word x;
      ];
-    ]}
+   ]}
 
     Example 2. Assignment to signed, without extraction.
     The result is 0xFFFF_FFFF.
-    {[
+   {[
      let x = signed const halfword 0xFFFF in
      let y = signed var word in
      RTL.[
        y := x;
      ]
-    ]}
+   ]}
 
     {4 Concatenation}
 
@@ -148,13 +148,13 @@
     signedness is matter, then use signed operands. Like in example
     below, [<] is a signed comparison:
 
-    {[
-      let x = signed const halfword 0xFAAA in
-      let y = unsigned var bit in
-      RTL.[
-        y := x < zero;
-      ]
-    ]}
+   {[
+     let x = signed const halfword 0xFAAA in
+     let y = unsigned var bit in
+     RTL.[
+       y := x < zero;
+     ]
+   ]}
 
     The result is true (1), since [x] is signed. But if we will replace
     x definition to [unsigned const halfword 0xFFFF] then result will be
@@ -165,14 +165,14 @@
     logical one if operand is unsigned. And otherwise, shift is
     an arithmetical one if operand is signed.
 
-    {[
-      let x = signed const halfword 0xFAAA in
-      let s = unsigned const halfword 4 in
-      let y = unsigned var halfword in
-      RTL.[
-        y := x >> s;
-      ]
-    ]}
+   {[
+     let x = signed const halfword 0xFAAA in
+     let s = unsigned const halfword 4 in
+     let y = unsigned var halfword in
+     RTL.[
+       y := x >> s;
+     ]
+   ]}
     If [x] is signed, like in example above, then shift is
     arithmetical, and result is 0xFFAA. If [x] is unsigned, then shift
     is logical and result is Ox0FAA.
@@ -183,10 +183,10 @@
     is an assignment. It is a very important and expressive operator
     in RTL. The right-hand side of an assignment is always treated to
     have the same sign and width as a left one:
-    {[
-      ra := zero;
-      rb := rc ^ rd;
-    ]}
+   {[
+     ra := zero;
+     rb := rc ^ rd;
+   ]}
     Assuming, that [zero] is just one bit and all [ra], [rb], [rc], [rd] are 32-bit
     expressions we will get [ra], with all bits set to zero, and [rb]
     equaled to [rd], since a concatenation [rc ^ rb] returns a 64 bit
@@ -194,16 +194,16 @@
 
     An expression in left hand side of assignment is always either of
     expressions:
-     - constructed with var/reg constructors
-     - all expressions from cpu model, except pc
-     - extraction or concatenation of two cases above
-    So there are few examples of correct assignment:
+   - constructed with var/reg constructors
+   - all expressions from cpu model, except pc
+   - extraction or concatenation of two cases above
+     So there are few examples of correct assignment:
 
-    {[
-      low byte rt := ra + rb;
-      cpu.cr := zero;
-      nbit cpu.cr 1 := one;
-    ]}
+   {[
+     low byte rt := ra + rb;
+     cpu.cr := zero;
+     nbit cpu.cr 1 := one;
+   ]}
 
 
     {2 Bit,byte,whatever Order}
@@ -214,33 +214,33 @@
 
     Example 1. [y] will be set to 0xAB, because first byte
     requested:
-    {[
+   {[
      let x = unsigned const halfword 0xABCD in
      let y = unsigned var byte in
      RTL.[
        y := first byte x;
      ];
-    ]}
+   ]}
 
     Example 2. [y] will be set to 0xCD, because last byte
     requested:
-    {[
+   {[
      let x = unsigned const halfword 0xABCD in
      let y = unsigned var byte in
      RTL.[
        y := last byte x;
      ];
-    ]}
+   ]}
 
     Example 3. [y] will be set to one, because second bit
     requested (numeration starts from zero):
-    {[
+   {[
      let x = unsigned of_string "0b010000" in
      let y = unsigned var bit in
      RTL.[
        y := nth bit x 1;
      ];
-    ]}
+   ]}
 
     {2 Lifter}
 
@@ -252,14 +252,14 @@
     semantics. So, if the first operand of add instruction is a target
     register, the second operand is a source register, and the
     third operand is an immediate:
-    {[
-      let tar = signed cpu.reg ops.(0) in
-      let src = signed cpu.reg ops.(1) in
-      let imm = unsigned imm ops.(2) in
-      RTL.[
-        tar := src + imm;
-      ]
-    ]}
+   {[
+     let tar = signed cpu.reg ops.(0) in
+     let src = signed cpu.reg ops.(1) in
+     let imm = unsigned imm ops.(2) in
+     RTL.[
+       tar := src + imm;
+     ]
+   ]}
 
     {2 Misc}
 
@@ -268,30 +268,30 @@
     Also, one needs to register a lifted function, so
     it could be called when appropriative instruction will be
     encountered. There are two operators for this purpose:
-    - [(|>)] - just registers a function (see example below)
-    - [(|>.)] - does the same, plus does some extra job (see
+   - [(|>)] - just registers a function (see example below)
+   - [(|>.)] - does the same, plus does some extra job (see
              a description below)
 
     {2 Complete example}
 
     To be more concrete let's create an artificial example.
-    {[
-      1 let sort_of_add cpu ops =
-      2   let rt = unsigned reg ops.(0) in
-      3   let ra = signed reg ops.(1) in
-      4   let im = unsigned imm ops.(2) in
-      5   let rc = unsigned reg ops.(3) in
-      6   let tm = signed var doubleword in
-      7   let xv = unsigned const word 42 in
-      8   let sh = unsigned const byte 2 in
-      9   RTL.[
-     10        rt := ra + im;
-     11        tm = cpu.load rt halfword + xv;
-     12        rc := (tm lsl sh) + cpu.ca;
-     13    ]
-     14   let () =
-     15     "SomeSortOfAdd" >| sort_of_add;
-    ]}
+   {[
+     1 let sort_of_add cpu ops =
+         2   let rt = unsigned reg ops.(0) in
+     3   let ra = signed reg ops.(1) in
+     4   let im = unsigned imm ops.(2) in
+     5   let rc = unsigned reg ops.(3) in
+     6   let tm = signed var doubleword in
+     7   let xv = unsigned const word 42 in
+     8   let sh = unsigned const byte 2 in
+     9   RTL.[
+         10        rt := ra + im;
+         11        tm = cpu.load rt halfword + xv;
+         12        rc := (tm lsl sh) + cpu.ca;
+         13    ]
+       14   let () =
+              15     "SomeSortOfAdd" >| sort_of_add;
+   ]}
 
     There is a lifter for instruction [SomeSortOfAdd]. It's required
     it has two arguments: cpu model and operand array.
@@ -307,24 +307,24 @@
     written to [rc] register.
 
     How did author implement lifter for this instruction:
-    - [line 1] - defined a function with two arguments
-    - [lines 2-5] - parsed instruction operands
-    - [lines 6-8] - defined useful constants
-    - [lines 9-13] - wrote RTL code for this instruction.
-    - [lines 14-15] - registered lifter for this instruction
+   - [line 1] - defined a function with two arguments
+   - [lines 2-5] - parsed instruction operands
+   - [lines 6-8] - defined useful constants
+   - [lines 9-13] - wrote RTL code for this instruction.
+   - [lines 14-15] - registered lifter for this instruction
 
     What happens on each line of RTL code:
-    - [line 10]: sum of signed [ra] and unsigned imm is a signed expression,
+   - [line 10]: sum of signed [ra] and unsigned imm is a signed expression,
              because one of the operands is signed. But an unsigned
              result is placed in [rt], since [rt] is unsigned too.
-    - [line 11]: load from memory at address from [rt] is summed with 42
+   - [line 11]: load from memory at address from [rt] is summed with 42
              and assigned to variable [tm]. Note, there are two width
              extension under the hood: loaded halfword is extended to
              up to a word bitwidth (since it's a bigger bitwidth among
              sum operand) and than sum extended to a doubleword
              bitwidth with respect to a [tm] sign. So, the result of
              this sum is treated as a signed.
-    - [line 12]: Logical shift returns an unsigned result which is summed
+   - [line 12]: Logical shift returns an unsigned result which is summed
              with unsigned value. The interesting part is that it's
              safe to add one-bit value (flag is one bit width) and a
              doubleword.
@@ -411,10 +411,10 @@ module Std : sig
       if format is decimal then bitwidth equals to a number of significant bits
       else bitwidth equals to a number of all listed bits in a string.
       Examples:
-       - bitwidth of [unsigned of_string "0b00"] is eqauls to 2
-       - bitwidth of [unsigned of_string "0o474"] is eqauls to 9;
-       - bitwidth of [unsigned of_string "0b03FA"] is eqauls to 16;
-       - bitwidth of [unsigned of_string "42"] is eqauls to 6; *)
+      - bitwidth of [unsigned of_string "0b00"] is eqauls to 2
+      - bitwidth of [unsigned of_string "0o474"] is eqauls to 9;
+      - bitwidth of [unsigned of_string "0b03FA"] is eqauls to 16;
+      - bitwidth of [unsigned of_string "42"] is eqauls to 6; *)
   val of_string : (string -> exp) ec
 
   (** Set of operators. Briefly it contains next operators:

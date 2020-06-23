@@ -3,7 +3,7 @@
     This library provides an interface for creating and registering
     demanglers, that can be used on demand by fronends and plugins.
 
- *)
+*)
 open Core_kernel
 
 module Std : sig

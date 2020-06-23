@@ -24,8 +24,8 @@ type jumptarget =
   | Jrel of addr * addr (* next ins address, offset *)
 
 (** See section 4.1 of the Intel® 64 and IA-32 Architectures Software
-   Developer’s Manual, Volumes 2A & 2B: Instruction Set Reference
-   (order numbers 253666 and 253667) *)
+    Developer’s Manual, Volumes 2A & 2B: Instruction Set Reference
+    (order numbers 253666 and 253667) *)
 module Pcmpstr = struct
 
   type ssize = Bytes | Words
@@ -39,29 +39,29 @@ module Pcmpstr = struct
   type outselectmask = Bitmask | Bytemask (* For PCMPESTRM/PCMPISTRM, represents bit mask/word mask. *)
 
   (** See Section 4.1 of Intel manual for more
-     information on the immediate control byte.
+      information on the immediate control byte.
 
-     i[0]:
-     0 = 16 packed bytes
-     1 =  8 packed words
-     i[1]:
-     0 = packed elements are unsigned
-     1 = packed elements are signed
-     i[3:2]:
-     00 = "equal any"
-     01 = "ranges"
-     10 = "each each"
-     11 = "equal ordered"
-     i[4]:
-     0 = IntRes1 unmodified
-     1 = IntRes1 is negated (1's complement)
-     i[5]:
-     0 = Negation of IntRes1 is for all 16 (8) bits
-     1 = Negation of IntRes1 is masked by reg/mem validity
-     i[6]:
-     0 = Use least significant bit for IntRes2
-     1 = Use most significant bit for IntRes2
-     i[7]: Undefined, set to 0.
+      i[0]:
+      0 = 16 packed bytes
+      1 =  8 packed words
+      i[1]:
+      0 = packed elements are unsigned
+      1 = packed elements are signed
+      i[3:2]:
+      00 = "equal any"
+      01 = "ranges"
+      10 = "each each"
+      11 = "equal ordered"
+      i[4]:
+      0 = IntRes1 unmodified
+      1 = IntRes1 is negated (1's complement)
+      i[5]:
+      0 = Negation of IntRes1 is for all 16 (8) bits
+      1 = Negation of IntRes1 is masked by reg/mem validity
+      i[6]:
+      0 = Use least significant bit for IntRes2
+      1 = Use most significant bit for IntRes2
+      i[7]: Undefined, set to 0.
   *)
   type imm8cb = {
     ssize : ssize;
@@ -180,7 +180,7 @@ type rex = {
   rex_r : bool; (** Bit 2: Extension of ModR/M reg field *)
   rex_x : bool; (** Bit 1: Extension of SIB index field *)
   rex_b : bool; (** Bit 0: Extension of ModR/M r/m field, SIB base
-                   field, or opcode reg field *)
+                    field, or opcode reg field *)
 }
 
 type vex = {
@@ -198,7 +198,7 @@ type prefix = {
   addrsize : typ;
   opsize   : typ; (** General operand size *)
   bopsize  : typ; (** Operand size that defaults to machine size
-                     (e.g. for pop) *)
+                      (e.g. for pop) *)
   mopsize  : typ; (** Multi-scalar operand size *)
   repeat   : bool;
   nrepeat  : bool;

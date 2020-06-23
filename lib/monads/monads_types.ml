@@ -168,13 +168,13 @@ module Monad = struct
   end
 
   module type Basic2 = sig
-      type ('a, 'e) t
-      val bind : ('a, 'e) t -> ('a -> ('b, 'e) t) -> ('b, 'e) t
-      val map : [ `Define_using_bind
-                | `Custom of (('a, 'e) t -> f:('a -> 'b) -> ('b, 'e) t)
-                ]
-      val return : 'a -> ('a, _) t
-    end
+    type ('a, 'e) t
+    val bind : ('a, 'e) t -> ('a -> ('b, 'e) t) -> ('b, 'e) t
+    val map : [ `Define_using_bind
+              | `Custom of (('a, 'e) t -> f:('a -> 'b) -> ('b, 'e) t)
+              ]
+    val return : 'a -> ('a, _) t
+  end
 
   module type Core = Monad.S
   module type Core2 = Monad.S2
@@ -474,8 +474,8 @@ module Multi = struct
     val status : id -> status t
 
     include State.S with type 'a t := 'a t
-               and type 'a e := 'a e
-               and type 'a m := 'a m
+                     and type 'a e := 'a e
+                     and type 'a m := 'a m
   end
 
   module type S2 = sig
@@ -497,8 +497,8 @@ module Multi = struct
     val status : id -> (status,'e) t
 
     include State.S2 with type ('a,'e) t := ('a,'e) t
-                and type ('a,'e) e := ('a,'e) e
-                and type 'a m := 'a m
+                      and type ('a,'e) e := ('a,'e) e
+                      and type 'a m := 'a m
   end
 end
 

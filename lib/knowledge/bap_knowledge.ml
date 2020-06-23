@@ -1458,8 +1458,8 @@ module Dict = struct
   let merge
     : type a b. merge -> a key -> b key -> b -> a -> a =
     fun {merge} ka kb b a ->
-      let T = Key.same ka kb in
-      merge kb b a
+    let T = Key.same ka kb in
+    merge kb b a
 
   let app = merge
 
@@ -2131,23 +2131,23 @@ module Knowledge = struct
 
   let provide : type a p. (a,p) slot -> a obj -> p -> unit Knowledge.t =
     fun slot obj x ->
-      if Domain.is_empty slot.dom x
-      then Knowledge.return ()
-      else
-        get () >>= function {classes} as s ->
-          let {Env.vals} as objs =
-            match Map.find classes slot.cls.id with
-            | None -> Env.empty_class
-            | Some objs -> objs in
-          try put {
-              s with classes = Map.set classes ~key:slot.cls.id ~data:{
-              objs with vals = Map.update vals obj ~f:(function
-              | None -> Record.(put slot.key empty x)
-              | Some v -> match Record.commit slot.dom slot.key v x with
-                | Ok r -> r
-                | Error err -> raise (Record.Merge_conflict err))}}
-          with Record.Merge_conflict err ->
-            Knowledge.fail (Non_monotonic_update (Slot.name slot, err))
+    if Domain.is_empty slot.dom x
+    then Knowledge.return ()
+    else
+      get () >>= function {classes} as s ->
+        let {Env.vals} as objs =
+          match Map.find classes slot.cls.id with
+          | None -> Env.empty_class
+          | Some objs -> objs in
+        try put {
+            s with classes = Map.set classes ~key:slot.cls.id ~data:{
+            objs with vals = Map.update vals obj ~f:(function
+            | None -> Record.(put slot.key empty x)
+            | Some v -> match Record.commit slot.dom slot.key v x with
+              | Ok r -> r
+              | Error err -> raise (Record.Merge_conflict err))}}
+        with Record.Merge_conflict err ->
+          Knowledge.fail (Non_monotonic_update (Slot.name slot, err))
 
   let pids = ref Pid.zero
 

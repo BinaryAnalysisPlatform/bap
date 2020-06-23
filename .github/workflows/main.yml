@@ -29,6 +29,9 @@ jobs:
         with:
           ocaml-version: ${{ matrix.ocaml-version }}
 
+      - name: Check the Style
+        run: opam install -y ocp-indent && opam exec -- make check-style
+
       - name: Pin BAP
         run: opam pin add bap . --no-action
 

@@ -12,7 +12,7 @@ open SM.Let_syntax
 open SM.Monad_infix
 
 type taints = Tid.Set.t Var.Map.t Tid.Map.t
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 module Result = struct
   type t = {
@@ -72,7 +72,7 @@ module Result = struct
 end
 
 type result = Result.t
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 let propagate taints vars tid v r : taints =
   let ts = taints r in

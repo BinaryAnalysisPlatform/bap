@@ -218,12 +218,12 @@ let cntlzw cpu ops =
     cnt := zero;
     has_no_ones := one;
     foreach biti xv [
-          if_ (has_no_ones land (biti = zero)) [
-            cnt := cnt + one;
-          ] [
-            has_no_ones := zero;
-          ]
-        ];
+      if_ (has_no_ones land (biti = zero)) [
+        cnt := cnt + one;
+      ] [
+        has_no_ones := zero;
+      ]
+    ];
     ra := cnt;
   ]
 
@@ -239,12 +239,12 @@ let cntlzd cpu ops =
     cnt := zero;
     has_no_ones := one;
     foreach biti xv [
-          if_ (has_no_ones land (biti = zero)) [
-            cnt := cnt + one;
-          ] [
-            has_no_ones := zero;
-          ]
-        ];
+      if_ (has_no_ones land (biti = zero)) [
+        cnt := cnt + one;
+      ] [
+        has_no_ones := zero;
+      ]
+    ];
     ra := cnt;
   ]
 

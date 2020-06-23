@@ -86,7 +86,7 @@ val standard_prefs : int list
     both 32-bit and 64-bit processors. However, on the former it is
     32-bit (contrary to the name), and on the latter it is 64-bit.
 
-  *)
+*)
 module type ModeVars = sig
 
   (** base pointer *)

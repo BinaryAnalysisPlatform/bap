@@ -60,7 +60,7 @@ type t =
   (** [Seq (t1,..,tN)]   *)
   | Ptr of t
   (** [Ptr (type,size)]  *)
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 
 (**  *)
