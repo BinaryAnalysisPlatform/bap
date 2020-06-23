@@ -65,8 +65,8 @@ module Make(State : Monad.State.S2) = struct
       State.update @@ fun s -> s#update var data
 
     method load mem addr = match mem#load addr with
-        | None -> self#undefined_addr addr
-        | Some w -> word w
+      | None -> self#undefined_addr addr
+      | Some w -> word w
 
     method store mem addr word =
       storage (mem#save addr word)

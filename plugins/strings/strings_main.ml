@@ -24,8 +24,8 @@ let scan (mem,value) =
   Strings.Scanner.run ~read 0 |>
   Seq.fold ~init:Addr.Map.empty ~f:(fun strs (off,str) ->
       Map.set strs
-      ~key:(Addr.nsucc (Memory.min_addr mem) off)
-      ~data:str)
+        ~key:(Addr.nsucc (Memory.min_addr mem) off)
+        ~data:str)
 
 
 let union = Map.merge ~f:(fun ~key -> function
@@ -64,5 +64,5 @@ let print {Config.get=(!!)} proj =
     ~f:(print_str !!address)
 
 let () = Config.when_ready (fun cfg ->
-  Project.register_pass  ~name:"collect" (collect cfg);
-  Project.register_pass' ~deps:["strings-collect"] (print cfg))
+    Project.register_pass  ~name:"collect" (collect cfg);
+    Project.register_pass' ~deps:["strings-collect"] (print cfg))

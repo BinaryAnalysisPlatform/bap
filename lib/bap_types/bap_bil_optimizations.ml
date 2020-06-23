@@ -192,10 +192,10 @@ module Propagate(SM : Monad.State.S2) = struct
       let ctxt = match
           has_unconditional_jmps yes,
           has_unconditional_jmps no with
-        | false, false -> join ctxt_yes ctxt_no
-        | true, true -> ctxt
-        | false, _ -> ctxt_yes
-        | _ -> ctxt_no in
+      | false, false -> join ctxt_yes ctxt_no
+      | true, true -> ctxt
+      | false, _ -> ctxt_yes
+      | _ -> ctxt_no in
       SM.put ctxt >>= fun () ->
       SM.return (if_ cond yes no)
 

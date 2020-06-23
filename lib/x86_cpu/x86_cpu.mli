@@ -7,7 +7,7 @@ open Bap.Std
     32 and 64 mode. For example, the A register, has a name [rax] on
     both 32-bit and 64-bit processors. However, on the former it is
     32-bit (contrary to the name), and on the latter it is 64-bit.
-  *)
+*)
 module IA32 : sig
   include Bap.Std.CPU
 

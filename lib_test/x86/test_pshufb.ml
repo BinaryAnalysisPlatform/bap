@@ -1,17 +1,17 @@
 (**
-# rappel (don't forget -x option)
-## mov to xmm0 register a 128-bit value "50 4F 4E 4D 4C 4B 4A 49 48 47 46 45 44 43 42 41"
+   # rappel (don't forget -x option)
+   ## mov to xmm0 register a 128-bit value "50 4F 4E 4D 4C 4B 4A 49 48 47 46 45 44 43 42 41"
 
     mov rax, 0x4847464544434241
     mov rbx, 0x504F4E4D4C4B4A49
     pinsrq xmm0, rax, 0
     pinsrq xmm0, rbx, 1
 
-So, xmm0 will be used for original value, xmm1 - for mask, and xmm2
-for our tests.
+   So, xmm0 will be used for original value, xmm1 - for mask, and xmm2
+   for our tests.
 
-Cases:
-1) mov to xmm1 register a 128 bit value with permutation indexes, just
+   Cases:
+   1) mov to xmm1 register a 128 bit value with permutation indexes, just
    bytes numbers as they are, i.e "0F 0E 0D 0C 0B 0A 09 08 07 06 05 04 03 02 01 00"
    expected: xmm2 value should be the same as before
 
@@ -21,7 +21,7 @@ Cases:
     pinsrq xmm1, rcx, 1
     pshufb xmm2, xmm1
 
-2) permutation mask = "0F 0E 0D 0C 0B 0A 09 08 07 06 05 04 03 01 01 01",
+   2) permutation mask = "0F 0E 0D 0C 0B 0A 09 08 07 06 05 04 03 01 01 01",
    i.e. last three bytes of destination should be the same as byte #01.
    expected: xmm2 = "50 4F 4E 4D 4C 4B 4A 49 48 47 46 45 44 42 42 42"
 
@@ -32,7 +32,7 @@ Cases:
    pinsrq xmm1, rcx, 1
    pshufb xmm2, xmm1
 
-3) permutation mask = "01 01 01 0C 0B 0A 09 08 07 06 05 04 03 02 01 00",
+   3) permutation mask = "01 01 01 0C 0B 0A 09 08 07 06 05 04 03 02 01 00",
    i.e. first three bytes of destination should be the same as byte #01.
    expected: xmm2 = "42 42 42 4D 4C 4B 4A 49 48 47 46 45 44 43 42 41"
 
@@ -43,7 +43,7 @@ Cases:
    pinsrq xmm1, rcx, 1
    pshufb xmm2, xmm1
 
-4) permutation mask = "0F 0E 0D 0C 0B 0A 09 08 07 06 05 04 03 80 80 80",
+   4) permutation mask = "0F 0E 0D 0C 0B 0A 09 08 07 06 05 04 03 80 80 80",
    i.e. last three bytes of destination shold be eqaul to zero.
    expected: xmm2 = "50 4F 4E 4D 4C 4B 4A 49 48 47 46 45 44 00 00 00"
 

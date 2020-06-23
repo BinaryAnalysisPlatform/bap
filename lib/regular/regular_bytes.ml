@@ -83,12 +83,12 @@ module From_string =
       type t = string
       let length = String.length
     end) (struct
-      type nonrec t = t
-      let create ~len = create len
-      let length = length
-      let unsafe_blit ~src ~src_pos ~dst ~dst_pos ~len =
-        Std_bytes.blit_string src src_pos dst dst_pos len
-    end)
+    type nonrec t = t
+    let create ~len = create len
+    let length = length
+    let unsafe_blit ~src ~src_pos ~dst ~dst_pos ~len =
+      Std_bytes.blit_string src src_pos dst dst_pos len
+  end)
 
 let create = Std_bytes.create
 let length = Std_bytes.length

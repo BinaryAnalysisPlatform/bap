@@ -57,15 +57,15 @@ open Core_kernel
     behavior of some memory allocator. We expect the following kinds
     of events:
 
-     - [(acquire SITE PTR LEN)] represents an allocation event, where
+    - [(acquire SITE PTR LEN)] represents an allocation event, where
        SITE is an allocation site (i.e., an address of a program
        instruction that performs an allocation), [PTR] is a pointer to
        the allocated data, and [LEN] is the data size;
 
-     - [(release SITE PTR LEN)] represents a memory deallocation
+    - [(release SITE PTR LEN)] represents a memory deallocation
        event;
 
-     - [(violate SITE PTR KIND)] represents a violation of a memory
+    - [(violate SITE PTR KIND)] represents a violation of a memory
        allocator invariants of the specified KIND.
 
      Suppose we want to build a rule, that will report each violation

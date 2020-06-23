@@ -200,9 +200,9 @@ let main args proj =
 module Cmdline = struct
 
   let () = Config.manpage [
-    `S "DESCRIPTION";
+      `S "DESCRIPTION";
 
-    `P "A taint propagation framework, that uses microexecution to
+      `P "A taint propagation framework, that uses microexecution to
     propagate the taint through a program. The execution is performed
     using the ConquEror Engine, that is short for Concrete Evaluation
     with Errors. This execution engine allows to run incomplete
@@ -210,7 +210,7 @@ module Cmdline = struct
     coverage it may take infeasible paths.";
 
 
-    `P "The taint is propagated from a seed to its maximum extent. The
+      `P "The taint is propagated from a seed to its maximum extent. The
     seed is a definition point that is marked with a `Taint.reg` or
     `Taint.ptr` tag. A usual way of using the framework, would be to
     use one or more passes that marks points of interest with a taint
@@ -219,19 +219,19 @@ module Cmdline = struct
     the result.";
 
 
-    `P "The microexecution is performed over a lifted program using
+      `P "The microexecution is performed over a lifted program using
     bap-microx library. Memory reads are intercepted and redirected to
     program image, if possible (for static data), otherwise they are
     concretized. All other inputs, like reads from unknown registers
     or user input are also concretized. Several concretization
     policies are provided:";
 
-    `Pre "
+      `Pre "
       - Const - all unknown values are concretized to a specified constant;
       - Random - a random value is picked from a value domain;
       - Range - a random value is picked from a specified range.";
 
-    `P "By default, the microexecution engine tries to visit all
+      `P "By default, the microexecution engine tries to visit all
     program branches. During the execution, it will record missed
     branches as checkpoints. When there is nothing more to explore, it
     will backtrack to a stored checkpoint, restoring the execution
@@ -242,15 +242,15 @@ module Cmdline = struct
     the interpreter requests a backtracking, it will instead return
     from a current procedure.";
 
-    `P "The maximum length of an execution path is limited with some
+      `P "The maximum length of an execution path is limited with some
     constant number of jumps (basic blocks). Also, a loop escaping
     mechanism, will detect loops and bail out of them after a
     specified amount of iterations. In the deterministic mode it will
     just return from a procedure, otherwise, it will backtrack.";
 
-    `S "SEE ALSO";
-    `P "$(b,bap-plugin-taint)(1), $(b,bap-plugin-map-terms)(1)"
-  ]
+      `S "SEE ALSO";
+      `P "$(b,bap-plugin-taint)(1), $(b,bap-plugin-map-terms)(1)"
+    ]
 
   let max_trace = Config.(param int "max-trace"
                             ~default:1_000_000 ~docv:"BLOCKS"
