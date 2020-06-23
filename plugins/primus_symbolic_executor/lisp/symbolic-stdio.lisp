@@ -99,7 +99,7 @@
           (data (dict-get 'symbolic-open-data fd)))
       (if (= fpos size) -1
         (dict-add 'symbolic-open-fpos fd (+1 fpos))
-        (symbolic-memory-read data fpos))))))
+        (cast int (symbolic-memory-read data fpos)))))))
 
 (defun getchar ()
   (declare (external "getchar"))
