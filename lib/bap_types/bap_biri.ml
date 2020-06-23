@@ -77,13 +77,13 @@ module Make(SM : Monad.State.S2) = struct
       2. if [f] is applied to [t], then [next] is set to the successor
          of [t], just before the application, where
          successor of t is
-         - next element in sequence if [t] is not the last one
-         - [t'] if [t] is last and [c] is not [None], and [t'] is the
+      - next element in sequence if [t] is not the last one
+      - [t'] if [t] is last and [c] is not [None], and [t'] is the
            first element of non empty sequence of terms of class [c]
-         - [t'] if [t] is last and [c] is not [None] and sequence of terms
+      - [t'] if [t] is last and [c] is not [None] and sequence of terms
            of class [c] is empty and [t'] is first element of non empty
            sequence of term of class [c']
-         - None otherwise
+      - None otherwise
   *)
   let eval_terms eval c1 c2 c3 blk : #context u =
     let set_next next = match next with
@@ -104,11 +104,11 @@ module Make(SM : Monad.State.S2) = struct
     set_next (Seq.hd terms) >>= fun () ->
     SM.Seq.fold terms ~init:Empty
       ~f:(fun m t -> match m with
-        | Empty -> SM.return (First t)
-        | First t1 -> set_next (Some t1) >>| fun () -> Ready (t1,t)
-        | Ready (t1,t2) ->
-          step t1 (Some t2) >>= fun () ->
-          SM.return (Ready (t2,t))) >>= function
+          | Empty -> SM.return (First t)
+          | First t1 -> set_next (Some t1) >>| fun () -> Ready (t1,t)
+          | Ready (t1,t2) ->
+            step t1 (Some t2) >>= fun () ->
+            SM.return (Ready (t2,t))) >>= function
     | Empty -> SM.return ()
     | First t -> step t None
     | Ready (t1,t2) ->

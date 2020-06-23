@@ -215,7 +215,7 @@
           dynamic order.
 
 
-     - Do not introduce any mechanism but rely on the advice mechanism
+    - Do not introduce any mechanism but rely on the advice mechanism
        instead. In Common Lisp terminology this will only leave us
        with auxiliary methods, except that the after method allows us
        to override the return value. Thus, if someone would like to

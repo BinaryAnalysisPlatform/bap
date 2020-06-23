@@ -105,6 +105,7 @@ let init redirections =
     let nil = Value.b0
     let error = addr_width >>= fun w -> Value.of_word (Word.ones w)
     let ok = addr_width >>= Value.zero
+    let int x = addr_width >>= fun width -> Value.of_int ~width x
 
     let value_to_fd fd =
       Value.to_word fd |> Word.to_int |> function
@@ -211,7 +212,7 @@ let init redirections =
         | Some {input=Some ch} -> match input_byte ch with
           | Error _ -> error
           | Ok None -> error
-          | Ok (Some ch) -> Value.of_int ~width:8 ch
+          | Ok (Some ch) -> int ch
   end in
 
   let module Primitives(Machine : Primus.Machine.S) = struct
@@ -264,7 +265,7 @@ let init redirections =
             channel that has the descriptor DESCR to be outputted to the
             associated destination. Returns -1 if no such channel exists or
             if in case of an IO error.|};
-        def "channel-input"  (one int @-> byte) (module Input)
+        def "channel-input"  (one int @-> int) (module Input)
           {|(channel-input DESC) reads one byte from a channel that
             has the descriptor DESC. Returns -1 if no such channel
             exists, or if any IO error occurs, if the channel is not

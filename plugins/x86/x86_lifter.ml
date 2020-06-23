@@ -476,7 +476,7 @@ module ToIR = struct
 
       List.concat Bil.[
           [tmp_dst := int zero];
-	  foreach_size (fun i -> [
+          foreach_size (fun i -> [
                 elt := fbop (getelement d i) (getelement s i);
                 iv := int @@ Word.of_int ~width:byte i;
                 tmp_dst :=
@@ -519,7 +519,7 @@ module ToIR = struct
 
       List.concat Bil.[
           [tmp_dst := int zero_long];
-	  foreach_size (fun (i, left_bit, right_bit) -> [
+          foreach_size (fun (i, left_bit, right_bit) -> [
                 elt_1 := extract right_bit left_bit src;
                 elt_2 := extract right_bit left_bit (op2e t vsrc);
                 iv := int i;
@@ -866,16 +866,16 @@ module ToIR = struct
         | _ -> [] in
 
       List.concat [
-	check_mem_alignment;
-	[Bil.move tmp_dst zero];
-	foreach_byte (fun i ->
+        check_mem_alignment;
+        [Bil.move tmp_dst zero];
+        foreach_byte (fun i ->
             Bil.[
               iv := int (Word.of_int ~width:8 i);
               mask_byte_i := extract 7 0 (src lsr (var iv * byte));
               if_ (msb_one land var mask_byte_i = msb_one) [
                 tmp_byte := zero;
-	      ] (* else *) [
-		ind := cast unsigned 8 (extract index_bits 0 (var mask_byte_i));
+              ] (* else *) [
+                ind := cast unsigned 8 (extract index_bits 0 (var mask_byte_i));
                 tmp_byte :=
                   cast unsigned op_size (extract 7 0 (dst lsr (var ind * byte)))
               ];

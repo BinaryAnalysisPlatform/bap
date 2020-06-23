@@ -119,7 +119,7 @@ let observe ctxt =
   Stream.observe ss f;
   Signal.repeat signal ~times:2 ();
   assert_equal ~ctxt 2 !called
-  
+
 let subscribe ctxt = 
   let ss, signal, _ = Stream.of_list values in
   let called = ref Int.zero in
@@ -377,7 +377,7 @@ let hd values ctxt =
   | [] -> assert_false "hd is not decided" (Future.is_decided f)
   | _ ->
     assert_equal ~ctxt (List.hd_exn values) (Future.peek_exn f)
-      
+
 let tl ctxt = 
   let ss,signal, _ = Stream.of_list values in
   let ss' = Stream.tl ss in
@@ -521,11 +521,11 @@ let suite =
 
     "foldw stride=2 width=3" >::
     foldw ~f:(+) ~init:0 ~stride:2 ~width:3 ~values
-    ~times:(List.length values + 1) ~expect:[3; 9; 15];
+      ~times:(List.length values + 1) ~expect:[3; 9; 15];
 
     "foldw stride=2 width=1" >::
     foldw ~f:(+) ~init:0 ~stride:2 ~width:1 ~values
-    ~times:(List.length values + 1) ~expect:[0;2;4;6;];
+      ~times:(List.length values + 1) ~expect:[0;2;4;6;];
 
     "foldw stride=3 width=1" >::
     foldw ~f:(+) ~init:0 ~stride:3 ~width:1 ~values
@@ -607,7 +607,7 @@ let suite =
       ~width:0
       ~values ~times:(List.length values + 1)
       ~expect:[[1];];
-    
+
     "foldw: width < stride < size; 0 < width < size; size > 0" >::
     foldw ~f:(fun xs x -> xs @ [x]) ~init:[]
       ~stride:3 ~width:2
@@ -685,7 +685,7 @@ let suite =
                   |event
      data: 0 1 2 3 4 5 6 7         "  >:: 
     last_before values ~expect:[0;1;2] ~event_after:2 ~last:3;
-    
+
     "last_before: after=2; length=4
                 |event
      data: 0 1 2 3 4 5 6 7         "  >:: 

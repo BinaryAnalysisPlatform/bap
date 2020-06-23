@@ -265,14 +265,14 @@
 
     {[
       let () =
-          Theory.declare "my-constant-tracker"
+        Theory.declare "my-constant-tracker"
           Theory.instance ~require:["bap.std:constant-tracker"] >>=
-          Theory.require >>|
-          fun (module Base) : Theory.core -> (module struct
-            include Base
-            let add x y =
-              printf "add is called!\n%!";
-              add x y
+        Theory.require >>|
+        fun (module Base) : Theory.core -> (module struct
+          include Base
+          let add x y =
+            printf "add is called!\n%!";
+            add x y
         end
     ]}
 
@@ -319,7 +319,7 @@
           "structural-analysis";
           "floating-point";
           "bap.std:bil-semantics"
-      ] >>=
+        ] >>=
       Theory.require >>= fun (module Theory) ->
 
     ]}

@@ -149,7 +149,7 @@ let drop read str ~pos_ref = read str ~pos_ref >>| fun _ -> None
 let ignore read str ~pos_ref = read str ~pos_ref >>| fun _ -> ()
 let map read ~f =
   fun str ~pos_ref ->
-    read str ~pos_ref >>| fun x -> f x
+  read str ~pos_ref >>| fun x -> f x
 
 let pair read1 read2 str ~pos_ref =
   read1 str ~pos_ref >>= fun w1 ->

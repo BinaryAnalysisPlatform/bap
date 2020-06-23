@@ -63,7 +63,7 @@ let def_uses x =
 
 let exists_child par cls tid =
   Term.to_sequence cls par |>
-    Seq.exists ~f:(fun t -> Tid.equal (Term.tid t) tid)
+  Seq.exists ~f:(fun t -> Tid.equal (Term.tid t) tid)
 
 let find_parent sub child_tid =
   if exists_child sub blk_t child_tid then Some `Sub
@@ -80,23 +80,23 @@ let find_parent sub child_tid =
 let parent x =
   match Tid.from_string x with
   | Error _ ->
-     eprintf "Didn't find term with a name %s" x;
-     new content_visitor
+    eprintf "Didn't find term with a name %s" x;
+    new content_visitor
   | Ok tid ->
-     object
-       inherit content_visitor
-       val mutable marked : tid option = None
+    object
+      inherit content_visitor
+      val mutable marked : tid option = None
 
-       method! enter_blk b _ = match marked with
-         | None -> false
-         | Some tid -> Tid.equal (Term.tid b) tid
+      method! enter_blk b _ = match marked with
+        | None -> false
+        | Some tid -> Tid.equal (Term.tid b) tid
 
-       method! enter_sub s _ =
-         match find_parent s tid with
-         | Some `Sub -> true
-         | Some (`Blk b) -> marked <- Some (Term.tid b); false
-         | None -> false
-     end
+      method! enter_sub s _ =
+        match find_parent s tid with
+        | Some `Sub -> true
+        | Some (`Blk b) -> marked <- Some (Term.tid b); false
+        | None -> false
+    end
 
 let init () =
   let (:=) = Predicates.Unary.register in

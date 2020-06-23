@@ -91,21 +91,21 @@ class base (m : model) = object(self)
 
   method union : compound unqualified -> Int.t option =
     fun {Spec.t={Compound.fields}} ->
-      List.map fields ~f:(fun (_,t) -> self#bits t) |> Option.all |> function
+    List.map fields ~f:(fun (_,t) -> self#bits t) |> Option.all |> function
+    | None -> None
+    | Some ss -> List.max_elt ~compare:Int.compare ss |> function
       | None -> None
-      | Some ss -> List.max_elt ~compare:Int.compare ss |> function
-        | None -> None
-        | Some s -> Some s
+      | Some s -> Some s
 
   method structure : compound unqualified -> Int.t option =
     fun {Spec.t={Compound.fields}} ->
-      List.fold fields ~init:(Some 0) ~f:(fun sz (_,field) -> match sz with
+    List.fold fields ~init:(Some 0) ~f:(fun sz (_,field) -> match sz with
+        | None -> None
+        | Some sz -> match self#bits field with
           | None -> None
-          | Some sz -> match self#bits field with
-            | None -> None
-            | Some sz' ->
-              let pad = match self#padding field sz with
-                | None -> 0
-                | Some sz -> Size.in_bits sz in
-              Some (sz + sz' + pad))
+          | Some sz' ->
+            let pad = match self#padding field sz with
+              | None -> 0
+              | Some sz -> Size.in_bits sz in
+            Some (sz + sz' + pad))
 end

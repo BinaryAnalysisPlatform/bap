@@ -47,7 +47,7 @@ class context :
     path is taken, otherwise, the interpreter, will execute all
     linearly independent paths.
 
-  *)
+*)
 class ['a] main : ?deterministic:bool -> program term -> object
     inherit ['a] biri
     constraint 'a = #context
