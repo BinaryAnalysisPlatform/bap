@@ -1,7 +1,7 @@
 #!/bin/sh
 
-# a Emacs regex for files to indent
-files_to_indent='.*\.\(ml\|mli\|mll\|mly\)'
+# a regex for files to indent
+files_to_indent='.*\.\(ml\|mli\|mll\|mly\)$'
 
 VERSION=$(ocp-indent --version)
 
@@ -13,7 +13,10 @@ else
 fi
 
 if $(git diff --quiet --exit-code); then
-    find -type f -regex $files_to_indent -exec ocp-indent -i '{}' \;
+    git ls-files | grep -e $files_to_indent | while read file
+    do
+        ocp-indent -i $file
+    done
 else
     echo "Please commit your code before running this script"
     exit 1
