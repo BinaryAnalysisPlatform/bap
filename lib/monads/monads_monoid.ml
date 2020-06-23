@@ -82,10 +82,10 @@ module Int = struct
   module Sum = struct
     type t = int
     include Make(struct
-      type t = int
-      let zero = 0
-      let plus = (+)
-    end)
+        type t = int
+        let zero = 0
+        let plus = (+)
+      end)
   end
   module Product = struct
     type t = int
@@ -103,10 +103,10 @@ module Float = struct
   module Sum = struct
     type t = float
     include Make(struct
-      type t = float
-      let zero = 0.
-      let plus = (+.)
-    end)
+        type t = float
+        let zero = 0.
+        let plus = (+.)
+      end)
   end
   module Product = struct
     type t = float

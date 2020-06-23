@@ -5,7 +5,7 @@ open Bap.Std
 type policy = [
   | `Random
   | `Fixed of int64 | `Interval of int64 * int64 ]
-  [@@deriving sexp_of]
+[@@deriving sexp_of]
 
 
 (** expression interpreter that never halts due to an unknown value.

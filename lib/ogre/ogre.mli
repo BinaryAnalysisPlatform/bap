@@ -150,7 +150,7 @@ val declare : name:string -> ('f -> 'a, 'k) scheme -> 'f -> ('a, 'k) typeinfo
     A field is a pair of a name and a type, and is used to reference
     to construct attributes, and to reference to attribute objects in
     queries.
-  *)
+*)
 module Type : sig
 
 
@@ -508,7 +508,7 @@ end
 
     A concrete representation of a database.
 
-  *)
+*)
 module Doc : sig
   type t = doc [@@deriving compare]
 

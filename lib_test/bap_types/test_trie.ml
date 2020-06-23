@@ -72,6 +72,6 @@ let find _ =
   assert_bool "1.nothing" (T.find t "nothing" = None)
 
 let suite () = "Trie" >::: [
-      "longest-match" >:: longest_match;
-      "find" >:: find;
+    "longest-match" >:: longest_match;
+    "find" >:: find;
   ]

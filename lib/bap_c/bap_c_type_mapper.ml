@@ -12,10 +12,10 @@ module Make(M : Monad.S2) = struct
       'a. ('a -> (unit,'e) m) -> ('a -> ('a,'e) m) -> ('a -> (unit,'e) m) ->
       'a -> ('a,'e) m =
       fun enter visit leave t ->
-        enter t >>= fun () ->
-        visit t >>= fun t  ->
-        leave t >>= fun () ->
-        M.return t
+      enter t >>= fun () ->
+      visit t >>= fun t  ->
+      leave t >>= fun () ->
+      M.return t
 
     method run = self#map_type
 
@@ -215,11 +215,11 @@ module Make(M : Monad.S2) = struct
       : 'a 'b. ('a -> ('a,'e) m) -> ('b -> ('b,'e) m) ->
         ('a,'b) spec -> (('a,'b) spec, 'e) m =
       fun map_qualifier map_t s ->
-        let open Spec in
-        map_t s.t >>= fun t ->
-        map_qualifier s.qualifier >>= fun qualifier ->
-        self#map_attrs s.attrs >>= fun attrs ->
-        M.return {t; qualifier; attrs}
+      let open Spec in
+      map_t s.t >>= fun t ->
+      map_qualifier s.qualifier >>= fun qualifier ->
+      self#map_attrs s.attrs >>= fun attrs ->
+      M.return {t; qualifier; attrs}
 
     method private do_map_basic = function
       | #integer as t ->

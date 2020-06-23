@@ -379,9 +379,9 @@ let lbrx name opt_opcode size arch ctxt =
   let expected =
     Seq.to_list_rev (Word.enum_bytes data endian) |>
     List.fold ~init:None ~f:(fun acc b ->
-           match acc with
-            | None -> Some b
-            | Some p -> Some (Word.concat p b)) |>
+        match acc with
+        | None -> Some b
+        | Some p -> Some (Word.concat p b)) |>
     Option.value_exn in
   let expected = Word.extract_exn ~hi:(width -1) expected in
   check_gpr init bytes r1 expected arch ctxt

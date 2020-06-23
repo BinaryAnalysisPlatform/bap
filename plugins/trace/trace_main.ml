@@ -46,22 +46,22 @@ let main dump_uri loads =
 
 module Cmdline = struct
   let () = Config.manpage [
-    `S "SYNOPSIS";
-    `Pre "
+      `S "SYNOPSIS";
+      `Pre "
         $(b,bap) $(b,--)$(mname)$(b,-dump)=$(i,URI)
         $(b,bap) $(i,BINARY) $(b,--)$(mname)$(b,-load)=$(i,URI)...
        ";
-    `S "DESCRIPTION";
-    `P "Loads and prints traces. The plugin can be used in two
+      `S "DESCRIPTION";
+      `P "Loads and prints traces. The plugin can be used in two
        modes. When called as $(b,--)$(mname)$(b,-dump) it will just dump the
        specified trace and exit. In the second mode, it will load
        specified traces, so that they can be used by
        analysis. The loaded traces must be runs of the analyzed
        $(i,BINARY). The loaded traces are accessible via the
        $(b,Traces) of the traces library.";
-    `S "SEE ALSO";
-    `P "$(b,bap-trace)(3)"
-  ]
+      `S "SEE ALSO";
+      `P "$(b,bap-trace)(3)"
+    ]
 
   let uri_of_string str =
     let uri = Uri.of_string str in

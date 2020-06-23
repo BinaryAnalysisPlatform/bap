@@ -27,7 +27,7 @@ module Bound = struct
   type t =
     | Unbound
     | Bounded of addr * addr
-    [@@deriving sexp_of]
+  [@@deriving sexp_of]
 
   let empty = Unbound
 

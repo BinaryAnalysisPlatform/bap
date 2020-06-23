@@ -22,7 +22,7 @@
     ]}
 
 
- *)
+*)
 module Std : sig
   module Plugin_rules : sig
 
