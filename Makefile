@@ -58,3 +58,11 @@ check:
 veri:
 	if [ -d .git ]; then git submodule init; git submodule update; 	fi
 	make -C testsuite veri
+
+.PHONY: indent check-style
+
+indent:
+	sh tools/ocp-indent-all.sh
+
+check-style: indent
+	git diff --exit-code
