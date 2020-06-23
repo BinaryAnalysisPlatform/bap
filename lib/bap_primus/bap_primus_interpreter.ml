@@ -666,7 +666,7 @@ module Make (Machine : Machine) = struct
     then Machine.return stop
     else body >>= fun _ -> repeat cnd body
 
-  let term return cls f t =
+  let term return cls f x t =
     Machine.Local.get state >>= fun s ->
     match Pos.next s.curr cls t with
     | Error err -> Machine.raise err
@@ -674,7 +674,7 @@ module Make (Machine : Machine) = struct
       update_pc t >>= fun () ->
       Machine.Local.update state (fun s -> {s with curr}) >>= fun () ->
       enter cls curr t >>= fun () ->
-      f t >>= fun r ->
+      f x t >>= fun r ->
       leave cls curr t >>= fun () ->
       return r
 
@@ -684,8 +684,8 @@ module Make (Machine : Machine) = struct
     !!will_halt () >>= fun () -> Machine.raise Halt
 
   let (:=) v x  = eval_exp x >>= set v
-  let def t = Def.lhs t := Def.rhs t
-  let def = term normal def_t def
+  let def () t  = Def.lhs t := Def.rhs t
+  let def = term normal def_t def ()
 
   let will_jump_to_tid cond dst =
     Code.resolve_addr (`tid dst) >>= function
@@ -766,33 +766,59 @@ module Make (Machine : Machine) = struct
       interrupt n >>= fun () ->
       Code.exec (`tid r)
 
-  let jmp t = eval_exp (Jmp.cond t) >>= fun ({value} as cond) ->
-    !!on_cond cond >>| fun () ->
-    Option.some_if (Word.is_one value) (cond,t)
+  type constr =
+    | Init
+    | Conj of Value.t
+    | Disj of Value.t * Jmp.t
+
+  let jmp constr t =
+    eval_exp (Jmp.cond t) >>= fun v ->
+    match constr, Word.is_one v.value with
+    | Init,true ->
+      !!on_cond v >>= fun () ->
+      Machine.return (Disj (v,t))
+    | Init,false ->
+      !!on_cond v >>= fun () ->
+      unop Bil.NOT v >>| fun u ->
+      Conj u
+    | Conj u,false ->
+      binop Bil.AND u v >>= !!on_cond >>= fun () ->
+      unop Bil.NOT v >>= fun v ->
+      binop Bil.AND u v >>| fun w ->
+      Conj w
+    | Conj u,true ->
+      binop Bil.AND u v >>= fun w ->
+      !!on_cond w >>| fun () ->
+      Disj (w,t)
+    | Disj (u,t),_ ->
+      unop Bil.NOT u >>= fun p ->
+      binop Bil.AND p v >>= !!on_cond >>= fun () ->
+      binop Bil.OR u v >>| fun w ->
+      Disj (w,t)
 
   let jmp = term normal jmp_t jmp
 
-  let blk t =
+  let blk () t =
     Machine.Seq.iter (Term.enum def_t t) ~f:def >>= fun () ->
-    Machine.Seq.find_map (Term.enum jmp_t t) ~f:jmp
+    Machine.Seq.fold ~init:Init (Term.enum jmp_t t) ~f:jmp
 
   let finish = function
-    | None -> Machine.return ()  (* return from sub *)
-    | Some (cond,code) -> jump cond code
+    | Init | Conj _ -> Machine.return ()  (* return from sub *)
+    | Disj (cond,code) -> jump cond code
 
-  let blk : blk term -> unit m = term finish blk_t blk
+  let blk : blk term -> unit m = term finish blk_t blk ()
 
-  let arg_def t = match Arg.intent t with
+  let arg_def () t = match Arg.intent t with
     | None | Some (In|Both) -> Arg.lhs t := Arg.rhs t
     | _ -> Machine.return ()
 
-  let arg_def = term normal arg_t arg_def
+  let arg_def = term normal arg_t arg_def ()
 
-  let arg_use t = match Arg.intent t with
+  let arg_use () t = match Arg.intent t with
     | Some Out -> Arg.lhs t := Arg.rhs t
     | _ -> Machine.return ()
 
-  let arg_use = term normal arg_t arg_use
+  let arg_use = term normal arg_t arg_use ()
 
   let is_out_intent x = match Arg.intent x with
     | Some Out -> true
@@ -808,7 +834,7 @@ module Make (Machine : Machine) = struct
 
   let iter_args t f = Machine.Seq.iter (Term.enum arg_t t) ~f
 
-  let sub t = match Term.first blk_t t with
+  let sub () t = match Term.first blk_t t with
     | None -> Machine.return ()
     | Some entry ->
       let name = Sub.name t in
@@ -825,7 +851,7 @@ module Make (Machine : Machine) = struct
 
   let assume x = !!on_cond x
 
-  let sub = term normal sub_t sub
+  let sub = term normal sub_t sub ()
   let pos = Machine.Local.get state >>| fun {curr} -> curr
   let pc = Machine.Local.get state >>| fun {addr} -> addr
 end
