@@ -1,10 +1,10 @@
 open Core_kernel
 open Regular.Std
 open Bap.Std
-(*
-1. Also has Wn. Do I need to define?
-2. Same name but extended
-*)
+
+module QWord = Bitvec.M64
+module Word = Bitvec.M32
+module Byte = Bitvec.M8
 
 type registers_t = [
     (* parameter and result registers *)
@@ -89,7 +89,13 @@ type branch_insn_t = [
 
 type mem_access_insn_t = [
     (* load-store single register TODO *)
-    | `LDR
+    | `LDRi_pre
+    | `LDRi_post
+    | `LDRi_unoff
+    | `LDRl
+    | `LDRr
+
+
     | `LDRB
     | `LDSB
     | `LDRH
