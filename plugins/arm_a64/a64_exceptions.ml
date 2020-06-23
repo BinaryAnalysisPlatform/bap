@@ -1,1 +1,2 @@
 exception Unexpected_Situation
+exception Lift_Error of string

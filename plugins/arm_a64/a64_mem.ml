@@ -10,8 +10,8 @@ module Env  = A64_env.Env
 module Mem(Core : Theory.Core) = struct
 	open Core
 
-	module Utils_tmp = A64_utils.Utils(Core)
-	open Utils_tmp
+	module Utils = A64_utils.Utils(Core)
+	open Utils
 
 	let lift_LDRi ~rt ~rn_sp ~imm ~wback ~post_index ~is_64 = 
 		let scale = const_bv64_of (if is_64 then 3 else 2) in
@@ -26,7 +26,11 @@ module Mem(Core : Theory.Core) = struct
 		let eff2 = if wback then set rn_sp (if post_index then add address offset else address) else pass in
 		seq eff1 eff2
 
-
+		let lift_LDRi_adapter ~rt ~rn_sp ~imm ~wback ~post_index ~is_64 =
+			lift_LDRi ~rt:(load_register rt) 
+			~rn_sp:(load_register rn_sp) 
+			~imm:(load_immediate imm) 
+			~wback:wback ~post_index:post_index ~is_64:is_64
 (*
 	let lift_mem_insn_single ?(sign = false) ~dest ~src1 ?(src2 = None) ~op ~size =
 		let open Defs in

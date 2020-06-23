@@ -71,9 +71,8 @@ type conditon_t = [
 
 type operand_t = [
     | `Reg of registers_t
-    | `Imm of word
+    | `Imm of Bitvec.t
 ]
-
 
 type branch_insn_t = [
     (* conditional branch TODO*)
@@ -179,5 +178,3 @@ type simple_insn_t = [
     | sign_zero_extend_insn_t
     | int_mult_div_insn_t
 ]
-
-exception Lift_Error of string
