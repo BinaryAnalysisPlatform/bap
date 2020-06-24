@@ -824,7 +824,7 @@ module Make (Machine : Machine) = struct
     | Some Out -> true
     | _ -> false
 
-  let get_arg t = Env.get (Arg.lhs t)
+  let get_arg t = exp (Arg.rhs t)
   let get_args ~input sub =
     Term.enum arg_t sub |>
     Seq.filter ~f:(fun x -> match input with
