@@ -320,19 +320,17 @@ let lift_bits mem ops (insn : bits_insn ) =
   (* reverses *)
   | `REV, [|`Reg dest; src; cond; _|] ->
     let s = exp_of_op src in
-    let rev = Bil.(concat
-                    (concat (extract 7 0 s)
-                            (extract 15 8 s))
-                    (concat (extract 23 16 s)
-                            (extract 31 24 s))) in
+    let rev = Bil.(extract 7 0 s ^
+                   extract 15 8 s ^
+                   extract 23 16 s ^
+                   extract 31 24 s) in
     exec [assn (Env.of_reg dest) rev] cond
   | `REV16, [|`Reg dest; src; cond; _|] ->
     let s = exp_of_op src in
-    let rev = Bil.(concat
-                   (concat (extract 23 16 s)
-                           (extract 31 24 s))
-                   (concat (extract 7 0 s)  
-                           (extract 15 8 s))) in
+    let rev = Bil.(extract 23 16 s ^
+                   extract 31 24 s ^
+                   extract 7 0 s ^
+                   extract 15 8 s) in
     exec [assn (Env.of_reg dest) rev] cond
   | `CLZ, [|`Reg dest; src; cond; _|] ->
     let shift = tmp ~name:"shift" reg32_t in
