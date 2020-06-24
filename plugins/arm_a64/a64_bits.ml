@@ -8,9 +8,9 @@ module Env  = A64_env.Env
 
 
 module Bits(Core : Theory.Core) = struct
-	open Core
+  open Core
 
-	module Utils = A64_utils.Utils(Core)
+  module Utils = A64_utils.Utils(Core)
   open Utils
 
 
