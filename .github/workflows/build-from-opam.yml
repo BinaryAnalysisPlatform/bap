@@ -3,35 +3,36 @@ on:
   - push
 
 jobs:
-  matrix:
-      os:
-        - ubuntu-latest
-      ocaml-version:
-        - 4.09.1
-        - 4.08.1
-        - 4.07.1
+  build:
+    strategy:
+      matrix:
+          ocaml-version:
+            - 4.09.1
+            - 4.08.1
+            - 4.07.1
 
-  runs-on: ${{ matrix.os }}
-  steps:
-      - name: Use OCaml ${{ matrix.ocaml-version }}
-        uses: avsm/setup-ocaml@v1
-        with:
-          ocaml-version: ${{ matrix.ocaml-version }}
+    runs-on: ubuntu-latest
 
-      - name: Add the testing Repository
-        run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
+    steps:
+        - name: Use OCaml ${{ matrix.ocaml-version }}
+          uses: avsm/setup-ocaml@v1
+          with:
+            ocaml-version: ${{ matrix.ocaml-version }}
 
-      - name: Install system dependencies
-        run: opam depext bap --yes
+        - name: Add the testing Repository
+          run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
 
-      - name: Install opam dependencies
-        run: opam install . --deps-only
+        - name: Install system dependencies
+          run: opam depext bap --yes
 
-      - name: Build and Install BAP
-        run: opam install bap -v --yes --with-test
+        - name: Install opam dependencies
+          run: opam install . --deps-only
 
-      - uses: actions/upload-artifact@v2
-        if: ${{ always() }}
-        with:
-          name: opam-log
-          path: .opam/log
+        - name: Build and Install BAP
+          run: opam install bap -v --yes --with-test
+
+        - uses: actions/upload-artifact@v2
+          if: ${{ always() }}
+          with:
+            name: opam-log
+            path: .opam/log

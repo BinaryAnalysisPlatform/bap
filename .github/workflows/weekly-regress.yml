@@ -6,64 +6,67 @@ on:
     - cron: '0 0 * * SUN' # Every Sunday at 00:00 UTC
 
 jobs:
-  matrix:
-      os:
-        - ubuntu-latest
-        - macos-latest
-      ocaml-version:
-        - 4.09.1
-        - 4.08.1
-        - 4.07.1
+  build:
+    strategy:
+      matrix:
+          os:
+            - ubuntu-latest
+            - macos-latest
+          ocaml-version:
+            - 4.09.1
+            - 4.08.1
+            - 4.07.1
 
-  runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
 
-  steps:
-      - name: Use OCaml ${{ matrix.ocaml-version }}
-        uses: avsm/setup-ocaml@v1
-        with:
-          ocaml-version: ${{ matrix.ocaml-version }}
+    steps:
+        - name: Use OCaml ${{ matrix.ocaml-version }}
+          uses: avsm/setup-ocaml@v1
+          with:
+            ocaml-version: ${{ matrix.ocaml-version }}
 
-      - name: Configure Homebrew LLVM
-        if: matrix.os == 'macos-latest'
-        run: echo '::set-env name=LLVM_CONFIG::/usr/local/opt/llvm@9/bin/llvm-config'
+        - name: Configure Homebrew LLVM
+          if: matrix.os == 'macos-latest'
+          run: echo '::set-env name=LLVM_CONFIG::/usr/local/opt/llvm@9/bin/llvm-config'
 
-      - name: Install system dependencies
-        run: opam depext bap --yes
+        - name: Install system dependencies
+          run: opam depext bap --yes
 
-      - name: Install opam dependencies
-        run: opam install . --deps-only
+        - name: Install opam dependencies
+          run: opam install . --deps-only
 
-      - name: Build and Install BAP
-        run: opam install bap -v --yes --with-test
+        - name: Build and Install BAP
+          run: opam install bap -v --yes --with-test
 
-      - name: Checkout the Tests
-        uses: actions/checkout@v2
-          submodules: true
-          repository: BinaryAnalysisPlatform/bap
+        - name: Checkout the Tests
+          uses: actions/checkout@v2
+          with:
+            submodules: true
+            repository: BinaryAnalysisPlatform/bap
 
-      - name: Run Functional Tests
-        run: opam exec -- make check
+        - name: Run Functional Tests
+          run: opam exec -- make check
 
-      - uses: actions/upload-artifact@v2
-        if: ${{ always() }}
-        with:
-          name: opam-log
-          path: .opam/log
+        - uses: actions/upload-artifact@v2
+          if: ${{ always() }}
+          with:
+            name: opam-log
+            path: .opam/log
 
-      - uses: actions/upload-artifact@v2
-        if: ${{ always() }}
-        with:
-          name: bap-log
-          path: /tmp/bap/log
+        - uses: actions/upload-artifact@v2
+          if: ${{ always() }}
+          with:
+            name: bap-log
+            path: /tmp/bap/log
 
-      - uses: actions/upload-artifact@v2
-        if: ${{ always() }}
-        with:
-          name: unit-tests-log
-          path: oUnit-*.log
+        - uses: actions/upload-artifact@v2
+          if: ${{ always() }}
+          with:
+            name: unit-tests-log
+            path: oUnit-*.log
 
-      - uses: actions/upload-artifact@v2
-        if: ${{ always() }}
-        with:
-          name: fun-tests-log
-          path: testsuite/*.log
+        - uses: actions/upload-artifact@v2
+          if: ${{ always() }}
+          with:
+            name: fun-tests-log
+            path: testsuite/*.log

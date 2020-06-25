@@ -5,65 +5,66 @@ on:
   - pull_request
 
 jobs:
-  runs-on: ubuntu-latest
+  build:
+     runs-on: ubuntu-latest
 
-  steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-        with:
-          submodules: recursive
+     steps:
+         - name: Checkout code
+           uses: actions/checkout@v2
+           with:
+             submodules: recursive
 
-      - name: Install OCaml
-        uses: avsm/setup-ocaml@v1
-        with:
-          ocaml-version: 4.07.1
+         - name: Install OCaml
+           uses: avsm/setup-ocaml@v1
+           with:
+             ocaml-version: 4.07.1
 
-      - name: Pin OASIS
-        run: opam pin add oasis git@github.com:BinaryAnalysisPlatform/oasis.git
+         - name: Pin OASIS
+           run: opam pin add oasis git@github.com:BinaryAnalysisPlatform/oasis.git
 
-      - name: Pin BAP
-        run: opam pin add bap . --no-action
+         - name: Pin BAP
+           run: opam pin add bap . --no-action
 
-      - name: Install system dependencies
-        run: opam depext bap --yes
+         - name: Install system dependencies
+           run: opam depext bap --yes
 
-      - name: Install opam dependencies
-        run: opam install . --deps-only
+         - name: Install opam dependencies
+           run: opam install . --deps-only
 
-      - name: Configure BAP
-        run: opam-exec -- ./configure-omake
+         - name: Configure BAP
+           run: opam-exec -- ./configure-omake
 
-      - name: Build BAP
-        run: opam-exec -- make
+         - name: Build BAP
+           run: opam-exec -- make
 
-      - name: Install BAP
-        run: opam-exec -- make reinstall
+         - name: Install BAP
+           run: opam-exec -- make reinstall
 
-      - name: Run Unit Tests
-        run: opam exec -- make test
+         - name: Run Unit Tests
+           run: opam exec -- make test
 
-      - name: Run Functional Tests
-        run: opam exec -- make check
+         - name: Run Functional Tests
+           run: opam exec -- make check
 
-      - name: Run BIL verification tool
-        run: |
-          opam pin add bap-veri testsuite/veri/bap-veri/ -y
-          opam exec -- make -C testsuite veri
+         - name: Run BIL verification tool
+           run: |
+             opam pin add bap-veri testsuite/veri/bap-veri/ -y
+             opam exec -- make -C testsuite veri
 
-      - uses: actions/upload-artifact@v2
-        if: ${{ always() }}
-        with:
-          name: bap-log
-          path: /tmp/bap/log
+         - uses: actions/upload-artifact@v2
+           if: ${{ always() }}
+           with:
+             name: bap-log
+             path: /tmp/bap/log
 
-      - uses: actions/upload-artifact@v2
-        if: ${{ always() }}
-        with:
-          name: unit-tests-log
-          path: oUnit-*.log
+         - uses: actions/upload-artifact@v2
+           if: ${{ always() }}
+           with:
+             name: unit-tests-log
+             path: oUnit-*.log
 
-      - uses: actions/upload-artifact@v2
-        if: ${{ always() }}
-        with:
-          name: fun-tests-log
-          path: testsuite/*.log
+         - uses: actions/upload-artifact@v2
+           if: ${{ always() }}
+           with:
+             name: fun-tests-log
+             path: testsuite/*.log
