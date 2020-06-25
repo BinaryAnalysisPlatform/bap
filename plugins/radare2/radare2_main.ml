@@ -23,21 +23,21 @@ let provide_roots funcs =
 
 let extract_name (json : Yojson.t) = 
   match json with
-  | Yojson.(`Assoc list) -> 
+  | `Assoc list -> 
     (match List.find list ~f:(fun (key, _) -> String.equal key "name") with
      | Some (_, v) -> (match v with
-         | Yojson.(`String str) -> Some str
+         | `String str -> Some str
          | _ -> None)
      | _ -> None)
   | _ -> None
 
 let extract_addr (json : Yojson.t) = 
   match json with
-  | Yojson.(`Assoc list) -> 
+  | `Assoc list -> 
     (match List.find list ~f:(fun (key, _) -> String.equal key "vaddr") with
      | Some (_, v) -> (match v with
-         | Yojson.(`Int i) -> Z.of_int i |> Some
-         | Yojson.(`Intlit s) -> Z.of_string s |> Some
+         | `Int i -> Some (Z.of_int i)
+         | `Intlit s -> Some (Z.of_string s)
          | _ -> None)
      | _ -> None)
   | _ -> None
@@ -55,12 +55,13 @@ let provide_radare2 file =
     end) in
   let accept name addr = Hashtbl.set funcs addr name in
   let symbol_list = match R2.with_command_j "isj" file with
-    | Yojson.(`List list) -> Some list
+    | `List list -> Some list
     | s -> warning "unexpected radare2 output: %a" Yojson.pp s; None
     | exception _ -> warning "failed to get symbols - radare2 command failed"; None in
-  Option.iter symbol_list ~f:(List.iter ~f:(fun s -> match extract_name s, extract_addr s with
-      | Some name, Some addr -> accept (strip name) addr
-      | _ -> debug "skipping json item %a" Yojson.pp s));
+  Option.iter symbol_list 
+    ~f:(List.iter ~f:(fun s -> match extract_name s, extract_addr s with
+        | Some name, Some addr -> accept (strip name) addr
+        | _ -> debug "skipping json item %a" Yojson.pp s));
   if Hashtbl.length funcs = 0
   then warning "failed to obtain symbols";
   let symbolizer = Symbolizer.create @@ fun addr ->
