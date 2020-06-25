@@ -20,7 +20,7 @@ jobs:
              ocaml-version: 4.07.1
 
          - name: Pin OASIS
-           run: opam pin add oasis git@github.com:BinaryAnalysisPlatform/oasis.git
+           run: opam pin add oasis https://github.com/BinaryAnalysisPlatform/oasis.git
 
          - name: Pin BAP
            run: opam pin add bap . --no-action
