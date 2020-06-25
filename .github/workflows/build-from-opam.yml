@@ -26,10 +26,10 @@ jobs:
           run: opam depext bap --yes
 
         - name: Install opam dependencies
-          run: opam install . --deps-only
+          run: opam install bap --yes --deps-only
 
         - name: Build and Install BAP
-          run: opam install bap -v --yes --with-test
+          run: opam install bap -v --yes
 
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}
