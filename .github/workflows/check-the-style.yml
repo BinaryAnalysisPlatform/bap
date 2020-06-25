@@ -1,0 +1,20 @@
+name: check-the-style
+
+on:
+  - pull_request
+
+jobs:
+  runs-on:
+    - ubuntu-latest
+
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Setup OCaml
+      uses: avsm/setup-ocaml@v1
+      with:
+        ocaml-version: 4.07.1
+
+    - name: Check the Style
+      run: opam install -y ocp-indent && opam exec -- make check-style

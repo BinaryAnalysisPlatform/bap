@@ -1,12 +1,10 @@
-name: Main workflow
+name: build-oasis-ocamlbuild
 
 on:
   - pull_request
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
       matrix:
         os:
           - ubuntu-latest
@@ -18,19 +16,21 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
+    env:
+      XDG_CACHE_HOME: .cache
+      TMPDIR: /tmp
+      BAP_LOG_DIR: /tmp/bap-log
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
         with:
-          submodules: true
+          submodules: recursive
 
       - name: Use OCaml ${{ matrix.ocaml-version }}
         uses: avsm/setup-ocaml@v1
         with:
           ocaml-version: ${{ matrix.ocaml-version }}
-
-      - name: Check the Style
-        run: opam install -y ocp-indent && opam exec -- make check-style
 
       - name: Pin BAP
         run: opam pin add bap . --no-action
@@ -45,23 +45,11 @@ jobs:
       - name: Install opam dependencies
         run: opam install . --deps-only
 
-      - name: Install BAP
+      - name: Build and Install BAP
         run: opam install bap -v --yes --with-test
-        env:
-          XDG_CACHE_HOME: .cache
-          TMPDIR: /tmp
-          BAP_LOG_DIR: /tmp/bap-log
 
-      - name: Run the testsuite
-        run: |
-          eval $(opam env)
-          make check
-
-      - name: Run bap-veri
-        run: |
-          eval $(opam env)
-          cd testsuite
-          git submodule init
-          git submodule update
-          opam pin add bap-veri veri/bap-veri/ -y
-          make veri
+      - uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: opam-log
+          path: .opam/log

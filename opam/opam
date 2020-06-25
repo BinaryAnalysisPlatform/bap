@@ -49,7 +49,7 @@ build: [
     "--with-llvm-config=%{conf-bap-llvm:config}%" {conf-bap-llvm:installed}
     "--mandir=%{man}%"
     "--enable-everything"
-    "--enable-tests"
+    "--enable-tests" {with-test}
     "--%{conf-ida:enable}%-ida"
     "--ida-path=%{conf-ida:path}%" {conf-ida:installed}
     "--ida-headless=%{conf-ida:headless}%" {conf-ida:installed}
@@ -170,7 +170,6 @@ install: [
   ["cp" "run_piqi_tests.native" "%{bin}%/bap_piqi_tests"]
   ["cp" "run_traces_tests.native" "%{bin}%/bap_traces_tests"]
   ["cp" "run_stub_resolver_tests.native" "%{bin}%/bap_stub_resolver_tests"]
-  [make "test"] {with-test}
 ]
 remove: [
   ["ocamlfind" "remove" "bap-main"]
