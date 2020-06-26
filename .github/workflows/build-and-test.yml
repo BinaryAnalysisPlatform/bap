@@ -8,6 +8,9 @@ jobs:
   build:
      runs-on: ubuntu-latest
 
+     env:
+       OPAMJOBS: 2
+
      steps:
          - name: Checkout code
            uses: actions/checkout@v2
@@ -32,13 +35,13 @@ jobs:
            run: opam install bap --yes --deps-only
 
          - name: Configure BAP
-           run: opam-exec -- ./configure-omake
+           run: opam exec -- ./configure-omake
 
          - name: Build BAP
-           run: opam-exec -- make
+           run: opam exec -- make
 
          - name: Install BAP
-           run: opam-exec -- make reinstall
+           run: opam exec -- make reinstall
 
          - name: Run Unit Tests
            run: opam exec -- make test

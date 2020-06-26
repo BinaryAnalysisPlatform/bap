@@ -13,6 +13,9 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    env:
+      OPAMJOBS: 2
+
     steps:
         - name: Use OCaml ${{ matrix.ocaml-version }}
           uses: avsm/setup-ocaml@v1
@@ -35,4 +38,4 @@ jobs:
           if: ${{ always() }}
           with:
             name: opam-log
-            path: .opam/log
+            path: ~/.opam/log

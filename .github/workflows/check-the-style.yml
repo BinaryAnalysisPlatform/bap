@@ -5,8 +5,10 @@ on:
 
 jobs:
   build:
-    runs-on:
-      - ubuntu-latest
+    runs-on: ubuntu-latest
+
+    env:
+      OPAMJOBS: 2
 
     steps:
       - name: Checkout code

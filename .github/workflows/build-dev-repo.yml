@@ -21,6 +21,7 @@ jobs:
       XDG_CACHE_HOME: .cache
       TMPDIR: /tmp
       BAP_LOG_DIR: /tmp/bap-log
+      OPAMJOBS: 2
 
     steps:
       - name: Checkout code
@@ -53,4 +54,4 @@ jobs:
         if: ${{ always() }}
         with:
           name: opam-log
-          path: .opam/log
+          path: ~/.opam/log

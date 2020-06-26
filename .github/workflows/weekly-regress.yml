@@ -1,9 +1,10 @@
 # runs the latest release version
 name: weekly-regression-tests
 
-on:
-  schedule:
-    - cron: '0 0 * * SUN' # Every Sunday at 00:00 UTC
+on: push
+# on: */
+#   schedule: */
+#     - cron: '0 0 * * SUN' #\ Every Sunday at 00:00 UTC */
 
 jobs:
   build:
