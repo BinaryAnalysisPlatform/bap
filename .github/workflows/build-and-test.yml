@@ -29,7 +29,7 @@ jobs:
            run: opam pin add bap . --no-action
 
          - name: Install system dependencies
-           run: opam depext bap --yes
+           run: sudo apt update && opam depext bap --yes
 
          - name: Install opam dependencies
            run: opam install bap --yes --deps-only
@@ -47,7 +47,7 @@ jobs:
            run: opam exec -- make test
 
          - name: Run Functional Tests
-           run: opam exec -- make check
+           run: sudo apt install -y dejagnu && opam exec -- make check
 
          - name: Run BIL verification tool
            run: |
