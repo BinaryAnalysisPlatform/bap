@@ -65,7 +65,6 @@ build_plugin() {
     then
         echo "$1: is up-to-date"
     else
-        sync
         touch $plugin.ml
         bapbuild -clean
         bapbuild -package bap-plugin-$1 $plugin.plugin

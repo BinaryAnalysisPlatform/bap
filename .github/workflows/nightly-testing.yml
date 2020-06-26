@@ -36,7 +36,7 @@ jobs:
           run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
 
         - name: Install system dependencies
-          run: sudo apt update && opam depext bap --yes
+          run: opam depext bap --yes
 
         - name: Install opam dependencies
           run: opam install bap --yes --deps-only
@@ -51,7 +51,7 @@ jobs:
             repository: BinaryAnalysisPlatform/bap
 
         - name: Run Functional Tests
-          run: sudo apt install -y dejagnu && opam exec -- make check
+          run: opam exec -- make check
 
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}
