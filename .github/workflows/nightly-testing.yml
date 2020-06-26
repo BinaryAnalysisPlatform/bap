@@ -32,13 +32,12 @@ jobs:
           if: matrix.os == 'macos-latest'
           run: echo '::set-env name=LLVM_CONFIG::/usr/local/opt/llvm@9/bin/llvm-config'
 
-        - name: Add the testing Repository
+        - name: Add the Testing Repository
           run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
-
-        - name: Install system dependencies
+        - name: Install System Dependencies
           run: opam depext bap --yes
 
-        - name: Install opam dependencies
+        - name: Install opam Dependencies
           run: opam install bap --yes --deps-only
 
         - name: Build and Install BAP
@@ -49,6 +48,11 @@ jobs:
           with:
             submodules: true
             repository: BinaryAnalysisPlatform/bap
+
+        - name: Install Extra System Dependencies
+          run: |
+              opam pin add bap .
+              opam depext bap --yes
 
         - name: Run Functional Tests
           run: opam exec -- make check

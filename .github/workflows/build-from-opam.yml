@@ -26,13 +26,10 @@ jobs:
           run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
 
         - name: Install system dependencies
-          run: opam depext bap --yes
+          run: opam depext bap
 
-        - name: Install opam dependencies
-          run: opam install bap --yes --deps-only
-
-        - name: Build and Install BAP
-          run: opam install bap -v --yes
+        - name: Build and Install BAP Packages
+          run: opam install bap
 
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}
