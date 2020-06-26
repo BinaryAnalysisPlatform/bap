@@ -27,7 +27,7 @@ jobs:
           run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
 
         - name: Install system dependencies
-          run: opam depext bap
+          run: opam depext -u bap
 
         - name: Check the Space
           run: df -h

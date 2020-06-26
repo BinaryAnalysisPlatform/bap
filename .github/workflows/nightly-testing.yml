@@ -36,7 +36,7 @@ jobs:
         - name: Add the Testing Repository
           run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
         - name: Install System Dependencies
-          run: opam depext bap
+          run: opam depext -u bap
 
         - name: Check the Space
           run: df -h
@@ -53,7 +53,7 @@ jobs:
         - name: Install Extra System Dependencies
           run: |
               opam pin add bap .
-              opam depext bap
+              opam depext -u bap
 
         - name: Run Functional Tests
           run: opam exec -- make check

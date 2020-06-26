@@ -30,7 +30,7 @@ jobs:
            run: opam pin add bap . --no-action
 
          - name: Install system dependencies
-           run: opam depext bap
+           run: opam depext -u bap
 
          - name: Install opam dependencies
            run: opam install bap --deps-only

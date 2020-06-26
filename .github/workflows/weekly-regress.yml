@@ -35,10 +35,10 @@ jobs:
           run: echo '::set-env name=LLVM_CONFIG::/usr/local/opt/llvm@9/bin/llvm-config'
 
         - name: Install System Dependencies
-          run: opam depext bap --yes
+          run: opam depext -y bap
 
         - name: Build and Install BAP
-          run: opam install bap --yes
+          run: opam install bap
 
         - name: Checkout the Tests
           uses: actions/checkout@v2
@@ -49,7 +49,7 @@ jobs:
         - name: Install Extra System Dependencies
           run: |
               opam pin add bap .
-              opam depext bap --yes
+              opam depext -u bap
 
         - name: Run Functional Tests
           run: opam exec -- make check

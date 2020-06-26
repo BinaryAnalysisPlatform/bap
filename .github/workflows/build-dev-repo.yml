@@ -43,7 +43,7 @@ jobs:
         run: echo '::set-env name=LLVM_CONFIG::/usr/local/opt/llvm@9/bin/llvm-config'
 
       - name: Install system dependencies
-        run: opam depext bap
+        run: opam depext -u bap
 
       - name: Install opam dependencies
         run: opam install bap --deps-only
