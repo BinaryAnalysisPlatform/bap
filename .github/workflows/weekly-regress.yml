@@ -20,6 +20,9 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
+    env:
+      OPAMJOBS: 2
+
     steps:
         - name: Use OCaml ${{ matrix.ocaml-version }}
           uses: avsm/setup-ocaml@v1
@@ -52,7 +55,7 @@ jobs:
           if: ${{ always() }}
           with:
             name: opam-log
-            path: .opam/log
+            path: ~/.opam/log
 
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}
