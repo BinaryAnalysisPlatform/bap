@@ -33,7 +33,9 @@ jobs:
            run: opam depext -u bap
 
          - name: Install opam dependencies
-           run: opam install bap --deps-only
+           run: |
+               opam install bap --deps-only
+               opam install omake
 
          - name: Configure BAP
            run: opam exec -- ./configure-omake
