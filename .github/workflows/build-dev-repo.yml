@@ -22,6 +22,7 @@ jobs:
       TMPDIR: /tmp
       BAP_LOG_DIR: /tmp/bap-log
       OPAMJOBS: 2
+      OPAMRETRES: 8
 
     steps:
       - name: Checkout code
@@ -42,13 +43,13 @@ jobs:
         run: echo '::set-env name=LLVM_CONFIG::/usr/local/opt/llvm@9/bin/llvm-config'
 
       - name: Install system dependencies
-        run: opam depext bap --yes
+        run: opam depext bap
 
       - name: Install opam dependencies
-        run: opam install bap --yes --deps-only
+        run: opam install bap --deps-only
 
       - name: Build and Install BAP
-        run: opam install bap -v --yes --with-test
+        run: opam install bap
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}

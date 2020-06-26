@@ -21,6 +21,7 @@ jobs:
 
     env:
       OPAMJOBS: 2
+      OPAMRETRES: 8
 
     steps:
         - name: Use OCaml ${{ matrix.ocaml-version }}
@@ -35,13 +36,13 @@ jobs:
         - name: Add the Testing Repository
           run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
         - name: Install System Dependencies
-          run: opam depext bap --yes
+          run: opam depext bap
 
-        - name: Install opam Dependencies
-          run: opam install bap --yes --deps-only
+        - name: Check the Space
+          run: df -h
 
         - name: Build and Install BAP
-          run: opam install bap -v --yes --with-test
+          run: opam install bap
 
         - name: Checkout the Tests
           uses: actions/checkout@v2
@@ -52,7 +53,7 @@ jobs:
         - name: Install Extra System Dependencies
           run: |
               opam pin add bap .
-              opam depext bap --yes
+              opam depext bap
 
         - name: Run Functional Tests
           run: opam exec -- make check

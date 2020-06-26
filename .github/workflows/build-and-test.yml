@@ -10,6 +10,7 @@ jobs:
 
      env:
        OPAMJOBS: 2
+       OPAMRETRES: 8
 
      steps:
          - name: Checkout code
@@ -29,10 +30,10 @@ jobs:
            run: opam pin add bap . --no-action
 
          - name: Install system dependencies
-           run: opam depext bap --yes
+           run: opam depext bap
 
          - name: Install opam dependencies
-           run: opam install bap --yes --deps-only
+           run: opam install bap --deps-only
 
          - name: Configure BAP
            run: opam exec -- ./configure-omake

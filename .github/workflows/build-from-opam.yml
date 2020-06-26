@@ -15,6 +15,7 @@ jobs:
 
     env:
       OPAMJOBS: 2
+      OPAMRETRES: 8
 
     steps:
         - name: Use OCaml ${{ matrix.ocaml-version }}
@@ -28,8 +29,11 @@ jobs:
         - name: Install system dependencies
           run: opam depext bap
 
+        - name: Check the Space
+          run: df -h
+
         - name: Build and Install BAP Packages
-          run: opam install bap
+          run: opam clean -a; opam install bap
 
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}

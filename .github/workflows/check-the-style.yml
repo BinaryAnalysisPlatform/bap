@@ -9,6 +9,7 @@ jobs:
 
     env:
       OPAMJOBS: 2
+      OPAMRETRES: 8
 
     steps:
       - name: Checkout code

@@ -22,6 +22,7 @@ jobs:
 
     env:
       OPAMJOBS: 2
+      OPAMRETRES: 8
 
     steps:
         - name: Use OCaml ${{ matrix.ocaml-version }}
@@ -36,11 +37,8 @@ jobs:
         - name: Install System Dependencies
           run: opam depext bap --yes
 
-        - name: Install opam Dependencies
-          run: opam install bap --yes --deps-only
-
         - name: Build and Install BAP
-          run: opam install bap -v --yes
+          run: opam install bap --yes
 
         - name: Checkout the Tests
           uses: actions/checkout@v2
