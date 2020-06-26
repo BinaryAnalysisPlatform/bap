@@ -25,9 +25,11 @@ jobs:
 
         - name: Add the testing Repository
           run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
-
         - name: Install system dependencies
           run: opam depext -u bap
+
+        - name: Cleanup the Caches
+          run: sudo apt clean --yes
 
         - name: Check the Space
           run: df -h

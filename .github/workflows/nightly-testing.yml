@@ -38,6 +38,10 @@ jobs:
         - name: Install System Dependencies
           run: opam depext -u bap
 
+        - name: Cleanup the Caches
+          if: matrix.os == 'ubuntu-latest'
+          run: sudo apt clean --yes
+
         - name: Check the Space
           run: df -h
 

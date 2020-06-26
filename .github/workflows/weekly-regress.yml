@@ -37,6 +37,10 @@ jobs:
         - name: Install System Dependencies
           run: opam depext -y bap
 
+        - name: Cleanup the Caches
+          if: matrix.os == 'ubuntu-latest'
+          run: sudo apt clean --yes
+
         - name: Build and Install BAP
           run: opam install bap
 
