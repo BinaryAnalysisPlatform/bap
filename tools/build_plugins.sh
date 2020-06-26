@@ -1,9 +1,10 @@
 #!/bin/sh
 
-set -ue
+set -u
 
 . $(dirname $0)/bap_config
 
+MAX_JOBS=8
 md5sum=md5sum
 
 if [ $OS = "macosx" ]; then
@@ -11,12 +12,41 @@ if [ $OS = "macosx" ]; then
 fi
 
 built_plugins=_build/built_plugins
-[ -d $built_plugins ] || mkdir -p $built_plugins
+mkdir -p $built_plugins
 
 compute_digest() {
     plugin_lib=$1
     output=$2
     $md5sum $(ocamlfind query -predicates byte -a-format -r $plugin_lib) > $output
+}
+
+feature() {
+    (export $1; eval $(cat setup.data); printenv $1)
+}
+
+is_set() {
+    [ "is-$(feature $1)" = "is-true" ]
+}
+
+
+is_enabled() {
+    [ -n "$(feature omake)" ] || is_set everything || is_set $1
+}
+
+jobs_folder=_build/jobs
+rm -rf $jobs_folder
+mkdir -p $jobs_folder
+
+count_jobs() {
+    ls -1 $jobs_folder | wc -l
+}
+
+start_job() {
+    realpath $(mktemp -p $jobs_folder XXX)
+}
+
+finish_job() {
+    rm $1
 }
 
 build_plugin() {
@@ -35,6 +65,7 @@ build_plugin() {
     then
         echo "$1: is up-to-date"
     else
+        sync
         touch $plugin.ml
         bapbuild -clean
         bapbuild -package bap-plugin-$1 $plugin.plugin
@@ -53,9 +84,13 @@ build_plugin() {
 }
 
 for plugin in $(ls plugins); do
-    if [ -d plugins/$plugin ]; then
-        (build_plugin $plugin)&
+    if [ -d plugins/$plugin ] && is_enabled $plugin; then
+        ID=$(start_job)
+        while [ $(count_jobs) -gt $MAX_JOBS ]; do
+            wait || exit 1
+        done
+        (build_plugin $plugin; finish_job $ID)&
     fi
 done
-wait
+wait || exit 1
 echo "Finished updating plugins"
