@@ -1,0 +1,58 @@
+name: build-dev-repo
+
+on:
+  - pull_request
+
+jobs:
+  build:
+    strategy:
+      matrix:
+          os:
+            - ubuntu-latest
+            - macos-latest
+          ocaml-version:
+            - 4.09.1
+            - 4.08.1
+            - 4.07.1
+
+    runs-on: ${{ matrix.os }}
+
+    env:
+      TMPDIR: /tmp
+      XDG_CACHE_HOME: /tmp/cache
+      BAP_LOG_DIR: /tmp/bap-log
+      OPAMJOBS: 2
+      OPAMRETRES: 8
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+
+      - name: Use OCaml ${{ matrix.ocaml-version }}
+        uses: avsm/setup-ocaml@v1
+        with:
+          ocaml-version: ${{ matrix.ocaml-version }}
+
+      - name: Pin BAP
+        run: opam pin add bap . --no-action
+
+      - name: Configure Homebrew LLVM
+        if: matrix.os == 'macos-latest'
+        run: echo '::set-env name=LLVM_CONFIG::/usr/local/opt/llvm@9/bin/llvm-config'
+
+      - name: Install system dependencies
+        run: opam depext -u bap
+
+      - name: Install opam dependencies
+        run: opam install bap --deps-only
+
+      - name: Build and Install BAP
+        run: opam install bap
+
+      - uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: opam-log
+          path: ~/.opam/log
