@@ -1,4 +1,4 @@
-name: build-oasis-ocamlbuild
+name: build-dev-repo
 
 on:
   - pull_request
