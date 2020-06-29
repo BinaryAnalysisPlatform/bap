@@ -50,7 +50,7 @@ jobs:
            run: opam exec -- make test
 
          - name: Run Functional Tests
-           run: pam exec -- make check
+           run: opam exec -- make check
 
          - name: Run BIL verification tool
            run: |
