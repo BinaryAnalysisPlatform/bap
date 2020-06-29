@@ -1,32 +1,21 @@
 name: Publish Docker
 on:
-  schedule:
-    - cron: '0 18 * * *' # Every day at 18:00 UTC
+  - push
+#  schedule:
+#    - cron: '0 18 * * *' # Every day at 18:00 UTC
+
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@master
-    - name: Publish Alpine image to Registry
-      uses: elgohr/Publish-Docker-Github-Action@master
-      with:
-        name: BinaryAnalysisPlatform/bap/alpine
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
-        dockerfile: docker/alpine/Dockerfile
-
-    - name: Publish Debian image to Registry
-      uses: elgohr/Publish-Docker-Github-Action@master
-      with:
-        name: BinaryAnalysisPlatform/bap/debian
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
-        dockerfile: docker/debian/testing/Dockerfile
 
     - name: Publish Ubuntu image to Registry
-      uses: elgohr/Publish-Docker-Github-Action@master
+      uses: docker/build-push-action@v1
       with:
-        name: BinaryAnalysisPlatform/bap/ubuntu
-        username: ${{ secrets.DOCKER_USERNAME }}
+        repository: gitoleg/bap #fixit
+        tags: latest
+        username: gitoleg
         password: ${{ secrets.DOCKER_PASSWORD }}
-        dockerfile: docker/xenial/testing/Dockerfile
+        dockerfile: docker/Dockerfile
