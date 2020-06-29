@@ -18,8 +18,8 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     env:
-      XDG_CACHE_HOME: .cache
       TMPDIR: /tmp
+      XDG_CACHE_HOME: /tmp/cache
       BAP_LOG_DIR: /tmp/bap-log
       OPAMJOBS: 2
       OPAMRETRES: 8
