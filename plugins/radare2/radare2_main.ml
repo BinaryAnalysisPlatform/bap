@@ -10,14 +10,16 @@ let agent =
   KB.Agent.register ~package:"bap.std" "radare2-symbolizer"
     ~desc:"extracts symbols radare2"
 
-let provide_roots funcs =
+let provide_roots file funcs =
   let promise_property slot =
     KB.promise slot @@ fun label ->
-    KB.collect Theory.Label.addr label >>| function
-    | None -> None
-    | Some addr ->
+    KB.collect Theory.Label.addr label >>=? fun addr ->
+    KB.collect Theory.Label.unit label >>=?
+    KB.collect Theory.Unit.path >>|? fun path ->
+    if String.equal path file then
       let addr = Bitvec.to_bigint addr in
-      Option.some_if (Hashtbl.mem funcs addr) true in
+      Option.some_if (Hashtbl.mem funcs addr) true
+    else None in
   promise_property Theory.Label.is_valid;
   promise_property Theory.Label.is_subroutine
 
@@ -79,8 +81,9 @@ let provide_radare2 file =
     match Hashtbl.find funcs addr with
     | Some name -> name
     | None -> None in
+  let symbolizer = Symbolizer.set_path symbolizer file in
   Symbolizer.provide agent symbolizer;
-  provide_roots funcs
+  provide_roots file funcs
 
 let main () = Stream.observe Project.Info.file @@ provide_radare2
 
