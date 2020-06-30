@@ -33,12 +33,16 @@ let with_arch arch mems =
 let with_filename arch data code path =
   let open KB.Syntax in
   let width = Size.in_bits (Arch.addr_size arch) in
-  KB.promising Theory.Label.path ~promise:(fun label ->
-      KB.collect Theory.Label.addr label >>|? fun addr ->
+  KB.promising Theory.Label.unit ~promise:(fun label ->
+      KB.collect Theory.Label.addr label >>=? fun addr ->
       let addr = Word.create addr width in
       if Memmap.contains data addr || Memmap.contains code addr
-      then Some path
-      else None)
+      then
+        KB.Symbol.intern ~package:"file" path Theory.Unit.cls
+          ~public:true >>= fun unit ->
+        KB.provide Theory.Unit.path unit (Some path) >>| fun () ->
+        Some unit
+      else KB.return None)
 
 
 module Kernel = struct
@@ -611,7 +615,7 @@ let () =
            dynamic ["input"] |>
            dynamic ["data"; "code"; "path"] |>
            require Theory.Label.addr |>
-           provide Theory.Label.path |>
+           provide Theory.Label.unit |>
            comment {|
 On [Project.create input] provides [path] for the address [x]
 if [x] in [data] or [x] in [code].

@@ -98,7 +98,10 @@ let address = register (module Bap_bitvector)
     ~name:"address"
     ~uuid:"7bcef7c0-0b37-4167-887a-eba0d68891fe"
 
-let filename = register_slot Theory.Label.path (module String)
+let filename = register (module String)
+    ~package
+    ~public:false
+    ~name:"filename"
     ~uuid:"9701d189-24e3-4348-8610-0dedf780d06b"
 
 let foreground = register (module Foreground)

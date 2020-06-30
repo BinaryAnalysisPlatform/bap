@@ -1102,9 +1102,42 @@ module Theory : sig
       val slot : (program, t) Knowledge.slot
       include Knowledge.Value.S with type t := t
     end
+
     include Knowledge.Value.S with type t := t
   end
 
+  module Unit : sig
+    type cls
+
+    type t = cls KB.Object.t
+
+    val cls : (cls,unit) KB.Class.t
+
+    val path : (cls, string option) KB.slot
+    val shift : (cls, Bitvec.t option) KB.slot
+
+    module Target : sig
+      val arch : (cls, string option) KB.slot
+      val subarch : (cls, string option) KB.slot
+      val vendor : (cls, string option) KB.slot
+      val system : (cls, string option) KB.slot
+      val abi    : (cls, string option) KB.slot
+      val fabi   : (cls, string option) KB.slot
+      val cpu    : (cls, string option) KB.slot
+      val fpu    : (cls, string option) KB.slot
+    end
+
+    module Source : sig
+      val language : (cls, string option) KB.slot
+    end
+
+    module Compiler : sig
+      val name : (cls, string option) KB.slot
+      val version : (cls, string option) KB.slot
+    end
+
+    include Knowledge.Object.S with type t := t
+  end
 
   (** A program label.
 
@@ -1152,8 +1185,8 @@ module Theory : sig
     val aliases : (program, Set.M(String).t) KB.slot
 
 
-    (** a filesystem name of the file that contains the program.  *)
-    val path : (program, string option) KB.slot
+    (** a compilation unit (file/library/object) to which this label belongs  *)
+    val unit : (program, Unit.t option) KB.slot
 
 
     (** a link is valid if it references a valid program.

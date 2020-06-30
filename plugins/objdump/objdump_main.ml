@@ -166,7 +166,8 @@ let provide_function_starts_and_names ctxt : unit =
              comment @@ sprintf "extracts %s from objdump" name) in
   let property lookup promise slot key_slot f =
     promise slot @@ fun label ->
-    KB.collect Theory.Label.path label >>=? fun path ->
+    KB.collect Theory.Label.unit label >>=?
+    KB.collect Theory.Unit.path >>=? fun path ->
     KB.collect key_slot label >>|? fun key ->
     f (lookup repo ~path key) in
   let is_known = function

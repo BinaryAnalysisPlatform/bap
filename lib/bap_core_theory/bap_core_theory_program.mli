@@ -17,10 +17,45 @@ end
 
 include Knowledge.Value.S with type t := t
 
+module Unit : sig
+  open Knowledge
+  type cls
+
+  type t = cls obj
+
+  val cls : (cls,unit) Class.t
+
+  val path : (cls, string option) slot
+  val shift : (cls, Bitvec.t option) slot
+
+  module Target : sig
+    val arch : (cls, string option) slot
+    val subarch : (cls, string option) slot
+    val vendor : (cls, string option) slot
+    val system : (cls, string option) slot
+    val abi    : (cls, string option) slot
+    val fabi   : (cls, string option) slot
+    val cpu    : (cls, string option) slot
+    val fpu    : (cls, string option) slot
+  end
+
+  module Source : sig
+    val language : (cls, string option) slot
+  end
+
+  module Compiler : sig
+    val name : (cls, string option) slot
+    val version : (cls, string option) slot
+  end
+
+  include Knowledge.Object.S with type t := t
+end
+
+
 module Label : sig
   open Knowledge
   type t = program obj
-  val path : (program, string option) slot
+  val unit : (program, Unit.t option) slot
   val addr : (program, Bitvec.t option) slot
   val name : (program, string option) slot
   val ivec : (program, Int.t option) slot

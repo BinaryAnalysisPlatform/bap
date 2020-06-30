@@ -14,31 +14,99 @@ let (cls : (cls,unit) Knowledge.cls) =
 
 let program = cls
 
+let word = Knowledge.Domain.optional "word"
+    ~equal:Bitvec.equal
+    ~inspect:Bitvec_sexp.sexp_of_t
+
+let name = Knowledge.Domain.optional "name"
+    ~equal:String.equal
+    ~inspect:sexp_of_string
+
+let path = Knowledge.Domain.optional "path"
+    ~equal:String.equal
+    ~inspect:sexp_of_string
+
+let names = Knowledge.Domain.powerset (module String) "names"
+    ~inspect:sexp_of_string
+
+let name_choices = Knowledge.Domain.opinions ~empty:None
+    ~equal:(Option.equal String.equal)
+    ~inspect:(sexp_of_option sexp_of_string)
+    "name-choices"
+
+let string_property ?(domain=name) ~desc cls name =
+  Knowledge.Class.property ~package cls name domain
+    ~persistent:(Knowledge.Persistent.of_binable (module struct
+                   type t = string option [@@deriving bin_io]
+                 end))
+    ~public:true
+    ~desc
+
+module Unit = struct
+  type cls = Unit
+
+  let cls : (cls,unit) Knowledge.cls =
+    Knowledge.Class.declare ~package "unit" ()
+      ~public:true
+      ~desc:"a unit of code"
+
+
+  let path = string_property ~domain:path cls "unit-path"
+      ~desc:"a filesytem name of the file that contains the program"
+
+  let shift = Knowledge.Class.property ~package cls "unit-shift" word
+      ~persistent:(Knowledge.Persistent.of_binable (module struct
+                     type t = Bitvec_binprot.t option
+                     [@@deriving bin_io]
+                   end))
+      ~public:true
+      ~desc:"the program virtual address"
+
+  module Target = struct
+    let arch = string_property cls "target-arch"
+        ~desc:"target machine architecture"
+    let subarch = string_property cls "target-subarch"
+        ~desc:"target machine subarchitecture"
+    let vendor = string_property cls "target-vendor"
+        ~desc:"target machine vendor"
+    let system = string_property cls "target-system"
+        ~desc:"target machine operating system"
+    let abi = string_property cls "target-abi"
+        ~desc:"target machine application binary interface"
+    let fabi = string_property cls "target-fabi"
+        ~desc:"target machine floating-point binary interface"
+    let cpu = string_property cls "target-cpu"
+        ~desc:"target machine CPU model"
+    let fpu = string_property cls "target-fpu"
+        ~desc:"target machine FPU model"
+  end
+
+  module Source = struct
+    let language = string_property cls "source-language"
+        ~desc:"the original source language"
+  end
+
+  module Compiler = struct
+    let name = string_property cls "compiler-name"
+        ~desc:"the name of the compiler used to build the unit"
+
+    let version = string_property cls "compiler-version"
+        ~desc:"the version of the compiler used to build the unit"
+  end
+
+  include (val Knowledge.Object.derive cls)
+
+end
+
 module Label = struct
-  let word = Knowledge.Domain.optional "word"
-      ~equal:Bitvec.equal
-      ~inspect:Bitvec_sexp.sexp_of_t
-
-  let name = Knowledge.Domain.optional "name"
-      ~equal:String.equal
-      ~inspect:sexp_of_string
-
-  let path = Knowledge.Domain.optional "path"
-      ~equal:String.equal
-      ~inspect:sexp_of_string
-
-  let names = Knowledge.Domain.powerset (module String) "names"
-      ~inspect:sexp_of_string
-
-  let name_choices = Knowledge.Domain.opinions ~empty:None
-      ~equal:(Option.equal String.equal)
-      ~inspect:(sexp_of_option sexp_of_string)
-      "name-choices"
-
 
   let int = Knowledge.Domain.optional "ivec"
       ~equal:Int.equal
       ~inspect:sexp_of_int
+
+  let unit = Knowledge.Domain.optional "unit"
+      ~equal:Unit.equal
+      ~inspect:Unit.sexp_of_t
 
   let attr name desc =
     let bool_t = Knowledge.Domain.optional
@@ -50,11 +118,19 @@ module Label = struct
       ~public:true
       ~desc
 
-
   let is_valid = attr "is-valid"
       "is the program valid or not"
   let is_subroutine = attr "is-subroutine"
       "is the program a subroutine entry point"
+
+  let unit = Knowledge.Class.property ~package cls "label-unit" unit
+      ~persistent:(Knowledge.Persistent.of_binable (module struct
+                     type t = Unit.t option
+                     [@@deriving bin_io]
+                   end))
+      ~public:true
+      ~desc:"the program unit"
+
 
 
   let addr = Knowledge.Class.property ~package cls "label-addr" word
@@ -65,19 +141,7 @@ module Label = struct
       ~public:true
       ~desc:"the program virtual address"
 
-  let path = Knowledge.Class.property ~package cls "label-path" path
-      ~persistent:(Knowledge.Persistent.of_binable (module struct
-                     type t = string option [@@deriving bin_io]
-                   end))
-      ~public:true
-      ~desc:"a filesytem name of the file that contains the program"
-
-  let name =
-    Knowledge.Class.property ~package cls "label-name" name
-      ~persistent:(Knowledge.Persistent.of_binable (module struct
-                     type t = string option [@@deriving bin_io]
-                   end))
-      ~public:true
+  let name = string_property cls "label-name"
       ~desc:"the program linkage name"
 
 

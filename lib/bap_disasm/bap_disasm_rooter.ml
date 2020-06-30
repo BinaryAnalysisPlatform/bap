@@ -58,7 +58,8 @@ let provide =
   KB.Rule.(declare ~package:"bap" "reflect-rooter" |>
            dynamic ["rooter"] |>
            require Theory.Label.addr |>
-           require Theory.Label.path |>
+           require Theory.Label.unit |>
+           require Theory.Unit.path |>
            provide Theory.Label.is_subroutine |>
            comment "[Rooter.provide r] provides [r] to KB.");
   fun rooter ->
@@ -68,7 +69,8 @@ let provide =
       Seq.map ~f:Word.to_bitvec |>
       Seq.fold ~init ~f:Set.add in
     KB.promise Theory.Label.is_subroutine @@ fun label ->
-    KB.collect Theory.Label.path label >>= fun path ->
+    KB.collect Theory.Label.unit label >>=?
+    KB.collect Theory.Unit.path >>= fun path ->
     KB.collect Theory.Label.addr label >>|? fun addr ->
     if is_applicable rooter path
     then Option.some_if (Set.mem roots addr) true

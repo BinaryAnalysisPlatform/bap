@@ -81,7 +81,8 @@ let provide =
            dynamic ["symbolizer"] |>
            require Arch.slot |>
            require Theory.Label.addr |>
-           require Theory.Label.path |>
+           require Theory.Label.unit |>
+           require Theory.Unit.path |>
            provide Theory.Label.possible_name |>
            comment "[Symbolizer.provide s] reflects [s] to KB.");
   fun agent s ->
@@ -89,7 +90,8 @@ let provide =
     KB.propose agent Theory.Label.possible_name @@ fun label ->
     KB.collect Arch.slot label >>= fun arch ->
     KB.collect Theory.Label.addr label >>=? fun addr ->
-    KB.collect Theory.Label.path label >>| fun path ->
+    KB.collect Theory.Label.unit label >>=?
+    KB.collect Theory.Unit.path >>| fun path ->
     if is_applicable s path
     then s.find @@ Addr.create addr @@ Size.in_bits (Arch.addr_size arch)
     else None

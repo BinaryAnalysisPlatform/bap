@@ -178,7 +178,8 @@ let provide =
            dynamic ["brancher"] |>
            require Memory.slot |>
            require Dis.Insn.slot |>
-           require Theory.Label.path |>
+           require Theory.Label.unit |>
+           require Theory.Unit.path |>
            provide Insn.Slot.dests |>
            comment "[Brancher.provide b] provides [b] to KB");
   fun brancher ->
@@ -186,7 +187,8 @@ let provide =
     KB.promise Theory.Program.Semantics.slot @@ fun label ->
     KB.collect Memory.slot label >>=? fun mem ->
     KB.collect Dis.Insn.slot label >>=? fun insn ->
-    KB.collect Theory.Label.path label >>= fun path ->
+    KB.collect Theory.Label.unit label >>=? fun unit ->
+    KB.collect Theory.Unit.path unit >>= fun path ->
     if is_applicable brancher path then
       resolve brancher mem insn |>
       KB.List.fold ~init ~f:(fun dsts dst ->

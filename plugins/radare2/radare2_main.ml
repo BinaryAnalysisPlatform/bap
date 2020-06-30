@@ -7,7 +7,7 @@ include Self()
 open KB.Syntax
 
 let agent =
-  KB.Agent.register ~package:"bap.std" "radare2-symbolizer"
+  KB.Agent.register ~package:"bap" "radare2-symbolizer"
     ~desc:"extracts symbols radare2"
 
 let provide_roots file funcs =

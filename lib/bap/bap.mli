@@ -5533,7 +5533,7 @@ module Std : sig
 
       (** a contiguous piece of memory.  *)
       type 'a region = {
-        addr : addr;              (** a staring address *)
+        addr : addr;              (** a starting address *)
         size : size;              (** a size of the segment *)
         info : 'a                  (** the attached information *)
       }
