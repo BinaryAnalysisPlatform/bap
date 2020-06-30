@@ -75,7 +75,7 @@ let rlwnm arch ~sh ~from ~to_ ctxt =
   let init = Bil.[
       r3 := int shw;
       r9 := int x;
-  ] in
+    ] in
   let shifted = circ_shift32 x sh in
   let mask = mask32 width from to_ in
   let expected = Word.(shifted land mask) in
@@ -92,7 +92,7 @@ let rlwimi arch ~sh ~from ~to_ ctxt =
   let init = Bil.[
       r9  := int x;
       r10 := int y;
-  ] in
+    ] in
   let shifted = circ_shift32 x sh in
   let mask = mask32 width from to_ in
   let expected = Word.((shifted land mask) lor (y land (lnot mask))) in

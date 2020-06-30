@@ -22,5 +22,5 @@ for pass in `seq 2`; do
     oasis setup
     ocamlfind ocamlopt unix.cmxa setup.ml -o setup.exe
     rm setup.cmx setup.cmi setup.o
-    ./setup.exe -configure --prefix $(opam config var prefix)
+    ./setup.exe -configure --prefix $(opam config var prefix) --enable-tests
 done

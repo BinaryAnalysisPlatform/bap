@@ -44,8 +44,8 @@ let ir ~f mem insn =
 let rm ~f mem insn =
   match Insn.ops insn with
   | [| Op.Reg reg; Op.Reg base; Op.Imm scale; Op.Reg index;
-         Op.Imm disp; Op.Reg seg|] ->
-      f mem reg ~seg ~base ~scale ~index ~disp
+       Op.Imm disp; Op.Reg seg|] ->
+    f mem reg ~seg ~base ~scale ~index ~disp
   | _ -> invalid_operands ~here:[%here] insn
 
 let mr ~f mem insn =

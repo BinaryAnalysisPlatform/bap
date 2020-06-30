@@ -8,7 +8,7 @@ open Microx.Std
 exception Entry_point_not_found
 
 type result
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 module Result : sig
   type t = result [@@deriving bin_io, compare, sexp]

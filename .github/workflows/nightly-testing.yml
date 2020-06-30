@@ -1,0 +1,83 @@
+name: nightly-regression-tests
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # Every day at 06:00 UTC, 2 am EDT
+
+jobs:
+  build:
+    strategy:
+      matrix:
+          os:
+            - ubuntu-latest
+            - macos-latest
+          ocaml-version:
+            - 4.09.1
+            - 4.08.1
+            - 4.07.1
+
+    runs-on: ${{ matrix.os }}
+
+    env:
+      OPAMJOBS: 2
+      OPAMRETRES: 8
+
+    steps:
+        - name: Use OCaml ${{ matrix.ocaml-version }}
+          uses: avsm/setup-ocaml@v1
+          with:
+            ocaml-version: ${{ matrix.ocaml-version }}
+
+        - name: Configure Homebrew LLVM
+          if: matrix.os == 'macos-latest'
+          run: echo '::set-env name=LLVM_CONFIG::/usr/local/opt/llvm@9/bin/llvm-config'
+
+        - name: Add the Testing Repository
+          run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
+        - name: Install System Dependencies
+          run: opam depext -u bap
+
+        - name: Cleanup the Caches
+          if: matrix.os == 'ubuntu-latest'
+          run: sudo apt clean --yes
+
+        - name: Build and Install BAP
+          run: opam install bap
+
+        - name: Checkout the Tests
+          uses: actions/checkout@v2
+          with:
+            submodules: true
+            repository: BinaryAnalysisPlatform/bap
+
+        - name: Install Extra System Dependencies
+          run: |
+              opam pin add bap .
+              opam depext -u bap
+
+        - name: Run Functional Tests
+          run: opam exec -- make check
+
+        - uses: actions/upload-artifact@v2
+          if: ${{ always() }}
+          with:
+            name: opam-log
+            path: ~/.opam/log
+
+        - uses: actions/upload-artifact@v2
+          if: ${{ always() }}
+          with:
+            name: bap-log
+            path: /tmp/bap/log
+
+        - uses: actions/upload-artifact@v2
+          if: ${{ always() }}
+          with:
+            name: unit-tests-log
+            path: oUnit-*.log
+
+        - uses: actions/upload-artifact@v2
+          if: ${{ always() }}
+          with:
+            name: fun-tests-log
+            path: testsuite/*.log

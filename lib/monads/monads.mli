@@ -21,7 +21,7 @@ open Core_kernel
     - {{!conv}Conventions}
     - {{!Std.Monoid}Monoid} a set with an associative operation
     - {{!Std.Monad}Monad} a basic monad interface
-    {ul
+      {ul
       {- Monad Interfaces
         {ul
           {- {{!Std.Monad.S}Monad.S} the unary monad}
@@ -60,7 +60,7 @@ open Core_kernel
       {- {{!Std.Monad.State}Monad.State} a computation with a state}
       {- {{!Std.Monad.State}Monad.State.Multi} a computation with a non-deterministic state}
       {- {{!Std.Monad.Cont}Monad.Cont} a call/cc monad}
-    }
+      }
 
     {2:intro Introduction}
 
@@ -141,12 +141,12 @@ open Core_kernel
     3. Side-effects: [x] may produce an effect that changes the
        computation environment. We can subdivide effectful computation
        into more precise categories:
-         - effect only -- computations do depend on the effects produced
+    - effect only -- computations do depend on the effects produced
            by other computations, see {{!Std.Monad.Writer}Monad.Writer};
-         - coeffect only -- computations can't produce effects, though
+    - coeffect only -- computations can't produce effects, though
            they depend on the computation environment,
            see {{!Std.Monad.Reader}Monad.Reader};
-         - full effect -- computations may change the environment and
+    - full effect -- computations may change the environment and
            may depend on effects produced by other computations, see
            see {{!Std.Monad.State}Monad.State}.
        The effect itself may also be non-deterministic, e.g., [z] is
@@ -389,11 +389,11 @@ module Std : sig
       (** The unary fail monad interface.
 
           Implemented by:
-            - {{!Std.Monad.Result.Make}Monad.Result.Make}
-            - {{!Std.Monad.Result.Error}Monad.Result.Error}
-            - {{!Std.Monad.Result.Error.Make}Monad.Result.Error.Make}
-            - {{!Std.Monad.Result.Exception}Monad.Result.Exception}
-            - {{!Std.Monad.Result.Exception.Make}Monad.Result.Exception.Make}
+          - {{!Std.Monad.Result.Make}Monad.Result.Make}
+          - {{!Std.Monad.Result.Error}Monad.Result.Error}
+          - {{!Std.Monad.Result.Error.Make}Monad.Result.Error.Make}
+          - {{!Std.Monad.Result.Exception}Monad.Result.Exception}
+          - {{!Std.Monad.Result.Exception.Make}Monad.Result.Exception.Make}
       *)
       module type S = sig
 
@@ -1754,7 +1754,7 @@ module Std : sig
         difference in implementation, these are just two different
         interfaces.
 
-  *)
+    *)
     module State : sig
 
       (** an abstract storage  *)
@@ -2040,7 +2040,7 @@ module Std : sig
         The lazy monad implements a call-by-need evaluation
         strategy. The computation is delayed until it is run. It uses
         OCaml built in lazy computations to implement memoization.
-  *)
+    *)
     module Lazy : sig
       module type S = sig
         include Trans.S

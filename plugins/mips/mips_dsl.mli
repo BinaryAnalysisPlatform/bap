@@ -78,7 +78,7 @@ type clause
       default [rs := zero];
     ]
     ...
- *)
+*)
 val switch  : exp -> clause list -> rtl
 
 (** [case exp code] - creates a switch case *)

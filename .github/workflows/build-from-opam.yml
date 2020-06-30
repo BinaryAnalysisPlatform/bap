@@ -1,0 +1,44 @@
+name: build-from-opam
+on:
+  - push
+
+jobs:
+  build:
+    strategy:
+      matrix:
+          ocaml-version:
+            - 4.09.1
+            - 4.08.1
+            - 4.07.1
+
+    runs-on: ubuntu-latest
+
+    env:
+      OPAMJOBS: 2
+      OPAMRETRES: 8
+
+    steps:
+        - name: Use OCaml ${{ matrix.ocaml-version }}
+          uses: avsm/setup-ocaml@v1
+          with:
+            ocaml-version: ${{ matrix.ocaml-version }}
+
+        - name: Add the testing Repository
+          run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
+        - name: Install system dependencies
+          run: opam depext -u bap
+
+        - name: Cleanup the Caches
+          run: sudo apt clean --yes
+
+        - name: Check the Space
+          run: df -h
+
+        - name: Build and Install BAP Packages
+          run: opam clean -a; opam install bap
+
+        - uses: actions/upload-artifact@v2
+          if: ${{ always() }}
+          with:
+            name: opam-log
+            path: ~/.opam/log

@@ -8,12 +8,12 @@ type perm = R | W | X | Or of perm * perm
 
 (** A named contiguous part of file with permissions.  *)
 module Segment = struct
-    type t = {
-      name: string;
-      perm: perm;         (** segment's permissions  *)
-      off: int;
-      location : location;
-    } [@@deriving bin_io, compare, fields, sexp]
+  type t = {
+    name: string;
+    perm: perm;         (** segment's permissions  *)
+    off: int;
+    location : location;
+  } [@@deriving bin_io, compare, fields, sexp]
 end
 
 (** Symbol definition, that can span several non-contiguous parts of
@@ -45,12 +45,12 @@ module Img = struct
   module Self = struct
     type nonrec t = t
     include Regular.Make(struct
-      type nonrec t = t [@@deriving bin_io, compare, sexp]
-      let version = "1.0.0"
-      let module_name = None
-      let hash = Hashtbl.hash
-      let pp ppf x = Sexp.pp ppf (sexp_of_t x)
-    end)
+        type nonrec t = t [@@deriving bin_io, compare, sexp]
+        let version = "1.0.0"
+        let module_name = None
+        let hash = Hashtbl.hash
+        let pp ppf x = Sexp.pp ppf (sexp_of_t x)
+      end)
   end
   let t = Value.Tag.register (module Self)
       ~uuid:"ac12248c-18e8-4c68-bd8b-05344c426bc7"
