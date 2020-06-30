@@ -14,8 +14,8 @@ jobs:
     - name: Publish Ubuntu image to Registry
       uses: docker/build-push-action@v1
       with:
-        repository: gitoleg/bap #fixit
+        repository: binaryanalysisplatform/bap
         tags: latest
-        username: gitoleg
+        username: ${{ secrets.DOCKER_LOGIN }}
         password: ${{ secrets.DOCKER_PASSWORD }}
         dockerfile: docker/Dockerfile
