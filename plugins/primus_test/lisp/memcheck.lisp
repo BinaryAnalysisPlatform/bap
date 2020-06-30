@@ -51,13 +51,7 @@
   (when (and beg len)
     (let ((end (-1 (+ beg len)))
           (r1 (region-contains (symbol-concat 'memcheck/live heap) beg))
-          (r2 (region-contains (symbol-concat 'memcheck/live heap) end))
-          (b1 (region-contains 'buffer beg))
-          (b2 (region-contains 'buffer end)))
-      (unless b1
-        (memcheck-acquire 'buffer beg len))
-      (when (/= b1 b2)
-        (memcheck/report-out-of-bound b1 b2))
+          (r2 (region-contains (symbol-concat 'memcheck/live heap) end)))
       (when (/= r1 r2)
         (memcheck/report-out-of-bound r1 r2)))))
 
