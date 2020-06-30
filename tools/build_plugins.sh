@@ -42,7 +42,7 @@ count_jobs() {
 }
 
 start_job() {
-    realpath $(mktemp -p $jobs_folder XXX)
+    mktemp $PWD/$jobs_folder/XXX
 }
 
 finish_job() {
