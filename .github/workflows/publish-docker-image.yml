@@ -1,8 +1,7 @@
 name: Publish Docker
 on:
-  - push
-#  schedule:
-#    - cron: '0 18 * * *' # Every day at 18:00 UTC
+  schedule:
+    - cron: '0 4 * * *' # Every day at 4:00 a.m. UTC, midnight EDT
 
 
 jobs:
@@ -18,4 +17,4 @@ jobs:
         tags: latest
         username: ${{ secrets.DOCKER_LOGIN }}
         password: ${{ secrets.DOCKER_PASSWORD }}
-        dockerfile: docker/Dockerfile
+        dockerfile: docker/ubuntu/xenial/Dockerfile
