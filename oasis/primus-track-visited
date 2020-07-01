@@ -1,0 +1,13 @@
+Flag primus_track_visited
+  Description: build Primus track visited library
+  Default: false
+
+Library bap_primus_track_visited
+  Path: lib/bap_primus_track_visited
+  Build$: flag(everything) || flag(primus_track_visited)
+  FindlibName: bap-primus-track-visited
+  CompiledObject: best
+  BuildDepends: bap-primus, bap, core_kernel, ppx_jane
+  XMETADescription: tracks basic blocks visited by Primus
+  Modules: Bap_primus_track_visited
+  XMETAExtraLines: tags="primus"

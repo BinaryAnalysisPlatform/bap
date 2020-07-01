@@ -1,0 +1,14 @@
+
+Flag primus_wandering
+  Description: build Primus wandering scheduler
+  Default: false
+
+Library primus_wandering_scheduler_plugin
+  Path: plugins/primus_wandering
+  Build$: flag(everything) || flag(primus_wandering)
+  FindlibName: bap-plugin-primus_wandering
+  CompiledObject: best
+  BuildDepends: bap, bap-primus, core_kernel, monads, bap-future
+  XMETADescription: evaluates all machines while
+  Modules: Primus_wandering_main
+  XMETAExtraLines: tags="primus, scheduler"
