@@ -1,0 +1,13 @@
+Flag primus_promiscuous
+  Description: build Primus promiscuous plugin
+  Default: false
+
+Library primus_promiscuous_plugin
+  Path: plugins/primus_promiscuous
+  Build$: flag(everything) || flag(primus_promiscuous)
+  FindlibName: bap-plugin-primus_promiscuous
+  CompiledObject: best
+  BuildDepends: bap, bap-primus, core_kernel, monads
+  XMETADescription: enables the promiscuous mode of execution
+  Modules: Primus_promiscuous_main
+  XMETAExtraLines: tags="primus, fuzz"
