@@ -18,32 +18,3 @@ Library taint_plugin
   InternalModules: Taint_main
   XMETADescription: taint specified terms
   XMETAExtraLines:  tags="dataflow, pass, taint"
-
-Flag primus_propagate_taint
-  Description: Build primus-propagate-taint plugin
-  Default: false
-
-Library primus_propagate_taint_plugin
-  Path: plugins/primus_propagate_taint
-  Build$: flag(everything) || flag(primus_propagate_taint)
-  FindlibName: bap-plugin-primus_propagate_taint
-  CompiledObject: best
-  BuildDepends: bap-primus, bap-taint, core_kernel, bap, monads, ppx_jane
-  XMETADescription: a compatibility layer between different taint analysis frameworks
-  InternalModules: Primus_propagate_taint_main
-  XMETAExtraLines:  tags="dataflow, pass, taint, primus"
-
-Flag primus_taint
-  Description: Build primus-taint plugin
-  Default: false
-
-Library primus_taint_plugin
-  Path: plugins/primus_taint
-  Build$: flag(everything) || flag(primus_taint)
-  FindlibName: bap-plugin-primus_taint
-  CompiledObject: best
-  BuildDepends: bap-primus, bap-taint, bap, core_kernel, regular, monads
-  XMETADescription: a taint analysis control interface
-  DataFiles:        lisp/*.lisp ($primus_taint_lisp_path)
-  InternalModules: Primus_taint_main, Primus_taint_policies
-  XMETAExtraLines:  tags="dataflow, pass, taint, primus, primus-lisp"

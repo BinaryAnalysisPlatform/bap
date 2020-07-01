@@ -1,11 +1,11 @@
 ######################## Piqi library and plugin #############################
-Flag piqi
-  Description: Build piqi serialization library
+Flag piqi_printers
+  Description: Build piqi serialization library and plugin
   Default: false
 
 Library "bap-piqi"
   Path:         lib/bap_piqi
-  Build$: flag(everything) || flag(piqi)
+  Build$: flag(everything) || flag(piqi_printers)
   FindLibName: bap-piqi
   BuildTools: ocamlbuild, piqi
   DataFiles:    *.piqi
@@ -18,10 +18,6 @@ Library "bap-piqi"
              Ir_piqi,
              Ir_piqi_ext
 
-Flag piqi_printers
-  Description: Build piqi printers plugin
-  Default: false
-
 Library piqi_printers_plugin
   Path:   plugins/piqi_printers
   Build$:  flag(everything) || flag(piqi_printers)
@@ -32,9 +28,10 @@ Library piqi_printers_plugin
   XMETADescription: provides piqi serialization for main data types (BIL, IR)
   XMETAExtraLines:  tags="printer, serialization"
 
+
 Executable run_piqi_tests
   Path:       lib/bap_piqi/test
-  Build$:     flag(tests) && (flag(everything) || flag(piqi))
+  Build$:     flag(tests) && (flag(everything) || flag(piqi_printers))
   CompiledObject: best
   BuildDepends:   bap, oUnit, bap-piqi
   Install:    false
@@ -42,5 +39,5 @@ Executable run_piqi_tests
 
 Test piqi_tests
  TestTools: run_piqi_tests
- Run$: flag(tests) && (flag(everything) || flag(piqi))
+ Run$: flag(tests) && (flag(everything) || flag(piqi_printers))
  Command: $run_piqi_tests -runner sequential
