@@ -2,16 +2,6 @@ Flag primus_mark_visited
   Description: build Primus mark visited plugin
   Default: false
 
-Library bap_primus_track_visited
-  Path: lib/bap_primus_track_visited
-  Build$: flag(everything) || flag(primus_mark_visited)
-  FindlibName: bap-primus-track-visited
-  CompiledObject: best
-  BuildDepends: bap-primus, bap, core_kernel, ppx_jane
-  XMETADescription: tracks basic blocks visited by Primus
-  Modules: Bap_primus_track_visited
-  XMETAExtraLines: tags="primus"
-
 Library primus_mark_visited_plugin
   Path: plugins/primus_mark_visited
   Build$: flag(everything) || flag(primus_mark_visited)
