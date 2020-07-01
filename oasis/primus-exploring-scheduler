@@ -1,10 +1,10 @@
-Flag primus_exploring_scheduler
+Flag primus_exploring
   Description: build Primus exploring scheduler
   Default: false
 
 Library primus_exploring_scheduler_plugin
   Path: plugins/primus_exploring
-  Build$: flag(everything) || flag(primus_exploring_scheduler)
+  Build$: flag(everything) || flag(primus_exploring)
   FindlibName: bap-plugin-primus_exploring
   CompiledObject: best
   BuildDepends: bap, bap-primus, core_kernel, monads, bap-future

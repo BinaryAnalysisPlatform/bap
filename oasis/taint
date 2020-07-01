@@ -19,9 +19,13 @@ Library taint_plugin
   XMETADescription: taint specified terms
   XMETAExtraLines:  tags="dataflow, pass, taint"
 
+Flag primus_propagate_taint
+  Description: Build primus-propagate-taint plugin
+  Default: false
+
 Library primus_propagate_taint_plugin
   Path: plugins/primus_propagate_taint
-  Build$: flag(everything) || flag(taint)
+  Build$: flag(everything) || flag(primus_propagate_taint)
   FindlibName: bap-plugin-primus_propagate_taint
   CompiledObject: best
   BuildDepends: bap-primus, bap-taint, core_kernel, bap, monads, ppx_jane
@@ -29,9 +33,13 @@ Library primus_propagate_taint_plugin
   InternalModules: Primus_propagate_taint_main
   XMETAExtraLines:  tags="dataflow, pass, taint, primus"
 
+Flag primus_taint
+  Description: Build primus-taint plugin
+  Default: false
+
 Library primus_taint_plugin
   Path: plugins/primus_taint
-  Build$: flag(everything) || flag(taint)
+  Build$: flag(everything) || flag(primus_taint)
   FindlibName: bap-plugin-primus_taint
   CompiledObject: best
   BuildDepends: bap-primus, bap-taint, bap, core_kernel, regular, monads

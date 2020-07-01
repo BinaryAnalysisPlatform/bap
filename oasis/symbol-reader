@@ -1,9 +1,9 @@
-Flag symbol_reader
+Flag read_symbols
   Description: Build read-symbols plugin
   Default: false
 
 Library read_symbols_plugin
-  Build$:           flag(everything) || flag(symbol_reader)
+  Build$:           flag(everything) || flag(read_symbols)
   Path:             plugins/read_symbols
   FindlibName:      bap-plugin-read_symbols
   BuildDepends:     bap, core_kernel, ppx_jane, bap-knowledge, regular, bap-future

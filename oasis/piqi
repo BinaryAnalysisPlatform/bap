@@ -18,9 +18,13 @@ Library "bap-piqi"
              Ir_piqi,
              Ir_piqi_ext
 
+Flag piqi_printers
+  Description: Build piqi printers plugin
+  Default: false
+
 Library piqi_printers_plugin
   Path:   plugins/piqi_printers
-  Build$:  flag(everything) || flag(piqi)
+  Build$:  flag(everything) || flag(piqi_printers)
   FindlibName: bap-plugin-piqi_printers
   CompiledObject: native
   BuildDepends: bap-piqi

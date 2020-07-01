@@ -17,9 +17,13 @@ Library elf
 
 ############## Elf Native loader ####################
 
+Flag elf_loader
+  Description: Build native elf loader
+  Default: false
+
 Library elf_loader_plugin
   Path:             plugins/elf_loader
-  Build$:           flag(everything) || flag(elf)
+  Build$:           flag(everything) || flag(elf_loader)
   FindlibName:      bap-plugin-elf_loader
   CompiledObject:   best
   BuildDepends:     bap, bap-elf, bap-dwarf, core_kernel, regular, ppx_jane
