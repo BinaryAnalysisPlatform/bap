@@ -1,0 +1,13 @@
+
+Flag legacy_llvm
+ Description: Build with legacy llvm backend
+ Default: false
+
+Library legacy_llvm_plugin
+  XMETADescription: provide legacy loader using LLVM library
+  Path:            plugins/legacy_llvm
+  Build$:          flag(legacy_llvm)
+  BuildDepends:    bap, bap-llvm, core_kernel
+  FindlibName:     bap-plugin-legacy_llvm
+  InternalModules: Legacy_loader_main
+  XMETAExtraLines: tags="legacy, llvm, loader, elf, macho, coff"

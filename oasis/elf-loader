@@ -17,10 +17,6 @@ Library elf
 
 ############## Elf Native loader ####################
 
-Flag elf_loader
-  Description: Build native elf loader
-  Default: false
-
 Library elf_loader_plugin
   Path:             plugins/elf_loader
   Build$:           flag(everything) || flag(elf_loader)
