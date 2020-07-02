@@ -1,8 +1,8 @@
-FROM ocaml/opam2:debian-testing
+FROM ocaml/opam2:ubuntu-18.04
 
 WORKDIR /home/opam
 
-RUN sudo apt-get update --yes \
+RUN sudo apt-get update  \
  && opam switch 4.09 \
  && eval "$(opam env)" \
  && opam remote set-url default https://opam.ocaml.org \
@@ -12,7 +12,6 @@ RUN sudo apt-get update --yes \
  && opam clean -acrs \
  && rm -rf /home/opam/.opam/4.0[2-8,10] \
  && rm -rf /home/opam/.opam/4.09/.opam-switch/sources/* \
- && rm -rf /home/opam/opam-repository \
- && sudo pip install bap
+ && rm -rf /home/opam/opam-repository
 
 ENTRYPOINT ["opam", "config", "exec", "--"]
