@@ -52,7 +52,7 @@ jobs:
 
         - name: Install Extra System Dependencies
           run: |
-              opam pin add bap .
+              opam pin add bap . -n
               opam depext -u bap
 
         - name: Run Functional Tests
