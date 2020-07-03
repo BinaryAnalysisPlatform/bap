@@ -35,7 +35,7 @@ type gpr_reg = [
   | `R5
   | `R6
   | `R7
-(* all the ARM GRPs are still needed *)
+  (* all the ARM GRPs are still needed *)
   | `R8
   | `R9
   | `R10

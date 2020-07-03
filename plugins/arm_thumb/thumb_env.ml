@@ -3,12 +3,12 @@ open Base
 open KB.Syntax
 
 module Env = struct
-type value
-type byte
-type reg_single
-type half_byte
-type half_word
-type bit_val
+  type value
+  type byte
+  type reg_single
+  type half_byte
+  type half_word
+  type bit_val
 
   let bit : Theory.Bool.t Theory.Value.sort =
     Theory.Bool.t
@@ -56,21 +56,21 @@ type bit_val
   let lr = Theory.Var.define value "lr"
   let pc = Theory.Var.define value "pc"
   let sp = Theory.Var.define value "sp"
-(* The following are temporarily not used *)
+  (* The following are temporarily not used *)
   let spsr = Theory.Var.define value "spsr"
   let cpsr = Theory.Var.define value "cpsr"
-(* The following are individual flag *)
+  (* The following are individual flag *)
   let nf = Theory.Var.define bit "nf"
   let zf = Theory.Var.define bit "zf"
   let cf = Theory.Var.define bit "cf"
   let vf = Theory.Var.define bit "vf"
   let qf = Theory.Var.define bit "qf"
   let ge = Theory.Var.define half_byte "ge"
-(* psuedo register storing temporary computations *)
+  (* psuedo register storing temporary computations *)
   let tmp = Theory.Var.define value "tmp"
 
-exception Unbound_Reg
-module Defs = Thumb_defs
+  exception Unbound_Reg
+  module Defs = Thumb_defs
 
   (* to elimiate ambiguity *)
   let load_reg_wide (op : Defs.reg) = let open Thumb_defs in

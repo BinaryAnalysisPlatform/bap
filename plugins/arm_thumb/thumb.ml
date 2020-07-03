@@ -10,26 +10,26 @@ let package = "arm-thumb"
 type insns = Defs.insn * (Defs.op list)
 
 module Thumb(Core : Theory.Core) = struct
-    open Core
-    open Defs
-    module Env = Thumb_env.Env
+  open Core
+  open Defs
+  module Env = Thumb_env.Env
 
-    module Mov = Thumb_mov.Mov(Core)
-    module Mem = Thumb_mem.Mem(Core)
-    module Bits = Thumb_bits.Bits(Core)
-    module Utils = Thumb_util.Utils(Core)
+  module Mov = Thumb_mov.Mov(Core)
+  module Mem = Thumb_mem.Mem(Core)
+  module Bits = Thumb_bits.Bits(Core)
+  module Utils = Thumb_util.Utils(Core)
 
-    open Utils
+  open Utils
 
-    let move eff =
+  let move eff =
     KB.Object.create Theory.Program.cls >>= fun lbl ->
     blk lbl eff skip
 
-    let ctrl eff data pc = 
+  let ctrl eff data pc = 
     Theory.Label.for_addr pc >>= fun lbl ->
     blk lbl data eff
 
-    let lift_move insn ops =
+  let lift_move insn ops =
     let open Mov in
     match insn, ops with
     | `tADC, [dest; src1; src2] -> adc dest src1 src2
@@ -72,55 +72,55 @@ module Thumb(Core : Theory.Core) = struct
     | `tTST, [dest; src] -> tst dest src
     | _ -> pass
 
-    let lift_mem insn ops =
+  let lift_mem insn ops =
     let open Defs in
     let open Mem in
     match insn, ops with
     | `tLDRi, [dest; src; imm] -> 
-        lift_mem_single dest src ~src2:imm Ld W
+      lift_mem_single dest src ~src2:imm Ld W
     | `tLDRr, [dest; src1; src2] -> 
-        lift_mem_single dest src1 ~src2 Ld W
+      lift_mem_single dest src1 ~src2 Ld W
     | `tLDRpci, [dest; imm] -> 
-        lift_mem_single dest `PC ~src2:imm Ld W
+      lift_mem_single dest `PC ~src2:imm Ld W
     | `tLDRspi, [dest; imm] -> 
-        lift_mem_single dest `SP ~src2:imm Ld W
+      lift_mem_single dest `SP ~src2:imm Ld W
     | `tLDRBi, [dest; src; imm] -> 
-        lift_mem_single dest src ~src2:imm Ld B
+      lift_mem_single dest src ~src2:imm Ld B
     | `tLDRBr, [dest; src1; src2] -> 
-        lift_mem_single dest src1 ~src2 Ld B
+      lift_mem_single dest src1 ~src2 Ld B
     | `tLDRHi, [dest; src; imm] -> 
-        lift_mem_single dest src ~src2:imm Ld H
+      lift_mem_single dest src ~src2:imm Ld H
     | `tLDRHr, [dest; src1; src2] -> 
-        lift_mem_single dest src1 ~src2 Ld H
+      lift_mem_single dest src1 ~src2 Ld H
     | `tLDRSB, [dest; src1; src2] -> 
-        lift_mem_single dest src1 ~src2 Ld B ~sign:true
+      lift_mem_single dest src1 ~src2 Ld B ~sign:true
     | `tLDRSH, [dest; src1; src2] -> 
-        lift_mem_single dest src1 ~src2 Ld H ~sign:true
+      lift_mem_single dest src1 ~src2 Ld H ~sign:true
     | `tSTRi, [dest; src; imm] -> 
-        lift_mem_single dest src ~src2:imm St W
+      lift_mem_single dest src ~src2:imm St W
     | `tSTRr, [dest; src1; src2] -> 
-        lift_mem_single dest src1 ~src2 St W
+      lift_mem_single dest src1 ~src2 St W
     | `tSTRspi, [dest; imm] -> 
-        lift_mem_single dest `SP ~src2:imm St W
+      lift_mem_single dest `SP ~src2:imm St W
     | `tSTRBi, [dest; src; imm] -> 
-        lift_mem_single dest src ~src2:imm St B
+      lift_mem_single dest src ~src2:imm St B
     | `tSTRBr, [dest; src1; src2] -> 
-        lift_mem_single dest src1 ~src2 St B
+      lift_mem_single dest src1 ~src2 St B
     | `tSTRHi, [dest; src; imm] -> 
-        lift_mem_single dest src ~src2:imm St H
+      lift_mem_single dest src ~src2:imm St H
     | `tSTRHr, [dest; src1; src2] -> 
-        lift_mem_single dest src1 ~src2 St H
+      lift_mem_single dest src1 ~src2 St H
     | `tSTMIA, dest :: src_list ->
-        store_multiple dest src_list
+      store_multiple dest src_list
     | `tLDMIA, dest :: src_list ->
-        load_multiple dest src_list
+      load_multiple dest src_list
     | `tPUSH, src_list ->
-        push_multiple src_list
+      push_multiple src_list
     | `tPOP, src_list ->
-        pop_multiple src_list (* TODO: PC might have been changed *)
+      pop_multiple src_list (* TODO: PC might have been changed *)
     | _ -> pass
 
-    let lift_bits insn ops =
+  let lift_bits insn ops =
     let open Bits in
     match insn, ops with
     | `tSXTB, [dest; src] -> sxtb dest src
@@ -129,14 +129,14 @@ module Thumb(Core : Theory.Core) = struct
     | `tUXTH, [dest; src] -> uxth dest src
     | _ -> pass
 
-    let bcc cond target = match cond, target with
+  let bcc cond target = match cond, target with
     | `Imm cond, `Imm target -> 
-        let z = var Env.zf in
-        let c = var Env.cf in
-        let v = var Env.vf in
-        let n = var Env.nf in
-        let eq_ a b = or_ (and_ a b) (and_ (inv a) (inv b)) in
-        let cond_val = match Bap.Std.Word.to_int cond |> Result.ok |> Option.value_exn |> Defs.of_int_exn  with
+      let z = var Env.zf in
+      let c = var Env.cf in
+      let v = var Env.vf in
+      let n = var Env.nf in
+      let eq_ a b = or_ (and_ a b) (and_ (inv a) (inv b)) in
+      let cond_val = match Bap.Std.Word.to_int cond |> Result.ok |> Option.value_exn |> Defs.of_int_exn  with
         | `EQ -> z
         | `NE -> inv z
         | `CS -> c
@@ -152,26 +152,26 @@ module Thumb(Core : Theory.Core) = struct
         | `GT -> and_ (inv z) (eq_ n v)
         | `LE -> or_ z (eq_ n v |> inv)
         | `AL -> b1 
-        in let jump_address = add (var Env.pc) (lshift (word_as_bitv target) (bitv_of 1)) in
-            branch cond_val
-            (
-                jmp jump_address
-            )
-            (skip)
+      in let jump_address = add (var Env.pc) (lshift (word_as_bitv target) (bitv_of 1)) in
+      branch cond_val
+        (
+          jmp jump_address
+        )
+        (skip)
     | _ -> raise @@ Lift_Error "operands must be immediate"
 
-    let lift_b ?(link = false) ?(state = false) ?(shl = true) ?offset base =
-        let open Defs in
-        let address = match base, offset with
-                        | `Reg r, Some `Imm v -> let r = reg r in
-                            add (var r) ((if shl then Bap.Std.Word.(lshift v (of_int 32 1)) else v) |> word_as_bitv)
-                        | `Reg r, None -> let r = reg r in
-                            if shl then shiftl b0 (var r) (bitv_of 2) else var r
-                        | _ -> raise (Lift_Error "invalid operands")
-        in jmp address
+  let lift_b ?(link = false) ?(state = false) ?(shl = true) ?offset base =
+    let open Defs in
+    let address = match base, offset with
+      | `Reg r, Some `Imm v -> let r = reg r in
+        add (var r) ((if shl then Bap.Std.Word.(lshift v (of_int 32 1)) else v) |> word_as_bitv)
+      | `Reg r, None -> let r = reg r in
+        if shl then shiftl b0 (var r) (bitv_of 2) else var r
+      | _ -> raise (Lift_Error "invalid operands")
+    in jmp address
 
-    (* these are not entirely complete *)
-    let lift_branch insn ops =
+  (* these are not entirely complete *)
+  let lift_branch insn ops =
     let open Defs in
     match insn, ops with
     | `tBcc, [cond; target] -> bcc cond target
@@ -182,7 +182,7 @@ module Thumb(Core : Theory.Core) = struct
     | `tBX, [target] -> lift_b target ~state:true
     | _ -> skip
 
-    let lift ((ins, ops) : insns) : unit Theory.Effect.t KB.t = 
+  let lift ((ins, ops) : insns) : unit Theory.Effect.t KB.t = 
     match ins with
     | #move_insn -> lift_move ins ops |> move
     | #mem_insn -> lift_mem ins ops |> move
