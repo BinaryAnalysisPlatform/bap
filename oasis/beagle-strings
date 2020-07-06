@@ -1,0 +1,12 @@
+Flag beagle_strings
+  Description: Build string analysis library
+  Default: false
+
+Library beagle_strings_plugin
+  Build$:       flag(everything) || flag(beagle_strings)
+  Path:         plugins/beagle_strings
+  FindlibName:  bap-plugin-beagle_strings
+  BuildDepends: bap, bap-strings, bap-beagle-prey, core_kernel, regular
+  InternalModules: Strings_main
+  XMETAExtraLines:  tags="pass, strings"
+  XMETADescription: find strings of characters

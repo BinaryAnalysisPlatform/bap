@@ -20,12 +20,3 @@ Library beagle_prey
   Modules: Beagle_prey
   BuildDepends: bap, bap-primus, core_kernel, ppx_jane, monads, regular
   XMETADescription: beagle attributes
-
-Library strings_plugin
-  Build$:       flag(everything) || flag(beagle)
-  Path:         plugins/strings
-  FindlibName:  bap-plugin-strings
-  BuildDepends: bap, bap-strings, bap-beagle-prey, core_kernel, regular
-  InternalModules: Strings_main
-  XMETAExtraLines:  tags="pass, strings"
-  XMETADescription: find strings of characters
