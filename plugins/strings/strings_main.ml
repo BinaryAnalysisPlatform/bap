@@ -1,4 +1,3 @@
-
 open Core_kernel
 open Regular.Std
 open Bap.Std
