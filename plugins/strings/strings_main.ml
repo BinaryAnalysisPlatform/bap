@@ -66,4 +66,4 @@ let print {Config.get=(!!)} proj =
 
 let () = Config.when_ready (fun cfg ->
     Project.register_pass  ~name:"collect" (collect cfg);
-    Project.register_pass' ~deps:["beagle-strings-collect"] (print cfg))
+    Project.register_pass' ~deps:["strings-collect"] (print cfg))
