@@ -6,7 +6,7 @@ RUN sudo zypper --non-interactive install llvm-devel clang \
  && opam switch 4.09 \
  && eval "$(opam env)" \
  && opam remote set-url default https://opam.ocaml.org \
- && opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository --all \
+ && opam repo add bap git://github.com/gitoleg/opam-repository#testing --all \
  && opam update \
  && opam depext --install bap --yes -j 1 \
  && opam clean -acrs \
