@@ -12,4 +12,4 @@ jobs:
        uses: docker/build-push-action@v1
        with:
          push: false
-         dockerfile: docker/fedora/Dockerfile
+         dockerfile: docker/opensuse/Dockerfile
