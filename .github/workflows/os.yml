@@ -8,8 +8,8 @@ jobs:
      steps:
      - uses: actions/checkout@master
 
-     - name: Build BAP on Archlinux
+     - name: Build BAP
        uses: docker/build-push-action@v1
        with:
          push: false
-         dockerfile: docker/archlinux/Dockerfile
+         dockerfile: docker/fedora/Dockerfile
