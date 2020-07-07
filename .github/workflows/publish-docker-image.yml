@@ -1,0 +1,20 @@
+name: Publish Docker
+on:
+  schedule:
+    - cron: '0 4 * * *' # Every day at 4:00 a.m. UTC, midnight EDT
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+
+    - name: Publish Ubuntu image to Registry
+      uses: docker/build-push-action@v1
+      with:
+        repository: binaryanalysisplatform/bap
+        tags: latest
+        username: ${{ secrets.DOCKER_LOGIN }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+        dockerfile: docker/ubuntu/xenial/Dockerfile
