@@ -1,0 +1,13 @@
+Flag primus_print
+  Description: build Primus print plugin
+  Default: false
+
+Library primus_print_plugin
+  Path: plugins/primus_print
+  Build$: flag(everything) || flag(primus_print)
+  FindlibName: bap-plugin-primus_print
+  CompiledObject: best
+  BuildDepends: bap-primus, bare, bap, core_kernel, ppx_jane, bap-future, monads
+  XMETADescription: prints Primus states and observations
+  Modules: Primus_print_main
+  XMETAExtraLines: tags="primus, printer"

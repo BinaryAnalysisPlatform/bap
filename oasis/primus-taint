@@ -1,0 +1,15 @@
+
+Flag primus_taint
+  Description: Build primus-taint plugin
+  Default: false
+
+Library primus_taint_plugin
+  Path: plugins/primus_taint
+  Build$: flag(everything) || flag(primus_taint)
+  FindlibName: bap-plugin-primus_taint
+  CompiledObject: best
+  BuildDepends: bap-primus, bap-taint, bap, core_kernel, regular, monads
+  XMETADescription: a taint analysis control interface
+  DataFiles:        lisp/*.lisp ($primus_taint_lisp_path)
+  InternalModules: Primus_taint_main, Primus_taint_policies
+  XMETAExtraLines:  tags="dataflow, pass, taint, primus, primus-lisp"

@@ -439,16 +439,15 @@ let with_disasm beg cfg f =
   | Error _ -> KB.return (cfg,None)
   | Ok dis -> f arch dis
 
-let may_fall insn =
-  KB.collect Theory.Program.Semantics.slot insn >>| fun insn ->
-  not Insn.(is barrier insn)
-
 let explore
     ?entry:start ?(follow=always) ~block ~node ~edge ~init
     {begs; jmps; data; mems} =
   let find_base addr =
     if Set.mem data addr then None
     else List.find mems ~f:(fun mem -> Memory.contains mem addr) in
+  let may_fall jmp = match Map.find jmps jmp with
+    | None -> true
+    | Some {barrier} -> not barrier in
   let blocks = Hashtbl.create (module Addr) in
   let edge_insert cfg src dst = match dst with
     | None -> KB.return cfg
@@ -473,8 +472,8 @@ let explore
                   let next = Addr.succ last in
                   if Set.mem begs next || Map.mem jmps curr
                   then
-                    may_fall insn >>| fun may ->
-                    (curr, len, insn::insns,may)
+                    KB.return
+                      (curr, len, insn::insns,may_fall curr)
                   else Dis.jump s (view next base)
                       (next, len, insn::insns,true))
             >>= fun (fin,len,insns,may_fall) ->

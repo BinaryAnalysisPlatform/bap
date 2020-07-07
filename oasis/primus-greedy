@@ -1,0 +1,13 @@
+Flag primus_greedy
+  Description: build Primus greedy scheduler
+  Default: false
+
+Library primus_greedy_scheduler_plugin
+  Path: plugins/primus_greedy
+  Build$: flag(everything) || flag(primus_greedy)
+  FindlibName: bap-plugin-primus_greedy
+  CompiledObject: best
+  BuildDepends: bap, bap-primus, core_kernel, monads
+  XMETADescription: evaluates all machines in the DFS order
+  Modules: Primus_greedy_main
+  XMETAExtraLines: tags="primus, scheduler"

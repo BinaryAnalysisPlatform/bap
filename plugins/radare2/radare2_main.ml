@@ -21,56 +21,66 @@ let provide_roots funcs =
   promise_property Theory.Label.is_valid;
   promise_property Theory.Label.is_subroutine
 
-let extract_name (json : Yojson.t) = 
-  match json with
-  | `Assoc list -> 
-    (match List.find list ~f:(fun (key, _) -> String.equal key "name") with
-     | Some (_, v) -> (match v with
-         | `String str -> Some str
-         | _ -> None)
-     | _ -> None)
-  | _ -> None
+module Field = struct
+  (* unfortunately, we can't use Yojson.*.Utils because they are
+     undefined for the Yojson type *)
 
-let extract_addr (json : Yojson.t) = 
-  match json with
-  | `Assoc list -> 
-    (match List.find list ~f:(fun (key, _) -> String.equal key "vaddr") with
-     | Some (_, v) -> (match v with
-         | `Int i -> Some (Z.of_int i)
-         | `Intlit s -> Some (Z.of_string s)
-         | _ -> None)
-     | _ -> None)
-  | _ -> None
+  let member name = function
+    | `Assoc xs -> List.Assoc.find xs ~equal:String.equal name
+    | _ -> invalid_arg "expects and assoc list"
 
-let strip str = 
-  match String.chop_prefix str ~prefix:"sym.imp." with
-  | Some str -> str
-  | None -> str
+  let string = function
+    | `String x -> x
+    | x -> invalid_argf "expects a string got %s"
+             (Yojson.to_string x) ()
 
-let provide_radare2 file = 
+  let number = function
+    | `Int i -> Z.of_int i
+    | `Intlit s -> Z.of_string s
+    | s -> invalid_argf "expected an address got %s"
+             (Yojson.to_string s) ()
+
+  let field name parse obj = match member name obj with
+    | None -> invalid_argf "expected member %S in the object %s"
+                name (Yojson.to_string obj) ()
+    | Some field -> parse field
+
+  let addr = field "vaddr" number
+  let name = field "name" string
+  let kind = field "type" string
+end
+
+let strip str =
+  if String.is_prefix ~prefix:"func." str then None
+  else Option.some @@ match String.chop_prefix str ~prefix:"imp." with
+    | Some str -> str
+    | None -> str
+
+let provide_radare2 file =
   let funcs = Hashtbl.create (module struct
       type t = Z.t
       let compare = Z.compare and hash = Z.hash
       let sexp_of_t x = Sexp.Atom (Z.to_string x)
     end) in
-  let accept name addr = Hashtbl.set funcs addr name in
-  let symbol_list = match R2.with_command_j "isj" file with
+  let accept name addr =  Hashtbl.set funcs addr name in
+  let symbols = match R2.with_command_j "isj" file with
     | `List list -> Some list
     | s -> warning "unexpected radare2 output: %a" Yojson.pp s; None
-    | exception _ -> warning "failed to get symbols - radare2 command failed"; None in
-  Option.iter symbol_list 
-    ~f:(List.iter ~f:(fun s -> match extract_name s, extract_addr s with
-        | Some name, Some addr -> accept (strip name) addr
-        | _ -> debug "skipping json item %a" Yojson.pp s));
+    | exception Invalid_argument msg ->
+      warning "failed to get symbols: %s" msg; None in
+  Option.iter symbols ~f:(List.iter ~f:(fun s ->
+      match Field.name s, Field.addr s, Field.kind s with
+      | name,addr, "FUNC" -> accept (strip name) addr
+      | _ -> debug "skipping json item %a" Yojson.pp s));
   if Hashtbl.length funcs = 0
   then warning "failed to obtain symbols";
   let symbolizer = Symbolizer.create @@ fun addr ->
-    Hashtbl.find funcs @@
-    Bitvec.to_bigint (Word.to_bitvec addr) in
+    let addr = Bitvec.to_bigint (Word.to_bitvec addr) in
+    match Hashtbl.find funcs addr with
+    | Some name -> name
+    | None -> None in
   Symbolizer.provide agent symbolizer;
   provide_roots funcs
-
-
 
 let main () = Stream.observe Project.Info.file @@ provide_radare2
 
