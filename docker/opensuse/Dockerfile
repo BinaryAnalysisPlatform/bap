@@ -1,8 +1,8 @@
-FROM ocaml/opam2:fedora
+FROM ocaml/opam2:opensuse
 
 WORKDIR /home/opam
 
-RUN sudo yum install clang -y \
+RUN sudo zypper --non-interactive install llvm-devel \
  && opam switch 4.09 \
  && eval "$(opam env)" \
  && opam remote set-url default https://opam.ocaml.org \
