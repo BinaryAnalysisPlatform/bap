@@ -6,9 +6,11 @@ open KB.Syntax
 (** General cpu defs. *)
 module type CPU = sig
   type value
+  type bit_val
   type reg_type
   type operand
   val value: value Theory.Bitv.t Theory.Value.sort
+  val bit_val: bit_val Theory.Bitv.t Theory.Value.sort
   val load_reg: reg_type -> value Theory.Bitv.t Theory.Var.t
   val assert_var: operand -> value Theory.Bitv.t Theory.Var.t
   val assert_val: operand -> value Theory.Bitv.t Theory.pure
@@ -27,6 +29,9 @@ module DSL(Core: Theory.Core)(CPU: CPU)(V: ValueHolder) = struct
     List.fold dsl ~init:bot 
       ~f:(fun acc current -> seq acc current)
 
+  (** alternative of expand to enable short syntax *)
+  let ( !% ) = expand
+
   let assert_var = CPU.assert_var
 
   let assert_val = CPU.assert_val
@@ -35,6 +40,8 @@ module DSL(Core: Theory.Core)(CPU: CPU)(V: ValueHolder) = struct
 
   let word_as_bitv w = (int CPU.value (Bap.Std.Word.to_bitvec w))
 
+  let bool_as_bitv b = ite b (int CPU.value Bitvec.one) (int CPU.value Bitvec.zero)
+
   let imm (x : int) = word_as_bitv (Bap.Std.Word.of_int value_size x)
 
   let ( := )  = set
@@ -42,6 +49,11 @@ module DSL(Core: Theory.Core)(CPU: CPU)(V: ValueHolder) = struct
   let when_ (cond : bool) eff = 
     let bot = perform Theory.Effect.Sort.bot in
     if cond then eff |> expand else bot
+  let if_then_ (cond : Theory.bool) then_ else_ =
+    branch cond (then_ |> expand) (else_ |> expand)
+  let if_ (cond : Theory.bool) then_ =
+    let bot = perform Theory.Effect.Sort.bot in
+    if_then_ cond then_ [bot]
   let ( < )  = slt
   let ( > )  = sgt
   let ( <= )  = sle
@@ -50,10 +62,13 @@ module DSL(Core: Theory.Core)(CPU: CPU)(V: ValueHolder) = struct
   let ( <> )   = neq
   let ( << )  = lshift
   let ( >> )  = rshift
+  let ( asr ) = arshift
   let ( lor )  = logor
   let ( land ) = logand
   let ( lxor ) = logxor
   let ( lnot ) = not
+
+  let nth_bit n e = cast CPU.bit_val b0 (shiftr b0 e n) |> msb
 
   module Bool = struct
     let ( lor ) = or_

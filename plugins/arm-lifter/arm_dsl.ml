@@ -14,7 +14,7 @@ module Arm_cpu(Core : Theory.Core) = struct
     | `Imm i -> (int value (Bap.Std.Word.to_bitvec i))
   let assert_var = function
     | `Reg r -> load_reg r
-    | `Imm i -> raise Assert_error
+    | `Imm _ -> raise Assert_error
 end
 
 module Make_Extend(Core : Theory.Core)(Holder : Common.ValueHolder) = struct
@@ -28,6 +28,6 @@ end
 module Make(Core : Theory.Core) = struct
   module CPU_Holder = Arm_cpu(Core)
   module Nested = Make_Extend(Core)(CPU_Holder)
-  
+
   include Nested
 end

@@ -69,6 +69,10 @@ type op = [
   | `Imm of word
 ] [@@deriving bin_io, compare, sexp]
 
+let assert_imm : op -> word = function
+  | `Imm imm -> imm
+  | _ -> raise (Lift_Error "immediate assertion failed")
+
 type move_insn = [
   | `ADCri
   | `ADCrr

@@ -59,4 +59,9 @@ module Flags(Core : Theory.Core) = struct
 
   let set_sbc s1 s2 r = set_adc s1 (not s2) r
 
+  (** the `S` flag repr in ARM's llvm-mc *)
+  let is_cpsr = function
+    | `Reg `CPSR -> true
+    | _ -> false
+
 end
