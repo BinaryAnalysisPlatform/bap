@@ -379,6 +379,8 @@ let init = {
   debt = [];
 }
 
+let subroutines {funs} = funs
+
 let query_arch addr =
   KB.Object.scoped Theory.Program.cls @@ fun obj ->
   KB.provide Theory.Label.addr obj (Some addr) >>= fun () ->
