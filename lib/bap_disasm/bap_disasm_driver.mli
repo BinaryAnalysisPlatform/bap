@@ -12,6 +12,8 @@ val init : state
 val scan : mem -> state -> state knowledge
 val merge : state -> state -> state
 
+val subroutines : state -> Set.M(Addr).t
+
 val explore :
   ?entry:addr ->
   ?follow:(addr -> bool knowledge) ->
