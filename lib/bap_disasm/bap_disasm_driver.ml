@@ -13,7 +13,7 @@ type insn = Insn.t [@@deriving sexp_of]
 type edge = [`Jump | `Cond | `Fall] [@@deriving compare]
 
 
-type dsts = {
+type jump = {
   call : bool;
   barrier : bool;
   indirect : bool;
@@ -24,7 +24,7 @@ module Machine : sig
   type task = private
     | Dest of {dst : addr; parent : task option}
     | Fall of {dst : addr; parent : task; delay : slot}
-    | Jump of {src : addr; age: int; dsts : dsts; parent : task}
+    | Jump of {src : addr; age: int; dsts : jump; parent : task}
   and slot = private
     | Ready of task option
     | Delay
@@ -38,7 +38,7 @@ module Machine : sig
     addr : addr;                (* current address *)
     dels : Set.M(Addr).t;
     begs : task list Map.M(Addr).t;       (* begins of basic blocks *)
-    jmps : dsts Map.M(Addr).t;  (* jumps  *)
+    jmps : jump Map.M(Addr).t;  (* jumps  *)
     code : Set.M(Addr).t;       (* all valid instructions *)
     data : Set.M(Addr).t;       (* all non-instructions *)
     usat : Set.M(Addr).t;       (* unsatisfied constraints *)
@@ -58,7 +58,7 @@ module Machine : sig
     ready:(state -> mem -> 'a) -> 'a
 
   val failed : state -> addr -> state
-  val jumped : state -> mem -> dsts -> int -> state
+  val jumped : state -> mem -> jump -> int -> state
   val stopped : state -> state
   val moved  : state -> mem -> state
   val is_ready : state -> bool
@@ -67,7 +67,7 @@ end = struct
   type task =
     | Dest of {dst : addr; parent : task option}
     | Fall of {dst : addr; parent : task; delay : slot}
-    | Jump of {src : addr; age: int; dsts : dsts; parent : task}
+    | Jump of {src : addr; age: int; dsts : jump; parent : task}
   and slot =
     | Ready of task option
     | Delay
@@ -87,7 +87,7 @@ end = struct
     addr : addr;                (* current address *)
     dels : Set.M(Addr).t;
     begs : task list Map.M(Addr).t;       (* begins of basic blocks *)
-    jmps : dsts Map.M(Addr).t;  (* jumps  *)
+    jmps : jump Map.M(Addr).t;  (* jumps  *)
     code : Set.M(Addr).t;       (* all valid instructions *)
     data : Set.M(Addr).t;       (* all non-instructions *)
     usat : Set.M(Addr).t;       (* unsatisfied constraints *)
@@ -364,7 +364,7 @@ type insns = Theory.Label.t list
 type state = {
   funs : Addr.Set.t;
   begs : Addr.Set.t;
-  jmps : dsts Addr.Map.t;
+  jmps : jump Addr.Map.t;
   data : Addr.Set.t;
   mems : mem list;
   debt : Machine.task list;
@@ -379,7 +379,18 @@ let init = {
   debt = [];
 }
 
-let subroutines {funs} = funs
+let subroutines x = x.funs
+let blocks x = x.begs
+let jump {jmps} = Map.find jmps
+
+let is_data {data} = Set.mem data
+let is_subroutine {funs} = Set.mem funs
+let is_jump {jmps} = Map.mem jmps
+let is_block {begs} = Set.mem begs
+
+let destinations dsts = dsts.resolved
+let is_call dsts = dsts.call
+let is_barrier dsts = dsts.barrier
 
 let query_arch addr =
   KB.Object.scoped Theory.Program.cls @@ fun obj ->
