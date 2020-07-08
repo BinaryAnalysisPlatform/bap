@@ -2,7 +2,7 @@ FROM ocaml/opam2:opensuse
 
 WORKDIR /home/opam
 
-RUN sudo zypper --non-interactive install llvm-devel clang \
+RUN sudo zypper --non-interactive install llvm-devel clang ncurses5-devel \
  && opam switch 4.09 \
  && eval "$(opam env)" \
  && opam remote set-url default https://opam.ocaml.org \
