@@ -517,7 +517,7 @@ let explore
               cfg,Some block in
   match start with
   | None ->
-    Set.to_sequence state.funs |>
+    Set.to_sequence state.begs |>
     KB.Seq.fold ~init ~f:(fun cfg beg ->
         build cfg beg >>| fst)
   | Some start -> build init start >>| fst
