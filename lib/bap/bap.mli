@@ -6598,13 +6598,11 @@ module Std : sig
 
   (** The interface to the disassembler level.
 
-      {2 Definitions}
-
       The following definitions are used in documentation of modules
       and functions in this interface.
 
       An {i instruction} is a sequence of consecutive bytes that has
-      a known decoding in the given instruction set architecture
+      known decoding in the given instruction set architecture
       (ISA). The following semantic properties of an instruction, as
       provided by ISA specification. In the definitions below the
       following properties play an important role
@@ -6619,12 +6617,9 @@ module Std : sig
       ISA specification to which the control flow should transfer if
       the jump is taken. Potentially, it is possible that the
       destination of a jump instruction follows the instruction, but
-      otherwise the instruction that follows the instruction is not
+      otherwise, the instruction that follows the instruction is not
       the destination, only destinations of the {i taken} jump are
       considered to be in the set of destinations of an instruction.
-
-      A [jump] instruction is an {i indirect} jump if doesn't have
-      known destinations.
 
       An instruction is a {i conditional} [jump] if it is a [jump]
       instruction that is not always taken, as defined by the ISA
@@ -6654,16 +6649,16 @@ module Std : sig
       a resolved destination of [i(k)] or follows it. An instruction
       can belong to more than one chain.
 
-      A {i valid chain of instructions} is chain where the last
+      A {i valid chain of instructions} is a chain where the last
       instruction is a [jump] instruction that is either indirect or
-      its destinations belongs to some previous jump in the same
+      its destinations belong to some previous jump in the same
       chain.
 
       An instruction is {i valid} if it belongs to a valid chain of
       instructions.
 
       A byte is {i data} if one the following is true:
-      1) its address is an address of instruction that is not valid;
+      1) its address is an address of an instruction that is not valid;
       2) it was classified in the knowledge base as data;
       3) it is not an instruction.
 
@@ -6674,22 +6669,21 @@ module Std : sig
         [i(i)] as a known destination;
       - [i(i)] is not a jump when [i < n].
 
-
       A {i subroutine} is a non-empty finite set of basic blocks
       [{b(1); ..; b(n)}] such that [b(1)] dominates each block in
       [{b(2); ..; b(n)}] (which also implies that they are
-      reachable) and [b(1)].
-
-
+      reachable) and [b(1)] is called the {i entry} block (or point).
   *)
   module Disasm : sig
+
     (** Disassembler Driver.
 
         This is a low-level interface to the CFG reconstruction and
         disassembling engine. It is used by BAP's high-level
-        components, such as recursive-descent disassembler, so there is
-        in general no need to use it directly, unless you're devising
-        your own disassembly pipe-line.
+        components, such as the recursive-descent disassembler, so
+        there is in general no need to use it directly, unless you're
+        devising a custom disassembly pipe-line.
+
 
         The disassembler is driven and controlled by the knowledge
         base, so it is possible to modify the behavior of the BAP
@@ -6706,29 +6700,31 @@ module Std : sig
         {!Driver.scan} function), it uses the knowledge base to
         initially classify addresses that belong to this region.
 
-        For each byte in the region it creates a temporary
+        For each byte in the region, it creates a temporary
         [core-theory:program] object and sets is [label-address]
         property to the address of that byte. It then queries if it is
         a function start ([core-theory:is-function]) and if it is
         known to be code or data (if the [core-theory:is-valid]
-        property is [(true)] then it is classified as code and if
-        it [(false)] then it is data, otherwise it is
-        undetermined). All objects created during classification are
-        deleted immediately after the query and never commited to the
-        knowledge base (they are scoped objects). Therefore it is fine
-        to speculate and assume that all bytes are code by providing
-        [(true)] to the [is-valid] property of each byte.
+        property is [(true)] then it is classified as code and if it
+        [(false)] then it is data, otherwise, it is undetermined). All
+        objects created during classification are deleted immediately
+        after the query and never committed to the knowledge base
+        (they are scoped objects). Therefore it is fine to speculate
+        and assume that all bytes are code by providing [(true)] to
+        the [is-valid] property of each byte.
+
 
         {4 Disassembling}
 
         The disassembling starts from each function start (as
         identified by the previous step) and continues until there is
-        no more unprocessed function starts and all addresses classified
-        as code are either successfully disassembled or proved to be data.
+        no more unprocessed function starts and all addresses, which
+        were classified as code, are either successfully disassembled
+        or proved to be data.
 
-        During disassembling the driver will discover more
-        jump destinations and add them to the worklist. The default mode
-        is speculative, i.e., when we meet a barrier, we continue
+        During disassembling the driver will discover more jump
+        destinations and add them to the worklist. The default mode is
+        speculative, i.e., when we meet a barrier, we continue
         disassembling beyond it. If the worklist is empty, but the set
         of addresses that were classified as code (in the first step)
         is still not empty, which means that these addresses are not
@@ -6737,46 +6733,44 @@ module Std : sig
         the set and is assumed to be a start of a basic block and
         added to the worklist.
 
-        The process continues until both the worklist and the set
-        of address classified as code are empty. When the processes
-        converges the knowledge base will contain all disassembled
-        instructions (though some of them might be invalid). The
-        result of the disassembly is the a value that contains
-        information sufficient to reconstruct the control-flow graph
-        of a program. It could be queried directly, using various
-        accessors or folded over using the [explore] function, which
-        is a generalized control-flow graph building function.
+        The process continues until both the worklist and the set of
+        code addresses are empty. When the process converges the
+        knowledge base will contain all disassembled instructions
+        (though some of them might be invalid). The result of the
+        disassembly is the value that contains information sufficient
+        to reconstruct the control-flow graph of the program. It could
+        be queried directly, using various accessors or folded over
+        with the [explore] function, which is a generalized
+        control-flow graph building function.
 
         {4 Backtracking}
 
-        The disassembler has a backtracing mechanism which enables it
+        The disassembler has a backtracking mechanism that enables it
         to track each disassembled byte back to the memory byte that
-        was initially marked as code or function start. When we
-        identify an instruction chain that is invalid, i.e., when
-        data follows instruction or when instruction destination is
+        was initially marked as code or a function start. When we
+        identify an instruction chain that is invalid, i.e., when data
+        follow a machine instruction or when its destination is some
         data, we retract the whole chain of instructions. This ensures
-        that all valid instructions belong to at least one instruction
-        chain that is valid. The justification for including invalid
-        instuctions chains into the disassembly is that such chain will
-        unconditionally switch the CPU into the invalid instruction
-        state which will terminate the program. Since such chain can't
-        include system calls or cpu exceptions (both are not barriers)
-        it can't have any side-effects visible outside of the process
-        so it could be safely ignored.
-
+        that all valid instructions belong to at least one valid
+        instruction chain. The justification for not including invalid
+        instructions chains into the disassembly is that such chains
+        will unconditionally switch the CPU into the invalid
+        instruction state which will terminate the program. Since such
+        a chain can't include system calls or CPU exceptions (both are
+        not barriers) it can't have any side-effects visible outside
+        of the process so it could be safely ignored.
 
         {4 Delay slots}
 
         Any instruction could have a delay ([core-theory:delay]) that
         is greater than zero. In that case the execution order of the
         instructions will not be equal to the linear order of the
-        instructions addresses and the number of instructions equal to
-        the delay slot size that follow the delayed instruction will
-        be executed before that instruction (put in the basic block
-        before it).
+        instructions addresses and [m] instructions that follow the
+        delayed instruction will be executed before that instruction
+        (put in the basic block before it), where [m] is the size of
+        the delay slot, expressed in instructions.
 
         @since 2.0.0
-
     *)
     module Driver : sig
 
