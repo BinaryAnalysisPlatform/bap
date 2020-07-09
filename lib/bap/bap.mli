@@ -6596,17 +6596,253 @@ module Std : sig
 
   end
 
-  (** Disassembled program.
-      An interface for diassembling things. *)
+  (** The interface to the disassembler level.
+
+      The following definitions are used in documentation of modules
+      and functions in this interface.
+
+      An {i instruction} is a sequence of consecutive bytes that has
+      known decoding in the given instruction set architecture
+      (ISA). The following semantic properties of an instruction, as
+      provided by ISA specification. In the definitions below the
+      following properties play an important role
+      (see {!Insn.property} for more details about the properties):
+      - [call];
+      - [jump].
+
+      An {i instruction address} is the address of the first byte of
+      the instruction.
+
+      A [jump] instruction {i destination} is an address defined by
+      ISA specification to which the control flow should transfer if
+      the jump is taken. Potentially, it is possible that the
+      destination of a jump instruction follows the instruction, but
+      otherwise, the instruction that follows the instruction is not
+      the destination, only destinations of the {i taken} jump are
+      considered to be in the set of destinations of an instruction.
+
+      An instruction is a {i conditional} [jump] if it is a [jump]
+      instruction that is not always taken, as defined by the ISA
+      specification.
+
+      An instruction is a {i barrier} if it a [jump] that is not a
+      [call] and is not conditional.
+
+      An {i execution order}, is an order in which CPU executes
+      instructions.
+
+      The {i linear order} of a sequence of instructions is the
+      ascending order of their addresses.
+
+      An instruction is {i delayed} by [m > 0] instructions if it takes
+      effect not immediately but after [m] other instructions are
+      executed.
+
+      An instruction [i(k)] {i follows} the instruction [i(j)] if
+      [i(j)] is not a barrier and either the address of [i(k)] is
+      the successor of the address of the last byte of [i(j)] or if
+      either [i(k+m)] or [i(k)] is an instruction that is delayed
+      by [m > 0] instructions.
+
+      A {i chain of instructions} is a sequence of instruction
+      [{i(0); ...; i(k),i(k+1),i(n)}] so that i(k+1) is either
+      a resolved destination of [i(k)] or follows it. An instruction
+      can belong to more than one chain.
+
+      A {i valid chain of instructions} is a chain where the last
+      instruction is a [jump] instruction that is either indirect or
+      its destinations belong to some previous jump in the same
+      chain.
+
+      An instruction is {i valid} if it belongs to a valid chain of
+      instructions.
+
+      A byte is {i data} if one the following is true:
+      1) its address is an address of an instruction that is not valid;
+      2) it was classified in the knowledge base as data;
+      3) it is not an instruction.
+
+      A {i basic block} is an non-empty instruction chain
+      [{i(1); ... i(n)}] such that for each [1 < i <= n],
+      - [i(i)] follows [i(i-1)];
+      - there is no valid instruction in the knowledge base that has
+        [i(i)] as a known destination;
+      - [i(i)] is not a jump when [i < n].
+
+      A {i subroutine} is a non-empty finite set of basic blocks
+      [{b(1); ..; b(n)}] such that [b(1)] dominates each block in
+      [{b(2); ..; b(n)}] (which also implies that they are
+      reachable) and [b(1)] is called the {i entry} block (or point).
+  *)
   module Disasm : sig
 
+    (** Disassembler Driver.
+
+        This is a low-level interface to the CFG reconstruction and
+        disassembling engine. It is used by BAP's high-level
+        components, such as the recursive-descent disassembler, so
+        there is in general no need to use it directly, unless you're
+        devising a custom disassembly pipe-line.
+
+
+        The disassembler is driven and controlled by the knowledge
+        base, so it is possible to modify the behavior of the BAP
+        disassembler layer through the knowledge base and turn the
+        default recursive-descent mode into something more
+        conservative, e.g., speculative, superset, shingled, or even
+        probabilistic disassembler.
+
+        {3 Algorithm}
+
+        {4 Memory Classification}
+
+        When the driver is fed with a new memory region (using the
+        {!Driver.scan} function), it uses the knowledge base to
+        initially classify addresses that belong to this region.
+
+        For each byte in the region, it creates a temporary
+        [core-theory:program] object and sets is [label-address]
+        property to the address of that byte. It then queries if it is
+        a function start ([core-theory:is-function]) and if it is
+        known to be code or data (if the [core-theory:is-valid]
+        property is [(true)] then it is classified as code and if it
+        [(false)] then it is data, otherwise, it is undetermined). All
+        objects created during classification are deleted immediately
+        after the query and never committed to the knowledge base
+        (they are scoped objects). Therefore it is fine to speculate
+        and assume that all bytes are code by providing [(true)] to
+        the [is-valid] property of each byte.
+
+
+        {4 Disassembling}
+
+        The disassembling starts from each function start (as
+        identified by the previous step) and continues until there is
+        no more unprocessed function starts and all addresses, which
+        were classified as code, are either successfully disassembled
+        or proved to be data.
+
+        During disassembling the driver will discover more jump
+        destinations and add them to the worklist. The default mode is
+        speculative, i.e., when we meet a barrier, we continue
+        disassembling beyond it. If the worklist is empty, but the set
+        of addresses that were classified as code (in the first step)
+        is still not empty, which means that these addresses are not
+        reachable from the initially provided starting points
+        (function starts) then the minimal address is extracted from
+        the set and is assumed to be a start of a basic block and
+        added to the worklist.
+
+        The process continues until both the worklist and the set of
+        code addresses are empty. When the process converges the
+        knowledge base will contain all disassembled instructions
+        (though some of them might be invalid). The result of the
+        disassembly is the value that contains information sufficient
+        to reconstruct the control-flow graph of the program. It could
+        be queried directly, using various accessors or folded over
+        with the [explore] function, which is a generalized
+        control-flow graph building function.
+
+        {4 Backtracking}
+
+        The disassembler has a backtracking mechanism that enables it
+        to track each disassembled byte back to the memory byte that
+        was initially marked as code or a function start. When we
+        identify an instruction chain that is invalid, i.e., when data
+        follow a machine instruction or when its destination is some
+        data, we retract the whole chain of instructions. This ensures
+        that all valid instructions belong to at least one valid
+        instruction chain. The justification for not including invalid
+        instructions chains into the disassembly is that such chains
+        will unconditionally switch the CPU into the invalid
+        instruction state which will terminate the program. Since such
+        a chain can't include system calls or CPU exceptions (both are
+        not barriers) it can't have any side-effects visible outside
+        of the process so it could be safely ignored.
+
+        {4 Delay slots}
+
+        Any instruction could have a delay ([core-theory:delay]) that
+        is greater than zero. In that case the execution order of the
+        instructions will not be equal to the linear order of the
+        instructions addresses and [m] instructions that follow the
+        delayed instruction will be executed before that instruction
+        (put in the basic block before it), where [m] is the size of
+        the delay slot, expressed in instructions.
+
+        @since 2.0.0
+    *)
     module Driver : sig
-      type state
+
+      (** information necessary to build the control-flow graph.
+
+          @since 2.2.0 implements [bin_io]
+      *)
+      type state [@@deriving bin_io]
+
+      (** abstract type for a sequence of instructions.  *)
       type insns
 
+
+      (** abstract representation of a jump instruction.  *)
+      type jump
+
+      (** [init] the initial disassembler state.  *)
       val init : state
+
+
+      (** [merge x y] is a sum of information in states [x] and [y].
+
+          @since 2.2.0
+      *)
+      val merge : state -> state -> state
+
+
+      (** [scan mem state] updates the state.
+
+          If bytes in [mem] were already scanned then returns [state]
+          without changes. Nothing is stored in the knowledge base.
+
+          If it is a new memory region then classifies and
+          disassembles the whole region. For each disassembled address
+          [p] an object [Theory.Label.for_addr p] is stored in the
+          knowledge base. It will contain a fully disassembled and
+          lifted instruction. All instructions that are subroutine
+          entry points will have [is-subroutine] property set to [(true)].
+
+          See {! sec:Algorithm} for the detailed description of the
+          algorithm.
+      *)
       val scan : mem -> state -> state knowledge
 
+
+      (** [explore ~block ~node ~edge ~init state] builds a
+          control-flow graph from the [state].
+
+          This function is a generalized fold function that calls the
+          user provided functions to construct the graph, which has
+          abstract type ['g].
+
+          - [block mem insns] creates a basic block of type ['n] which
+            covers memory [mem]; [insns] is the sequence of
+            instructions that constitute that memory, use [list_insns insns]
+            to get instructions in the linear order of their
+            addresses, or [execution_order] to get the execution
+            order (which might be different from linear in the
+            presence of delayed and speculative instructions).
+
+          - [node x g] inserts the node [x] into graph [g];
+          - [edge x y g] inserts an edge between nodes [x] and [y];
+          - [init] is the initial graph;
+          - [follow x] if it returns [true] then the function will
+            follow this destination. Defaults to a function that
+            always evaluates to [true].
+
+          - [entry] is the entry point from which to build the graph,
+            if absent, then all basic blocks will be consecuitively,
+            in the order of ascending addresses, used as the entry
+            points.
+      *)
       val explore :
         ?entry:addr ->
         ?follow:(addr -> bool knowledge) ->
@@ -6616,10 +6852,137 @@ module Std : sig
         init:'c ->
         state -> 'c knowledge
 
+
+      (** [list_insns xs] returns the list of instructions in the
+          ascending order of their addresses (or descending if [rev]
+          is [true] (defaults to [false]. *)
       val list_insns : ?rev:bool -> insns -> Theory.Label.t list
+
+
+      (** [execution_order xs] reruns a list of instructions in the
+          order in which they will be executed by the target CPU,
+          which could be different when instructions are delayed or
+          speculatively executed. *)
       val execution_order : insns -> Theory.Label.t list knowledge
+
+      (** {3 Low-level interface}
+
+          All functions in this interface were made availabe in BAP
+          2.2.0 unless stated otherwise. *)
+
+
+      (** [subroutines state] is a set of subroutine entry points that
+          either were provided through the knowledge base or later
+          discovered as destinations of call instructions.
+
+          @since 2.2.0
+      *)
+      val subroutines : state -> Set.M(Addr).t
+
+
+      (** [blocks state] is the set of addresses of instructions that
+          start basic blocks.
+          @since 2.2.0
+
+      *)
+      val blocks : state -> Set.M(Addr).t
+
+
+      (** [is_data state x] is [true] if [x] was classified as data.
+          @since 2.2.0 *)
+      val is_data : state -> addr -> bool
+
+      (** [is_subroutine s x] is [Set.mem (subroutines s) x].
+          @since 2.2.0 *)
+      val is_subroutine : state -> addr -> bool
+
+      (** [is_block s x] is [Set.mem (blocks s) x].
+          @since 2.2.0 *)
+      val is_block : state -> addr -> bool
+
+
+      (** [is_jump s x] is [true] if [x] is the maximal address of an
+          instruction in the basic block that terminates with a jump.
+
+          Note, that when jumps are delayed, the linear order of
+          instructions differs from the execution order, so the
+          address of the last instruction is not the maximal address
+          in the basic block.
+
+          @since 2.2.0 *)
+      val is_jump : state -> addr -> bool
+
+      (** [jump state src] if [src] is the last in the linear order
+          instruction of a basic block that terminates with a jump
+          instruction then returns the descrption of that jump
+          instruction.
+
+          @since 2.2.0
+      *)
+      val jump : state -> addr -> jump option
+
+
+      (** [destinations jump] returns the set of resolved
+          destinations.
+          @since 2.2.0
+      *)
+      val destinations : jump -> Set.M(Addr).t
+
+
+      (** [is_call jump] is [true] if jump is [call].
+          @since 2.2.0 *)
+      val is_call : jump -> bool
+
+      (** [is_barrier jump] is [true] if jump is [barrier].
+          @since 2.2.0 *)
+      val is_barrier : jump -> bool
     end
 
+
+    (** A set of subroutines.
+
+        A partition of a whole program control-flow graph into a
+        quotient set of subroutines.
+
+        The algorithm builds the minimal partion, i.e., it guarantees
+        that no other partition exists that has fewer
+        elements.
+
+        The number of elements heavily depends on the number of
+        function starts that were provided as the input (e.g., if the
+        function start identification procedure has a lot of false
+        positives, expect a lot of subroutines).
+
+        @since made public since 2.2.0
+    *)
+    module Subroutines : sig
+      type t [@@deriving bin_io]
+
+      (** [empty] is the empty partition.  *)
+      val empty : t
+
+      (** [equal p1 p2] is [true] if [p1] is structurally equal [p2].  *)
+      val equal : t -> t -> bool
+
+      (** [update p s] updates the partitioning with the newly
+          disassembled blocks.  *)
+      val update : t -> Driver.state -> t knowledge
+
+      (** [belongs part ~entry addr] is true if [addr] belongs to a
+          basic block of subroutine with the given [entry].  *)
+      val belongs : t -> entry:addr -> addr -> bool
+
+      (** [entries part] is the set of entry points of all
+          subroutines in the partition.
+
+          [Set.length (entries part)] is the cardinality of the
+          partition. *)
+      val entries : t -> Set.M(Addr).t
+
+      (** [siblings part x y] is [true] if [x] and [y] belong to the
+          same subroutine.  *)
+      val siblings : t -> addr -> addr -> bool
+    end
 
     type t = disasm
 

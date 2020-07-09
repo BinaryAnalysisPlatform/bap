@@ -14,6 +14,7 @@ type cfg = Bap_disasm_rec.Cfg.t [@@deriving compare]
 
 module Disasm : sig
   module Driver = Bap_disasm_driver
+  module Subroutines = Bap_disasm_calls
 
   type t = disasm
   type 'a disassembler = ?backend:string -> ?brancher:brancher -> ?rooter:rooter -> 'a
