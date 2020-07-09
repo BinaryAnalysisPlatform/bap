@@ -107,8 +107,8 @@ module Repository : sig
   type t
   type info
   val create : (string -> (string -> Bitvec.t -> info -> info) -> info -> info) -> t
-  val name : t -> path:string -> Bitvec.t -> string option
-  val addr : t -> path:string -> string -> Bitvec.t option
+  val name : t -> ?bias:Bitvec.t -> path:string -> Bitvec.t -> string option
+  val addr : t -> ?bias:Bitvec.t -> path:string -> string -> Bitvec.t option
 end = struct
   type info = {
     names : string Map.M(Bitvec_order).t;
@@ -142,16 +142,25 @@ end = struct
       Hashtbl.set files path info;
       info
 
-  let name repo ~path addr =
-    let {names} = lookup repo path in
-    Map.find names addr
+  let to_real = function
+    | None -> ident
+    | Some bias -> fun addr -> Bitvec.M32.(addr - bias)
 
-  let addr repo ~path name =
+  let of_real = function
+    | None -> ident
+    | Some bias -> fun addr -> Bitvec.M32.(addr + bias)
+
+  let name repo ?bias ~path addr =
+    let {names} = lookup repo path in
+    Map.find names (to_real bias addr)
+
+  let addr repo ?bias ~path name =
     let {addrs} = lookup repo path in
     match Map.find addrs name with
-    | Some [addr] -> Some addr
+    | Some [addr] -> Some (of_real bias addr)
     | _ -> None
 end
+
 
 let provide_function_starts_and_names ctxt : unit =
   let demangler = Extension.Configuration.get ctxt demangler in
@@ -166,10 +175,11 @@ let provide_function_starts_and_names ctxt : unit =
              comment @@ sprintf "extracts %s from objdump" name) in
   let property lookup promise slot key_slot f =
     promise slot @@ fun label ->
-    KB.collect Theory.Label.unit label >>=?
-    KB.collect Theory.Unit.path >>=? fun path ->
+    KB.collect Theory.Label.unit label >>=? fun unit ->
+    KB.collect Theory.Unit.path unit >>=? fun path ->
+    KB.collect Theory.Unit.bias unit >>= fun bias ->
     KB.collect key_slot label >>|? fun key ->
-    f (lookup repo ~path key) in
+    f (lookup repo ?bias ~path key) in
   let is_known = function
     | None -> None
     | Some _ -> Some true in

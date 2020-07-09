@@ -350,6 +350,7 @@ module Scheme = struct
   let declare name scheme f = Ogre.declare ~name scheme f
   let named n scheme f = declare n (scheme $ name) f
   let arch    () = declare "arch" (scheme name) ident
+  let bias    () = declare "bias" (scheme off) ident
   let section () = declare "section" (location ()) void_region
   let code_start   () = declare "code-start" (scheme addr) ident
   let entry_point  () = declare "entry-point" (scheme addr) ident

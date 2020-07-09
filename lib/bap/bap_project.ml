@@ -2,6 +2,7 @@ open Core_kernel
 open Regular.Std
 open Bap_core_theory
 open Graphlib.Std
+open Monads.Std
 open Bap_future.Std
 open Bap_types.Std
 open Bap_image_std
@@ -16,7 +17,13 @@ module Event = Bap_main_event
 module Buffer = Caml.Buffer
 include Bap_self.Create()
 
-let find name = FileUtil.which name
+let query doc attr =
+  match Ogre.eval (Ogre.request attr) doc with
+  | Error err ->
+    invalid_argf "Malformed ogre specification: %s"
+      (Error.to_string_hum err) ()
+  | Ok bias -> bias
+
 
 let with_arch arch mems =
   let open KB.Syntax in
@@ -30,16 +37,18 @@ let with_arch arch mems =
         then arch
         else `unknown)
 
-let with_filename arch data code path =
+let with_filename spec arch data code path =
   let open KB.Syntax in
   let width = Size.in_bits (Arch.addr_size arch) in
+  let bias = Option.map (query spec Image.Scheme.bias)
+      ~f:(fun x -> Bitvec.(int64 x mod modulus width)) in
   KB.promising Theory.Label.unit ~promise:(fun label ->
       KB.collect Theory.Label.addr label >>=? fun addr ->
       let addr = Word.create addr width in
       if Memmap.contains data addr || Memmap.contains code addr
       then
-        KB.Symbol.intern ~package:"file" path Theory.Unit.cls
-          ~public:true >>= fun unit ->
+        Theory.Unit.for_file path >>= fun unit ->
+        KB.provide Theory.Unit.bias unit bias >>= fun () ->
         KB.provide Theory.Unit.path unit (Some path) >>| fun () ->
         Some unit
       else KB.return None)
@@ -76,10 +85,10 @@ module Kernel = struct
 
   module Toplevel = struct
     let result = Toplevel.var "result"
-    let run arch ~code ~data file k =
+    let run spec arch ~code ~data file k =
       Toplevel.put result begin
         with_arch arch code @@ fun () ->
-        with_filename arch code data file @@ fun () ->
+        with_filename spec arch code data file @@ fun () ->
         k >>= fun k ->
         disasm k >>= fun g ->
         symtab k >>| fun s -> g,s,k
@@ -119,14 +128,15 @@ module Input = struct
     arch : arch;
     data : value memmap;
     code : value memmap;
+    spec : Ogre.doc;
     file : string;
     finish : t -> t;
   }
 
   type t = unit -> result
 
-  let create ?(finish=ident)arch file ~code ~data () = {
-    arch; file; code; data; finish;
+  let create ?(finish=ident) arch file ~code ~data () = {
+    arch; file; code; data; finish; spec=Ogre.Doc.empty;
   }
 
   let loaders = String.Table.create ()
@@ -142,6 +152,7 @@ module Input = struct
     arch = Image.arch img;
     data = Memmap.filter ~f:is_data (Image.memory img);
     code = Memmap.filter ~f:is_code (Image.memory img);
+    spec = Image.spec img;
     file;
     finish;
   }
@@ -161,12 +172,12 @@ module Input = struct
     Symbolizer.provide symtab_agent image_symbols;
     Rooter.provide image_roots
 
+
   let of_image ?loader filename =
     Image.create ?backend:loader filename >>| fun (img,warns) ->
     List.iter warns ~f:(fun e -> warning "%a" Error.pp e);
     let spec = Image.spec img in
     Signal.send Info.got_img img;
-    Signal.send Info.got_spec spec;
     provide_image img;
     let finish proj = {
       proj with
@@ -200,7 +211,8 @@ module Input = struct
     let section = Value.create Image.section "bap.user" in
     let code = Memmap.add Memmap.empty mem section in
     let data = Memmap.empty  in
-    {arch; data; code; file = filename; finish = ident;}
+    let spec = Ogre.Doc.empty in
+    {arch; data; code; file = filename; finish = ident; spec}
 
   let available_loaders () =
     Hashtbl.keys loaders @ Image.available_backends ()
@@ -278,7 +290,7 @@ let set_package package = match package with
   | None -> KB.return ()
   | Some pkg -> KB.Symbol.set_package pkg
 
-let build ?package ?state ~file ~code ~data arch =
+let build ?package ?state ~file ~code ~data spec arch =
   let init = match state with
     | Some state -> Kernel.{state with package}
     | None -> Kernel.empty ?package arch in
@@ -287,7 +299,7 @@ let build ?package ?state ~file ~code ~data arch =
     set_package package >>= fun () ->
     Memmap.to_sequence code |> KB.Seq.fold ~init ~f:(fun k (mem,_) ->
         Kernel.update k mem) in
-  let cfg,symbols,core = Kernel.Toplevel.run arch ~code ~data file kernel in
+  let cfg,symbols,core = Kernel.Toplevel.run spec arch ~code ~data file kernel in
   {
     core;
     disasm = Disasm.create cfg;
@@ -310,12 +322,13 @@ let create_exn
     ?rooter:_
     ?reconstructor:_
     (read : input)  =
-  let {Input.arch; data; code; file; finish} = read () in
+  let {Input.arch; data; code; file; spec; finish} = read () in
   Signal.send Info.got_file file;
   Signal.send Info.got_arch arch;
   Signal.send Info.got_data data;
   Signal.send Info.got_code code;
-  finish @@ build ?package ?state ~file ~code ~data arch
+  Signal.send Info.got_spec spec;
+  finish @@ build ?package ?state ~file ~code ~data spec arch
 
 let create
     ?package ?state ?disassembler ?brancher ?symbolizer ?rooter ?
@@ -590,7 +603,6 @@ module Collator = struct
     Hashtbl.to_alist registry |>
     List.map ~f:(fun (name,(desc,_)) -> {name; desc})
 
-
   let name {name} = name
   let desc = function
     | {desc=None} -> "not provided"
@@ -610,7 +622,9 @@ include Data.Make(struct
   end)
 
 let () =
-  Data.set_module_name instance "Bap.Std.Project";
+  Data.set_module_name instance "Bap.Std.Project"
+
+let () =
   KB.Rule.(declare ~package:"bap" "project-filename" |>
            dynamic ["input"] |>
            dynamic ["data"; "code"; "path"] |>

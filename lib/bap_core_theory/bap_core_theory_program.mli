@@ -25,8 +25,10 @@ module Unit : sig
 
   val cls : (cls,unit) Class.t
 
+  val for_file : string -> t knowledge
+
   val path : (cls, string option) slot
-  val shift : (cls, Bitvec.t option) slot
+  val bias : (cls, Bitvec.t option) slot
 
   module Target : sig
     val arch : (cls, string option) slot

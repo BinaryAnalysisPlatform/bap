@@ -5551,6 +5551,10 @@ module Std : sig
       (** [arch name] a file contains code for the [name] architecture. *)
       val arch : (string, (string -> 'a) -> 'a) Ogre.attribute
 
+      (** [bias offset] the value by which all addresses are biased
+          wrt to the real addresses in the binary  *)
+      val bias : (off, (off -> 'a) -> 'a) Ogre.attribute
+
       (** [segment addr size readable writable executable] a memory
           region (addr,size) has the specified permissions.  *)
       val segment : ((bool * bool * bool) region,

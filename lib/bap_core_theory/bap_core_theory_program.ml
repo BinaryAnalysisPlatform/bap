@@ -50,17 +50,20 @@ module Unit = struct
       ~public:true
       ~desc:"a unit of code"
 
+  let for_file name =
+    Knowledge.Symbol.intern ~package:"file" name cls
+      ~public:true
 
   let path = string_property ~domain:path cls "unit-path"
       ~desc:"a filesytem name of the file that contains the program"
 
-  let shift = Knowledge.Class.property ~package cls "unit-shift" word
+  let bias = Knowledge.Class.property ~package cls "unit-bias" word
       ~persistent:(Knowledge.Persistent.of_binable (module struct
                      type t = Bitvec_binprot.t option
                      [@@deriving bin_io]
                    end))
       ~public:true
-      ~desc:"the program virtual address"
+      ~desc:"the value by which all addresses of the unit a biased"
 
   module Target = struct
     let arch = string_property cls "target-arch"

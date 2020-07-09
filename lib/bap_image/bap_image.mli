@@ -95,6 +95,7 @@ module Scheme : sig
   val executable : bool Ogre.field
 
   val arch : (string, (string -> 'a) -> 'a) Ogre.attribute
+  val bias : (off, (off -> 'a) -> 'a) Ogre.attribute
   val segment : ((bool * bool * bool) region,
                  (addr -> addr -> bool -> bool -> bool -> 'a) -> 'a) Ogre.attribute
   val section : (unit region, (addr -> addr -> 'a) -> 'a) Ogre.attribute

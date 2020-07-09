@@ -1113,8 +1113,10 @@ module Theory : sig
 
     val cls : (cls,unit) KB.Class.t
 
+    val for_file : string -> t knowledge
+
     val path : (cls, string option) KB.slot
-    val shift : (cls, Bitvec.t option) KB.slot
+    val bias : (cls, Bitvec.t option) KB.slot
 
     module Target : sig
       val arch : (cls, string option) KB.slot
