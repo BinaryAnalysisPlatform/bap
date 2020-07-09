@@ -161,7 +161,6 @@ end = struct
     | _ -> None
 end
 
-
 let provide_function_starts_and_names ctxt : unit =
   let demangler = Extension.Configuration.get ctxt demangler in
   let repo = Repository.create (fun file accept init ->

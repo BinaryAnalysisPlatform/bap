@@ -76,6 +76,7 @@ let is_applicable s path = match s.path, path with
   | Some p, Some p' -> String.equal p p'
   | Some _, None -> false
 
+
 let provide =
   KB.Rule.(declare ~package:"bap" "reflect-symbolizers" |>
            dynamic ["symbolizer"] |>
@@ -83,6 +84,7 @@ let provide =
            require Theory.Label.addr |>
            require Theory.Label.unit |>
            require Theory.Unit.path |>
+           require Theory.Unit.bias |>
            provide Theory.Label.possible_name |>
            comment "[Symbolizer.provide s] reflects [s] to KB.");
   fun agent s ->
@@ -90,10 +92,11 @@ let provide =
     KB.propose agent Theory.Label.possible_name @@ fun label ->
     KB.collect Arch.slot label >>= fun arch ->
     KB.collect Theory.Label.addr label >>=? fun addr ->
-    KB.collect Theory.Label.unit label >>=?
-    KB.collect Theory.Unit.path >>| fun path ->
+    KB.collect Theory.Label.unit label >>=? fun unit ->
+    KB.collect Theory.Unit.bias unit >>= fun bias ->
+    KB.collect Theory.Unit.path unit >>| fun path ->
     if is_applicable s path
-    then s.find @@ Addr.create addr @@ Size.in_bits (Arch.addr_size arch)
+    then s.find @@ Biased.to_real bias arch addr
     else None
 
 let get_name addr =

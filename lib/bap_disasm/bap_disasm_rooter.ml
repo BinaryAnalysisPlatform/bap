@@ -3,10 +3,11 @@ open Bap_core_theory
 open Core_kernel
 open Bap_types.Std
 open Bap_image_std
+open Bap_disasm_source
+
 
 open KB.Syntax
 
-module Source = Bap_disasm_source
 module Insn = Bap_disasm_insn
 
 type t = {
@@ -30,7 +31,7 @@ let path {path=x} = x
 
 let empty = create Seq.empty
 
-module Factory = Source.Factory.Make(struct type nonrec t = t end)
+module Factory = Factory.Make(struct type nonrec t = t end)
 
 let of_image img = {
   path = Image.filename img;
@@ -63,15 +64,16 @@ let provide =
            provide Theory.Label.is_subroutine |>
            comment "[Rooter.provide r] provides [r] to KB.");
   fun rooter ->
-    let init = Set.empty (module Bitvec_order) in
+    let init = Set.empty (module Word) in
     let roots =
       roots rooter |>
-      Seq.map ~f:Word.to_bitvec |>
       Seq.fold ~init ~f:Set.add in
     KB.promise Theory.Label.is_subroutine @@ fun label ->
-    KB.collect Theory.Label.unit label >>=?
-    KB.collect Theory.Unit.path >>= fun path ->
+    KB.collect Arch.slot label >>= fun arch ->
+    KB.collect Theory.Label.unit label >>=? fun unit ->
+    KB.collect Theory.Unit.path unit >>= fun path ->
+    KB.collect Theory.Unit.bias unit >>= fun bias ->
     KB.collect Theory.Label.addr label >>|? fun addr ->
     if is_applicable rooter path
-    then Option.some_if (Set.mem roots addr) true
+    then Option.some_if (Set.mem roots (Biased.to_real bias arch addr)) true
     else None
