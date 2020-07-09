@@ -34,7 +34,11 @@ module DSL(Core: Theory.Core)(CPU: CPU)(V: ValueHolder) = struct
 
   let assert_var = CPU.assert_var
 
+  let (!$$) = assert_var
+
   let assert_val = CPU.assert_val
+
+  let (!$) = assert_val
 
   let value_size = Theory.Bitv.size CPU.value
 
