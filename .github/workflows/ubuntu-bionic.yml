@@ -1,6 +1,7 @@
-name: Debian testing
+name: Ubuntu-bionic
 on:
-  - push
+  schedule:
+    - cron: '0 0 * * FRI'
 
 jobs:
    build:
@@ -8,8 +9,8 @@ jobs:
      steps:
      - uses: actions/checkout@master
 
-     - name: Build on Debian Testing
+     - name: Build on Ubuntu Bionic
        uses: docker/build-push-action@v1
        with:
          push: false
-         dockerfile: docker/debian/testing/Dockerfile
+         dockerfile: docker/ubuntu/bionic/Dockerfile

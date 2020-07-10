@@ -1,6 +1,7 @@
-name: Bionic
+name: Archlinux
 on:
-  - push
+ schedule:
+    - cron: '0 0 * * TUE'
 
 jobs:
    build:
@@ -8,8 +9,8 @@ jobs:
      steps:
      - uses: actions/checkout@master
 
-     - name: Build on Ubuntu Bionic
+     - name: Build on Archlinux
        uses: docker/build-push-action@v1
        with:
          push: false
-         dockerfile: docker/ubuntu/bionic/Dockerfile
+         dockerfile: docker/archlinux/Dockerfile

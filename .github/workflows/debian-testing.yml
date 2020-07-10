@@ -1,6 +1,8 @@
-name: Archlinux
+name: Debian-testing
+
 on:
-  - push
+ schedule:
+    - cron: '0 0 * * WED'
 
 jobs:
    build:
@@ -8,8 +10,8 @@ jobs:
      steps:
      - uses: actions/checkout@master
 
-     - name: Build on Archlinux
+     - name: Build on Debian Testing
        uses: docker/build-push-action@v1
        with:
          push: false
-         dockerfile: docker/archlinux/Dockerfile
+         dockerfile: docker/debian/testing/Dockerfile
