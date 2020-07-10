@@ -35,10 +35,12 @@ module Unit : sig
     val subarch : (cls, string option) slot
     val vendor : (cls, string option) slot
     val system : (cls, string option) slot
+    val bits   : (cls, int option) slot
     val abi    : (cls, string option) slot
     val fabi   : (cls, string option) slot
     val cpu    : (cls, string option) slot
     val fpu    : (cls, string option) slot
+    val is_little_endian : (cls, bool option) slot
   end
 
   module Source : sig

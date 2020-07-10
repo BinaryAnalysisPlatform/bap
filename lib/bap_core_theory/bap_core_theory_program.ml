@@ -82,6 +82,27 @@ module Unit = struct
         ~desc:"target machine CPU model"
     let fpu = string_property cls "target-fpu"
         ~desc:"target machine FPU model"
+
+    let bits = Knowledge.Domain.optional "bits"
+        ~equal:Int.equal
+        ~inspect:sexp_of_int
+
+    let bits =
+      Knowledge.Class.property ~package cls "target-bits" bits
+        ~persistent:(Knowledge.Persistent.of_binable (module struct
+                       type t = int option [@@deriving bin_io]
+                     end))
+        ~public:true
+        ~desc:"the bitness of the architecture"
+
+    let is_little_endian =
+      Knowledge.Class.property ~package cls "target-is-little-endian"
+        Knowledge.Domain.bool
+        ~persistent:(Knowledge.Persistent.of_binable (module struct
+                       type t = bool option [@@deriving bin_io]
+                     end))
+        ~public:true
+        ~desc:"whether the target architecture is little endian"
   end
 
   module Source = struct

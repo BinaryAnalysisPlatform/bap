@@ -1123,10 +1123,12 @@ module Theory : sig
       val subarch : (cls, string option) KB.slot
       val vendor : (cls, string option) KB.slot
       val system : (cls, string option) KB.slot
+      val bits   : (cls, int option) KB.slot
       val abi    : (cls, string option) KB.slot
       val fabi   : (cls, string option) KB.slot
       val cpu    : (cls, string option) KB.slot
       val fpu    : (cls, string option) KB.slot
+      val is_little_endian : (cls, bool option) KB.slot
     end
 
     module Source : sig
