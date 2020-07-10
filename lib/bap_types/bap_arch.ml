@@ -47,6 +47,10 @@ module T = struct
   let of_string s =
     Option.try_with (fun () -> of_string_exn s)
 
+  let from_string s = match of_string s with
+    | None -> `unknown
+    | Some s -> s
+
   let addr_size : t -> addr_size = function
     | #arm | #armeb | #thumb | #thumbeb
     | `x86 | `ppc | `mips | `mipsel | `sparc
@@ -68,7 +72,6 @@ module T = struct
   let domain =
     KB.Domain.flat ~empty:`unknown ~equal ~inspect:sexp_of_t "arch"
 
-
   let slot = KB.Class.property ~package:"bap"
       Theory.Program.cls "arch" domain
       ~persistent:(KB.Persistent.of_binable (module struct
@@ -76,6 +79,27 @@ module T = struct
                    end))
       ~public:true
       ~desc:"an ISA of the program"
+
+
+  let _arch_of_unit_ : unit =
+    KB.Rule.(declare ~package:"bap" "arch-of-unit" |>
+             require Theory.Label.unit |>
+             require Theory.Unit.Target.arch |>
+             require Theory.Unit.Target.subarch |>
+             provide slot |>
+             comment "compute arch from the unit target defintions");
+    let open KB.Syntax in
+    let (>>=?) x f =
+      x >>= function
+      | None -> KB.return `unknown
+      | Some x -> f x in
+    KB.promise slot @@ fun obj ->
+    KB.collect Theory.Label.unit obj >>=? fun unit ->
+    KB.collect Theory.Unit.Target.arch unit >>=? fun arch ->
+    KB.collect Theory.Unit.Target.subarch unit >>| fun sub ->
+    from_string @@ arch ^ Option.value sub ~default:""
+
+
 end
 
 include T
