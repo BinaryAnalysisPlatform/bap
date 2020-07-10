@@ -85,7 +85,6 @@ module T = struct
     KB.Rule.(declare ~package:"bap" "arch-of-unit" |>
              require Theory.Label.unit |>
              require Theory.Unit.Target.arch |>
-             require Theory.Unit.Target.subarch |>
              provide slot |>
              comment "compute arch from the unit target defintions");
     let open KB.Syntax in
@@ -96,8 +95,7 @@ module T = struct
     KB.promise slot @@ fun obj ->
     KB.collect Theory.Label.unit obj >>=? fun unit ->
     KB.collect Theory.Unit.Target.arch unit >>=? fun arch ->
-    KB.collect Theory.Unit.Target.subarch unit >>| fun sub ->
-    from_string @@ arch ^ Option.value sub ~default:""
+    KB.return (from_string arch)
 
 
 end

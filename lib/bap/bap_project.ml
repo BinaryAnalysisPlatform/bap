@@ -24,6 +24,72 @@ let query doc attr =
       (Error.to_string_hum err) ()
   | Ok bias -> bias
 
+module Spec = struct
+  module Fact = Ogre.Make(KB)
+  open Fact.Syntax
+
+  let provide slot obj value =
+    Fact.lift @@ KB.provide slot obj value
+
+  let str field slot unit =
+    Fact.request field >>= function
+    | None | Some "" | Some "unknown" ->
+      Fact.return ()
+    | value -> provide slot unit value
+
+  let bool field slot unit =
+    Fact.request field >>= provide slot unit
+
+  let int field slot unit =
+    Fact.request field >>= function
+    | Some x ->
+      provide slot unit (Some (Int64.to_int_exn x))
+    | None -> Fact.return ()
+
+  let facts fields unit =
+    Fact.List.iter fields ~f:(fun provide -> provide unit)
+
+  let init_unit =
+    let open Theory.Unit in
+    let open Image.Scheme in
+    facts [
+      str arch Target.arch;
+      str subarch Target.subarch;
+      str vendor Target.vendor;
+      str system Target.system;
+      str abi Target.abi;
+      int bits Target.bits;
+      bool is_little_endian Target.is_little_endian;
+    ]
+
+  let provide spec unit =
+    let open KB.Syntax in
+    Fact.exec (init_unit unit) spec >>= function
+    | Error err ->
+      invalid_argf "Failed to provide the image specification \
+                    to the knowledge base: %s"
+        (Error.to_string_hum err) ()
+    | Ok _doc -> KB.return ()
+
+
+  let init arch =
+    let module Field = Image.Scheme in
+    let open Ogre.Syntax in
+    let bits = Int64.of_int (Size.in_bits (Arch.addr_size arch))  in
+    let statements = Ogre.all [
+        Ogre.provide Field.arch (Arch.to_string arch);
+        Ogre.provide Field.bits bits;
+        Ogre.provide Field.is_little_endian @@
+        match Arch.endian arch with
+        | LittleEndian -> true
+        | BigEndian -> false
+      ] in
+    match Ogre.exec statements Ogre.Doc.empty with
+    | Error err ->
+      failwithf "got a malformed ogre document: %s"
+        (Error.to_string_hum err) ();
+    | Ok doc -> doc
+end
 
 let with_arch arch mems =
   let open KB.Syntax in
@@ -48,6 +114,7 @@ let with_filename spec arch data code path =
       if Memmap.contains data addr || Memmap.contains code addr
       then
         Theory.Unit.for_file path >>= fun unit ->
+        Spec.provide spec unit >>= fun () ->
         KB.provide Theory.Unit.bias unit bias >>= fun () ->
         KB.provide Theory.Unit.path unit (Some path) >>| fun () ->
         Some unit
@@ -122,7 +189,6 @@ module Info = struct
   let spec,got_spec = Stream.create ()
 end
 
-
 module Input = struct
   type result = {
     arch : arch;
@@ -136,7 +202,7 @@ module Input = struct
   type t = unit -> result
 
   let create ?(finish=ident) arch file ~code ~data () = {
-    arch; file; code; data; finish; spec=Ogre.Doc.empty;
+    arch; file; code; data; finish; spec=Spec.init arch;
   }
 
   let loaders = String.Table.create ()
