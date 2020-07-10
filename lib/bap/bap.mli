@@ -5548,11 +5548,51 @@ module Std : sig
       val executable : bool Ogre.field (** is_executable *)
       val fixup : addr Ogre.field      (** an address of a fixup *)
 
-      (** [arch name] a file contains code for the [name] architecture. *)
+      (** [arch name] a file contains code for the [name] architecture.
+
+          E.g., arm, x86, x86_64
+      *)
       val arch : (string, (string -> 'a) -> 'a) Ogre.attribute
 
+
+      (** [subarch name] the subarchitecture, when applicable,
+          e.g., v7, v8, r2, etc. Should be appended to the arch
+          name to get the full description, e.g., armv7.
+      *)
+      val subarch : (string, (string -> 'a) -> 'a) Ogre.attribute
+
+
+      (** [vendor name] the second part of the build triplet,
+          e.g., apple, pc, ibm, unknown. Could be just an empty string.
+      *)
+      val vendor : (string, (string -> 'a) -> 'a) Ogre.attribute
+
+
+      (** [system name] the operating system name, for which the
+          binary is specifically built, e.g., ananas, ios, linux.
+      *)
+      val system : (string, (string -> 'a) -> 'a) Ogre.attribute
+
+
+      (** [abi name] the environment/toolchain/abi under which the
+          binary is expected to be run, e.g., gnu, android, msvc
+      *)
+      val abi : (string, (string -> 'a) -> 'a) Ogre.attribute
+
+
+      (** [bits m] is the bitness of the target architecture, e.g.,
+          16, 32, 64.
+      *)
+      val bits : (size, (size -> 'a) -> 'a) Ogre.attribute
+
+
+      (** [is_little_endian yes-or-no] is [true] if the target is
+          little endian.   *)
+      val is_little_endian : (bool, (bool -> 'a) -> 'a) Ogre.attribute
+
+
       (** [bias offset] the value by which all addresses are biased
-          wrt to the real addresses in the binary  *)
+          wrt to the real addresses in the binary. *)
       val bias : (off, (off -> 'a) -> 'a) Ogre.attribute
 
       (** [segment addr size readable writable executable] a memory

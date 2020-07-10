@@ -95,6 +95,13 @@ module Scheme : sig
   val executable : bool Ogre.field
 
   val arch : (string, (string -> 'a) -> 'a) Ogre.attribute
+  val subarch : (string, (string -> 'a) -> 'a) Ogre.attribute
+  val vendor : (string, (string -> 'a) -> 'a) Ogre.attribute
+  val system : (string, (string -> 'a) -> 'a) Ogre.attribute
+  val abi : (string, (string -> 'a) -> 'a) Ogre.attribute
+  val bits : (size, (size -> 'a) -> 'a) Ogre.attribute
+  val is_little_endian : (bool, (bool -> 'a) -> 'a) Ogre.attribute
+
   val bias : (off, (off -> 'a) -> 'a) Ogre.attribute
   val segment : ((bool * bool * bool) region,
                  (addr -> addr -> bool -> bool -> bool -> 'a) -> 'a) Ogre.attribute
