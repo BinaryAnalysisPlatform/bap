@@ -1,8 +1,8 @@
 name: Ubuntu-bionic
+
 on:
-  - push
-#  schedule:
-#    - cron: '0 0 * * FRI'
+  schedule:
+    - cron: '0 0 * * FRI'
 
 jobs:
    build:

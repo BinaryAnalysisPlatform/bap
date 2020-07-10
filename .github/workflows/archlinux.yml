@@ -1,8 +1,8 @@
 name: Archlinux
+
 on:
- - push
- # schedule:
- #    - cron: '0 0 * * TUE'
+  schedule:
+    - cron: '0 0 * * TUE'
 
 jobs:
    build:
