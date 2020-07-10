@@ -159,5 +159,18 @@ module Bits(Core : Theory.Core) = struct
       ]
     ]
 
+  let clz dest src cond =
+    DSL.[
+      if_ (resolve_cond cond) [
+        Env.tmp := !$src;
+        !$$dest := !!0;
+        (* this couldn't by statically expanded *)
+        repeat (msb (var Env.tmp)) !%[
+          Env.tmp := var Env.tmp << !!1;
+          !$$dest := !$dest + imm 1
+        ]
+      ]
+    ]
+
 
 end

@@ -56,11 +56,11 @@ module DSL(Core: Theory.Core)(CPU: CPU)(V: ValueHolder) = struct
     let bot = perform Theory.Effect.Sort.bot in
     if cond then eff |> expand else bot
   let unless_ (cond : bool) eff = when_ (phys_equal cond false) eff
-  let if_then_ (cond : Theory.bool) then_ else_ =
+  let if_else_ (cond : Theory.bool) then_ else_ =
     branch cond (then_ |> expand) (else_ |> expand)
   let if_ (cond : Theory.bool) then_ =
     let bot = perform Theory.Effect.Sort.bot in
-    if_then_ cond then_ [bot]
+    if_else_ cond then_ [bot]
 
   (** this is a static effect list generator (from core theory perspective) *)
   let rec while_ (cond : 'a -> bool * 'a) (init : 'a) (perf : 'a -> 'b Theory.eff) =
