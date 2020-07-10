@@ -8,6 +8,36 @@
 #include "llvm_elf_loader.hpp"
 #include "llvm_macho_loader.hpp"
 
+static std::string scheme =
+    "(declare arch (name str))\n"
+    "(declare subarch (name str))\n"
+    "(declare vendor (name str))\n"
+    "(declare system (name str))\n"
+    "(declare abi (name str))\n"
+    "(declare bits (size int))\n"
+    "(declare is-little-endian (flag bool))\n"
+    "(declare code-entry (name str) (off int) (size int))\n"
+    "(declare default-base-address (addr int))\n"
+    "(declare entry (relative-addr int))\n"
+    "(declare file-type (name str))\n"
+    "(declare function (off int) (name str))\n"
+    "(declare macho-symbol (name str) (value int))\n"
+    "(declare plt-entry (name str) (relative-addr int) (size int) (off int))\n"
+    "(declare program-header-flags (name str) (ld bool) (r bool) (w bool) (x bool))\n"
+    "(declare program-header (name str) (off int) (size int))\n"
+    "(declare ref-external (rel-off int) (name str))\n"
+    "(declare ref-internal (sym-off int) (rel-off int))\n"
+    "(declare relocatable (flag bool))\n"
+    "(declare section-entry (name str) (relative-addr int) (size int) (off int))\n"
+    "(declare section-flags (name str) (r bool) (w bool) (x bool))\n"
+    "(declare segment-command-flags (name str) (r bool) (w bool) (x bool))\n"
+    "(declare segment-command (name str) (off int) (size int))\n"
+    "(declare symbol-entry (name str) (relative-addr int) (size int) (off int))\n"
+    "(declare virtual-program-header (name str) (relative-addr int) (size int))\n"
+    "(declare virtual-section-header (name str) (relative-addr int) (size int))\n"
+    "(declare virtual-segment-command (name str) (relative-addr int) (size int))\n";
+
+
 namespace loader {
 
 using namespace llvm;
@@ -54,35 +84,35 @@ error_or<object::Binary> get_binary(const char* data, std::size_t size) {
 error_or<std::string> unsupported_filetype() { return success(std::string("")); }
 
 template <typename T>
-error_or<std::string> load_base(const object::Binary *binary) {
+error_or<std::string> load_base(ogre_doc &s, const object::Binary *binary) {
     if (auto bin = llvm::dyn_cast<T>(binary))
-        return load(*bin);
+        return load(s, *bin);
     else
         return unsupported_filetype();
 }
 
-error_or<std::string> load_elf(const object::Binary *binary) {
+error_or<std::string> load_elf(ogre_doc &s, const object::Binary *binary) {
     if (isa<ELF32LEObjectFile>(*binary))
-        return load_base<ELF32LEObjectFile>(binary);
+        return load_base<ELF32LEObjectFile>(s, binary);
     else if (isa<ELF32BEObjectFile>(*binary))
-        return load_base<ELF32BEObjectFile>(binary);
+        return load_base<ELF32BEObjectFile>(s, binary);
     else if (isa<ELF64LEObjectFile>(*binary))
-        return load_base<ELF64LEObjectFile>(binary);
+        return load_base<ELF64LEObjectFile>(s, binary);
     else if (isa<ELF64BEObjectFile>(*binary))
-        return load_base<ELF64BEObjectFile>(binary);
+        return load_base<ELF64BEObjectFile>(s, binary);
     else
         return unsupported_filetype();
 }
 
-error_or<std::string> load_coff(const object::Binary *binary, const char * pdb_path) {
+error_or<std::string> load_coff(ogre_doc &s,const object::Binary *binary, const char * pdb_path) {
      if (auto bin = llvm::dyn_cast<COFFObjectFile>(binary))
-         return load(*bin, pdb_path);
+         return load(s, *bin, pdb_path);
     else
         return unsupported_filetype();
 }
 
-error_or<std::string> load_macho(const object::Binary *binary) {
-    return load_base<MachOObjectFile>(binary);
+error_or<std::string> load_macho(ogre_doc &s, const object::Binary *binary) {
+    return load_base<MachOObjectFile>(s, binary);
 }
 
 template <typename T>
@@ -96,19 +126,35 @@ void verbose_fails(const error_or<T> &loaded) {
     }
 }
 
+void emit_common_header(ogre_doc &s, const object::ObjectFile *obj) {
+    s.raw_entry(scheme);
+    auto target = obj->makeTriple();
+    s.entry("arch") << Triple::getArchTypeName(target.getArch());
+    s.entry("subarch") << prim::string_of_subarch(target.getSubArch());
+    s.entry("vendor") << target.getVendorName();
+    s.entry("system") << target.getOSName();
+    s.entry("abi") << target.getEnvironmentName();
+    s.entry("bits") << (obj->getBytesInAddress() * 8);
+    s.entry("is-little-endian") << target.isLittleEndian();
+}
+
 error_or<std::string> load(const char* data, std::size_t size, const char * pdb_path) {
-    error_or<object::Binary> bin = get_binary(data, size);
-    if (!bin) { verbose_fails(bin); return unsupported_filetype(); }
-    else if (bin->isCOFF())   return load_coff(bin.get(), pdb_path);
-    else if (bin->isELF())    return load_elf(bin.get());
-    else if (bin->isMachO())  return load_macho(bin.get());
+    error_or<object::Binary> result = get_binary(data, size);
+    if (!result) { verbose_fails(result); return unsupported_filetype(); }
+    auto object = llvm::dyn_cast<object::ObjectFile>(result.get());
+    if (!object) return unsupported_filetype();
+    ogre_doc s;
+    emit_common_header(s, object);
+    if (object->isCOFF())   return load_coff(s, object, pdb_path);
+    else if (object->isELF())    return load_elf(s, object);
+    else if (object->isMachO())  return load_macho(s, object);
     else return unsupported_filetype();
 }
 
 typedef error_or<std::string> bap_llvm_loader;
 
 const bap_llvm_loader * create(const char* data, std::size_t size, const char *pdb_path) {
-    auto loaded = load(data, size, pdb_path);
+    error_or<std::string> loaded = load(data, size, pdb_path);
     verbose_fails(loaded);
     return new bap_llvm_loader(std::move(loaded));
 }

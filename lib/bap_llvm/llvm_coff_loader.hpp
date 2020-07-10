@@ -20,21 +20,6 @@ using namespace llvm::object;
 
 typedef COFFObjectFile coff_obj;
 
-static const std::string coff_declarations =
-    "(declare file-type (name str))"
-    "(declare arch (name str))"
-    "(declare default-base-address (addr int))"
-    "(declare entry (relative-addr int))"
-    "(declare section-entry (name str) (relative-addr int) (size int) (off int))"
-    "(declare virtual-section-header (name str) (relative-addr int) (size int))"
-    "(declare code-entry (name str) (off int) (size int))"
-    "(declare section-flags (name str) (r bool) (w bool) (x bool))"
-    "(declare symbol-entry (name str) (relative-addr int) (size int) (off int))"
-    "(declare function (off int) (name str))"
-    "(declare relocatable (flag bool))"
-    "(declare ref-internal (sym-off int) (rel-off int))"
-    "(declare ref-external (rel-off int) (name str))";
-
 bool is_code_section(const coff_section &sec) {
     return
         static_cast<bool>(
@@ -384,12 +369,9 @@ error_or<uint64_t> symbol_value(const coff_obj &obj, const SymbolRef &s) {
 
 } // namespace coff_loader
 
-error_or<std::string> load(const llvm::object::COFFObjectFile &obj, const char* pdb_path) {
+error_or<std::string> load(ogre_doc &s, const llvm::object::COFFObjectFile &obj, const char* pdb_path) {
     using namespace coff_loader;
-    ogre_doc s;
-    s.raw_entry(coff_declarations);
     s.raw_entry("(file-type coff)");
-    s.entry("arch") << prim::arch_of_object(obj);
     s.entry("relocatable") << is_relocatable(obj);
     image_base(obj, s);
     entry_point(obj, s);

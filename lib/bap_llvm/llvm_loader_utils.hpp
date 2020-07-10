@@ -3,6 +3,7 @@
 
 #include <sstream>
 #include <iomanip>
+#include <iostream>
 
 #include <llvm/ADT/Triple.h>
 
@@ -15,7 +16,7 @@ using namespace llvm;
 std::string escape(const std::string &src) {
     std::stringstream dst;
     for (auto it = src.begin(); it != src.end (); ++it) {
-        if (isalpha(*it) || isdigit(*it))
+        if (isprint(*it) && *it != '\\' && *it != '"')
             dst << *it;
         else
             dst << "\\x" << std::hex << int(*it) ;
@@ -70,9 +71,13 @@ struct ogre_doc {
         return d << std::string(t);
     }
 
+    friend ogre_doc &operator<<(ogre_doc &d, const llvm::StringRef &s) {
+        return d << s.str();
+    }
+
     void raw_entry(const std::string &data) {
         close();
-        if (s_) *s_ << data;
+        if (s_) *s_ << data << "\n";
     }
 
     error_or<std::string> str() {
@@ -83,7 +88,10 @@ struct ogre_doc {
 
 private:
     void close() {
-        if (s_ && !closed_) { *s_ << ")"; closed_ = true; }
+        if (s_ && !closed_) {
+            *s_ << ")\n";
+            closed_ = true;
+        }
     }
 
 private:
