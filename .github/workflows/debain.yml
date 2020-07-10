@@ -1,0 +1,15 @@
+name: Debian testing
+on:
+  - push
+
+jobs:
+   build:
+     runs-on: ubuntu-latest
+     steps:
+     - uses: actions/checkout@master
+
+     - name: Build on Debian Testing
+       uses: docker/build-push-action@v1
+       with:
+         push: false
+         dockerfile: docker/debian/testing/Dockerfile
