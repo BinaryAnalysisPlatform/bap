@@ -48,16 +48,26 @@ module DSL(Core: Theory.Core)(CPU: CPU)(V: ValueHolder) = struct
 
   let imm (x : int) = word_as_bitv (Bap.Std.Word.of_int value_size x)
 
+  let (!!) = imm
+
   let ( := )  = set
   let set_if cond dest src = dest := ite cond src (var dest)
   let when_ (cond : bool) eff = 
     let bot = perform Theory.Effect.Sort.bot in
     if cond then eff |> expand else bot
+  let unless_ (cond : bool) eff = when_ (phys_equal cond false) eff
   let if_then_ (cond : Theory.bool) then_ else_ =
     branch cond (then_ |> expand) (else_ |> expand)
   let if_ (cond : Theory.bool) then_ =
     let bot = perform Theory.Effect.Sort.bot in
     if_then_ cond then_ [bot]
+
+  (** this is a static effect list generator (from core theory perspective) *)
+  let rec while_ (cond : 'a -> bool * 'a) (init : 'a) (perf : 'a -> 'b Theory.eff) =
+    match cond init with
+    | true, next -> [perf init] @ while_ cond next perf
+    | false, _ -> [perform Theory.Effect.Sort.bot]
+
   let ( < )  = slt
   let ( > )  = sgt
   let ( <= )  = sle
@@ -97,5 +107,8 @@ module DSL(Core: Theory.Core)(CPU: CPU)(V: ValueHolder) = struct
 
   let extend v = cast CPU.value b0 v
   let extend_to s v = cast s b0 v
+  let extend_signed v = signed CPU.value v
+  let extend_to_signed s v = signed s v
+  let scoped_var = Theory.Var.scoped
 
 end
