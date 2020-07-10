@@ -1,8 +1,9 @@
 name: Debian-testing
 
 on:
- schedule:
-    - cron: '0 0 * * WED'
+  - push
+#  schedule:
+#    - cron: '0 0 * * WED'
 
 jobs:
    build:

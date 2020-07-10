@@ -1,8 +1,9 @@
 name: Fedora
 
 on:
- schedule:
-    - cron: '0 0 * * THU'
+  - push
+#  schedule:
+#    - cron: '0 0 * * THU'
 
 jobs:
    build:

@@ -1,7 +1,8 @@
 name: Alpine
 on:
-  schedule:
-    - cron: '0 0 * * MON'
+  - push
+#  schedule:
+#    - cron: '0 0 * * MON'
 
 jobs:
    build:
