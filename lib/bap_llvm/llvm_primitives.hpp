@@ -18,6 +18,7 @@ using namespace llvm::object;
 
 // object
 std::string string_of_subarch(Triple::SubArchType sub);
+std::string string_of_abi(Triple::EnvironmentType sub);
 const char* get_raw_data(const ObjectFile &obj);
 std::vector<RelocationRef> relocations(const SectionRef &sec);
 std::vector<SectionRef> sections(const ObjectFile &obj);

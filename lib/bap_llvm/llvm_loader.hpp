@@ -133,7 +133,7 @@ void emit_common_header(ogre_doc &s, const object::ObjectFile *obj) {
     s.entry("subarch") << prim::string_of_subarch(target.getSubArch());
     s.entry("vendor") << target.getVendorName();
     s.entry("system") << target.getOSName();
-    s.entry("abi") << target.getEnvironmentName();
+    s.entry("abi") << prim::string_of_abi(target.getEnvironment());
     s.entry("bits") << (obj->getBytesInAddress() * 8);
     s.entry("is-little-endian") << target.isLittleEndian();
 }

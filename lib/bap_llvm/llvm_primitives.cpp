@@ -13,6 +13,9 @@ int64_t relative_address(uint64_t base, uint64_t abs) {
     return (abs - base);
 }
 
+// some cases are commented out because they are not supported
+// by all versions of LLVM, we will later use a macro to enable
+// them depending on the version.
 std::string string_of_subarch(Triple::SubArchType sub) {
     switch (sub) {
     case Triple::NoSubArch: return "";
@@ -46,6 +49,34 @@ std::string string_of_subarch(Triple::SubArchType sub) {
     // case Triple::MipsSubArch_r6: return "r6";
     // case Triple::PPCSubArch_spe: return "spe";
     default: return "";
+    }
+}
+
+// we need it because Triple::getEnvironmentName() is broken and
+// returns the system instead.
+std::string string_of_abi(Triple::EnvironmentType abi) {
+    switch (abi) {
+    case Triple::UnknownEnvironment: return "unknown";
+    case Triple::GNU: return "gnu";
+    case Triple::GNUABIN32: return "gnuabin32";
+    case Triple::GNUABI64: return "gnuabi64";
+    case Triple::GNUEABI: return "gnueabi";
+    case Triple::GNUEABIHF: return "gnueabihf";
+    case Triple::GNUX32: return "gnux32";
+    case Triple::CODE16: return "code16";
+    case Triple::EABI: return "eabi";
+    case Triple::EABIHF: return "eabihf";
+    case Triple::Android: return "android";
+    case Triple::Musl: return "musl";
+    case Triple::MuslEABI: return "musleabi";
+    case Triple::MuslEABIHF: return "musleabihf";
+    case Triple::MSVC: return "msvc";
+    case Triple::Itanium: return "itanium";
+    case Triple::Cygnus: return "cygnus";
+    case Triple::CoreCLR: return "coreclr";
+    case Triple::Simulator: return "simulator";
+  //case Triple::MacABI: return "macabi";
+    default: return "unknown";
     }
 }
 
