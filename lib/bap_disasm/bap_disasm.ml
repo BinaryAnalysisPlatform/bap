@@ -63,6 +63,7 @@ let of_rec d = {
 
 module Disasm = struct
   module Driver = Bap_disasm_driver
+  module Subroutines = Bap_disasm_calls
 
   type t = disasm
   type 'a disassembler = ?backend:string -> ?brancher:brancher -> ?rooter:rooter -> 'a

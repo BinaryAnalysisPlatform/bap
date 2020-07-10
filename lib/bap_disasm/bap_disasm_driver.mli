@@ -7,10 +7,24 @@ module Dis = Bap_disasm_basic
 
 type state [@@deriving bin_io]
 type insns
+type jump
 
 val init : state
 val scan : mem -> state -> state knowledge
 val merge : state -> state -> state
+
+val subroutines : state -> Set.M(Addr).t
+val blocks : state -> Set.M(Addr).t
+val jump : state -> addr -> jump option
+
+val is_data : state -> addr -> bool
+val is_subroutine : state -> addr -> bool
+val is_jump : state -> addr -> bool
+val is_block : state -> addr -> bool
+
+val destinations : jump -> Set.M(Addr).t
+val is_call : jump -> bool
+val is_barrier : jump -> bool
 
 val explore :
   ?entry:addr ->

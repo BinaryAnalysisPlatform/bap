@@ -13,7 +13,7 @@ type insn = Insn.t [@@deriving sexp_of]
 type edge = [`Jump | `Cond | `Fall] [@@deriving compare]
 
 
-type dsts = {
+type jump = {
   call : bool;
   barrier : bool;
   indirect : bool;
@@ -24,7 +24,7 @@ module Machine : sig
   type task = private
     | Dest of {dst : addr; parent : task option}
     | Fall of {dst : addr; parent : task; delay : slot}
-    | Jump of {src : addr; age: int; dsts : dsts; parent : task}
+    | Jump of {src : addr; age: int; dsts : jump; parent : task}
   and slot = private
     | Ready of task option
     | Delay
@@ -33,11 +33,12 @@ module Machine : sig
   type state = private {
     stop : bool;
     work : task list;           (* work list*)
-    debt : task list;
+    debt : task list;           (* work that we can't finish *)
     curr : task;
     addr : addr;                (* current address *)
-    begs : Set.M(Addr).t;       (* begins of basic blocks *)
-    jmps : dsts Map.M(Addr).t;  (* jumps  *)
+    dels : Set.M(Addr).t;
+    begs : task list Map.M(Addr).t;       (* begins of basic blocks *)
+    jmps : jump Map.M(Addr).t;  (* jumps  *)
     code : Set.M(Addr).t;       (* all valid instructions *)
     data : Set.M(Addr).t;       (* all non-instructions *)
     usat : Set.M(Addr).t;       (* unsatisfied constraints *)
@@ -57,7 +58,7 @@ module Machine : sig
     ready:(state -> mem -> 'a) -> 'a
 
   val failed : state -> addr -> state
-  val jumped : state -> mem -> dsts -> int -> state
+  val jumped : state -> mem -> jump -> int -> state
   val stopped : state -> state
   val moved  : state -> mem -> state
   val is_ready : state -> bool
@@ -66,7 +67,7 @@ end = struct
   type task =
     | Dest of {dst : addr; parent : task option}
     | Fall of {dst : addr; parent : task; delay : slot}
-    | Jump of {src : addr; age: int; dsts : dsts; parent : task}
+    | Jump of {src : addr; age: int; dsts : jump; parent : task}
   and slot =
     | Ready of task option
     | Delay
@@ -84,8 +85,9 @@ end = struct
     debt : task list;
     curr : task;
     addr : addr;                (* current address *)
-    begs : Set.M(Addr).t;       (* begins of basic blocks *)
-    jmps : dsts Map.M(Addr).t;  (* jumps  *)
+    dels : Set.M(Addr).t;
+    begs : task list Map.M(Addr).t;       (* begins of basic blocks *)
+    jmps : jump Map.M(Addr).t;  (* jumps  *)
     code : Set.M(Addr).t;       (* all valid instructions *)
     data : Set.M(Addr).t;       (* all non-instructions *)
     usat : Set.M(Addr).t;       (* unsatisfied constraints *)
@@ -100,7 +102,7 @@ end = struct
   let mark_data s addr = {
     s with
     data = Set.add s.data addr;
-    begs = Set.remove s.begs addr;
+    begs = Map.remove s.begs addr;
     usat = Set.remove s.usat addr;
     code = Set.remove s.code addr;
     jmps = Map.filter_map (Map.remove s.jmps addr) ~f:(fun dsts ->
@@ -137,21 +139,33 @@ end = struct
         | Fall _ | Dest _ -> cancel parent (mark_data s src)
         | Jump _ -> assert false
 
+  let cancel_beg s addr = match Map.find s.begs addr with
+    | None -> s
+    | Some tasks ->
+      List.fold_right tasks ~f:cancel ~init:{
+        s with begs = Map.remove s.begs addr;
+      }
+
+  let is_slot s addr = Set.mem s.dels addr
+
   let rec step s = match s.work with
     | [] ->
       if Set.is_empty s.usat then {s with stop = true}
       else step {s with work = [
           Dest {dst=Set.min_elt_exn s.usat; parent=None}
         ]}
-    | Dest {dst=next} as curr :: work when is_data s next ->
+    | Dest {dst=next} as curr :: work
+      when is_data s next || is_slot s next ->
       step @@ cancel curr {s with work}
     | Dest {dst=next} as curr :: work ->
-      let s = {s with begs = Set.add s.begs next} in
+      let s = {s with begs = Map.add_multi s.begs next curr} in
       if is_visited s next then step {s with work}
       else {s with work; addr=next; curr}
     | Fall {dst=next} as curr :: work ->
       if is_code s next
-      then step {s with begs = Set.add s.begs next; work}
+      then
+        if is_slot s next then step @@ cancel curr {s with work}
+        else step {s with begs = Map.add_multi s.begs next curr; work}
       else if is_data s next then step @@ cancel curr {s with work}
       else {s with work; addr=next; curr}
     | (Jump {src; dsts} as jump) :: ([] as work)
@@ -164,17 +178,18 @@ end = struct
         let init = {s with jmps = Map.add_exn s.jmps src dsts; work} in
         step @@
         Set.fold resolved ~init ~f:(fun s next ->
-            if not (is_visited s next)
-            then {s with work = Dest {dst=next; parent = Some jump} ::
-                                s.work}
-            else {s with begs = Set.add s.begs next})
+            {s with work = Dest {dst=next; parent = Some jump} ::
+                           s.work})
     | Jump jmp as self :: Fall ({dst=next} as slot) :: work ->
+      let s = cancel_beg s next in
       let delay = if jmp.age = 1 then Ready (Some self) else Delay in
+      let jump = Jump {
+          jmp with age = jmp.age-1; src = next;
+        } in
       step {
         s with
-        work = Fall {slot with delay} :: Jump {
-            jmp with age = jmp.age-1; src = next;
-          } :: work
+        work = Fall {slot with delay} :: jump :: work;
+        dels = Set.add s.dels next;
       }
     | Jump jmp :: work -> step {
         s with work = Jump {jmp with age=0} :: work
@@ -251,7 +266,8 @@ end = struct
       debt = [];
       curr = Dest {dst = start; parent = None};
       stop = false;
-      begs = Set.empty (module Addr);
+      dels = Set.empty (module Addr);
+      begs = Map.empty (module Addr);
       jmps = Map.empty (module Addr);
       code = Set.empty (module Addr);
     } mem
@@ -320,13 +336,12 @@ let classify_mem mem =
         | Some true -> (code,data,Set.add root addr)
         | _ -> (code,data,root))
 
-let scan_mem arch disasm debt base : Machine.state KB.t =
-  classify_mem base >>= fun (code,data,init) ->
+let scan_mem ~code ~data ~funs arch disasm debt base : Machine.state KB.t =
   let step d s =
     if Machine.is_ready s then KB.return s
     else Machine.view s base ~ready:(fun s mem -> Dis.jump d mem s)
         ~empty:KB.return in
-  Machine.start base ~debt ~code ~data ~init
+  Machine.start base ~debt ~code ~data ~init:funs
     ~ready:(fun init mem ->
         Dis.run disasm mem ~stop_on:[`Valid]
           ~return:KB.return ~init
@@ -347,20 +362,35 @@ let scan_mem arch disasm debt base : Machine.state KB.t =
 type insns = Theory.Label.t list
 
 type state = {
+  funs : Addr.Set.t;
   begs : Addr.Set.t;
-  jmps : dsts Addr.Map.t;
+  jmps : jump Addr.Map.t;
   data : Addr.Set.t;
   mems : mem list;
   debt : Machine.task list;
 } [@@deriving bin_io]
 
 let init = {
+  funs = Set.empty (module Addr);
   begs = Set.empty (module Addr);
   jmps = Map.empty (module Addr);
   data = Set.empty (module Addr);
   mems = [];
   debt = [];
 }
+
+let subroutines x = x.funs
+let blocks x = x.begs
+let jump {jmps} = Map.find jmps
+
+let is_data {data} = Set.mem data
+let is_subroutine {funs} = Set.mem funs
+let is_jump {jmps} = Map.mem jmps
+let is_block {begs} = Set.mem begs
+
+let destinations dsts = dsts.resolved
+let is_call dsts = dsts.call
+let is_barrier dsts = dsts.barrier
 
 let query_arch addr =
   KB.Object.scoped Theory.Program.cls @@ fun obj ->
@@ -373,14 +403,15 @@ let already_scanned addr s =
 
 let commit_calls {jmps} =
   Map.to_sequence jmps |>
-  KB.Seq.iter ~f:(fun (_,dsts) ->
+  KB.Seq.fold ~init:Addr.Set.empty ~f:(fun calls (_,dsts) ->
       if dsts.call then
         Set.to_sequence dsts.resolved |>
-        KB.Seq.iter ~f:(fun addr ->
+        KB.Seq.fold ~init:calls ~f:(fun calls addr ->
             Theory.Label.for_addr (Word.to_bitvec addr) >>= fun dst ->
             KB.provide Theory.Label.is_valid dst (Some true) >>= fun () ->
-            KB.provide Theory.Label.is_subroutine dst (Some true))
-      else KB.return ())
+            KB.provide Theory.Label.is_subroutine dst (Some true) >>| fun () ->
+            Set.add calls addr)
+      else KB.return calls)
 
 let scan mem s =
   let open KB.Syntax in
@@ -392,16 +423,21 @@ let scan mem s =
     match Dis.create (Arch.to_string arch) with
     | Error _ -> KB.return s
     | Ok dis ->
-      scan_mem arch dis s.debt mem >>= fun {Machine.begs; jmps; data; debt} ->
+      classify_mem mem >>= fun (code,data,funs) ->
+      scan_mem ~code ~data ~funs arch dis s.debt mem >>=
+      fun {Machine.begs; jmps; data; debt; dels} ->
       let jmps = Map.merge s.jmps jmps ~f:(fun ~key:_ -> function
           | `Left dsts | `Right dsts | `Both (_,dsts) -> Some dsts) in
-      let begs = Set.union s.begs begs in
+      let begs = Set.of_map_keys begs in
+      let funs = Set.union s.funs funs in
+      let begs = Set.(diff (union s.begs begs) dels) in
       let data = Set.union s.data data in
-      let s = {begs; data; jmps; mems = mem :: s.mems; debt} in
-      commit_calls s >>| fun () ->
-      s
+      let s = {funs; begs; data; jmps; mems = mem :: s.mems; debt} in
+      commit_calls s >>| fun funs ->
+      {s with funs = Set.(diff (union s.funs funs) dels)}
 
 let merge t1 t2 = {
+  funs = Set.union t1.funs t2.funs;
   begs = Set.union t1.begs t2.begs;
   data = Set.union t1.data t2.data;
   mems = List.rev_append t2.mems t1.mems;
@@ -439,13 +475,9 @@ let with_disasm beg cfg f =
   | Error _ -> KB.return (cfg,None)
   | Ok dis -> f arch dis
 
-let may_fall insn =
-  KB.collect Theory.Program.Semantics.slot insn >>| fun insn ->
-  not Insn.(is barrier insn)
-
 let explore
     ?entry:start ?(follow=always) ~block ~node ~edge ~init
-    {begs; jmps; data; mems} =
+    ({begs; jmps; data; mems} as state) =
   let find_base addr =
     if Set.mem data addr then None
     else List.find mems ~f:(fun mem -> Memory.contains mem addr) in
@@ -465,41 +497,40 @@ let explore
           | None -> KB.return (cfg,None)
           | Some base ->
             Dis.run dis (view beg base) ~stop_on:[`Valid]
-              ~init:(beg,0,[],true) ~return:KB.return
-              ~hit:(fun s mem insn (curr,len,insns,_) ->
+              ~init:(beg,0,[]) ~return:KB.return
+              ~hit:(fun s mem insn (curr,len,insns) ->
                   new_insn arch mem insn >>= fun insn ->
                   let len = Memory.length mem + len in
                   let last = Memory.max_addr mem in
                   let next = Addr.succ last in
                   if Set.mem begs next || Map.mem jmps curr
                   then
-                    may_fall insn >>| fun may ->
-                    (curr, len, insn::insns,may)
+                    KB.return
+                      (curr, len, insn::insns)
                   else Dis.jump s (view next base)
-                      (next, len, insn::insns,true))
-            >>= fun (fin,len,insns,may_fall) ->
+                      (next, len, insn::insns))
+            >>= fun (fin,len,insns) ->
             let mem = view ~len beg base in
             block mem insns >>= fun block ->
             let fall = Addr.succ (Memory.max_addr mem) in
             Hashtbl.add_exn blocks beg block;
             node block cfg >>= fun cfg ->
             match Map.find jmps fin with
-            | None when may_fall ->
+            | None ->
               build cfg fall >>= fun (cfg,dst) ->
-              edge_insert cfg block dst >>= fun cfg ->
-              KB.return (cfg, Some block)
-            | None -> KB.return (cfg, Some block)
-            | Some {resolved=dsts} ->
-              let dsts = if may_fall
-                then Set.add dsts fall else dsts in
+              edge_insert cfg block dst >>| fun cfg ->
+              cfg, Some block
+            | Some {resolved=dsts; barrier} ->
+              let dsts = if barrier then dsts
+                else Set.add dsts fall in
               Set.to_sequence dsts |>
               KB.Seq.fold ~init:cfg ~f:(fun cfg dst ->
                   build cfg dst >>= fun (cfg,dst) ->
-                  edge_insert cfg block dst) >>= fun cfg ->
-              KB.return (cfg,Some block)  in
+                  edge_insert cfg block dst) >>| fun cfg ->
+              cfg,Some block in
   match start with
   | None ->
-    Set.to_sequence begs |>
+    Set.to_sequence state.begs |>
     KB.Seq.fold ~init ~f:(fun cfg beg ->
         build cfg beg >>| fst)
   | Some start -> build init start >>| fst
