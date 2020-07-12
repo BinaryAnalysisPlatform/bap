@@ -46,6 +46,8 @@ module DSL(Core: Theory.Core)(CPU: CPU)(V: ValueHolder) = struct
 
   let bool_as_bitv b = ite b (int CPU.value Bitvec.one) (int CPU.value Bitvec.zero)
 
+  let bool_as_bit b = ite b (int CPU.bit_val Bitvec.one) (int CPU.bit_val Bitvec.zero)
+
   let imm (x : int) = word_as_bitv (Bap.Std.Word.of_int value_size x)
 
   let (!!) = imm
@@ -67,6 +69,10 @@ module DSL(Core: Theory.Core)(CPU: CPU)(V: ValueHolder) = struct
     match cond init with
     | true, next -> [perf init] @ while_ cond next perf
     | false, _ -> [perform Theory.Effect.Sort.bot]
+
+  let foreach_ (list : 'a list) (perf : 'a -> int -> 'b Theory.eff) =
+    List.foldi list ~init:(perform Theory.Effect.Sort.bot)
+      ~f:(fun it eff item -> seq eff (perf item it))
 
   let ( < )  = slt
   let ( > )  = sgt

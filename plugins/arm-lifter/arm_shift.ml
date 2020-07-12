@@ -75,4 +75,37 @@ module Shift(Core : Theory.Core) = struct
              shift_type (word_as_bitv shift_amt))
     | _ -> raise (Defs.Lift_Error "shift decoding failed")
 
+  (* decodes a shifted operand for a memory operation
+   * src - the operand to be shifted
+   * shift - an int64,
+   *            bits 11 through 0 represent the shift amount
+   *            bits 12 represents whether the expression is added or subtracted
+   *            bits 15 through 13 represent the shift type, valid shift types
+   *              are number 1 through 5
+   * typ - the type
+   **)
+  let mem_shift ~src shift =
+    let shift = Defs.assert_imm shift in
+    let width = 32 in
+    let word = Word.of_int ~width in
+    let wordm n = Ok (word n) in
+    let shift_typ w =
+      Word.Int_err.((!$w land wordm 0xE000) lsr wordm 13 >>|
+                    shift_of_word) in
+    (* Gets the shift amount from the immediate *)
+    let shift_amt w = Word.Int_err.(!$w land wordm 0xFFF >>| DSL.word_as_bitv) in
+    (* Converts the shift to a negative if the negative bit is set *)
+    let to_neg w exp =
+      match Word.Int_err.(wordm 0x1000 land !$w) with
+      | Ok x when Word.equal x (word 0x1000) ->
+        DSL.(word_as_bitv (Word.ones width) * exp)
+      | _ -> exp in
+    let r = Word.Int_err.(shift_typ shift >>= fun t -> shift_amt shift >>= fun amt ->
+                          Or_error.return (t,amt)) in
+    match r with
+    | Error _ -> raise (Defs.Lift_Error "error during shift decoding")
+    | Ok (t,amount) ->
+      let exp, _ = shift_with_carry src t amount in
+      to_neg shift exp
+
 end
