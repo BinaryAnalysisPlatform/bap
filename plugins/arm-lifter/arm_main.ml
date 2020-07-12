@@ -20,6 +20,7 @@ module ARM(Core : Theory.Core) = struct
   module Special = Arm_special.Special(Core)
   module Mem = Arm_mem.Mem(Core)
   module Mem_multi = Arm_mem.Mem_Multi(Core)
+  module Branch = Arm_branch.Branch(Core)
 
   open Utils
 
