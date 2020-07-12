@@ -9,12 +9,16 @@ module Env = struct
   type half_byte
   type half_word
   type bit_val
+  type double_word
 
   let bit : Theory.Bool.t Theory.Value.sort =
     Theory.Bool.t
 
   let bit_val : bit_val Theory.Bitv.t Theory.Value.sort =
     Theory.Bitv.define 1
+
+  let double_word : double_word Theory.Bitv.t Theory.Value.sort =
+    Theory.Bitv.define 64
 
   (** grps are defined by 3-bit indices *)
   let reg_single : reg_single Theory.Bitv.t Theory.Value.sort =
@@ -66,6 +70,7 @@ module Env = struct
   let ge = Theory.Var.define half_byte "ge"
   (* psuedo register storing temporary computations *)
   let tmp = Theory.Var.define value "tmp"
+  let tmp64 = Theory.Var.define double_word "tmp64"
 
   exception Unbound_Reg
   module Defs = Arm_defs

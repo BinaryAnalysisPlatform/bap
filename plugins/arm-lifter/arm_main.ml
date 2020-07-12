@@ -16,6 +16,7 @@ module ARM(Core : Theory.Core) = struct
   module Utils = Arm_util.Utils(Core)
   module Mov = Arm_move.Mov(Core)
   module Bits = Arm_bits.Bits(Core)
+  module Mul = Arm_mul.Mul(Core)
 
   open Utils
 

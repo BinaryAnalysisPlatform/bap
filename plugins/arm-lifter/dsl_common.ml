@@ -96,11 +96,12 @@ module DSL(Core: Theory.Core)(CPU: CPU)(V: ValueHolder) = struct
   module Arith = struct
     let distribute op x y = op (cast V.value b0 x) (cast V.value b0 y)
     let ( + ) x y  = distribute add x y
-    let ( - ) x y  = sub x y
-    let ( * ) x y  = mul x y
-    let ( / ) x y  = div x y
-    let ( ^ ) x y  = concat x y
-    let ( % ) x y  = modulo x y
+    let ( - ) x y  = distribute sub x y
+    let ( * ) x y  = distribute mul x y
+    (* multiplication with signed cast *)
+    let ( -* ) x y = mul (signed V.value x) (signed V.value y)
+    let ( / ) x y  = distribute div x y
+    let ( % ) x y  = distribute modulo x y
   end
 
   include Arith
