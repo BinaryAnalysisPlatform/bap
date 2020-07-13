@@ -54,6 +54,11 @@ module Unit = struct
     Knowledge.Symbol.intern ~package:"file" name cls
       ~public:true
 
+  let for_region ~lower ~upper =
+    let name = Format.asprintf "%a-%a"
+        Bitvec.pp lower Bitvec.pp upper in
+    Knowledge.Symbol.intern ~package:"region" name cls
+
   let path = string_property ~domain:path cls "unit-path"
       ~desc:"a filesytem name of the file that contains the program"
 

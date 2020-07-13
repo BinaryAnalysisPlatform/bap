@@ -305,15 +305,12 @@ let structure cfg ctxt =
 let test_micro_cfg insn ctxt =
   Toplevel.reset ();
   let open Or_error in
-  let mem = Bigstring.of_string insn |>
-            Memory.create LittleEndian (Addr.of_int64 0L) |>
-            ok_exn in
+  let mem = memory_of_string insn in
   let dis = Rec.run `x86_64 mem |> ok_exn in
+  let cfg = Rec.cfg dis in
   assert_bool "No errors" (List.is_empty (Rec.errors dis));
-  assert_bool "One block" (Rec.cfg dis |> Cfg.number_of_nodes = 1);
-  Rec.cfg dis |> Cfg.nodes |>
-  Seq.to_list |> List.hd_exn
-  |> Block.insns |> function
+  assert_bool "One block" (Cfg.number_of_nodes cfg = 1);
+  Cfg.nodes cfg |> Seq.to_list |> List.hd_exn |> Block.insns |> function
   | [mem, _] ->
     let max_addr = Addr.of_int ~width:64 (String.length insn - 1) in
     assert_equal ~printer:Addr.to_string ~ctxt

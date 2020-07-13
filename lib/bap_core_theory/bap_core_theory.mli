@@ -1115,6 +1115,8 @@ module Theory : sig
 
     val for_file : string -> t knowledge
 
+    val for_region : lower:word -> upper:word -> t knowledge
+
     val path : (cls, string option) KB.slot
     val bias : (cls, Bitvec.t option) KB.slot
 

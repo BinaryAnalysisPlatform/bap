@@ -121,7 +121,7 @@ let with_filename spec arch data code path =
       else KB.return None)
 
 
-module Kernel = struct
+module State = struct
   open KB.Syntax
   module Driver = Bap_disasm_driver
   module Calls = Bap_disasm_calls
@@ -164,11 +164,11 @@ module Kernel = struct
   end
 end
 
-type state = Kernel.t [@@deriving bin_io]
+type state = State.t [@@deriving bin_io]
 
 type t = {
   arch    : arch;
-  core    : Kernel.t;
+  core    : State.t;
   disasm  : disasm;
   memory  : value memmap;
   storage : dict;
@@ -263,8 +263,7 @@ module Input = struct
     | None -> from_image filename
     | Some name -> match Hashtbl.find loaders name with
       | None -> from_image ?loader filename
-      | Some load ->
-        fun () -> load filename ()
+      | Some load -> load filename
 
   let null arch : addr =
     Addr.of_int 0 ~width:(Arch.addr_size arch |> Size.in_bits)
@@ -277,41 +276,12 @@ module Input = struct
     let section = Value.create Image.section "bap.user" in
     let code = Memmap.add Memmap.empty mem section in
     let data = Memmap.empty  in
-    let spec = Ogre.Doc.empty in
+    let spec = Spec.init arch in
     {arch; data; code; file = filename; finish = ident; spec}
 
   let available_loaders () =
     Hashtbl.keys loaders @ Image.available_backends ()
 end
-
-module Merge = struct
-
-  let merge_streams ss ~f : 'a Source.t =
-    Stream.concat_merge ss
-      ~f:(fun s s' -> match s, s' with
-          | Ok s, Ok s' -> Ok (f s s')
-          | Ok _, Error er
-          | Error er, Ok _ -> Error er
-          | Error er, Error er' ->
-            Error (Error.of_list [er; er']))
-
-  let merge_sources create sources ~f = match sources with
-    | [] -> None
-    | names -> match List.filter_map names ~f:create with
-      | [] -> assert false
-      | ss -> Some (merge_streams ss ~f)
-
-  let symbolizer () =
-    let symbolizers = Symbolizer.Factory.list () in
-    merge_sources Symbolizer.Factory.find symbolizers ~f:(fun s1 s2 ->
-        Symbolizer.chain [s1;s2])
-
-  let rooter () =
-    let rooters = Rooter.Factory.list () in
-    merge_sources Rooter.Factory.find rooters ~f:Rooter.union
-
-end
-
 
 type input = Input.t
 type project = t
@@ -356,53 +326,58 @@ let set_package package = match package with
   | None -> KB.return ()
   | Some pkg -> KB.Symbol.set_package pkg
 
-let build ?package ?state ~file ~code ~data spec arch =
-  let init = match state with
-    | Some state -> Kernel.{state with package}
-    | None -> Kernel.empty ?package arch in
-  let kernel =
-    let open KB.Syntax in
-    set_package package >>= fun () ->
-    Memmap.to_sequence code |> KB.Seq.fold ~init ~f:(fun k (mem,_) ->
-        Kernel.update k mem) in
-  let cfg,symbols,core = Kernel.Toplevel.run spec arch ~code ~data file kernel in
-  {
-    core;
-    disasm = Disasm.create cfg;
-    program = Program.lift symbols;
-    symbols;
-    arch; memory=union_memory code data;
-    storage = Dict.set Dict.empty filename file;
-    passes=[]
-  }
-
 let state {core} = core
-let package {core={Kernel.package}} = package
+let package {core={State.package}} = package
 
-let create_exn
-    ?package
-    ?state
-    ?disassembler:_
-    ?brancher:_
-    ?symbolizer:_
-    ?rooter:_
-    ?reconstructor:_
-    (read : input)  =
-  let {Input.arch; data; code; file; spec; finish} = read () in
-  Signal.send Info.got_file file;
-  Signal.send Info.got_arch arch;
-  Signal.send Info.got_data data;
-  Signal.send Info.got_code code;
-  Signal.send Info.got_spec spec;
-  finish @@ build ?package ?state ~file ~code ~data spec arch
+let unused_options =
+  List.iter ~f:(Option.iter ~f:(fun name ->
+      warning "Project.create parameter %S is deprecated, \
+               please consult the documentation for the proper \
+               alternative" name))
+
+let (=?) name = Option.map ~f:(fun _ -> name)
 
 let create
-    ?package ?state ?disassembler ?brancher ?symbolizer ?rooter ?
-    reconstructor input =
+    ?package
+    ?state
+    ?disassembler:p1
+    ?brancher:p2
+    ?symbolizer:p3
+    ?rooter:p4
+    ?reconstructor:p5
+    (read : input)  =
   try
-    Ok (create_exn
-          ?package ?state ?disassembler ?brancher ?symbolizer ?rooter
-          ?reconstructor input)
+    unused_options [
+      "disassembler" =? p1;
+      "brancher" =? p2;
+      "symbolizer" =? p3;
+      "rooter" =? p4;
+      "rooter" =? p5;
+    ];
+    let {Input.arch; data; code; file; spec; finish} = read () in
+    Signal.send Info.got_file file;
+    Signal.send Info.got_arch arch;
+    Signal.send Info.got_data data;
+    Signal.send Info.got_code code;
+    Signal.send Info.got_spec spec;
+    let init = match state with
+      | Some state -> State.{state with package}
+      | None -> State.empty ?package arch in
+    let state =
+      let open KB.Syntax in
+      set_package package >>= fun () ->
+      Memmap.to_sequence code |> KB.Seq.fold ~init ~f:(fun k (mem,_) ->
+          State.update k mem) in
+    let cfg,symbols,core = State.Toplevel.run spec arch ~code ~data file state in
+    Result.return @@ finish {
+      core;
+      disasm = Disasm.create cfg;
+      program = Program.lift symbols;
+      symbols;
+      arch; memory=union_memory code data;
+      storage = Dict.set Dict.empty filename file;
+      passes=[]
+    }
   with
   | Toplevel.Conflict err ->
     let open Error.Internal_repr in
@@ -445,7 +420,6 @@ let subst_of_string = function
   | "min_addr" | "addr" -> Some (`memory `min)
   | "max_addr" -> Some (`memory `max)
   | _ -> None
-
 
 let addr which mem =
   let take = match which with

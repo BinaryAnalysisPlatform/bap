@@ -27,6 +27,8 @@ module Unit : sig
 
   val for_file : string -> t knowledge
 
+  val for_region : lower:Bitvec.t -> upper:Bitvec.t -> t knowledge
+
   val path : (cls, string option) slot
   val bias : (cls, Bitvec.t option) slot
 
