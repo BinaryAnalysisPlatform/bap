@@ -223,17 +223,14 @@ let run_lifter _label addr insn _mem
     | Error err -> raise (Defs.Lift_Error (Error.to_string_hum err))
     | Ok ops -> lifter addr arm_insn ops
 
-let provide_sematics insn effect = 
-  KB.provide Theory.Program.Semantics.slot insn effect >>| fun () -> insn
-
-let lift label =
+let () =
+  KB.promise Theory.Program.Semantics.slot @@ fun label ->
   Theory.instance () >>= Theory.require >>= fun (module Core) ->
-  KB.collect Theory.Label.addr label >>= fun addr -> (* this is the address of the current instruction *)
   KB.collect Disasm_expert.Basic.Insn.slot label >>= fun insn -> (* the LLVM provided decoding *)
   KB.collect Memory.slot label >>= fun mem -> (* the memory chunk, probably not needed *)
   let module Lifter = ARM(Core) in
-  match addr, insn, mem with
-  | Some addr, Some insn, Some mem -> 
-    run_lifter label addr insn mem Lifter.lift_with >>= fun sema ->
-    provide_sematics label sema
-  | _ -> raise (Defs.Lift_Error "insufficient knowledge") (* should I have not raised an error here? *)
+  match insn, mem with
+  | Some insn, Some mem ->
+    let addr = Word.to_bitvec@@Memory.min_addr mem in
+    run_lifter label addr insn mem Lifter.lift_with
+  | _ -> KB.return Insn.empty
