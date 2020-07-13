@@ -18,13 +18,13 @@ module Branch(Core : Theory.Core) = struct
   module Var = Theory.Var
   open Flags
   open Cond
-  
+
   (* fabsd Dd Dm cond *)
   let vabsd dest src cond =
     DSL.[
       if_ (resolve_cond cond) FP64.[
-        !$$.dest := fabs !$.src
-      ]
+          !$$.dest := fabs !$.src
+        ]
     ]
 
 end
