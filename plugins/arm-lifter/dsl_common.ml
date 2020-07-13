@@ -16,6 +16,15 @@ module type CPU = sig
   val assert_val: operand -> value Theory.Bitv.t Theory.pure
 end
 
+(** General fpu defs *)
+module type FPU = sig
+  type operand
+  type value
+  val value : value Theory.Float.t Theory.Value.sort
+  val assert_var: operand -> value Theory.Float.t Theory.Var.t
+  val assert_val: operand -> value Theory.Float.t Theory.pure
+end
+
 module type ValueHolder = sig
   type value
   val value: value Theory.Bitv.t Theory.Value.sort
@@ -118,4 +127,14 @@ module DSL(Core: Theory.Core)(CPU: CPU)(V: ValueHolder) = struct
   let extend_to_signed s v = signed s v
   let scoped_var = Theory.Var.scoped
 
+end
+
+module DSLFP(Core : Theory.Core)(FPU: FPU) = struct
+  let assert_var = FPU.assert_var
+
+  let (!$$.) = assert_var
+
+  let assert_val = FPU.assert_val
+
+  let (!$.) = assert_val
 end

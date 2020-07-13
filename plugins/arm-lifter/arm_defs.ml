@@ -45,6 +45,69 @@ type gpr_reg = [
   | `SP
 ] [@@deriving bin_io, compare, sexp, enumerate]
 
+(* Double-precision floating point register *)
+type dgpr_reg = [
+  | `D0
+  | `D1
+  | `D2
+  | `D3
+  | `D4
+  | `D5
+  | `D6
+  | `D7
+  | `D8
+  | `D9
+  | `D10
+  | `D11
+  | `D12
+  | `D13
+  | `D14
+  | `D15
+] [@@deriving bin_io, compare, sexp, enumerate]
+
+(* Single-precision floating point register, which overlaps with double precision *)
+type sgpr_reg = [
+  | `S0 
+  | `S1
+  | `S2 
+  | `S3
+  | `S4 
+  | `S5
+  | `S6 
+  | `S7
+  | `S8 
+  | `S9
+  | `S10
+  | `S11
+  | `S12
+  | `S13
+  | `S14
+  | `S15
+  | `S16
+  | `S17
+  | `S18
+  | `S19
+  | `S20
+  | `S21
+  | `S22
+  | `S23
+  | `S24
+  | `S25
+  | `S26
+  | `S27
+  | `S28
+  | `S29
+  | `S30
+  | `S31
+] [@@deriving bin_io, compare, sexp, enumerate]
+
+type fgpr_reg = [dgpr_reg | sgpr_reg]
+[@@deriving bin_io, compare, sexp, enumerate]
+
+type fccr_reg = [
+  | `FPSCR
+] [@@deriving bin_io, compare, sexp, enumerate]
+
 type gpr_or_nil = [nil_reg | gpr_reg]
 [@@deriving bin_io, compare, sexp, enumerate]
 
@@ -55,13 +118,16 @@ type ccr_reg = [
   | `ITSTATE
 ] [@@deriving bin_io, compare, sexp, enumerate]
 
+type fp_reg = [fgpr_reg | fccr_reg]
+[@@deriving bin_io, compare, sexp, enumerate]
+
 type ccr_or_nil = [nil_reg | ccr_reg ]
 [@@deriving bin_io, compare, sexp, enumerate]
 
 type non_nil_reg = [gpr_reg | ccr_reg]
 [@@deriving bin_io, compare, sexp, enumerate]
 
-type reg = [nil_reg | non_nil_reg]
+type reg = [nil_reg | non_nil_reg | fp_reg]
 [@@deriving bin_io, compare, sexp, enumerate]
 
 type op = [

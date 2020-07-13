@@ -13,6 +13,7 @@ module ARM(Core : Theory.Core) = struct
   open Core
   open Defs
   module Env = Arm_env.Env
+  module FP = Arm_env_fp.Env_fp
   module Utils = Arm_util.Utils(Core)
   module Mov = Arm_move.Mov(Core)
   module Bits = Arm_bits.Bits(Core)
