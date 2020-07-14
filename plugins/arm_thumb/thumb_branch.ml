@@ -62,7 +62,7 @@ module Branch(Core : Theory.Core) = struct
     (DSL.(
         jmp !$target
       ), DSL.[
-        Env.lr := (var Env.pc) + !!2 lor !!1;
+        Env.lr := (var Env.pc) - !!2 lor !!1;
         Env.pc := !$target
       ] |> DSL.expand)
 
@@ -71,7 +71,7 @@ module Branch(Core : Theory.Core) = struct
     (DSL.(
         jmp (!$target land !!0xfffffffc)
       ), DSL.[
-        Env.lr := (var Env.pc) + !!2 lor !!1;
+        Env.lr := (var Env.pc) - !!2 lor !!1;
         Env.pc := (!$target land !!0xfffffffc)
       ] |> DSL.expand)
 
@@ -79,7 +79,7 @@ module Branch(Core : Theory.Core) = struct
     (DSL.(
         jmp (!$target land !!0xfffffffe)
       ), DSL.[
-        Env.lr := (var Env.pc) + !!2 lor !!1;
+        Env.lr := (var Env.pc) - !!2 lor !!1;
         Env.pc := (!$target land !!0xfffffffe)
       ] |> DSL.expand)
 
