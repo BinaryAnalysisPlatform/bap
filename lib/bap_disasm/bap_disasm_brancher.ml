@@ -7,6 +7,7 @@ open Monads.Std
 open KB.Syntax
 
 module Source = Bap_disasm_source
+module Context = Source.Context
 module Targets = Bap_disasm_target_factory
 module Dis = Bap_disasm_basic
 module Insn = Bap_disasm_insn
@@ -18,7 +19,9 @@ type full_insn = Bap_disasm_basic.full_insn
 
 type t = {
   path : string option;
-  resolve : mem -> full_insn -> dests
+  resolve : mem -> full_insn -> dests;
+  biased : bool;
+
 }
 
 type brancher = t
@@ -96,14 +99,15 @@ let resolve_jumps rel_info mem dests =
       | Some addr, `Jump -> fixup rel_info mem addr, `Jump
       | x -> x) dests
 
-let create f = {path=None; resolve=f}
+let create f = {path=None; resolve=f; biased=false}
 let set_path b s = {b with path = Some s}
 let path b = b.path
 let resolve {resolve=f} = f
 
 let empty = {
   path = None;
-  resolve = fun _ _ -> []
+  biased = false;
+  resolve = fun _ _ -> [];
 }
 
 let kind_of_dests = function
@@ -159,19 +163,17 @@ let dests_of_bil ?(rel_info=Rel_info.empty) arch =
 let of_bil arch = create (dests_of_bil arch)
 
 let of_image img =
-  let rel_info = Rel_info.of_spec (Image.spec img) in
-  create (dests_of_bil ~rel_info (Image.arch img))
+  let rel_info = Rel_info.of_spec (Image.spec img) in {
+    path=None;
+    biased = true;
+    resolve = dests_of_bil ~rel_info (Image.arch img)
+  }
 
 module Factory = Source.Factory.Make(struct type nonrec t = t end)
 
 let (>>=?) x f = x >>= function
   | None -> KB.return Insn.empty
   | Some x -> f x
-
-let is_applicable s path = match s.path, path with
-  | None,_-> true
-  | Some p, Some p' -> String.equal p p'
-  | Some _, None -> false
 
 let provide =
   KB.Rule.(declare ~package:"bap" "reflect-brancher" |>
@@ -187,13 +189,18 @@ let provide =
     KB.promise Theory.Program.Semantics.slot @@ fun label ->
     KB.collect Memory.slot label >>=? fun mem ->
     KB.collect Dis.Insn.slot label >>=? fun insn ->
-    KB.collect Theory.Label.unit label >>=? fun unit ->
-    KB.collect Theory.Unit.path unit >>= fun path ->
-    if is_applicable brancher path then
+    Context.for_label label >>= fun ctxt ->
+    let addr =
+      Context.create_addr ctxt ~unbiased:(not brancher.biased) @@
+      Addr.to_bitvec (Memory.min_addr mem) in
+    let bias = Addr.(Memory.min_addr mem - addr) in
+    let mem = Memory.rebase mem addr in
+    if Context.is_applicable ctxt brancher.path then
       resolve brancher mem insn |>
       KB.List.fold ~init ~f:(fun dsts dst ->
           match dst with
           | Some addr,_ ->
+            let addr = Word.(addr + bias) in
             Theory.Label.for_addr (Word.to_bitvec addr) >>| fun dst ->
             Set.add dsts dst
           | None,_ -> KB.return dsts) >>| fun dests ->

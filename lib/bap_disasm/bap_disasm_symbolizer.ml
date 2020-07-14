@@ -9,6 +9,7 @@ open KB.Syntax
 type t = {
   path : string option;
   find : addr -> string option;
+  biased : bool;
 }
 
 type symbolizer = t
@@ -31,6 +32,7 @@ end
 let create find = {
   path = None;
   find;
+  biased = false;
 }
 
 let path s = s.path
@@ -54,7 +56,7 @@ let of_image img =
       and addr = Memory.min_addr mem in
       if not (Name.is_empty name)
       then Hashtbl.set names ~key:addr ~data:name);
-  {find = Hashtbl.find names; path=Image.filename img}
+  {find = Hashtbl.find names; path=Image.filename img; biased=true}
 
 let of_blocks seq =
   let names =
@@ -71,12 +73,6 @@ let of_blocks seq =
 
 module Factory = Factory.Make(struct type nonrec t = t end)
 
-let is_applicable s path = match s.path, path with
-  | None,_-> true
-  | Some p, Some p' -> String.equal p p'
-  | Some _, None -> false
-
-
 let provide =
   KB.Rule.(declare ~package:"bap" "reflect-symbolizers" |>
            dynamic ["symbolizer"] |>
@@ -90,13 +86,11 @@ let provide =
   fun agent s ->
     let open KB.Syntax in
     KB.propose agent Theory.Label.possible_name @@ fun label ->
-    KB.collect Arch.slot label >>= fun arch ->
     KB.collect Theory.Label.addr label >>=? fun addr ->
-    KB.collect Theory.Label.unit label >>=? fun unit ->
-    KB.collect Theory.Unit.bias unit >>= fun bias ->
-    KB.collect Theory.Unit.path unit >>| fun path ->
-    if is_applicable s path
-    then s.find @@ Biased.to_real bias arch addr
+    Context.for_label label >>| fun ctxt ->
+    if Context.is_applicable ctxt s.path
+    then
+      s.find @@ Context.create_addr ctxt ~unbiased:(not s.biased) addr
     else None
 
 let get_name addr =

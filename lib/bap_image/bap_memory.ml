@@ -150,6 +150,8 @@ let create ?(pos=0) ?len endian addr data : t Or_error.t =
 let of_file endian addr path : t Or_error.t =
   create endian addr (Bap_fileutils.readfile path)
 
+let rebase mem addr = {mem with addr}
+
 let min_addr t : addr = t.addr
 
 let max_addr t : addr =

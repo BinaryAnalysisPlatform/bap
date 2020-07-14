@@ -4775,6 +4775,14 @@ module Std : sig
       addr ->
       Bigstring.t -> t Or_error.t
 
+
+    (** [rebase mem addr] returns the same memory but with the new
+        starting address [addr].
+
+        @since 2.2.0
+    *)
+    val rebase : t -> addr -> t
+
     (** memory representation of a program  *)
     val slot : (Theory.program, mem option) Knowledge.slot
 
@@ -8783,7 +8791,6 @@ module Std : sig
         @since 2.2.0
     *)
     val path : t -> string option
-
 
     (** [create seq] creates a rooter from a given sequence of addresses  *)
     val create : addr seq -> t
