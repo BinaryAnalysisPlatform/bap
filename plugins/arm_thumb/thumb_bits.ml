@@ -11,27 +11,28 @@ module Bits(Core : Theory.Core) = struct
   open Core
 
   module Utils = Thumb_util.Utils(Core)
+  module DSL = Thumb_dsl.Make(Core)
 
   open Utils
 
-  let sxtb dest src = match dest, src with
-    | `Reg d, `Reg s -> let d, s = reg d, reg s in
-      (set d (cast Env.byte b0 (var s) |> signed Env.value))
-    | _ -> raise (Lift_Error "dest or src is not a register")
+  let sxtb dest src = 
+    DSL.[
+      !$$dest := extend_to Env.byte !$src |> extend_signed
+    ]
 
-  let sxth dest src = match dest, src with
-    | `Reg d, `Reg s -> let d, s = reg d, reg s in
-      (set d (cast Env.half_word b0 (var s) |> signed Env.value))
-    | _ -> raise (Lift_Error "dest or src is not a register")
+  let sxth dest src =
+    DSL.[
+      !$$dest := extend_to Env.half_word !$src |> extend_signed
+    ]
 
-  let uxtb dest src = match dest, src with
-    | `Reg d, `Reg s -> let d, s = reg d, reg s in
-      (set d (cast Env.byte b0 (var s) |> unsigned Env.value))
-    | _ -> raise (Lift_Error "dest or src is not a register")
+  let uxtb dest src =
+    DSL.[
+      !$$dest := extend_to Env.byte !$src |> extend
+    ]
 
-  let uxth dest src = match dest, src with
-    | `Reg d, `Reg s -> let d, s = reg d, reg s in
-      (set d (cast Env.half_word b0 (var s) |> unsigned Env.value))
-    | _ -> raise (Lift_Error "dest or src is not a register")
+  let uxth dest src = 
+    DSL.[
+      !$$dest := extend_to Env.half_word !$src |> extend
+    ]
 
 end

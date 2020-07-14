@@ -21,7 +21,7 @@ module Env = struct
     Theory.Bitv.define 3
 
   let half_word : half_word Theory.Bitv.t Theory.Value.sort =
-    Theory.Bitv.define 32
+    Theory.Bitv.define 16
 
   let value : value Theory.Bitv.t Theory.Value.sort =
     Theory.Bitv.define 32
@@ -71,6 +71,9 @@ module Env = struct
 
   exception Unbound_Reg
   module Defs = Thumb_defs
+
+  type reg_type = Defs.reg
+  type operand = Defs.op
 
   (* to elimiate ambiguity *)
   let load_reg_wide (op : Defs.reg) = let open Thumb_defs in
