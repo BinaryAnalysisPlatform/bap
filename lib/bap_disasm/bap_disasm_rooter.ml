@@ -54,6 +54,21 @@ let of_blocks blocks =
           | _ -> Some sa));
   create (Hashtbl.data roots |> Seq.of_list)
 
+let make_provider rooter =
+  let init = Set.empty (module Word) in
+  let roots =
+    roots rooter |>
+    Seq.fold ~init ~f:Set.add in
+  fun label ->
+    KB.collect Theory.Label.addr label >>=? fun addr ->
+    Context.for_label label >>| fun ctxt ->
+    if Context.is_applicable ctxt rooter.path
+    then
+      let addr =
+        Context.create_addr ctxt ~unbiased:(not rooter.biased) addr in
+      Option.some_if (Set.mem roots addr) true
+    else None
+
 let provide =
   KB.Rule.(declare ~package:"bap" "reflect-rooter" |>
            dynamic ["rooter"] |>
@@ -63,16 +78,9 @@ let provide =
            provide Theory.Label.is_subroutine |>
            comment "[Rooter.provide r] provides [r] to KB.");
   fun rooter ->
-    let init = Set.empty (module Word) in
-    let roots =
-      roots rooter |>
-      Seq.fold ~init ~f:Set.add in
-    KB.promise Theory.Label.is_subroutine @@ fun label ->
-    KB.collect Theory.Label.addr label >>=? fun addr ->
-    Context.for_label label >>| fun ctxt ->
-    if Context.is_applicable ctxt rooter.path
-    then
-      let addr =
-        Context.create_addr ctxt ~unbiased:(not rooter.biased) addr in
-      Option.some_if (Set.mem roots addr) true
-    else None
+    let rooter = make_provider rooter in
+    KB.promise Theory.Label.is_subroutine @@ rooter
+
+let providing =
+  fun rooter ->
+  KB.promising Theory.Label.is_subroutine ~promise:(make_provider rooter)

@@ -8723,6 +8723,18 @@ module Std : sig
     *)
     val provide : Knowledge.agent -> t -> unit
 
+    (** [providing t scope] provides the information in the specified [scope],
+
+        After the [scope] function is evaluated the information source
+        is retracted from the knowledge base.
+
+        See {!Bap_knowledge.Knowledge.proposing{proposing}}.
+
+        @since 2.2.0
+    *)
+    val providing : Knowledge.agent -> t -> (unit -> 'a knowledge) -> 'a knowledge
+
+
     (** [create fn] creates a symbolizer for a given function  *)
     val create : (addr -> string option) -> t
 
@@ -8776,6 +8788,18 @@ module Std : sig
         @since 2.0.0
     *)
     val provide : t -> unit
+
+
+    (** [providing t scope] provides the information in the specified [scope],
+
+        After the [scope] function is evaluated the information source
+        is retracted from the knowledge base.
+
+        See {!Bap_knowledge.Knowledge.promising{promising}}.
+
+        @since 2.2.0
+    *)
+    val providing : t -> (unit -> 'a knowledge) -> 'a knowledge
 
 
     (** [set_path s] limits the symbolizer applicability only to
@@ -8860,6 +8884,18 @@ module Std : sig
     (** [provide brancher] provides the brancher information to the
         knowledge base.    *)
     val provide : t -> unit
+
+    (** [providing t scope] provides the information in the specified [scope],
+
+        After the [scope] function is evaluated the information source
+        is retracted from the knowledge base.
+
+        See {!Bap_knowledge.Knowledge.promising{promising}}.
+
+        @since 2.2.0
+    *)
+    val providing : t -> (unit -> 'a knowledge) -> 'a knowledge
+
 
     module Factory : Source.Factory.S with type t = t
       [@@deprecated "[since 2019-05] use [provide]"]

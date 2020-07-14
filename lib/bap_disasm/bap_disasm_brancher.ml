@@ -175,6 +175,28 @@ let (>>=?) x f = x >>= function
   | None -> KB.return Insn.empty
   | Some x -> f x
 
+let provide_brancher brancher label =
+  let init = Set.empty (module Theory.Label) in
+  KB.collect Memory.slot label >>=? fun mem ->
+  KB.collect Dis.Insn.slot label >>=? fun insn ->
+  Context.for_label label >>= fun ctxt ->
+  let addr =
+    Context.create_addr ctxt ~unbiased:(not brancher.biased) @@
+    Addr.to_bitvec (Memory.min_addr mem) in
+  let bias = Addr.(Memory.min_addr mem - addr) in
+  let mem = Memory.rebase mem addr in
+  if Context.is_applicable ctxt brancher.path then
+    resolve brancher mem insn |>
+    KB.List.fold ~init ~f:(fun dsts dst ->
+        match dst with
+        | Some addr,_ ->
+          let addr = Word.(addr + bias) in
+          Theory.Label.for_addr (Word.to_bitvec addr) >>| fun dst ->
+          Set.add dsts dst
+        | None,_ -> KB.return dsts) >>| fun dests ->
+    KB.Value.put Insn.Slot.dests Insn.empty (Some dests)
+  else KB.return Insn.empty
+
 let provide =
   KB.Rule.(declare ~package:"bap" "reflect-brancher" |>
            dynamic ["brancher"] |>
@@ -185,24 +207,9 @@ let provide =
            provide Insn.Slot.dests |>
            comment "[Brancher.provide b] provides [b] to KB");
   fun brancher ->
-    let init = Set.empty (module Theory.Label) in
-    KB.promise Theory.Program.Semantics.slot @@ fun label ->
-    KB.collect Memory.slot label >>=? fun mem ->
-    KB.collect Dis.Insn.slot label >>=? fun insn ->
-    Context.for_label label >>= fun ctxt ->
-    let addr =
-      Context.create_addr ctxt ~unbiased:(not brancher.biased) @@
-      Addr.to_bitvec (Memory.min_addr mem) in
-    let bias = Addr.(Memory.min_addr mem - addr) in
-    let mem = Memory.rebase mem addr in
-    if Context.is_applicable ctxt brancher.path then
-      resolve brancher mem insn |>
-      KB.List.fold ~init ~f:(fun dsts dst ->
-          match dst with
-          | Some addr,_ ->
-            let addr = Word.(addr + bias) in
-            Theory.Label.for_addr (Word.to_bitvec addr) >>| fun dst ->
-            Set.add dsts dst
-          | None,_ -> KB.return dsts) >>| fun dests ->
-      KB.Value.put Insn.Slot.dests Insn.empty (Some dests)
-    else KB.return Insn.empty
+    KB.promise Theory.Program.Semantics.slot @@
+    provide_brancher brancher
+
+let providing brancher =
+  KB.promising Theory.Program.Semantics.slot ~promise:
+    (provide_brancher brancher)

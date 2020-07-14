@@ -8,6 +8,7 @@ type t
 type symbolizer = t
 
 val provide : Knowledge.agent -> t -> unit
+val providing : Knowledge.agent -> t -> (unit -> 'a knowledge) -> 'a knowledge
 val get_name : addr -> string knowledge
 
 module Toplevel : sig

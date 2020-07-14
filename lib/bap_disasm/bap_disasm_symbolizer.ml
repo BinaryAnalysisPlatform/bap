@@ -73,6 +73,16 @@ let of_blocks seq =
 
 module Factory = Factory.Make(struct type nonrec t = t end)
 
+let provide_symbolizer s label =
+  let open KB.Syntax in
+  KB.collect Theory.Label.addr label >>=? fun addr ->
+  Context.for_label label >>| fun ctxt ->
+  if Context.is_applicable ctxt s.path
+  then
+    s.find @@ Context.create_addr ctxt ~unbiased:(not s.biased) addr
+  else None
+
+
 let provide =
   KB.Rule.(declare ~package:"bap" "reflect-symbolizers" |>
            dynamic ["symbolizer"] |>
@@ -84,14 +94,12 @@ let provide =
            provide Theory.Label.possible_name |>
            comment "[Symbolizer.provide s] reflects [s] to KB.");
   fun agent s ->
-    let open KB.Syntax in
-    KB.propose agent Theory.Label.possible_name @@ fun label ->
-    KB.collect Theory.Label.addr label >>=? fun addr ->
-    Context.for_label label >>| fun ctxt ->
-    if Context.is_applicable ctxt s.path
-    then
-      s.find @@ Context.create_addr ctxt ~unbiased:(not s.biased) addr
-    else None
+    KB.propose agent Theory.Label.possible_name @@
+    provide_symbolizer s
+
+let providing agent s =
+  KB.proposing agent Theory.Label.possible_name
+    ~propose:(provide_symbolizer s)
 
 let get_name addr =
   let data = Some (Word.to_bitvec addr) in

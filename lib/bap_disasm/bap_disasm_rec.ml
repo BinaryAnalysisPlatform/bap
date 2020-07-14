@@ -134,10 +134,10 @@ let scan arch mem state =
   Driver.scan mem state
 
 let run ?backend:_ ?(brancher=Brancher.empty) ?(rooter=Rooter.empty) arch mem =
-  Brancher.provide brancher;
-  Rooter.provide rooter;
   Result.return @@
   extract @@
+  Brancher.providing brancher @@ fun () ->
+  Rooter.providing rooter @@ fun () ->
   with_unit arch mem @@ fun () ->
   Driver.scan mem Driver.init >>= global_cfg
 
