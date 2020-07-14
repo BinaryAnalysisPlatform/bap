@@ -107,8 +107,8 @@ module Repository : sig
   type t
   type info
   val create : (string -> (string -> Bitvec.t -> info -> info) -> info -> info) -> t
-  val name : t -> ?bias:Bitvec.t -> path:string -> Bitvec.t -> string option
-  val addr : t -> ?bias:Bitvec.t -> path:string -> string -> Bitvec.t option
+  val name : t -> ?size:int -> ?bias:Bitvec.t -> path:string -> Bitvec.t -> string option
+  val addr : t -> ?size:int -> ?bias:Bitvec.t -> path:string -> string -> Bitvec.t option
 end = struct
   type info = {
     names : string Map.M(Bitvec_order).t;
@@ -142,22 +142,24 @@ end = struct
       Hashtbl.set files path info;
       info
 
-  let to_real = function
+  let to_real size = function
     | None -> ident
-    | Some bias -> fun addr -> Bitvec.M32.(addr - bias)
+    | Some bias -> fun addr ->
+      Bitvec.((addr - bias) mod modulus size)
 
-  let of_real = function
+  let of_real size = function
     | None -> ident
-    | Some bias -> fun addr -> Bitvec.M32.(addr + bias)
+    | Some bias -> fun addr ->
+      Bitvec.((addr + bias) mod modulus size)
 
-  let name repo ?bias ~path addr =
+  let name repo ?(size=32) ?bias ~path addr =
     let {names} = lookup repo path in
-    Map.find names (to_real bias addr)
+    Map.find names (to_real size bias addr)
 
-  let addr repo ?bias ~path name =
+  let addr repo ?(size=32) ?bias ~path name =
     let {addrs} = lookup repo path in
     match Map.find addrs name with
-    | Some [addr] -> Some (of_real bias addr)
+    | Some [addr] -> Some (of_real size bias addr)
     | _ -> None
 end
 
@@ -177,8 +179,9 @@ let provide_function_starts_and_names ctxt : unit =
     KB.collect Theory.Label.unit label >>=? fun unit ->
     KB.collect Theory.Unit.path unit >>=? fun path ->
     KB.collect Theory.Unit.bias unit >>= fun bias ->
+    KB.collect Theory.Unit.Target.bits unit >>= fun size ->
     KB.collect key_slot label >>|? fun key ->
-    f (lookup repo ?bias ~path key) in
+    f (lookup repo ?size ?bias ~path key) in
   let is_known = function
     | None -> None
     | Some _ -> Some true in
