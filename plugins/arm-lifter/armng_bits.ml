@@ -56,12 +56,28 @@ module Bits(Core : Theory.Core) = struct
   let uxtab dest src1 src2 rot cond =
     DSL.[
       if_ (resolve_cond cond)[
-        Env.tmp := extend_to Env.byte (!$src2 >>> !$rot * imm 8) |> extend_signed;
+        Env.tmp := extend_to Env.byte (!$src2 >>> !$rot * imm 8) |> extend;
         !$$dest := !$src1 + var Env.tmp
       ]
     ]
 
   let uxtah dest src1 src2 rot cond =
+    DSL.[
+      if_ (resolve_cond cond)[
+        Env.tmp := extend_to Env.half_word (!$src2 >>> !$rot * imm 8) |> extend;
+        !$$dest := !$src1 + var Env.tmp
+      ]
+    ]
+
+  let sxtab dest src1 src2 rot cond =
+    DSL.[
+      if_ (resolve_cond cond)[
+        Env.tmp := extend_to Env.byte (!$src2 >>> !$rot * imm 8) |> extend_signed;
+        !$$dest := !$src1 + var Env.tmp
+      ]
+    ]
+
+  let sxtah dest src1 src2 rot cond =
     DSL.[
       if_ (resolve_cond cond)[
         Env.tmp := extend_to Env.half_word (!$src2 >>> !$rot * imm 8) |> extend_signed;
@@ -72,7 +88,7 @@ module Bits(Core : Theory.Core) = struct
   let ubfx dest src lsb widthm1 cond =
     DSL.[
       if_ (resolve_cond cond)[
-        !$$dest := extract Env.value (!$lsb + !$widthm1) !$lsb src
+        !$$dest := extract Env.value (!$lsb + !$widthm1) !$lsb !$src
       ]
     ]
 
@@ -81,7 +97,7 @@ module Bits(Core : Theory.Core) = struct
     let value_type = Theory.Bitv.define width in
     DSL.[
       if_ (resolve_cond cond)[
-        !$$dest := extract value_type (!$lsb + !$widthm1) !$lsb src |> signed Env.value
+        !$$dest := extract value_type (!$lsb + !$widthm1) !$lsb !$src |> signed Env.value
       ]
     ]
 
