@@ -230,21 +230,20 @@ module Input = struct
       ~desc:"extracts symbols from symbol tables"
       ~package:"bap"
 
-  let provide_image image =
-    let image_symbols = Symbolizer.of_image image in
-    let image_roots = Rooter.of_image image in
+  let provide_image file image =
+    let image_symbols = Symbolizer.(set_path (of_image image) file) in
+    let image_roots = Rooter.(set_path (of_image image) file) in
     info "providing rooter and symbolizer from image of %a"
       Sexp.pp_hum ([%sexp_of : string option] (Image.filename image));
     Symbolizer.provide symtab_agent image_symbols;
     Rooter.provide image_roots
-
 
   let of_image ?loader filename =
     Image.create ?backend:loader filename >>| fun (img,warns) ->
     List.iter warns ~f:(fun e -> warning "%a" Error.pp e);
     let spec = Image.spec img in
     Signal.send Info.got_img img;
-    provide_image img;
+    provide_image filename img;
     let finish proj = {
       proj with
       storage = Dict.set proj.storage Image.specification spec;
