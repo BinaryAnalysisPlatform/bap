@@ -1,0 +1,17 @@
+name: Ubuntu-bionic
+
+on:
+  schedule:
+    - cron: '0 0 * * FRI'
+
+jobs:
+   build:
+     runs-on: ubuntu-latest
+     steps:
+     - uses: actions/checkout@master
+
+     - name: Build on Ubuntu Bionic
+       uses: docker/build-push-action@v1
+       with:
+         push: false
+         dockerfile: docker/ubuntu/bionic/Dockerfile

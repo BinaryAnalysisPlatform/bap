@@ -1,4 +1,4 @@
-FROM ocaml/opam2:alpine
+FROM ocaml/opam2:fedora
 
 WORKDIR /home/opam
 
@@ -9,10 +9,8 @@ RUN opam switch 4.09 \
  && opam update \
  && opam depext --install bap --yes -j 1 \
  && opam clean -acrs \
- && rm -rf /home/opam/.opam/4.0[2-8] \
+ && rm -rf /home/opam/.opam/4.0[2-8,10] \
  && rm -rf /home/opam/.opam/4.09/.opam-switch/sources/* \
- && rm -rf /home/opam/opam-repository \
- && sudo apk add py-pip \
- && sudo pip install bap
+ && rm -rf /home/opam/opam-repository
 
 ENTRYPOINT ["opam", "config", "exec", "--"]
