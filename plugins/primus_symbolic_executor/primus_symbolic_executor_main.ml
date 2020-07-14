@@ -88,7 +88,7 @@ end = struct
         let name = Primus.Memory.Descriptor.name bank in
         Machine.Global.get memories >>= fun memories ->
         match Map.find memories name with
-        | None -> Lisp.failf "unknown symbolic memory %s" name ()
+        | None -> Machine.return ()
         | Some {lower; upper} -> allocate bank lower upper
 
     let set input value = match input with
