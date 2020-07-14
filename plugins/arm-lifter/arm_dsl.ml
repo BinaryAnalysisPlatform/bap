@@ -53,4 +53,9 @@ module Make(Core : Theory.Core) = struct
   module Nested = Make_Extend(Core)(CPU_Holder)
 
   include Nested
+
+  let if_ cond eff = let bot = Core.perform Theory.Effect.Sort.bot in
+    match cond with
+    | `Var var -> Nested.if_ var eff
+    | `Const const -> if const then eff |> Nested.expand else bot
 end

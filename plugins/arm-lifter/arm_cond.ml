@@ -6,6 +6,11 @@ open Bap.Std
 module Env  = Arm_env.Env
 module Defs = Arm_defs
 
+type cond_resolved = [
+  | `Var of Theory.bool
+  | `Const of bool
+]
+
 module Cond(Core : Theory.Core) = struct
   open Core
   module DSL = Arm_dsl.Make(Core)
@@ -33,22 +38,23 @@ module Cond(Core : Theory.Core) = struct
     let n = var Env.nf in
     let f = b0 in
     let t = b1 in
+    let open DSL.Bool in
     match cond with
-    | `EQ -> DSL.Bool.(z = t)
-    | `NE -> DSL.Bool.(z = f)
-    | `CS -> DSL.Bool.(c = t)
-    | `CC -> DSL.Bool.(c = f)
-    | `MI -> DSL.Bool.(n = t)
-    | `PL -> DSL.Bool.(n = f)
-    | `VS -> DSL.Bool.(v = t)
-    | `VC -> DSL.Bool.(v = f)
-    | `HI -> DSL.Bool.((c = t) land (z = f))
-    | `LS -> DSL.Bool.((c = f) lor  (z = t))
-    | `GE -> DSL.Bool.(n = v)
-    | `LT -> DSL.Bool.(n <> v)
-    | `GT -> DSL.Bool.((z = f) land (n =  v))
-    | `LE -> DSL.Bool.((z = t) lor  (n <> v))
-    | `AL -> t 
+    | `EQ -> `Var (z = t)
+    | `NE -> `Var (z = f)
+    | `CS -> `Var (c = t)
+    | `CC -> `Var (c = f)
+    | `MI -> `Var (n = t)
+    | `PL -> `Var (n = f)
+    | `VS -> `Var (v = t)
+    | `VC -> `Var (v = f)
+    | `HI -> `Var ((c = t) land (z = f))
+    | `LS -> `Var ((c = f) lor  (z = t))
+    | `GE -> `Var (n = v)
+    | `LT -> `Var (n <> v)
+    | `GT -> `Var ((z = f) land (n =  v))
+    | `LE -> `Var ((z = t) lor  (n <> v))
+    | `AL -> `Const true
 
   (** resolve operands to theory bool directly *)
   let resolve_cond cond = Defs.assert_imm cond |> cond_of_word |> cond_var
