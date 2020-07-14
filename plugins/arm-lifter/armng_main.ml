@@ -3,9 +3,9 @@ open Base
 open KB.Syntax
 open KB
 
-module Defs = Arm_defs
-module Flags = Arm_flags.Flags
-module Insns = Arm_insn
+module Defs = Armng_defs
+module Flags = Armng_flags.Flags
+module Insns = Armng_insn
 
 let package = "arm-lifter"
 
@@ -14,17 +14,17 @@ type insns = Defs.insn * (Defs.op list)
 module ARM(Core : Theory.Core) = struct
   open Core
   open Defs
-  module Env = Arm_env.Env
-  module FP = Arm_env_fp.Env_fp
-  module Utils = Arm_util.Utils(Core)
-  module Mov = Arm_move.Mov(Core)
-  module Bits = Arm_bits.Bits(Core)
-  module Mul = Arm_mul.Mul(Core)
-  module Special = Arm_special.Special(Core)
-  module Mem = Arm_mem.Mem(Core)
-  module Mem_multi = Arm_mem.Mem_Multi(Core)
-  module Branch = Arm_branch.Branch(Core)
-  module DSL = Arm_dsl.Make(Core)
+  module Env = Armng_env.Env
+  module FP = Armng_env_fp.Env_fp
+  module Utils = Armng_util.Utils(Core)
+  module Mov = Armng_move.Mov(Core)
+  module Bits = Armng_bits.Bits(Core)
+  module Mul = Armng_mul.Mul(Core)
+  module Special = Armng_special.Special(Core)
+  module Mem = Armng_mem.Mem(Core)
+  module Mem_multi = Armng_mem.Mem_Multi(Core)
+  module Branch = Armng_branch.Branch(Core)
+  module DSL = Armng_dsl.Make(Core)
 
   open Utils
 
@@ -200,8 +200,8 @@ module ARM(Core : Theory.Core) = struct
     match insn, ops with
     | _, _ -> pass
 
-  let lift_with (addr : Bitvec.t) (insn : Arm_defs.insn)
-      (ops : Arm_defs.op array) = match insn with
+  let lift_with (addr : Bitvec.t) (insn : Armng_defs.insn)
+      (ops : Armng_defs.op array) = match insn with
     | #move_insn -> lift_move insn ops addr
     | #mem_insn -> lift_mem insn ops |> move
     | #bits_insn -> lift_bits insn ops |> move

@@ -2,7 +2,7 @@ open Bap_core_theory
 open Base
 open KB.Syntax
 
-module Env = Arm_env.Env
+module Env = Armng_env.Env
 
 (** ARM VFP support *)
 module Env_fp = struct
@@ -68,7 +68,7 @@ module Env_fp = struct
   ]
 
   exception Unbound_Reg
-  module Defs = Arm_defs
+  module Defs = Armng_defs
 
   type reg_type = Defs.reg
   type operand = Defs.op

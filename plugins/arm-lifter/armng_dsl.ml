@@ -2,8 +2,8 @@ open Bap_core_theory
 open Base
 open KB.Syntax
 
-module Env  = Arm_env.Env
-module Env_fp = Arm_env_fp.Env_fp
+module Env  = Armng_env.Env
+module Env_fp = Armng_env_fp.Env_fp
 module Common = Dsl_common
 
 exception Assert_error

@@ -2,7 +2,7 @@ open Bap_core_theory
 open Base
 open KB.Syntax
 
-module Env  = Arm_env.Env
+module Env  = Armng_env.Env
 
 module ExtendValude = struct
   type value
@@ -13,8 +13,8 @@ end
 
 module Flags(Core : Theory.Core) = struct
   open Core
-  module DSL = Arm_dsl.Make(Core)
-  module DSL_Extend = Arm_dsl.Make_Extend(Core)(ExtendValude)
+  module DSL = Armng_dsl.Make(Core)
+  module DSL_Extend = Armng_dsl.Make_Extend(Core)(ExtendValude)
 
   let set_nzf r : Theory.data Theory.eff =
     DSL.[

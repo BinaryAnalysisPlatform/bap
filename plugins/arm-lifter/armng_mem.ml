@@ -3,16 +3,16 @@ open Base
 open KB.Syntax
 open Bap.Std
 
-module Env  = Arm_env.Env
-module Defs = Arm_defs
+module Env  = Armng_env.Env
+module Defs = Armng_defs
 
 
 module Mem_Multi(Core : Theory.Core) = struct
   open Core
-  module DSL = Arm_dsl.Make(Core)
-  module Flags = Arm_flags.Flags(Core)
-  module Shift = Arm_shift.Shift(Core)
-  module Cond = Arm_cond.Cond(Core)
+  module DSL = Armng_dsl.Make(Core)
+  module Flags = Armng_flags.Flags(Core)
+  module Shift = Armng_shift.Shift(Core)
+  module Cond = Armng_cond.Cond(Core)
   module Var = Theory.Var
   open Flags
   open Cond
@@ -177,10 +177,10 @@ end
 
 module Mem(Core : Theory.Core) = struct
   open Core
-  module DSL = Arm_dsl.Make(Core)
-  module Flags = Arm_flags.Flags(Core)
-  module Shift = Arm_shift.Shift(Core)
-  module Cond = Arm_cond.Cond(Core)
+  module DSL = Armng_dsl.Make(Core)
+  module Flags = Armng_flags.Flags(Core)
+  module Shift = Armng_shift.Shift(Core)
+  module Cond = Armng_cond.Cond(Core)
   module Var = Theory.Var
   open Flags
   open Cond

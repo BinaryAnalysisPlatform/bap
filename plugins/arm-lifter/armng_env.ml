@@ -73,12 +73,12 @@ module Env = struct
   let tmp64 = Theory.Var.define double_word "tmp64"
 
   exception Unbound_Reg
-  module Defs = Arm_defs
+  module Defs = Armng_defs
 
   type reg_type = Defs.reg
   type operand = Defs.op
 
-  let load_reg (op : reg_type) = let open Arm_defs in
+  let load_reg (op : reg_type) = let open Armng_defs in
     match op with
     | `R0 -> r0
     | `R1 -> r1

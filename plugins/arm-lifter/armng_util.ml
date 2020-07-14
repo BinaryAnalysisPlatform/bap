@@ -2,7 +2,7 @@ open Bap_core_theory
 open Base
 open KB.Syntax
 
-module Env  = Arm_env.Env
+module Env  = Armng_env.Env
 
 module Utils(Core : Theory.Core) = struct
   open Core

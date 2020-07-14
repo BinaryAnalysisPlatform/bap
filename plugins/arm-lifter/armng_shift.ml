@@ -3,12 +3,12 @@ open Base
 open KB.Syntax
 open Bap.Std
 
-module Env  = Arm_env.Env
-module Defs = Arm_defs
+module Env  = Armng_env.Env
+module Defs = Armng_defs
 
 module Shift(Core : Theory.Core) = struct
   open Core
-  module DSL = Arm_dsl.Make(Core)
+  module DSL = Armng_dsl.Make(Core)
 
   let shift_of_word op = match Word.to_int op with
     | Ok 1 -> `ASR

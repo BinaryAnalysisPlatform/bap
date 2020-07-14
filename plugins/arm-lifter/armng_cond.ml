@@ -3,8 +3,8 @@ open Base
 open KB.Syntax
 open Bap.Std
 
-module Env  = Arm_env.Env
-module Defs = Arm_defs
+module Env  = Armng_env.Env
+module Defs = Armng_defs
 
 type cond_resolved = [
   | `Var of Theory.bool
@@ -13,7 +13,7 @@ type cond_resolved = [
 
 module Cond(Core : Theory.Core) = struct
   open Core
-  module DSL = Arm_dsl.Make(Core)
+  module DSL = Armng_dsl.Make(Core)
   let cond_of_word op = match Word.to_int op with
     | Ok 0 ->  `EQ
     | Ok 1 ->  `NE

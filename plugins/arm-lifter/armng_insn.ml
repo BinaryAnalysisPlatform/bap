@@ -2,8 +2,8 @@ open Core_kernel
 open Bap.Std
 open Or_error
 
-type t = Arm_defs.insn [@@deriving bin_io, compare, sexp]
-type regs = Arm_defs.reg [@@deriving bin_io, compare, sexp]
+type t = Armng_defs.insn [@@deriving bin_io, compare, sexp]
+type regs = Armng_defs.reg [@@deriving bin_io, compare, sexp]
 
 let sexpable_of_string t_of_sexp name =
   try Some (t_of_sexp @@ Sexp.of_string name)
@@ -15,10 +15,10 @@ let of_name name =
 let of_basic insn = of_name (Disasm_expert.Basic.Insn.name insn)
 let create insn = of_name (Insn.name insn)
 
-let create_reg reg : Arm_defs.reg option =
+let create_reg reg : Armng_defs.reg option =
   sexpable_of_string regs_of_sexp (Reg.name reg)
 
-let create_op : op -> Arm_defs.op option =
+let create_op : op -> Armng_defs.op option =
   let open Option.Monad_infix in
   function
   | Op.Fmm fmm -> None (* this should be later extended *)
