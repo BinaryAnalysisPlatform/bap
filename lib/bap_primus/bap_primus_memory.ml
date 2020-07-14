@@ -120,6 +120,7 @@ let generated,on_generated =
   Bap_primus_observation.provide "load-generated"
     ~inspect:inspect_generated
     ~package:"bap"
+    ~desc:"Occurs when a new value is generated during the load operation"
 
 
 let virtual_memory arch =

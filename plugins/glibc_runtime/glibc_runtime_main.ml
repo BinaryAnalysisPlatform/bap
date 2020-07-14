@@ -1,6 +1,6 @@
 let doc = "
 Enables ad-hoc support for glibc runtime code. In particular it
-detects the locations of $(b,main) and $b(,__libc_start_main)
+detects the locations of $(b,main) and $(b,__libc_start_main)
 functions (and adds the latter if it is absent).
 "
 open Base

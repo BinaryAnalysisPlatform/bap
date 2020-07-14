@@ -111,14 +111,17 @@ module Location = struct
   let new_instance,report_new_instance =
     Primus.Observation.provide "incident-new-instance"
       ~inspect:inspect_instance
+      ~desc:"Occurs on a new instance of the incident class"
 
   let new_class,report_new_class =
     Primus.Observation.provide "incident-new-class"
       ~inspect:inspect_instance
+      ~desc:"Occures when a new incident class is created"
 
   let new_representative,report_new_representative =
     Primus.Observation.provide "incident-new-representative"
       ~inspect:inspect_instance
+      ~desc:"Occurs when a new representative of the class is selected"
 
   let trace = Primus.Machine.State.declare
       ~uuid:"3663b645-87a6-4561-b75f-c447cdc221bc"
