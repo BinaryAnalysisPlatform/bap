@@ -164,7 +164,7 @@ module Thumb(Core : Theory.Core) = struct
     | #bits_insn -> lift_bits insn ops |> DSL.expand |> move
     | #branch_insn -> 
       let (ctrl_eff, data_eff) = lift_branch insn ops addr in
-        ctrl ctrl_eff data_eff addr (* var Env.pc *)
+      ctrl ctrl_eff data_eff addr (* var Env.pc *)
 
 end
 

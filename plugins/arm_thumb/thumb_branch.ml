@@ -53,42 +53,42 @@ module Branch(Core : Theory.Core) = struct
 
   let tb target addr =
     (DSL.(
-      jmp (!$target + addr << !!1)
-    ), DSL.(
-      Env.pc := (!$target + addr << !!1)
-    ))
+        jmp (!$target + addr << !!1)
+      ), DSL.(
+        Env.pc := (!$target + addr << !!1)
+      ))
 
   let tbl target =
     (DSL.(
-      jmp !$target
-    ), DSL.[
-      Env.lr := (var Env.pc) + !!2 lor !!1;
-      Env.pc := !$target
-    ] |> DSL.expand)
+        jmp !$target
+      ), DSL.[
+        Env.lr := (var Env.pc) + !!2 lor !!1;
+        Env.pc := !$target
+      ] |> DSL.expand)
 
   (* TODO : switch to normal mode *)
   let tblxi target =
     (DSL.(
-      jmp (!$target land !!0xfffffffc)
-    ), DSL.[
-      Env.lr := (var Env.pc) + !!2 lor !!1;
-      Env.pc := (!$target land !!0xfffffffc)
-    ] |> DSL.expand)
+        jmp (!$target land !!0xfffffffc)
+      ), DSL.[
+        Env.lr := (var Env.pc) + !!2 lor !!1;
+        Env.pc := (!$target land !!0xfffffffc)
+      ] |> DSL.expand)
 
   let tblxr target =
     (DSL.(
-      jmp (!$target land !!0xfffffffe)
-    ), DSL.[
-      Env.lr := (var Env.pc) + !!2 lor !!1;
-      Env.pc := (!$target land !!0xfffffffe)
-    ] |> DSL.expand)
+        jmp (!$target land !!0xfffffffe)
+      ), DSL.[
+        Env.lr := (var Env.pc) + !!2 lor !!1;
+        Env.pc := (!$target land !!0xfffffffe)
+      ] |> DSL.expand)
 
   let tbx target =
     (DSL.(
-      (* reference here is PC = Rm[31:1] << 1 *)
-      jmp (extract Env.value !!31 !!1 !$target << !!1)
-    ), DSL.(
-      Env.pc := (extract Env.value !!31 !!1 !$target << !!1)
-    ))
+        (* reference here is PC = Rm[31:1] << 1 *)
+        jmp (extract Env.value !!31 !!1 !$target << !!1)
+      ), DSL.(
+        Env.pc := (extract Env.value !!31 !!1 !$target << !!1)
+      ))
 
 end
