@@ -8943,11 +8943,12 @@ module Std : sig
 
   (** Event subsystem.
 
-      The event subsystem is a way of communicating between different
-      subsystems of BAP.  *)
+      This module is the [Bap_main_event] module extended with the
+      [Pritable.S] interface, kept here for backward compatibility.
+  *)
   module Event : sig
 
-    type t = ..
+    type t = Bap_main_event.t = ..
     type event = t = ..
 
     (** global [stream] of events  *)
@@ -8967,18 +8968,20 @@ module Std : sig
 
     (** Logging event.*)
     module Log : sig
-      type level =
+      type level = Bap_main_event.Log.level =
         | Debug
         | Info
         | Warning
         | Error
 
-      type info = {
+      type info = Bap_main_event.Log.info = {
         level : level;
         section : string;
         message : string;
       }
 
+
+      (** re-exports {!Bap_main_event.Log.Message} *)
       type event += Message of info
 
       (** [message level ~section fmt ...] send a message of the
@@ -8994,6 +8997,9 @@ module Std : sig
             info "created some %s" "thing"
           v} *)
       val message :  level -> section:string -> ('a,Format.formatter,unit) format -> 'a
+
+
+      (** re-exports {!Bap_main_event.Log.Progress}  *)
       type event += Progress of {
           task  : string;         (** hierarchical task name  *)
           note  : string option;  (** a short note            *)
@@ -9655,6 +9661,11 @@ module Std : sig
 
       If run in a standalone mode, then field [name] would be set to
       [Sys.executable_name] and [argv] to [Sys.argv].
+
+      Note: this module uses the [Event.Self()] module and extends it
+      with several more fields, such as [name], [version], [doc], and
+      [argv]. It is recommended to use [Event.Self()] aka
+      [Bap_main_event.Self()] instead.
   *)
   module Self() : sig
 

@@ -1507,3 +1507,21 @@ module Extension : sig
     val register_printer : (t -> string option) -> unit
   end
 end
+
+
+(** Use this module to insert logging functions to your scope.
+
+    E.g.,
+    {[
+      open Bap_main
+      include Loggers()
+
+      let main () =
+        debug "starting main!";
+        warning "Something wrong has happened: %s" "oops";
+        ...
+    ]}
+
+    See the {!Bap_main_event.Log.Create} for more information.
+*)
+module Loggers = Bap_main_event.Log.Create
