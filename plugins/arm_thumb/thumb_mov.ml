@@ -54,8 +54,8 @@ module Mov(Core : Theory.Core) = struct
 
   let subi3 dest src immsrc =
     DSL.[
-      !$$dest := !$src + !$immsrc;
-      Flags.set_add !$src !$immsrc !$$dest
+      !$$dest := !$src - !$immsrc;
+      Flags.set_sub !$src !$immsrc !$$dest
     ]
 
   (* a temp value is introduced here *)
@@ -81,7 +81,7 @@ module Mov(Core : Theory.Core) = struct
 
   let subrr d s1 s2 = 
     DSL.[
-      !$$d := !$s1 + !$s2;
+      !$$d := !$s1 - !$s2;
       Flags.set_sub !$s1 !$s2 !$$d
     ]
 
@@ -111,16 +111,17 @@ module Mov(Core : Theory.Core) = struct
       Env.sp := (var Env.sp) - !$immsrc << !!2
     ]
 
-  let adc d s1 s2 = 
+  let adc d s = 
     DSL.[
-      !$$d := !$s1 + !$s2 + bool_as_bitv (var Env.cf);
-      Flags.set_adc !$s1 !$s2 !$$d
+      Env.tmp := !$d;
+      !$$d := !$d + !$s + bool_as_bitv (var Env.cf);
+      Flags.set_adc (var Env.tmp) !$s !$$d
     ]
 
   let sbc d s =
     DSL.[
       Env.tmp := !$d;
-      !$$d := !$s + !$d + bool_as_bitv (var Env.cf);
+      !$$d := !$s - !$d - bool_as_bitv (var Env.cf |> inv);
       Flags.set_sbc (var Env.tmp) !$s !$$s
     ]
 

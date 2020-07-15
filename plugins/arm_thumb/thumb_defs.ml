@@ -126,7 +126,9 @@ type bits_insn = [
 (** Rd [reglist] *)
 type mem_multi_insn = [
   | `tSTMIA
+  | `tSTMIA_UPD
   | `tLDMIA
+  | `tLDMIA_UPD
   | `tPOP
   | `tPUSH
 ] [@@deriving bin_io, compare, sexp, enumerate]

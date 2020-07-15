@@ -30,15 +30,22 @@ module Mem(Core : Theory.Core) = struct
 
   let load_multiple dest src_list = 
     match dest with
-    | `Reg r -> let r = reg r in List.fold src_list ~init:pass 
-        ~f:(fun eff src -> match src with
-            | `Reg s -> let src = reg s in seq eff
-                (seq
-                   (loadw Env.value b0 (var Env.memory) (var r) |> set src)
-                   (set r (add (var r) (bitv_of 4)))
-                )
-            | _ -> raise (Lift_Error "`src` must be a register")
-          )
+    | `Reg r -> 
+      if List.length src_list = 0 then pass
+      else let first_eq = [%compare.equal: Defs.op] (List.nth_exn src_list 0) dest in
+        let src_list = if first_eq 
+          then List.sub src_list ~pos:1 ~len:(List.length src_list - 1) 
+          else src_list in
+        let r = reg r in
+        seq (List.fold src_list ~init:(set Env.tmp (var r)) 
+               ~f:(fun eff src -> match src with
+                   | `Reg s -> let src = reg s in seq eff
+                       (seq
+                          (loadw Env.value b0 (var Env.memory) (var Env.tmp) |> set src)
+                          (set Env.tmp (add (var Env.tmp) (bitv_of 4)))
+                       )
+                   | _ -> raise (Lift_Error "`src` must be a register")
+                 )) (set r (var Env.tmp))
     | _ -> raise (Lift_Error "`dest` must be a register")
   (* the `R` bit is automatically resolved *)
   let push_multiple src_list =
@@ -59,6 +66,14 @@ module Mem(Core : Theory.Core) = struct
     let initial = set Env.tmp (var Env.sp) in
     seq (List.fold src_list ~init:initial 
            ~f:(fun eff src -> match src with
+               | `Reg `PC -> let src = reg_wide `PC in seq eff
+                   (seq
+                      (logand 
+                         (loadw Env.value b0 (var Env.memory) (var Env.tmp)) 
+                         (bitv_of 0xfffffffe) 
+                       |> set src)
+                      (set Env.tmp (add (var Env.tmp) (bitv_of 4)))
+                   )
                | `Reg s -> let src = reg s in seq eff
                    (seq
                       (loadw Env.value b0 (var Env.memory) (var Env.tmp) |> set src)
@@ -67,7 +82,7 @@ module Mem(Core : Theory.Core) = struct
                | _ -> raise (Lift_Error "`src` must be a register")
              )) (set Env.sp (var Env.tmp))
 
-  let lift_mem_single ?(sign = false) dest src1 ?src2 (op : Defs.operation) (size : Defs.size) =
+  let lift_mem_single ?(sign = false) ?(shift_val = 2) dest src1 ?src2 (op : Defs.operation) (size : Defs.size) =
     let open Defs in
     let dest = match dest with
       | `Reg r -> reg r

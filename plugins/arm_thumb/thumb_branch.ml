@@ -42,7 +42,7 @@ module Branch(Core : Theory.Core) = struct
         | `GT -> and_ (inv z) (eq_ n v)
         | `LE -> or_ z (eq_ n v |> inv)
         | `AL -> b1 in 
-      let jump_address = DSL.(addr + !$target << !!1) in
+      let jump_address = DSL.(addr + !$target) in
       let eff_hold = (jmp jump_address, set Env.pc jump_address) in
       if always_true then eff_hold 
       else (
@@ -53,16 +53,16 @@ module Branch(Core : Theory.Core) = struct
 
   let tb target addr =
     (DSL.(
-        jmp (!$target + addr << !!1)
+        jmp (!$target + addr)
       ), DSL.(
-        Env.pc := (!$target + addr << !!1)
+        Env.pc := (!$target + addr)
       ))
 
   let tbl target =
     (DSL.(
         jmp !$target
       ), DSL.[
-        Env.lr := (var Env.pc) - !!2 lor !!1;
+        Env.lr := ((var Env.pc) - !!2) lor !!1;
         Env.pc := !$target
       ] |> DSL.expand)
 
@@ -71,24 +71,24 @@ module Branch(Core : Theory.Core) = struct
     (DSL.(
         jmp (!$target land !!0xfffffffc)
       ), DSL.[
-        Env.lr := (var Env.pc) - !!2 lor !!1;
+        Env.lr := ((var Env.pc) - !!2) lor !!1;
         Env.pc := (!$target land !!0xfffffffc)
       ] |> DSL.expand)
 
   let tblxr target =
     (DSL.(
-        jmp (!$target land !!0xfffffffe)
+        jmp (!$+target land !!0xfffffffe)
       ), DSL.[
-        Env.lr := (var Env.pc) - !!2 lor !!1;
-        Env.pc := (!$target land !!0xfffffffe)
+        Env.lr := ((var Env.pc) - !!2) lor !!1;
+        Env.pc := (!$+target land !!0xfffffffe)
       ] |> DSL.expand)
 
   let tbx target =
     (DSL.(
         (* reference here is PC = Rm[31:1] << 1 *)
-        jmp (extract Env.value !!31 !!1 !$target << !!1)
+        jmp (extract Env.value !!31 !!1 !$+target << !!1)
       ), DSL.(
-        Env.pc := (extract Env.value !!31 !!1 !$target << !!1)
+        Env.pc := (extract Env.value !!31 !!1 !$+target << !!1)
       ))
 
 end
