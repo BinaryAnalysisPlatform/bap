@@ -1106,39 +1106,136 @@ module Theory : sig
     include Knowledge.Value.S with type t := t
   end
 
+
+  (** A unit of code.
+
+      A unit of code is a generic piece of code, i.e., a set of
+      instructions that share some common properties, such as the
+      instruction set architecture. The whole set of instructions
+      in the knowledge base is partitioned into units, so that each
+      instruction belongs to at most one code unit, see the
+      {!Label.unit} property.
+  *)
   module Unit : sig
+
+    (** the class of all code units  *)
     type cls
 
+    (** the meta type of the unit object  *)
     type t = cls KB.Object.t
 
+
+    (** the base class for all units.
+
+        Right now we have only one sort of units, indexed with the
+        [unit] type. But later we may introduce more unit sorts.
+    *)
     val cls : (cls,unit) KB.Class.t
 
+
+    (** [for_file name] creates a new unit denoting a file with the
+        given [name].
+
+        This function creates a symbol that interns [name] in the
+        [file] package and sets the {!path} property to [name].
+    *)
     val for_file : string -> t knowledge
 
+
+    (** [for_region ~lower ~upper] creates a new unit denoting an
+        anonymous memory region.
+
+        The [lower] and [upper] labels are interned in the current
+        package and the symbol, built from their concatenation, is
+        interned in the [region] package. That enables distinguishing
+        between anonymous memory regions that belong to different
+        projects/files but having intersecting set of addresses,
+        provided that every project is setting the current package to
+        some unique name.
+    *)
     val for_region : lower:word -> upper:word -> t knowledge
 
+
+    (** [path] is the path of the file from which the unit originates.  *)
     val path : (cls, string option) KB.slot
+
+
+    (** [bias] is the bias of all addresses in the unit.
+
+        If a unit is biased, then all addresses in this unit have
+        [Some bias] with respect to the real addresses in the unit
+        representation. To obtain the real address the [bias] shall
+        be subtracted from the address that is stored in the knowledge
+        base. To get the biased address the [bias] shall be added to
+        the real address.
+
+        Any knowledge provider that also operates with the real view
+        on the program must take [bias] into account.
+    *)
     val bias : (cls, Bitvec.t option) KB.slot
 
+    (** Information about the target architecture.
+
+        Assuming that the code is produced from source the target
+        denotes the target for which this source is built and
+        tailored. This module provides information about the target
+        triplet and target features.
+    *)
     module Target : sig
+
+      (** [arch] the target architecture, e.g., [arm].  *)
       val arch : (cls, string option) KB.slot
+
+      (** [subarch] the target subarchitecture designator, e.g, [v7]  *)
       val subarch : (cls, string option) KB.slot
+
+      (** [vendor] the target vendor, e.g., [apple] *)
       val vendor : (cls, string option) KB.slot
+
+      (** [system] the target operating system, e.g., [darwin]  *)
       val system : (cls, string option) KB.slot
+
+      (** [bits] the number of bits in the machine word, e.g., [32]  *)
       val bits   : (cls, int option) KB.slot
+
+      (** [abi] target's ABI, e.g., [gnueabi].  *)
       val abi    : (cls, string option) KB.slot
+
+      (** [fabi] targets floating-point ABI, e.g., [hf]  *)
       val fabi   : (cls, string option) KB.slot
+
+      (** [cpu] the target CPU, e.g., [cortex] *)
       val cpu    : (cls, string option) KB.slot
+
+      (** [fpu] the target FPU.  *)
       val fpu    : (cls, string option) KB.slot
+
+
+      (** [is_little_endian] is true if the target's default
+          endianness is the little endian order.   *)
       val is_little_endian : (cls, bool option) KB.slot
     end
 
+    (** Information about the code source.  *)
     module Source : sig
+
+      (** [language] the programming language in which the code of
+          this unit was written.  *)
       val language : (cls, string option) KB.slot
     end
 
+    (** Information about the compiler.
+
+        A compiler is a translator that was used to translate
+        the code in this unit from the source to the target
+        representation.
+    *)
     module Compiler : sig
+
+      (** [name] the compiler name  *)
       val name : (cls, string option) KB.slot
+
+      (** [version] the compiler version.  *)
       val version : (cls, string option) KB.slot
     end
 

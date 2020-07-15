@@ -43,21 +43,13 @@ let string_property ?(domain=name) ~desc cls name =
     ~desc
 
 module Unit = struct
+  open Knowledge.Syntax
   type cls = Unit
 
   let cls : (cls,unit) Knowledge.cls =
     Knowledge.Class.declare ~package "unit" ()
       ~public:true
       ~desc:"a unit of code"
-
-  let for_file name =
-    Knowledge.Symbol.intern ~package:"file" name cls
-      ~public:true
-
-  let for_region ~lower ~upper =
-    let name = Format.asprintf "%a-%a"
-        Bitvec.pp lower Bitvec.pp upper in
-    Knowledge.Symbol.intern ~package:"region" name cls
 
   let path = string_property ~domain:path cls "unit-path"
       ~desc:"a filesytem name of the file that contains the program"
@@ -69,6 +61,23 @@ module Unit = struct
                    end))
       ~public:true
       ~desc:"the value by which all addresses of the unit a biased"
+
+  let for_file name =
+    Knowledge.Symbol.intern ~package:"file" name cls
+      ~public:true >>= fun obj ->
+    Knowledge.provide path obj (Some name) >>| fun () ->
+    obj
+
+
+  let for_region ~lower ~upper =
+    let to_symbol addr =
+      Knowledge.Symbol.intern (Bitvec.to_string addr) program >>=
+      Knowledge.Object.repr program in
+    to_symbol lower >>= fun lower ->
+    to_symbol upper >>= fun upper ->
+    let name = Format.asprintf "%s-%s" lower upper in
+    Knowledge.Symbol.intern ~package:"region" name cls
+
 
   module Target = struct
     let arch = string_property cls "target-arch"
