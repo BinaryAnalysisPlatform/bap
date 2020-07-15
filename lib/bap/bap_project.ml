@@ -92,17 +92,6 @@ module Spec = struct
     | Ok doc -> doc
 end
 
-let with_arch arch mems =
-  let open KB.Syntax in
-  let width = Size.in_bits (Arch.addr_size arch) in
-  KB.promising Arch.slot ~promise:(fun label ->
-      KB.collect Theory.Label.addr label >>| function
-      | None -> `unknown
-      | Some p ->
-        let p = Word.create p width in
-        if Memmap.contains mems p
-        then arch
-        else `unknown)
 
 let with_filename spec arch data code path =
   let open KB.Syntax in
@@ -185,7 +174,6 @@ module State = struct
     let run spec arch ~code ~data file k =
       let result = Toplevel.var "disassembly-result" in
       Toplevel.put result begin
-        with_arch arch code @@ fun () ->
         with_filename spec arch code data file @@ fun () ->
         k
       end;
@@ -948,13 +936,4 @@ let () =
            comment {|
 On [Project.create input] provides [path] for the address [x]
 if [x] in [data] or [x] in [code].
-|});
-  KB.Rule.(declare ~package:"bap" "project-arch" |>
-           dynamic ["input"] |>
-           dynamic ["arch"; "code"] |>
-           require Theory.Label.addr |>
-           provide Arch.slot |>
-           comment {|
-On [Project.create input] provides [arch] for the address [x]
-if [x] in [code].
 |})

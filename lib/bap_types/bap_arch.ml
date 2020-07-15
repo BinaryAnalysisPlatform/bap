@@ -95,7 +95,9 @@ module T = struct
     KB.promise slot @@ fun obj ->
     KB.collect Theory.Label.unit obj >>=? fun unit ->
     KB.collect Theory.Unit.Target.arch unit >>=? fun arch ->
-    KB.return (from_string arch)
+    KB.return @@ match from_string arch with
+    | #arm -> `unknown
+    | arch -> arch
 
 
 end

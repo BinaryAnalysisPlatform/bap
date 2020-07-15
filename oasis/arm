@@ -34,7 +34,8 @@ Library arm_plugin
   Build$:           flag(everything) || flag(arm)
   Path:             plugins/arm
   FindlibName:      bap-plugin-arm
-  BuildDepends:     bap, bap-abi, bap-arm, bap-c, core_kernel, bap-future, bap-api, regular
+  BuildDepends:     bap, bap-abi, bap-arm, bap-c, core_kernel, bap-future, bap-api,
+                    regular, bap-core-theory, ogre, bap-knowledge, bitvec, bitvec-order
   InternalModules:  Arm_main, Arm_gnueabi
   XMETADescription: provide ARM lifter
   XMETAExtraLines:  tags="arm, lifter"

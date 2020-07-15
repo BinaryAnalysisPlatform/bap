@@ -180,7 +180,7 @@ let tag mem tag value memmap =
 let map_region data {locn={addr}; info={off; len; endian}} =
   Memory.create ~pos:off ~len endian addr data
 
-let static_view segments = function {addr} as locn ->
+let static_view segments = function {addr; size} as locn ->
 match Table.find_addr segments addr with
 | Some (segmem,_) -> mem_of_locn segmem locn
 | None -> Result.failf "region %a is not mapped to memory"
