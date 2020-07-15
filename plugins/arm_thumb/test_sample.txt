@@ -1,0 +1,582 @@
+tADC:
+4c 41
+{
+  tmp := r4
+  r4 := r4 + r1 + (if cf then 1 else 0)
+  cf := high:1[pad:33[tmp] + pad:33[r1] + (if cf then 1 else 0)]
+  vf := high:1[~(tmp ^ r1) & (tmp ^ r4)]
+  nf := high:1[r4]
+  zf := r4 = 0
+}
+tADDi3:
+4b 1d
+{
+  r3 := r1 + 5
+  cf := r3 <$ r1
+  vf := high:1[~(r1 ^ 5) & (r1 ^ r3)]
+  nf := high:1[r3]
+  zf := r3 = 0
+}
+tADDi8:
+11 31
+{
+  tmp := r1
+  r1 := r1 + 0x11
+  cf := r1 <$ tmp
+  vf := high:1[~(tmp ^ 0x11) & (tmp ^ r1)]
+  nf := high:1[r1]
+  zf := r1 = 0
+}
+tADDrr:
+5d 18
+{
+  r5 := r3 + r1
+  cf := r5 <$ r3
+  vf := high:1[~(r3 ^ r1) & (r3 ^ r5)]
+  nf := high:1[r5]
+  zf := r5 = 0
+}
+tADDhirr:
+cb 44
+{
+  r11 := r11 + r9
+}
+tADR:
+11 a1
+{
+  r1 := (pc & 0xFFFFFFFC) + 0x11 << 2
+}
+tADDrSPi:
+11 aa
+{
+  r2 := sp + 0x11 << 2
+}
+tADDspi:
+07 b0
+{
+  sp := sp + 7 << 2
+}
+tMOVi8:
+11 27
+{
+  r7 := 0x11
+  nf := high:1[r7]
+  zf := r7 = 0
+}
+tMOVr:
+89 46
+{
+  r9 := r1
+}
+tMUL:
+4f 43
+{
+  r7 := r7 * r1
+  nf := high:1[r7]
+  zf := r7 = 0
+}
+tMVN:
+cb 43
+{
+  r3 := ~r1
+  nf := high:1[r3]
+  zf := r3 = 0
+}
+tSBC:
+8b 41
+{
+  tmp := r3
+  r3 := r1 - r3 - (if ~cf then 1 else 0)
+  cf := high:1[pad:33[tmp] + pad:33[~r1] + (if cf then 1 else 0)]
+  vf := high:1[~(tmp ^ ~r1) & (tmp ^ r1)]
+  nf := high:1[r1]
+  zf := r1 = 0
+}
+tSUBi3:
+8b 1f
+{
+  r3 := r1 - 6
+  cf := 6 <=$ r1
+  vf := high:1[(r1 ^ 6) & (r1 ^ r3)]
+  nf := high:1[r3]
+  zf := r3 = 0
+}
+tSUBi8:
+8b 3f
+{
+  tmp := r7
+  r7 := r7 - 0x8B
+  cf := 0x8B <=$ tmp
+  vf := high:1[(tmp ^ 0x8B) & (tmp ^ r7)]
+  nf := high:1[r7]
+  zf := r7 = 0
+}
+tSUBrr:
+8b 1b
+{
+  r3 := r1 - r6
+  cf := r6 <=$ r1
+  vf := high:1[(r1 ^ r6) & (r1 ^ r3)]
+  nf := high:1[r3]
+  zf := r3 = 0
+}
+tSUBspi:
+8b b0
+{
+  sp := sp - 0xB << 2
+}
+tAND:
+0b 40
+{
+  r3 := r3 & r1
+  nf := high:1[r3]
+  zf := r3 = 0
+}
+tASRri:
+8b 10
+{
+  cf := low:1[r1 >> 1]
+  r3 := r1 ~>> 2
+  nf := high:1[r3]
+  zf := r3 = 0
+}
+0b 10
+{
+  cf := high:1[r1]
+  if (high:1[r1]) {
+    r3 := 0xFFFFFFFF
+  }
+  else {
+    r3 := 0
+  }
+  nf := high:1[r3]
+  zf := r3 = 0
+}
+tASRrr:
+0b 41
+{
+  if (pad:32[low:8[r1]] < 0x20) {
+    if (pad:32[low:8[r1]] <> 0) {
+      cf := low:1[r3 >> pad:32[low:8[r1]] - 1]
+      r3 := r3 ~>> pad:32[low:8[r1]]
+    }
+  }
+  else {
+    cf := high:1[r3]
+    if (high:1[r3]) {
+      r3 := 0xFFFFFFFF
+    }
+    else {
+      r3 := 0
+    }
+  }
+  nf := high:1[r3]
+  zf := r3 = 0
+}
+tBIC:
+8b 43
+{
+  r3 := r3 & ~r1
+  nf := high:1[r3]
+  zf := r3 = 0
+}
+tCMPi8:
+11 29
+{
+  tmp := r1 - 0x11
+  cf := 0x11 <=$ r1
+  vf := high:1[(r1 ^ 0x11) & (r1 ^ tmp)]
+  nf := high:1[tmp]
+  zf := tmp = 0
+}
+tCMPr:
+91 42
+{
+  tmp := r1 - r2
+  cf := r2 <=$ r1
+  vf := high:1[(r1 ^ r2) & (r1 ^ tmp)]
+  nf := high:1[tmp]
+  zf := tmp = 0
+}
+tCMPhir:
+91 45
+{
+  tmp := r9 - r2
+  cf := r2 <=$ r9
+  vf := high:1[(r9 ^ r2) & (r9 ^ tmp)]
+  nf := high:1[tmp]
+  zf := tmp = 0
+}
+tEOR:
+51 40
+{
+  r1 := r1 ^ r2
+  nf := high:1[r1]
+  zf := r1 = 0
+}
+tLSLri:
+51 00
+{
+  cf := low:1[r2 >> 0x1F]
+  r1 := r2 << 1
+  nf := high:1[r1]
+  zf := r1 = 0
+}
+tLSLrr:
+91 40
+{
+  if (pad:32[low:8[r2]] < 0x20) {
+    if (pad:32[low:8[r2]] <> 0) {
+      cf := low:1[r1 >> 0x20 - pad:32[low:8[r2]]]
+      r1 := r1 << pad:32[low:8[r2]]
+    }
+  }
+  else {
+    if (pad:32[low:8[r2]] = 0x20) {
+      cf := low:1[r1]
+    }
+    else {
+      cf := 0
+    }
+    r1 := 0
+  }
+  nf := high:1[r1]
+  zf := r1 = 0
+}
+tLSRri:
+51 08
+{
+  cf := low:1[r2]
+  r1 := r2 >> 1
+  nf := high:1[r1]
+  zf := r1 = 0
+}
+tLSRrr:
+d1 40
+{
+  if (pad:32[low:8[r2]] < 0x20) {
+    if (pad:32[low:8[r2]] <> 0) {
+      cf := low:1[r1 >> pad:32[low:8[r2]] - 1]
+      r1 := r1 >> pad:32[low:8[r2]]
+    }
+  }
+  else {
+    if (pad:32[low:8[r2]] = 0x20) {
+      cf := high:1[r1]
+    }
+    else {
+      cf := 0
+    }
+    r1 := 0
+  }
+  nf := high:1[r1]
+  zf := r1 = 0
+}
+tORR:
+11 43
+{
+  r1 := r1 | r2
+  nf := high:1[r1]
+  zf := r1 = 0
+}
+tRSB:
+51 42
+{
+  r1 := -r2
+  cf := r2 <=$ 0
+  vf := high:1[r2 & r1]
+  nf := high:1[r1]
+  zf := r1 = 0
+}
+tREV:
+11 ba
+{
+  r1 := extract:7:0[r2].extract:15:8[r2].extract:23:16[r2].extract:31:24[r2]
+}
+tREV16:
+51 ba
+{
+  r1 := extract:23:16[r2].extract:31:24[r2].extract:7:0[r2].extract:15:8[r2]
+}
+tREVSH:
+d1 ba
+{
+  if (high:1[low:8[r2]]) {
+    r1 := 0xFF.0xFF.extract:7:0[r2].extract:15:8[r2]
+  }
+  else {
+    r1 := 0.0.extract:7:0[r2].extract:15:8[r2]
+  }
+}
+tROR:
+d3 41
+{
+  if (pad:32[low:4[r2]] = 0) {
+    cf := high:1[r3]
+  }
+  else {
+    cf := low:1[r3 >> pad:32[low:4[r2]] - 1]
+    r3 := r3 >> (pad:32[low:4[r2]] | r3) << 0x20 - pad:32[low:4[r2]]
+  }
+  nf := high:1[r3]
+  zf := r3 = 0
+}
+tTST:
+13 42
+{
+  tmp := r3 & r2
+  nf := high:1[tmp]
+  zf := tmp = 0
+}
+-- bits instructions
+tSXTB:
+57 b2
+{
+  r7 := extend:32[low:8[r2]]
+}
+tSXTH:
+17 b2
+{
+  r7 := extend:32[low:16[r2]]
+}
+tUXTB:
+d7 b2
+{
+  r7 := pad:32[low:8[r2]]
+}
+tUXTH:
+97 b2
+{
+  r7 := pad:32[low:16[r2]]
+}
+-- branch instructions (* following takes the instruction address as 0 *)
+tBcc:
+65 d1
+{
+  if (~zf) {
+    pc := 0xCA
+  }
+  if (~zf) {
+    jmp 0xCA
+  }
+}
+7f dd
+{
+  if (zf | ~(nf & vf | ~nf & ~vf)) {
+    pc := 0xFE
+  }
+  if (zf | ~(nf & vf | ~nf & ~vf)) {
+    jmp 0xFE
+  }
+}
+tB:
+aa e0
+{
+  pc := 0x154
+  jmp 0x154
+}
+tBL:
+01 f0 01 f8
+{
+  lr := pc - 2 | 1
+  pc := 0x1002
+  jmp 0x1002
+}
+tBLXi:
+06 f0 06 e8
+{
+  lr := pc - 2 | 1
+  pc := 0x600C
+  jmp 0x600C
+}
+tBLXr:
+d8 47
+{
+  lr := pc - 2 | 1
+  pc := r11 & 0xFFFFFFFE
+  jmp (r11 & 0xFFFFFFFE)
+}
+tBX:
+50 47
+{
+  pc := (0x7FFFFFFF & r10 >> 1) << 1
+  jmp ((0x7FFFFFFF & r10 >> 1) << 1)
+}
+-- mem instructions
+tLDRi:
+8a 69
+{
+  r2 := mem[r1 + 0x18, el]:u32
+}
+tLDRr:
+0a 59
+{
+  r2 := mem[r1 + r4, el]:u32
+}
+tLDRpci:
+ca 4f
+{
+  r7 := mem[pc + 0x328, el]:u32
+}
+tLDRspi:
+0a 99
+{
+  r1 := mem[sp + 0x28, el]:u32
+}
+tLDRBi:
+0a 79
+{
+  r2 := pad:32[mem[r1 + 4]]
+}
+tLDRBi:
+0a 5d
+{
+  r2 := pad:32[mem[r1 + r4]]
+}
+tLDRHi:
+0a 89
+{
+  r2 := pad:32[mem[r1 + 8, el]:u16]
+}
+tLDRHr:
+0a 5b
+{
+  r2 := pad:32[mem[r1 + r4, el]:u16]
+}
+tLDRSB:
+0a 57
+{
+  r2 := extend:32[mem[r1 + r4]]
+}
+tLDRSH:
+0a 5f
+{
+  r2 := extend:32[mem[r1 + r4, el]:u16]
+}
+tSTRi:
+0a 67
+{
+  mem := mem with [r1 + 0x70, el]:u32 <- r2
+}
+tSTRr:
+0a 51
+{
+  mem := mem with [r1 + r4, el]:u32 <- r2
+}
+tSTRspi:
+0a 91
+{
+  mem := mem with [sp + 0x28, el]:u32 <- r1
+}
+tSTRBi:
+0a 71
+{
+  mem := mem with [r1 + 4] <- low:8[r2]
+}
+tSTRBr:
+0a 55
+{
+  mem := mem with [r1 + r4] <- low:8[r2]
+}
+tSTRHi:
+0a 85
+{
+  mem := mem with [r1 + 0x28, el]:u16 <- low:16[r2]
+}
+tSTRHr:
+0a 53
+{
+  mem := mem with [r1 + r4, el]:u16 <- low:16[r2]
+}
+-- multi mem instructions
+tSTMIA_UPD:
+0b c3
+{
+  mem := mem with [r3, el]:u32 <- r0
+  r3 := r3 + 4
+  mem := mem with [r3, el]:u32 <- r1
+  r3 := r3 + 4
+  mem := mem with [r3, el]:u32 <- r3
+  r3 := r3 + 4
+}
+tLDMIA:
+ab cd
+{
+  tmp := r5
+  r0 := mem[tmp, el]:u32
+  tmp := tmp + 4
+  r1 := mem[tmp, el]:u32
+  tmp := tmp + 4
+  r3 := mem[tmp, el]:u32
+  tmp := tmp + 4
+  r5 := mem[tmp, el]:u32
+  tmp := tmp + 4
+  r7 := mem[tmp, el]:u32
+  tmp := tmp + 4
+  r5 := tmp
+}
+ab c8
+{
+  tmp := r0
+  r1 := mem[tmp, el]:u32
+  tmp := tmp + 4
+  r3 := mem[tmp, el]:u32
+  tmp := tmp + 4
+  r5 := mem[tmp, el]:u32
+  tmp := tmp + 4
+  r7 := mem[tmp, el]:u32
+  tmp := tmp + 4
+  r0 := tmp
+}
+tPUSH:
+ab b5
+{
+  tmp := sp - 0x18
+  mem := mem with [tmp, el]:u32 <- r0
+  tmp := tmp + 4
+  mem := mem with [tmp, el]:u32 <- r1
+  tmp := tmp + 4
+  mem := mem with [tmp, el]:u32 <- r3
+  tmp := tmp + 4
+  mem := mem with [tmp, el]:u32 <- r5
+  tmp := tmp + 4
+  mem := mem with [tmp, el]:u32 <- r7
+  tmp := tmp + 4
+  mem := mem with [tmp, el]:u32 <- lr
+  tmp := tmp + 4
+  sp := sp - 0x18
+}
+tPOP:
+ab bd
+{
+  tmp := sp
+  r0 := mem[tmp, el]:u32
+  tmp := tmp + 4
+  r1 := mem[tmp, el]:u32
+  tmp := tmp + 4
+  r3 := mem[tmp, el]:u32
+  tmp := tmp + 4
+  r5 := mem[tmp, el]:u32
+  tmp := tmp + 4
+  r7 := mem[tmp, el]:u32
+  tmp := tmp + 4
+  pc := mem[tmp, el]:u32 & 0xFFFFFFFE
+  tmp := tmp + 4
+  sp := tmp
+  jmp pc
+}
+ab bc
+{
+  tmp := sp
+  r0 := mem[tmp, el]:u32
+  tmp := tmp + 4
+  r1 := mem[tmp, el]:u32
+  tmp := tmp + 4
+  r3 := mem[tmp, el]:u32
+  tmp := tmp + 4
+  r5 := mem[tmp, el]:u32
+  tmp := tmp + 4
+  r7 := mem[tmp, el]:u32
+  tmp := tmp + 4
+  sp := tmp
+}
