@@ -264,6 +264,44 @@ module ARM(Core : Theory.Core) = struct
       !%(smlalbt dest hidest src1 src2 cond _wflag)
     | _, _ -> move pass
 
+  let lift_mem_multi ops insn =
+    let ( !% ) list = DSL.expand list |> move in
+    let open Mem_multi in
+    match insn, Array.to_list ops with
+    | `STMDA, base :: cond :: _wr_flag :: dest_list ->
+      !%(stmda base cond _wr_flag dest_list)
+    | `STMDA_UPD, base :: _unknown :: cond :: _wr_flag :: dest_list ->
+      !%(stmda_upd base cond _wr_flag dest_list)
+    | `LDMIB, base :: cond :: _wr_flag :: dest_list ->
+      !%(ldmib base cond _wr_flag dest_list)
+    | `LDMIB_UPD, base :: _unknown :: cond :: _wr_flag :: dest_list ->
+      !%(ldmib_upd base cond _wr_flag dest_list)
+    | `STMIB, base :: cond :: _wr_flag :: dest_list ->
+      !%(stmib base cond _wr_flag dest_list)
+    | `STMIB_UPD, base :: _unknown :: cond :: _wr_flag :: dest_list ->
+      !%(stmib_upd base cond _wr_flag dest_list)
+    | `LDMDB, base :: cond :: _wr_flag :: dest_list ->
+      !%(ldmdb base cond _wr_flag dest_list)
+    | `LDMDB_UPD, base :: _unknown :: cond :: _wr_flag :: dest_list ->
+      !%(ldmdb_upd base cond _wr_flag dest_list)
+    | `STMDB, base :: cond :: _wr_flag :: dest_list ->
+      !%(stmdb base cond _wr_flag dest_list)
+    | `STMDB_UPD, base :: _unknown :: cond :: _wr_flag :: dest_list ->
+      !%(stmdb_upd base cond _wr_flag dest_list)
+    | `LDMIA, base ::  cond ::  _wr_flag ::  dest_list  ->
+      !%(ldmia base cond _wr_flag dest_list)
+    | `LDMIA_UPD, base :: _unknown :: cond :: _wr_flag :: dest_list  ->
+      !%(ldmda_upd base cond _wr_flag dest_list)
+    | `STMIA, base :: cond :: _wr_flag :: dest_list ->
+      !%(stmia base cond _wr_flag dest_list)
+    | `STMIA_UPD, base :: _unknown :: cond :: _wr_flag :: dest_list ->
+      !%(stmia_upd base cond _wr_flag dest_list)
+    | `LDMDA, base :: cond :: _wr_flag :: dest_list ->
+      !%(ldmda base cond _wr_flag dest_list)
+    | `LDMDA_UPD, base :: _unknown :: cond :: _wr_flag :: dest_list ->
+      !%(ldmda_upd base cond _wr_flag dest_list)
+    | _, _ -> move pass
+
   let lift_mem insn ops =
     let ( !% ) list = DSL.expand list |> move in
     let open Mem in
@@ -406,6 +444,7 @@ module ARM(Core : Theory.Core) = struct
     (* multisrc is one of the multireg combinations *)
     | `STREXD, [|`Reg dest1; multisrc; base; cond; _|] ->
       !%(strexd (`Reg dest1) multisrc base cond)
+    | #mem_multi_insn as insn, ops -> lift_mem_multi ops insn
     | _, _ -> move pass
 
   (** Branching instructions *)
