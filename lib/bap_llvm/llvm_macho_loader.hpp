@@ -46,23 +46,6 @@ typedef macho::LoadCommandInfo command_info;
 typedef std::vector<command_info> commands;
 typedef SymbolRef::Type sym_type;
 
-static std::string macho_declarations =
-    "(declare file-type (name str))"
-    "(declare arch (name str))"
-    "(declare entry (relative-addr int))"
-    "(declare default-base-address (addr int))"
-    "(declare segment-command (name str) (off int) (size int))"
-    "(declare segment-command-flags (name str) (r bool) (w bool) (x bool))"
-    "(declare virtual-segment-command (name str) (relative-addr int) (size int))"
-    "(declare section-entry (name str) (relative-addr int) (size int) (off int))"
-    "(declare symbol-entry (name str) (relative-addr int) (size int) (off int))"
-    "(declare macho-symbol (name str) (value int))"
-    "(declare code-entry (name str) (off int) (size int))"
-    "(declare relocatable (flag bool))"
-    "(declare ref-internal (sym-off int) (rel-off int))"
-    "(declare ref-external (rel-off int) (name str))";
-
-
 template <typename T>
 void segment_command(const T &cmd, uint64_t base, ogre_doc &s) {
     bool r = static_cast<bool>(cmd.initprot & MachO::VM_PROT_READ);
@@ -545,12 +528,9 @@ symbol_iterator get_symbol(const macho &obj, std::size_t index) {
 
 } // namespace macho_loader
 
-error_or<std::string> load(const llvm::object::MachOObjectFile &obj) {
+error_or<std::string> load(ogre_doc &s, const llvm::object::MachOObjectFile &obj) {
     using namespace macho_loader;
-    ogre_doc s;
-    s.raw_entry(macho_declarations);
     s.raw_entry("(file-type macho)");
-    s.entry("arch") << prim::arch_of_object(obj);
     s.entry("default-base-address") << image_base(obj);
     image_info(obj, s);
     iterate_macho_commands(obj, s);

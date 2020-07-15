@@ -89,7 +89,7 @@ module Relocatable = struct
           select (from section_entry $ section_flags)
             ~join:[[field name]]
         end)
-        ~f:(fun hdr (_, w, x) -> hdr, (w,x)) >>= fun s ->
+        ~f:(fun hdr (_, _, w, x) -> hdr, (w,x)) >>= fun s ->
       Fact.Seq.iter s
         ~f:(fun ((name,_,size,off), (w,x)) ->
             let addr = Int64.(base + off) in

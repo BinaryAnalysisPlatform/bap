@@ -11,6 +11,7 @@ module Format = Stdlib.Format
 module Digest = Stdlib.Digest
 module Filename = Stdlib.Filename
 module Sys = Stdlib.Sys
+module Loggers = Bap_main_event.Log.Create
 
 let fail fmt = Printf.ksprintf invalid_arg fmt
 let sprintf = Printf.sprintf

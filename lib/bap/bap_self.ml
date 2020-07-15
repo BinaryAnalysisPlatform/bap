@@ -62,32 +62,7 @@ module Create() = struct
                    has_var ("DEBUG_"^name) ||
                    has_var ("DEBUG")
 
-  open Event.Log
-
-  let debug = (); match is_verbose with
-    | false -> fun fmt -> ifprintf std_formatter fmt
-    | true ->  fun fmt -> message Debug ~section:name fmt
-
-  let info f = message Info ~section:name f
-  let warning f = message Warning ~section:name f
-  let error f = message Error ~section:name f
-
-  let make_formatter (f : ('a, formatter, unit) format -> 'a) =
-    let buf = Buffer.create 512 in
-    let output = Buffer.add_substring buf in
-    let flush () =
-      f "%s" (Buffer.contents buf);
-      Buffer.clear buf in
-    let fmt = make_formatter output flush in
-    let out = pp_get_formatter_out_functions fmt () in
-    let out = {out with out_newline = flush} in
-    pp_set_formatter_out_functions fmt out;
-    fmt
-
-  let debug_formatter = make_formatter debug
-  let info_formatter = make_formatter info
-  let warning_formatter = make_formatter warning
-  let error_formatter = make_formatter error
+  include Event.Log.Create ()
 
   module Config = struct
     open Bap_main.Extension
@@ -141,7 +116,7 @@ module Create() = struct
             | [] -> default
             | xs -> xs)
 
-    let flag ?deprecated ?docv ?(doc="Undocumented.") ?synonyms name =
+    let flag ?deprecated ?docv:_ ?(doc="Undocumented.") ?synonyms name =
       let doc = prepend_deprecation deprecated doc in
       Configuration.flag ~doc ?aliases:synonyms name |>
       Configuration.determined

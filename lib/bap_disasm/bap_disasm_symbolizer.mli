@@ -7,8 +7,8 @@ open Bap_disasm_source
 type t
 type symbolizer = t
 
-val common_name : (Theory.program, string option KB.opinions) KB.slot
 val provide : Knowledge.agent -> t -> unit
+val providing : Knowledge.agent -> t -> (unit -> 'a knowledge) -> 'a knowledge
 val get_name : addr -> string knowledge
 
 module Toplevel : sig
@@ -16,6 +16,10 @@ module Toplevel : sig
 end
 
 val empty : t
+
+val set_path : t -> string -> t
+
+val path : t -> string option
 
 val create : (addr -> string option) -> t
 

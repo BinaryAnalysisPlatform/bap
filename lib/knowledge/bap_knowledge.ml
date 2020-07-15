@@ -18,6 +18,7 @@ module Conflict = struct
   let pp = Exn.pp
   let register_printer pr = Caml.Printexc.register_printer pr
   let sexp_of_t = Exn.sexp_of_t
+  let to_string = Exn.to_string
 end
 
 module type Id = sig
@@ -327,6 +328,8 @@ module Agent : sig
   (* the private interface *)
 
   val weight : t -> int
+  val id : t -> id
+
   include Base.Comparable.S with type t := t
 end = struct
   module Id = String
@@ -356,6 +359,8 @@ end = struct
     | D -> 2
     | E -> 1
 
+  let id x = x
+
   let register
       ?(desc="no description provided")
       ?package
@@ -366,7 +371,7 @@ end = struct
       failwithf "An agent with name `%a' already exists, \
                  please choose another name" Name.str name ();
     Hashtbl.add_exn agents agent {
-      desc; name; rcls = reliability
+      desc; name; rcls = reliability;
     };
     agent
 
@@ -500,13 +505,20 @@ module Domain = struct
 
   let is_empty {empty; order} x = Order.equal_partial (order empty x) EQ
 
-  exception Join of string * Sexp.t * Sexp.t [@@deriving sexp_of]
+  type conflict += Join : string * ('a -> Sexp.t) * 'a * 'a -> conflict
+
+  let () = Conflict.register_printer @@ function
+    | Join (dom,inspect, x, y) -> Option.some @@
+      Format.asprintf
+        "Domain %s doesn't have a join for values %a and %a"
+        dom Sexp.pp_hum (inspect x) Sexp.pp_hum (inspect y)
+    | _ -> None
 
   let make_join name inspect order x y =
     match order x y with
     | Order.GT -> Ok x
     | EQ | LT -> Ok y
-    | NC -> Error (Join (name, inspect x, inspect y))
+    | NC -> Error (Join (name, inspect, x, y))
 
   let define ?(inspect=sexp_of_opaque) ?join ~empty ~order name = {
     inspect; empty; order; name;
@@ -567,8 +579,7 @@ module Domain = struct
           | `Both (x,y) ->
             if equal x y then Some y
             else
-              let x = inspect x and y = inspect y in
-              let failed = Join (name,x,y) in
+              let failed = Join (name,inspect,x,y) in
               raise (Join.Conflict failed))
       with Join.Conflict err -> Error err in
     let inspect xs =
@@ -590,7 +601,7 @@ module Domain = struct
       | Some join -> join
       | None -> fun x y ->
         if equal x y then Ok y
-        else Error (Join (name, inspect x, inspect y)) in
+        else Error (Join (name, inspect, x, y)) in
     let inspect = sexp_of_option inspect in
     let join x y = match x,y with
       | None,x | x,None -> Ok x
@@ -723,10 +734,41 @@ end
 
 type 'a obj = Oid.t
 
+
 module Registry = struct
+  type info = {
+    desc : string option;
+  }
+
+  type 'a rule = {
+    name : Name.t;
+    provides : 'a;
+    requires : Name.t list;
+    parameters : string list list;
+    comment : string;
+  }
+  type unfinished = Unifinished
+  type finished = Name.t
+  type def = unfinished rule
+  type doc = finished rule
+
+  let sexp_of_rule {name} = Name.sexp_of_t name
+
+  module Rule = struct
+    type t = finished rule
+    let hash {provides=name} = Name.hash name
+    let sexp_of_t = sexp_of_rule
+    include Base.Comparable.Inherit(Name)(struct
+        type t = finished rule
+        let component {name} = name
+        let sexp_of_t = sexp_of_rule
+      end)
+  end
+
   let public = Hashtbl.create (module Name)
   let classes = Hashtbl.create (module String)
   let slots = Hashtbl.create (module String)
+  let rules = Hash_set.create (module Rule) ()
 
   let is_present ~package namespace name =
     match Hashtbl.find namespace package with
@@ -736,12 +778,40 @@ module Registry = struct
   let register kind namespace ?desc ?(package=user_package) name =
     if is_present ~package namespace name
     then failwithf
-        "Failed to declare new %s, there is already a %s \
+        "Failed to declare a new %s, there is already a %s \
          named `%s' in package `%s'" kind kind name package ();
+    let info = {desc} in
     Hashtbl.update namespace package ~f:(function
-        | None -> Map.singleton (module String) name desc
-        | Some names -> Map.add_exn names ~key:name ~data:desc);
+        | None -> Map.singleton (module String) name info
+        | Some names -> Map.add_exn names ~key:name ~data:info);
     {package; name}
+
+
+
+  let start_rule ?package name = {
+    name = Name.create ?package name;
+    provides = Unifinished;
+    requires = [];
+    parameters = [];
+    comment = ""
+  }
+
+  let rule_require name rule = {
+    rule with requires = name :: rule.requires;
+  }
+
+  let rule_provide name rule = {
+    rule with provides = name;
+  }
+
+  let rule_dynamic params rule = {
+    rule with parameters = params :: rule.parameters;
+  }
+
+  let rule_comment comment rule =
+    Hash_set.add rules {
+      rule with comment
+    }
 
   let add_class = register "class" classes
   let add_slot  = register "property" slots
@@ -758,7 +828,6 @@ module Registry = struct
   let find namespace name =
     let names = Hashtbl.find_exn namespace (Name.package name) in
     Map.find_exn names (Name.unqualified name)
-
 end
 
 module Documentation = struct
@@ -772,19 +841,77 @@ module Documentation = struct
 
   module Agent = struct
     type t = Agent.id
+    let of_agent = Agent.id
     let name = Agent.name
     let desc = Agent.desc
   end
 
   module Pair = struct
-    type t = Name.t * string option
+    type t = Name.t * Registry.info
     let name = fst
-    let desc = function
-      | _,None -> ""
-      | _,Some d -> d
+    let desc (_,{Registry.desc}) = match desc with
+      | None -> ""
+      | Some d -> d
   end
   module Class = Pair
   module Property = Pair
+
+  module Rule = struct
+    open Registry
+    type t = Rule.t
+    let name t = t.name
+    let desc r = r.comment
+    let property name = name, Registry.(find slots) name
+    let provides r = property r.provides
+    let requires r = List.map ~f:property r.requires
+    let parameters r = r.parameters
+
+    let refmt input =
+      let max_column = 70 in
+      let buffer = Buffer.create 64 in
+      Buffer.add_string buffer "-- ";
+      let column = ref 3 in
+      let prev = ref ' ' in
+      let in_white () = !prev = ' ' in
+      let push c =
+        if !column >= max_column && in_white () then begin
+          Buffer.add_string buffer "\n-- ";
+          column := 4;
+        end;
+        Buffer.add_char buffer c;
+        if Char.is_whitespace c
+        then prev := ' '
+        else prev := c;
+        incr column; in
+      let skip = () in
+      String.iter input ~f:(fun c ->
+          if Char.is_whitespace c then
+            if in_white () then skip else push ' '
+          else push c);
+      Buffer.contents buffer
+
+    let pp_parameters ppf = function
+      | [] -> ()
+      | ps ->
+        List.iter ps ~f:(fun ps ->
+            let pp_sep ppf () = Format.fprintf ppf ", " in
+            Format.fprintf ppf "(%a)"
+              Format.(pp_print_list ~pp_sep pp_print_string) ps)
+
+    let pp ppf {parameters; provides; requires; name; comment} =
+      if comment <> "" then
+        Format.fprintf ppf "%s@\n" (refmt comment);
+      Format.fprintf ppf "@[<v2>%a%a ::=@\n"
+        Name.pp name pp_parameters parameters;
+      let max_len = ref (String.length (Name.to_string provides)) in
+      List.iter requires ~f:(fun name ->
+          let len = String.length (Name.to_string name) in
+          max_len := Int.max len !max_len;
+          Format.fprintf ppf "%a@\n" Name.pp name;);
+      let sep = String.make !max_len '-' in
+      Format.fprintf ppf "%s@\n%a@]@\n"
+        sep Name.pp provides
+  end
 
   let classes () =
     Hashtbl.to_alist Registry.public |>
@@ -793,6 +920,9 @@ module Documentation = struct
         List.map slots ~f:(fun slot ->
             slot,
             Registry.(find slots) slot))
+
+  let rules () =
+    Hash_set.to_list Registry.rules
 end
 
 module Class = struct
@@ -2127,171 +2257,11 @@ module Knowledge = struct
   let gets f = Knowledge.lift (State.gets f)
   let update f = Knowledge.lift (State.update f)
 
-  exception Non_monotonic_update of Name.t * Conflict.t [@@deriving sexp]
-
-  let provide : type a p. (a,p) slot -> a obj -> p -> unit Knowledge.t =
-    fun slot obj x ->
-    if Domain.is_empty slot.dom x
-    then Knowledge.return ()
-    else
-      get () >>= function {classes} as s ->
-        let {Env.vals} as objs =
-          match Map.find classes slot.cls.id with
-          | None -> Env.empty_class
-          | Some objs -> objs in
-        try put {
-            s with classes = Map.set classes ~key:slot.cls.id ~data:{
-            objs with vals = Map.update vals obj ~f:(function
-            | None -> Record.(put slot.key empty x)
-            | Some v -> match Record.commit slot.dom slot.key v x with
-              | Ok r -> r
-              | Error err -> raise (Record.Merge_conflict err))}}
-        with Record.Merge_conflict err ->
-          Knowledge.fail (Non_monotonic_update (Slot.name slot, err))
-
-  let pids = ref Pid.zero
-
-  let register_promise (s : _ slot) run =
-    Pid.incr pids;
-    let pid = !pids in
-    Hashtbl.add_exn s.promises pid {run; pid}
-
-  let promise s get =
-    register_promise s @@ fun obj ->
-    get obj >>= fun x ->
-    if Domain.is_empty s.dom x
-    then Knowledge.return ()
-    else provide s obj x
-
   let objects {Class.id} =
     get () >>| fun {classes} ->
     match Map.find classes id with
     | None -> Env.empty_class
     | Some objs -> objs
-
-  let uid {Slot.key} = Dict.Key.uid key
-
-  let status
-    : ('a,_) slot -> 'a obj -> slot_status knowledge =
-    fun slot obj ->
-    objects slot.cls >>| fun {comp} ->
-    match Map.find comp obj with
-    | None -> Sleep
-    | Some slots -> match Map.find slots (uid slot) with
-      | None -> Sleep
-      | Some Work _ -> Awoke
-      | Some Done -> Ready
-
-  let update_slot
-    : ('a,_) slot -> 'a obj -> _ -> unit knowledge =
-    fun slot obj f ->
-    objects slot.cls >>= fun ({comp} as objs) ->
-    let comp = Map.update comp obj ~f:(fun slots ->
-        let slots = match slots with
-          | None -> Map.empty (module Dict.Key.Uid)
-          | Some slots -> slots in
-        Map.update slots (uid slot) ~f) in
-    get () >>= fun s ->
-    let classes = Map.set s.classes slot.cls.id {objs with comp} in
-    put {s with classes}
-
-  let enter_slot : ('a,_) slot -> 'a obj -> unit knowledge = fun s x ->
-    update_slot s x @@ function
-    | Some _ -> assert false
-    | None ->  Work {
-        waiting = Set.empty (module Pid);
-        current = Set.empty (module Pid)
-      }
-
-  let leave_slot : ('a,'p) slot -> 'a obj -> unit Knowledge.t = fun s x ->
-    update_slot s x @@ function
-    | Some (Work _) -> Done
-    | _ -> assert false
-
-  let update_work s x f =
-    update_slot s x @@ function
-    | Some (Work w) -> f w
-    | _ -> assert false
-
-  let enter_promise s x p =
-    update_work s x @@ fun {waiting; current} ->
-    Work {waiting; current = Set.add current p}
-
-  let leave_promise s x p =
-    update_work s x @@ fun {waiting; current} ->
-    Work {waiting; current = Set.remove current p}
-
-  let enqueue_promises s x =
-    update_work s x @@ fun {waiting; current} ->
-    Work {waiting = Set.union current waiting; current}
-
-  let collect_waiting
-    : ('a,'p) slot -> 'a obj -> _ Knowledge.t = fun s x ->
-    objects s.cls >>| fun {comp} ->
-    Map.find_exn (Map.find_exn comp x) (uid s)  |> function
-    | Env.Done -> assert false
-    | Env.Work {waiting} ->
-      Set.fold waiting ~init:[] ~f:(fun ps p ->
-          Hashtbl.find_exn s.Slot.promises p :: ps)
-
-  let dequeue_waiting s x = update_work s x @@ fun _ ->
-    Work {
-      waiting = Set.empty (module Pid);
-      current = Set.empty (module Pid)
-    }
-
-  let initial_promises {Slot.promises} = Hashtbl.data promises
-
-  let current : type a p. (a,p) slot -> a obj -> p Knowledge.t =
-    fun slot id ->
-    objects slot.cls >>| fun {Env.vals} ->
-    match Map.find vals id with
-    | None -> slot.dom.empty
-    | Some v -> Record.get slot.key slot.dom v
-
-  let rec collect_inner
-    : ('a,'p) slot -> 'a obj -> _ -> _ =
-    fun slot obj promises ->
-    current slot obj >>= fun was ->
-    Knowledge.List.iter promises ~f:(fun {Slot.run; pid} ->
-        enter_promise slot obj pid >>= fun () ->
-        run obj >>= fun () ->
-        leave_promise slot obj pid) >>= fun () ->
-    collect_waiting slot obj >>= fun waiting ->
-    dequeue_waiting slot obj >>= fun () ->
-    match waiting with
-    | [] -> Knowledge.return ()
-    | promises ->
-      current slot obj >>= fun now ->
-      match slot.dom.order now was with
-      | EQ | LT -> Knowledge.return ()
-      | GT | NC -> collect_inner slot obj promises
-
-
-  let collect : type a p. (a,p) slot -> a obj -> p Knowledge.t =
-    fun slot id ->
-    status slot id >>= function
-    | Ready ->
-      current slot id
-    | Awoke ->
-      enqueue_promises slot id >>= fun () ->
-      current slot id
-    | Sleep ->
-      enter_slot slot id >>= fun () ->
-      collect_inner slot id (initial_promises slot) >>= fun () ->
-      leave_slot slot id >>= fun () ->
-      current slot id
-
-  let resolve slot obj =
-    collect slot obj >>| Opinions.choice
-
-  let suggest agent slot obj x =
-    current slot obj >>= fun opinions ->
-    provide slot obj (Opinions.add agent x opinions)
-
-  let propose agent s get =
-    register_promise s @@ fun obj ->
-    get obj >>= suggest agent s obj
 
   module Object = struct
     type +'a t = 'a obj
@@ -2459,6 +2429,217 @@ module Knowledge = struct
       (module R)
   end
 
+  type conflict += Non_monotonic_update of {
+      slot : Name.t;
+      repr : string;
+      error : Conflict.t;
+      trace : Caml.Printexc.raw_backtrace;
+    }
+
+  let () = Conflict.register_printer (function
+      | Non_monotonic_update {slot; repr; error; trace} ->
+        Option.some @@
+        Format.asprintf
+          "Unable to update the slot %a of %s,\n%a\n\
+           Backtrace:\n%s"
+          Name.pp slot repr Conflict.pp error
+          (Caml.Printexc.raw_backtrace_to_string trace)
+      | _ -> None)
+
+
+  let non_monotonic slot obj error trace =
+    Object.repr (Slot.cls slot) obj >>= fun obj ->
+    Knowledge.fail (Non_monotonic_update {
+        slot = Slot.name slot;
+        repr = obj;
+        error;
+        trace;
+      })
+
+  let provide : type a p. (a,p) slot -> a obj -> p -> unit Knowledge.t =
+    fun slot obj x ->
+    if Domain.is_empty slot.dom x
+    then Knowledge.return ()
+    else
+      get () >>= function {classes} as s ->
+        let {Env.vals} as objs =
+          match Map.find classes slot.cls.id with
+          | None -> Env.empty_class
+          | Some objs -> objs in
+        try put {
+            s with classes = Map.set classes ~key:slot.cls.id ~data:{
+            objs with vals = Map.update vals obj ~f:(function
+            | None -> Record.(put slot.key empty x)
+            | Some v -> match Record.commit slot.dom slot.key v x with
+              | Ok r -> r
+              | Error err -> raise (Record.Merge_conflict err))}}
+        with Record.Merge_conflict err ->
+          non_monotonic slot obj err @@
+          Caml.Printexc.get_raw_backtrace ()
+
+
+  let pids = ref Pid.zero
+
+  let register_promise (s : _ slot) run =
+    Pid.incr pids;
+    let pid = !pids in
+    Hashtbl.add_exn s.promises pid {run; pid};
+    pid
+
+  let remove_promise (s : _ slot) pid =
+    Hashtbl.remove s.promises pid
+
+  let promising s ~promise:get scoped =
+    let pid = register_promise s @@ fun obj ->
+      get obj >>= fun x ->
+      if Domain.is_empty s.dom x
+      then Knowledge.return ()
+      else provide s obj x in
+    scoped () >>= fun r ->
+    remove_promise s pid;
+    Knowledge.return r
+
+  let promise s get =
+    ignore @@
+    register_promise s @@ fun obj ->
+    get obj >>= fun x ->
+    if Domain.is_empty s.dom x
+    then Knowledge.return ()
+    else provide s obj x
+
+
+  let uid {Slot.key} = Dict.Key.uid key
+
+  let status
+    : ('a,_) slot -> 'a obj -> slot_status knowledge =
+    fun slot obj ->
+    objects slot.cls >>| fun {comp} ->
+    match Map.find comp obj with
+    | None -> Sleep
+    | Some slots -> match Map.find slots (uid slot) with
+      | None -> Sleep
+      | Some Work _ -> Awoke
+      | Some Done -> Ready
+
+  let update_slot
+    : ('a,_) slot -> 'a obj -> _ -> unit knowledge =
+    fun slot obj f ->
+    objects slot.cls >>= fun ({comp} as objs) ->
+    let comp = Map.update comp obj ~f:(fun slots ->
+        let slots = match slots with
+          | None -> Map.empty (module Dict.Key.Uid)
+          | Some slots -> slots in
+        Map.update slots (uid slot) ~f) in
+    get () >>= fun s ->
+    let classes = Map.set s.classes slot.cls.id {objs with comp} in
+    put {s with classes}
+
+  let enter_slot : ('a,_) slot -> 'a obj -> unit knowledge = fun s x ->
+    update_slot s x @@ function
+    | Some _ -> assert false
+    | None ->  Work {
+        waiting = Set.empty (module Pid);
+        current = Set.empty (module Pid)
+      }
+
+  let leave_slot : ('a,'p) slot -> 'a obj -> unit Knowledge.t = fun s x ->
+    update_slot s x @@ function
+    | Some (Work _) -> Done
+    | _ -> assert false
+
+  let update_work s x f =
+    update_slot s x @@ function
+    | Some (Work w) -> f w
+    | _ -> assert false
+
+  let enter_promise s x p =
+    update_work s x @@ fun {waiting; current} ->
+    Work {waiting; current = Set.add current p}
+
+  let leave_promise s x p =
+    update_work s x @@ fun {waiting; current} ->
+    Work {waiting; current = Set.remove current p}
+
+  let enqueue_promises s x =
+    update_work s x @@ fun {waiting; current} ->
+    Work {waiting = Set.union current waiting; current}
+
+  let collect_waiting
+    : ('a,'p) slot -> 'a obj -> _ Knowledge.t = fun s x ->
+    objects s.cls >>| fun {comp} ->
+    Map.find_exn (Map.find_exn comp x) (uid s)  |> function
+    | Env.Done -> assert false
+    | Env.Work {waiting} ->
+      Set.fold waiting ~init:[] ~f:(fun ps p ->
+          Hashtbl.find_exn s.Slot.promises p :: ps)
+
+  let dequeue_waiting s x = update_work s x @@ fun _ ->
+    Work {
+      waiting = Set.empty (module Pid);
+      current = Set.empty (module Pid)
+    }
+
+  let initial_promises {Slot.promises} = Hashtbl.data promises
+
+  let current : type a p. (a,p) slot -> a obj -> p Knowledge.t =
+    fun slot id ->
+    objects slot.cls >>| fun {Env.vals} ->
+    match Map.find vals id with
+    | None -> slot.dom.empty
+    | Some v -> Record.get slot.key slot.dom v
+
+  let rec collect_inner
+    : ('a,'p) slot -> 'a obj -> _ -> _ =
+    fun slot obj promises ->
+    current slot obj >>= fun was ->
+    Knowledge.List.iter promises ~f:(fun {Slot.run; pid} ->
+        enter_promise slot obj pid >>= fun () ->
+        run obj >>= fun () ->
+        leave_promise slot obj pid) >>= fun () ->
+    collect_waiting slot obj >>= fun waiting ->
+    dequeue_waiting slot obj >>= fun () ->
+    match waiting with
+    | [] -> Knowledge.return ()
+    | promises ->
+      current slot obj >>= fun now ->
+      match slot.dom.order now was with
+      | EQ | LT -> Knowledge.return ()
+      | GT | NC -> collect_inner slot obj promises
+
+
+  let collect : type a p. (a,p) slot -> a obj -> p Knowledge.t =
+    fun slot id ->
+    status slot id >>= function
+    | Ready ->
+      current slot id
+    | Awoke ->
+      enqueue_promises slot id >>= fun () ->
+      current slot id
+    | Sleep ->
+      enter_slot slot id >>= fun () ->
+      collect_inner slot id (initial_promises slot) >>= fun () ->
+      leave_slot slot id >>= fun () ->
+      current slot id
+
+  let resolve slot obj =
+    collect slot obj >>| Opinions.choice
+
+  let suggest agent slot obj x =
+    current slot obj >>= fun opinions ->
+    provide slot obj (Opinions.add agent x opinions)
+
+  let propose agent s get =
+    ignore @@
+    register_promise s @@ fun obj ->
+    get obj >>= suggest agent s obj
+
+  let proposing agent s ~propose:get scoped =
+    let pid = register_promise s @@ fun obj ->
+      get obj >>= suggest agent s obj in
+    scoped () >>= fun r ->
+    remove_promise s pid;
+    Knowledge.return r
+
   module Domain = struct
     include Domain
 
@@ -2567,6 +2748,9 @@ module Knowledge = struct
                 >>| fun objects ->
                 Map.set classes clsid objects))
       >>= fun classes -> put {s with classes}
+
+    let package = get () >>| fun {Env.package} -> package
+    let set_package name = update @@ fun s -> {s with package = name}
   end
 
 
@@ -2640,6 +2824,16 @@ module Knowledge = struct
     let (-->) x p = collect p x
     let (<--) p f = promise p f
     let (//) c s = Object.read c s
+
+    let (>>=?) x f =
+      x >>= function
+      | None -> Knowledge.return None
+      | Some x -> f x
+
+    let (>>|?) x f =
+      x >>| function
+      | None -> None
+      | Some x -> f x
   end
 
   module type S = sig
@@ -2694,6 +2888,16 @@ module Knowledge = struct
                     (pp_fullname ~package) name in
               Format.fprintf ppf "@,%a)@]@\n"
                 (Sexp.pp_hum_indent 2) (Dict.sexp_of_t data)))
+
+  module Rule = struct
+    type def = Registry.def
+    type doc = Registry.doc
+    let declare = Registry.start_rule
+    let require {Slot.name} = Registry.rule_require name
+    let provide {Slot.name} = Registry.rule_provide name
+    let dynamic = Registry.rule_dynamic
+    let comment = Registry.rule_comment
+  end
 
   module Conflict = Conflict
   module Agent = Agent

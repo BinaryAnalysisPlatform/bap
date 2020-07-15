@@ -115,6 +115,8 @@ type entity = [
   | `Classes
   | `Theories
   | `Agents
+  | `Rules
+  | `Collators
 ]
 
 let entities : (string, entity) List.Assoc.t = [
@@ -129,6 +131,8 @@ let entities : (string, entity) List.Assoc.t = [
   "classes", `Classes;
   "theories", `Theories;
   "agents", `Agents;
+  "rules", `Rules;
+  "collators", `Collators;
 ]
 
 let entity_name = function
@@ -142,6 +146,8 @@ let entity_name = function
   | `Classes -> "classes"
   | `Theories -> "theories"
   | `Agents -> "agents"
+  | `Rules -> "rules"
+  | `Collators -> "collators"
 
 let entity_desc : (entity * string) list = [
   `Entities, "prints this message";
@@ -154,6 +160,8 @@ let entity_desc : (entity * string) list = [
   `Classes, "knowledge representation classes";
   `Theories, "installed theories";
   `Agents, "knowledge providers";
+  `Rules, "knowledge base rules";
+  `Collators, "project collators (comparators)";
 ]
 
 let () =
@@ -263,8 +271,21 @@ let () =
         and desc = Agent.desc agent in
         if selected name
         then Format.printf "  %-32s @[<hov>%a@]@\n" name
-            Format.pp_print_text desc;
-        ());
+            Format.pp_print_text desc);
+    Ok ()
+  | `Rules ->
+    let open Bap_knowledge.Knowledge.Documentation in
+    rules () |> List.iter ~f:(Format.printf "%a@\n" Rule.pp);
+    Ok ()
+  | `Collators ->
+    let module Name = Bap_knowledge.Knowledge.Name in
+    Project.Collator.registered () |>
+    List.iter ~f:(fun collator ->
+        let name = Name.show (Project.Collator.name collator) in
+        let desc = Project.Collator.desc collator in
+        if selected name
+        then Format.printf "  %-32s @[<hov>%a@]@\n" name
+            Format.pp_print_text desc);
     Ok ()
   | `Entities ->
     List.iter entity_desc ~f:(fun (entity,desc) ->

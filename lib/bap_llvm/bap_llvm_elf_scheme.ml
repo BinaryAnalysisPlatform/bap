@@ -23,4 +23,5 @@ let program_header_flags () = declare "program-header-flags"
 
 (** elf section header flags *)
 let section_flags () = declare "section-flags"
-    (scheme name $ writable $ executable) Tuple.T3.create
+    (scheme name $ readable $ writable $ executable) @@ fun s r w x ->
+  s,r,w,x

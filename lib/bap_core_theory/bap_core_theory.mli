@@ -1102,9 +1102,145 @@ module Theory : sig
       val slot : (program, t) Knowledge.slot
       include Knowledge.Value.S with type t := t
     end
+
     include Knowledge.Value.S with type t := t
   end
 
+
+  (** A unit of code.
+
+      A unit of code is a generic piece of code, i.e., a set of
+      instructions that share some common properties, such as the
+      instruction set architecture. The whole set of instructions
+      in the knowledge base is partitioned into units, so that each
+      instruction belongs to at most one code unit, see the
+      {!Label.unit} property.
+  *)
+  module Unit : sig
+
+    (** the class of all code units  *)
+    type cls
+
+    (** the meta type of the unit object  *)
+    type t = cls KB.Object.t
+
+
+    (** the base class for all units.
+
+        Right now we have only one sort of units, indexed with the
+        [unit] type. But later we may introduce more unit sorts.
+    *)
+    val cls : (cls,unit) KB.Class.t
+
+
+    (** [for_file name] creates a new unit denoting a file with the
+        given [name].
+
+        This function creates a symbol that interns [name] in the
+        [file] package and sets the {!path} property to [name].
+    *)
+    val for_file : string -> t knowledge
+
+
+    (** [for_region ~lower ~upper] creates a new unit denoting an
+        anonymous memory region.
+
+        The [lower] and [upper] labels are interned in the current
+        package and the symbol, built from their concatenation, is
+        interned in the [region] package. That enables distinguishing
+        between anonymous memory regions that belong to different
+        projects/files but having intersecting set of addresses,
+        provided that every project is setting the current package to
+        some unique name.
+    *)
+    val for_region : lower:word -> upper:word -> t knowledge
+
+
+    (** [path] is the path of the file from which the unit originates.  *)
+    val path : (cls, string option) KB.slot
+
+
+    (** [bias] is the bias of all addresses in the unit.
+
+        If a unit is biased, then all addresses in this unit have
+        [Some bias] with respect to the real addresses in the unit
+        representation. To obtain the real address the [bias] shall
+        be subtracted from the address that is stored in the knowledge
+        base. To get the biased address the [bias] shall be added to
+        the real address.
+
+        Any knowledge provider that also operates with the real view
+        on the program must take [bias] into account.
+    *)
+    val bias : (cls, Bitvec.t option) KB.slot
+
+    (** Information about the target architecture.
+
+        Assuming that the code is produced from source the target
+        denotes the target for which this source is built and
+        tailored. This module provides information about the target
+        triplet and target features.
+    *)
+    module Target : sig
+
+      (** [arch] the target architecture, e.g., [arm].  *)
+      val arch : (cls, string option) KB.slot
+
+      (** [subarch] the target subarchitecture designator, e.g, [v7]  *)
+      val subarch : (cls, string option) KB.slot
+
+      (** [vendor] the target vendor, e.g., [apple] *)
+      val vendor : (cls, string option) KB.slot
+
+      (** [system] the target operating system, e.g., [darwin]  *)
+      val system : (cls, string option) KB.slot
+
+      (** [bits] the number of bits in the machine word, e.g., [32]  *)
+      val bits   : (cls, int option) KB.slot
+
+      (** [abi] target's ABI, e.g., [gnueabi].  *)
+      val abi    : (cls, string option) KB.slot
+
+      (** [fabi] targets floating-point ABI, e.g., [hf]  *)
+      val fabi   : (cls, string option) KB.slot
+
+      (** [cpu] the target CPU, e.g., [cortex] *)
+      val cpu    : (cls, string option) KB.slot
+
+      (** [fpu] the target FPU.  *)
+      val fpu    : (cls, string option) KB.slot
+
+
+      (** [is_little_endian] is true if the target's default
+          endianness is the little endian order.   *)
+      val is_little_endian : (cls, bool option) KB.slot
+    end
+
+    (** Information about the code source.  *)
+    module Source : sig
+
+      (** [language] the programming language in which the code of
+          this unit was written.  *)
+      val language : (cls, string option) KB.slot
+    end
+
+    (** Information about the compiler.
+
+        A compiler is a translator that was used to translate
+        the code in this unit from the source to the target
+        representation.
+    *)
+    module Compiler : sig
+
+      (** [name] the compiler name  *)
+      val name : (cls, string option) KB.slot
+
+      (** [version] the compiler version.  *)
+      val version : (cls, string option) KB.slot
+    end
+
+    include Knowledge.Object.S with type t := t
+  end
 
   (** A program label.
 
@@ -1129,6 +1265,13 @@ module Theory : sig
     val name : (program, string option) KB.slot
 
 
+    (** a possible (and opinionated) name.
+
+        Use this slot when the name of a program is not really known
+        or when it is possible that other name providers will have a
+        conflicting opinion.  *)
+    val possible_name : (program, string option KB.opinions) KB.slot
+
     (** the interrupt vector of the label.
 
         Labels could also represent code in interrupt vector
@@ -1145,6 +1288,10 @@ module Theory : sig
     val aliases : (program, Set.M(String).t) KB.slot
 
 
+    (** a compilation unit (file/library/object) to which this label belongs  *)
+    val unit : (program, Unit.t option) KB.slot
+
+
     (** a link is valid if it references a valid program.
 
         If a link references a memory location which is not
@@ -1159,26 +1306,58 @@ module Theory : sig
 
     (** [for_addr x] generates a link to address [x].
 
-        It is guaranteed that every call [for_addr x] with the same
-        [x] will return the same label.
+        It is guaranteed that every call [for_addr ~package x] with
+        the same arguments will return the same label.
+
+        The [addr] property of the created object is set to [x].
+
+        If the [package] parameter is not specified then the created
+        object is interned in the currently selected package otherwise
+        it is interned in the provided [package].
+
+        @since 2.2.0 the [package] parameter is added
+        @since 2.2.0 the object is interned in the currently selected package
     *)
-    val for_addr : Bitvec.t -> t knowledge
+    val for_addr : ?package:string -> Bitvec.t -> t knowledge
 
 
     (** [for_name x] generates a link to program with linkage name [x].
 
-        It is guaranteed that every call [for_name x] with the same
-        [x] will return the same label.
+        It is guaranteed that every call [for_name ~package x] with
+        the same arguments will return the same label, which is the
+        same object as the [Knowledge.Symbol.intern ?package name].
+
+        The [name] property of the created object is set to [x].
+
+        If the [package] parameter is not specified then the created
+        object is interned in the currently selected package otherwise
+        it is interned in the provided [package].
+
+        @since 2.2.0 the [package] parameter is added
+        @since 2.2.0 the object is interned in the currently selected package
+
     *)
-    val for_name : string -> t knowledge
+    val for_name : ?package:string -> string -> t knowledge
 
 
-    (** [for_name x] generates a link to an interrupt service number [x].
+    (** [for_ivec x] generates a link to an interrupt service number [x].
 
-        It is guaranteed that every call [for_name x] with the same
-        [x] will return the same label.
+        It is guaranteed that every call [for_addr ~package x] with
+        the same arguments will return the same label, which is the
+        same object as the [Knowledge.Symbol.intern ?package name],
+        where [name] is [sprintf "ivec-%x" x].
+
+        The [addr] property of the created object is set to [x].
+
+        If the [package] parameter is not specified then the created
+        object is interned in the currently selected package otherwise
+        it is interned in the provided [package].
+
+        @since 2.2.0 the [package] parameter is added
+        @since 2.2.0 the object is interned in the currently selected package
+
     *)
-    val for_ivec : int -> t knowledge
+    val for_ivec : ?package:string -> int -> t knowledge
 
     include Knowledge.Object.S with type t := t
   end

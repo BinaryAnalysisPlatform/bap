@@ -42,7 +42,7 @@ let is_physical v = not (is_virtual v)
 
 let unknown =
   let unknown =
-    Theory.Value.Sort.Name.declare ~package:"bap-std" "Unknown" in
+    Theory.Value.Sort.Name.declare ~package:"bap" "Unknown" in
   Theory.Value.Sort.sym unknown
 
 let sort_of_typ t =
@@ -67,7 +67,7 @@ module Generator = struct
       "ident"
   type generator = Gen
   let generator =
-    KB.Class.declare ~package:"bap.std.internal" "var-generator" Gen
+    KB.Class.declare ~package:"bap-internal" "var-generator" Gen
 
   let ident = Toplevel.var "ident"
 

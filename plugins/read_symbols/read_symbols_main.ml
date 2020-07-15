@@ -19,21 +19,26 @@ let extract name arch =
 module type Target = sig
   type t
   val of_blocks : (string * addr * addr) seq -> t
+  val set_path : t -> string -> t
   val provide : Knowledge.agent -> t -> unit
 end
 
 let agent =
   let reliability = Knowledge.Agent.authorative in
-  Knowledge.Agent.register ~package:"bap.std"
+  Knowledge.Agent.register ~package:"bap"
     ~reliability "user-symbolizer"
     ~desc:"reads symbols from the user provided file"
 
 let register syms =
   let provide (module T : Target) =
-    Stream.observe Project.Info.arch (fun arch ->
-        extract syms arch |>
-        Seq.of_list |> T.of_blocks |>
-        T.provide agent) in
+    let providers = Stream.merge
+        Project.Info.arch
+        Project.Info.file
+        ~f:(fun arch path ->
+            extract syms arch |>
+            Seq.of_list |> T.of_blocks |>
+            fun t -> T.set_path t path) in
+    Stream.observe providers (T.provide agent) in
   provide (module struct
     include Rooter
     let provide _ s = provide s

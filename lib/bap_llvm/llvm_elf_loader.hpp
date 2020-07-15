@@ -58,23 +58,6 @@ namespace elf_loader {
 using namespace llvm;
 using namespace llvm::object;
 
-static const std::string elf_declarations =
-    "(declare file-type (name str))"
-    "(declare arch (name str))"
-    "(declare default-base-address (addr int))"
-    "(declare entry (relative-addr int))"
-    "(declare relocatable (flag bool))"
-    "(declare program-header (name str) (off int) (size int))"
-    "(declare virtual-program-header (name str) (relative-addr int) (size int))"
-    "(declare program-header-flags (name str) (ld bool) (r bool) (w bool) (x bool))"
-    "(declare section-entry (name str) (relative-addr int) (size int) (off int))"
-    "(declare section-flags (name str) (w bool) (x bool))"
-    "(declare symbol-entry (name str) (relative-addr int) (size int) (off int))"
-    "(declare plt-entry (name str) (relative-addr int) (size int) (off int))"
-    "(declare code-entry (name str) (off int) (size int))"
-    "(declare ref-internal (sym-off int) (rel-off int))"
-    "(declare ref-external (rel-off int) (name str))";
-
 template <typename T>
 bool is_rel(const ELFObjectFile<T> &obj) {
     auto hdr = obj.getELFFile()->getHeader();
@@ -136,7 +119,7 @@ void section_header(const T &hdr, const std::string &name, uint64_t base, ogre_d
     s.entry("section-entry") << name << addr << hdr.sh_size << hdr.sh_offset;
     bool w = static_cast<bool>(hdr.sh_flags & ELF::SHF_WRITE);
     bool x = static_cast<bool>(hdr.sh_flags & ELF::SHF_EXECINSTR);
-    s.entry("section-flags") << name << w << x;
+    s.entry("section-flags") << name << true << w << x;
     if (x)
         s.entry("code-entry") << name << hdr.sh_offset << hdr.sh_size;
 }
@@ -356,13 +339,10 @@ void relocations(const ELFObjectFile<T> &obj, ogre_doc &s) {
 } // namespace elf_loader
 
 template <typename T>
-error_or<std::string> load(const llvm::object::ELFObjectFile<T> &obj) {
+error_or<std::string> load(ogre_doc &s, const llvm::object::ELFObjectFile<T> &obj) {
     using namespace elf_loader;
-    ogre_doc s;
-    s.raw_entry(elf_declarations);
     s.raw_entry("(file-type elf)");
     s.entry("default-base-address") << base_address(obj);
-    s.entry("arch") << prim::arch_of_object(obj);
     file_header(obj, s);
     program_headers(obj, s);
     section_headers(obj, s);
