@@ -2,7 +2,7 @@ open Core_kernel
 open Bap_knowledge
 open Knowledge.Syntax
 
-let package = "bap-internal"
+let package = "bap"
 type 'a t = 'a
 type env = Knowledge.state ref
 type main = Main
@@ -32,7 +32,7 @@ let eval slot exp =
   | Ok v -> v
   | Error x -> raise (Conflict x)
 
-let main = Knowledge.Class.declare ~package "main" Main
+let main = Knowledge.Class.declare ~package "toplevel" Main
 
 
 let var name =

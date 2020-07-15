@@ -235,7 +235,7 @@ module Std : sig
 
   (** {2:disasm Disassembler}
 
-      This layer defines interfaces for disassemblers. Two interfaces
+      This layer defines the interfaces for disassemblers. Two interfaces
       are provided:
 
       - {{!Disasm}Disasm} - a regular interface that hides all
@@ -9015,17 +9015,163 @@ module Std : sig
 
   type project
 
-  (**/**)
-  (* Explicitly undocumented right now, as we will later
-     republish it as a separate library.
+
+  (** The interface to the BAP toplevel state.
+
+      To create a project from the binary code BAP relies on the
+      knowledge base, which is a state monad underneath the hood,
+      or, put it simply, each knowledge computation is a function
+      of type [state -> state * 'a]. To enable backward compatibility,
+      we compute each such stateful computation in the toplevel, which
+      also stores the hidden state.
+
+      Using this interface it is possible to evaluate knowledge base
+      computations and extract their results to concrete values. Since
+      the knowledge base computations are not expression but objective
+      language, i.e., they evaluate to knowledge base objects, not to
+      values, we commonly need to create objects that will carry the
+      result of the computation as their properties. To ease the
+      process this module provides the notion of toplevel variables,
+      that denote such properties. Here is an example, how to run a
+      knowledge base computation and extract its result, assuming that
+      [analysis] is a function of type [unit -> my knowledge]
+
+      {[
+        let result : my var = Toplevel.var "my-property"
+        let run analysis : my =
+          Toplevel.put result (analysis ());
+          Toplevel.get result
+      ]}
+
+      There are also [eval] and [exec] functions that could be used to
+      extract values from the existing properties, e.g.,
+
+      {[
+        let get_unit tid =
+          eval Theory.Label.unit (KB.return tid)
+      ]}
+
+      Finally, the interface provides functions to control the inner
+      state of the toplevel, which is the knowledge base that is used
+      by BAP throught the lifetime of the BAP process and could be
+      also persistet between runs. E.g., the [disassemble] plugin is
+      persisting the knowledge base in the BAP cache facility and
+      loads it when it identifies that the input digest is the same.
+
+      Warning: this interface should be used with care, in particular,
+      it shall not be used in the context of another knowledge
+      computation that is also run in the toplevel.
+
+      @since 2.2.0 made public and documented, the state interface
+      was available since 2.0.0 but wasn't documented and considered
+      official.
+
   *)
   module Toplevel : sig
+
+    (** this exception is raised when the knowledge computation
+        enters the inconsistent state.
+
+        @since 2.2.0
+    *)
     exception Conflict of Knowledge.conflict
+
+
+    (** {3 Toplevel variables}  *)
+
+    (** the type of variables holding property ['p] *)
+    type 'p var
+
+
+    (** [var name] creates a fresh variable.
+
+        Creates and declares a fresh new property of the
+        [bap:toplevel] class. The name is mangled to prevent clashing
+        with existing properties, and each evaluation of this function
+        creates a new property that is distinct from any previously
+        created properties.
+
+        Warning: this function changes the static representation of
+        the knowledge base (the scheme) and should be only used to
+        create static (global) variables, that have the lifetime of
+        the BAP process. It is not recommended to call this function
+        inside any other function.
+    *)
+    val var : string -> 'p var
+
+
+    (** [put var exp] evaluates [exp] and sets [var] to its result.
+
+        @raise Conflict if [exp] ends up in the conflicting state.
+    *)
+    val put : 'p var -> 'p knowledge -> unit
+
+
+    (** [get var] reads the value of the variable.
+
+        @raise Not_found if [var] was not set with [put].
+    *)
+    val get : 'p var -> 'p
+
+    (** {3 The slot interface}  *)
+
+
+    (** [eval property obj_exp] gets [property] of [obj_exp].
+
+        Evaluates the computation [obj_exp] that shall return an
+        object of class ['a] and returns the value ['p] of the specified
+        [property].
+
+        @raise Conflict when the knowledge base enters the conflicting
+        state.
+    *)
+    val eval : ('a,'p) Knowledge.slot -> 'a Knowledge.obj knowledge -> 'p
+
+
+    (** [try_eval property object] is like [eval property object] but
+        returns [Error conflict] instead of raising an exception. *)
+    val try_eval : ('a,'p) Knowledge.slot -> 'a Knowledge.obj knowledge ->
+      ('p,Knowledge.conflict) result
+
+
+    (** [exec stmt] executes the side-effectful knowledge computation.
+
+        Executes the statement and updates the internal knowledge base.
+
+        @raise Conflict when the knowledge base enters the conflicting
+        state.
+    *)
+    val exec : unit knowledge -> unit
+
+
+
+    (** [try_exec stmt] is like [exec stmt] but returns
+        [Error conflict] instead of raising an exception.
+    *)
+    val try_exec : unit knowledge -> (unit,Knowledge.conflict) result
+
+
+
+    (** {3 The state interface}  *)
+
+
+    (** [set s] sets the knowledge base state to [s].
+
+        Any existing state is discarded.
+    *)
     val set : Knowledge.state -> unit
-    val reset : unit -> unit
+
+
+    (** [current ()] is the current state of the knowledge base.  *)
     val current : unit -> Knowledge.state
+
+
+    (** [reset ()] resets the knowledge state to the empty state.
+
+        It is the same as [set @@ KB.empty]
+    *)
+    val reset : unit -> unit
   end
-  (**/**)
 
   (** Disassembled program.
 
@@ -9050,127 +9196,92 @@ module Std : sig
     (** IO interface to a project data structure.  *)
     include Data.S with type t := t
 
-    (** [from_file filename] creates a project from a provided input
-        source. The reconstruction is a multi-pass process driven by
-        the following input variables, provided by a user:
+    (** [from_file filename] creates a project from the provided input
+        source.
 
-        - [brancher] decides instruction successors;
-        - [rooter] decides function starts;
-        - [symbolizer] decides function names;
-        - [reconstructor] provides algorithm for symtab reconstruction;
-
-        The project is built incrementally and iteratively until a
-        fixpoint is reached. The fixpoint is reached when an
-        information stops to flow from the input variables.
-
-        The overall algorithm of can depicted with the following
-        diargram, where boxes denote data and ovals denote processes:
+        The input code regions are speculatively disassembled and the
+        set of basic blocks is determined, using the algorithm
+        described in {!Disasm.Driver}. After that the concrete whole
+        program control-flow graph (CFG) is built, which can be
+        accessed with the {!Project.disasm} function. The whole
+        program CFG is then partitioned into a set of subroutines
+        using the dominators analsysis, see {!Disasm.Subroutines} for
+        details. Based on this partition a symbol table, which is a
+        set of a subroutines control-flow graphs, is built. The symbol
+        table, which can be accessed with {!Project.symbols}, also
+        contains information about the interprocedural control
+        flow. Finally, the symbol table is translated into the
+        intermediate representation, which can be accessed using the
+        {!Project.program} function. The whole process is pictured below.
 
         {v
-               +---------+   +---------+   +---------+
-               | brancher|   |code/data|   |  rooter |
-               +----+----+   +----+----+   +----+----+
-                    |             |             |
-                    |             v             |
-                    |        -----------        |
-                    +------>(   disasm  )<------+
-                             -----+-----
+                         ---------------------
+                        (    Disassembling    )
+                         ---------------------
                                   |
-                                  v
-              +----------+   +---------+   +----------+
-              |symbolizer|   |   CFG   |   | reconstr +
-              +-----+----+   +----+----+   +----+-----+
-                    |             |             |
-                    |             v             |
-                    |        -----------        |
-                    +------>(  reconstr )<------+
-                             -----+-----
+                        +---------------------+
+                        |                     |
+                        |  All instructions   |
+                        |  and basic blocks   |
+                        |                     |
+                        +---------------------+
                                   |
-                                  v
-                             +---------+
-                             |  symtab |
-                             +----+----+
+                         ---------------------
+                        ( CFG  reconstruction )
+                         ---------------------
                                   |
-                                  v
-                             -----------
-                            (  lift IR  )
-                             -----+-----
+                        +---------------------+
+                        |                     |
+                        |  The whole program  |
+                        |  control-flow graph |
+                        |                     |
+                        +---------------------+
                                   |
-                                  v
-                             +---------+
-                             | program |
-                             +---------+
+                         ---------------------
+                        (    Partitioning     )
+                         ---------------------
+                                  |
+                        +---------------------+
+                        |                     |
+                        | The quotient set of |
+                        |    basic  blocks    |
+                        |                     |
+                        +---------------------+
+                                  |
+                         ---------------------
+                        ( Constructing Symtab )
+                         ---------------------
+                                  |
+                        +---------------------+
+                        |                     |
+                        |   The symbol table  |
+                        |  and the  callgraph |
+                        |                     |
+                        +---------------------+
+                                  |
+                         ---------------------
+                        (  IR Reconstruction  )
+                         ---------------------
+                                  |
+                        +---------------------+
+                        |                     |
+                        |    The IR of the    |
+                        |   binary  program   |
+                        |                     |
+                        +---------------------+
 
-       v}
+        v}
 
-        The input variables, are represented with stream of
-        values. Basically, they can be viewed as cells, that depends
-        on some input. When input changes, the value is recomputed and
-        passed to the stream. Circular dependencies are allowed, so a
-        rooter may actually depend on the [program] term. In case of
-        circular dependencies, the above algorithm will be run
-        iteratively, until a fixpoint is reached. A criterium for the
-        fixpoint, is when no data need to be recomputed. And the data
-        must be recomputed when its input is changed or needs to be
-        recomputed.
+        The disassembling process is fully integrated with the
+        knowledge base. If the input source provides information about
+        symbols and their location, then this information will be
+        automatically reflected to the knowledge base.
 
-        User provided input can depend on any information, but a good
-        start is the information provided by the {!Info} module. It
-        contains several variables, that are guaranteed to be defined
-        in the process of reconstruction.
-
-        For example, let's assume, that a [create_source] function
-        actually requires a filename as its input, to create a source
-        [t], then it can be created as easily as:
-
-        [Stream.map Input.file ~f:create_source]
-
-        As a more complex, example let's assume, that a source now
-        requires that both [arch] and [file] are known. We can combine
-        two different streams of information with a [merge] function:
-
-        [Stream.merge Input.file Input.arch ~f:create_source], where
-        [create_source] is a function of type: [string -> arch -> t].
-
-        If the source requires more than two arguments, then a
-        [Stream.Variadic], that is a generalization of a merge
-        function can be used. Suppose, that a source of information
-        requires three inputs: filename, architecture and compiler
-        name. Then we first define a list of arguments,
-
-        [let args = Stream.Variadic.(args Input.arch $Input.file $Compiler.name)]
-
-        and apply them to our function [create_source]:
-
-        [Stream.Variadic.(apply ~f:create_source args].
-
-        Sources, specified in the examples above, will call a [create_source]
-        when all arguments changes. This is an expected behavior for
-        the [arch] and [file] variables, since the do not change during
-        the program computation. Mixing constant and non-constant
-        (with respect to a computation) variables is not that easy, but
-        still can be achieved using [either] and [parse] combinators.
-        For example, let's assume, that a [source] requires [arch] and
-        [cfg] as its input:
-
-        {[
-          Stream.either Input.arch Input.cfg |>
-          Stream.parse inputs ~init:nil ~f:(fun create -> function
-              | First arch -> None, create_source arch
-              | Second cfg -> Some (create cfg), create)
-        ]}
-
-        In the example, we parse the stream that contains either
-        architectures or control flow graphs with a state of type,
-        [cfg -> t Or_error.t]. Every time an architecture is changed,
-        (i.e., a new project is started), we recreate a our state,
-        by calling the [create_source] function. Since, we can't
-        proof, that architecture will be decided before the [cfg], or
-        decided at all we need to provide an initial [nil] function.
-        It can return either a bottom value, e.g.,
-        [let nil _ = Or_error.of_string "expected arch"]
-
-        or it can just provide an empty information.
+        The [brancher], [symbolizer], and [rooter] parameters are
+        ignored since 2.0.0 and their information could be reflected
+        to the knowledge base using, correspondingly,
+        {!Brancher.provide}, {!Symbolizer.provide}, and
+        {!Rooter.provide} functions.
 
         @param state if specified then the provided [state] will be
         used as the initial state
@@ -9179,7 +9290,13 @@ module Std : sig
         disassembly will be created (interned) in the specified package.
 
         @since 2.0.0 the state parameter is added
+        @since 2.0.0 the parameter [disassembler] is unused
+        @since 2.0.0 the parameter [brancher] is unused
+        @since 2.0.0 the parameter [symbolizer] is unused
+        @since 2.0.0 the parameter [rooter] is unused
+        @since 2.0.0 the parameter [reconstructor] is unused
         @since 2.2.0 the package parameter is added
+
     *)
     val create :
       ?package:string ->
