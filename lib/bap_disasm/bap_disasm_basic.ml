@@ -403,6 +403,7 @@ let create_state ?(backlog=8) ?(stop_on=[]) ?stopped ?invalid ?hit dis
   insns = [| |] ;
 }
 
+
 let insn_mem s ~insn : mem =
   let off = C.insn_offset !!(s.dis) ~insn in
   let words = C.insn_size !!(s.dis) ~insn in
@@ -539,6 +540,8 @@ let with_disasm ?debug_level ?cpu ?backend triple ~f =
   f dis >>| fun res -> close dis; res
 
 type ('a,'k) t = dis
+
+let switch : ('a,'k,'s,'r) state -> ('a,'k) t -> ('a,'k,'s,'r) state = fun s dis -> {s with dis}
 
 let run ?backlog ?(stop_on=[]) ?invalid ?stopped ?hit dis ~return ~init mem =
   let state =

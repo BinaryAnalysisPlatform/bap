@@ -59,6 +59,7 @@ val stop : (_,_,'s,'r) state -> 's -> 'r
 val step : (_,_,'s,'r) state -> 's -> 'r
 val jump : (_,_,'s,'r) state -> mem -> 's -> 'r
 val back : (_,_,'s,'r) state -> 's -> 'r
+val switch : ('a,'k,'s,'r) state -> ('a,'k) t -> ('a,'k,'s,'r) state
 
 module Op : sig
   type t =

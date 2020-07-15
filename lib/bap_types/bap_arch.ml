@@ -93,7 +93,9 @@ module T = struct
     KB.promise slot @@ fun obj ->
     KB.collect Theory.Label.unit obj >>= function
     | None -> KB.return `unknown
-    | Some unit -> KB.collect unit_slot unit
+    | Some unit -> KB.collect unit_slot unit >>| function
+      | #arm -> `unknown
+      | arch -> arch
 end
 
 include T
