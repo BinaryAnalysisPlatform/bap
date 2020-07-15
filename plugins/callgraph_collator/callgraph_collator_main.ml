@@ -119,9 +119,9 @@ let () = Extension.declare ~provides:["collator"] ~doc @@ fun ctxt ->
     base,if is_different then diffs + 1 else diffs in
 
   let print_summary = function
-    | 0 -> fprintf ppf "All versions have the same callgraph as the base version\n"
-    | 1 -> fprintf ppf "Found one version that is different\n"
-    | n -> fprintf ppf "Found %d versions that are different\n" n in
+    | 0 -> fprintf ppf "All versions have the same callgraph as the base version\n%!"
+    | 1 -> fprintf ppf "Found one version that is different\n%!"
+    | n -> fprintf ppf "Found %d versions that are different\n%!" n in
 
 
   let summary (_,diff) =
