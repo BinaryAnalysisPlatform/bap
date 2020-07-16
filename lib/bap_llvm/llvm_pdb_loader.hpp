@@ -46,17 +46,6 @@
 // [3] https://pierrelib.pagesperso-orange.fr/exec_formats/MS_Symbol_Type_v1.0.pdf
 //
 
-
-#if LLVM_VERSION_MAJOR < 5
-namespace loader {
-namespace pdb_loader {
-
-void load(const llvm::object::COFFObjectFile &obj, const std::string &path, ogre_doc &s) {}
-
-}
-}
-#else
-
 #include <map>
 
 #include <llvm/Object/COFF.h>
@@ -91,7 +80,7 @@ namespace pdb_loader {
 using namespace llvm;
 
 struct section_info {
-    uint64_t rel_addr;
+    uint64_t addr;
     uint64_t offset;
 };
 
@@ -107,12 +96,10 @@ uint64_t section_offset(const object::COFFObjectFile &obj, const object::Section
 coff_sections collect_sections(const object::COFFObjectFile &obj) {
     std::size_t i = 1;
     coff_sections secs;
-    auto base = obj.getImageBase();
     for (auto sec : prim::sections(obj)) {
         if (auto addr = prim::section_address(sec)) {
-            auto raddr = *addr - base;
             auto offset = section_offset(obj, sec);
-            secs.insert(std::make_pair(i, section_info{raddr,offset}));
+            secs.insert(std::make_pair(i, section_info{*addr,offset}));
         }
         ++i;
     }
@@ -130,11 +117,14 @@ struct symbol_visitor : public codeview::SymbolVisitorCallbacks {
         if (it == sections.end())
             return Error::success();;
 
-        uint64_t relative_addr = it->second.rel_addr + proc.CodeOffset;
+        uint64_t addr = it->second.addr + proc.CodeOffset;
         uint64_t off = it->second.offset + proc.CodeOffset;
 
-        doc.entry("symbol-entry") << proc.Name.str() << relative_addr << proc.CodeSize << off;
-        doc.entry("code-entry") << proc.Name.str() << off << proc.CodeSize;
+        doc.entry("llvm:symbol-entry") << proc.Name.str()
+                                       << addr
+                                       << proc.CodeSize
+                                       << off;
+        doc.entry("llvm:code-entry") << proc.Name.str() << off << proc.CodeSize;
 
         return Error::success();
     }
@@ -188,7 +178,5 @@ void load(const llvm::object::COFFObjectFile &obj, const std::string &path, ogre
 
 }  // namespace pdb_loader
 }  // namespace loader
-
-#endif // LLVM >= 5
 
 #endif // LLVM_PDB_LOADER_HPP

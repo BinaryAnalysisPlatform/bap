@@ -5538,6 +5538,7 @@ module Std : sig
       type addr = int64
       type size = int64
       type off  = int64
+      type value = int64
 
       (** a contiguous piece of memory.  *)
       type 'a region = {
@@ -5566,41 +5567,56 @@ module Std : sig
       (** [subarch name] the subarchitecture, when applicable,
           e.g., v7, v8, r2, etc. Should be appended to the arch
           name to get the full description, e.g., armv7.
+
+          @since 2.2.0
       *)
       val subarch : (string, (string -> 'a) -> 'a) Ogre.attribute
 
 
       (** [vendor name] the second part of the build triplet,
-          e.g., apple, pc, ibm, unknown. Could be just an empty string.
+          e.g., apple, pc, ibm, unknown. Could be just an empty
+          string.
+
+          @since 2.2.0
       *)
       val vendor : (string, (string -> 'a) -> 'a) Ogre.attribute
 
 
       (** [system name] the operating system name, for which the
           binary is specifically built, e.g., ananas, ios, linux.
+
+          @since 2.2.0
       *)
       val system : (string, (string -> 'a) -> 'a) Ogre.attribute
 
 
       (** [abi name] the environment/toolchain/abi under which the
           binary is expected to be run, e.g., gnu, android, msvc
+
+          @since 2.2.0
       *)
       val abi : (string, (string -> 'a) -> 'a) Ogre.attribute
 
 
       (** [bits m] is the bitness of the target architecture, e.g.,
           16, 32, 64.
+
+          @since 2.2.0
       *)
       val bits : (size, (size -> 'a) -> 'a) Ogre.attribute
 
 
       (** [is_little_endian yes-or-no] is [true] if the target is
-          little endian.   *)
+          little endian.
+
+          @since 2.2.0  *)
       val is_little_endian : (bool, (bool -> 'a) -> 'a) Ogre.attribute
 
 
       (** [bias offset] the value by which all addresses are biased
-          wrt to the real addresses in the binary. *)
+          wrt to the real addresses in the binary.
+
+          @since 2.2.0 *)
       val bias : (off, (off -> 'a) -> 'a) Ogre.attribute
 
       (** [segment addr size readable writable executable] a memory
@@ -5614,7 +5630,7 @@ module Std : sig
       (** [code_start addr] an address starts a code sequence *)
       val code_start : (addr, (addr -> 'a) -> 'a) Ogre.attribute
 
-      (** [entry_point addr] an address is a program entry point  *)
+      (** [entry_point addr] an address is the program entry point  *)
       val entry_point : (addr, (addr -> 'a) -> 'a) Ogre.attribute
 
       (** [symbol_chunk addr size root] a contiguous piece of a program
@@ -5652,8 +5668,17 @@ module Std : sig
           i.e., an address of a first byte of the image.  *)
       val base_address : (addr, (addr -> 'a) -> 'a) Ogre.attribute
 
+
+      (** [code_region addr size off] the memory region in the file
+          with the given offset [off] and [size] is code that should be loaded
+          at the specified virtual address [addr]. *)
       val code_region :
         (addr * size * off, (addr -> size -> off -> 'a) -> 'a) Ogre.attribute
+
+      (** [symbol_value addr value] the symbol at address the
+          specified [value].  *)
+      val symbol_value :
+        (addr * value, (addr -> value -> 'a) -> 'a) Ogre.attribute
     end
   end
 
