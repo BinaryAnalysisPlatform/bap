@@ -10,9 +10,7 @@ open KB.Syntax
 let default_objdump_opts = "-rd --no-show-raw-insn"
 
 let objdump_cmds demangler=
-  objdump ::
-  List.map targets ~f:(fun p -> p^"-objdump") |>
-  String.Set.stable_dedup_list |>
+  String.Set.stable_dedup_list (objdump :: objdumps)|>
   List.map ~f:(fun cmd ->
       sprintf "%s %s %s" cmd default_objdump_opts @@
       match demangler with

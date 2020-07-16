@@ -21,9 +21,7 @@ let demangle prog name =
 
 
 let run name =
-  let demanglers =
-    cxxfilt ::
-    List.map targets ~f:(fun t -> t ^ "c++filt") in
+  let demanglers = cxxfilt :: cxxfilts in
   List.find_map demanglers ~f:(fun d ->
       let demangled = demangle d name in
       Option.some_if String.(demangled <> name) demangled) |> function

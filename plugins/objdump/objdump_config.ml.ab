@@ -1,2 +1,1 @@
-let targets = $objdump_targets
-let objdump = "$objdump_path"
+let objdumps = "$objdumps"
