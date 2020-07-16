@@ -513,11 +513,13 @@ let run_lifter _label addr insn _mem
 let () =
   KB.promise Theory.Program.Semantics.slot @@ fun label ->
   Theory.instance () >>= Theory.require >>= fun (module Core) ->
+  KB.collect Arch.slot label >>= fun arch ->
   KB.collect Disasm_expert.Basic.Insn.slot label >>= fun insn -> (* the LLVM provided decoding *)
   KB.collect Memory.slot label >>= fun mem -> (* the memory chunk, probably not needed *)
   let module Lifter = ARM(Core) in
-  match insn, mem with
-  | Some insn, Some mem ->
+  match arch, insn, mem with
+  | #Arch.armeb, Some insn, Some mem
+  | #Arch.arm, Some insn, Some mem ->
     let addr = Word.to_bitvec@@Memory.min_addr mem in
     run_lifter label addr insn mem Lifter.lift_with
   | _ -> KB.return Insn.empty
