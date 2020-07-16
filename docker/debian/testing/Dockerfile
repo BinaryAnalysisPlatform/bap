@@ -1,32 +1,19 @@
-FROM ocaml/opam2:debian-stable
-
-MAINTAINER Ivan Gotovchits <ivg@ieee.org>
-
-RUN sudo apt-get -y update && sudo apt-get -y install \
-    build-essential \
-    curl \
-    git \
-    libx11-dev \
-    m4 \
-    pkg-config \
-    python-pip \
-    software-properties-common \
-    sudo \
-    unzip \
-    wget \
-    libcap-dev \
-    gcc \
-    make \
-    libncurses5-dev
-
-RUN opam switch 4.05
-RUN eval "$(opam env)"
-RUN opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
-RUN opam update
-RUN opam install depext --yes
-RUN OPAMJOBS=1 opam depext --install bap --yes
-RUN sudo pip install bap
+FROM ocaml/opam2:debian-testing
 
 WORKDIR /home/opam
+
+RUN sudo apt-get update --yes && sudo apt-get install wget \
+ && wget https://radare.mikelloc.com/get/4.5.0-git/radare2_4.5.0-git_amd64.deb \
+ && sudo dpkg -i radare2_4.5.0-git_amd64.deb \
+ && opam switch 4.09 \
+ && eval "$(opam env)" \
+ && opam remote set-url default https://opam.ocaml.org \
+ && opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing --all \
+ && opam update \
+ && opam depext --install bap --yes -j 1 \
+ && opam clean -acrs \
+ && rm -rf /home/opam/.opam/4.0[2-8,10] \
+ && rm -rf /home/opam/.opam/4.09/.opam-switch/sources/* \
+ && rm -rf /home/opam/opam-repository
 
 ENTRYPOINT ["opam", "config", "exec", "--"]

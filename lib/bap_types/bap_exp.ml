@@ -253,7 +253,7 @@ let persistent = Knowledge.Persistent.of_binable (module struct
     type t = Bap_bil.exp [@@deriving bin_io]
   end)
 
-let slot = Knowledge.Class.property ~package:"bap.std"
+let slot = Knowledge.Class.property ~package:"bap"
     ~persistent Theory.Value.cls  "exp" domain
     ~public:true
     ~desc:"semantics of expressions in BIL"

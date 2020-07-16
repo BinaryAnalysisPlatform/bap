@@ -363,12 +363,27 @@ module type Modulus = sig
 end
 
 let to_string = Z.format "%#x"
-let of_string x =
-  let r = Z.of_string x in
+
+let nonnegative r =
   if Z.sign r < 0
   then invalid_arg
-      (x ^ " - invalid string representation, sign is not expected")
-  else r
+      "invalid string representation, sign is not expected";
+  r
+[@@inline]
+
+let defaults_to_length ?len x = match len with
+  | None -> String.length x
+  | Some n -> n
+
+
+let of_string x = nonnegative (Z.of_string x) [@@inline]
+let of_string_base b x = nonnegative (Z.of_string_base b x) [@@inline]
+let of_substring ?(pos=0) ?len x =
+  nonnegative @@
+  Z.of_substring x ~pos ~len:(defaults_to_length ?len x)
+let of_substring_base ?(pos=0) ?len b x =
+  nonnegative @@
+  Z.of_substring_base b x ~pos ~len:(defaults_to_length ?len x)
 
 let (!$) x = of_string x [@@inline]
 let (!!) x m = int x m [@@inline]

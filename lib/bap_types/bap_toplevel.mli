@@ -3,6 +3,8 @@ open Bap_knowledge
 type 'a t = 'a
 type 'p var
 
+exception Conflict of Knowledge.conflict
+
 val eval : ('a,'p) Knowledge.slot -> 'a Knowledge.obj knowledge -> 'p t
 val exec : unit knowledge -> unit t
 

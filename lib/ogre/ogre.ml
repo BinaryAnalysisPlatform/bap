@@ -28,7 +28,7 @@ module Type = struct
     ftype : typ;
   } [@@deriving compare, sexp]
 
-  type signature = header list [@@deriving compare]
+  type signature = header list [@@deriving compare, sexp]
 
   type ('f,'k) scheme = {
     read : entry -> 'a -> 'b option;
@@ -130,7 +130,11 @@ module Type = struct
     | Float -> rewrite float
 
   let signature_mismatch ~expect:s1 ~got:s2 =
-    Or_error.errorf "signature mismatch"
+    Or_error.errorf
+      "Failed to parse an OGRE document, \
+       got a signature mismatch. Expected:\n%s\nGot:\n%s\n"
+      (Sexp.to_string_hum ~indent:2 (sexp_of_signature s1))
+      (Sexp.to_string_hum ~indent:2 (sexp_of_signature s2))
 
   let def name t = {name;t}
   let (%:) = def

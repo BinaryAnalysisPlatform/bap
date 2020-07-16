@@ -166,13 +166,13 @@ let () =
     Bil_ir.init();
     let open KB.Syntax in
     Theory.declare !!(module Bil_semantics.Core : Theory.Core)
-      ~package:"bap.std" ~name:"bil"
+      ~package:"bap" ~name:"bil"
       ~desc:"semantics in BIL"
       ~provides:["bil"; "lifter"];
 
     Theory.declare !!(module Bil_semantics.Core_with_fp_emulation : Theory.Core)
-      ~package:"bap.std" ~name:"bil-fp-emu"
-      ~extends:["bap.std:bil"]
+      ~package:"bap" ~name:"bil-fp-emu"
+      ~extends:["bap:bil"]
       ~desc: "semantics in BIL, including FP emulation"
       ~context:["floating-point"]
       ~provides:[

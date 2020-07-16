@@ -1,0 +1,17 @@
+name: Fedora
+
+on:
+  schedule:
+    - cron: '0 0 * * THU'
+
+jobs:
+   build:
+     runs-on: ubuntu-latest
+     steps:
+     - uses: actions/checkout@master
+
+     - name: Build on Fedora
+       uses: docker/build-push-action@v1
+       with:
+         push: false
+         dockerfile: docker/fedora/Dockerfile

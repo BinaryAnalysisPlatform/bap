@@ -40,10 +40,12 @@ end
 
 module Tag : sig
   type 'a t = 'a tag
-  val register : name:string -> uuid:string ->
+  val register :
+    ?public:bool -> ?desc:string ->
+    ?package:string -> name:string -> uuid:string ->
     (module S with type t = 'a) -> 'a tag
 
-  val register_slot : (Theory.program,'a option) KB.slot -> (module S with type t = 'a) -> 'a tag
+  val register_slot : ?uuid:string -> (Theory.program,'a option) KB.slot -> (module S with type t = 'a) -> 'a tag
 
   val slot : 'a tag -> (Theory.program, 'a option) KB.slot
 

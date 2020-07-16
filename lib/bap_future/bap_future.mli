@@ -398,6 +398,30 @@ module Std : sig
     type 'a t = 'a stream
     type id
 
+
+    (** Applying function to multiple streams.
+
+        This interface enables merging of arbitrary number of streams
+        and processing them with a single function.
+
+        {3 Example}
+
+        {[
+          let args = Stream.Variadic.(begin
+              args input1 $input2 ... $inputN
+            end)
+
+          let output =
+            Stream.Variadic.apply args ~f:(fun x1 x2 ... xN ->
+                (x1,x2,...,xN) (* or something more clever *))
+        ]}
+
+        where
+        - `input1`, ..., `inputN` are streams of types
+          `t1 stream`, ..., `tN stream`;
+        - `output` is the merged stream of type
+          `t1 * t2 * ... * tN`.
+    *)
     module Variadic : Variadic.S with type 'a arg = 'a t
 
 
@@ -547,7 +571,8 @@ module Std : sig
     val either : 'a t -> 'b t -> ('a,'b) Either.t t
 
     (** [merge xs ys f] merges streams [xs] and [ys] using function
-        [f]. *)
+        [f]. To merge an arbitrary number of streams use the
+        {!Variadic} interface. *)
     val merge : 'a t -> 'b t -> f:('a -> 'b -> 'c) -> 'c t
 
     (** [apply fs xs] apply stream of functions [fs] to a stream of

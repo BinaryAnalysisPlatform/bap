@@ -55,7 +55,7 @@ module Cfg = Graphlib.Make(Node)(Edge)
 
 type cfg = Cfg.t [@@deriving compare]
 
-type t = Driver.state KB.t
+type t = cfg
 
 let create_insn basic prog =
   match basic with
@@ -101,35 +101,46 @@ let global_cfg disasm =
 
 let result = Toplevel.var "cfg"
 
-let extract build disasm =
-  Toplevel.put result begin
-    disasm >>= build
-  end;
+let extract self =
+  Toplevel.put result self;
   Toplevel.get result
 
-
-let provide_arch arch mem =
-  let width = Size.in_bits (Arch.addr_size arch) in
-  KB.promise Arch.slot @@ fun label ->
-  KB.collect Theory.Label.addr label >>| function
-  | None -> `unknown
-  | Some p ->
-    let p = Word.create p width in
-    if Memory.contains mem p then arch
-    else `unknown
+let with_unit =
+  KB.Rule.(declare ~package:"bap" "unit-for-mem" |>
+           dynamic ["arch"; "mem"] |>
+           require Theory.Label.addr |>
+           provide Theory.Label.unit |>
+           comment "[Rec.{run,scan} arch mem] provides a unit for [mem]");
+  fun arch mem ->
+    let width = Size.in_bits (Arch.addr_size arch) in
+    let is_little = Arch.endian arch = LittleEndian in
+    let lower = Word.to_bitvec @@ Memory.min_addr mem
+    and upper = Word.to_bitvec @@ Memory.max_addr mem in
+    KB.promising Theory.Label.unit ~promise:(fun label ->
+        KB.collect Theory.Label.addr label >>= function
+        | Some p when Memory.contains mem @@ Word.create p width ->
+          Theory.Unit.for_region ~lower ~upper >>= fun unit ->
+          let (:=) slot value = KB.provide slot unit (Some value) in
+          KB.List.sequence Theory.Unit.[
+              Target.bits := width;
+              Target.arch := Arch.to_string arch;
+              Target.is_little_endian := is_little;
+            ] >>= fun () ->
+          KB.return (Some unit)
+        | _ -> KB.return None)
 
 let scan arch mem state =
-  provide_arch arch mem;
+  with_unit arch mem @@ fun () ->
   Driver.scan mem state
 
-let run ?backend ?(brancher=Brancher.empty) ?(rooter=Rooter.empty) arch mem =
-  Brancher.provide brancher;
-  Rooter.provide rooter;
-  provide_arch arch mem;
-  Ok (Driver.scan mem Driver.init)
+let run ?backend:_ ?(brancher=Brancher.empty) ?(rooter=Rooter.empty) arch mem =
+  Result.return @@
+  extract @@
+  Brancher.providing brancher @@ fun () ->
+  Rooter.providing rooter @@ fun () ->
+  with_unit arch mem @@ fun () ->
+  Driver.scan mem Driver.init >>= global_cfg
 
-let cfg = extract global_cfg
+let cfg = ident
 let errors _ = []
-
 let create = KB.return
-let graph s = s >>= global_cfg

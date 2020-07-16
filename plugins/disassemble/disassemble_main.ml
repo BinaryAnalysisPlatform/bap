@@ -104,7 +104,7 @@ let features_used = [
 ]
 
 type failure =
-  | Expects_a_regular_file
+  | Expects_a_regular_file of string
   | Old_and_new_style_passes
   | Unknown_pass of string
   | Incompatible_options of string * string
@@ -112,6 +112,7 @@ type failure =
   | Pass of Project.Pass.error
   | Unknown_format of string
   | Unavailable_format_version of string
+  | Unknown_collator of string
 
 type Extension.Error.t += Fail of failure
 
@@ -189,7 +190,8 @@ let process passes outputs project =
         Out_channel.with_file dst ~f:(fun ch ->
             Project.Io.save ~fmt ?ver ch proj)
       | `stdout,fmt,ver ->
-        Project.Io.show ~fmt ?ver proj)
+        Project.Io.show ~fmt ?ver proj);
+  proj
 
 let old_style_passes =
   Extension.Command.switches
@@ -212,8 +214,9 @@ let outputs =
     Extension.Type.("[<FMT>[:<FILE>]]" %: string)
     "dump"
 
+
 let input = Extension.Command.argument
-    ~doc:"The input file" Extension.Type.("FILE" %: string)
+    ~doc:"The input file" Extension.Type.("FILE" %: string =? "a.out" )
 
 let loader =
   Extension.Command.parameter
@@ -224,7 +227,7 @@ let loader =
 
 let validate_input file =
   Result.ok_if_true (Sys.file_exists file)
-    ~error:(Fail Expects_a_regular_file)
+    ~error:(Fail (Expects_a_regular_file file))
 
 let validate_passes_style old_style_passes new_style_passes =
   match old_style_passes, new_style_passes with
@@ -290,20 +293,13 @@ let has_env var = match Sys.getenv var with
   | exception _ -> false
   | _ -> true
 
-let _disassemble_command_registered : unit =
-  Extension.Command.(begin
-      declare ~doc:man "disassemble"
-        ~requires:features_used
-        (args $input $outputs $old_style_passes $passes $loader)
-    end) @@
-  fun input outputs old_style_passes passes loader ctxt ->
+let setup_gc_unless_overriden () =
   if not (has_env "OCAMLRUNPARAM" || has_env "CAMLRUNPARAM")
   then setup_gc ()
-  else info "GC parameters are overriden by a user";
-  validate_input input >>= fun () ->
-  validate_passes_style old_style_passes (List.concat passes) >>=
-  validate_passes >>= fun passes ->
-  Dump_formats.parse outputs >>= fun outputs ->
+  else info "GC parameters are overriden by a user"
+
+let create_and_process input outputs passes loader ctxt =
+  let package = input in
   let digest = make_digest [
       Extension.Configuration.digest ctxt;
       Caml.Digest.file input;
@@ -312,13 +308,80 @@ let _disassemble_command_registered : unit =
   import_knowledge_from_cache digest;
   let state = load_project_state_from_cache digest in
   let input = Project.Input.file ~loader ~filename:input in
-  Project.create ?state
+  Project.create ~package ?state
     input |> proj_error >>= fun proj ->
   if Option.is_none state then begin
     store_knowledge_in_cache digest;
     save_project_state_to_cache digest (Project.state proj);
   end;
   process passes outputs proj
+
+let _disassemble_command_registered : unit =
+  Extension.Command.(begin
+      declare ~doc:man "disassemble"
+        ~requires:features_used
+        (args $input $outputs $old_style_passes $passes $loader)
+    end) @@
+  fun input outputs old_style_passes passes loader ctxt ->
+  setup_gc_unless_overriden ();
+  validate_input input >>= fun () ->
+  validate_passes_style old_style_passes (List.concat passes) >>=
+  validate_passes >>= fun passes ->
+  Dump_formats.parse outputs >>= fun outputs ->
+  create_and_process input outputs passes loader ctxt >>= fun _ ->
+  Ok ()
+
+let _compare_command_registered : unit =
+  let base = Extension.Command.argument
+      ~doc:"The base version."
+      Extension.Type.("BASE" %: string =? "a.out") in
+
+  let inputs = Extension.Command.arguments
+      ~doc:"The alternative versions."
+      Extension.Type.("ALT" %: string =? "b.out") in
+
+  let collator = Extension.Command.argument
+      ~doc:"The collator to use." Extension.Type.("COLLATOR" %: string) in
+
+  let doc = {|
+    # DESCRIPTION
+
+    Compares several alternative versions of the binary with the base
+    version, using the specified $(b,COLLATOR). For the list of
+    available collators use $(b,bap list collators).
+
+    # EXAMPLE
+
+```
+    bap compare callgraph testsuite/bin/*-echo
+```
+|} in
+
+  Extension.Command.(begin
+      declare "compare" ~doc
+        ~requires:features_used
+        (args $collator $base $inputs $outputs $old_style_passes $passes $loader)
+    end) @@
+  fun collator input inputs outputs old_style_passes passes loader ctxt ->
+  match Project.Collator.find ~package:"bap" collator with
+  | None -> Error (Fail (Unknown_collator collator))
+  | Some collator ->
+    setup_gc_unless_overriden ();
+    Err.all_unit @@ List.map (input::inputs) ~f:validate_input >>= fun () ->
+    validate_passes_style old_style_passes (List.concat passes) >>=
+    validate_passes >>= fun passes ->
+    Dump_formats.parse outputs >>= fun outputs ->
+    let projs =
+      Seq.map (Seq.of_list (input::inputs)) ~f:(fun input ->
+          create_and_process input outputs passes loader ctxt) in
+    let exception Escape of Extension.Error.t in
+    try
+      let projs = Seq.map projs ~f:(function
+          | Ok proj -> proj
+          | Error e -> raise (Escape e))  in
+      Project.Collator.apply collator projs;
+      Ok ()
+    with Escape failed -> Error failed
 
 let pp_guesses ppf badname =
   let guess = String.map badname ~f:(function
@@ -351,24 +414,23 @@ let pp_exn ppf = function
     fprintf ppf "%s" s
   | other -> fprintf ppf "%a" Exn.pp other
 
-let nice_pp_error fmt er =
+let nice_pp_error ppf er =
   let module R = Info.Internal_repr in
-  let rec pp_sexp fmt = function
-    | Sexp.Atom x -> Format.fprintf fmt "%s\n" x
-    | Sexp.List xs -> List.iter ~f:(pp_sexp fmt) xs in
-  let rec pp fmt r =
+  let rec pp ppf r =
     let open R in
     match r with
     | With_backtrace (r, backtrace) ->
-      Format.fprintf fmt "%a@\n%a" pp r
+      Format.fprintf ppf "%a@\n%a" pp r
         pp_backtrace (String.strip backtrace);
-    | String s -> Format.fprintf fmt "%s" s
-    | r -> pp_sexp fmt (R.sexp_of_t r) in
-  Format.fprintf fmt "%a" pp (R.of_info (Error.to_info er))
+    | String s -> Format.fprintf ppf "%s" s
+    | _ ->
+      let msg = Error.to_string_hum er in
+      Format.fprintf ppf "%s" msg  in
+  Format.fprintf ppf "%a" pp (R.of_info (Error.to_info er))
 
 let string_of_failure = function
-  | Expects_a_regular_file ->
-    "Unable to open the specified file."
+  | Expects_a_regular_file name ->
+    sprintf "Unable to open file `%s'." name
   | Old_and_new_style_passes ->
     "Bad invocation: passes are specified in both old an new style, \
      please switch to the new style, e.g., `-p<p1>,<p2>,<p3>'"
@@ -377,7 +439,7 @@ let string_of_failure = function
   | Incompatible_options (o1,o2) ->
     sprintf "Bad invocation: the options `%s' and `%s' can not be used together" o1 o2
   | Project err ->
-    asprintf "Failed to build the project:@\n %a" nice_pp_error err
+    asprintf "Failed to build the project:@\n%a" nice_pp_error err
   | Pass (Project.Pass.Unsat_dep (p,s)) ->
     sprintf "Can't run passes - the dependency %S of pass %S is not available."
       s (Project.Pass.name p)
@@ -391,6 +453,10 @@ let string_of_failure = function
     sprintf "The format %S is not known." fmt
   | Unavailable_format_version fmt ->
     sprintf "The selected version of the format %S is not supported." fmt
+  | Unknown_collator "" ->
+    "Please specify the collator that you want to use."
+  | Unknown_collator s ->
+    sprintf "The collator `%s' is not registered." s
 
 let () = Extension.Error.register_printer @@ function
   | Fail err -> Some (string_of_failure err)

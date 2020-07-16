@@ -5,7 +5,9 @@ open Monads.Std
 (** The Knowledge Representation Library.
 
     A library for building knowledge representation and
-    reasoning systems. *)
+    reasoning systems.
+
+*)
 
 
 (** a knowledge dependent computation.  *)
@@ -180,8 +182,6 @@ module Knowledge : sig
       then [provide p x v] diverges into a conflict.
   *)
   val provide : ('a,'p) slot -> 'a obj -> 'p -> unit t
-
-
   (** [suggest a p x v] suggests [v] as the value for the property [p].
 
       The same as [provide] except the provided value is predicated by
@@ -203,13 +203,35 @@ module Knowledge : sig
   *)
   val promise : ('a,'p) slot -> ('a obj -> 'p t) -> unit
 
+
+  (** [promising p ~promise f] evaluates [f ()] under [promise] and
+      retracts it after [f] is evaluated.
+
+      The information provided by [promise] is only available during
+      evaluation of [f ()].
+
+      @since 2.2.0
+  *)
+  val promising : ('a,'p) slot -> promise:('a obj -> 'p t) ->
+    (unit -> 's t) -> 's t
+
   (** [propose p f] proposes the opinion computation.
 
       The same as [promise] except that it promises a value for
-      an opinion based property.
+      an opinion-based property.
   *)
   val propose : agent -> ('a, 'p opinions) slot -> ('a obj -> 'p t) -> unit
 
+  (** [proposing a p ~propose f] a scope-limited proposal.
+
+      The proposal is active only during the evaluation of [f ()]. The
+      function is the same as {!proposing} except that it promises a
+      value for an opinion-based property.
+
+      @since 2.2.0
+  *)
+  val proposing : agent -> ('a, 'p opinions) slot ->
+    propose:('a obj -> 'p t) -> (unit -> 's t) -> 's t
 
   (** state with no knowledge  *)
   val empty : state
@@ -258,6 +280,14 @@ module Knowledge : sig
 
     (** [c // s] is [Object.read c s]  *)
     val (//) : ('a,_) cls -> string -> 'a obj t
+
+
+    (** [x >>=? f] evaluates to [f y] if [x] evaluates to [Some y].  *)
+    val (>>=?) : 'a option t -> ('a -> 'b option t) -> 'b option t
+
+
+    (** [x >>|? f] evaluates to [f y] if [x] evaluates to [Some y].  *)
+    val (>>|?) : 'a option t -> ('a -> 'b option) -> 'b option t
   end
 
 
@@ -780,6 +810,18 @@ module Knowledge : sig
     val in_package : string -> (unit -> 'a knowledge) -> 'a knowledge
 
 
+    (** [set_package pkg] makes the package named [pkg] the current package.
+
+        @since 2.2.0
+    *)
+    val set_package : string -> unit knowledge
+
+    (** [package] is the name of the current package.
+
+        @since 2.2.0
+    *)
+    val package : string knowledge
+
     (** [import ?strict ?package:p names] imports all [names] into [p].
 
         The [names] elements could be either package names or
@@ -1258,6 +1300,11 @@ module Knowledge : sig
     type t = conflict = ..
 
 
+    (** [to_string err] is the textual representation of the conflict [err]
+
+        @since 2.2.0  *)
+    val to_string : conflict -> string
+
     (** prints the conflict  *)
     val pp : Format.formatter -> conflict -> unit
 
@@ -1378,6 +1425,147 @@ module Knowledge : sig
   (** the s-expression denoting the conflict. *)
   val sexp_of_conflict : conflict -> Sexp.t
 
+  (** {3 Rules}
+
+      Rules are used for introspection and documentation. A rule is a
+      specification of a promise and consists of the following parts
+
+      - a unique rule name,
+      - an optional sequence of external dependencies,
+      - an optional sequence of inputs,
+      - the output,
+      - the documentation string.
+
+      {3 Examples}
+
+      Suppose, we have a system that describes personal information,
+
+      {[
+        type person
+        type address
+
+        val first_name : (person, string option) slot
+        val last_name : (person, string option) slot
+        val full_name : (person, string option) slot
+
+        val address : (person, address option) slot
+        val phone : (person, phone option) slot
+      ]}
+
+      The simplest and obvious rule would a derivation of the full
+      name from the first and last names. This derivation could be
+      encoded as a promise. To make this promise visible and known
+      to the users of the knowledge system we advertise it as a rule,
+
+      {[
+        Rule.(declare "full-name" |>
+              require first_name  |>
+              require last_name   |>
+              provide full_name   |>
+              comment "full = first last");
+        promise full_name @@ fun person ->
+        collect first_name >>=? fun first ->
+        collect last_name >>|? fun last ->
+        first ^ " " ^ last
+      ]}
+
+
+      The rule above is a closed term, since it doesn't reference any
+      language variables, i.e., it derives its output directly from
+      the knowledge base. Such rules are called static as they are
+      always available. Contrary, dynamic rules are provide external
+      information to the knowledge system. For example, the following
+      rule extracts the phone number of a person from the online database,
+
+      {[
+        let provide_phone_base =
+          Rule.(declare "lookup-phone-number" |>
+                dynamic ["phone-base"] |>
+                require full_name |>
+                provide phone |>
+                comment "lookups phone in the public database");
+          fun base ->
+            promise phone @@ fun person ->
+            collect full_name >>| fun name ->
+            Phonebase.lookup base phone
+      ]}
+
+      The [dynamic] operator of the specification accepts a list of
+      formal parameters of the rule. In theory, this list could be
+      empty. In that case, the rule will still be treated as dynamic.
+
+      Note, that in the example above, the rule declaration is not
+      parametrized with the base. Otherwise, it will be only declared
+      after the base is available. Moreover, each new application will
+      create a new rule, which will end up in a runtime failure, since
+      the rule name should be unique.
+
+      This module defines an domain-specific language for specifying
+      rules. The [Documentation] and [Documentation.Rule] modules
+      could be used to introspect all available rules.
+
+      @since 2.2.0
+  *)
+  module Rule : sig
+
+    (** a term of type [def] expects either
+
+        - [|> require <slot>], or
+        - [|> provide <slot>].
+    *)
+    type def
+
+    (** a term of type [doc] expects [|> comment <doc>].
+        This is the only way to finish a rule definition. *)
+    type doc
+
+
+    (** [declare ?package name] starts a rule definition.
+
+        The rule definition should be followed by zero or more
+        dependencies,
+        - [|> require <slot>],
+          zero or more dynamic parameters specifications,
+        - [|> dynamic <parameters>],
+          exactly one output specification,
+        - [|> provide <slot>], and
+          exactly one documentation string,
+        - [|> comment <comment>]
+
+        {3 Example}
+
+        {[
+          declare "rule-name"   |>
+          dynamic ["parameter"] |>
+          require slot1         |>
+          require slot2         |>
+          provide slot3         |>
+          comment "example rule"
+        ]}
+    *)
+    val declare : ?package:string -> string -> def
+
+
+    (** [dynamic ps] declares that a rule is dynamic and lists formal parameters.
+    *)
+    val dynamic : string list -> def -> def
+
+    (** [require p] declares a dependency on the property [p].
+
+        Note: This function enables introspection of the rules that are
+        registered in the knowledge base. It doesn't affect the
+        semantics in any way.
+    *)
+    val require : (_,_) slot -> def -> def
+
+
+    (** [provide p] declares that a rule computes the property [p]  *)
+    val provide : (_,_) slot -> def -> doc
+
+    (** [comment text] provides a documentation for a rule.
+    *)
+    val comment : string -> doc -> unit
+  end
 
   (** Online Knowledge documentation.
 
@@ -1415,6 +1603,14 @@ module Knowledge : sig
     module Property : Element
 
 
+    module Rule : sig
+      include Element
+      val requires : t -> Property.t list
+      val provides : t -> Property.t
+      val parameters : t -> string list list
+      val pp : Format.formatter -> t -> unit
+    end
+
     (** [agents ()] is the list of currently registered agents.  *)
     val agents : unit -> Agent.t list
 
@@ -1425,5 +1621,7 @@ module Knowledge : sig
         included in the list.
     *)
     val classes : unit -> (Class.t * Property.t list) list
+
+    val rules : unit -> Rule.t list
   end
 end

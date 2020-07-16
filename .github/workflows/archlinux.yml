@@ -1,0 +1,17 @@
+name: Archlinux
+
+on:
+  schedule:
+    - cron: '0 0 * * TUE'
+
+jobs:
+   build:
+     runs-on: ubuntu-latest
+     steps:
+     - uses: actions/checkout@master
+
+     - name: Build on Archlinux
+       uses: docker/build-push-action@v1
+       with:
+         push: false
+         dockerfile: docker/archlinux/Dockerfile

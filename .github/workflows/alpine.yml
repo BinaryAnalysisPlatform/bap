@@ -1,0 +1,17 @@
+name: Alpine
+
+on:
+  schedule:
+    - cron: '0 0 * * MON'
+
+jobs:
+   build:
+     runs-on: ubuntu-latest
+     steps:
+     - uses: actions/checkout@master
+
+     - name: Build on Alpine
+       uses: docker/build-push-action@v1
+       with:
+         push: false
+         dockerfile: docker/alpine/Dockerfile

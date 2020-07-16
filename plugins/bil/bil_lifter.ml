@@ -11,6 +11,7 @@ open Theory.Parser
 include Self()
 
 module Call = Bil_semantics.Call
+let package = "bap"
 
 module BilParser = struct
   type context = [`Bitv | `Bool | `Mem ] [@@deriving sexp]
@@ -187,7 +188,12 @@ module Optimizer = Theory.Parser.Make(Bil_semantics.Core)
 
 
 let provide_bir () =
-  Knowledge.promise Theory.Program.Semantics.slot @@ fun obj ->
+  KB.Rule.(declare ~package "reify-ir" |>
+           require Theory.Program.Semantics.slot |>
+           require Bil_ir.slot |>
+           provide Theory.Program.Semantics.slot |>
+           comment "reifies IR");
+  KB.promise Theory.Program.Semantics.slot @@ fun obj ->
   KB.collect Theory.Program.Semantics.slot obj >>| fun sema ->
   let bir = Bil_ir.reify @@  KB.Value.get Bil_ir.slot sema in
   KB.Value.put Term.slot sema bir
@@ -468,6 +474,11 @@ let provide_lifter ~enable_intrinsics ~with_fp () =
       let bil = Insn.bil sema in
       KB.Value.merge ~on_conflict:`drop_left
         sema (Insn.of_basic ~bil insn) in
+  KB.Rule.(declare ~package "bil-semantics" |>
+           require Memory.slot |>
+           require Disasm_expert.Basic.Insn.slot |>
+           provide Theory.Program.Semantics.slot |>
+           comment "denotates BIL in the Core Theory terms");
   Knowledge.promise Theory.Program.Semantics.slot lifter
 
 
@@ -475,7 +486,7 @@ let init ~enable_intrinsics ~with_fp () =
   provide_lifter ~enable_intrinsics ~with_fp ();
   provide_bir ();
   Theory.declare !!(module Brancher : Theory.Core)
-    ~package:"bap.std" ~name:"jump-dests"
+    ~package ~name:"jump-dests"
     ~desc:"an approximation of jump destinations"
     ~provides:[
       "brancher";

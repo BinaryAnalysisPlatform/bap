@@ -52,9 +52,9 @@ val jmp_t : (blk, jmp) cls
 module Tid : sig
   type t = tid
 
-  val for_name : string -> t Bap_toplevel.t
-  val for_addr : addr -> t Bap_toplevel.t
-  val for_ivec : int -> t Bap_toplevel.t
+  val for_name : ?package:string -> string -> t Bap_toplevel.t
+  val for_addr : ?package:string -> addr -> t Bap_toplevel.t
+  val for_ivec : ?package:string -> int -> t Bap_toplevel.t
 
   val create : unit -> t Bap_toplevel.t
   val set_name : t -> string -> unit Bap_toplevel.t

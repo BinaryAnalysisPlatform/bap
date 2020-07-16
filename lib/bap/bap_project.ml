@@ -2,6 +2,7 @@ open Core_kernel
 open Regular.Std
 open Bap_core_theory
 open Graphlib.Std
+open Monads.Std
 open Bap_future.Std
 open Bap_types.Std
 open Bap_image_std
@@ -16,9 +17,111 @@ module Event = Bap_main_event
 module Buffer = Caml.Buffer
 include Bap_self.Create()
 
-let find name = FileUtil.which name
+let query doc attr =
+  match Ogre.eval (Ogre.request attr) doc with
+  | Error err ->
+    invalid_argf "Malformed ogre specification: %s"
+      (Error.to_string_hum err) ()
+  | Ok bias -> bias
 
-module Kernel = struct
+module Spec = struct
+  module Fact = Ogre.Make(KB)
+  open Fact.Syntax
+
+  let provide slot obj value =
+    Fact.lift @@ KB.provide slot obj value
+
+  let str field slot unit =
+    Fact.request field >>= function
+    | None | Some "" | Some "unknown" ->
+      Fact.return ()
+    | value -> provide slot unit value
+
+  let bool field slot unit =
+    Fact.request field >>= provide slot unit
+
+  let int field slot unit =
+    Fact.request field >>= function
+    | Some x ->
+      provide slot unit (Some (Int64.to_int_exn x))
+    | None -> Fact.return ()
+
+  let facts fields unit =
+    Fact.List.iter fields ~f:(fun provide -> provide unit)
+
+  let init_unit =
+    let open Theory.Unit in
+    let open Image.Scheme in
+    facts [
+      str arch Target.arch;
+      str subarch Target.subarch;
+      str vendor Target.vendor;
+      str system Target.system;
+      str abi Target.abi;
+      int bits Target.bits;
+      bool is_little_endian Target.is_little_endian;
+    ]
+
+  let provide spec unit =
+    let open KB.Syntax in
+    Fact.exec (init_unit unit) spec >>= function
+    | Error err ->
+      invalid_argf "Failed to provide the image specification \
+                    to the knowledge base: %s"
+        (Error.to_string_hum err) ()
+    | Ok _doc -> KB.return ()
+
+
+  let init arch =
+    let module Field = Image.Scheme in
+    let open Ogre.Syntax in
+    let bits = Int64.of_int (Size.in_bits (Arch.addr_size arch))  in
+    let statements = Ogre.all [
+        Ogre.provide Field.arch (Arch.to_string arch);
+        Ogre.provide Field.bits bits;
+        Ogre.provide Field.is_little_endian @@
+        match Arch.endian arch with
+        | LittleEndian -> true
+        | BigEndian -> false
+      ] in
+    match Ogre.exec statements Ogre.Doc.empty with
+    | Error err ->
+      failwithf "got a malformed ogre document: %s"
+        (Error.to_string_hum err) ();
+    | Ok doc -> doc
+end
+
+let with_arch arch mems =
+  let open KB.Syntax in
+  let width = Size.in_bits (Arch.addr_size arch) in
+  KB.promising Arch.slot ~promise:(fun label ->
+      KB.collect Theory.Label.addr label >>| function
+      | None -> `unknown
+      | Some p ->
+        let p = Word.create p width in
+        if Memmap.contains mems p
+        then arch
+        else `unknown)
+
+let with_filename spec arch data code path =
+  let open KB.Syntax in
+  let width = Size.in_bits (Arch.addr_size arch) in
+  let bias = Option.map (query spec Image.Scheme.bias)
+      ~f:(fun x -> Bitvec.(int64 x mod modulus width)) in
+  KB.promising Theory.Label.unit ~promise:(fun label ->
+      KB.collect Theory.Label.addr label >>=? fun addr ->
+      let addr = Word.create addr width in
+      if Memmap.contains data addr || Memmap.contains code addr
+      then
+        Theory.Unit.for_file path >>= fun unit ->
+        Spec.provide spec unit >>= fun () ->
+        KB.provide Theory.Unit.bias unit bias >>= fun () ->
+        KB.provide Theory.Unit.path unit (Some path) >>| fun () ->
+        Some unit
+      else KB.return None)
+
+
+module State = struct
   open KB.Syntax
   module Driver = Bap_disasm_driver
   module Calls = Bap_disasm_calls
@@ -26,18 +129,20 @@ module Kernel = struct
 
   type t = {
     default : arch;
+    package : string option;
     state : Driver.state;
     calls : Calls.t;
   } [@@deriving bin_io]
 
-  let empty arch = {
+  let empty ?package arch = {
     default = arch;
+    package;
     state = Driver.init;
     calls = Calls.empty;
   }
 
   let update self mem =
-    Disasm.scan self.default mem self.state >>= fun state ->
+    Driver.scan mem self.state >>= fun state ->
     Calls.update self.calls state >>| fun calls ->
     {self with state; calls}
 
@@ -47,8 +152,10 @@ module Kernel = struct
 
   module Toplevel = struct
     let result = Toplevel.var "result"
-    let run k =
+    let run spec arch ~code ~data file k =
       Toplevel.put result begin
+        with_arch arch code @@ fun () ->
+        with_filename spec arch code data file @@ fun () ->
         k >>= fun k ->
         disasm k >>= fun g ->
         symtab k >>| fun s -> g,s,k
@@ -57,12 +164,11 @@ module Kernel = struct
   end
 end
 
-type state = Kernel.t [@@deriving bin_io]
+type state = State.t [@@deriving bin_io]
 
 type t = {
   arch    : arch;
-  core    : Kernel.t;
-
+  core    : State.t;
   disasm  : disasm;
   memory  : value memmap;
   storage : dict;
@@ -83,20 +189,20 @@ module Info = struct
   let spec,got_spec = Stream.create ()
 end
 
-
 module Input = struct
   type result = {
     arch : arch;
     data : value memmap;
     code : value memmap;
+    spec : Ogre.doc;
     file : string;
     finish : t -> t;
   }
 
   type t = unit -> result
 
-  let create ?(finish=ident)arch file ~code ~data () = {
-    arch; file; code; data; finish;
+  let create ?(finish=ident) arch file ~code ~data () = {
+    arch; file; code; data; finish; spec=Spec.init arch;
   }
 
   let loaders = String.Table.create ()
@@ -112,6 +218,7 @@ module Input = struct
     arch = Image.arch img;
     data = Memmap.filter ~f:is_data (Image.memory img);
     code = Memmap.filter ~f:is_code (Image.memory img);
+    spec = Image.spec img;
     file;
     finish;
   }
@@ -121,12 +228,13 @@ module Input = struct
     KB.Agent.register "symtab"
       ~reliability
       ~desc:"extracts symbols from symbol tables"
-      ~package:"bap.std"
+      ~package:"bap"
 
-  let provide_image image =
-    let image_symbols = Symbolizer.of_image image in
-    let image_roots = Rooter.of_image image in
-    info "providing rooter and symbolizer from image";
+  let provide_image file image =
+    let image_symbols = Symbolizer.(set_path (of_image image) file) in
+    let image_roots = Rooter.(set_path (of_image image) file) in
+    info "providing rooter and symbolizer from image of %a"
+      Sexp.pp_hum ([%sexp_of : string option] (Image.filename image));
     Symbolizer.provide symtab_agent image_symbols;
     Rooter.provide image_roots
 
@@ -135,8 +243,7 @@ module Input = struct
     List.iter warns ~f:(fun e -> warning "%a" Error.pp e);
     let spec = Image.spec img in
     Signal.send Info.got_img img;
-    Signal.send Info.got_spec spec;
-    provide_image img;
+    provide_image filename img;
     let finish proj = {
       proj with
       storage = Dict.set proj.storage Image.specification spec;
@@ -155,8 +262,7 @@ module Input = struct
     | None -> from_image filename
     | Some name -> match Hashtbl.find loaders name with
       | None -> from_image ?loader filename
-      | Some load ->
-        fun () -> load filename ()
+      | Some load -> load filename
 
   let null arch : addr =
     Addr.of_int 0 ~width:(Arch.addr_size arch |> Size.in_bits)
@@ -169,40 +275,12 @@ module Input = struct
     let section = Value.create Image.section "bap.user" in
     let code = Memmap.add Memmap.empty mem section in
     let data = Memmap.empty  in
-    {arch; data; code; file = filename; finish = ident;}
+    let spec = Spec.init arch in
+    {arch; data; code; file = filename; finish = ident; spec}
 
   let available_loaders () =
     Hashtbl.keys loaders @ Image.available_backends ()
 end
-
-module Merge = struct
-
-  let merge_streams ss ~f : 'a Source.t =
-    Stream.concat_merge ss
-      ~f:(fun s s' -> match s, s' with
-          | Ok s, Ok s' -> Ok (f s s')
-          | Ok _, Error er
-          | Error er, Ok _ -> Error er
-          | Error er, Error er' ->
-            Error (Error.of_list [er; er']))
-
-  let merge_sources create sources ~f = match sources with
-    | [] -> None
-    | names -> match List.filter_map names ~f:create with
-      | [] -> assert false
-      | ss -> Some (merge_streams ss ~f)
-
-  let symbolizer () =
-    let symbolizers = Symbolizer.Factory.list () in
-    merge_sources Symbolizer.Factory.find symbolizers ~f:(fun s1 s2 ->
-        Symbolizer.chain [s1;s2])
-
-  let rooter () =
-    let rooters = Rooter.Factory.list () in
-    merge_sources Rooter.Factory.find rooters ~f:Rooter.union
-
-end
-
 
 type input = Input.t
 type project = t
@@ -234,7 +312,7 @@ let pp_mem ppf mem =
 
 let pp_disasm_error ppf = function
   | `Failed_to_disasm mem ->
-    fprintf ppf "can't disassemble insnt at address %a" pp_mem mem
+    fprintf ppf "can't disassemble an instruction at address %a" pp_mem mem
   | `Failed_to_lift (_mem,insn,err) ->
     fprintf ppf "<%s>: %a"
       (Disasm_expert.Basic.Insn.asm insn) Error.pp err
@@ -243,47 +321,70 @@ let union_memory m1 m2 =
   Memmap.to_sequence m2 |> Seq.fold ~init:m1 ~f:(fun m1 (mem,v) ->
       Memmap.add m1 mem v)
 
-
-let build ?state ~file ~code ~data arch =
-  let init = match state with
-    | Some state -> state
-    | None -> Kernel.empty arch in
-  let kernel =
-    Memmap.to_sequence code |> KB.Seq.fold ~init ~f:(fun k (mem,_) ->
-        Kernel.update k mem) in
-  let cfg,symbols,core = Kernel.Toplevel.run kernel in
-  {
-    core;
-    disasm = Disasm.create cfg;
-    program = Program.lift symbols;
-    symbols;
-    arch; memory=union_memory code data;
-    storage = Dict.set Dict.empty filename file;
-    passes=[]
-  }
+let set_package package = match package with
+  | None -> KB.return ()
+  | Some pkg -> KB.Symbol.set_package pkg
 
 let state {core} = core
+let package {core={State.package}} = package
 
-let create_exn
-    ?state
-    ?disassembler:_
-    ?brancher:_
-    ?symbolizer:_
-    ?rooter:_
-    ?reconstructor:_
-    (read : input)  =
-  let {Input.arch; data; code; file; finish} = read () in
-  Signal.send Info.got_file file;
-  Signal.send Info.got_arch arch;
-  Signal.send Info.got_data data;
-  Signal.send Info.got_code code;
-  finish @@ build ?state ~file ~code ~data arch
+let unused_options =
+  List.iter ~f:(Option.iter ~f:(fun name ->
+      warning "Project.create parameter %S is deprecated, \
+               please consult the documentation for the proper \
+               alternative" name))
+
+let (=?) name = Option.map ~f:(fun _ -> name)
 
 let create
-    ?state ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input =
-  Or_error.try_with ~backtrace:true (fun () ->
-      create_exn
-        ?state ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input)
+    ?package
+    ?state
+    ?disassembler:p1
+    ?brancher:p2
+    ?symbolizer:p3
+    ?rooter:p4
+    ?reconstructor:p5
+    (read : input)  =
+  try
+    unused_options [
+      "disassembler" =? p1;
+      "brancher" =? p2;
+      "symbolizer" =? p3;
+      "rooter" =? p4;
+      "rooter" =? p5;
+    ];
+    let {Input.arch; data; code; file; spec; finish} = read () in
+    Signal.send Info.got_file file;
+    Signal.send Info.got_arch arch;
+    Signal.send Info.got_data data;
+    Signal.send Info.got_code code;
+    Signal.send Info.got_spec spec;
+    let init = match state with
+      | Some state -> State.{state with package}
+      | None -> State.empty ?package arch in
+    let state =
+      let open KB.Syntax in
+      set_package package >>= fun () ->
+      Memmap.to_sequence code |> KB.Seq.fold ~init ~f:(fun k (mem,_) ->
+          State.update k mem) in
+    let cfg,symbols,core = State.Toplevel.run spec arch ~code ~data file state in
+    Result.return @@ finish {
+      core;
+      disasm = Disasm.create cfg;
+      program = Program.lift symbols;
+      symbols;
+      arch; memory=union_memory code data;
+      storage = Dict.set Dict.empty filename file;
+      passes=[]
+    }
+  with
+  | Toplevel.Conflict err ->
+    let open Error.Internal_repr in
+    let msg =
+      String (Format.asprintf "Knowledge Base Conflict: %a"
+                KB.Conflict.pp err) in
+    Error (to_info msg)
+  | exn -> Or_error.of_exn ~backtrace:`Get exn
 
 let restore_state _ =
   failwith "Project.restore_state: this function should no be used.
@@ -318,7 +419,6 @@ let subst_of_string = function
   | "min_addr" | "addr" -> Some (`memory `min)
   | "max_addr" -> Some (`memory `max)
   | _ -> None
-
 
 let addr which mem =
   let take = match which with
@@ -497,6 +597,57 @@ end
 let passes () = DList.to_list passes
 let find_pass = Pass.find
 
+module Collator = struct
+  open Bap_knowledge
+
+  type info = {
+    name : Knowledge.Name.t;
+    desc : string option;
+  }
+
+  type t = Collator : {
+      prepare : project -> 's;
+      collate : int -> 's -> project -> 's;
+      summary : 's -> unit;
+    } -> t
+
+  let registry = Hashtbl.create (module Knowledge.Name)
+
+  let apply (Collator {prepare; collate; summary}) projects =
+    match Seq.split_n projects 1 with
+    | [base],rest ->
+      summary @@
+      Seq.foldi ~init:(prepare base) rest ~f:collate
+    | _ -> ()
+
+  let register ?desc ?package name ~prepare ~collate ~summary =
+    let name = Knowledge.Name.create ?package name in
+    if Hashtbl.mem registry name then
+      invalid_argf "A collator with name %s is already registered \
+                    please choose another unique name"
+        (Knowledge.Name.show name) ();
+    Hashtbl.add_exn registry name (desc,Collator {
+        prepare;
+        collate;
+        summary;
+      })
+
+  let find ?package name =
+    let name = Knowledge.Name.read ?package name in
+    match Hashtbl.find registry name with
+    | Some (_,x) -> Some x
+    | None -> None
+
+  let registered () =
+    Hashtbl.to_alist registry |>
+    List.map ~f:(fun (name,(desc,_)) -> {name; desc})
+
+  let name {name} = name
+  let desc = function
+    | {desc=None} -> "not provided"
+    | {desc=Some txt} -> txt
+end
+
 module type S = sig
   type t
   val empty : t
@@ -509,4 +660,25 @@ include Data.Make(struct
     let version = "2.0.0"
   end)
 
-let () = Data.set_module_name instance "Bap.Std.Project"
+let () =
+  Data.set_module_name instance "Bap.Std.Project"
+
+let () =
+  KB.Rule.(declare ~package:"bap" "project-filename" |>
+           dynamic ["input"] |>
+           dynamic ["data"; "code"; "path"] |>
+           require Theory.Label.addr |>
+           provide Theory.Label.unit |>
+           comment {|
+On [Project.create input] provides [path] for the address [x]
+if [x] in [data] or [x] in [code].
+|});
+  KB.Rule.(declare ~package:"bap" "project-arch" |>
+           dynamic ["input"] |>
+           dynamic ["arch"; "code"] |>
+           require Theory.Label.addr |>
+           provide Arch.slot |>
+           comment {|
+On [Project.create input] provides [arch] for the address [x]
+if [x] in [code].
+|})
