@@ -1,1 +1,1 @@
-let objdumps = $objdumps
+let objdumps = $objdump-paths

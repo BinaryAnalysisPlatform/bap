@@ -1,1 +1,1 @@
-let cxxfilts = $cxxfilts
+let cxxfilts = $cxxfilt-paths

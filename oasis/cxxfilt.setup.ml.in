@@ -1,7 +1,7 @@
 
 let () =
   add_variable  ~doc:
-    "A list (OCaml syntax) of paths to all discovered c++filts" "cxxfilts"
+    "A list (OCaml syntax) of paths to all discovered c++filts" "cxxfilt-paths"
     ~define:(function
         | None -> "[]"
         | Some xs -> xs)
