@@ -173,11 +173,23 @@ end
 
 open Bap.Std
 
-let run_lifter _label addr insn _mem 
+(* this is a temporary fix since bap-mc disassembler couldn't recognize CMN *)
+let fix_cmnz insn mem = match insn with
+  | None -> if Memory.length mem = 2 then
+      let insn_word = Or_error.(ok (Size.of_int 16 >>= fun hw ->
+                                    Memory.get ~scale:hw mem >>= Word.extract ~hi:16 ~lo:6)) in
+      Option.(insn_word >>= fun insn -> 
+              if Word.equal (Word.of_int 11 0x10b) insn 
+              then Some `tCMNz 
+              else None)
+    else None
+  | Some insn -> Some insn
+
+let run_lifter _label addr insn mem 
     (lifter : Bitvec.t -> Defs.insn -> Defs.op array -> unit Theory.eff) =
-  match Insns.of_basic insn with
+  match fix_cmnz (Insns.of_basic insn) mem with
   | None -> raise (Defs.Lift_Error "unknown instruction")
-  | Some arm_insn -> Disasm_expert.Basic.sexp_of_full_insn insn |> Sexp.to_string |> Stdio.print_endline;
+  | Some arm_insn -> 
     match Insns.arm_ops (Disasm_expert.Basic.Insn.ops insn) with
     | Error err -> raise (Defs.Lift_Error (Error.to_string_hum err))
     | Ok ops -> lifter addr arm_insn ops

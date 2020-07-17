@@ -180,6 +180,15 @@ tBIC:
   nf := high:1[r3]
   zf := r3 = 0
 }
+tCMNz:
+cb 42
+{
+  tmp := r3 + r1
+  cf := tmp <$ r3
+  vf := high:1[~(r3 ^ r1) & (r3 ^ tmp)]
+  nf := high:1[tmp]
+  zf := tmp = 0
+}
 tCMPi8:
 11 29
 {
