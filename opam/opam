@@ -37,7 +37,10 @@ depends: [
   "yojson"
   "result" {= "1.4"}
 ]
-depopts: ["conf-ida" "conf-binutils"]
+depopts: [
+  "conf-ida"
+  "conf-binutils"  {= "0.3"}
+]
 flags: light-uninstall
 build: [
   [
@@ -54,8 +57,7 @@ build: [
     "--ida-path=%{conf-ida:path}%" {conf-ida:installed}
     "--ida-headless=%{conf-ida:headless}%" {conf-ida:installed}
     "--%{conf-binutils:enable}%-objdump"
-    "--objdump-path=%{conf-binutils:objdump}%" {conf-binutils:installed}
-    "--objdump-targets=%{conf-binutils:targets}%" {conf-binutils:installed}
+    "--objdump-paths=%{conf-binutils:objdumps}%" {conf-binutils:installed}
   ]
   [make]
 ]
