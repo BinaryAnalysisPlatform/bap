@@ -177,9 +177,9 @@ open Bap.Std
 let fix_cmnz insn mem = match insn with
   | None -> if Memory.length mem = 2 then
       let insn_word = Or_error.(ok (Size.of_int 16 >>= fun hw ->
-                                    Memory.get ~scale:hw mem >>= Word.extract ~hi:16 ~lo:6)) in
+                                    Memory.get ~scale:hw mem >>= Word.extract ~hi:15 ~lo:6)) in
       Option.(insn_word >>= fun insn -> 
-              if Word.equal (Word.of_int 11 0x10b) insn 
+              if Word.equal (Word.of_int 10 0x10b) insn 
               then Some `tCMNz 
               else None)
     else None
