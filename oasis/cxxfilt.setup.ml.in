@@ -1,10 +1,7 @@
 
 let () =
-  add_variable  ~doc:"A list (OCaml syntax) of supported targets" "cxxfilt_targets"
+  add_variable  ~doc:
+    "A list (OCaml syntax) of paths to all discovered c++filts" "cxxfilt_paths"
     ~define:(function
         | None -> "[]"
-        | Some xs -> xs);
-  add_variable ~doc:"A path to cxxfilt binary" "cxxfilt_path"
-    ~define:(function
-        | None -> "c++filt"
-        | Some x -> x)
+        | Some xs -> xs)
