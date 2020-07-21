@@ -9,7 +9,7 @@ USER bap
 WORKDIR /home/bap
 
 RUN sudo pacman -S --noconfirm m4 git unzip make curl wget \
-         diffutils patch make gcc pkgconfig llvm9 python2 \
+         diffutils patch make gcc pkgconfig llvm python2 \
          which clang \
   && wget https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh \
   && echo "" | sudo sh install.sh \
