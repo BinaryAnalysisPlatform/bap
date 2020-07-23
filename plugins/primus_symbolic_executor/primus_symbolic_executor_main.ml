@@ -10,6 +10,12 @@ let cutoff = Extension.Configuration.parameter
     "cutoff-level"
     ~doc:"The number of times the same branch is retried."
 
+let timeout = Extension.Configuration.parameter
+    Extension.Type.(int =? 1000)
+    "timeout"
+    ~doc:"The number of milliseconds alloted to the SMT solver to find
+    a model"
+
 type memory = {
   bank : Primus.Memory.Descriptor.t;
   lower : Addr.t;
@@ -146,6 +152,8 @@ module SMT : sig
   val pp_expr : Format.formatter -> expr -> unit
   val pp_formula : Format.formatter -> formula -> unit
   val pp_value : Format.formatter -> value -> unit
+
+  val set_timeout : int -> unit
 end = struct
   module Bitv = Z3.BitVector
   module Bool = Z3.Boolean
@@ -160,8 +168,11 @@ end = struct
 
   let ctxt = Z3.mk_context [
       "model", "true";
-      "timeout", "16";
+      "timeout", "1000";
     ]
+
+  let set_timeout ms =
+    Z3.Params.update_param_value ctxt "timeout" (string_of_int ms)
 
   let to_string = Expr.to_string
   let pp_expr ppf expr = Format.fprintf ppf "%s" (to_string expr)
@@ -1015,6 +1026,8 @@ module Primitives(Machine : Primus.Machine.S) = struct
 end
 
 let () = Extension.declare  @@ fun ctxt ->
+  let open Extension.Syntax in
+  SMT.set_timeout (ctxt-->timeout);
   Primus.Components.register_generic "symbolic-computer"
     (module Executor) ~package:"bap"
     ~desc:"Computes a symbolic formula for each Primus value.";
