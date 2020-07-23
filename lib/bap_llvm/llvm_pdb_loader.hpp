@@ -91,7 +91,7 @@ namespace pdb_loader {
 using namespace llvm;
 
 struct section_info {
-    int64_t rel_addr;
+    uint64_t rel_addr;
     uint64_t offset;
 };
 
@@ -110,7 +110,7 @@ coff_sections collect_sections(const object::COFFObjectFile &obj) {
     auto base = obj.getImageBase();
     for (auto sec : prim::sections(obj)) {
         if (auto addr = prim::section_address(sec)) {
-            auto raddr = prim::relative_address(base, *addr);
+            auto raddr = *addr - base;
             auto offset = section_offset(obj, sec);
             secs.insert(std::make_pair(i, section_info{raddr,offset}));
         }

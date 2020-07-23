@@ -34,10 +34,8 @@ module Relocatable = struct
   module Make(Fact : Ogre.S) = struct
     open Fact.Syntax
 
-    module Base = Base_address(Fact)
-
     let segments =
-      Base.from_sections_offset >>= fun base ->
+      Fact.require base_address >>= fun base ->
       Fact.foreach Ogre.Query.(begin
           select (from section_entry $ code_entry)
             ~join:[[field name];

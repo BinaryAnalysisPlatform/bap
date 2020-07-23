@@ -56,10 +56,8 @@ module Relocatable = struct
   module Make(Fact : Ogre.S) = struct
     open Fact.Syntax
 
-    module Base = Base_address(Fact)
-
     let segments =
-      Base.from_sections_offset >>= fun base ->
+      Fact.require base_address >>= fun base ->
       Fact.foreach Ogre.Query.(
           select (from section_entry
                   $ virtual_section_header
@@ -75,7 +73,7 @@ module Relocatable = struct
             Fact.provide mapped addr size start)
 
     let sections =
-      Base.from_sections_offset >>= fun base ->
+      Fact.require base_address >>= fun base ->
       Fact.foreach Ogre.Query.(
           select (from section_entry))
         ~f:(fun (name,_,size,off) -> name,off,size) >>= fun s ->
@@ -86,7 +84,7 @@ module Relocatable = struct
             Fact.provide named_region addr size name)
 
     let code_regions =
-      Base.from_sections_offset >>= fun base ->
+      Fact.require base_address >>= fun base ->
       Fact.foreach Ogre.Query.(
           select (from section_entry $ code_entry)
             ~join:[[field name];

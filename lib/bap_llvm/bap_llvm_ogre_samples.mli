@@ -19,7 +19,3 @@ end
 module Code_regions(Fact : Ogre.S) : sig
   val code_regions : unit Fact.t
 end
-
-module Base_address(Fact : Ogre.S) : sig
-  val from_sections_offset : int64 Fact.t
-end

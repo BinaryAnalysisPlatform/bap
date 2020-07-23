@@ -53,7 +53,7 @@ void segment_command(const T &cmd, uint64_t base, ogre_doc &s) {
     bool x = static_cast<bool>(cmd.initprot & MachO::VM_PROT_EXECUTE);
     s.entry("segment-command") << cmd.segname << cmd.fileoff << cmd.filesize;
     s.entry("segment-command-flags") << cmd.segname << r << w << x;
-    s.entry("virtual-segment-command") << cmd.segname << prim::relative_address(base, cmd.vmaddr) << cmd.vmsize;
+    s.entry("virtual-segment-command") << cmd.segname << (cmd.vmaddr - base) << cmd.vmsize;
 }
 
 uint32_t filetype(const macho &obj) {
@@ -73,28 +73,40 @@ bool is_exec(const macho &obj) { return filetype(obj) == MachO::MH_EXECUTE;  }
 
 commands macho_commands(const macho &obj);
 
-// collect address from executable segment commands
+
 template <typename T>
-void add_segment_addr(const T &cmd, std::vector<uint64_t> &addrs) {
-    if (static_cast<bool>(cmd.initprot & MachO::VM_PROT_EXECUTE))
-        addrs.push_back(cmd.vmaddr);
+uint64_t is_first_nonempty(const T& cmd) {
+    return cmd.fileoff == 0 && cmd.filesize != 0;
 }
 
-template <typename Info>
-void add_segment_addr(const macho &obj, const Info &info, std::vector<uint64_t> &addrs) {
-    if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT_64)
-        add_segment_addr(obj.getSegment64LoadCommand(info), addrs);
-    if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT)
-        add_segment_addr(obj.getSegmentLoadCommand(info), addrs);
+template <typename T>
+uint64_t base_for_relocatable(const T& cmd) {
+    return cmd.vmaddr - cmd.fileoff;
 }
 
 uint64_t image_base(const macho &obj) {
-    std::vector<uint64_t> addrs;
-    for (auto info : macho_commands(obj))
-        add_segment_addr(obj, info, addrs);
-    auto it = std::min_element(addrs.begin(), addrs.end());
-    if (it == addrs.end()) return 0;
-    else return *it;
+    if (is_relocatable(obj)) {
+        for (auto info : macho_commands(obj)) {
+            if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT_64) {
+                return base_for_relocatable(obj.getSegment64LoadCommand(info));
+            } else if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT) {
+                return base_for_relocatable(obj.getSegmentLoadCommand(info));
+            }
+        }
+    } else {
+        for (auto info : macho_commands(obj)) {
+            if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT_64) {
+                auto cmd = obj.getSegment64LoadCommand(info);
+                if (is_first_nonempty(cmd))
+                    return cmd.vmaddr;
+            } else if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT) {
+                auto cmd = obj.getSegmentLoadCommand(info);
+                if (is_first_nonempty(cmd))
+                    return cmd.vmaddr;
+            }
+        }
+    }
+    return 0L;
 }
 
 void dynamic_relocations(const macho &obj, command_info &info, ogre_doc &s);
@@ -188,7 +200,7 @@ uint32_t section_type(const macho &obj, SectionRef sec) {
     return section_flags(obj, sec) & MachO::SECTION_TYPE;
 }
 
-void section(const std::string &name, int64_t rel_addr, uint64_t size, uint64_t off, ogre_doc &s) {
+void section(const std::string &name, uint64_t rel_addr, uint64_t size, uint64_t off, ogre_doc &s) {
     s.entry("section-entry") << name << rel_addr << size << off;
 }
 
@@ -271,13 +283,12 @@ bool is_in_section(const macho &obj, const SymbolRef &sym) {
     return ((typ & MachO::N_TYPE) == MachO::N_SECT);
 }
 
-error_or<int64_t> symbol_address(const macho &obj, const SymbolRef &sym) {
+error_or<uint64_t> symbol_address(const macho &obj, const SymbolRef &sym) {
     if (is_relocatable(obj))
-        return success(int64_t(0));
+        return success(uint64_t(0));
     auto addr = prim::symbol_address(sym);
     if (!addr) return addr;
-    auto base = image_base(obj);
-    return success(prim::relative_address(base, *addr));
+    return success(*addr - image_base(obj));
 }
 
 void relocations(const macho &obj, ogre_doc &s) {
@@ -302,7 +313,7 @@ void sections(const macho &obj, ogre_doc &s) {
         auto name = prim::section_name(sec);
         auto offs = section_offset(obj, section_iterator(sec));
         if (addr && name && size) {
-            section(*name, prim::relative_address(base, *addr), *size, offs, s);
+            section(*name, *addr-base, *size, offs, s);
             if (is_code_section(obj, sec))
                 s.entry("code-entry") << *name << offs << *size;
         }
@@ -319,11 +330,13 @@ void symbols(const macho &obj, const prim::symbols_sizes &sizes, ogre_doc &s) {
                 auto addr = symbol_address(obj, sym);
                 auto offs = symbol_file_offset(obj, sym);
                 auto type = prim::symbol_type(sym);
-                if (addr && offs && type)
+                if (addr && offs && type) {
                     section_symbol(*name, *addr, size, *offs, *type, s);
+                }
             }
-            else
+            else {
                 macho_symbol(*name, symbol_value(obj, sym), s);
+            }
         }
     }
 }
@@ -427,7 +440,7 @@ void indirect_symbols(const macho &obj, const MachO::dysymtab_command &dlc, ogre
                 auto sym = get_indirect_symbol(obj, dlc, tab_indx + j);
                 if (sym != prim::end_symbols(obj)) {
                     if (auto name = prim::symbol_name(*sym)) {
-                        auto sym_addr = prim::relative_address(base, sec_addr + j * stride);
+                        auto sym_addr = (sec_addr + j * stride) - base;
                         auto sym_offs = sec_offs + j * stride;
                         s.entry("symbol-entry") << *name << sym_addr << stride << sym_offs ;
                         s.entry("code-entry") << *name << sym_offs << stride;

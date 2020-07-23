@@ -36,34 +36,11 @@ module Sections(Fact : Ogre.S) = struct
           Fact.provide named_region addr size name)
 end
 
-
-module Base_address(Fact : Ogre.S) = struct
-  open Scheme
-  open Fact.Syntax
-
-  let from_sections_offset =
-    Fact.require base_address >>= fun base ->
-    Fact.foreach Ogre.Query.(begin
-        select (from section_entry $ code_entry)
-          ~join:[[field name];
-                 [field size ~from:section_entry;
-                  field size ~from:code_entry]]
-      end)
-      ~f:(fun (_,_,_,off) _ -> off) >>= fun s ->
-    match Seq.min_elt s ~compare:Int64.compare with
-    | None -> Fact.return base
-    | Some x -> Fact.return Int64.(base - x)
-
-end
-
 module Relocatable_symbols(Fact : Ogre.S) = struct
   open Scheme
   open Fact.Syntax
-
-  module Base = Base_address(Fact)
-
   let relocations =
-    Base.from_sections_offset >>= fun base ->
+    Fact.require base_address >>= fun base ->
     Fact.collect
       Ogre.Query.(select (from ref_internal)) >>= fun ints ->
     Fact.Seq.iter ints ~f:(fun (sym_off, rel_off) ->
@@ -72,7 +49,7 @@ module Relocatable_symbols(Fact : Ogre.S) = struct
         Fact.provide relocation relocation_addr symbol_addr)
 
   let externals =
-    Base.from_sections_offset >>= fun base ->
+    Fact.require base_address >>= fun base ->
     Fact.collect
       Ogre.Query.(select (from ref_external)) >>= fun exts ->
     Fact.Seq.iter exts ~f:(fun (off, name) ->
@@ -81,7 +58,7 @@ module Relocatable_symbols(Fact : Ogre.S) = struct
   let symbols =
     relocations >>= fun () ->
     externals >>= fun () ->
-    Base.from_sections_offset >>= fun base ->
+    Fact.require base_address >>= fun base ->
     Fact.collect Ogre.Query.(select (from symbol_entry)) >>= fun s ->
     Fact.Seq.iter s ~f:(fun (name, _, size, off) ->
         if Int64.(size = 0L) then Fact.return ()
@@ -100,10 +77,9 @@ module Relocatable_sections(Fact : Ogre.S) = struct
   open Scheme
   open Fact.Syntax
 
-  module Base = Base_address(Fact)
 
   let sections =
-    Base.from_sections_offset >>= fun base ->
+    Fact.require base_address >>= fun base ->
     Fact.collect Ogre.Query.(select (from section_entry)) >>= fun s ->
     Fact.Seq.iter s
       ~f:(fun (name, _, size, off) ->

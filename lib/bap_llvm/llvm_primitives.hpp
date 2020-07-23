@@ -45,10 +45,6 @@ error_or<uint64_t> symbol_size(const SymbolRef &s);
 // relocation
 uint64_t relocation_offset(const RelocationRef &rel);
 
-// misc
-// returns abs - base
-int64_t relative_address(uint64_t base, uint64_t abs);
-
 typedef std::vector<std::pair<SymbolRef, uint64_t>> symbols_sizes;
 
 //replace to computeSymbolSizes function, because sometimes it's

@@ -1,47 +1,6 @@
 #ifndef LLVM_ELF_LOADER_HPP
 #define LLVM_ELF_LOADER_HPP
 
-// Clarification-relocation.
-//
-// Elf loader provide information about common entries like segments, sectuions and symbols
-// Also it provides information about relocations, and there are some details here.
-//
-// Relocation info is targeting mainly for relocatable files like shared libraries or kernel
-// modules. Such files don't have entry point or segments, symbol addresses etc. and contain
-// calls to unresolved locations like in example below.
-//
-// ...
-// 0000000000000014 <my_fun>:
-//    14:	55                   	push   %rbp
-//    15:	48 89 e5             	mov    %rsp,%rbp
-//    18:	48 83 ec 18          	sub    $0x18,%rsp
-//    1c:	89 7d ec             	mov    %edi,-0x14(%rbp)
-//    1f:	c7 45 f8 2a 00 00 00 	movl   $0x2a,-0x8(%rbp)
-//    26:	8b 55 ec             	mov    -0x14(%rbp),%edx
-//    29:	8b 45 f8             	mov    -0x8(%rbp),%eax
-//    2c:	89 d6                	mov    %edx,%esi
-//    2e:	89 c7                	mov    %eax,%edi
-//--> 30:	e8 00 00 00 00       	callq  35 <my_fun+0x21>
-//    35:	89 45 fc             	mov    %eax,-0x4(%rbp)
-//    38:	8b 45 fc             	mov    -0x4(%rbp),%eax
-//    3b:	c9                   	leaveq
-//    3c:	c3                   	retq
-// ...
-//
-// 0x31 is offset where some changes in address expected - 00 00 00 00 defenetly is not
-// an address. It could be a reference to a symbol defined in same file or to a symbol defined somewhere
-// else (external symbol).
-// So, our task is to resolve this case, i.e. to find a mapping from this offset to something sensible.
-//
-// First of all we should use absolute offset, i.e. file offsets to make every mapping unique.
-// So full offset in example above will be computed as section offset + 0x31. And it is a place
-// where relocation should be applied.
-//
-// We define two attributes for relocations, and every relocation is represented only by one of them:
-// 1) ref-internal that is a mapping from one file offset to another ;
-// 2) ref-external that is a mapping from file offset to some name.
-//
-
 #include <algorithm>
 #include <iostream>
 #include <iomanip>
@@ -64,21 +23,48 @@ bool is_rel(const ELFObjectFile<T> &obj) {
     return (hdr->e_type == ELF::ET_REL);
 }
 
-//taking a smallest virtual address of loadable segments as a base address
-template <typename Phdr>
-uint64_t base_address(Phdr begin, Phdr end) {
-    if (begin == end) return 0;
-    std::vector<uint64_t> addrs;
-    for (auto it = begin; it != end; ++it)
-        if (it->p_type == ELF::PT_LOAD)
-            addrs.push_back(it->p_vaddr);
-    auto it = std::min_element(addrs.begin(), addrs.end());
-    if (it == addrs.end()) return 0;
-    return *it;
+// computes the base address of an ELF file.
+//
+// The base address is either derived as a difference between the
+// virtual address of any loadable code segment or, if there are no
+// segments or no loadable segments, it is the difference between
+// the suggested address of the PROGBITS section with a minimal offset
+// and that offset. For object and relocatable files, it is usually
+// 0 - 0x34.
+//
+// Finally, if there are no loadable segments or PROGBIT sections,
+// i.e., we don't really have a binary program but something else
+// packed as an ELF file, we just return 0.
+template <typename T>
+uint64_t base_address(const ELFObjectFile<T> &obj) {
+    uint64_t base = 0L;
+    auto elf = *obj.getELFFile();
+    auto segs = prim::elf_program_headers(elf);
+    auto code = segs.end();
+
+    for (auto it = segs.begin(); it != segs.end(); ++it)
+        if (it->p_type == ELF::PT_LOAD && (it->p_flags & ELF::PF_X))
+            code = it;
+
+    if (code != segs.end()) {
+        base = code->p_vaddr - code->p_offset;
+    } else {
+        auto secs = prim::elf_sections(elf);
+        auto first = secs.end();
+        auto smallest = std::numeric_limits<uint64_t>::max();
+        for (auto it = secs.begin(); it != secs.end(); ++it) {
+            if (it->sh_type == ELF::SHT_PROGBITS && it->sh_offset < smallest) {
+                first = it;
+                smallest = it->sh_offset;
+            }
+        }
+
+        if (first != secs.end())
+            base = first->sh_addr - first->sh_offset;
+    }
+    return base;
 }
 
-template <typename T>
-uint64_t base_address(const ELFObjectFile<T> &obj);
 
 template <typename T>
 void file_header(const ELFObjectFile<T> &obj, ogre_doc &s) {
@@ -94,28 +80,9 @@ std::string name_of_index(std::size_t i) {
     return s.str();
 }
 
-template <typename I>
-void program_headers(I begin, I end, ogre_doc &s) {
-    std::size_t i = 0;
-    uint64_t base = base_address(begin, end);
-    for (auto it = begin; it != end; ++it, ++i) {
-        bool ld = (it->p_type == ELF::PT_LOAD);
-        bool r = static_cast<bool>(it->p_flags & ELF::PF_R);
-        bool w = static_cast<bool>(it->p_flags & ELF::PF_W);
-        bool x = static_cast<bool>(it->p_flags & ELF::PF_X);
-        auto off = it->p_offset;
-        auto filesz = it->p_filesz;
-        auto name = name_of_index(i);
-        auto addr = prim::relative_address(base, it->p_vaddr);
-        s.entry("program-header") << name << off << filesz;
-        s.entry("virtual-program-header") << name << addr << it->p_memsz;
-        s.entry("program-header-flags") << name << ld << r << w << x;
-    }
-}
-
 template <typename T>
 void section_header(const T &hdr, const std::string &name, uint64_t base, ogre_doc &s) {
-    auto addr = prim::relative_address(base, hdr.sh_addr);
+    auto addr = hdr.sh_addr - base;
     s.entry("section-entry") << name << addr << hdr.sh_size << hdr.sh_offset;
     bool w = static_cast<bool>(hdr.sh_flags & ELF::SHF_WRITE);
     bool x = static_cast<bool>(hdr.sh_flags & ELF::SHF_EXECINSTR);
@@ -146,15 +113,15 @@ error_or<uint64_t> symbol_file_offset(const ELFObjectFile<T> &obj, const SymbolR
 }
 
 template <typename T>
-error_or<int64_t> symbol_address(const ELFObjectFile<T> &obj, const SymbolRef &sym) {
+error_or<uint64_t> symbol_address(const ELFObjectFile<T> &obj, const SymbolRef &sym) {
     auto sym_elf = obj.getSymbol(sym.getRawDataRefImpl());
     if (is_rel(obj) && !is_abs_symbol(*sym_elf)) { // abs symbols does not affected by relocations
-        return success(int64_t(0));
+        return success(uint64_t(0));
     } else {
         auto addr = prim::symbol_address(sym);
         if (!addr) return addr;
         auto base = base_address(obj);
-        return success(prim::relative_address(base, *addr));
+        return success(*addr - base);
     }
 }
 
@@ -196,15 +163,22 @@ void symbol_entry(const ELFObjectFile<T> &obj, const SymbolRef &sym, ogre_doc &s
     || LLVM_VERSION_MAJOR >= 4
 
 template <typename T>
-uint64_t base_address(const ELFObjectFile<T> &obj) {
-    auto hdrs = prim::elf_program_headers(*obj.getELFFile());
-    return base_address(hdrs.begin(), hdrs.end());
-}
-
-template <typename T>
 void program_headers(const ELFObjectFile<T> &obj, ogre_doc &s) {
+    uint64_t base = base_address(obj);
     auto hdrs = prim::elf_program_headers(*obj.getELFFile());
-    program_headers(hdrs.begin(), hdrs.end(), s);
+    for (auto it = hdrs.begin(); it != hdrs.end(); ++it) {
+        bool ld = (it->p_type == ELF::PT_LOAD);
+        bool r = static_cast<bool>(it->p_flags & ELF::PF_R);
+        bool w = static_cast<bool>(it->p_flags & ELF::PF_W);
+        bool x = static_cast<bool>(it->p_flags & ELF::PF_X);
+        auto off = it->p_offset;
+        auto filesz = it->p_filesz;
+        auto name = name_of_index(it - hdrs.begin());
+        auto addr = it->p_vaddr - base;
+        s.entry("program-header") << name << off << filesz;
+        s.entry("virtual-program-header") << name << addr << it->p_memsz;
+        s.entry("program-header-flags") << name << ld << r << w << x;
+    }
 }
 
 template <typename T>
@@ -270,12 +244,6 @@ uint64_t section_offset(const ELFObjectFile<T> &obj, section_iterator it) {
 }
 
 #elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
-
-template <typename T>
-uint64_t base_address(const ELFObjectFile<T> &obj) {
-    auto elf = obj.getELFFile();
-    return base_address(elf->begin_program_headers(), elf->end_program_headers());
-}
 
 template <typename T>
 void program_headers(const ELFObjectFile<T> &obj, ogre_doc &s) {

@@ -16,9 +16,6 @@ module type Parameters = sig
   val pdb_path   : string
 end
 
-(** default image base for relocatable files *)
-let relocatable_base = 0x0L
-
 module Fact(M : Monad.S) = struct
   include Ogre.Make(M)
   type 'a m = 'a M.t
@@ -53,15 +50,9 @@ module Ogre_loader(P : Parameters) = struct
     | Macho -> make (module Macho)
     | Unknown -> Fact.failf "file type is not supported" ()
 
-  let image_base =
-    Fact.require is_relocatable >>= fun is_rel ->
-    if Option.is_none P.image_base && is_rel
-    then Fact.return (Some relocatable_base)
-    else Fact.return P.image_base
-
   let provide_base =
     Fact.require default_base_address >>= fun real ->
-    image_base >>= function
+    match P.image_base with
     | None -> Fact.provide base_address real
     | Some base ->
       let base_bias = Int64.(base - real) in

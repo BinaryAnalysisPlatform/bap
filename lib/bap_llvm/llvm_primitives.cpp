@@ -8,11 +8,6 @@ namespace prim {
 using namespace llvm;
 using namespace llvm::object;
 
-
-int64_t relative_address(uint64_t base, uint64_t abs) {
-    return (abs - base);
-}
-
 // some cases are commented out because they are not supported
 // by all versions of LLVM, we will later use a macro to enable
 // them depending on the version.
