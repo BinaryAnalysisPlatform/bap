@@ -14,10 +14,15 @@ let provide_roots file funcs =
   let promise_property slot =
     KB.promise slot @@ fun label ->
     KB.collect Theory.Label.addr label >>=? fun addr ->
-    KB.collect Theory.Label.unit label >>=?
-    KB.collect Theory.Unit.path >>|? fun path ->
+    KB.collect Theory.Label.unit label >>=? fun unit ->
+    KB.collect Theory.Unit.bias unit >>= fun bias ->
+    KB.collect Theory.Unit.Target.bits unit >>=? fun bits ->
+    KB.collect Theory.Unit.path unit >>|? fun path ->
     if String.equal path file then
-      let addr = Bitvec.to_bigint addr in
+      let bias = Option.value bias ~default:Bitvec.zero in
+      let addr =
+        Bitvec.to_bigint @@
+        Bitvec.((addr - bias) mod modulus bits) in
       Option.some_if (Hashtbl.mem funcs addr) true
     else None in
   promise_property Theory.Label.is_valid;
