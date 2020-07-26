@@ -126,6 +126,8 @@ module DSL(Core: Theory.Core)(CPU: CPU)(V: ValueHolder) = struct
   let extend_signed v = signed CPU.value v
   let extend_to_signed s v = signed s v
   let scoped_var = Theory.Var.scoped
+  let local_var = Theory.Var.fresh CPU.value
+  let local_var_sort = Theory.Var.fresh
 
 end
 

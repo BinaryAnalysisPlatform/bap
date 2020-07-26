@@ -293,26 +293,29 @@ module Mov(Core : Theory.Core) = struct
 
   let teqri src1 src2 cond =
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := !$src1 lxor !$src2;
-        set_nzf Env.tmp
+        tmp := !$src1 lxor !$src2;
+        set_nzf tmp
       ]
     ]
 
   let teqrr src1 src2 cond =
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := !$src1 lxor !$src2;
-        set_nzf Env.tmp
+        tmp := !$src1 lxor !$src2;
+        set_nzf tmp
       ]
     ]
 
   let teqrsr src1 src2 sreg simm cond =
     let (shift_operand, carry) = Shift.shift_r src2 simm sreg in
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := !$src1 lxor shift_operand;
-        set_nzf Env.tmp;
+        tmp := !$src1 lxor shift_operand;
+        set_nzf tmp;
         Env.cf := carry
       ]
     ]
@@ -320,35 +323,39 @@ module Mov(Core : Theory.Core) = struct
   let teqrsi src1 src2 simm cond =
     let (shift_operand, carry) = Shift.shift_i src2 simm in
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := !$src1 lxor shift_operand;
-        set_nzf Env.tmp;
+        tmp := !$src1 lxor shift_operand;
+        set_nzf tmp;
         Env.cf := carry
       ]
     ]
 
   let tstri src1 src2 cond =
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := !$src1 land !$src2;
-        set_nzf Env.tmp
+        tmp := !$src1 land !$src2;
+        set_nzf tmp
       ]
     ]
 
   let tstrr src1 src2 cond =
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := !$src1 land !$src2;
-        set_nzf Env.tmp
+        tmp := !$src1 land !$src2;
+        set_nzf tmp
       ]
     ]
 
   let tstrsr src1 src2 sreg simm cond =
     let (shift_operand, carry) = Shift.shift_r src2 simm sreg in
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := !$src1 land shift_operand;
-        set_nzf Env.tmp;
+        tmp := !$src1 land shift_operand;
+        set_nzf tmp;
         Env.cf := carry
       ]
     ]
@@ -356,9 +363,10 @@ module Mov(Core : Theory.Core) = struct
   let tstrsi src1 src2 simm cond =
     let (shift_operand, carry) = Shift.shift_i src2 simm in
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := !$src1 land shift_operand;
-        set_nzf Env.tmp;
+        tmp := !$src1 land shift_operand;
+        set_nzf tmp;
         Env.cf := carry
       ]
     ]
@@ -629,69 +637,77 @@ module Mov(Core : Theory.Core) = struct
 
   let cmpri src1 src2 cond =
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := !$src1 - !$src2;
-        set_sub !$src1 !$src2 Env.tmp
+        tmp := !$src1 - !$src2;
+        set_sub !$src1 !$src2 tmp
       ]
     ]
 
   let cmprr src1 src2 cond =
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := !$src1 - !$src2;
-        set_sub !$src1 !$src2 Env.tmp
+        tmp := !$src1 - !$src2;
+        set_sub !$src1 !$src2 tmp
       ]
     ]
 
   let cmprsr src1 src2 sreg simm cond =
     let (shift_operand, _) = Shift.shift_r src2 simm sreg in
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := !$src1 - shift_operand;
-        set_sub !$src1 shift_operand Env.tmp
+        tmp := !$src1 - shift_operand;
+        set_sub !$src1 shift_operand tmp
       ]
     ]
 
   let cmprsi src1 src2 simm cond =
     let (shift_operand, _) = Shift.shift_i src2 simm in
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := !$src1 - shift_operand;
-        set_sub !$src1 shift_operand Env.tmp
+        tmp := !$src1 - shift_operand;
+        set_sub !$src1 shift_operand tmp
       ]
     ]
 
   let cmnri src1 src2 cond =
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := !$src1 + !$src2;
-        set_add !$src1 !$src2 Env.tmp
+        tmp := !$src1 + !$src2;
+        set_add !$src1 !$src2 tmp
       ]
     ]
 
   let cmnzrr src1 src2 cond =
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := !$src1 + !$src2;
-        set_add !$src1 !$src2 Env.tmp
+        tmp := !$src1 + !$src2;
+        set_add !$src1 !$src2 tmp
       ]
     ]
 
   let cmnzrsr src1 src2 sreg simm cond =
     let (shift_operand, _) = Shift.shift_r src2 simm sreg in
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := !$src1 + shift_operand;
-        set_add !$src1 shift_operand Env.tmp
+        tmp := !$src1 + shift_operand;
+        set_add !$src1 shift_operand tmp
       ]
     ]
 
   let cmnzrsi src1 src2 simm cond =
     let (shift_operand, _) = Shift.shift_i src2 simm in
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := !$src1 + shift_operand;
-        set_add !$src1 shift_operand Env.tmp
+        tmp := !$src1 + shift_operand;
+        set_add !$src1 shift_operand tmp
       ]
     ]
 

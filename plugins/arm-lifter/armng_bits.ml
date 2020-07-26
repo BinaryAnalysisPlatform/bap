@@ -55,33 +55,37 @@ module Bits(Core : Theory.Core) = struct
 
   let uxtab dest src1 src2 rot cond =
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond)[
-        Env.tmp := extend_to Env.byte (!$src2 >>> !$rot * imm 8) |> extend;
-        !$$dest := !$src1 + var Env.tmp
+        tmp := extend_to Env.byte (!$src2 >>> !$rot * imm 8) |> extend;
+        !$$dest := !$src1 + var tmp
       ]
     ]
 
   let uxtah dest src1 src2 rot cond =
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond)[
-        Env.tmp := extend_to Env.half_word (!$src2 >>> !$rot * imm 8) |> extend;
-        !$$dest := !$src1 + var Env.tmp
+        tmp := extend_to Env.half_word (!$src2 >>> !$rot * imm 8) |> extend;
+        !$$dest := !$src1 + var tmp
       ]
     ]
 
   let sxtab dest src1 src2 rot cond =
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond)[
-        Env.tmp := extend_to Env.byte (!$src2 >>> !$rot * imm 8) |> extend_signed;
-        !$$dest := !$src1 + var Env.tmp
+        tmp := extend_to Env.byte (!$src2 >>> !$rot * imm 8) |> extend_signed;
+        !$$dest := !$src1 + var tmp
       ]
     ]
 
   let sxtah dest src1 src2 rot cond =
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond)[
-        Env.tmp := extend_to Env.half_word (!$src2 >>> !$rot * imm 8) |> extend_signed;
-        !$$dest := !$src1 + var Env.tmp
+        tmp := extend_to Env.half_word (!$src2 >>> !$rot * imm 8) |> extend_signed;
+        !$$dest := !$src1 + var tmp
       ]
     ]
 
@@ -104,40 +108,44 @@ module Bits(Core : Theory.Core) = struct
   (** llvm-mc has kind of wierd definition for this *)
   let bfi dest src lsb width cond =
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := extract Env.value (!$lsb + !$width) !$lsb !$dest << !$lsb;
-        !$$dest := (!$dest lxor var Env.tmp) land 
+        tmp := extract Env.value (!$lsb + !$width) !$lsb !$dest << !$lsb;
+        !$$dest := (!$dest lxor var tmp) land 
                    (extract Env.value !$width (imm 0) !$src << !$lsb)
       ]
     ]
 
   let bfc dest lsb width cond =
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := extract Env.value (!$lsb + !$width) !$lsb !$dest << !$lsb;
+        tmp := extract Env.value (!$lsb + !$width) !$lsb !$dest << !$lsb;
         (* clear bit field *)
-        !$$dest := !$dest lxor var Env.tmp
+        !$$dest := !$dest lxor var tmp
       ]
     ]
 
   let rbit dest src cond =
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := imm 0;
+        tmp := imm 0;
         while_ (fun i -> Int.(i <= 31, i + 1)) 0 (fun i -> !% [
-            Env.tmp := var Env.tmp lor bool_as_bitv (msb (!$src << imm i));
-            Env.tmp := var Env.tmp << imm 1;
+            tmp := var tmp lor bool_as_bitv (msb (!$src << imm i));
+            tmp := var tmp << imm 1;
           ]) |> expand;
-        !$$dest := var Env.tmp;
+        !$$dest := var tmp;
       ]
     ]
 
   let swpb dest src1 src2 cond =
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := load (var Env.memory) !$src2 |> extend;
+        tmp := load (var Env.memory) !$src2 |> extend;
         Env.memory := store (var Env.memory) !$src2 (extend_to Env.byte !$src1);
-        !$$dest := var Env.tmp;
+        !$$dest := var tmp;
       ]
     ]
 
@@ -177,12 +185,13 @@ module Bits(Core : Theory.Core) = struct
 
   let clz dest src cond =
     DSL.[
+      local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
-        Env.tmp := !$src;
+        tmp := !$src;
         !$$dest := !!0;
         (* this couldn't by statically expanded *)
-        repeat (msb (var Env.tmp)) !%[
-          Env.tmp := var Env.tmp << !!1;
+        repeat (msb (var tmp)) !%[
+          tmp := var tmp << !!1;
           !$$dest := !$dest + imm 1
         ]
       ]
