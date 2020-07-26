@@ -61,16 +61,20 @@ module Mov(Core : Theory.Core) = struct
   (* a temp value is introduced here *)
   let addi8 dest immsrc =
     DSL.[
-      Env.tmp := !$dest;
-      !$$dest := !$dest + !$immsrc;
-      Flags.set_add (var Env.tmp) !$immsrc !$$dest
+      local_var >>= fun tmp -> !%[
+        tmp := !$dest;
+        !$$dest := !$dest + !$immsrc;
+        Flags.set_add (var tmp) !$immsrc !$$dest
+      ]
     ]
 
   let subi8 dest immsrc = 
     DSL.[
-      Env.tmp := !$dest;
-      !$$dest := !$dest - !$immsrc;
-      Flags.set_sub (var Env.tmp) !$immsrc !$$dest
+      local_var >>= fun tmp -> !%[
+        tmp := !$dest;
+        !$$dest := !$dest - !$immsrc;
+        Flags.set_sub (var tmp) !$immsrc !$$dest
+      ]
     ]
 
   let addrr d s1 s2 = 
@@ -91,9 +95,9 @@ module Mov(Core : Theory.Core) = struct
     ]
 
   (* Rd = (PC and 0xfffffffc) + (imm << 2) *)
-  let adr dest immsrc = 
+  let adr dest immsrc addr = 
     DSL.[
-      !$$dest := (var Env.pc) land (imm 0xFFFFFFFC) + !$immsrc << !!2
+      !$$dest := addr land (imm 0xFFFFFFFC) + !$immsrc << !!2
     ]
 
   let addrspi dest immsrc = 
@@ -113,16 +117,20 @@ module Mov(Core : Theory.Core) = struct
 
   let adc d s = 
     DSL.[
-      Env.tmp := !$d;
-      !$$d := !$d + !$s + bool_as_bitv (var Env.cf);
-      Flags.set_adc (var Env.tmp) !$s !$$d
+      local_var >>= fun tmp -> !%[
+        tmp := !$d;
+        !$$d := !$d + !$s + bool_as_bitv (var Env.cf);
+        Flags.set_adc (var tmp) !$s !$$d
+      ]
     ]
 
   let sbc d s =
     DSL.[
-      Env.tmp := !$d;
-      !$$d := !$s - !$d - bool_as_bitv (var Env.cf |> inv);
-      Flags.set_sbc (var Env.tmp) !$s !$$s
+      local_var >>= fun tmp -> !%[
+        tmp := !$d;
+        !$$d := !$s - !$d - bool_as_bitv (var Env.cf |> inv);
+        Flags.set_sbc (var tmp) !$s !$$s
+      ]
     ]
 
   let andrr dest src = 
@@ -178,26 +186,34 @@ module Mov(Core : Theory.Core) = struct
 
   let cmnz dest src = 
     DSL.[
-      Env.tmp := !$dest + !$src;
-      Flags.set_add !$dest !$src Env.tmp
+      local_var >>= fun tmp -> !%[
+        tmp := !$dest + !$src;
+        Flags.set_add !$dest !$src tmp
+      ]
     ]
 
   let cmpi8 dest immsrc = 
     DSL.[
-      Env.tmp := !$dest - !$immsrc;
-      Flags.set_sub !$dest !$immsrc Env.tmp
+      local_var >>= fun tmp -> !%[
+        tmp := !$dest - !$immsrc;
+        Flags.set_sub !$dest !$immsrc tmp
+      ]
     ]
 
   let cmpr dest src = 
     DSL.[
-      Env.tmp := !$dest - !$src;
-      Flags.set_sub !$dest !$src Env.tmp
+      local_var >>= fun tmp -> !%[
+        tmp := !$dest - !$src;
+        Flags.set_sub !$dest !$src tmp
+      ]
     ]
 
   let cmphir dest src = 
     DSL.[
-      Env.tmp := !$+dest - !$+src;
-      Flags.set_sub !$+dest !$+src Env.tmp
+      local_var >>= fun tmp -> !%[
+        tmp := !$+dest - !$+src;
+        Flags.set_sub !$+dest !$+src tmp
+      ]
     ]
 
   let eor dest src = 
@@ -340,8 +356,10 @@ module Mov(Core : Theory.Core) = struct
 
   let tst dest src = 
     DSL.[
-      Env.tmp := !$dest land !$src;
-      Flags.set_nzf Env.tmp
+      local_var >>= fun tmp -> !%[
+        tmp := !$dest land !$src;
+        Flags.set_nzf tmp
+      ]
     ]
 
 end

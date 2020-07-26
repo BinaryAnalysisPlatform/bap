@@ -37,37 +37,35 @@ module Env = struct
   let memory = Theory.Var.define heap_type "mem"
 
   (** define grps *)
-  let r0 = Theory.Var.define value "r0"
-  let r1 = Theory.Var.define value "r1"
-  let r2 = Theory.Var.define value "r2"
-  let r3 = Theory.Var.define value "r3"
-  let r4 = Theory.Var.define value "r4"
-  let r5 = Theory.Var.define value "r5"
-  let r6 = Theory.Var.define value "r6"
-  let r7 = Theory.Var.define value "r7"
+  let r0 = Theory.Var.define value "R0"
+  let r1 = Theory.Var.define value "R1"
+  let r2 = Theory.Var.define value "R2"
+  let r3 = Theory.Var.define value "R3"
+  let r4 = Theory.Var.define value "R4"
+  let r5 = Theory.Var.define value "R5"
+  let r6 = Theory.Var.define value "R6"
+  let r7 = Theory.Var.define value "R7"
 
   (** grps which are not commonly accessible *)
-  let r8 = Theory.Var.define value "r8"
-  let r9 = Theory.Var.define value "r9"
-  let r10 = Theory.Var.define value "r10"
-  let r11 = Theory.Var.define value "r11"
-  let r12 = Theory.Var.define value "r12"
+  let r8 = Theory.Var.define value "R8"
+  let r9 = Theory.Var.define value "R9"
+  let r10 = Theory.Var.define value "R10"
+  let r11 = Theory.Var.define value "R11"
+  let r12 = Theory.Var.define value "R12"
 
-  let lr = Theory.Var.define value "lr"
-  let pc = Theory.Var.define value "pc"
-  let sp = Theory.Var.define value "sp"
+  let lr = Theory.Var.define value "LR"
+  (* let pc = Theory.Var.define value "PC" *)
+  let sp = Theory.Var.define value "SP"
   (* The following are temporarily not used *)
-  let spsr = Theory.Var.define value "spsr"
-  let cpsr = Theory.Var.define value "cpsr"
+  let spsr = Theory.Var.define value "SPSR"
+  let cpsr = Theory.Var.define value "CPSR"
   (* The following are individual flag *)
-  let nf = Theory.Var.define bit "nf"
-  let zf = Theory.Var.define bit "zf"
-  let cf = Theory.Var.define bit "cf"
-  let vf = Theory.Var.define bit "vf"
-  let qf = Theory.Var.define bit "qf"
-  let ge = Theory.Var.define half_byte "ge"
-  (* psuedo register storing temporary computations *)
-  let tmp = Theory.Var.define value "tmp"
+  let nf = Theory.Var.define bit "NF"
+  let zf = Theory.Var.define bit "ZF"
+  let cf = Theory.Var.define bit "CF"
+  let vf = Theory.Var.define bit "VF"
+  let qf = Theory.Var.define bit "QF"
+  let ge = Theory.Var.define half_byte "GE"
 
   exception Unbound_Reg
   module Defs = Thumb_defs
@@ -93,7 +91,7 @@ module Env = struct
     | `R12 -> r12
     | `LR -> lr
     | `SP -> sp
-    | `PC -> pc
+    | `PC (* pc should never normally occur *)
     | _ -> raise Unbound_Reg
 
   let load_reg (op : Defs.reg) = let open Thumb_defs in
@@ -108,7 +106,7 @@ module Env = struct
     | `R7 -> r7
     | `LR -> lr
     | `SP -> sp
-    | `PC -> pc
+    | `PC (* pc should never normally occur *)
     | _ -> raise Unbound_Reg
 
 end

@@ -43,52 +43,45 @@ module Branch(Core : Theory.Core) = struct
         | `LE -> or_ z (eq_ n v |> inv)
         | `AL -> b1 in 
       let jump_address = DSL.(addr + !$target) in
-      let eff_hold = (jmp jump_address, set Env.pc jump_address) in
+      let eff_hold = (jmp jump_address, pass) in
       if always_true then eff_hold 
       else (
         branch cond_val (fst eff_hold) skip, (* control effect branch *)
-        branch cond_val (snd eff_hold) pass  (* data effect branch *)
+        pass  (* data effect branch *)
       )
     | _ -> raise @@ Lift_Error "operands must be immediate"
 
   let tb target addr =
     (DSL.(
         jmp (!$target + addr)
-      ), DSL.(
-        Env.pc := (!$target + addr)
-      ))
+      ), pass)
 
-  let tbl target =
+  let tbl target addr =
     (DSL.(
         jmp !$target
-      ), DSL.[
-        Env.lr := ((var Env.pc) - !!2) lor !!1;
-        Env.pc := !$target
-      ] |> DSL.expand)
+      ), DSL.(
+        Env.lr := (addr - !!2) lor !!1
+      ))
 
   (* TODO : switch to normal mode *)
-  let tblxi target =
+  let tblxi target addr =
     (DSL.(
         jmp (!$target land !!0xfffffffc)
-      ), DSL.[
-        Env.lr := ((var Env.pc) - !!2) lor !!1;
-        Env.pc := (!$target land !!0xfffffffc)
-      ] |> DSL.expand)
+      ), DSL.(
+        Env.lr := (addr - !!2) lor !!1
+      ))
 
-  let tblxr target =
+  let tblxr target addr =
     (DSL.(
         jmp (!$+target land !!0xfffffffe)
-      ), DSL.[
-        Env.lr := ((var Env.pc) - !!2) lor !!1;
-        Env.pc := (!$+target land !!0xfffffffe)
-      ] |> DSL.expand)
+      ), DSL.(
+        Env.lr := (addr - !!2) lor !!1
+      ))
 
   let tbx target =
     (DSL.(
         (* reference here is PC = Rm[31:1] << 1 *)
         jmp (extract Env.value !!31 !!1 !$+target << !!1)
-      ), DSL.(
-        Env.pc := (extract Env.value !!31 !!1 !$+target << !!1)
-      ))
+      ), pass)
 
 end

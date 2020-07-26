@@ -37,50 +37,53 @@ module Mem(Core : Theory.Core) = struct
           then List.sub src_list ~pos:1 ~len:(List.length src_list - 1) 
           else src_list in
         let r = reg r in
-        seq (List.fold src_list ~init:(set Env.tmp (var r)) 
+        Theory.Var.fresh Env.value >>= fun tmp ->
+        seq (List.fold src_list ~init:(set tmp (var r)) 
                ~f:(fun eff src -> match src with
                    | `Reg s -> let src = reg s in seq eff
                        (seq
-                          (loadw Env.value b0 (var Env.memory) (var Env.tmp) |> set src)
-                          (set Env.tmp (add (var Env.tmp) (bitv_of 4)))
+                          (loadw Env.value b0 (var Env.memory) (var tmp) |> set src)
+                          (set tmp (add (var tmp) (bitv_of 4)))
                        )
                    | _ -> raise (Lift_Error "`src` must be a register")
-                 )) (set r (var Env.tmp))
+                 )) (set r (var tmp))
     | _ -> raise (Lift_Error "`dest` must be a register")
   (* the `R` bit is automatically resolved *)
   let push_multiple src_list =
+    Theory.Var.fresh Env.value >>= fun tmp ->
     let shift x = bitv_of 2 |> shiftl b0 x in
     let offset = List.length src_list |> bitv_of |> shift in
-    let initial = set Env.tmp (sub (var Env.sp) offset) in
+    let initial = set tmp (sub (var Env.sp) offset) in
     seq (List.fold src_list ~init:initial 
            ~f:(fun eff src -> match src with
                | `Reg s -> let src = reg s in seq eff
                    (seq
-                      (storew b0 (var Env.memory) (var Env.tmp) (var src) |> set Env.memory)
-                      (set Env.tmp (add (var Env.tmp) (bitv_of 4)))
+                      (storew b0 (var Env.memory) (var tmp) (var src) |> set Env.memory)
+                      (set tmp (add (var tmp) (bitv_of 4)))
                    )
                | _ -> raise (Lift_Error "`src` must be a register")
              )) (set Env.sp (sub (var Env.sp) offset))
   (* TODO: PC might change here *)
-  let pop_multiple src_list =
-    let initial = set Env.tmp (var Env.sp) in
+  let pop_multiple src_list pc =
+    Theory.Var.fresh Env.value >>= fun tmp ->
+    let initial = set tmp (var Env.sp) in
     seq (List.fold src_list ~init:initial 
            ~f:(fun eff src -> match src with
-               | `Reg `PC -> let src = reg_wide `PC in seq eff
-                   (seq
-                      (logand 
-                         (loadw Env.value b0 (var Env.memory) (var Env.tmp)) 
-                         (bitv_of 0xfffffffe) 
-                       |> set src)
-                      (set Env.tmp (add (var Env.tmp) (bitv_of 4)))
-                   )
+               | `Reg `PC -> seq eff
+                               (seq
+                                  (logand 
+                                     (loadw Env.value b0 (var Env.memory) (var tmp)) 
+                                     (bitv_of 0xfffffffe) 
+                                   |> set pc)
+                                  (set tmp (add (var tmp) (bitv_of 4)))
+                               )
                | `Reg s -> let src = reg s in seq eff
                    (seq
-                      (loadw Env.value b0 (var Env.memory) (var Env.tmp) |> set src)
-                      (set Env.tmp (add (var Env.tmp) (bitv_of 4)))
+                      (loadw Env.value b0 (var Env.memory) (var tmp) |> set src)
+                      (set tmp (add (var tmp) (bitv_of 4)))
                    )
                | _ -> raise (Lift_Error "`src` must be a register")
-             )) (set Env.sp (var Env.tmp))
+             )) (set Env.sp (var tmp))
 
   let lift_mem_single ?(sign = false) ?(shift_val = 2) dest src1 ?src2 (op : Defs.operation) (size : Defs.size) =
     let open Defs in

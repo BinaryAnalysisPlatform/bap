@@ -32,15 +32,16 @@ module Thumb(Core : Theory.Core) = struct
     Theory.Label.for_addr pc >>= fun lbl ->
     blk lbl data eff
 
-  let lift_move insn ops =
+  let lift_move insn ops addr =
     let open Mov in
+    let addr = Core.int Env.value addr in
     match insn, ops with
     | `tADC, [|dest; _cpsr; _dest; src; _unknown; _|] -> adc dest src
     | `tADDi3, [|dest; _cpsr; src; imm; _unknown; _|] -> addi3 dest src imm
     | `tADDi8, [|dest; _cpsr; _dest; imm; _unknown; _|] -> addi8 dest imm
     | `tADDrr, [|dest; _cpsr; src1; src2; _unknown; _|] -> addrr dest src1 src2
     | `tADDhirr, [|dest; _dest; src; _unknown; _|] -> addhirr dest src
-    | `tADR, [|dest; imm; _unknown; _|] -> adr dest imm
+    | `tADR, [|dest; imm; _unknown; _|] -> adr dest imm addr
     | `tADDrSPi, [|dest; `Reg `SP; imm; _unknown; _|] -> addrspi dest imm
     | `tADDspi, [|`Reg `SP; _sp; imm; _unknown; _|] -> addspi imm
     | `tMOVr, [|dest; src; _unknown; _|] -> mover dest src
@@ -126,13 +127,14 @@ module Thumb(Core : Theory.Core) = struct
     | `tPUSH, _unknown :: _nil_reg :: src_list ->
       Mem.push_multiple src_list |> move
     | `tPOP, _unknown :: _nil_reg :: src_list ->
+      Theory.Var.fresh Env.value >>= fun pc ->
       let has_pc = List.exists src_list 
           (fun s -> match s with
              |`Reg `PC -> true
              | _ -> false) in
-      let pop_eff = Mem.pop_multiple src_list in
+      let pop_eff = Mem.pop_multiple src_list pc in
       if has_pc then
-        ctrl (jmp (var Env.pc)) pop_eff addr
+        ctrl (jmp (var pc)) pop_eff addr
       else move pop_eff
     | _ -> move pass
 
@@ -153,16 +155,16 @@ module Thumb(Core : Theory.Core) = struct
     match insn, ops with
     | `tBcc, [|target; cond; _cpsr|] -> tbcc cond target addr
     | `tB, [|target; _unknown; _|] -> tb target addr
-    | `tBL, [|_unknown; _nil_reg; target; _cpsr|] -> tbl target
-    | `tBLXi, [|_unknown; _nil_reg; target; _cpsr|] -> tblxi target
-    | `tBLXr, [|_unknown; _nil_reg; target|] -> tblxr target
+    | `tBL, [|_unknown; _nil_reg; target; _cpsr|] -> tbl target addr 
+    | `tBLXi, [|_unknown; _nil_reg; target; _cpsr|] -> tblxi target addr
+    | `tBLXr, [|_unknown; _nil_reg; target|] -> tblxr target addr
     | `tBX, [|target; _unknown; _|] -> tbx target
     | _ -> (skip, pass)
 
   let lift_with (addr : Bitvec.t) (insn : Thumb_defs.insn)
       (ops : Thumb_defs.op array) =
     match insn with
-    | #move_insn -> lift_move insn ops |> DSL.expand |> move
+    | #move_insn -> lift_move insn ops addr |> DSL.expand |> move
     | #mem_insn -> lift_mem insn ops addr
     | #bits_insn -> lift_bits insn ops |> DSL.expand |> move
     | #branch_insn -> 
