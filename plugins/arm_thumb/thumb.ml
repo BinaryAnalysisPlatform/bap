@@ -34,7 +34,6 @@ module Thumb(Core : Theory.Core) = struct
 
   let lift_move insn ops addr =
     let open Mov in
-    let addr = Core.int Env.value addr in
     match insn, ops with
     | `tADC, [|dest; _cpsr; _dest; src; _unknown; _|] -> adc dest src
     | `tADDi3, [|dest; _cpsr; src; imm; _unknown; _|] -> addi3 dest src imm
@@ -61,7 +60,6 @@ module Thumb(Core : Theory.Core) = struct
     | `tCMNz, [|dest; src; _unknown; _|] -> cmnz dest src (* TODO : we've got an error here *)
     | `tCMPi8, [|dest; imm; _unknown; _|] -> cmpi8 dest imm
     | `tCMPr, [|dest; src; _unknown; _|] -> cmpr dest src
-    | `tCMPhir, [|dest; src; _unknown; _|] -> cmphir dest src
     | `tEOR, [|dest; _cpsr; _dest; src; _unknown; _|] -> eor dest src
     | `tLSLri, [|dest; _cpsr; src; imm; _unknown; _|] -> lsli dest src imm
     | `tLSLrr, [|dest; _cpsr; _dest; src; _unknown; _|] -> lslr dest src
@@ -75,6 +73,28 @@ module Thumb(Core : Theory.Core) = struct
     | `tROR, [|dest; _cpsr; _dest; src; _unknown; _|] -> ror dest src
     | `tTST, [|dest; src; _unknown; _|] -> tst dest src
     | _ -> []
+
+  let lift_move_pre insn ops addr =
+    let open Mov in
+    let addr_bitv = Core.int Env.value addr in
+    let filter_pc = function
+      | `Reg `PC -> addr_bitv
+      | src -> DSL.(!$src) in
+    match insn, ops with (* resolve the PC-involved instructions here *)
+    | `tMOVr, [|`Reg `PC; src; _unknown; _|] -> 
+      ctrl DSL.(jmp !$+src) pass addr
+    | `tMOVr, [|dest; `Reg `PC; _unknown; _|] ->
+      move DSL.(!$$+dest := addr_bitv)
+    | `tADDhirr, [|`Reg `PC; _dest; src; _unknown; _|] ->
+      let src = filter_pc src in
+      ctrl DSL.(jmp (src + addr_bitv)) pass addr
+    | `tADDhirr, [|dest; _dest; `Reg `PC; _unknown; _|] ->
+      move DSL.(!$$+dest := !$+dest + addr_bitv)
+    | `tCMPhir, [|dest; src; _unknown; _|] -> 
+      let src = filter_pc src in
+      let dest = filter_pc dest in
+      cmphir dest src |> DSL.expand |> move
+    | _, _ -> lift_move insn ops addr_bitv |> DSL.expand |> move
 
   let lift_mem_single ?(sign = false) ?(shift_val = 2) dest src1 ?src2 (op : Defs.operation) (size : Defs.size) =
     match src2 with
@@ -164,7 +184,7 @@ module Thumb(Core : Theory.Core) = struct
   let lift_with (addr : Bitvec.t) (insn : Thumb_defs.insn)
       (ops : Thumb_defs.op array) =
     match insn with
-    | #move_insn -> lift_move insn ops addr |> DSL.expand |> move
+    | #move_insn -> lift_move_pre insn ops addr
     | #mem_insn -> lift_mem insn ops addr
     | #bits_insn -> lift_bits insn ops |> DSL.expand |> move
     | #branch_insn -> 

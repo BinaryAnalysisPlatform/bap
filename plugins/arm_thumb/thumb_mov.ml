@@ -211,8 +211,8 @@ module Mov(Core : Theory.Core) = struct
   let cmphir dest src = 
     DSL.[
       local_var >>= fun tmp -> !%[
-        tmp := !$+dest - !$+src;
-        Flags.set_sub !$+dest !$+src tmp
+        tmp := dest - src;
+        Flags.set_sub dest src tmp
       ]
     ]
 
