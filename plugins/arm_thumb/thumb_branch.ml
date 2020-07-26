@@ -42,7 +42,7 @@ module Branch(Core : Theory.Core) = struct
         | `GT -> and_ (inv z) (eq_ n v)
         | `LE -> or_ z (eq_ n v |> inv)
         | `AL -> b1 in 
-      let jump_address = DSL.(addr + !$target) in
+      let jump_address = DSL.(addr + !$target + !!2) in
       let eff_hold = (jmp jump_address, pass) in
       if always_true then eff_hold 
       else (
@@ -53,12 +53,12 @@ module Branch(Core : Theory.Core) = struct
 
   let tb target addr =
     (DSL.(
-        jmp (!$target + addr)
+        jmp (!$target + addr + !!2)
       ), pass)
 
   let tbl target addr =
     (DSL.(
-        jmp !$target
+        jmp (addr + !$target + !!4)
       ), DSL.(
         Env.lr := (addr - !!2) lor !!1
       ))
@@ -66,7 +66,7 @@ module Branch(Core : Theory.Core) = struct
   (* TODO : switch to normal mode *)
   let tblxi target addr =
     (DSL.(
-        jmp (!$target land !!0xfffffffc)
+        jmp ((addr + !$target + !!4) land !!0xfffffffc)
       ), DSL.(
         Env.lr := (addr - !!2) lor !!1
       ))
