@@ -216,6 +216,8 @@ let run_lifter _label addr insn mem
     | Error err -> raise (Defs.Lift_Error (Error.to_string_hum err))
     | Ok ops -> lifter addr arm_insn ops
 
+include Self()
+
 let () =
   KB.promise Theory.Program.Semantics.slot @@ fun label ->
   Theory.instance () >>= Theory.require >>= fun (module Core) ->
@@ -227,5 +229,10 @@ let () =
   | #Arch.thumbeb, Some insn, Some mem
   | #Arch.thumb, Some insn, Some mem ->
     let addr = Word.to_bitvec@@Memory.min_addr mem in
-    run_lifter label addr insn mem Lifter.lift_with
+    (match Or_error.try_with (
+         fun () -> run_lifter label addr insn mem Lifter.lift_with
+       ) with
+     | Ok semantics -> semantics
+     | Error err -> warning "%s" (Error.to_string_hum err);
+       KB.return Insn.empty)
   | _ -> KB.return Insn.empty
