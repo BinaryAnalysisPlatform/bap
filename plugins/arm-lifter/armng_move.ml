@@ -62,7 +62,7 @@ module Mov(Core : Theory.Core) = struct
 
   (** this is expected with PC change *)
   let movpclr cond wflag address =
-  let addr_val = Core.int Env.value address in
+    let addr_val = Core.int Env.value address in
     DSL.[
       if_ (resolve_cond cond) [
         when_ (is_cpsr wflag) [
