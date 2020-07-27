@@ -27,7 +27,7 @@ module Branch(Core : Theory.Core) = struct
         if Word.equal offset int32_min 
         then DSL.imm 0 
         else DSL.word_as_bitv offset in
-      DSL.(addr + var Env.pc + offset)
+      DSL.(addr + offset)
 
   let bcc offset cond addr =
     let target = target_address offset addr in
@@ -41,7 +41,7 @@ module Branch(Core : Theory.Core) = struct
     let addr_val = Core.int Env.value addr in
     DSL.(
       if_ (resolve_cond cond) [
-        Env.lr := addr_val + var Env.pc - !!4;
+        Env.lr := addr_val - !!4;
         ctrl addr @@ jmp target
       ])
 
@@ -50,7 +50,7 @@ module Branch(Core : Theory.Core) = struct
     let addr_val = Core.int Env.value addr in
     DSL.(
       if_ (resolve_cond cond) [
-        Env.lr := addr_val + var Env.pc - !!4;
+        Env.lr := addr_val - !!4;
         ctrl addr @@ jmp target
       ])
 
@@ -79,7 +79,7 @@ module Branch(Core : Theory.Core) = struct
     let addr_val = Core.int Env.value addr in
     DSL.(
       if_ (`Const true) [
-        Env.lr := addr_val + var Env.pc - !!4;
+        Env.lr := addr_val - !!4;
         ctrl addr @@ jmp target;
       ]
     )
@@ -89,7 +89,7 @@ module Branch(Core : Theory.Core) = struct
     let addr_val = Core.int Env.value addr in
     DSL.(
       if_ (resolve_cond cond) [
-        Env.lr := addr_val + var Env.pc - !!4;
+        Env.lr := addr_val - !!4;
         ctrl addr @@ jmp target
       ])
 
@@ -98,7 +98,7 @@ module Branch(Core : Theory.Core) = struct
     let addr_val = Core.int Env.value addr in
     DSL.(
       if_ (`Const true) [
-        Env.lr := addr_val + var Env.pc - !!4;
+        Env.lr := addr_val - !!4;
         ctrl addr @@ jmp target;
       ]
     )

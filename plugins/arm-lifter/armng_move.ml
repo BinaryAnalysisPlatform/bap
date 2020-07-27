@@ -62,14 +62,14 @@ module Mov(Core : Theory.Core) = struct
 
   (** this is expected with PC change *)
   let movpclr cond wflag address =
+  let addr_val = Core.int Env.value address in
     DSL.[
       if_ (resolve_cond cond) [
-        Env.pc := var Env.lr;
         when_ (is_cpsr wflag) [
-          set_nzf (var Env.pc);
-        ]
+          set_nzf addr_val;
+        ];
+        ctrl address @@ jmp addr_val
       ];
-      ctrl address @@ jmp (var Env.pc)
     ]
 
   let mvni dest src cond wflag =
