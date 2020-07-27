@@ -54,11 +54,11 @@ module Special(Core : Theory.Core) = struct
     DSL.[
       if_ (resolve_cond cond) [
         when_ Int.(value land 0x8 = 0x8) [
-          Env.nf := nth_bit !!31 !$src;
-          Env.zf := nth_bit !!30 !$src;
-          Env.cf := nth_bit !!29 !$src;
-          Env.vf := nth_bit !!28 !$src;
-          Env.qf := nth_bit !!27 !$src;
+          data (Env.nf <== nth_bit !!31 !$src);
+          data (Env.zf <== nth_bit !!30 !$src);
+          data (Env.cf <== nth_bit !!29 !$src);
+          data (Env.vf <== nth_bit !!28 !$src);
+          data (Env.qf <== nth_bit !!27 !$src);
         ];
         when_ Int.(value land 0x4 = 0x4) [
           Env.ge := concat Env.half_byte [

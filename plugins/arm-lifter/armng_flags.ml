@@ -16,33 +16,33 @@ module Flags(Core : Theory.Core) = struct
   module DSL = Armng_dsl.Make(Core)
   module DSL_Extend = Armng_dsl.Make_Extend(Core)(ExtendValude)
 
-  let set_nzf r : Theory.data Theory.eff =
+  let set_nzf r : unit Theory.eff =
     DSL.[
-      Env.nf := (msb (var r));
-      Env.zf := (var r = imm 0)
+      data (Env.nf <== (msb r));
+      data (Env.zf <== (r = imm 0))
     ] |> DSL.expand
 
   let set_vnzf_add s1 s2 r = 
     DSL.[
-      Env.vf := lnot (s1 lxor s2) land (s1 lxor var r) |> msb;
+      data (Env.vf <== (lnot (s1 lxor s2) land (s1 lxor r) |> msb));
       set_nzf r
     ] |> DSL.expand
 
   let set_add s1 s2 r =
     DSL.[
-      Env.cf := var r < s1;
+      data (Env.cf <== (r < s1));
       set_vnzf_add s1 s2 r
     ] |> DSL.expand
 
   let set_vnzf_sub s1 s2 r = 
     DSL.[
-      Env.vf := s1 lxor s2 land s1 lxor var r |> msb;
+      data (Env.vf <== (s1 lxor s2 land s1 lxor r |> msb));
       set_nzf r
     ] |> DSL.expand
 
   let set_sub s1 s2 r =
     DSL.[
-      Env.cf := s1 <= s1;
+      data (Env.cf <== (s1 <= s1));
       set_vnzf_sub s1 s2 r
     ] |> DSL.expand
 
@@ -53,7 +53,7 @@ module Flags(Core : Theory.Core) = struct
   (* dsl arithmetic value is extended here for taking the msb *)
   let set_adc s1 s2 r =
     DSL_Extend.[
-      Env.cf := s1 + s2 + (as_bitv (var Env.cf)) |> msb;
+      data (Env.cf <== (s1 + s2 + (as_bitv (var Env.cf)) |> msb));
       set_vnzf_add s1 s2 r
     ] |> DSL.expand
 

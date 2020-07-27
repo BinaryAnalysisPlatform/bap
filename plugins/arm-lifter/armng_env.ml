@@ -56,6 +56,7 @@ module Env = struct
   let r12 = Theory.Var.define value "R12"
 
   let lr = Theory.Var.define value "LR"
+  (* in no case this var should be assigned with any value, it's merely a placeholder *)
   let pc = Theory.Var.define value "PC"
   let sp = Theory.Var.define value "SP"
   (* The following are temporarily not used *)

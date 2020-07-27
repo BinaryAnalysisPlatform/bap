@@ -20,7 +20,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest
+          set_nzf !$dest
         ]
       ]
     ]
@@ -31,7 +31,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest
+          set_nzf !$dest
         ]
       ]
     ]
@@ -42,8 +42,8 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := shift_operand;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest;
-          Env.cf := carry
+          set_nzf !$dest;
+          data (Env.cf <== carry)
         ]
       ]
     ]
@@ -54,29 +54,30 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := shift_operand;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest;
-          Env.cf := carry
+          set_nzf !$dest;
+          data (Env.cf <== carry)
         ]
       ]
     ]
 
   (** this is expected with PC change *)
-  let movpclr cond wflag =
-    (DSL.[
-        if_ (resolve_cond cond) [
-          Env.pc := var Env.lr;
-          when_ (is_cpsr wflag) [
-            set_nzf Env.pc;
-          ]
+  let movpclr cond wflag address =
+    DSL.[
+      if_ (resolve_cond cond) [
+        Env.pc := var Env.lr;
+        when_ (is_cpsr wflag) [
+          set_nzf (var Env.pc);
         ]
-      ], jmp (var Env.pc))
+      ];
+      ctrl address @@ jmp (var Env.pc)
+    ]
 
   let mvni dest src cond wflag =
     DSL.[
       if_ (resolve_cond cond) [
         !$$dest := not !$src;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest
+          set_nzf !$dest
         ]
       ]
     ]
@@ -86,7 +87,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := not !$src;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest
+          set_nzf !$dest
         ]
       ]
     ]
@@ -97,8 +98,8 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := not shift_operand;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest;
-          Env.cf := carry
+          set_nzf !$dest;
+          data (Env.cf <== carry)
         ]
       ]
     ]
@@ -109,8 +110,8 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := not shift_operand;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest;
-          Env.cf := carry
+          set_nzf !$dest;
+          data (Env.cf <== carry)
         ]
       ]
     ]
@@ -120,7 +121,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 land !$src2;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest
+          set_nzf !$dest
         ]
       ]
     ]
@@ -130,7 +131,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 land !$src2;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest
+          set_nzf !$dest
         ]
       ]
     ]
@@ -141,8 +142,8 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 land shift_operand;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest;
-          Env.cf := carry
+          set_nzf !$dest;
+          data (Env.cf <== carry)
         ]
       ]
     ]
@@ -153,8 +154,8 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 land shift_operand;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest;
-          Env.cf := carry
+          set_nzf !$dest;
+          data (Env.cf <== carry)
         ]
       ]
     ]
@@ -164,7 +165,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 land lnot !$src2;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest
+          set_nzf !$dest
         ]
       ]
     ]
@@ -174,7 +175,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 land lnot !$src2;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest
+          set_nzf !$dest
         ]
       ]
     ]
@@ -185,8 +186,8 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 land lnot shift_operand;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest;
-          Env.cf := carry
+          set_nzf !$dest;
+          data (Env.cf <== carry)
         ]
       ]
     ]
@@ -197,8 +198,8 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 land lnot shift_operand;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest;
-          Env.cf := carry
+          set_nzf !$dest;
+          data (Env.cf <== carry)
         ]
       ]
     ]
@@ -208,7 +209,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 lxor !$src2;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest
+          set_nzf !$dest
         ]
       ]
     ]
@@ -218,7 +219,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 lxor !$src2;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest
+          set_nzf !$dest
         ]
       ]
     ]
@@ -229,8 +230,8 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 lxor shift_operand;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest;
-          Env.cf := carry
+          set_nzf !$dest;
+          data (Env.cf <== carry)
         ]
       ]
     ]
@@ -241,8 +242,8 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 lxor shift_operand;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest;
-          Env.cf := carry
+          set_nzf !$dest;
+          data (Env.cf <== carry)
         ]
       ]
     ]
@@ -252,7 +253,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 lor !$src2;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest
+          set_nzf !$dest
         ]
       ]
     ]
@@ -262,7 +263,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 lor !$src2;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest
+          set_nzf !$dest
         ]
       ]
     ]
@@ -273,8 +274,8 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 lor shift_operand;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest;
-          Env.cf := carry
+          set_nzf !$dest;
+          data (Env.cf <== carry)
         ]
       ]
     ]
@@ -285,8 +286,8 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 lor shift_operand;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest;
-          Env.cf := carry
+          set_nzf !$dest;
+          data (Env.cf <== carry)
         ]
       ]
     ]
@@ -296,7 +297,7 @@ module Mov(Core : Theory.Core) = struct
       local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
         tmp := !$src1 lxor !$src2;
-        set_nzf tmp
+        set_nzf (var tmp)
       ]
     ]
 
@@ -305,7 +306,7 @@ module Mov(Core : Theory.Core) = struct
       local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
         tmp := !$src1 lxor !$src2;
-        set_nzf tmp
+        set_nzf (var tmp)
       ]
     ]
 
@@ -315,8 +316,8 @@ module Mov(Core : Theory.Core) = struct
       local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
         tmp := !$src1 lxor shift_operand;
-        set_nzf tmp;
-        Env.cf := carry
+        set_nzf (var tmp);
+        data (Env.cf <== carry)
       ]
     ]
 
@@ -326,8 +327,8 @@ module Mov(Core : Theory.Core) = struct
       local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
         tmp := !$src1 lxor shift_operand;
-        set_nzf tmp;
-        Env.cf := carry
+        set_nzf (var tmp);
+        data (Env.cf <== carry)
       ]
     ]
 
@@ -336,7 +337,7 @@ module Mov(Core : Theory.Core) = struct
       local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
         tmp := !$src1 land !$src2;
-        set_nzf tmp
+        set_nzf (var tmp)
       ]
     ]
 
@@ -345,7 +346,7 @@ module Mov(Core : Theory.Core) = struct
       local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
         tmp := !$src1 land !$src2;
-        set_nzf tmp
+        set_nzf (var tmp)
       ]
     ]
 
@@ -355,8 +356,8 @@ module Mov(Core : Theory.Core) = struct
       local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
         tmp := !$src1 land shift_operand;
-        set_nzf tmp;
-        Env.cf := carry
+        set_nzf (var tmp);
+        data (Env.cf <== carry)
       ]
     ]
 
@@ -366,8 +367,8 @@ module Mov(Core : Theory.Core) = struct
       local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
         tmp := !$src1 land shift_operand;
-        set_nzf tmp;
-        Env.cf := carry
+        set_nzf (var tmp);
+        data (Env.cf <== carry)
       ]
     ]
 
@@ -376,7 +377,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 + !$src2;
         when_ (is_cpsr wflag) [
-          set_add !$src1 !$src2 !$$dest
+          set_add !$src1 !$src2 !$dest
         ]
       ]
     ]
@@ -386,7 +387,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 + !$src2;
         when_ (is_cpsr wflag) [
-          set_add !$src1 !$src2 !$$dest
+          set_add !$src1 !$src2 !$dest
         ]
       ]
     ]
@@ -397,7 +398,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 + shift_operand;
         when_ (is_cpsr wflag) [
-          set_add !$src1 shift_operand !$$dest
+          set_add !$src1 shift_operand !$dest
         ]
       ]
     ]
@@ -408,7 +409,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 + shift_operand;
         when_ (is_cpsr wflag) [
-          set_add !$src1 shift_operand !$$dest
+          set_add !$src1 shift_operand !$dest
         ]
       ]
     ]
@@ -418,7 +419,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 - !$src2;
         when_ (is_cpsr wflag) [
-          set_sub !$src1 !$src2 !$$dest
+          set_sub !$src1 !$src2 !$dest
         ]
       ]
     ]
@@ -428,7 +429,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 - !$src2;
         when_ (is_cpsr wflag) [
-          set_sub !$src1 !$src2 !$$dest
+          set_sub !$src1 !$src2 !$dest
         ]
       ]
     ]
@@ -439,7 +440,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 - shift_operand;
         when_ (is_cpsr wflag) [
-          set_sub !$src1 shift_operand !$$dest
+          set_sub !$src1 shift_operand !$dest
         ]
       ]
     ]
@@ -450,7 +451,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 - shift_operand;
         when_ (is_cpsr wflag) [
-          set_sub !$src1 shift_operand !$$dest
+          set_sub !$src1 shift_operand !$dest
         ]
       ]
     ]
@@ -461,7 +462,7 @@ module Mov(Core : Theory.Core) = struct
         (let cf = bool_as_bitv (var Env.cf) in
          !$$dest := !$src1 + !$src2 + cf);
         when_ (is_cpsr wflag) [
-          set_adc !$src1 !$src2 !$$dest
+          set_adc !$src1 !$src2 !$dest
         ]
       ]
     ]
@@ -472,7 +473,7 @@ module Mov(Core : Theory.Core) = struct
         (let cf = bool_as_bitv (var Env.cf) in
          !$$dest := !$src1 + !$src2 + cf);
         when_ (is_cpsr wflag) [
-          set_adc !$src1 !$src2 !$$dest
+          set_adc !$src1 !$src2 !$dest
         ]
       ]
     ]
@@ -484,7 +485,7 @@ module Mov(Core : Theory.Core) = struct
         (let cf = bool_as_bitv (var Env.cf) in
          !$$dest := !$src1 + shift_operand + cf);
         when_ (is_cpsr wflag) [
-          set_adc !$src1 shift_operand !$$dest
+          set_adc !$src1 shift_operand !$dest
         ]
       ]
     ]
@@ -496,7 +497,7 @@ module Mov(Core : Theory.Core) = struct
         (let cf = bool_as_bitv (var Env.cf) in
          !$$dest := !$src1 + shift_operand + cf);
         when_ (is_cpsr wflag) [
-          set_adc !$src1 shift_operand !$$dest
+          set_adc !$src1 shift_operand !$dest
         ]
       ]
     ]
@@ -507,7 +508,7 @@ module Mov(Core : Theory.Core) = struct
         (let cf = bool_as_bitv (var Env.cf) in
          !$$dest := !$src1 - !$src2 - not cf);
         when_ (is_cpsr wflag) [
-          set_sbc !$src1 !$src2 !$$dest
+          set_sbc !$src1 !$src2 !$dest
         ]
       ]
     ]
@@ -518,7 +519,7 @@ module Mov(Core : Theory.Core) = struct
         (let cf = bool_as_bitv (var Env.cf) in
          !$$dest := !$src1 - !$src2 - not cf);
         when_ (is_cpsr wflag) [
-          set_sbc !$src1 !$src2 !$$dest
+          set_sbc !$src1 !$src2 !$dest
         ]
       ]
     ]
@@ -530,7 +531,7 @@ module Mov(Core : Theory.Core) = struct
         (let cf = bool_as_bitv (var Env.cf) in
          !$$dest := !$src1 - shift_operand - not cf);
         when_ (is_cpsr wflag) [
-          set_sbc !$src1 shift_operand !$$dest
+          set_sbc !$src1 shift_operand !$dest
         ]
       ]
     ]
@@ -542,7 +543,7 @@ module Mov(Core : Theory.Core) = struct
         (let cf = bool_as_bitv (var Env.cf) in
          !$$dest := !$src1 - shift_operand - not cf);
         when_ (is_cpsr wflag) [
-          set_sbc !$src1 shift_operand !$$dest
+          set_sbc !$src1 shift_operand !$dest
         ]
       ]
     ]
@@ -552,7 +553,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src2 - !$src1;
         when_ (is_cpsr wflag) [
-          set_sub !$src2 !$src1 !$$dest
+          set_sub !$src2 !$src1 !$dest
         ]
       ]
     ]
@@ -562,7 +563,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src2 - !$src1;
         when_ (is_cpsr wflag) [
-          set_sub !$src2 !$src1 !$$dest
+          set_sub !$src2 !$src1 !$dest
         ]
       ]
     ]
@@ -573,7 +574,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := shift_operand - !$src1;
         when_ (is_cpsr wflag) [
-          set_sub shift_operand !$src1 !$$dest
+          set_sub shift_operand !$src1 !$dest
         ]
       ]
     ]
@@ -584,7 +585,7 @@ module Mov(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := shift_operand - !$src1;
         when_ (is_cpsr wflag) [
-          set_sub shift_operand !$src1 !$$dest
+          set_sub shift_operand !$src1 !$dest
         ]
       ]
     ]
@@ -595,7 +596,7 @@ module Mov(Core : Theory.Core) = struct
         (let cf = bool_as_bitv (var Env.cf) in
          !$$dest := !$src2 - !$src1 - not cf);
         when_ (is_cpsr wflag) [
-          set_sbc !$src2 !$src1 !$$dest
+          set_sbc !$src2 !$src1 !$dest
         ]
       ]
     ]
@@ -606,7 +607,7 @@ module Mov(Core : Theory.Core) = struct
         (let cf = bool_as_bitv (var Env.cf) in
          !$$dest := !$src2 - !$src1 - not cf);
         when_ (is_cpsr wflag) [
-          set_sbc !$src2 !$src1 !$$dest
+          set_sbc !$src2 !$src1 !$dest
         ]
       ]
     ]
@@ -618,7 +619,7 @@ module Mov(Core : Theory.Core) = struct
         (let cf = bool_as_bitv (var Env.cf) in
          !$$dest := shift_operand - !$src1 - not cf);
         when_ (is_cpsr wflag) [
-          set_sbc shift_operand !$src1 !$$dest
+          set_sbc shift_operand !$src1 !$dest
         ]
       ]
     ]
@@ -630,7 +631,7 @@ module Mov(Core : Theory.Core) = struct
         (let cf = bool_as_bitv (var Env.cf) in
          !$$dest := shift_operand - !$src1 - not cf);
         when_ (is_cpsr wflag) [
-          set_sbc shift_operand !$src1 !$$dest
+          set_sbc shift_operand !$src1 !$dest
         ]
       ]
     ]
@@ -640,7 +641,7 @@ module Mov(Core : Theory.Core) = struct
       local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
         tmp := !$src1 - !$src2;
-        set_sub !$src1 !$src2 tmp
+        set_sub !$src1 !$src2 (var tmp)
       ]
     ]
 
@@ -649,7 +650,7 @@ module Mov(Core : Theory.Core) = struct
       local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
         tmp := !$src1 - !$src2;
-        set_sub !$src1 !$src2 tmp
+        set_sub !$src1 !$src2 (var tmp)
       ]
     ]
 
@@ -659,7 +660,7 @@ module Mov(Core : Theory.Core) = struct
       local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
         tmp := !$src1 - shift_operand;
-        set_sub !$src1 shift_operand tmp
+        set_sub !$src1 shift_operand (var tmp)
       ]
     ]
 
@@ -669,7 +670,7 @@ module Mov(Core : Theory.Core) = struct
       local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
         tmp := !$src1 - shift_operand;
-        set_sub !$src1 shift_operand tmp
+        set_sub !$src1 shift_operand (var tmp)
       ]
     ]
 
@@ -678,7 +679,7 @@ module Mov(Core : Theory.Core) = struct
       local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
         tmp := !$src1 + !$src2;
-        set_add !$src1 !$src2 tmp
+        set_add !$src1 !$src2 (var tmp)
       ]
     ]
 
@@ -687,7 +688,7 @@ module Mov(Core : Theory.Core) = struct
       local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
         tmp := !$src1 + !$src2;
-        set_add !$src1 !$src2 tmp
+        set_add !$src1 !$src2 (var tmp)
       ]
     ]
 
@@ -697,7 +698,7 @@ module Mov(Core : Theory.Core) = struct
       local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
         tmp := !$src1 + shift_operand;
-        set_add !$src1 shift_operand tmp
+        set_add !$src1 shift_operand (var tmp)
       ]
     ]
 
@@ -707,7 +708,7 @@ module Mov(Core : Theory.Core) = struct
       local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
         tmp := !$src1 + shift_operand;
-        set_add !$src1 shift_operand tmp
+        set_add !$src1 shift_operand (var tmp)
       ]
     ]
 

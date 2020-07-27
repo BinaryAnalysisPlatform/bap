@@ -28,7 +28,7 @@ module Mul(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$src1 * !$src2;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest
+          set_nzf !$dest
         ]
       ]
     ]
@@ -38,7 +38,7 @@ module Mul(Core : Theory.Core) = struct
       if_ (resolve_cond cond) [
         !$$dest := !$addend + !$src1 * !$src2;
         when_ (is_cpsr wflag) [
-          set_nzf !$$dest
+          set_nzf !$dest
         ]
       ]
     ]
@@ -58,8 +58,8 @@ module Mul(Core : Theory.Core) = struct
         !$$lodest := extract Env.value !!31 !!0 (var tmp);
         !$$hidest := extract Env.value !!61 !!32 (var tmp);
         when_ (is_cpsr wflag) [
-          Env.nf := msb !$hidest;
-          Env.zf := and_ (!$lodest = !!0) (!$hidest = !!0)
+          data (Env.nf <== msb !$hidest);
+          data (Env.zf <== and_ (!$lodest = !!0) (!$hidest = !!0))
         ]
       ]
     ]
@@ -72,8 +72,8 @@ module Mul(Core : Theory.Core) = struct
         !$$lodest := extract Env.value !!31 !!0 (var tmp);
         !$$hidest := extract Env.value !!61 !!32 (var tmp);
         when_ (is_cpsr wflag) [
-          Env.nf := msb !$hidest;
-          Env.zf := and_ (!$lodest = !!0) (!$hidest = !!0)
+          data (Env.nf <== msb !$hidest);
+          data (Env.zf <== and_ (!$lodest = !!0) (!$hidest = !!0))
         ]
       ]
     ]
@@ -87,8 +87,8 @@ module Mul(Core : Theory.Core) = struct
         !$$lodest := extract Env.value !!31 !!0 (var tmp);
         !$$hidest := extract Env.value !!61 !!32 (var tmp);
         when_ (is_cpsr wflag) [
-          Env.nf := msb !$hidest;
-          Env.zf := and_ (!$lodest = !!0) (!$hidest = !!0)
+          data (Env.nf <== msb !$hidest);
+          data (Env.zf <== and_ (!$lodest = !!0) (!$hidest = !!0))
         ]
       ]
     ]
@@ -102,8 +102,8 @@ module Mul(Core : Theory.Core) = struct
         !$$lodest := extract Env.value !!31 !!0 (var tmp);
         !$$hidest := extract Env.value !!61 !!32 (var tmp);
         when_ (is_cpsr wflag) [
-          Env.nf := msb !$hidest;
-          Env.zf := and_ (!$lodest = !!0) (!$hidest = !!0)
+          data (Env.nf <== msb !$hidest);
+          data (Env.zf <== and_ (!$lodest = !!0) (!$hidest = !!0))
         ]
       ]
     ]
@@ -119,7 +119,7 @@ module Mul(Core : Theory.Core) = struct
           );
         !$$dest := extend (var tmp);
         (* overflow check *)
-        Env.qf := extend_to Env.double_word !$dest <> var tmp;
+        data (Env.qf <== (extend_to Env.double_word !$dest <> var tmp));
       ]
     ]
 
@@ -148,7 +148,7 @@ module Mul(Core : Theory.Core) = struct
           );
         !$$dest := extend (var tmp);
         (* overflow check *)
-        Env.qf := extend_to Env.double_word !$dest <> var tmp;
+        data (Env.qf <== (extend_to Env.double_word !$dest <> var tmp));
       ]
     ]
 
@@ -164,7 +164,7 @@ module Mul(Core : Theory.Core) = struct
           );
         !$$dest := extend (var tmp);
         (* overflow check *)
-        Env.qf := extend_to Env.double_word !$dest <> var tmp;
+        data (Env.qf <== (extend_to Env.double_word !$dest <> var tmp));
       ]
     ]
 
@@ -176,7 +176,7 @@ module Mul(Core : Theory.Core) = struct
         tmp := DSL64.(!$src1 -* halfword_extend !$src2);
         !$$dest := extract Env.value !!47 !!16 (var tmp) + !$accum;
         (* overflow check *)
-        Env.qf := extend_to Env.double_word !$dest <> var tmp;
+        data (Env.qf <== (extend_to Env.double_word !$dest <> var tmp));
       ]
     ]
 

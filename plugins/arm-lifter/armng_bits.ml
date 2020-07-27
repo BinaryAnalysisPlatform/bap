@@ -144,7 +144,7 @@ module Bits(Core : Theory.Core) = struct
       local_var >>= fun tmp ->
       if_ (resolve_cond cond) [
         tmp := load (var Env.memory) !$src2 |> extend;
-        Env.memory := store (var Env.memory) !$src2 (extend_to Env.byte !$src1);
+        data (Env.memory <== (store (var Env.memory) !$src2 (extend_to Env.byte !$src1)));
         !$$dest := var tmp;
       ]
     ]
@@ -190,9 +190,9 @@ module Bits(Core : Theory.Core) = struct
         tmp := !$src;
         !$$dest := !!0;
         (* this couldn't by statically expanded *)
-        repeat (msb (var tmp)) !%[
-          tmp := var tmp << !!1;
-          !$$dest := !$dest + imm 1
+        data @@ repeat (msb (var tmp)) !%[
+          tmp <== (var tmp << !!1);
+          !$$dest <== (!$dest + imm 1)
         ]
       ]
     ]

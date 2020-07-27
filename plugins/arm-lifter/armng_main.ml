@@ -37,8 +37,9 @@ module ARM(Core : Theory.Core) = struct
     blk lbl data eff
 
   let lift_move (insn : Defs.insn ) ops address =
-    let ( !% ) list = DSL.expand list |> move in
+    let ( !% ) list = DSL.expand list in
     let open Mov in
+    let () = Mov.DSL.put_addr address in
     match insn, ops with
     | `MOVi,  [|dest; src; cond; _; wflag|] -> 
       !%(movi dest src cond wflag)
@@ -49,8 +50,7 @@ module ARM(Core : Theory.Core) = struct
     | `MOVsi, [|dest; src; shift_imm; cond; _; wflag|] ->
       !%(movsi dest src shift_imm cond wflag)
     | `MOVPCLR, [|cond; wflag|] ->
-      let data_eff, ctrl_eff = movpclr cond wflag in
-      ctrl ctrl_eff (DSL.expand data_eff) address
+      !%(movpclr cond wflag address)
     | `MVNi, [|dest; src; cond; _; wflag|] ->
       !%(mvni dest src cond wflag)
     | `MVNr, [|dest; src; cond; _; wflag|] ->
@@ -178,9 +178,10 @@ module ARM(Core : Theory.Core) = struct
       !%(movti16 (`Reg dest) src cond _wflag)
     | _, _ -> move pass
 
-  let lift_bits insn ops =
-    let ( !% ) list = DSL.expand list |> move in
+  let lift_bits insn ops addr =
+    let ( !% ) list = DSL.expand list in
     let open Bits in
+    let () = Bits.DSL.put_addr addr in
     match insn, ops with
     | `UXTB, [|dest; src; rot; cond; _|] ->
       !%(uxtb dest src rot cond)
@@ -221,9 +222,10 @@ module ARM(Core : Theory.Core) = struct
       !%(clz (`Reg dest) src cond)
     | _, _ -> move pass
 
-  let lift_mult insn ops =
-    let ( !% ) list = DSL.expand list |> move in
+  let lift_mult insn ops addr =
+    let ( !% ) list = DSL.expand list in
     let open Mul in
+    let () = Mul.DSL.put_addr addr in
     match insn,ops with
     | `MUL, [|`Reg dest; src1; src2; cond; _rflag; wflag|] ->
       !%(mul (`Reg dest) src1 src2 cond _rflag wflag)
@@ -264,9 +266,10 @@ module ARM(Core : Theory.Core) = struct
       !%(smlalbt dest hidest src1 src2 cond _wflag)
     | _, _ -> move pass
 
-  let lift_mem_multi ops insn =
-    let ( !% ) list = DSL.expand list |> move in
+  let lift_mem_multi ops insn addr =
+    let ( !% ) list = DSL.expand list in
     let open Mem_multi in
+    let () = Mem_multi.DSL.put_addr addr in
     match insn, Array.to_list ops with
     | `STMDA, base :: cond :: _wr_flag :: dest_list ->
       !%(stmda base cond _wr_flag dest_list)
@@ -302,9 +305,10 @@ module ARM(Core : Theory.Core) = struct
       !%(ldmda_upd base cond _wr_flag dest_list)
     | _, _ -> move pass
 
-  let lift_mem insn ops =
-    let ( !% ) list = DSL.expand list |> move in
+  let lift_mem insn ops addr =
+    let ( !% ) list = DSL.expand list in
     let open Mem in
+    let () = Mem.DSL.put_addr addr in
     match insn, ops with
     | `STRD, [|dest1; dest2; base; reg_off; `Imm imm_off; cond; _|] ->
       !%(strd dest1 dest2 base reg_off (`Imm imm_off) cond)
@@ -444,14 +448,14 @@ module ARM(Core : Theory.Core) = struct
     (* multisrc is one of the multireg combinations *)
     | `STREXD, [|`Reg dest1; multisrc; base; cond; _|] ->
       !%(strexd (`Reg dest1) multisrc base cond)
-    | #mem_multi_insn as insn, ops -> lift_mem_multi ops insn
+    | #mem_multi_insn as insn, ops -> lift_mem_multi ops insn addr
     | _, _ -> move pass
 
   (** Branching instructions *)
 
   let lift_branch insn ops addr =
-    let addr = Core.int Env.value addr in
     let open Branch in
+    let () = Branch.DSL.put_addr addr in
     match insn, ops with
     | `Bcc, [|offset; cond; _|] ->
       bcc offset cond addr
@@ -460,7 +464,7 @@ module ARM(Core : Theory.Core) = struct
     | `BL_pred, [|offset; cond; _|] ->
       bl_pred offset cond addr
     | `BX_RET, [|cond; _|] ->
-      bx_ret cond
+      bx_ret cond addr
     | `BX, [|target|] ->
       bx target addr
     | `BX_pred, [|target; cond; _|] ->
@@ -471,11 +475,12 @@ module ARM(Core : Theory.Core) = struct
       blx_pred target cond addr
     | `BLXi, [|offset|] ->
       blxi offset addr
-    | _, _ -> (skip, pass)
+    | _, _ -> move pass
 
-  let lift_special insn ops =
-    let ( !% ) list = DSL.expand list |> move in
+  let lift_special insn ops addr =
+    let ( !% ) list = DSL.expand list in
     let open Special in
+    let () = Special.DSL.put_addr addr in
     match insn, ops with
     | `SVC, [|`Imm word; cond; _|] ->
       !%(svc (`Imm word) cond)
@@ -488,14 +493,12 @@ module ARM(Core : Theory.Core) = struct
   let lift_with (addr : Bitvec.t) (insn : Armng_defs.insn)
       (ops : Armng_defs.op array) = match insn with
     | #move_insn -> lift_move insn ops addr
-    | #mem_insn -> lift_mem insn ops
-    | #bits_insn -> lift_bits insn ops
-    | #mult_insn -> lift_mult insn ops
-    | #special_insn -> lift_special insn ops
+    | #mem_insn -> lift_mem insn ops addr
+    | #bits_insn -> lift_bits insn ops addr 
+    | #mult_insn -> lift_mult insn ops addr
+    | #special_insn -> lift_special insn ops addr
     (* this is malformed for now *)
-    | #branch_insn -> 
-      let ctrl_eff, data_eff = lift_branch insn ops addr in
-      ctrl ctrl_eff data_eff addr
+    | #branch_insn -> lift_branch insn ops addr
 
 end
 

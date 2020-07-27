@@ -17,7 +17,7 @@ module Mem_Multi(Core : Theory.Core) = struct
   open Flags
   open Cond
 
-  let mem_store address value = DSL.(Env.memory := storew b0 (var Env.memory) address value)
+  let mem_store address value = DSL.data DSL.(Env.memory <== storew b0 (var Env.memory) address value)
 
   let mem_load sort address = loadw sort b0 (var Env.memory) address
 
@@ -240,7 +240,7 @@ module Mem(Core : Theory.Core) = struct
     | Some s -> Shift.mem_shift ~src:offset s
     | None -> offset
 
-  let mem_store address value = DSL.(Env.memory := storew b0 (var Env.memory) address value)
+  let mem_store address value = DSL.data DSL.(Env.memory <== storew b0 (var Env.memory) address value)
 
   let mem_load sort address = loadw sort b0 (var Env.memory) address
 
