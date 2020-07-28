@@ -2,7 +2,7 @@ FROM ocaml/opam2:debian-testing
 
 WORKDIR /home/opam
 
-RUN sudo apt-get update --yes && sudo apt-get install wget \
+RUN sudo apt-get update --yes && sudo apt-get install wget --yes \
  && wget https://radare.mikelloc.com/get/4.5.0-git/radare2_4.5.0-git_amd64.deb \
  && sudo dpkg -i radare2_4.5.0-git_amd64.deb \
  && opam switch 4.09 \
