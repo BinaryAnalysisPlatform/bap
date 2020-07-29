@@ -36,6 +36,7 @@ jobs:
             brew update
             brew upgrade
             echo '::set-env name=LLVM_CONFIG::/usr/local/opt/llvm@9/bin/llvm-config'
+            echo '::set-env name=OBJDUMP_PATH::$(which objdump)
 
         - name: Install System Dependencies
           run: opam depext -y bap
