@@ -10,50 +10,45 @@ jobs:
   build:
     strategy:
       matrix:
-          os:
-            - ubuntu-latest
-            - macos-latest
           ocaml-version:
             - 4.09.1
             - 4.08.1
             - 4.07.1
 
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
 
     env:
       OPAMJOBS: 2
       OPAMRETRES: 8
 
     steps:
-        - name: Find objdump
-          if: matrix.os == 'macos-latest'
-          run: |
-             echo path `which gobjdump`
-             mdfind -name objdump
-             which objdump
 
         - name: Use OCaml ${{ matrix.ocaml-version }}
           uses: avsm/setup-ocaml@v1
           with:
             ocaml-version: ${{ matrix.ocaml-version }}
 
-        - name: Configure Homebrew
-          if: matrix.os == 'macos-latest'
-          run: |
-            brew update
-            brew upgrade
-            echo '::set-env name=LLVM_CONFIG::/usr/local/opt/llvm@9/bin/llvm-config'
-            echo ::set-env name=OBJDUMP_PATH::$(which objdump)
-
         - name: Install System Dependencies
           run: opam depext -y bap
 
         - name: Cleanup the Caches
-          if: matrix.os == 'ubuntu-latest'
           run: sudo apt clean --yes
 
         - name: Build and Install BAP
           run: opam install bap
+
+ - name: Checkout the Tests
+          uses: actions/checkout@v2
+          with:
+            submodules: true
+            repository: BinaryAnalysisPlatform/bap
+            ref: v2.1.0
+
+        - name: Install Extra System Dependencies
+          run: sudo apt-get install dejagnu --yes
+
+        - name: Run Functional Tests
+          run: opam exec -- make check
 
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}
@@ -66,3 +61,15 @@ jobs:
           with:
             name: bap-log
             path: /tmp/bap/log
+
+        - uses: actions/upload-artifact@v2
+          if: ${{ always() }}
+          with:
+            name: unit-tests-log
+            path: oUnit-*.log
+
+        - uses: actions/upload-artifact@v2
+          if: ${{ always() }}
+          with:
+            name: fun-tests-log
+            path: testsuite/*.log
