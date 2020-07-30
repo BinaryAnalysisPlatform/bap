@@ -25,6 +25,12 @@ jobs:
       OPAMRETRES: 8
 
     steps:
+        - name: Find objdump
+          run: |
+             echo path `which gobjdump`
+             mdfind -name objdump
+             which objdump
+
         - name: Use OCaml ${{ matrix.ocaml-version }}
           uses: avsm/setup-ocaml@v1
           with:
