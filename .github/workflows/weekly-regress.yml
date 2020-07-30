@@ -26,6 +26,7 @@ jobs:
 
     steps:
         - name: Find objdump
+          if: matrix.os == 'macos-latest'
           run: |
              echo path `which gobjdump`
              mdfind -name objdump
