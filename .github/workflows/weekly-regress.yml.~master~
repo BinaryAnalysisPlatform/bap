@@ -2,36 +2,42 @@
 name: weekly-regression-tests
 
 on:
-  - push
-#  schedule:
-#    - cron: '0 0 * * SUN' # Every Sunday at 00:00 UTC */
+  schedule:
+    - cron: '0 0 * * SUN' # Every Sunday at 00:00 UTC */
 
 jobs:
   build:
     strategy:
       matrix:
+          os:
+            - ubuntu-latest
+            - macos-latest
           ocaml-version:
             - 4.09.1
             - 4.08.1
             - 4.07.1
 
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
 
     env:
       OPAMJOBS: 2
       OPAMRETRES: 8
 
     steps:
-
         - name: Use OCaml ${{ matrix.ocaml-version }}
           uses: avsm/setup-ocaml@v1
           with:
             ocaml-version: ${{ matrix.ocaml-version }}
 
+        - name: Configure Homebrew LLVM
+          if: matrix.os == 'macos-latest'
+          run: echo '::set-env name=LLVM_CONFIG::/usr/local/opt/llvm@9/bin/llvm-config'
+
         - name: Install System Dependencies
           run: opam depext -y bap
 
         - name: Cleanup the Caches
+          if: matrix.os == 'ubuntu-latest'
           run: sudo apt clean --yes
 
         - name: Build and Install BAP
@@ -42,10 +48,11 @@ jobs:
           with:
             submodules: true
             repository: BinaryAnalysisPlatform/bap
-            ref: v2.1.0
 
         - name: Install Extra System Dependencies
-          run: sudo apt-get install dejagnu --yes
+          run: |
+              opam pin add bap . -n
+              opam depext -u bap
 
         - name: Run Functional Tests
           run: opam exec -- make check
@@ -53,17 +60,23 @@ jobs:
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}
           with:
-            name: bap-log-{{ matrix.ocaml-version }}
-            path: ~/.local/state/bap/*
+            name: opam-log
+            path: ~/.opam/log
 
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}
           with:
-            name: opam-log-{{ matrix.ocaml-version }}
-            path: ~/.opam/log/*
+            name: bap-log
+            path: /tmp/bap/log
 
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}
           with:
-            name: fun-tests-log-{{ matrix.ocaml-version  }}
+            name: unit-tests-log
+            path: oUnit-*.log
+
+        - uses: actions/upload-artifact@v2
+          if: ${{ always() }}
+          with:
+            name: fun-tests-log
             path: testsuite/*.log
