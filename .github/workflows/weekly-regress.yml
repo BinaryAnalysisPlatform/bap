@@ -53,17 +53,17 @@ jobs:
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}
           with:
-            name: bap-log-{{ matrix.ocaml-version }}
+            name: bap-log-${{ matrix.ocaml-version }}
             path: ~/.local/state/bap/*
 
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}
           with:
-            name: opam-log-{{ matrix.ocaml-version }}
+            name: opam-log-${{ matrix.ocaml-version }}
             path: ~/.opam/log/*
 
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}
           with:
-            name: fun-tests-log-{{ matrix.ocaml-version  }}
+            name: fun-tests-log-${{ matrix.ocaml-version  }}
             path: testsuite/*.log
