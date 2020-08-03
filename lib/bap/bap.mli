@@ -5492,6 +5492,14 @@ module Std : sig
     (** [register_loader ~name backend] registers new loader. *)
     val register_loader : name:string -> (module Loader) -> unit
 
+    (** [find_loader name] lookups the loader registered under the
+        given [name].
+
+        @since 2.2.0
+    *)
+    val find_loader : string -> (module Loader) option
+
+
     (** lists all registered backends  *)
     val available_backends : unit -> string list
 
