@@ -30,6 +30,7 @@ val create :
   input -> t Or_error.t
 
 val arch : t -> arch
+val specification : t -> Ogre.doc
 val program : t -> program term
 val with_program : t -> program term -> t
 val symbols : t -> symtab

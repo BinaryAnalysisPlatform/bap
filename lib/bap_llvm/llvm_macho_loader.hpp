@@ -39,15 +39,11 @@ uint32_t filetype(const macho &obj) {
     else return obj.getHeader().filetype;
 }
 
-bool is_relocatable(const macho &obj) {
-    return (filetype(obj) == MachO::MH_OBJECT ||
-            filetype(obj) == MachO::MH_KEXT_BUNDLE ||
-            filetype(obj) == MachO::MH_BUNDLE ||
-            filetype(obj) == MachO::MH_DYLIB ||
-            filetype(obj) == MachO::MH_DYLIB_STUB);
+bool is_executable(const macho &obj) {
+    return (filetype(obj) == MachO::MH_EXECUTE ||
+            filetype(obj) == MachO::MH_PRELOAD);
 }
 
-bool is_exec(const macho &obj) { return filetype(obj) == MachO::MH_EXECUTE;  }
 
 commands macho_commands(const macho &obj);
 
@@ -168,10 +164,12 @@ void entry_point(const macho &obj, ogre_doc &s) {
 }
 
 void emit_image_info(const macho &obj, ogre_doc &s) {
-    if (!is_exec(obj))
-        s.raw_entry("(llvm:entry-point 0)");
-    else
+    bool is_exec = is_executable(obj);
+    s.entry("is-executable") << is_exec;
+    if (is_exec)
         entry_point(obj, s);
+    else
+        s.raw_entry("(llvm:entry-point 0)");
 }
 
 uint32_t section_type(const macho &obj, SectionRef sec) {
@@ -472,7 +470,7 @@ symbol_iterator get_symbol(const macho &obj, std::size_t index) {
 
 error_or<std::string> load(ogre_doc &s, const llvm::object::MachOObjectFile &obj) {
     using namespace macho_loader;
-    s.raw_entry("(llvm:file-type macho)");
+    s.raw_entry("(format macho)");
     s.entry("llvm:base-address") << image_base(obj);
     emit_image_info(obj, s);
     emit_macho_commands(obj, s);

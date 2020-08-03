@@ -59,8 +59,6 @@ std::vector<typename ELFFile<T>::Elf_Shdr> elf_sections(const ELFFile<T> &elf);
 template <typename T>
 error_or<std::string> elf_section_name(const ELFFile<T> &elf, const typename ELFFile<T>::Elf_Shdr *sec);
 
-error_or<pe32_header> get_pe32_header(const COFFObjectFile &);
-error_or<pe32plus_header> get_pe32plus_header(const COFFObjectFile &);
 
 template <typename T>
 std::vector<typename ELFFile<T>::Elf_Phdr> elf_program_headers(const ELFFile<T> &elf) {

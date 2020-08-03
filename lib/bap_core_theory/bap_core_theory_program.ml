@@ -26,6 +26,10 @@ let path = Knowledge.Domain.optional "path"
     ~equal:String.equal
     ~inspect:sexp_of_string
 
+let format = Knowledge.Domain.optional "path"
+    ~equal:String.equal
+    ~inspect:sexp_of_string
+
 let names = Knowledge.Domain.powerset (module String) "names"
     ~inspect:sexp_of_string
 
@@ -52,7 +56,20 @@ module Unit = struct
       ~desc:"a unit of code"
 
   let path = string_property ~domain:path cls "unit-path"
-      ~desc:"a filesytem name of the file that contains the program"
+      ~desc:"a filesystem name of the file that contains the program"
+
+  let format = string_property ~domain:format cls "unit-format"
+      ~desc:"the file format that used to encode the unit"
+
+  let is_executable =
+    Knowledge.Class.property ~package cls "unit-is-executable"
+      Knowledge.Domain.bool
+      ~persistent:(Knowledge.Persistent.of_binable (module struct
+                     type t = bool option [@@deriving bin_io]
+                   end))
+      ~public:true
+      ~desc:"whether the unit is ready to be executed by the OS"
+
 
   let bias = Knowledge.Class.property ~package cls "unit-bias" word
       ~persistent:(Knowledge.Persistent.of_binable (module struct

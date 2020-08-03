@@ -204,39 +204,4 @@ symbols_sizes get_symbols_sizes(const ObjectFile &obj) {
     return sizes;
 }
 
-
-
-#if LLVM_VERSION_MAJOR >= 10
-
-error_or<pe32_header> get_pe32_header(const COFFObjectFile &obj) {
-    const pe32_header *hdr = obj.getPE32Header();
-    if (!hdr) { return failure("PE header not found"); }
-    else return success(*hdr);
-}
-
-error_or<pe32plus_header> get_pe32plus_header(const COFFObjectFile &obj) {
-    const pe32plus_header *hdr = obj.getPE32PlusHeader();
-    if (!hdr) { return failure("PE+ header not found"); }
-    else return success(*hdr);
-}
-
-#else
-
-error_or<pe32_header> get_pe32_header(const COFFObjectFile &obj) {
-    const pe32_header *hdr = 0;
-    auto ec = obj.getPE32Header(hdr);
-    if (ec) return failure(ec.message());
-    else if (!hdr) { return failure("PE header not found"); }
-    else return success(*hdr);
-}
-
-error_or<pe32plus_header> get_pe32plus_header(const COFFObjectFile &obj) {
-    const pe32plus_header *hdr = 0;
-    auto ec = obj.getPE32PlusHeader(hdr);
-    if (ec) return failure(ec.message());
-    else if (!hdr) { return failure("PE+ header not found"); }
-    else return success(*hdr);
-}
-#endif
-
 } // namespace prim

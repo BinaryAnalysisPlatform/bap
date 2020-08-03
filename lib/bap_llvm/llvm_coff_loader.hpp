@@ -57,13 +57,51 @@ void emit_base_address(const coff_obj &obj, ogre_doc &s) {
     s.entry("llvm:base-address") << obj.getImageBase();
 }
 
+#if LLVM_VERSION_MAJOR >= 10
+
+error_or<pe32_header> get_pe32_header(const COFFObjectFile &obj) {
+    const pe32_header *hdr = obj.getPE32Header();
+    if (!hdr) { return failure("PE header not found"); }
+    else return success(*hdr);
+}
+
+error_or<pe32plus_header> get_pe32plus_header(const COFFObjectFile &obj) {
+    const pe32plus_header *hdr = obj.getPE32PlusHeader();
+    if (!hdr) { return failure("PE+ header not found"); }
+    else return success(*hdr);
+}
+
+#else
+
+error_or<pe32_header> get_pe32_header(const COFFObjectFile &obj) {
+    const pe32_header *hdr = 0;
+    auto ec = obj.getPE32Header(hdr);
+    if (ec) return failure(ec.message());
+    else if (!hdr) { return failure("PE header not found"); }
+    else return success(*hdr);
+}
+
+error_or<pe32plus_header> get_pe32plus_header(const COFFObjectFile &obj) {
+    const pe32plus_header *hdr = 0;
+    auto ec = obj.getPE32PlusHeader(hdr);
+    if (ec) return failure(ec.message());
+    else if (!hdr) { return failure("PE+ header not found"); }
+    else return success(*hdr);
+}
+#endif
+
+bool is_executable(const COFFObjectFile &obj) {
+    return obj.getCharacteristics() & COFF::IMAGE_FILE_EXECUTABLE_IMAGE;
+}
+
+
 void emit_entry_point(const coff_obj &obj, ogre_doc &s) {
     auto entry = 0L;
     if (obj.getBytesInAddress() == 4) {
-        if (auto hdr = prim::get_pe32_header(obj))
+        if (auto hdr = get_pe32_header(obj))
             entry = hdr->AddressOfEntryPoint;
     } else {
-        if (auto hdr = prim::get_pe32plus_header(obj))
+        if (auto hdr = get_pe32plus_header(obj))
             entry = hdr->AddressOfEntryPoint;
     }
     s.entry("llvm:entry-point") << entry + obj.getImageBase();
@@ -268,7 +306,8 @@ error_or<uint64_t> symbol_file_offset(const coff_obj &obj, const SymbolRef &sym)
 
 error_or<std::string> load(ogre_doc &s, const llvm::object::COFFObjectFile &obj, const char* pdb_path) {
     using namespace coff_loader;
-    s.raw_entry("(llvm:file-type coff)");
+    s.raw_entry("(format coff)");
+    s.entry("is-executable") << is_executable(obj);
     emit_base_address(obj, s);
     emit_entry_point(obj, s);
     emit_sections(obj, s);

@@ -3,31 +3,31 @@ Enables ad-hoc support for glibc runtime code. In particular it
 detects the locations of $(b,main) and $b(,__libc_start_main)
 functions (and adds the latter if it is absent).
 "
-open Base
+open Core_kernel
 open Bap_main
 open Bap.Std
 open Bap_c.Std
+
+include Bap_main.Loggers()
 
 let enable = Extension.Configuration.flag "enable"
     ~doc:"Override the glib detection heuristic and enable the \
           runtime fixup."
 
-let glibc_sections = Set.of_list (module String) [
-    ".symtab";
-    ".init";
-    ".plt";
-    ".plt.got";
-    ".text";
-    ".fini";
-  ]
+let references_glib_start_main doc =
+  let open Ogre.Syntax in
+  let query =
+    Ogre.request Image.Scheme.external_reference
+      ~that:(fun (_,name) -> name = "__libc_start_main")
+    >>| Option.is_some in
+  match Ogre.eval query doc with
+  | Ok r -> r
+  | Error err ->
+    warning "unable to determine the presence of glibc runtime: %a"
+      Error.pp err;
+    false
 
-let is_glibc proj =
-  Project.memory proj |>
-  Memmap.to_sequence |>
-  Sequence.exists ~f:(fun (_,tag) ->
-      match Value.get Image.section tag with
-      | None -> false
-      | Some name -> Set.mem glibc_sections name)
+let is_glibc proj = references_glib_start_main (Project.specification proj)
 
 let find_by_name prog name =
   Term.enum sub_t prog |> Seq.find ~f:(fun sub -> String.equal (Sub.name sub) name)

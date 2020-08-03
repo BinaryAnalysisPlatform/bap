@@ -32,9 +32,6 @@ module LLVM = struct
 
   let at = "at" %: int
 
-  let file_type () =
-    Ogre.declare ~name:"llvm:file-type" (scheme name) ident
-
   (** entry point  *)
   let entry_point () =
     Ogre.declare ~name:"llvm:entry-point" (scheme addr) ident
@@ -293,7 +290,7 @@ let provide_coff_segmentation = [
 ]
 
 let overload file_type info =
-  Ogre.require LLVM.file_type >>= fun file ->
+  Ogre.require format >>= fun file ->
   Ogre.sequence @@
   provide_if (String.equal file file_type) info
 
