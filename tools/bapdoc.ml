@@ -215,7 +215,7 @@ let install_handwritten_manpages () =
   run "cp ../man/* man1/"
 
 (* by default, title is the buffer/file name with no extension,
-   that's why we need override it with empty an title *)
+   that's why we need override it with an empty title *)
 let html_of_org file =
   run "echo \"#+TITLE:\n\" >> %s" file;
   run "emacs %s --batch --eval '(org-html-export-to-html)'" file;
