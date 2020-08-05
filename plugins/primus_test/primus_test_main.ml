@@ -116,7 +116,7 @@ module Location = struct
   let new_class,report_new_class =
     Primus.Observation.provide "incident-new-class"
       ~inspect:inspect_instance
-      ~desc:"Occures when a new incident class is created"
+      ~desc:"Occurs when a new incident class is created"
 
   let new_representative,report_new_representative =
     Primus.Observation.provide "incident-new-representative"
