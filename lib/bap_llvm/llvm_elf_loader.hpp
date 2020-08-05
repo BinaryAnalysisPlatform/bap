@@ -26,6 +26,13 @@ bool has_addresses(const ELFObjectFile<T> &obj) {
 }
 
 
+template <typename T>
+bool is_executable(const ELFObjectFile<T> &obj) {
+    auto hdr = obj.getELFFile()->getHeader();
+    return (hdr->e_type == ELF::ET_EXEC ||
+            hdr->e_type == ELF::ET_DYN);
+}
+
 // computes the base address of an ELF file.
 //
 // The base address is derived as a difference between the
@@ -211,8 +218,9 @@ void emit_relocations(const ELFObjectFile<T> &obj, ogre_doc &s) {
 template <typename T>
 error_or<std::string> load(ogre_doc &s, const llvm::object::ELFObjectFile<T> &obj) {
     using namespace elf_loader;
-    s.raw_entry("(llvm:file-type elf)");
+    s.raw_entry("(format elf)");
     s.entry("llvm:base-address") << base_address(obj);
+    s.entry("is-executable") << is_executable(obj);
     emit_entry_point(obj, s);
     emit_program_headers(obj, s);
     emit_section_headers(obj, s);

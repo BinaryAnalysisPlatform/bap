@@ -7,7 +7,7 @@ Library glibc_runtime_plugin
   Path:             plugins/glibc_runtime
   FindlibName:      bap-plugin-glibc_runtime
   CompiledObject:   best
-  BuildDepends:     base, bap-main, bap, bap-abi, bap-c
+  BuildDepends:     core_kernel, bap-main, bap, bap-abi, bap-c, ogre
   InternalModules:  Glibc_runtime_main
   XMETADescription: detects main and libc_start_main functions
   XMETAExtraLines:  tags="abi, pass"

@@ -79,6 +79,7 @@ module Spec = struct
     let statements = Ogre.all [
         Ogre.provide Field.arch (Arch.to_string arch);
         Ogre.provide Field.bits bits;
+        Ogre.provide Field.format "raw";
         Ogre.provide Field.is_little_endian @@
         match Arch.endian arch with
         | LittleEndian -> true
@@ -168,6 +169,7 @@ type state = State.t [@@deriving bin_io]
 
 type t = {
   arch    : arch;
+  spec    : Ogre.doc;
   core    : State.t;
   disasm  : disasm;
   memory  : value memmap;
@@ -370,6 +372,7 @@ let create
     let cfg,symbols,core = State.Toplevel.run spec arch ~code ~data file state in
     Result.return @@ finish {
       core;
+      spec;
       disasm = Disasm.create cfg;
       program = Program.lift symbols;
       symbols;
@@ -385,6 +388,8 @@ let create
                 KB.Conflict.pp err) in
     Error (to_info msg)
   | exn -> Or_error.of_exn ~backtrace:`Get exn
+
+let specification = spec
 
 let restore_state _ =
   failwith "Project.restore_state: this function should no be used.

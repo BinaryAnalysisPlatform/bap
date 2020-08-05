@@ -1160,6 +1160,13 @@ module Theory : sig
     val path : (cls, string option) KB.slot
 
 
+    (** [format] the file format of the unit, e.g., ["elf"].*)
+    val format : (cls, string option) KB.slot
+
+    (** [is-executed] is true if the unit is an executable file ready
+        to be executed by the operating system. *)
+    val is_executable : (cls, bool option) KB.slot
+
     (** [bias] is the bias of all addresses in the unit.
 
         If a unit is biased, then all addresses in this unit have
