@@ -72,7 +72,7 @@ module type Loader = sig
 end
 
 val register_loader : name:string -> (module Loader) -> unit
-
+val find_loader : string -> (module Loader) option
 val available_backends : unit -> string list
 
 
