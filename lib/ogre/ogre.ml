@@ -4,9 +4,9 @@ open Format
 
 type entry = {
   fields : string String.Map.t
-} [@@deriving compare]
+} [@@deriving compare, sexp]
 
-type row = {row : entry array}
+type row = {row : entry array} [@@deriving sexp]
 type 'a seq = 'a Sequence.t
 
 module Type = struct
@@ -667,10 +667,11 @@ module Query = struct
     tables : 'f tables;
   }
 
-  let get_exn {row} attr pos =
+  let get_exn ({row} as x) attr pos =
     let {Attribute.name; read} = attr () in
     match read (Array.get row pos) with
-    | None -> failwithf "can't parse attribute %s" name ()
+    | None -> failwithf "can't parse attribute %s of %s" name
+                (Sexp.to_string_hum (sexp_of_row x)) ()
     | Some x -> x
 
 

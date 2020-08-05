@@ -1,3 +1,3 @@
 open Core_kernel
 
-val init : unit -> unit Or_error.t
+val init : ?base:int64 -> ?pdb_path:string -> unit -> unit Or_error.t

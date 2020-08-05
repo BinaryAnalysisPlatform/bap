@@ -37,17 +37,12 @@ symbol_iterator begin_symbols(const ObjectFile &obj);
 symbol_iterator end_symbols(const ObjectFile &obj);
 error_or<uint64_t> symbol_address(const SymbolRef &sym);
 error_or<std::string> symbol_name(const SymbolRef &s);
-error_or<uint64_t> symbol_value(const SymbolRef &s);
 error_or<SymbolRef::Type> symbol_type(const SymbolRef &s);
 error_or<section_iterator> symbol_section(const ObjectFile &obj, const SymbolRef &s);
 error_or<uint64_t> symbol_size(const SymbolRef &s);
 
 // relocation
 uint64_t relocation_offset(const RelocationRef &rel);
-
-// misc
-// returns abs - base
-int64_t relative_address(uint64_t base, uint64_t abs);
 
 typedef std::vector<std::pair<SymbolRef, uint64_t>> symbols_sizes;
 
@@ -66,11 +61,6 @@ error_or<std::string> elf_section_name(const ELFFile<T> &elf, const typename ELF
 
 error_or<pe32_header> get_pe32_header(const COFFObjectFile &);
 error_or<pe32plus_header> get_pe32plus_header(const COFFObjectFile &);
-
-
-// template functions
-
-#if LLVM_VERSION_MAJOR >= 4
 
 template <typename T>
 std::vector<typename ELFFile<T>::Elf_Phdr> elf_program_headers(const ELFFile<T> &elf) {
@@ -98,69 +88,6 @@ error_or<std::string> elf_section_name(const ELFFile<T> &elf, const typename ELF
     if (!er_name) return failure(toString(er_name.takeError()));
     return success(er_name.get().str());
 }
-
-// 3.8
-#elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-
-template <typename T>
-std::vector<typename ELFFile<T>::Elf_Phdr> elf_program_headers(const ELFFile<T> &elf) {
-    typedef typename ELFFile<T>::Elf_Phdr hdr;
-
-    auto hdrs = elf.program_headers();
-    return std::vector<hdr>(hdrs.begin(), hdrs.end());
-}
-
-template <typename T>
-std::vector<typename ELFFile<T>::Elf_Shdr> elf_sections(const ELFFile<T> &elf) {
-    typedef typename ELFFile<T>::Elf_Shdr hdr;
-
-    auto secs = elf.sections();
-    return std::vector<hdr>(secs.begin(), secs.end());
-}
-
-template <typename T>
-error_or<std::string> elf_section_name(const ELFFile<T> &elf, const typename ELFFile<T>::Elf_Shdr *sec) {
-    auto er_name = elf.getSectionName(sec);
-    if (er_name) return success(er_name->str());
-    return failure(er_name.getError().message());
-}
-
-// 3.4
-#elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
-
-template <typename T>
-std::vector<typename ELFFile<T>::Elf_Phdr> elf_program_headers(const ELFFile<T> &elf) {
-    typedef typename ELFFile<T>::Elf_Phdr hdr;
-
-    return std::vector<hdr>(elf.begin_program_headers(), elf.end_program_headers());
-}
-
-template <typename T>
-std::vector<typename ELFFile<T>::Elf_Shdr> elf_sections(const ELFFile<T> &elf) {
-    typedef typename ELFFile<T>::Elf_Shdr hdr;
-
-    return std::vector<hdr>(elf.begin_sections(), elf.end_sections());
-}
-
-template <typename T>
-error_or<std::string> elf_section_name(const ELFFile<T> &elf, const typename ELFFile<T>::Elf_Shdr *sec) {
-    auto er_name = elf.getSectionName(sec);
-    if (error_code er = er_name) return failure(er.message());
-    return success(er_name->str());
-}
-
-// aimed for iteration over symbols, sections, relocations in llvm 3.4
-template <typename T>
-void next(content_iterator<T> &it, content_iterator<T> end) {
-    error_code ec;
-    it.increment(ec);
-    if (ec) it = end;
-}
-
-#else
-#error LLVM version is not supported
-#endif
-
 } // namespace prim
 
 #endif // LLVM_PRIMITIVES_HPP

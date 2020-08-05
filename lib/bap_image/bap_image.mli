@@ -81,6 +81,7 @@ module Scheme : sig
   type addr = int64
   type size = int64
   type off = int64
+  type value = int64
 
   type 'a region = {addr : addr; size : int64; info : 'a}
 
@@ -130,4 +131,6 @@ module Scheme : sig
   val code_region :
     (addr * size * off, (addr -> size -> off -> 'a) -> 'a) Ogre.attribute
 
+  val symbol_value :
+    (addr * value, (addr -> value -> 'a) -> 'a) Ogre.attribute
 end

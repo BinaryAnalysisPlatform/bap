@@ -4,7 +4,7 @@ Flag disassemble
 
 Library disassemble_plugin
   Build$: flag(everything) || flag(disassemble)
-  XMETADescription: implements the disassembler command
+  XMETADescription: implements the disassemble command
   Path: plugins/disassemble
   FindlibName: bap-plugin-disassemble
   CompiledObject: best

@@ -332,6 +332,7 @@ module Scheme = struct
   type addr = int64
   type size = int64
   type off = int64
+  type value = int64
   type 'a region = {addr : int64; size: int64; info : 'a}
   let region addr size info = {addr; size; info}
   let void_region addr size = {addr; size; info = ()}
@@ -339,6 +340,7 @@ module Scheme = struct
   let off  = "off"  %: int
   let size = "size" %: int
   let addr = "addr" %: int
+  let value = "value" %: int
   let name = "name" %: str
   let root = "root" %: int
   let readable   = "r" %: bool
@@ -378,6 +380,9 @@ module Scheme = struct
   let external_reference () =
     declare "external-reference" (scheme addr $ name) Tuple.T2.create
   let base_address () = declare "base-address" (scheme addr) ident
+
+  let symbol_value () =
+    declare "symbol-value" (scheme addr $ value) Tuple.T2.create
 end
 
 

@@ -27,31 +27,24 @@ bool is_code_section(const coff_section &sec) {
             sec.Characteristics & COFF::IMAGE_SCN_CNT_CODE);
 }
 
-void section(const coff_section &sec, uint64_t image_base,  ogre_doc &s) {
+void emit_section(const coff_section &sec, uint64_t base, bool is_rel, ogre_doc &s) {
     bool r = static_cast<bool>(sec.Characteristics & COFF::IMAGE_SCN_MEM_READ);
     bool w = static_cast<bool>(sec.Characteristics & COFF::IMAGE_SCN_MEM_WRITE);
     bool x = is_code_section(sec);
-    s.entry("section-entry") << sec.Name << sec.VirtualAddress << sec.SizeOfRawData << sec.PointerToRawData;
-    s.entry("virtual-section-header") << sec.Name << sec.VirtualAddress << sec.VirtualSize;
-    s.entry("section-flags") << sec.Name << r << w << x;
-    if (x)
-        s.entry("code-entry") << sec.Name << sec.PointerToRawData << sec.SizeOfRawData;
+    uint64_t vaddr = sec.VirtualAddress + base;
+    uint64_t vsize = is_rel ? sec.SizeOfRawData : sec.VirtualSize;
+    uint64_t fsize = sec.SizeOfRawData;
+    uint64_t off = sec.PointerToRawData;
+    s.entry("llvm:section-entry") << sec.Name << vaddr << fsize << off;
+    s.entry("llvm:coff-virtual-section-header") << sec.Name << vaddr << vsize;
+    s.entry("llvm:section-flags") << sec.Name << r << w << x;
+    if (x) s.entry("llvm:code-entry") << sec.Name << off << fsize;
 }
 
-void symbol(const std::string &name, int64_t relative_addr, uint64_t size, uint64_t off, SymbolRef::Type typ, ogre_doc &s) {
-    s.entry("symbol-entry") << name << relative_addr << size << off;
-    if (typ == SymbolRef::ST_Function)
-        s.entry("code-entry") << name << off << size;
-}
-
-error_or<uint64_t> get_image_base(const coff_obj &obj);
-bool is_relocatable(const coff_obj &obj);
-bool is_external_symbol(const coff_obj &obj, symbol_iterator s);
 error_or<uint64_t> symbol_file_offset(const coff_obj &obj, const SymbolRef &sym);
 const coff_section* get_coff_section(const coff_obj &obj, const SectionRef &sec);
 error_or<int> section_number(const coff_obj &obj, const SymbolRef &sym);
 error_or<uint64_t> symbol_value(const coff_obj &obj, const SymbolRef &sym);
-error_or<int64_t> symbol_relative_address(const coff_obj &obj, const SymbolRef &sym);
 
 const coff_section * get_coff_section(const coff_obj &obj, std::size_t index) {
     const coff_section *sec = nullptr;
@@ -60,32 +53,20 @@ const coff_section * get_coff_section(const coff_obj &obj, std::size_t index) {
     else return sec;
 }
 
-void image_base(const coff_obj &obj, ogre_doc &s) {
-    auto base = get_image_base(obj);
-    if (base)
-        s.entry("default-base-address") << *base;
+void emit_base_address(const coff_obj &obj, ogre_doc &s) {
+    s.entry("llvm:base-address") << obj.getImageBase();
 }
 
-void entry_point(const coff_obj &obj, ogre_doc &s) {
-    // coff object files may not have a PE/PE+ header
-    if (is_relocatable(obj)) {
-        s.entry("entry") << 0;
-        return;
-    }
+void emit_entry_point(const coff_obj &obj, ogre_doc &s) {
+    auto entry = 0L;
     if (obj.getBytesInAddress() == 4) {
-        error_or<pe32_header> hdr = prim::get_pe32_header(obj);
-        if (!hdr) { s.fail("PE header not found"); return; }
-        s.entry("entry") << hdr->AddressOfEntryPoint;
+        if (auto hdr = prim::get_pe32_header(obj))
+            entry = hdr->AddressOfEntryPoint;
     } else {
-        error_or<pe32plus_header> hdr = prim::get_pe32plus_header(obj);
-        if (!hdr) { s.fail("PE+ header not found"); return; }
-        s.entry("entry") << hdr->AddressOfEntryPoint;
+        if (auto hdr = prim::get_pe32plus_header(obj))
+            entry = hdr->AddressOfEntryPoint;
     }
-}
-
-error_or<uint64_t> symbol_address(const coff_obj &obj, const SymbolRef &sym) {
-    if (is_relocatable(obj)) return success(uint64_t(0));
-    else return prim::symbol_address(sym);
+    s.entry("llvm:entry-point") << entry + obj.getImageBase();
 }
 
 uint64_t section_offset(const coff_obj &obj, section_iterator sec) {
@@ -93,44 +74,50 @@ uint64_t section_offset(const coff_obj &obj, section_iterator sec) {
     return coff_sec->PointerToRawData;
 }
 
-void symbol_reference(const coff_obj &obj, const RelocationRef &rel, section_iterator sec, ogre_doc &s) {
-    auto it = rel.getSymbol();
-    if (it == prim::end_symbols(obj)) return;
-    auto sec_offset = section_offset(obj, sec);
-    auto off = prim::relocation_offset(rel) + sec_offset; // relocation file offset
-    if (is_external_symbol(obj, it)) {
-        if (auto name = prim::symbol_name(*it))
-            s.entry("ref-external") << off << *name;
-    } else {
-        if (auto file_offset = symbol_file_offset(obj, *it))
-            s.entry("ref-internal") << *file_offset << off;
+void emit_relocation(const coff_obj &obj, const RelocationRef &rel, section_iterator sec, ogre_doc &s) {
+    auto sym = rel.getSymbol();
+    if (sym != prim::end_symbols(obj)) {
+        if (auto saddr = prim::section_address(*sec)) {
+            auto raddr = prim::relocation_offset(rel) + *saddr;
+            if (auto addr = prim::symbol_address(*sym))
+                if (*addr) s.entry("llvm:relocation") << raddr << *addr;
+            if (auto name = prim::symbol_name(*sym))
+                s.entry("llvm:name-reference") << raddr << *name;
+        }
     }
 }
 
-void sections(const coff_obj &obj, ogre_doc &s) {
-    auto base = get_image_base(obj);
-    if (!base) { s.fail(base.message()); return; }
+void emit_sections(const coff_obj &obj, ogre_doc &s) {
+    uint64_t base = obj.getImageBase();
+    bool is_rel = obj.isRelocatableObject();
     for (auto sec : prim::sections(obj))
-        section(*get_coff_section(obj, sec), *base, s);
+        emit_section(*get_coff_section(obj, sec), base, is_rel, s);
 }
 
-void symbols(const coff_obj &obj, ogre_doc &s) {
+void emit_symbols(const coff_obj &obj, ogre_doc &s) {
     for (auto sized_sym : prim::get_symbols_sizes(obj)) {
         auto sym = sized_sym.first;
         auto name = prim::symbol_name(sym);
         auto type = prim::symbol_type(sym);
-        auto addr = symbol_relative_address(obj, sym);
+        auto addr = prim::symbol_address(sym);
         auto offs = symbol_file_offset(obj, sym);
-        if (!name || !type || !addr || !offs) continue;
-        symbol(*name, *addr, sized_sym.second, *offs, *type, s);
+        if (name && type && addr && offs) {
+            s.entry("llvm:symbol-entry") << *name
+                                         << *addr
+                                         << sized_sym.second
+                                         << *offs
+                                         << sym.getValue();
+            if (*type == SymbolRef::ST_Function)
+                s.entry("llvm:code-entry") << *name << *offs << sized_sym.second;
+        }
     }
 }
 
-void relocations(const coff_obj &obj, ogre_doc &s) {
+void emit_relocations(const coff_obj &obj, ogre_doc &s) {
     for (auto sec : prim::sections(obj))
         for (auto rel : prim::relocations(sec)) {
             if (auto rel_sec = prim::relocated_section(sec))
-                symbol_reference(obj, rel, *rel_sec, s);
+                emit_relocation(obj, rel, *rel_sec, s);
         }
 }
 
@@ -190,7 +177,8 @@ bool same_sections(const coff_obj &obj, const exported_sym &sym1, const exported
     return (c1 == c2);
 }
 
-void exported_symbols(const coff_obj &obj, exports &syms, ogre_doc &s) {
+void emit_exported_symbols(const coff_obj &obj, exports &syms, ogre_doc &s) {
+    uint64_t base = obj.getImageBase();
     std::sort(syms.begin(), syms.end(),
               [](const exported_sym &x, const exported_sym &y)
               { return x.first < y.first; });
@@ -205,15 +193,14 @@ void exported_symbols(const coff_obj &obj, exports &syms, ogre_doc &s) {
             size = exp_sym_size(syms[i], syms[i + 1]);
         else
             size = exp_sym_size(c, syms[i]);
-        auto offs = exp_sym_offset(c, syms[i]);
-        s.entry("symbol-entry") << syms[i].second << syms[i].first << size << offs;
-        s.entry("code-entry") << syms[i].second << offs << size;
+        uint64_t offs = exp_sym_offset(c, syms[i]);
+        uint64_t addr = syms[i].first + base;
+        s.entry("llvm:symbol-entry") << syms[i].second << addr << size << offs << 0;
+        s.entry("llvm:code-entry") << syms[i].second << offs << size;
     }
 }
 
-void exported_symbols(const coff_obj &obj, ogre_doc &s) {
-    auto base = get_image_base(obj);
-    if (!base) { s.fail(base.message()); return; }
+void emit_exported_symbols(const coff_obj &obj, ogre_doc &s) {
 
     const data_directory *data_entry;
     uintptr_t ptr = 0;
@@ -243,18 +230,7 @@ void exported_symbols(const coff_obj &obj, ogre_doc &s) {
             break;
         }
     }
-    exported_symbols(obj, v, s);
-}
-
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8 \
-    || LLVM_VERSION_MAJOR >= 4
-
-error_or<int64_t> symbol_relative_address(const coff_obj &obj, const SymbolRef &sym) {
-    auto base = obj.getImageBase();
-    auto addr = symbol_address(obj, sym);
-    if (!addr) return addr;
-    auto raddr = prim::relative_address(base, *addr);
-    return success(raddr);
+    emit_exported_symbols(obj, v, s);
 }
 
 error_or<int> section_number(const coff_obj &obj, const SymbolRef &s) {
@@ -265,15 +241,6 @@ error_or<int> section_number(const coff_obj &obj, const SymbolRef &s) {
 error_or<uint64_t> symbol_value(const coff_obj &obj, const SymbolRef &s) {
     auto sym = obj.getCOFFSymbol(s);
     return success(uint64_t(sym.getValue()));
-}
-
-bool is_relocatable(const coff_obj &obj) {
-    return obj.isRelocatableObject();
-}
-
-bool is_external_symbol(const coff_obj &obj, symbol_iterator it) {
-    auto coff_sym = obj.getCOFFSymbol(*it);
-    return coff_sym.isExternal();
 }
 
 const coff_section* get_coff_section(const coff_obj &obj, const SectionRef &sec) {
@@ -297,88 +264,17 @@ error_or<uint64_t> symbol_file_offset(const coff_obj &obj, const SymbolRef &sym)
     uint64_t off = coff_sec->PointerToRawData + coff_sym.getValue();
     return success(off);
 }
-
-error_or<uint64_t> get_image_base(const coff_obj &obj) {
-    return success(obj.getImageBase());
-}
-
-#elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
-
-// symbol address for 3.4 is already relative, i.e. doesn't include image base
-error_or<int64_t> symbol_relative_address(const coff_obj &obj, const SymbolRef &sym) {
-    auto addr = symbol_address(obj, sym);
-    if (!addr) return addr;
-    else return success(int64_t(*addr));
-}
-
-bool is_relocatable(const coff_obj &obj) {
-    std::size_t n = 0;
-    for (auto s : prim::sections(obj))
-        for (auto r : prim::relocations(s))
-            ++n;
-    return (n != 0);
-}
-
-bool is_external_symbol(const coff_obj &obj, symbol_iterator s) {
-    auto coff_sym = obj.getCOFFSymbol(s);
-    return coff_sym->StorageClass == COFF::IMAGE_SYM_CLASS_EXTERNAL;
-}
-
-const coff_section* get_coff_section(const coff_obj &obj, const SectionRef &sec) {
-    section_iterator it(sec);
-    return obj.getCOFFSection(it);
-}
-
-error_or<uint64_t> symbol_file_offset(const coff_obj &obj, const SymbolRef &sym) {
-    uint64_t off;
-    if (auto er = sym.getFileOffset(off)) return failure(er.message());
-    return success(off);
-}
-
-error_or<uint64_t> get_image_base(const COFFObjectFile &obj) {
-    if (is_relocatable(obj)) return success(uint64_t(0));
-    if (obj.getBytesInAddress() == 4) {
-        const pe32_header *hdr;
-        if (error_code ec = obj.getPE32Header(hdr))
-            return failure(ec.message());
-        return error_or<uint64_t>(hdr->ImageBase);
-    } else {
-        error_or<pe32plus_header> hdr = prim::get_pe32plus_header(obj);
-        if (!hdr) return hdr;
-        return std::move(error_or<uint64_t>(hdr->ImageBase) << hdr.warnings());
-    }
-}
-
-error_or<int> section_number(const coff_obj &obj, const SymbolRef &s) {
-    symbol_iterator it(s);
-    if (auto sym = obj.getCOFFSymbol(it))
-        return success(int(sym->SectionNumber));
-    else return failure("Failed to obtain coff symbol");
-}
-
-error_or<uint64_t> symbol_value(const coff_obj &obj, const SymbolRef &s) {
-    symbol_iterator it(s);
-    if (auto sym = obj.getCOFFSymbol(it))
-        return success(uint64_t(sym->Value));
-    else return failure("Failed to obtain coff symbol");
-}
-
-#else
-#error LLVM version is not supported
-#endif
-
 } // namespace coff_loader
 
 error_or<std::string> load(ogre_doc &s, const llvm::object::COFFObjectFile &obj, const char* pdb_path) {
     using namespace coff_loader;
-    s.raw_entry("(file-type coff)");
-    s.entry("relocatable") << is_relocatable(obj);
-    image_base(obj, s);
-    entry_point(obj, s);
-    sections(obj, s);
-    symbols(obj, s);
-    relocations(obj, s);
-    exported_symbols(obj, s);
+    s.raw_entry("(llvm:file-type coff)");
+    emit_base_address(obj, s);
+    emit_entry_point(obj, s);
+    emit_sections(obj, s);
+    emit_symbols(obj, s);
+    emit_relocations(obj, s);
+    emit_exported_symbols(obj, s);
     if (pdb_path)
         pdb_loader::load(obj, pdb_path, s);
     return s.str();
