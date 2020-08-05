@@ -14,6 +14,8 @@ val create
   -> addr
   -> Bigstring.t -> t Or_error.t
 
+val rebase : t -> addr -> t
+
 val slot : (Theory.program, t option) KB.slot
 val of_file : endian -> addr -> string -> t Or_error.t
 val view : ?word_size:size -> ?from:addr -> ?words:int -> t -> t Or_error.t

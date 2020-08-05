@@ -109,7 +109,7 @@ let persistent = Knowledge.Persistent.of_binable (module struct
     type t = stmt list [@@deriving bin_io]
   end)
 
-let slot = Knowledge.Class.property ~package:"bap.std"
+let slot = Knowledge.Class.property ~package:"bap"
     ~persistent Theory.Program.Semantics.cls "bil" domain
     ~public:true
     ~desc:"semantics of statements in BIL"

@@ -28,9 +28,12 @@ jobs:
           with:
             ocaml-version: ${{ matrix.ocaml-version }}
 
-        - name: Configure Homebrew LLVM
+        - name: Configure Homebrew
           if: matrix.os == 'macos-latest'
-          run: echo '::set-env name=LLVM_CONFIG::/usr/local/opt/llvm@9/bin/llvm-config'
+          run: |
+            brew update
+            brew upgrade
+            echo '::set-env name=LLVM_CONFIG::/usr/local/opt/llvm@9/bin/llvm-config'
 
         - name: Add the Testing Repository
           run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing

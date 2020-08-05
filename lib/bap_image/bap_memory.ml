@@ -150,6 +150,8 @@ let create ?(pos=0) ?len endian addr data : t Or_error.t =
 let of_file endian addr path : t Or_error.t =
   create endian addr (Bap_fileutils.readfile path)
 
+let rebase mem addr = {mem with addr}
+
 let min_addr t : addr = t.addr
 
 let max_addr t : addr =
@@ -443,7 +445,7 @@ let domain = KB.Domain.optional ~inspect:sexp_of_t "mem"
         Addr.equal x.addr y.addr &&
         Int.equal x.size y.size)
 
-let slot = KB.Class.property ~package:"bap.std"
+let slot = KB.Class.property ~package:"bap"
     Theory.Program.cls "mem" domain
     ~public:true
     ~desc:"a memory region occupied by the program"

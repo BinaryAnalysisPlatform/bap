@@ -103,4 +103,8 @@ let () =
         ~if_not_found:(fun _ -> insn)
     | _ -> KB.return Insn.empty in
   Bap_main.Extension.declare @@ fun _ctxt ->
+  KB.Rule.(declare ~package:"mips" "delay-slot" |>
+           require Insn.Slot.name |>
+           provide Insn.Slot.delay |>
+           comment "provides the delay slot length for branches");
   Ok (KB.promise Theory.Program.Semantics.slot provide_delay)

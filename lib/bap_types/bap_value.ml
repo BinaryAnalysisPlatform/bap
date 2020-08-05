@@ -48,9 +48,15 @@ let uid = Type_equal.Id.uid
 
 type ('a,'b) eq = ('a,'b) Type_equal.t = T : ('a,'a) eq
 
-let register_slot (type a) slot
+let register_slot (type a) ?uuid slot
     (module S : S with type t = a) : a tag =
-  let name = KB.Name.show @@ KB.Slot.name slot in
+  let slot_name = KB.Slot.name slot in
+  let uuid = match uuid with
+    | None -> KB.Name.package slot_name
+    | Some uuid -> uuid in
+  let name = KB.Name.show @@
+    KB.Name.create ~package:uuid @@
+    KB.Name.unqualified slot_name in
   let key = Type_equal.Id.create name S.sexp_of_t in
   let pp ppf (Value.T (k,x)) =
     let T = Equal.proof k key in
@@ -88,15 +94,16 @@ let register_slot (type a) slot
   Hashtbl.add_exn types ~key:name ~data:info;
   {key; slot}
 
-let register (type a) ~name ~uuid (module S : S with type t = a) =
+let register (type a) ?public ?desc ?package ~name ~uuid
+    (module S : S with type t = a) =
   let persistent = KB.Persistent.of_binable (module struct
       type t = S.t option [@@deriving bin_io]
     end) in
   let equal x y = S.compare x y = 0 in
   let domain = KB.Domain.optional ~equal name in
-  let slot = KB.Class.property ~persistent ~package:uuid
+  let slot = KB.Class.property ?public ?desc ~persistent ?package
       Theory.Program.cls name domain in
-  register_slot slot (module S)
+  register_slot ~uuid slot (module S)
 
 let key_name k =
   KB.Name.unqualified @@ KB.Name.read @@ Type_equal.Id.name k
@@ -177,11 +184,11 @@ module Tag = struct
   let key tag = tag.key
   let uid tag = uid tag.key
 
-  let register (type a) ~name ~uuid
+  let register (type a) ?public ?desc ?package ~name ~uuid
       (typ : (module S with type t = a)) : a tag =
-    register ~name ~uuid typ
+    register ?public ?desc ?package ~name ~uuid typ
 
-  let register_slot slot ops = register_slot slot ops
+  let register_slot = register_slot
   let slot tag = tag.slot
 
   let same_witness t1 t2 =

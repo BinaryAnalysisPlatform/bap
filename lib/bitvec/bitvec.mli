@@ -389,9 +389,67 @@ val to_string : t -> string
       hex-digit ::= '0'-'9' |'a'-'f'|'A'-'F'
     v}
 
-    The function is not defined if [s] is not in [valid-numbers].
+    @raise Invalid_argument if the string [s] is not recognized as [valid-numbers].
 *)
 val of_string : string -> t
+
+
+(** [of_substring ~pos ~len s] is a bitvector that corresponds to a
+    substring of [s] designated by the start position [pos] and length
+    [len].
+
+    The result is the same as [of_string (String.sub s pos len)],
+    except that no intermediate substring is created.
+
+    @param pos is the starting position of the substring (defaults to [0])
+    @param len is the length of the substring (defaults to the length
+    of [s].
+
+    @raise Invalid_argument if [pos] and [len] together do not define
+    a valid substring of [s] or if the substring is not a sequence of
+    numbers of the base [b].
+*)
+val of_substring : ?pos:int -> ?len:int -> string -> t
+
+
+(** [of_string_base b x] is a bitvector that corresponds to [s]
+    represented in base [b].
+
+    The base [b] must be between [2] and [16]. The textual
+    representation shall not contain a prefix that designates the
+    base and must be a sequence of digits that are less than [b].
+
+    {3 Examples}
+
+    Valid inputs:
+    - [of_string_base 16 "DEADBEEF"];
+    - [of_string_base 2 "010110"];
+    - [of_string_base 11 "AAAAAA"].
+
+    Invalid inputs:
+    - [of_string_base 16 "0xDEADBEEF"];
+    - [of_string_base 2  "-010100"];
+    - [of_string_base 10 "AAAAA"].
+*)
+val of_string_base : int -> string -> t
+
+(** [of_substring_base b x] is a bitvector that corresponds to a
+    substring of [s] designated by the start position [pos] and
+    length [len] that is a sequence of digits in base [b].
+
+    The result is the same as [of_string_base b x (String.sub s pos
+    len)], except that no intermediate substring is created.
+
+    @param pos is the starting position of the substring (default to [0])
+
+    @param len is the length of the substring (defaults to the length
+    of [s].
+
+    @raise Invalid_argument if [pos] and [len] together do not define
+    a valid substring of [s] or if the substring is not a sequence of
+    numbers of the base [b].
+*)
+val of_substring_base : ?pos:int -> ?len:int -> int -> string -> t
 
 (** [fits_int x] is [true] if [x] could be represented with the OCaml
     [int] type.

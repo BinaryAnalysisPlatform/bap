@@ -235,7 +235,7 @@ module Std : sig
 
   (** {2:disasm Disassembler}
 
-      This layer defines interfaces for disassemblers. Two interfaces
+      This layer defines the interfaces for disassemblers. Two interfaces
       are provided:
 
       - {{!Disasm}Disasm} - a regular interface that hides all
@@ -4215,7 +4215,7 @@ module Std : sig
     module Tag : sig
       type 'a t = 'a tag
       (** [register ~name ~uuid (module T)] creates a new variant
-          constructor, that accepts values of type [T.t]. Module [T]
+          constructor that accepts values of type [T.t]. Module [T]
           should implement [Binable.S] and [Sexpable.S] interfaces,
           provide [compare] and pretty-printing [pp] functions. This
           functions will be used to print, compare and serialize
@@ -4223,12 +4223,37 @@ module Std : sig
 
           The returned value of type [T.t tag] is a special key that
           can be used with [create] and [get] functions to pack and
-          unpack values of type [T.t] into [value]. *)
-      val register : name:string -> uuid:string ->
+          unpack values of type [T.t] into [value].
+
+          Registration of a value tag, automatically adds a
+          property slot to the [Theory.program] class. Then property
+          name is [package:name] where [package] defaults to
+          [uuid].
+
+          No matter of the [package] name the [uuid] parameter is used
+          as a [typeid] and to serialize and de-serialize values.
+
+
+          Note, this function delegates most of it work to {!register_slot}.
+
+          @since 2.2.0 adds [public], [desc], and [package] parameter
+          @since 2.2.0 changed the defined slot name to [package:name]
+      *)
+      val register :
+        ?public:bool ->
+        ?desc:string ->
+        ?package:string -> name:string -> uuid:string ->
         (module S with type t = 'a) -> 'a tag
 
-      (** [register_slot slot (module T)] reflects Knowledge property into BAP value.  *)
-      val register_slot : (Theory.program,'a option) KB.slot ->
+      (** [register_slot s f] registers a KB property as a value.
+
+          An existing property of the [Theory.program] class can be
+          also represented as BAP value and attached directly to
+          program attributes, memory locations, or stored in the
+          project dictionary.
+      *)
+      val register_slot : ?uuid:string ->
+        (Theory.program,'a option) KB.slot ->
         (module S with type t = 'a) -> 'a tag
 
       (** [slot tag] returns a slot associated with the tag. *)
@@ -4749,6 +4774,14 @@ module Std : sig
       endian ->
       addr ->
       Bigstring.t -> t Or_error.t
+
+
+    (** [rebase mem addr] returns the same memory but with the new
+        starting address [addr].
+
+        @since 2.2.0
+    *)
+    val rebase : t -> addr -> t
 
     (** memory representation of a program  *)
     val slot : (Theory.program, mem option) Knowledge.slot
@@ -5508,7 +5541,7 @@ module Std : sig
 
       (** a contiguous piece of memory.  *)
       type 'a region = {
-        addr : addr;              (** a staring address *)
+        addr : addr;              (** a starting address *)
         size : size;              (** a size of the segment *)
         info : 'a                  (** the attached information *)
       }
@@ -5523,8 +5556,52 @@ module Std : sig
       val executable : bool Ogre.field (** is_executable *)
       val fixup : addr Ogre.field      (** an address of a fixup *)
 
-      (** [arch name] a file contains code for the [name] architecture. *)
+      (** [arch name] a file contains code for the [name] architecture.
+
+          E.g., arm, x86, x86_64
+      *)
       val arch : (string, (string -> 'a) -> 'a) Ogre.attribute
+
+
+      (** [subarch name] the subarchitecture, when applicable,
+          e.g., v7, v8, r2, etc. Should be appended to the arch
+          name to get the full description, e.g., armv7.
+      *)
+      val subarch : (string, (string -> 'a) -> 'a) Ogre.attribute
+
+
+      (** [vendor name] the second part of the build triplet,
+          e.g., apple, pc, ibm, unknown. Could be just an empty string.
+      *)
+      val vendor : (string, (string -> 'a) -> 'a) Ogre.attribute
+
+
+      (** [system name] the operating system name, for which the
+          binary is specifically built, e.g., ananas, ios, linux.
+      *)
+      val system : (string, (string -> 'a) -> 'a) Ogre.attribute
+
+
+      (** [abi name] the environment/toolchain/abi under which the
+          binary is expected to be run, e.g., gnu, android, msvc
+      *)
+      val abi : (string, (string -> 'a) -> 'a) Ogre.attribute
+
+
+      (** [bits m] is the bitness of the target architecture, e.g.,
+          16, 32, 64.
+      *)
+      val bits : (size, (size -> 'a) -> 'a) Ogre.attribute
+
+
+      (** [is_little_endian yes-or-no] is [true] if the target is
+          little endian.   *)
+      val is_little_endian : (bool, (bool -> 'a) -> 'a) Ogre.attribute
+
+
+      (** [bias offset] the value by which all addresses are biased
+          wrt to the real addresses in the binary. *)
+      val bias : (off, (off -> 'a) -> 'a) Ogre.attribute
 
       (** [segment addr size readable writable executable] a memory
           region (addr,size) has the specified permissions.  *)
@@ -5565,7 +5642,7 @@ module Std : sig
       val relocation :
         (int64 * addr, (addr -> addr -> 'a) -> 'a) Ogre.attribute
 
-      (** [extrenal_reference addr name] a piece of code at the
+      (** [external_reference addr name] a piece of code at the
           specified address [addr] references an external symbol with
           the given [name]. *)
       val external_reference :
@@ -7206,16 +7283,63 @@ module Std : sig
       target.  *)
   val register_target : arch -> (module Target) -> unit
 
-  (** Term identifier  *)
+  (** Term identifier.
+
+      A term identifier is a knowledge object of class
+      [core-theory:program] that represents a program. Objects of this
+      class have many properties that describe program syntax
+      (representation) and semantics. The set of properties is
+      extensible and each plugin/library can add its own properties,
+      for the current set of all properties of all classes, see
+      [bap list classes], or [bap list class -f core-theory:program]
+      to list the properties of the class to which Tid.t belongs.
+
+
+  *)
   module Tid : sig
     type t = tid
 
-    (** [create ()] creates a fresh newly term identifier  *)
+    (** [create ()] creates a fresh newly term identifier.
+
+        This function has a side-effect of changing the Toplevel
+        knowledge base.
+    *)
     val create : unit -> t
 
-    val for_name : string -> t
-    val for_addr : addr -> t
-    val for_ivec : int -> t
+
+    (** [for_name name] creates a Term identifier for the given [name].
+
+        Creates a new program object that denotes a program with the
+        given name. See [Theory.Label.for_name] from the
+        [Bap_core_theory] interface for more information.
+
+        @since 2.0.0
+        @since 2.2.0 has the optional [package] parameter.
+    *)
+    val for_name : ?package:string -> string -> t
+
+
+    (** [for_addr addr] creates a Term identifier for the given [addr].
+
+        Creates a new program object that denotes a program with the
+        given addr. See [Theory.Label.for_addr] from the
+        [Bap_core_theory] interface for more information.
+
+        @since 2.0.0
+        @since 2.2.0 has the optional [package] parameter.
+    *)
+    val for_addr : ?package:string -> addr -> t
+
+    (** [for_ivec ivec] creates a Term identifier for the given [ivec].
+
+        Creates a new program object that denotes a program with the
+        given ivec. See [Theory.Label.for_ivec] from the
+        [Bap_core_theory] interface for more information.
+
+        @since 2.0.0
+        @since 2.2.0 has the optional [package] parameter.
+    *)
+    val for_ivec : ?package:string -> int -> t
 
 
     (** [set_name tid name] associates a [name] with a given
@@ -8599,8 +8723,35 @@ module Std : sig
     *)
     val provide : Knowledge.agent -> t -> unit
 
+    (** [providing t scope] provides the information in the specified [scope],
+
+        After the [scope] function is evaluated the information source
+        is retracted from the knowledge base.
+
+        See {!Bap_knowledge.Knowledge.proposing{proposing}}.
+
+        @since 2.2.0
+    *)
+    val providing : Knowledge.agent -> t -> (unit -> 'a knowledge) -> 'a knowledge
+
+
     (** [create fn] creates a symbolizer for a given function  *)
     val create : (addr -> string option) -> t
+
+
+    (** [set_path s] limits the symbolizer applicability only to
+        addresses that belong to a file/compilation unit with the
+        specified path.
+
+        @since 2.2.0
+    *)
+    val set_path : t -> string -> t
+
+
+    (** [path s] is the path to the file that this symbolizer serves.
+        @since 2.2.0
+    *)
+    val path : t -> string option
 
     (** [of_blocks] produces a symbolizer from a serialized
         sequence of blocks. Each element of the sequence is deconstructed
@@ -8630,7 +8781,40 @@ module Std : sig
   module Rooter : sig
     type t = rooter
 
+
+    (** [provide r] reflects the rooter information to the knowledge
+        base.
+
+        @since 2.0.0
+    *)
     val provide : t -> unit
+
+
+    (** [providing t scope] provides the information in the specified [scope],
+
+        After the [scope] function is evaluated the information source
+        is retracted from the knowledge base.
+
+        See {!Bap_knowledge.Knowledge.promising{promising}}.
+
+        @since 2.2.0
+    *)
+    val providing : t -> (unit -> 'a knowledge) -> 'a knowledge
+
+
+    (** [set_path s] limits the symbolizer applicability only to
+        addresses that belong to a file/compilation unit with the
+        specified path.
+
+        @since 2.2.0
+    *)
+    val set_path : t -> string -> t
+
+
+    (** [path s] is the path to the file that this symbolizer serves.
+        @since 2.2.0
+    *)
+    val path : t -> string option
 
     (** [create seq] creates a rooter from a given sequence of addresses  *)
     val create : addr seq -> t
@@ -8674,6 +8858,20 @@ module Std : sig
         instruction itself and returns a list of destination.  *)
     val create : (mem -> full_insn -> dests) -> t
 
+    (** [set_path s] limits the symbolizer applicability only to
+        addresses that belong to a file/compilation unit with the
+        specified path.
+
+        @since 2.2.0
+    *)
+    val set_path : t -> string -> t
+
+    (** [path s] is the path to the file that this symbolizer serves.
+        @since 2.2.0
+    *)
+    val path : t -> string option
+
+
     (** [of_bil arch] creates a brancher that will use a BIL code to
         statically deduce the instruction destinations.  *)
     val of_bil : arch -> t
@@ -8682,7 +8880,22 @@ module Std : sig
         the instruction [insn], that occupies memory region [mem].  *)
     val resolve : t -> mem -> full_insn -> dests
 
+
+    (** [provide brancher] provides the brancher information to the
+        knowledge base.    *)
     val provide : t -> unit
+
+    (** [providing t scope] provides the information in the specified [scope],
+
+        After the [scope] function is evaluated the information source
+        is retracted from the knowledge base.
+
+        See {!Bap_knowledge.Knowledge.promising{promising}}.
+
+        @since 2.2.0
+    *)
+    val providing : t -> (unit -> 'a knowledge) -> 'a knowledge
+
 
     module Factory : Source.Factory.S with type t = t
       [@@deprecated "[since 2019-05] use [provide]"]
@@ -8730,11 +8943,12 @@ module Std : sig
 
   (** Event subsystem.
 
-      The event subsystem is a way of communicating between different
-      subsystems of BAP.  *)
+      This module is the [Bap_main_event] module extended with the
+      [Pritable.S] interface, kept here for backward compatibility.
+  *)
   module Event : sig
 
-    type t = ..
+    type t = Bap_main_event.t = ..
     type event = t = ..
 
     (** global [stream] of events  *)
@@ -8754,18 +8968,20 @@ module Std : sig
 
     (** Logging event.*)
     module Log : sig
-      type level =
+      type level = Bap_main_event.Log.level =
         | Debug
         | Info
         | Warning
         | Error
 
-      type info = {
+      type info = Bap_main_event.Log.info = {
         level : level;
         section : string;
         message : string;
       }
 
+
+      (** re-exports {!Bap_main_event.Log.Message} *)
       type event += Message of info
 
       (** [message level ~section fmt ...] send a message of the
@@ -8781,6 +8997,9 @@ module Std : sig
             info "created some %s" "thing"
           v} *)
       val message :  level -> section:string -> ('a,Format.formatter,unit) format -> 'a
+
+
+      (** re-exports {!Bap_main_event.Log.Progress}  *)
       type event += Progress of {
           task  : string;         (** hierarchical task name  *)
           note  : string option;  (** a short note            *)
@@ -8802,16 +9021,163 @@ module Std : sig
 
   type project
 
-  (**/**)
-  (* Explicitly undocumented right now, as we will later
-     republish it as a separate library.
+
+  (** The interface to the BAP toplevel state.
+
+      To create a project from the binary code BAP relies on the
+      knowledge base, which is a state monad underneath the hood,
+      or, put it simply, each knowledge computation is a function
+      of type [state -> state * 'a]. To enable backward compatibility,
+      we compute each such stateful computation in the toplevel, which
+      also stores the hidden state.
+
+      Using this interface it is possible to evaluate knowledge base
+      computations and extract their results to concrete values. Since
+      the knowledge base computations are not expression but objective
+      language, i.e., they evaluate to knowledge base objects, not to
+      values, we commonly need to create objects that will carry the
+      result of the computation as their properties. To ease the
+      process this module provides the notion of toplevel variables,
+      that denote such properties. Here is an example, how to run a
+      knowledge base computation and extract its result, assuming that
+      [analysis] is a function of type [unit -> my knowledge]
+
+      {[
+        let result : my var = Toplevel.var "my-property"
+        let run analysis : my =
+          Toplevel.put result (analysis ());
+          Toplevel.get result
+      ]}
+
+      There are also [eval] and [exec] functions that could be used to
+      extract values from the existing properties, e.g.,
+
+      {[
+        let get_unit tid =
+          eval Theory.Label.unit (KB.return tid)
+      ]}
+
+      Finally, the interface provides functions to control the inner
+      state of the toplevel, which is the knowledge base that is used
+      by BAP throught the lifetime of the BAP process and could be
+      also persistet between runs. E.g., the [disassemble] plugin is
+      persisting the knowledge base in the BAP cache facility and
+      loads it when it identifies that the input digest is the same.
+
+      Warning: this interface should be used with care, in particular,
+      it shall not be used in the context of another knowledge
+      computation that is also run in the toplevel.
+
+      @since 2.2.0 made public and documented, the state interface
+      was available since 2.0.0 but wasn't documented and considered
+      official.
+
   *)
   module Toplevel : sig
+
+    (** this exception is raised when the knowledge computation
+        enters the inconsistent state.
+
+        @since 2.2.0
+    *)
+    exception Conflict of Knowledge.conflict
+
+
+    (** {3 Toplevel variables}  *)
+
+    (** the type of variables holding property ['p] *)
+    type 'p var
+
+
+    (** [var name] creates a fresh variable.
+
+        Creates and declares a fresh new property of the
+        [bap:toplevel] class. The name is mangled to prevent clashing
+        with existing properties, and each evaluation of this function
+        creates a new property that is distinct from any previously
+        created properties.
+
+        Warning: this function changes the static representation of
+        the knowledge base (the scheme) and should be only used to
+        create static (global) variables, that have the lifetime of
+        the BAP process. It is not recommended to call this function
+        inside any other function.
+    *)
+    val var : string -> 'p var
+
+
+    (** [put var exp] evaluates [exp] and sets [var] to its result.
+
+        @raise Conflict if [exp] ends up in the conflicting state.
+    *)
+    val put : 'p var -> 'p knowledge -> unit
+
+
+    (** [get var] reads the value of the variable.
+
+        @raise Not_found if [var] was not set with [put].
+    *)
+    val get : 'p var -> 'p
+
+    (** {3 The slot interface}  *)
+
+
+    (** [eval property obj_exp] gets [property] of [obj_exp].
+
+        Evaluates the computation [obj_exp] that shall return an
+        object of class ['a] and returns the value ['p] of the specified
+        [property].
+
+        @raise Conflict when the knowledge base enters the conflicting
+        state.
+    *)
+    val eval : ('a,'p) Knowledge.slot -> 'a Knowledge.obj knowledge -> 'p
+
+
+    (** [try_eval property object] is like [eval property object] but
+        returns [Error conflict] instead of raising an exception. *)
+    val try_eval : ('a,'p) Knowledge.slot -> 'a Knowledge.obj knowledge ->
+      ('p,Knowledge.conflict) result
+
+
+    (** [exec stmt] executes the side-effectful knowledge computation.
+
+        Executes the statement and updates the internal knowledge base.
+
+        @raise Conflict when the knowledge base enters the conflicting
+        state.
+    *)
+    val exec : unit knowledge -> unit
+
+
+
+    (** [try_exec stmt] is like [exec stmt] but returns
+        [Error conflict] instead of raising an exception.
+    *)
+    val try_exec : unit knowledge -> (unit,Knowledge.conflict) result
+
+
+
+    (** {3 The state interface}  *)
+
+
+    (** [set s] sets the knowledge base state to [s].
+
+        Any existing state is discarded.
+    *)
     val set : Knowledge.state -> unit
-    val reset : unit -> unit
+
+
+    (** [current ()] is the current state of the knowledge base.  *)
     val current : unit -> Knowledge.state
+
+
+    (** [reset ()] resets the knowledge state to the empty state.
+
+        It is the same as [set @@ KB.empty]
+    *)
+    val reset : unit -> unit
   end
-  (**/**)
 
   (** Disassembled program.
 
@@ -8836,129 +9202,110 @@ module Std : sig
     (** IO interface to a project data structure.  *)
     include Data.S with type t := t
 
-    (** [from_file filename] creates a project from a provided input
-        source. The reconstruction is a multi-pass process driven by
-        the following input variables, provided by a user:
+    (** [from_file filename] creates a project from the provided input
+        source.
 
-        - [brancher] decides instruction successors;
-        - [rooter] decides function starts;
-        - [symbolizer] decides function names;
-        - [reconstructor] provides algorithm for symtab reconstruction;
-
-        The project is built incrementally and iteratively until a
-        fixpoint is reached. The fixpoint is reached when an
-        information stops to flow from the input variables.
-
-        The overall algorithm of can depicted with the following
-        diargram, where boxes denote data and ovals denote processes:
+        The input code regions are speculatively disassembled and the
+        set of basic blocks is determined, using the algorithm
+        described in {!Disasm.Driver}. After that the concrete whole
+        program control-flow graph (CFG) is built, which can be
+        accessed with the {!Project.disasm} function. The whole
+        program CFG is then partitioned into a set of subroutines
+        using the dominators analsysis, see {!Disasm.Subroutines} for
+        details. Based on this partition a symbol table, which is a
+        set of a subroutines control-flow graphs, is built. The symbol
+        table, which can be accessed with {!Project.symbols}, also
+        contains information about the interprocedural control
+        flow. Finally, the symbol table is translated into the
+        intermediate representation, which can be accessed using the
+        {!Project.program} function. The whole process is pictured below.
 
         {v
-               +---------+   +---------+   +---------+
-               | brancher|   |code/data|   |  rooter |
-               +----+----+   +----+----+   +----+----+
-                    |             |             |
-                    |             v             |
-                    |        -----------        |
-                    +------>(   disasm  )<------+
-                             -----+-----
+                         ---------------------
+                        (    Disassembling    )
+                         ---------------------
                                   |
-                                  v
-              +----------+   +---------+   +----------+
-              |symbolizer|   |   CFG   |   | reconstr +
-              +-----+----+   +----+----+   +----+-----+
-                    |             |             |
-                    |             v             |
-                    |        -----------        |
-                    +------>(  reconstr )<------+
-                             -----+-----
+                        +---------------------+
+                        |                     |
+                        |  All instructions   |
+                        |  and basic blocks   |
+                        |                     |
+                        +---------------------+
                                   |
-                                  v
-                             +---------+
-                             |  symtab |
-                             +----+----+
+                         ---------------------
+                        ( CFG  reconstruction )
+                         ---------------------
                                   |
-                                  v
-                             -----------
-                            (  lift IR  )
-                             -----+-----
+                        +---------------------+
+                        |                     |
+                        |  The whole program  |
+                        |  control-flow graph |
+                        |                     |
+                        +---------------------+
                                   |
-                                  v
-                             +---------+
-                             | program |
-                             +---------+
+                         ---------------------
+                        (    Partitioning     )
+                         ---------------------
+                                  |
+                        +---------------------+
+                        |                     |
+                        | The quotient set of |
+                        |    basic  blocks    |
+                        |                     |
+                        +---------------------+
+                                  |
+                         ---------------------
+                        ( Constructing Symtab )
+                         ---------------------
+                                  |
+                        +---------------------+
+                        |                     |
+                        |   The symbol table  |
+                        |  and the  callgraph |
+                        |                     |
+                        +---------------------+
+                                  |
+                         ---------------------
+                        (  IR Reconstruction  )
+                         ---------------------
+                                  |
+                        +---------------------+
+                        |                     |
+                        |    The IR of the    |
+                        |   binary  program   |
+                        |                     |
+                        +---------------------+
 
-       v}
+        v}
 
-        The input variables, are represented with stream of
-        values. Basically, they can be viewed as cells, that depends
-        on some input. When input changes, the value is recomputed and
-        passed to the stream. Circular dependencies are allowed, so a
-        rooter may actually depend on the [program] term. In case of
-        circular dependencies, the above algorithm will be run
-        iteratively, until a fixpoint is reached. A criterium for the
-        fixpoint, is when no data need to be recomputed. And the data
-        must be recomputed when its input is changed or needs to be
-        recomputed.
+        The disassembling process is fully integrated with the
+        knowledge base. If the input source provides information about
+        symbols and their location, then this information will be
+        automatically reflected to the knowledge base.
 
-        User provided input can depend on any information, but a good
-        start is the information provided by the {!Info} module. It
-        contains several variables, that are guaranteed to be defined
-        in the process of reconstruction.
+        The [brancher], [symbolizer], and [rooter] parameters are
+        ignored since 2.0.0 and their information could be reflected
+        to the knowledge base using, correspondingly,
+        {!Brancher.provide}, {!Symbolizer.provide}, and
+        {!Rooter.provide} functions.
 
-        For example, let's assume, that a [create_source] function
-        actually requires a filename as its input, to create a source
-        [t], then it can be created as easily as:
+        @param state if specified then the provided [state] will be
+        used as the initial state
 
-        [Stream.map Input.file ~f:create_source]
+        @param package if specified, then all symbols during the
+        disassembly will be created (interned) in the specified package.
 
-        As a more complex, example let's assume, that a source now
-        requires that both [arch] and [file] are known. We can combine
-        two different streams of information with a [merge] function:
+        @since 2.0.0 the state parameter is added
+        @since 2.0.0 the parameter [disassembler] is unused
+        @since 2.0.0 the parameter [brancher] is unused
+        @since 2.0.0 the parameter [symbolizer] is unused
+        @since 2.0.0 the parameter [rooter] is unused
+        @since 2.0.0 the parameter [reconstructor] is unused
+        @since 2.2.0 the package parameter is added
 
-        [Stream.merge Input.file Input.arch ~f:create_source], where
-        [create_source] is a function of type: [string -> arch -> t].
-
-        If the source requires more than two arguments, then a
-        [Stream.Variadic], that is a generalization of a merge
-        function can be used. Suppose, that a source of information
-        requires three inputs: filename, architecture and compiler
-        name. Then we first define a list of arguments,
-
-        [let args = Stream.Variadic.(args Input.arch $Input.file $Compiler.name)]
-
-        and apply them to our function [create_source]:
-
-        [Stream.Variadic.(apply ~f:create_source args].
-
-        Sources, specified in the examples above, will call a [create_source]
-        when all arguments changes. This is an expected behavior for
-        the [arch] and [file] variables, since the do not change during
-        the program computation. Mixing constant and non-constant
-        (with respect to a computation) variables is not that easy, but
-        still can be achieved using [either] and [parse] combinators.
-        For example, let's assume, that a [source] requires [arch] and
-        [cfg] as its input:
-
-        {[
-          Stream.either Input.arch Input.cfg |>
-          Stream.parse inputs ~init:nil ~f:(fun create -> function
-              | First arch -> None, create_source arch
-              | Second cfg -> Some (create cfg), create)
-        ]}
-
-        In the example, we parse the stream that contains either
-        architectures or control flow graphs with a state of type,
-        [cfg -> t Or_error.t]. Every time an architecture is changed,
-        (i.e., a new project is started), we recreate a our state,
-        by calling the [create_source] function. Since, we can't
-        proof, that architecture will be decided before the [cfg], or
-        decided at all we need to provide an initial [nil] function.
-        It can return either a bottom value, e.g.,
-        [let nil _ = Or_error.of_string "expected arch"]
-
-        or it can just provide an empty information.
     *)
     val create :
+      ?package:string ->
       ?state:state ->
       ?disassembler:string ->
       ?brancher:brancher source ->
@@ -8971,6 +9318,7 @@ module Std : sig
     val arch : t -> arch
 
     val state : t -> state
+
 
     (** [disasm project] returns results of disassembling  *)
     val disasm : t -> disasm
@@ -9235,7 +9583,65 @@ module Std : sig
       (** [autorun pass] is [true] if a [pass] was created with
           autorun option *)
       val autorun : t -> bool
+    end
 
+
+    (** A pass that collates projects.
+
+        A collator is a pass that is folded over projects and computes
+        differences between the base version and the number of
+        alternative versions.
+    *)
+    module Collator : sig
+
+      type t
+
+
+      (** Information about a collator.  *)
+      type info
+
+
+      (** [register ~prepare ~collate ~summary name] registers a collator.
+
+          The [prepare] function is called on the base version and it
+          returns the collator's state that can be an arbitrary type
+          ['s]. Then the [collate] function is consequitevely applied
+          on alternative versions of the base version, with the
+          version number passed as the first argument (starting from
+          0). Finally, when all versions are compared with the base,
+          the summary function is called.
+
+          The collator fullname (package:name) must be unique,
+          otherwise a function terminates.
+      *)
+      val register : ?desc:string -> ?package:string -> string ->
+        prepare:(project -> 's) ->
+        collate:(int -> 's -> project -> 's) ->
+        summary:('s -> unit) ->
+        unit
+
+
+      (** [apply collator projects] applies the [collator] to the
+          sequence of projects.
+
+          Projects are evaluated lazily, one project at time.
+      *)
+      val apply : t -> project seq -> unit
+
+
+      (** [find ?package name] looks up a collator in the registry.  *)
+      val find : ?package:string -> string -> t option
+
+
+      (** the collators name  *)
+      val name : info -> Knowledge.Name.t
+
+
+      (** the collators description.  *)
+      val desc : info -> string
+
+      (** information about registered collators  *)
+      val registered : unit -> info list
     end
 
     (**/**)
@@ -9255,6 +9661,11 @@ module Std : sig
 
       If run in a standalone mode, then field [name] would be set to
       [Sys.executable_name] and [argv] to [Sys.argv].
+
+      Note: this module uses the [Event.Self()] module and extends it
+      with several more fields, such as [name], [version], [doc], and
+      [argv]. It is recommended to use [Event.Self()] aka
+      [Bap_main_event.Self()] instead.
   *)
   module Self() : sig
 

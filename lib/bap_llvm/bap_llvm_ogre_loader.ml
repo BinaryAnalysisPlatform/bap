@@ -60,10 +60,13 @@ module Ogre_loader(P : Parameters) = struct
     else Fact.return P.image_base
 
   let provide_base =
-    Fact.require default_base_address >>= fun default ->
+    Fact.require default_base_address >>= fun real ->
     image_base >>= function
-    | None -> Fact.provide base_address default
-    | Some a -> Fact.provide base_address a
+    | None -> Fact.provide base_address real
+    | Some base ->
+      let base_bias = Int64.(base - real) in
+      Fact.provide bias base_bias >>= fun () ->
+      Fact.provide base_address base
 
   let provide_entry =
     Fact.require base_address >>= fun base ->

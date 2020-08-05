@@ -8,12 +8,76 @@ namespace prim {
 using namespace llvm;
 using namespace llvm::object;
 
-std::string arch_of_object(const llvm::object::ObjectFile &obj) {
-    return Triple::getArchTypeName(static_cast<Triple::ArchType>(obj.getArch()));
-}
 
 int64_t relative_address(uint64_t base, uint64_t abs) {
     return (abs - base);
+}
+
+// some cases are commented out because they are not supported
+// by all versions of LLVM, we will later use a macro to enable
+// them depending on the version.
+std::string string_of_subarch(Triple::SubArchType sub) {
+    switch (sub) {
+    case Triple::NoSubArch: return "";
+    // case Triple::ARMSubArch_v8_6a: return "v8.6-a";
+    // case Triple::ARMSubArch_v8_5a: return "v8.5-a";
+    // case Triple::ARMSubArch_v8_4a: return "v8.4-a";
+    // case Triple::ARMSubArch_v8_3a: return "v8.3-a";
+    // case Triple::ARMSubArch_v8_2a: return "v8.2-a";
+    // case Triple::ARMSubArch_v8_1a: return "v8.1-a";
+    case Triple::ARMSubArch_v8:    return "v8";
+    // case Triple::ARMSubArch_v8r:   return "v8-r";
+    // case Triple::ARMSubArch_v8m_baseline: return "v8-m.base";
+    // case Triple::ARMSubArch_v8m_mainline: return "v8-m.main";
+    // case Triple::ARMSubArch_v8_1m_mainline: return "v8.1-m.base",
+    case Triple::ARMSubArch_v7: return "v7";
+    case Triple::ARMSubArch_v7em: return "v7e-m";
+    case Triple::ARMSubArch_v7m: return "v7-m";
+    case Triple::ARMSubArch_v7s: return "v7s";
+    case Triple::ARMSubArch_v7k: return "v7k";
+    case Triple::ARMSubArch_v7ve: return "v7ve";
+    case Triple::ARMSubArch_v6: return "v6";
+    case Triple::ARMSubArch_v6m: return "v6-m";
+    case Triple::ARMSubArch_v6k: return "v6k";
+    case Triple::ARMSubArch_v6t2: return "v6t2";
+    case Triple::ARMSubArch_v5: return "v5";
+    case Triple::ARMSubArch_v5te: return "v5te";
+    case Triple::ARMSubArch_v4t: return "v4t";
+    case Triple::KalimbaSubArch_v5: return "v5";
+    case Triple::KalimbaSubArch_v3: return "v3";
+    case Triple::KalimbaSubArch_v4: return "v4";
+    // case Triple::MipsSubArch_r6: return "r6";
+    // case Triple::PPCSubArch_spe: return "spe";
+    default: return "";
+    }
+}
+
+// we need it because Triple::getEnvironmentName() is broken and
+// returns the system instead.
+std::string string_of_abi(Triple::EnvironmentType abi) {
+    switch (abi) {
+    case Triple::UnknownEnvironment: return "unknown";
+    case Triple::GNU: return "gnu";
+    case Triple::GNUABIN32: return "gnuabin32";
+    case Triple::GNUABI64: return "gnuabi64";
+    case Triple::GNUEABI: return "gnueabi";
+    case Triple::GNUEABIHF: return "gnueabihf";
+    case Triple::GNUX32: return "gnux32";
+    case Triple::CODE16: return "code16";
+    case Triple::EABI: return "eabi";
+    case Triple::EABIHF: return "eabihf";
+    case Triple::Android: return "android";
+    case Triple::Musl: return "musl";
+    case Triple::MuslEABI: return "musleabi";
+    case Triple::MuslEABIHF: return "musleabihf";
+    case Triple::MSVC: return "msvc";
+    case Triple::Itanium: return "itanium";
+    case Triple::Cygnus: return "cygnus";
+    case Triple::CoreCLR: return "coreclr";
+    case Triple::Simulator: return "simulator";
+  //case Triple::MacABI: return "macabi";
+    default: return "unknown";
+    }
 }
 
 

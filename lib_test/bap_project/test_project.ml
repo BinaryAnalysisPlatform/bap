@@ -69,9 +69,8 @@ let test_substitute case =
       |> ok_exn in
     let code =
       Memmap.add Memmap.empty mem (Value.create Image.section "bap.test") in
-    let data = code in
+    let data = Memmap.empty in
     Project.Input.create case.arch file ~code ~data in
-
   let p = Project.create input |> ok_exn in
   let mem,_ = Memmap.lookup (Project.memory p) base |> Seq.hd_exn in
   let test expect s =

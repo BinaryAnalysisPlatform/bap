@@ -20,6 +20,7 @@ module Symbols = Data.Make(struct
 module type Target = sig
   type t
   val of_blocks : (string * addr * addr) seq -> t
+  val set_path : t -> string -> t
   val provide : Knowledge.agent -> t -> unit
 end
 
@@ -60,13 +61,14 @@ let extract path arch =
 let ida_symbolizer =
   let reliability = Knowledge.Agent.reliable in
   Knowledge.Agent.register ~reliability
-    ~package:"bap.std" "ida-symbolizer"
+    ~package:"bap" "ida-symbolizer"
     ~desc:"Provides information from IDA Pro"
 
 let register_source (module T : Target) =
   let inputs = Stream.zip Project.Info.file Project.Info.arch in
   Stream.observe inputs @@ fun (file,arch) ->
-  T.provide ida_symbolizer (T.of_blocks (extract file arch))
+  let provider = T.of_blocks (extract file arch) in
+  T.provide ida_symbolizer (T.set_path provider file)
 
 
 type perm = [`code | `data] [@@deriving sexp, equal]
@@ -218,7 +220,8 @@ let register_brancher_source () =
   let inputs =
     Stream.zip Project.Info.file Project.Info.arch in
   Stream.observe inputs @@ fun (file,arch) ->
-  Brancher.provide @@ Brancher.create (get_resolve_fun file arch)
+  let brancher = Brancher.create (get_resolve_fun file arch) in
+  Brancher.provide @@ Brancher.set_path brancher file
 
 let main () =
   register_source (module struct include Rooter

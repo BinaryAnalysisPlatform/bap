@@ -2,7 +2,7 @@ open Core_kernel
 open Bap_knowledge
 open Knowledge.Syntax
 
-let package = "bap.std-internal"
+let package = "bap"
 type 'a t = 'a
 type env = Knowledge.state ref
 type main = Main
@@ -16,8 +16,8 @@ let set s = state := s
 let reset () = state := Knowledge.empty
 let current () = !state
 
-exception Internal_runtime_error of Knowledge.conflict [@@deriving sexp]
-exception Not_found [@@deriving sexp]
+exception Conflict of Knowledge.conflict
+exception Not_found
 
 let try_eval slot exp =
   let cls = Knowledge.Slot.cls slot in
@@ -30,10 +30,9 @@ let try_eval slot exp =
 let eval slot exp =
   try_eval slot exp |> function
   | Ok v -> v
-  | Error conflict ->
-    raise (Internal_runtime_error conflict)
+  | Error x -> raise (Conflict x)
 
-let main = Knowledge.Class.declare ~package "main" Main
+let main = Knowledge.Class.declare ~package "toplevel" Main
 
 
 let var name =
@@ -58,7 +57,7 @@ let try_exec stmt =
 let exec stmt =
   try_exec stmt |> function
   | Ok () -> ()
-  | Error err -> raise (Internal_runtime_error err)
+  | Error err -> raise (Conflict err)
 
 let put slot exp = exec @@begin
     exp >>= fun v -> this >>= fun x ->
@@ -68,3 +67,9 @@ let put slot exp = exec @@begin
 let get slot = eval slot this |> function
   | None -> raise Not_found
   | Some x -> x
+
+
+let () = Caml.Printexc.register_printer @@ function
+  | Conflict err ->
+    Some (Format.asprintf "%a" Knowledge.Conflict.pp err)
+  | _ -> None

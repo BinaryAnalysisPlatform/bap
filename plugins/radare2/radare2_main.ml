@@ -7,17 +7,24 @@ include Self()
 open KB.Syntax
 
 let agent =
-  KB.Agent.register ~package:"bap.std" "radare2-symbolizer"
+  KB.Agent.register ~package:"bap" "radare2-symbolizer"
     ~desc:"extracts symbols radare2"
 
-let provide_roots funcs =
+let provide_roots file funcs =
   let promise_property slot =
     KB.promise slot @@ fun label ->
-    KB.collect Theory.Label.addr label >>| function
-    | None -> None
-    | Some addr ->
-      let addr = Bitvec.to_bigint addr in
-      Option.some_if (Hashtbl.mem funcs addr) true in
+    KB.collect Theory.Label.addr label >>=? fun addr ->
+    KB.collect Theory.Label.unit label >>=? fun unit ->
+    KB.collect Theory.Unit.bias unit >>= fun bias ->
+    KB.collect Theory.Unit.Target.bits unit >>=? fun bits ->
+    KB.collect Theory.Unit.path unit >>|? fun path ->
+    if String.equal path file then
+      let bias = Option.value bias ~default:Bitvec.zero in
+      let addr =
+        Bitvec.to_bigint @@
+        Bitvec.((addr - bias) mod modulus bits) in
+      Option.some_if (Hashtbl.mem funcs addr) true
+    else None in
   promise_property Theory.Label.is_valid;
   promise_property Theory.Label.is_subroutine
 
@@ -79,8 +86,9 @@ let provide_radare2 file =
     match Hashtbl.find funcs addr with
     | Some name -> name
     | None -> None in
+  let symbolizer = Symbolizer.set_path symbolizer file in
   Symbolizer.provide agent symbolizer;
-  provide_roots funcs
+  provide_roots file funcs
 
 let main () = Stream.observe Project.Info.file @@ provide_radare2
 

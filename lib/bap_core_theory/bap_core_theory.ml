@@ -13,6 +13,7 @@ module Theory = struct
   module Var = Bap_core_theory_var
   module Program = Bap_core_theory_program
   module Label = Program.Label
+  module Unit = Program.Unit
   type program = Program.cls
 
 
