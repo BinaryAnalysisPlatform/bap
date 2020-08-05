@@ -10,7 +10,7 @@ Library objdump_plugin
   BuildDepends:     re.pcre, bap-core-theory,
                     core_kernel, bap-knowledge,
                     bitvec, bitvec-order, bitvec-sexp,
-                    bap-main
+                    bap-main, bap-relation
   InternalModules:  Objdump_main, Objdump_config
   XMETADescription: use objdump to provide a symbolizer
   XMETAExtraLines:  tags="objdump, symbolizer"

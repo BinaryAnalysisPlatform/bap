@@ -10,7 +10,7 @@ module Call : sig
   val create : string -> Stmt.t
   val dst : Stmt.t -> string option
 end = struct
-  let prefix = "bil-call:"
+  let prefix = "external:"
   let create name =
     Bil.special @@ sprintf "%s%s" prefix name
 

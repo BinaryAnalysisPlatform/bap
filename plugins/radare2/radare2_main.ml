@@ -8,6 +8,7 @@ open KB.Syntax
 
 let agent =
   KB.Agent.register ~package:"bap" "radare2-symbolizer"
+    ~reliability:KB.Agent.doubtful
     ~desc:"extracts symbols radare2"
 
 let provide_roots file funcs =
@@ -63,23 +64,39 @@ let extract_symbols file =
     warning "radare2 was interrupted with a signal";
     out
 
+let string_of_addr addrs =
+  List.map addrs ~f:(Z.format "0x%x") |>
+  String.concat ~sep:", "
+
+let report_missing = function
+  | Bap_relation.Non_injective_fwd (addrs,name) ->
+    info "skipping (%s), as they all have the same name %s"
+      (string_of_addr addrs) name
+  | Bap_relation.Non_injective_bwd (names,addr) ->
+    info "skipping (%s), as they all have the same address %s"
+      (String.concat names ~sep:", ") (Z.format "0x%x" addr)
+
 let provide_radare2 file =
   let funcs = Hashtbl.create (module struct
       type t = Z.t
       let compare = Z.compare and hash = Z.hash
       let sexp_of_t x = Sexp.Atom (Z.to_string x)
     end) in
-  let accept name addr =  Hashtbl.set funcs addr name in
-  List.iter (extract_symbols file) ~f:(function
-      | (name,addr,"FUNC") -> accept (strip name) addr
-      | _ -> ());
+  let rels =
+    let init = Bap_relation.empty Z.compare String.compare in
+    List.fold ~init (extract_symbols file) ~f: (fun rels (name,addr,typ) ->
+        if typ = "FUNC" then match strip name with
+          | None -> rels
+          | Some name -> Bap_relation.add rels addr name
+        else rels) in
+  Bap_relation.matching rels ()
+    ~saturated:(fun addr name () -> Hashtbl.add_exn funcs addr name)
+    ~unmatched:(fun reason () -> report_missing reason);
   if Hashtbl.length funcs = 0
   then warning "failed to obtain symbols";
   let symbolizer = Symbolizer.create @@ fun addr ->
     let addr = Bitvec.to_bigint (Word.to_bitvec addr) in
-    match Hashtbl.find funcs addr with
-    | Some name -> name
-    | None -> None in
+    Hashtbl.find funcs addr in
   let symbolizer = Symbolizer.set_path symbolizer file in
   Symbolizer.provide agent symbolizer;
   provide_roots file funcs

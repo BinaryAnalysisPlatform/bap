@@ -167,9 +167,7 @@ module BilParser = struct
       | Mem (ks,vs) ->
         S.set_mem n (Size.in_bits ks) (Size.in_bits vs) x in
     fun s -> match Call.dst s with
-      | Some dst ->
-        info "translating a special to call(%s)" dst;
-        S.call dst
+      | Some dst -> S.call dst
       | None -> match s with
         | Move (v,x) -> set v x
         | Jmp (Int x) -> S.goto (Word.to_bitvec x)
@@ -256,16 +254,39 @@ module Relocations = struct
     | Ok rels, Ok exts -> {rels; exts}
     | Error e, _  | _, Error e -> Error.raise e
 
-  let span mem =
+
+  let reference_analyzer = object
+    inherit [addr Var.Map.t * Addr.Set.t] Stmt.visitor
+    method! enter_move var exp (vars,refs) =
+      match exp with
+      | Bil.Int const -> Map.set vars var const,refs
+      | _ -> vars,refs
+    method! enter_load ~mem:_ ~addr _ _ (vars,refs) =
+      let const = match addr with
+        | Bil.Int const -> Some const
+        | Bil.Var var -> Map.find vars var
+        | _ -> None in
+      match const with
+      | Some const -> vars, Set.add refs const
+      | None -> vars,refs
+  end
+
+  let references bil = snd @@
+    reference_analyzer#run bil
+      (Var.Map.empty, Addr.Set.empty)
+
+  let addresses bil mem =
     let start = Memory.min_addr mem in
     let len = Memory.length mem in
-    Seq.init len ~f:(Addr.nsucc start)
+    Seq.append
+      (Set.to_sequence (references bil))
+      (Seq.init len ~f:(Addr.nsucc start))
 
-  let find_external {exts} mem =
-    Seq.find_map ~f:(Map.find exts) (span mem)
+  let find_external {exts} bil mem =
+    Seq.find_map ~f:(Map.find exts) (addresses bil mem)
 
-  let find_internal {rels} mem =
-    Seq.find_map ~f:(Map.find rels) (span mem)
+  let find_internal {rels} bil mem =
+    Seq.find_map ~f:(Map.find rels) (addresses bil mem)
 
   let subscribe () =
     let open Future.Syntax in
@@ -278,25 +299,24 @@ module Relocations = struct
       method! map_jmp _ = [Bil.Jmp (Int dst)]
     end)
 
-  let override_external name =
+  let override_external is_stub name =
+    let name = if is_stub then name ^ "@external" else name in
     Stmt.map (object inherit Stmt.mapper
       method! map_jmp _ = [Call.create name]
     end)
 
-
-  let fixup info mem bil =
+  let fixup info is_stub mem bil =
     match Future.peek info with
     | None -> bil
     | Some info ->
-      match find_internal info mem with
+      match find_internal info bil mem with
       | Some dst ->
         override_internal dst bil
       | None ->
-        match find_external info mem with
+        match find_external info bil mem with
         | Some name ->
-          override_external name bil
+          override_external is_stub name bil
         | None -> bil
-
 end
 
 module Brancher = struct
@@ -346,7 +366,6 @@ end
 let base_context = [
   "bil-lifter";
 ]
-
 
 let create_intrinsic arch mem insn =
   let module Insn = Disasm_expert.Basic.Insn in
@@ -469,7 +488,9 @@ let provide_lifter ~enable_intrinsics ~with_fp () =
       let module Lifter = Theory.Parser.Make(Core) in
       Optimizer.run BilParser.t bil >>= fun sema ->
       let bil = Insn.bil sema in
-      let bil = Relocations.fixup relocations mem bil in
+      KB.collect (Value.Tag.slot Sub.stub) obj >>|
+      Option.is_some >>= fun is_stub ->
+      let bil = Relocations.fixup relocations is_stub mem bil in
       Lifter.run BilParser.t bil >>| fun sema ->
       let bil = Insn.bil sema in
       KB.Value.merge ~on_conflict:`drop_left

@@ -1,0 +1,10 @@
+Flag relation
+  Description: Build the relation library
+  Default: false
+
+Library bap_relation
+  Build$:       flag(everything) || flag(relation)
+  Path:         lib/bap_relation
+  FindlibName:  bap-relation
+  BuildDepends: base
+  Modules:      Bap_relation

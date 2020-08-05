@@ -166,16 +166,19 @@ void emit_symbol_entry(const ELFObjectFile<T> &obj, const SymbolRef &sym, ogre_d
     auto name = prim::symbol_name(sym);
     auto addr = prim::symbol_address(sym);
     auto off = symbol_file_offset(obj, sym);
-    if (name && addr && off && !name->empty() &&
-        !is_external(*addr, *off, sym_elf->st_size)) {
-        s.entry("llvm:symbol-entry") << *name
-                                     << *addr
-                                     << sym_elf->st_size
-                                     << *off
-                                     << sym_elf->st_value;
+    if (name && addr && off && !name->empty()) {
+        if (is_external(*addr, *off, sym_elf->st_size) && sym_elf->st_value) {
+            s.entry("llvm:name-reference") << sym_elf->st_value << *name;
+        } else {
+            s.entry("llvm:symbol-entry") << *name
+                                         << *addr
+                                         << sym_elf->st_size
+                                         << *off
+                                         << sym_elf->st_value;
 
-        if (sym_elf->getType() == ELF::STT_FUNC)
-            s.entry("llvm:code-entry") << *name << *off << sym_elf->st_size ;
+            if (sym_elf->getType() == ELF::STT_FUNC)
+                s.entry("llvm:code-entry") << *name << *off << sym_elf->st_size ;
+        }
     }
 }
 
@@ -196,21 +199,20 @@ void emit_symbol_entries(const ELFObjectFile<T> &obj, ogre_doc &s) {
 template <typename T>
 void emit_relocations(const ELFObjectFile<T> &obj, ogre_doc &s) {
     for (auto sec : obj.sections()) {
-        if (auto rel_sec = prim::relocated_section(sec)) {
-            for (auto rel : sec.relocations()) {
-                auto sym = rel.getSymbol();
-                if (sym != prim::end_symbols(obj)) {
-                    uint64_t base = section_address(obj, *rel_sec);
-                    auto raddr = prim::relocation_offset(rel) + base;
-                    if (auto addr = prim::symbol_address(*sym))
-                        if (*addr) s.entry("llvm:relocation") << raddr << *addr;
-                    if (auto name = prim::symbol_name(*sym))
+        for (auto rel : sec.relocations()) {
+            auto sym = rel.getSymbol();
+            if (sym != prim::end_symbols(obj)) {
+                uint64_t raddr = prim::relocation_offset(rel);
+                if (auto addr = prim::symbol_address(*sym))
+                    if (*addr) s.entry("llvm:relocation") << raddr << *addr;
+                if (auto name = prim::symbol_name(*sym))
+                    if (!name->empty())
                         s.entry("llvm:name-reference") << raddr << *name;
-                }
             }
         }
     }
 }
+
 
 
 } // namespace elf_loader
