@@ -1,0 +1,13 @@
+Flag specification
+  Description: Enable the specification command
+  Default: false
+
+Library specification_plugin
+  Build$: flag(everything) || flag(specification)
+  XMETADescription: implements the specification command
+  Path: plugins/specification
+  FindlibName: bap-plugin-specification
+  CompiledObject: best
+  BuildDepends: bap, core_kernel, bap-main, ogre
+  InternalModules: Specification_main
+  XMETAExtraLines: tags="command, specification"
