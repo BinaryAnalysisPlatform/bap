@@ -54,5 +54,5 @@ jobs:
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
         with:
-          name: opam-log
+          name: opam-log-${{ matrix.os }}-${{ matrix.ocaml-version }}
           path: ~/.opam/log
