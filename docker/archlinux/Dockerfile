@@ -10,7 +10,7 @@ WORKDIR /home/bap
 
 RUN sudo pacman -S --noconfirm m4 git unzip make curl wget \
          diffutils patch make gcc pkgconfig llvm python2 \
-         which clang \
+         which clang radare2 \
   && wget https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh \
   && echo "" | sudo sh install.sh \
   && opam init --comp=4.09.1 --disable-sandboxing --yes \
