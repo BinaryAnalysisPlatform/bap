@@ -1,4 +1,4 @@
 PKG bap
-PKG radare2
+PKG yojson
 B ../../_build/plugins/radare2
 REC

@@ -33,7 +33,7 @@ depends: [
   "bap-signatures"
   "result"
   "z3"
-  "radare2"
+  "conf-radare2"
   "yojson"
   "result" {= "1.4"}
 ]
