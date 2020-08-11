@@ -49,14 +49,17 @@ let parse =
   to_string @@ member "type" x
 
 let extract_symbols file =
-  let cmd = sprintf "radare2 -2 -q -cisj %s" file in
-  let input = Unix.open_process_in cmd in
+  let cmd = sprintf "radare2 -2 -q -c isj %s" file in
+  let env = Unix.environment () in
+  let input,output,err = Unix.open_process_full cmd env in
   let out = try parse@@Yojson.Safe.from_channel input with
     | exn ->
       warning "failed to extract symbols: %s" (Exn.to_string exn);
       [] in
-  match Unix.close_process_in input with
-  | Unix.WEXITED 0 -> out
+  match Unix.close_process_full (input,output,err) with
+  | Unix.WEXITED 0 ->
+    info "radare2 invocation finished successfully";
+    out
   | WEXITED n ->
     warning "radare2 failed with the exit code %d" n;
     out
