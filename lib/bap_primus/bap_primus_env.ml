@@ -28,6 +28,7 @@ let generated,on_generated =
   Observation.provide "var-generated"
     ~inspect:inspect_generated
     ~package:"bap"
+    ~desc:"Occurs when a new value is generated during the read operation"
 
 let sexp_of_values values =
   Sexp.List (Map.to_sequence values |> Seq.map ~f:(fun (v,{value}) ->

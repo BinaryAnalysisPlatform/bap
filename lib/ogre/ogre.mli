@@ -561,12 +561,12 @@ module Doc : sig
   val clear : doc -> doc
 
 
-  (** [declarations doc] returns a number of declarations in the
+  (** [declarations doc] returns the number of declarations in the
       document *)
   val declarations : doc -> int
 
 
-  (** [definitions doc] returns a number of facts, defined in the
+  (** [definitions doc] returns the number of facts that defined in the
       document. *)
   val definitions : doc -> int
 end

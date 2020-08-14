@@ -64,16 +64,18 @@ jobs:
            if: ${{ always() }}
            with:
              name: bap-log
-             path: /tmp/bap/log
+             path: ~/.local/state/bap
 
          - uses: actions/upload-artifact@v2
            if: ${{ always() }}
            with:
              name: unit-tests-log
-             path: oUnit-*.log
+             path: _build/oUnit-*.log
 
          - uses: actions/upload-artifact@v2
            if: ${{ always() }}
            with:
              name: fun-tests-log
-             path: testsuite/*.log
+             path: |
+               testsuite/*.log
+               testsuite/logs

@@ -10,5 +10,6 @@ module Std = struct
 
   let llvm_version = strip_version Bap_llvm_config.version
   let init_disassembler = Bap_llvm_disasm.init
-  let init_loader = Bap_llvm_ogre_loader.init
+  let init_loader ?base ?pdb_path () =
+    ok_exn @@ Bap_llvm_loader.init ?base ?pdb_path ()
 end

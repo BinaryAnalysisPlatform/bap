@@ -28,9 +28,12 @@ jobs:
           with:
             ocaml-version: ${{ matrix.ocaml-version }}
 
-        - name: Configure Homebrew LLVM
+        - name: Configure Homebrew
           if: matrix.os == 'macos-latest'
-          run: echo '::set-env name=LLVM_CONFIG::/usr/local/opt/llvm@9/bin/llvm-config'
+          run: |
+            brew update
+            brew upgrade
+            echo '::set-env name=LLVM_CONFIG::/usr/local/opt/llvm@9/bin/llvm-config'
 
         - name: Add the Testing Repository
           run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
@@ -61,23 +64,25 @@ jobs:
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}
           with:
-            name: opam-log
+            name: opam-log-${{ matrix.os }}-${{ matrix.ocaml-version }}
             path: ~/.opam/log
 
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}
           with:
-            name: bap-log
-            path: /tmp/bap/log
+            name: bap-log-${{ matrix.os }}-${{ matrix.ocaml-version }}
+            path: ~/.local/state/bap
 
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}
           with:
-            name: unit-tests-log
-            path: oUnit-*.log
+            name: unit-tests-log-${{ matrix.os }}-${{ matrix.ocaml-version }}
+            path: _build/oUnit-*.log
 
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}
           with:
-            name: fun-tests-log
-            path: testsuite/*.log
+            name: fun-tests-log-${{ matrix.os }}-${{ matrix.ocaml-version }}
+            path: |
+              testsuite/*.log
+              testsuite/logs

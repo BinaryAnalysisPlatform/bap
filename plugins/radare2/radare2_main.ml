@@ -28,40 +28,40 @@ let provide_roots file funcs =
   promise_property Theory.Label.is_valid;
   promise_property Theory.Label.is_subroutine
 
-module Field = struct
-  (* unfortunately, we can't use Yojson.*.Utils because they are
-     undefined for the Yojson type *)
-
-  let member name = function
-    | `Assoc xs -> List.Assoc.find xs ~equal:String.equal name
-    | _ -> invalid_arg "expects and assoc list"
-
-  let string = function
-    | `String x -> x
-    | x -> invalid_argf "expects a string got %s"
-             (Yojson.to_string x) ()
-
-  let number = function
-    | `Int i -> Z.of_int i
-    | `Intlit s -> Z.of_string s
-    | s -> invalid_argf "expected an address got %s"
-             (Yojson.to_string s) ()
-
-  let field name parse obj = match member name obj with
-    | None -> invalid_argf "expected member %S in the object %s"
-                name (Yojson.to_string obj) ()
-    | Some field -> parse field
-
-  let addr = field "vaddr" number
-  let name = field "name" string
-  let kind = field "type" string
-end
-
 let strip str =
   if String.is_prefix ~prefix:"func." str then None
   else Option.some @@ match String.chop_prefix str ~prefix:"imp." with
     | Some str -> str
     | None -> str
+
+let to_zarith = function
+  | `Int i -> Z.of_int i
+  | `Intlit s -> Z.of_string s
+  | s -> invalid_argf "expected an address got %s"
+           (Yojson.Safe.to_string s) ()
+
+let parse =
+  let open Yojson.Safe.Util in
+  convert_each @@ fun x ->
+  to_string @@ member "name" x,
+  to_zarith @@ member "vaddr" x,
+  to_string @@ member "type" x
+
+let extract_symbols file =
+  let cmd = sprintf "radare2 -2 -q -cisj %s" file in
+  let input = Unix.open_process_in cmd in
+  let out = try parse@@Yojson.Safe.from_channel input with
+    | exn ->
+      warning "failed to extract symbols: %s" (Exn.to_string exn);
+      [] in
+  match Unix.close_process_in input with
+  | Unix.WEXITED 0 -> out
+  | WEXITED n ->
+    warning "radare2 failed with the exit code %d" n;
+    out
+  | WSIGNALED _ | WSTOPPED _ ->
+    warning "radare2 was interrupted with a signal";
+    out
 
 let provide_radare2 file =
   let funcs = Hashtbl.create (module struct
@@ -70,15 +70,9 @@ let provide_radare2 file =
       let sexp_of_t x = Sexp.Atom (Z.to_string x)
     end) in
   let accept name addr =  Hashtbl.set funcs addr name in
-  let symbols = match R2.with_command_j "isj" file with
-    | `List list -> Some list
-    | s -> warning "unexpected radare2 output: %a" Yojson.pp s; None
-    | exception Invalid_argument msg ->
-      warning "failed to get symbols: %s" msg; None in
-  Option.iter symbols ~f:(List.iter ~f:(fun s ->
-      match Field.name s, Field.addr s, Field.kind s with
-      | name,addr, "FUNC" -> accept (strip name) addr
-      | _ -> debug "skipping json item %a" Yojson.pp s));
+  List.iter (extract_symbols file) ~f:(function
+      | (name,addr,"FUNC") -> accept (strip name) addr
+      | _ -> ());
   if Hashtbl.length funcs = 0
   then warning "failed to obtain symbols";
   let symbolizer = Symbolizer.create @@ fun addr ->

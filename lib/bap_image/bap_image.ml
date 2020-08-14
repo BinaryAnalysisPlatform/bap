@@ -182,8 +182,9 @@ let map_region data {locn={addr}; info={off; len; endian}} =
 
 let static_view segments = function {addr} as locn ->
 match Table.find_addr segments addr with
-| None -> Result.failf "region is not mapped to memory" ()
 | Some (segmem,_) -> mem_of_locn segmem locn
+| None -> Result.failf "region %a is not mapped to memory"
+            Sexp.pp_hum (sexp_of_location locn) ()
 
 let add_sym segments memory (symtab : symtab)
     ({name; locn=entry; info={extra_locns=locns}} as sym) =
@@ -327,11 +328,14 @@ let segment_of_symbol {segment_of_symbol = lazy f} = f
 let register_loader ~name backend =
   Hashtbl.add_exn backends ~key:name ~data:backend
 
+let find_loader = Hashtbl.find backends
+
 module Scheme = struct
   open Ogre.Type
   type addr = int64
   type size = int64
   type off = int64
+  type value = int64
   type 'a region = {addr : int64; size: int64; info : 'a}
   let region addr size info = {addr; size; info}
   let void_region addr size = {addr; size; info = ()}
@@ -339,6 +343,7 @@ module Scheme = struct
   let off  = "off"  %: int
   let size = "size" %: int
   let addr = "addr" %: int
+  let value = "value" %: int
   let name = "name" %: str
   let root = "root" %: int
   let readable   = "r" %: bool
@@ -354,9 +359,11 @@ module Scheme = struct
   let subarch    () = declare "subarch" (scheme name) ident
   let vendor    () = declare "vendor" (scheme name) ident
   let system    () = declare "system" (scheme name) ident
+  let format    () = declare "format" (scheme name) ident
   let abi    () = declare "abi" (scheme name) ident
   let bits    () = declare "bits" (scheme size) ident
-  let is_little_endian () = declare "is_little_endian" (scheme flag) ident
+  let is_little_endian () = declare "is-little-endian" (scheme flag) ident
+  let is_executable () = declare "is-executable" (scheme flag) ident
   let bias    () = declare "bias" (scheme off) ident
   let section () = declare "section" (location ()) void_region
   let code_start   () = declare "code-start" (scheme addr) ident
@@ -378,6 +385,9 @@ module Scheme = struct
   let external_reference () =
     declare "external-reference" (scheme addr $ name) Tuple.T2.create
   let base_address () = declare "base-address" (scheme addr) ident
+
+  let symbol_value () =
+    declare "symbol-value" (scheme addr $ value) Tuple.T2.create
 end
 
 

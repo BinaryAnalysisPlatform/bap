@@ -8,11 +8,6 @@ namespace prim {
 using namespace llvm;
 using namespace llvm::object;
 
-
-int64_t relative_address(uint64_t base, uint64_t abs) {
-    return (abs - base);
-}
-
 // some cases are commented out because they are not supported
 // by all versions of LLVM, we will later use a macro to enable
 // them depending on the version.
@@ -80,9 +75,6 @@ std::string string_of_abi(Triple::EnvironmentType abi) {
     }
 }
 
-
-#if LLVM_VERSION_MAJOR >= 4
-
 template <typename T>
 std::string error_message(Expected<T> &e) {
     return toString(e.takeError());
@@ -93,21 +85,6 @@ error_or<SymbolRef::Type> symbol_type(const SymbolRef &s) {
     if (typ) return success(*typ);
     else return failure(error_message(typ));
 }
-
-// 3.8 only
-#elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-
-template <typename T>
-std::string error_message(const ErrorOr<T> &er) {
-    return er.getError().message();
-}
-
-error_or<SymbolRef::Type> symbol_type(const SymbolRef &s) {
-    return success(s.getType());
-}
-
-#endif
-
 
 #if LLVM_VERSION_MAJOR >= 10
 error_or<std::string> section_name(const SectionRef &sec) {
@@ -138,9 +115,6 @@ error_or<section_iterator> relocated_section(const SectionRef &sec) {
 #endif
 
 
-// 4.0 or 3.8
-#if LLVM_VERSION_MAJOR >= 4 \
-    || LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 
 const char* get_raw_data(const ObjectFile &obj) {
     return obj.getMemoryBufferRef().getBufferStart();
@@ -162,8 +136,6 @@ error_or<std::string> symbol_name(const SymbolRef &s) {
     if (name) return success(name->str());
     else return failure(error_message(name));
 }
-
-error_or<uint64_t> symbol_value(const SymbolRef &s) { return success(s.getValue()); }
 
 error_or<section_iterator> symbol_section(const ObjectFile &obj, const SymbolRef &s) {
     auto sec = s.getSection();
@@ -200,113 +172,6 @@ error_or<uint64_t> section_size(const SectionRef &sec) {
 template <typename T>
 void next(content_iterator<T> &it, content_iterator<T> end) { ++it; }
 
-// 3.4
-#elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
-
-const char* get_raw_data(const ObjectFile &obj) {
-    return obj.getData().begin();
-}
-
-symbol_iterator begin_symbols(const ObjectFile &obj) { return obj.begin_symbols(); }
-symbol_iterator end_symbols(const ObjectFile &obj) { return obj.end_symbols(); }
-section_iterator begin_sections(const ObjectFile &obj) { return obj.begin_sections(); }
-section_iterator end_sections(const ObjectFile &obj) { return obj.end_sections(); }
-
-error_or<std::string> symbol_name(const SymbolRef &s) {
-    StringRef name;
-    auto er_name = s.getName(name);
-    if (!er_name) return success(name.str());
-    else return failure(er_name.message());
-}
-
-error_or<uint64_t> symbol_size(const SymbolRef &s) {
-    uint64_t size;
-    auto er = s.getSize(size);
-    if (!er) return success(size);
-    else return failure(er.message());
-}
-
-error_or<uint64_t> symbol_value(const SymbolRef &s) {
-    uint64_t val;
-    auto er = s.getValue(val);
-    if (!er) return success(val);
-    else return failure(er.message());
-}
-
-
-error_or<SymbolRef::Type> symbol_type(const SymbolRef &s) {
-    SymbolRef::Type typ;
-    auto er = s.getType(typ);
-    if (!er) return success(typ);
-    else return failure(er.message());
-}
-
-error_or<uint64_t> symbol_address(const SymbolRef &s) {
-    uint64_t addr;
-    auto er = s.getAddress(addr);
-    if (er) return failure(er.message());
-
-    //need to check this due to nice llvm code like:
-    // ...
-    // Result = UnknownAddressOrSize;
-    // return object_error::success;
-    // ..
-    // where UnknownAddressOrSize = 18446744073709551615
-    if (addr == UnknownAddressOrSize)
-        addr = 0;
-    return success(addr);
-}
-
-error_or<section_iterator> symbol_section(const ObjectFile &obj, const SymbolRef &s) {
-    section_iterator sec = obj.begin_sections();
-    auto er = s.getSection(sec);
-    if (!er) return success(sec);
-    else return failure(er.message());
-}
-
-error_or<uint64_t> section_address(const SectionRef &sec) {
-    uint64_t addr;
-    auto er = sec.getAddress(addr);
-    if (!er) return success(addr);
-    else return failure(er.message());
-}
-
-error_or<uint64_t> section_size(const SectionRef &sec) {
-    uint64_t size;
-    auto er = sec.getSize(size);
-    if (!er) return success(size);
-    else return failure(er.message());
-}
-
-uint64_t relocation_offset(const RelocationRef &rel) {
-    uint64_t off;
-    auto er_off = rel.getOffset(off); // this operation is always successful
-    return off;
-}
-
-template <typename T>
-std::vector<T> collect(content_iterator<T> begin, content_iterator<T> end) {
-    std::vector<T> data;
-    for (auto it = begin; it != end; next(it, end))
-        data.push_back(*it);
-    return data;
-}
-
-std::vector<SectionRef> sections(const ObjectFile &obj) {
-    return collect(obj.begin_sections(), obj.end_sections());
-}
-
-std::vector<RelocationRef> relocations(const SectionRef &sec) {
-    return collect(sec.begin_relocations(), sec.end_relocations());
-}
-
-std::vector<SymbolRef> symbols(const ObjectFile &obj) {
-    return collect(obj.begin_symbols(), obj.end_symbols());
-}
-
-#else
-#error LLVM version is not supported
-#endif
 
 typedef std::vector<std::pair<SymbolRef, uint64_t>> symbols_sizes;
 
@@ -338,76 +203,5 @@ symbols_sizes get_symbols_sizes(const ObjectFile &obj) {
     }
     return sizes;
 }
-
-
-
-#if LLVM_VERSION_MAJOR >= 10
-
-error_or<pe32_header> get_pe32_header(const COFFObjectFile &obj) {
-    const pe32_header *hdr = obj.getPE32Header();
-    if (!hdr) { return failure("PE header not found"); }
-    else return success(*hdr);
-}
-
-error_or<pe32plus_header> get_pe32plus_header(const COFFObjectFile &obj) {
-    const pe32plus_header *hdr = obj.getPE32PlusHeader();
-    if (!hdr) { return failure("PE+ header not found"); }
-    else return success(*hdr);
-}
-
-#elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8 \
-    || LLVM_VERSION_MAJOR >= 4
-
-error_or<pe32_header> get_pe32_header(const COFFObjectFile &obj) {
-    const pe32_header *hdr = 0;
-    auto ec = obj.getPE32Header(hdr);
-    if (ec) return failure(ec.message());
-    else if (!hdr) { return failure("PE header not found"); }
-    else return success(*hdr);
-}
-
-error_or<pe32plus_header> get_pe32plus_header(const COFFObjectFile &obj) {
-    const pe32plus_header *hdr = 0;
-    auto ec = obj.getPE32PlusHeader(hdr);
-    if (ec) return failure(ec.message());
-    else if (!hdr) { return failure("PE+ header not found"); }
-    else return success(*hdr);
-}
-
-#elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
-
-error_or<pe32_header> get_pe32_header(const COFFObjectFile &obj) {
-    const pe32_header* hdr = 0;
-    error_code ec = obj.getPE32Header(hdr);
-    if (ec || !hdr)
-        return failure("PE header not found");
-    return success(*hdr);
-}
-
-error_or<pe32plus_header> get_pe32plus_header(const COFFObjectFile &obj) {
-    uint64_t cur_ptr = 0;
-    const char *buf = (obj.getData()).data();
-    const uint8_t *start = reinterpret_cast<const uint8_t *>(buf);
-    uint8_t b0 = start[0];
-    uint8_t b1 = start[1];
-    if (b0 == 0x4d && b1 == 0x5a) { // check if this is a PE/COFF file
-        // a pointer at offset 0x3C points to the
-        cur_ptr += *reinterpret_cast<const uint16_t *>(start + 0x3c);
-        // check the PE magic bytes.
-        if (std::memcmp(start + cur_ptr, "PE\0\0", 4) != 0)
-            return failure("PE Plus header not found");
-        cur_ptr += 4; // skip the PE magic bytes.
-        cur_ptr += sizeof(llvm::object::coff_file_header);
-        auto p = reinterpret_cast<const pe32plus_header *>(start + cur_ptr);
-        return error_or<pe32plus_header>(*p);
-    }
-    return failure("Failed to extract PE32+ header");
-}
-#else
-#error LLVM version is not supported
-#endif
-
-
-
 
 } // namespace prim

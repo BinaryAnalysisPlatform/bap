@@ -30,6 +30,8 @@ module Unit : sig
   val for_region : lower:Bitvec.t -> upper:Bitvec.t -> t knowledge
 
   val path : (cls, string option) slot
+  val format : (cls, string option) slot
+  val is_executable : (cls, bool option) slot
   val bias : (cls, Bitvec.t option) slot
 
   module Target : sig

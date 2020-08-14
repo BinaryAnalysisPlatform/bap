@@ -87,10 +87,12 @@ let mkdir path =
   if not (Sys.file_exists path) then
     Unix.mkdir path 0o770
 
-let run cmd =
-  let res = Sys.command cmd in
-  if res <> 0 then
-    failwith ("Command: '" ^ cmd ^ "' failed")
+let run fmt =
+  let cmd c =
+    let res = Sys.command c in
+    if res <> 0 then
+      failwith ("Command: '" ^ c ^ "' failed") in
+  ksprintf cmd fmt
 
 let render_entry (_,entry,short,desc) =
   let name_to_display = match short with
@@ -143,7 +145,7 @@ let build_manual {man; help} tool =
   match Sys.command @@ sprintf "%s >/dev/null" (help tool) with
   | 0 ->
     let out = sprintf "man1/%s.1.html" (man tool) in
-    run @@ dump_to_file out @@ connect_with_pipes [
+    run "%s" @@ dump_to_file out @@ connect_with_pipes [
       help tool;
       repair_links;
       man2html;
@@ -165,7 +167,7 @@ let generate_manual () =
 
 let odig_pkgs () =
   let f = Filename.temp_file "odig" ".pkgs" in
-  run (sprintf "odig pkg > %s" f);
+  run "odig pkg > %s" f;
   let pkgs =
     In_channel.read_lines f |>
     List.filter_map ~f:(fun s ->
@@ -202,7 +204,7 @@ let generate () =
   Out_channel.output_string out plugins_index;
   Out_channel.close out;
   let pkgs = remove_unresolved packages |> String.concat ~sep:" " in
-  run @@ sprintf
+  run
     {|odig odoc --index-title="BAP API" --no-tag-index --index-intro=%s %s|}
     intro pkgs;
   run @@ "ln -s $(odig cache path)/html odoc";
@@ -212,10 +214,27 @@ let install_handwritten_manpages () =
   mkdir "man1";
   run "cp ../man/* man1/"
 
+(* by default, title is the buffer/file name with no extension,
+   that's why we need override it with an empty title *)
+let html_of_org file =
+  run "echo \"#+TITLE:\n\" >> %s" file;
+  run "emacs %s --batch --eval '(org-html-export-to-html)'" file;
+  Sys.remove file
+
 let install_lisp_documentation () =
+  let file = "lisp/index.org" in
   mkdir "lisp";
-  run "bap /bin/true --primus-lisp-documentation > lisp/index.org";
-  run "emacs lisp/index.org --batch --eval '(org-html-export-to-html)'"
+  run "bap /bin/true --primus-lisp-documentation > %s" file;
+  html_of_org file
+
+let install_primus_api () =
+  let file = "primus/index.org" in
+  let add x =
+    run "echo '* %s' >> %s" (String.capitalize x) file;
+    run "bap primus-%s >> %s" x file in
+  mkdir "primus";
+  List.iter ~f:add ["systems"; "components"; "observations"];
+  html_of_org file
 
 let is_installed x = Sys.command (sprintf "which %s" x) = 0
 
@@ -235,4 +254,5 @@ let () =
   generate_manual ();
   install_handwritten_manpages ();
   install_lisp_documentation ();
+  install_primus_api ();
   generate ()
