@@ -205,7 +205,7 @@ let generate () =
   Out_channel.close out;
   let pkgs = remove_unresolved packages |> String.concat ~sep:" " in
   run
-    {|odig odoc --index-title="BAP API" --no-tag-index --index-intro=%s %s|}
+    {|odig odoc --odoc-theme=odoc.default --index-title="BAP API" --no-tag-index --index-intro=%s %s|}
     intro pkgs;
   run @@ "ln -s $(odig cache path)/html odoc";
   Sys.remove intro
