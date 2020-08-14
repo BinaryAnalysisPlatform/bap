@@ -2,9 +2,8 @@
 name: weekly-regression-tests
 
 on:
-  - push
-#  schedule:
-#    - cron: '0 0 * * SUN' # Every Sunday at 00:00 UTC */
+  schedule:
+    - cron: '0 0 * * SUN' # Every Sunday at 00:00 UTC */
 
 jobs:
   build:
@@ -61,12 +60,6 @@ jobs:
           with:
             name: bap-log-${{ matrix.ocaml-version }}
             path: ~/.local/state/bap
-
-        - uses: actions/upload-artifact@v2
-          if: ${{ always() }}
-          with:
-            name: unit-tests-log-${{ matrix.ocaml-version }}
-            path: _build/oUnit-*.log
 
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}
