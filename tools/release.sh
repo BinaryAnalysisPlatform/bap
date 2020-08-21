@@ -16,11 +16,10 @@ BINARIES="bap bapbundle bapbuild bap-mc"
 PREFIX=/usr/local
 ARCH=$(dpkg-architecture -qDEB_BUILD_ARCH)
 CONFDIR=$PREFIX/etc/bap
-SWITCH=$(date +%s)
 TMPDIR=$(mktemp -d)
 
 eval $(opam config env)
-echo OCaml is at `which ocaml`
+echo OCaml is at $(which ocaml)
 echo "Looking in the dev-repo for the current list of dependencies"
 opam pin add bap --dev-repo --yes -n
 echo "Installing System dependenices"
@@ -39,8 +38,8 @@ sudo cp $(which ocamlfind) $PREFIX/bin
 
 
 cd bap-repo
-LLVM_VERSION=`opam config var conf-bap-llvm:package-version`
-LLVM_CONFIG=`opam config var conf-bap-llvm:config`
+LLVM_VERSION=$(opam config var conf-bap-llvm:package-version)
+LLVM_CONFIG=$(opam config var conf-bap-llvm:config)
 
 SIGURL=https://github.com/BinaryAnalysisPlatform/bap/releases/download/v2.1.0
 echo BAP version is $BAP_VERSION
@@ -199,10 +198,10 @@ for pkg in bap libbap libbap-dev; do
     dir=$pkg-$BAP_VERSION
     sudo alien --to-rpm -g $deb.deb
     cd $dir
-    spec=`mktemp`
+    spec=$(mktemp)
     awk '/%dir.*bap/ {print} /%dir/ {next} {print}' $pkg-$BAP_VERSION-2.spec > $spec
     sudo cp $spec $pkg-$BAP_VERSION-2.spec
-    sudo rpmbuild -bb $pkg-$BAP_VERSION-2.spec --buildroot=`pwd`
+    sudo rpmbuild -bb $pkg-$BAP_VERSION-2.spec --buildroot=$(pwd)
     echo "trying to run alien"
     echo alien --to-tgz $deb.deb
     cd ..
