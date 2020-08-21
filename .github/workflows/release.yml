@@ -1,0 +1,37 @@
+name: release
+
+on:
+  schedule:
+    - cron: '0 0 * * SAT' # every Saturday
+
+jobs:
+  build:
+     runs-on: ubuntu-18.04
+
+     env:
+       OPAMJOBS: 2
+       OPAMRETRES: 8
+       VERSION: 2.2.0
+
+     steps:
+         - name: Checkout code
+           uses: actions/checkout@v2
+
+         - name: Install OCaml
+           uses: avsm/setup-ocaml@v1
+           with:
+             ocaml-version: 4.09.1+flambda
+
+         - name: Build deb packages
+           run: ./tools/release.sh ${{ env.VERSION }}
+
+           # caution: this action overwrite the tag and deletes
+           # releases that are associated with it
+         - name: Create a new prerelease
+           uses: "marvinpinto/action-automatic-releases@latest"
+           with:
+             repo_token: "${{ secrets.GITHUB_TOKEN }}"
+             automatic_release_tag: v${{ env.VERSION }}-alpha
+             prerelease: true
+             title: "Development Build"
+             files: bap/*
