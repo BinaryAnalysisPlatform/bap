@@ -138,6 +138,8 @@ module Slot = struct
   let dests =
     let empty = Some (Set.empty (module Theory.Label)) in
     let order x y : KB.Order.partial = match x,y with
+      | Some x,_ when Set.is_empty x -> LT
+      | _,Some x when Set.is_empty x -> GT
       | None,None -> EQ
       | None,_ | _,None -> NC
       | Some x, Some y ->
@@ -146,7 +148,9 @@ module Slot = struct
         if Set.is_subset y x then GT else NC in
     let join x y = match x,y with
       | None,None -> Ok None
-      | None,_ |Some _,None -> Error Jump_vs_Move
+      | None,Some x |Some x,None ->
+        if Set.is_empty x then Ok None
+        else Error Jump_vs_Move
       | Some x, Some y -> Ok (Some (Set.union x y)) in
     let module IO = struct
       module Set = Set.Make_binable_using_comparator(Theory.Label)

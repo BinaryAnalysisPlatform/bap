@@ -1,0 +1,7 @@
+; a list of words that commonly start a stub,
+; one per line, with `;' for comments.
+
+0x3d601001 ; lis r11, 4097
+0x3d601002 ; lis r11, 4098
+0x3d601003 ; lis r11, 4099
+0x3d601004 ; lis r11, 4100

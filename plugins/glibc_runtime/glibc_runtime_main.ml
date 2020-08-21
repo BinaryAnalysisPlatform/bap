@@ -49,27 +49,33 @@ let find_entry_point prog =
   Term.enum sub_t prog |>
   Seq.find ~f:(fun sub -> Term.has_attr sub Sub.entry_point)
 
+
+let insert_call prog start entry jmp =
+  let name = "__libc_start_main" in
+  let tid = Tid.for_name name in
+  let sub = Sub.create ~tid ~name () in
+  let prog = Term.append sub_t prog sub in
+  let entry = Term.remove jmp_t entry (Term.tid jmp) in
+  let call = Call.create (Direct (Term.tid sub)) () in
+  let jmp = Jmp.create_call call in
+  let entry = Term.prepend jmp_t entry jmp in
+  let start = Term.update blk_t start entry in
+  let prog = Term.update sub_t prog start in
+  Some (Term.tid sub, prog)
+
+
 let find_libc_start_main prog =
   let open Option.Monad_infix in
   find_entry_point prog >>= fun start ->
   Term.first blk_t start >>= fun entry ->
   Term.first jmp_t entry >>= fun jmp ->
   match Jmp.kind jmp with
-  | Goto _ | Ret _ | Int _ -> None
+  | Goto _ -> insert_call prog start entry jmp
+  | Ret _ | Int _ -> None
   | Call call -> match Call.target call with
     | Direct tid -> Some (tid,prog)
     | Indirect _ ->
-      let name = "__libc_start_main" in
-      let tid = Tid.for_name name in
-      let sub = Sub.create ~tid ~name () in
-      let prog = Term.append sub_t prog sub in
-      let entry = Term.remove jmp_t entry (Term.tid jmp) in
-      let call = Call.create (Direct (Term.tid sub)) () in
-      let jmp = Jmp.create_call call in
-      let entry = Term.prepend jmp_t entry jmp in
-      let start = Term.update blk_t start entry in
-      let prog = Term.update sub_t prog start in
-      Some (Term.tid sub, prog)
+      insert_call prog start entry jmp
 
 let detect_main_address prog =
   let open Option.Monad_infix in

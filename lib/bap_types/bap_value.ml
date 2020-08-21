@@ -100,7 +100,7 @@ let register (type a) ?public ?desc ?package ~name ~uuid
       type t = S.t option [@@deriving bin_io]
     end) in
   let equal x y = S.compare x y = 0 in
-  let domain = KB.Domain.optional ~equal name in
+  let domain = KB.Domain.optional ~equal name ~inspect:S.sexp_of_t in
   let slot = KB.Class.property ?public ?desc ~persistent ?package
       Theory.Program.cls name domain in
   register_slot ~uuid slot (module S)

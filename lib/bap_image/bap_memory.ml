@@ -170,6 +170,7 @@ let last_byte mem : t =
 let contains mem =
   Addr.between ~low:(min_addr mem) ~high:(max_addr mem)
 
+
 let compare_with mem addr =
   let low = min_addr mem and high = max_addr mem in
   if Addr.between ~low ~high addr then `addr_is_inside else

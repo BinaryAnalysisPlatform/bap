@@ -14,6 +14,7 @@ val create
   -> addr
   -> Bigstring.t -> t Or_error.t
 
+
 val rebase : t -> addr -> t
 
 val slot : (Theory.program, t option) KB.slot

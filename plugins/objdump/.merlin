@@ -1,4 +1,5 @@
 PKG cmdliner
 PKG re.pcre
 B ../../_build/plugins/objdump
+B ../../lib/bap_relation
 REC

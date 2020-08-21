@@ -546,7 +546,7 @@ module Domain = struct
   let powerset (type t o)
       (module S : Comparator.S with type t = t
                                 and type comparator_witness = o)
-      ?(inspect=sexp_of_opaque) name =
+      ?(inspect=S.comparator.sexp_of_t) name =
     let empty = Set.empty (module S) in
     let order x y : Order.partial =
       if Set.equal x y then EQ else
