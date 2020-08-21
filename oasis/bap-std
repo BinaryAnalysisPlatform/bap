@@ -146,7 +146,9 @@ Library disasm
                  ppx_jane,
                  zarith,
                  bitvec,
-                 bitvec-order
+                 bitvec-order,
+                 bap-relation,
+                 bap-main
   InternalModules:
                  Bap_disasm,
                  Bap_disasm_basic,

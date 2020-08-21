@@ -11,7 +11,7 @@ let cutoff = Extension.Configuration.parameter
     ~doc:"The number of times the same branch is retried."
 
 let timeout = Extension.Configuration.parameter
-    Extension.Type.(int =? 1000)
+    Extension.Type.(int =? 16)
     "timeout"
     ~doc:"The number of milliseconds alloted to the SMT solver to find
     a model"
@@ -166,9 +166,10 @@ end = struct
 
   let () = Z3.set_global_param "parallel.enable" "true"
 
+
   let ctxt = Z3.mk_context [
       "model", "true";
-      "timeout", "1000";
+      "timeout", "16";
     ]
 
   let set_timeout ms =

@@ -5,6 +5,7 @@ open Bap_image_std
 open Bap_disasm_source
 open KB.Syntax
 
+include Bap_main.Loggers()
 
 type t = {
   path : string option;
@@ -48,28 +49,47 @@ let empty = create (fun _ -> None)
 let chain ss =
   create (fun addr -> List.find_map ss ~f:(fun s -> run s addr))
 
+let string_of_addr addrs =
+  List.map addrs ~f:Addr.to_string |>
+  String.concat ~sep:", "
+
+let report_broken = function
+  | Bap_relation.Non_injective_fwd (addrs,name) ->
+    info "skipping (%s) as they all have the same name %s"
+      (string_of_addr addrs) name
+  | Bap_relation.Non_injective_bwd (names,addr) ->
+    info "skipping (%s) as they all have the same address %a"
+      (String.concat names ~sep:", ") Addr.pp addr
+
 let of_image img =
   let symtab = Image.symbols img in
   let names = Addr.Table.create () in
-  Table.iteri symtab ~f:(fun mem sym ->
+  let init = Bap_relation.empty Addr.compare String.compare in
+  Table.foldi symtab ~init ~f:(fun mem sym rels ->
       let name = Image.Symbol.name sym
       and addr = Memory.min_addr mem in
       if not (Name.is_empty name)
-      then Hashtbl.set names ~key:addr ~data:name);
+      then Bap_relation.add rels addr name
+      else rels) |> fun rels ->
+  Bap_relation.matching rels ()
+    ~saturated:(fun addr name () -> Hashtbl.add_exn names addr name)
+    ~unmatched:(fun reason () -> report_broken reason);
   {find = Hashtbl.find names; path=Image.filename img; biased=true}
 
 let of_blocks seq =
   let names =
+    let empty_rel = Bap_relation.empty Addr.compare String.compare in
     Seq.fold seq ~init:String.Map.empty ~f:(fun addrs (name,addr,_) ->
         Map.update addrs name (function
             | Some addr' -> Addr.min addr addr'
             | None -> addr)) |>
     Map.to_sequence |>
-    Seq.fold ~init:Addr.Map.empty ~f:(fun names (name,entry) ->
-        Map.add_multi names entry name) in
-  create @@ fun addr -> match Map.find names addr with
-  | Some [name] -> Some name
-  | _ -> None
+    Seq.fold ~init:empty_rel ~f:(fun rels (name,entry) ->
+        Bap_relation.add rels entry name) |> fun rels ->
+    Bap_relation.matching rels Addr.Map.empty
+      ~saturated:(fun addr name names -> Map.add_exn names addr name)
+      ~unmatched:(fun reason names -> report_broken reason; names) in
+  create @@ Map.find names
 
 module Factory = Factory.Make(struct type nonrec t = t end)
 
@@ -102,9 +122,7 @@ let providing agent s =
     ~propose:(provide_symbolizer s)
 
 let get_name addr =
-  let data = Some (Word.to_bitvec addr) in
-  KB.Object.scoped Theory.Program.cls @@ fun label ->
-  KB.provide Theory.Label.addr label data >>= fun () ->
+  Theory.Label.for_addr (Word.to_bitvec addr) >>= fun label ->
   KB.collect Theory.Label.name label >>| function
   | None -> name_of_addr addr
   | Some name -> name

@@ -409,20 +409,13 @@ void emit_indirect_symbols(const macho &obj, const MachO::dysymtab_command &dlc,
             uint64_t sym_numb = section_size(obj, sec) / stride;
             uint32_t tab_indx = section_reserved1(obj, sec);
             uint64_t sec_addr = section_addr(obj, sec);
-            uint32_t sec_offs = section_offset(obj, sec);
 
             for (uint32_t j = 0; j < sym_numb && tab_indx + j < dlc.nindirectsyms; j++) {
                 auto sym = get_indirect_symbol(obj, dlc, tab_indx + j);
                 if (sym != prim::end_symbols(obj)) {
                     if (auto name = prim::symbol_name(*sym)) {
                         auto sym_addr = sec_addr + j * stride;
-                        auto sym_offs = sec_offs + j * stride;
-                        s.entry("llvm:symbol-entry") << *name
-                                                     << sym_addr
-                                                     << stride
-                                                     << sym_offs
-                                                     << sym->getValue();
-                        s.entry("llvm:code-entry") << *name << sym_offs << stride;
+                        s.entry("llvm:name-reference") << sym_addr << *name;
                     }
                 }
             }
