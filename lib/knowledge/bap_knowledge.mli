@@ -152,6 +152,10 @@ module Knowledge : sig
   (** a fully qualified name  *)
   type name
 
+  (** [objects cls] is a seqeuence of all objects of the class [cls].
+      @since 2.2.0  *)
+  val objects : ('a,_) cls -> 'a obj Sequence.t t
+
   (** [collect p x] collects the value of the property [p].
 
       If the object [x] doesn't have a value for the property [p] and
