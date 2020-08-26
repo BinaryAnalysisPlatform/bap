@@ -2889,6 +2889,10 @@ module Knowledge = struct
               Format.fprintf ppf "@,%a)@]@\n"
                 (Sexp.pp_hum_indent 2) (Dict.sexp_of_t data)))
 
+  let objects cls = objects cls >>| fun {vals} ->
+    Map.to_sequence vals |>
+    Sequence.map ~f:fst
+
   module Rule = struct
     type def = Registry.def
     type doc = Registry.doc
