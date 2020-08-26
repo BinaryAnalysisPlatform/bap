@@ -250,9 +250,8 @@ let main paths proj =
     error "api wasn't applied: %a" Error.pp e;
     exit 1
   | Ok mappers ->
-    let prog = Project.program proj in
-    List.fold mappers ~init:prog ~f:(fun prog map -> map#run prog) |>
-    Project.with_program proj
+    Project.map_program proj ~f:(fun prog ->
+        List.fold mappers ~init:prog ~f:(fun prog map -> map#run prog))
 
 let list_of_paths paths =
   List.iter ~f:(fun p -> Format.printf "%s\n" (Api_path.to_string p)) paths

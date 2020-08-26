@@ -107,10 +107,7 @@ module Marker = struct
 end
 
 
-let mark regs ptrs proj =
-  Project.program proj |>
-  Marker.run ~regs ~ptrs |>
-  Project.with_program proj
+let mark regs ptrs = Project.map_program ~f:(Marker.run ~regs ~ptrs)
 
 let main regs ptrs = match regs,ptrs with
   | [],[] -> ()

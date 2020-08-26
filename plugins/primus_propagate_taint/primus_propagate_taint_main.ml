@@ -184,10 +184,7 @@ module Marker(Machine : Primus.Machine.S) = struct
 
   let mark _ =
     Machine.Local.get mapper >>= fun s ->
-    Machine.update (fun proj ->
-        Project.program proj |>
-        mark_terms s |>
-        Project.with_program proj)
+    Machine.update (Project.map_program ~f:(mark_terms s))
 
   let init () =
     Primus.Interpreter.leave_blk >>> mark

@@ -10,6 +10,7 @@ type insns
 type jump
 
 val init : state
+val equal : state -> state -> bool
 val scan : mem -> state -> state knowledge
 val merge : state -> state -> state
 

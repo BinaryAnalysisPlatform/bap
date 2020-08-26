@@ -114,6 +114,9 @@ type failure =
   | Unknown_format of string
   | Unavailable_format_version of string
   | Unknown_collator of string
+  | Unknown_analysis of string
+  | No_knowledge
+
 
 type Extension.Error.t += Fail of failure
 
@@ -131,12 +134,16 @@ let run_passes base proj =
       Project.Pass.run pass proj |> pass_error >>= fun proj ->
       Ok (step+1,proj))
 
+let knowledge_reader = Data.Read.create
+    ~of_bigstring:Knowledge.of_bigstring ()
+
+let knowledge_writer = Data.Write.create
+    ~to_bigstring:Knowledge.to_bigstring ()
+
 let knowledge_cache () =
-  let reader = Data.Read.create
-      ~of_bigstring:Knowledge.of_bigstring () in
-  let writer = Data.Write.create
-      ~to_bigstring:Knowledge.to_bigstring () in
-  Data.Cache.Service.request reader writer
+  Data.Cache.Service.request
+    knowledge_reader
+    knowledge_writer
 
 let project_state_cache () =
   let module State = struct
@@ -154,20 +161,11 @@ let import_knowledge_from_cache digest =
     Data.Cache.Digest.pp digest;
   let cache = knowledge_cache () in
   match Data.Cache.load cache digest with
-  | None -> ()
+  | None -> false
   | Some state ->
     info "importing knowledge from cache";
-    Toplevel.set state
-
-let load_project_state_from_cache digest =
-  let digest = digest ~namespace:"project" in
-  let cache = project_state_cache () in
-  Data.Cache.load cache digest
-
-let save_project_state_to_cache digest state =
-  let digest = digest ~namespace:"project" in
-  let cache = project_state_cache () in
-  Data.Cache.save cache digest state
+    Toplevel.set state;
+    true
 
 let store_knowledge_in_cache digest =
   let digest = digest ~namespace:"knowledge" in
@@ -215,6 +213,27 @@ let outputs =
     Extension.Type.("[<FMT>[:<FILE>]]" %: string)
     "dump"
 
+let rw_file = Extension.Type.define
+    ~name:"<FILE>" ~print:ident ~parse:ident
+    ~digest:(fun path ->
+        if Sys.file_exists path
+        then Caml.Digest.file path
+        else Caml.Digest.string "empty")
+    ""
+
+let update =
+  Extension.Command.flag "update" ~aliases:["u"]
+    ~doc: "Preserve the knowledge base, i.e., do not change it."
+
+let knowledge =
+  Extension.Command.parameter
+    ~doc:"Import the knowledge to the provided knowledge base. \
+          If the $(b,--update) flag is set the the knowledge base \
+          will be also updated with the new information. If \
+          $(b,--update) is set, the the knowledge base might not \
+          exist and it will be created"
+    ~aliases:["k"; "knowledge-base";]
+    (Extension.Type.some rw_file) "project"
 
 let input = Extension.Command.argument
     ~doc:"The input file" Extension.Type.("FILE" %: string =? "a.out" )
@@ -229,6 +248,13 @@ let loader =
 let validate_input file =
   Result.ok_if_true (Sys.file_exists file)
     ~error:(Fail (Expects_a_regular_file file))
+
+let validate_knowledge update kb = match kb with
+  | None -> Result.ok_if_true (not update)
+              ~error:(Fail No_knowledge)
+  | Some path ->
+    Result.ok_if_true (Sys.file_exists path || update)
+      ~error:(Fail No_knowledge)
 
 let validate_passes_style old_style_passes new_style_passes =
   match old_style_passes, new_style_passes with
@@ -299,37 +325,55 @@ let setup_gc_unless_overriden () =
   then setup_gc ()
   else info "GC parameters are overriden by a user"
 
-let create_and_process input outputs passes loader ctxt =
+let load_knowledge digest = function
+  | None -> import_knowledge_from_cache digest
+  | Some path when not (Sys.file_exists path) ->
+    import_knowledge_from_cache digest
+  | Some path ->
+    info "importing knowledge from %S" path;
+    Toplevel.set @@ Knowledge.load path;
+    true
+
+let save_knowledge ~had_knowledge ~update digest = function
+  | None ->
+    if not had_knowledge then store_knowledge_in_cache digest
+  | Some path when update ->
+    info "storing knowledge base to %S" path;
+    Knowledge.save (Toplevel.current ()) path
+  | Some _ -> ()
+
+
+
+let create_and_process input outputs passes loader update kb ctxt =
   let package = input in
   let digest = make_digest [
       Extension.Configuration.digest ctxt;
       Caml.Digest.file input;
       loader;
     ] in
-  import_knowledge_from_cache digest;
-  let state = load_project_state_from_cache digest in
+  let had_knowledge = load_knowledge digest kb in
   let input = Project.Input.file ~loader ~filename:input in
-  Project.create ~package ?state
+  Project.create ~package
     input |> proj_error >>= fun proj ->
-  if Option.is_none state then begin
-    store_knowledge_in_cache digest;
-    save_project_state_to_cache digest (Project.state proj);
-  end;
-  process passes outputs proj
+  process passes outputs proj >>| fun proj ->
+  save_knowledge ~had_knowledge ~update digest kb;
+  proj
 
 let _disassemble_command_registered : unit =
-  Extension.Command.(begin
-      declare ~doc:man "disassemble"
-        ~requires:features_used
-        (args $input $outputs $old_style_passes $passes $loader)
-    end) @@
-  fun input outputs old_style_passes passes loader ctxt ->
+  let args =
+    let open Extension.Command in
+    args $input $outputs $old_style_passes $passes $loader
+    $update $knowledge in
+  Extension.Command.declare ~doc:man "disassemble"
+    ~requires:features_used args @@
+  fun input outputs old_style_passes passes loader update kb ctxt ->
   setup_gc_unless_overriden ();
+  validate_knowledge update kb >>= fun () ->
   validate_input input >>= fun () ->
   validate_passes_style old_style_passes (List.concat passes) >>=
   validate_passes >>= fun passes ->
   Dump_formats.parse outputs >>= fun outputs ->
-  create_and_process input outputs passes loader ctxt >>= fun _ ->
+  create_and_process input outputs passes loader update kb ctxt >>= fun _ ->
   Ok ()
 
 let _compare_command_registered : unit =
@@ -358,12 +402,21 @@ let _compare_command_registered : unit =
 ```
 |} in
 
-  Extension.Command.(begin
-      declare "compare" ~doc
-        ~requires:features_used
-        (args $collator $base $inputs $outputs $old_style_passes $passes $loader)
-    end) @@
-  fun collator input inputs outputs old_style_passes passes loader ctxt ->
+  let args =
+    let open Extension.Command in
+    args
+    $collator
+    $base
+    $inputs
+    $outputs
+    $old_style_passes
+    $passes
+    $loader
+    $update
+    $knowledge in
+  Extension.Command.declare "compare" ~doc ~requires:features_used args @@
+  fun collator input inputs outputs old_style_passes passes
+    loader update kb ctxt ->
   match Project.Collator.find ~package:"bap" collator with
   | None -> Error (Fail (Unknown_collator collator))
   | Some collator ->
@@ -374,7 +427,8 @@ let _compare_command_registered : unit =
     Dump_formats.parse outputs >>= fun outputs ->
     let projs =
       Seq.map (Seq.of_list (input::inputs)) ~f:(fun input ->
-          create_and_process input outputs passes loader ctxt) in
+          create_and_process input outputs passes loader
+            update kb ctxt) in
     let exception Escape of Extension.Error.t in
     try
       let projs = Seq.map projs ~f:(function
@@ -458,6 +512,11 @@ let string_of_failure = function
     "Please specify the collator that you want to use."
   | Unknown_collator s ->
     sprintf "The collator `%s' is not registered." s
+  | Unknown_analysis s ->
+    sprintf "There is no analysis with the name `%s'" s
+  | No_knowledge ->
+    sprintf "Expected the path to an existing knowledge base \
+             (either add or remove the --update option)"
 
 let () = Extension.Error.register_printer @@ function
   | Fail err -> Some (string_of_failure err)

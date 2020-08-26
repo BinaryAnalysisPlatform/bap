@@ -120,15 +120,14 @@ let () =
   Map_terms_features.init ();
   Ok ()
 
-let main patts file proj =
+let main patts file =
   let patts = match file with
     | None -> patts
     | Some file -> match Scheme.parse_file file with
       | Ok ps -> patts @ ps
       | Error err -> raise (Parse_error err) in
   let marker = new marker patts in
-  Project.with_program proj @@
-  marker#run (Project.program proj)
+  Project.map_program ~f:marker#run
 
 module Cmdline = struct
 

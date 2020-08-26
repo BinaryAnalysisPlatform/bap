@@ -11,6 +11,7 @@ depends: [
   "base-unix"
   "bitstring"
   "camlzip"
+  "linenoise" {>= "1.1" & < "2.0"}
   "cmdliner" {>= "1.0" & < "2.0"}
   "ppx_jane" {>= "v0.12" & < "v0.13"}
   "core_kernel" {>= "v0.12" & < "v0.13"}

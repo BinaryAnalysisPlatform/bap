@@ -1,11 +1,9 @@
 open Bap.Std
 include Self()
 
-let main proj =
-  Project.with_program proj @@
-  Term.map sub_t (Project.program proj) ~f:Sub.ssa;;
+let main = Project.map_program ~f:(Term.map sub_t ~f:Sub.ssa)
 
-
+;;
 Config.manpage [
   `S "SYNOPSIS";
   `Pre "

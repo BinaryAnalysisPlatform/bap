@@ -137,7 +137,7 @@ module Knowledge : sig
   (** an instance of the persistance type class  *)
   type 'a persistent
 
-  (** the knowledge base state  *)
+  (** the knowledge base state *)
   type state
 
   (** a set of possible conflicts  *)
@@ -240,14 +240,22 @@ module Knowledge : sig
   (** state with no knowledge  *)
   val empty : state
 
-
-
   (** [of_bigstring data] loads state from [data] *)
   val of_bigstring : Bigstring.t -> state
 
 
   (** [to_bigstring state] serializes state into a binary representation.  *)
   val to_bigstring : state -> Bigstring.t
+
+  (** [load path] loads the knowledge base from the file at [path].
+      @since 2.2.0
+  *)
+  val load : string -> state
+
+  (** [save state path] saves the knowledge base to the file at [path].
+      @since 2.2.0
+  *)
+  val save : state -> string -> unit
 
 
   (** prints the state of the knowledge base.  *)

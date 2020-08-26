@@ -17,27 +17,38 @@ type getter = {
 
 type t = {
   endian : endian;
-  data : Bigstring.Stable.V1.t;
+  data : bigstring;
   addr : addr;
   off  : int;
   size : int;
-} [@@deriving bin_io]
+}
 
 module Repr = struct
+  open Bin_prot.Std
   type t = {
     endian  : endian;
-    offset  : int;
-    base    : addr;
-    size    : int;
-  } [@@deriving sexp_of]
+    addr    : addr;
+    data    : bigstring;
+  } [@@deriving bin_io]
 end
 
-let to_repr mem = {
-  Repr.endian = mem.endian;
-  Repr.offset = mem.off;
-  Repr.base   = mem.addr;
-  Repr.size   = mem.size;
-}
+include Binable.Of_binable(Repr)(struct
+    type nonrec t = t
+    let to_binable {endian; addr; data; off; size} : Repr.t = {
+      endian;
+      addr;
+      data = Bigstring.sub ~pos:off ~len:size data
+    }
+
+    let of_binable {Repr.endian; addr; data} : t = {
+      endian;
+      data;
+      addr;
+      off = 0;
+      size = Bigstring.length data;
+    }
+  end)
+
 
 let sexp_of_t mem = Sexp.List [
     Atom (Addr.string_of_value mem.addr);

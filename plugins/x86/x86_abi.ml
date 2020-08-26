@@ -91,8 +91,15 @@ let strip_leading_underscore s =
   | None -> s
   | Some s -> s
 
+let symbols proj =
+  let spec = Project.specification proj in
+  let syms = Ogre.(collect Query.(select (from Image.Scheme.named_symbol))) in
+  match Ogre.eval syms spec with
+  | Ok syms -> Seq.map ~f:snd syms
+  | Error _ -> Seq.empty
+
 let has_symbol fn proj =
-  Option.is_some (Symtab.find_by_name (Project.symbols proj) fn)
+  Seq.mem (symbols proj) fn ~equal:String.equal
 
 module MS_32 = struct
   include STDCALL
@@ -254,7 +261,7 @@ let setup ?(abi=fun _ -> None) () =
       C.Abi.register Abi.name abi;
       let api = C.Abi.create_api_processor Abi.size abi in
       Bap_api.process api;
-      let prog = demangle Abi.demangle (Project.program proj) in
-      Project.set (Project.with_program proj prog) Bap_abi.name Abi.name
+      let proj = Project.map_program proj ~f:(demangle Abi.demangle) in
+      Project.set proj Bap_abi.name Abi.name
     | _ -> proj in
   Bap_abi.register_pass main

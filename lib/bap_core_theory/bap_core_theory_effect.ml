@@ -8,11 +8,13 @@ type cls = Effects
 let package = "core-theory"
 
 module Sort = struct
-  type effects = Top | Set of Set.M(String).t
+  type effects = Top | Set of Set.M(KB.Name).t
   type +'a t = effects
   type data = Data
   type ctrl = Ctrl
-  let single eff = Set (Set.singleton (module String) eff)
+  let single eff =
+    let eff = KB.Name.create ~package:"effect" eff in
+    Set (Set.singleton (module KB.Name) eff)
   let make name = single name
   let define name = make name
 
@@ -25,7 +27,7 @@ module Sort = struct
   let refine name other : 'a t = make name && other
 
   let top = Top
-  let bot = Set (Set.empty (module String))
+  let bot = Set (Set.empty (module KB.Name))
 
   let union xs = List.reduce xs ~f:both |> function
     | Some x -> x

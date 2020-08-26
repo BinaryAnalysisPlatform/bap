@@ -336,8 +336,7 @@ let update prog =
           | _ -> jmp
   end)#run prog
 
-let main proj =
-  Project.with_program proj (update @@ Project.program proj)
+let main = Project.map_program ~f:update
 
 let () = Extension.declare ~doc @@ fun ctxt ->
   Bap_abi.register_pass main;

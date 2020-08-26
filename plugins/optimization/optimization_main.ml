@@ -155,19 +155,18 @@ let digest_of_sub sub level =
 let run level proj =
   let arch = Project.arch proj in
   let can_touch = is_optimization_allowed (is_flag arch) level in
-  let prog = Project.program proj in
-  let free = free_vars prog in
-  Project.with_program proj @@
-  Term.map sub_t prog ~f:(fun sub ->
-      let digest = digest_of_sub sub level in
-      match O.Cache.load digest with
-      | Some data -> O.apply sub data
-      | None ->
-        let data = process_sub free can_touch sub in
-        let sub = O.update sub data in
-        let data = O.find_unreachable sub data in
-        O.Cache.save digest data;
-        O.remove_dead_code sub data)
+  Project.map_program proj ~f:(fun prog ->
+      let free = free_vars prog in
+      Term.map sub_t prog ~f:(fun sub ->
+          let digest = digest_of_sub sub level in
+          match O.Cache.load digest with
+          | Some data -> O.apply sub data
+          | None ->
+            let data = process_sub free can_touch sub in
+            let sub = O.update sub data in
+            let data = O.find_unreachable sub data in
+            O.Cache.save digest data;
+            O.remove_dead_code sub data))
 
 let () =
   Config.manpage [

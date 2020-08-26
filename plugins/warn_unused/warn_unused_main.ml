@@ -72,14 +72,10 @@ let print unchecked proj =
   (printer unchecked)#run prog ()
 
 let mark unchecked proj =
-  Project.program proj |>
-  (marker unchecked)#run |>
-  Project.with_program proj
+  Project.map_program proj ~f:(marker unchecked)#run
 
 let taint proj =
-  Project.program proj |>
-  taint |>
-  Project.with_program proj
+  Project.map_program proj taint
 
 let run pass proj =
   let prog = Project.program proj in

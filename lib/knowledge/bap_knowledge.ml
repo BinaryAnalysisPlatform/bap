@@ -158,9 +158,7 @@ module Oid : Tid = struct
 
 end
 
-module Cid : Sid = Int63
 module Pid : Sid = Int63
-
 let user_package = "user"
 let keyword_package = "keyword"
 
@@ -174,9 +172,73 @@ type fullname = {
   name : string;
 } [@@deriving bin_io, compare, sexp]
 
-module Name = struct
-  type t = fullname [@@deriving bin_io, compare, sexp]
 
+module Name : sig
+  type t [@@deriving bin_io, compare, sexp]
+  val create : ?package:string -> string -> t
+  val read : ?package:string -> string -> t
+  val show : t -> string
+  val unqualified : t -> string
+  val package : t -> string
+  val str : unit -> t -> string
+  val hash : t -> int
+
+  val full : t -> fullname
+
+  module Full : sig
+    type t = fullname
+    val create : ?package:string -> string -> t
+    val read : ?package:string -> string -> t
+    val short : t -> string
+    val package : t -> string
+    val to_string : t -> string
+  end
+
+  val normalize_name : [`Literal | `Reading] -> package:string ->
+    string -> string
+  val normalize_package : [`Literal | `Reading] -> string -> string
+
+  val find_separator : string -> int option
+  include Base.Comparable.S with type t := t
+  include Binable.S with type t := t
+  include Stringable.S with type t := t
+  include Pretty_printer.S with type t := t
+end = struct
+  let full {package; name} =
+    if package = keyword_package || package = user_package
+    then name
+    else package ^ ":" ^ name
+
+  module Id : sig
+    type t [@@deriving bin_io, compare, sexp]
+    val intern : fullname -> t
+    val fullname : t -> fullname
+    val hash : t -> int
+  end = struct
+
+    let registry = Hashtbl.create (module Int63)
+
+    let hash_name str =
+      let open Int63 in
+      String.fold str ~init:(of_int 5381) ~f:(fun h c ->
+          (h lsl 5) + h + of_int (Char.to_int c))
+
+    let intern name =
+      let str = full name in
+      let id = hash_name str in
+      match Hashtbl.find registry id with
+      | None -> Hashtbl.add_exn registry id name; id
+      | Some name ->
+        if full name = str
+        then id
+        else invalid_argf "Names %S and %S have the same hash value, \
+                           Change one of them."
+            (full name) str ()
+
+    let fullname = Hashtbl.find_exn registry
+    include Int63
+  end
+  type t = Id.t [@@deriving bin_io, compare, sexp]
 
   let separator = ':'
   let escape_char = '\\'
@@ -245,53 +307,58 @@ module Name = struct
     | `Literal -> escape_all_literally package
     | `Reading -> escape_all_unescaped package
 
-  let create ?(package=user_package) name = {
-    package = normalize_package `Literal package;
-    name = normalize_name `Literal ~package name;
-  }
+
+  module Full = struct
+    type t = fullname
+    let create ?(package=user_package) name =
+      let package = normalize_package `Literal package in
+      let name = normalize_name `Literal ~package name in
+      {package; name}
+    let short x = unescape @@ x.name
+    let package x = unescape @@ x.package
+    let to_string name = full name
+
+    let read ?(package=user_package) s : t =
+      let package = normalize_package `Literal package in
+      let escape = escape_all_unescaped in
+      match find_separator s with
+      | None ->
+        let name = normalize_name `Reading ~package s in
+        {package; name}
+      | Some 0 ->
+        let package = keyword_package
+        and name = escape ~is_keyword:true s in
+        {package; name}
+      | Some len ->
+        let package = escape (String.sub s ~pos:0 ~len) in
+        let name = normalize_name `Reading ~package @@
+          String.subo s ~pos:(len+1) in
+        {package; name}
+  end
+
+  let full = Id.fullname
+
+  let create ?package name =
+    Id.intern @@ Full.create ?package name
 
   let keyword = create ~package:keyword_package
 
-  let read ?(package=user_package) s =
-    let package = normalize_package `Literal package in
-    let escape = escape_all_unescaped in
-    match find_separator s with
-    | None -> {
-        package;
-        name = normalize_name `Reading ~package s
-      }
-    | Some 0 -> {
-        package = keyword_package;
-        name = escape ~is_keyword:true s
-      }
-    | Some len ->
-      let package = escape (String.sub s ~pos:0 ~len) in
-      {
-        package;
-        name = normalize_name `Reading ~package @@
-          String.subo s ~pos:(len+1);
-      }
+  let read ?package name = Id.intern @@ Full.read ?package name
 
-
-  let package t = unescape t.package
-  let short t = unescape t.name
+  let package t = Full.package Id.(fullname t)
+  let short t = Full.short Id.(fullname t)
   let unqualified t = short t
-  let to_string {package; name} =
-    if String.(package = keyword_package || package = user_package)
-    then name
-    else package ^ ":" ^ name
-
+  let to_string t = Full.to_string Id.(fullname t)
   let show t = to_string t
-
   let of_string s = read s
 
   let str () s = to_string s
   let pp ppf x = Format.fprintf ppf "%s" (show x)
 
-  let hash {name} = String.hash name
+  let hash = Id.hash
 
   include Base.Comparable.Make(struct
-      type t = fullname [@@deriving bin_io, compare, sexp]
+      type t = Id.t [@@deriving bin_io, compare, sexp]
     end)
 end
 
@@ -784,9 +851,7 @@ module Registry = struct
     Hashtbl.update namespace package ~f:(function
         | None -> Map.singleton (module String) name info
         | Some names -> Map.add_exn names ~key:name ~data:info);
-    {package; name}
-
-
+    Name.create ~package name
 
   let start_rule ?package name = {
     name = Name.create ?package name;
@@ -927,34 +992,27 @@ end
 
 module Class = struct
   type +'s info = {
-    id : Cid.t;
-    name : fullname;
+    name : Name.t;
     sort : 's;
   }
-  let id {id} = id
+  let id {name} = name
 
   type (+'a,+'s) t = 's info
 
-  let classes = ref Cid.zero
-
-  let names = Hashtbl.create (module Cid)
 
   let newclass ?(public=false) ?desc ?package name sort =
-    Cid.incr classes;
-    let id = !classes
-    and name = Registry.add_class ?desc ?package name in
+    let name = Registry.add_class ?desc ?package name in
     if public then Registry.public_class name;
-    Hashtbl.add_exn names id name;
-    {id; name; sort}
+    {name; sort}
 
   let declare
     : ?public:bool -> ?desc:string -> ?package:string -> string -> 's -> ('k,'s) t =
     fun ?public ?desc ?package name data ->
     newclass ?public ?desc ?package name data
 
-  let refine {id; name} sort = {id; name; sort}
+  let refine {name} sort = {name; sort}
 
-  let same x y = Cid.equal x.id y.id
+  let same x y = Name.equal x.name y.name
 
   let equal : type a b. (a,_) t -> (b,_) t -> (a obj,b obj) Type_equal.t option =
     fun x y -> Option.some_if (same x y) Type_equal.T
@@ -991,7 +1049,7 @@ module Dict = struct
     type 'a t = {
       ord : Uid.t;
       key : 'a typeid;
-      name : string;
+      name : Name.t;
       show : 'a -> Sexp.t;
     }
 
@@ -1742,7 +1800,7 @@ module Dict = struct
   let sexp_of_t dict = Sexp.List (foreach ~init:[] dict {
       visit = fun k x xs ->
         Sexp.List [
-          Sexp.Atom (Key.name k);
+          Sexp.Atom (Name.to_string (Key.name k));
           (Key.to_sexp k x)
         ] :: xs
     })
@@ -1750,7 +1808,7 @@ module Dict = struct
 
   let pp_field ppf (k,v) =
     Format.fprintf ppf "%s : %a"
-      (Key.name k)
+      (Name.to_string (Key.name k))
       Sexp.pp_hum (Key.to_sexp k v)
 
   let rec pp_fields ppf = function
@@ -1788,7 +1846,6 @@ module Dict = struct
   let pp_elt ppf (k,v) =
     Format.fprintf ppf "%a" Sexp.pp_hum (Key.to_sexp k v)
 
-
   let rec pp_tree ppf = function
     | T0 -> Format.fprintf ppf "()"
     | T1 (ka,a) ->
@@ -1819,7 +1876,7 @@ module Dict = struct
         pp_tree x pp_elt (k,a) pp_tree y
 
   let pp_key ppf {Key.name} =
-    Format.fprintf ppf "%s" name
+    Format.fprintf ppf "%s" (Name.to_string name)
 end
 
 module Record = struct
@@ -1832,7 +1889,7 @@ module Record = struct
 
   module Repr = struct
     type entry = {
-      name : string;
+      name : Name.t;
       data : string;
     } [@@deriving bin_io]
 
@@ -1850,8 +1907,8 @@ module Record = struct
     writer : record -> string option;
   }
 
-  let io : slot_io Hashtbl.M(String).t =
-    Hashtbl.create (module String)
+  let io : slot_io Hashtbl.M(Name).t =
+    Hashtbl.create (module Name)
 
   let vtables : vtable Hashtbl.M(Uid).t =
     Hashtbl.create (module Uid)
@@ -1988,16 +2045,48 @@ module Record = struct
   let t_of_sexp = opaque_of_sexp
   let inspect = sexp_of_t
 
-  let pp ppf x = Sexp.pp_hum ppf (inspect x)
+  let pp_text ppf s =
+    Format.fprintf ppf "@[<1>\"%a\"@]" Format.pp_print_text s
+
+  let is_text = String.exists ~f:Char.is_whitespace
+
+  let rec pp_hum ppf = function
+    | Sexp.Atom s -> if is_text s
+      then pp_text ppf s
+      else Format.pp_print_string ppf s
+    | Sexp.List xs ->
+      Format.fprintf ppf "(@[<hv>";
+      Format.pp_print_list pp_hum ppf xs
+        ~pp_sep:Format.pp_print_space;
+      Format.fprintf ppf "@])"
+
+  let pp_payload ppf = function
+    | [Sexp.Atom str] ->
+      Format.fprintf ppf "@[<1>\"%a\"@]" Format.pp_print_text str
+    | other ->
+      Format.fprintf ppf "%a" pp_hum (Sexp.List other)
+
+
+  let pp ppf x = pp_hum ppf (inspect x)
   let pp_slots slots ppf x =
     let slots = Set.of_list (module String) slots in
+    let no_name = Set.nth slots 1 = None in
     match (inspect x : Sexp.t) with
     | Atom _ -> assert false
     | List xs ->
+      let first = ref true in
+      Format.fprintf ppf "@[<v>";
       List.iter xs ~f:(function
-          | Sexp.List (Atom slot :: _ ) as data when Set.mem slots slot ->
-            Sexp.pp_hum ppf data
-          | _ -> ())
+          | Sexp.List (Atom slot :: payload ) as data
+            when Set.mem slots slot ->
+            if not first.contents then Format.fprintf ppf "@,";
+            first := false;
+            if no_name
+            then Format.fprintf ppf "%a" pp_payload payload
+            else Format.fprintf ppf "%a" pp_hum data
+          | _ -> ());
+      Format.fprintf ppf "@]"
+
 end
 
 module Knowledge = struct
@@ -2033,19 +2122,19 @@ module Knowledge = struct
     type workers = {
       waiting : Pid.Set.t;
       current : Pid.Set.t;
-    } [@@deriving bin_io]
+    }
 
-    type work = Done | Work of workers [@@deriving bin_io]
+    type work = Done | Work of workers
 
     type objects = {
       vals : Record.t Oid.Map.t;
-      comp : work Dict.Key.Uid.Map.t Oid.Map.t;
+      comp : work Map.M(Name).t Oid.Map.t;
       syms : fullname Oid.Map.t;
       heap : cell Oid.Map.t;
       data : Oid.t Cell.Map.t;
       objs : Oid.t String.Map.t String.Map.t;
       pubs : Oid.Set.t String.Map.t;
-    } [@@deriving bin_io]
+    }
 
     let empty_class = {
       vals = Map.empty (module Oid);
@@ -2058,22 +2147,17 @@ module Knowledge = struct
     }
 
     type t = {
-      classes : objects Cid.Map.t;
+      classes : objects Map.M(Name).t;
       package : string;
-    } [@@deriving bin_io]
+    }
   end
 
   type state = Env.t
 
-  let of_bigstring =
-    Binable.of_bigstring (module Env)
-
-  let to_bigstring =
-    Binable.to_bigstring (module Env)
 
   let empty : Env.t = {
     package = user_package;
-    classes = Map.empty (module Cid);
+    classes = Map.empty (module Name);
   }
 
   module State = struct
@@ -2100,24 +2184,24 @@ module Knowledge = struct
       cls : ('a,unit) cls;
       dom : 'p Domain.t;
       key : 'p Dict.Key.t;
-      name : fullname;
+      name : Name.t;
       desc : string option;
       promises : (pid, 'p promise) Hashtbl.t;
     }
 
     type pack = Pack : ('a,'p) t -> pack
-    let repository = Hashtbl.create (module Cid)
+    let repository = Hashtbl.create (module Name)
 
     let register slot =
-      Hashtbl.update repository slot.cls.id ~f:(function
+      Hashtbl.update repository slot.cls.name ~f:(function
           | None -> [Pack slot]
           | Some xs -> Pack slot :: xs)
 
-    let enum {Class.id} = Hashtbl.find_multi repository id
+    let enum {Class.name} = Hashtbl.find_multi repository name
 
     let declare ?(public=false) ?desc ?persistent ?package cls name (dom : 'a Domain.t) =
       let name = Registry.add_slot ?desc ?package name in
-      let key = Dict.Key.create ~name:(Name.to_string name) dom.inspect in
+      let key = Dict.Key.create ~name dom.inspect in
       if public then Registry.update_class ~cls:cls.Class.name ~slot:name;
       Option.iter persistent (Record.register_persistent key);
       Record.register_domain key dom;
@@ -2236,7 +2320,7 @@ module Knowledge = struct
           end)
         let domain = Domain.define ~empty ~order ~join
             ~inspect:sexp_of_t
-            (Name.short (Class.name cls))
+            (Name.unqualified (Class.name cls))
       end in
       (module R)
 
@@ -2257,9 +2341,9 @@ module Knowledge = struct
   let gets f = Knowledge.lift (State.gets f)
   let update f = Knowledge.lift (State.update f)
 
-  let objects {Class.id} =
+  let objects {Class.name} =
     get () >>| fun {classes} ->
-    match Map.find classes id with
+    match Map.find classes name with
     | None -> Env.empty_class
     | Some objs -> objs
 
@@ -2283,7 +2367,7 @@ module Knowledge = struct
       objects cls >>= fun objs ->
       with_new_object objs @@ fun obj objs ->
       update @@begin function {classes} as s -> {
-          s with classes = Map.set classes ~key:cls.id ~data:objs
+          s with classes = Map.set classes ~key:cls.name ~data:objs
         }
       end >>| fun () ->
       obj
@@ -2294,10 +2378,10 @@ module Knowledge = struct
 
        So far we ignore both deletes.
     *)
-    let delete {Class.id} obj =
+    let delete {Class.name} obj =
       update @@ function {classes} as s -> {
           s with
-          classes = Map.change classes id ~f:(function
+          classes = Map.change classes name ~f:(function
               | None -> None
               | Some objs -> Some {
                   objs with
@@ -2336,7 +2420,7 @@ module Knowledge = struct
         put {s with classes = Map.set classes clsid objects} >>| fun () ->
         obj in
 
-      fun ?(public=false) ?desc:_ {package; name} {Class.id} ->
+      fun ?(public=false) ?desc:_ {package; name} {Class.name=id} ->
         get () >>= fun ({classes} as s) ->
         let objects = match Map.find classes id with
           | None -> Env.empty_class
@@ -2359,7 +2443,7 @@ module Knowledge = struct
     let intern ?public ?desc ?package name cls =
       match package with
       | Some package ->
-        do_intern ?public ?desc (Name.create ~package name) cls
+        do_intern ?public ?desc (Name.Full.create ~package name) cls
       | None ->
         get () >>= fun {Env.package} ->
         let name = {
@@ -2372,15 +2456,16 @@ module Knowledge = struct
       Format.asprintf "#<%s %a>" cls Oid.pp obj
 
     let to_string
-        {Class.name=cls as fname; id=cid} {Env.package; classes} obj =
-      let cls = if String.equal package cls.package then cls.name
-        else Name.to_string fname in
-      match Map.find classes cid with
+        {Class.name=cls as cname} {Env.package; classes} obj =
+      let cls = if String.equal package (Name.package cls)
+        then Name.unqualified cls
+        else Name.to_string cls in
+      match Map.find classes cname with
       | None -> uninterned_repr cls obj
       | Some {Env.syms} -> match Map.find syms obj with
         | Some fname -> if String.equal fname.package package
           then fname.name
-          else Name.to_string fname
+          else Name.Full.to_string fname
         | None -> uninterned_repr cls obj
 
     let repr cls obj =
@@ -2393,7 +2478,7 @@ module Knowledge = struct
         Knowledge.return (Oid.atom_of_string obj)
       with _ ->
         get () >>= fun {Env.package} ->
-        do_intern (Name.read ~package input) cls
+        do_intern (Name.Full.read ~package input) cls
 
     let cast : type a b. (a obj, b obj) Type_equal.t -> a obj -> b obj =
       fun Type_equal.T x -> x
@@ -2463,11 +2548,11 @@ module Knowledge = struct
     else
       get () >>= function {classes} as s ->
         let {Env.vals} as objs =
-          match Map.find classes slot.cls.id with
+          match Map.find classes slot.cls.name with
           | None -> Env.empty_class
           | Some objs -> objs in
         try put {
-            s with classes = Map.set classes ~key:slot.cls.id ~data:{
+            s with classes = Map.set classes ~key:slot.cls.name ~data:{
             objs with vals = Map.update vals obj ~f:(function
             | None -> Record.(put slot.key empty x)
             | Some v -> match Record.commit slot.dom slot.key v x with
@@ -2508,7 +2593,7 @@ module Knowledge = struct
     else provide s obj x
 
 
-  let uid {Slot.key} = Dict.Key.uid key
+  let uid {Slot.name} = name
 
   let status
     : ('a,_) slot -> 'a obj -> slot_status knowledge =
@@ -2527,11 +2612,11 @@ module Knowledge = struct
     objects slot.cls >>= fun ({comp} as objs) ->
     let comp = Map.update comp obj ~f:(fun slots ->
         let slots = match slots with
-          | None -> Map.empty (module Dict.Key.Uid)
+          | None -> Map.empty (module Name)
           | Some slots -> slots in
         Map.update slots (uid slot) ~f) in
     get () >>= fun s ->
-    let classes = Map.set s.classes slot.cls.id {objs with comp} in
+    let classes = Map.set s.classes slot.cls.name {objs with comp} in
     put {s with classes}
 
   let enter_slot : ('a,_) slot -> 'a obj -> unit knowledge = fun s x ->
@@ -2734,7 +2819,7 @@ module Knowledge = struct
       Knowledge.List.fold ~init:s.classes imports ~f:(fun classes name ->
           let name = match Name.find_separator name with
             | None -> `Pkg name
-            | Some _ -> `Sym (Name.read name) in
+            | Some _ -> `Sym (Name.Full.read name) in
           let needs_import {Env.pubs} sym obj = match name with
             | `Sym s -> [%compare.equal : fullname] sym s
             | `Pkg p -> match Map.find pubs p with
@@ -2785,12 +2870,12 @@ module Knowledge = struct
 
     let atom _ x = Knowledge.return x
 
-    let add_cell {Class.id} objects oid cell =
+    let add_cell {Class.name} objects oid cell =
       let {Env.data; heap} = objects in
       let data = Map.add_exn data ~key:cell ~data:oid in
       let heap = Map.add_exn heap ~key:oid ~data:cell in
       update (fun s -> {
-            s with classes = Map.set s.classes id {
+            s with classes = Map.set s.classes name {
           objects with data; heap
         }}) >>| fun () ->
       oid
@@ -2873,21 +2958,196 @@ module Knowledge = struct
     else Format.fprintf ppf "%s:%s" p name
 
   let pp_state ppf {Env.classes; package} =
-    Format.fprintf ppf "(in-package %s)@\n" package;
-    Map.iteri classes ~f:(fun ~key:cid ~data:{vals;syms} ->
-        let name = Hashtbl.find_exn Class.names cid in
-        Format.fprintf ppf "(in-class %a)@\n"
-          (pp_fullname ~package) name;
-        Map.iteri vals ~f:(fun ~key:oid ~data ->
-            if not (Dict.is_empty data) then
-              let () = match Map.find syms oid with
-                | None ->
-                  Format.fprintf ppf "@[<2>(%a@ " Oid.pp oid
-                | Some name ->
-                  Format.fprintf ppf "@[<2>(%a@ "
-                    (pp_fullname ~package) name in
-              Format.fprintf ppf "@,%a)@]@\n"
-                (Sexp.pp_hum_indent 2) (Dict.sexp_of_t data)))
+    Format.fprintf ppf "@[<v0>(in-package %s)@;" package;
+    Map.iteri classes ~f:(fun ~key:name ~data:{vals;syms} ->
+        if not (Map.is_empty vals) then begin
+          Format.fprintf ppf "(in-class %a)@;"
+            (pp_fullname ~package) (Name.full name);
+          Format.fprintf ppf "@[<v>";
+          Map.iteri vals ~f:(fun ~key:oid ~data ->
+              if not (Dict.is_empty data) then
+                let () = match Map.find syms oid with
+                  | None ->
+                    Format.fprintf ppf "@[<hv2>(%a@ " Oid.pp oid
+                  | Some name ->
+                    Format.fprintf ppf "@[<hv2>(%a@ "
+                      (pp_fullname ~package) name in
+                Format.fprintf ppf "%a)@]@;"
+                  Record.pp_hum (Dict.sexp_of_t data));
+          Format.fprintf ppf "@]"
+        end);
+    Format.fprintf ppf "@]";
+
+  module Io = struct
+    type version = V1 [@@deriving bin_io]
+
+    module List = Base.List
+
+    type data = {
+      key : Oid.t;
+      sym : fullname option;
+      data : (Name.t * string) array;
+      comp : Name.t list;
+    } [@@deriving bin_io]
+
+    type objects = data list [@@deriving bin_io]
+    type payload = (Name.t * objects) list [@@deriving bin_io]
+
+    type canonical = {
+      version : version;
+      payload : payload;
+    } [@@deriving bin_io]
+
+    let magic = "CMU:KB"
+
+    let check_magic data =
+      let len = String.length magic in
+      if Bigstring.To_string.subo ~len data <> magic
+      then invalid_arg "Not a valid knowledge base";
+      len
+
+    let make_value data =
+      let init = Record.empty in
+      Array.fold data ~init ~f:(fun record (name,data) ->
+          match Hashtbl.find Record.io name with
+          | None -> record
+          | Some {Record.reader=read} ->
+            read data record)
+
+    let expand_comp comp =
+      List.fold comp
+        ~init:(Map.empty (module Name))
+        ~f:(fun works slot ->
+            Map.add_exn works slot Env.Done)
+
+    let add_object
+        ({Env.vals; syms; objs} as self)
+        {key; sym; data; comp} =
+      let value = make_value data in
+      let self = {self with vals = Map.add_exn vals key value} in
+      match sym with
+      | None -> self
+      | Some s -> {
+          self with
+          comp = Map.set self.comp key (expand_comp comp);
+          syms = Map.add_exn syms key s;
+          objs = Map.update objs s.package ~f:(function
+              | None -> Map.singleton (module String) s.name key
+              | Some objs -> Map.add_exn objs s.name key)
+        }
+
+    let names_in_syms = Map.fold
+        ~init:(Set.empty (module String))
+        ~f:(fun ~key:_ ~data:{package;name} names ->
+            Set.add (Set.add names package) name)
+
+
+    let names = Map.fold
+        ~init:(Set.empty (module String))
+        ~f:(fun ~key:_ ~data:{Env.syms} names ->
+            Set.union names @@
+            names_in_syms syms)
+
+    let serialize_record record =
+      let fields = Dict.foreach record ~init:[] {
+          visit = fun k _ xs ->
+            let name = Record.Key.name k in
+            match Hashtbl.find Record.io name with
+            | None -> xs
+            | Some {writer} -> match writer record with
+              | None -> xs
+              | Some data -> (name,data) :: xs
+        } in
+      let result = Array.of_list fields in
+      Array.sort result ~compare:(fun (k1,_) (k2,_) ->
+          Name.compare k1 k2);
+      result
+
+    let collect_comps comp oid =
+      match Map.find comp oid with
+      | None -> []
+      | Some works -> Map.keys works
+
+
+    let to_canonical {Env.classes} =
+      let payload =
+        Map.to_alist classes |>
+        List.map ~f:(fun (cid, {Env.vals; syms; comp}) ->
+            cid,
+            Map.to_alist vals |> List.filter_map ~f:(fun (oid,value) ->
+                let data = serialize_record value in
+                let sym = Map.find syms oid in
+                let comp = collect_comps comp oid in
+                if Array.is_empty data && Option.is_none sym
+                then None
+                else Some {key=oid; sym; data; comp})) in {
+        version = V1;
+        payload;
+      }
+
+    let of_canonical {payload} =
+      let init = Map.empty (module Name) in
+      let classes =
+        List.fold payload ~init ~f:(fun state (cid,objs) ->
+            Map.add_exn state ~key:cid
+              ~data:(List.fold objs ~f:add_object
+                       ~init:Env.empty_class)) in
+      {empty with classes}
+
+    let of_bigstring data =
+      let pos_ref = ref (check_magic data) in
+      let V1 = bin_read_version data ~pos_ref in
+      let payload = bin_read_payload data ~pos_ref in
+      of_canonical {version=V1; payload}
+
+    let load path =
+      let fd = Unix.openfile path Unix.[O_RDONLY] 0o400 in
+      try
+        let data =
+          Bigarray.array1_of_genarray @@
+          Unix.map_file fd
+            Bigarray.char Bigarray.c_layout false [| -1 |]in
+        let r = of_bigstring data in
+        Unix.close fd;
+        r
+      with exn ->
+        Unix.close fd; raise exn
+
+    let blit_canonical_to_bigstring repr buf =
+      Bigstring.From_string.blito ~src:magic ~dst:buf ();
+      let pos = String.length magic in
+      let _p = bin_write_canonical ~pos buf repr in
+      ()
+
+    let to_bigstring state =
+      let repr = to_canonical state in
+      let size = String.length magic +
+                 bin_size_canonical repr in
+      let data = Bigstring.create size in
+      blit_canonical_to_bigstring repr data;
+      data
+
+    let save state path =
+      let repr = to_canonical state in
+      let size = String.length magic +
+                 bin_size_canonical repr in
+      let fd = Unix.openfile path Unix.[O_RDWR; O_CREAT; O_TRUNC] 0o660 in
+      try
+        let dim = [|size |]in
+        let buf =
+          Bigarray.array1_of_genarray @@
+          Unix.map_file fd Bigarray.char Bigarray.c_layout true dim in
+        blit_canonical_to_bigstring repr buf;
+        Unix.close fd
+      with exn ->
+        Unix.close fd;
+        raise exn
+  end
+
+  let save = Io.save
+  and load = Io.load
+  and to_bigstring = Io.to_bigstring
+  and of_bigstring = Io.of_bigstring
 
   let objects cls = objects cls >>| fun {vals} ->
     Map.to_sequence vals |>

@@ -108,9 +108,8 @@ let set_abi proj m =
   C.Abi.register A.name abi;
   let api = C.Abi.create_api_processor A.size abi in
   Bap_api.process api;
-  let prog = Project.program proj in
-  let prog = demangle strip_leading_dot prog in
-  Project.set (Project.with_program proj prog) Bap_abi.name A.name
+  let proj = Project.map_program proj ~f:(demangle strip_leading_dot) in
+  Project.set proj Bap_abi.name A.name
 
 let main proj = match Project.arch proj with
   | `mips ->

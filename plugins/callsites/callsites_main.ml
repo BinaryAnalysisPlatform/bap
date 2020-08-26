@@ -83,9 +83,7 @@ let fill_calls program =
   Term.map sub_t program ~f:(insert_defs program)
 
 
-let main proj =
-  let prog = Project.program proj in
-  Project.with_program proj (fill_calls prog)
+let main = Project.map_program ~f:fill_calls
 
 let () =
   Config.manpage [

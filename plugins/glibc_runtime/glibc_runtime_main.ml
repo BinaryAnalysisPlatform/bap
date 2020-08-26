@@ -130,8 +130,7 @@ let main ctxt proj =
   if Extension.Configuration.get ctxt enable ||
      is_glibc proj
   then
-    Project.with_program proj @@
-    fix_glibc_runtime (Project.program proj)
+    Project.map_program proj ~f:fix_glibc_runtime
   else proj
 
 let () = Extension.declare ~doc ~provides:["abi"] @@ fun ctxt ->

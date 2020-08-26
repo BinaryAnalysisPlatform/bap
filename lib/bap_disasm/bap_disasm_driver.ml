@@ -18,7 +18,7 @@ type jump = {
   barrier : bool;
   indirect : bool;
   resolved : Addr.Set.t;
-} [@@deriving bin_io]
+} [@@deriving bin_io, equal]
 
 module Machine : sig
   type task = private
@@ -379,6 +379,11 @@ let init = {
   debt = [];
 }
 
+let equal x y =
+  phys_equal x y ||
+  Set.equal x.begs y.begs &&
+  Map.equal equal_jump x.jmps y.jmps
+
 let subroutines x = x.funs
 let blocks x = x.begs
 let jump {jmps} = Map.find jmps
@@ -470,7 +475,8 @@ let execution_order stack =
 let always _ = KB.return true
 
 let with_disasm beg cfg f =
-  query_arch (Word.to_bitvec beg) >>= fun arch ->
+  Theory.Label.for_addr (Word.to_bitvec beg) >>=
+  KB.collect Arch.slot >>= fun arch ->
   match Dis.create (Arch.to_string arch) with
   | Error _ -> KB.return (cfg,None)
   | Ok dis -> f arch dis

@@ -102,7 +102,7 @@ module PP = struct
       pr "@[<4>%a@;with [%a, %a]:%a <- %a@]"
         pp mem pp idx pp_edn edn Bap_size.pp s pp exp
     | Ite (ce, te, fe) ->
-      pr "@[<2>if %a@;then %a@;else %a@]" pp ce pp te pp fe
+      pr "@[if %a@;then %a@;else %a@]" pp ce pp te pp fe
     | Extract (hi, lo, exp) ->
       pr "extract:%d:%d[%a]" hi lo pp exp
     | Concat (le, re) as p ->
@@ -116,7 +116,7 @@ module PP = struct
     | BinOp (PLUS,le,(Int x as re)) as p when msb x ->
       pr (pfmt p le ^^ " - " ^^ pfmt p re) pp le Word.pp (Word.neg x)
     | BinOp (op, le, re) as p ->
-      pr (pfmt p le ^^ " %a " ^^ pfmt p re) pp le pp_binop op pp re
+      pr (pfmt p le ^^ "@ %a@ " ^^ pfmt p re) pp le pp_binop op pp re
     | UnOp (op, exp) as p ->
       pr ("%a" ^^ pfmt p exp) pp_unop op pp exp
     | Var var -> Bap_var.pp fmt var
@@ -124,7 +124,7 @@ module PP = struct
     | Cast (ct, n, exp) ->
       pr "%a:%d[%a]" pp_cast ct n pp exp
     | Let (var, def, body) ->
-      pr "let %a = %a in@ %a" Bap_var.pp var pp def pp body
+      pr "@[let %a =@ %a in@ %a@]" Bap_var.pp var pp def pp body
     | Unknown (s, typ) ->
       pr "unknown[%s]:%a" s Bap_type.pp typ
 end
