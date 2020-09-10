@@ -377,7 +377,11 @@ module Array = struct
 
 
   let pp ppx ppf xs =
-    Array.iter xs ~f:(fun x -> Format.fprintf ppf "%a" ppx x)
+    let last = Array.length xs - 1 in
+    Array.iteri xs ~f:(fun i x ->
+        Format.fprintf ppf "%a" ppx x;
+        if i <> last
+        then Format.pp_print_cut ppf ())
 end
 
 
@@ -509,15 +513,24 @@ let sub_t : (program, sub) cls = {
   get = Program.subs;
 }
 
-let term_pp pp_self ppf t =
+let horizontal ppf = Format.pp_open_box ppf 10
+let vertical ppf = Format.pp_open_vbox ppf 0
+
+let term_pp ?(no_cut=false) ?(box=horizontal) pp_self ppf t =
   let open Format in
   let attrs = Dict.data t.dict in
   Seq.iter attrs ~f:(fun attr ->
       pp_open_tag ppf (asprintf "%a" pp_attr attr));
-  fprintf ppf "@[%08Lx: %a@]@." (Int63.to_int64 (KB.Object.id t.tid))
+  let pp_cut ppf = if not no_cut
+    then Format.pp_print_break ppf 1 0
+    else fprintf ppf " " in
+  box ppf;
+  fprintf ppf "%08Lx:%t%a" (Int63.to_int64 (KB.Object.id t.tid))
+    pp_cut
     pp_self t.self;
+  Format.pp_close_box ppf ();
   Seq.iter attrs ~f:(fun _ -> pp_close_tag ppf ())
-[@@warning "-D"]
+[@@warning "-D"] (* for open and close tag *)
 
 let pp_value slots ppf x =
   match slots with
@@ -568,7 +581,7 @@ module Call = struct
         | None -> Format.fprintf ppf "with noreturn"
 
       let pp ppf c =
-        Format.fprintf ppf "@[call %a %a@]"
+        Format.fprintf ppf "call %a %a"
           Label.pp c.target pp_return c.return
 
       let hash = Hashtbl.hash
@@ -671,11 +684,13 @@ module Ir_arg = struct
       pp_sort var
       pp_rhs rhs
 
-  let pp ppf arg = term_pp (pp_self (fun ppf rhs ->
-      let exp = Rhs.exp rhs in
-      Bap_exp.pp ppf exp)) ppf arg
+  let pp ppf arg =
+    term_pp (pp_self (fun ppf rhs ->
+        let exp = Rhs.exp rhs in
+        Bap_exp.pp ppf exp)) ppf arg
 
-  let pp_slots slots = term_pp (pp_self (pp_value slots))
+  let pp_slots slots =
+    term_pp (pp_self (pp_value slots))
 
 
   module V2 = struct
@@ -729,14 +744,14 @@ module Ir_def = struct
 
   let pp_self ppf {Def.var; rhs} =
     Format.fprintf ppf
-      "%s := %a" (Theory.Var.name var) Bap_exp.pp (Rhs.exp rhs)
+      "%s@ :=@ %a" (Theory.Var.name var) Bap_exp.pp (Rhs.exp rhs)
 
 
   let pp_self_slots slots ppf {Def.var; rhs} =
     Format.fprintf ppf
-      "%s := %a" (Theory.Var.name var) (pp_value slots) rhs
+      "%s@ :=@ %a" (Theory.Var.name var) (pp_value slots) rhs
 
-  let pp = term_pp pp_self
+  let pp ppf x = term_pp pp_self ppf x
   let pp_slots ds = term_pp (pp_self_slots ds)
 
   module V2 = struct
@@ -827,7 +842,7 @@ module Ir_phi = struct
         Set.union vars (Exp.free_vars e))
 
   let pp_self ppf {Phi.var; map} =
-    Format.fprintf ppf "%s := phi(%s)"
+    Format.fprintf ppf "%s@ :=@ phi(%s)"
       (Theory.Var.name var)
       (String.concat ~sep:", " @@
        List.map ~f:(fun (id,exp) ->
@@ -836,7 +851,7 @@ module Ir_phi = struct
          (Map.to_alist map))
 
   let pp_self_slots ds ppf {Phi.var; map} =
-    Format.fprintf ppf "%s := phi(%s)"
+    Format.fprintf ppf "%s@ :=@ phi(%s)"
       (Theory.Var.name var)
       (String.concat ~sep:", " @@
        List.map ~f:(fun (id,exp) ->
@@ -1027,7 +1042,9 @@ module Ir_jmp = struct
       pp_cond (cond_of_jmp jmp)
       pp_dst (kind_of_jmp jmp)
 
-  let pp = term_pp pp_self
+  let pp ppf x =
+    term_pp pp_self ppf x
+
   let pp_slots _ = pp
 
 
@@ -1656,20 +1673,35 @@ module Ir_blk = struct
     Tid.(dominator = id) ||
     Term.(after def_t b dominator |> Seq.exists ~f:(fun x -> Tid.(x.tid = id)))
 
+  let pp_sep xs ys ppf =
+    if Array.length xs <> 0 &&
+       Array.length ys <> 0
+    then Format.pp_print_cut ppf ()
+
   let pp_self ppf self =
-    Format.fprintf ppf "@[@.%a%a%a@]"
+    Format.fprintf ppf "%a%t%a%t%a"
       (Array.pp Ir_phi.pp) self.phis
+      (pp_sep self.phis self.defs)
       (Array.pp Ir_def.pp) self.defs
+      (pp_sep self.defs self.jmps)
       (Array.pp Ir_jmp.pp) self.jmps
 
   let pp_self_slots ds ppf self =
-    Format.fprintf ppf "@[@.%a%a%a@]"
+    Format.fprintf ppf "%a%t%a%t%a"
       (Array.pp (Ir_phi.pp_slots ds)) self.phis
+      (pp_sep self.phis self.defs)
       (Array.pp (Ir_def.pp_slots ds)) self.defs
+      (pp_sep self.defs self.jmps)
       (Array.pp (Ir_jmp.pp_slots ds)) self.jmps
 
-  let pp_slots ds = term_pp (pp_self_slots ds)
-  let pp = term_pp pp_self
+  let box ppf = Format.pp_open_vbox ppf 0
+
+  let pp = term_pp ~box pp_self
+
+  let pp_slots ds ppf x =
+    term_pp ~box (pp_self_slots ds) ppf x;
+
+
 
   include Regular.Make(struct
       type t = blk term [@@deriving bin_io, compare, sexp]
@@ -1823,35 +1855,31 @@ module Ir_sub = struct
         | None -> Format.asprintf "sub_%a" Tid.pp tid in
       make_term tid {name; args; blks}
   end
-  let pp_self ppf self =
-    Format.fprintf ppf "@[<v>sub %s(%s)@.%a%a@]"
-      self.name
-      (String.concat ~sep:", " @@
-       Array.to_list @@
-       Array.map self.args ~f:Ir_arg.name)
-      (Array.pp Ir_arg.pp) self.args
-      (Array.pp Ir_blk.pp) self.blks
+
+  let pp_blks pp ppf blks =
+    Array.iter blks ~f:(Format.fprintf ppf "@;%a@;" pp)
 
   let pp_self ppf self =
-    Format.fprintf ppf "@[<v>sub %s(%s)@.%a%a@]"
+    Format.fprintf ppf "sub %s(%s)@;%a@;%a"
       self.name
       (String.concat ~sep:", " @@
        Array.to_list @@
        Array.map self.args ~f:Ir_arg.name)
       (Array.pp Ir_arg.pp) self.args
-      (Array.pp Ir_blk.pp) self.blks
+      (pp_blks Ir_blk.pp) self.blks
 
   let pp_self_slots ds ppf self =
-    Format.fprintf ppf "@[<v>sub %s(%s)@.%a%a@]"
+    Format.fprintf ppf "sub %s(%s)@;%a@;%a"
       self.name
       (String.concat ~sep:", " @@
        Array.to_list @@
        Array.map self.args ~f:Ir_arg.name)
       (Array.pp (Ir_arg.pp_slots ds)) self.args
-      (Array.pp (Ir_blk.pp_slots ds)) self.blks
+      (pp_blks (Ir_blk.pp_slots ds)) self.blks
 
-  let pp = term_pp pp_self
+  let pp = term_pp pp_self ~no_cut:true ~box:vertical
   let pp_slots ds = term_pp (pp_self_slots ds)
+      ~no_cut:true ~box:vertical
 
   include Regular.Make(struct
       type t = sub term [@@deriving bin_io, compare, sexp]
@@ -1970,15 +1998,16 @@ module Ir_program = struct
   end
 
   let pp_self ppf self =
-    Format.fprintf ppf "@[<v>program@.%a@]"
+    Format.fprintf ppf "program@;%a"
       (Array.pp Ir_sub.pp) self.subs
 
   let pp_self_slots ds ppf self =
-    Format.fprintf ppf "@[<v>program@.%a@]"
+    Format.fprintf ppf "program@;%a"
       (Array.pp (Ir_sub.pp_slots ds)) self.subs
 
   let pp_slots ds = term_pp (pp_self_slots ds)
-  let pp = term_pp pp_self
+      ~no_cut:true ~box:vertical
+  let pp = term_pp pp_self ~no_cut:true ~box:vertical
 
   include Regular.Make(struct
       type t = program term [@@deriving bin_io, compare, sexp]

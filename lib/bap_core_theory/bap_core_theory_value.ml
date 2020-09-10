@@ -51,45 +51,33 @@ end
   type +'a num
   type cls = Values
 
-  type name = {
-    package : string;
-    name : string;
-  } [@@deriving bin_io, compare, sexp]
+  type name = KB.Name.t [@@deriving bin_io, compare, sexp]
 
-  type names = {
-    unique : Hash_set.M(String).t;
-    packages : Set.M(String).t Hashtbl.M(String).t;
-  }
-
-  let registry = {
-    unique = Hash_set.create (module String) ();
-    packages = Hashtbl.create (module String);
-  }
+  let names = Hash_set.create (module KB.Name) ()
+  let short_names = Hashtbl.create (module String)
 
   let cls = KB.Class.declare ~package:"core-theory" "value" ()
       ~public:true
       ~desc:"the denotation of an expression"
 
-
   module Name = struct
     type t = name [@@deriving bin_io, compare, sexp]
     let declare ?(package="user") name =
-      Hashtbl.update registry.packages package ~f:(function
-          | None -> Set.singleton (module String) name
-          | Some names ->
-            if Set.mem names name
-            then failwithf "Type name `%s' is already defined \
-                            for package `%s'. Please, pick a unique \
-                            name or a different package." name package ();
-            Set.add names name);
-      if Hash_set.mem registry.unique name
-      then Hash_set.remove registry.unique name
-      else Hash_set.add registry.unique name;
-      {package; name}
+      let key = KB.Name.create ~package name in
+      if Hash_set.mem names key then
+        failwithf "Type name `%s' is already defined \
+                   for package `%s'. Please, pick a unique \
+                   name or a different package." name package ();
+      Hashtbl.update short_names name ~f:(function
+          | None -> 1
+          | Some x -> x + 1);
+      key
 
-    let to_string {package; name} =
-      if Hash_set.mem registry.unique name then name
-      else sprintf "%s:%s" package name
+    let to_string name =
+      let short = KB.Name.unqualified name in
+      if Hashtbl.find_exn short_names short = 1
+      then short
+      else sprintf "%s" (KB.Name.to_string name)
 
     include Base.Comparable.Make(struct
         type t = name [@@deriving bin_io, compare, sexp]

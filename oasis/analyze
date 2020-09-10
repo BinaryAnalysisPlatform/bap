@@ -1,0 +1,14 @@
+Flag analyze
+  Description: Build the KB analyze command
+  Default: false
+
+Library analyze_plugin
+  Build$: flag(everything) || flag(analyze)
+  Path: plugins/analyze
+  FindlibName: bap-plugin-analyze
+  CompiledObject: best
+  BuildDepends: core_kernel, monads, ppx_jane, linenoise,
+                bap-knowledge, bap-core-theory, bap-main, bap,
+                bitvec
+  InternalModules: Analyze_main, Analyze_core_commands
+  XMETADescription: implements the analyze command

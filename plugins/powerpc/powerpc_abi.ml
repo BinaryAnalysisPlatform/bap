@@ -83,8 +83,7 @@ let main proj = match Project.arch proj with
     C.Abi.register Abi32.name abi;
     let api = C.Abi.create_api_processor Abi32.size abi in
     Bap_api.process api;
-    let prog = Project.program proj in
-    Project.set (Project.with_program proj prog) Bap_abi.name Abi32.name
+    Project.set proj Bap_abi.name Abi32.name
   | _ -> proj
 
 let setup () = Bap_abi.register_pass main

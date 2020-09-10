@@ -35,7 +35,7 @@ module TCF = struct
 
   let prog = Term.map sub_t ~f:sub
 
-  let proj p = Project.with_program p @@ prog @@ Project.program p
+  let proj = Project.map_program ~f:prog
 end
 
 

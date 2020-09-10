@@ -22,7 +22,7 @@ Library x86_plugin
  Path:             plugins/x86
  FindlibName:      bap-plugin-x86
  BuildDepends:     bap, bap-abi, bap-c, bap-x86-cpu, bap-llvm, core_kernel,
-                   ppx_jane, bap-main, bap-future, bap-api
+                   ppx_jane, bap-main, bap-future, bap-api, ogre
  Modules:          X86_backend, X86_prefix
  InternalModules:  X86_abi,
                    X86_btx,

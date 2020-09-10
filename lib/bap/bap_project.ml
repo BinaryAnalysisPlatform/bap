@@ -124,42 +124,70 @@ let with_filename spec arch data code path =
 
 module State = struct
   open KB.Syntax
-  module Driver = Bap_disasm_driver
-  module Calls = Bap_disasm_calls
-  module Disasm = Disasm_expert.Recursive
+  module Dis = Bap_disasm_driver
+  module Sub = Bap_disasm_calls
+  module Rec = Disasm_expert.Recursive
 
   type t = {
-    default : arch;
-    package : string option;
-    state : Driver.state;
-    calls : Calls.t;
+    disassembly : Dis.state;
+    subroutines : Sub.t;
   } [@@deriving bin_io]
 
-  let empty ?package arch = {
-    default = arch;
-    package;
-    state = Driver.init;
-    calls = Calls.empty;
+  let empty = {
+    disassembly = Dis.init;
+    subroutines = Sub.empty;
   }
 
-  let update self mem =
-    Driver.scan mem self.state >>= fun state ->
-    Calls.update self.calls state >>| fun calls ->
-    {self with state; calls}
+  let equal x y =
+    Dis.equal x.disassembly y.disassembly &&
+    Sub.equal x.subroutines y.subroutines
 
-  let symtab {state; calls} = Symtab.create state calls
-  let disasm {state} =
-    Disasm_expert.Recursive.global_cfg state
+
+  let disassemble self mem =
+    Dis.scan mem self.disassembly >>| fun disassembly ->
+    {self with disassembly}
+
+  let partition self =
+    Sub.update self.subroutines self.disassembly >>| fun subroutines ->
+    {self with subroutines}
+
+  let symbols {disassembly; subroutines} =
+    Symtab.create disassembly subroutines
+
+  let cfg {disassembly} =
+    Disasm_expert.Recursive.global_cfg disassembly
+
+  let disassembly {disassembly=d} = d
+  let subroutines {subroutines=s} = s
+
+  let set_length set =
+    Sexp.Atom (string_of_int @@ Set.length set)
+
+  let inspect {disassembly; subroutines} = Sexp.List [
+      List [
+        Atom ":number-of-basic-blocks";
+        set_length (Dis.blocks disassembly);
+      ];
+      List [
+        Atom ":number-of-subroutines";
+        set_length (Sub.entries subroutines);
+      ]
+    ]
+
+  let slot = KB.Class.property Theory.Unit.cls
+      ~package:"bap" "disassembly"
+      ~persistent:(KB.Persistent.of_binable(module struct
+                     type nonrec t = t [@@deriving bin_io]
+                   end)) @@
+    KB.Domain.flat ~empty ~equal "disassembly" ~inspect
 
   module Toplevel = struct
-    let result = Toplevel.var "result"
     let run spec arch ~code ~data file k =
+      let result = Toplevel.var "disassembly-result" in
       Toplevel.put result begin
         with_arch arch code @@ fun () ->
         with_filename spec arch code data file @@ fun () ->
-        k >>= fun k ->
-        disasm k >>= fun g ->
-        symtab k >>| fun s -> g,s,k
+        k
       end;
       Toplevel.get result
   end
@@ -170,12 +198,12 @@ type state = State.t [@@deriving bin_io]
 type t = {
   arch    : arch;
   spec    : Ogre.doc;
-  core    : State.t;
-  disasm  : disasm;
+  state   : State.t;
+  disasm  : disasm Lazy.t;
   memory  : value memmap;
   storage : dict;
-  program : program term;
-  symbols : Symtab.t;
+  program : program term Lazy.t;
+  symbols : Symtab.t Lazy.t;
   passes  : string list;
 } [@@deriving fields]
 
@@ -249,11 +277,13 @@ module Input = struct
     let finish proj = {
       proj with
       storage = Dict.set proj.storage Image.specification spec;
-      program = Term.map sub_t proj.program ~f:(fun sub ->
-          match Term.get_attr sub address with
-          | Some a when Addr.equal a (Image.entry_point img) ->
-            Term.set_attr sub Sub.entry_point ()
-          | _ -> sub)
+      program =
+        Lazy.map proj.program ~f:(fun prog ->
+            Term.map sub_t prog ~f:(fun sub ->
+                match Term.get_attr sub address with
+                | Some a when Addr.equal a (Image.entry_point img) ->
+                  Term.set_attr sub Sub.entry_point ()
+                | _ -> sub))
     } in
     of_image finish filename img
 
@@ -327,8 +357,7 @@ let set_package package = match package with
   | None -> KB.return ()
   | Some pkg -> KB.Symbol.set_package pkg
 
-let state {core} = core
-let package {core={State.package}} = package
+let state {state} = state
 
 let unused_options =
   List.iter ~f:(Option.iter ~f:(fun name ->
@@ -361,20 +390,33 @@ let create
     Signal.send Info.got_data data;
     Signal.send Info.got_code code;
     Signal.send Info.got_spec spec;
-    let init = match state with
-      | Some state -> State.{state with package}
-      | None -> State.empty ?package arch in
-    let state =
-      let open KB.Syntax in
-      set_package package >>= fun () ->
-      Memmap.to_sequence code |> KB.Seq.fold ~init ~f:(fun k (mem,_) ->
-          State.update k mem) in
-    let cfg,symbols,core = State.Toplevel.run spec arch ~code ~data file state in
+    let run k =
+      State.Toplevel.run spec arch ~code ~data file k in
+    let state = match state with
+      | Some state -> state
+      | None ->
+        let compute_state =
+          let open KB.Syntax in
+          set_package package >>= fun () ->
+          Theory.Unit.for_file file >>= fun unit ->
+          KB.collect State.slot unit >>= fun state ->
+          if KB.Domain.is_empty (KB.Slot.domain State.slot) state
+          then
+            Memmap.to_sequence code |>
+            KB.Seq.fold ~init:State.empty ~f:(fun k (mem,_) ->
+                State.disassemble k mem) >>=
+            State.partition >>= fun state ->
+            KB.provide State.slot unit state >>| fun () ->
+            state
+          else !!state in
+        run compute_state in
+    let cfg = lazy (run @@ State.cfg state) in
+    let symbols = lazy (run @@ State.symbols state) in
     Result.return @@ finish {
-      core;
+      state;
       spec;
-      disasm = Disasm.create cfg;
-      program = Program.lift symbols;
+      disasm = Lazy.(cfg >>| Disasm.create);
+      program = Lazy.(symbols >>| Program.lift) ;
       symbols;
       arch; memory=union_memory code data;
       storage = Dict.set Dict.empty filename file;
@@ -391,15 +433,20 @@ let create
 
 let specification = spec
 
+let symbols {symbols} = Lazy.force symbols
+let disasm {disasm} = Lazy.force disasm
+let program {program} = Lazy.force program
+
+let with_symbols p x = {p with symbols = lazy x}
+let with_program p x = {p with program = lazy x}
+let map_program p ~f = {p with program = Lazy.map p.program ~f}
+
+let with_memory = Field.fset Fields.memory
+let with_storage = Field.fset Fields.storage
+
 let restore_state _ =
   failwith "Project.restore_state: this function should no be used.
     Please use the Toplevel module to save/restore the state."
-
-let with_memory = Field.fset Fields.memory
-let with_symbols = Field.fset Fields.symbols
-let with_program = Field.fset Fields.program
-
-let with_storage = Field.fset Fields.storage
 
 let set t tag x =
   with_storage t @@
@@ -444,12 +491,12 @@ let substitute project mem tag value : t =
         | None -> None) in
   let find_section = find_tag Image.section in
   let find_symbol mem =
-    Symtab.owners project.symbols (Memory.min_addr mem) |>
+    Symtab.owners (symbols project) (Memory.min_addr mem) |>
     List.hd |>
     Option.map ~f:(fun (name,entry,_) ->
         Block.memory entry, name) in
   let find_block mem =
-    Symtab.dominators project.symbols mem |>
+    Symtab.dominators (symbols project) mem |>
     List.find_map ~f:(fun (_,_,cfg) ->
         Seq.find_map (Cfg.nodes cfg) ~f:(fun block ->
             if Addr.(Block.addr block = Memory.min_addr mem)
@@ -602,21 +649,50 @@ end
 let passes () = DList.to_list passes
 let find_pass = Pass.find
 
-module Collator = struct
+module Registry(T : T)(I : T) = struct
   open Bap_knowledge
-
   type info = {
     name : Knowledge.Name.t;
     desc : string option;
+    extra : I.t;
   }
 
+  let registry : (Knowledge.name, string option * T.t * I.t) Hashtbl.t =
+    Hashtbl.create (module Knowledge.Name)
+
+  let register ?desc ?package name extra entity =
+    let name = Knowledge.Name.create ?package name in
+    if Hashtbl.mem registry name then
+      invalid_argf "An element with name %s is already registered \
+                    please choose a unique name"
+        (Knowledge.Name.show name) ();
+    Hashtbl.add_exn registry name (desc,entity,extra)
+
+  let find ?package name =
+    let name = Knowledge.Name.read ?package name in
+    match Hashtbl.find registry name with
+    | Some (_,x,_) -> Some x
+    | None -> None
+
+  let registered () =
+    Hashtbl.to_alist registry |>
+    List.map ~f:(fun (name,(desc,_,extra)) -> {name; desc; extra})
+
+  let name {name} = name
+  let desc = function
+    | {desc=None} -> "not provided"
+    | {desc=Some txt} -> txt
+  let extra {extra} = extra
+end
+
+module Collator = struct
   type t = Collator : {
       prepare : project -> 's;
       collate : int -> 's -> project -> 's;
       summary : 's -> unit;
     } -> t
 
-  let registry = Hashtbl.create (module Knowledge.Name)
+  include Registry(struct type nonrec t = t end)(Unit)
 
   let apply (Collator {prepare; collate; summary}) projects =
     match Seq.split_n projects 1 with
@@ -626,31 +702,226 @@ module Collator = struct
     | _ -> ()
 
   let register ?desc ?package name ~prepare ~collate ~summary =
-    let name = Knowledge.Name.create ?package name in
-    if Hashtbl.mem registry name then
-      invalid_argf "A collator with name %s is already registered \
-                    please choose another unique name"
-        (Knowledge.Name.show name) ();
-    Hashtbl.add_exn registry name (desc,Collator {
-        prepare;
-        collate;
-        summary;
-      })
+    register ?desc ?package name () @@ Collator {
+      prepare;
+      collate;
+      summary;
+    }
+end
 
-  let find ?package name =
-    let name = Knowledge.Name.read ?package name in
-    match Hashtbl.find registry name with
-    | Some (_,x) -> Some x
-    | None -> None
+module Analysis = struct
+  open Bap_knowledge
+  open Bap_core_theory
+  open Knowledge.Syntax
 
-  let registered () =
-    Hashtbl.to_alist registry |>
-    List.map ~f:(fun (name,(desc,_)) -> {name; desc})
+  type ctxt = {
+    rule : string;
+    pos : int;
+    parsed : string list;
+    inputs : string list;
+  }
 
-  let name {name} = name
-  let desc = function
-    | {desc=None} -> "not provided"
-    | {desc=Some txt} -> txt
+  type 'a arg = {
+    parse : ctxt -> ('a * ctxt) knowledge;
+    desc : string;
+    rule : string;
+  }
+
+  type ('a,'r) args = {
+    run : 'a -> 'r arg;
+    grammar : string list;
+  }
+
+  type problem =
+    | No_input
+    | Bad_syntax of string
+    | Trailing_input
+
+  type parse_error = {
+    ctxt : ctxt;
+    problem : problem
+  }
+
+  type Knowledge.conflict += Fail of parse_error
+
+
+  let fail ctxt problem =
+    Knowledge.fail (Fail {ctxt; problem})
+
+  let string_of_problem = function
+    | No_input -> "expects an argument"
+    | Bad_syntax msg -> msg
+    | Trailing_input -> "too many arguments"
+
+  let string_of_parse_error {ctxt; problem} =
+    sprintf "Syntax error: when parsing rule %s of argument %d - %s"
+      ctxt.rule (ctxt.pos+1) (string_of_problem problem)
+
+  let () = Knowledge.Conflict.register_printer @@ function
+    | Fail err -> Some (string_of_parse_error err)
+    | _ -> None
+
+  let required parse ctxt =
+    match ctxt.inputs with
+    | [] -> fail ctxt No_input
+    | x :: xs ->
+      let fail x = fail ctxt (Bad_syntax x) in
+      parse ~fail x >>| fun r -> r,{
+          ctxt with pos = ctxt.pos + 1;
+                    parsed = x :: ctxt.parsed;
+                    inputs = xs;
+        }
+
+  let argument ?(desc="No description") ~parse rule = {
+    parse=(required parse); rule; desc;
+  }
+
+  let optional arg = {
+    rule = sprintf "[%s]" arg.rule;
+    desc = arg.desc;
+    parse = fun ctxt -> match ctxt.inputs with
+      | [] -> KB.return (None,ctxt)
+      | _ -> arg.parse ctxt >>| fun (x,ctxt) -> Some x,ctxt
+  }
+
+  let pull_keyword kw inputs =
+    let rec loop searched = function
+      | [] -> None
+      | [k] when String.equal k kw && List.is_empty searched ->
+        Some []
+      | k :: x :: xs when String.equal k kw ->
+        Some (x :: List.rev_append searched xs)
+      | x :: xs -> loop (x::searched) xs in
+    loop [] inputs
+
+  let filter_flag kw inputs =
+    let rec loop searched = function
+      | [] -> None
+      | k :: xs when String.equal k kw ->
+        Some (List.rev_append searched xs)
+      | x :: xs -> loop (x::searched) xs in
+    loop [] inputs
+
+  let keyword key arg = {
+    rule = sprintf "[:%s %s]" key arg.rule;
+    desc = "an argument prefixed by the keyword";
+    parse = fun ctxt ->
+      match pull_keyword (":"^key) ctxt.inputs with
+      | None -> KB.return (None,ctxt)
+      | Some inputs -> arg.parse {ctxt with inputs} >>|
+        fun (x,ctxt) -> Some x,ctxt
+  }
+
+  let flag key = {
+    rule = sprintf "[:%s]" key;
+    desc = "an optional flag";
+    parse = fun ctxt ->
+      match filter_flag (":"^key) ctxt.inputs with
+      | None -> KB.return (false,ctxt)
+      | Some inputs -> KB.return (true, {ctxt with inputs})
+  }
+
+  let apply_until_exhausted ctxt arg =
+    let rec loop rs ctxt = match ctxt.inputs with
+      | [] -> KB.return (List.rev rs,ctxt)
+      | _ -> arg.parse ctxt >>= fun (r,ctxt) ->
+        loop (r::rs) ctxt in
+    loop [] ctxt
+
+  let rest arg = {
+    rule = sprintf "[%s] ..." arg.rule;
+    desc = arg.desc;
+    parse = fun ctxt -> apply_until_exhausted ctxt arg
+  }
+
+  let empty = {
+    rule = "";
+    desc = "no arguments are expected";
+    parse = fun ctxt -> match ctxt.inputs with
+      | [] -> KB.return ((),ctxt)
+      | _ -> fail ctxt Trailing_input
+  }
+
+
+  let parse_string ~fail:_ x = !!x
+
+  let string = argument "<string>"
+      ~parse:parse_string
+      ~desc:"a sequence of characters without whitespaces"
+
+  let parse_object cls ~fail:_ x = KB.Object.read cls x
+
+  let program =
+    argument "<label>"
+      ~parse:(parse_object Theory.Program.cls)
+      ~desc:(sprintf "an object of the core-theory:program class")
+
+  let unit =
+    argument "<unit>"
+      ~parse:(parse_object Theory.Unit.cls)
+      ~desc:(sprintf "an object of the core-theory:unit class")
+
+  let parse_bitvec ~fail str =
+    try !!(Bitvec.of_string str)
+    with Invalid_argument msg ->
+      fail msg
+
+  let bitvec = argument "<bitvec>"
+      ~parse:parse_bitvec
+      ~desc:"a bitvector of arbitrary length"
+
+  module Arg = struct
+    type 'a t = 'a arg
+    let map arg ~f = {
+      arg with
+      parse = fun ctxt ->
+        arg.parse {ctxt with rule = arg.rule} >>| fun (x,ctxt) ->
+        f x,ctxt
+    }
+
+    let apply ({parse=f} as lhs) ({parse=x} as rhs) = {
+      rule = lhs.rule ^ " " ^ rhs.rule;
+      desc = "";
+      parse = fun ctxt ->
+        f {ctxt with rule = lhs.rule} >>= fun (f,ctxt) ->
+        x {ctxt with rule = rhs.rule} >>| fun (x,ctxt) ->
+        f x,ctxt
+    }
+  end
+
+  let ($) t arg = {
+    grammar = arg.rule :: t.grammar;
+    run = fun f -> Arg.apply (t.run f) arg
+  }
+  let args a = {
+    grammar = [a.rule];
+    run = fun f -> Arg.map ~f a
+  }
+  let apply ~f args = args.run f
+
+  let run inputs args code =
+    let ctxt = {rule = ""; pos=0; parsed=[]; inputs} in
+    (apply args ~f:code).parse ctxt >>= fun (f,_ctxt) ->
+    f
+
+  type t = string list -> unit knowledge
+  include Registry(struct type nonrec t = t end)(struct
+      type t = string list
+    end)
+
+  let register ?desc ?package name args analysis =
+    let code inputs = run inputs args analysis in
+    register ?desc ?package name (List.rev args.grammar) code
+
+  let apply f xs = f xs
+
+  let grammar = extra
+
+  module Grammar = struct
+    type t = string list
+    let to_string = String.concat ~sep:" "
+  end
+  type grammar = Grammar.t
 end
 
 module type S = sig

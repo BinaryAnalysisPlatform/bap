@@ -17,13 +17,12 @@ let resolver memory = object
     | _ -> exp
 end
 
-let main proj = 
-  let prog = Project.program proj in
-  let memory = Project.memory proj in
-  Term.map sub_t prog ~f:(fun sub -> 
-      Term.map blk_t sub ~f:(fun blk -> 
-          Blk.map_exp blk ~f:(Exp.map (resolver memory)))) |>
-  Project.with_program proj
+let main =
+  Project.map_program ~f:(fun prog ->
+      let memory = Project.memory proj in
+      Term.map sub_t prog ~f:(fun sub ->
+          Term.map blk_t sub ~f:(fun blk ->
+              Blk.map_exp blk ~f:(Exp.map (resolver memory)))))
 
 let () =
   Project.register_pass ~name:"resolve-indirects" main

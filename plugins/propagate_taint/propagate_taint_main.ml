@@ -194,8 +194,7 @@ let main args proj =
   then eprintf "@.Coverage: %a@." State.pp_coverage state;
 
   let marker = new marker (State.taints state) in
-  Project.program proj |> marker#run |>
-  Project.with_program proj
+  Project.map_program proj ~f:marker#run
 
 module Cmdline = struct
 

@@ -201,5 +201,4 @@ let equal s1 s2 =
   Set.equal s1.entries s2.entries &&
   Solution.equal ~equal:Parent.equal s1.parents s2.parents
 
-
 let domain = KB.Domain.flat ~empty ~equal "callgraph"

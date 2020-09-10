@@ -6914,12 +6914,18 @@ module Std : sig
       (** [init] the initial disassembler state.  *)
       val init : state
 
-
       (** [merge x y] is a sum of information in states [x] and [y].
 
           @since 2.2.0
       *)
       val merge : state -> state -> state
+
+
+      (** [equal x y] is [true] if [x] and [y] denote equal graphs.
+
+          @since 2.2.0
+      *)
+      val equal : state -> state -> bool
 
 
       (** [scan mem state] updates the state.
@@ -9370,8 +9376,11 @@ module Std : sig
         @since 2.2.0*)
     val specification : t -> Ogre.doc
 
-    val state : t -> state
 
+    (** [state project] returns the core state of the [project].
+
+        @since 2.0.0 *)
+    val state : t -> state
 
     (** [disasm project] returns results of disassembling  *)
     val disasm : t -> disasm
@@ -9381,6 +9390,17 @@ module Std : sig
 
     (** [with_program project program] updates a project program *)
     val with_program : t -> program term -> t
+
+
+    (** [map_program t ~f] maps the IR representation of the program
+        with function [f].
+
+        Note: since the program is computed lazily this function
+        should be preferred to [program] composed [with_program] for
+        passes that transform the program representation so that they
+        are not run if the program is never ever used.
+    *)
+    val map_program : t -> f:(program term -> program term) -> t
 
     (** [symbols t] returns reconstructed symbol table  *)
     val symbols : t -> symtab
@@ -9496,6 +9516,34 @@ module Std : sig
       (** occurs once image spec is known *)
       val spec : Ogre.Doc.t stream
     end
+
+
+    (** The core state of the project.
+
+        @since 2.2.0
+    *)
+    module State : sig
+
+      (** the abstract type for the project state.
+          See {!Project.state}.
+      *)
+      type t = state
+
+
+      (** [disassembly state] contains all disassembled instructions,
+          as well as their connection. To build control-flow graphs or
+          to explore the graph structure, use {!Disasm.Driver.explore}.
+      *)
+      val disassembly : t -> Disasm.Driver.state
+
+      (** [subroutines state] returns the partition of the set of
+          disassembled instructions into a set of subroutines.   *)
+      val subroutines : t -> Disasm.Subroutines.t
+
+      (** the slot of a unit object that stores the state of disassembly  *)
+      val slot : (Theory.Unit.cls, state) KB.slot
+    end
+
 
     (** Input information.
 
@@ -9644,6 +9692,8 @@ module Std : sig
         A collator is a pass that is folded over projects and computes
         differences between the base version and the number of
         alternative versions.
+
+        @since 2.2.0
     *)
     module Collator : sig
 
@@ -9693,8 +9743,327 @@ module Std : sig
       (** the collators description.  *)
       val desc : info -> string
 
-      (** information about registered collators  *)
+      (** information about currently registered collators  *)
       val registered : unit -> info list
+    end
+
+
+    (** Knowledge base analyses.
+
+        A registry of the knowledge base computations that could be
+        used for exploring and refining the facts stored in the
+        knowledge base.
+
+        An analysis could be parameterized by an arbitrary number of
+        arguments, e.g., to register a function [print_subr] that has
+        type
+
+        {[
+          tid -> string -> Bitvec.t -> unit knowledge
+        ]}
+
+        use the following code
+
+        {[
+          let open Project.Analysis in
+          register ~package "subroutine"
+            (args @@ unit $ string $ bitvec)
+            print_subr
+        ]}
+
+        The registered analyses could be invoked directly, using the
+        [Analysis.apply] function or via the [analysis] plugin that
+        provides a REPL as well as an ability to call analysis from
+        the command-line interface or from a script. To get the list
+        of available analyses, run `bap analyze commands`.
+    *)
+    module Analysis : sig
+
+      (** the type for analyses  *)
+      type t
+
+      (** information about an analysis  *)
+      type info
+
+      (** a description of the analysis application syntax  *)
+      type grammar
+
+      (** a description of an analysis argument  *)
+      type 'a arg
+
+      (** a signature of an analysis.
+
+          The ['r] type denotes the return type of an analysis,
+          which is always [unit knowledge] and the ['a] type
+          variable denotes the function type of the analysis,
+          e.g., an analysis of type
+
+          {[
+            tid -> Bitvec.t -> unit knowledge
+          ]}
+
+          will have the following args type
+
+          {[
+            (tid -> Bitvec.t -> unit knowledge, unit knowledge) args
+          ]}
+
+      *)
+      type ('a,'r) args
+
+
+      (** [apply analysis] is the computation performed by the analysis.  *)
+      val apply : t -> string list -> unit knowledge
+
+      (** [find ?package string] searches the analysis with the given
+          name in the registry.  *)
+      val find : ?package:string -> string -> t option
+
+      (** [name info] is the analysis unique name. *)
+      val name : info -> Knowledge.Name.t
+
+      (** [desc info] is the short description of the analysis  *)
+      val desc : info -> string
+
+      (** [grammar info] is the description of the rule grammar.  *)
+      val grammar : info -> grammar
+
+      (** [register ?desc ?package name comp] registers the knowledge
+          computation as an analysis. The [package:name] pair should
+          be unique.  *)
+      val register : ?desc:string -> ?package:string -> string ->
+        ('a,unit knowledge) args -> 'a -> unit
+
+      (** information about currently registered analyses  *)
+      val registered : unit -> info list
+
+      (** [args x] a unary signature.
+
+          Creates a signature of a function that takes one
+          argument. The type ['a] of the argument and its syntax
+          are represented by the value of type ['a arg].
+
+          Examples,
+
+          - {[args empty]} -- a function of type [unit -> 'r]
+          - {[args string]} -- a function of type [string -> 'r].
+
+          Note, while the ['r] type is kept as a variable it will be
+          concretized to the [unit knowledge] when the function of
+          this type will be registered using the [register] function.
+      *)
+      val args : 'a arg -> ('a -> 'b, 'b) args
+
+
+      (** [args $ arg] appends [arg] to [args].
+
+          If [args] denote a signature of a function with type
+          [x -> y] and [arg] has type [z], then [args $ arg] denote
+          a signature of type [x -> y -> z].
+
+          {3 Example}
+
+          [args string $ bitvec $ program] - denotes a function of
+          type [string -> Bitvec.t -> Theory.Label.t -> 'r].
+
+          {3 A note on the type}
+
+          The type of the [$] makes a little bit more clear if we
+          will consider the following example,
+          [args string $ bitvec], where
+          - [args string] has type [(string -> 'r,'r) args] and
+          - [bitvec] has type [Bitvec.t arg].
+
+          The type of [args string $ bitvec] is computed by unifying
+          [string -> 'r] with ['a] and ['r] with ['b -> 'c], where
+          ['b] is [Bitvec.t]. A syntactic unification gives us the
+          following values for the variables ['r] and ['a]
+          - ['r = Bitvec.t -> 'c]
+          - ['a = string -> 'r = string -> Bitvec.t -> 'c]
+
+          Therefore the type of [args string $ bitvec] is
+          {[
+            ('a,'c) args = (string -> Bitvec.t -> 'c,'c) args
+          ]}
+
+      *)
+      val ($) : ('a, 'b -> 'c) args -> 'b arg -> ('a,'c) args
+
+      (** {2 Grammar Rules}  *)
+
+      (** {3 Terminals}  *)
+
+      (** [empty] no arguments.
+
+          The syntax is an empty string and the signature is a unary
+          function that takes an argument of type [unit]. *)
+      val empty : unit arg
+
+      (** [string] a string argument.
+
+          The syntax is a string of characters that does not include
+          whitespaces. *)
+      val string : string arg
+
+      (** [bitvec] a bitvector.
+
+          The syntax is described in the {!Bitvec.of_string} and is a
+          non-negative binary, octal, hexadecimal, or decimal
+          numeral. *)
+      val bitvec : Bitvec.t arg
+
+
+      (** [program] a program label.
+
+          The syntax is a textual representation of the knowledge base
+          symbol ({!Knowledge.Symbol}). Unqualified names are read in
+          the current package.
+
+          Examples, [0x88f0] or [bin/arm-linux-gnueabi-echo:0x88f0].
+      *)
+      val program : Theory.Label.t arg
+
+
+      (** [unit] a program unit.
+
+          The syntax is a textual representation of the knowledge base
+          symbol ({!Knowledge.Symbol}). Unqualified names are read in
+          the current package.
+
+          Examples, [file:/bin/ls] or [my-unit].
+      *)
+      val unit : Theory.Unit.t arg
+
+
+      (** [argument ~parse name] defines a new terminal.
+
+          The [name] denotes the name of the rule as it will appear in
+          the grammar definition. The [parse] function defines the
+          grammar, it is called as [parse fail input] where [input] is
+          the value of type [string]. The [parse] function should
+          either produce a value of type ['a] if [input] is a valid
+          representation or use [fail error] to indicate that it is
+          invalid, where [error] is the error message.
+
+          The [parse] function is a knowledge computation so it can
+          access the knowledge base to construct the value.
+      *)
+      val argument :
+        ?desc:string ->
+        parse:(fail:(string -> _ knowledge) -> string -> 'a knowledge) ->
+        string -> 'a arg
+
+
+      (** {3 Non-terminals}  *)
+
+      (** [optional x] an optional argument [x].
+
+          The syntax of [args xs $ optional x] is [<xs> [<x>]], where
+          [<x>] denotes the syntax of the argument [x], [[]] indicates
+          that it can be omitted, and [<xs>] is the grammar of the
+          signature [xs]. An optional argument should be the last
+          argument in the signature, otherwise the resulting grammar
+          will be ambiguous.
+
+
+          Example, the grammar of
+          {[
+            args string $ optional bitvec
+          }],
+
+          recognizes the following strings,
+            - ["hello"]
+            - ["hello 0x42"]  *)
+      val optional : 'a arg -> 'a option arg
+
+
+      (** [keyword s x] an optional keyworded argument [x].
+
+          The syntax of [args xs $ keyword s x] is {[<xs> [:<s> <x>]]},
+          where [<x>] denotes the syntax of the argument [x], [[]]
+          indicates that it can be omitted, [:<s>] is the literal string
+          [":<s>"], where [<s>] is equal to [s], and [<xs>] is the
+          grammar of the signature [xs]. If a grammar includes several
+          keyworded arguments they may follow in an arbitrary order.
+
+
+          Example, the grammar of
+          {[
+            args @@
+            keyword "foo" string $
+            keyword "bar" bitvec
+          }],
+
+          recognizes the following strings,
+
+            - [""]
+            - [":foo hello"]
+            - [":bar 0x42"]
+            - [":foo hello :bar 0x42"]
+            - [":bar 0x42 :foo hello"]
+      *)
+      val keyword : string -> 'a arg -> 'a option arg
+
+
+      (** [flag x] a keyword [x] without arguments.
+
+          The syntax of [args xs $ flag s] is {[<xs> [:<s>]]}, where
+          [[]] indicates that it can be omitted, [:s] is the literal
+          string [":<s>"], where [<s>] is equal to [s], and [<xs>] is
+          the grammar of the signature [xs]. If a grammar includes
+          several flags they may follow in an arbitrary order.
+
+
+          Example, the grammar of
+          {[
+            args @@
+            flag "foo" $
+            flag "bar"
+          }],
+
+          recognizes the following strings,
+            - [""]
+            - [":foo hello"]
+            - [":bar 0x42"]
+            - [":foo hello :bar 0x42"]
+            - [":bar 0x42 :foo hello"]
+            - and so on.
+
+      *)
+      val flag : string -> bool arg
+
+
+      (** [rest x] a zero or more [x] arguments.
+
+          The syntax of [args xs $ rest x] is {[<xs> [<x>]...]}, where
+          [[]...] indicates that an argument can be omitted or
+          repeated an arbitrary number of times, [<x>] is syntax of
+          the agument [x], and [<xs>] is the grammar of the signature
+          [xs].  The [rest x] argument should be the last argument in
+          the signature, and any extensions of the resulting signature
+          will lead to an ambiguous grammar.
+
+          Example, the grammar of
+          {[
+            args string $ rest bitvec
+          }],
+
+          recognizes the following strings,
+            - ["hello"]
+            - ["hello 0x42"]
+            - ["hello 0x42 42"]
+            - and so on
+      *)
+      val rest : 'a arg -> 'a list arg
+
+
+      (** Abstract Grammar descriptions.*)
+      module Grammar : sig
+        type t = grammar
+
+        (** [to_string grammar] is the textual representation of the [grammar].  *)
+        val to_string : grammar -> string
+      end
     end
 
     (**/**)

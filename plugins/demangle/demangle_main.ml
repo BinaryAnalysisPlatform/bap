@@ -6,11 +6,9 @@ open Bap_plugins.Std
 include Self()
 
 
-let apply demangler proj =
-  let prog = Project.program proj in
-  Term.map sub_t prog ~f:(fun sub ->
-      Sub.with_name sub (Demangler.run demangler (Sub.name sub))) |>
-  Project.with_program proj
+let apply demangler =
+  Project.map_program ~f:(Term.map sub_t ~f:(fun sub ->
+      Sub.with_name sub (Demangler.run demangler (Sub.name sub))))
 
 let find_demangler name =
   Demanglers.available () |>

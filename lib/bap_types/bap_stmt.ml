@@ -9,19 +9,19 @@ open Bap_bil
 let rec pp fmt s =
   let open Stmt in match s with
   | Move (var, exp) ->
-    fprintf fmt "@[<v2>%a := %a@]" Bap_var.pp var Bap_exp.pp exp
+    fprintf fmt "@[<2>%a :=@ %a@]" Bap_var.pp var Bap_exp.pp exp
   | Jmp (Exp.Var _ | Exp.Int _ as exp) ->
-    fprintf fmt "jmp %a" Bap_exp.pp exp
-  | Jmp exp -> fprintf fmt "jmp (%a)" Bap_exp.pp exp
-  | Special s -> fprintf fmt "special (%s)" s
+    fprintf fmt "@[<2>jmp@ %a@]" Bap_exp.pp exp
+  | Jmp exp -> fprintf fmt "@[<2>jmp@ (%a)@]" Bap_exp.pp exp
+  | Special s -> fprintf fmt "special@ @[<1>(%s)@]" s
   | While (cond, body) ->
-    fprintf fmt "@[<v0>@[<v2>while (%a) {@;%a@]@;}@]"
+    fprintf fmt "@[<v0>@[<v2>while (@[%a@]) {@;%a@]@;}@]"
       Bap_exp.pp cond pp_list body
   | If (cond, ts, []) ->
-    fprintf fmt "@[<v0>@[<v2>if (%a) {@;%a@]@,}@]"
+    fprintf fmt "@[<v0>@[<v2>if (@[%a@]) {@;%a@]@,}@]"
       Bap_exp.pp cond pp_list ts
   | If (cond, ts, fs) ->
-    fprintf fmt "@[<v0>@[<v2>if (%a) {@;%a@]@,}@;%a@]"
+    fprintf fmt "@[<v0>@[<v2>if (@[%a@]) {@;%a@]@,}@;%a@]"
       Bap_exp.pp cond pp_list ts pp_else fs
   | CpuExn  n -> fprintf fmt "cpuexn (%d)" n
 and pp_list fmt = function
@@ -30,10 +30,10 @@ and pp_list fmt = function
   | x :: xs -> fprintf fmt "%a@;%a" pp x pp_list xs
 and pp_else fmt = function
   | [] -> ()
-  | fs -> fprintf fmt "@[<v0>@[<v2>else {@;%a@]@\n}@]" pp_list fs
+  | fs -> fprintf fmt "@[<v0>@[<v2>else {@;%a@]@;}@]" pp_list fs
 
 let pp_stmts fmt ss =
-  fprintf fmt "@[<v0>@[<v2>{@\n%a@]@\n}@]" pp_list ss
+  fprintf fmt "@[<v0>@[<v2>{@;%a@]@;}@]" pp_list ss
 
 module Stmt = struct
   open Bap_bil.Stmt

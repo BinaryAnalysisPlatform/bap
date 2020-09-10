@@ -1,5 +1,5 @@
 open Bap_knowledge
-
+open Bap_core_theory
 open Core_kernel
 open Regular.Std
 open Bap_future.Std
@@ -16,8 +16,6 @@ type state [@@deriving bin_io]
 type second = float
 
 val state : t -> state
-val package : t -> string option
-
 
 val create :
   ?package:string ->
@@ -47,6 +45,15 @@ val get : t -> 'a tag -> 'a option
 val has : t -> 'a tag -> bool
 val del : t -> 'a tag -> t
 
+val map_program : t -> f:(program term -> program term) -> t
+
+module State : sig
+  type t = state
+  val disassembly : t -> Bap_disasm_driver.state
+  val subroutines : t -> Bap_disasm_calls.t
+
+  val slot : (Theory.Unit.cls, state) KB.slot
+end
 
 module Info : sig
   val file : string stream
@@ -112,6 +119,50 @@ module Collator : sig
     unit
 
   val registered : unit -> info list
+end
+
+module Analysis : sig
+  type t
+  type info
+  type grammar
+  type 'a arg
+  type ('a,'r) args
+
+  val args : 'a arg -> ('a -> 'b, 'b) args
+  val ($) : ('a, 'b -> 'c) args -> 'b arg -> ('a,'c) args
+
+  val empty : unit arg
+  val string : string arg
+  val bitvec : Bitvec.t arg
+  val program : Theory.Label.t arg
+  val unit : Theory.Unit.t arg
+
+  val optional : 'a arg -> 'a option arg
+  val keyword : string -> 'a arg -> 'a option arg
+  val flag : string -> bool arg
+  val rest : 'a arg -> 'a list arg
+
+  val register : ?desc:string -> ?package:string -> string ->
+    ('a,unit knowledge) args -> 'a -> unit
+
+  val registered : unit -> info list
+
+  val apply : t -> string list -> unit knowledge
+  val find : ?package:string -> string -> t option
+  val name : info -> Knowledge.Name.t
+  val desc : info -> string
+  val grammar : info -> grammar
+
+  val argument :
+    ?desc:string ->
+    parse:(fail:(string -> _ knowledge) -> string -> 'a knowledge) ->
+    string -> 'a arg
+
+  module Grammar : sig
+    type t = grammar
+    val to_string : grammar -> string
+  end
+
 end
 
 val find_pass : string -> pass option
