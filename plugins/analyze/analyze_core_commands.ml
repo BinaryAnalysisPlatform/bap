@@ -46,15 +46,17 @@ let belongs_to_subr subr insn =
     and subr = Word.create subr bits in
     Disasm.Subroutines.belongs subrs ~entry:subr insn
 
-let find_by_name subrs name =
+let find_entry subrs name_or_addr =
   Disasm.Subroutines.entries subrs |>
   Set.to_sequence |>
   KB.Seq.find ~f:(fun addr ->
       let addr = Word.to_bitvec addr in
-      Theory.Label.for_addr addr >>= fun label ->
-      KB.collect Theory.Label.name label >>| function
-      | None -> false
-      | Some name' -> String.equal name name')
+      if Bitvec.to_string addr = name_or_addr
+      then KB.return true
+      else Theory.Label.for_addr addr >>= fun label ->
+        KB.collect Theory.Label.name label >>| function
+        | None -> false
+        | Some name -> String.equal name name_or_addr)
 
 let iter_subr entry subrs disasm ~f =
   Disasm.Driver.explore disasm ~entry ~init:()
@@ -111,14 +113,18 @@ let list_insns unit slots =
       ensure (belongs_to_unit unit obj) @@ fun () ->
       print_insn slots obj)
 
-let print_subr unit name slots =
+let word_for_unit unit bitvec =
+  KB.collect Theory.Unit.Target.bits unit >>|? fun bits ->
+  Some (Word.create bitvec bits)
+
+let print_subr unit name_or_addr slots =
   KB.collect Project.State.slot unit >>= fun state ->
   KB.Symbol.package >>= fun current ->
   KB.collect Theory.Unit.path unit >>= fun package ->
   in_package package @@ fun () ->
   let sub = Project.State.subroutines state
   and dis = Project.State.disassembly state in
-  find_by_name sub name >>= function
+  find_entry sub name_or_addr >>= function
   | None -> KB.return ()
   | Some entry ->
     iter_subr entry sub dis ~f:(print_insn ~package:current slots)
@@ -185,10 +191,10 @@ let register () =
   register ~package "subroutine"
     (args @@ unit $ string $ keyword "semantics" (rest string))
     print_subr
-    ~desc:"Prints a subroutine. Prints the subroutine in the specified \
-           unit with the given name. If :semantics is specified, then \
-           prints the semantics of each instruction. The :semantics \
-           keyword could be followed by one or more field names. If no \
-           fields are specified, then all properties of an instruction \
-           will be printed, otherwise only those that are specified \
-           will be printed.";
+    ~desc:"Prints a subroutine. Prints the subroutine in the \
+           specified unit with the given name or address. If \
+           :semantics is specified, then prints the semantics of each \
+           instruction. The :semantics keyword could be followed by \
+           one or more field names. If no fields are specified, then \
+           all properties of an instruction will be printed, \
+           otherwise only those that are specified will be printed.";

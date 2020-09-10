@@ -8,6 +8,7 @@ Library analyze_plugin
   FindlibName: bap-plugin-analyze
   CompiledObject: best
   BuildDepends: core_kernel, monads, ppx_jane, linenoise,
-                bap-knowledge, bap-core-theory, bap-main, bap
+                bap-knowledge, bap-core-theory, bap-main, bap,
+                bitvec
   InternalModules: Analyze_main, Analyze_core_commands
   XMETADescription: implements the analyze command

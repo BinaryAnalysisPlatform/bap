@@ -851,13 +851,15 @@ module Analysis = struct
 
   let parse_object cls ~fail:_ x = KB.Object.read cls x
 
-  let object_of cls =
+  let program =
     argument "<label>"
-      ~parse:(parse_object cls)
-      ~desc:(sprintf "an object of the %s" name)
+      ~parse:(parse_object Theory.Program.cls)
+      ~desc:(sprintf "an object of the core-theory:program class")
 
-  let program = object_of Theory.Program.cls
-  let unit = object_of Theory.Unit.cls
+  let unit =
+    argument "<unit>"
+      ~parse:(parse_object Theory.Unit.cls)
+      ~desc:(sprintf "an object of the core-theory:unit class")
 
   let parse_bitvec ~fail str =
     try !!(Bitvec.of_string str)
