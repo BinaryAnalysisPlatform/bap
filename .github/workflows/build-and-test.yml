@@ -52,14 +52,6 @@ jobs:
          - name: Run Functional Tests
            run: opam exec -- make check
 
-         - name: Run BIL verification tool
-           run: |
-             opam install --fake bap
-             opam pin add bap-veri testsuite/veri/bap-veri/ -n
-             opam depext bap-veri
-             opam install bap-veri
-             opam exec -- make -C testsuite veri
-
          - uses: actions/upload-artifact@v2
            if: ${{ always() }}
            with:
