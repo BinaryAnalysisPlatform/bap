@@ -50,7 +50,6 @@ jobs:
         - name: Checkout the Tests
           uses: actions/checkout@v2
           with:
-            submodules: true
             repository: BinaryAnalysisPlatform/bap
 
         - name: Install Extra System Dependencies

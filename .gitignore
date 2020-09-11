@@ -75,3 +75,4 @@ _oasis
 bap_main_config.ml
 tools/postinstall.ml
 OMakefile
+/testsuite/
