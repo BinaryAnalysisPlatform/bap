@@ -39,7 +39,6 @@ jobs:
         - name: Checkout the Tests
           uses: actions/checkout@v2
           with:
-            submodules: true
             repository: BinaryAnalysisPlatform/bap
             ref: v2.1.0
 

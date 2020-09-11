@@ -51,12 +51,13 @@ distclean:
 test: build
 	$(SETUP) -test $(BAPTESTFLAGS)
 
-check:
-	if [ -d .git ]; then git submodule init; git submodule update; 	fi
+testsuite:
+	git clone https://github.com/BinaryAnalysisPlatform/bap-testsuite.git testsuite
+
+check: testsuite
 	make -C testsuite
 
-veri:
-	if [ -d .git ]; then git submodule init; git submodule update; 	fi
+veri: testsuite
 	make -C testsuite veri
 
 .PHONY: indent check-style status-clean

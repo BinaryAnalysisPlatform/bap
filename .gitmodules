@@ -1,3 +1,0 @@
-[submodule "testsuite"]
-	path = testsuite
-	url = https://github.com/BinaryAnalysisPlatform/bap-testsuite
