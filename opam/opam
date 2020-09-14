@@ -308,7 +308,6 @@ depexts: [
     "llvm-9-dev"
     "time"
     "clang"
-    "llvm"
     "m4"
     "dejagnu"
   ] {os-distribution = "ubuntu"}
