@@ -1,7 +1,6 @@
 #!/bin/sh
 
-rm -f _oasis
-rm -f setup.log.om
+rm -f _oasis setup.log.om setup.data _oasis_setup.om
 mv oasis/benchmarks oasis/benchmarks.backup
 mv oasis/piqi-printers oasis/piqi-printers.backup
 mv oasis/common oasis/common.backup
