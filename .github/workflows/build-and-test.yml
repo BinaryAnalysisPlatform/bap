@@ -36,7 +36,11 @@ jobs:
                opam install omake
 
          - name: Configure BAP
-           run: opam exec -- ./configure-omake
+           run: |
+               opam exec -- ./configure-omake \
+                 --enable-tests \
+                 --with-llvm-version=9 \
+                 --with-llvm-config=llvm-config-9
 
          - name: Build BAP
            run: opam exec -- make

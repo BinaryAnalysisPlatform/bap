@@ -1,6 +1,7 @@
 #!/bin/sh
 
 rm -f _oasis
+rm -f setup.log.om
 mv oasis/benchmarks oasis/benchmarks.backup
 mv oasis/piqi-printers oasis/piqi-printers.backup
 mv oasis/common oasis/common.backup
@@ -17,10 +18,32 @@ sed -i 's/.*Build$.*//' _oasis
 sed -i 's/.*CCOpt:.*//' _oasis
 sed -i 's/.*CCLib:.*//' _oasis
 
+FST=true
+
+
+for i in "$@"; do
+  if $FST; then
+    set --
+    FST=false
+  fi
+
+  case $i in
+    --*=*)
+      ARG=${i%%=*}
+      VAL=${i##*=}
+      set -- "$@" "$ARG" "$VAL"
+      ;;
+    *)
+      set -- "$@" "$i"
+      ;;
+  esac
+done
+
+
 # call setup twice so that it can capture the AB deps
 for pass in `seq 2`; do
     oasis setup
     ocamlfind ocamlopt unix.cmxa setup.ml -o setup.exe
     rm setup.cmx setup.cmi setup.o
-    ./setup.exe -configure --prefix $(opam config var prefix) --enable-tests
+    ./setup.exe -configure --prefix $(opam config var prefix) "$@"
 done
