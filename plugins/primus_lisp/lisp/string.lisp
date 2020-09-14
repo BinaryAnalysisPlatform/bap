@@ -1,6 +1,7 @@
 (require types)
 (require pointers)
 (require memory)
+(require ascii)
 
 (defun strlen (p)
   (declare (external "strlen"))
@@ -140,20 +141,25 @@
   (memcmp s1 s2 (min (strlen/with-null s1)
                      (strlen/with-null s2))))
 
-(defun strncasecmp (p1 p2 n)
-  (declare (external "strncasecmp"))
+(defun memcasecmp (p1 p2 n)
   (let ((res 0) (i 0))
     (while (and (< i n) (not res))
       (set res (compare
-                (tolower (memory-read p1))
-                (tolower (memory-read p2))))
+                (ascii-to-lower (cast int (memory-read p1)))
+                (ascii-to-lower (cast int (memory-read p2)))))
       (incr p1 p2 i))
     res))
 
-(defun strcasecmp (p1 p2)
+(defun strncasecmp (p1 p2 n)
   (declare (external "strncasecmp"))
-  (strncasecmp p1 p2 (min (strlen p1)
-                          (strlen p2))))
+  (memcasecmp p1 p2 (min n
+                         (strlen/with-null p1)
+                         (strlen/with-null p2))))
+
+(defun strcasecmp (p1 p2)
+  (declare (external "strcasecmp"))
+  (strncasecmp p1 p2 (min (strlen/with-null p1)
+                          (strlen/with-null p2))))
 
 
 (defmacro find-substring (compare hay needle)

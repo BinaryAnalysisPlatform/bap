@@ -22,6 +22,14 @@
 (defmacro make-converter (type s)
   (cast type (read-ascii-word s)))
 
-(defun atoi  (s) (make-converter int s))
-(defun atol  (s) (make-converter long s))
-(defun atoll (s) (make-converter long-long s))
+(defun atoi  (s)
+  (declare (external "atoi"))
+  (make-converter int s))
+
+(defun atol  (s)
+  (declare (external "atol"))
+  (make-converter long s))
+
+(defun atoll (s)
+  (declare (external "atoll"))
+  (make-converter long-long s))
