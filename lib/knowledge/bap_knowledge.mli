@@ -1278,6 +1278,11 @@ module Knowledge : sig
     (** string is a persistent data type.  *)
     val string : string persistent
 
+    (** names are persistent.
+
+        @since 2.2.0 *)
+    val name : name persistent
+
     (** [list t] derives persistence for a list.  *)
     val list : 'a persistent -> 'a list persistent
 
@@ -1350,7 +1355,6 @@ module Knowledge : sig
         ["user"] package.
     *)
     val create : ?package:string -> string -> t
-
 
     (** [read ?package input] reads a full name from input.
 

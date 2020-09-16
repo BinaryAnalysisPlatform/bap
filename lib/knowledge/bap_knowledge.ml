@@ -170,7 +170,7 @@ type slot_status =
 type fullname = {
   package : string;
   name : string;
-} [@@deriving bin_io, compare, sexp]
+} [@@deriving bin_io, equal, compare, sexp]
 
 
 module Name : sig
@@ -218,22 +218,26 @@ end = struct
 
     let registry = Hashtbl.create (module Int63)
 
-    let hash_name str =
+    (* using FNV-1a algorithm *)
+    let hash_name =
       let open Int63 in
-      String.fold str ~init:(of_int 5381) ~f:(fun h c ->
-          (h lsl 5) + h + of_int (Char.to_int c))
+      let init = of_int64_exn 0xCBF29CE484222325L in
+      let m = of_int64_exn 0x100000001B3L in
+      let hash init = String.fold ~init ~f:(fun h c ->
+          (h lxor of_int (Char.to_int c)) * m) in
+      fun {package; name} ->
+        hash (hash init package) name
 
     let intern name =
-      let str = full name in
-      let id = hash_name str in
+      let id = hash_name name in
       match Hashtbl.find registry id with
       | None -> Hashtbl.add_exn registry id name; id
-      | Some name ->
-        if full name = str
+      | Some name' ->
+        if equal_fullname name name'
         then id
         else invalid_argf "Names %S and %S have the same hash value, \
                            Change one of them."
-            (full name) str ()
+            (full name) (full name') ()
 
     let fullname = Hashtbl.find_exn registry
     include Int63
@@ -796,6 +800,8 @@ module Persistent = struct
                             let key = of_string pk key
                             and data = of_string pd data in
                             Map.add_exn xs ~key ~data))
+
+  let name = of_binable (module Name)
 end
 
 
