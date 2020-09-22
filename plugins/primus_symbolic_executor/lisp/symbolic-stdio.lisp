@@ -62,7 +62,7 @@
 
 (defun fread (ptr size n stream)
   (declare (external "fread"))
-  (let ((r (read (fileno stream) buf (* n size))))
+  (let ((r (read (fileno stream) ptr (* n size))))
     (if (< r 0) r
       (/ r size))))
 
