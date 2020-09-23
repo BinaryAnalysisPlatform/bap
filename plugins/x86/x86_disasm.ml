@@ -999,9 +999,9 @@ let parse_instr mode mem addr =
           (Punpck(prefix.mopsize, elemt, order, r, rm, rv), na)
         | 0x64 | 0x65 | 0x66 | 0x74 | 0x75 | 0x76  as o ->
           let r, rm, rv, na = parse_modrm_vec None na in
-          let elet = match o land 0x6 with | 0x4 -> reg8_t | 0x5 -> reg16_t | 0x6 -> reg32_t | _ ->
+          let elet = match o land 0x0F with | 0x4 -> reg8_t | 0x5 -> reg16_t | 0x6 -> reg32_t | _ ->
             disfailwith "impossible" in
-          let bop, bstr = match o land 0x70 with
+          let bop, bstr = match o land 0xF0 with
             | 0x70 -> Bil.EQ, "pcmpeq"
             | 0x60 -> Bil.SLT, "pcmpgt"
             | _ -> disfailwith "impossible" in
