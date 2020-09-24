@@ -155,10 +155,7 @@ let build_cfg disasm calls entry =
 
 let build_symbol disasm calls start =
   build_cfg disasm calls start >>= function
-  | None ->
-    Format.eprintf "Failed to obtain a CFG from %a@\n%!"
-      Addr.pp start;
-    assert false
+  | None -> failwith "Broken CFG, try bap --cache-clean"
   | Some (entry,graph) ->
     Symbolizer.get_name start >>| fun name ->
     name,entry,graph

@@ -1,7 +1,3 @@
-PKG core_kernel
-PKG oUnit
-PKG bap
-PKG bap-abi
-
 S .
 B ../../_build/plugins/stub_resolver
+REC

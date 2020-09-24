@@ -113,20 +113,14 @@ let with_unit =
            comment "[Rec.{run,scan} arch mem] provides a unit for [mem]");
   fun arch mem ->
     let width = Size.in_bits (Arch.addr_size arch) in
-    let is_little = Arch.endian arch = LittleEndian in
     let lower = Word.to_bitvec @@ Memory.min_addr mem
     and upper = Word.to_bitvec @@ Memory.max_addr mem in
     KB.promising Theory.Label.unit ~promise:(fun label ->
         KB.collect Theory.Label.addr label >>= function
         | Some p when Memory.contains mem @@ Word.create p width ->
           Theory.Unit.for_region ~lower ~upper >>= fun unit ->
-          let (:=) slot value = KB.provide slot unit (Some value) in
-          KB.List.sequence Theory.Unit.[
-              Target.bits := width;
-              Target.arch := Arch.to_string arch;
-              Target.is_little_endian := is_little;
-            ] >>= fun () ->
-          KB.return (Some unit)
+          KB.provide Arch.unit_slot unit arch >>| fun () ->
+          Some unit
         | _ -> KB.return None)
 
 let scan arch mem state =

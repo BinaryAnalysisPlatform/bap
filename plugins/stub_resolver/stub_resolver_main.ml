@@ -68,21 +68,19 @@ let signatures = Extension.Configuration.parameters
     Extension.Type.(list path) "signatures"
     ~doc:("A list of folders and files that contain signatures for \
            stubs identification. Each file shall have a name of the \
-           form $(b,<triple>.stubs) and contain a list of words each \
+           form $(b,<target>.stubs) and contain a list of words each \
            denoting a possible starting sequence of a bytes for a \
-           stub. The triple has the form \
-           $(b,<arch><subarch>-<system>-<abi>). Only $(b,<arch>) is \
-           required, all other fileds could be omitted (or filled in \
-           with $(b,unknown). E.g., $(b,arm.stubs), \
-           $(b,armv7-linux-gnueabi.stubs), etc. Each word denoting a \
-           signature must be encoded as an ASCII number and be binary \
-           (start with $(b,0b)), octal (start with $(b,0o), or \
-           hexadecimal (start with $(b,0x), e.g., $(b,0xDEADBEEF). If \
-           the prefix is omitted then the hexadecimal notation is \
-           assumed, e.g., $(b,DEADBEEF) is also acceptable. The \
-           signature length is automatically inferred from the word, \
-           i.e., the leading zeros are not discarded. By default we \
-           search in the current working folder and in " ^
+           stub. The <target> is the name of the target, e.g., \
+           $(b,arm.stubs), $(b,armv7-linux-gnueabi.stubs), etc. Each \
+           word denoting a signature must be encoded as an ASCII \
+           number and be binary (start with $(b,0b)), octal (start \
+           with $(b,0o), or hexadecimal (start with $(b,0x), e.g., \
+           $(b,0xDEADBEEF). If the prefix is omitted then the \
+           hexadecimal notation is assumed, e.g., $(b,DEADBEEF) is \
+           also acceptable. The signature length is automatically \
+           inferred from the word, i.e., the leading zeros are not \
+           discarded. By default we search in the current working \
+           folder and in " ^
           default_signatures_folder)
 
 module Stubs : sig
@@ -130,12 +128,8 @@ end
 
 module Signatures : sig
   type t
-  type triple
   val collect : ctxt -> t
-
-  val triple : ?arch:string -> ?subarch:string -> ?system:string ->
-    ?abi:string -> unit -> triple
-  val matching : triple -> t -> Word.Set.t
+  val matching : Theory.Target.t -> t -> Word.Set.t
 end = struct
   type parser_outcome =
     | Success of word
@@ -143,9 +137,7 @@ end = struct
     | Empty
     | Comment
 
-  type triple = string list list
-  type t = (string list * Word.Set.t) list
-
+  type t = (string * Word.Set.t) list
 
   let is_prefixed s =
     String.length s > 1 && match s.[0],s.[1] with
@@ -185,26 +177,11 @@ end = struct
             file (number+1) msg;
           words)
 
-  let parse_triple s = String.split s ~on:'-' |> List.map ~f:(function
-      | "" -> "unknown"
-      | s -> s)
-
   let parse_filename s =
     match String.split (Filename.basename s) ~on:'.' with
     | [""; "stubs"] -> None      (* for .stubs *)
-    | [triple; "stubs"] -> Some (parse_triple triple)
+    | [name; "stubs"] -> Some name
     | _ -> None
-
-  let matches xs ys =
-    let rec next xs ys = match xs,ys with
-      | x :: xs, y::ys -> matches x y xs ys
-      | _,[]|[],_ -> true
-    and matches x y xs ys = match x,y with
-      | _,"unknown" | "unknown",_
-      | _,"" | "",_ -> next xs ys
-      | x,y -> x = y && next xs ys in
-    next xs ys
-
 
   let collect ctxt : t =
     let signatures = Extension.Configuration.get ctxt signatures in
@@ -224,21 +201,12 @@ end = struct
         then add_files sigs path
         else add_file sigs path)
 
-  let triple
-      ?(arch="unknown")
-      ?(subarch="")
-      ?(system="unknown")
-      ?(abi="unknown") () = [
-    [arch; system; abi];
-    [arch^subarch; system; abi];
-  ]
 
-  let matching triple sigs =
-    let all t = Word.Set.union_list @@
-      List.filter_map sigs ~f:(fun (t' ,s) ->
-          Option.some_if (matches t t') s) in
-    Set.union_list (module Word) @@
-    List.map triple ~f:all
+  let matching target sigs =
+    Word.Set.union_list @@
+    List.filter_map sigs ~f:(fun (t' ,s) ->
+        Option.some_if (Theory.Target.matches target t') s)
+
 end
 
 let mark_plt_as_stub ctxt : unit =
@@ -269,25 +237,14 @@ let word_of_memory mem =
   Word.create (bitvec_of_memory mem) width
 
 
-let collect_triple unit =
-  KB.collect Theory.Unit.Target.arch unit >>= fun arch ->
-  KB.collect Theory.Unit.Target.subarch unit >>= fun subarch ->
-  KB.collect Theory.Unit.Target.system unit >>= fun system ->
-  KB.collect Theory.Unit.Target.abi unit >>| fun abi ->
-  Signatures.triple ?arch ?subarch ?system ?abi ()
 
 let with_path_and_unit label f =
   KB.collect Theory.Label.unit label >>=? fun unit ->
   KB.collect Theory.Unit.path unit >>=? fun path ->
   f path unit
 
-let with_context label f =
-  with_path_and_unit label @@ fun path unit ->
-  collect_triple unit >>= fun triple ->
-  f path triple
-
-let find_mem bits code addr =
-  let addr = Word.create addr bits in
+let find_mem target code addr =
+  let addr = Word.code_addr target addr in
   Memmap.lookup code addr |>
   Seq.find_map ~f:(fun (mem,_) ->
       match Memory.view ~from:addr mem with
@@ -316,10 +273,9 @@ let detect_stubs_by_signatures ctxt : unit =
   KB.promise (Value.Tag.slot Sub.stub) @@ fun label ->
   KB.collect Theory.Label.addr label >>=? fun addr ->
   with_path_and_unit label @@ fun path unit ->
-  collect_triple unit >>= fun triple ->
-  KB.collect Theory.Unit.Target.bits unit >>|? fun bits ->
-  Option.bind (find_mem bits code addr) ~f:(fun mem ->
-      let sigs = Signatures.matching triple sigs in
+  KB.collect Theory.Unit.target unit >>| fun target ->
+  Option.bind (find_mem target code addr) ~f:(fun mem ->
+      let sigs = Signatures.matching target sigs in
       Option.some_if (path = file && matches sigs mem) ())
 
 let update prog =

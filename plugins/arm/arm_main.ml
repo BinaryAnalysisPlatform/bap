@@ -35,6 +35,7 @@ end
 
 let () =
   Config.when_ready (fun _ ->
+      Arm_target.load ();
       List.iter Arch.all_of_arm ~f:(fun arch ->
           register_target (arch :> arch) (module ARM);
           Arm_gnueabi.setup ()))

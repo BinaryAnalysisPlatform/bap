@@ -186,9 +186,9 @@ let mark_mips_stubs_as_functions refs file : unit =
   KB.collect Theory.Label.addr label >>=? fun addr ->
   KB.collect Theory.Label.unit label >>=? fun unit ->
   KB.collect Theory.Unit.path unit >>=? fun path ->
-  KB.collect Theory.Unit.Target.arch unit >>|? fun arch ->
+  KB.collect Theory.Unit.target unit >>| fun target ->
   let is_entry = path = file &&
-                 (arch = "mips" || arch = "mips64") &&
+                 (Theory.Target.matches target "mips") &&
                  Option.is_some (References.lookup refs addr) in
   Option.some_if is_entry true
 
@@ -202,7 +202,7 @@ let () = Extension.declare ~doc @@ fun _ctxt ->
            require Theory.Label.addr |>
            require Theory.Label.unit |>
            require Theory.Unit.path |>
-           require Theory.Unit.Target.arch |>
+           require Theory.Unit.target |>
            dynamic ["specification"] |>
            dynamic ["filename"] |>
            provide Theory.Label.is_subroutine |>

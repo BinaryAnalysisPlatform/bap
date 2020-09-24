@@ -1,11 +1,12 @@
 open Core_kernel
 open Bap.Std
-open X86_target
+open X86_targets
 include Self()
 
 type kind = Legacy | Modern | Merge [@@deriving equal]
 
 let main kind x32 x64 =
+  X86_target.load ();
   let ia32, amd64 = match kind with
     | Legacy -> (module IA32L : Target), (module AMD64L : Target)
     | Modern -> (module IA32 : Target), (module AMD64 : Target)

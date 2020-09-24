@@ -6,8 +6,8 @@ Library "bap-arm"
  XMETADescription: arm lifting
  Path:             lib/arm
  Build$:           flag(everything) || flag(arm)
- BuildDepends:     bap
- BuildDepends:     bap, core_kernel, ppx_jane, regular
+ BuildDepends:     bap, core_kernel, ppx_jane, regular,
+                   bap-core-theory, bap-knowledge, ogre
  FindlibName:      bap-arm
  Modules:
                  ARM,
@@ -26,6 +26,7 @@ Library "bap-arm"
                  Arm_op,
                  Arm_reg,
                  Arm_shift,
+                 Arm_target,
                  Arm_types,
                  Arm_utils
 

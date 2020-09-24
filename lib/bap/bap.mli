@@ -1250,6 +1250,33 @@ module Std : sig
     (** [create v w] creates a word from bitvector [v] of width [w].*)
     val create : Bitvec.t -> int -> t
 
+
+    (** [code_addr t x] uses target's address size to create a word.
+
+        Same as [create x (Theory.Target.code_addr_size t)].
+
+        @since 2.2.0
+    *)
+    val code_addr : Theory.Target.t -> Bitvec.t -> t
+
+
+    (** [data_addr t x] uses target's code address size to create a word.
+
+        Same as [create x (Theory.Target.data_addr_size t)].
+
+        @since 2.2.0
+    *)
+    val data_addr : Theory.Target.t -> Bitvec.t -> t
+
+    (** [data_word t x] uses target's word size to create a word.
+
+        Same as [create x (Theory.Target.bits t)].
+
+        @since 2.2.0
+    *)
+    val data_word : Theory.Target.t -> Bitvec.t -> t
+
+
     (** [of_string s] parses a bitvector from a string representation
         defined in section {!bv_string}.    *)
     val of_string : string -> t
@@ -4012,6 +4039,24 @@ module Std : sig
 
     (** the architecture (ISA) of a program.  *)
     val slot : (Theory.program, t) Knowledge.slot
+
+    (** [unit_slot] the arch property of the unit.
+
+        Use this slot to enable backward compatibility of the [Arch.t]
+        type with the [Theory.Target.t] by registering a promise that
+        translates [Theory.Target.t] to [Arch.t].
+
+        Example,
+
+        {[
+          let target = Theory.Target.declare ~package:"foo" "r600"
+          let () = KB.promise Arch.unit_slot @@ fun unit ->
+            KB.collect Theory.Unit.target >>| fun t ->
+            if Theory.Target.equal t target then `r600
+            else `unknown
+        ]}
+    *)
+    val unit_slot : (Theory.Unit.cls, t) Knowledge.slot
 
     (** [arch] type implements [Regular]  interface  *)
     include Regular.S with type t := t
@@ -9367,15 +9412,32 @@ module Std : sig
       ?reconstructor:reconstructor source ->
       input -> t Or_error.t
 
-    (** [arch project] reveals the architecture of a loaded file  *)
+
+    (** [empty target] creates a for the given [target]. *)
+    val empty : Theory.Target.t -> t
+
+    (** [arch project] reveals the architecture of a loaded file
+
+        @deprecated use [target project] instead.
+    *)
     val arch : t -> arch
+
+
+    (** [target project] returns the target system of the project.
+
+        @since 2.2.0
+    *)
+    val target : t -> Theory.Target.t
 
 
     (** [specification p] returns the specification of the binary.
 
-        @since 2.2.0*)
+        @since 2.2.0 *)
     val specification : t -> Ogre.doc
 
+    (** the slot to access the specification of a unit.
+        @since 2.2.0 *)
+    val specification_slot : (Theory.Unit.cls, Ogre.Doc.t) KB.slot
 
     (** [state project] returns the core state of the [project].
 
@@ -9547,33 +9609,77 @@ module Std : sig
 
     (** Input information.
 
-        This module abstracts input type.
-    *)
+        This module abstracts the input data necessary to create a
+        project. *)
     module Input : sig
       type t = input
 
-      (** [file ?loader ~filename] input data from a file, using the
-          specified loader. If [loader] is not specified, then some existing
-          loader will be used. If it is specified, then it is first looked
-          up in the [available_loaders] and if it is not found, then it will
-          be looked up in the {!Image.available_backends}.  *)
-      val file : ?loader:string -> filename:string -> t
 
-      (** [binary ?base arch ~filename] create an input from a binary
-          file, that is a pure code.
-          @param base is an virtual address of the first byte (defaults to 0).*)
-      val binary : ?base:addr -> arch -> filename:string -> t
+      (** [load filename] loads the file from the specified path.
+          The file must be regular (i.e., not a pipe) and is expected
+          to have the necessary meta information, i.e., not the raw
+          code (use [raw_file] to load files that are raw code).
 
-      (** [create arch filename ~code ~data] creates an input from a
-          file, using two memory maps. The [code] memmap spans the code in
-          the file, and [data] spans the data. An optional [finish]
-          function can be used to propagate to the project any
-          additional information that is available to the loader. It
-          defaults to [ident].
+          If [loader] is not specified then all image loaders are used
+          and the information from the is merged, otherwise only the
+          selected loaded is used. See {!Image.available_backend}.
+
+          The [target] could be used to specialize the target
+          information retrieved from the file. If it is less specific,
+          then it will be ignored, if it contradicts the information
+          in the file then the project creation will fail.
+
+          @since 2.2.0 *)
+      val load : ?target:Theory.Target.t -> ?loader:string -> string -> t
+
+      (** [raw_file ?base target ~filename] creates an input from a binary
+          file that is raw code for the given [target], i.e.,
+          without any headers or meta information.
+
+          @param base is an virtual address of the first byte
+          (defaults to 0).
+
+          @since 2.2.0 *)
+      val raw_file : ?base:addr -> Theory.Target.t -> string -> t
+
+
+      (** [create ?base target code] creates input from the binary
+          [code] for the given [target].
+
+          @since 2.2.0 *)
+      val from_string : ?base:addr -> Theory.Target.t -> string -> t
+
+      (** [create ?base target code] creates input from the binary
+          [code] for the given [target].
+
+          @since 2.2.0 *)
+      val from_bigstring : ?base:addr -> Theory.Target.t -> Bigstring.t -> t
+
+
+      (** [custom target] creates a custom input.
+
+          The [target] parameter denotes the target system of the
+          input program. The [code] and [data] parameters are stored
+          in the [Project.memory] and [code] is disassembled and
+          lifted if the specified [target] has a disassembler and lifter.
+
+          The [filename] is used to communicate with external tools
+          and will be broadcasted via [Info.file] stream and stored in
+          the filename property of the project, otherwise it is not
+          used when the project is created.
+
+          The [finish project] is the post-constructor that takes the
+          nearly finished project (with code and data and potentially
+          disassembled and lifted code) and constructs the final
+          project.
       *)
-      val create :
+      val custom :
         ?finish:(project -> project) ->
-        arch -> string -> code:value memmap -> data: value memmap -> t
+        ?filename:string ->
+        ?code:value memmap ->
+        ?data:value memmap ->
+        Theory.Target.t -> t
+
 
       (** [register_loader name load] register a loader under provided
           [name]. The [load] function will be called the filename, and it
@@ -9582,6 +9688,47 @@ module Std : sig
 
       (** [available_loaders ()] returns a list of names of currently known loaders.  *)
       val available_loaders : unit -> string list
+
+      (** {3 Deprecated Interface}
+
+          The following functions are deprecated and better
+          alternatives are provided.
+          They might be removed in BAP 3.0.*)
+
+      (** [binary ?base arch ~filename] create an input from a binary
+          file that is a pure code without any headers or meta
+          information.
+
+          @param base is an virtual address of the first byte
+          (defaults to 0).
+
+          @deprecated use [Input.raw_file] instead.
+      *)
+      val binary : ?base:addr -> arch -> filename:string -> t
+
+      (** [file ?target ?loader ~filename] input data from a file, using the
+          specified loader. If [loader] is not specified, then some existing
+          loader will be used. If it is specified, then it is first looked
+          up in the [available_loaders] and if it is not found, then it will
+          be looked up in the {!Image.available_backends}.
+
+          @deprecated use [Input.load filename]
+
+      *)
+      val file : ?loader:string -> filename:string -> t
+
+      (** [create arch filename ~code ~data] creates an input from a
+          file, using two memory maps. The [code] memmap spans the code in
+          the file, and [data] spans the data. An optional [finish]
+          function can be used to propagate to the project any
+          additional information that is available to the loader. It
+          defaults to [ident].
+          @deprecated use either [Input.custom] or [Input.from_string]
+          and [Input.from_bigstring].
+      *)
+      val create :
+        ?finish:(project -> project) ->
+        arch -> string -> code:value memmap -> data: value memmap -> t
     end
 
     (** {3 Registering passes}

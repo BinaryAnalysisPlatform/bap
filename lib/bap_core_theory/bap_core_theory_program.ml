@@ -4,6 +4,7 @@ open Bap_knowledge
 
 let package = "core-theory"
 module Effect = Bap_core_theory_effect
+module Target = Bap_core_theory_target
 
 type cls = Program
 type program = cls
@@ -45,6 +46,52 @@ let string_property ?(domain=name) ~desc cls name =
                  end))
     ~public:true
     ~desc
+
+module Source = struct
+  type cls = Source
+  let cls : (cls,unit) Knowledge.cls =
+    Knowledge.Class.declare ~package "unit-source" ()
+
+  type language = Knowledge.Name.t
+
+  module Language = struct
+    type t = Knowledge.Name.t [@@deriving bin_io]
+    let declare ?package name = Knowledge.Name.create ?package name
+    let unknown = Knowledge.Name.read ":unknown"
+    let name x = x
+    include Base.Comparable.Make(Knowledge.Name)
+
+    let domain = Knowledge.Domain.flat
+        ~inspect:Knowledge.Name.sexp_of_t
+        ~empty:unknown
+        ~equal "language"
+
+    include (Knowledge.Name : Stringable.S with type t := t)
+    include (Knowledge.Name : Pretty_printer.S with type t := t)
+  end
+
+  let language = Knowledge.Class.property cls
+      ~package "source-language" Language.domain
+      ~persistent:Knowledge.Persistent.name
+      ~public:true
+      ~desc:"the language of the unit's source code"
+
+  let code = Knowledge.Class.property cls
+      ~package "source-code" Knowledge.Domain.string
+      ~persistent:Knowledge.Persistent.string
+      ~public:true
+      ~desc:"the units source code text"
+
+  let file = string_property ~domain:path cls "source-path"
+      ~desc:"a path to the source code file"
+
+  module Value = (val Knowledge.Value.derive cls)
+
+  let persistent = Knowledge.Persistent.of_binable (module Value)
+
+  include Value
+
+end
 
 module Unit = struct
   open Knowledge.Syntax
@@ -96,62 +143,65 @@ module Unit = struct
     Knowledge.Symbol.intern ~package:"region" name cls
 
 
-  module Target = struct
-    let arch = string_property cls "target-arch"
-        ~desc:"target machine architecture"
-    let subarch = string_property cls "target-subarch"
-        ~desc:"target machine subarchitecture"
-    let vendor = string_property cls "target-vendor"
-        ~desc:"target machine vendor"
-    let system = string_property cls "target-system"
-        ~desc:"target machine operating system"
-    let abi = string_property cls "target-abi"
-        ~desc:"target machine application binary interface"
-    let fabi = string_property cls "target-fabi"
-        ~desc:"target machine floating-point binary interface"
-    let cpu = string_property cls "target-cpu"
-        ~desc:"target machine CPU model"
-    let fpu = string_property cls "target-fpu"
-        ~desc:"target machine FPU model"
+  let target =
+    Knowledge.Class.property ~package cls "unit-target" Target.domain
+      ~persistent:Target.persistent
+      ~public:true
+      ~desc:"the target system for the unit"
 
-    let bits = Knowledge.Domain.optional "bits"
-        ~equal:Int.equal
-        ~inspect:sexp_of_int
 
-    let bits =
-      Knowledge.Class.property ~package cls "target-bits" bits
-        ~persistent:(Knowledge.Persistent.of_binable (module struct
-                       type t = int option [@@deriving bin_io]
-                     end))
-        ~public:true
-        ~desc:"the bitness of the architecture"
+  let source =
+    Knowledge.Class.property ~package cls "unit-source" Source.domain
+      ~persistent:Source.persistent
+      ~public:true
+      ~desc:"the source of the unit"
 
-    let is_little_endian =
-      Knowledge.Class.property ~package cls "target-is-little-endian"
-        Knowledge.Domain.bool
-        ~persistent:(Knowledge.Persistent.of_binable (module struct
-                       type t = bool option [@@deriving bin_io]
-                     end))
-        ~public:true
-        ~desc:"whether the target architecture is little endian"
-  end
-
-  module Source = struct
-    let language = string_property cls "source-language"
-        ~desc:"the original source language"
-  end
 
   module Compiler = struct
-    let name = string_property cls "compiler-name"
-        ~desc:"the name of the compiler used to build the unit"
+    type t = {
+      name : string;
+      version : string list;
+      options : string list;
+      specs : string String.Map.t;
+    } [@@deriving bin_io, compare, equal, fields, sexp]
 
-    let version = string_property cls "compiler-version"
-        ~desc:"the version of the compiler used to build the unit"
+    let create ?(specs=[]) ?(version=[]) ?(options=[]) name = {
+      name; version; options;
+      specs = String.Map.of_alist_exn specs;
+    }
+
+    let pp ppf x = Sexp.pp_hum ppf (sexp_of_t x)
+
+    let to_string x = Format.asprintf "%a" pp x
+
+    let persistent = Knowledge.Persistent.of_binable (module struct
+        type nonrec t = t option [@@deriving bin_io]
+      end)
+
+    let domain = Knowledge.Domain.optional
+        ~inspect:sexp_of_t
+        ~equal
+        "compiler"
+
+    include Base.Comparable.Make(struct
+        type nonrec t = t [@@deriving bin_io, compare, sexp]
+      end)
   end
+
+  type compiler = Compiler.t
+
+  let compiler = Knowledge.Class.property ~package cls "unit-compiler"
+      Compiler.domain
+      ~persistent:Compiler.persistent
+      ~public:true
+      ~desc:"the compiler that compiles/compiled the unit"
+
 
   include (val Knowledge.Object.derive cls)
 
 end
+
+
 
 module Label = struct
 
@@ -239,6 +289,11 @@ module Label = struct
     let s = sprintf "ivec-%x" x in
     Knowledge.Symbol.intern ?package s cls >>= fun obj ->
     Knowledge.provide ivec obj (Some x) >>| fun () -> obj
+
+  let target x =
+    Knowledge.collect unit x >>= function
+    | None -> Knowledge.return Target.unknown
+    | Some unit -> Knowledge.collect Unit.target unit
 
   let _decide_name_from_possible_name : unit =
     Knowledge.Rule.(declare ~package "name-of-possible-names" |>

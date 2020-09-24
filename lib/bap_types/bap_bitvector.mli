@@ -1,3 +1,4 @@
+open Bap_core_theory
 open Core_kernel
 open Regular.Std
 open Format
@@ -14,6 +15,11 @@ include Bap_integer.S with type t := t
 module Mono : Comparable.S with type t := t
 
 val create : Bitvec.t -> int -> t
+
+val code_addr : Theory.Target.t -> Bitvec.t -> t
+val data_addr : Theory.Target.t -> Bitvec.t -> t
+val data_word : Theory.Target.t -> Bitvec.t -> t
+
 val to_bitvec : t -> Bitvec.t
 
 val of_string : string -> t

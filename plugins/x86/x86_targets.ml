@@ -8,13 +8,13 @@ module AMD64L = X86_lifter.AMD64
 
 module IA32D = struct
   module CPU = IA32L.CPU
-  let lift mem insn =
+  let lift _mem insn =
     Or_error.error "unimplemented" insn Insn.sexp_of_t
 end
 
 module AMD64D = struct
   module CPU = AMD64L.CPU
-  let lift mem insn =
+  let lift _mem insn =
     Or_error.error "unimplemented" insn Insn.sexp_of_t
 end
 

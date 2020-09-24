@@ -646,7 +646,7 @@ module Theory : sig
       val pp : formatter -> 'a t -> unit
 
 
-      (** Sort without a type index.
+      (** Sorts with erased type indices.
 
           This module enables construction of complex data structures
           on sorts, like maps, sets, etc, e.g.,
@@ -1107,6 +1107,401 @@ module Theory : sig
   end
 
 
+  (** The source code artifact of a compilation unit.
+
+      Contains the information about the source code of a program
+      unit. Note, that it is not an attribute of a program that
+      denotes the semantics of that program, but an artifact
+      that is associated with the compile unit.
+
+      The information about the source code is represented as an
+      extesnsible {!KB.Value.t}. To add a new property of the Source
+      class use {!KB.Class.property},
+        to access existing properties use {!KB.Value.get}
+        and {!KB.Value.put}.
+
+
+      @since 2.2.0
+  *)
+  module Source : sig
+    type cls
+    include KB.Value.S with type t = (cls,unit) KB.cls KB.Value.t
+
+    (** the abstract name of a programming language  *)
+    type language
+
+
+    (** the class index for the core-theory:source class  *)
+    val cls : (cls,unit) KB.cls
+
+
+    (** the language of the source code  *)
+    val language : (cls,language) KB.slot
+
+    (** the source code text  *)
+    val code : (cls,string) KB.slot
+
+    (** the file name of the unit's source code  *)
+    val file : (cls,string option) KB.slot
+
+    (** The source code language. *)
+    module Language : sig
+      include Base.Comparable.S with type t = language
+      include Binable.S with type t := t
+      include Stringable.S with type t := t
+      include Pretty_printer.S with type t := t
+
+      (** [declare ?package name] declares a new source code language.  *)
+      val declare : ?package:string -> string -> language
+
+      (** the unique name of the language  *)
+      val name : language -> KB.Name.t
+    end
+  end
+
+
+  (** Description of the execution target.
+
+      An abstract description of the system on which a program is
+      intended to be run. The description precisely describes various
+      architectual and microarchitectual details of the target system,
+      and could be extended with further details either internally, by
+      adding more fields (and functions to this module) or storing
+      those options in [Options.t]; or externally, by maintaining
+      finite mappings from [Target.t] to corresponding properties.
+
+      The [Target.t] has a lightweight immediate representation, which
+      is portable across OCaml runtime and persistent across versions
+      of BAP and OCaml.
+
+      @since 2.2.0  *)
+  module Target : sig
+    (** the abstract type representing the target.
+
+        This type is a unique identifier of the target,
+        represented as [KB.Name.t] underneath the hood.
+    *)
+    type t
+    include Base.Comparable.S with type t := t
+    include Binable.S with type t := t
+    include Stringable.S with type t := t
+    include Pretty_printer.S with type t := t
+
+    (** The ordering of the bytes.  *)
+    type endianness
+
+    (** The operating system  *)
+    type system
+
+    (** The application binary interface  *)
+    type abi
+
+    (** The floating-point ABI  *)
+    type fabi
+
+    (** The file format  *)
+    type format
+
+    (** The set of target-specific options.  *)
+    type options = (options_cls,unit) KB.cls KB.Value.t and options_cls
+
+    (** [declare ?package name] declares a new execution target.
+
+        The packaged name of the target must be unique and the target
+        shall be declared during the module registration (commonly as
+        a toplevel definition of a module that implements the target
+        support package).
+
+        The newly declared target inherits all the parameters from the
+        [parent] target unless they are explicitly overriden.
+
+        For the description of parameters see the corresponding
+        accessor functions in this module.
+    *)
+    val declare :
+      ?parent:t ->               (** defaults to [unknown] *)
+      ?bits:int ->               (** defaults to [32] *)
+      ?byte:int ->               (** defaults to [8]  *)
+      ?data:_ Mem.t Var.t ->     (** defaults to [mem : Mem(bits,byte)] *)
+      ?code:_ Mem.t Var.t ->     (** defaults to [mem : Mem(bits,byte)] *)
+      ?vars:unit Var.t list ->   (** defaults to [[]] *)
+      ?endianness:endianness ->  (** defaults to [Endian.big] *)
+      ?system:system ->          (** defaults to [System.unknown]  *)
+      ?abi:abi ->                (** defaults to [Abi.unknown] *)
+      ?fabi:fabi ->              (** defaults to [Fabi.unknown] *)
+      ?format:format ->          (** defaults to [Format.unknown] *)
+      ?options:options ->        (** defaults to [Options.empty] *)
+      ?nicknames:string list ->  (** defaults to [[]] *)
+      ?package:string ->         (** defaults to ["user"] *)
+      string -> t
+
+    (** [lookup ?package name] lookups a target with the given [name].
+
+        If [name] is unqualified then it is qualified with the
+        [package] (which itself defaults to "user"), otherwise the
+        [package] parameter is ignored.
+
+        Returns [None] if the target with the given name wasn't declared.
+    *)
+    val lookup : ?package:string -> string -> t option
+
+    (** [get ?package name] returns the target with the given [name].
+
+        If the target with the given name wasn't declared raises an
+        exception.
+
+        See {!lookup} for the details on the [name] and [package] parameters.
+    *)
+    val get : ?package:string -> string -> t
+
+    (** [declared ()] is the list of declared targets.
+        The order is unspecified, see also {!families}. The list
+        doesn't include the [unknown] target. *)
+    val declared : unit -> t list
+
+    (** [unknown] the unknown architecture.
+
+        The [core-theory:unknown] is the ancestor of all other
+        architectures with all fields set to defaults as described
+        in {!declare}. *)
+    val unknown : t
+
+    (** [is_unknown t] is [true] if [t] is equal to [unknown].  *)
+    val is_unknown : t -> bool
+
+    (** [name target] is the unique name of the target.  *)
+    val name : t -> KB.Name.t
+
+    (** [matches target name] is true if [name] matches either
+        the unqualified name of the target itsef or one of its
+        ancestors; or if the name matches one of the target
+        nicknames. E.g., [matches target "mips"].
+    *)
+    val matches : t -> string -> bool
+
+    (** [order t t'] the order of [t] and [t'] in the target hierarchy.
+
+        - [order t t'] is [NC] if [t] and [t'] are different and
+          neither [t] is an ancestor of [t'] nor [t'] is an ancestor of [t];
+        - [order t t'] is [LT] if [t] is an ancestor of [t'];
+        - [order t t'] is [GT] if [t'] is an ancestor of [t];
+        - [order t t'] is [EQ] if [t] and [t'] are equal.
+    *)
+    val order : t -> t -> KB.Order.partial
+
+    (** [belongs t t'] iff [order t t'] is [GT] or [EQ].
+
+        The [belongs t] predicate defines a {!family} of targets that
+        are derived from the target [t], e.g., [belongs arm] defines
+        a set of all ARM targets. *)
+    val belongs : t -> t -> bool
+
+    (** [parent t] is the closest ancestor of [t] or [unknown]
+        if [t] is unknown  *)
+    val parent : t -> t
+
+    (** [parents t] returns an ordered list of [t]'s ancestors.
+
+        The closest ancestor comes first in the list and the last
+        element of the list is [unknown].
+    *)
+    val parents : t -> t list
+
+    (** [family p] returns an ordered list of targets that {!belongs} [p].
+
+        The family members are ordered according to their hierarchy
+        with [p] comming first.
+    *)
+    val family : t -> t list
+
+    (** [partition targets] partitions targets into families.
+
+        The partition is a list where each element is a list of family
+        members with the family parent coming as the first member and
+        all other members ordered in the ascending order of their
+        hierarchy, i.e., for each [p::fs] in [families ()]
+        [family p] is [p:fs]. The families itself are partitioned by
+        the lexical order of the unqualified names of the family
+        parents.
+    *)
+    val partition : t list -> t list list
+
+    (** [families ()] partitions all declared targets into families,
+        i.e., it is [partition @@ declared ()].
+    *)
+    val families : unit -> t list list
+
+    (** [bits target] is the bitness of the target architecture.
+
+        It is commonly the number of bits of the machine word in the
+        given architecture and corresponds to the logical width of the
+        data bus.
+    *)
+    val bits : t -> int
+
+
+    (** [byte target] is the size of the target's byte. *)
+    val byte : t -> int
+
+    (** [data_addr_size target] is the number of bits in the data address.
+
+        The logical size of the data address, which is taken
+        from the sort of the keys of the [data] memory variable. *)
+    val data_addr_size : t -> int
+
+    (** [code_addr_size target] the size of the program counter.
+
+        The size of the instruction address, which is taken
+        from the sort of the keys of the [data] memory variable. *)
+    val code_addr_size : t -> int
+
+    (** [data target] the main memory variable. *)
+    val data : t -> (unit,unit) Mem.t Var.t
+
+    (** [code target] the code memory variable. *)
+    val code : t -> (unit,unit) Mem.t Var.t
+
+    (** [vars target] is the set of all registers and memories.
+
+        The set includes both general-purpose, floating-points, and
+        status registers, as well variables that denote memories and
+        other entities specific to the target.
+    *)
+    val vars : t -> Set.M(Var.Top).t
+
+    (** [endianness target] describes the byte order.
+
+        Describes how multibyte words are stored in the main memory. *)
+    val endianness : t -> endianness
+
+    (** [system target] the target operating system.  *)
+    val system : t -> system
+
+    (** [abi target] the target application binary interface.  *)
+    val abi : t -> abi
+
+    (** [fabi target] the target floating-point ABI.  *)
+    val fabi : t -> fabi
+
+    (** [format target] the target file format.  *)
+    val format : t -> format
+
+    (** [options target] the target-specific set of options.  *)
+    val options : t -> options
+
+
+    (** Defines how multibyte words are stored in the memory.
+
+        The number of variants are essentially infinite, given that
+        there is an infinite number of variants of the byte and word
+        sizes, but the two orderings are the most common: little and
+        big endian. More orderings could be declared when necessary.
+    *)
+    module Endianness : sig
+      include Base.Comparable.S with type t = endianness
+      include Binable.S with type t := t
+      include Stringable.S with type t := t
+      include Pretty_printer.S with type t := t
+
+      (** In the big endian ordering the most significant byte of the
+          word is stored at the smallest address.   *)
+      val eb : endianness
+
+      (** In the little endian ordering the least significant byte of
+          the word is stored at the largest address. *)
+      val le : endianness
+
+
+      (** In the bi-endian order the endianness is essentially
+          unspecified and depends on the execution context, e.g.,
+          on the status register or memory page descriptor.  *)
+      val bi : endianness
+
+      (** [declare ?package string] declares a new byte ordering.
+
+          The [package] [name] pair should be unique.
+      *)
+      val declare : ?package:string -> string -> endianness
+
+      (** the unique name  *)
+      val name : endianness -> KB.Name.t
+    end
+
+
+    (** The Operating System.*)
+    module System : sig
+      include Base.Comparable.S with type t = system
+      include Binable.S with type t := t
+      include Stringable.S with type t := t
+      include Pretty_printer.S with type t := t
+
+      (** [declare ?package string] declares a new operating system.
+
+          The [package] [name] pair should be unique.
+      *)
+      val declare : ?package:string -> string -> system
+
+      (** the unique name  *)
+      val name : system -> KB.Name.t
+    end
+
+    (** The Application Binary Interface name  *)
+    module Abi : sig
+      include Base.Comparable.S with type t = abi
+      include Binable.S with type t := t
+      include Stringable.S with type t := t
+      include Pretty_printer.S with type t := t
+
+
+      (** [declare ?package string] declares a new ABI.
+
+          The [package] [name] pair should be unique.*)
+      val declare : ?package:string -> string -> abi
+
+      (** the unique name of the ABI  *)
+      val name : abi -> KB.Name.t
+    end
+
+    (** The Application Floating-point Binary Interface name  *)
+    module Fabi : sig
+      include Base.Comparable.S with type t = fabi
+      include Binable.S with type t := t
+      include Stringable.S with type t := t
+      include Pretty_printer.S with type t := t
+
+      (** [declare ?package string] declares a new FABI.
+
+          The [package] [name] pair should be unique.*)
+      val declare : ?package:string -> string -> fabi
+
+      (** the unique name of the FABI  *)
+      val name : fabi -> KB.Name.t
+    end
+
+
+    (** An extensible set of the target options.
+
+        The set is represented with the {!KB.Value.t},
+        to add a new property, use {!KB.Class.property},
+        to access existing properties use {!KB.Value.get}
+        and {!KB.Value.put}.
+    *)
+    module Options : sig
+      type cls = options_cls
+      include KB.Value.S with type t = options
+      include Binable.S with type t := t
+      include Pretty_printer.S with type t := t
+
+      (** the class index of the target properties  *)
+      val cls : (cls, unit) KB.cls
+
+
+      (** the textual representation of the set of properties.  *)
+      val to_string : t -> string
+    end
+  end
+
+
   (** A unit of code.
 
       A unit of code is a generic piece of code, i.e., a set of
@@ -1123,6 +1518,8 @@ module Theory : sig
 
     (** the meta type of the unit object  *)
     type t = cls KB.Object.t
+
+    type compiler
 
 
     (** the base class for all units.
@@ -1159,10 +1556,6 @@ module Theory : sig
     (** [path] is the path of the file from which the unit originates.  *)
     val path : (cls, string option) KB.slot
 
-
-    (** [format] the file format of the unit, e.g., ["elf"].*)
-    val format : (cls, string option) KB.slot
-
     (** [is-executed] is true if the unit is an executable file ready
         to be executed by the operating system. *)
     val is_executable : (cls, bool option) KB.slot
@@ -1181,55 +1574,14 @@ module Theory : sig
     *)
     val bias : (cls, Bitvec.t option) KB.slot
 
-    (** Information about the target architecture.
+    (** [target] the target on which this unit should be executed.   *)
+    val target : (cls, Target.t) KB.slot
 
-        Assuming that the code is produced from source the target
-        denotes the target for which this source is built and
-        tailored. This module provides information about the target
-        triplet and target features.
-    *)
-    module Target : sig
+    (** [source] the source of this unit. *)
+    val source : (cls, Source.t) KB.slot
 
-      (** [arch] the target architecture, e.g., [arm].  *)
-      val arch : (cls, string option) KB.slot
-
-      (** [subarch] the target subarchitecture designator, e.g, [v7]  *)
-      val subarch : (cls, string option) KB.slot
-
-      (** [vendor] the target vendor, e.g., [apple] *)
-      val vendor : (cls, string option) KB.slot
-
-      (** [system] the target operating system, e.g., [darwin]  *)
-      val system : (cls, string option) KB.slot
-
-      (** [bits] the number of bits in the machine word, e.g., [32]  *)
-      val bits   : (cls, int option) KB.slot
-
-      (** [abi] target's ABI, e.g., [gnueabi].  *)
-      val abi    : (cls, string option) KB.slot
-
-      (** [fabi] targets floating-point ABI, e.g., [hf]  *)
-      val fabi   : (cls, string option) KB.slot
-
-      (** [cpu] the target CPU, e.g., [cortex] *)
-      val cpu    : (cls, string option) KB.slot
-
-      (** [fpu] the target FPU.  *)
-      val fpu    : (cls, string option) KB.slot
-
-
-      (** [is_little_endian] is true if the target's default
-          endianness is the little endian order.   *)
-      val is_little_endian : (cls, bool option) KB.slot
-    end
-
-    (** Information about the code source.  *)
-    module Source : sig
-
-      (** [language] the programming language in which the code of
-          this unit was written.  *)
-      val language : (cls, string option) KB.slot
-    end
+    (** [compiler] the program that translated the unit from the [source].  *)
+    val compiler : (cls, compiler option) KB.slot
 
     (** Information about the compiler.
 
@@ -1238,13 +1590,53 @@ module Theory : sig
         representation.
     *)
     module Compiler : sig
+      include Base.Comparable.S with type t = compiler
+      include Binable.S with type t := t
+      include Pretty_printer.S with type t := t
 
-      (** [name] the compiler name  *)
-      val name : (cls, string option) KB.slot
+      (** [declare name] declares a compiler.
 
-      (** [version] the compiler version.  *)
-      val version : (cls, string option) KB.slot
+          The compiler here represents more of a process that compiled
+          the unit rather than a specific program, thus it includes
+          the configuration parameters and command-line options.
+      *)
+      val create :
+        ?specs:(string * string) list ->
+        ?version:string list ->
+        ?options:string list ->
+        string -> compiler
+
+      (** [version] the compiler version.
+
+          The least specific (aka major) version comes first in the
+          list, with more detailed versions added after. The exact
+          meaning of the version consituents is specific to the compiler.
+      *)
+      val version : compiler -> string list
+
+      (** [options] the list of options that were used to compile the unit.
+
+          Options are specified as a list of command-line options with
+          possible repetitions. The meaning of the options is specific
+          to the compiler.
+
+          Note, that [options] are the options passed to the compiler
+          when this compilation unit was compiled from the source, not
+          the options of the compiler itsef, for the latter see [specs].
+      *)
+      val options : compiler -> string list
+
+
+      (** [specs] the configuration of the compiler.
+
+          A key-value storage of the configuration parameters of the
+          compiler itself. *)
+      val specs : compiler -> string Map.M(String).t
+
+      (** is the textual representation of the compiler descriptor  *)
+      val to_string : compiler -> string
     end
+
 
     include Knowledge.Object.S with type t := t
   end
@@ -1298,6 +1690,8 @@ module Theory : sig
     (** a compilation unit (file/library/object) to which this label belongs  *)
     val unit : (program, Unit.t option) KB.slot
 
+    (** [target label] is the [Unit.target] of the label's [unit].   *)
+    val target : label -> Target.t knowledge
 
     (** a link is valid if it references a valid program.
 

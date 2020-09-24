@@ -2,12 +2,21 @@ Flag powerpc
  Description: Build PowerPC lifter
  Default: false
 
+Library "bap-powerpc"
+ Build$:           flag(everything) || flag(powerpc)
+ XMETADescription: common definitions for PowerPC targets
+ Path: lib/bap_powerpc
+ BuildDepends: core_kernel, ppx_jane,
+               ogre, bap-knowledge, bap-core-theory, bap
+ FindlibName: bap-powerpc
+ Modules: Bap_powerpc_target
+
 Library powerpc_plugin
   XMETADescription: provide PowerPC lifter
   Path:             plugins/powerpc
   Build$:           flag(everything) || flag(powerpc)
   BuildDepends:     bap, bap-abi, bap-c, zarith, monads, core_kernel,
-                    ppx_jane, regular, bap-api
+                    ppx_jane, regular, bap-api, bap-powerpc
   FindlibName:      bap-plugin-powerpc
   InternalModules:  Powerpc,
                     Powerpc_cpu,

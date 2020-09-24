@@ -6,6 +6,11 @@ B ../../_build/lib/arm
 B ../../_build/lib/bap_api
 B ../../_build/lib/bap_abi
 
+B ../../lib/bap_c
+B ../../lib/arm
+B ../../lib/bap_api
+B ../../lib/bap_abi
+
 S ../../lib/bap_c
 S ../../lib/arm
 S ../../lib/bap_api
