@@ -232,7 +232,7 @@ module Doc = struct
               else (packed :: data)) in
     { doc with entries }
 
-  let merge doc {scheme; entries} =
+  let do_merge doc {scheme; entries} =
     Map.to_sequence scheme |>
     Error.Seq.fold ~init:doc ~f:(fun doc (name,sign) ->
         update_scheme name sign doc) >>= fun doc ->
@@ -241,6 +241,14 @@ module Doc = struct
         Error.List.fold values ~init:doc ~f:(fun doc value ->
             update_entries name value doc))
 
+  let merge d1 d2 = match is_empty d1, is_empty d2 with
+    | true,true -> Ok d1
+    | true,false -> Ok d2
+    | false,true -> Ok d1
+    | false,false -> match compare d1 d2 with
+      | 0 -> Ok d1
+      | 1 -> do_merge d1 d2
+      | _ -> do_merge d2 d1
 
   let put k attr =
     let {Attribute.name; save; sign} = attr () in
