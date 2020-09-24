@@ -1,3 +1,4 @@
+open Bap_core_theory
 open Core_kernel
 open Regular.Std
 open Or_error
@@ -138,6 +139,11 @@ let lift3 = Packed.lift3
 type t = Packed.t [@@deriving bin_io]
 
 let create x w = Packed.create (Bitvec.to_bigint x) w [@@inline]
+let code_addr t x = create x (Theory.Target.code_addr_size t) [@@inline]
+let data_addr t x = create x (Theory.Target.data_addr_size t) [@@inline]
+let data_word t x = create x (Theory.Target.bits t) [@@inline]
+
+
 let to_bitvec x = Packed.payload x [@@inline]
 let unsigned x = x [@@inline]
 let signed x = Packed.signed x [@@inline]
@@ -562,6 +568,7 @@ module Mono = Comparable.Make(struct
         | 0 -> compare_mono x y
         | _ -> failwith "Non monomorphic comparison"
   end)
+
 
 module Trie = struct
   module Common = struct

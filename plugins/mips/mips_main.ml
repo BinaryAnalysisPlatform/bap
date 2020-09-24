@@ -39,6 +39,7 @@ module MIPS64_le = Make(M64LE)
 
 let () =
   Config.when_ready (fun _ ->
+      Bap_mips_target.load ();
       register_target `mips (module MIPS32);
       register_target `mipsel (module MIPS32_le);
       register_target `mips64 (module MIPS64);

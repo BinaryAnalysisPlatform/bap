@@ -72,32 +72,28 @@ module T = struct
   let domain =
     KB.Domain.flat ~empty:`unknown ~equal ~inspect:sexp_of_t "arch"
 
+  let persistent = KB.Persistent.of_binable (module struct
+      type t = arch [@@deriving bin_io]
+    end)
   let slot = KB.Class.property ~package:"bap"
       Theory.Program.cls "arch" domain
-      ~persistent:(KB.Persistent.of_binable (module struct
-                     type t = arch [@@deriving bin_io]
-                   end))
-      ~public:true
-      ~desc:"an ISA of the program"
+      ~persistent
 
+  let unit_slot = KB.Class.property ~package:"bap"
+      Theory.Unit.cls "unit-arch" domain
+      ~persistent
 
   let _arch_of_unit_ : unit =
     KB.Rule.(declare ~package:"bap" "arch-of-unit" |>
              require Theory.Label.unit |>
-             require Theory.Unit.Target.arch |>
+             require unit_slot |>
              provide slot |>
-             comment "compute arch from the unit target defintions");
+             comment "propagates arch from the unit");
     let open KB.Syntax in
-    let (>>=?) x f =
-      x >>= function
-      | None -> KB.return `unknown
-      | Some x -> f x in
     KB.promise slot @@ fun obj ->
-    KB.collect Theory.Label.unit obj >>=? fun unit ->
-    KB.collect Theory.Unit.Target.arch unit >>=? fun arch ->
-    KB.return (from_string arch)
-
-
+    KB.collect Theory.Label.unit obj >>= function
+    | None -> KB.return `unknown
+    | Some unit -> KB.collect unit_slot unit
 end
 
 include T

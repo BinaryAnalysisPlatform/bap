@@ -24,53 +24,40 @@ let query doc attr =
       (Error.to_string_hum err) ()
   | Ok bias -> bias
 
+let rec guess_arch t =
+  if Theory.Target.is_unknown t then `unknown
+  else
+    Theory.Target.name t |>
+    KB.Name.unqualified  |>
+    Arch.of_string |> function
+    | Some arch -> arch
+    | None -> guess_arch (Theory.Target.parent t)
+
 module Spec = struct
   module Fact = Ogre.Make(KB)
   open Fact.Syntax
 
-  let provide slot obj value =
-    Fact.lift @@ KB.provide slot obj value
+  type KB.Conflict.t += Spec_inconsistency of Error.t
 
-  let str field slot unit =
-    Fact.request field >>= function
-    | None | Some "" | Some "unknown" ->
-      Fact.return ()
-    | value -> provide slot unit value
+  let domain = KB.Domain.flat "spec"
+      ~empty:Ogre.Doc.empty
+      ~inspect:Ogre.Doc.sexp_of_t
+      ~join:(fun d1 d2 -> match Ogre.Doc.merge d1 d2 with
+          | Ok d -> Ok d
+          | Error err ->
+            Error (Spec_inconsistency err))
+      ~equal:(fun d1 d2 -> Ogre.Doc.compare d1 d2 = 0)
 
-  let bool field slot unit =
-    Fact.request field >>= provide slot unit
+  let slot = KB.Class.property Theory.Unit.cls "unit-spec" domain
+      ~package
+      ~persistent:(KB.Persistent.of_binable (module struct
+                     type t = Ogre.Doc.t [@@deriving bin_io]
+                   end))
 
-  let int field slot unit =
-    Fact.request field >>= function
-    | Some x ->
-      provide slot unit (Some (Int64.to_int_exn x))
-    | None -> Fact.return ()
-
-  let facts fields unit =
-    Fact.List.iter fields ~f:(fun provide -> provide unit)
-
-  let init_unit =
-    let open Theory.Unit in
-    let open Image.Scheme in
-    facts [
-      str arch Target.arch;
-      str subarch Target.subarch;
-      str vendor Target.vendor;
-      str system Target.system;
-      str abi Target.abi;
-      int bits Target.bits;
-      bool is_little_endian Target.is_little_endian;
-    ]
-
-  let provide spec unit =
-    let open KB.Syntax in
-    Fact.exec (init_unit unit) spec >>= function
-    | Error err ->
-      invalid_argf "Failed to provide the image specification \
-                    to the knowledge base: %s"
-        (Error.to_string_hum err) ()
-    | Ok _doc -> KB.return ()
-
+  let () = KB.Conflict.register_printer @@ function
+    | Spec_inconsistency err ->
+      Some (Error.to_string_hum err)
+    | _ -> None
 
   let init arch =
     let module Field = Image.Scheme in
@@ -92,31 +79,27 @@ module Spec = struct
     | Ok doc -> doc
 end
 
-let with_arch arch mems =
+let target_of_spec spec =
   let open KB.Syntax in
-  let width = Size.in_bits (Arch.addr_size arch) in
-  KB.promising Arch.slot ~promise:(fun label ->
-      KB.collect Theory.Label.addr label >>| function
-      | None -> `unknown
-      | Some p ->
-        let p = Word.create p width in
-        if Memmap.contains mems p
-        then arch
-        else `unknown)
+  KB.Object.scoped Theory.Unit.cls @@ fun unit ->
+  KB.provide Spec.slot unit spec >>= fun () ->
+  KB.collect Theory.Unit.target unit
 
-let with_filename spec arch data code path =
+let with_filename spec target data code path =
   let open KB.Syntax in
-  let width = Size.in_bits (Arch.addr_size arch) in
-  let bias = Option.map (query spec Image.Scheme.bias)
-      ~f:(fun x -> Bitvec.(int64 x mod modulus width)) in
+  let width = Theory.Target.code_addr_size target in
+  let bias = query spec Image.Scheme.bias |> Option.map
+               ~f:(fun x -> Bitvec.(int64 x mod modulus width)) in
   KB.promising Theory.Label.unit ~promise:(fun label ->
       KB.collect Theory.Label.addr label >>=? fun addr ->
       let addr = Word.create addr width in
       if Memmap.contains data addr || Memmap.contains code addr
       then
         Theory.Unit.for_file path >>= fun unit ->
-        Spec.provide spec unit >>= fun () ->
+        KB.provide Spec.slot unit spec >>= fun () ->
         KB.provide Theory.Unit.bias unit bias >>= fun () ->
+        KB.provide Theory.Unit.target unit target >>= fun () ->
+        KB.provide Spec.slot unit spec >>= fun () ->
         KB.provide Theory.Unit.path unit (Some path) >>| fun () ->
         Some unit
       else KB.return None)
@@ -182,11 +165,14 @@ module State = struct
     KB.Domain.flat ~empty ~equal "disassembly" ~inspect
 
   module Toplevel = struct
-    let run spec arch ~code ~data file k =
+    let run spec target ~code ~data file k =
       let result = Toplevel.var "disassembly-result" in
+      let compute_target = if Theory.Target.is_unknown target
+        then target_of_spec spec
+        else KB.return target in
       Toplevel.put result begin
-        with_arch arch code @@ fun () ->
-        with_filename spec arch code data file @@ fun () ->
+        compute_target >>= fun target ->
+        with_filename spec target code data file @@ fun () ->
         k
       end;
       Toplevel.get result
@@ -197,6 +183,7 @@ type state = State.t [@@deriving bin_io]
 
 type t = {
   arch    : arch;
+  target  : Theory.Target.t;
   spec    : Ogre.doc;
   state   : State.t;
   disasm  : disasm Lazy.t;
@@ -206,6 +193,7 @@ type t = {
   symbols : Symtab.t Lazy.t;
   passes  : string list;
 } [@@deriving fields]
+
 
 module Info = struct
   let file,got_file = Stream.create ()
@@ -227,12 +215,29 @@ module Input = struct
     spec : Ogre.doc;
     file : string;
     finish : t -> t;
+    target : Theory.Target.t;
   }
 
   type t = unit -> result
 
-  let create ?(finish=ident) arch file ~code ~data () = {
-    arch; file; code; data; finish; spec=Spec.init arch;
+
+  let custom
+      ?(finish=ident)
+      ?(filename="")
+      ?(code=Memmap.empty)
+      ?(data=Memmap.empty) target () = {
+    arch=guess_arch target; file=filename; code; data; finish;
+    target;
+    spec = Ogre.Doc.empty
+  }
+
+  let create
+      ?(finish=ident) arch file ~code ~data () = {
+    arch; file; code; data; finish;
+    target = Theory.Target.unknown;
+    spec = match arch with
+      | #Arch.unknown -> Ogre.Doc.empty
+      | arch -> Spec.init arch;
   }
 
   let loaders = String.Table.create ()
@@ -244,13 +249,14 @@ module Input = struct
 
   let is_data v = not (is_code v)
 
-  let of_image finish file img = {
+  let result_of_image ?(target=Theory.Target.unknown) finish file img = {
     arch = Image.arch img;
     data = Memmap.filter ~f:is_data (Image.memory img);
     code = Memmap.filter ~f:is_code (Image.memory img);
     spec = Image.spec img;
     file;
     finish;
+    target;
   }
 
   let symtab_agent =
@@ -268,7 +274,7 @@ module Input = struct
     Symbolizer.provide symtab_agent image_symbols;
     Rooter.provide image_roots
 
-  let of_image ?loader filename =
+  let of_image ?target ?loader filename =
     Image.create ?backend:loader filename >>| fun (img,warns) ->
     List.iter warns ~f:(fun e -> warning "%a" Error.pp e);
     let spec = Image.spec img in
@@ -285,30 +291,51 @@ module Input = struct
                   Term.set_attr sub Sub.entry_point ()
                 | _ -> sub))
     } in
-    of_image finish filename img
+    result_of_image ?target finish filename img
 
-  let from_image ?loader filename () =
-    of_image ?loader filename |> ok_exn
+  let from_image ?target ?loader filename () =
+    of_image ?target ?loader filename |> ok_exn
 
-  let file ?loader ~filename = match loader with
-    | None -> from_image filename
+  let load ?target ?loader filename = match loader with
+    | None -> from_image ?target filename
     | Some name -> match Hashtbl.find loaders name with
-      | None -> from_image ?loader filename
+      | None -> from_image ?target ?loader filename
       | Some load -> load filename
+
+  let file ?loader ~filename = load ?loader filename
 
   let null arch : addr =
     Addr.of_int 0 ~width:(Arch.addr_size arch |> Size.in_bits)
 
-  let binary ?base arch ~filename () =
-    let big = Bap_fileutils.readfile filename in
+  let raw ?(target=Theory.Target.unknown) ?(filename="") ?base arch big () =
     if Bigstring.length big = 0 then invalid_arg "file is empty";
-    let base = Option.value base ~default:(null arch) in
-    let mem = Memory.create (Arch.endian arch) base big |> ok_exn in
+    let addr_size = if Theory.Target.is_unknown target
+      then Arch.addr_size arch |> Size.in_bits
+      else Theory.Target.code_addr_size target in
+    let endian = if Theory.Target.is_unknown target
+      then Arch.endian arch else
+      if Theory.Target.endianness target =
+         Theory.Target.Endianness.le
+      then LittleEndian else BigEndian in
+    let base = Option.value base ~default:(Addr.zero addr_size) in
+    let mem = Memory.create endian base big |> ok_exn in
     let section = Value.create Image.section "bap.user" in
     let code = Memmap.add Memmap.empty mem section in
     let data = Memmap.empty  in
     let spec = Spec.init arch in
-    {arch; data; code; file = filename; finish = ident; spec}
+    {arch; data; code; file = filename; finish = ident; spec; target}
+
+  let binary ?base arch ~filename =
+    raw ?base arch (Bap_fileutils.readfile filename)
+
+  let raw_file ?base target filename =
+    raw ~target ?base `unknown (Bap_fileutils.readfile filename)
+
+  let from_bigstring ?base target data =
+    raw ~target ?base `unknown data
+
+  let from_string ?base target data =
+    from_bigstring ?base target (Bigstring.of_string data)
 
   let available_loaders () =
     Hashtbl.keys loaders @ Image.available_backends ()
@@ -365,6 +392,19 @@ let unused_options =
                please consult the documentation for the proper \
                alternative" name))
 
+let empty target = {
+  arch = guess_arch target;
+  target;
+  spec = Ogre.Doc.empty;
+  state = State.empty;
+  memory = Memmap.empty;
+  storage = Dict.empty;
+  program = lazy (Program.create ());
+  symbols = lazy Symtab.empty;
+  disasm = lazy (Disasm.create Graphs.Cfg.empty);
+  passes = []
+}
+
 let (=?) name = Option.map ~f:(fun _ -> name)
 
 let create
@@ -384,14 +424,14 @@ let create
       "rooter" =? p4;
       "rooter" =? p5;
     ];
-    let {Input.arch; data; code; file; spec; finish} = read () in
+    let {Input.arch; data; code; file; spec; finish; target} = read () in
     Signal.send Info.got_file file;
     Signal.send Info.got_arch arch;
     Signal.send Info.got_data data;
     Signal.send Info.got_code code;
     Signal.send Info.got_spec spec;
     let run k =
-      State.Toplevel.run spec arch ~code ~data file k in
+      State.Toplevel.run spec target ~code ~data file k in
     let state = match state with
       | Some state -> state
       | None ->
@@ -420,7 +460,8 @@ let create
       symbols;
       arch; memory=union_memory code data;
       storage = Dict.set Dict.empty filename file;
-      passes=[]
+      passes=[];
+      target;
     }
   with
   | Toplevel.Conflict err ->
@@ -432,6 +473,7 @@ let create
   | exn -> Or_error.of_exn ~backtrace:`Get exn
 
 let specification = spec
+let specification_slot = Spec.slot
 
 let symbols {symbols} = Lazy.force symbols
 let disasm {disasm} = Lazy.force disasm
@@ -940,21 +982,16 @@ let () =
   Data.set_module_name instance "Bap.Std.Project"
 
 let () =
-  KB.Rule.(declare ~package:"bap" "project-filename" |>
-           dynamic ["input"] |>
-           dynamic ["data"; "code"; "path"] |>
-           require Theory.Label.addr |>
-           provide Theory.Label.unit |>
-           comment {|
-On [Project.create input] provides [path] for the address [x]
-if [x] in [data] or [x] in [code].
-|});
-  KB.Rule.(declare ~package:"bap" "project-arch" |>
-           dynamic ["input"] |>
-           dynamic ["arch"; "code"] |>
-           require Theory.Label.addr |>
-           provide Arch.slot |>
-           comment {|
-On [Project.create input] provides [arch] for the address [x]
-if [x] in [code].
-|})
+  let open KB.Rule in
+  declare ~package:"bap" "project-filename" |>
+  dynamic ["input"] |>
+  dynamic ["data"; "code"; "path"] |>
+  dynamic ["loader"] |>
+  require Theory.Label.addr |>
+  provide Theory.Label.unit |>
+  comment {|
+  On [Project.create input] provides [unit] for the address [x]
+  if [x] in [data] or [x] in [code]. The [unit] is initialized
+  with the specification from the loader, filename, target name,
+  etc.
+|};

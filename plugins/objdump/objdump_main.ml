@@ -187,9 +187,10 @@ let provide_function_starts_and_names ctxt : unit =
     KB.collect Theory.Label.unit label >>=? fun unit ->
     KB.collect Theory.Unit.path unit >>=? fun path ->
     KB.collect Theory.Unit.bias unit >>= fun bias ->
-    KB.collect Theory.Unit.Target.bits unit >>= fun size ->
+    KB.collect Theory.Unit.target unit >>|
+    Theory.Target.code_addr_size >>= fun size ->
     KB.collect key_slot label >>|? fun key ->
-    f (Repository.name repo ?size ?bias ~path key) in
+    f (Repository.name repo ~size ?bias ~path key) in
   let is_known = function
     | None -> None
     | Some _ -> Some true in

@@ -17,7 +17,8 @@ let provide_roots file funcs =
     KB.collect Theory.Label.addr label >>=? fun addr ->
     KB.collect Theory.Label.unit label >>=? fun unit ->
     KB.collect Theory.Unit.bias unit >>= fun bias ->
-    KB.collect Theory.Unit.Target.bits unit >>=? fun bits ->
+    KB.collect Theory.Unit.target unit >>|
+    Theory.Target.code_addr_size >>= fun bits ->
     KB.collect Theory.Unit.path unit >>|? fun path ->
     if String.equal path file then
       let bias = Option.value bias ~default:Bitvec.zero in

@@ -11,4 +11,6 @@ val endian : arch -> endian
 
 val slot : (Theory.program, arch) KB.slot
 
+val unit_slot : (Theory.Unit.cls, arch) KB.slot
+
 include Regular.S with type t := arch

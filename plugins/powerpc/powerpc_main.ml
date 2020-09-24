@@ -40,6 +40,7 @@ module PowerPC64_le = Make(T64_le)
 let () =
   Config.when_ready (fun _ ->
       info "Providing PowerPC semantics in BIL";
+      Bap_powerpc_target.load ();
       Powerpc_add.init ();
       Powerpc_branch.init ();
       Powerpc_compare.init ();

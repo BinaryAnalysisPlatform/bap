@@ -39,7 +39,8 @@ let belongs_to_subr subr insn =
     require Theory.Label.addr subr @@ fun subr ->
     require Theory.Label.unit insn @@ fun unit ->
     require Theory.Label.addr insn @@ fun insn ->
-    require Theory.Unit.Target.bits unit @@ fun bits ->
+    KB.collect Theory.Unit.target unit >>|
+    Theory.Target.code_addr_size >>= fun bits ->
     KB.collect Project.State.slot unit >>| fun state ->
     let subrs = Project.State.subroutines state in
     let insn = Word.create insn bits
@@ -67,25 +68,12 @@ let iter_subr entry subrs disasm ~f =
     ~node:(fun insns () -> KB.List.iter insns ~f)
     ~edge:(fun _ _ _ -> KB.return ())
 
-
-let make_triple unit =
-  KB.collect Theory.Unit.Target.arch   unit >>= fun arch ->
-  KB.collect Theory.Unit.Target.subarch unit >>= fun sub ->
-  KB.collect Theory.Unit.Target.vendor unit >>= fun vendor ->
-  KB.collect Theory.Unit.Target.system unit >>= fun system ->
-  KB.collect Theory.Unit.Target.abi unit >>| fun abi ->
-  let (=?) x default = Option.value x ~default in
-  sprintf "%s%s-%s-%s-%s"
-    (arch =? "unknown") (sub =? "") (vendor =? "none")
-    (system =? "unknown") (abi =? "unknown")
-
-
 let print_unit () =
   KB.objects Theory.Unit.cls >>=
   KB.Seq.iter ~f:(fun obj ->
       KB.Object.repr Theory.Unit.cls obj >>= fun str ->
-      make_triple obj >>| fun triple ->
-      Format.printf "%-40s %s@\n" str triple)
+      KB.collect Theory.Unit.target obj >>| fun triple ->
+      Format.printf "%-40s %a@\n" str Theory.Target.pp triple)
 
 let ensure x yes =
   x >>= function
@@ -112,10 +100,6 @@ let list_insns unit slots =
   KB.Seq.iter ~f:(fun obj ->
       ensure (belongs_to_unit unit obj) @@ fun () ->
       print_insn slots obj)
-
-let word_for_unit unit bitvec =
-  KB.collect Theory.Unit.Target.bits unit >>|? fun bits ->
-  Some (Word.create bitvec bits)
 
 let print_subr unit name_or_addr slots =
   KB.collect Project.State.slot unit >>= fun state ->

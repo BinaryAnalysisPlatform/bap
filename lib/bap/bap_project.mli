@@ -17,6 +17,8 @@ type second = float
 
 val state : t -> state
 
+val empty : Theory.Target.t -> t
+
 val create :
   ?package:string ->
   ?state:state ->
@@ -28,7 +30,10 @@ val create :
   input -> t Or_error.t
 
 val arch : t -> arch
+val target : t -> Theory.Target.t
 val specification : t -> Ogre.doc
+val specification_slot : (Theory.Unit.cls, Ogre.Doc.t) KB.slot
+
 val program : t -> program term
 val with_program : t -> program term -> t
 val symbols : t -> symtab
@@ -68,6 +73,19 @@ end
 
 module Input : sig
   type t = input
+
+  val load : ?target:Theory.Target.t -> ?loader:string -> string -> t
+  val custom :
+    ?finish:(project -> project) ->
+    ?filename:string ->
+    ?code:value memmap ->
+    ?data:value memmap ->
+    Theory.Target.t -> t
+
+  val raw_file : ?base:addr -> Theory.Target.t -> string -> t
+  val from_string : ?base:addr -> Theory.Target.t -> string -> t
+  val from_bigstring : ?base:addr -> Theory.Target.t -> Bigstring.t -> t
+
   val file : ?loader:string -> filename:string -> t
   val binary : ?base:addr -> arch -> filename:string -> t
 
@@ -77,6 +95,7 @@ module Input : sig
     string ->
     code:value memmap ->
     data:value memmap -> t
+
   val register_loader : string -> (string -> t) -> unit
   val available_loaders : unit -> string list
 end

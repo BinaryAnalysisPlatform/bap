@@ -3,7 +3,7 @@ open Bap_knowledge
 module KB = Knowledge
 
 module Theory = struct
-  module Value   = Bap_core_theory_value
+  module Value = Bap_core_theory_value
   module Bool = Value.Bool
   module Bitv = Value.Bitv
   module Mem = Value.Mem
@@ -14,6 +14,8 @@ module Theory = struct
   module Program = Bap_core_theory_program
   module Label = Program.Label
   module Unit = Program.Unit
+  module Source = Program.Source
+  module Target = Bap_core_theory_target
   type program = Program.cls
 
 
