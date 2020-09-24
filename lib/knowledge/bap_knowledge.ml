@@ -209,41 +209,6 @@ end = struct
     then name
     else package ^ ":" ^ name
 
-  module Id : sig
-    type t [@@deriving bin_io, compare, sexp]
-    val intern : fullname -> t
-    val fullname : t -> fullname
-    val hash : t -> int
-  end = struct
-
-    let registry = Hashtbl.create (module Int63)
-
-    (* using FNV-1a algorithm *)
-    let hash_name =
-      let open Int63 in
-      let init = of_int64_exn 0xCBF29CE484222325L in
-      let m = of_int64_exn 0x100000001B3L in
-      let hash init = String.fold ~init ~f:(fun h c ->
-          (h lxor of_int (Char.to_int c)) * m) in
-      fun {package; name} ->
-        hash (hash init package) name
-
-    let intern name =
-      let id = hash_name name in
-      match Hashtbl.find registry id with
-      | None -> Hashtbl.add_exn registry id name; id
-      | Some name' ->
-        if equal_fullname name name'
-        then id
-        else invalid_argf "Names %S and %S have the same hash value, \
-                           Change one of them."
-            (full name) (full name') ()
-
-    let fullname = Hashtbl.find_exn registry
-    include Int63
-  end
-  type t = Id.t [@@deriving bin_io, compare, sexp]
-
   let separator = ':'
   let escape_char = '\\'
   let escapeworthy = [separator]
@@ -339,6 +304,48 @@ end = struct
           String.subo s ~pos:(len+1) in
         {package; name}
   end
+
+  module Id : sig
+    type t [@@deriving bin_io, compare, sexp]
+    val intern : fullname -> t
+    val fullname : t -> fullname
+    val hash : t -> int
+  end = struct
+
+    let registry = Hashtbl.create (module Int63)
+
+    (* using FNV-1a algorithm *)
+    let hash_name =
+      let open Int63 in
+      let init = of_int64_exn 0xCBF29CE484222325L in
+      let m = of_int64_exn 0x100000001B3L in
+      let hash init = String.fold ~init ~f:(fun h c ->
+          (h lxor of_int (Char.to_int c)) * m) in
+      fun {package; name} ->
+        hash (hash init package) name
+
+    let intern name =
+      let id = hash_name name in
+      match Hashtbl.find registry id with
+      | None -> Hashtbl.add_exn registry id name; id
+      | Some name' ->
+        if equal_fullname name name'
+        then id
+        else invalid_argf "Names %S and %S have the same hash value, \
+                           Change one of them."
+            (full name) (full name') ()
+
+    let fullname = Hashtbl.find_exn registry
+    include Int63
+    let sexp_of_t id =
+      Sexp.Atom (Full.to_string (fullname id))
+    let t_of_sexp = function
+      | Sexp.Atom str -> intern (Full.read str)
+      | _ -> invalid_arg "KB.Name.sexp_of_t: expects an atom"
+
+  end
+  type t = Id.t [@@deriving bin_io, compare, sexp]
+
 
   let full = Id.fullname
 
