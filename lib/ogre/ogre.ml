@@ -4,14 +4,14 @@ open Format
 
 type entry = {
   fields : string String.Map.t
-} [@@deriving compare, sexp]
+} [@@deriving bin_io, compare, sexp]
 
 type row = {row : entry array} [@@deriving sexp]
 type 'a seq = 'a Sequence.t
 
 module Type = struct
   type typ = Int | Str | Bool | Float
-  [@@deriving compare,enumerate,sexp]
+  [@@deriving bin_io, compare,enumerate,sexp]
   type 'a t = {
     parse : string -> 'a option;
     pack : 'a -> string;
@@ -26,9 +26,9 @@ module Type = struct
   type header = {
     fname : string;
     ftype : typ;
-  } [@@deriving compare, sexp]
+  } [@@deriving bin_io, compare, sexp]
 
-  type signature = header list [@@deriving compare, sexp]
+  type signature = header list [@@deriving bin_io, compare, sexp]
 
   type ('f,'k) scheme = {
     read : entry -> 'a -> 'b option;
@@ -169,18 +169,21 @@ let declare = Attribute.declare
 
 
 module Doc = struct
+  module Problem = Error
   module Error = Monad.Result.Error
   open Error.Syntax
 
   type t = {
     scheme  : Type.signature String.Map.t;
     entries : entry list String.Map.t;
-  } [@@deriving compare]
+  } [@@deriving bin_io, compare]
 
   let empty = {
     scheme = String.Map.empty;
     entries = String.Map.empty;
   }
+
+  let is_empty {scheme}= Map.is_empty scheme
 
   let errorf fmt = Or_error.errorf fmt
 
@@ -394,6 +397,24 @@ module Doc = struct
     Or_error.try_with_join ~backtrace:true (fun () ->
         Sexp.scan_sexps (String.strip str |> Lexing.from_string) |>
         of_sexps)
+
+  let sexps_of_t {scheme; entries} =
+    let attrs =
+      Map.fold entries ~init:[] ~f:(fun ~key:n ~data:vs sexps ->
+          List.fold vs ~init:sexps ~f:(fun sexps v ->
+              sexp_of_attr scheme n v :: sexps)) in
+    Map.fold scheme ~init:attrs ~f:(fun ~key:n ~data:s xs ->
+        sexp_of_decl (n,s) :: xs)
+
+  let sexp_of_t doc = Sexp.List (sexps_of_t doc)
+
+  let t_of_sexp = function
+    | Sexp.Atom _ -> invalid_arg "Ogre.Doc.t_of_sexp: expects a list"
+    | List exp -> match of_sexps exp with
+      | Ok x -> x
+      | Error err ->
+        invalid_argf "Ogre.Doc.t_of_sexp: ill-formed document: %s"
+          (Problem.to_string_hum err) ()
 
   let to_string x = asprintf "%a" pp x
 end

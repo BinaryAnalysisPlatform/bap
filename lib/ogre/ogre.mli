@@ -510,11 +510,16 @@ end
 
 *)
 module Doc : sig
-  type t = doc [@@deriving compare]
+  type t = doc [@@deriving bin_io, compare, sexp]
 
 
   (** [empty] creates an empty document  *)
   val empty : doc
+
+
+  (** [is_empty x] is true iff [x] is [empty].
+      @since 2.2.0 *)
+  val is_empty : doc -> bool
 
 
   (** [merge d1 d2] merges two documents in one. Returns an error,
