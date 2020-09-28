@@ -226,6 +226,23 @@ let enable_arch () =
   then `x86
   else `unknown
 
+
+let llvm_x86_encoding =
+  Theory.Language.declare ~package:"llvm" "x86"
+let llvm_x86_64_encoding =
+  Theory.Language.declare ~package:"llvm" "x86-64"
+
+let enable_decoder () =
+  let open KB.Syntax in
+  KB.promise Theory.Label.encoding @@ fun label ->
+  Theory.Label.target label >>| fun t ->
+  if Theory.Target.belongs amd64 t
+  then llvm_x86_64_encoding else
+  if Theory.Target.belongs parent t
+  then llvm_x86_encoding
+  else Theory.Language.unknown
+
 let load () =
   enable_loader ();
-  enable_arch ()
+  enable_arch ();
+  enable_decoder ()
