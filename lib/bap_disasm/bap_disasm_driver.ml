@@ -7,14 +7,17 @@ open KB.Syntax
 
 module Dis = Bap_disasm_basic
 module Insn = Bap_disasm_insn
+module Target = Theory.Target
 
 type full_insn = Dis.full_insn [@@deriving sexp_of]
 type insn = Insn.t [@@deriving sexp_of]
 type edge = [`Jump | `Cond | `Fall] [@@deriving compare]
 
+type encoding = Theory.Language.t [@@deriving bin_io, compare, equal]
+let unknown = Theory.Language.unknown
 
 type jump = {
-  arch : Arch.t;
+  encoding : encoding;
   call : bool;
   barrier : bool;
   indirect : bool;
@@ -23,8 +26,8 @@ type jump = {
 
 module Machine : sig
   type task = private
-    | Dest of {dst : addr; parent : task option; arch : arch option}
-    | Fall of {dst : addr; parent : task; delay : slot; arch : arch option}
+    | Dest of {dst : addr; parent : task option; encoding : encoding}
+    | Fall of {dst : addr; parent : task; delay : slot; encoding : encoding}
     | Jump of {src : addr; age: int; dsts : jump; parent : task}
   and slot = private
     | Ready of task option
@@ -52,23 +55,23 @@ module Machine : sig
     data:Set.M(Addr).t ->
     init:Set.M(Addr).t ->
     empty:(state -> 'a) ->
-    ready:(state -> arch option -> mem -> 'a) -> 'a
+    ready:(state -> encoding -> mem -> 'a) -> 'a
 
   val view : state -> mem ->
     empty:(state -> 'a) ->
-    ready:(state -> arch option -> mem -> 'a) -> 'a
+    ready:(state -> encoding -> mem -> 'a) -> 'a
 
-  val failed : state -> arch -> addr -> state
-  val jumped : state -> arch -> mem -> jump -> int -> state
-  val stopped : state -> arch -> state
+  val failed : state -> encoding -> addr -> state
+  val jumped : state -> encoding -> mem -> jump -> int -> state
+  val stopped : state -> encoding -> state
   val skipped : state -> addr -> state
-  val moved  : state -> arch -> mem -> state
+  val moved  : state -> encoding -> mem -> state
   val is_ready : state -> bool
 end = struct
 
   type task =
-    | Dest of {dst : addr; parent : task option; arch : arch option}
-    | Fall of {dst : addr; parent : task; delay : slot; arch : arch option}
+    | Dest of {dst : addr; parent : task option; encoding : encoding}
+    | Fall of {dst : addr; parent : task; delay : slot; encoding : encoding}
     | Jump of {src : addr; age: int; dsts : jump; parent : task}
   and slot =
     | Ready of task option
@@ -78,8 +81,11 @@ end = struct
 
   let init_work init roots =
     Set.to_sequence ~order:`Decreasing roots |>
-    Seq.fold ~init ~f:(fun work root ->
-        Dest {dst=root; parent=None; arch=None} :: work)
+    Seq.fold ~init ~f:(fun work root -> Dest {
+        dst=root;
+        parent=None;
+        encoding=unknown
+      } :: work)
 
   type state = {
     stop : bool;
@@ -153,9 +159,11 @@ end = struct
   let rec step s = match s.work with
     | [] ->
       if Set.is_empty s.usat then {s with stop = true}
-      else step {s with work = [
-          Dest {dst=Set.min_elt_exn s.usat; parent=None; arch=None}
-        ]}
+      else step {s with work = [Dest {
+          dst=Set.min_elt_exn s.usat;
+          parent=None;
+          encoding=unknown
+        }]}
     | Dest {dst=next} as curr :: work
       when is_data s next || is_slot s next ->
       step @@ cancel curr {s with work}
@@ -182,7 +190,7 @@ end = struct
         Set.fold resolved ~init ~f:(fun s next -> {
               s with
               work = Dest {
-                  dst=next; parent = Some jump; arch = Some dsts.arch;
+                  dst=next; parent = Some jump; encoding = dsts.encoding;
                 } :: s.work})
     | Jump jmp as self :: Fall ({dst=next} as slot) :: work ->
       let s = cancel_beg s next in
@@ -205,7 +213,7 @@ end = struct
              usat = Set.remove s.usat addr
     }
 
-  let jumped s arch mem dsts delay =
+  let jumped s encoding mem dsts delay =
     let s = decoded s mem in
     let parent = s.curr in
     let src = Memory.min_addr mem in
@@ -213,50 +221,53 @@ end = struct
     let next = Addr.succ (Memory.max_addr mem) in
     let next =
       if dsts.barrier && delay = 0
-      then Dest {dst=next; parent=None; arch=None}
-      else Fall {dst=next; parent=jump; delay = Ready None; arch=Some arch} in
+      then Dest {dst=next; parent=None; encoding=unknown}
+      else Fall {dst=next; parent=jump; delay = Ready None; encoding} in
     step {s with work = jump :: next :: s.work }
 
   let insert_delayed t = function
     | x :: xs -> x :: t :: xs
     | [] -> [t]
 
-  let moved s arch mem =
+  let moved s encoding mem =
     let parent = match s.curr with
       | Fall {delay=Ready (Some parent)} -> parent
       | _ -> s.curr in
     let next = Addr.succ (Memory.max_addr mem) in
     let next = match parent with
-      | Jump {dsts={barrier=true}} ->
-        Dest {dst=next; parent=None; arch=None}
+      | Jump {dsts={barrier=true}} -> Dest {
+          dst=next;
+          parent=None;
+          encoding=unknown
+        }
       | parent -> Fall {
           dst = next;
           parent;
           delay = Ready None;
-          arch = Some arch;
+          encoding;
         } in
     let work = match s.curr with
       | Fall {delay = Delay} -> insert_delayed next s.work
       | _ -> next :: s.work in
     step @@ decoded {s with work} mem
 
-  let failed s _arch addr =
+  let failed s _encoding addr =
     step @@ cancel s.curr @@ mark_data s addr
 
   let skipped s addr =
     step {s with usat = Set.remove s.usat addr }
 
-  let stopped s _arch =
+  let stopped s _encoding =
     step @@ cancel s.curr @@ mark_data s s.addr
 
-  let task_arch = function
-    | Fall {arch} | Dest {arch} -> arch
-    | Jump _ -> None
+  let task_encoding = function
+    | Fall {encoding} | Dest {encoding} -> encoding
+    | Jump _ -> unknown
 
   let rec view s base ~empty ~ready =
     if s.stop then empty (step s)
     else match Memory.view ~from:s.addr base with
-      | Ok mem -> ready s (task_arch s.curr) mem
+      | Ok mem -> ready s (task_encoding s.curr) mem
       | Error _ ->
         let s = match s.curr with
           | Fall _ as task -> cancel task s
@@ -275,7 +286,7 @@ end = struct
       work; data; usat=code;
       addr = start;
       debt = [];
-      curr = Dest {dst = start; parent = None; arch=None};
+      curr = Dest {dst = start; parent = None; encoding=unknown};
       stop = false;
       dels = Set.empty (module Addr);
       begs = Map.empty (module Addr);
@@ -292,11 +303,11 @@ let new_insn mem insn =
   code
 
 let collect_dests code =
-  KB.collect Arch.slot code >>= fun arch ->
-  let width = Size.in_bits (Arch.addr_size arch) in
+  Theory.Label.target code >>= fun target ->
+  KB.collect Theory.Label.encoding code >>= fun encoding ->
   KB.collect Theory.Program.Semantics.slot code >>= fun insn ->
   let init = {
-    arch;
+    encoding;
     call = Insn.(is call insn);
     barrier = Insn.(is barrier insn);
     indirect = false;
@@ -307,15 +318,15 @@ let collect_dests code =
   | Some dests ->
     Set.to_sequence dests |>
     KB.Seq.fold ~init ~f:(fun dest label ->
-        KB.collect Arch.slot label >>= fun arch ->
+        KB.collect Theory.Label.encoding label >>= fun encoding ->
         KB.collect Theory.Label.addr label >>| function
         | Some d -> {
             dest with
-            arch;
-            resolved = Set.add dest.resolved (Word.create d width)
+            encoding;
+            resolved = Set.add dest.resolved (Word.code_addr target d)
           }
         | None ->
-          {dest with indirect=true; arch}) >>= fun res ->
+          {dest with indirect=true; encoding}) >>= fun res ->
     KB.return res
 
 let pp_addr_opt ppf = function
@@ -347,63 +358,63 @@ let classify_mem mem =
         | Some true -> (code,data,Set.add root addr)
         | _ -> (code,data,root))
 
-let switch arch s = match Dis.create (Arch.to_string arch) with
+let create_disassembler language =
+  let name = Theory.Language.name language in
+  let backend = KB.Name.package name
+  and triple = KB.Name.unqualified name in
+  Dis.create ~backend triple
+
+let switch lang s =
+  match create_disassembler lang with
   | Error _ -> s
   | Ok dis -> Dis.switch s dis
 
-let rec next_arch state arch code = match arch with
-  | Some arch -> KB.return arch
-  | None ->
+let rec next_encoding state current code =
+  if Theory.Language.equal unknown current
+  then
     let addr = Memory.min_addr code in
     KB.Object.scoped Theory.Program.cls @@ fun obj ->
     KB.provide Theory.Label.addr obj (Some (Word.to_bitvec addr)) >>= fun () ->
-    KB.collect Arch.slot obj >>= function
-    | #Arch.unknown -> use_unit_arch_or_skip state code addr obj
-    | arch -> KB.return arch
-and use_unit_arch_or_skip state code addr label =
-  KB.collect Theory.Label.unit label >>= function
-  | None -> skip state addr code
-  | Some unit ->
-    KB.collect Arch.unit_slot unit >>= function
-    |#Arch.unknown -> skip state addr code
-    | arch -> KB.return arch
+    KB.collect Theory.Label.encoding obj >>= fun encoding ->
+    if Theory.Language.equal unknown encoding
+    then skip state addr code
+    else KB.return encoding
+  else KB.return current
 and skip state addr code =
   Machine.view (Machine.skipped state addr) code
-    ~empty:(fun _ -> KB.return `unknown)
-    ~ready:next_arch
-
-
+    ~empty:(fun _ -> KB.return unknown)
+    ~ready:next_encoding
 
 let scan_mem ~code ~data ~funs debt base : Machine.state KB.t =
   let step d s =
     if Machine.is_ready s then KB.return s
     else Machine.view s base
-        ~ready:(fun s arch mem ->
-            next_arch s arch mem >>= fun arch ->
-            Dis.jump (switch arch d) mem s)
+        ~ready:(fun s encoding mem ->
+            next_encoding s encoding mem >>= fun encoding ->
+            Dis.jump (switch encoding d) mem s)
         ~empty:KB.return in
   Machine.start base ~debt ~code ~data ~init:funs
-    ~ready:(fun init arch mem ->
-        next_arch init arch mem >>= fun arch ->
-        match Dis.create (Arch.to_string arch) with
+    ~ready:(fun init encoding mem ->
+        next_encoding init encoding mem >>= fun encoding ->
+        match create_disassembler encoding with
         | Error _ -> KB.return init
         | Ok disasm ->
           Dis.run disasm mem ~stop_on:[`Valid]
             ~return:KB.return ~init
             ~stopped:(fun d s ->
-                step d (Machine.stopped s arch))
+                step d (Machine.stopped s encoding))
             ~hit:(fun d mem insn s ->
                 new_insn mem insn >>= fun label ->
-                KB.provide Arch.slot label arch >>= fun () ->
+                KB.provide Theory.Label.encoding label encoding >>= fun () ->
                 collect_dests label >>= fun dests ->
                 if Set.is_empty dests.resolved &&
                    not dests.indirect then
-                  step d @@ Machine.moved s arch mem
+                  step d @@ Machine.moved s encoding mem
                 else
                   delay mem insn >>= fun delay ->
-                  step d @@ Machine.jumped s arch mem dests delay)
+                  step d @@ Machine.jumped s encoding mem dests delay)
             ~invalid:(fun d _ s ->
-                step d (Machine.failed s arch s.addr)))
+                step d (Machine.failed s encoding s.addr)))
     ~empty:KB.return
 
 type insns = Theory.Label.t list
@@ -488,7 +499,7 @@ let merge t1 t2 = {
   jmps = Map.merge t1.jmps t2.jmps ~f:(fun ~key:_ -> function
       | `Left dsts | `Right dsts -> Some dsts
       | `Both (d1,d2) -> Some {
-          arch = d1.arch;
+          encoding = d1.encoding;
           call = d1.call || d2.call;
           barrier = d1.barrier || d2.barrier;
           indirect = d1.indirect || d2.indirect;
@@ -513,12 +524,14 @@ let execution_order stack =
 
 let always _ = KB.return true
 
+
+
 let with_disasm beg cfg f =
   Theory.Label.for_addr (Word.to_bitvec beg) >>=
-  KB.collect Arch.slot >>= fun arch ->
-  match Dis.create (Arch.to_string arch) with
+  KB.collect Theory.Label.encoding >>= fun language ->
+  match create_disassembler language with
   | Error _ -> KB.return (cfg,None)
-  | Ok dis -> f arch dis
+  | Ok dis -> f language dis
 
 let explore
     ?entry:start ?(follow=always) ~block ~node ~edge ~init
@@ -535,7 +548,7 @@ let explore
     if Set.mem data beg then KB.return (cfg,None)
     else follow beg >>= function
       | false -> KB.return (cfg,None)
-      | true -> with_disasm beg cfg @@ fun _arch dis ->
+      | true -> with_disasm beg cfg @@ fun _encoding dis ->
         match Hashtbl.find blocks beg with
         | Some block -> KB.return (cfg, Some block)
         | None -> match find_base beg with
