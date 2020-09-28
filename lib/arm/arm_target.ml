@@ -61,7 +61,7 @@ end
 
 
 module type ARM = sig
-  val endianness : Theory.Target.endianness
+  val endianness : Theory.endianness
   val parent : Theory.Target.t
   val v4 : Theory.Target.t
   val v4t : Theory.Target.t
@@ -87,12 +87,12 @@ module type ARM = sig
   val v86a : Theory.Target.t
 end
 
-module type Endianness =  sig val endianness : Theory.Target.endianness end
+module type Endianness =  sig val endianness : Theory.endianness end
 module Family (Order : Endianness) = struct
   include Order
 
   let ordered name =
-    let order = Theory.Target.Endianness.name endianness in
+    let order = Theory.Endianness.name endianness in
     name ^ "+" ^ KB.Name.unqualified order
 
   let (<:) parent name =
@@ -101,7 +101,7 @@ module Family (Order : Endianness) = struct
     else Theory.Target.declare ~package (ordered name) ~parent
         ~nicknames:[name]
 
-  let is_bi_endian = Theory.Target.Endianness.(equal bi) endianness
+  let is_bi_endian = Theory.Endianness.(equal bi) endianness
 
   let v4 =
     if is_bi_endian
@@ -166,19 +166,9 @@ module Family (Order : Endianness) = struct
   let parent = if is_bi_endian then v7 else v4
 end
 
-module LE = Family(struct
-    let endianness = Theory.Target.Endianness.le
-  end)
-
-
-module Bi = Family(struct
-    let endianness = Theory.Target.Endianness.bi
-  end)
-
-
-module EB = Family(struct
-    let endianness = Theory.Target.Endianness.eb
-  end)
+module LE = Family(struct let endianness = Theory.Endianness.le end)
+module Bi = Family(struct let endianness = Theory.Endianness.bi end)
+module EB = Family(struct let endianness = Theory.Endianness.eb end)
 
 let family_of_endian is_little : (module ARM) = match is_little with
   | None -> (module Bi)

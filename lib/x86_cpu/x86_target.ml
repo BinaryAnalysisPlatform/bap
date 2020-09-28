@@ -151,7 +151,7 @@ let i86 = Theory.Target.declare ~package "i86"
     ~data:M16.data
     ~code:M16.data
     ~vars:M16.vars
-    ~endianness:Theory.Target.Endianness.le
+    ~endianness:Theory.Endianness.le
 
 let i186 = Theory.Target.declare ~package "i186"
     ~parent:i86

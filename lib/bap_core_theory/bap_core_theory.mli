@@ -1070,6 +1070,48 @@ module Theory : sig
   (** label is an object of the program class.  *)
   type label = program KB.Object.t
 
+  (** The target execution system.  *)
+  type target
+
+  (** The ordering of the bytes.  *)
+  type endianness
+
+  (** The operating system  *)
+  type system
+
+  (** The application binary interface  *)
+  type abi
+
+  (** The floating-point ABI  *)
+  type fabi
+
+  (** The file type  *)
+  type filetype
+
+  (** source to code transformer  *)
+  type compiler
+
+  (** the name of the code encoding  *)
+  type language
+
+  (** The semantics of programs.
+
+      The semantics of a program is denoted with effects that this
+      program produces, so effectively [Program.Semantics = Effect],
+      but we reexport it in a separate module here, to separate the
+      concerns.
+  *)
+  module Semantics : sig
+    type cls = Effect.cls
+    type t = unit Effect.t
+
+    (** the cl program semantics values.  *)
+    val cls : (cls, unit Effect.sort) Knowledge.cls
+
+    (** the slot to store program semantics.  *)
+    val slot : (program, t) Knowledge.slot
+    include Knowledge.Value.S with type t := t
+  end
 
   (** The denotation of programs.
 
@@ -1083,28 +1125,10 @@ module Theory : sig
     type t = (program,unit) KB.cls KB.value
     val cls : (program,unit) KB.cls
 
-
-    (** The semantics of programs.
-
-        The semantics of a program is denoted with effects that this
-        program produces, so effectively [Program.Semantics = Effect],
-        but we reexport it in a separate module here, to separate the
-        concerns.
-    *)
-    module Semantics : sig
-      type cls = Effect.cls
-      type t = unit Effect.t
-
-      (** the class of program semantics values.  *)
-      val cls : (cls, unit Effect.sort) Knowledge.cls
-
-      (** the slot to store program semantics.  *)
-      val slot : (program, t) Knowledge.slot
-      include Knowledge.Value.S with type t := t
-    end
-
+    module Semantics = Semantics
     include Knowledge.Value.S with type t := t
   end
+
 
 
   (** The source code artifact of a compilation unit.
@@ -1127,13 +1151,8 @@ module Theory : sig
     type cls
     include KB.Value.S with type t = (cls,unit) KB.cls KB.Value.t
 
-    (** the abstract name of a programming language  *)
-    type language
-
-
     (** the class index for the core-theory:source class  *)
     val cls : (cls,unit) KB.cls
-
 
     (** the language of the source code  *)
     val language : (cls,language) KB.slot
@@ -1143,22 +1162,7 @@ module Theory : sig
 
     (** the file name of the unit's source code  *)
     val file : (cls,string option) KB.slot
-
-    (** The source code language. *)
-    module Language : sig
-      include Base.Comparable.S with type t = language
-      include Binable.S with type t := t
-      include Stringable.S with type t := t
-      include Pretty_printer.S with type t := t
-
-      (** [declare ?package name] declares a new source code language.  *)
-      val declare : ?package:string -> string -> language
-
-      (** the unique name of the language  *)
-      val name : language -> KB.Name.t
-    end
   end
-
 
   (** Description of the execution target.
 
@@ -1181,29 +1185,15 @@ module Theory : sig
         This type is a unique identifier of the target,
         represented as [KB.Name.t] underneath the hood.
     *)
-    type t
+    type t = target
     include Base.Comparable.S with type t := t
     include Binable.S with type t := t
     include Stringable.S with type t := t
     include Pretty_printer.S with type t := t
 
-    (** The ordering of the bytes.  *)
-    type endianness
-
-    (** The operating system  *)
-    type system
-
-    (** The application binary interface  *)
-    type abi
-
-    (** The floating-point ABI  *)
-    type fabi
-
-    (** The file format  *)
-    type format
-
     (** The set of target-specific options.  *)
     type options = (options_cls,unit) KB.cls KB.Value.t and options_cls
+
 
     (** [declare ?package name] declares a new execution target.
 
@@ -1229,7 +1219,7 @@ module Theory : sig
       ?system:system ->          (** defaults to [System.unknown]  *)
       ?abi:abi ->                (** defaults to [Abi.unknown] *)
       ?fabi:fabi ->              (** defaults to [Fabi.unknown] *)
-      ?format:format ->          (** defaults to [Format.unknown] *)
+      ?filetype:filetype ->      (** defaults to [Filetype.unknown] *)
       ?options:options ->        (** defaults to [Options.empty] *)
       ?nicknames:string list ->  (** defaults to [[]] *)
       ?package:string ->         (** defaults to ["user"] *)
@@ -1339,7 +1329,6 @@ module Theory : sig
     *)
     val bits : t -> int
 
-
     (** [byte target] is the size of the target's byte. *)
     val byte : t -> int
 
@@ -1383,101 +1372,19 @@ module Theory : sig
     (** [fabi target] the target floating-point ABI.  *)
     val fabi : t -> fabi
 
-    (** [format target] the target file format.  *)
-    val format : t -> format
+    (** [filetype target] the target executable file type.  *)
+    val filetype : t -> filetype
 
     (** [options target] the target-specific set of options.  *)
     val options : t -> options
 
+    (** the domain type class for the targets.
 
-    (** Defines how multibyte words are stored in the memory.
+        Targets form a flat domain with [unknown] in the bottom. *)
+    val domain : t KB.domain
 
-        The number of variants are essentially infinite, given that
-        there is an infinite number of variants of the byte and word
-        sizes, but the two orderings are the most common: little and
-        big endian. More orderings could be declared when necessary.
-    *)
-    module Endianness : sig
-      include Base.Comparable.S with type t = endianness
-      include Binable.S with type t := t
-      include Stringable.S with type t := t
-      include Pretty_printer.S with type t := t
-
-      (** In the big endian ordering the most significant byte of the
-          word is stored at the smallest address.   *)
-      val eb : endianness
-
-      (** In the little endian ordering the least significant byte of
-          the word is stored at the largest address. *)
-      val le : endianness
-
-
-      (** In the bi-endian order the endianness is essentially
-          unspecified and depends on the execution context, e.g.,
-          on the status register or memory page descriptor.  *)
-      val bi : endianness
-
-      (** [declare ?package string] declares a new byte ordering.
-
-          The [package] [name] pair should be unique.
-      *)
-      val declare : ?package:string -> string -> endianness
-
-      (** the unique name  *)
-      val name : endianness -> KB.Name.t
-    end
-
-
-    (** The Operating System.*)
-    module System : sig
-      include Base.Comparable.S with type t = system
-      include Binable.S with type t := t
-      include Stringable.S with type t := t
-      include Pretty_printer.S with type t := t
-
-      (** [declare ?package string] declares a new operating system.
-
-          The [package] [name] pair should be unique.
-      *)
-      val declare : ?package:string -> string -> system
-
-      (** the unique name  *)
-      val name : system -> KB.Name.t
-    end
-
-    (** The Application Binary Interface name  *)
-    module Abi : sig
-      include Base.Comparable.S with type t = abi
-      include Binable.S with type t := t
-      include Stringable.S with type t := t
-      include Pretty_printer.S with type t := t
-
-
-      (** [declare ?package string] declares a new ABI.
-
-          The [package] [name] pair should be unique.*)
-      val declare : ?package:string -> string -> abi
-
-      (** the unique name of the ABI  *)
-      val name : abi -> KB.Name.t
-    end
-
-    (** The Application Floating-point Binary Interface name  *)
-    module Fabi : sig
-      include Base.Comparable.S with type t = fabi
-      include Binable.S with type t := t
-      include Stringable.S with type t := t
-      include Pretty_printer.S with type t := t
-
-      (** [declare ?package string] declares a new FABI.
-
-          The [package] [name] pair should be unique.*)
-      val declare : ?package:string -> string -> fabi
-
-      (** the unique name of the FABI  *)
-      val name : fabi -> KB.Name.t
-    end
-
+    (** the persistence type class, derived from [KB.Name.persistent] *)
+    val persistent : t KB.persistent
 
     (** An extensible set of the target options.
 
@@ -1519,8 +1426,6 @@ module Theory : sig
     (** the meta type of the unit object  *)
     type t = cls KB.Object.t
 
-    type compiler
-
 
     (** the base class for all units.
 
@@ -1556,9 +1461,6 @@ module Theory : sig
     (** [path] is the path of the file from which the unit originates.  *)
     val path : (cls, string option) KB.slot
 
-    (** [is-executed] is true if the unit is an executable file ready
-        to be executed by the operating system. *)
-    val is_executable : (cls, bool option) KB.slot
 
     (** [bias] is the bias of all addresses in the unit.
 
@@ -1582,61 +1484,6 @@ module Theory : sig
 
     (** [compiler] the program that translated the unit from the [source].  *)
     val compiler : (cls, compiler option) KB.slot
-
-    (** Information about the compiler.
-
-        A compiler is a translator that was used to translate
-        the code in this unit from the source to the target
-        representation.
-    *)
-    module Compiler : sig
-      include Base.Comparable.S with type t = compiler
-      include Binable.S with type t := t
-      include Pretty_printer.S with type t := t
-
-      (** [declare name] declares a compiler.
-
-          The compiler here represents more of a process that compiled
-          the unit rather than a specific program, thus it includes
-          the configuration parameters and command-line options.
-      *)
-      val create :
-        ?specs:(string * string) list ->
-        ?version:string list ->
-        ?options:string list ->
-        string -> compiler
-
-      (** [version] the compiler version.
-
-          The least specific (aka major) version comes first in the
-          list, with more detailed versions added after. The exact
-          meaning of the version consituents is specific to the compiler.
-      *)
-      val version : compiler -> string list
-
-      (** [options] the list of options that were used to compile the unit.
-
-          Options are specified as a list of command-line options with
-          possible repetitions. The meaning of the options is specific
-          to the compiler.
-
-          Note, that [options] are the options passed to the compiler
-          when this compilation unit was compiled from the source, not
-          the options of the compiler itsef, for the latter see [specs].
-      *)
-      val options : compiler -> string list
-
-
-      (** [specs] the configuration of the compiler.
-
-          A key-value storage of the configuration parameters of the
-          compiler itself. *)
-      val specs : compiler -> string Map.M(String).t
-
-      (** is the textual representation of the compiler descriptor  *)
-      val to_string : compiler -> string
-    end
-
 
     include Knowledge.Object.S with type t := t
   end
@@ -1679,11 +1526,14 @@ module Theory : sig
     *)
     val ivec : (program, int option) KB.slot
 
+    (** the program encoding.
+
+        The language used to encode the program. *)
+    val encoding : (program, language) KB.slot
 
     (** possible aliases under which the label might be known.
 
-        This may include versioned names, demangled names, etc.
-    *)
+        This may include versioned names, demangled names, etc. *)
     val aliases : (program, Set.M(String).t) KB.slot
 
 
@@ -1763,6 +1613,164 @@ module Theory : sig
     include Knowledge.Object.S with type t := t
   end
 
+
+  (** An extensible enumerated type.
+
+      An enumerated type is a set of names that are represented
+      underneath the hood using the [KB.Name.t].
+
+      The enumerated type had to be declared before used and is
+      commonly referenced as a module declared constant. It is
+      possible, however to reference the enumerated type value using
+      its string representation, via the [read] function. *)
+  module Enum : sig
+
+    (** The enumerated type interface  *)
+    module type S = sig
+      include Base.Comparable.S
+      include Binable.S with type t := t
+      include Stringable.S with type t := t
+      include Pretty_printer.S with type t := t
+      include Sexpable.S with type t := t
+
+      (** [declare ?package name] declares a new element of the enumeration.
+
+          Fails if the name is already declared. *)
+      val declare : ?package:string -> string -> t
+
+      (** [read ?package name] reads the element from its textual representation.
+
+          Fails if the name doesn't represent a previously declared
+          element of the enumeration.
+
+          If [name] is unqualified then [package] is used as the
+          package name. The [package] itself defaults to ["user"].
+
+          See also [of_string s] from the [Stringable] interface which
+          is equal to [read s]
+      *)
+      val read : ?package:string -> string -> t
+
+      (** [name x] is the name that corresponds to the element [x]  *)
+      val name : t -> KB.Name.t
+
+      (** [unknown] is the placeholder for unknown element.  *)
+      val unknown : t
+
+      (** [is_unknown t] is true if [t] is [unknown].  *)
+      val is_unknown : t -> bool
+
+      (** [domain] the type class implementing the domain structure.
+
+          Each enumeration type forms a flat domain with the [unknown]
+          element at the bottom. *)
+      val domain : t KB.domain
+
+      (** [persistent] the persistance type class.
+
+          The enumeration types are persistent and are derived from
+          the [KB.Name.persistent] type class, i.e., they are
+          represented as 63-bit numbers. *)
+      val persistent : t KB.persistent
+
+      (** the hash value of the enum  *)
+      val hash : t -> int
+    end
+
+    (** Creates a new enumerated type.  *)
+    module Make() : S
+  end
+
+  (** The source code language. *)
+  module Language : Enum.S with type t = language
+
+  (** Defines how multibyte words are stored in the memory.
+
+      The number of variants are essentially infinite, given that
+      there is an infinite number of variants of the byte and word
+      sizes, but the two orderings are the most common: little and
+      big endian. More orderings could be declared when necessary.
+  *)
+  module Endianness : sig
+    include Enum.S with type t = endianness
+    (** In the big endian ordering the most significant byte of the
+        word is stored at the smallest address.   *)
+    val eb : endianness
+
+    (** In the little endian ordering the least significant byte of
+        the word is stored at the largest address. *)
+    val le : endianness
+
+
+    (** In the bi-endian order the endianness is essentially
+        unspecified and depends on the execution context, e.g.,
+        on the status register or memory page descriptor.  *)
+    val bi : endianness
+  end
+
+
+  (** The Operating System.*)
+  module System : Enum.S with type t = system
+
+  (** The Application Binary Interface name  *)
+  module Abi : Enum.S with type t = abi
+
+  (** The Application Floating-point Binary Interface name  *)
+  module Fabi : Enum.S with type t = fabi
+
+  (** Information about the compiler.
+
+      A compiler is a translator that was used to translate
+      the code in this unit from the source to the target
+      representation.
+  *)
+  module Compiler : sig
+    include Base.Comparable.S with type t = compiler
+    include Binable.S with type t := t
+    include Pretty_printer.S with type t := t
+
+    (** [declare name] declares a compiler.
+
+        The compiler here represents more of a process that compiled
+        the unit rather than a specific program, thus it includes
+        the configuration parameters and command-line options.
+    *)
+    val create :
+      ?specs:(string * string) list ->
+      ?version:string list ->
+      ?options:string list ->
+      string -> compiler
+
+    (** [version] the compiler version.
+
+        The least specific (aka major) version comes first in the
+        list, with more detailed versions added after. The exact
+        meaning of the version consituents is specific to the compiler.
+    *)
+    val version : compiler -> string list
+
+    (** [options] the list of options that were used to compile the unit.
+
+        Options are specified as a list of command-line options with
+        possible repetitions. The meaning of the options is specific
+        to the compiler.
+
+        Note, that [options] are the options passed to the compiler
+        when this compilation unit was compiled from the source, not
+        the options of the compiler itsef, for the latter see [specs].
+    *)
+    val options : compiler -> string list
+
+
+    (** [specs] the configuration of the compiler.
+
+        A key-value storage of the configuration parameters of the
+        compiler itself. *)
+    val specs : compiler -> string Map.M(String).t
+
+    (** is the textual representation of the compiler descriptor  *)
+    val to_string : compiler -> string
+  end
 
   (** a boolean terms  *)
   type bool = Bool.t pure

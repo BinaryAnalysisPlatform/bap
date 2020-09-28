@@ -37,7 +37,7 @@ let untyped = List.map ~f:Theory.Var.forget
 let (@<) xs ys = untyped xs @ untyped ys
 
 let name size order  =
-  let order = Theory.Target.Endianness.name order in
+  let order = Theory.Endianness.name order in
   sprintf "mips%d+%s" size (KB.Name.unqualified order)
 
 let parent = Theory.Target.declare ~package "mips"
@@ -57,13 +57,13 @@ let define ?(parent=parent) bits endianness =
     ~data:data
 
 
-let mips32bi = define r32 Theory.Target.Endianness.bi
-let mips32eb = define r32 Theory.Target.Endianness.eb ~parent:mips32bi
-let mips32le = define r32 Theory.Target.Endianness.le ~parent:mips32bi
+let mips32bi = define r32 Theory.Endianness.bi
+let mips32eb = define r32 Theory.Endianness.eb ~parent:mips32bi
+let mips32le = define r32 Theory.Endianness.le ~parent:mips32bi
 
-let mips64bi = define r64 Theory.Target.Endianness.bi
-let mips64le = define r64 Theory.Target.Endianness.le ~parent:mips64bi
-let mips64eb = define r64 Theory.Target.Endianness.eb ~parent:mips64bi
+let mips64bi = define r64 Theory.Endianness.bi
+let mips64le = define r64 Theory.Endianness.le ~parent:mips64bi
+let mips64eb = define r64 Theory.Endianness.eb ~parent:mips64bi
 
 let enable_loader () =
   KB.Rule.(declare ~package "mips-target" |>

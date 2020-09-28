@@ -364,10 +364,9 @@ and use_unit_arch_or_skip state code addr label =
   KB.collect Theory.Label.unit label >>= function
   | None -> skip state addr code
   | Some unit ->
-    KB.collect Theory.Unit.Target.arch unit >>|?
-    Arch.of_string >>= function
-    | None | Some #Arch.unknown -> skip state addr code
-    | Some arch -> KB.return arch
+    KB.collect Arch.unit_slot unit >>= function
+    |#Arch.unknown -> skip state addr code
+    | arch -> KB.return arch
 and skip state addr code =
   Machine.view (Machine.skipped state addr) code
     ~empty:(fun _ -> KB.return `unknown)

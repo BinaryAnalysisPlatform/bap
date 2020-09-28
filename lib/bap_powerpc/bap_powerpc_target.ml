@@ -26,7 +26,7 @@ let untyped = List.map ~f:Theory.Var.forget
 let (@<) xs ys = untyped xs @ untyped ys
 
 let name size order  =
-  let order = Theory.Target.Endianness.name order in
+  let order = Theory.Endianness.name order in
   sprintf "powerpc%d+%s" size (KB.Name.unqualified order)
 
 let parent = Theory.Target.declare ~package "powerpc"
@@ -61,13 +61,13 @@ let define ?(parent=parent) bits endianness =
     ~data:data
 
 
-let powerpc32bi = define r32 Theory.Target.Endianness.bi
-let powerpc32eb = define r32 Theory.Target.Endianness.eb ~parent:powerpc32bi
-let powerpc32le = define r32 Theory.Target.Endianness.le ~parent:powerpc32bi
+let powerpc32bi = define r32 Theory.Endianness.bi
+let powerpc32eb = define r32 Theory.Endianness.eb ~parent:powerpc32bi
+let powerpc32le = define r32 Theory.Endianness.le ~parent:powerpc32bi
 
-let powerpc64bi = define r64 Theory.Target.Endianness.bi
-let powerpc64le = define r64 Theory.Target.Endianness.le ~parent:powerpc64bi
-let powerpc64eb = define r64 Theory.Target.Endianness.eb ~parent:powerpc64bi
+let powerpc64bi = define r64 Theory.Endianness.bi
+let powerpc64le = define r64 Theory.Endianness.le ~parent:powerpc64bi
+let powerpc64eb = define r64 Theory.Endianness.eb ~parent:powerpc64bi
 
 let enable_loader () =
   let open KB.Syntax in

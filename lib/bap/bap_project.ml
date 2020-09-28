@@ -13,7 +13,6 @@ open Format
 
 module Driver = Bap_disasm_driver
 
-module Event = Bap_main_event
 module Buffer = Caml.Buffer
 include Bap_self.Create()
 
@@ -315,7 +314,7 @@ module Input = struct
     let endian = if Theory.Target.is_unknown target
       then Arch.endian arch else
       if Theory.Target.endianness target =
-         Theory.Target.Endianness.le
+         Theory.Endianness.le
       then LittleEndian else BigEndian in
     let base = Option.value base ~default:(Addr.zero addr_size) in
     let mem = Memory.create endian base big |> ok_exn in
