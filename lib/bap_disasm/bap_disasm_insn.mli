@@ -5,7 +5,7 @@ open Bap_types.Std
 open Bap_disasm_types
 open Bap_ir
 
-type t = Theory.Program.Semantics.t [@@deriving bin_io, compare, sexp]
+type t = Theory.Semantics.t [@@deriving bin_io, compare, sexp]
 type op = Op.t [@@deriving bin_io, compare, sexp]
 
 val empty : t

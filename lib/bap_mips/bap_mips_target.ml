@@ -67,7 +67,7 @@ let mips64eb = define r64 Theory.Endianness.eb ~parent:mips64bi
 
 let enable_loader () =
   KB.Rule.(declare ~package "mips-target" |>
-           require Project.specification_slot |>
+           require Image.Spec.slot |>
            provide Theory.Unit.target |>
            comment "computes target from the OGRE specification");
   let open KB.Syntax in
@@ -81,7 +81,7 @@ let enable_loader () =
     | Error _ -> None,None
     | Ok info -> info in
   KB.promise Theory.Unit.target @@ fun unit ->
-  KB.collect Project.specification_slot unit >>|
+  KB.collect Image.Spec.slot unit >>|
   request_info >>| function
   | Some "mips", None -> mips32bi
   | Some "mips64",None -> mips64bi
@@ -111,7 +111,28 @@ let map_mips () =
   | Some arch -> arch
   | None -> `unknown
 
+module Dis = Disasm_expert.Basic
+
+let llvm_mips32 = Theory.Language.declare ~package "llvm-mips32"
+let llvm_mips64 = Theory.Language.declare ~package "llvm-mips64"
+
+let register encoding triple =
+  Dis.register encoding @@ fun _ ->
+  Dis.create ~backend:"llvm" triple
+
+let enable_decoder () =
+  let open KB.Syntax in
+  register llvm_mips32 "mips";
+  register llvm_mips64 "mips64";
+  KB.promise Theory.Label.encoding @@ fun label ->
+  Theory.Label.target label >>| fun t ->
+  if Theory.Target.belongs parent t then
+    if Theory.Target.belongs mips32bi t
+    then llvm_mips32
+    else llvm_mips64
+  else Theory.Language.unknown
 
 let load () =
   enable_loader ();
+  enable_decoder ();
   map_mips ()

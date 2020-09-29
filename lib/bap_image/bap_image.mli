@@ -1,5 +1,6 @@
 (** A loadable memory image of an executable.  *)
 
+open Bap_core_theory
 open Core_kernel
 open Regular.Std
 open Bap_types.Std
@@ -43,6 +44,11 @@ val memory_of_segment  : t -> segment -> mem
 val memory_of_symbol   : t -> symbol -> mem * mem seq
 val symbols_of_segment : t -> segment -> symbol seq
 val segment_of_symbol  : t -> symbol -> segment
+
+module Spec : sig
+  val from_arch : arch -> Ogre.doc
+  val slot : (Theory.Unit.cls, Ogre.doc) KB.slot
+end
 
 module Segment : sig
   type t = segment

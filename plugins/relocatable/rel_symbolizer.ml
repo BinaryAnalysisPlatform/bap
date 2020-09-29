@@ -23,7 +23,15 @@ open Bap_core_theory
 
 include Loggers()
 
-let width = Ogre.(require Image.Scheme.bits >>| Int64.to_int_trunc)
+let arch =
+  let open Ogre.Syntax in
+  Ogre.request Image.Scheme.arch >>| function
+  | None -> `unknown
+  | Some arch -> match Arch.of_string arch with
+    | None -> `unknown
+    | Some arch -> arch
+
+let width = Ogre.(arch >>| Arch.addr_size >>| Size.in_bits)
 
 type ref =
   | Addr of Bitvec_order.t
@@ -111,7 +119,7 @@ let collect_insns number_of_instructions entry =
   let rec collect bils addr collected =
     if collected < number_of_instructions then
       Theory.Label.for_addr addr >>= fun label ->
-      KB.collect Theory.Program.Semantics.slot label >>= fun insn ->
+      KB.collect Theory.Semantics.slot label >>= fun insn ->
       KB.collect Memory.slot label >>= function
       | None -> return bils
       | Some mem ->

@@ -70,14 +70,14 @@ module Props = struct
   let persistent = KB.Persistent.of_binable (module T)
 
   let slot = KB.Class.property ~package:"bap"
-      Theory.Program.Semantics.cls "insn-properties" domain
+      Theory.Semantics.cls "insn-properties" domain
       ~persistent
       ~public:true
       ~desc:"semantic properties of an instruction"
 end
 
 
-type t = Theory.Program.Semantics.t
+type t = Theory.Semantics.t
 type op = Op.t [@@deriving bin_io, compare, sexp]
 
 
@@ -94,13 +94,13 @@ module Slot = struct
 
 
   let name = KB.Class.property ~package:"bap"
-      Theory.Program.Semantics.cls "insn-opcode" text
+      Theory.Semantics.cls "insn-opcode" text
       ~persistent:KB.Persistent.string
       ~public:true
       ~desc:"instruction opcode"
 
   let asm = KB.Class.property ~package:"bap"
-      Theory.Program.Semantics.cls "insn-asm" text
+      Theory.Semantics.cls "insn-asm" text
       ~persistent:KB.Persistent.string
       ~public:true
       ~desc:"an assembly string"
@@ -120,13 +120,13 @@ module Slot = struct
     end)
 
   let ops = KB.Class.property ~package:"bap"
-      Theory.Program.Semantics.cls "insn-ops" ops_domain
+      Theory.Semantics.cls "insn-ops" ops_domain
       ~persistent:ops_persistent
       ~public:true
       ~desc:"an array of instruction operands"
 
   let delay = KB.Class.property ~package:"bap"
-      Theory.Program.Semantics.cls "insn-delay" delay_t
+      Theory.Semantics.cls "insn-delay" delay_t
       ~persistent:(KB.Persistent.of_binable (module struct
                      type t = int option [@@deriving bin_io]
                    end))
@@ -159,7 +159,7 @@ module Slot = struct
     let inspect = IO.sexp_of_t in
     let data = KB.Domain.define ~empty ~order ~join ~inspect "dest-set" in
     let persistent = KB.Persistent.of_binable (module IO) in
-    KB.Class.property ~package:"bap" Theory.Program.Semantics.cls
+    KB.Class.property ~package:"bap" Theory.Semantics.cls
       "insn-dests" data
       ~persistent
       ~public:true
@@ -232,7 +232,7 @@ let of_basic ?bil insn : t =
   let may_store = is_bil `May_store in
   let effect =
     KB.Value.put Bil.slot
-      (KB.Value.empty Theory.Program.Semantics.cls)
+      (KB.Value.empty Theory.Semantics.cls)
       (Option.value bil ~default:[]) in
   let props =
     Props.empty                                              |>
@@ -268,7 +268,7 @@ let ops s = match KB.Value.get Slot.ops s with
   | None -> [||]
   | Some ops -> ops
 
-let empty = KB.Value.empty Theory.Program.Semantics.cls
+let empty = KB.Value.empty Theory.Semantics.cls
 
 module Adt = struct
   let pr fmt = Format.fprintf fmt
@@ -323,7 +323,7 @@ module Trie = struct
 end
 
 include Regular.Make(struct
-    type t = Theory.Program.Semantics.t [@@deriving sexp, bin_io, compare]
+    type t = Theory.Semantics.t [@@deriving sexp, bin_io, compare]
     let hash t = Hashtbl.hash t
     let module_name = Some "Bap.Std.Insn"
     let version = "2.0.0"

@@ -1070,28 +1070,36 @@ module Theory : sig
   (** label is an object of the program class.  *)
   type label = program KB.Object.t
 
-  (** The target execution system.  *)
+  (** The target execution system.
+      @since 2.2.0 *)
   type target
 
-  (** The ordering of the bytes.  *)
+  (** The ordering of the bytes.
+      @since 2.2.0  *)
   type endianness
 
-  (** The operating system  *)
+  (** The operating system.
+      @since 2.2.0 *)
   type system
 
-  (** The application binary interface  *)
+  (** The application binary interface.
+      @since 2.2.0  *)
   type abi
 
-  (** The floating-point ABI  *)
+  (** The floating-point ABI.
+      @since 2.2.0*)
   type fabi
 
-  (** The file type  *)
+  (** The file type.
+      @since 2.2.0 *)
   type filetype
 
-  (** source to code transformer  *)
+  (** source to code transformer.
+      @since 2.2.0*)
   type compiler
 
-  (** the name of the code encoding  *)
+  (** the name of the code encoding.
+      @since 2.2.0 *)
   type language
 
   (** The semantics of programs.
@@ -1100,12 +1108,14 @@ module Theory : sig
       program produces, so effectively [Program.Semantics = Effect],
       but we reexport it in a separate module here, to separate the
       concerns.
+
+      @since 2.2.0 (was {!Program.Semantics} before that
   *)
   module Semantics : sig
     type cls = Effect.cls
     type t = unit Effect.t
 
-    (** the cl program semantics values.  *)
+    (** the class of program semantics values.  *)
     val cls : (cls, unit Effect.sort) Knowledge.cls
 
     (** the slot to store program semantics.  *)
@@ -1126,9 +1136,10 @@ module Theory : sig
     val cls : (program,unit) KB.cls
 
     module Semantics = Semantics
+    [@@deprecated "[since 2020-10] use [Semantics] (without Program)"]
+
     include Knowledge.Value.S with type t := t
   end
-
 
 
   (** The source code artifact of a compilation unit.
@@ -1417,6 +1428,8 @@ module Theory : sig
       in the knowledge base is partitioned into units, so that each
       instruction belongs to at most one code unit, see the
       {!Label.unit} property.
+
+      @since 2.2.0
   *)
   module Unit : sig
 
@@ -1528,7 +1541,10 @@ module Theory : sig
 
     (** the program encoding.
 
-        The language used to encode the program. *)
+        The language used to encode the program.
+
+        @since 2.2.0
+    *)
     val encoding : (program, language) KB.slot
 
     (** possible aliases under which the label might be known.
@@ -1622,7 +1638,10 @@ module Theory : sig
       The enumerated type had to be declared before used and is
       commonly referenced as a module declared constant. It is
       possible, however to reference the enumerated type value using
-      its string representation, via the [read] function. *)
+      its string representation, via the [read] function.
+
+      @since 2.2.0
+  *)
   module Enum : sig
 
     (** The enumerated type interface  *)
@@ -1681,7 +1700,9 @@ module Theory : sig
     module Make() : S
   end
 
-  (** The source code language. *)
+  (** The source code language.
+
+      @since 2.2.0 *)
   module Language : Enum.S with type t = language
 
   (** Defines how multibyte words are stored in the memory.
@@ -1690,7 +1711,8 @@ module Theory : sig
       there is an infinite number of variants of the byte and word
       sizes, but the two orderings are the most common: little and
       big endian. More orderings could be declared when necessary.
-  *)
+
+      @since 2.2.0  *)
   module Endianness : sig
     include Enum.S with type t = endianness
     (** In the big endian ordering the most significant byte of the
@@ -1701,7 +1723,6 @@ module Theory : sig
         the word is stored at the largest address. *)
     val le : endianness
 
-
     (** In the bi-endian order the endianness is essentially
         unspecified and depends on the execution context, e.g.,
         on the status register or memory page descriptor.  *)
@@ -1709,13 +1730,16 @@ module Theory : sig
   end
 
 
-  (** The Operating System.*)
+  (** The Operating System.
+      @since 2.2.0  *)
   module System : Enum.S with type t = system
 
-  (** The Application Binary Interface name  *)
+  (** The Application Binary Interface name.
+      @since 2.2.0 *)
   module Abi : Enum.S with type t = abi
 
-  (** The Application Floating-point Binary Interface name  *)
+  (** The Application Floating-point Binary Interface name.
+      @since 2.2.0 *)
   module Fabi : Enum.S with type t = fabi
 
   (** Information about the compiler.
@@ -1723,6 +1747,8 @@ module Theory : sig
       A compiler is a translator that was used to translate
       the code in this unit from the source to the target
       representation.
+
+      @since 2.2.0
   *)
   module Compiler : sig
     include Base.Comparable.S with type t = compiler

@@ -132,8 +132,6 @@ let assert_cont ~word_size img =
     | None -> invalid_arg "memory is empty" in
   Table.foldi words ~init:base ~f:(fun mem word a1 ->
       let a2 = Memory.min_addr mem in
-      (* Format.eprintf "a1 = %a, a2 = %a, word = %a\n" *)
-      (*   Addr.pp a1 Addr.pp a2 Addr.pp word; *)
       assert_bool "a1 = a2 -> a1 = base" begin
         Addr.(a1 = a2) ==> Addr.(a1 = base)
       end;

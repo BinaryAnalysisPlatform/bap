@@ -32,8 +32,6 @@ val create :
 val arch : t -> arch
 val target : t -> Theory.Target.t
 val specification : t -> Ogre.doc
-val specification_slot : (Theory.Unit.cls, Ogre.Doc.t) KB.slot
-
 val program : t -> program term
 val with_program : t -> program term -> t
 val symbols : t -> symtab
@@ -56,7 +54,6 @@ module State : sig
   type t = state
   val disassembly : t -> Bap_disasm_driver.state
   val subroutines : t -> Bap_disasm_calls.t
-
   val slot : (Theory.Unit.cls, state) KB.slot
 end
 

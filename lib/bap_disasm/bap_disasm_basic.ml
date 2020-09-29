@@ -3,10 +3,11 @@ open Regular.Std
 open Bap_types.Std
 open Bap_core_theory
 open Or_error
+open Bap_disasm_backend_types
 
 module Kind = Bap_insn_kind
 module Mem = Bap_memory
-module C = Bap_disasm_prim
+module Prim = Bap_disasm_prim
 
 type empty
 type asm
@@ -42,6 +43,43 @@ type reg = reg_info oper [@@deriving bin_io, compare, sexp]
 type imm = imm_info oper [@@deriving bin_io, compare, sexp]
 type fmm = float    oper [@@deriving bin_io, compare, sexp]
 
+module C : sig
+  include S
+  val create : (module S with type t = 'a) -> 'a -> t
+end = struct
+  type t = D : (module S with type t = 'd) * 'd -> t
+  let create c d = D (c,d)
+  let delete (D ((module C),d)) = C.delete d
+  let set_memory (D ((module C),d)) = C.set_memory d
+  let store_predicates (D ((module C),d)) = C.store_predicates d
+  let store_asm_string (D ((module C),d)) = C.store_asm_string d
+  let insn_table (D ((module C),d)) = C.insn_table d
+  let reg_table (D ((module C),d)) = C.reg_table d
+  let predicates_clear (D ((module C),d)) = C.predicates_clear d
+  let predicates_push (D ((module C),d)) = C.predicates_push d
+  let is_supported (D ((module C),d)) = C.is_supported d
+  let set_offset (D ((module C),d)) = C.set_offset d
+  let offset (D ((module C),d)) = C.offset d
+  let run (D ((module C),d)) = C.run d
+  let insns_clear (D ((module C),d)) = C.insns_clear d
+  let insns_size (D ((module C),d)) = C.insns_size d
+  let insn_size (D ((module C),d)) = C.insn_size d
+  let insn_name (D ((module C),d)) = C.insn_name d
+  let insn_code (D ((module C),d)) = C.insn_code d
+  let insn_offset (D ((module C),d)) = C.insn_offset d
+  let insn_asm_size (D ((module C),d)) = C.insn_asm_size d
+  let insn_asm_copy (D ((module C),d)) = C.insn_asm_copy d
+  let insn_satisfies (D ((module C),d)) = C.insn_satisfies d
+  let insn_ops_size (D ((module C),d)) = C.insn_ops_size d
+  let insn_op_type (D ((module C),d)) = C.insn_op_type d
+  let insn_op_reg_name (D ((module C),d)) = C.insn_op_reg_name d
+  let insn_op_reg_code (D ((module C),d)) = C.insn_op_reg_code d
+  let insn_op_imm_value (D ((module C),d)) = C.insn_op_imm_value d
+  let insn_op_imm_small_value (D ((module C),d)) = C.insn_op_imm_small_value d
+  let insn_op_fmm_value (D ((module C),d)) = C.insn_op_fmm_value d
+end
+
+
 module Table = struct
   (* Bigstring.length is very slow... we should report a bug to the
      mantis. They need to add "noalloc" to it, otherwise on each call
@@ -72,28 +110,34 @@ module Table = struct
             Bytes.to_string dst)
 end
 
+
 type disassembler = {
-  dd : int;
+  dd : C.t;
   insn_table : Table.t;
   reg_table  : Table.t;
   mutable users : int;
 }
 
-let last_id = ref 0
-let disassemblers = Hashtbl.create (module String)
-
-
-
 type dis = {
   name : string;
+  enc : string;
   asm : bool;
   kinds : bool;
 }
 
+type ('a,'k) t = dis
+
+let last_id = ref 0
+let disassemblers = Hashtbl.create (module String)
+type constructor = Theory.target -> (empty,empty) t Or_error.t
+let constructors : (Theory.language, constructor) Hashtbl.t=
+  Hashtbl.create (module Theory.Language)
+
+
 let get {name} = match Hashtbl.find disassemblers name with
-  | None ->
-    failwith "Trying to access a closed disassembler"
   | Some d -> d
+  | None -> invalid_argf "Trying to access a closed disassembler %s"
+              name ()
 
 let (!!) h = (get h).dd
 
@@ -259,18 +303,18 @@ end
 type op = Op.t
 [@@deriving bin_io, compare, sexp]
 
-let cpred_of_pred : pred -> C.pred = function
-  | `Valid -> C.Is_true
-  | `Conditional_branch -> C.Is_conditional_branch
-  | `Unconditional_branch -> C.Is_unconditional_branch
-  | `Indirect_branch -> C.Is_indirect_branch
-  | `Return -> C.Is_return
-  | `Call -> C.Is_call
-  | `Barrier -> C.Is_barrier
-  | `Terminator -> C.Is_terminator
-  | `May_affect_control_flow -> C.May_affect_control_flow
-  | `May_store  -> C.May_store
-  | `May_load -> C.May_load
+let cpred_of_pred = function
+  | `Valid -> Is_true
+  | `Conditional_branch -> Is_conditional_branch
+  | `Unconditional_branch -> Is_unconditional_branch
+  | `Indirect_branch -> Is_indirect_branch
+  | `Return -> Is_return
+  | `Call -> Is_call
+  | `Barrier -> Is_barrier
+  | `Terminator -> Is_terminator
+  | `May_affect_control_flow -> May_affect_control_flow
+  | `May_store  -> May_store
+  | `May_load -> May_load
 
 module Insn = struct
   type ins_info = {
@@ -300,7 +344,6 @@ module Insn = struct
     let equal x y = Kind.compare x y = 0 in
     List.mem ~equal op.kinds x
 
-
   let create ~asm ~kinds dis ~insn =
     let code = C.insn_code !!dis ~insn in
     let name =
@@ -323,11 +366,11 @@ module Insn = struct
     let opers =
       Array.init (C.insn_ops_size !!dis ~insn) ~f:(fun oper ->
           match C.insn_op_type !!dis ~insn ~oper with
-          | C.Reg -> Op.Reg Reg.(create dis ~insn ~oper)
-          | C.Imm -> Op.Imm Imm.(create dis ~insn ~oper)
-          | C.Fmm -> Op.Fmm Fmm.(create dis ~insn ~oper)
-          | C.Insn -> assert false) in
-    {code; name; asm; kinds; opers; encoding = dis.name }
+          | Reg -> Op.Reg Reg.(create dis ~insn ~oper)
+          | Imm -> Op.Imm Imm.(create dis ~insn ~oper)
+          | Fmm -> Op.Fmm Fmm.(create dis ~insn ~oper)
+          | Insn -> assert false) in
+    {code; name; asm; kinds; opers; encoding = dis.enc }
 
   let encoding x = x.encoding
 
@@ -437,7 +480,7 @@ let with_preds s (ps : pred list) =
   else begin
     C.predicates_clear !!(s.dis);
     Preds.iter ps ~f:(add);
-    C.predicates_push !!(s.dis) C.Is_invalid;
+    C.predicates_push !!(s.dis) Is_invalid;
   end;
   {s with current = {s.current with preds = ps}}
 
@@ -467,7 +510,7 @@ let step s data =
     let {asm; kinds} = s.dis in
     let insns = Array.init n ~f:(fun insn -> begin
           let is_valid =
-            not(C.insn_satisfies !!(s.dis) ~insn C.Is_invalid) in
+            not(C.insn_satisfies !!(s.dis) ~insn Is_invalid) in
           insn_mem s ~insn,
           Option.some_if is_valid
             (Insn.create ~asm ~kinds s.dis ~insn)
@@ -476,7 +519,7 @@ let step s data =
     if stop then match s.stopped with
       | Some f -> f s data
       | None -> s.return data
-    else if C.insn_satisfies !!(s.dis) ~insn C.Is_invalid
+    else if C.insn_satisfies !!(s.dis) ~insn Is_invalid
     then match s.invalid with
       | Some f -> f s (insn_mem s ~insn) data
       | None -> loop s data
@@ -502,28 +545,76 @@ let back s data =
     | x :: xs -> x,xs in
   step { s with current; history} data
 
+let init dd = {
+  dd;
+  insn_table = Table.create (C.insn_table dd);
+  reg_table = Table.create (C.reg_table dd);
+  users = 1;
+}
+
+let make_name target encoding =
+  sprintf "%s-%s"
+    (Theory.Language.to_string encoding)
+    (Theory.Target.to_string target)
+
+let register encoding construct =
+  if Hashtbl.mem constructors encoding
+  then invalid_argf "A disassembler backend for the encoding %s \
+                     is already provided. Please, disable the old \
+                     one before registering a new one."
+      (Theory.Language.to_string encoding) ();
+  Hashtbl.add_exn constructors ~key:encoding ~data:(fun target ->
+      match construct target with
+      | Error _ as err -> err
+      | Ok dis ->
+        let name = make_name target encoding in
+        if name <> dis.name
+        then begin
+          let d = Hashtbl.find_exn disassemblers dis.name in
+          d.users <- d.users + 1;
+          Hashtbl.add_exn disassemblers ~key:name ~data:d
+        end;
+        Ok dis)
+
+let encoding_name encoding =
+  KB.Name.unqualified @@ Theory.Language.name encoding
+
+let lookup target encoding =
+  let name = make_name target encoding in
+  match Hashtbl.find disassemblers name with
+  | Some d ->
+    d.users <- d.users + 1;
+    Ok {name; asm=false; kinds=false; enc=encoding_name encoding}
+  | None -> match Hashtbl.find constructors encoding with
+    | None -> errorf "no disassembler for encoding %s"
+                (Theory.Language.to_string encoding)
+    | Some create -> create target
+
 let create ?(debug_level=0) ?(cpu="") ?(backend="llvm") triple =
   let name = sprintf "%s-%s%s" backend triple cpu in
   match Hashtbl.find disassemblers name with
   | Some d ->
     d.users <- d.users + 1;
-    Ok {name; asm=false; kinds=false}
-  | None ->
-    let dd = match C.create ~backend ~triple ~cpu ~debug_level with
-      | n when n >= 0 -> Ok n
-      | -2 -> errorf "Unknown backend: %s" backend
-      | -3 -> errorf "Unsupported target: %s %s" triple cpu
-      |  n -> errorf "Disasm.Basic: Unknown error %d" n in
-    dd >>= fun dd ->
-    let disassembler = {
-      dd;
-      insn_table = Table.create (C.insn_table dd);
-      reg_table = Table.create (C.reg_table dd);
-      users = 1;
-    } in
-    Hashtbl.add_exn disassemblers name disassembler;
-    Ok {name; asm = false; kinds = false}
+    Ok {name; asm=false; kinds=false; enc=name}
+  | None -> match Prim.create ~backend ~triple ~cpu ~debug_level with
+    | n when n >= 0 ->
+      let disassembler = init @@ C.create (module Prim) n in
+      Hashtbl.add_exn disassemblers name disassembler;
+      Ok {name; asm = false; kinds = false; enc=name}
+    | -2 -> errorf "Unknown backend: %s" backend
+    | -3 -> errorf "Unsupported target: %s %s" triple cpu
+    |  n -> errorf "Disasm.Basic: Unknown error %d" n
 
+let custom target encoding backend t =
+  let name = make_name target encoding in
+  match Hashtbl.find disassemblers name with
+  | Some d ->
+    d.users <- d.users + 1;
+    {name; asm=false; kinds=false; enc=encoding_name encoding}
+  | None ->
+    let disassembler = init @@ C.create backend t in
+    Hashtbl.add_exn disassemblers name disassembler;
+    {name; asm=false; kinds=false; enc=encoding_name encoding}
 
 let close dis =
   let disassembler = get dis in
@@ -534,12 +625,9 @@ let close dis =
     C.delete disassembler.dd;
   end
 
-
 let with_disasm ?debug_level ?cpu ?backend triple ~f =
   create ?debug_level ?cpu ?backend triple >>= fun dis ->
   f dis >>| fun res -> close dis; res
-
-type ('a,'k) t = dis
 
 let switch : ('a,'k,'s,'r) state -> ('a,'k) t -> ('a,'k,'s,'r) state = fun s dis -> {s with dis}
 
@@ -572,7 +660,7 @@ let insn_of_mem dis mem =
 
 
 let available_backends () =
-  C.backends_size () |> List.init ~f:C.backend_name
+  Prim.backends_size () |> List.init ~f:Prim.backend_name
 
 module Trie = struct
 

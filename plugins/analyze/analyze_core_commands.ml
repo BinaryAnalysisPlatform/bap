@@ -14,7 +14,7 @@ let read_name name =
 
 
 let print_semantics label slots =
-  KB.collect Theory.Program.Semantics.slot label >>= fun sema ->
+  KB.collect Theory.Semantics.slot label >>= fun sema ->
   KB.List.map slots ~f:read_name >>| fun slots ->
   match slots with
   | [] -> Format.printf "%a@\n" KB.Value.pp sema

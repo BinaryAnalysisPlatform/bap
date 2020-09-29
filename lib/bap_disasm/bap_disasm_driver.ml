@@ -13,8 +13,15 @@ type full_insn = Dis.full_insn [@@deriving sexp_of]
 type insn = Insn.t [@@deriving sexp_of]
 type edge = [`Jump | `Cond | `Fall] [@@deriving compare]
 
-type encoding = Theory.Language.t [@@deriving bin_io, compare, equal]
-let unknown = Theory.Language.unknown
+type encoding = {
+  coding : Theory.Language.t;
+  target : Theory.Target.t;
+} [@@deriving bin_io, compare, equal]
+
+let unknown = {
+  coding = Theory.Language.unknown;
+  target = Theory.Target.unknown;
+}
 
 type jump = {
   encoding : encoding;
@@ -295,6 +302,12 @@ end = struct
     } mem
 end
 
+
+let pp_encoding ppf {target; coding} =
+  Format.fprintf ppf "%a-%a"
+    Theory.Target.pp target
+    Theory.Language.pp coding
+
 let new_insn mem insn =
   let addr = Addr.to_bitvec (Memory.min_addr mem) in
   Theory.Label.for_addr addr >>= fun code ->
@@ -302,10 +315,14 @@ let new_insn mem insn =
   KB.provide Dis.Insn.slot code (Some insn) >>| fun () ->
   code
 
+let get_encoding label =
+  Theory.Label.target label >>= fun target ->
+  KB.collect Theory.Label.encoding label >>| fun coding ->
+  {coding; target}
+
 let collect_dests code =
-  Theory.Label.target code >>= fun target ->
-  KB.collect Theory.Label.encoding code >>= fun encoding ->
-  KB.collect Theory.Program.Semantics.slot code >>= fun insn ->
+  KB.collect Theory.Semantics.slot code >>= fun insn ->
+  get_encoding code >>= fun encoding ->
   let init = {
     encoding;
     call = Insn.(is call insn);
@@ -318,12 +335,14 @@ let collect_dests code =
   | Some dests ->
     Set.to_sequence dests |>
     KB.Seq.fold ~init ~f:(fun dest label ->
-        KB.collect Theory.Label.encoding label >>= fun encoding ->
+        get_encoding label >>= fun encoding ->
         KB.collect Theory.Label.addr label >>| function
         | Some d -> {
             dest with
             encoding;
-            resolved = Set.add dest.resolved (Word.code_addr target d)
+            resolved =
+              Set.add dest.resolved @@
+              Word.code_addr encoding.target d
           }
         | None ->
           {dest with indirect=true; encoding}) >>= fun res ->
@@ -335,7 +354,7 @@ let pp_addr_opt ppf = function
 
 let delay mem insn =
   new_insn mem insn >>= fun code ->
-  KB.collect Theory.Program.Semantics.slot code >>| fun insn ->
+  KB.collect Theory.Semantics.slot code >>| fun insn ->
   KB.Value.get Insn.Slot.delay insn |> function
   | None -> 0
   | Some x -> x
@@ -358,25 +377,22 @@ let classify_mem mem =
         | Some true -> (code,data,Set.add root addr)
         | _ -> (code,data,root))
 
-let create_disassembler language =
-  let name = Theory.Language.name language in
-  let backend = KB.Name.package name
-  and triple = KB.Name.unqualified name in
-  Dis.create ~backend triple
+let create_disassembler {target; coding} =
+  Dis.lookup target coding
 
-let switch lang s =
-  match create_disassembler lang with
+let switch encoding s =
+  match create_disassembler encoding with
   | Error _ -> s
   | Ok dis -> Dis.switch s dis
 
 let rec next_encoding state current code =
-  if Theory.Language.equal unknown current
+  if Theory.Language.is_unknown current.coding
   then
     let addr = Memory.min_addr code in
     KB.Object.scoped Theory.Program.cls @@ fun obj ->
     KB.provide Theory.Label.addr obj (Some (Word.to_bitvec addr)) >>= fun () ->
-    KB.collect Theory.Label.encoding obj >>= fun encoding ->
-    if Theory.Language.equal unknown encoding
+    get_encoding obj >>= fun encoding ->
+    if Theory.Language.is_unknown encoding.coding
     then skip state addr code
     else KB.return encoding
   else KB.return current
@@ -405,7 +421,7 @@ let scan_mem ~code ~data ~funs debt base : Machine.state KB.t =
                 step d (Machine.stopped s encoding))
             ~hit:(fun d mem insn s ->
                 new_insn mem insn >>= fun label ->
-                KB.provide Theory.Label.encoding label encoding >>= fun () ->
+                KB.provide Theory.Label.encoding label encoding.coding >>= fun () ->
                 collect_dests label >>= fun dests ->
                 if Set.is_empty dests.resolved &&
                    not dests.indirect then
@@ -517,21 +533,19 @@ let rec insert pos x xs =
 
 let execution_order stack =
   KB.List.fold stack ~init:[] ~f:(fun insns insn ->
-      KB.collect Theory.Program.Semantics.slot insn >>| fun s ->
+      KB.collect Theory.Semantics.slot insn >>| fun s ->
       match KB.Value.get Insn.Slot.delay s with
       | None -> insn::insns
       | Some d -> insert d insn insns)
 
 let always _ = KB.return true
 
-
-
 let with_disasm beg cfg f =
   Theory.Label.for_addr (Word.to_bitvec beg) >>=
-  KB.collect Theory.Label.encoding >>= fun language ->
-  match create_disassembler language with
+  get_encoding >>= fun encoding ->
+  match create_disassembler encoding with
   | Error _ -> KB.return (cfg,None)
-  | Ok dis -> f language dis
+  | Ok dis -> f encoding dis
 
 let explore
     ?entry:start ?(follow=always) ~block ~node ~edge ~init
