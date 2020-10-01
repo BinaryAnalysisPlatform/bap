@@ -5472,6 +5472,20 @@ module Std : sig
     (** [segment_of_symbol image sym] a segment to which [sym] belongs.*)
     val segment_of_symbol  : t -> symbol -> segment
 
+    (** Interface to the image specification.
+
+        @since 2.2.0
+    *)
+    module Spec : sig
+
+      (** [from_arch x] constructs a minimal specification
+          for the given architecture [x]. *)
+      val from_arch : arch -> Ogre.doc
+
+      (** the slot to access the specification of the uni  *)
+      val slot : (Theory.Unit.cls, Ogre.doc) KB.slot
+    end
+
     (** Image Segments.
         Segment is a contiguous region of memory that has
         permissions. The same as segment in ELF.    *)
@@ -6005,9 +6019,308 @@ module Std : sig
       control flow graph, and represents the latter as a table of
       blocks. *)
   module Disasm_expert : sig
+
+
+    (** The interface for custom backends.
+
+        This is an OCaml interface for defining custom disassembling
+        backends in pure OCaml. An alternative interface in C++ can
+        be found at disasm.hpp and disasm.h.
+
+        The interface is pretty low-level and mimics one-to-one the
+        existing C interface between OCaml and the C/C++ disassemblers
+        backends, which, in turn, are optimized for performance.
+
+        The [Basic.custom] function wraps the backend interface and
+        enables seamless integration with the existing [Basic.t]
+        interface. To make the custom [backend] available for your
+        [encoding], use [Basic.register encoding] function to register
+        a constructor that uses [Basic.custom], e.g.,
+
+        {[
+          let () = Basic.register encoding @@ fun target ->
+            let dis = create_custom target in
+            Ok (Basic.custom ?target encoding backend)
+        ]}
+
+        where [create_custom] is a user function that creates
+        the custom backend and [target] contains the detailed
+        information about the target system.
+
+        The [Basic.lookup] function could be used then to lazily
+        create the disassembler for the given [encoding], [target]
+        pair. The constructor will be called only once for each pair.
+
+        @since 2.2.0
+    *)
+    module Backend : sig
+
+      (** possible semantic predicates for instructions  *)
+      type predicate =
+        | Is_true
+        | Is_invalid
+        | Is_return
+        | Is_call
+        | Is_barrier
+        | Is_terminator
+        | Is_branch
+        | Is_indirect_branch
+        | Is_conditional_branch
+        | Is_unconditional_branch
+        | May_affect_control_flow
+        | May_store
+        | May_load
+      [@@deriving compare, sexp]
+
+
+      (** operand types  *)
+      type op =
+        | Reg (** a register  *)
+        | Imm (** an integer immediate  *)
+        | Fmm (** a floating-point immediate  *)
+        | Insn (** a sub-instruction  *)
+      [@@deriving compare, sexp]
+
+
+      (** The backend interface.
+
+          The backend is a simple automaton that disassembles
+          instructions and pushes them into the queue. It runs until it
+          either hits an instruction that matches with one of the
+          previously set predicates or if it either hits an invalid
+          instruction or runs out of the bounds of the specified
+          memory region. On the high level the algorithm of the [run]
+          function can be described with the following pseudocode.
+
+          1. disassemble instruction
+          2. push result into the queue
+          3. update the offset
+          4. if exists predicate p such that p(insn)
+             or off >= length(data)
+             then stop
+             else goto 1.
+
+          If it is impossible to decode the given sequence of bytes,
+          then an invalid instruction is pushed into the queue and
+          disassembling continues on the next offset.
+
+          Predicates enables fine control over the behavior of the
+          disassembler. For example, the [Is_true] predicate is always
+          [true] disassembler will stop after each instruction. The
+          backend is not required to support all predicates, only
+          [Is_true] and [Is_invalid] are required.
+
+          The state of the disassembler includes the queue of
+          disassembled instructions, the last disassembled
+          instruction, the set of predicates, and the current
+          offset. At the beginning, the queue and the set of predicates
+          are empty, the offset is zero, and the last disassembled
+          instruction is invalid.
+
+          To minimize allocations, opcodes and register names are
+          represented as offsets in the corresponding string
+          tables.
+
+      *)
+      module type S = sig
+
+        (** an abs  *)
+        type t
+
+        (** [delete d] is called when the disassembler is no longer needed.
+
+            It is safe now to free any data related with the disassembler.
+        *)
+        val delete : t -> unit
+
+
+        (** [set_memory dis addr data ~off ~len] sets the current memory region.
+
+            Sets the memory region accessible by disassembler to a
+            substring of [data] starting at the offset [off] and
+            having the length [len] with the first byte at [off]
+            having the address [addr].
+
+            Parameters [off] and [len] must be non-negative
+            numbers. The [offset dis] shall be equal to [0] after this
+            function is executed.
+        *)
+        val set_memory : t -> int64 -> Bigstring.t -> off:int -> len:int -> unit
+
+        (** [store_predicates dis on_off] turns predicate storage on or off.
+
+            When it is [off] it is not required to store semantic
+            predicates for each instruction in the queue, only for the
+            last disassembled one.
+            It is [off] by default.
+        *)
+        val store_predicates : t -> bool -> unit
+
+        (** [store_asm_string dis on_off] turns assembly string
+            storage on or off.
+
+            When it is [off] it is not required to store assembly
+            strings for each instruction in the queue, only for the
+            last disassembled one.
+
+            It is [off] by default.  *)
+        val store_asm_string : t -> bool -> unit
+
+        (** [insn_table dis] returns a string table for opcodes.
+
+            The table contains a sequence of null-terminated strings.
+        *)
+        val insn_table : t -> Bigstring.t
+
+        (** [reg_table dis] returns a string table for register names.
+
+            The table contains a sequence of null-terminated strings.
+        *)
+        val reg_table : t -> Bigstring.t
+
+        (** [predicates_clear dis] clears the set of predicates. *)
+        val predicates_clear : t -> unit
+
+        (** [predicates_push dis p] adds [p] to the set of predicates.
+
+            precondition: [is_supported dis p].
+        *)
+        val predicates_push : t -> predicate -> unit
+
+        (** [is_supported dis p] is [true] if [dis] supports [p].*)
+        val is_supported : t -> predicate -> bool
+
+        (** [set_offset dis off] sets the current offset to [off].  *)
+        val set_offset : t -> int -> unit
+
+        (** [offset dis] is the current offset. *)
+        val offset : t -> int
+
+        (** [run dis] runs the disassembler.
+
+            The disassembler runs until it hits an instruction that
+            matches one of the predicates in the disassemblers current
+            set of predicates or it runs out of the boundaries of the
+            currently specified memory region.
+
+            See the module description for the more detailed
+            description of the backend algorithm.
+        *)
+        val run : t -> unit
+
+
+        (** [insns_clear dis] clears the disassembler instructions queue.  *)
+        val insns_clear : t -> unit
+
+        (** [insns_size dis] the length of the instruction queue.  *)
+        val insns_size : t -> int
+
+        (** {3 Instructions}
+
+            Each operation in this section takes a parameter labeled
+            with [insn] that designates the position of the
+            instruction in the queue, with [0] being the first
+            disassembled instruction and [insn_size dis - 1] being the
+            last disassembled.
+        *)
+        (** [insn_size dis ~insn:n] the [n]th instruction length.   *)
+        val insn_size : t -> insn:int -> int
+
+        (** [insn_name dis ~insn:n] the [n]th instruction name.   *)
+        val insn_name : t -> insn:int -> int
+
+        (** [insn_name dis ~insn:n] the [n]th instruction opcode.
+
+            The opcode name is represented as an offset to the
+            [insn_table dis] string table in which each element is a
+            null-terminated string.
+        *)
+        val insn_code : t -> insn:int -> int
+
+        (** [insn_offset dis ~insn:n] the offset of [n]th instruction.  *)
+        val insn_offset : t -> insn:int -> int
+
+        (** [insn_offset dis ~insn:n] the [n]th instruction assembly
+            string length.  *)
+        val insn_asm_size : t -> insn:int -> int
+
+        (** [insn_asm_copy dis ~insn:n data] copies the assembly
+            string of the [n]th instruction.  *)
+        val insn_asm_copy : t -> insn:int -> Bytes.t -> unit
+
+        (** [insn_satisfies dis ~insn:n p] is [true] if
+            the [n]th instruction satisfies the predicate [p].  *)
+        val insn_satisfies : t -> insn:int -> predicate -> bool
+
+        (** [insn_ops_size dis ~insn:n] the number of operands.  *)
+        val insn_ops_size : t -> insn:int -> int
+
+
+        (** {4 Instruction Operands}
+
+            The following function accesses operands of [n]'th
+            instruction. Each operand is referenced by its position
+            [m] with [0] being the first operand (if such exists) and
+            [insn_ops_size dis - 1] being the last operand.
+
+            The operand type is denoted with the [op] type.
+        *)
+        (** [insn_op_type dis ~insn:n ~oper:m] the [m]th operand type.  *)
+        val insn_op_type : t -> insn:int -> oper:int -> op
+
+        (** [insn_op_reg_name dis ~insn:n ~oper:m] the register name.
+
+            Returns the register name of the operand [m]. The name is
+            represented as an offset to the [reg_table dis], which is
+            a string table of null-terminated strings.
+
+            Precondition: [insn_op_type dis ~insn:n ~oper:m = Reg]
+        *)
+        val insn_op_reg_name : t -> insn:int -> oper:int -> int
+
+        (** [insn_op_reg_name dis ~insn:n ~oper:m] the register code.
+
+            Returns the register code of the operand [m]. The code is
+            a unique number identifying the register (could be the
+            same as [insn_op_reg_name].
+
+            Precondition: [insn_op_type dis ~insn:n ~oper:m = Reg]
+        *)
+        val insn_op_reg_code : t -> insn:int -> oper:int -> int
+
+
+        (** [insn_op_imm_value dis ~insn:n ~oper:m] the immediate value.
+
+            Returns the value of the operand [m].
+
+            Precondition: [insn_op_type dis ~insn:n ~oper:m = Imm]
+        *)
+        val insn_op_imm_value : t -> insn:int -> oper:int -> int64
+
+        (** [insn_op_imm_small_value dis ~insn:n ~oper:m] the immediate value.
+
+            If the value [v] of the operand [m] is strictly greater
+            than [Int.min_val] and is strictly less than [Int.max_val]
+            then returns [v] otherwise returns [Int.min_val] or [Int.max_val].
+
+            Precondition: [insn_op_type dis ~insn:n ~oper:m = Imm]
+        *)
+        val insn_op_imm_small_value : t -> insn:int -> oper:int -> int
+
+
+        (** [insn_op_fmm_value] the floating-point immediate value.
+
+            Returns the value of the operand [m].
+
+            Precondition: [insn_op_type dis ~insn:n ~oper:m = Fmm] *)
+        val insn_op_fmm_value : t -> insn:int -> oper:int -> float
+      end
+
+    end
+
     (** Basic disassembler.
 
-        This is a target agnostic basic low-level disassembler. *)
+        This is a target agnostic basic low-level machine code disassembler. *)
     module Basic : sig
       (** predicate to drive the disassembler *)
       type pred = [
@@ -6080,6 +6393,55 @@ module Std : sig
           be made the same. *)
       type (+'a,+'k,'s,'r) state
 
+
+      (** [register encoding constructor] registers a disassembler
+          [constructor] for the given [encoding].
+
+          The constructor receives the [target] value that
+          further specifies the details of the target system, e.g.,
+          a cpu model, limitiations on the instruction set, etc.
+
+          The constructor commonly uses {!create} and passes the
+          backend and target specific options to it. It can also use
+          the {!custom} function to create its own
+          backend. Alternatively, the {!lookup} function could be used
+          to delegate the decoding to another encoder.
+      *)
+      val register : Theory.language ->
+        (Theory.target -> (empty,empty) t Or_error.t) ->
+        unit
+
+      (** [lookup target encoding] returns the disassembler for the
+          specified [target] and [encoding], creates one if necessary.
+
+          Returns an error if there is no constructor for the given
+          encoding registered (via the {!register} function) or if the
+          constructor itself fails to create a disassembler. *)
+      val lookup : Theory.target -> Theory.language -> (empty,empty) t Or_error.t
+
+      (** [create ?debug_level ?cpu ~backend target] creates the
+          disassmbler from one of the C-level backends.
+
+          The parameters are backend-specific and are commonly
+          set by the target support plugins via the {!register}
+          function, therefore the [create] function should only be used
+          to register a new target. Use {!lookup} to get an appropriate
+          disassembler for your target/encoding. *)
+      val create :
+        ?debug_level:int ->
+        ?cpu:string ->
+        ?backend:string ->
+        string -> (empty, empty) t Or_error.t
+
+
+      (** [custom target encoding backend disassembler] creates a
+          custom backend for the given [target] and [encoding].
+
+          This function is commonly called by the constructor
+          function registered with the {!register} function. *)
+      val custom : Theory.target -> Theory.language ->
+        (module Backend.S with type t = 'a) -> 'a -> (empty,empty) t
+
       (** [with_disasm ?debug_level ?cpu ~backend ~f target] creates a
           disassembler passing all options to [create] function and
           applies function [f] to it. Once [f] is evaluated the
@@ -6087,18 +6449,6 @@ module Std : sig
       val with_disasm :
         ?debug_level:int -> ?cpu:string -> ?backend:string -> string ->
         f:((empty, empty) t -> 'a Or_error.t) -> 'a Or_error.t
-
-      (** [create ?debug_level ?cpu ~backend target] creates a
-          disassembler for the specified [target]. All parameters are
-          backend specific, consult the concrete backend for more
-          information. In general, the greater [debug_level] is, the
-          more debug information will be outputted by a backend. To
-          silent backend set it [0]. This is a default value. Example:
-
-          [create ~debug_level:3 ~backend:"llvm" "x86_64" ~f:process]
-      *)
-      val create : ?debug_level:int -> ?cpu:string -> ?backend:string -> string ->
-        (empty, empty) t Or_error.t
 
       (** [close d] closes a disassembler [d].   *)
       val close : (_,_) t -> unit
@@ -9434,10 +9784,6 @@ module Std : sig
 
         @since 2.2.0 *)
     val specification : t -> Ogre.doc
-
-    (** the slot to access the specification of a unit.
-        @since 2.2.0 *)
-    val specification_slot : (Theory.Unit.cls, Ogre.Doc.t) KB.slot
 
     (** [state project] returns the core state of the [project].
 

@@ -26,6 +26,11 @@ val powerpc64eb : Theory.Target.t (** The big endian PowerPC64  *)
 val powerpc64le : Theory.Target.t (** The little endian PowerPC64  *)
 
 
+(** {2 The PowerPC encodings}  *)
+
+val llvm_powerpc32 : Theory.language
+val llvm_powerpc64 : Theory.language
+
 (** [load ()] loads the knowledge base rules for the PowerPC targets.
 
     This includes parsing the loader output and enabling backward

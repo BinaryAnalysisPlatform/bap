@@ -81,7 +81,7 @@ let global_cfg disasm =
         Driver.execution_order insns >>=
         KB.List.filter_map ~f:(fun label ->
             KB.collect Basic.Insn.slot label >>= fun basic ->
-            KB.collect Theory.Program.Semantics.slot label >>= fun s ->
+            KB.collect Theory.Semantics.slot label >>= fun s ->
             KB.collect Memory.slot label >>| function
             | None -> None
             | Some mem -> Some (mem,create_insn basic s)) >>|
@@ -119,7 +119,7 @@ let with_unit =
         KB.collect Theory.Label.addr label >>= function
         | Some p when Memory.contains mem @@ Word.create p width ->
           Theory.Unit.for_region ~lower ~upper >>= fun unit ->
-          KB.provide Arch.unit_slot unit arch >>| fun () ->
+          KB.provide Image.Spec.slot unit (Image.Spec.from_arch arch) >>| fun () ->
           Some unit
         | _ -> KB.return None)
 

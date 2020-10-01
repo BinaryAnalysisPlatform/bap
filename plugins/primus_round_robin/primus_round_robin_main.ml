@@ -39,12 +39,8 @@ module RR(Machine : Primus.Machine.S) = struct
     | Some (next,pending) ->
       Machine.status next >>= function
       | `Dead ->
-        eprintf "Machine %a is dead, skipping over@\n%!"
-          Machine.Id.pp next;
         schedule {pending; finished = Set.add t.finished next}
       | _ ->
-        eprintf "Switching to machine %a@\n"
-          Machine.Id.pp next;
         Machine.Global.put state {t with pending} >>= fun () ->
         Machine.switch next >>= fun () ->
         Machine.Global.get state >>= schedule
@@ -56,7 +52,6 @@ module RR(Machine : Primus.Machine.S) = struct
     Machine.current () >>= fun id ->
     Machine.Global.update state ~f:(fun t ->
         {t with finished = Set.add t.finished id}) >>= fun () ->
-    eprintf "machine %a is done@\n%!" Machine.Id.pp id;
     step ()
 
 

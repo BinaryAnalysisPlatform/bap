@@ -80,7 +80,7 @@ let domain = KB.Domain.optional ~inspect "graph"
     ~equal:(fun x y -> Theory.Label.equal x.entry y.entry)
 
 let graph =
-  KB.Class.property Theory.Program.Semantics.cls "ir-graph" domain
+  KB.Class.property Theory.Semantics.cls "ir-graph" domain
     ~persistent:(KB.Persistent.of_binable (module struct
                    type t = cfg option [@@deriving bin_io]
                  end))

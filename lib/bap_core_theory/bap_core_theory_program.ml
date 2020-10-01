@@ -47,32 +47,17 @@ let string_property ?(domain=name) ~desc cls name =
     ~public:true
     ~desc
 
+module Language = Target.Enum.Make()
+type language = Language.t
+
 module Source = struct
   type cls = Source
   let cls : (cls,unit) Knowledge.cls =
     Knowledge.Class.declare ~package "unit-source" ()
 
-  type language = Knowledge.Name.t
-
-  module Language = struct
-    type t = Knowledge.Name.t [@@deriving bin_io]
-    let declare ?package name = Knowledge.Name.create ?package name
-    let unknown = Knowledge.Name.read ":unknown"
-    let name x = x
-    include Base.Comparable.Make(Knowledge.Name)
-
-    let domain = Knowledge.Domain.flat
-        ~inspect:Knowledge.Name.sexp_of_t
-        ~empty:unknown
-        ~equal "language"
-
-    include (Knowledge.Name : Stringable.S with type t := t)
-    include (Knowledge.Name : Pretty_printer.S with type t := t)
-  end
-
   let language = Knowledge.Class.property cls
       ~package "source-language" Language.domain
-      ~persistent:Knowledge.Persistent.name
+      ~persistent:Language.persistent
       ~public:true
       ~desc:"the language of the unit's source code"
 
@@ -90,8 +75,40 @@ module Source = struct
   let persistent = Knowledge.Persistent.of_binable (module Value)
 
   include Value
-
 end
+
+module Compiler = struct
+  type t = {
+    name : string;
+    version : string list;
+    options : string list;
+    specs : string String.Map.t;
+  } [@@deriving bin_io, compare, equal, fields, sexp]
+
+  let create ?(specs=[]) ?(version=[]) ?(options=[]) name = {
+    name; version; options;
+    specs = String.Map.of_alist_exn specs;
+  }
+
+  let pp ppf x = Sexp.pp_hum ppf (sexp_of_t x)
+
+  let to_string x = Format.asprintf "%a" pp x
+
+  let persistent = Knowledge.Persistent.of_binable (module struct
+      type nonrec t = t option [@@deriving bin_io]
+    end)
+
+  let domain = Knowledge.Domain.optional
+      ~inspect:sexp_of_t
+      ~equal
+      "compiler"
+
+  include Base.Comparable.Make(struct
+      type nonrec t = t [@@deriving bin_io, compare, sexp]
+    end)
+end
+
+type compiler = Compiler.t
 
 module Unit = struct
   open Knowledge.Syntax
@@ -104,19 +121,6 @@ module Unit = struct
 
   let path = string_property ~domain:path cls "unit-path"
       ~desc:"a filesystem name of the file that contains the program"
-
-  let format = string_property ~domain:format cls "unit-format"
-      ~desc:"the file format that used to encode the unit"
-
-  let is_executable =
-    Knowledge.Class.property ~package cls "unit-is-executable"
-      Knowledge.Domain.bool
-      ~persistent:(Knowledge.Persistent.of_binable (module struct
-                     type t = bool option [@@deriving bin_io]
-                   end))
-      ~public:true
-      ~desc:"whether the unit is ready to be executed by the OS"
-
 
   let bias = Knowledge.Class.property ~package cls "unit-bias" word
       ~persistent:(Knowledge.Persistent.of_binable (module struct
@@ -156,40 +160,6 @@ module Unit = struct
       ~public:true
       ~desc:"the source of the unit"
 
-
-  module Compiler = struct
-    type t = {
-      name : string;
-      version : string list;
-      options : string list;
-      specs : string String.Map.t;
-    } [@@deriving bin_io, compare, equal, fields, sexp]
-
-    let create ?(specs=[]) ?(version=[]) ?(options=[]) name = {
-      name; version; options;
-      specs = String.Map.of_alist_exn specs;
-    }
-
-    let pp ppf x = Sexp.pp_hum ppf (sexp_of_t x)
-
-    let to_string x = Format.asprintf "%a" pp x
-
-    let persistent = Knowledge.Persistent.of_binable (module struct
-        type nonrec t = t option [@@deriving bin_io]
-      end)
-
-    let domain = Knowledge.Domain.optional
-        ~inspect:sexp_of_t
-        ~equal
-        "compiler"
-
-    include Base.Comparable.Make(struct
-        type nonrec t = t [@@deriving bin_io, compare, sexp]
-      end)
-  end
-
-  type compiler = Compiler.t
-
   let compiler = Knowledge.Class.property ~package cls "unit-compiler"
       Compiler.domain
       ~persistent:Compiler.persistent
@@ -228,6 +198,12 @@ module Label = struct
   let is_subroutine = attr "is-subroutine"
       "is the program a subroutine entry point"
 
+  let encoding = Knowledge.Class.property ~package cls "encoding"
+      Language.domain
+      ~persistent:Language.persistent
+      ~public:true
+      ~desc:"the language of the code"
+
   let unit = Knowledge.Class.property ~package cls "label-unit" unit
       ~persistent:(Knowledge.Persistent.of_binable (module struct
                      type t = Unit.t option
@@ -235,8 +211,6 @@ module Label = struct
                    end))
       ~public:true
       ~desc:"the program unit"
-
-
 
   let addr = Knowledge.Class.property ~package cls "label-addr" word
       ~persistent:(Knowledge.Persistent.of_binable (module struct

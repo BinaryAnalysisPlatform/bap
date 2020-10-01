@@ -133,7 +133,7 @@ let build_cfg disasm calls entry =
     ~block:(fun mem insns ->
         Disasm.execution_order insns >>= fun insns ->
         KB.List.filter_map insns ~f:(fun label ->
-            KB.collect Theory.Program.Semantics.slot label >>= fun s ->
+            KB.collect Theory.Semantics.slot label >>= fun s ->
             KB.collect Memory.slot label >>| function
             | None -> None
             | Some mem -> Some (mem, s)) >>| fun insns ->

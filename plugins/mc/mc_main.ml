@@ -216,7 +216,7 @@ let new_insn arch mem insn =
 
 let lift arch mem insn =
   match KB.run Theory.Program.cls (new_insn arch mem insn) KB.empty with
-  | Ok (code,_) -> Ok (KB.Value.get Theory.Program.Semantics.slot code)
+  | Ok (code,_) -> Ok (KB.Value.get Theory.Semantics.slot code)
   | Error conflict -> fail (Inconsistency conflict)
 
 let print_insn_size formats mem =

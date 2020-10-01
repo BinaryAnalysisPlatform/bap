@@ -26,6 +26,12 @@ val mips64eb : Theory.Target.t (** The big endian MIPS64  *)
 val mips64le : Theory.Target.t (** The little endian MIPS64  *)
 
 
+
+(** {2 MIPS encodings}  *)
+
+val llvm_mips32 : Theory.language
+val llvm_mips64 : Theory.language
+
 (** [load ()] loads the knowledge base rules for the MIPS targets.
 
     This includes parsing the loader output and enabling backward

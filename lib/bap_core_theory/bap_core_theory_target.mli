@@ -10,7 +10,7 @@ type endianness
 type system
 type abi
 type fabi
-type format
+type filetype
 type options = (options_cls,unit) KB.Class.t KB.Value.t and options_cls
 
 val declare :
@@ -24,7 +24,7 @@ val declare :
   ?system:system ->
   ?abi:abi ->
   ?fabi:fabi ->
-  ?format:format ->
+  ?filetype:filetype ->
   ?options:options ->
   ?nicknames:string list ->
   ?package:string ->
@@ -55,50 +55,43 @@ val endianness : t -> endianness
 val system : t -> system
 val abi : t -> abi
 val fabi : t -> fabi
-val format : t -> format
+val filetype : t -> filetype
 val options : t -> options
 
 val domain : t KB.Domain.t
 val persistent : t KB.Persistent.t
 
+module Enum : sig
+  module type S = sig
+    include Base.Comparable.S
+    include Binable.S with type t := t
+    include Stringable.S with type t := t
+    include Pretty_printer.S with type t := t
+    include Sexpable.S with type t := t
+    val declare : ?package:string -> string -> t
+    val read : ?package:string -> string -> t
+    val name : t -> KB.Name.t
+    val unknown : t
+    val is_unknown : t -> bool
+    val domain : t KB.domain
+    val persistent : t KB.persistent
+    val hash : t -> int
+  end
+
+  module Make() : S
+end
+
 module Endianness : sig
-  include Base.Comparable.S with type t = endianness
-  include Binable.S with type t := t
-  include Stringable.S with type t := t
-  include Pretty_printer.S with type t := t
+  include Enum.S with type t = endianness
   val le : endianness
   val eb : endianness
   val bi : endianness
-  val declare : ?package:string -> string -> endianness
-  val name : endianness -> KB.Name.t
 end
 
-module System : sig
-  include Base.Comparable.S with type t = system
-  include Binable.S with type t := t
-  include Stringable.S with type t := t
-  include Pretty_printer.S with type t := t
-  val declare : ?package:string -> string -> system
-  val name : system -> KB.Name.t
-end
-
-module Abi : sig
-  include Base.Comparable.S with type t = abi
-  include Binable.S with type t := t
-  include Stringable.S with type t := t
-  include Pretty_printer.S with type t := t
-  val declare : ?package:string -> string -> abi
-  val name : abi -> KB.Name.t
-end
-
-module Fabi : sig
-  include Base.Comparable.S with type t = fabi
-  include Binable.S with type t := t
-  include Stringable.S with type t := t
-  include Pretty_printer.S with type t := t
-  val declare : ?package:string -> string -> fabi
-  val name : fabi -> KB.Name.t
-end
+module System : Enum.S with type t = system
+module Filetype : Enum.S with type t = filetype
+module Abi : Enum.S with type t = abi
+module Fabi : Enum.S with type t = fabi
 
 module Options : sig
   type cls = options_cls
@@ -113,3 +106,7 @@ include Base.Comparable.S with type t := t
 include Binable.S with type t := t
 include Stringable.S with type t := t
 include Pretty_printer.S with type t := t
+val name : t -> KB.Name.t
+val unknown : t
+val domain : t KB.domain
+val persistent : t KB.persistent

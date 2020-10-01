@@ -26,7 +26,7 @@ let untyped = List.map ~f:Theory.Var.forget
 let (@<) xs ys = untyped xs @ untyped ys
 
 let name size order  =
-  let order = Theory.Target.Endianness.name order in
+  let order = Theory.Endianness.name order in
   sprintf "powerpc%d+%s" size (KB.Name.unqualified order)
 
 let parent = Theory.Target.declare ~package "powerpc"
@@ -61,13 +61,13 @@ let define ?(parent=parent) bits endianness =
     ~data:data
 
 
-let powerpc32bi = define r32 Theory.Target.Endianness.bi
-let powerpc32eb = define r32 Theory.Target.Endianness.eb ~parent:powerpc32bi
-let powerpc32le = define r32 Theory.Target.Endianness.le ~parent:powerpc32bi
+let powerpc32bi = define r32 Theory.Endianness.bi
+let powerpc32eb = define r32 Theory.Endianness.eb ~parent:powerpc32bi
+let powerpc32le = define r32 Theory.Endianness.le ~parent:powerpc32bi
 
-let powerpc64bi = define r64 Theory.Target.Endianness.bi
-let powerpc64le = define r64 Theory.Target.Endianness.le ~parent:powerpc64bi
-let powerpc64eb = define r64 Theory.Target.Endianness.eb ~parent:powerpc64bi
+let powerpc64bi = define r64 Theory.Endianness.bi
+let powerpc64le = define r64 Theory.Endianness.le ~parent:powerpc64bi
+let powerpc64eb = define r64 Theory.Endianness.eb ~parent:powerpc64bi
 
 let enable_loader () =
   let open KB.Syntax in
@@ -81,7 +81,7 @@ let enable_loader () =
     | Error _ -> None,None
     | Ok info -> info in
   KB.promise Theory.Unit.target @@ fun unit ->
-  KB.collect Project.specification_slot unit >>|
+  KB.collect Image.Spec.slot unit >>|
   request_info >>| function
   | Some "powerpc", None -> powerpc32bi
   | Some "powerpc64",None -> powerpc64bi
@@ -106,7 +106,28 @@ let map_powerpc () =
   | Some arch -> arch
   | None -> `unknown
 
+module Dis = Disasm_expert.Basic
+
+let llvm_powerpc32 = Theory.Language.declare ~package "llvm-powerpc32"
+let llvm_powerpc64 = Theory.Language.declare ~package "llvm-powerpc64"
+
+let register encoding triple =
+  Dis.register encoding @@ fun _ ->
+  Dis.create ~backend:"llvm" triple
+
+let enable_decoder () =
+  let open KB.Syntax in
+  register llvm_powerpc32 "powerpc";
+  register llvm_powerpc64 "powerpc64";
+  KB.promise Theory.Label.encoding @@ fun label ->
+  Theory.Label.target label >>| fun t ->
+  if Theory.Target.belongs parent t then
+    if Theory.Target.belongs powerpc32bi t
+    then llvm_powerpc32
+    else llvm_powerpc64
+  else Theory.Language.unknown
 
 let load () =
   enable_loader ();
+  enable_decoder ();
   map_powerpc ()

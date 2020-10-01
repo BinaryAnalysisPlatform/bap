@@ -187,12 +187,12 @@ module Optimizer = Theory.Parser.Make(Bil_semantics.Core)
 
 let provide_bir () =
   KB.Rule.(declare ~package "reify-ir" |>
-           require Theory.Program.Semantics.slot |>
+           require Theory.Semantics.slot |>
            require Bil_ir.slot |>
-           provide Theory.Program.Semantics.slot |>
+           provide Theory.Semantics.slot |>
            comment "reifies IR");
-  KB.promise Theory.Program.Semantics.slot @@ fun obj ->
-  KB.collect Theory.Program.Semantics.slot obj >>| fun sema ->
+  KB.promise Theory.Semantics.slot @@ fun obj ->
+  KB.collect Theory.Semantics.slot obj >>| fun sema ->
   let bir = Bil_ir.reify @@  KB.Value.get Bil_ir.slot sema in
   KB.Value.put Term.slot sema bir
 
@@ -223,8 +223,7 @@ module Relocations = struct
         (Seq.filter_map ~f:Arch.of_string s) >>= fun a ->
       match a with
       | Some a -> Fact.return a
-      | None -> Fact.failf "unknown/unsupported architecture" ()
-
+      | None -> Fact.return `unknown
 
     let arch_width =
       arch >>| fun arch -> Arch.addr_size arch |> Size.in_bits
@@ -463,7 +462,7 @@ let lift ~enable_intrinsics:{for_all; for_unk; for_special; predicates}
 let provide_lifter ~enable_intrinsics ~with_fp () =
   info "providing a lifter for all BIL lifters";
   let relocations = Relocations.subscribe () in
-  let unknown = Theory.Program.Semantics.empty in
+  let unknown = Theory.Semantics.empty in
   let context arch =
     sprintf "arch-%a" Arch.str arch ::
     if with_fp
@@ -498,9 +497,9 @@ let provide_lifter ~enable_intrinsics ~with_fp () =
   KB.Rule.(declare ~package "bil-semantics" |>
            require Memory.slot |>
            require Disasm_expert.Basic.Insn.slot |>
-           provide Theory.Program.Semantics.slot |>
+           provide Theory.Semantics.slot |>
            comment "denotates BIL in the Core Theory terms");
-  Knowledge.promise Theory.Program.Semantics.slot lifter
+  Knowledge.promise Theory.Semantics.slot lifter
 
 
 let init ~enable_intrinsics ~with_fp () =

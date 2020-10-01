@@ -92,6 +92,66 @@ end
 type segment = Segment.t [@@deriving bin_io, compare, sexp]
 type symbol = Symbol.t [@@deriving bin_io,compare, sexp]
 
+module Scheme = struct
+  open Ogre.Type
+  type addr = int64
+  type size = int64
+  type off = int64
+  type value = int64
+  type 'a region = {addr : int64; size: int64; info : 'a}
+  let region addr size info = {addr; size; info}
+  let void_region addr size = {addr; size; info = ()}
+
+  let off  = "off"  %: int
+  let size = "size" %: int
+  let addr = "addr" %: int
+  let value = "value" %: int
+  let name = "name" %: str
+  let root = "root" %: int
+  let readable   = "r" %: bool
+  let writable   = "w" %: bool
+  let executable = "x" %: bool
+  let flag = "flag" %: bool
+  let fixup = "fixup" %: int
+
+  let location () = scheme addr $ size
+  let declare name scheme f = Ogre.declare ~name scheme f
+  let named n scheme f = declare n (scheme $ name) f
+  let arch    () = declare "arch" (scheme name) ident
+  let subarch    () = declare "subarch" (scheme name) ident
+  let vendor    () = declare "vendor" (scheme name) ident
+  let system    () = declare "system" (scheme name) ident
+  let format    () = declare "format" (scheme name) ident
+  let abi    () = declare "abi" (scheme name) ident
+  let bits    () = declare "bits" (scheme size) ident
+  let is_little_endian () = declare "is-little-endian" (scheme flag) ident
+  let is_executable () = declare "is-executable" (scheme flag) ident
+  let bias    () = declare "bias" (scheme off) ident
+  let section () = declare "section" (location ()) void_region
+  let code_start   () = declare "code-start" (scheme addr) ident
+  let entry_point  () = declare "entry-point" (scheme addr) ident
+  let symbol_chunk () = declare "symbol-chunk" (location () $ root) region
+  let named_region () = named "named-region" (location ()) region
+  let named_symbol () = named "named-symbol" (scheme addr) (fun x y -> x,y)
+  let rwx scheme = scheme $ readable $ writable $ executable
+  let segment () = declare "segment" (location () |> rwx)
+      (fun addr size r w x -> {addr; size; info=(r,w,x)})
+  let mapped () = declare "mapped" (location () $off)
+      (fun addr size off -> region addr size off)
+
+  let code_region () =
+    declare "code-region" (scheme addr $ size $ off) Tuple.T3.create
+
+  let relocation () =
+    declare "relocation" (scheme fixup $ addr) Tuple.T2.create
+  let external_reference () =
+    declare "external-reference" (scheme addr $ name) Tuple.T2.create
+  let base_address () = declare "base-address" (scheme addr) ident
+
+  let symbol_value () =
+    declare "symbol-value" (scheme addr $ value) Tuple.T2.create
+end
+
 module Spec = struct
   type t = {
     arch : arch;
@@ -101,6 +161,28 @@ module Spec = struct
     sections : unit region list;
     code  : mapped region list;
   } [@@deriving bin_io, compare, sexp]
+
+  let slot = Bap_ogre.slot
+
+  let provide_arch arch =
+    let module Field = Scheme in
+    let open Ogre.Syntax in
+    let bits = Int64.of_int (Size.in_bits (Arch.addr_size arch))  in
+    Ogre.sequence [
+      Ogre.provide Field.arch (Arch.to_string arch);
+      Ogre.provide Field.bits bits;
+      Ogre.provide Field.is_little_endian @@
+      match Arch.endian arch with
+      | LittleEndian -> true
+      | BigEndian -> false
+    ]
+
+  let from_arch arch =
+    match Ogre.exec (provide_arch arch) Ogre.Doc.empty with
+    | Error err ->
+      failwithf "got a malformed ogre document: %s"
+        (Error.to_string_hum err) ();
+    | Ok doc -> doc
 end
 
 
@@ -162,9 +244,10 @@ let file = Value.Tag.register (module String)
     ~name:"file"
     ~uuid:"c119f700-4069-47ad-ba99-fc29791e0d47"
 
-let specification = Value.Tag.register (module Bap_ogre.Doc)
+let specification = Value.Tag.register (module Bap_ogre)
     ~name:"image-specification"
     ~uuid:"a0c98f1f-3693-412a-a11a-2b6c3f6935a7"
+
 
 let mem_of_locn mem {addr;size} : mem Or_error.t =
   match Memory.view ~from:addr ~words:size mem with
@@ -330,67 +413,6 @@ let register_loader ~name backend =
 
 let find_loader = Hashtbl.find backends
 
-module Scheme = struct
-  open Ogre.Type
-  type addr = int64
-  type size = int64
-  type off = int64
-  type value = int64
-  type 'a region = {addr : int64; size: int64; info : 'a}
-  let region addr size info = {addr; size; info}
-  let void_region addr size = {addr; size; info = ()}
-
-  let off  = "off"  %: int
-  let size = "size" %: int
-  let addr = "addr" %: int
-  let value = "value" %: int
-  let name = "name" %: str
-  let root = "root" %: int
-  let readable   = "r" %: bool
-  let writable   = "w" %: bool
-  let executable = "x" %: bool
-  let flag = "flag" %: bool
-  let fixup = "fixup" %: int
-
-  let location () = scheme addr $ size
-  let declare name scheme f = Ogre.declare ~name scheme f
-  let named n scheme f = declare n (scheme $ name) f
-  let arch    () = declare "arch" (scheme name) ident
-  let subarch    () = declare "subarch" (scheme name) ident
-  let vendor    () = declare "vendor" (scheme name) ident
-  let system    () = declare "system" (scheme name) ident
-  let format    () = declare "format" (scheme name) ident
-  let abi    () = declare "abi" (scheme name) ident
-  let bits    () = declare "bits" (scheme size) ident
-  let is_little_endian () = declare "is-little-endian" (scheme flag) ident
-  let is_executable () = declare "is-executable" (scheme flag) ident
-  let bias    () = declare "bias" (scheme off) ident
-  let section () = declare "section" (location ()) void_region
-  let code_start   () = declare "code-start" (scheme addr) ident
-  let entry_point  () = declare "entry-point" (scheme addr) ident
-  let symbol_chunk () = declare "symbol-chunk" (location () $ root) region
-  let named_region () = named "named-region" (location ()) region
-  let named_symbol () = named "named-symbol" (scheme addr) (fun x y -> x,y)
-  let rwx scheme = scheme $ readable $ writable $ executable
-  let segment () = declare "segment" (location () |> rwx)
-      (fun addr size r w x -> {addr; size; info=(r,w,x)})
-  let mapped () = declare "mapped" (location () $off)
-      (fun addr size off -> region addr size off)
-
-  let code_region () =
-    declare "code-region" (scheme addr $ size $ off) Tuple.T3.create
-
-  let relocation () =
-    declare "relocation" (scheme fixup $ addr) Tuple.T2.create
-  let external_reference () =
-    declare "external-reference" (scheme addr $ name) Tuple.T2.create
-  let base_address () = declare "base-address" (scheme addr) ident
-
-  let symbol_value () =
-    declare "symbol-value" (scheme addr $ value) Tuple.T2.create
-end
-
-
 module Derive = struct
   open Fact.Syntax
   open Scheme
@@ -408,11 +430,13 @@ module Derive = struct
       (Seq.filter_map ~f:Arch.of_string s) >>= fun a ->
     match a with
     | Some a -> Fact.return a
-    | None -> Fact.failf "unknown/unsupported architecture" ()
+    | None -> Fact.return `unknown
 
   let addr_width = arch >>| Arch.addr_size >>| Size.in_bits
-
-  let endian = arch >>| Arch.endian
+  let endian = Fact.request is_little_endian >>| function
+    | Some true -> LittleEndian
+    | Some false -> BigEndian
+    | None -> BigEndian
 
   let entry =
     addr_width >>= fun width ->
@@ -423,7 +447,6 @@ module Derive = struct
     let addr = Word.of_int64 ~width addr in
     int_of_int64 size >>| fun size ->
     {addr;size}
-
 
   let segments : segment seq Fact.t =
     endian >>= fun endian ->
@@ -568,7 +591,7 @@ module Legacy = struct
 
   let provide_image
       {Img.arch=a; entry; segments=(s,ss); sections; symbols} =
-    Fact.provide arch (Arch.to_string a) >>= fun () ->
+    Spec.provide_arch a >>= fun () ->
     Fact.provide entry_point (addr entry) >>= fun () ->
     Fact.List.iter (s::ss)  ~f:(provide_segment sections) >>= fun () ->
     Fact.List.iter sections ~f:provide_section >>= fun () ->

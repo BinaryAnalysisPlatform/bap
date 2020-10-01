@@ -44,10 +44,7 @@ module Rel_info = struct
           Map.set m ~key ~data)
 
     let arch_width =
-      Fact.require arch >>= fun a ->
-      match Arch.of_string a with
-      | Some a -> Fact.return (Arch.addr_size a |> Size.in_bits)
-      | None -> Fact.failf "unknown/unsupported architecture" ()
+      Fact.require bits >>| Int64.to_int_exn
 
     let relocations =
       arch_width >>= fun width ->
@@ -207,9 +204,9 @@ let provide =
            provide Insn.Slot.dests |>
            comment "[Brancher.provide b] provides [b] to KB");
   fun brancher ->
-    KB.promise Theory.Program.Semantics.slot @@
+    KB.promise Theory.Semantics.slot @@
     provide_brancher brancher
 
 let providing brancher =
-  KB.promising Theory.Program.Semantics.slot ~promise:
+  KB.promising Theory.Semantics.slot ~promise:
     (provide_brancher brancher)

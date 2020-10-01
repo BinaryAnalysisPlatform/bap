@@ -13,7 +13,6 @@ open Format
 
 module Driver = Bap_disasm_driver
 
-module Event = Bap_main_event
 module Buffer = Caml.Buffer
 include Bap_self.Create()
 
@@ -24,65 +23,10 @@ let query doc attr =
       (Error.to_string_hum err) ()
   | Ok bias -> bias
 
-let rec guess_arch t =
-  if Theory.Target.is_unknown t then `unknown
-  else
-    Theory.Target.name t |>
-    KB.Name.unqualified  |>
-    Arch.of_string |> function
-    | Some arch -> arch
-    | None -> guess_arch (Theory.Target.parent t)
-
-module Spec = struct
-  module Fact = Ogre.Make(KB)
-  open Fact.Syntax
-
-  type KB.Conflict.t += Spec_inconsistency of Error.t
-
-  let domain = KB.Domain.flat "spec"
-      ~empty:Ogre.Doc.empty
-      ~inspect:Ogre.Doc.sexp_of_t
-      ~join:(fun d1 d2 -> match Ogre.Doc.merge d1 d2 with
-          | Ok d -> Ok d
-          | Error err ->
-            Error (Spec_inconsistency err))
-      ~equal:(fun d1 d2 -> Ogre.Doc.compare d1 d2 = 0)
-
-  let slot = KB.Class.property Theory.Unit.cls "unit-spec" domain
-      ~package
-      ~persistent:(KB.Persistent.of_binable (module struct
-                     type t = Ogre.Doc.t [@@deriving bin_io]
-                   end))
-
-  let () = KB.Conflict.register_printer @@ function
-    | Spec_inconsistency err ->
-      Some (Error.to_string_hum err)
-    | _ -> None
-
-  let init arch =
-    let module Field = Image.Scheme in
-    let open Ogre.Syntax in
-    let bits = Int64.of_int (Size.in_bits (Arch.addr_size arch))  in
-    let statements = Ogre.all [
-        Ogre.provide Field.arch (Arch.to_string arch);
-        Ogre.provide Field.bits bits;
-        Ogre.provide Field.format "raw";
-        Ogre.provide Field.is_little_endian @@
-        match Arch.endian arch with
-        | LittleEndian -> true
-        | BigEndian -> false
-      ] in
-    match Ogre.exec statements Ogre.Doc.empty with
-    | Error err ->
-      failwithf "got a malformed ogre document: %s"
-        (Error.to_string_hum err) ();
-    | Ok doc -> doc
-end
-
 let target_of_spec spec =
   let open KB.Syntax in
   KB.Object.scoped Theory.Unit.cls @@ fun unit ->
-  KB.provide Spec.slot unit spec >>= fun () ->
+  KB.provide Image.Spec.slot unit spec >>= fun () ->
   KB.collect Theory.Unit.target unit
 
 let with_filename spec target data code path =
@@ -96,10 +40,10 @@ let with_filename spec target data code path =
       if Memmap.contains data addr || Memmap.contains code addr
       then
         Theory.Unit.for_file path >>= fun unit ->
-        KB.provide Spec.slot unit spec >>= fun () ->
+        KB.provide Image.Spec.slot unit spec >>= fun () ->
         KB.provide Theory.Unit.bias unit bias >>= fun () ->
         KB.provide Theory.Unit.target unit target >>= fun () ->
-        KB.provide Spec.slot unit spec >>= fun () ->
+        KB.provide Image.Spec.slot unit spec >>= fun () ->
         KB.provide Theory.Unit.path unit (Some path) >>| fun () ->
         Some unit
       else KB.return None)
@@ -226,7 +170,7 @@ module Input = struct
       ?(filename="")
       ?(code=Memmap.empty)
       ?(data=Memmap.empty) target () = {
-    arch=guess_arch target; file=filename; code; data; finish;
+    arch=`unknown; file=filename; code; data; finish;
     target;
     spec = Ogre.Doc.empty
   }
@@ -237,7 +181,7 @@ module Input = struct
     target = Theory.Target.unknown;
     spec = match arch with
       | #Arch.unknown -> Ogre.Doc.empty
-      | arch -> Spec.init arch;
+      | arch -> Image.Spec.from_arch arch;
   }
 
   let loaders = String.Table.create ()
@@ -315,14 +259,14 @@ module Input = struct
     let endian = if Theory.Target.is_unknown target
       then Arch.endian arch else
       if Theory.Target.endianness target =
-         Theory.Target.Endianness.le
+         Theory.Endianness.le
       then LittleEndian else BigEndian in
     let base = Option.value base ~default:(Addr.zero addr_size) in
     let mem = Memory.create endian base big |> ok_exn in
     let section = Value.create Image.section "bap.user" in
     let code = Memmap.add Memmap.empty mem section in
     let data = Memmap.empty  in
-    let spec = Spec.init arch in
+    let spec = Image.Spec.from_arch arch in
     {arch; data; code; file = filename; finish = ident; spec; target}
 
   let binary ?base arch ~filename =
@@ -393,7 +337,7 @@ let unused_options =
                alternative" name))
 
 let empty target = {
-  arch = guess_arch target;
+  arch = `unknown;
   target;
   spec = Ogre.Doc.empty;
   state = State.empty;
@@ -473,7 +417,6 @@ let create
   | exn -> Or_error.of_exn ~backtrace:`Get exn
 
 let specification = spec
-let specification_slot = Spec.slot
 
 let symbols {symbols} = Lazy.force symbols
 let disasm {disasm} = Lazy.force disasm

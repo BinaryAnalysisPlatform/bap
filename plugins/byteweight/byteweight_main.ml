@@ -27,7 +27,7 @@ let create_finder path ~min_length ~max_length threshold arch comp =
     info "advice - alternatively, use `opam install bap-signatures'";
     Or_error.errorf "signatures are corrupted"
   | Error (`No_entry _) ->
-    error "no signatures for the specified compiler and/or architecture";
+    warning "no signatures for the specified compiler and/or architecture";
     info "advice - try to use the default compiler entry";
     info "advice - create new entries using the `bap-byteweight' tool";
     Or_error.errorf "compiler is not supported by signatures"

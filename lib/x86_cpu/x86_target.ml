@@ -1,5 +1,6 @@
 open Bap_core_theory
 open Core_kernel
+open Bap.Std
 
 let package = "bap"
 
@@ -151,7 +152,7 @@ let i86 = Theory.Target.declare ~package "i86"
     ~data:M16.data
     ~code:M16.data
     ~vars:M16.vars
-    ~endianness:Theory.Target.Endianness.le
+    ~endianness:Theory.Endianness.le
 
 let i186 = Theory.Target.declare ~package "i186"
     ~parent:i86
@@ -194,10 +195,9 @@ let amd64 = Theory.Target.declare ~package "amd64"
 let family = [amd64; i686; i586; i486; i386; i86]
 
 let enable_loader () =
-  let open Bap.Std in
   let open KB.Syntax in
   KB.Rule.(declare ~package "x86-target" |>
-           require Project.specification_slot |>
+           require Image.Spec.slot |>
            provide Theory.Unit.target |>
            comment "computes target from the OGRE specification");
   let request_arch doc =
@@ -205,14 +205,13 @@ let enable_loader () =
     | Error _ -> None
     | Ok arch -> arch in
   KB.promise Theory.Unit.target @@ fun unit ->
-  KB.collect Project.specification_slot unit >>|
+  KB.collect Image.Spec.slot unit >>|
   request_arch >>| function
   | Some ("amd64"|"x86-64"|"x86_64") -> amd64
   | Some ("x86"|"i386"|"i486"|"i586"|"i686") -> i686
   | _ -> Theory.Target.unknown
 
 let enable_arch () =
-  let open Bap.Std in
   let open KB.Syntax in
   KB.Rule.(declare ~package "x86-arch" |>
            require Theory.Unit.target |>
@@ -226,6 +225,33 @@ let enable_arch () =
   then `x86
   else `unknown
 
+let llvm_x86_encoding =
+  Theory.Language.declare ~package "llvm-x86"
+
+let llvm_x86_64_encoding =
+  Theory.Language.declare ~package "llvm-x86_64"
+
+let register_x86_llvm_disassembler () =
+  Disasm_expert.Basic.register llvm_x86_encoding @@ fun _ ->
+  Disasm_expert.Basic.create ~backend:"llvm" "x86"
+
+let register_x86_64_llvm_disassembler () =
+  Disasm_expert.Basic.register llvm_x86_64_encoding @@ fun _ ->
+  Disasm_expert.Basic.create ~backend:"llvm" "x86_64"
+
+let enable_decoder () =
+  let open KB.Syntax in
+  register_x86_llvm_disassembler ();
+  register_x86_64_llvm_disassembler ();
+  KB.promise Theory.Label.encoding @@ fun label ->
+  Theory.Label.target label >>| fun t ->
+  if Theory.Target.belongs amd64 t
+  then llvm_x86_64_encoding else
+  if Theory.Target.belongs parent t
+  then llvm_x86_encoding
+  else Theory.Language.unknown
+
 let load () =
   enable_loader ();
-  enable_arch ()
+  enable_arch ();
+  enable_decoder ()

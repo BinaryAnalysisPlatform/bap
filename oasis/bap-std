@@ -151,6 +151,7 @@ Library disasm
                  bap-main
   InternalModules:
                  Bap_disasm,
+                 Bap_disasm_backend_types,
                  Bap_disasm_basic,
                  Bap_disasm_block,
                  Bap_disasm_brancher,

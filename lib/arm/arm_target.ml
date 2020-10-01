@@ -1,34 +1,37 @@
+let package = "bap"
+
 open Core_kernel
 open Bap_core_theory
 open Bap.Std
+open KB.Syntax
 
-let package = "bap"
+module CT = Theory
 
 type r128 and r80 and r64 and r32 and r16 and r8
 
-type 'a bitv = 'a Theory.Bitv.t Theory.Value.sort
+type 'a bitv = 'a CT.Bitv.t CT.Value.sort
 
-let r128 : r128 bitv = Theory.Bitv.define 128
-let r80 : r80 bitv = Theory.Bitv.define 80
-let r64 : r64 bitv = Theory.Bitv.define 64
-let r32 : r32 bitv = Theory.Bitv.define 32
-let r16 : r16 bitv = Theory.Bitv.define 16
-let r8  : r8  bitv = Theory.Bitv.define 8
-let bool = Theory.Bool.t
+let r128 : r128 bitv = CT.Bitv.define 128
+let r80 : r80 bitv = CT.Bitv.define 80
+let r64 : r64 bitv = CT.Bitv.define 64
+let r32 : r32 bitv = CT.Bitv.define 32
+let r16 : r16 bitv = CT.Bitv.define 16
+let r8  : r8  bitv = CT.Bitv.define 8
+let bool = CT.Bool.t
 
 
-let reg t n = Theory.Var.define t n
-let untyped = List.map ~f:Theory.Var.forget
+let reg t n = CT.Var.define t n
+let untyped = List.map ~f:CT.Var.forget
 let (@<) xs ys = untyped xs @ untyped ys
 
 let array ?(index=string_of_int) t pref size =
   List.init size ~f:(fun i -> reg t (pref ^ index i))
 
-let mems = Theory.Mem.define r32 r8
-let data = Theory.Var.define mems (Var.name Arm_env.mem)
+let mems = CT.Mem.define r32 r8
+let data = CT.Var.define mems (Var.name Arm_env.mem)
 
 let of_bil v =
-  Theory.Var.define (Var.sort v) (Var.name v)
+  CT.Var.define (Var.sort v) (Var.name v)
 
 let vars32 = List.map ~f:of_bil Arm_env.[
     r0; r1; r2; r3; r4; r5; r6; r7; r8; r9;
@@ -43,8 +46,8 @@ let gp64 = array r64 "X" 30
 let fp64 = array r128 "Q" 32
 let sp64 = [reg r64 "SP"]
 let lr64 = [reg r64 "LR"]
-let mems64 = Theory.Mem.define r64 r8
-let data64 = Theory.Var.define mems64 "mem"
+let mems64 = CT.Mem.define r64 r8
+let data64 = CT.Var.define mems64 "mem"
 let flags64 = [
   reg bool "NF";
   reg bool "ZF";
@@ -54,59 +57,59 @@ let flags64 = [
 
 let vars64 = gp64 @< fp64 @< sp64 @< lr64 @< flags64 @< [data64]
 
-let parent = Theory.Target.declare "arm"
+let parent = CT.Target.declare "arm"
 
 module type v4 = sig
 end
 
 
 module type ARM = sig
-  val endianness : Theory.Target.endianness
-  val parent : Theory.Target.t
-  val v4 : Theory.Target.t
-  val v4t : Theory.Target.t
-  val v5 : Theory.Target.t
-  val v5t : Theory.Target.t
-  val v5te : Theory.Target.t
-  val v5tej : Theory.Target.t
-  val v6 : Theory.Target.t
-  val v6t2 : Theory.Target.t
-  val v6z : Theory.Target.t
-  val v6k : Theory.Target.t
-  val v6m : Theory.Target.t
-  val v7 : Theory.Target.t
-  val v7fp : Theory.Target.t
-  val v7a : Theory.Target.t
-  val v7afp : Theory.Target.t
-  val v8a : Theory.Target.t
-  val v81a : Theory.Target.t
-  val v82a : Theory.Target.t
-  val v83a : Theory.Target.t
-  val v84a : Theory.Target.t
-  val v85a : Theory.Target.t
-  val v86a : Theory.Target.t
+  val endianness : CT.endianness
+  val parent : CT.Target.t
+  val v4 : CT.Target.t
+  val v4t : CT.Target.t
+  val v5 : CT.Target.t
+  val v5t : CT.Target.t
+  val v5te : CT.Target.t
+  val v5tej : CT.Target.t
+  val v6 : CT.Target.t
+  val v6t2 : CT.Target.t
+  val v6z : CT.Target.t
+  val v6k : CT.Target.t
+  val v6m : CT.Target.t
+  val v7 : CT.Target.t
+  val v7fp : CT.Target.t
+  val v7a : CT.Target.t
+  val v7afp : CT.Target.t
+  val v8a : CT.Target.t
+  val v81a : CT.Target.t
+  val v82a : CT.Target.t
+  val v83a : CT.Target.t
+  val v84a : CT.Target.t
+  val v85a : CT.Target.t
+  val v86a : CT.Target.t
 end
 
-module type Endianness =  sig val endianness : Theory.Target.endianness end
+module type Endianness =  sig val endianness : CT.endianness end
 module Family (Order : Endianness) = struct
   include Order
 
   let ordered name =
-    let order = Theory.Target.Endianness.name endianness in
+    let order = CT.Endianness.name endianness in
     name ^ "+" ^ KB.Name.unqualified order
 
   let (<:) parent name =
-    if Theory.Target.is_unknown parent
-    then Theory.Target.unknown
-    else Theory.Target.declare ~package (ordered name) ~parent
+    if CT.Target.is_unknown parent
+    then CT.Target.unknown
+    else CT.Target.declare ~package (ordered name) ~parent
         ~nicknames:[name]
 
-  let is_bi_endian = Theory.Target.Endianness.(equal bi) endianness
+  let is_bi_endian = CT.Endianness.(equal bi) endianness
 
   let v4 =
     if is_bi_endian
-    then Theory.Target.unknown
-    else Theory.Target.declare ~package (ordered "armv4")
+    then CT.Target.unknown
+    else CT.Target.declare ~package (ordered "armv4")
         ~parent
         ~nicknames:["armv4"]
         ~bits:32
@@ -127,8 +130,8 @@ module Family (Order : Endianness) = struct
   let v6k   = v6z <: "armv6k"
   let v6m   = v6 <: "armv6-m"
 
-  let v7    = if not is_bi_endian then v6t2 <: "armv7"
-    else Theory.Target.declare ~package (ordered "armv4")
+  let v7 = if not is_bi_endian then v6t2 <: "armv7"
+    else CT.Target.declare ~package (ordered "armv4")
         ~parent
         ~nicknames:["armv4"]
         ~bits:32
@@ -138,18 +141,18 @@ module Family (Order : Endianness) = struct
         ~data:data
         ~vars:vars32
 
-  let v7fp  = Theory.Target.declare ~package (ordered "armv7+fp") ~parent:v7
+  let v7fp  = CT.Target.declare ~package (ordered "armv7+fp") ~parent:v7
       ~nicknames:["armv7+fp"]
       ~vars:vars32_fp
 
   let v7a    = v7 <: "armv7-a"
-  let v7afp  = Theory.Target.declare ~package (ordered "armv7-a+fp")
+  let v7afp  = CT.Target.declare ~package (ordered "armv7-a+fp")
       ~nicknames:["armv7-a+fp"]
       ~parent:v7a
       ~vars:vars32_fp
 
   let v8a =
-    Theory.Target.declare ~package (ordered "armv8-a") ~parent:v7
+    CT.Target.declare ~package (ordered "armv8-a") ~parent:v7
       ~nicknames:["armv8-a"]
       ~bits:64
       ~code:data64
@@ -166,19 +169,9 @@ module Family (Order : Endianness) = struct
   let parent = if is_bi_endian then v7 else v4
 end
 
-module LE = Family(struct
-    let endianness = Theory.Target.Endianness.le
-  end)
-
-
-module Bi = Family(struct
-    let endianness = Theory.Target.Endianness.bi
-  end)
-
-
-module EB = Family(struct
-    let endianness = Theory.Target.Endianness.eb
-  end)
+module LE = Family(struct let endianness = CT.Endianness.le end)
+module Bi = Family(struct let endianness = CT.Endianness.bi end)
+module EB = Family(struct let endianness = CT.Endianness.eb end)
 
 let family_of_endian is_little : (module ARM) = match is_little with
   | None -> (module Bi)
@@ -213,8 +206,8 @@ let normalize arch sub =
 let enable_loader () =
   let open Bap.Std in
   KB.Rule.(declare ~package "arm-target" |>
-           require Project.specification_slot |>
-           provide Theory.Unit.target |>
+           require Image.Spec.slot |>
+           provide CT.Unit.target |>
            comment "computes target from the OGRE specification");
   let open KB.Syntax in
   let request_info doc =
@@ -227,10 +220,10 @@ let enable_loader () =
     match Ogre.eval request doc with
     | Error _ -> None,None,None
     | Ok info -> info in
-  KB.promise Theory.Unit.target @@ fun unit ->
-  KB.collect Project.specification_slot unit >>|
+  KB.promise CT.Unit.target @@ fun unit ->
+  KB.collect Image.Spec.slot unit >>|
   request_info >>| fun (arch,sub,is_little) ->
-  if not (in_family arch) then Theory.Target.unknown
+  if not (in_family arch) then CT.Target.unknown
   else
     let module Family = (val family_of_endian is_little) in
     match normalize arch sub with
@@ -271,8 +264,8 @@ type arms = [
   | Arch.aarch64
 ]
 
-let arms : arms Map.M(Theory.Target).t =
-  Map.of_alist_exn (module Theory.Target) [
+let arms : arms Map.M(CT.Target).t =
+  Map.of_alist_exn (module CT.Target) [
     LE.v4, `armv4;
     LE.v4t, `armv4;
     LE.v5, `armv5;
@@ -321,16 +314,105 @@ let arms : arms Map.M(Theory.Target).t =
 let enable_arch () =
   let open KB.Syntax in
   KB.Rule.(declare ~package "arm-arch" |>
-           require Theory.Unit.target |>
+           require CT.Unit.target |>
            provide Arch.unit_slot |>
            comment "computes Arch.t from the unit's target");
   KB.promise Arch.unit_slot @@ fun unit ->
-  KB.collect Theory.Unit.target unit >>| fun t ->
+  KB.collect CT.Unit.target unit >>| fun t ->
   match Map.find arms t with
   | Some arch -> (arch :> Arch.t)
   | None -> `unknown
 
 
+let llvm_a32 = CT.Language.declare ~package "llvm-A32"
+let llvm_t32 = CT.Language.declare ~package "llvm-T32"
+let llvm_a64 = CT.Language.declare ~package "llvm-A64"
+
+module Dis = Disasm_expert.Basic
+
+let register encoding triple =
+  Dis.register encoding @@ fun _ ->
+  Dis.create ~backend:"llvm" triple
+
+let symbol_values doc =
+  let field = Ogre.Query.(select (from Image.Scheme.symbol_value)) in
+  match Ogre.eval (Ogre.collect field) doc with
+  | Ok syms -> syms
+  | Error err ->
+    failwithf "Arm_target: broken file specification: %s"
+      (Error.to_string_hum err) ()
+
+module Encodings = struct
+  let empty = Map.empty (module Bitvec_order)
+
+  let symbols_encoding spec =
+    symbol_values spec |>
+    Seq.fold ~init:empty ~f:(fun symbols (addr,value) ->
+        let addr = Bitvec.M32.int64 addr in
+        Map.add_exn symbols ~key:addr
+          ~data:(match Int64.(value land 1L) with
+              | 0L -> llvm_a32
+              | _ -> llvm_a64))
+
+  let slot = KB.Class.property CT.Unit.cls
+      ~package "symbols-encodings" @@
+    KB.Domain.flat "encodings"
+      ~empty
+      ~equal:(Map.equal CT.Language.equal)
+
+  let () =
+    let open KB.Syntax in
+    KB.promise slot @@ fun label ->
+    KB.collect Image.Spec.slot label >>|
+    symbols_encoding
+end
+
+let (>>=?) x f = x >>= function
+  | None -> !!CT.Language.unknown
+  | Some x -> f x
+
+let compute_encoding_from_symbol_table default label =
+  KB.collect CT.Label.unit label >>=? fun unit ->
+  KB.collect CT.Label.addr label >>=? fun addr ->
+  KB.collect Encodings.slot unit >>= fun encodings ->
+  KB.return @@ match Map.find encodings addr with
+  | Some x -> x
+  | None -> default
+
+(* here less than means: was introduced before *)
+let (<) t p = not (CT.Target.belongs p t)
+let (<=) t p = CT.Target.equal t p || t < p
+let (>=) = CT.Target.belongs
+
+let is_arm = CT.Target.belongs parent
+
+let before_thumb2 t =
+  t < LE.v6t2 ||
+  t < EB.v6t2
+
+let is_64bit t =
+  t >= LE.v8a ||
+  t >= EB.v8a ||
+  t >= Bi.v8a
+
+let guess_encoding label target =
+  if is_arm target then
+    if before_thumb2 target
+    then compute_encoding_from_symbol_table llvm_a32 label
+    else KB.return @@
+      if is_64bit target then llvm_a64 else llvm_a32
+  else KB.return CT.Language.unknown
+
+
+let enable_decoder () =
+  let open KB.Syntax in
+  register llvm_a32 "armv7";
+  register llvm_t32 "thumbv7";
+  register llvm_a64 "aarch64";
+  KB.promise CT.Label.encoding @@ fun label ->
+  CT.Label.target label >>= guess_encoding label
+
 let load () =
   enable_loader ();
-  enable_arch ()
+  enable_arch ();
+  enable_decoder ()

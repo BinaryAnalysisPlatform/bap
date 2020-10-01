@@ -1,5 +1,7 @@
 open Core_kernel
 open Bap.Std
+open Bap_future.Std
+open Bap_core_theory
 include Self()
 
 let () = Config.manpage [
@@ -32,10 +34,9 @@ module ARM = struct
         Error (Error.of_string "type error")
 end
 
-
 let () =
-  Config.when_ready (fun _ ->
-      Arm_target.load ();
-      List.iter Arch.all_of_arm ~f:(fun arch ->
-          register_target (arch :> arch) (module ARM);
-          Arm_gnueabi.setup ()))
+  Config.when_ready @@ fun _ ->
+  Arm_target.load ();
+  List.iter Arch.all_of_arm ~f:(fun arch ->
+      register_target (arch :> arch) (module ARM);
+      Arm_gnueabi.setup ())

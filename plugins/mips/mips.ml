@@ -95,7 +95,7 @@ let () =
     let open KB.Syntax in
     KB.collect Arch.slot obj >>= function
     | #Arch.mips ->
-      KB.collect Theory.Program.Semantics.slot obj >>| fun insn ->
+      KB.collect Theory.Semantics.slot obj >>| fun insn ->
       let name = KB.Value.get Insn.Slot.name insn in
       Hashtbl.find_and_call Std.delayed_opcodes name
         ~if_found:(fun delay ->
@@ -107,4 +107,4 @@ let () =
            require Insn.Slot.name |>
            provide Insn.Slot.delay |>
            comment "provides the delay slot length for branches");
-  Ok (KB.promise Theory.Program.Semantics.slot provide_delay)
+  Ok (KB.promise Theory.Semantics.slot provide_delay)

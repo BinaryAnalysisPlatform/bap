@@ -2,6 +2,8 @@ open Core_kernel
 open Regular.Std
 open Bap_types.Std
 open Bap_core_theory
+open Bap_disasm_backend_types
+
 
 type mem = Bap_memory.t [@@deriving sexp_of]
 type kind = Bap_insn_kind.t [@@deriving compare, sexp]
@@ -24,12 +26,20 @@ type full_insn = (asm,kinds) insn [@@deriving compare, sexp_of]
 type ('a,'k) t
 type (+'a,+'k,'s,'r) state
 
+val register : Theory.language ->
+  (Theory.target -> (empty, empty) t Or_error.t) -> unit
+
+val lookup : Theory.target -> Theory.language -> (empty,empty) t Or_error.t
+val custom : Theory.target -> Theory.language ->
+  (module S with type t = 'a) -> 'a -> (empty, empty) t
+val create : ?debug_level:int -> ?cpu:string -> ?backend:string -> string ->
+  (empty, empty) t Or_error.t
+
+
 val with_disasm :
   ?debug_level:int -> ?cpu:string -> ?backend:string -> string ->
   f:((empty, empty) t -> 'a Or_error.t) -> 'a Or_error.t
 
-val create : ?debug_level:int -> ?cpu:string -> ?backend:string -> string ->
-  (empty, empty) t Or_error.t
 
 val close : (_,_) t -> unit
 
@@ -59,6 +69,7 @@ val stop : (_,_,'s,'r) state -> 's -> 'r
 val step : (_,_,'s,'r) state -> 's -> 'r
 val jump : (_,_,'s,'r) state -> mem -> 's -> 'r
 val back : (_,_,'s,'r) state -> 's -> 'r
+val switch : ('a,'k,'s,'r) state -> ('a,'k) t -> ('a,'k,'s,'r) state
 
 module Op : sig
   type t =

@@ -1,3 +1,5 @@
+let package = "core-theory"
+
 open Core_kernel
 open Bap_knowledge
 
@@ -9,39 +11,78 @@ module Bitv = Val.Bitv
 module Sort = Val.Sort
 module Name = KB.Name
 
-
-let package = "core-theory"
-
 type t = Name.t [@@deriving bin_io, compare, sexp]
 type target = t
 type endianness = Name.t
 type system = Name.t
 type abi = Name.t
-type format = Name.t
+type filetype = Name.t
 type fabi = Name.t
 type name = Name.t
 
 module Enum = struct
-  type t = Name.t [@@deriving bin_io]
-  let declare ?package name = Name.create ?package name
-  let read ?package name = Name.read ?package name
-  let name x = x
-  include Base.Comparable.Make(Name)
-  include (Name : Stringable.S with type t := t)
-  include (Name : Pretty_printer.S with type t := t)
+  module type S = sig
+    include Base.Comparable.S
+    include Binable.S with type t := t
+    include Stringable.S with type t := t
+    include Pretty_printer.S with type t := t
+    include Sexpable.S with type t := t
+    val declare : ?package:string -> string -> t
+    val read : ?package:string -> string -> t
+    val name : t -> KB.Name.t
+    val unknown : t
+    val is_unknown : t -> bool
+    val domain : t KB.domain
+    val persistent : t KB.persistent
+    val hash : t -> int
+  end
 
+  module Make() = struct
+    type t = Name.t [@@deriving bin_io, sexp]
+
+    let elements = Hash_set.create (module Name) ()
+    let declare ?package name =
+      let name = Name.create ?package name in
+      if Hash_set.mem elements name
+      then invalid_argf
+          "Enum.declare: the element %s is already declared \
+           please choose a unique name" (Name.to_string name) ();
+      Hash_set.add elements name;
+      name
+
+    let read ?package name =
+      let name = Name.read ?package name in
+      if not (Hash_set.mem elements name)
+      then invalid_argf "Enum.read: %s is not a member of the given \
+                         enumeration." (Name.to_string name) ();
+      name
+
+    let name x = x
+    let unknown = Name.of_string ":unknown"
+    let is_unknown = Name.equal unknown
+    let hash = Name.hash
+    include Base.Comparable.Make(Name)
+    include (Name : Stringable.S with type t := t)
+    include (Name : Pretty_printer.S with type t := t)
+    let domain = Knowledge.Domain.flat "enum"
+        ~inspect:sexp_of_t
+        ~empty:unknown
+        ~equal
+    let persistent = KB.Persistent.name
+  end
 end
 
 module Endianness = struct
-  include Enum
+  include Enum.Make()
   let le = declare ~package "le"
   let eb = declare ~package "eb"
   let bi = declare ~package "bi"
 end
 
-module System = Enum
-module Abi = Enum
-module Fabi = Enum
+module System = Enum.Make()
+module Abi = Enum.Make()
+module Fabi = Enum.Make()
+module Filetype = Enum.Make()
 
 module Options = struct
   type cls = Options
@@ -66,13 +107,13 @@ type info = {
   system : Name.t;
   abi : Name.t;
   fabi : Name.t;
-  format : Name.t;
+  filetype : Name.t;
   options : Options.t;
   names : String.Caseless.Set.t
 }
 
-let unknown = Name.create ~package:KB.Symbol.keyword "unknown"
-let empty = unknown
+module Self = Enum.Make()
+let unknown = Self.unknown
 
 let mem name k v =
   let k = Bitv.(define k)
@@ -87,7 +128,6 @@ let unpack (Var var) =
   and v = Bitv.size@@Mem.vals s in
   mem (Var.name var) k v
 
-
 let unknown = {
   parent = unknown;
   bits = 32;
@@ -99,7 +139,7 @@ let unknown = {
   system = unknown;
   abi = unknown;
   fabi = unknown;
-  format = unknown;
+  filetype = unknown;
   options = Options.empty;
   names = String.Caseless.Set.empty;
 }
@@ -118,11 +158,11 @@ let extend parent
     ?(system=parent.system)
     ?(abi=parent.abi)
     ?(fabi=parent.fabi)
-    ?(format=parent.format)
+    ?(filetype=parent.filetype)
     ?(options=parent.options)
     ?nicknames name = {
   parent=name; bits; byte; endianness;
-  system; abi; fabi; format;
+  system; abi; fabi; filetype;
   options;
   data = pack data;
   code = pack code;
@@ -137,7 +177,7 @@ let extend parent
 let declare
     ?(parent=unknown.parent)
     ?bits ?byte ?data ?code ?vars ?endianness
-    ?system ?abi ?fabi ?format ?options
+    ?system ?abi ?fabi ?filetype ?options
     ?nicknames ?package name =
   let name = Name.create ?package name in
   if Hashtbl.mem targets name
@@ -148,7 +188,7 @@ let declare
       (Name.package name) ();
   let p = Hashtbl.find_exn targets parent in
   let info = extend ?bits ?byte ?data ?code ?vars ?endianness
-      ?system ?abi ?fabi ?format ?options ?nicknames p parent in
+      ?system ?abi ?fabi ?filetype ?options ?nicknames p parent in
   Hashtbl.add_exn targets name info;
   name
 
@@ -185,7 +225,7 @@ let endianness t = (info t).endianness
 let system t = (info t).system
 let abi t = (info t).abi
 let fabi t = (info t).fabi
-let format t = (info t).format
+let filetype t = (info t).filetype
 let options t = (info t).options
 
 let parents target =
@@ -250,11 +290,9 @@ let partition xs =
 
 let families () = partition@@declared ()
 
-let unknown = empty
-let domain = KB.Domain.define ~empty ~order "target"
-    ~inspect:sexp_of_t
-let persistent = KB.Persistent.name
-
-include (Name : Base.Comparable.S with type t := t)
-include (Name : Stringable.S with type t := t)
-include (Name : Pretty_printer.S with type t := t)
+include (Self : Base.Comparable.S with type t := t)
+include (Self : Stringable.S with type t := t)
+include (Self : Pretty_printer.S with type t := t)
+let domain = Self.domain
+let persistent = Self.persistent
+let unknown = Self.unknown

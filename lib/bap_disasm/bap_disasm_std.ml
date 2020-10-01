@@ -16,6 +16,7 @@ module Disasm_expert = struct
   module Linear = Bap_disasm_linear_sweep
   module Kind = Bap_insn_kind
   module Insn = Bap_disasm_basic.Insn
+  module Backend = Bap_disasm_backend_types
 end
 
 module Cfg = Bap_disasm_rec.Cfg
