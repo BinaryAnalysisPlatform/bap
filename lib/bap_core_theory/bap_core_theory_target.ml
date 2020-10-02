@@ -35,6 +35,7 @@ module Enum = struct
     val domain : t KB.domain
     val persistent : t KB.persistent
     val hash : t -> int
+    val members : unit -> t list
   end
 
   module Make() = struct
@@ -61,6 +62,7 @@ module Enum = struct
     let unknown = Name.of_string ":unknown"
     let is_unknown = Name.equal unknown
     let hash = Name.hash
+    let members () = Hash_set.to_list elements
     include Base.Comparable.Make(Name)
     include (Name : Stringable.S with type t := t)
     include (Name : Pretty_printer.S with type t := t)
@@ -202,6 +204,8 @@ let get ?package name =
   if not (Hashtbl.mem targets name)
   then invalid_argf "Unknown target %s" (Name.to_string name) ();
   name
+
+let read = get
 
 let info name = match Hashtbl.find targets name with
   | None -> unknown

@@ -9,7 +9,8 @@ Library mc_plugin
   CompiledObject:  best
   Modules:         Mc_main
   BuildDepends:    core_kernel, bap-main, bap, regular, bap-plugins,
-                   bap-core-theory, bap-knowledge, ppx_jane, bitvec
+                   bap-core-theory, bap-knowledge, ppx_jane, bitvec,
+                   ogre
   XMETAExtraLines: tags="command, disassemble"
 
 

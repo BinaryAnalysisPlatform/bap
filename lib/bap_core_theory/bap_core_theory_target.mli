@@ -31,6 +31,7 @@ val declare :
   string -> t
 
 val get : ?package:string -> string -> t
+val read : ?package:string -> string -> t
 val lookup : ?package:string -> string -> t option
 val unknown : t
 val is_unknown : t -> bool
@@ -76,6 +77,7 @@ module Enum : sig
     val domain : t KB.domain
     val persistent : t KB.persistent
     val hash : t -> int
+    val members : unit -> t list
   end
 
   module Make() : S

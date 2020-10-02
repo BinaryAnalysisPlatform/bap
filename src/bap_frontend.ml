@@ -117,6 +117,7 @@ type entity = [
   | `Agents
   | `Rules
   | `Collators
+  | `Targets
 ]
 
 let entities : (string, entity) List.Assoc.t = [
@@ -133,6 +134,7 @@ let entities : (string, entity) List.Assoc.t = [
   "agents", `Agents;
   "rules", `Rules;
   "collators", `Collators;
+  "targets", `Targets;
 ]
 
 let entity_name = function
@@ -148,6 +150,7 @@ let entity_name = function
   | `Agents -> "agents"
   | `Rules -> "rules"
   | `Collators -> "collators"
+  | `Targets -> "targets"
 
 let entity_desc : (entity * string) list = [
   `Entities, "prints this message";
@@ -294,6 +297,17 @@ let () =
         then Format.printf "  %-24s @[<hov>%a@]@\n" name
             Format.pp_print_text desc);
     Ok ()
+  | `Targets ->
+    let open Bap_core_theory in
+    Theory.Target.families () |> List.iter ~f:(function
+        | parent :: members ->
+          Format.printf "  %s:@\n" (Theory.Target.to_string parent);
+          List.iter members ~f:(fun m ->
+              Format.printf "   - %s@\n"
+                (Theory.Target.to_string m))
+        | _ -> ());
+    Ok ()
+
 
 let () =
   let _unused : (module unit) = (module Bap.Std) in

@@ -57,7 +57,7 @@ let flags64 = [
 
 let vars64 = gp64 @< fp64 @< sp64 @< lr64 @< flags64 @< [data64]
 
-let parent = CT.Target.declare "arm"
+let parent = CT.Target.declare ~package "arm"
 
 module type v4 = sig
 end
@@ -81,6 +81,7 @@ module type ARM = sig
   val v7fp : CT.Target.t
   val v7a : CT.Target.t
   val v7afp : CT.Target.t
+  val v7m : CT.Target.t
   val v8a : CT.Target.t
   val v81a : CT.Target.t
   val v82a : CT.Target.t
@@ -131,15 +132,17 @@ module Family (Order : Endianness) = struct
   let v6m   = v6 <: "armv6-m"
 
   let v7 = if not is_bi_endian then v6t2 <: "armv7"
-    else CT.Target.declare ~package (ordered "armv4")
+    else CT.Target.declare ~package (ordered "armv7")
         ~parent
-        ~nicknames:["armv4"]
+        ~nicknames:["armv7"]
         ~bits:32
         ~byte:8
         ~endianness
         ~code:data
         ~data:data
         ~vars:vars32
+
+  let v7m = v7 <: "armv7-m"
 
   let v7fp  = CT.Target.declare ~package (ordered "armv7+fp") ~parent:v7
       ~nicknames:["armv7+fp"]
@@ -250,8 +253,7 @@ let enable_loader () =
     | "arm","v84a" -> Family.v84a
     | "arm","v85a" -> Family.v85a
     | "arm","v86a" -> Family.v86a
-    | "thumb", "v4" -> Family.v4t
-    | "thumb", "v5" -> Family.v5t
+    | "thumb",_     -> Family.v7m
     | "aarch64",_   -> Family.v86a
     | _ -> Family.v7
 
@@ -367,11 +369,11 @@ module Encodings = struct
     symbols_encoding
 end
 
-let (>>=?) x f = x >>= function
-  | None -> !!CT.Language.unknown
-  | Some x -> f x
 
 let compute_encoding_from_symbol_table default label =
+  let (>>=?) x f = x >>= function
+    | None -> !!default
+    | Some x -> f x in
   KB.collect CT.Label.unit label >>=? fun unit ->
   KB.collect CT.Label.addr label >>=? fun addr ->
   KB.collect Encodings.slot unit >>= fun encodings ->
@@ -379,30 +381,26 @@ let compute_encoding_from_symbol_table default label =
   | Some x -> x
   | None -> default
 
-(* here less than means: was introduced before *)
-let (<) t p = not (CT.Target.belongs p t)
-let (<=) t p = CT.Target.equal t p || t < p
-let (>=) = CT.Target.belongs
-
+(* here t < p means that t was introduced before p *)
+let (>=) t p = CT.Target.belongs t p
+let (<) t p = t >= p && not (p >= t)
+let (<=) t p = t = p || t < p
 let is_arm = CT.Target.belongs parent
 
-let before_thumb2 t =
-  t < LE.v6t2 ||
-  t < EB.v6t2
-
-let is_64bit t =
-  t >= LE.v8a ||
-  t >= EB.v8a ||
-  t >= Bi.v8a
+let before_thumb2 t = t < LE.v6t2 || t < EB.v6t2
+let is_64bit t = LE.v8a <= t || EB.v8a <= t || Bi.v8a <= t
+let is_thumb_only t = LE.v7m <= t || EB.v7m <= t || Bi.v7m <= t
 
 let guess_encoding label target =
   if is_arm target then
     if before_thumb2 target
     then compute_encoding_from_symbol_table llvm_a32 label
     else KB.return @@
-      if is_64bit target then llvm_a64 else llvm_a32
+      if is_64bit target then llvm_a64 else
+      if is_thumb_only target
+      then llvm_t32
+      else llvm_a32
   else KB.return CT.Language.unknown
-
 
 let enable_decoder () =
   let open KB.Syntax in
@@ -411,6 +409,7 @@ let enable_decoder () =
   register llvm_a64 "aarch64";
   KB.promise CT.Label.encoding @@ fun label ->
   CT.Label.target label >>= guess_encoding label
+
 
 let load () =
   enable_loader ();

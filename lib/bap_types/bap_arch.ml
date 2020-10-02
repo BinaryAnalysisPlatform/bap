@@ -75,6 +75,7 @@ module T = struct
   let persistent = KB.Persistent.of_binable (module struct
       type t = arch [@@deriving bin_io]
     end)
+
   let slot = KB.Class.property ~package:"bap"
       Theory.Program.cls "arch" domain
       ~persistent
