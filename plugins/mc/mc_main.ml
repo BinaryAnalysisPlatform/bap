@@ -18,6 +18,45 @@ The following input formats are supported:
     31d248f7f3";
 ```
 
+# SETTING ARCHITECHTURE
+
+The target architecture is controlled by several groups of options
+that can not be used together:
+
+- $(b,arch);
+- $(b,target) and $(b,encoding);
+- $(b,triple), $(b,backend), $(b,cpu), $(b,bits), and $(b,order).
+
+The $(b,arch) option provides the least control but is easiest to
+use. It relies on the dependency-injection mechanism and lets the
+target support packages (plugins that implement support for the given
+architecture) do their best to guess the target and encoding that
+matches the provided name. Use the common names for the architecture
+and it should work. You can use the $(b,bits) and $(b,order) options
+to give more hints to the target support packages. They default to
+$(b,32) and $(b,little) correspondingly.
+
+The $(b,target) and $(b,encoding) provides precise control over the
+selection of the target and the encoding that is used to represent
+machine instructions. The $(b,encoding) field can be omitted and will
+be deduced from the target. Use $(b, bap list targets) and
+$(b, bap list encodings) to get the list of supported targets and
+encodings respectivly.
+
+Finally, the $(b,triple), $(b,backend), $(b,cpu),... group of options
+provides the full control over the disassembler backend and bypasses
+the dependency-injection mechanism to pass the specified options
+directly to the corresponding backends. This enables disassembling of
+targets and encodings that are not yet supported by BAP. The meanings
+of the options totally depend on the selected $(b,backend) and they
+are passed as is to the corresponding arguments of the
+$(b,Disasm_expert.Basic.create) function. The $(b,bits) and $(b,order)
+defaults to $(b,32) and $(b,little) corresondingly and are used to
+specify the number of bits in the target's addresses and the order of
+bytes in the word. This group of options is useful during the
+implementation and debugging of new targets and thus is reserved for
+experts. Note, when this group is used the semantics of the instructions
+will not be provided as it commonly requires the target specification.
 |}
 
 let objdump_man = {|
@@ -59,6 +98,14 @@ type error =
   | No_formats_expected of string
   | Disassembler_failed of Error.t
   | Loader_failed of Error.t
+  | Target_must_be_unknown
+  | Encoding_must_be_unknown
+  | Triple_must_not_be_set
+  | Arch_must_not_be_set
+  | Backend_must_not_be_set
+  | Cpu_must_not_be_set
+  | Bits_must_not_be_set
+  | Order_must_not_be_set
 
 type Extension.Error.t += Fail of error
 
@@ -71,6 +118,19 @@ type output = [
   | `size
   | `invalid
 ] [@@deriving compare]
+
+type target =
+  | Target of {
+      name : Theory.Target.t;
+      encoding : Theory.Language.t;
+    }
+  | Triple of {
+      name : string;
+      backend : string option;
+      cpu: string option;
+      order : endian;
+      bits : int;
+    }
 
 let outputs = [
   `insn;
@@ -92,16 +152,46 @@ module Spec = struct
   let input = Command.arguments Type.string
   let file = Command.argument Type.file
 
-  let arch_type = Type.define
-      ~parse:(fun s -> match Arch.of_string s with
-          | None -> invalid_arg "unknown architecture"
-          | Some arch -> arch)
-      ~print:Arch.to_string
-      `x86_64
+  let language = Type.define
+      ~parse:(Theory.Language.read ~package:"bap")
+      ~print:Theory.Language.to_string
+      Theory.Language.unknown
 
-  let arch =
-    let doc = "Target architecture" in
-    Command.parameter ~doc arch_type "arch"
+  let target = Type.define
+      ~parse:(Theory.Target.get ~package:"bap")
+      ~print:Theory.Target.to_string
+      Theory.Target.unknown
+
+  let order = Type.enum [
+      "big", BigEndian;
+      "little", LittleEndian;
+    ]
+
+  let arch = Command.parameter Type.(some string) "arch"
+      ~aliases:["a"]
+      ~doc:"The target architecture."
+
+  let target = Command.parameter target "target"
+      ~aliases:["t"]
+      ~doc:"The target name."
+
+  let encoding = Command.parameter language "encoding"
+      ~aliases:["e"]
+      ~doc:"The target encoding."
+
+  let triple = Command.parameter Type.(some string) "triple"
+      ~doc:"The target triple."
+
+  let cpu = Command.parameter Type.(some string) "cpu"
+      ~doc:"The target CPU (used with triple)."
+
+  let bits = Command.parameter Type.(some int) "bits"
+      ~doc:"The number of bits in the address \
+            (used with triple or arch)"
+
+  let order = Command.parameter Type.(some order) "order"
+      ~doc: "The order of bytes in the target's word \
+             (used with triple or arch)."
 
   let outputs =
     let name_of_output = function
@@ -143,7 +233,7 @@ module Spec = struct
       ~doc:"Stop disassembling on the first error and report it"
 
   let backend =
-    let doc = "Specify the disassembler backend" in
+    let doc = "The disassembling backend (used with triple)." in
     Command.parameter ~doc Type.(some string) "backend"
 
   let loader =
@@ -193,9 +283,15 @@ let read_input input =
     | "0x" ->  to_binary ~map:escape_0x input
     | _ -> to_binary ~map:prepend_slash_x input
 
+let endian = function
+  | Triple {order} -> order
+  | Target {name=t} ->
+    if Theory.Endianness.(equal le) (Theory.Target.endianness t)
+    then LittleEndian
+    else BigEndian
+
 let create_memory arch data base =
-  let endian = Arch.endian arch in
-  Memory.create endian base @@
+  Memory.create (endian arch) base @@
   Bigstring.of_string data |> function
   | Ok r -> Ok r
   | Error e -> fail (Create_mem e)
@@ -208,8 +304,17 @@ let print_kinds formats insn =
 
 let new_insn arch mem insn =
   let open KB.Syntax in
+  let provide_target unit label = function
+    | Triple _ -> KB.return ()
+    | Target {name=target; encoding} ->
+      KB.provide Theory.Unit.target unit target >>= fun () ->
+      if Theory.Language.is_unknown encoding
+      then KB.return ()
+      else KB.provide Theory.Label.encoding label encoding in
   KB.Object.create Theory.Program.cls >>= fun code ->
-  KB.provide Arch.slot code arch >>= fun () ->
+  KB.Symbol.intern "unit" Theory.Unit.cls >>= fun unit ->
+  provide_target unit code arch >>= fun () ->
+  KB.provide Theory.Label.unit code (Some unit) >>= fun () ->
   KB.provide Memory.slot code (Some mem) >>= fun () ->
   KB.provide Dis.Insn.slot code (Some insn) >>| fun () ->
   code
@@ -266,25 +371,27 @@ let print arch mem code formats =
   print_sema (formats `sema) insn;
   print_kinds (formats `kinds) code
 
+let bits = function
+  | Target {name=t} -> Theory.Target.bits t
+  | Triple {bits} -> bits
+
 let parse_base arch base =
   Result.map_error ~f:(function
       | Invalid_argument str -> Fail (Invalid_base str)
       | exn -> Fail (Invalid_base (Exn.to_string exn))) @@
   Result.try_with @@ fun () ->
-  Word.create (Bitvec.of_string base)
-    (Size.in_bits (Arch.addr_size arch))
+  Word.create (Bitvec.of_string base) (bits arch)
 
-
-let create_disassembler ?(backend="llvm") arch =
-  Dis.create ~backend (Arch.to_string arch) |>
-  Result.map_error ~f:(fun err -> Fail (Disassembler_failed err))
-
+let create_disassembler spec =
+  Result.map_error ~f:(fun err -> Fail (Disassembler_failed err)) @@
+  match spec with
+  | Target {name; encoding} -> Dis.lookup name encoding
+  | Triple {name; cpu; backend} -> Dis.create ?backend ?cpu name
 
 let module_of_kind = function
   | `insn -> "Bap.Std.Insn"
   | `bil -> "Bap.Std.Bil"
   | `bir -> "Bap.Std.Blk"
-
 
 let validate_module kind formats =
   let name = module_of_kind kind in
@@ -339,15 +446,144 @@ let run ?(only_one=false) ?(stop_on_error=false) dis arch mem formats =
         if only_one then Dis.stop state bytes
         else Dis.step state (bytes + Memory.length mem))
 
+let check_invariants xs =
+  List.concat_map xs ~f:(fun (pred,props) ->
+      if pred then props else []) |>
+  Result.all_unit
+
+let check check t error =
+  if not (check t) then fail error else Ok ()
+
+let target_must_be_unknown t =
+  check Theory.Target.is_unknown t Target_must_be_unknown
+
+let encoding_must_be_unknown t =
+  check Theory.Language.is_unknown t Encoding_must_be_unknown
+
+let triple_must_not_be_set x =
+  check Option.is_none x Triple_must_not_be_set
+
+let arch_must_not_be_set x =
+  check Option.is_none x Arch_must_not_be_set
+
+let backend_must_not_be_set x =
+  check Option.is_none x Backend_must_not_be_set
+
+let cpu_must_not_be_set x =
+  check Option.is_none x Cpu_must_not_be_set
+
+let bits_must_not_be_set x =
+  check Option.is_none x Bits_must_not_be_set
+
+let order_must_not_be_set x =
+  check Option.is_none x Order_must_not_be_set
+
+
+
+let compute_target provide =
+  let extract_target =
+    let open KB.Syntax in
+    KB.Object.scoped Theory.Unit.cls @@ fun unit ->
+    KB.Object.scoped Theory.Program.cls @@ fun label ->
+    provide unit >>= fun () ->
+    KB.provide Theory.Label.unit label (Some unit) >>= fun () ->
+    Theory.Label.target label >>= fun name ->
+    KB.collect Theory.Label.encoding label >>| fun encoding ->
+    Target {name; encoding} in
+  let result = Toplevel.var "target-and-encoding" in
+  Toplevel.put result extract_target;
+  Toplevel.get result
+
+let target_of_arch arch bits order =
+  let bits = match bits with
+    | None -> 32L
+    | Some bits -> Int64.of_int bits in
+  let is_little = match order with
+    | Some BigEndian -> false
+    | _ -> true in
+  let make_spec =
+    let open Ogre.Syntax in
+    Ogre.sequence [
+      Ogre.provide Image.Scheme.arch arch;
+      Ogre.provide Image.Scheme.bits bits;
+      Ogre.provide Image.Scheme.is_little_endian is_little;
+    ] in
+  let spec = match Ogre.exec make_spec Ogre.Doc.empty with
+    | Error err ->
+      failwithf "compute_target: failed to build a spec: %s"
+        (Error.to_string_hum err) ()
+    | Ok doc -> doc in
+  compute_target @@ fun unit ->
+  KB.provide Image.Spec.slot unit spec
+
+let make_triple ?(bits=32) ?(order=BigEndian) ?backend ?cpu name =
+  Triple {name; backend; cpu; bits; order}
+
+let make_target target encoding =
+  if Theory.Language.is_unknown encoding
+  then compute_target @@ fun unit ->
+    KB.provide Theory.Unit.target unit target
+  else Target {name=target; encoding}
+
+let parse_arch
+    arch
+    target encoding
+    triple cpu backend
+    bits order =
+  check_invariants [
+    Option.is_some arch, [
+      target_must_be_unknown target;
+      triple_must_not_be_set triple;
+    ];
+    not (Theory.Target.is_unknown target), [
+      arch_must_not_be_set arch;
+      triple_must_not_be_set triple;
+    ];
+    Option.is_some triple, [
+      target_must_be_unknown target;
+      encoding_must_be_unknown encoding;
+      arch_must_not_be_set arch;
+    ];
+    Theory.Target.is_unknown target, [
+      encoding_must_be_unknown encoding;
+    ];
+    Option.is_none triple, [
+      cpu_must_not_be_set cpu;
+      backend_must_not_be_set backend;
+    ];
+    Option.is_none triple && Option.is_none arch, [
+      bits_must_not_be_set bits;
+      order_must_not_be_set order;
+    ]
+  ] >>| fun () -> match arch,triple with
+  | None,None ->
+    if Theory.Target.is_unknown target
+    then target_of_arch "x86-64" None None
+    else make_target target encoding
+  | Some arch,None -> target_of_arch arch bits order
+  | None,Some triple -> make_triple ?bits ?order ?backend ?cpu triple
+  | Some _, Some _ ->
+    failwith "parse_arch: unchecked invariant"
+
 let () = Extension.Command.(begin
     declare ~doc:mc_man "mc"
-      Spec.(args $arch $base $backend $only_one $stop_on_error $input $outputs)
-  end) @@ fun arch base backend only_one stop_on_error input outputs _ctxt ->
+      Spec.(args
+            $arch
+            $target $encoding
+            $triple $cpu $backend
+            $bits $order
+            $base $only_one $stop_on_error $input $outputs)
+  end) @@ fun arch
+    target encoding
+    triple cpu backend
+    bits order
+    base only_one stop_on_error input outputs _ctxt ->
   validate_formats outputs >>= fun () ->
-  parse_base arch base >>= fun base ->
+  parse_arch arch target encoding triple cpu backend bits order >>= fun arch ->
   read_input input >>= fun data ->
+  parse_base arch base >>= fun base ->
   create_memory arch data base >>= fun mem ->
-  create_disassembler ?backend arch >>= fun dis ->
+  create_disassembler arch >>= fun dis ->
   let formats = formats outputs in
   run ~only_one ~stop_on_error dis arch mem formats >>= fun bytes ->
   Dis.close dis;
@@ -358,22 +594,23 @@ let () = Extension.Command.(begin
 
 let () = Extension.Command.(begin
     declare ~doc:objdump_man "objdump"
-      Spec.(args $backend $loader $stop_on_error $file $outputs)
-  end) @@ fun backend loader stop_on_error input outputs _ctxt ->
+      Spec.(args $loader $stop_on_error $file $outputs)
+  end) @@ fun loader stop_on_error input outputs _ctxt ->
   validate_formats outputs >>= fun () ->
   let formats = formats outputs in
   match Image.create ~backend:loader input with
   | Error err -> Error (Fail (Loader_failed err))
   | Ok (img,_warns) ->
-    let arch = Image.arch img in
-    create_disassembler ?backend arch >>= fun dis ->
+    let target = compute_target @@ fun unit ->
+      KB.provide Image.Spec.slot unit (Image.spec img) in
+    create_disassembler target >>= fun dis ->
     Image.memory img |>
     Memmap.to_sequence |>
     Seq.filter_map ~f:(fun (mem,data) ->
         Option.some_if
           (Value.is Image.code_region data) mem) |>
     Seq.map ~f:(fun mem ->
-        run ~stop_on_error dis arch mem formats >>= fun _bytes ->
+        run ~stop_on_error dis target mem formats >>= fun _bytes ->
         Ok ()) |>
     Seq.to_list |>
     Result.all_unit
@@ -418,6 +655,19 @@ let string_of_failure = function
     sprintf "--show-%s doesn't expect any formats yet" name
   | Loader_failed err ->
     Format.asprintf "Failed to unpack the file: %a" Error.pp err
+  | Target_must_be_unknown
+  | Triple_must_not_be_set
+  | Arch_must_not_be_set ->
+    "The target, triple, and arch options could not be used together"
+  | Encoding_must_be_unknown ->
+    "The encoding option requires the target option"
+  | Backend_must_not_be_set ->
+    "The backend option requires the triple option"
+  | Cpu_must_not_be_set ->
+    "The CPU option requires the triple option"
+  | Bits_must_not_be_set | Order_must_not_be_set ->
+    "The bits and order parameters are only accepted with arch or \
+     triple and are not allowed when the target is specified"
 
 
 let () = Extension.Error.register_printer @@ function

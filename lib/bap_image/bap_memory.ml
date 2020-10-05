@@ -461,3 +461,16 @@ let slot = KB.Class.property ~package:"bap"
     Theory.Program.cls "mem" domain
     ~public:true
     ~desc:"a memory region occupied by the program"
+
+let () =
+  let open KB.Syntax in
+  KB.promise Theory.Label.addr @@ fun label ->
+  KB.collect slot label >>|? fun mem ->
+  Some (Addr.to_bitvec (min_addr mem))
+
+let () =
+  let open KB.Rule in
+  declare ~package:"bap" "addr-of-mem" |>
+  require slot |>
+  provide Theory.Label.addr |>
+  comment "addr of the first byte"

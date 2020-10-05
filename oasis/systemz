@@ -1,0 +1,22 @@
+Flag systemz
+ Description: Build Systemz lifter
+ Default: false
+
+Library "bap-systemz"
+ Build$:           flag(everything) || flag(systemz)
+ XMETADescription: common definitions for Systemz targets
+ Path: lib/bap_systemz
+ BuildDepends: core_kernel, bap-knowledge, bap-core-theory
+ FindlibName: bap-systemz
+ Modules: Bap_systemz_target
+
+Library systemz_plugin
+  XMETADescription: provide Systemz lifter
+  Path:             plugins/systemz
+  Build$:           flag(everything) || flag(systemz)
+  BuildDepends:     core_kernel, ppx_jane, ogre,
+                    bap-core-theory, bap-knowledge, bap-main,
+                    bap, bap-systemz
+  FindlibName:      bap-plugin-systemz
+  InternalModules:  Systemz_main, Systemz_lifter
+  XMETAExtraLines:  tags="systemz, lifter, z9"

@@ -69,7 +69,7 @@ end
 module Term : sig
   type 'a t = 'a term
 
-  val slot : (Theory.Program.Semantics.cls, blk term list) KB.slot
+  val slot : (Theory.Semantics.cls, blk term list) KB.slot
 
   val clone : 'a t -> 'a t
   val same : 'a t -> 'a t -> bool

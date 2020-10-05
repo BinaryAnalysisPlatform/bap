@@ -115,7 +115,7 @@ module Tid = struct
     then intern str
     else match str.[0] with
       | '%' -> parse @@ sprintf "#<%s 0x%s>"
-          (KB.Name.show (KB.Class.name Theory.Program.Semantics.cls))
+          (KB.Name.show (KB.Class.name Theory.Semantics.cls))
           (String.subo ~pos:1 str)
       | '@' -> intern (String.subo ~pos:1 str)
       | _ -> intern str
@@ -1251,7 +1251,7 @@ module Term = struct
     end)
 
   let slot = Knowledge.Class.property
-      Theory.Program.Semantics.cls "bir" domain
+      Theory.Semantics.cls "bir" domain
       ~package ~persistent
       ~public:true
       ~desc:"BIL semantics in a graphical IR"

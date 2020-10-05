@@ -1255,6 +1255,12 @@ module Theory : sig
     *)
     val get : ?package:string -> string -> t
 
+    (** [read ?package name] is a synonym for [get ?package name].
+
+        Introduces for the consistency with the [Enum.S] interface.
+    *)
+    val read : ?package:string -> string -> t
+
     (** [declared ()] is the list of declared targets.
         The order is unspecified, see also {!families}. The list
         doesn't include the [unknown] target. *)
@@ -1694,6 +1700,9 @@ module Theory : sig
 
       (** the hash value of the enum  *)
       val hash : t -> int
+
+      (** [members ()] the list of all members of the enumeration type. *)
+      val members : unit -> t list
     end
 
     (** Creates a new enumerated type.  *)

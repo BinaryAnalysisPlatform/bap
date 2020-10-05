@@ -186,7 +186,7 @@ let i686 = Theory.Target.declare ~package "i686"
 let amd64 = Theory.Target.declare ~package "amd64"
     ~parent:i686
     ~nicknames:["x64"; "x86_64"; "x86-64"; ]
-    ~bits:32
+    ~bits:64
     ~data:M64.data
     ~code:M64.data
     ~vars:M64.vars
