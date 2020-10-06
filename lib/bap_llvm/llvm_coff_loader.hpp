@@ -46,12 +46,25 @@ const coff_section* get_coff_section(const coff_obj &obj, const SectionRef &sec)
 error_or<int> section_number(const coff_obj &obj, const SymbolRef &sym);
 error_or<uint64_t> symbol_value(const coff_obj &obj, const SymbolRef &sym);
 
+#if LLVM_VERSION_MAJOR >= 11
+const coff_section * get_coff_section(const coff_obj &obj, std::size_t index) {
+    if (index != COFF::IMAGE_SYM_UNDEFINED) {
+        auto sec = obj.getSection(index);
+        return sec ? *sec : nullptr;
+    } else {
+        return nullptr;
+    }
+}
+#else
 const coff_section * get_coff_section(const coff_obj &obj, std::size_t index) {
     const coff_section *sec = nullptr;
     bool fail = (index == COFF::IMAGE_SYM_UNDEFINED) || obj.getSection(index, sec);
     if (fail) return nullptr;
     else return sec;
 }
+
+#endif
+
 
 void emit_base_address(const coff_obj &obj, ogre_doc &s) {
     s.entry("llvm:base-address") << obj.getImageBase();
@@ -132,6 +145,17 @@ void emit_sections(const coff_obj &obj, ogre_doc &s) {
         emit_section(*get_coff_section(obj, sec), base, is_rel, s);
 }
 
+#if LLVM_VERSION_MAJOR >= 11
+uint64_t get_symbol_value(const SymbolRef &sym) {
+    auto value = sym.getValue();
+    return value ? *value : 0;
+}
+#else
+uint64_t get_symbol_value(const SymbolRef &sym) {
+   return sym.getValue();
+}
+#endif
+
 void emit_symbols(const coff_obj &obj, ogre_doc &s) {
     for (auto sized_sym : prim::get_symbols_sizes(obj)) {
         auto sym = sized_sym.first;
@@ -144,7 +168,7 @@ void emit_symbols(const coff_obj &obj, ogre_doc &s) {
                                          << *addr
                                          << sized_sym.second
                                          << *offs
-                                         << sym.getValue();
+                                         << get_symbol_value(sym);
             if (*type == SymbolRef::ST_Function)
                 s.entry("llvm:code-entry") << *name << *offs << sized_sym.second;
         }
@@ -238,12 +262,26 @@ void emit_exported_symbols(const coff_obj &obj, exports &syms, ogre_doc &s) {
     }
 }
 
+#if LLVM_VERSION_MAJOR >= 11
+const data_directory *get_export_table(const coff_obj &obj) {
+    return obj.getDataDirectory(COFF::EXPORT_TABLE);
+}
+#else
+const data_directory *get_export_table(const coff_obj &obj) {
+    const data_directory *data_entry;
+    if (obj.getDataDirectory(COFF::EXPORT_TABLE, data_entry)) {
+        return nullptr;
+    } else {
+        return data_entry;
+    }
+}
+#endif // llvm >= 11
+
 void emit_exported_symbols(const coff_obj &obj, ogre_doc &s) {
 
-    const data_directory *data_entry;
     uintptr_t ptr = 0;
-
-    if (obj.getDataDirectory(COFF::EXPORT_TABLE, data_entry)) return;
+    const data_directory *data_entry = get_export_table(obj);
+    if (!data_entry) return;
     uint32_t export_table_rva = data_entry->RelativeVirtualAddress;
     if (!export_table_rva) return;
     if (obj.getRvaPtr(export_table_rva, ptr)) return;
@@ -295,12 +333,13 @@ error_or<uint64_t> symbol_file_offset(const coff_obj &obj, const SymbolRef &sym)
         num == COFF::IMAGE_SYM_DEBUG)
         return success(coff_sym.getValue());
 
-    const coff_section *coff_sec;
-    if (auto er = obj.getSection(num, coff_sec)) {
-        return failure(er.message());
+    const coff_section *coff_sec = get_coff_section(obj, num);
+    if (coff_sec) {
+        uint64_t off = coff_sec->PointerToRawData + coff_sym.getValue();
+        return success(off);
+    } else {
+        return failure("failed to get the section");
     }
-    uint64_t off = coff_sec->PointerToRawData + coff_sym.getValue();
-    return success(off);
 }
 } // namespace coff_loader
 
