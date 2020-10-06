@@ -506,7 +506,7 @@ private:
 
     void init_prefixes() {
         for (std::size_t i = 0; i < ins_info->getNumOpcodes(); i++) {
-            if (ends_with(ins_info->getName(i), "_PREFIX")) {
+            if (ends_with(std::string(ins_info->getName(i)), "_PREFIX")) {
                 prefixes.push_back(i);
             }
         }
