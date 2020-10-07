@@ -3,7 +3,7 @@ open Base
 open KB.Syntax
 
 module Env  = Thumb_env.Env
-module Common = Dsl_common
+module Common = Thumb_dsl_common
 
 exception Assert_error
 
@@ -21,7 +21,7 @@ end
 module Make_Extend(Core : Theory.Core)(Holder : Common.ValueHolder) = struct
   open Core
   module CPU = Arm_cpu(Core)
-  module DSL = Dsl_common.DSL(Core)(CPU)(Holder)
+  module DSL = Thumb_dsl_common.DSL(Core)(CPU)(Holder)
 
   include DSL
 

@@ -1,5 +1,4 @@
 open Core_kernel
-open Regular.Std
 open Bap.Std
 
 exception Lift_Error of string
@@ -213,4 +212,4 @@ let of_int_exn = function
   | 12 -> `GT
   | 13 -> `LE
   | 14 -> `AL
-  | n -> raise @@ Lift_Error "input is not a condition"
+  | _ -> raise @@ Lift_Error "input is not a condition"

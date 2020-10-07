@@ -28,7 +28,7 @@ module Thumb(Core : Theory.Core) = struct
     KB.Object.create Theory.Program.cls >>= fun lbl ->
     blk lbl eff skip
 
-  let ctrl eff data pc = 
+  let ctrl eff data pc =
     Theory.Label.for_addr pc >>= fun lbl ->
     blk lbl data eff
 
@@ -81,7 +81,7 @@ module Thumb(Core : Theory.Core) = struct
       | `Reg `PC -> addr_bitv
       | src -> DSL.(!$src) in
     match insn, ops with (* resolve the PC-involved instructions here *)
-    | `tMOVr, [|`Reg `PC; src; _unknown; _|] -> 
+    | `tMOVr, [|`Reg `PC; src; _unknown; _|] ->
       ctrl DSL.(jmp !$+src) pass addr
     | `tMOVr, [|dest; `Reg `PC; _unknown; _|] ->
       move DSL.(!$$+dest := addr_bitv)
@@ -90,7 +90,7 @@ module Thumb(Core : Theory.Core) = struct
       ctrl DSL.(jmp (src + addr_bitv)) pass addr
     | `tADDhirr, [|dest; _dest; `Reg `PC; _unknown; _|] ->
       move DSL.(!$$+dest := !$+dest + addr_bitv)
-    | `tCMPhir, [|dest; src; _unknown; _|] -> 
+    | `tCMPhir, [|dest; src; _unknown; _|] ->
       let src = filter_pc src in
       let dest = filter_pc dest in
       cmphir dest src |> DSL.expand |> move
@@ -104,39 +104,39 @@ module Thumb(Core : Theory.Core) = struct
   let lift_mem insn ops addr =
     let open Defs in
     match insn, Array.to_list ops with
-    | `tLDRi, [dest; src; imm; unknown; _] -> 
+    | `tLDRi, [dest; src; imm; unknown; _] ->
       lift_mem_single dest src ~src2:imm Ld W
-    | `tLDRr, [dest; src1; src2; unknown; _] -> 
+    | `tLDRr, [dest; src1; src2; unknown; _] ->
       lift_mem_single dest src1 ~src2 Ld W
-    | `tLDRpci, [dest; imm; unknown; _] -> 
+    | `tLDRpci, [dest; imm; unknown; _] ->
       lift_mem_single ~shift_val:0 dest (`Reg `PC) ~src2:imm Ld W
-    | `tLDRspi, [dest; (`Reg `SP); imm; unknown; _] -> 
+    | `tLDRspi, [dest; (`Reg `SP); imm; unknown; _] ->
       lift_mem_single dest (`Reg `SP) ~src2:imm Ld W
-    | `tLDRBi, [dest; src; imm; unknown; _] -> 
+    | `tLDRBi, [dest; src; imm; unknown; _] ->
       lift_mem_single ~shift_val:0 dest src ~src2:imm Ld B
-    | `tLDRBr, [dest; src1; src2; unknown; _] -> 
+    | `tLDRBr, [dest; src1; src2; unknown; _] ->
       lift_mem_single dest src1 ~src2 Ld B
-    | `tLDRHi, [dest; src; imm; unknown; _] -> 
+    | `tLDRHi, [dest; src; imm; unknown; _] ->
       lift_mem_single ~shift_val:1 dest src ~src2:imm Ld H
-    | `tLDRHr, [dest; src1; src2; unknown; _] -> 
+    | `tLDRHr, [dest; src1; src2; unknown; _] ->
       lift_mem_single dest src1 ~src2 Ld H
-    | `tLDRSB, [dest; src1; src2; unknown; _] -> 
+    | `tLDRSB, [dest; src1; src2; unknown; _] ->
       lift_mem_single dest src1 ~src2 Ld B ~sign:true
-    | `tLDRSH, [dest; src1; src2; unknown; _] -> 
+    | `tLDRSH, [dest; src1; src2; unknown; _] ->
       lift_mem_single dest src1 ~src2 Ld H ~sign:true
-    | `tSTRi, [dest; src; imm; unknown; _] -> 
+    | `tSTRi, [dest; src; imm; unknown; _] ->
       lift_mem_single dest src ~src2:imm St W
-    | `tSTRr, [dest; src1; src2; unknown; _] -> 
+    | `tSTRr, [dest; src1; src2; unknown; _] ->
       lift_mem_single dest src1 ~src2 St W
-    | `tSTRspi, [dest; (`Reg `SP); imm; unknown; _] -> 
+    | `tSTRspi, [dest; (`Reg `SP); imm; unknown; _] ->
       lift_mem_single dest (`Reg `SP) ~src2:imm St W
-    | `tSTRBi, [dest; src; imm; unknown; _] -> 
+    | `tSTRBi, [dest; src; imm; unknown; _] ->
       lift_mem_single ~shift_val:0 dest src ~src2:imm St B
-    | `tSTRBr, [dest; src1; src2; unknown; _] -> 
+    | `tSTRBr, [dest; src1; src2; unknown; _] ->
       lift_mem_single dest src1 ~src2 St B
-    | `tSTRHi, [dest; src; imm; unknown; _] -> 
+    | `tSTRHi, [dest; src; imm; unknown; _] ->
       lift_mem_single ~shift_val:1 dest src ~src2:imm St H
-    | `tSTRHr, [dest; src1; src2; unknown; _] -> 
+    | `tSTRHr, [dest; src1; src2; unknown; _] ->
       lift_mem_single dest src1 ~src2 St H
     | `tSTMIA, dest :: _dest :: _unknown :: _nil_reg :: src_list (* looks like they should be different, but actually are the same in Thumb mode *)
     | `tSTMIA_UPD, dest :: _dest :: _unknown :: _nil_reg :: src_list ->
@@ -148,7 +148,7 @@ module Thumb(Core : Theory.Core) = struct
       Mem.push_multiple src_list |> move
     | `tPOP, _unknown :: _nil_reg :: src_list ->
       Theory.Var.fresh Env.value >>= fun pc ->
-      let has_pc = List.exists src_list 
+      let has_pc = List.exists src_list
           (fun s -> match s with
              |`Reg `PC -> true
              | _ -> false) in
@@ -175,7 +175,7 @@ module Thumb(Core : Theory.Core) = struct
     match insn, ops with
     | `tBcc, [|target; cond; _cpsr|] -> tbcc cond target addr
     | `tB, [|target; _unknown; _|] -> tb target addr
-    | `tBL, [|_unknown; _nil_reg; target; _cpsr|] -> tbl target addr 
+    | `tBL, [|_unknown; _nil_reg; target; _cpsr|] -> tbl target addr
     | `tBLXi, [|_unknown; _nil_reg; target; _cpsr|] -> tblxi target addr
     | `tBLXr, [|_unknown; _nil_reg; target|] -> tblxr target addr
     | `tBX, [|target; _unknown; _|] -> tbx target
@@ -187,7 +187,7 @@ module Thumb(Core : Theory.Core) = struct
     | #move_insn -> lift_move_pre insn ops addr
     | #mem_insn -> lift_mem insn ops addr
     | #bits_insn -> lift_bits insn ops |> DSL.expand |> move
-    | #branch_insn -> 
+    | #branch_insn ->
       let ctrl_eff, data_eff = lift_branch insn ops addr in
       ctrl ctrl_eff data_eff addr (* var Env.pc *)
 
@@ -200,18 +200,18 @@ let fix_cmnz insn mem = match insn with
   | None -> if Memory.length mem = 2 then
       let insn_word = Or_error.(ok (Size.of_int 16 >>= fun hw ->
                                     Memory.get ~scale:hw mem >>= Word.extract ~hi:15 ~lo:6)) in
-      Option.(insn_word >>= fun insn -> 
-              if Word.equal (Word.of_int 10 0x10b) insn 
-              then Some `tCMNz 
+      Option.(insn_word >>= fun insn ->
+              if Word.equal (Word.of_int 10 0x10b) insn
+              then Some `tCMNz
               else None)
     else None
   | Some insn -> Some insn
 
-let run_lifter _label addr insn mem 
+let run_lifter _label addr insn mem
     (lifter : Bitvec.t -> Defs.insn -> Defs.op array -> unit Theory.eff) =
   match fix_cmnz (Insns.of_basic insn) mem with
   | None -> raise (Defs.Lift_Error "unknown instruction")
-  | Some arm_insn -> 
+  | Some arm_insn ->
     match Insns.arm_ops (Disasm_expert.Basic.Insn.ops insn) with
     | Error err -> raise (Defs.Lift_Error (Error.to_string_hum err))
     | Ok ops -> lifter addr arm_insn ops
@@ -219,7 +219,7 @@ let run_lifter _label addr insn mem
 include Self()
 
 let () =
-  KB.promise Theory.Program.Semantics.slot @@ fun label ->
+  KB.promise Theory.Semantics.slot @@ fun label ->
   Theory.instance () >>= Theory.require >>= fun (module Core) ->
   KB.collect Arch.slot label >>= fun arch ->
   KB.collect Disasm_expert.Basic.Insn.slot label >>= fun insn -> (* the LLVM provided decoding *)
