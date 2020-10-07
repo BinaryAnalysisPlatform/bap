@@ -5,8 +5,6 @@ open KB.Syntax
 module Env  = Thumb_env.Env
 module Defs = Thumb_defs
 
-exception Lift_Error = Thumb_defs.Lift_Error
-
 module Bits(Core : Theory.Core) = struct
   open Core
 
@@ -15,7 +13,7 @@ module Bits(Core : Theory.Core) = struct
 
   open Utils
 
-  let sxtb dest src = 
+  let sxtb dest src =
     DSL.[
       !$$dest := extend_to Env.byte !$src |> extend_signed
     ]
@@ -30,7 +28,7 @@ module Bits(Core : Theory.Core) = struct
       !$$dest := extend_to Env.byte !$src |> extend
     ]
 
-  let uxth dest src = 
+  let uxth dest src =
     DSL.[
       !$$dest := extend_to Env.half_word !$src |> extend
     ]

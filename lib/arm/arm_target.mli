@@ -96,6 +96,9 @@ module Bi : sig
   val v86a : Theory.Target.t
 end
 
+val llvm_a32 : Theory.language
+val llvm_t32 : Theory.language
+val llvm_a64 : Theory.language
 
 
 (** [load ()] loads the knowledge base rules for the ARM targets.

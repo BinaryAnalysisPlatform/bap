@@ -1,8 +1,6 @@
 open Core_kernel
 open Bap.Std
 
-exception Lift_Error of string
-
 type cond = [
   | `EQ
   | `NE
@@ -71,7 +69,7 @@ type op = [
 
 let assert_imm : op -> word = function
   | `Imm imm -> imm
-  | _ -> raise (Lift_Error "immediate assertion failed")
+  | _ -> failwith "thumb-lifter: expected an immediate"
 
 (** all the `mov` series, registers marked with `e` means extended *)
 type move_insn = [
@@ -212,4 +210,4 @@ let of_int_exn = function
   | 12 -> `GT
   | 13 -> `LE
   | 14 -> `AL
-  | _ -> raise @@ Lift_Error "input is not a condition"
+  | _ -> failwith "expected a condition code"

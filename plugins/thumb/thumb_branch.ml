@@ -5,8 +5,6 @@ open KB.Syntax
 module Env  = Thumb_env.Env
 module Defs = Thumb_defs
 
-exception Lift_Error = Thumb_defs.Lift_Error
-
 module Branch(Core : Theory.Core) = struct
   open Core
 
@@ -16,7 +14,7 @@ module Branch(Core : Theory.Core) = struct
   open Utils
 
   let tbcc cond target addr = match cond, target with
-    | `Imm cond, `Imm _ -> 
+    | `Imm cond, `Imm _ ->
       let z = var Env.zf in
       let c = var Env.cf in
       let v = var Env.vf in
@@ -41,15 +39,15 @@ module Branch(Core : Theory.Core) = struct
         | `LT -> eq_ n v |> inv
         | `GT -> and_ (inv z) (eq_ n v)
         | `LE -> or_ z (eq_ n v |> inv)
-        | `AL -> b1 in 
+        | `AL -> b1 in
       let jump_address = DSL.(addr + !$target + !!2) in
       let eff_hold = (jmp jump_address, pass) in
-      if always_true then eff_hold 
+      if always_true then eff_hold
       else (
         branch cond_val (fst eff_hold) skip, (* control effect branch *)
         pass  (* data effect branch *)
       )
-    | _ -> raise @@ Lift_Error "operands must be immediate"
+    | _ -> failwith "operands must be immediate"
 
   let tb target addr =
     (DSL.(

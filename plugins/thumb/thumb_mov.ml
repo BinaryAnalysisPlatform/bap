@@ -6,8 +6,6 @@ module Env  = Thumb_env.Env
 module Flags = Thumb_flags.Flags
 module Defs = Thumb_defs
 
-exception Lift_Error = Thumb_defs.Lift_Error
-
 module Mov(Core : Theory.Core) = struct
   open Core
 
@@ -17,18 +15,18 @@ module Mov(Core : Theory.Core) = struct
 
   open Utils
 
-  let mover dest src = 
+  let mover dest src =
     DSL.[
       !$$+dest := !$+src
     ]
 
-  let movesr dest src = 
+  let movesr dest src =
     DSL.[
       !$$dest := !$src;
       Flags.set_nzf !$$dest
     ]
 
-  let movei8 dest immsrc = 
+  let movei8 dest immsrc =
     DSL.[
       !$$dest := !$immsrc;
       Flags.set_nzf !$$dest
@@ -46,7 +44,7 @@ module Mov(Core : Theory.Core) = struct
       Flags.set_nzf !$$dest
     ]
 
-  let addi3 dest src immsrc = 
+  let addi3 dest src immsrc =
     DSL.[
       !$$dest := !$src + !$immsrc;
       Flags.set_add !$src !$immsrc !$$dest
@@ -68,7 +66,7 @@ module Mov(Core : Theory.Core) = struct
       ]
     ]
 
-  let subi8 dest immsrc = 
+  let subi8 dest immsrc =
     DSL.[
       local_var >>= fun tmp -> !%[
         tmp := !$dest;
@@ -77,45 +75,45 @@ module Mov(Core : Theory.Core) = struct
       ]
     ]
 
-  let addrr d s1 s2 = 
+  let addrr d s1 s2 =
     DSL.[
       !$$d := !$s1 + !$s2;
       Flags.set_add !$s1 !$s2 !$$d
     ]
 
-  let subrr d s1 s2 = 
+  let subrr d s1 s2 =
     DSL.[
       !$$d := !$s1 - !$s2;
       Flags.set_sub !$s1 !$s2 !$$d
     ]
 
-  let addhirr d s = 
+  let addhirr d s =
     DSL.[
       !$$+d := !$+d + !$+s;
     ]
 
   (* Rd = (PC and 0xfffffffc) + (imm << 2) *)
-  let adr dest immsrc addr = 
+  let adr dest immsrc addr =
     DSL.[
       !$$dest := addr land (imm 0xFFFFFFFC) + !$immsrc << !!2
     ]
 
-  let addrspi dest immsrc = 
+  let addrspi dest immsrc =
     DSL.[
       !$$dest := (var Env.sp) + !$immsrc << !!2
     ]
 
-  let addspi immsrc = 
+  let addspi immsrc =
     DSL.[
       Env.sp := (var Env.sp) + !$immsrc << !!2
     ]
 
-  let subspi immsrc = 
+  let subspi immsrc =
     DSL.[
       Env.sp := (var Env.sp) - !$immsrc << !!2
     ]
 
-  let adc d s = 
+  let adc d s =
     DSL.[
       local_var >>= fun tmp -> !%[
         tmp := !$d;
@@ -133,7 +131,7 @@ module Mov(Core : Theory.Core) = struct
       ]
     ]
 
-  let andrr dest src = 
+  let andrr dest src =
     DSL.[
       !$$dest := !$dest land !$src;
       Flags.set_nzf !$$dest
@@ -159,7 +157,7 @@ module Mov(Core : Theory.Core) = struct
     ]
 
   (* ASRr has a rather complex logic, see A7.1.12 *)
-  let asrr dest src = 
+  let asrr dest src =
     let seg = DSL.(extend_to Env.byte !$src |> extend) in
     DSL.[
       if_else_ (seg <+ !!32) [
@@ -178,13 +176,13 @@ module Mov(Core : Theory.Core) = struct
       Flags.set_nzf !$$dest
     ]
 
-  let bic dest src = 
+  let bic dest src =
     DSL.[
       !$$dest := !$dest land lnot !$src;
       Flags.set_nzf !$$dest
     ]
 
-  let cmnz dest src = 
+  let cmnz dest src =
     DSL.[
       local_var >>= fun tmp -> !%[
         tmp := !$dest + !$src;
@@ -192,7 +190,7 @@ module Mov(Core : Theory.Core) = struct
       ]
     ]
 
-  let cmpi8 dest immsrc = 
+  let cmpi8 dest immsrc =
     DSL.[
       local_var >>= fun tmp -> !%[
         tmp := !$dest - !$immsrc;
@@ -200,7 +198,7 @@ module Mov(Core : Theory.Core) = struct
       ]
     ]
 
-  let cmpr dest src = 
+  let cmpr dest src =
     DSL.[
       local_var >>= fun tmp -> !%[
         tmp := !$dest - !$src;
@@ -208,7 +206,7 @@ module Mov(Core : Theory.Core) = struct
       ]
     ]
 
-  let cmphir dest src = 
+  let cmphir dest src =
     DSL.[
       local_var >>= fun tmp -> !%[
         tmp := dest - src;
@@ -216,13 +214,13 @@ module Mov(Core : Theory.Core) = struct
       ]
     ]
 
-  let eor dest src = 
+  let eor dest src =
     DSL.[
       !$$dest := !$dest lxor !$src;
       Flags.set_nzf !$$dest
     ]
 
-  let lsli dest src immsrc = 
+  let lsli dest src immsrc =
     let shift_amt = Defs.assert_imm immsrc in
     DSL.[
       when_else_ (Word.is_zero shift_amt) [
@@ -235,7 +233,7 @@ module Mov(Core : Theory.Core) = struct
     ]
 
   (* LSLr has a rather complex logic, see A7.1.39 *)
-  let lslr dest src = 
+  let lslr dest src =
     let seg = DSL.(extend_to Env.byte !$src |> extend) in
     DSL.[
       if_else_ (seg <+ !!32) [
@@ -254,7 +252,7 @@ module Mov(Core : Theory.Core) = struct
       Flags.set_nzf !$$dest
     ]
 
-  let lsri dest src immsrc = 
+  let lsri dest src immsrc =
     let shift_amt = Defs.assert_imm immsrc in
     DSL.[
       when_else_ (Word.is_zero shift_amt) [
@@ -267,7 +265,7 @@ module Mov(Core : Theory.Core) = struct
       Flags.set_nzf !$$dest
     ]
 
-  let lsrr dest src = 
+  let lsrr dest src =
     let seg = DSL.(extend_to Env.byte !$src |> extend) in
     DSL.[
       if_else_ (seg <+ !!32) [
@@ -286,14 +284,14 @@ module Mov(Core : Theory.Core) = struct
       Flags.set_nzf !$$dest
     ]
 
-  let orr dest src = 
+  let orr dest src =
     DSL.[
       !$$dest := !$dest lor !$src;
       Flags.set_nzf !$$dest
     ]
 
   (* This is actually code named `neg Rd Rm`, but llvm encodes it as `rsb Rd Rm #0` *)
-  let rsb dest src immsrc = 
+  let rsb dest src immsrc =
     DSL.[
       !$$dest := !$immsrc - !$src;
       Flags.set_sub !$immsrc !$src !$$dest
@@ -313,7 +311,7 @@ module Mov(Core : Theory.Core) = struct
     let i8 = bitv_of 8 in
     logor (lshift hf i8) (rshift hf i8)
 
-  let rev16 dest src = 
+  let rev16 dest src =
     DSL.[
       !$$dest := concat Env.value [
           extract Env.byte !!23 !!16 !$src;
@@ -323,7 +321,7 @@ module Mov(Core : Theory.Core) = struct
         ]
     ]
 
-  let revsh dest src = 
+  let revsh dest src =
     DSL.[
       if_else_ (msb (extend_to Env.byte !$src)) [
         !$$dest := concat Env.value [
@@ -342,19 +340,19 @@ module Mov(Core : Theory.Core) = struct
       ]
     ]
 
-  let ror dest src = 
+  let ror dest src =
     let seg4 = DSL.(extend_to Env.half_byte !$src |> extend) in
     DSL.[
       if_else_ (seg4 = !!0) [
         Env.cf := msb !$dest
       ] (*else*) [
         Env.cf := nth_bit (seg4 - !!1) !$dest;
-        !$$dest := !$dest >> seg4 lor !$dest << (!!32 - seg4) 
+        !$$dest := !$dest >> seg4 lor !$dest << (!!32 - seg4)
       ];
       Flags.set_nzf !$$dest
     ]
 
-  let tst dest src = 
+  let tst dest src =
     DSL.[
       local_var >>= fun tmp -> !%[
         tmp := !$dest land !$src;

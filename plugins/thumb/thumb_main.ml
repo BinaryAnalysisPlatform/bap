@@ -1,12 +1,17 @@
-open Bap_core_theory
+let package = "bap"
+
 open Base
+open Bap_core_theory
 open KB.Syntax
+
+include Bap_main.Loggers()
 
 module Defs = Thumb_defs
 module Flags = Thumb_flags.Flags
 module Insns = Thumb_insn
+module Target = Arm_target
 
-let package = "arm-thumb"
+module MC = Bap.Std.Disasm_expert.Basic
 
 type insns = Defs.insn * (Defs.op list)
 
@@ -104,49 +109,49 @@ module Thumb(Core : Theory.Core) = struct
   let lift_mem insn ops addr =
     let open Defs in
     match insn, Array.to_list ops with
-    | `tLDRi, [dest; src; imm; unknown; _] ->
+    | `tLDRi, [dest; src; imm; _; _] ->
       lift_mem_single dest src ~src2:imm Ld W
-    | `tLDRr, [dest; src1; src2; unknown; _] ->
+    | `tLDRr, [dest; src1; src2; _; _] ->
       lift_mem_single dest src1 ~src2 Ld W
-    | `tLDRpci, [dest; imm; unknown; _] ->
+    | `tLDRpci, [dest; imm; _; _] ->
       lift_mem_single ~shift_val:0 dest (`Reg `PC) ~src2:imm Ld W
-    | `tLDRspi, [dest; (`Reg `SP); imm; unknown; _] ->
+    | `tLDRspi, [dest; (`Reg `SP); imm; _; _] ->
       lift_mem_single dest (`Reg `SP) ~src2:imm Ld W
-    | `tLDRBi, [dest; src; imm; unknown; _] ->
+    | `tLDRBi, [dest; src; imm; _; _] ->
       lift_mem_single ~shift_val:0 dest src ~src2:imm Ld B
-    | `tLDRBr, [dest; src1; src2; unknown; _] ->
+    | `tLDRBr, [dest; src1; src2; _; _] ->
       lift_mem_single dest src1 ~src2 Ld B
-    | `tLDRHi, [dest; src; imm; unknown; _] ->
+    | `tLDRHi, [dest; src; imm; _; _] ->
       lift_mem_single ~shift_val:1 dest src ~src2:imm Ld H
-    | `tLDRHr, [dest; src1; src2; unknown; _] ->
+    | `tLDRHr, [dest; src1; src2; _; _] ->
       lift_mem_single dest src1 ~src2 Ld H
-    | `tLDRSB, [dest; src1; src2; unknown; _] ->
+    | `tLDRSB, [dest; src1; src2; _; _] ->
       lift_mem_single dest src1 ~src2 Ld B ~sign:true
-    | `tLDRSH, [dest; src1; src2; unknown; _] ->
+    | `tLDRSH, [dest; src1; src2; _; _] ->
       lift_mem_single dest src1 ~src2 Ld H ~sign:true
-    | `tSTRi, [dest; src; imm; unknown; _] ->
+    | `tSTRi, [dest; src; imm; _; _] ->
       lift_mem_single dest src ~src2:imm St W
-    | `tSTRr, [dest; src1; src2; unknown; _] ->
+    | `tSTRr, [dest; src1; src2; _; _] ->
       lift_mem_single dest src1 ~src2 St W
-    | `tSTRspi, [dest; (`Reg `SP); imm; unknown; _] ->
+    | `tSTRspi, [dest; (`Reg `SP); imm; _; _] ->
       lift_mem_single dest (`Reg `SP) ~src2:imm St W
-    | `tSTRBi, [dest; src; imm; unknown; _] ->
+    | `tSTRBi, [dest; src; imm; _; _] ->
       lift_mem_single ~shift_val:0 dest src ~src2:imm St B
-    | `tSTRBr, [dest; src1; src2; unknown; _] ->
+    | `tSTRBr, [dest; src1; src2; _; _] ->
       lift_mem_single dest src1 ~src2 St B
-    | `tSTRHi, [dest; src; imm; unknown; _] ->
+    | `tSTRHi, [dest; src; imm; _; _] ->
       lift_mem_single ~shift_val:1 dest src ~src2:imm St H
-    | `tSTRHr, [dest; src1; src2; unknown; _] ->
+    | `tSTRHr, [dest; src1; src2; _; _] ->
       lift_mem_single dest src1 ~src2 St H
-    | `tSTMIA, dest :: _dest :: _unknown :: _nil_reg :: src_list (* looks like they should be different, but actually are the same in Thumb mode *)
-    | `tSTMIA_UPD, dest :: _dest :: _unknown :: _nil_reg :: src_list ->
+    | `tSTMIA, dest :: _dest :: _ :: _nil_reg :: src_list (* looks like they should be different, but actually are the same in Thumb mode *)
+    | `tSTMIA_UPD, dest :: _dest :: _ :: _nil_reg :: src_list ->
       Mem.store_multiple dest src_list |> move
-    | `tLDMIA, dest :: _unknown :: _nil_reg :: src_list (* same as stmia *)
-    | `tLDMIA_UPD, dest :: _unknown :: _nil_reg :: src_list ->
+    | `tLDMIA, dest :: _ :: _nil_reg :: src_list (* same as stmia *)
+    | `tLDMIA_UPD, dest :: _ :: _nil_reg :: src_list ->
       Mem.load_multiple dest src_list |> move
-    | `tPUSH, _unknown :: _nil_reg :: src_list ->
+    | `tPUSH, _ :: _nil_reg :: src_list ->
       Mem.push_multiple src_list |> move
-    | `tPOP, _unknown :: _nil_reg :: src_list ->
+    | `tPOP, _ :: _nil_reg :: src_list ->
       Theory.Var.fresh Env.value >>= fun pc ->
       let has_pc = List.exists src_list
           (fun s -> match s with
@@ -181,9 +186,7 @@ module Thumb(Core : Theory.Core) = struct
     | `tBX, [|target; _unknown; _|] -> tbx target
     | _ -> (skip, pass)
 
-  let lift_with (addr : Bitvec.t) (insn : Thumb_defs.insn)
-      (ops : Thumb_defs.op array) =
-    match insn with
+  let lift_insn addr insn ops = match insn with
     | #move_insn -> lift_move_pre insn ops addr
     | #mem_insn -> lift_mem insn ops addr
     | #bits_insn -> lift_bits insn ops |> DSL.expand |> move
@@ -193,46 +196,60 @@ module Thumb(Core : Theory.Core) = struct
 
 end
 
-open Bap.Std
+module Main = struct
+  open Bap.Std
 
-(* this is a temporary fix since bap-mc disassembler couldn't recognize CMN *)
-let fix_cmnz insn mem = match insn with
-  | None -> if Memory.length mem = 2 then
-      let insn_word = Or_error.(ok (Size.of_int 16 >>= fun hw ->
-                                    Memory.get ~scale:hw mem >>= Word.extract ~hi:15 ~lo:6)) in
-      Option.(insn_word >>= fun insn ->
-              if Word.equal (Word.of_int 10 0x10b) insn
-              then Some `tCMNz
-              else None)
-    else None
-  | Some insn -> Some insn
+  let cmnz_opcode = Word.of_int 10 0x10b
 
-let run_lifter _label addr insn mem
-    (lifter : Bitvec.t -> Defs.insn -> Defs.op array -> unit Theory.eff) =
-  match fix_cmnz (Insns.of_basic insn) mem with
-  | None -> raise (Defs.Lift_Error "unknown instruction")
-  | Some arm_insn ->
-    match Insns.arm_ops (Disasm_expert.Basic.Insn.ops insn) with
-    | Error err -> raise (Defs.Lift_Error (Error.to_string_hum err))
-    | Ok ops -> lifter addr arm_insn ops
+  (* this is a temporary fix since bap-mc disassembler couldn't recognize CMN *)
+  let fix_cmnz insn mem = match insn with
+    | Some insn -> Some insn
+    | None ->
+      let opcode =
+        let open Or_error.Monad_infix in
+        let scale = Size.of_int_exn 16 in
+        Memory.get ~scale mem >>=
+        Word.extract ~hi:15 ~lo:6 in
+      match opcode with
+      | Ok opcode when Word.equal opcode cmnz_opcode ->
+        Some `tCMNz
+      | _ -> None
 
-include Self()
+  let decode insn mem = match fix_cmnz (Insns.of_basic insn) mem with
+    | None -> Or_error.errorf "Unknown instruction: %s"
+                (MC.Insn.asm insn)
+    | Some opcode -> match Insns.arm_ops (MC.Insn.ops insn) with
+      | Ok ops -> Ok (opcode,ops)
+      | Error _ as err -> err
 
-let () =
-  KB.promise Theory.Semantics.slot @@ fun label ->
-  Theory.instance () >>= Theory.require >>= fun (module Core) ->
-  KB.collect Arch.slot label >>= fun arch ->
-  KB.collect Disasm_expert.Basic.Insn.slot label >>= fun insn -> (* the LLVM provided decoding *)
-  KB.collect Memory.slot label >>= fun mem -> (* the memory chunk, probably not needed *)
-  let module Lifter = Thumb(Core) in
-  match arch, insn, mem with
-  | #Arch.thumbeb, Some insn, Some mem
-  | #Arch.thumb, Some insn, Some mem ->
-    let addr = Word.to_bitvec@@Memory.min_addr mem in
-    (match Or_error.try_with (
-         fun () -> run_lifter label addr insn mem Lifter.lift_with
-       ) with
-     | Ok semantics -> semantics
-     | Error err -> warning "%s" (Error.to_string_hum err);
-       KB.return Insn.empty)
-  | _ -> KB.return Insn.empty
+  let (>>=?) x f = x >>= function
+    | None -> KB.return Insn.empty
+    | Some x -> f x
+
+  let load () =
+    KB.promise Theory.Semantics.slot @@ fun label ->
+    KB.collect Theory.Label.encoding label >>= fun encoding ->
+    if Theory.Language.equal Target.llvm_t32 encoding then
+      KB.collect MC.Insn.slot label >>=? fun insn ->
+      KB.collect Memory.slot label >>=? fun mem ->
+      Theory.instance () >>= Theory.require >>= fun (module Core) ->
+      let module Thumb = Thumb(Core) in
+      let addr = Word.to_bitvec@@Memory.min_addr mem in
+      match decode insn mem with
+      | Ok (op,ops) -> Thumb.lift_insn addr op ops
+      | Error err ->
+        info "failed to decode a thumb instruction: %a"
+          Error.pp err;
+        KB.return Insn.empty
+      | exception uncaught ->
+        warning "failed to decode a thumb instruction: \
+                 uncaught exception %s\nBacktrace:\n %s\n"
+          (Exn.to_string uncaught)
+          (Caml.Printexc.get_backtrace ());
+        KB.return Insn.empty
+    else KB.return Insn.empty
+end
+
+let () = Bap_main.Extension.declare @@ fun _ctxt ->
+  Main.load ();
+  Ok ()

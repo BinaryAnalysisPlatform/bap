@@ -5,8 +5,6 @@ open KB.Syntax
 module Env  = Thumb_env.Env
 module Common = Thumb_dsl_common
 
-exception Assert_error
-
 module Arm_cpu(Core : Theory.Core) = struct
   open Core
   include Env
@@ -15,7 +13,7 @@ module Arm_cpu(Core : Theory.Core) = struct
     | `Imm i -> (int value (Bap.Std.Word.to_bitvec i))
   let assert_var = function
     | `Reg r -> load_reg r
-    | `Imm _ -> raise Assert_error
+    | `Imm _ -> assert false
 end
 
 module Make_Extend(Core : Theory.Core)(Holder : Common.ValueHolder) = struct
@@ -33,7 +31,7 @@ module Make_Extend(Core : Theory.Core)(Holder : Common.ValueHolder) = struct
 
   let assert_var_wide (op : Env.operand) = match op with
     | `Reg r -> Env.load_reg_wide r
-    | `Imm _ -> raise Assert_error
+    | `Imm _ -> assert false
 
   let (!$$+) = assert_var_wide
 end

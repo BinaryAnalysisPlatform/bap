@@ -67,7 +67,6 @@ module Env = struct
   let qf = Theory.Var.define bit "QF"
   let ge = Theory.Var.define half_byte "GE"
 
-  exception Unbound_Reg
   module Defs = Thumb_defs
 
   type reg_type = Defs.reg
@@ -92,7 +91,7 @@ module Env = struct
     | `LR -> lr
     | `SP -> sp
     | `PC (* pc should never normally occur *)
-    | _ -> raise Unbound_Reg
+    | _ -> failwith "unexpected or unknown register"
 
   let load_reg (op : Defs.reg) = let open Thumb_defs in
     match op with
@@ -107,6 +106,6 @@ module Env = struct
     | `LR -> lr
     | `SP -> sp
     | `PC (* pc should never normally occur *)
-    | _ -> raise Unbound_Reg
+    | _ -> failwith "unexpected or unknown register"
 
 end
