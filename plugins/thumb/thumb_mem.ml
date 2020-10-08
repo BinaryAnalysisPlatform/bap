@@ -3,113 +3,133 @@ open Base
 open KB.Syntax
 
 module Env  = Thumb_env.Env
-module Defs = Thumb_defs
+type reg = Env.value Theory.Bitv.t Theory.var
+type eff = unit Theory.effect KB.t
+module M64 = Bitvec.M64
 
-module Mem(Core : Theory.Core) = struct
-  open Core
 
-  module Utils = Thumb_util.Utils(Core)
+module Make(CT : Theory.Core) = struct
+  let rec seq = function
+    | [] -> CT.perform Theory.Effect.Sort.bot
+    | [x] -> x
+    | x :: xs -> CT.seq x @@ seq xs
 
-  open Utils
+  let foreach xs f = seq @@ List.concat_map xs ~f
+  let foreachi xs f = seq @@ List.concat_mapi xs ~f
+  let unsigned x = CT.unsigned Env.value x
+  let signed x = CT.signed Env.value x
+  let half x = CT.low Env.half_word x
+  let byte x = CT.low Env.byte x
 
-  (* The original ARM lifter implement this in a BIL loop-style for some reason *)
-  let store_multiple dest src_list =
-    match dest with
-    | `Reg r -> let r = reg r in List.fold src_list ~init:pass
-        ~f:(fun eff src -> match src with
-            | `Reg s -> let src = reg s in seq eff
-                (seq
-                   (storew b0 (var Env.memory) (var r) (var src) |> set Env.memory)
-                   (set r (add (var r) (bitv_of 4)))
-                )
-            | _ -> failwith "`src` must be a register"
-          )
-    | _ -> failwith "`dest` must be a register"
+  let bitv x = CT.int Env.value x
+  let const x = bitv (M64.int x)
+  let int64 x = bitv (M64.int64 x)
 
-  let load_multiple dest src_list =
-    match dest with
-    | `Reg r ->
-      if List.length src_list = 0 then pass
-      else let first_eq = [%compare.equal: Defs.op] (List.nth_exn src_list 0) dest in
-        let src_list = if first_eq
-          then List.sub src_list ~pos:1 ~len:(List.length src_list - 1)
-          else src_list in
-        let r = reg r in
-        Theory.Var.fresh Env.value >>= fun tmp ->
-        seq (List.fold src_list ~init:(set tmp (var r))
-               ~f:(fun eff src -> match src with
-                   | `Reg s -> let src = reg s in seq eff
-                       (seq
-                          (loadw Env.value b0 (var Env.memory) (var tmp) |> set src)
-                          (set tmp (add (var tmp) (bitv_of 4)))
-                       )
-                   | _ -> failwith "`src` must be a register"
-                 )) (set r (var tmp))
-    | _ -> failwith "`dest` must be a register"
-  (* the `R` bit is automatically resolved *)
-  let push_multiple src_list =
-    Theory.Var.fresh Env.value >>= fun tmp ->
-    let shift x = bitv_of 2 |> shiftl b0 x in
-    let offset = List.length src_list |> bitv_of |> shift in
-    let initial = set tmp (sub (var Env.sp) offset) in
-    seq (List.fold src_list ~init:initial
-           ~f:(fun eff src -> match src with
-               | `Reg s -> let src = reg s in seq eff
-                   (seq
-                      (storew b0 (var Env.memory) (var tmp) (var src) |> set Env.memory)
-                      (set tmp (add (var tmp) (bitv_of 4)))
-                   )
-               | _ -> failwith "`src` must be a register"
-             )) (set Env.sp (sub (var Env.sp) offset))
-  (* TODO: PC might change here *)
-  let pop_multiple src_list pc =
-    Theory.Var.fresh Env.value >>= fun tmp ->
-    let initial = set tmp (var Env.sp) in
-    seq (List.fold src_list ~init:initial
-           ~f:(fun eff src -> match src with
-               | `Reg `PC -> seq eff
-                               (seq
-                                  (logand
-                                     (loadw Env.value b0 (var Env.memory) (var tmp))
-                                     (bitv_of 0xfffffffe)
-                                   |> set pc)
-                                  (set tmp (add (var tmp) (bitv_of 4)))
-                               )
-               | `Reg s -> let src = reg s in seq eff
-                   (seq
-                      (loadw Env.value b0 (var Env.memory) (var tmp) |> set src)
-                      (set tmp (add (var tmp) (bitv_of 4)))
-                   )
-               | _ -> failwith "`src` must be a register"
-             )) (set Env.sp (var tmp))
+  let var = CT.var
+  let (:=) = CT.set
+  let (+) = CT.add
+  let (+=) r x = r := var r + x
 
-  let lift_mem_single ?(sign = false) ?(shift_val = 2) dest src1 ?src2 (op : Defs.operation) (size : Defs.size) =
-    let open Defs in
-    let dest = match dest with
-      | `Reg r -> reg r
-      | _ -> failwith "`dest` must be a register"
-    in
-    let shift x = bitv_of 2 |> shiftl b0 x in
-    let address = match src1, src2 with
-      | `Reg s, None -> reg s |> var
-      | `Reg s1, Some (`Reg s2) ->
-        add (reg s1 |> var) (reg s2 |> var)
-      | `Reg s, Some (`Imm v) ->
-        add (reg_wide s |> var) (word_as_bitv v |> shift)
-      | _ -> failwith "Unbound memory operation mode"
-    in match op with
-    | Ld ->
-      let extend = if sign then signed else unsigned in
-      let value = match size with
-        | W -> loadw Env.value b0 (var Env.memory) address
-        | H -> loadw Env.half_word b0 (var Env.memory) address |> extend Env.value
-        | B -> load (var Env.memory) address |> extend Env.value
-      in set dest value
-    | St ->
-      let mem = match size with
-        | W -> storew b0 (var Env.memory) address (var dest)
-        | H -> storew b0 (var Env.memory) address (cast Env.half_word b0 (var dest))
-        | B -> store (var Env.memory) address (cast Env.byte b0 (var dest))
-      in set Env.memory mem
+  let loadb p = CT.load (var Env.memory) p
+  let loadh p = CT.loadw Env.half_word CT.b0 (var Env.memory) p
+  let loadw p = CT.loadw Env.value CT.b0 (var Env.memory) p
 
+  let storeb p x = Env.memory := CT.store (var Env.memory) p x
+  let storew p x = Env.memory := CT.storew CT.b0 (var Env.memory) p x
+
+  let (<--) = storew
+
+  let data eff =
+    KB.Object.create Theory.Program.cls >>= fun lbl ->
+    CT.blk lbl (seq eff) (seq [])
+
+  (**************************************************************)
+
+  let ldri rd r i = data [
+      rd := loadw (var r + int64 i)
+    ]
+
+  let ldrr rd rn rm = data [
+      rd := loadw (var rn + var rm);
+    ]
+
+  let ldrbi rd rn i = data [
+      rd := unsigned @@ loadb (var rn + int64 i)
+    ]
+
+  let ldrbr rd rn rm = data [
+      rd := unsigned @@ loadb (var rn + var rm)
+    ]
+
+  let ldrsb rd rn rm = data [
+      rd := signed @@ loadb (var rn + var rm)
+    ]
+
+  let ldrhi rd rn i = data [
+      rd := unsigned @@ loadh (var rn + int64 i)
+    ]
+
+  let ldrhr rd rn rm = data [
+      rd := unsigned @@ loadh (var rn + var rm)
+    ]
+
+  let ldrsh rd rn rm = data [
+      rd := signed @@ loadh (var rn + var rm);
+    ]
+
+  let ldrpci rd pc off = data [
+      rd := loadw @@ bitv pc + int64 off;
+    ]
+
+  let ldrspi rd i = data [
+      rd := loadw @@ var Env.sp + int64 i
+    ]
+
+  let ldmu b regs = data [
+      foreach regs @@ fun r -> [
+        r := loadw @@ var b;
+        b += const 4;
+      ]
+    ]
+
+  let ldm b regs = data [
+      foreachi regs @@ fun i r -> [
+        r := loadw @@ (var b + const i)
+      ]
+    ]
+
+  let stri rd rm i = data [
+      var rd <-- var rm + int64 i
+    ]
+
+  let strr rd rm rn = data [
+      var rd <-- var rm + var rn
+    ]
+
+  let strhi rd rm i = data [
+      var rd <-- half (var rm + int64 i);
+    ]
+
+  let strhr rd rm rn = data [
+      var rd <-- half (var rm + var rn);
+    ]
+
+  let strbi rd rm i = data [
+      var rd <-- byte (var rm + int64 i);
+    ]
+
+  let strbr rd rm rn = data [
+      var rd <-- byte (var rm + var rn)
+    ]
+
+  let strsp rd i = data [
+      var rd <-- var Env.sp + int64 i;
+    ]
+
+  let stm i regs = data [
+      foreach regs @@ fun r -> [
+        var i <-- var r;
+        i += const 4;
+      ]
+    ]
 end
