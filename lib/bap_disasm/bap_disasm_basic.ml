@@ -468,20 +468,22 @@ let update_state s current = {
 
 let memory s = s.current.mem
 
+let push_pred s p =
+  let p = cpred_of_pred p in
+  if C.is_supported !!(s.dis) p then
+    C.predicates_push !!(s.dis) p
+
+let reset_predicates s ps =
+  C.predicates_clear !!(s.dis);
+  Preds.iter ps ~f:(push_pred s);
+  C.predicates_push !!(s.dis) Is_invalid
+
 let with_preds s (ps : pred list) =
-  let add p =
-    let p = cpred_of_pred p in
-    if C.is_supported !!(s.dis) p then
-      C.predicates_push !!(s.dis) p in
   let ps = Preds.of_list ps in
   let drop = Preds.diff s.current.preds ps in
-  if not(Preds.is_empty drop) then
-    Preds.iter (Preds.diff ps s.current.preds) ~f:add
-  else begin
-    C.predicates_clear !!(s.dis);
-    Preds.iter ps ~f:(add);
-    C.predicates_push !!(s.dis) Is_invalid;
-  end;
+  if Preds.is_empty drop
+  then Preds.iter (Preds.diff ps s.current.preds) ~f:(push_pred s)
+  else reset_predicates s ps;
   {s with current = {s.current with preds = ps}}
 
 let insns s =
@@ -629,7 +631,10 @@ let with_disasm ?debug_level ?cpu ?backend triple ~f =
   create ?debug_level ?cpu ?backend triple >>= fun dis ->
   f dis >>| fun res -> close dis; res
 
-let switch : ('a,'k,'s,'r) state -> ('a,'k) t -> ('a,'k,'s,'r) state = fun s dis -> {s with dis}
+let switch : ('a,'k,'s,'r) state -> ('a,'k) t -> ('a,'k,'s,'r) state = fun s dis ->
+  let s = {s with dis} in
+  reset_predicates s s.current.preds;
+  s
 
 let run ?backlog ?(stop_on=[]) ?invalid ?stopped ?hit dis ~return ~init mem =
   let state =
