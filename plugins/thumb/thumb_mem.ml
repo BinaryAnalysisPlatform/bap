@@ -23,12 +23,13 @@ module Make(CT : Theory.Core) = struct
 
   let bitv x = CT.int Env.value x
   let const x = bitv (M64.int x)
-  let int64 x = bitv (M64.int64 x)
 
   let var = CT.var
   let (:=) = CT.set
   let (+) = CT.add
+  let (-) = CT.sub
   let (+=) r x = r := var r + x
+  let (-=) r x = r := var r - x
 
   let loadb p = CT.load (var Env.memory) p
   let loadh p = CT.loadw Env.half_word CT.b0 (var Env.memory) p
@@ -39,6 +40,8 @@ module Make(CT : Theory.Core) = struct
 
   let (<--) = storew
 
+  let sp = Env.sp
+
   let data eff =
     KB.Object.create Theory.Program.cls >>= fun lbl ->
     CT.blk lbl (seq eff) (seq [])
@@ -46,7 +49,7 @@ module Make(CT : Theory.Core) = struct
   (**************************************************************)
 
   let ldri rd r i = data [
-      rd := loadw (var r + int64 i)
+      rd := loadw (var r + const i)
     ]
 
   let ldrr rd rn rm = data [
@@ -54,7 +57,7 @@ module Make(CT : Theory.Core) = struct
     ]
 
   let ldrbi rd rn i = data [
-      rd := unsigned @@ loadb (var rn + int64 i)
+      rd := unsigned @@ loadb (var rn + const i)
     ]
 
   let ldrbr rd rn rm = data [
@@ -66,7 +69,7 @@ module Make(CT : Theory.Core) = struct
     ]
 
   let ldrhi rd rn i = data [
-      rd := unsigned @@ loadh (var rn + int64 i)
+      rd := unsigned @@ loadh (var rn + const i)
     ]
 
   let ldrhr rd rn rm = data [
@@ -78,28 +81,18 @@ module Make(CT : Theory.Core) = struct
     ]
 
   let ldrpci rd pc off = data [
-      rd := loadw @@ bitv pc + int64 off;
+      rd := loadw @@ bitv pc + const off;
     ]
 
-  let ldrspi rd i = data [
-      rd := loadw @@ var Env.sp + int64 i
-    ]
-
-  let ldmu b regs = data [
+  let ldm b regs = data [
       foreach regs @@ fun r -> [
         r := loadw @@ var b;
         b += const 4;
       ]
     ]
 
-  let ldm b regs = data [
-      foreachi regs @@ fun i r -> [
-        r := loadw @@ (var b + const i)
-      ]
-    ]
-
   let stri rd rm i = data [
-      var rd <-- var rm + int64 i
+      var rd <-- var rm + const i
     ]
 
   let strr rd rm rn = data [
@@ -107,7 +100,7 @@ module Make(CT : Theory.Core) = struct
     ]
 
   let strhi rd rm i = data [
-      var rd <-- half (var rm + int64 i);
+      var rd <-- half (var rm + const i);
     ]
 
   let strhr rd rm rn = data [
@@ -115,15 +108,11 @@ module Make(CT : Theory.Core) = struct
     ]
 
   let strbi rd rm i = data [
-      var rd <-- byte (var rm + int64 i);
+      var rd <-- byte (var rm + const i);
     ]
 
   let strbr rd rm rn = data [
       var rd <-- byte (var rm + var rn)
-    ]
-
-  let strsp rd i = data [
-      var rd <-- var Env.sp + int64 i;
     ]
 
   let stm i regs = data [
@@ -132,4 +121,24 @@ module Make(CT : Theory.Core) = struct
         i += const 4;
       ]
     ]
+
+  let pop regs = ldm sp regs
+
+  let popret regs =
+    let data = foreach regs @@ fun r -> [
+        r := loadw @@ var sp;
+        sp += const 4;
+      ] in
+    let ctrl = CT.jmp (loadw (var sp)) in
+    KB.Object.create Theory.Program.cls >>= fun lbl ->
+    CT.blk lbl data ctrl
+
+
+  let push regs = data [
+      sp -= const Int.(List.length regs * 4);
+      foreachi regs @@ fun i r -> [
+        var sp + const Int.(i*4) <-- var r;
+      ]
+    ]
+
 end

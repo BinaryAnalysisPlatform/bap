@@ -1,7 +1,8 @@
 let package = "bap"
 
-open Base
+open Core_kernel
 open Bap_core_theory
+open Bap.Std
 open KB.Syntax
 
 include Bap_main.Loggers()
@@ -15,19 +16,40 @@ module MC = Bap.Std.Disasm_expert.Basic
 
 type insns = Defs.insn * (Defs.op list)
 
+let string_of_opcode x = Sexp.to_string (Defs.sexp_of_insn x)
+let string_of_operands ops =
+  Array.map ops ~f:Op.to_string |>
+  String.concat_array ~sep:", "
+
+let pp_insn ppf (op,ops) =
+  Format.fprintf ppf "%a(%s)"
+    Sexp.pp (Defs.sexp_of_insn op)
+    (string_of_operands ops)
+
+
 module Thumb(Core : Theory.Core) = struct
   open Core
   open Defs
   module Env = Thumb_env.Env
 
   module Mov = Thumb_mov.Mov(Core)
-  module Mem = Thumb_mem.Mem(Core)
+
   module Bits = Thumb_bits.Bits(Core)
   module Branch = Thumb_branch.Branch(Core)
   module Utils = Thumb_util.Utils(Core)
   module DSL = Thumb_dsl.Make(Core)
 
   open Utils
+
+  let reg r = Theory.Var.define Env.value (Reg.name r)
+  let imm x = Option.value_exn (Imm.to_int x)
+  let regs rs = List.map rs ~f:(function
+      | Op.Reg r -> reg r
+      | _ -> failwith "invalid multireg instruction")
+
+  let is_pc v = Theory.Var.name v = "PC"
+  let has_pc = List.exists ~f:is_pc
+  let remove_pc = List.filter ~f:(Fn.non is_pc)
 
   let move eff =
     KB.Object.create Theory.Program.cls >>= fun lbl ->
@@ -101,67 +123,63 @@ module Thumb(Core : Theory.Core) = struct
       cmphir dest src |> DSL.expand |> move
     | _, _ -> lift_move insn ops addr_bitv |> DSL.expand |> move
 
-  let lift_mem_single ?(sign = false) ?(shift_val = 2) dest src1 ?src2 (op : Defs.operation) (size : Defs.size) =
-    match src2 with
-    | Some src2 -> Mem.lift_mem_single ~sign ~shift_val dest src1 ~src2 op size |> move
-    | None -> Mem.lift_mem_single ~sign ~shift_val dest src1 op size |> move
+  let lift_mem pc opcode insn =
+    let module Mem = Thumb_mem.Make(Core) in
+    let open Mem in
+    match opcode, (MC.Insn.ops insn : Op.t array) with
+    | `tLDRi,   [|Reg rd; Reg rm; Imm i; _; _|]
+    | `tLDRspi, [|Reg rd; Reg rm; Imm i; _; _|] ->
+      ldri (reg rd) (reg rm) (imm i * 4)
+    | `tLDRr, [|Reg rd; Reg rm; Reg rn; _; _|] ->
+      ldrr (reg rd) (reg rm) (reg rn)
+    | `tLDRpci, [|Reg rd; Imm i; _; _|] ->
+      ldrpci (reg rd) pc (imm i)
+    | `tLDRBi, [|Reg rd; Reg rm; Imm i; _; _|] ->
+      ldrbi (reg rd) (reg rm) (imm i)
+    | `tLDRBr, [|Reg rd; Reg rm; Reg rn; _; _|] ->
+      ldrbr (reg rd) (reg rm) (reg rn)
+    | `tLDRSB, [|Reg rd; Reg rm; Reg rn; _; _|] ->
+      ldrsb (reg rd) (reg rm) (reg rn)
+    | `tLDRHi, [|Reg rd; Reg rm; Imm i; _; _|] ->
+      ldrhi (reg rd) (reg rm) (imm i * 2)
+    | `tLDRHr, [|Reg rd; Reg rm; Reg rn|] ->
+      ldrhr (reg rd) (reg rm) (reg rn)
+    | `tLDRSH, [|Reg rd; Reg rm; Reg rn; _; _|] ->
+      ldrsh (reg rd) (reg rm) (reg rn)
+    | `tSTRspi, [|Reg rd; Reg rm; Imm i; _; _|]
+    | `tSTRi,   [|Reg rd; Reg rm; Imm i; _; _|] ->
+      stri (reg rd) (reg rm) (imm i * 4)
+    | `tSTRr, [|Reg rd; Reg rm; Reg rn; _; _|] ->
+      strr (reg rd) (reg rm) (reg rn)
+    | `tSTRBi, [|Reg rd; Reg rm; Imm i;_;_|] ->
+      strbi (reg rd) (reg rm) (imm i)
+    | `tSTRBr, [|Reg rd; Reg rm; Reg rn; _; _|] ->
+      strbr (reg rd) (reg rm) (reg rn)
+    | `tSTRHi, [|Reg rd; Reg rm; Imm i; _; _|] ->
+      strhi (reg rd) (reg rm) (imm i * 2)
+    | `tSTRHr, [|Reg rd; Reg rm; Reg rn; _; _|] ->
+      strhr (reg rd) (reg rm) (reg rn)
+    | (`tSTMIA | `tLDMIA | `tPUSH | `tPOP as op),ops ->
+      begin match op, Array.to_list ops with
+        | (`tSTMIA), Reg rd :: _ :: _ :: ar ->
+          stm (reg rd) (regs ar)
+        | `tLDMIA, Reg rd :: _ :: _ :: ar ->
+          ldm (reg rd) (regs ar)
+        | `tPUSH, _ :: _ :: ar ->
+          push (regs ar)
+        | `tPOP, _ :: _ :: ar ->
+          let regs = regs ar in
+          if has_pc regs
+          then popret (remove_pc regs)
+          else pop regs
+        | op,_ ->
+          info "unhandled multi-reg instruction: %a" pp_insn (op,ops);
+          !!Insn.empty
+      end
+    | insn ->
+      info "unhandled memory operation: %a" pp_insn insn;
+      !!Insn.empty
 
-  let lift_mem insn ops addr =
-    let open Defs in
-    match insn, Array.to_list ops with
-    | `tLDRi, [dest; src; imm; _; _] ->
-      lift_mem_single dest src ~src2:imm Ld W
-    | `tLDRr, [dest; src1; src2; _; _] ->
-      lift_mem_single dest src1 ~src2 Ld W
-    | `tLDRpci, [dest; imm; _; _] ->
-      lift_mem_single ~shift_val:0 dest (`Reg `PC) ~src2:imm Ld W
-    | `tLDRspi, [dest; (`Reg `SP); imm; _; _] ->
-      lift_mem_single dest (`Reg `SP) ~src2:imm Ld W
-    | `tLDRBi, [dest; src; imm; _; _] ->
-      lift_mem_single ~shift_val:0 dest src ~src2:imm Ld B
-    | `tLDRBr, [dest; src1; src2; _; _] ->
-      lift_mem_single dest src1 ~src2 Ld B
-    | `tLDRHi, [dest; src; imm; _; _] ->
-      lift_mem_single ~shift_val:1 dest src ~src2:imm Ld H
-    | `tLDRHr, [dest; src1; src2; _; _] ->
-      lift_mem_single dest src1 ~src2 Ld H
-    | `tLDRSB, [dest; src1; src2; _; _] ->
-      lift_mem_single dest src1 ~src2 Ld B ~sign:true
-    | `tLDRSH, [dest; src1; src2; _; _] ->
-      lift_mem_single dest src1 ~src2 Ld H ~sign:true
-    | `tSTRi, [dest; src; imm; _; _] ->
-      lift_mem_single dest src ~src2:imm St W
-    | `tSTRr, [dest; src1; src2; _; _] ->
-      lift_mem_single dest src1 ~src2 St W
-    | `tSTRspi, [dest; (`Reg `SP); imm; _; _] ->
-      lift_mem_single dest (`Reg `SP) ~src2:imm St W
-    | `tSTRBi, [dest; src; imm; _; _] ->
-      lift_mem_single ~shift_val:0 dest src ~src2:imm St B
-    | `tSTRBr, [dest; src1; src2; _; _] ->
-      lift_mem_single dest src1 ~src2 St B
-    | `tSTRHi, [dest; src; imm; _; _] ->
-      lift_mem_single ~shift_val:1 dest src ~src2:imm St H
-    | `tSTRHr, [dest; src1; src2; _; _] ->
-      lift_mem_single dest src1 ~src2 St H
-    | `tSTMIA, dest :: _dest :: _ :: _nil_reg :: src_list (* looks like they should be different, but actually are the same in Thumb mode *)
-    | `tSTMIA_UPD, dest :: _dest :: _ :: _nil_reg :: src_list ->
-      Mem.store_multiple dest src_list |> move
-    | `tLDMIA, dest :: _ :: _nil_reg :: src_list (* same as stmia *)
-    | `tLDMIA_UPD, dest :: _ :: _nil_reg :: src_list ->
-      Mem.load_multiple dest src_list |> move
-    | `tPUSH, _ :: _nil_reg :: src_list ->
-      Mem.push_multiple src_list |> move
-    | `tPOP, _ :: _nil_reg :: src_list ->
-      Theory.Var.fresh Env.value >>= fun pc ->
-      let has_pc = List.exists src_list
-          (fun s -> match s with
-             |`Reg `PC -> true
-             | _ -> false) in
-      let pop_eff = Mem.pop_multiple src_list pc in
-      if has_pc then
-        ctrl (jmp (var pc)) pop_eff addr
-      else move pop_eff
-    | _ -> move pass
 
   let lift_bits insn ops =
     let open Bits in
@@ -186,14 +204,13 @@ module Thumb(Core : Theory.Core) = struct
     | `tBX, [|target; _unknown; _|] -> tbx target
     | _ -> (skip, pass)
 
-  let lift_insn addr insn ops = match insn with
-    | #move_insn -> lift_move_pre insn ops addr
-    | #mem_insn -> lift_mem insn ops addr
-    | #bits_insn -> lift_bits insn ops |> DSL.expand |> move
+  let lift_insn addr opcode ops insn = match opcode with
+    | #mem_insn -> lift_mem addr opcode insn
+    | #move_insn -> lift_move_pre opcode ops addr
+    | #bits_insn -> lift_bits opcode ops |> DSL.expand |> move
     | #branch_insn ->
-      let ctrl_eff, data_eff = lift_branch insn ops addr in
+      let ctrl_eff, data_eff = lift_branch opcode ops addr in
       ctrl ctrl_eff data_eff addr (* var Env.pc *)
-
 end
 
 module Main = struct
@@ -236,7 +253,7 @@ module Main = struct
       let module Thumb = Thumb(Core) in
       let addr = Word.to_bitvec@@Memory.min_addr mem in
       match decode insn mem with
-      | Ok (op,ops) -> Thumb.lift_insn addr op ops
+      | Ok (op,ops) -> Thumb.lift_insn addr op ops insn
       | Error err ->
         info "failed to decode a thumb instruction: %a"
           Error.pp err;

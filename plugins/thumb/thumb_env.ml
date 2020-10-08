@@ -1,5 +1,5 @@
+open Core_kernel
 open Bap_core_theory
-open Base
 open KB.Syntax
 
 module Env = struct
@@ -54,11 +54,8 @@ module Env = struct
   let r12 = Theory.Var.define value "R12"
 
   let lr = Theory.Var.define value "LR"
-  (* let pc = Theory.Var.define value "PC" *)
   let sp = Theory.Var.define value "SP"
-  (* The following are temporarily not used *)
-  let spsr = Theory.Var.define value "SPSR"
-  let cpsr = Theory.Var.define value "CPSR"
+
   (* The following are individual flag *)
   let nf = Theory.Var.define bit "NF"
   let zf = Theory.Var.define bit "ZF"
@@ -73,8 +70,7 @@ module Env = struct
   type operand = Defs.op
 
   (* to elimiate ambiguity *)
-  let load_reg_wide (op : Defs.reg) = let open Thumb_defs in
-    match op with
+  let load_reg_wide (op : Defs.reg) = match op with
     | `R0 -> r0
     | `R1 -> r1
     | `R2 -> r2
@@ -90,11 +86,12 @@ module Env = struct
     | `R12 -> r12
     | `LR -> lr
     | `SP -> sp
-    | `PC (* pc should never normally occur *)
-    | _ -> failwith "unexpected or unknown register"
+    | reg ->
+      failwithf "load_wide: unexpected or unknown register: %s"
+        (Sexp.to_string (Defs.sexp_of_reg reg))
+        ()
 
-  let load_reg (op : Defs.reg) = let open Thumb_defs in
-    match op with
+  let load_reg (op : Defs.reg) = match op with
     | `R0 -> r0
     | `R1 -> r1
     | `R2 -> r2
@@ -105,7 +102,8 @@ module Env = struct
     | `R7 -> r7
     | `LR -> lr
     | `SP -> sp
-    | `PC (* pc should never normally occur *)
-    | _ -> failwith "unexpected or unknown register"
-
+    | reg ->
+      failwithf "load_reg: unexpected or unknown register: %s"
+        (Sexp.to_string (Defs.sexp_of_reg reg))
+        ()
 end
