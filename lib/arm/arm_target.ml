@@ -354,7 +354,7 @@ module Encodings = struct
         Map.add_exn symbols ~key:addr
           ~data:(match Int64.(value land 1L) with
               | 0L -> llvm_a32
-              | _ -> llvm_a64))
+              | _ -> llvm_t32))
 
   let slot = KB.Class.property CT.Unit.cls
       ~package "symbols-encodings" @@
@@ -379,7 +379,7 @@ let compute_encoding_from_symbol_table default label =
   KB.collect Encodings.slot unit >>= fun encodings ->
   KB.return @@ match Map.find encodings addr with
   | Some x -> x
-  | None -> default
+  | None -> CT.Language.unknown
 
 (* here t < p means that t was introduced before p *)
 let (>=) t p = CT.Target.belongs t p
@@ -393,14 +393,11 @@ let is_thumb_only t = LE.v7m <= t || EB.v7m <= t || Bi.v7m <= t
 
 let guess_encoding label target =
   if is_arm target then
-    if before_thumb2 target
-    then compute_encoding_from_symbol_table llvm_a32 label
-    else KB.return @@
-      if is_64bit target then llvm_a64 else
-      if is_thumb_only target
-      then llvm_t32
-      else llvm_a32
-  else KB.return CT.Language.unknown
+    if is_64bit target then !!llvm_a64 else
+    if is_thumb_only target
+    then !!llvm_t32
+    else compute_encoding_from_symbol_table llvm_a32 label
+  else !!CT.Language.unknown
 
 let enable_decoder () =
   let open KB.Syntax in
