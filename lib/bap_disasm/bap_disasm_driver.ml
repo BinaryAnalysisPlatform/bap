@@ -68,12 +68,14 @@ module Machine : sig
     empty:(state -> 'a) ->
     ready:(state -> encoding -> mem -> 'a) -> 'a
 
-  val failed : state -> encoding -> addr -> state
+  val is_ready : state -> bool
+  val encoding : state -> encoding
+  val switch : state -> encoding -> state
+  val moved  : state -> encoding -> mem -> state
   val jumped : state -> encoding -> mem -> jump -> int -> state
+  val failed : state -> encoding -> addr -> state
   val stopped : state -> encoding -> state
   val skipped : state -> addr -> state
-  val moved  : state -> encoding -> mem -> state
-  val is_ready : state -> bool
 end = struct
 
   type task =
@@ -271,6 +273,18 @@ end = struct
     | Fall {encoding} | Dest {encoding} -> encoding
     | Jump _ -> unknown
 
+  let with_encoding encoding = function
+    | Fall s -> Fall {s with encoding}
+    | Dest s -> Dest {s with encoding}
+    | Jump _ as j -> j
+
+  let switch s encodings = {
+    s with curr = with_encoding encodings s.curr
+  }
+
+  let encoding s = task_encoding s.curr
+
+
   let rec view s base ~empty ~ready =
     if s.stop then empty (step s)
     else match Memory.view ~from:s.addr base with
@@ -385,19 +399,18 @@ let switch encoding s =
   | Error _ -> s
   | Ok dis -> Dis.switch s dis
 
-let rec next_encoding state current code =
-  if Theory.Language.is_unknown current.coding
-  then
-    let addr = Memory.min_addr code in
-    KB.Object.scoped Theory.Program.cls @@ fun obj ->
-    KB.provide Theory.Label.addr obj (Some (Word.to_bitvec addr)) >>= fun () ->
-    get_encoding obj >>= fun encoding ->
-    if Theory.Language.is_unknown encoding.coding
-    then skip state addr code
-    else KB.return encoding
-  else KB.return current
-and skip state addr code =
-  Machine.view (Machine.skipped state addr) code
+let rec next_encoding state current mem =
+  let addr = Memory.min_addr mem in
+  KB.Object.scoped Theory.Program.cls @@ fun obj ->
+  KB.provide Theory.Label.addr obj (Some (Word.to_bitvec addr)) >>= fun () ->
+  get_encoding obj >>= fun encoding ->
+  if Theory.Language.is_unknown encoding.coding
+  then if Theory.Language.is_unknown current.coding
+    then skip state addr mem
+    else KB.return current
+  else KB.return encoding
+and skip state addr mem =
+  Machine.view (Machine.skipped state addr) mem
     ~empty:(fun _ -> KB.return unknown)
     ~ready:next_encoding
 
@@ -407,7 +420,8 @@ let scan_mem ~code ~data ~funs debt base : Machine.state KB.t =
     else Machine.view s base
         ~ready:(fun s encoding mem ->
             next_encoding s encoding mem >>= fun encoding ->
-            Dis.jump (switch encoding d) mem s)
+            Dis.jump (switch encoding d) mem @@
+            Machine.switch s encoding)
         ~empty:KB.return in
   Machine.start base ~debt ~code ~data ~init:funs
     ~ready:(fun init encoding mem ->
@@ -417,10 +431,10 @@ let scan_mem ~code ~data ~funs debt base : Machine.state KB.t =
         | Ok disasm ->
           Dis.run disasm mem ~stop_on:[`Valid]
             ~return:KB.return ~init
-            ~stopped:(fun d s ->
-                step d (Machine.stopped s encoding))
+            ~stopped:(fun d s -> step d (Machine.stopped s encoding))
             ~hit:(fun d mem insn s ->
                 new_insn mem insn >>= fun label ->
+                let encoding = Machine.encoding s in
                 KB.provide Theory.Label.encoding label encoding.coding >>= fun () ->
                 collect_dests label >>= fun dests ->
                 if Set.is_empty dests.resolved &&
