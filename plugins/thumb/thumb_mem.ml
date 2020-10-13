@@ -2,91 +2,61 @@ open Bap_core_theory
 open Base
 open KB.Syntax
 
-module Env  = Thumb_env.Env
-type reg = Env.value Theory.Bitv.t Theory.var
-type eff = unit Theory.effect KB.t
-module M64 = Bitvec.M64
+open Thumb_core
 
+type eff = unit Theory.effect KB.t
 
 module Make(CT : Theory.Core) = struct
-  let rec seq = function
-    | [] -> CT.perform Theory.Effect.Sort.bot
-    | [x] -> x
-    | x :: xs -> CT.seq x @@ seq xs
+  module T = Thumb_core.Make(CT)
+  open T open T.Syntax
 
-  let foreach xs f = seq @@ List.concat_map xs ~f
-  let foreachi xs f = seq @@ List.concat_mapi xs ~f
-  let unsigned x = CT.unsigned Env.value x
-  let signed x = CT.signed Env.value x
-  let half x = CT.low Env.half_word x
-  let byte x = CT.low Env.byte x
-
-  let bitv x = CT.int Env.value x
-  let const x = bitv (M64.int x)
-
+  let unsigned x = CT.unsigned s32 x
+  let signed x = CT.signed s32 x
+  let half x = CT.low s16 x
+  let byte x  = CT.low s8 x
   let var = CT.var
-  let (:=) = CT.set
-  let (+) = CT.add
-  let (-) = CT.sub
-  let (+=) r x = r := var r + x
-  let (-=) r x = r := var r - x
-
-  let loadb p = CT.load (var Env.memory) p
-  let loadh p = CT.loadw Env.half_word CT.b0 (var Env.memory) p
-  let loadw p = CT.loadw Env.value CT.b0 (var Env.memory) p
-
-  let storeb p x = Env.memory := CT.store (var Env.memory) p x
-  let storew p x = Env.memory := CT.storew CT.b0 (var Env.memory) p x
-
-  let (<--) = storew
-
-  let sp = Env.sp
-
-  let data eff =
-    KB.Object.create Theory.Program.cls >>= fun lbl ->
-    CT.blk lbl (seq eff) (seq [])
 
   (**************************************************************)
 
   let ldri rd r i = data [
-      rd := loadw (var r + const i)
+      rd := load s32 (var r + const i)
     ]
 
   let ldrr rd rn rm = data [
-      rd := loadw (var rn + var rm);
+      rd := load s32 (var rn + var rm);
     ]
 
   let ldrbi rd rn i = data [
-      rd := unsigned @@ loadb (var rn + const i)
+      rd := unsigned @@ load s8 (var rn + const i)
     ]
 
   let ldrbr rd rn rm = data [
-      rd := unsigned @@ loadb (var rn + var rm)
+      rd := unsigned @@ load s8 (var rn + var rm)
     ]
 
   let ldrsb rd rn rm = data [
-      rd := signed @@ loadb (var rn + var rm)
+      rd := signed @@ load s8 (var rn + var rm)
     ]
 
   let ldrhi rd rn i = data [
-      rd := unsigned @@ loadh (var rn + const i)
+      rd := unsigned @@ load s16 (var rn + const i)
     ]
 
   let ldrhr rd rn rm = data [
-      rd := unsigned @@ loadh (var rn + var rm)
+      rd := unsigned @@ load s16 (var rn + var rm)
     ]
 
   let ldrsh rd rn rm = data [
-      rd := signed @@ loadh (var rn + var rm);
+      rd := signed @@ load s16 (var rn + var rm);
     ]
 
   let ldrpci rd pc off = data [
-      rd := loadw @@ bitv pc + const off;
+      rd := load s32 @@ bitv pc + const off;
     ]
 
   let ldm b regs = data [
       foreach regs @@ fun r -> [
-        r := loadw @@ var b;
+        r := load s32 @@ var b;
         b += const 4;
       ]
     ]
@@ -126,13 +96,12 @@ module Make(CT : Theory.Core) = struct
 
   let popret regs =
     let data = foreach regs @@ fun r -> [
-        r := loadw @@ var sp;
+        r := load s32 @@ var sp;
         sp += const 4;
       ] in
-    let ctrl = CT.jmp (loadw (var sp)) in
-    KB.Object.create Theory.Program.cls >>= fun lbl ->
+    let ctrl = CT.jmp (load s32 (var sp)) in
+    label >>= fun lbl ->
     CT.blk lbl data ctrl
-
 
   let push regs = data [
       sp -= const Int.(List.length regs * 4);

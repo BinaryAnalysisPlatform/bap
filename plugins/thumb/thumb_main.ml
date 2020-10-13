@@ -8,7 +8,6 @@ open KB.Syntax
 include Bap_main.Loggers()
 
 module Defs = Thumb_defs
-module Flags = Thumb_flags.Flags
 module Insns = Thumb_insn
 module Target = Arm_target
 
@@ -35,7 +34,6 @@ module Thumb(Core : Theory.Core) = struct
   module Mov = Thumb_mov.Mov(Core)
 
   module Bits = Thumb_bits.Bits(Core)
-  module Branch = Thumb_branch.Branch(Core)
   module Utils = Thumb_util.Utils(Core)
   module DSL = Thumb_dsl.Make(Core)
 
@@ -46,6 +44,25 @@ module Thumb(Core : Theory.Core) = struct
   let regs rs = List.map rs ~f:(function
       | Op.Reg r -> reg r
       | _ -> failwith "invalid multireg instruction")
+
+  let cnd x = match Option.value_exn (Imm.to_int x) with
+    | 0 ->  `EQ
+    | 1 ->  `NE
+    | 2 ->  `CS
+    | 3 ->  `CC
+    | 4 ->  `MI
+    | 5 ->  `PL
+    | 6 ->  `VS
+    | 7 ->  `VC
+    | 8 ->  `HI
+    | 9 ->  `LS
+    | 10 -> `GE
+    | 11 -> `LT
+    | 12 -> `GT
+    | 13 -> `LE
+    | 14 -> `AL
+    | _ -> failwith "expected a condition code"
+
 
   let is_pc v = Theory.Var.name v = "PC"
   let has_pc = List.exists ~f:is_pc
@@ -142,7 +159,7 @@ module Thumb(Core : Theory.Core) = struct
       ldrsb (reg rd) (reg rm) (reg rn)
     | `tLDRHi, [|Reg rd; Reg rm; Imm i; _; _|] ->
       ldrhi (reg rd) (reg rm) (imm i * 2)
-    | `tLDRHr, [|Reg rd; Reg rm; Reg rn|] ->
+    | `tLDRHr, [|Reg rd; Reg rm; Reg rn; _; _|] ->
       ldrhr (reg rd) (reg rm) (reg rn)
     | `tLDRSH, [|Reg rd; Reg rm; Reg rn; _; _|] ->
       ldrsh (reg rd) (reg rm) (reg rn)
@@ -191,26 +208,24 @@ module Thumb(Core : Theory.Core) = struct
     | _ -> []
 
   (* these are not entirely complete *)
-  let lift_branch insn ops addr =
-    let open Defs in
-    let open Branch in
-    let addr = Core.int Env.value addr in
-    match insn, ops with
-    | `tBcc, [|target; cond; _cpsr|] -> tbcc cond target addr
-    | `tB, [|target; _unknown; _|] -> tb target addr
-    | `tBL, [|_unknown; _nil_reg; target; _cpsr|] -> tbl target addr
-    | `tBLXi, [|_unknown; _nil_reg; target; _cpsr|] -> tblxi target addr
-    | `tBLXr, [|_unknown; _nil_reg; target|] -> tblxr target addr
-    | `tBX, [|target; _unknown; _|] -> tbx target
-    | _ -> (skip, pass)
+  let lift_branch pc opcode insn =
+    let module Branch = Thumb_branch.Branch(Core) in
+    match opcode, (MC.Insn.ops insn : Op.t array) with
+    | `tB, [|Imm dst; _; _|] -> b pc (imm dst)
+    | `tBcc, [|Imm dst; Imm c; _|] -> bcc pc (cnd c) (imm dst)
+    | `tBX, [|Reg dst; _; _|] -> bx (reg dst)
+    | `tBL, [|_; _; Imm lbl; _|] -> bl pc (imm lbl)
+    | `tBLXi, [|_; _; Imm dst; _|] -> blxi (imm dst)
+    | `tBLXr, [|_; _; Reg dst|] -> blxr (reg dst)
+    | insn ->
+      info "unhandled branch: %a" pp_insn insn;
+      !!Insn.empty
 
   let lift_insn addr opcode ops insn = match opcode with
     | #mem_insn -> lift_mem addr opcode insn
+    | #branch_insn -> lift_branch addr opcode insn
     | #move_insn -> lift_move_pre opcode ops addr
     | #bits_insn -> lift_bits opcode ops |> DSL.expand |> move
-    | #branch_insn ->
-      let ctrl_eff, data_eff = lift_branch opcode ops addr in
-      ctrl ctrl_eff data_eff addr (* var Env.pc *)
 end
 
 module Main = struct

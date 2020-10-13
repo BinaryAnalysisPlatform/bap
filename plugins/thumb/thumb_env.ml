@@ -1,68 +1,44 @@
+(* This module is left temporary for backward compatibility,
+   we will remove it later.
+*)
 open Core_kernel
 open Bap_core_theory
 open KB.Syntax
 
+open Thumb_core
+
 module Env = struct
-  type value
-  type byte
-  type reg_single
-  type half_byte
-  type half_word
-  type bit_val
+  type value = r32
+  type byte = r8
+  type half_word = r16
+  type bit = r1
 
-  let bit : Theory.Bool.t Theory.Value.sort =
-    Theory.Bool.t
-
-  let bit_val : bit_val Theory.Bitv.t Theory.Value.sort =
-    Theory.Bitv.define 1
-
-  (** grps are defined by 3-bit indices *)
-  let reg_single : reg_single Theory.Bitv.t Theory.Value.sort =
-    Theory.Bitv.define 3
-
-  let half_word : half_word Theory.Bitv.t Theory.Value.sort =
-    Theory.Bitv.define 16
-
-  let value : value Theory.Bitv.t Theory.Value.sort =
-    Theory.Bitv.define 32
-
-  let half_byte : half_byte Theory.Bitv.t Theory.Value.sort =
-    Theory.Bitv.define 4
-
-  let byte : byte Theory.Bitv.t Theory.Value.sort =
-    Theory.Bitv.define 8
-
-  let heap_type = Theory.Mem.define value byte
-
-  let memory = Theory.Var.define heap_type "mem"
-
-  (** define grps *)
-  let r0 = Theory.Var.define value "R0"
-  let r1 = Theory.Var.define value "R1"
-  let r2 = Theory.Var.define value "R2"
-  let r3 = Theory.Var.define value "R3"
-  let r4 = Theory.Var.define value "R4"
-  let r5 = Theory.Var.define value "R5"
-  let r6 = Theory.Var.define value "R6"
-  let r7 = Theory.Var.define value "R7"
-
-  (** grps which are not commonly accessible *)
-  let r8 = Theory.Var.define value "R8"
-  let r9 = Theory.Var.define value "R9"
-  let r10 = Theory.Var.define value "R10"
-  let r11 = Theory.Var.define value "R11"
-  let r12 = Theory.Var.define value "R12"
-
-  let lr = Theory.Var.define value "LR"
-  let sp = Theory.Var.define value "SP"
-
-  (* The following are individual flag *)
-  let nf = Theory.Var.define bit "NF"
-  let zf = Theory.Var.define bit "ZF"
-  let cf = Theory.Var.define bit "CF"
-  let vf = Theory.Var.define bit "VF"
-  let qf = Theory.Var.define bit "QF"
-  let ge = Theory.Var.define half_byte "GE"
+  let bit = s1
+  let half_word = s16
+  let value = s32
+  let byte = s8
+  let memory = mem
+  let r0 = r0
+  let r1 = r1
+  let r2 = r2
+  let r3 = r3
+  let r4 = r4
+  let r5 = r5
+  let r6 = r6
+  let r7 = r7
+  let r8 = r8
+  let r9 = r9
+  let r10 = r10
+  let r11 = r11
+  let r12 = r12
+  let lr = lr
+  let sp = sp
+  let nf = nf
+  let zf = zf
+  let cf = cf
+  let vf = vf
+  let qf = qf
+  let tf = tf
 
   module Defs = Thumb_defs
 

@@ -1,71 +1,69 @@
 open Bap_core_theory
 open Theory
+open Thumb_core
 
-module Env = Thumb_env.Env
-
-type reg = Env.value Bitv.t var
 type eff = unit effect KB.t
 
 module Make(Core : Theory.Core) : sig
 
   (** [ldr rd, [rn, #i]] *)
-  val ldri : reg -> reg -> int -> eff
+  val ldri : r32 reg -> r32 reg -> int -> eff
 
   (** [ldr rd, [rn, rm]]  *)
-  val ldrr : reg -> reg -> reg -> eff
+  val ldrr : r32 reg -> r32 reg -> r32 reg -> eff
   (** [ldrb rd, [rn, #i]]  *)
 
   (** [ldrb rd, [rn, #i]]  *)
-  val ldrbi : reg -> reg -> int -> eff
+  val ldrbi : r32 reg -> r32 reg -> int -> eff
 
   (** [ldrb rd, [rn, rm]]  *)
-  val ldrbr : reg -> reg -> reg -> eff
+  val ldrbr : r32 reg -> r32 reg -> r32 reg -> eff
 
   (** [ldrsb rd, [rn, rm]]  *)
-  val ldrsb : reg -> reg -> reg -> eff
+  val ldrsb : r32 reg -> r32 reg -> r32 reg -> eff
 
   (** [ldrh rd, [rn, #i]]  *)
-  val ldrhi : reg -> reg -> int -> eff
+  val ldrhi : r32 reg -> r32 reg -> int -> eff
 
   (** [ldrh rd, [rn, rm]]  *)
-  val ldrhr : reg -> reg -> reg -> eff
+  val ldrhr : r32 reg -> r32 reg -> r32 reg -> eff
 
   (** [ldrsh rd, [rn, rm]] *)
-  val ldrsh : reg -> reg -> reg -> eff
+  val ldrsh : r32 reg -> r32 reg -> r32 reg -> eff
 
   (** [ldr rd <label>]  *)
-  val ldrpci : reg -> Bitvec.t -> int -> eff
+  val ldrpci : r32 reg -> Bitvec.t -> int -> eff
 
   (** [ldm b!, {rm,...,rn}]  *)
-  val ldm : reg -> reg list -> eff
+  val ldm : r32 reg -> r32 reg list -> eff
 
   (** [str rd, [rm, #i]] *)
-  val stri : reg -> reg -> int -> eff
+  val stri : r32 reg -> r32 reg -> int -> eff
 
   (** [str rd, [rm, rn]]  *)
-  val strr : reg -> reg -> reg -> eff
+  val strr : r32 reg -> r32 reg -> r32 reg -> eff
 
   (** [strh rd, [rm, #i]]  *)
-  val strhi : reg -> reg -> int -> eff
+  val strhi : r32 reg -> r32 reg -> int -> eff
 
   (** [strh rd, [rm, rn]]  *)
-  val strhr : reg -> reg -> reg -> eff
+  val strhr : r32 reg -> r32 reg -> r32 reg -> eff
 
   (** [strb rd, [rm, #i]]  *)
-  val strbi : reg -> reg -> int -> eff
+  val strbi : r32 reg -> r32 reg -> int -> eff
 
   (** [strb rd, [rm, rn]]  *)
-  val strbr : reg -> reg -> reg -> eff
+  val strbr : r32 reg -> r32 reg -> r32 reg -> eff
 
   (** [stm b!, {rm,...,rn}]  *)
-  val stm : reg -> reg list -> eff
+  val stm : r32 reg -> r32 reg list -> eff
 
   (** [pop {rm,...,rn}]  *)
-  val pop : reg list -> eff
+  val pop : r32 reg list -> eff
 
   (** [pop {rm,...,rn,pc}]  *)
-  val popret : reg list -> eff
+  val popret : r32 reg list -> eff
 
   (** [push {rm,...,rn}]  *)
-  val push : reg list -> eff
+  val push : r32 reg list -> eff
 end

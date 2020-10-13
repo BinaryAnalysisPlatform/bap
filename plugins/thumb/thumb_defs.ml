@@ -193,21 +193,3 @@ type shift = [`ASR | `LSL | `LSR | `ROR | `RRX]
 
 
 type smul_size = BB | BT | TB | TT | D | DX | WB | WT
-
-let of_int_exn = function
-  | 0 ->  `EQ
-  | 1 ->  `NE
-  | 2 ->  `CS
-  | 3 ->  `CC
-  | 4 ->  `MI
-  | 5 ->  `PL
-  | 6 ->  `VS
-  | 7 ->  `VC
-  | 8 ->  `HI
-  | 9 ->  `LS
-  | 10 -> `GE
-  | 11 -> `LT
-  | 12 -> `GT
-  | 13 -> `LE
-  | 14 -> `AL
-  | _ -> failwith "expected a condition code"

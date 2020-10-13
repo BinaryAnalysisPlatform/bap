@@ -4,11 +4,15 @@ open KB.Syntax
 
 module Env  = Thumb_env.Env
 
-module Utils(Core : Theory.Core) = struct
-  open Core
+
+
+
+module Utils(CT : Theory.Core) = struct
+  open CT
 
   let skip : Theory.ctrl Theory.eff = perform Theory.Effect.Sort.bot
   let pass : Theory.data Theory.eff = perform Theory.Effect.Sort.bot
+
 
   let nop =
     KB.return @@
@@ -26,7 +30,7 @@ module Utils(Core : Theory.Core) = struct
 
   let move_reg ?lreg:(lreg = reg) dest src = set (lreg dest) (var (lreg src))
 
-  let set_reg ?lreg:(lreg = reg) dest imm = 
+  let set_reg ?lreg:(lreg = reg) dest imm =
     set (lreg dest) (word_as_bitv imm)
 
 end

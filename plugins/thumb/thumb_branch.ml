@@ -2,84 +2,54 @@ open Bap_core_theory
 open Base
 open KB.Syntax
 
-module Env  = Thumb_env.Env
-module Defs = Thumb_defs
+open Thumb_core
 
-module Branch(Core : Theory.Core) = struct
-  open Core
+type eff = unit Theory.effect KB.t
 
-  module Utils = Thumb_util.Utils(Core)
-  module DSL = Thumb_dsl.Make(Core)
+module Make(CT : Theory.Core) = struct
+  module T = Thumb_core.Make(CT)
+  open T
+  open T.Syntax
 
-  open Utils
+  let holds cond =
+    let is_set x = is_set ~@x and is_clear x = is_clear ~@x in
+    match cond with
+    | `EQ -> is_set zf
+    | `NE -> is_clear zf
+    | `CS -> is_set cf
+    | `CC -> is_clear cf
+    | `MI -> is_set nf
+    | `PL -> is_clear nf
+    | `VS -> is_set vf
+    | `VC -> is_clear vf
+    | `HI -> is_set cf && is_clear zf
+    | `LS -> is_clear cf || is_set zf
+    | `GE -> ~@nf = ~@vf
+    | `LT -> ~@nf <> ~@vf
+    | `GT -> is_clear zf && ~@nf = ~@vf
+    | `LE -> is_set zf || ~@nf <> ~@vf
+    | `AL -> assert false
 
-  let tbcc cond target addr = match cond, target with
-    | `Imm cond, `Imm _ ->
-      let z = var Env.zf in
-      let c = var Env.cf in
-      let v = var Env.vf in
-      let n = var Env.nf in
-      let eq_ a b = or_ (and_ a b) (and_ (inv a) (inv b)) in
-      let cond = Bap.Std.Word.to_int cond |> Result.ok |> Option.value_exn |> Defs.of_int_exn in
-      let always_true = match cond with
-        | `AL -> true
-        | _ -> false in
-      let cond_val = match cond with
-        | `EQ -> z
-        | `NE -> inv z
-        | `CS -> c
-        | `CC -> inv c
-        | `MI -> n
-        | `PL -> inv n
-        | `VS -> v
-        | `VC -> inv v
-        | `HI -> and_ c (inv z)
-        | `LS -> or_ (inv c) z
-        | `GE -> eq_ n v
-        | `LT -> eq_ n v |> inv
-        | `GT -> and_ (inv z) (eq_ n v)
-        | `LE -> or_ z (eq_ n v |> inv)
-        | `AL -> b1 in
-      let jump_address = DSL.(addr + !$target + !!2) in
-      let eff_hold = (jmp jump_address, pass) in
-      if always_true then eff_hold
-      else (
-        branch cond_val (fst eff_hold) skip, (* control effect branch *)
-        pass  (* data effect branch *)
-      )
-    | _ -> failwith "operands must be immediate"
 
-  let tb target addr =
-    (DSL.(
-        jmp (!$target + addr + !!2)
-      ), pass)
+  let b pc dst = goto (pc ++ dst)
 
-  let tbl target addr =
-    (DSL.(
-        jmp (addr + !$target + !!4)
-      ), DSL.(
-        Env.lr := (addr - !!2) lor !!1
-      ))
+  let bcc pc cnd dst = match cnd with
+    | `AL -> b pc dst
+    | cnd -> CT.branch (holds cnd)
+               (goto (pc++dst))
+               (seq [])
 
-  (* TODO : switch to normal mode *)
-  let tblxi target addr =
-    (DSL.(
-        jmp ((addr + !$target + !!4) land !!0xfffffffc)
-      ), DSL.(
-        Env.lr := (addr - !!2) lor !!1
-      ))
+  let next pc = bitv W32.(pc + int 4)
 
-  let tblxr target addr =
-    (DSL.(
-        jmp (!$+target land !!0xfffffffe)
-      ), DSL.(
-        Env.lr := (addr - !!2) lor !!1
-      ))
+  let bli pc dst = seq [
+      data @@ [lr := next pc;];
+      goto @@ pc++dst
+    ]
 
-  let tbx target =
-    (DSL.(
-        (* reference here is PC = Rm[31:1] << 1 *)
-        jmp (extract Env.value !!31 !!1 !$+target << !!1)
-      ), pass)
+  let mask = bitv@@W32.int32 0xffff_fffel
 
+  let blr pc dst = seq CT.[
+      data @@ [lr := next pc];
+      ctrl @@ jmp (var dst land mask);
+    ]
 end

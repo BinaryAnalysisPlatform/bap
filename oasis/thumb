@@ -13,6 +13,7 @@ Library thumb_plugin
   InternalModules:  Thumb_main,
                     Thumb_bits,
                     Thumb_branch,
+                    Thumb_core,
                     Thumb_defs,
                     Thumb_dsl_common,
                     Thumb_dsl,

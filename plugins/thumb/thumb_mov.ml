@@ -1,363 +1,82 @@
 open Bap_core_theory
 open Base
 open KB.Syntax
+open Thumb_core
 
-module Env  = Thumb_env.Env
-module Flags = Thumb_flags.Flags
-module Defs = Thumb_defs
+module Mov(CT : Theory.Core) = struct
+  module T = Thumb_core.Make(CT)
+  open T open T.Syntax
 
-module Mov(Core : Theory.Core) = struct
-  open Core
+  let carry ~r ~rd ~rr =
+    let open CT in
+    msb rd && msb rr ||
+    msb rr && inv (msb r) ||
+    msb r && inv (msb rd)
 
-  module Utils = Thumb_util.Utils(Core)
-  module Flags = Flags(Core)
-  module DSL = Thumb_dsl.Make(Core)
+  let overflow ~r ~rd ~rr =
+    let open CT in
+    msb rd && msb rr && inv (msb r) ||
+    inv (msb rd) && inv (msb rr) && (msb r)
 
-  open Utils
+  let overflow_from_sub ~r ~rn ~rm =
+    msb @@ (rn lxor rm) land (rn lxor r)
 
-  let mover dest src =
-    DSL.[
-      !$$+dest := !$+src
+  let borrow_from_sub ~rn ~rm = bit (rn < rm)
+
+  (** [mov rd, #x]  *)
+  let movi8 rd x = seq [
+      rd := const x;
+      nf := msb (var rd);
+      cf := is_zero (var rd);
     ]
 
-  let movesr dest src =
-    DSL.[
-      !$$dest := !$src;
-      Flags.set_nzf !$$dest
+  (** [mov rd, rn]  *)
+  let movsr rd rn = seq [
+      rd := var rn;
+      nf := msb (var rd);
+      cf := is_zero (var rd);
     ]
 
-  let movei8 dest immsrc =
-    DSL.[
-      !$$dest := !$immsrc;
-      Flags.set_nzf !$$dest
+  (** [mov rd, rn] with [d] or [n] greater than 7.  *)
+  let tmovr rd rn = seq [
+      rd := var rn
     ]
 
-  let movenot dest src =
-    DSL.[
-      !$$dest := not !$src;
-      Flags.set_nzf !$$dest
+  (** [adds rd, rn, #x] aka add(1)  *)
+  let addi3 rd rn x = with_result rd @@ fun r -> [
+
     ]
 
-  let mul dest src =
-    DSL.[
-      !$$dest := !$dest * !$src;
-      Flags.set_nzf !$$dest
+  (** [subs rd, rn, #x] aka sub(1) *)
+  let subi3 rd rn x = with_result rd @@ fun r -> [
+      r := var rn - const x;
+      nf := msb (var r);
+      zf := is_zero (var r);
+      cf := lnot @@ borrow_from_sub (var rn) (const x);
+      vf := overflow_from_sub (var r) (var rn) (const x);
     ]
 
-  let addi3 dest src immsrc =
-    DSL.[
-      !$$dest := !$src + !$immsrc;
-      Flags.set_add !$src !$immsrc !$$dest
+  (** [subs rd, #x] aka sub(2)  *)
+  let subi8 rd x = with_result rd @@ fun r -> [
+      r := var rd - const x;
+      nf := msb (var r);
+      zf := is_zero (var r);
+      cf := lnot @@ borrow_from_sub (var rd) (const x);
+      vf := overflow_from_sub (var r) (var rd) (const x);
     ]
 
-  let subi3 dest src immsrc =
-    DSL.[
-      !$$dest := !$src - !$immsrc;
-      Flags.set_sub !$src !$immsrc !$$dest
+  (** [subs rd, rn, rm] aka sub(3) *)
+  let subrr rd rn rm = with_result rd @@ fun r -> [
+      r := var rn - var rm;
+      nf := msb (var r);
+      zf := is_zero (var r);
+      cf := lnot @@ borrow_from_sub (var rn) (var rm);
+      vf := overflow_from_sub (var r) (var rn) (var rm);
     ]
 
-  (* a temp value is introduced here *)
-  let addi8 dest immsrc =
-    DSL.[
-      local_var >>= fun tmp -> !%[
-        tmp := !$dest;
-        !$$dest := !$dest + !$immsrc;
-        Flags.set_add (var tmp) !$immsrc !$$dest
-      ]
-    ]
-
-  let subi8 dest immsrc =
-    DSL.[
-      local_var >>= fun tmp -> !%[
-        tmp := !$dest;
-        !$$dest := !$dest - !$immsrc;
-        Flags.set_sub (var tmp) !$immsrc !$$dest
-      ]
-    ]
-
-  let addrr d s1 s2 =
-    DSL.[
-      !$$d := !$s1 + !$s2;
-      Flags.set_add !$s1 !$s2 !$$d
-    ]
-
-  let subrr d s1 s2 =
-    DSL.[
-      !$$d := !$s1 - !$s2;
-      Flags.set_sub !$s1 !$s2 !$$d
-    ]
-
-  let addhirr d s =
-    DSL.[
-      !$$+d := !$+d + !$+s;
-    ]
-
-  (* Rd = (PC and 0xfffffffc) + (imm << 2) *)
-  let adr dest immsrc addr =
-    DSL.[
-      !$$dest := addr land (imm 0xFFFFFFFC) + !$immsrc << !!2
-    ]
-
-  let addrspi dest immsrc =
-    DSL.[
-      !$$dest := (var Env.sp) + !$immsrc << !!2
-    ]
-
-  let addspi immsrc =
-    DSL.[
-      Env.sp := (var Env.sp) + !$immsrc << !!2
-    ]
-
-  let subspi immsrc =
-    DSL.[
-      Env.sp := (var Env.sp) - !$immsrc << !!2
-    ]
-
-  let adc d s =
-    DSL.[
-      local_var >>= fun tmp -> !%[
-        tmp := !$d;
-        !$$d := !$d + !$s + bool_as_bitv (var Env.cf);
-        Flags.set_adc (var tmp) !$s !$$d
-      ]
-    ]
-
-  let sbc d s =
-    DSL.[
-      local_var >>= fun tmp -> !%[
-        tmp := !$d;
-        !$$d := !$s - !$d - bool_as_bitv (var Env.cf |> inv);
-        Flags.set_sbc (var tmp) !$s !$$s
-      ]
-    ]
-
-  let andrr dest src =
-    DSL.[
-      !$$dest := !$dest land !$src;
-      Flags.set_nzf !$$dest
-    ]
-
-  open Bap.Std
-
-  let asri dest src srcimm =
-    let shift_amt = Defs.assert_imm srcimm in
-    DSL.[
-      when_else_ (Word.is_zero shift_amt) [
-        Env.cf := msb !$src;
-        if_else_ (msb !$src) [
-          !$$dest := !!0xffffffff
-        ] (*else*) [
-          !$$dest := !!0
-        ]
-      ] (*else*) [
-        Env.cf := nth_bit (!$srcimm - !!1) !$src;
-        !$$dest := !$src asr !$srcimm
-      ];
-      Flags.set_nzf !$$dest
-    ]
-
-  (* ASRr has a rather complex logic, see A7.1.12 *)
-  let asrr dest src =
-    let seg = DSL.(extend_to Env.byte !$src |> extend) in
-    DSL.[
-      if_else_ (seg <+ !!32) [
-        if_ (seg <> !!0) [
-          Env.cf := nth_bit (seg - !!1) !$dest;
-          !$$dest := !$dest asr seg
-        ]
-      ] (*else*) [
-        Env.cf := msb !$dest;
-        if_else_ (msb !$dest) [
-          !$$dest := !!0xffffffff
-        ] (*else*) [
-          !$$dest := !!0
-        ]
-      ];
-      Flags.set_nzf !$$dest
-    ]
-
-  let bic dest src =
-    DSL.[
-      !$$dest := !$dest land lnot !$src;
-      Flags.set_nzf !$$dest
-    ]
-
-  let cmnz dest src =
-    DSL.[
-      local_var >>= fun tmp -> !%[
-        tmp := !$dest + !$src;
-        Flags.set_add !$dest !$src tmp
-      ]
-    ]
-
-  let cmpi8 dest immsrc =
-    DSL.[
-      local_var >>= fun tmp -> !%[
-        tmp := !$dest - !$immsrc;
-        Flags.set_sub !$dest !$immsrc tmp
-      ]
-    ]
-
-  let cmpr dest src =
-    DSL.[
-      local_var >>= fun tmp -> !%[
-        tmp := !$dest - !$src;
-        Flags.set_sub !$dest !$src tmp
-      ]
-    ]
-
-  let cmphir dest src =
-    DSL.[
-      local_var >>= fun tmp -> !%[
-        tmp := dest - src;
-        Flags.set_sub dest src tmp
-      ]
-    ]
-
-  let eor dest src =
-    DSL.[
-      !$$dest := !$dest lxor !$src;
-      Flags.set_nzf !$$dest
-    ]
-
-  let lsli dest src immsrc =
-    let shift_amt = Defs.assert_imm immsrc in
-    DSL.[
-      when_else_ (Word.is_zero shift_amt) [
-        !$$dest := !$src
-      ] (*else*) [
-        Env.cf := nth_bit (!!32 - !$immsrc) !$src;
-        !$$dest := !$src << !$immsrc
-      ];
-      Flags.set_nzf !$$dest
-    ]
-
-  (* LSLr has a rather complex logic, see A7.1.39 *)
-  let lslr dest src =
-    let seg = DSL.(extend_to Env.byte !$src |> extend) in
-    DSL.[
-      if_else_ (seg <+ !!32) [
-        if_ (seg <> !!0) [
-          Env.cf := nth_bit (!!32 - seg) !$dest;
-          !$$dest := !$dest << seg
-        ]
-      ] (*else*) [
-        if_else_ (seg = !!32) [
-          Env.cf := lsb !$dest
-        ] (*else*) [
-          Env.cf := b0
-        ];
-        !$$dest := !!0
-      ];
-      Flags.set_nzf !$$dest
-    ]
-
-  let lsri dest src immsrc =
-    let shift_amt = Defs.assert_imm immsrc in
-    DSL.[
-      when_else_ (Word.is_zero shift_amt) [
-        Env.cf := msb !$src;
-        !$$dest := !!0
-      ] (*else*) [
-        Env.cf := nth_bit (!$immsrc - !!1) !$src;
-        !$$dest := !$src >> !$immsrc
-      ];
-      Flags.set_nzf !$$dest
-    ]
-
-  let lsrr dest src =
-    let seg = DSL.(extend_to Env.byte !$src |> extend) in
-    DSL.[
-      if_else_ (seg <+ !!32) [
-        if_ (seg <> !!0) [
-          Env.cf := nth_bit (seg - !!1) !$dest;
-          !$$dest := !$dest >> seg
-        ]
-      ] (*else*) [
-        if_else_ (seg = !!32) [
-          Env.cf := msb !$dest
-        ] (*else*) [
-          Env.cf := b0
-        ];
-        !$$dest := !!0
-      ];
-      Flags.set_nzf !$$dest
-    ]
-
-  let orr dest src =
-    DSL.[
-      !$$dest := !$dest lor !$src;
-      Flags.set_nzf !$$dest
-    ]
-
-  (* This is actually code named `neg Rd Rm`, but llvm encodes it as `rsb Rd Rm #0` *)
-  let rsb dest src immsrc =
-    DSL.[
-      !$$dest := !$immsrc - !$src;
-      Flags.set_sub !$immsrc !$src !$$dest
-    ]
-
-  let rev dest src =
-    DSL.[
-      !$$dest := concat Env.value [
-          extract Env.byte !!7 !!0 !$src;
-          extract Env.byte !!15 !!8 !$src;
-          extract Env.byte !!23 !!16 !$src;
-          extract Env.byte !!31 !!24 !$src;
-        ]
-    ]
-
-  let rev_halfword hf =
-    let i8 = bitv_of 8 in
-    logor (lshift hf i8) (rshift hf i8)
-
-  let rev16 dest src =
-    DSL.[
-      !$$dest := concat Env.value [
-          extract Env.byte !!23 !!16 !$src;
-          extract Env.byte !!31 !!24 !$src;
-          extract Env.byte !!7 !!0 !$src;
-          extract Env.byte !!15 !!8 !$src;
-        ]
-    ]
-
-  let revsh dest src =
-    DSL.[
-      if_else_ (msb (extend_to Env.byte !$src)) [
-        !$$dest := concat Env.value [
-            extend_to Env.byte !!0xff;
-            extend_to Env.byte !!0xff;
-            extract Env.byte !!7 !!0 !$src;
-            extract Env.byte !!15 !!8 !$src;
-          ]
-      ] (*else*) [
-        !$$dest := concat Env.value [
-            extend_to Env.byte !!0x00;
-            extend_to Env.byte !!0x00;
-            extract Env.byte !!7 !!0 !$src;
-            extract Env.byte !!15 !!8 !$src;
-          ]
-      ]
-    ]
-
-  let ror dest src =
-    let seg4 = DSL.(extend_to Env.half_byte !$src |> extend) in
-    DSL.[
-      if_else_ (seg4 = !!0) [
-        Env.cf := msb !$dest
-      ] (*else*) [
-        Env.cf := nth_bit (seg4 - !!1) !$dest;
-        !$$dest := !$dest >> seg4 lor !$dest << (!!32 - seg4)
-      ];
-      Flags.set_nzf !$$dest
-    ]
-
-  let tst dest src =
-    DSL.[
-      local_var >>= fun tmp -> !%[
-        tmp := !$dest land !$src;
-        Flags.set_nzf tmp
-      ]
+  (** [subs sp, #i] aka sub(4) *)
+  let subspi off = seq [
+      sp -= off;
     ]
 
 end
