@@ -7,39 +7,27 @@ open KB.Syntax
 
 include Bap_main.Loggers()
 
-module Defs = Thumb_defs
-module Insns = Thumb_insn
-module Target = Arm_target
+open Thumb_opcodes
+open Thumb_core
 
 module MC = Bap.Std.Disasm_expert.Basic
+module Target = Arm_target
 
-type insns = Defs.insn * (Defs.op list)
+type insns = opcode * Op.t array
 
-let string_of_opcode x = Sexp.to_string (Defs.sexp_of_insn x)
+let string_of_opcode x = Sexp.to_string (sexp_of_opcode x)
 let string_of_operands ops =
   Array.map ops ~f:Op.to_string |>
   String.concat_array ~sep:", "
 
 let pp_insn ppf (op,ops) =
   Format.fprintf ppf "%a(%s)"
-    Sexp.pp (Defs.sexp_of_insn op)
+    Sexp.pp (sexp_of_opcode op)
     (string_of_operands ops)
 
+module Thumb(CT : Theory.Core) = struct
 
-module Thumb(Core : Theory.Core) = struct
-  open Core
-  open Defs
-  module Env = Thumb_env.Env
-
-  module Mov = Thumb_mov.Mov(Core)
-
-  module Bits = Thumb_bits.Bits(Core)
-  module Utils = Thumb_util.Utils(Core)
-  module DSL = Thumb_dsl.Make(Core)
-
-  open Utils
-
-  let reg r = Theory.Var.define Env.value (Reg.name r)
+  let reg r = Theory.Var.define s32 (Reg.name r)
   let imm x = Option.value_exn (Imm.to_int x)
   let regs rs = List.map rs ~f:(function
       | Op.Reg r -> reg r
@@ -68,80 +56,100 @@ module Thumb(Core : Theory.Core) = struct
   let has_pc = List.exists ~f:is_pc
   let remove_pc = List.filter ~f:(Fn.non is_pc)
 
-  let move eff =
-    KB.Object.create Theory.Program.cls >>= fun lbl ->
-    blk lbl eff skip
+  let lift_move _addr opcode insn =
+    let module T = Thumb_mov.Make(CT) in
+    let open T in
+    match opcode, (MC.Insn.ops insn : Op.t array) with
+    (* | `tADC, [|dest; _cpsr; _dest; src; _unknown; _|] -> adc dest src *)
+    | `tADDi3, [| Reg rd; _; Reg rn; Imm x; _; _|] ->
+      addi3 (reg rd) (reg rn) (imm x)
+    | `tADDi8, [|Reg rd; _; _ ; Imm x; _; _|] ->
+      addi8 (reg rd) (imm x)
+    | `tADDrr, [|Reg rd; _; Reg rn; Reg rm; _; _|] ->
+      addrr (reg rd) (reg rn) (reg rm)
+    | `tADDrSPi, [|Reg rd; _; Imm x; _; _;|] ->
+      addrspi (reg rd) (imm x * 4)
+    | `tADDspi, [|_; _; Imm x; _; _|] ->
+      addspi (imm x * 4)
+    | `tSUBi3, [| Reg rd; _; Reg rn; Imm x; _; _|] ->
+      subi3 (reg rd) (reg rn) (imm x)
+    | `tSUBi8, [|Reg rd; _; _ ; Imm x; _; _|] ->
+      subi8 (reg rd) (imm x)
+    | `tSUBrr, [|Reg rd; _; Reg rn; Reg rm; _; _|] ->
+      subrr (reg rd) (reg rn) (reg rm)
+    | `tSUBspi, [|_; _; Imm x; _; _|] ->
+      subspi (imm x * 4)
+    | `tMOVi8, [|Reg rd; _; Imm x; _; _|] ->
+      movi8 (reg rd) (imm x)
+    | `tMOVSr, [|Reg rd; Reg rn|] ->
+      movsr (reg rd) (reg rn)
+    | `tMOVr, [|Reg rd; Reg rn; _; _|] ->
+      movr (reg rd) (reg rn)
+    (*
 
-  let ctrl eff data pc =
-    Theory.Label.for_addr pc >>= fun lbl ->
-    blk lbl data eff
+     *
+     * | `tADDhirr, [|dest; _dest; src; _unknown; _|] -> addhirr dest src
+     * | `tADR, [|dest; imm; _unknown; _|] -> adr dest imm addr
+     *
+     * | `tADDspi, [|`Reg `SP; _sp; imm; _unknown; _|] -> addspi imm
+     *
+     *
+     *
+     * | `tMUL, [|dest; _cpsr; src; _dest; _unknown; _|] -> mul dest src
+     * | `tMVN, [|dest; _cpsr; src; _unknown; _|] -> movenot dest src
+     * | `tSBC, [|dest; _cpsr; _dest; src; _unknown; _|] -> sbc dest src
+     * | `tSUBi3, [|dest; _cpsr; src; imm; _unknown; _|] -> subi3 dest src imm
+     * | `tSUBi8, [|dest; _cpsr; _dest; imm; _unknown; _|] -> subi8 dest imm
+     * | `tSUBrr, [|dest; _cpsr; src1; src2; _unknown; _|] -> subrr dest src1 src2
+     * | `tSUBspi, [|`Reg `SP; _sp; imm; _unknown; _|] -> subspi imm
+     * | `tAND, [|dest; _cpsr; _dest; src; _unknown; _|] -> andrr dest src
+     * | `tASRri, [|dest; _cpsr; src; imm; _unknown; _|] -> asri dest src imm
+     * | `tASRrr, [|dest; _cpsr; _dest; src; _unknown; _|] -> asrr dest src
+     * | `tBIC, [|dest; _cpsr; _dest; src; _unknown; _|] -> bic dest src
+     * | `tCMNz, [|dest; src; _unknown; _|] -> cmnz dest src (\* TODO : we've got an error here *\)
+     * | `tCMPi8, [|dest; imm; _unknown; _|] -> cmpi8 dest imm
+     * | `tCMPr, [|dest; src; _unknown; _|] -> cmpr dest src
+     * | `tEOR, [|dest; _cpsr; _dest; src; _unknown; _|] -> eor dest src
+     * | `tLSLri, [|dest; _cpsr; src; imm; _unknown; _|] -> lsli dest src imm
+     * | `tLSLrr, [|dest; _cpsr; _dest; src; _unknown; _|] -> lslr dest src
+     * | `tLSRri, [|dest; _cpsr; src; imm; _unknown; _|] -> lsri dest src imm
+     * | `tLSRrr, [|dest; _cpsr; _dest; src; _unknown; _|] -> lsrr dest src
+     * | `tORR, [|dest; _cpsr; _dest; src; _unknown; _|] -> orr dest src
+     * | `tRSB, [|dest; _cpsr; src; _unknown; _ (\* placeholder *\)|] -> rsb dest src (`Imm (Bap.Std.Word.zero 32))
+     * | `tREV, [|dest; src; _unknown; _|] -> rev dest src
+     * | `tREV16, [|dest; src; _unknown; _|] -> rev16 dest src
+     * | `tREVSH, [|dest; src; _unknown; _|] -> revsh dest src
+     * | `tROR, [|dest; _cpsr; _dest; src; _unknown; _|] -> ror dest src
+     * | `tTST, [|dest; src; _unknown; _|] -> tst dest src
+     * | _ -> [] *)
+    | insn ->
+      info "unhandled move instruction: %a" pp_insn insn;
+      !!Insn.empty
 
-  let lift_move insn ops addr =
-    let open Mov in
-    match insn, ops with
-    | `tADC, [|dest; _cpsr; _dest; src; _unknown; _|] -> adc dest src
-    | `tADDi3, [|dest; _cpsr; src; imm; _unknown; _|] -> addi3 dest src imm
-    | `tADDi8, [|dest; _cpsr; _dest; imm; _unknown; _|] -> addi8 dest imm
-    | `tADDrr, [|dest; _cpsr; src1; src2; _unknown; _|] -> addrr dest src1 src2
-    | `tADDhirr, [|dest; _dest; src; _unknown; _|] -> addhirr dest src
-    | `tADR, [|dest; imm; _unknown; _|] -> adr dest imm addr
-    | `tADDrSPi, [|dest; `Reg `SP; imm; _unknown; _|] -> addrspi dest imm
-    | `tADDspi, [|`Reg `SP; _sp; imm; _unknown; _|] -> addspi imm
-    | `tMOVr, [|dest; src; _unknown; _|] -> mover dest src
-    | `tMOVSr, [|dest; _cpsr; src; _unknown; _|] -> movesr dest src (* this has been properly encoded by `tADDi3 dest #0 src` *)
-    | `tMOVi8, [|dest; _cpsr; imm; _unknown; _|] -> movei8 dest imm
-    | `tMUL, [|dest; _cpsr; src; _dest; _unknown; _|] -> mul dest src
-    | `tMVN, [|dest; _cpsr; src; _unknown; _|] -> movenot dest src
-    | `tSBC, [|dest; _cpsr; _dest; src; _unknown; _|] -> sbc dest src
-    | `tSUBi3, [|dest; _cpsr; src; imm; _unknown; _|] -> subi3 dest src imm
-    | `tSUBi8, [|dest; _cpsr; _dest; imm; _unknown; _|] -> subi8 dest imm
-    | `tSUBrr, [|dest; _cpsr; src1; src2; _unknown; _|] -> subrr dest src1 src2
-    | `tSUBspi, [|`Reg `SP; _sp; imm; _unknown; _|] -> subspi imm
-    | `tAND, [|dest; _cpsr; _dest; src; _unknown; _|] -> andrr dest src
-    | `tASRri, [|dest; _cpsr; src; imm; _unknown; _|] -> asri dest src imm
-    | `tASRrr, [|dest; _cpsr; _dest; src; _unknown; _|] -> asrr dest src
-    | `tBIC, [|dest; _cpsr; _dest; src; _unknown; _|] -> bic dest src
-    | `tCMNz, [|dest; src; _unknown; _|] -> cmnz dest src (* TODO : we've got an error here *)
-    | `tCMPi8, [|dest; imm; _unknown; _|] -> cmpi8 dest imm
-    | `tCMPr, [|dest; src; _unknown; _|] -> cmpr dest src
-    | `tEOR, [|dest; _cpsr; _dest; src; _unknown; _|] -> eor dest src
-    | `tLSLri, [|dest; _cpsr; src; imm; _unknown; _|] -> lsli dest src imm
-    | `tLSLrr, [|dest; _cpsr; _dest; src; _unknown; _|] -> lslr dest src
-    | `tLSRri, [|dest; _cpsr; src; imm; _unknown; _|] -> lsri dest src imm
-    | `tLSRrr, [|dest; _cpsr; _dest; src; _unknown; _|] -> lsrr dest src
-    | `tORR, [|dest; _cpsr; _dest; src; _unknown; _|] -> orr dest src
-    | `tRSB, [|dest; _cpsr; src; _unknown; _ (* placeholder *)|] -> rsb dest src (`Imm (Bap.Std.Word.zero 32))
-    | `tREV, [|dest; src; _unknown; _|] -> rev dest src
-    | `tREV16, [|dest; src; _unknown; _|] -> rev16 dest src
-    | `tREVSH, [|dest; src; _unknown; _|] -> revsh dest src
-    | `tROR, [|dest; _cpsr; _dest; src; _unknown; _|] -> ror dest src
-    | `tTST, [|dest; src; _unknown; _|] -> tst dest src
-    | _ -> []
-
-  let lift_move_pre insn ops addr =
-    let open Mov in
-    let addr_bitv = Core.int Env.value addr in
-    let filter_pc = function
-      | `Reg `PC -> addr_bitv
-      | src -> DSL.(!$src) in
-    match insn, ops with (* resolve the PC-involved instructions here *)
-    | `tMOVr, [|`Reg `PC; src; _unknown; _|] ->
-      ctrl DSL.(jmp !$+src) pass addr
-    | `tMOVr, [|dest; `Reg `PC; _unknown; _|] ->
-      move DSL.(!$$+dest := addr_bitv)
-    | `tADDhirr, [|`Reg `PC; _dest; src; _unknown; _|] ->
-      let src = filter_pc src in
-      ctrl DSL.(jmp (src + addr_bitv)) pass addr
-    | `tADDhirr, [|dest; _dest; `Reg `PC; _unknown; _|] ->
-      move DSL.(!$$+dest := !$+dest + addr_bitv)
-    | `tCMPhir, [|dest; src; _unknown; _|] ->
-      let src = filter_pc src in
-      let dest = filter_pc dest in
-      cmphir dest src |> DSL.expand |> move
-    | _, _ -> lift_move insn ops addr_bitv |> DSL.expand |> move
+  (* let lift_move_pre insn ops addr =
+   *   let open Mov in
+   *   let addr_bitv = Core.int Env.value addr in
+   *   let filter_pc = function
+   *     | `Reg `PC -> addr_bitv
+   *     | src -> DSL.(!$src) in
+   *   match insn, ops with (\* resolve the PC-involved instructions here *\)
+   *   | `tMOVr, [|`Reg `PC; src; _unknown; _|] ->
+   *     ctrl DSL.(jmp !$+src) pass addr
+   *   | `tMOVr, [|dest; `Reg `PC; _unknown; _|] ->
+   *     move DSL.(!$$+dest := addr_bitv)
+   *   | `tADDhirr, [|`Reg `PC; _dest; src; _unknown; _|] ->
+   *     let src = filter_pc src in
+   *     ctrl DSL.(jmp (src + addr_bitv)) pass addr
+   *   | `tADDhirr, [|dest; _dest; `Reg `PC; _unknown; _|] ->
+   *     move DSL.(!$$+dest := !$+dest + addr_bitv)
+   *   | `tCMPhir, [|dest; src; _unknown; _|] ->
+   *     let src = filter_pc src in
+   *     let dest = filter_pc dest in
+   *     cmphir dest src |> DSL.expand |> move
+   *   | _, _ -> lift_move insn ops addr_bitv |> DSL.expand |> move *)
 
   let lift_mem pc opcode insn =
-    let module Mem = Thumb_mem.Make(Core) in
+    let module Mem = Thumb_mem.Make(CT) in
     let open Mem in
     match opcode, (MC.Insn.ops insn : Op.t array) with
     | `tLDRi,   [|Reg rd; Reg rm; Imm i; _; _|]
@@ -176,9 +184,9 @@ module Thumb(Core : Theory.Core) = struct
       strhi (reg rd) (reg rm) (imm i * 2)
     | `tSTRHr, [|Reg rd; Reg rm; Reg rn; _; _|] ->
       strhr (reg rd) (reg rm) (reg rn)
-    | (`tSTMIA | `tLDMIA | `tPUSH | `tPOP as op),ops ->
+    | #opmem_multi as op,ops ->
       begin match op, Array.to_list ops with
-        | (`tSTMIA), Reg rd :: _ :: _ :: ar ->
+        | `tSTMIA_UPD, Reg rd :: _ :: _ :: ar ->
           stm (reg rd) (regs ar)
         | `tLDMIA, Reg rd :: _ :: _ :: ar ->
           ldm (reg rd) (regs ar)
@@ -198,34 +206,38 @@ module Thumb(Core : Theory.Core) = struct
       !!Insn.empty
 
 
-  let lift_bits insn ops =
-    let open Bits in
-    match insn, ops with
-    | `tSXTB, [|dest; src; _unknown; _|] -> sxtb dest src
-    | `tSXTH, [|dest; src; _unknown; _|] -> sxth dest src
-    | `tUXTB, [|dest; src; _unknown; _|] -> uxtb dest src
-    | `tUXTH, [|dest; src; _unknown; _|] -> uxth dest src
-    | _ -> []
+  (* let lift_bits insn ops =
+   *   let open Bits in
+   *   match insn, ops with
+   *   | `tSXTB, [|dest; src; _unknown; _|] -> sxtb dest src
+   *   | `tSXTH, [|dest; src; _unknown; _|] -> sxth dest src
+   *   | `tUXTB, [|dest; src; _unknown; _|] -> uxtb dest src
+   *   | `tUXTH, [|dest; src; _unknown; _|] -> uxth dest src
+   *   | _ -> [] *)
 
   (* these are not entirely complete *)
   let lift_branch pc opcode insn =
-    let module Branch = Thumb_branch.Branch(Core) in
+    let module T = Thumb_branch.Make(CT) in
+    let open T in
     match opcode, (MC.Insn.ops insn : Op.t array) with
     | `tB, [|Imm dst; _; _|] -> b pc (imm dst)
     | `tBcc, [|Imm dst; Imm c; _|] -> bcc pc (cnd c) (imm dst)
-    | `tBX, [|Reg dst; _; _|] -> bx (reg dst)
-    | `tBL, [|_; _; Imm lbl; _|] -> bl pc (imm lbl)
-    | `tBLXi, [|_; _; Imm dst; _|] -> blxi (imm dst)
-    | `tBLXr, [|_; _; Reg dst|] -> blxr (reg dst)
+    | `tBL,   [|_; _; Imm dst; _|]
+    | `tBLXi, [|_; _; Imm dst; _|] -> bli pc (imm dst)
+    | `tBX,   [|Reg dst; _; _|]
+    | `tBLXr, [|_; _; Reg dst|] -> blr pc (reg dst)
     | insn ->
       info "unhandled branch: %a" pp_insn insn;
       !!Insn.empty
 
-  let lift_insn addr opcode ops insn = match opcode with
-    | #mem_insn -> lift_mem addr opcode insn
-    | #branch_insn -> lift_branch addr opcode insn
-    | #move_insn -> lift_move_pre opcode ops addr
-    | #bits_insn -> lift_bits opcode ops |> DSL.expand |> move
+  let lift_insn addr opcode insn = match opcode with
+    | #opmem as op -> lift_mem addr op insn
+    | #opmov as op -> lift_move addr op insn
+    | #opbranch as op -> lift_branch addr op insn
+    | op ->
+      info "unsupported opcode: %s" (string_of_opcode op);
+      !!Insn.empty
+
 end
 
 module Main = struct
@@ -247,12 +259,6 @@ module Main = struct
         Some `tCMNz
       | _ -> None
 
-  let decode insn mem = match fix_cmnz (Insns.of_basic insn) mem with
-    | None -> Or_error.errorf "Unknown instruction: %s"
-                (MC.Insn.asm insn)
-    | Some opcode -> match Insns.arm_ops (MC.Insn.ops insn) with
-      | Ok ops -> Ok (opcode,ops)
-      | Error _ as err -> err
 
   let (>>=?) x f = x >>= function
     | None -> KB.return Insn.empty
@@ -267,18 +273,21 @@ module Main = struct
       Theory.instance () >>= Theory.require >>= fun (module Core) ->
       let module Thumb = Thumb(Core) in
       let addr = Word.to_bitvec@@Memory.min_addr mem in
-      match decode insn mem with
-      | Ok (op,ops) -> Thumb.lift_insn addr op ops insn
-      | Error err ->
-        info "failed to decode a thumb instruction: %a"
-          Error.pp err;
-        KB.return Insn.empty
-      | exception uncaught ->
-        warning "failed to decode a thumb instruction: \
-                 uncaught exception %s\nBacktrace:\n %s\n"
-          (Exn.to_string uncaught)
-          (Caml.Printexc.get_backtrace ());
-        KB.return Insn.empty
+      match opcode_of_sexp (Sexp.Atom (MC.Insn.name insn)) with
+      | exception _ ->
+        info "failed to decode MC instruction, unknown opcode: \
+              %s => %a"
+          (MC.Insn.asm insn)
+          Sexp.pp_hum (MC.Insn.sexp_of_t insn);
+        !!Insn.empty
+      | opcode ->
+        try Thumb.lift_insn addr opcode insn
+        with uncaught ->
+          warning "failed to decode a thumb instruction: \
+                   uncaught exception %s\nBacktrace:\n %s\n"
+            (Exn.to_string uncaught)
+            (Caml.Printexc.get_backtrace ());
+          KB.return Insn.empty
     else KB.return Insn.empty
 end
 

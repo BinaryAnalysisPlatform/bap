@@ -11,16 +11,9 @@ Library thumb_plugin
                     bap, bap-arm, bitvec
   FindlibName:      bap-plugin-thumb
   InternalModules:  Thumb_main,
-                    Thumb_bits,
                     Thumb_branch,
                     Thumb_core,
-                    Thumb_defs,
-                    Thumb_dsl_common,
-                    Thumb_dsl,
-                    Thumb_env,
-                    Thumb_flags,
-                    Thumb_insn,
                     Thumb_mem,
                     Thumb_mov,
-                    Thumb_util
+                    Thumb_opcodes
   XMETAExtraLines:  tags="thumb, lifter, arm"
