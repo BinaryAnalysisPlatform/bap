@@ -334,9 +334,8 @@ let get_encoding label =
   KB.collect Theory.Label.encoding label >>| fun coding ->
   {coding; target}
 
-let collect_dests code =
+let collect_dests encoding code =
   KB.collect Theory.Semantics.slot code >>= fun insn ->
-  get_encoding code >>= fun encoding ->
   let init = {
     encoding;
     call = Insn.(is call insn);
@@ -352,8 +351,10 @@ let collect_dests code =
         get_encoding label >>= fun encoding ->
         KB.collect Theory.Label.addr label >>| function
         | Some d -> {
-            dest with
-            encoding;
+            dest with     (* note: we shouldn't do this here *)
+            encoding = if Theory.Language.is_unknown encoding.coding
+              then dest.encoding
+              else encoding;
             resolved =
               Set.add dest.resolved @@
               Word.code_addr encoding.target d
@@ -436,7 +437,7 @@ let scan_mem ~code ~data ~funs debt base : Machine.state KB.t =
                 new_insn mem insn >>= fun label ->
                 let encoding = Machine.encoding s in
                 KB.provide Theory.Label.encoding label encoding.coding >>= fun () ->
-                collect_dests label >>= fun dests ->
+                collect_dests encoding label >>= fun dests ->
                 if Set.is_empty dests.resolved &&
                    not dests.indirect then
                   step d @@ Machine.moved s encoding mem
