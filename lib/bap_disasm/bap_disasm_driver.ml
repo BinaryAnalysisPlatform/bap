@@ -400,33 +400,36 @@ let switch encoding s =
   | Error _ -> s
   | Ok dis -> Dis.switch s dis
 
-let rec next_encoding state current mem =
+let rec next_encoding state current mem f =
   let addr = Memory.min_addr mem in
   KB.Object.scoped Theory.Program.cls @@ fun obj ->
   KB.provide Theory.Label.addr obj (Some (Word.to_bitvec addr)) >>= fun () ->
   get_encoding obj >>= fun encoding ->
   if Theory.Language.is_unknown encoding.coding
   then if Theory.Language.is_unknown current.coding
-    then skip state addr mem
-    else KB.return current
-  else KB.return encoding
-and skip state addr mem =
+    then skip state addr mem f
+    else f state current mem
+  else f state encoding mem
+and skip state addr mem f =
   Machine.view (Machine.skipped state addr) mem
-    ~empty:(fun _ -> KB.return unknown)
-    ~ready:next_encoding
+    ~empty:KB.return
+    ~ready:(fun state current mem ->
+        next_encoding state current mem f)
 
 let scan_mem ~code ~data ~funs debt base : Machine.state KB.t =
   let step d s =
     if Machine.is_ready s then KB.return s
     else Machine.view s base
         ~ready:(fun s encoding mem ->
-            next_encoding s encoding mem >>= fun encoding ->
+            next_encoding s encoding mem @@
+            fun s encoding mem ->
             Dis.jump (switch encoding d) mem @@
             Machine.switch s encoding)
         ~empty:KB.return in
   Machine.start base ~debt ~code ~data ~init:funs
     ~ready:(fun init encoding mem ->
-        next_encoding init encoding mem >>= fun encoding ->
+        next_encoding init encoding mem @@
+        fun init encoding mem ->
         match create_disassembler encoding with
         | Error _ -> KB.return init
         | Ok disasm ->
