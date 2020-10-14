@@ -97,4 +97,27 @@ module Make(CT : Theory.Core) = struct
       sp -= const off;
     ]
 
+  let asri rd rm = function
+    | 0 -> data [
+        cf := msb (var rm);
+        rd := CT.ite (CT.msb (var rm)) (const ~-1) (const 0);
+        nf := msb (var rd);
+        zf := is_zero (var rd);
+      ]
+    | n -> data [
+        cf := nth Int.(n-1) (var rm);
+        rd := var rm asr const n;
+        nf := msb (var rd);
+        zf := is_zero (var rd);
+      ]
+
+  let cmpi8 rd x =
+    Theory.Var.fresh s32 >>= fun r -> data [
+      r := var rd - const x;
+      nf := msb (var r);
+      zf := is_zero (var r);
+      cf := lnot @@ borrow_from_sub (var rd) (const x);
+      vf := overflow_from_sub (var r) (var rd) (const x);
+    ]
+
 end

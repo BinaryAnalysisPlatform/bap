@@ -60,7 +60,6 @@ module Thumb(CT : Theory.Core) = struct
     let module T = Thumb_mov.Make(CT) in
     let open T in
     match opcode, (MC.Insn.ops insn : Op.t array) with
-    (* | `tADC, [|dest; _cpsr; _dest; src; _unknown; _|] -> adc dest src *)
     | `tADDi3, [| Reg rd; _; Reg rn; Imm x; _; _|] ->
       addi3 (reg rd) (reg rn) (imm x)
     | `tADDi8, [|Reg rd; _; _ ; Imm x; _; _|] ->
@@ -85,68 +84,14 @@ module Thumb(CT : Theory.Core) = struct
       movsr (reg rd) (reg rn)
     | `tMOVr, [|Reg rd; Reg rn; _; _|] ->
       movr (reg rd) (reg rn)
-    (*
-
-     *
-     * | `tADDhirr, [|dest; _dest; src; _unknown; _|] -> addhirr dest src
-     * | `tADR, [|dest; imm; _unknown; _|] -> adr dest imm addr
-     *
-     * | `tADDspi, [|`Reg `SP; _sp; imm; _unknown; _|] -> addspi imm
-     *
-     *
-     *
-     * | `tMUL, [|dest; _cpsr; src; _dest; _unknown; _|] -> mul dest src
-     * | `tMVN, [|dest; _cpsr; src; _unknown; _|] -> movenot dest src
-     * | `tSBC, [|dest; _cpsr; _dest; src; _unknown; _|] -> sbc dest src
-     * | `tSUBi3, [|dest; _cpsr; src; imm; _unknown; _|] -> subi3 dest src imm
-     * | `tSUBi8, [|dest; _cpsr; _dest; imm; _unknown; _|] -> subi8 dest imm
-     * | `tSUBrr, [|dest; _cpsr; src1; src2; _unknown; _|] -> subrr dest src1 src2
-     * | `tSUBspi, [|`Reg `SP; _sp; imm; _unknown; _|] -> subspi imm
-     * | `tAND, [|dest; _cpsr; _dest; src; _unknown; _|] -> andrr dest src
-     * | `tASRri, [|dest; _cpsr; src; imm; _unknown; _|] -> asri dest src imm
-     * | `tASRrr, [|dest; _cpsr; _dest; src; _unknown; _|] -> asrr dest src
-     * | `tBIC, [|dest; _cpsr; _dest; src; _unknown; _|] -> bic dest src
-     * | `tCMNz, [|dest; src; _unknown; _|] -> cmnz dest src (\* TODO : we've got an error here *\)
-     * | `tCMPi8, [|dest; imm; _unknown; _|] -> cmpi8 dest imm
-     * | `tCMPr, [|dest; src; _unknown; _|] -> cmpr dest src
-     * | `tEOR, [|dest; _cpsr; _dest; src; _unknown; _|] -> eor dest src
-     * | `tLSLri, [|dest; _cpsr; src; imm; _unknown; _|] -> lsli dest src imm
-     * | `tLSLrr, [|dest; _cpsr; _dest; src; _unknown; _|] -> lslr dest src
-     * | `tLSRri, [|dest; _cpsr; src; imm; _unknown; _|] -> lsri dest src imm
-     * | `tLSRrr, [|dest; _cpsr; _dest; src; _unknown; _|] -> lsrr dest src
-     * | `tORR, [|dest; _cpsr; _dest; src; _unknown; _|] -> orr dest src
-     * | `tRSB, [|dest; _cpsr; src; _unknown; _ (\* placeholder *\)|] -> rsb dest src (`Imm (Bap.Std.Word.zero 32))
-     * | `tREV, [|dest; src; _unknown; _|] -> rev dest src
-     * | `tREV16, [|dest; src; _unknown; _|] -> rev16 dest src
-     * | `tREVSH, [|dest; src; _unknown; _|] -> revsh dest src
-     * | `tROR, [|dest; _cpsr; _dest; src; _unknown; _|] -> ror dest src
-     * | `tTST, [|dest; src; _unknown; _|] -> tst dest src
-     * | _ -> [] *)
+    | `tASRri, [|Reg rd; _; Reg rm; Imm x; _; _|] ->
+      asri (reg rd) (reg rm) (imm x)
+    | `tCMPi8, [|Reg rn; Imm x;_;_|] ->
+      cmpi8 (reg rn) (imm x)
     | insn ->
       info "unhandled move instruction: %a" pp_insn insn;
       !!Insn.empty
 
-  (* let lift_move_pre insn ops addr =
-   *   let open Mov in
-   *   let addr_bitv = Core.int Env.value addr in
-   *   let filter_pc = function
-   *     | `Reg `PC -> addr_bitv
-   *     | src -> DSL.(!$src) in
-   *   match insn, ops with (\* resolve the PC-involved instructions here *\)
-   *   | `tMOVr, [|`Reg `PC; src; _unknown; _|] ->
-   *     ctrl DSL.(jmp !$+src) pass addr
-   *   | `tMOVr, [|dest; `Reg `PC; _unknown; _|] ->
-   *     move DSL.(!$$+dest := addr_bitv)
-   *   | `tADDhirr, [|`Reg `PC; _dest; src; _unknown; _|] ->
-   *     let src = filter_pc src in
-   *     ctrl DSL.(jmp (src + addr_bitv)) pass addr
-   *   | `tADDhirr, [|dest; _dest; `Reg `PC; _unknown; _|] ->
-   *     move DSL.(!$$+dest := !$+dest + addr_bitv)
-   *   | `tCMPhir, [|dest; src; _unknown; _|] ->
-   *     let src = filter_pc src in
-   *     let dest = filter_pc dest in
-   *     cmphir dest src |> DSL.expand |> move
-   *   | _, _ -> lift_move insn ops addr_bitv |> DSL.expand |> move *)
 
   let lift_mem pc opcode insn =
     let module Mem = Thumb_mem.Make(CT) in

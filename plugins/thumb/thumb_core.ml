@@ -102,14 +102,14 @@ module Make(CT : Theory.Core) = struct
     let (++) pc off = W32.(pc + int Int.(off + 4))
     let (=) = CT.eq
     let (<>) = CT.neq
-    let (<) = CT.slt
-    let (<=) = CT.sle
-    let (>) = CT.sgt
-    let (>=) = CT.sge
-    let (<$) = CT.ult
-    let (<=$) = CT.ule
-    let (>$) = CT.ugt
-    let (>=$) = CT.uge
+    let (<) = CT.ult
+    let (<=) = CT.ule
+    let (>) = CT.ugt
+    let (>=) = CT.uge
+    let (<$) = CT.slt
+    let (<=$) = CT.sle
+    let (>$) = CT.sgt
+    let (>=$) = CT.sge
     let (&&) = CT.and_
     let (||) = CT.or_
     let (land) = CT.logand
