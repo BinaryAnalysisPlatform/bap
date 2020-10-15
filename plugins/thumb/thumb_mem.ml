@@ -51,7 +51,7 @@ module Make(CT : Theory.Core) = struct
     ]
 
   let ldrpci rd pc off = data [
-      rd := load s32 @@ bitv pc + const off;
+      rd := load s32 @@ bitv pc + const Int.(off + 2);
     ]
 
   let ldm b regs = data [
@@ -62,27 +62,27 @@ module Make(CT : Theory.Core) = struct
     ]
 
   let stri rd rm i = data [
-      var rd <-- var rm + const i
+      var rm + const i <-- var rd
     ]
 
   let strr rd rm rn = data [
-      var rd <-- var rm + var rn
+      var rm + var rn <-- var rd
     ]
 
   let strhi rd rm i = data [
-      var rd <-- half (var rm + const i);
+      var rm + const i <-- half (var rd);
     ]
 
   let strhr rd rm rn = data [
-      var rd <-- half (var rm + var rn);
+      var rm + var rn <-- half (var rd);
     ]
 
   let strbi rd rm i = data [
-      var rd <-- byte (var rm + const i);
+      var rm + const i <-- byte (var rd);
     ]
 
   let strbr rd rm rn = data [
-      var rd <-- byte (var rm + var rn)
+      var rm + var rn <-- byte (var rd)
     ]
 
   let stm i regs = data [

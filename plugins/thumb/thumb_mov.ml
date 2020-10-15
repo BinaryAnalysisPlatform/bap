@@ -19,8 +19,8 @@ module Make(CT : Theory.Core) = struct
 
   let movi8 rd x = data [
       rd := const x;
-      nf := msb (var rd);
-      cf := is_zero (var rd);
+      nf := if Int.(x lsr 7 = 1) then bit1 else bit0;
+      cf := if Int.(x = 0) then bit1 else bit0;
     ]
 
   let movsr rd rn = data [
