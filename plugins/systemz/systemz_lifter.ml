@@ -125,23 +125,24 @@ end
    Our simple framework matches on the opcode name and calls corresponding
    function, which expects the decoded machine instruction as its
    input and produces the effect denotation.
-
-
 *)
 let lifter label : unit Theory.eff =
-  KB.collect MC.Insn.slot label >>= function
-  | None -> KB.return Insn.empty
-  | Some insn ->
-    Theory.instance () >>= Theory.require >>= fun (module Core) ->
-    let module Systemz = Systemz(Core) in
-    let open Systemz in
-    insn |> match MC.Insn.name insn with
-    | "LR" -> lr
-    | code ->
-      info "unsupported opcode: %s" code;
-      fun _ -> KB.return Insn.empty
-
-
+  let lift insn lifter =
+    lifter insn >>| fun sema -> Insn.with_basic sema insn in
+  Theory.Label.target label >>= fun t ->
+  if Theory.Target.belongs Target.parent t then
+    KB.collect MC.Insn.slot label >>= function
+    | None -> KB.return Insn.empty
+    | Some insn ->
+      Theory.instance () >>= Theory.require >>= fun (module Core) ->
+      let module Systemz = Systemz(Core) in
+      let open Systemz in
+      lift insn @@ match MC.Insn.name insn with
+      | "LR" -> lr
+      | code ->
+        info "unsupported opcode: %s" code;
+        fun _ -> KB.return Insn.empty
+  else !!Insn.empty
 
 (* a lifter is a promise to provide the instruction semantics.*)
 let load () =
