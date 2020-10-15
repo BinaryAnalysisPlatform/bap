@@ -9,6 +9,15 @@
   (declare (external "__libc_start_main"))
   (exit-with (invoke-subroutine main argc argv)))
 
+(defun init (main argc argv auxv)
+  "GNU libc initialization stub"
+  (declare (external "__libc_start_main")
+           (context (abi "eabi")))
+  (exit-with (invoke-subroutine
+              (logand main 0xfffffffe) ; to handle thumb jumps
+              argc argv)))
+
+
 (defun setup-stack-canary ()
   (declare (context (abi "sysv")))
   (set FS_BASE (- brk 0x28))
