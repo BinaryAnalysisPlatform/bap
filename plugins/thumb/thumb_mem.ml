@@ -55,10 +55,11 @@ module Make(CT : Theory.Core) = struct
     ]
 
   let ldm b regs = data [
-      foreach regs @@ fun r -> [
-        r := load s32 @@ var b;
-        b += const 4;
-      ]
+      foreachi regs @@ begin fun i r -> [
+          r := load s32 @@ var b + const Int.(i*4);
+        ]
+      end;
+      b += const Int.(List.length regs * 4);
     ]
 
   let stri rd rm i = data [
@@ -85,19 +86,23 @@ module Make(CT : Theory.Core) = struct
       var rm + var rn <-- byte (var rd)
     ]
 
-  let stm i regs = data [
-      foreach regs @@ fun r -> [
-        var i <-- var r;
-        i += const 4;
-      ]
+  let stm b regs = data [
+      foreachi regs @@ begin fun i r -> [
+          var b + const Int.(i * 4) <-- var r;
+        ]
+      end;
+      b += const Int.(List.length regs * 4);
     ]
 
   let pop regs = ldm sp regs
 
   let popret regs =
-    let data = foreach regs @@ fun r -> [
-        r := load s32 @@ var sp;
-        sp += const 4;
+    let data = seq [
+        foreachi regs @@ begin fun i r -> [
+            r := load s32 @@ var sp + const Int.(i*4);
+          ]
+        end;
+        sp += const Int.(List.length regs * 4);
       ] in
     let ctrl = CT.jmp (load s32 (var sp)) in
     label >>= fun lbl ->
