@@ -347,14 +347,18 @@ let symbol_values doc =
 module Encodings = struct
   let empty = Map.empty (module Bitvec_order)
 
+  let lsb x = Int64.(x land 1L)
+  let is_thumb x = lsb x = 1L
+
   let symbols_encoding spec =
     symbol_values spec |>
     Seq.fold ~init:empty ~f:(fun symbols (addr,value) ->
         let addr = Bitvec.M32.int64 addr in
-        Map.add_exn symbols ~key:addr
-          ~data:(match Int64.(value land 1L) with
-              | 0L -> llvm_a32
-              | _ -> llvm_t32))
+        if is_thumb value
+        then Map.set symbols addr llvm_t32
+        else Map.update symbols addr ~f:(function
+            | None -> llvm_a32
+            | Some t -> t))
 
   let slot = KB.Class.property CT.Unit.cls
       ~package "symbols-encodings" @@
@@ -370,9 +374,9 @@ module Encodings = struct
 end
 
 
-let compute_encoding_from_symbol_table default label =
+let compute_encoding_from_symbol_table label =
   let (>>=?) x f = x >>= function
-    | None -> !!default
+    | None -> !!Theory.Language.unknown
     | Some x -> f x in
   KB.collect CT.Label.unit label >>=? fun unit ->
   KB.collect CT.Label.addr label >>=? fun addr ->
@@ -396,7 +400,7 @@ let guess_encoding label target =
     if is_64bit target then !!llvm_a64 else
     if is_thumb_only target
     then !!llvm_t32
-    else compute_encoding_from_symbol_table llvm_a32 label
+    else compute_encoding_from_symbol_table label
   else !!CT.Language.unknown
 
 let enable_decoder () =
