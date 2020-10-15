@@ -65,29 +65,23 @@ module Make(CT : Theory.Core) = struct
       rd := var sp + const off;
     ]
 
-  let subi3 rd rn x = with_result rd @@ fun r -> [
-      r := var rn - const x;
-      nf := msb (var r);
-      zf := is_zero (var r);
-      cf := lnot @@ borrow_from_sub (var rn) (const x);
-      vf := overflow_from_sub (var r) (var rn) (const x);
-    ]
+  let sub r x y = [
+    r := x - y;
+    nf := msb (var r);
+    zf := is_zero (var r);
+    cf := lnot @@ borrow_from_sub x y;
+    vf := overflow_from_sub (var r) x y;
 
-  let subi8 rd x = with_result rd @@ fun r -> [
-      r := var rd - const x;
-      nf := msb (var r);
-      zf := is_zero (var r);
-      cf := lnot @@ borrow_from_sub (var rd) (const x);
-      vf := overflow_from_sub (var r) (var rd) (const x);
-    ]
+  ]
 
-  let subrr rd rn rm = with_result rd @@ fun r -> [
-      r := var rn - var rm;
-      nf := msb (var r);
-      zf := is_zero (var r);
-      cf := lnot @@ borrow_from_sub (var rn) (var rm);
-      vf := overflow_from_sub (var r) (var rn) (var rm);
-    ]
+  let subi3 rd rn x = with_result rd @@ fun r ->
+    sub r (var rn) (const x)
+
+  let subi8 rd x = with_result rd @@ fun r ->
+    sub r (var rd) (const x)
+
+  let subrr rd rn rm = with_result rd @@ fun r ->
+    sub r (var rn) (var rm)
 
   let subrspi rd off = data [
       rd := var sp - const off;
@@ -111,13 +105,42 @@ module Make(CT : Theory.Core) = struct
         zf := is_zero (var rd);
       ]
 
-  let cmpi8 rd x =
-    Theory.Var.fresh s32 >>= fun r -> data [
-      r := var rd - const x;
-      nf := msb (var r);
-      zf := is_zero (var r);
-      cf := lnot @@ borrow_from_sub (var rd) (const x);
-      vf := overflow_from_sub (var r) (var rd) (const x);
+  let lsri rd rm = function
+    | 0 -> data [
+        cf := msb (var rm);
+        rd := const 0;
+        nf := bit0;
+        zf := bit1;
+      ]
+    | n -> data [
+        cf := nth Int.(n-1) (var rm);
+        rd := var rm lsr const n;
+        nf := msb (var rd);
+        zf := is_zero (var rd);
+      ]
+
+  let lsli rd rm = function
+    | 0 -> data [
+        rd := var rm;
+        nf := msb (var rd);
+        zf := is_zero (var rd);
+      ]
+    | n -> data [
+        cf := nth Int.(32-n) (var rm);
+        rd := var rm lsl const n;
+        nf := msb (var rd);
+        zf := is_zero (var rd);
+      ]
+
+  let lorr rd rm = data [
+      rd := var rd lor var rm;
+      nf := msb (var rd);
+      zf := is_zero (var rd);
     ]
 
+  let cmpi8 rd x = Theory.Var.fresh s32 >>= fun r ->
+    data @@ sub r (var rd) (const x)
+
+  let cmpr rn rm = Theory.Var.fresh s32 >>= fun r ->
+    data @@ sub r (var rn) (var rm)
 end

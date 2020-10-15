@@ -86,8 +86,16 @@ module Thumb(CT : Theory.Core) = struct
       movr (reg rd) (reg rn)
     | `tASRri, [|Reg rd; _; Reg rm; Imm x; _; _|] ->
       asri (reg rd) (reg rm) (imm x)
+    | `tLSRri, [|Reg rd; _; Reg rm; Imm x; _; _|] ->
+      lsri (reg rd) (reg rm) (imm x)
+    | `tLSLri, [|Reg rd; _; Reg rm; Imm x; _; _|] ->
+      lsli (reg rd) (reg rm) (imm x)
     | `tCMPi8, [|Reg rn; Imm x;_;_|] ->
       cmpi8 (reg rn) (imm x)
+    | `tCMPr, [|Reg rn; Reg rm;_;_|] ->
+      cmpr (reg rn) (reg rm)
+    | `tORR, [|Reg rd; _; _; Reg rm; _; _|] ->
+      lorr (reg rd) (reg rm)
     | insn ->
       info "unhandled move instruction: %a" pp_insn insn;
       !!Insn.empty

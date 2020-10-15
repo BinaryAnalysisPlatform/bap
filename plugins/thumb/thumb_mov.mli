@@ -43,5 +43,18 @@ module Make(CT : Theory.Core) : sig
   (** [asrs rd, rn, #i]  *)
   val asri : r32 reg -> r32 reg -> int -> unit eff
 
+  (** [lsrs rd, rn, #i]  *)
+  val lsri : r32 reg -> r32 reg -> int -> unit eff
+
+  (** [lsls rd, rn, #i]  *)
+  val lsli : r32 reg -> r32 reg -> int -> unit eff
+
+  (** [orrs rd, rn]  *)
+  val lorr : r32 reg -> r32 reg -> unit eff
+
+  (** [cmp rn, #i] *)
   val cmpi8 : r32 reg -> int -> unit eff
+
+  (** [cmp rn, rm] *)
+  val cmpr : r32 reg -> r32 reg -> unit eff
 end
