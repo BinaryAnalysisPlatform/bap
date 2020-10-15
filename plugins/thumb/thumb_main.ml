@@ -234,7 +234,9 @@ module Main = struct
           Sexp.pp_hum (MC.Insn.sexp_of_t insn);
         !!Insn.empty
       | opcode ->
-        try Thumb.lift_insn addr opcode insn
+        try
+          Thumb.lift_insn addr opcode insn >>| fun sema ->
+          Insn.with_basic sema insn
         with uncaught ->
           warning "failed to decode a thumb instruction: \
                    uncaught exception %s\nBacktrace:\n %s\n"
