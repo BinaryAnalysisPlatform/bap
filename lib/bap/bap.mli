@@ -6745,11 +6745,14 @@ module Std : sig
       val dests : Set.M(Theory.Label).t option t
     end
 
-    (** {3 Creating}
-        The following functions will create [insn] instances from a lower
-        level representation.
-    *)
+    (** [of_basic ?bil insn] derives semantics from the machine code instruction.*)
     val of_basic : ?bil:bil -> Disasm_expert.Basic.full_insn -> t
+
+    (** [with_basic mc] stores properties of the machine code instruction.
+
+        @since 2.2.0
+    *)
+    val with_basic : t -> Disasm_expert.Basic.full_insn -> t
 
     (** [empty] is an instruction with no known semantics  *)
     val empty : t
