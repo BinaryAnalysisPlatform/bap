@@ -434,7 +434,7 @@ let scan_mem ~code ~data ~funs debt base : Machine.state KB.t =
         | Error _ -> KB.return init
         | Ok disasm ->
           Dis.run disasm mem ~stop_on:[`Valid]
-            ~return:KB.return ~init
+            ~return:KB.return ~init:(Machine.switch init encoding)
             ~stopped:(fun d s -> step d (Machine.stopped s encoding))
             ~hit:(fun d mem insn s ->
                 new_insn mem insn >>= fun label ->
