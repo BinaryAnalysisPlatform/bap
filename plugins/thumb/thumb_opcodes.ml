@@ -63,8 +63,8 @@ type opmem_multi = [
 
 type opmem = [
   | `tLDRi
-  | `tLDRr
-  | `tLDRpci
+  | `tLDRr   | `t2LDRs
+  | `tLDRpci | `t2LDRpci
   | `tLDRspi
   | `tLDRBi
   | `tLDRBr

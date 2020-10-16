@@ -51,7 +51,7 @@ module Make(CT : Theory.Core) = struct
     ]
 
   let ldrpci rd pc off = data [
-      rd := load s32 @@ bitv pc + const Int.(off + 2);
+      rd := load s32 @@ bitv pc + const off;
     ]
 
   let ldm b regs = data [

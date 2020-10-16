@@ -108,10 +108,13 @@ module Thumb(CT : Theory.Core) = struct
     | `tLDRi,   [|Reg rd; Reg rm; Imm i; _; _|]
     | `tLDRspi, [|Reg rd; Reg rm; Imm i; _; _|] ->
       ldri (reg rd) (reg rm) (imm i * 4)
-    | `tLDRr, [|Reg rd; Reg rm; Reg rn; _; _|] ->
+    | `tLDRr, [|Reg rd; Reg rm; Reg rn; _; _|]
+    | `t2LDRs, [|Reg rd; Reg rm; Reg rn; _; _; _|] ->
       ldrr (reg rd) (reg rm) (reg rn)
     | `tLDRpci, [|Reg rd; Imm i; _; _|] ->
-      ldrpci (reg rd) pc (imm i)
+      ldrpci (reg rd) W32.(pc + int 2) (imm i)
+    | `t2LDRpci, [|Reg rd; Imm i; _; _|] ->
+      ldrpci (reg rd) W32.(pc + int 4) (imm i)
     | `tLDRBi, [|Reg rd; Reg rm; Imm i; _; _|] ->
       ldrbi (reg rd) (reg rm) (imm i)
     | `tLDRBr, [|Reg rd; Reg rm; Reg rn; _; _|] ->

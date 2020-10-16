@@ -11,7 +11,6 @@ module Make(Core : Theory.Core) : sig
 
   (** [ldr rd, [rn, rm]]  *)
   val ldrr : r32 reg -> r32 reg -> r32 reg -> eff
-  (** [ldrb rd, [rn, #i]]  *)
 
   (** [ldrb rd, [rn, #i]]  *)
   val ldrbi : r32 reg -> r32 reg -> int -> eff

@@ -5,7 +5,11 @@ open Arm_helpers
 
 type t = Arm_types.insn [@@deriving bin_io, compare, sexp]
 
+let is_thumb2 = String.is_prefix ~prefix:"t2"
+let recode_as_arm = String.chop_prefix_exn ~prefix:"t2"
+
 let of_name name =
+  let name = if is_thumb2 name then recode_as_arm name else name in
   sexpable_of_string t_of_sexp name
 
 let of_basic insn = of_name (Disasm_expert.Basic.Insn.name insn)

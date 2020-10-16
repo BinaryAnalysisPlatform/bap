@@ -332,9 +332,9 @@ let llvm_a64 = CT.Language.declare ~package "llvm-A64"
 
 module Dis = Disasm_expert.Basic
 
-let register encoding triple =
+let register ?attrs encoding triple =
   Dis.register encoding @@ fun _ ->
-  Dis.create ~backend:"llvm" triple
+  Dis.create ?attrs ~backend:"llvm" triple
 
 let symbol_values doc =
   let field = Ogre.Query.(select (from Image.Scheme.symbol_value)) in
@@ -406,7 +406,7 @@ let guess_encoding label target =
 let enable_decoder () =
   let open KB.Syntax in
   register llvm_a32 "armv7";
-  register llvm_t32 "thumbv7";
+  register llvm_t32 "thumbv7" ~attrs:"+thumb2";
   register llvm_a64 "aarch64";
   KB.promise CT.Label.encoding @@ fun label ->
   CT.Label.target label >>= guess_encoding label
