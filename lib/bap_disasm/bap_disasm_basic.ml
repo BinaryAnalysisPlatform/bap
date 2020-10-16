@@ -592,13 +592,13 @@ let lookup target encoding =
                 (Theory.Language.to_string encoding)
     | Some create -> create target
 
-let create ?(debug_level=0) ?(cpu="") ?(backend="llvm") triple =
+let create ?(debug_level=0) ?(cpu="") ?(attrs="") ?(backend="llvm") triple =
   let name = sprintf "%s-%s%s" backend triple cpu in
   match Hashtbl.find disassemblers name with
   | Some d ->
     d.users <- d.users + 1;
     Ok {name; asm=false; kinds=false; enc=name}
-  | None -> match Prim.create ~backend ~triple ~cpu ~debug_level with
+  | None -> match Prim.create ~backend ~triple ~cpu ~attrs ~debug_level with
     | n when n >= 0 ->
       let disassembler = init @@ C.create (module Prim) n in
       Hashtbl.add_exn disassemblers name disassembler;

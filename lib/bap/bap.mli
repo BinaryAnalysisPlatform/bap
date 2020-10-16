@@ -6426,10 +6426,14 @@ module Std : sig
           set by the target support plugins via the {!register}
           function, therefore the [create] function should only be used
           to register a new target. Use {!lookup} to get an appropriate
-          disassembler for your target/encoding. *)
+          disassembler for your target/encoding.
+
+          @since 2.2.0 has the [attrs] parameter
+      *)
       val create :
         ?debug_level:int ->
         ?cpu:string ->
+        ?attrs:string ->
         ?backend:string ->
         string -> (empty, empty) t Or_error.t
 

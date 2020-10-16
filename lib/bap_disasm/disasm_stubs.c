@@ -24,6 +24,20 @@ value bap_disasm_create_stub(value backend,
     return Val_int(r);
 }
 
+
+value bap_disasm_create_with_attrs_stub(value backend,
+                                        value triple,
+                                        value cpu,
+                                        value attrs,
+                                        value debug_level) {
+    int r = bap_disasm_create_with_attrs(String_val(backend),
+                                         String_val(triple),
+                                         String_val(cpu),
+                                         String_val(attrs),
+                                         Int_val(debug_level));
+    return Val_int(r);
+}
+
 /* noalloc */
 value bap_disasm_delete_stub(value d) {
     bap_disasm_delete(Int_val(d));

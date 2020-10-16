@@ -120,6 +120,14 @@ struct result {
 struct disasm_factory {
     virtual result<disassembler_interface>
     create(const char *triple, const char *cpu, int debug_level) = 0;
+
+    // an extended constructor that accepts a sequence of target attributes
+    //
+    // The default implementation just ignores it.
+    virtual result<disassembler_interface>
+    create(const char *triple, const char *cpu, const char *attrs, int debug_level) {
+        return create(triple, cpu, debug_level);
+    }
 };
 
 
