@@ -169,15 +169,13 @@ void emit_symbol_entry(const ELFObjectFile<T> &obj, const SymbolRef &sym, ogre_d
     if (name && addr && off && !name->empty()) {
         if (is_external(*addr, *off, sym_elf->st_size) && sym_elf->st_value) {
             s.entry("llvm:name-reference") << sym_elf->st_value << *name;
-        } else {
+        } else if (sym_elf->getType() == ELF::STT_FUNC) {
             s.entry("llvm:symbol-entry") << *name
                                          << *addr
                                          << sym_elf->st_size
                                          << *off
                                          << sym_elf->st_value;
-
-            if (sym_elf->getType() == ELF::STT_FUNC)
-                s.entry("llvm:code-entry") << *name << *off << sym_elf->st_size ;
+            s.entry("llvm:code-entry") << *name << *off << sym_elf->st_size ;
         }
     }
 }
