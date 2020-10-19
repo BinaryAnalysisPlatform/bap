@@ -4,8 +4,6 @@ open Format
 
 open Bap_primus_types
 
-module Iterator = Bap_primus_iterator
-module Random  = Bap_primus_random
 module Generator = Bap_primus_generator
 open Bap_primus_sexp
 
@@ -184,14 +182,9 @@ module Make(Machine : Machine) = struct
       mems = Map.set mems ~key:curr ~data:mem
     }
 
-  let update state f =
-    Machine.Local.get state >>= fun s ->
-    match Map.find s.mems s.curr with
-    | None -> Machine.return ()
-    | Some m -> Machine.Local.put state {
-        s with
-        mems = Map.set s.mems ~key:s.curr ~data:(f m)
-      }
+  let update f =
+    get_curr >>= fun s ->
+    put_curr (f s)
 
   let pagefault addr = Machine.raise (Pagefault addr)
 
@@ -329,7 +322,7 @@ module Make(Machine : Machine) = struct
       ~upper:(Addr.nsucc base (len-1))
 
   let map ?(readonly=false) ?(executable=false) mem =
-    update state @@ add_layer ({mem=Static mem; perms={readonly; executable}})
+    update @@ add_layer ({mem=Static mem; perms={readonly; executable}})
   let add_text mem = map mem ~readonly:true  ~executable:true
   let add_data mem = map mem ~readonly:false ~executable:false
 
@@ -341,7 +334,7 @@ module Make(Machine : Machine) = struct
     write addr value >>=
     put_curr
 
-  let del addr = update state @@ fun s -> {
+  let del addr = update @@ fun s -> {
       s with values = Map.remove s.values addr
     }
 
