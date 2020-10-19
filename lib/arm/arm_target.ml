@@ -373,6 +373,13 @@ module Encodings = struct
     symbols_encoding
 end
 
+let has_t32 label =
+  KB.collect CT.Label.unit label >>= function
+  | None -> !!false
+  | Some unit ->
+    KB.collect Encodings.slot unit >>|
+    Map.exists ~f:(Theory.Language.equal llvm_t32)
+
 
 let compute_encoding_from_symbol_table label =
   let (>>=?) x f = x >>= function
@@ -400,7 +407,9 @@ let guess_encoding label target =
     if is_64bit target then !!llvm_a64 else
     if is_thumb_only target
     then !!llvm_t32
-    else compute_encoding_from_symbol_table label
+    else has_t32 label >>= function
+      | true -> compute_encoding_from_symbol_table label
+      | false -> !!llvm_a32
   else !!CT.Language.unknown
 
 let enable_decoder () =
