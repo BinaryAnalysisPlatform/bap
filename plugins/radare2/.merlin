@@ -2,4 +2,5 @@ PKG yojson
 PKG zarith
 B ../../_build/plugins/radare2
 B ../../lib/bap_relation
+B ../../lib/arm
 REC
