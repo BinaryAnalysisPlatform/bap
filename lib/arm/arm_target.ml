@@ -402,26 +402,29 @@ let before_thumb2 t = t < LE.v6t2 || t < EB.v6t2
 let is_64bit t = LE.v8a <= t || EB.v8a <= t || Bi.v8a <= t
 let is_thumb_only t = LE.v7m <= t || EB.v7m <= t || Bi.v7m <= t
 
-let guess_encoding label target =
+let guess_encoding interworking label target =
   if is_arm target then
     if is_64bit target then !!llvm_a64 else
     if is_thumb_only target
     then !!llvm_t32
-    else has_t32 label >>= function
-      | true -> compute_encoding_from_symbol_table label
-      | false -> !!llvm_a32
+    else match interworking with
+      | Some true -> compute_encoding_from_symbol_table label
+      | Some false -> !!llvm_a32
+      | None -> has_t32 label >>= function
+        | true -> compute_encoding_from_symbol_table label
+        | false -> !!llvm_a32
   else !!CT.Language.unknown
 
-let enable_decoder () =
+let enable_decoder ?interworking () =
   let open KB.Syntax in
   register llvm_a32 "armv7";
   register llvm_t32 "thumbv7" ~attrs:"+thumb2";
   register llvm_a64 "aarch64";
   KB.promise CT.Label.encoding @@ fun label ->
-  CT.Label.target label >>= guess_encoding label
+  CT.Label.target label >>= guess_encoding interworking label
 
 
-let load () =
+let load ?interworking () =
   enable_loader ();
   enable_arch ();
-  enable_decoder ()
+  enable_decoder ?interworking ()
