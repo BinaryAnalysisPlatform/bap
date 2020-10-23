@@ -286,12 +286,12 @@ end = struct
 
 
   let rec view s base ~empty ~ready =
-    if s.stop then empty (step s)
+    if s.stop then empty s
     else match Memory.view ~from:s.addr base with
       | Ok mem -> ready s (task_encoding s.curr) mem
       | Error _ ->
         let s = match s.curr with
-          | Fall _ as task -> cancel task s
+          | Fall _ | Jump _ as task -> cancel task s
           | t -> {s with debt = t :: s.debt} in
         match s.work with
         | [] -> empty (step s)
@@ -334,10 +334,10 @@ let get_encoding label =
   KB.collect Theory.Label.encoding label >>| fun coding ->
   {coding; target}
 
-let collect_dests encoding code =
+let collect_dests source code =
   KB.collect Theory.Semantics.slot code >>= fun insn ->
   let init = {
-    encoding;
+    encoding=source;
     call = Insn.(is call insn);
     barrier = Insn.(is barrier insn);
     indirect = false;
@@ -353,7 +353,7 @@ let collect_dests encoding code =
         | Some d -> {
             dest with     (* note: we shouldn't do this here *)
             encoding = if Theory.Language.is_unknown encoding.coding
-              then dest.encoding
+              then source
               else encoding;
             resolved =
               Set.add dest.resolved @@
@@ -374,7 +374,7 @@ let delay mem insn =
   | None -> 0
   | Some x -> x
 
-let classify_mem mem =
+let classify mem =
   let empty = Set.empty (module Addr) in
   let base = Memory.min_addr mem in
   Seq.range 0 (Memory.length mem) |>
@@ -416,7 +416,7 @@ and skip state addr mem f =
     ~ready:(fun state current mem ->
         next_encoding state current mem f)
 
-let scan_mem ~code ~data ~funs debt base : Machine.state KB.t =
+let disassemble ~code ~data ~funs debt base : Machine.state KB.t =
   let step d s =
     if Machine.is_ready s then KB.return s
     else Machine.view s base
@@ -489,9 +489,6 @@ let destinations dsts = dsts.resolved
 let is_call dsts = dsts.call
 let is_barrier dsts = dsts.barrier
 
-let already_scanned addr s =
-  List.exists s.mems ~f:(fun mem ->
-      Memory.contains mem addr)
 
 let commit_calls {jmps} =
   Map.to_sequence jmps |>
@@ -505,24 +502,40 @@ let commit_calls {jmps} =
             Set.add calls addr)
       else KB.return calls)
 
+
+let owns mem s =
+  List.exists s.debt ~f:(function
+      | Machine.Dest {dst} -> Memory.contains mem dst
+      | _ -> false)
+
+let rec scan_step s mem =
+  classify mem >>= fun (code,data,funs) ->
+  disassemble ~code ~data ~funs s.debt mem >>=
+  fun {Machine.begs; jmps; data; debt; dels} ->
+  let jmps = Map.merge s.jmps jmps ~f:(fun ~key:_ -> function
+      | `Left dsts | `Right dsts | `Both (_,dsts) -> Some dsts) in
+  let begs = Set.of_map_keys begs in
+  let funs = Set.union s.funs funs in
+  let begs = Set.(diff (union s.begs begs) dels) in
+  let data = Set.union s.data data in
+  let s = {funs; begs; data; jmps; mems = mem :: s.mems; debt} in
+  commit_calls s >>| fun funs ->
+  {s with funs = Set.(diff (union s.funs funs) dels)}
+
+let already_scanned mem s =
+  let start = Memory.min_addr mem in
+  List.exists s.mems ~f:(fun mem ->
+      Memory.contains mem start)
+
 let scan mem s =
   let open KB.Syntax in
-  let start = Memory.min_addr mem in
-  if already_scanned start s
+  if already_scanned mem s
   then KB.return s
-  else
-    classify_mem mem >>= fun (code,data,funs) ->
-    scan_mem ~code ~data ~funs s.debt mem >>=
-    fun {Machine.begs; jmps; data; debt; dels} ->
-    let jmps = Map.merge s.jmps jmps ~f:(fun ~key:_ -> function
-        | `Left dsts | `Right dsts | `Both (_,dsts) -> Some dsts) in
-    let begs = Set.of_map_keys begs in
-    let funs = Set.union s.funs funs in
-    let begs = Set.(diff (union s.begs begs) dels) in
-    let data = Set.union s.data data in
-    let s = {funs; begs; data; jmps; mems = mem :: s.mems; debt} in
-    commit_calls s >>| fun funs ->
-    {s with funs = Set.(diff (union s.funs funs) dels)}
+  else scan_step s mem >>= fun s ->
+    KB.List.fold s.mems ~init:s ~f:(fun s mem ->
+        if owns mem s then scan_step s mem
+        else !!s)
+
 
 let merge t1 t2 = {
   funs = Set.union t1.funs t2.funs;
