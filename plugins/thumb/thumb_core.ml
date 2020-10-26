@@ -99,7 +99,7 @@ module Make(CT : Theory.Core) = struct
     let (+=) r x = r := var r + x
     let (-=) r x = r := var r - x
     let (<--) = store
-    let (++) pc off = W32.(pc + int Int.(off + 4))
+    let (+>) pc off = W32.(pc + int Int.(off + 4))
     let (=) = CT.eq
     let (<>) = CT.neq
     let (<) = CT.ult

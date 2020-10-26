@@ -12,8 +12,20 @@ module Make(CT : Theory.Core) : sig
   (** [bcc <label>]  *)
   val bcc : Bitvec.t -> cond -> int -> eff
 
-  (** [bl #off] or [blx #off] *)
+  (** [bl <label>] *)
   val bli : Bitvec.t -> int -> eff
+
+  (** [blx <label>]  *)
+  val blxi : Bitvec.t -> int -> eff
+
+  (** [blx rm]  *)
+  val blxr : Bitvec.t -> r32 reg -> eff
+
+  (** [bx rm]  *)
+  val bxr : r32 reg -> eff
+
+  (** [bx <label>]  *)
+  val bxi : Bitvec.t -> int -> eff
 
   (** [bl rm] or [blx rm]  *)
   val blr : Bitvec.t -> r32 reg -> eff

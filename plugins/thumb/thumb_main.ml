@@ -20,10 +20,18 @@ let string_of_operands ops =
   Array.map ops ~f:Op.to_string |>
   String.concat_array ~sep:", "
 
+let decode_opcode op =
+  try Some (opcode_of_sexp (Sexp.Atom op))
+  with _exn -> None
+
 let pp_insn ppf (op,ops) =
   Format.fprintf ppf "%a(%s)"
     Sexp.pp (sexp_of_opcode op)
     (string_of_operands ops)
+
+let (>>=?) x f = x >>= function
+  | None -> KB.return Insn.empty
+  | Some x -> f x
 
 module Thumb(CT : Theory.Core) = struct
 
@@ -179,9 +187,11 @@ module Thumb(CT : Theory.Core) = struct
     | `tB, [|Imm dst; _; _|] -> b pc (imm dst)
     | `tBcc, [|Imm dst; Imm c; _|] -> bcc pc (cnd c) (imm dst)
     | `tBL,   [|_; _; Imm dst; _|]
-    | `tBLXi, [|_; _; Imm dst; _|] -> bli pc (imm dst)
-    | `tBX,   [|Reg dst; _; _|]
-    | `tBLXr, [|_; _; Reg dst|] -> blr pc (reg dst)
+    | `tBLXi, [|_; _; Imm dst|] -> bli pc (imm dst)
+    | `tBLXr, [|_; _; Reg dst|]when is_pc (reg dst) -> blxi pc 0
+    | `tBLXr, [|_; _; Reg dst|]-> blxr pc (reg dst)
+    | `tBX, [|Reg dst; _; _|]when is_pc (reg dst) -> bxi pc 0
+    | `tBX, [|Reg dst;_;_|] -> bxr (reg dst)
     | insn ->
       info "unhandled branch: %a" pp_insn insn;
       !!Insn.empty
@@ -193,8 +203,8 @@ module Thumb(CT : Theory.Core) = struct
     | op ->
       info "unsupported opcode: %s" (string_of_opcode op);
       !!Insn.empty
-
 end
+
 
 module Main = struct
   open Bap.Std
@@ -215,11 +225,6 @@ module Main = struct
         Some `tCMNz
       | _ -> None
 
-
-  let (>>=?) x f = x >>= function
-    | None -> KB.return Insn.empty
-    | Some x -> f x
-
   let load () =
     KB.promise Theory.Semantics.slot @@ fun label ->
     KB.collect Theory.Label.encoding label >>= fun encoding ->
@@ -229,14 +234,14 @@ module Main = struct
       Theory.instance () >>= Theory.require >>= fun (module Core) ->
       let module Thumb = Thumb(Core) in
       let addr = Word.to_bitvec@@Memory.min_addr mem in
-      match opcode_of_sexp (Sexp.Atom (MC.Insn.name insn)) with
-      | exception _ ->
+      match decode_opcode (MC.Insn.name insn) with
+      | None ->
         info "failed to decode MC instruction, unknown opcode: \
               %s => %a"
           (MC.Insn.asm insn)
           Sexp.pp_hum (MC.Insn.sexp_of_t insn);
         !!Insn.empty
-      | opcode ->
+      | Some opcode ->
         try
           Thumb.lift_insn addr opcode insn >>| fun sema ->
           Insn.with_basic sema insn

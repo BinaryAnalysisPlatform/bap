@@ -111,8 +111,8 @@ module Make(CT : Theory.Core) : sig
     (** [addr <-- data] stores [data] at [addr] *)
     val (<--) : r32 bitv -> 'a bitv -> data eff
 
-    (** [pc ++ off] pc-relative offset  *)
-    val (++) : Bitvec.t -> int -> Bitvec.t
+    (** [pc +> off] pc-relative offset  *)
+    val (+>) : Bitvec.t -> int -> Bitvec.t
 
     (** [~@v] is the value of [v]  *)
     val (~@) : 'a reg -> 'a bitv
