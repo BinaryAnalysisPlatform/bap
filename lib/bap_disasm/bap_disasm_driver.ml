@@ -31,6 +31,9 @@ type jump = {
   resolved : Addr.Set.t;
 } [@@deriving bin_io, equal]
 
+let pp_encoding ppf {coding} =
+  Format.fprintf ppf "%a" Theory.Language.pp coding
+
 module Machine : sig
   type task = private
     | Dest of {dst : addr; parent : task option; encoding : encoding}
@@ -136,13 +139,15 @@ end = struct
 
   let pp_task ppf = function
     | Dest {dst; parent=None} ->
-      Format.fprintf ppf "Root %a" Addr.pp dst
+      Format.fprintf ppf "root-%a" Addr.pp dst
     | Dest {dst} ->
-      Format.fprintf ppf "Dest %a" Addr.pp dst
+      Format.fprintf ppf "dest-%a" Addr.pp dst
     | Fall {dst} ->
-      Format.fprintf ppf "Fall %a" Addr.pp dst
+      Format.fprintf ppf "fall-%a" Addr.pp dst
     | Jump {src; age} ->
-      Format.fprintf ppf "Delay%d %a" age Addr.pp src
+      Format.fprintf ppf "del%d-%a" age Addr.pp src
+
+  let sexp_of_task t = Sexp.Atom (Format.asprintf "%a" pp_task t)
 
   let rec cancel task s = match task with
     | Dest {parent=None} -> s
@@ -156,6 +161,7 @@ end = struct
         | Fall _ | Dest _ -> cancel parent (mark_data s src)
         | Jump _ -> assert false
 
+
   let cancel_beg s addr = match Map.find s.begs addr with
     | None -> s
     | Some tasks ->
@@ -164,6 +170,10 @@ end = struct
       }
 
   let is_slot s addr = Set.mem s.dels addr
+
+  let task_encoding = function
+    | Fall {encoding} | Dest {encoding} -> encoding
+    | Jump _ -> unknown
 
   let rec step s = match s.work with
     | [] ->
@@ -269,10 +279,6 @@ end = struct
   let stopped s _encoding =
     step @@ cancel s.curr @@ mark_data s s.addr
 
-  let task_encoding = function
-    | Fall {encoding} | Dest {encoding} -> encoding
-    | Jump _ -> unknown
-
   let with_encoding encoding = function
     | Fall s -> Fall {s with encoding}
     | Dest s -> Dest {s with encoding}
@@ -315,12 +321,6 @@ end = struct
       code = Set.empty (module Addr);
     } mem
 end
-
-
-let pp_encoding ppf {target; coding} =
-  Format.fprintf ppf "%a-%a"
-    Theory.Target.pp target
-    Theory.Language.pp coding
 
 let new_insn mem insn =
   let addr = Addr.to_bitvec (Memory.min_addr mem) in
@@ -400,23 +400,23 @@ let switch encoding s =
   | Error _ -> s
   | Ok dis -> Dis.switch s dis
 
-let rec next_encoding state current mem f =
-  let addr = Memory.min_addr mem in
-  KB.Object.scoped Theory.Program.cls @@ fun obj ->
-  KB.provide Theory.Label.addr obj (Some (Word.to_bitvec addr)) >>= fun () ->
-  get_encoding obj >>= fun encoding ->
-  if Theory.Language.is_unknown encoding.coding
-  then if Theory.Language.is_unknown current.coding
-    then skip state addr mem f
-    else f state current mem
-  else f state encoding mem
-and skip state addr mem f =
-  Machine.view (Machine.skipped state addr) mem
-    ~empty:KB.return
-    ~ready:(fun state current mem ->
-        next_encoding state current mem f)
 
 let disassemble ~code ~data ~funs debt base : Machine.state KB.t =
+  let rec next_encoding state current mem f =
+    let addr = Memory.min_addr mem in
+    KB.Object.scoped Theory.Program.cls @@ fun obj ->
+    KB.provide Theory.Label.addr obj (Some (Word.to_bitvec addr)) >>= fun () ->
+    get_encoding obj >>= fun encoding ->
+    if Theory.Language.is_unknown encoding.coding
+    then if Theory.Language.is_unknown current.coding
+      then skip state addr f
+      else f state current mem
+    else f state encoding mem
+  and skip state addr f =
+    Machine.view (Machine.skipped state addr) base
+      ~empty:KB.return
+      ~ready:(fun state current mem ->
+          next_encoding state current mem f) in
   let step d s =
     if Machine.is_ready s then KB.return s
     else Machine.view s base
