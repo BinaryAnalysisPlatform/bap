@@ -120,11 +120,15 @@ let collect_insns number_of_instructions entry =
     if collected < number_of_instructions then
       Theory.Label.for_addr addr >>= fun label ->
       KB.collect Theory.Semantics.slot label >>= fun insn ->
-      KB.collect Memory.slot label >>= function
-      | None -> return bils
-      | Some mem ->
-        let next = Addr.to_bitvec @@ Addr.succ @@ Memory.max_addr mem in
-        collect (Insn.bil insn :: bils) next (collected+1)
+      match Insn.bil insn with
+      | [Bil.Jmp (Int next)] as bil ->
+        collect (bil :: bils) (Addr.to_bitvec next) (collected+1)
+      | _ ->
+        KB.collect Memory.slot label >>= function
+        | Some mem ->
+          let next = Addr.to_bitvec @@ Addr.succ @@ Memory.max_addr mem in
+          collect (Insn.bil insn :: bils) next (collected+1)
+        | None -> return bils
     else return bils  in
   collect [] entry 0
 
@@ -144,7 +148,7 @@ let extract_external s =
        | None -> Name s
        | Some s -> Name s)
 
-let find_reference = List.find_map ~f:(function
+let find_references = List.filter_map ~f:(function
     | Bil.Jmp (Load (_,Int dst,_,_))
     | Bil.Jmp (Int dst)
     | Bil.Move (_, Load (_,Int dst,_,_)) -> Some (Addr (Word.to_bitvec dst))
@@ -178,12 +182,12 @@ let resolve_stubs refs path =
     | _ ->
       plt_size label >>=? fun size ->
       collect_insns size addr >>| fun bil ->
-      match find_reference bil with
-      | None -> None
-      | Some Name s -> Some s
-      | Some Addr dst -> match References.lookup refs dst with
-        | Some (Name s) -> Some s
-        | _ -> None
+      find_references bil |>
+      List.find_map ~f:(function
+          | Name s -> Some s
+          | Addr dst -> match References.lookup refs dst with
+            | Some (Name s) -> Some s
+            | _ -> None)
 
 let label_for_ref = function
   | Name s -> Theory.Label.for_name s
