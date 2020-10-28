@@ -321,7 +321,7 @@ module Insn = struct
     encoding : string;
     code : int;
     name : string;
-    asm  : string;
+    asm  : bytes;
     kinds: kind list;
     opers: Op.t array;
   }
@@ -337,7 +337,7 @@ module Insn = struct
 
   let name {name = x} = x
   let code op = op.code
-  let asm  x = x.asm
+  let asm  x = Bytes.to_string x.asm
   let ops  x = x.opers
   let kinds x = x.kinds
   let is op x =
@@ -353,15 +353,16 @@ module Insn = struct
       if asm then
         let data = Bytes.create (C.insn_asm_size !!dis ~insn) in
         C.insn_asm_copy !!dis ~insn data;
-        Bytes.to_string data
-      else "" in
+        data
+      else Bytes.empty in
     let kinds =
       if kinds then
-        List.filter_map Kind.all ~f:(fun k ->
+        List.fold Kind.all ~init:[] ~f:(fun ks k ->
             let p = cpred_of_pred (k :> pred) in
-            if C.is_supported !!dis p
-            then Option.some_if (C.insn_satisfies !!dis ~insn p) k
-            else None)
+            if C.is_supported !!dis p &&
+               C.insn_satisfies !!dis ~insn p
+            then k :: ks
+            else ks)
       else [] in
     let opers =
       Array.init (C.insn_ops_size !!dis ~insn) ~f:(fun oper ->
@@ -396,7 +397,7 @@ let sexp_of_full_insn = sexp_of_insn
 let compare_full_insn i1 i2 =
   let open Insn in
   let r1 = Int.compare i1.code i2.code in
-  if r1 <> 0 then String.compare i1.asm i2.asm
+  if r1 <> 0 then Bytes.compare i1.asm i2.asm
   else r1
 
 
@@ -435,7 +436,7 @@ type (+'a,+'k,'s,'r) state = {
       option sexp_opaque;
 } [@@deriving sexp_of]
 
-let create_state ?(backlog=8) ?(stop_on=[]) ?stopped ?invalid ?hit dis
+let create_state ?(backlog=0) ?(stop_on=[]) ?stopped ?invalid ?hit dis
     mem ~return  = {
   backlog;
   dis; return; hit;
@@ -451,7 +452,7 @@ let insn_mem s ~insn : mem =
   let off = C.insn_offset !!(s.dis) ~insn in
   let words = C.insn_size !!(s.dis) ~insn in
   let from = Addr.(Mem.min_addr s.current.mem ++ off) in
-  ok_exn (Mem.view s.current.mem ~from ~words)
+  Mem.view_exn s.current.mem ~from ~words
 
 let set_memory dis p : unit =
   let open Bigsubstring in
