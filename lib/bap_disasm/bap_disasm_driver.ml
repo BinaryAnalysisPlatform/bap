@@ -408,12 +408,13 @@ let switch encoding s =
   | Error _ -> s
   | Ok dis -> Dis.switch s dis
 
-
 let disassemble ~code ~data ~funs debt base : Machine.state KB.t =
+  unit_for_mem base >>= fun unit ->
   let rec next_encoding state current mem f =
     let addr = Memory.min_addr mem in
     KB.Object.scoped Theory.Program.cls @@ fun obj ->
     KB.provide Theory.Label.addr obj (Some (Word.to_bitvec addr)) >>= fun () ->
+    KB.provide Theory.Label.unit obj unit >>= fun () ->
     get_encoding obj >>= fun encoding ->
     if Theory.Language.is_unknown encoding.coding
     then if Theory.Language.is_unknown current.coding
