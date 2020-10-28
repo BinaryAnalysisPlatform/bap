@@ -4847,6 +4847,18 @@ module Std : sig
     *)
     val view : ?word_size:size -> ?from:addr -> ?words:int -> t -> t Or_error.t
 
+
+    (** [view_exn mem] is the same as [ok_exn @@view_exn mem] but is
+        slightly more efficient.
+
+        @raise Invalid_arg in case if the arguments are not fitting
+        into  the memory.
+
+        @since 2.2.0
+    *)
+    val view_exn : ?word_size:size -> ?from:addr -> ?words:int -> t -> t
+
+
     (** [range mem a0 a1] returns a view on [mem] starting from
         address [a0] and ending at [a1], bounds inclusive   *)
     val range : t -> addr -> addr -> t Or_error.t
