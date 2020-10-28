@@ -576,33 +576,32 @@ let execution_order stack =
 
 let always _ = KB.return true
 
-let with_disasm beg cfg f =
+let with_disasm beg blocks cfg f =
   Theory.Label.for_addr (Word.to_bitvec beg) >>=
   get_encoding >>= fun encoding ->
   match create_disassembler encoding with
-  | Error _ -> KB.return (cfg,None)
+  | Error _ -> KB.return (blocks,cfg,None)
   | Ok dis -> f encoding dis
 
 let explore
-    ?entry:start ?(follow=always) ~block ~node ~edge ~init
+    ?entries ?entry:start ?(follow=always) ~block ~node ~edge ~init
     ({begs; jmps; data; mems} as state) =
   let find_base addr =
     if Set.mem data addr then None
     else List.find mems ~f:(fun mem -> Memory.contains mem addr) in
-  let blocks = Hashtbl.create (module Addr) in
   let edge_insert cfg src dst = match dst with
     | None -> KB.return cfg
     | Some dst -> edge src dst cfg in
   let view ?len from mem = ok_exn (Memory.view ?words:len ~from mem) in
-  let rec build cfg beg =
-    if Set.mem data beg then KB.return (cfg,None)
+  let rec build blocks cfg beg =
+    if Set.mem data beg then KB.return (blocks,cfg,None)
     else follow beg >>= function
-      | false -> KB.return (cfg,None)
-      | true -> with_disasm beg cfg @@ fun _encoding dis ->
-        match Hashtbl.find blocks beg with
-        | Some block -> KB.return (cfg, Some block)
+      | false -> KB.return (blocks,cfg,None)
+      | true -> with_disasm beg blocks cfg @@ fun _encoding dis ->
+        match Map.find blocks beg with
+        | Some block -> KB.return (blocks,cfg,Some block)
         | None -> match find_base beg with
-          | None -> KB.return (cfg,None)
+          | None -> KB.return (blocks,cfg,None)
           | Some base ->
             Dis.run dis (view beg base) ~stop_on:[`Valid]
               ~init:(beg,0,[]) ~return:KB.return
@@ -611,34 +610,38 @@ let explore
                   let len = Memory.length mem + len in
                   let last = Memory.max_addr mem in
                   let next = Addr.succ last in
-                  if Set.mem begs next || Map.mem jmps curr
-                  then
-                    KB.return
-                      (curr, len, insn::insns)
+                  let is_terminator =
+                    Set.mem begs next || Map.mem jmps curr in
+                  if is_terminator
+                  then KB.return (curr, len, insn::insns)
                   else Dis.jump s (view next base)
                       (next, len, insn::insns))
             >>= fun (fin,len,insns) ->
             let mem = view ~len beg base in
             block mem insns >>= fun block ->
             let fall = Addr.succ (Memory.max_addr mem) in
-            Hashtbl.add_exn blocks beg block;
+            let blocks = Map.add_exn blocks beg block in
             node block cfg >>= fun cfg ->
             match Map.find jmps fin with
             | None ->
-              build cfg fall >>= fun (cfg,dst) ->
+              build blocks cfg fall >>= fun (blocks,cfg,dst) ->
               edge_insert cfg block dst >>| fun cfg ->
-              cfg, Some block
+              blocks,cfg,Some block
             | Some {resolved=dsts; barrier} ->
               let dsts = if barrier then dsts
                 else Set.add dsts fall in
               Set.to_sequence dsts |>
-              KB.Seq.fold ~init:cfg ~f:(fun cfg dst ->
-                  build cfg dst >>= fun (cfg,dst) ->
-                  edge_insert cfg block dst) >>| fun cfg ->
-              cfg,Some block in
-  match start with
-  | None ->
-    Set.to_sequence state.begs |>
-    KB.Seq.fold ~init ~f:(fun cfg beg ->
-        build cfg beg >>| fst)
-  | Some start -> build init start >>| fst
+              KB.Seq.fold ~init:(blocks,cfg) ~f:(fun (blocks,cfg) dst ->
+                  build blocks cfg dst >>= fun (blocks,cfg,dst) ->
+                  edge_insert cfg block dst >>| fun cfg ->
+                  blocks,cfg) >>| fun (blocks,cfg) ->
+              blocks,cfg,Some block in
+  let entries = match start,entries with
+    | None,None -> Set.to_sequence state.begs
+    | Some beg,None -> Seq.singleton beg
+    | None, Some begs -> begs
+    | Some beg, Some begs -> Seq.cons beg begs in
+  let empty = Map.empty (module Addr) in
+  KB.Seq.fold entries ~init:(empty,init) ~f:(fun (blocks,cfg) beg ->
+      build blocks cfg beg >>| fun (blocks,cfg,_) ->
+      blocks,cfg) >>| snd

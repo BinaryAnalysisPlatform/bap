@@ -7388,6 +7388,7 @@ module Std : sig
             points.
       *)
       val explore :
+        ?entries:addr Sequence.t ->
         ?entry:addr ->
         ?follow:(addr -> bool knowledge) ->
         block:(mem -> insns -> 'n knowledge) ->

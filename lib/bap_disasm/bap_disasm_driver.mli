@@ -27,6 +27,7 @@ val is_call : jump -> bool
 val is_barrier : jump -> bool
 
 val explore :
+  ?entries:addr seq ->
   ?entry:addr ->
   ?follow:(addr -> bool knowledge) ->
   block:(mem -> insns -> 'n knowledge) ->
