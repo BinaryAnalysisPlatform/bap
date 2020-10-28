@@ -351,7 +351,7 @@ let collect_dests source code =
         get_encoding label >>= fun encoding ->
         KB.collect Theory.Label.addr label >>| function
         | Some d -> {
-            dest with     (* note: we shouldn't do this here *)
+            dest with
             encoding = if Theory.Language.is_unknown encoding.coding
               then source
               else encoding;
@@ -374,15 +374,23 @@ let delay mem insn =
   | None -> 0
   | Some x -> x
 
+let unit_for_mem mem =
+  let addr = Addr.to_bitvec @@ Memory.min_addr mem in
+  KB.Object.scoped Theory.Program.cls @@ fun label ->
+  KB.provide Theory.Label.addr label (Some addr) >>= fun () ->
+  KB.collect Theory.Label.unit label
+
 let classify mem =
   let empty = Set.empty (module Addr) in
   let base = Memory.min_addr mem in
+  unit_for_mem mem >>= fun unit ->
   Seq.range 0 (Memory.length mem) |>
   KB.Seq.fold ~init:(empty,empty,empty) ~f:(fun (code,data,root) off ->
       let addr = Addr.(nsucc base off) in
       let slot = Some (Addr.to_bitvec addr) in
       KB.Object.scoped Theory.Program.cls @@ fun label ->
       KB.provide Theory.Label.addr label slot >>= fun () ->
+      KB.provide Theory.Label.unit label unit >>= fun () ->
       KB.collect Theory.Label.is_valid label >>= function
       | Some false -> KB.return (code,Set.add data addr,root)
       | r ->
@@ -592,7 +600,7 @@ let explore
   let edge_insert cfg src dst = match dst with
     | None -> KB.return cfg
     | Some dst -> edge src dst cfg in
-  let view ?len from mem = ok_exn (Memory.view ?words:len ~from mem) in
+  let view ?len from mem = Memory.view_exn ?words:len ~from mem in
   let rec build blocks cfg beg =
     if Set.mem data beg then KB.return (blocks,cfg,None)
     else follow beg >>= function
