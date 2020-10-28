@@ -490,7 +490,7 @@ let is_call dsts = dsts.call
 let is_barrier dsts = dsts.barrier
 
 
-let commit_calls {jmps} =
+let commit_calls jmps =
   Map.to_sequence jmps |>
   KB.Seq.fold ~init:Addr.Set.empty ~f:(fun calls (_,dsts) ->
       if dsts.call then
@@ -508,8 +508,9 @@ let owns mem s =
       | Machine.Dest {dst} -> Memory.contains mem dst
       | _ -> false)
 
-let rec scan_step s mem =
-  classify mem >>= fun (code,data,funs) ->
+let empty = Addr.Set.empty
+
+let scan_step ?(code=empty) ?(data=empty) ?(funs=empty) s mem =
   disassemble ~code ~data ~funs s.debt mem >>=
   fun {Machine.begs; jmps; data; debt; dels} ->
   let jmps = Map.merge s.jmps jmps ~f:(fun ~key:_ -> function
@@ -518,8 +519,8 @@ let rec scan_step s mem =
   let funs = Set.union s.funs funs in
   let begs = Set.(diff (union s.begs begs) dels) in
   let data = Set.union s.data data in
-  let s = {funs; begs; data; jmps; mems = mem :: s.mems; debt} in
-  commit_calls s >>| fun funs ->
+  let s = {funs; begs; data; jmps; mems = s.mems; debt} in
+  commit_calls s.jmps >>| fun funs ->
   {s with funs = Set.(diff (union s.funs funs) dels)}
 
 let already_scanned mem s =
@@ -531,10 +532,14 @@ let scan mem s =
   let open KB.Syntax in
   if already_scanned mem s
   then KB.return s
-  else scan_step s mem >>= fun s ->
-    KB.List.fold s.mems ~init:s ~f:(fun s mem ->
-        if owns mem s then scan_step s mem
-        else !!s)
+  else
+    classify mem >>= fun (code,data,funs) ->
+    scan_step ~code ~data ~funs s mem >>= fun s ->
+    KB.List.fold s.mems
+      ~f:(fun s mem ->
+          if owns mem s then scan_step s mem
+          else !!s)
+      ~init:{s with mems = mem :: s.mems}
 
 
 let merge t1 t2 = {
