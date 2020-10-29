@@ -411,8 +411,8 @@ let create
           KB.collect State.slot unit >>= fun state ->
           if KB.Domain.is_empty (KB.Slot.domain State.slot) state
           then
-            Memmap.to_sequence code |>
-            KB.Seq.fold ~init:State.empty ~f:(fun k (mem,_) ->
+            Memmap.to_sequence code |> Seq.to_list_rev |>
+            KB.List.fold ~init:State.empty ~f:(fun k (mem,_) ->
                 State.disassemble k mem) >>=
             State.partition >>= fun state ->
             KB.provide State.slot unit state >>| fun () ->
