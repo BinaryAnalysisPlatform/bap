@@ -132,14 +132,16 @@ let collect_insns number_of_instructions entry =
     else return bils  in
   collect [] entry 0
 
-let plt_size_of_arch : arch -> int option = function
-  | #Arch.arm -> Some 4
-  | #Arch.x86 -> Some 1
-  | #Arch.ppc -> Some 4
-  | _ -> None
+let plt_sizes = [
+  Arm_target.parent, 4;
+  X86_target.parent, 1;
+  Bap_powerpc_target.parent, 4;
+]
 
 let plt_size label =
-  KB.collect Arch.slot label >>| plt_size_of_arch
+  Theory.Label.target label >>| fun t ->
+  List.find_map plt_sizes ~f:(fun (p,s) ->
+      Option.some_if (Theory.Target.belongs p t) s)
 
 let extract_external s =
   Option.map

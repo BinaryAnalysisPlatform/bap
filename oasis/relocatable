@@ -9,5 +9,6 @@ Library relocatable_plugin
   FindlibName:     bap-plugin-relocatable
   InternalModules: Rel_symbolizer
   BuildDepends:    bap, ogre, bap-knowledge, core_kernel, bap-future, monads,
-                   bitvec, bitvec-order, bap-core-theory, ppx_jane, bap-main
+                   bitvec, bitvec-order, bap-core-theory, ppx_jane, bap-main,
+                   bap-arm, bap-powerpc, bap-x86-cpu
   XMETAExtraLines: tags="brancher, loader, ogre"
