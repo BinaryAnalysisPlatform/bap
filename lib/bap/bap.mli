@@ -5590,6 +5590,7 @@ module Std : sig
         input file, or it is whatever was passed to [of_[big]string]. *)
     val data : t -> Bigstring.t
 
+
     (** [spec image] returns the image specification.
 
         @since 1.3
@@ -5878,6 +5879,8 @@ module Std : sig
     (** [to_sequence map] converts the memmap ['a t] to a sequence of
         key-value pairs *)
     val to_sequence : 'a t -> (mem * 'a) seq
+
+
 
     include Container.S1 with type 'a t := 'a t
 
@@ -7386,6 +7389,13 @@ module Std : sig
             if absent, then all basic blocks will be consecuitively,
             in the order of ascending addresses, used as the entry
             points.
+
+          - [entries] is the sequence of entry points, if both [entry]
+            and [entries] are specified then [entry] is consed with
+            [entries].
+
+          @since 2.2.0 the optional [entries] parameter was added.
+
       *)
       val explore :
         ?entries:addr Sequence.t ->
@@ -9846,6 +9856,11 @@ module Std : sig
         arbitrary values.   *)
     val memory : t -> value memmap
 
+    (** the memory of the unit in the knowledge base.
+        @since 2.2.0  *)
+    val memory_slot : (Theory.Unit.cls, value memmap) KB.slot
+
+
     (** [tag_memory project region tag value] tags a given [region] of
         memory in [project] with a given [tag] and [value]. Example:
         [Project.tag_memory project tained color red]
@@ -9971,6 +9986,9 @@ module Std : sig
       (** the slot of a unit object that stores the state of disassembly  *)
       val slot : (Theory.Unit.cls, state) KB.slot
     end
+
+
+
 
 
     (** Input information.

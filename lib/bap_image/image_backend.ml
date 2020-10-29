@@ -55,6 +55,7 @@ module Img = struct
   let t = Value.Tag.register (module Self)
       ~uuid:"ac12248c-18e8-4c68-bd8b-05344c426bc7"
       ~name:"image"
+      ~package:"bap"
 end
 
 type t = Bigstring.t -> Img.t option

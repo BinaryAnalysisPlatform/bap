@@ -39,6 +39,7 @@ val with_symbols : t -> symtab -> t
 val storage : t -> dict
 val with_storage : t -> dict -> t
 val memory : t -> value memmap
+val memory_slot : (Theory.Unit.cls, value Memmap.t) KB.slot
 val disasm : t -> disasm
 val with_memory : t -> value memmap -> t
 val tag_memory : t -> mem -> 'a tag -> 'a -> t
@@ -47,6 +48,8 @@ val set : t -> 'a tag -> 'a -> t
 val get : t -> 'a tag -> 'a option
 val has : t -> 'a tag -> bool
 val del : t -> 'a tag -> t
+
+
 
 val map_program : t -> f:(program term -> program term) -> t
 
