@@ -17,8 +17,6 @@ open Bap_main
 open Bap_knowledge
 open Core_kernel
 open Bap.Std
-open Bap_future.Std
-open Monads.Std
 open Bap_core_theory
 
 include Loggers()
@@ -33,24 +31,42 @@ let arch =
 
 let width = Ogre.(arch >>| Arch.addr_size >>| Size.in_bits)
 
+module Bitvec = struct
+  include Bitvec
+  include Bitvec_sexp.Functions
+end
+
 type ref =
-  | Addr of Bitvec_order.t
+  | Addr of Bitvec.t
   | Name of string
-[@@deriving compare]
+[@@deriving compare, sexp, equal]
 
 
 module References : sig
   type t
-  val create : Ogre.doc -> t
+  val slot : (Theory.Unit.cls,t) KB.slot
   val lookup : t -> Bitvec.t -> ref option
   val search : t -> Word.t -> ref option
+  val prepare : unit -> unit
 end = struct
   open Image.Scheme
   open Ogre.Syntax
-  type value = Ref of ref | Bad [@@deriving compare]
-  type t = value Map.M(Bitvec_order).t
 
-  let empty = Map.empty (module Bitvec_order)
+  module Refs = Map.Make(Bitvec)
+
+  type value = Ref of ref | Bad [@@deriving compare, sexp, equal]
+  type t = value Refs.t [@@deriving sexp_of, equal]
+
+
+  let empty = Refs.empty
+
+  let slot = KB.Class.property Theory.Unit.cls "refs"
+      ~package:"bap"
+      ~public:true
+      ~desc:"external references" @@
+    KB.Domain.flat ~empty "refs"
+      ~inspect:sexp_of_t
+      ~equal
 
   let chop_version s =
     match String.lfindi s ~f:(fun _ -> Char.equal '@') with
@@ -101,6 +117,18 @@ end = struct
     | Some Ref x -> Some x
     | None -> None
   let search exts addr = lookup exts (Word.to_bitvec addr)
+
+  let () =
+    let open KB.Rule in
+    declare ~package:"bap" "refs-of-spec" |>
+    require Image.Spec.slot |>
+    provide slot |>
+    comment "extracts external references from the specification"
+
+  let prepare () =
+    let open KB.Syntax in
+    KB.promise slot @@ fun unit ->
+    KB.collect Image.Spec.slot unit >>| create
 end
 
 let plt_agent = Knowledge.Agent.register
@@ -172,13 +200,13 @@ let matches refs ref mem = match ref with
     Seq.append addr (addresses mem) |>
     Seq.find_map ~f:(References.lookup refs)
 
-let resolve_stubs refs path =
+let resolve_stubs () =
   KB.propose plt_agent Theory.Label.possible_name @@ fun label ->
-  KB.collect Theory.Label.addr label >>=? fun addr ->
   KB.collect Theory.Label.unit label >>=? fun unit ->
-  KB.collect Theory.Unit.path unit >>=? fun file ->
+  KB.collect References.slot unit >>= fun refs ->
+  KB.collect Theory.Label.addr label >>=? fun addr ->
   KB.collect (Value.Tag.slot Sub.stub) label >>= fun is_stub ->
-  if file <> path || not (Option.is_some is_stub) then KB.return None
+  if not (Option.is_some is_stub) then KB.return None
   else match References.lookup refs addr with
     | Some (Name s) -> KB.return (Some s)
     | _ ->
@@ -195,37 +223,31 @@ let label_for_ref = function
   | Name s -> Theory.Label.for_name s
   | Addr x -> Theory.Label.for_addr x
 
-let mark_mips_stubs_as_functions refs file : unit =
+let mark_mips_stubs_as_functions () : unit =
   KB.promise Theory.Label.is_subroutine @@ fun label ->
   KB.collect Theory.Label.addr label >>=? fun addr ->
   KB.collect Theory.Label.unit label >>=? fun unit ->
-  KB.collect Theory.Unit.path unit >>=? fun path ->
+  KB.collect References.slot unit >>= fun refs ->
   KB.collect Theory.Unit.target unit >>| fun target ->
-  let is_entry = path = file &&
-                 (Theory.Target.matches target "mips") &&
+  let is_entry = (Theory.Target.matches target "mips") &&
                  Option.is_some (References.lookup refs addr) in
   Option.some_if is_entry true
 
 let () = Extension.declare ~doc @@ fun _ctxt ->
-  Result.return @@
-  Stream.(observe Project.Info.(zip spec file)) @@ fun (spec, file) ->
-  let refs = References.create spec in
-  resolve_stubs refs file;
-  mark_mips_stubs_as_functions refs file;
+  References.prepare ();
+  resolve_stubs ();
+  mark_mips_stubs_as_functions ();
   KB.Rule.(declare ~package:"bap" "roots-for-mips" |>
            require Theory.Label.addr |>
            require Theory.Label.unit |>
-           require Theory.Unit.path |>
            require Theory.Unit.target |>
-           dynamic ["specification"] |>
-           dynamic ["filename"] |>
+           require References.slot |>
            provide Theory.Label.is_subroutine |>
            comment "marks external-references as function starts on MIPS");
   KB.Rule.(declare ~package:"bap" "resolve-stubs" |>
            require Theory.Label.addr |>
            require Theory.Label.unit |>
-           require Theory.Unit.path |>
-           dynamic ["specification"] |>
-           dynamic ["filename"] |>
+           require References.slot |>
            provide Theory.Label.possible_name |>
            comment "analyzes stubs for external references");
+  Ok ()
