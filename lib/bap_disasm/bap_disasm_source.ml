@@ -19,8 +19,7 @@ module Context = struct
     | Some p1, Some p2 -> String.equal p1 p2
 
   let for_label label =
-    KB.collect Arch.slot label >>= fun arch ->
-    let size = Size.in_bits (Arch.addr_size arch) in
+    Theory.Label.target label >>| Theory.Target.code_addr_size >>= fun size ->
     KB.collect Theory.Label.unit label >>= function
     | None -> KB.return {bias=None; path=None; size}
     | Some unit ->
