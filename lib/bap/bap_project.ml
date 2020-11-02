@@ -47,8 +47,7 @@ let with_filename spec target code memory path =
   KB.promising Theory.Label.unit ~promise:(fun label ->
       KB.collect Theory.Label.addr label >>=? fun addr ->
       let addr = Word.create addr width in
-      let memory = union_memory code data in
-      if Memmap.contains memory addr then
+      if Memmap.contains code addr then
         Theory.Unit.for_file path >>= fun unit ->
         KB.sequence [
           KB.provide Image.Spec.slot unit spec;
