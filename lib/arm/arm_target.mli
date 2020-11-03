@@ -96,11 +96,21 @@ module Bi : sig
   val v86a : Theory.Target.t
 end
 
+val llvm_a32 : Theory.language
+val llvm_t32 : Theory.language
+val llvm_a64 : Theory.language
 
 
 (** [load ()] loads the knowledge base rules for the ARM targets.
 
     This includes parsing the loader output and enabling backward
     compatibility with the old [Arch.t] representation.
+
+    @param [interworking] if set disables/enables the interworking
+    mode (switching between arm and thumb modes). If not set, then
+    the presence of interworking is detected using heurisitics. Right
+    now if the heuristic looks into the symbol table and if there is
+    a symbol there with an odd address (which is used to indicate
+    thumb encoding) then interworking is enabled.
 *)
-val load : unit -> unit
+val load : ?interworking:bool -> unit -> unit

@@ -1,42 +1,26 @@
+let doc = "
+# DESCRIPTION
+
+The target support package that enables support for the ARM family of
+architectures.
+"
+
 open Core_kernel
 open Bap.Std
-open Bap_future.Std
-open Bap_core_theory
-include Self()
+open Bap_main
+open Extension.Syntax
 
-let () = Config.manpage [
-    `S "DESCRIPTION";
-    `P "Provides lifter and ABI processor for ARM architecture.";
-    `S "SEE ALSO";
-    `P "$(b,bap-arm)(3)"
-  ]
+let interworking =
+  let open Extension in
+  Configuration.parameter Type.(some bool) "interworking"
+    ~doc:"Enable ARM/Thumb interworking. Defaults to (auto),
+          i.e., to the automatic detection of interworking"
 
-module ARM = struct
-  open Format
-  include ARM
 
-  let pp_insn ppf (mem,insn) =
-    fprintf ppf "%a: %s"
-      Addr.pp_hex (Memory.min_addr mem)
-      (Disasm_expert.Basic.Insn.asm insn)
-
-  let lift mem insn =
-    match lift mem insn with
-    | Error err as failed ->
-      warning "can't lift instruction %a - %a"
-        pp_insn (mem,insn) Error.pp err;
-      failed
-    | Ok bil as ok -> match Type.check bil with
-      | Ok () -> ok
-      | Error te ->
-        warning "BIL doesn't type check %a - %a"
-          pp_insn (mem,insn) Type.Error.pp te;
-        Error (Error.of_string "type error")
-end
-
-let () =
-  Config.when_ready @@ fun _ ->
-  Arm_target.load ();
+let () = Bap_main.Extension.declare ~doc @@ fun ctxt ->
+  let interworking = ctxt-->interworking in
+  Arm_target.load ?interworking ();
   List.iter Arch.all_of_arm ~f:(fun arch ->
       register_target (arch :> arch) (module ARM);
-      Arm_gnueabi.setup ())
+      Arm_gnueabi.setup ());
+  Ok ()

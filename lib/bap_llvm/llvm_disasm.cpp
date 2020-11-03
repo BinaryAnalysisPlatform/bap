@@ -125,7 +125,7 @@ class llvm_disassembler : public disassembler_interface {
 
 public:
     static result<llvm_disassembler>
-    create(const char *name, const char *cpu, int debug_level) {
+    create(const char *name, const char *cpu, const char *attrs, int debug_level) {
         std::string error;
         llvm::Triple t(llvm::Triple::normalize(name));
         std::string triple = t.getTriple();
@@ -166,7 +166,7 @@ public:
         }
 
         shared_ptr<const llvm::MCSubtargetInfo>
-            sub_info(target->createMCSubtargetInfo(triple, cpu, ""));
+            sub_info(target->createMCSubtargetInfo(triple, cpu, attrs));
 
         if (!sub_info) {
             if (debug_level > 0)
@@ -525,19 +525,29 @@ bool is_error_prone_arch(const char *triple) {
 
 struct create_llvm_disassembler : disasm_factory {
     result<disassembler_interface>
-    create(const char *triple, const char *cpu, int debug_level) {
+    do_create(const char *triple, const char *cpu, const char *attrs, int debug_level) {
         result<disassembler_interface> r;
         if (is_error_prone_arch(triple)) {
             if (debug_level > 0)
                 output_error(triple, cpu, "unsupported target", "consider to update to llvm version >= 8.0");
             r.err = bap_disasm_unsupported_target;
         } else {
-            auto llvm = llvm_disassembler::create(triple, cpu, debug_level);
+            auto llvm = llvm_disassembler::create(triple, cpu, attrs, debug_level);
             r.dis = llvm.dis;
             if (!r.dis)
                 r.err = llvm.err;
         }
         return r;
+    }
+
+    result<disassembler_interface>
+    create(const char *triple, const char *cpu, const char *attrs, int debug_level) {
+        return do_create(triple,cpu,attrs,debug_level);
+    }
+
+    result<disassembler_interface>
+    create(const char *triple, const char *cpu, int debug_level) {
+        return do_create(triple,cpu,NULL,debug_level);
     }
 };
 

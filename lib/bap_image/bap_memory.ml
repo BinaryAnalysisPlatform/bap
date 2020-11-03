@@ -212,34 +212,28 @@ module Input = struct
   let int256 = read `r256
 end
 
-let sub copy ?(word_size=`r8) ?from ?words  t : t or_error =
+let view_exn ?(word_size=`r8) ?from ?words  t =
   let amin = Option.value from ~default:(min_addr t) in
-  let amax =
-    Option.map words
-      ~f:(fun w -> Addr.(amin ++ Int.(w * Size.in_bytes word_size - 1))) |>
-    Option.value ~default:(max_addr t) in
-  Validate.(result @@ name "view must not be empty" @@
-            Addr.validate_lbound amax ~min:(Incl amin)) >>= fun () ->
-  Addr.Int_err.(!$amax - !$amin >>= Addr.to_int) >>= fun diff ->
-  let size = diff + 1 in
-  Addr.Int_err.(!$amin - !$(t.addr) >>= Addr.to_int) >>= fun off ->
-  let off = t.off + off in
-  let check_preconditions = Validate.(name_list "preconditions" [
-      name "offset in bounds" @@ Int.validate_bound off
-        ~min:(Incl t.off)
-        ~max:(Excl (t.off + t.size));
-      name_list "size fits" [
-        Int.validate_bound size
-          ~min:(Incl 1) ~max:(Incl t.size);
-        Int.validate_ubound (off + size) ~max:(Incl (t.off + t.size))
-      ];
-    ]) in
-  Validate.result check_preconditions >>= fun () ->
-  if size = 1 then return (make_byte t amin off)
-  else return { t with size; data = t.data; addr = amin; off}
+  let amax = match words with
+    | None -> max_addr t
+    | Some w -> Addr.(amin ++ Int.(w * Size.in_bytes word_size - 1)) in
+  if Word.(amax < amin) then invalid_arg "out-of-bounds"
+  else
+    let size = Addr.(to_int_exn @@ amax - amin) + 1 in
+    let off = Addr.(to_int_exn @@ amin - t.addr) + t.off in
+    if off >= t.off && off < t.off + t.size then match size with
+      | 0 -> invalid_arg "empty view"
+      | 1 -> make_byte t amin off
+      | n when n <= t.size ->
+        { t with size; data = t.data; addr = amin; off}
+      | _ -> invalid_arg "out-of-bounds"
+    else invalid_arg "out-of-bounds"
 
-let view = sub ident
-let copy = sub Bigstring.subo
+let view ?word_size ?from ?words mem =
+  try Ok (view_exn ?word_size ?from ?words mem)
+  with exn -> Or_error.of_exn exn
+
+let copy = view
 
 let range mem a1 a2 =
   Addr.Int_err.(!$a2 - !$a1) >>= Addr.to_int >>= fun bytes ->

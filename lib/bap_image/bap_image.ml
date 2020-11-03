@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 open Regular.Std
 open Bap_types.Std
 open Monads.Std
@@ -214,7 +215,6 @@ type t = {
 
 
 type result = (t * Error.t list) Or_error.t
-
 
 let segment = Value.Tag.register (module Segment)
     ~name:"segment"

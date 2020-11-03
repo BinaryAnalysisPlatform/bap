@@ -1,0 +1,19 @@
+Flag thumb
+ Description: Build Thumb lifter
+ Default: false
+
+Library thumb_plugin
+  XMETADescription: provide Thumb lifter
+  Path:             plugins/thumb
+  Build$:           flag(everything) || flag(thumb)
+  BuildDepends:     core_kernel, ppx_jane, ogre,
+                    bap-core-theory, bap-knowledge, bap-main,
+                    bap, bap-arm, bitvec
+  FindlibName:      bap-plugin-thumb
+  InternalModules:  Thumb_main,
+                    Thumb_branch,
+                    Thumb_core,
+                    Thumb_mem,
+                    Thumb_mov,
+                    Thumb_opcodes
+  XMETAExtraLines:  tags="thumb, lifter, arm"

@@ -103,9 +103,13 @@ class disassembler {
 
 public:
     static result<disassembler>
-    create(const char *name, const char *triple, const char *cpu, int debug_level) {
+    create(const char *name,
+           const char *triple,
+           const char *cpu,
+           const char *attrs,
+           int debug_level) {
         if (auto factory = backends[name]) {
-            auto result = factory->create(triple, cpu, debug_level);
+            auto result = factory->create(triple, cpu, attrs, debug_level);
             if (!result.dis) {
                 return {nullptr, result.err};
             } else {
@@ -272,11 +276,12 @@ static vector< shared_ptr<disassembler> > disassemblers;
 
 using namespace bap;
 
-bap_disasm_type bap_disasm_create(const char *backend,
+bap_disasm_type bap_disasm_create_with_attrs(const char *backend,
                                   const char *triple,
                                   const char *cpu,
+                                  const char *attrs,
                                   int debug_level) {
-    auto result = disassembler::create(backend, triple, cpu, debug_level);
+    auto result = disassembler::create(backend, triple, cpu, attrs, debug_level);
 
     if (!result.dis)
         return result.err;
@@ -289,6 +294,13 @@ bap_disasm_type bap_disasm_create(const char *backend,
     }
     disassemblers.push_back(result.dis);
     return disassemblers.size() - 1;
+}
+
+bap_disasm_type bap_disasm_create(const char *backend,
+                                  const char *triple,
+                                  const char *cpu,
+                                  int debug_level) {
+    return bap_disasm_create_with_attrs(backend,triple,cpu,NULL,debug_level);
 }
 
 void bap_disasm_delete(bap_disasm_type d) {

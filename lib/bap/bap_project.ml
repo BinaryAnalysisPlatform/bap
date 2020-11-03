@@ -29,7 +29,17 @@ let target_of_spec spec =
   KB.provide Image.Spec.slot unit spec >>= fun () ->
   KB.collect Theory.Unit.target unit
 
-let with_filename spec target data code path =
+let union_memory m1 m2 =
+  Memmap.to_sequence m2 |> Seq.fold ~init:m1 ~f:(fun m1 (mem,v) ->
+      Memmap.add m1 mem v)
+
+let memory_slot = KB.Class.property Theory.Unit.cls "unit-memory"
+    ~package:"bap"
+    ~public:true
+    ~desc:"annotated memory regions of the unit"
+    Memmap.domain
+
+let with_filename spec target code memory path =
   let open KB.Syntax in
   let width = Theory.Target.code_addr_size target in
   let bias = query spec Image.Scheme.bias |> Option.map
@@ -37,14 +47,16 @@ let with_filename spec target data code path =
   KB.promising Theory.Label.unit ~promise:(fun label ->
       KB.collect Theory.Label.addr label >>=? fun addr ->
       let addr = Word.create addr width in
-      if Memmap.contains data addr || Memmap.contains code addr
-      then
+      if Memmap.contains code addr then
         Theory.Unit.for_file path >>= fun unit ->
-        KB.provide Image.Spec.slot unit spec >>= fun () ->
-        KB.provide Theory.Unit.bias unit bias >>= fun () ->
-        KB.provide Theory.Unit.target unit target >>= fun () ->
-        KB.provide Image.Spec.slot unit spec >>= fun () ->
-        KB.provide Theory.Unit.path unit (Some path) >>| fun () ->
+        KB.sequence [
+          KB.provide Image.Spec.slot unit spec;
+          KB.provide Theory.Unit.bias unit bias;
+          KB.provide Theory.Unit.target unit target;
+          KB.provide Image.Spec.slot unit spec;
+          KB.provide Theory.Unit.path unit (Some path);
+          KB.provide memory_slot unit memory;
+        ] >>| fun () ->
         Some unit
       else KB.return None)
 
@@ -109,14 +121,14 @@ module State = struct
     KB.Domain.flat ~empty ~equal "disassembly" ~inspect
 
   module Toplevel = struct
-    let run spec target ~code ~data file k =
+    let run spec target ~code ~memory file k =
       let result = Toplevel.var "disassembly-result" in
       let compute_target = if Theory.Target.is_unknown target
         then target_of_spec spec
         else KB.return target in
       Toplevel.put result begin
         compute_target >>= fun target ->
-        with_filename spec target code data file @@ fun () ->
+        with_filename spec target code memory file @@ fun () ->
         k
       end;
       Toplevel.get result
@@ -156,6 +168,7 @@ module Input = struct
     arch : arch;
     data : value memmap;
     code : value memmap;
+    memory : value memmap;
     spec : Ogre.doc;
     file : string;
     finish : t -> t;
@@ -172,13 +185,15 @@ module Input = struct
       ?(data=Memmap.empty) target () = {
     arch=`unknown; file=filename; code; data; finish;
     target;
-    spec = Ogre.Doc.empty
+    spec = Ogre.Doc.empty;
+    memory = union_memory code data;
   }
 
   let create
       ?(finish=ident) arch file ~code ~data () = {
     arch; file; code; data; finish;
     target = Theory.Target.unknown;
+    memory = union_memory code data;
     spec = match arch with
       | #Arch.unknown -> Ogre.Doc.empty
       | arch -> Image.Spec.from_arch arch;
@@ -189,17 +204,22 @@ module Input = struct
     Hashtbl.set loaders ~key:name ~data:loader
 
   let is_code v =
-    Value.get Image.code_region v |> Option.is_some
+    Option.is_some @@
+    Value.get Image.code_region v
 
-  let is_data v = not (is_code v)
+  let is_data v =
+    match Value.get Image.segment v with
+    | None -> false
+    | Some s -> not (Image.Segment.is_executable s)
 
   let result_of_image ?(target=Theory.Target.unknown) finish file img = {
     arch = Image.arch img;
-    data = Memmap.filter ~f:is_data (Image.memory img);
     code = Memmap.filter ~f:is_code (Image.memory img);
-    spec = Image.spec img;
+    data = Memmap.filter ~f:is_data (Image.memory img);
+    memory = Image.memory img;
     file;
     finish;
+    spec = Image.spec img;
     target;
   }
 
@@ -266,8 +286,14 @@ module Input = struct
     let section = Value.create Image.section "bap.user" in
     let code = Memmap.add Memmap.empty mem section in
     let data = Memmap.empty  in
-    let spec = Image.Spec.from_arch arch in
-    {arch; data; code; file = filename; finish = ident; spec; target}
+    let spec = Image.Spec.from_arch arch in {
+      arch;
+      code;
+      data;
+      file = filename; finish = ident; spec;
+      target;
+      memory = code
+    }
 
   let binary ?base arch ~filename =
     raw ?base arch (Bap_fileutils.readfile filename)
@@ -320,9 +346,6 @@ let pp_disasm_error ppf = function
     fprintf ppf "<%s>: %a"
       (Disasm_expert.Basic.Insn.asm insn) Error.pp err
 
-let union_memory m1 m2 =
-  Memmap.to_sequence m2 |> Seq.fold ~init:m1 ~f:(fun m1 (mem,v) ->
-      Memmap.add m1 mem v)
 
 let set_package package = match package with
   | None -> KB.return ()
@@ -368,14 +391,15 @@ let create
       "rooter" =? p4;
       "rooter" =? p5;
     ];
-    let {Input.arch; data; code; file; spec; finish; target} = read () in
+    let {Input.arch; data; code; file; spec; finish; target; memory} =
+      read () in
     Signal.send Info.got_file file;
     Signal.send Info.got_arch arch;
     Signal.send Info.got_data data;
     Signal.send Info.got_code code;
     Signal.send Info.got_spec spec;
     let run k =
-      State.Toplevel.run spec target ~code ~data file k in
+      State.Toplevel.run spec target ~code ~memory file k in
     let state = match state with
       | Some state -> state
       | None ->
@@ -386,8 +410,8 @@ let create
           KB.collect State.slot unit >>= fun state ->
           if KB.Domain.is_empty (KB.Slot.domain State.slot) state
           then
-            Memmap.to_sequence code |>
-            KB.Seq.fold ~init:State.empty ~f:(fun k (mem,_) ->
+            Memmap.to_sequence code |> Seq.to_list_rev |>
+            KB.List.fold ~init:State.empty ~f:(fun k (mem,_) ->
                 State.disassemble k mem) >>=
             State.partition >>= fun state ->
             KB.provide State.slot unit state >>| fun () ->
@@ -402,7 +426,7 @@ let create
       disasm = Lazy.(cfg >>| Disasm.create);
       program = Lazy.(symbols >>| Program.lift) ;
       symbols;
-      arch; memory=union_memory code data;
+      arch; memory;
       storage = Dict.set Dict.empty filename file;
       passes=[];
       target;

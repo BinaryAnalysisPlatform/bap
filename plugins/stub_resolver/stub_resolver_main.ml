@@ -41,7 +41,6 @@ open Core_kernel
 open Bap.Std
 open Bap_core_theory
 open Bap_knowledge
-open Bap_future.Std
 open Bap_main
 open KB.Syntax
 
@@ -85,12 +84,22 @@ let signatures = Extension.Configuration.parameters
 
 module Stubs : sig
   type t
-  val create : ctxt -> Ogre.doc -> t
+  val prepare : ctxt -> unit
   val mem : t -> Bitvec.t -> bool
+  val slot : (Theory.Unit.cls,t) KB.slot
 end = struct
   open Image.Scheme
   open Ogre.Syntax
-  type t = {lower : Bitvec.t; upper : Bitvec.t}
+
+  module Bitvec = struct
+    include Bitvec
+    include Bitvec_sexp.Functions
+  end
+
+  type t = {
+    lower : Bitvec.t;
+    upper : Bitvec.t
+  } [@@deriving equal, sexp]
 
 
   let empty = {lower = Bitvec.zero; upper = Bitvec.zero}
@@ -124,20 +133,40 @@ end = struct
     | Error err ->
       warning "failed to find plt entries: %a" Error.pp err;
       empty
+
+  let t = KB.Domain.flat ~empty "interval"
+      ~equal
+      ~inspect:sexp_of_t
+
+  let slot = KB.Class.property Theory.Unit.cls "stubs-section" t
+      ~package:"bap"
+      ~public:true
+      ~desc:"an address interval of a stubs section"
+
+  let declare () =
+    let open KB.Rule in
+    declare ~package:"bap" "stubs-section" |>
+    require Image.Spec.slot |>
+    provide slot |>
+    comment "derives stubs regions from the spec"
+
+  let prepare ctxt =
+    let open KB.Syntax in
+    declare ();
+    KB.promise slot @@ fun unit ->
+    KB.collect Image.Spec.slot unit >>|
+    create ctxt
 end
 
 module Signatures : sig
-  type t
-  val collect : ctxt -> t
-  val matching : Theory.Target.t -> t -> Word.Set.t
+  val prepare : ctxt -> unit
+  val slot : (Theory.Unit.cls, Word.Set.t) KB.slot
 end = struct
   type parser_outcome =
     | Success of word
     | Failure of string
     | Empty
     | Comment
-
-  type t = (string * Word.Set.t) list
 
   let is_prefixed s =
     String.length s > 1 && match s.[0],s.[1] with
@@ -183,33 +212,48 @@ end = struct
     | [name; "stubs"] -> Some name
     | _ -> None
 
-  let collect ctxt : t =
-    let signatures = Extension.Configuration.get ctxt signatures in
-    let paths = Filename.current_dir_name ::
-                default_signatures_folder ::
-                List.concat signatures in
+  let paths ctxt =
+    Filename.current_dir_name ::
+    default_signatures_folder ::
+    List.concat (Extension.Configuration.get ctxt signatures)
+
+  let collect ctxt target =
+    let paths = paths ctxt in
     let add_file sigs path = match parse_filename path with
-      | None -> sigs
-      | Some triple ->
-        (triple, parse_file path) :: sigs in
+      | Some triple when Sys.file_exists path &&
+                         Theory.Target.matches target triple ->
+        Set.union sigs (parse_file path)
+      | _ -> sigs in
     let add_files sigs folder =
-      try Array.fold (Sys.readdir folder) ~init:sigs ~f:(fun sigs path ->
+      try Array.fold ~init:sigs (Sys.readdir folder) ~f:(fun sigs path ->
           add_file sigs (Filename.concat folder path))
       with _ -> sigs in
-    List.fold paths ~init:[] ~f:(fun sigs path ->
+    List.fold ~init:Word.Set.empty paths ~f:(fun sigs path ->
         if Sys.file_exists path && Sys.is_directory path
         then add_files sigs path
         else add_file sigs path)
 
+  let t = KB.Domain.powerset (module Word) "stub-signatures"
 
-  let matching target sigs =
-    Word.Set.union_list @@
-    List.filter_map sigs ~f:(fun (t' ,s) ->
-        Option.some_if (Theory.Target.matches target t') s)
+  let slot = KB.Class.property Theory.Unit.cls "stub-signatures" t
+      ~package:"bap"
 
+  let declare ctxt =
+    let open KB.Rule in
+    declare ~package:"bap" "stub-signatures" |>
+    dynamic (paths ctxt) |>
+    require Theory.Unit.target |>
+    provide slot |>
+    comment "loads the stubs signature file for the given unit"
+
+  let prepare ctxt =
+    declare ctxt;
+    KB.promise slot @@ fun unit ->
+    KB.collect Theory.Unit.target unit >>|
+    collect ctxt
 end
 
-let mark_plt_as_stub ctxt : unit =
+let mark_plt_as_stub () : unit =
   KB.Rule.(declare ~package:"bap" "stub-resolver" |>
            dynamic ["code"] |>
            dynamic ["stub-resolver:names"] |>
@@ -218,14 +262,11 @@ let mark_plt_as_stub ctxt : unit =
            require Theory.Unit.path |>
            provide (Value.Tag.slot Sub.stub) |>
            comment "marks code in the specially named sections as stubs");
-  Project.Info.(Stream.(observe @@ zip file spec)) @@ fun (file,spec) ->
-  let stubs = Stubs.create ctxt spec in
   KB.promise (Value.Tag.slot Sub.stub) @@ fun label ->
+  KB.collect Theory.Label.addr label >>=? fun addr ->
   KB.collect Theory.Label.unit label >>=? fun unit ->
-  KB.collect Theory.Unit.path unit >>=? fun path ->
-  KB.collect Theory.Label.addr label >>|? fun addr ->
-  Option.some_if (path = file && Stubs.mem stubs addr) ()
-
+  KB.collect Stubs.slot unit >>| fun stubs ->
+  Option.some_if (Stubs.mem stubs addr) ()
 
 let bitvec_of_memory mem =
   Bitvec.of_binary @@
@@ -235,8 +276,6 @@ let bitvec_of_memory mem =
 let word_of_memory mem =
   let width = Memory.length mem * 8 in
   Word.create (bitvec_of_memory mem) width
-
-
 
 let with_path_and_unit label f =
   KB.collect Theory.Label.unit label >>=? fun unit ->
@@ -251,13 +290,11 @@ let find_mem target code addr =
       | Ok view -> Some view
       | Error _ -> None)
 
-let detect_stubs_by_signatures ctxt : unit =
+let detect_stubs_by_signatures () : unit =
   KB.Rule.(declare ~package:"bap" "stub-detector" |>
-           dynamic ["code"] |>
-           dynamic ["stub-resolver:signatures"] |>
            require Theory.Label.addr |>
            require Theory.Label.unit |>
-           require Theory.Unit.path |>
+           require Signatures.slot |>
            provide (Value.Tag.slot Sub.stub) |>
            comment "marks bytes sequences that match signatures as stubs");
   let matches sigs mem =
@@ -268,15 +305,15 @@ let detect_stubs_by_signatures ctxt : unit =
         Word.equal s @@
         Word.extract_exn mem
           ~lo:(Word.bitwidth mem - Word.bitwidth s)) in
-  let sigs = Signatures.collect ctxt in
-  Project.Info.(Stream.(observe @@ zip file code)) @@ fun (file,code) ->
   KB.promise (Value.Tag.slot Sub.stub) @@ fun label ->
   KB.collect Theory.Label.addr label >>=? fun addr ->
-  with_path_and_unit label @@ fun path unit ->
-  KB.collect Theory.Unit.target unit >>| fun target ->
-  Option.bind (find_mem target code addr) ~f:(fun mem ->
-      let sigs = Signatures.matching target sigs in
-      Option.some_if (path = file && matches sigs mem) ())
+  KB.collect Theory.Label.unit label >>=? fun unit ->
+  KB.collect Signatures.slot unit >>= fun sigs ->
+  KB.collect Project.memory_slot unit >>= fun code ->
+  if Set.is_empty sigs then !!None else
+    KB.collect Theory.Unit.target unit >>| fun target ->
+    Option.bind (find_mem target code addr) ~f:(fun mem ->
+        Option.some_if (matches sigs mem) ())
 
 let update prog =
   let links = Stub_resolver.run prog in
@@ -296,6 +333,8 @@ let main = Project.map_program ~f:update
 
 let () = Extension.declare ~doc @@ fun ctxt ->
   Bap_abi.register_pass main;
-  mark_plt_as_stub ctxt;
-  detect_stubs_by_signatures ctxt;
+  mark_plt_as_stub ();
+  detect_stubs_by_signatures ();
+  Stubs.prepare ctxt;
+  Signatures.prepare ctxt;
   Ok ()

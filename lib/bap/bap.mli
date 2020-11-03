@@ -4847,6 +4847,18 @@ module Std : sig
     *)
     val view : ?word_size:size -> ?from:addr -> ?words:int -> t -> t Or_error.t
 
+
+    (** [view_exn mem] is the same as [ok_exn @@view_exn mem] but is
+        slightly more efficient.
+
+        @raise Invalid_arg in case if the arguments are not fitting
+        into  the memory.
+
+        @since 2.2.0
+    *)
+    val view_exn : ?word_size:size -> ?from:addr -> ?words:int -> t -> t
+
+
     (** [range mem a0 a1] returns a view on [mem] starting from
         address [a0] and ending at [a1], bounds inclusive   *)
     val range : t -> addr -> addr -> t Or_error.t
@@ -5578,6 +5590,7 @@ module Std : sig
         input file, or it is whatever was passed to [of_[big]string]. *)
     val data : t -> Bigstring.t
 
+
     (** [spec image] returns the image specification.
 
         @since 1.3
@@ -5866,6 +5879,8 @@ module Std : sig
     (** [to_sequence map] converts the memmap ['a t] to a sequence of
         key-value pairs *)
     val to_sequence : 'a t -> (mem * 'a) seq
+
+
 
     include Container.S1 with type 'a t := 'a t
 
@@ -6426,10 +6441,14 @@ module Std : sig
           set by the target support plugins via the {!register}
           function, therefore the [create] function should only be used
           to register a new target. Use {!lookup} to get an appropriate
-          disassembler for your target/encoding. *)
+          disassembler for your target/encoding.
+
+          @since 2.2.0 has the [attrs] parameter
+      *)
       val create :
         ?debug_level:int ->
         ?cpu:string ->
+        ?attrs:string ->
         ?backend:string ->
         string -> (empty, empty) t Or_error.t
 
@@ -6745,11 +6764,14 @@ module Std : sig
       val dests : Set.M(Theory.Label).t option t
     end
 
-    (** {3 Creating}
-        The following functions will create [insn] instances from a lower
-        level representation.
-    *)
+    (** [of_basic ?bil insn] derives semantics from the machine code instruction.*)
     val of_basic : ?bil:bil -> Disasm_expert.Basic.full_insn -> t
+
+    (** [with_basic mc] stores properties of the machine code instruction.
+
+        @since 2.2.0
+    *)
+    val with_basic : t -> Disasm_expert.Basic.full_insn -> t
 
     (** [empty] is an instruction with no known semantics  *)
     val empty : t
@@ -7367,8 +7389,16 @@ module Std : sig
             if absent, then all basic blocks will be consecuitively,
             in the order of ascending addresses, used as the entry
             points.
+
+          - [entries] is the sequence of entry points, if both [entry]
+            and [entries] are specified then [entry] is consed with
+            [entries].
+
+          @since 2.2.0 the optional [entries] parameter was added.
+
       *)
       val explore :
+        ?entries:addr Sequence.t ->
         ?entry:addr ->
         ?follow:(addr -> bool knowledge) ->
         block:(mem -> insns -> 'n knowledge) ->
@@ -9826,6 +9856,11 @@ module Std : sig
         arbitrary values.   *)
     val memory : t -> value memmap
 
+    (** the memory of the unit in the knowledge base.
+        @since 2.2.0  *)
+    val memory_slot : (Theory.Unit.cls, value memmap) KB.slot
+
+
     (** [tag_memory project region tag value] tags a given [region] of
         memory in [project] with a given [tag] and [value]. Example:
         [Project.tag_memory project tained color red]
@@ -9951,6 +9986,9 @@ module Std : sig
       (** the slot of a unit object that stores the state of disassembly  *)
       val slot : (Theory.Unit.cls, state) KB.slot
     end
+
+
+
 
 
     (** Input information.

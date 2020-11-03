@@ -20,6 +20,7 @@ val rebase : t -> addr -> t
 val slot : (Theory.program, t option) KB.slot
 val of_file : endian -> addr -> string -> t Or_error.t
 val view : ?word_size:size -> ?from:addr -> ?words:int -> t -> t Or_error.t
+val view_exn : ?word_size:size -> ?from:addr -> ?words:int -> t -> t
 val range : t -> addr -> addr -> t Or_error.t
 val merge : t -> t -> t Or_error.t
 val first_byte : t -> t

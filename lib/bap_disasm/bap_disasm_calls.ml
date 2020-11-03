@@ -9,7 +9,6 @@ open Bap_image_std
 open KB.Syntax
 
 module Driver = Bap_disasm_driver
-module Insn = Bap_disasm_insn
 
 module Callgraph = struct
   let entry = Word.b0
@@ -133,21 +132,18 @@ let pp_roots ppf graph =
         sprintf "%S" (Addr.string_of_value s))
 
 let callgraph_of_disasm disasm =
-  Driver.subroutines disasm |>
-  Set.to_sequence |>
-  KB.Seq.fold ~init:Callgraph.init ~f:(fun g entry ->
-      Driver.explore disasm ~init:g
-        ~entry
-        ~block:(fun mem _ -> KB.return (Memory.min_addr mem))
-        ~node:(fun n g ->
-            let g = Callgraph.Node.insert n g in
-            Theory.Label.for_addr (Word.to_bitvec n) >>= fun code ->
-            KB.collect Theory.Label.is_subroutine code >>| function
-            | Some true -> Callgraph.mark_as_root n g
-            | _ -> g)
-        ~edge:(fun src dst g ->
-            let e = Callgraph.Edge.create src dst () in
-            KB.return (Callgraph.Edge.insert e g)))
+  Driver.explore disasm ~init:Callgraph.init
+    ~entries:(Set.to_sequence@@Driver.subroutines disasm)
+    ~block:(fun mem _ -> KB.return (Memory.min_addr mem))
+    ~node:(fun n g ->
+        let g = Callgraph.Node.insert n g in
+        Theory.Label.for_addr (Word.to_bitvec n) >>= fun code ->
+        KB.collect Theory.Label.is_subroutine code >>| function
+        | Some true -> Callgraph.mark_as_root n g
+        | _ -> g)
+    ~edge:(fun src dst g ->
+        let e = Callgraph.Edge.create src dst () in
+        KB.return (Callgraph.Edge.insert e g))
 
 let empty =
   let root =

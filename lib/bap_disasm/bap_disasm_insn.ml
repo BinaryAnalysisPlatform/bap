@@ -208,7 +208,7 @@ let (<--) slot value insn = KB.Value.put slot insn value
 let write init ops =
   List.fold ~init ops ~f:(fun init f -> f init)
 
-let of_basic ?bil insn : t =
+let derive_props ?bil insn =
   let bil_kinds = match bil with
     | Some bil -> lookup_jumps bil @ lookup_side_effects bil
     | None -> [] in
@@ -230,27 +230,39 @@ let of_basic ?bil insn : t =
   let is_barrier = is_jump &&  not is_call && not is_conditional_jump in
   let may_load = is_bil `May_load in
   let may_store = is_bil `May_store in
-  let effect =
-    KB.Value.put Bil.slot
-      (KB.Value.empty Theory.Semantics.cls)
-      (Option.value bil ~default:[]) in
-  let props =
-    Props.empty                                              |>
-    Props.set_if is_jump jump                                |>
-    Props.set_if is_conditional_jump conditional             |>
-    Props.set_if is_indirect_jump indirect                   |>
-    Props.set_if is_call call                                |>
-    Props.set_if is_return return                            |>
-    Props.set_if is_barrier barrier                          |>
-    Props.set_if may_affect_control_flow affect_control_flow |>
-    Props.set_if may_load load                               |>
-    Props.set_if may_store store in
+  Props.empty                                              |>
+  Props.set_if is_jump jump                                |>
+  Props.set_if is_conditional_jump conditional             |>
+  Props.set_if is_indirect_jump indirect                   |>
+  Props.set_if is_call call                                |>
+  Props.set_if is_return return                            |>
+  Props.set_if is_barrier barrier                          |>
+  Props.set_if may_affect_control_flow affect_control_flow |>
+  Props.set_if may_load load                               |>
+  Props.set_if may_store store
+
+let set_basic effect insn : t =
   write effect Slot.[
-      Props.slot <-- props;
       name <-- Insn.name insn;
       asm <-- normalize_asm (Insn.asm insn);
       ops <-- Some (Insn.ops insn);
     ]
+
+let of_basic ?bil insn : t =
+  let effect =
+    KB.Value.put Bil.slot
+      (KB.Value.empty Theory.Semantics.cls)
+      (Option.value bil ~default:[]) in
+  write (set_basic effect insn) Slot.[
+      Props.slot <-- derive_props ?bil insn;
+    ]
+
+let with_basic effect insn : t =
+  let bil = KB.Value.get Bil.slot effect in
+  write (set_basic effect insn) Slot.[
+      Props.slot <-- derive_props ~bil insn
+    ]
+
 
 let get = KB.Value.get Props.slot
 let put = KB.Value.put Props.slot

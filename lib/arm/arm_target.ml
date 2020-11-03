@@ -332,9 +332,9 @@ let llvm_a64 = CT.Language.declare ~package "llvm-A64"
 
 module Dis = Disasm_expert.Basic
 
-let register encoding triple =
+let register ?attrs encoding triple =
   Dis.register encoding @@ fun _ ->
-  Dis.create ~backend:"llvm" triple
+  Dis.create ?attrs ~backend:"llvm" triple
 
 let symbol_values doc =
   let field = Ogre.Query.(select (from Image.Scheme.symbol_value)) in
@@ -347,14 +347,18 @@ let symbol_values doc =
 module Encodings = struct
   let empty = Map.empty (module Bitvec_order)
 
+  let lsb x = Int64.(x land 1L)
+  let is_thumb x = lsb x = 1L
+
   let symbols_encoding spec =
     symbol_values spec |>
     Seq.fold ~init:empty ~f:(fun symbols (addr,value) ->
         let addr = Bitvec.M32.int64 addr in
-        Map.add_exn symbols ~key:addr
-          ~data:(match Int64.(value land 1L) with
-              | 0L -> llvm_a32
-              | _ -> llvm_a64))
+        if is_thumb value
+        then Map.set symbols addr llvm_t32
+        else Map.update symbols addr ~f:(function
+            | None -> llvm_a32
+            | Some t -> t))
 
   let slot = KB.Class.property CT.Unit.cls
       ~package "symbols-encodings" @@
@@ -369,17 +373,24 @@ module Encodings = struct
     symbols_encoding
 end
 
+let has_t32 label =
+  KB.collect CT.Label.unit label >>= function
+  | None -> !!false
+  | Some unit ->
+    KB.collect Encodings.slot unit >>|
+    Map.exists ~f:(Theory.Language.equal llvm_t32)
 
-let compute_encoding_from_symbol_table default label =
+
+let compute_encoding_from_symbol_table label =
   let (>>=?) x f = x >>= function
-    | None -> !!default
+    | None -> !!Theory.Language.unknown
     | Some x -> f x in
   KB.collect CT.Label.unit label >>=? fun unit ->
   KB.collect CT.Label.addr label >>=? fun addr ->
   KB.collect Encodings.slot unit >>= fun encodings ->
   KB.return @@ match Map.find encodings addr with
   | Some x -> x
-  | None -> default
+  | None -> CT.Language.unknown
 
 (* here t < p means that t was introduced before p *)
 let (>=) t p = CT.Target.belongs t p
@@ -391,27 +402,29 @@ let before_thumb2 t = t < LE.v6t2 || t < EB.v6t2
 let is_64bit t = LE.v8a <= t || EB.v8a <= t || Bi.v8a <= t
 let is_thumb_only t = LE.v7m <= t || EB.v7m <= t || Bi.v7m <= t
 
-let guess_encoding label target =
+let guess_encoding interworking label target =
   if is_arm target then
-    if before_thumb2 target
-    then compute_encoding_from_symbol_table llvm_a32 label
-    else KB.return @@
-      if is_64bit target then llvm_a64 else
-      if is_thumb_only target
-      then llvm_t32
-      else llvm_a32
-  else KB.return CT.Language.unknown
+    if is_64bit target then !!llvm_a64 else
+    if is_thumb_only target
+    then !!llvm_t32
+    else match interworking with
+      | Some true -> compute_encoding_from_symbol_table label
+      | Some false -> !!llvm_a32
+      | None -> has_t32 label >>= function
+        | true -> compute_encoding_from_symbol_table label
+        | false -> !!llvm_a32
+  else !!CT.Language.unknown
 
-let enable_decoder () =
+let enable_decoder ?interworking () =
   let open KB.Syntax in
   register llvm_a32 "armv7";
-  register llvm_t32 "thumbv7";
+  register llvm_t32 "thumbv7" ~attrs:"+thumb2";
   register llvm_a64 "aarch64";
   KB.promise CT.Label.encoding @@ fun label ->
-  CT.Label.target label >>= guess_encoding label
+  CT.Label.target label >>= guess_encoding interworking label
 
 
-let load () =
+let load ?interworking () =
   enable_loader ();
   enable_arch ();
-  enable_decoder ()
+  enable_decoder ?interworking ()

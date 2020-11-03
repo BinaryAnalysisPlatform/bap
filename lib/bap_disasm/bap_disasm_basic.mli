@@ -32,7 +32,7 @@ val register : Theory.language ->
 val lookup : Theory.target -> Theory.language -> (empty,empty) t Or_error.t
 val custom : Theory.target -> Theory.language ->
   (module S with type t = 'a) -> 'a -> (empty, empty) t
-val create : ?debug_level:int -> ?cpu:string -> ?backend:string -> string ->
+val create : ?debug_level:int -> ?cpu:string -> ?attrs:string -> ?backend:string -> string ->
   (empty, empty) t Or_error.t
 
 

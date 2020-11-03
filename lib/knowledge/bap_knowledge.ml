@@ -2608,14 +2608,21 @@ module Knowledge = struct
 
   let uid {Slot.name} = name
 
+  let is_empty
+    : _ slot -> _ -> _ obj -> bool =
+    fun slot vals obj -> match Map.find vals obj with
+      | None -> true
+      | Some v ->
+        Domain.is_empty slot.dom (Record.get slot.key slot.dom v)
+
   let status
     : ('a,_) slot -> 'a obj -> slot_status knowledge =
     fun slot obj ->
-    objects slot.cls >>| fun {comp} ->
+    objects slot.cls >>| fun {comp; vals} ->
     match Map.find comp obj with
     | None -> Sleep
     | Some slots -> match Map.find slots (uid slot) with
-      | None -> Sleep
+      | None -> if is_empty slot vals obj then Sleep else Ready
       | Some Work _ -> Awoke
       | Some Done -> Ready
 

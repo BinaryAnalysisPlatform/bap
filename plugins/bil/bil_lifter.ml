@@ -481,7 +481,7 @@ let provide_lifter ~enable_intrinsics ~with_fp () =
     match lift ~enable_intrinsics arch mem insn with
     | Error err ->
       info "BIL: the BIL lifter failed with %a" Error.pp err;
-      Knowledge.return (Insn.of_basic insn)
+      !!Insn.empty
     | Ok bil ->
       Bil_semantics.context >>= fun ctxt ->
       Knowledge.provide Bil_semantics.arch ctxt arch >>= fun () ->

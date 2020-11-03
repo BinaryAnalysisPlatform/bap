@@ -277,14 +277,6 @@ module Label = struct
     Knowledge.promise name @@
     Knowledge.resolve possible_name
 
-  let _is_subroutine_implies_is_valid : unit =
-    Knowledge.Rule.(declare ~package "subroutine-is-valid" |>
-                    require is_subroutine |>
-                    provide is_valid |>
-                    comment "is-subroutine -> is-valid");
-    Knowledge.promise is_valid @@ fun obj ->
-    Knowledge.collect is_subroutine obj
-
   include (val Knowledge.Object.derive cls)
 end
 

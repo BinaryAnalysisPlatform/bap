@@ -14,19 +14,23 @@ let agent =
 let provide_roots file funcs =
   let promise_property slot =
     KB.promise slot @@ fun label ->
-    KB.collect Theory.Label.addr label >>=? fun addr ->
-    KB.collect Theory.Label.unit label >>=? fun unit ->
-    KB.collect Theory.Unit.bias unit >>= fun bias ->
-    KB.collect Theory.Unit.target unit >>|
-    Theory.Target.code_addr_size >>= fun bits ->
-    KB.collect Theory.Unit.path unit >>|? fun path ->
-    if String.equal path file then
-      let bias = Option.value bias ~default:Bitvec.zero in
-      let addr =
-        Bitvec.to_bigint @@
-        Bitvec.((addr - bias) mod modulus bits) in
-      Option.some_if (Hashtbl.mem funcs addr) true
-    else None in
+    Theory.Label.target label >>= fun t ->
+    if Theory.Target.belongs Arm_target.parent t
+    then !!None
+    else
+      KB.collect Theory.Label.addr label >>=? fun addr ->
+      KB.collect Theory.Label.unit label >>=? fun unit ->
+      KB.collect Theory.Unit.bias unit >>= fun bias ->
+      KB.collect Theory.Unit.target unit >>|
+      Theory.Target.code_addr_size >>= fun bits ->
+      KB.collect Theory.Unit.path unit >>|? fun path ->
+      if String.equal path file then
+        let bias = Option.value bias ~default:Bitvec.zero in
+        let addr =
+          Bitvec.to_bigint @@
+          Bitvec.((addr - bias) mod modulus bits) in
+        Option.some_if (Hashtbl.mem funcs addr) true
+      else None in
   promise_property Theory.Label.is_valid;
   promise_property Theory.Label.is_subroutine
 

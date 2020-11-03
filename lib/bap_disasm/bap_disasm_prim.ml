@@ -7,8 +7,10 @@ external create :
   backend:string ->
   triple:string ->
   cpu:string ->
+  attrs:string ->
   debug_level:int -> t =
-  "bap_disasm_create_stub" [@@noalloc]
+  "bap_disasm_create_with_attrs_stub" [@@noalloc]
+
 
 external backends_size : unit -> int =
   "bap_disasm_backends_size_stub" [@@noalloc]

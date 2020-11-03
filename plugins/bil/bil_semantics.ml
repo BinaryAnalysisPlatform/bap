@@ -68,10 +68,16 @@ module Simpl = struct
       | Int w -> Int (Word.extract_exn ~hi ~lo w)
       | x -> Extract (hi,lo,x)
 
-    and unop op x = match x with
-      | Int x -> Int (Bil.Apply.unop op x)
-      | UnOp(op',x) when [%compare.equal: unop] op op' -> x
-      | x -> UnOp(op, x)
+    and unop op x = match op,x with
+      | op,Int x -> Int (Bil.Apply.unop op x)
+      | op,UnOp(op',x) when [%compare.equal: unop] op op' -> x
+      | NOT,BinOp(LT,x,y) -> Bil.(x >= y)
+      | NOT,BinOp(LE,x,y) -> Bil.(x > y)
+      | NOT,BinOp(SLT,x,y) -> Bil.(x >=$ y)
+      | NOT,BinOp(SLE,x,y) -> Bil.(x >$ y)
+      | NOT,BinOp(EQ,x,y) -> Bil.(x <> y)
+      | NOT,BinOp(NEQ,x,y) -> Bil.(x = y)
+      | op,x -> UnOp(op, x)
 
     and binop op x y =
       let keep op x y = Bil.BinOp(op,x,y) in
@@ -300,10 +306,18 @@ module Basic : Theory.Basic = struct
     let lshift x y = app_bop sop Bil.lshift x y
 
     let ite cnd yes nay =
-      cnd >>= fun cnd ->
+      cnd >>| bool_exp >>= fun cnd ->
       yes >>-> fun s yes ->
       nay >>-> fun _ nay ->
-      gen s (Bil.ite (bool_exp cnd) yes nay)
+      match yes,nay with
+      | Bil.Int w, Bil.Int w' when Word.bitwidth w = 1 ->
+        if Word.is_one w && Word.is_zero w'
+        then gen s cnd
+        else if Word.is_zero w && Word.is_one w'
+        then gen s (Bil.lnot cnd)
+        else gen s (Bil.ite cnd yes nay)
+      | _ ->
+        gen s (Bil.ite cnd yes nay)
 
     let (>>:=) v f = v >>= fun v -> f (effect v)
 

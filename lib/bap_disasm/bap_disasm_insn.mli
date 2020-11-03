@@ -11,6 +11,7 @@ type op = Op.t [@@deriving bin_io, compare, sexp]
 val empty : t
 
 val of_basic : ?bil:bil -> Basic.full_insn -> t
+val with_basic : t -> Basic.full_insn -> t
 
 val name : t -> string
 val asm  : t -> string

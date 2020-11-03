@@ -106,7 +106,6 @@ let provide_symbolizer s label =
 let provide =
   KB.Rule.(declare ~package:"bap" "reflect-symbolizers" |>
            dynamic ["symbolizer"] |>
-           require Arch.slot |>
            require Theory.Label.addr |>
            require Theory.Label.unit |>
            require Theory.Unit.path |>

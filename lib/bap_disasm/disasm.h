@@ -111,12 +111,29 @@ typedef enum bap_disasm_insn_p {
 
 /** bap_disasm_create(triple,cpu) creates a disassembler for a given
  * triple and cpu.
- * This function is not thread safe.
- * @pre No preconditions. In case of error the corresponding code is returned. */
+ * This function is not thread-safe.
+ *
+ * @pre No preconditions.
+ *
+ * In case of an error a negative value of type
+ * bap_disasm_error is returned.
+ */
 bap_disasm_type bap_disasm_create(
     const char *backend,
     const char *triple,
     const char *cpu,
+    int debug_level);
+
+/** an extended version of the disassembler constructor that takes a
+    sequence of target attributes.
+
+    The attrs parameter meaning and format is specific to each backend.
+ */
+bap_disasm_type bap_disasm_create_with_attrs(
+    const char *backend,
+    const char *triple,
+    const char *cpu,
+    const char *attrs,
     int debug_level);
 
 /** deletes disassembler \a disasm.
