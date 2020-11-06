@@ -3,7 +3,7 @@ Library types_test
   Build$:         (flag(everything) || flag(bap_std)) && flag(tests)
   Install:        false
   CompiledObject: best
-  BuildDepends:   bap, oUnit, core_kernel, regular, graphlib, ocamlgraph, bap-future, ppx_jane
+  BuildDepends:   bap, oUnit, core_kernel, regular, graphlib, ocamlgraph, bap-future, ppx_bap
   Modules:        Test_bitvector,
                   Test_bili,
                   Test_bytes,
@@ -33,7 +33,7 @@ Library disasm_test
   Path:           lib_test/bap_disasm
   Build$:         (flag(everything) || flag(bap_std)) && flag(tests)
   CompiledObject: best
-  BuildDepends:   bap, oUnit, str, core_kernel, regular, ppx_jane
+  BuildDepends:   bap, oUnit, str, core_kernel, regular, ppx_bap
   Install:        false
   Modules:        Test_disasm
 

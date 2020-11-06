@@ -7,7 +7,7 @@ Library report_plugin
   Path:             plugins/report
   FindlibName:      bap-plugin-report
   CompiledObject:   best
-  BuildDepends:     bap, core_kernel, bap-future
+  BuildDepends:     bap, core_kernel, bap-future, core_kernel.caml_unix
   InternalModules:  Report_main
   XMETADescription: reports program status
   XMETAExtraLines:  tags="report, visualization"

@@ -12,7 +12,7 @@ module X86_syntax = struct
 end
 
 let putenv s =
-  Unix.putenv
+  Caml_unix.putenv
     "BAP_LLVM_OPTIONS" ("-x86-asm-syntax=" ^ X86_syntax.to_string s)
 
 let init ?(x86_syntax=`att) () =

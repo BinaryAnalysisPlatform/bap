@@ -6,7 +6,7 @@ type label_format = [ `with_asm | `with_bil | `with_name ]
 
 type t = {
   output_folder : string;
-  cfg_format : label_format sexp_list;
+  cfg_format : label_format list;
   no_resolve : bool;
   keep_alive : bool;
   no_inline : bool;

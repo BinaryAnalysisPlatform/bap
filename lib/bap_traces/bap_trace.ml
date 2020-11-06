@@ -5,6 +5,7 @@ open Bap.Std
 
 module Id = Bap_trace_id
 module Tab = String.Caseless.Table
+module Unix = Caml_unix
 
 type event = value [@@deriving bin_io, sexp, compare]
 
@@ -96,7 +97,7 @@ let find_proto uri : 'a result =
   match protocols_of_uri uri with
   | [] -> make_error `No_provider
   | p::[] -> Ok p
-  | protos -> make_error `Ambiguous_uri
+  | _ -> make_error `Ambiguous_uri
 
 let find_by_proto tab proto : 'a result =
   match Hashtbl.find tab proto with

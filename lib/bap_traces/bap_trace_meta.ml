@@ -4,6 +4,7 @@ open Bap.Std
 open Format
 
 open Bap_trace_meta_types
+module Unix = Caml_unix
 
 module Envp = struct
   let pp ppf env =

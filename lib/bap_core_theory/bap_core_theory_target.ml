@@ -41,7 +41,7 @@ module Enum = struct
   module Make() = struct
     type t = Name.t [@@deriving bin_io, sexp]
 
-    let elements = Hash_set.create (module Name) ()
+    let elements = Hash_set.create (module Name)
     let declare ?package name =
       let name = Name.create ?package name in
       if Hash_set.mem elements name
@@ -234,7 +234,7 @@ let options t = (info t).options
 
 let parents target =
   let rec closure ps p =
-    if p = unknown.parent
+    if Name.equal unknown.parent p
     then List.rev (p::ps)
     else closure (p::ps) (parent p) in
   closure [] (parent target)

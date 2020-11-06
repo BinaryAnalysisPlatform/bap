@@ -6,7 +6,7 @@ Library "bap-mips"
  Build$:           flag(everything) || flag(mips)
  XMETADescription: common definitions for MIPS targets
  Path: lib/bap_mips
- BuildDepends: core_kernel, ppx_jane,
+ BuildDepends: core_kernel, ppx_bap,
                ogre, bap-knowledge, bap-core-theory, bap
  FindlibName: bap-mips
  Modules: Bap_mips_target
@@ -17,7 +17,7 @@ Library mips_plugin
   FindlibName:          bap-plugin-mips
   Build$:               flag(everything) || flag (mips)
   BuildDepends:         bap, bap-mips, bap-abi, bap-c, bap-core-theory, core_kernel,
-                        ppx_jane, regular, zarith, bap-knowledge, bap-main, bap-api
+                        ppx_bap, regular, zarith, bap-knowledge, bap-main, bap-api
   InternalModules:
                         Mips,
                         Mips_main,

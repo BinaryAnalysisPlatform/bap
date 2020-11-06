@@ -6,7 +6,7 @@ Library "bap-bml"
   XMETADescription: BAP Mapping Language
   Path: lib/bap_bml
   Build$: flag(everything) || flag(map_terms)
-  BuildDepends: bap, core_kernel, ppx_jane
+  BuildDepends: bap, core_kernel, ppx_bap
   FindlibName: bap-bml
   Modules: Bap_bml
 
@@ -14,7 +14,7 @@ Library map_terms_plugin
   Build$: flag(everything) || flag(map_terms)
   Path: plugins/map_terms
   FindlibName: bap-plugin-map_terms
-  BuildDepends: bap, bap-bml, core_kernel, ppx_jane, regular, bap-main
+  BuildDepends: bap, bap-bml, core_kernel, ppx_bap, regular, bap-main
   InternalModules: Map_terms_main, Map_terms_features
   XMETADescription: map terms using BML DSL
   XMETAExtraLines:  tags="pass"

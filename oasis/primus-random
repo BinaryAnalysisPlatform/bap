@@ -5,7 +5,7 @@ Flag primus_random
 Library primus_random_library_plugin
   Build$:       flag(everything) || flag(primus_random)
   Path:         plugins/primus_random
-  BuildDepends: bap-primus, bap, core_kernel, ppx_jane, bap-main,
+  BuildDepends: bap-primus, bap, core_kernel, ppx_bap, bap-main,
                 bitvec, bitvec-sexp, zarith
   FindlibName:     bap-plugin-primus_random
   CompiledObject:  best

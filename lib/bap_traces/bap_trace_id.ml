@@ -10,6 +10,7 @@ module Bin = Bin_prot.Utils.Make_binable(struct
       | None -> invalid_arg "Bad UUID format"
       | Some uuid -> uuid
   end)
+[@@warning "-D"]
 
 module Stringable = struct
   type t = Uuidm.t

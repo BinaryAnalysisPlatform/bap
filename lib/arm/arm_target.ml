@@ -4,6 +4,7 @@ open Core_kernel
 open Bap_core_theory
 open Bap.Std
 open KB.Syntax
+open Poly
 
 module CT = Theory
 
@@ -348,7 +349,7 @@ module Encodings = struct
   let empty = Map.empty (module Bitvec_order)
 
   let lsb x = Int64.(x land 1L)
-  let is_thumb x = lsb x = 1L
+  let is_thumb x = Int64.equal (lsb x) 1L
 
   let symbols_encoding spec =
     symbol_values spec |>

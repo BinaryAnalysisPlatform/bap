@@ -409,7 +409,7 @@ let main ctxt =
     Seq.fold ~init:{args=Var.Map.empty} ~f:(fun init sub ->
         Term.enum arg_t sub |>
         Seq.fold ~init ~f:(fun {args} arg ->
-            if Arg.intent arg = Some In then {args}
+            if Poly.(Arg.intent arg = Some In) then {args}
             else match Var.typ (Arg.lhs arg) with
               | Unk | Mem _ -> {args}
               | Imm width ->

@@ -186,7 +186,7 @@ end = struct
 
   let parse_line s = match String.strip s with
     | "" -> Empty
-    | s when s.[0] = ';' -> Comment
+    | s when Char.equal s.[0] ';' -> Comment
     | s when String.for_all s ~f:Char.is_whitespace -> Empty
     | s ->
       let s = String.strip @@

@@ -18,7 +18,7 @@ Library traces
                    Bap_trace_std,
                    Bap_trace_traces,
                    Bap_trace
-  BuildDepends:    bap, core_kernel, uri, uuidm, regular, ppx_jane
+  BuildDepends:    bap, core_kernel, uri, uuidm, regular, ppx_bap, core_kernel.caml_unix
 
 Library traces_test
   Path:            lib_test/bap_traces
@@ -26,7 +26,7 @@ Library traces_test
   Install:         false
   CompiledObject:  best
   Modules:         Test_traces
-  BuildDepends:    bap, bap-traces, oUnit, core_kernel, uri, ppx_jane
+  BuildDepends:    bap, bap-traces, oUnit, core_kernel, uri, ppx_bap
 
 
 Executable run_traces_tests

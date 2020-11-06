@@ -1,6 +1,7 @@
 open Core_kernel
 open Regular.Std
 open Bap.Std
+module Unix = Caml_unix
 
 (** Traces of execution. *)
 module Std : sig

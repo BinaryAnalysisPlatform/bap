@@ -16,7 +16,7 @@ end
 
 let pp = Ogre.Doc.pp
 include Sexpable.Of_stringable(Stringable)
-include Binable.Of_stringable(Stringable)
+include Binable.Of_stringable(Stringable) [@@warning "-D"]
 
 type KB.Conflict.t += Spec_inconsistency of Error.t
 

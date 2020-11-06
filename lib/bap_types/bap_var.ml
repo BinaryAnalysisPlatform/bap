@@ -114,7 +114,7 @@ module T = struct
       type t = var
       let to_binable = Repr.of_var
       let of_binable = Repr.to_var
-    end)
+    end) [@@warning "-D"]
 
   let compare x y =
     Theory.Var.Ident.compare (ident x) (ident y)

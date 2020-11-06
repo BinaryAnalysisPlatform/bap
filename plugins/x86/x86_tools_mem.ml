@@ -19,7 +19,9 @@ module Make (CPU : X86CPU) (RR : RR) (IM : IM) : MM = struct
           | #X86_asm.Reg.gpr -> RR.of_mc_exn base |> gpr |> some
           | `IP | `EIP | `RIP ->
             Memory.max_addr mem' |> Word.succ |> ip |> some
-          | b -> Error.failwiths "invalid base" b X86_asm.Reg.sexp_of_t)
+          | b -> failwithf "invalid base %s"
+                   (Sexp.to_string_hum (X86_asm.Reg.sexp_of_t b))
+                   ())
 
     end
 
@@ -30,6 +32,8 @@ module Make (CPU : X86CPU) (RR : RR) (IM : IM) : MM = struct
       index : RR.t option;
       disp : int;
     } [@@ deriving fields, sexp]
+
+    let here = Lexing.dummy_pos
 
     let create ?seg ?base ?scale ?index ~disp mem =
       let seg =
@@ -43,13 +47,13 @@ module Make (CPU : X86CPU) (RR : RR) (IM : IM) : MM = struct
         match seg with
         | None -> None
         | Some (#Reg.segment as s) -> base s
-        | Some r -> Error.failwiths "invalid segment" r
+        | Some r -> Error.failwiths ~here "invalid segment" r
                       X86_asm.Reg.sexp_of_t in
       let map = Option.value_map ~default:None in
       let base = map ~f:(Base.create mem) base in
       let scale = map ~f:Imm.to_int scale in
       let index = map ~f:RR.of_mc index in
-      let disp = Imm.to_int disp |> Option.value_exn in
+      let disp = Option.value_exn (Imm.to_int disp) in
       Fields.create ~seg ~base ~scale ~index ~disp
 
     let make_value reg =
@@ -63,7 +67,7 @@ module Make (CPU : X86CPU) (RR : RR) (IM : IM) : MM = struct
       | #Reg.r64, _
       | #Reg.segment_base, _ -> RR.get reg
       | (#Reg.segment | #Reg.r128 | #Reg.r256), _ ->
-        Error.failwiths "invalid address register" reg RR.sexp_of_t
+        Error.failwiths ~here "invalid address register" reg RR.sexp_of_t
 
     let make_scale scale =
       let shift = match scale with
@@ -71,7 +75,7 @@ module Make (CPU : X86CPU) (RR : RR) (IM : IM) : MM = struct
         | 2 -> Some 1
         | 4 -> Some 2
         | 8 -> Some 3
-        | s -> Error.failwiths "invalid memory scale" s sexp_of_int in
+        | s -> Error.failwiths ~here "invalid memory scale" s sexp_of_int in
       Option.map ~f:(fun s -> Word.of_int ~width:2 s |> Bil.int) shift
 
     let disp_exp disp =

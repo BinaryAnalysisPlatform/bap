@@ -250,8 +250,8 @@ let stbrx name opt_opcode size arch ctxt =
     List.fold ~init:None ~f:(fun acc b ->
         match acc with
         | None -> Some b
-        | Some p -> Some (Word.concat p b)) |>
-    Option.value_exn |>
+        | Some p -> Some (Word.concat p b)) |> fun x ->
+    Option.value_exn x |>
     Word.extract_exn ~hi:(width -1) ~lo:(width - Size.in_bits size) in
   check_mem init bytes mem ~addr:ea ~size expected arch ctxt
 

@@ -3,9 +3,10 @@ FLG -w +a-4-6-7-9-29-32..42-44-45-48-50-60
 FLG -safe-string
 
 PKG core_kernel
+PKG core_kernel.caml_unix
 PKG fileutils
 PKG uri
-PKG ppx_jane
+PKG ppx_bap
 PKG camlzip
 PKG uuidm
 

@@ -7,6 +7,7 @@ open Format
 open Result.Monad_infix
 include Self()
 
+module Unix = Caml_unix
 
 let print_meta trace =
   Trace.meta trace |>

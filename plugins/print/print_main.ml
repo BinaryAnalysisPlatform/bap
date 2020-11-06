@@ -511,7 +511,7 @@ let () =
   let ansi_colors : bool Config.param =
     let doc =
       "Allow coloring output with ansi color escape sequences" in
-    let default = Unix.isatty Unix.stdout in
+    let default = Caml_unix.(isatty stdout) in
     Config.(param bool ~default "with-colors" ~doc) in
   let print_symbols : _ list Config.param =
     let opts = [

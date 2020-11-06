@@ -120,7 +120,7 @@ let load_or_create_signatures ?comp ?path operation arch =
     | Error e,_ -> fail (Sigs e)
 
 let oracle_of_image img =
-  let starts = Hash_set.create (module Addr) () in
+  let starts = Hash_set.create (module Addr) in
   Image.symbols img |> Table.iteri ~f:(fun mem _ ->
       Hash_set.add starts (Memory.min_addr mem));
   fun mem -> Hash_set.mem starts (Memory.min_addr mem)
@@ -157,7 +157,6 @@ let train loader operation length comp db paths _ctxt =
   let init = Map.empty (module String) in
   let files = List.fold ~init paths ~f:add_path in
   let total = Map.length files in
-  let start = Unix.gettimeofday () in
   let errors = ref 0 in
   let step = ref 0 in
   Map.iter files ~f:(fun path ->
@@ -170,8 +169,6 @@ let train loader operation length comp db paths _ctxt =
         printf "%6s\n%!" "SKIPPED";
         eprintf "Error: %a\n%!" Extension.Error.pp err;
         (incr errors));
-  printf "Processed %d files out of %d in %g seconds\n"
-    (total - !errors) total (Unix.gettimeofday () -. start);
   printf "Signatures were stored in %s\n%!" db;
   Ok ()
 

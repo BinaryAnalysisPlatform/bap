@@ -6,7 +6,7 @@ Flag primus_symbolic_executor
 Library primus_symbolic_executor_plugin
   Build$:       flag(everything) || flag(primus_symbolic_executor)
   Path:         plugins/primus_symbolic_executor
-  BuildDepends: bap-primus, bap, core_kernel, bitvec, ppx_jane,
+  BuildDepends: bap-primus, bap, core_kernel, bitvec, ppx_bap,
                 zarith, z3, regular, bap-main, monads,
                 bap-primus-track-visited
   FindlibName:     bap-plugin-primus_symbolic_executor

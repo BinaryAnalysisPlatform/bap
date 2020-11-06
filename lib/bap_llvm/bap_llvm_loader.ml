@@ -3,6 +3,8 @@ open Bap.Std
 open Monads.Std
 open Or_error
 
+module Unix = Caml_unix
+
 module Primitive = struct
   (** [bap_llvm_load data pdb_path] analyzes [data] and builds an llvm
       specification of the discovered meta-data.
@@ -146,10 +148,10 @@ let provide_entry =
 let provide_symbols =
   iter_rows LLVM.symbol_entry @@ fun bias (name, addr, size, off, value) ->
   let addr = Int64.(addr + bias) in
-  provide_if (size > 0L) [
+  provide_if Poly.(size > 0L) [
     Ogre.provide symbol_chunk addr size addr;
     Ogre.request LLVM.code_entry ~that:(fun (n,o,s) ->
-        o = off && n = name && s = size) >>= fun entry ->
+        Poly.(o = off && n = name && s = size)) >>= fun entry ->
     if Option.is_some entry then Ogre.provide code_start addr
     else Ogre.return ()
   ] @ [

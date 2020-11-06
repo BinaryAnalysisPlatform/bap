@@ -8,7 +8,7 @@ Library primus_propagate_taint_plugin
   Build$: flag(everything) || flag(primus_propagate_taint)
   FindlibName: bap-plugin-primus_propagate_taint
   CompiledObject: best
-  BuildDepends: bap-primus, bap-taint, core_kernel, bap, monads, ppx_jane
+  BuildDepends: bap-primus, bap-taint, core_kernel, bap, monads, ppx_bap
   XMETADescription: a compatibility layer between different taint analysis frameworks
   InternalModules: Primus_propagate_taint_main
   XMETAExtraLines:  tags="dataflow, pass, taint, primus"

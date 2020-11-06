@@ -20,11 +20,12 @@ Library bap
                    graphlib,
                    regular,
                    core_kernel,
-                   ppx_jane,
+                   ppx_bap,
                    monads,
                    bitvec,
                    ogre,
-                   fileutils
+                   fileutils,
+                   core_kernel.caml_unix
   Modules:         Bap
   InternalModules: Bap_project, Bap_self
 
@@ -59,8 +60,7 @@ Library types
                    bap-knowledge,
                    bap-core-theory,
                    core_kernel,
-                   ppx_jane
-
+                   ppx_bap
   InternalModules:
                    Bap_addr,
                    Bap_arch,
@@ -114,7 +114,8 @@ Library bap_image
   FindlibParent: bap
   FindlibName:   image
   BuildDepends:  bap.types, ogre, mmap, monads, core_kernel, regular,
-                 bap-core-theory, ppx_jane, bap-knowledge
+                 bap-core-theory, bap-knowledge, ppx_bap, core_kernel.caml_unix
+
   InternalModules:
                  Bap_fileutils,
                  Bap_image,
@@ -143,12 +144,12 @@ Library disasm
                  regular,
                  bap-core-theory,
                  bap-knowledge,
-                 ppx_jane,
                  zarith,
                  bitvec,
                  bitvec-order,
                  bap-relation,
-                 bap-main
+                 bap-main,
+                 ppx_bap
   InternalModules:
                  Bap_disasm,
                  Bap_disasm_backend_types,
@@ -187,7 +188,7 @@ Library sema
                  bap.image,
                  monads,
                  core_kernel,
-                 ppx_jane,
+                 ppx_bap,
                  graphlib,
                  regular,
                  bap-knowledge,

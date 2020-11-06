@@ -10,4 +10,4 @@ Executable "bap-byteweight"
   Install:        true
   CompiledObject: best
   BuildDepends:   bap, bap-byteweight,
-                  cmdliner, curl, fileutils, re.posix, findlib.dynload, ppx_jane
+                  cmdliner, curl, fileutils, re.posix, findlib.dynload, ppx_bap

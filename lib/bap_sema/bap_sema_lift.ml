@@ -299,7 +299,7 @@ let program symtab =
   let b = Ir_program.Builder.create () in
   let sub_of_blk = Hashtbl.create (module Tid) in
   let tid_for_sub =
-    let tids = Hash_set.create (module Tid) () in
+    let tids = Hash_set.create (module Tid) in
     fun name ->
       let tid = Tid.for_name name in
       match Hash_set.strict_add tids tid with

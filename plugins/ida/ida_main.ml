@@ -7,6 +7,7 @@ open Bap_ida.Std
 
 open Format
 open Result.Monad_infix
+module Unix = Caml_unix
 
 include Self()
 

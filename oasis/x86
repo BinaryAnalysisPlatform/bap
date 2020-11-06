@@ -7,7 +7,7 @@ Library "bap-x86-cpu"
  XMETADescription: provide x86 lifter
  Path:             lib/x86_cpu
  FindlibName:      bap-x86-cpu
- BuildDepends:     bap, core_kernel, ppx_jane,
+ BuildDepends:     bap, core_kernel, ppx_bap,
                    bap-core-theory, ogre, bap-knowledge
  Modules:          X86_cpu,
                    X86_env,
@@ -24,7 +24,7 @@ Library x86_plugin
  Path:             plugins/x86
  FindlibName:      bap-plugin-x86
  BuildDepends:     bap, bap-abi, bap-c, bap-x86-cpu, bap-llvm, core_kernel,
-                   ppx_jane, bap-main, bap-future, bap-api, ogre
+                   ppx_bap, bap-main, bap-future, bap-api, ogre
  Modules:          X86_backend, X86_prefix
  InternalModules:  X86_abi,
                    X86_btx,

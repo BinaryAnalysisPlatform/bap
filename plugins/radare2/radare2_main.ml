@@ -4,6 +4,8 @@ open Bap_future.Std
 open Bap.Std
 include Self()
 
+module Unix = Caml_unix
+
 open KB.Syntax
 
 let agent =
@@ -93,7 +95,7 @@ let provide_radare2 file =
   let rels =
     let init = Bap_relation.empty Z.compare String.compare in
     List.fold ~init (extract_symbols file) ~f: (fun rels (name,addr,typ) ->
-        if typ = "FUNC" then match strip name with
+        if String.equal typ "FUNC" then match strip name with
           | None -> rels
           | Some name -> Bap_relation.add rels addr name
         else rels) in

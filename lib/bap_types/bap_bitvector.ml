@@ -125,7 +125,7 @@ end = struct
     let of_string s = {packed = Z.of_bits s}
   end
 
-  include Binable.Of_stringable(Stringable)
+  include Binable.Of_stringable(Stringable) [@@warning "-D"]
   include Sexpable.Of_stringable(Stringable)
 end
 
@@ -642,7 +642,7 @@ module V1 = struct
     end
     include Z
     include Sexpable.Of_stringable(Repr)
-    include Binable.Of_stringable(Repr)
+    include Binable.Of_stringable(Repr) [@@warning "-D"]
   end
 
   type t = {
@@ -672,7 +672,7 @@ module Stable = struct
         type t = Packed.t
         let to_binable = to_legacy
         let of_binable = of_legacy
-      end)
+      end) [@@warning "-D"]
 
     include Sexpable.Of_sexpable(V1)(struct
         type t = Packed.t

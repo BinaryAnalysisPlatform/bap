@@ -13,8 +13,8 @@ depends: [
   "camlzip"
   "linenoise" {>= "1.1" & < "2.0"}
   "cmdliner" {>= "1.0" & < "2.0"}
-  "ppx_jane" {>= "v0.12" & < "v0.13"}
-  "core_kernel" {>= "v0.12" & < "v0.13"}
+  "ppx_bap"  {= "master"}
+  "core_kernel" {>= "v0.14" & < "v0.15"}
   "ezjsonm"
   "fileutils"
   "FrontC"
@@ -281,7 +281,6 @@ remove: [
   ["ocamlfind" "remove" "bap-lisp"]
   ["ocamlfind" "remove" "bap-primus-machine"]
   ["rm" "-f" "%{prefix}%/bin/baptop"]
-  ["rm" "-f" "%{prefix}%/bin/ppx-bap"]
   ["rm" "-rf" "%{prefix}%/share/bap"]
   ["rm" "-f" "%{man}%/man1/bap-mc.1"]
   ["rm" "-f" "%{man}%/man1/bap.1"]

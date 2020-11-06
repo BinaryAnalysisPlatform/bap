@@ -7,7 +7,7 @@ Library beagle_plugin
   Path: plugins/beagle
   FindlibName: bap-plugin-beagle
   BuildDepends: bap, bap-microx, bap-beagle-prey, bap-strings,
-                regular, monads, bap-future, core_kernel, ppx_jane,
+                regular, monads, bap-future, core_kernel, ppx_bap,
                 bap-primus
   InternalModules: Beagle_main
   XMETADescription: microx powered obfuscated string solver
@@ -18,5 +18,5 @@ Library beagle_prey
   Path: lib/beagle
   FindlibName: bap-beagle-prey
   Modules: Beagle_prey
-  BuildDepends: bap, bap-primus, core_kernel, ppx_jane, monads, regular
+  BuildDepends: bap, bap-primus, core_kernel, ppx_bap, monads, regular
   XMETADescription: beagle attributes

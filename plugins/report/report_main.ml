@@ -5,6 +5,8 @@ open Format
 
 include Self()
 
+module Unix = Caml_unix
+
 type slot = {
   note : string option;
   stage : int option;

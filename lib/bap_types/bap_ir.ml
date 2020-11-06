@@ -321,7 +321,8 @@ end = struct
     {s with self}
 
   let fix_names news =
-    let is_new sub = sub.tid <> Tid.for_name sub.self.name in
+    let is_new sub =
+      not @@ Tid.equal sub.tid (Tid.for_name sub.self.name) in
     let keep_name tids name tid = Map.set tids ~key:name ~data:tid in
     let tids = Array.fold news ~init:String.Map.empty ~f:(fun tids sub ->
         match Map.find tids sub.self.name with

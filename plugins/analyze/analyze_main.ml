@@ -251,7 +251,7 @@ let complete ctxt prefix completions =
       let pkg = Knowledge.Name.package name in
       let short = Knowledge.Name.unqualified name in
       let full = Knowledge.Name.to_string name in
-      if pkg = ctxt.package && matches short
+      if String.equal pkg ctxt.package && matches short
       then LNoise.add_completion completions short
       else if matches full || matches short
       then LNoise.add_completion completions full)

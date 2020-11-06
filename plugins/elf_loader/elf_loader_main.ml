@@ -56,7 +56,7 @@ let create_symtab data endian elf  =
   let module Buffer = Dwarf.Buffer in
   let create name s =
     match section_data data s with
-    | Error err -> None          (* TODO something *)
+    | Error _ -> None          (* TODO something *)
     | Ok data ->   Some (name, Buffer.create data) in
   let sections = Seq.filter_map elf.e_sections ~f:(fun s ->
       let name =
@@ -151,9 +151,9 @@ let img_of_elf data elf : Img.t Or_error.t =
     Seq.filter_mapi elf.e_segments (create_segment addr) |>
     Seq.to_list |>
     List.partition_map ~f:(function
-        | Ok s    -> `Fst s
-        | Error e -> `Snd e) in
-  let symbols,errors =
+        | Ok s    -> First s
+        | Error e -> Second e) in
+  let symbols,_ =
     match create_symtab data endian elf with
     | Ok syms -> syms,errors
     | Error err ->

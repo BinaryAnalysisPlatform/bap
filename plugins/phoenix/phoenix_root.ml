@@ -1,5 +1,7 @@
 open Core_kernel
 
+module Unix = Caml_unix
+
 exception Target_directory_is_a_file
 
 type t = string * string

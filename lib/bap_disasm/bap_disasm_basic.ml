@@ -36,7 +36,7 @@ let compare_reg_info {reg_code=x} {reg_code=y} = Int.compare x y
 
 type imm_info = {
   imm_small : int;
-  imm_large : int64 sexp_option;
+  imm_large : int64 option;
 } [@@deriving bin_io, compare, sexp]
 
 type reg = reg_info oper [@@deriving bin_io, compare, sexp]
@@ -123,7 +123,7 @@ type dis = {
   enc : string;
   asm : bool;
   kinds : bool;
-}
+} [@@deriving sexp_of]
 
 type ('a,'k) t = dis
 
@@ -417,7 +417,8 @@ type step = {
   preds : preds;
 } [@@deriving sexp_of]
 
-type ('a,'k) maybe_insn = mem * ('a,'k) insn option
+type ('a,'k) maybe_insn = mem * ('a,'k) insn option [@sexp.opaque]
+[@@deriving sexp_of]
 
 let sexp_of_maybe_ins (_,insn) =
   [%sexp_of:insn option] insn
@@ -425,15 +426,15 @@ let sexp_of_maybe_ins (_,insn) =
 
 type (+'a,+'k,'s,'r) state = {
   backlog : int;
-  dis : dis sexp_opaque;
+  dis : dis;
   current : step;
   history : step list;
-  insns : ('a,'k) maybe_insn array sexp_opaque;
-  return : ('s -> 'r) sexp_opaque;
-  stopped : (('a,'k,'s,'r) state -> 's -> 'r) option sexp_opaque;
-  invalid : (('a,'k,'s,'r) state -> mem -> 's -> 'r) option sexp_opaque;
+  insns : ('a,'k) maybe_insn array [@sexp.opaque];
+  return : ('s -> 'r) [@sexp.opaque];
+  stopped : (('a,'k,'s,'r) state -> 's -> 'r) option [@sexp.opaque];
+  invalid : (('a,'k,'s,'r) state -> mem -> 's -> 'r) option [@sexp.opaque];
   hit : (('a,'k,'s,'r) state -> mem -> (asm,kinds) insn -> 's -> 'r)
-      option sexp_opaque;
+      option [@sexp.opaque];
 } [@@deriving sexp_of]
 
 let create_state ?(backlog=0) ?(stop_on=[]) ?stopped ?invalid ?hit dis
@@ -571,7 +572,7 @@ let register encoding construct =
       | Error _ as err -> err
       | Ok dis ->
         let name = make_name target encoding in
-        if name <> dis.name
+        if String.(name <> dis.name)
         then begin
           let d = Hashtbl.find_exn disassemblers dis.name in
           d.users <- d.users + 1;

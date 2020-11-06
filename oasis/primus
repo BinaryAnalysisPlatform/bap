@@ -9,8 +9,9 @@ Library bap_primus
   FindlibName: bap-primus
   CompiledObject: best
   BuildDepends: bap, bap-abi, bap-c, uuidm, bap-future, parsexp, bap-strings,
-                core_kernel, ppx_jane, regular, monads, graphlib, bap-knowledge,
-                zarith, bitvec, zarith
+                core_kernel, regular, monads, graphlib, bap-knowledge,
+                zarith, bitvec, zarith, ppx_bap
+
   Modules: Bap_primus
   InternalModules:
            Bap_primus_env,

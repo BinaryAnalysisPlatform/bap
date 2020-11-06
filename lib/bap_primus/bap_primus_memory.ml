@@ -286,7 +286,7 @@ module Make(Machine : Machine) = struct
 
   let initialize values lower upper f =
     let rec loop values addr =
-      if addr < upper
+      if Addr.(addr < upper)
       then f addr >>= fun data ->
         Value.of_word data >>= fun data ->
         loop (Map.set values ~key:addr ~data) (Addr.succ addr)

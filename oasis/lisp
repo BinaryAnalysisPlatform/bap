@@ -9,7 +9,7 @@ Library bap_lisp
   FindlibName: bap-lisp
   CompiledObject: best
   BuildDepends: parsexp, bap-strings, bap-knowledge, bap-core-theory,
-                graphlib, ppx_jane, core_kernel, bitvec, bitvec-order,
+                graphlib, ppx_bap, core_kernel, bitvec, bitvec-order,
                 bitvec-binprot, regular, monads
   Modules: Bap_lisp
   InternalModules:

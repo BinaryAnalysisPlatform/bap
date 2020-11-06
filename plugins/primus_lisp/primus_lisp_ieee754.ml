@@ -127,12 +127,12 @@ module Primitives(Machine : Primus.Machine.S) = struct
       define pre "abs" abs_float;
       define inf "mod" mod_float;
       define cti "cti" Int64.of_float;
-      define ord "lt" (<.);
-      define ord "le" (<=.);
-      define ord "eq" (=.);
-      define ord "ne" (<>.);
-      define ord "gt" (>.);
-      define ord "ge" (>=.);
+      define ord "lt" Float.((<));
+      define ord "le" Float.((<=));
+      define ord "eq" Float.((=));
+      define ord "ne" Float.((<>));
+      define ord "gt" Float.((>));
+      define ord "ge" Float.((>=));
     ]
 end
 

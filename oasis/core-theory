@@ -7,8 +7,8 @@ Library bap_core_theory
   Path: lib/bap_core_theory
   FindlibName: bap-core-theory
   CompiledObject: best
-  BuildDepends: bap-knowledge, core_kernel,
-                bitvec, bitvec-order, bitvec-sexp, bitvec-binprot, ppx_jane
+  BuildDepends: bap-knowledge, core_kernel, core_kernel.caml_unix,
+                bitvec, bitvec-order, bitvec-sexp, bitvec-binprot, ppx_bap
   Modules: Bap_core_theory
   InternalModules:
         Bap_core_theory_basic,

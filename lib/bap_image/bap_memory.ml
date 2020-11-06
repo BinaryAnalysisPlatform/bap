@@ -48,6 +48,7 @@ include Binable.Of_binable(Repr)(struct
       size = Bigstring.length data;
     }
   end)
+[@@warning "-D"]
 
 
 let sexp_of_t mem = Sexp.List [

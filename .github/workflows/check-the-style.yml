@@ -18,7 +18,7 @@ jobs:
       - name: Setup OCaml
         uses: avsm/setup-ocaml@v1
         with:
-          ocaml-version: 4.07.1
+          ocaml-version: 4.08.1
 
       - name: Check the Style
         run: opam install -y ocp-indent && opam exec -- make check-style

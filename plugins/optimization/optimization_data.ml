@@ -53,8 +53,8 @@ let dead_jmps_of_blk b =
         if is_unreachable
         then Set.add deads (Term.tid jmp), is_unreachable
         else match Jmp.cond jmp with
-          | Bil.Int x when x = Word.b1 -> deads, true
-          | Bil.Int x when x = Word.b0 ->
+          | Bil.Int x when Word.(x = b1) -> deads, true
+          | Bil.Int x when Word.(x = b0) ->
             Set.add deads (Term.tid jmp), is_unreachable
           | _ -> deads, is_unreachable) |> fst
 

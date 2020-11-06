@@ -6,6 +6,7 @@ open Result
 open Bin_prot
 
 module Trace = Bap_trace
+module Unix = Caml_unix
 
 module Proto = struct
 

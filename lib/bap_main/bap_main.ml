@@ -1198,8 +1198,8 @@ let init
     let result = Plugins.load ?env:features ?provides:requires ~library () in
     let plugins,failures =
       List.partition_map result ~f:(function
-          | Ok p -> `Fst p
-          | Error (p,e) -> `Snd (p,e)) in
+          | Ok p -> First p
+          | Error (p,e) -> Second (p,e)) in
     let version = match Bap_main_config.build_id with
       | "" -> version
       | id -> sprintf "%s+%s" version id in

@@ -33,7 +33,7 @@ type table = scheme Table.t
 module Fn = struct
   module T = struct
     type t = {
-      pc_hi: addr sexp_option;
+      pc_hi: addr option;
       pc_lo: addr;
     } [@@deriving sexp, bin_io, compare, fields]
 

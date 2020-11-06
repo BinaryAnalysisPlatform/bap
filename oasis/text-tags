@@ -7,5 +7,5 @@ Library "text-tags"
   Build$: flag(everything) || flag(text_tags)
   FindlibName: text-tags
   CompiledObject: best
-  BuildDepends: core_kernel
+  BuildDepends: core_kernel, core_kernel.caml_unix
   Modules: Text_tags

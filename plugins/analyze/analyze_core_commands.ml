@@ -52,7 +52,7 @@ let find_entry subrs name_or_addr =
   Set.to_sequence |>
   KB.Seq.find ~f:(fun addr ->
       let addr = Word.to_bitvec addr in
-      if Bitvec.to_string addr = name_or_addr
+      if Poly.(Bitvec.to_string addr = name_or_addr)
       then KB.return true
       else Theory.Label.for_addr addr >>= fun label ->
         KB.collect Theory.Label.name label >>| function
