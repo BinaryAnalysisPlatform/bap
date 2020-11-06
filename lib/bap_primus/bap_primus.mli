@@ -352,6 +352,19 @@ module Std : sig
       val finished : unit observation
       [@@deprecated "[since 2020-03] use System.fini or Machine.kill instead"]
 
+      (** [fork (parent,child)] occurs when the machine [parent] forks a
+          new clone [child]. The computation continues in the [child]
+          machine.
+
+          @since 2.2.0 *)
+      val fork : (id * id) observation
+
+      (** [switch (was,now)] occurs when computation switches from
+          the machine [was] to the machine [now].
+
+          @since 2.2.0 *)
+      val switch : (id * id) observation
+
       (** [exn_raised exn] occurs every time an abnormal control flow
           is initiated *)
       val exn_raised : exn observation
