@@ -20,7 +20,7 @@ jobs:
          - name: Install OCaml
            uses: avsm/setup-ocaml@v1
            with:
-             ocaml-version: 4.09.1+flambda
+             ocaml-version: 4.11.1+flambda
 
          - name: Build deb packages
            run: ./tools/release.sh ${{ env.VERSION }}
