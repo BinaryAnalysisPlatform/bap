@@ -17,3 +17,5 @@ val exn_raised : exn observation
 val kill : id observation
 val start : string observation
 val stop : string observation
+val fork : (id * id) observation
+val switch : (id * id) observation

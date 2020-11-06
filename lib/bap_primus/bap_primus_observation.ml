@@ -30,17 +30,18 @@ type 'a mstream = {
 
 let providers : (string,provider) Hashtbl.t = Hashtbl.create (module String)
 
+
 let provider ?desc ?package name =
   let data,newdata = Stream.create () in
   let triggers,newtrigger = Stream.create () in
   let name = Name.create ?package name in
   let info = Info.create ?desc name in
-  let key = Univ_map.Key.create ~name:("watch-"^Name.show name) ident in
+  let key = Univ_map.Key.create ~name:(Name.show name) ident in
   {info; newdata; data; triggers; newtrigger; observers=0; key}
 
 let update_provider provider ~f =
   Hashtbl.update providers provider ~f:(function
-      | None -> failwith "bug: unregistered provider"
+      | None -> failwithf "bug: unregistered provider: %s" provider ()
       | Some p -> f p)
 
 let register_observer =
