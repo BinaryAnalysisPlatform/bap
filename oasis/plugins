@@ -12,4 +12,4 @@ Library bap_plugins
                    Bap_plugins_units_fallback,
                    Bap_plugins_units_intf
   BuildDepends:    core_kernel, dynlink, fileutils, findlib, bap-bundle, bap-future,
-                   uri, ppx_jane
+                   uri, ppx_bap

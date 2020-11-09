@@ -197,6 +197,7 @@ type words = {
 }
 
 let sexp_of_doc doc = Sexp.Atom (Ogre.Doc.to_string doc)
+let sexp_of_words = sexp_of_opaque
 
 type t = {
   doc  : doc;
@@ -206,11 +207,11 @@ type t = {
   symbols : symbol table;
   segments : segment table;
   memory : value memmap;
-  words : words sexp_opaque;
-  memory_of_segment : segment -> mem sexp_opaque;
-  memory_of_symbol : (symbol -> mem * mem seq) Lazy.t sexp_opaque;
-  symbols_of_segment : (segment -> symbol seq) Lazy.t sexp_opaque;
-  segment_of_symbol : (symbol -> segment) Lazy.t sexp_opaque;
+  words : words [@sexp.opaque];
+  memory_of_segment : segment -> mem [@sexp.opaque];
+  memory_of_symbol : (symbol -> mem * mem seq) Lazy.t [@sexp.opaque];
+  symbols_of_segment : (segment -> symbol seq) Lazy.t [@sexp.opaque];
+  segment_of_symbol : (symbol -> segment) Lazy.t [@sexp.opaque];
 } [@@deriving sexp_of]
 
 

@@ -60,7 +60,7 @@ module Thumb(CT : Theory.Core) = struct
     | _ -> failwith "expected a condition code"
 
 
-  let is_pc v = Theory.Var.name v = "PC"
+  let is_pc v = String.equal (Theory.Var.name v) "PC"
   let has_pc = List.exists ~f:is_pc
   let remove_pc = List.filter ~f:(Fn.non is_pc)
 

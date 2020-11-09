@@ -104,6 +104,7 @@ module Parents = struct
             (module Word) xs in
         Solution.create init Parent.unknown
     end)
+  [@@warning "-D"]
 end
 
 type input = Driver.state

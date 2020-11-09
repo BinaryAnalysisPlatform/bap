@@ -6,7 +6,7 @@ Library propagate_taint_plugin
   Build$:  flag(everything) || flag(propagate_taint)
   Path: plugins/propagate_taint
   FindlibName: bap-plugin-propagate_taint
-  BuildDepends: bap, bap-microx, core_kernel, ppx_jane, monads, regular, graphlib
+  BuildDepends: bap, bap-microx, core_kernel, ppx_bap, monads, regular, graphlib
   InternalModules: Propagate_taint_main, Propagator
   XMETADescription: propagate taints through a program
   XMETAExtraLines:  tags="dataflow, pass, taint"

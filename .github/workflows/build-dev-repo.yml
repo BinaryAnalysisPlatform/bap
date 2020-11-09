@@ -11,9 +11,8 @@ jobs:
             - ubuntu-latest
             - macos-latest
           ocaml-version:
-            - 4.09.1
+            - 4.11.1
             - 4.08.1
-            - 4.07.1
 
     runs-on: ${{ matrix.os }}
 
@@ -32,6 +31,9 @@ jobs:
         uses: avsm/setup-ocaml@v1
         with:
           ocaml-version: ${{ matrix.ocaml-version }}
+
+      - name: Add the testing Repository
+        run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
 
       - name: Pin BAP
         run: opam pin add bap . --no-action

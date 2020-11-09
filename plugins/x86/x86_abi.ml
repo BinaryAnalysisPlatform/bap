@@ -211,7 +211,7 @@ let name (module Abi : abi) = Abi.name
 let arch (module Abi : abi) = Abi.arch
 let find name = supported () |> List.find ~f:(fun abi -> is_named_after abi name)
 
-let auto proj = supported () |> List.find ~f:(fun (module Abi) ->
+let auto proj = supported () |> List.find ~f:(fun (module Abi : abi) ->
     Abi.autodetect proj)
 
 let api abi proto =

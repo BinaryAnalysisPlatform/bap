@@ -1,5 +1,6 @@
 open Core_kernel
 open Option.Monad_infix
+module Unix = Caml_unix
 
 let mapfile path : Bigstring.t option =
   let fd = Unix.(openfile path [O_RDONLY] 0o400) in

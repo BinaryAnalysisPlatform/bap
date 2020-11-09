@@ -6,6 +6,7 @@ include Self ()
 
 module Buffer = Caml.Buffer
 module Filename = Caml.Filename
+module Unix = Caml_unix
 
 module Info = Bap_ida_info
 

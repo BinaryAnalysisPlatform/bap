@@ -16,20 +16,20 @@ module Std = struct
       main : string;
       author : string;
       date : float;
-      requires : string sexp_list;
-      provides : string sexp_list;
-      url : string sexp_option;
-      license : string sexp_option;
-      copyrights : string sexp_option;
-      tags : string sexp_list;
-      cons : string sexp_list;
+      requires : string list;
+      provides : string list;
+      url : string option;
+      license : string option;
+      copyrights : string option;
+      tags : string list;
+      cons : string list;
     } [@@deriving bin_io, compare, fields, sexp]
 
     let create
         ?(author=getenv "USER")
         ?(version="1.0.0")
         ?main
-        ?(date=Unix.time ())
+        ?(date=Caml_unix.time ())
         ?(desc = "description not provided")
         ?(requires=[])
         ?(provides=[])

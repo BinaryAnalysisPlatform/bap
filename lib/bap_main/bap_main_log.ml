@@ -5,6 +5,7 @@ open Format
 
 module Event = Bap_main_event
 module Filename = Caml.Filename
+module Unix = Caml_unix
 
 let perm = 0o770
 let getenv opt = try Some (Sys.getenv opt) with Caml.Not_found -> None

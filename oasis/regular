@@ -7,7 +7,7 @@ Library regular
   Path:            lib/regular
   FindlibName:     regular
   CompiledObject:  best
-  BuildDepends:    core_kernel, ppx_jane
+  BuildDepends:    core_kernel, ppx_bap
   Modules:         Regular
   InternalModules:
                    Regular_bytes,

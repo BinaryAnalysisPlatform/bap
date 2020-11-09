@@ -1,6 +1,8 @@
 open Core_kernel
 open Monads.Std
 
+module Unix = Caml_unix
+
 type ('a,'b) eq = ('a,'b) Type_equal.t = T : ('a,'a) eq
 
 module Order = struct
@@ -205,7 +207,7 @@ module Name : sig
   include Pretty_printer.S with type t := t
 end = struct
   let full {package; name} =
-    if package = keyword_package || package = user_package
+    if String.(package = keyword_package || package = user_package)
     then name
     else package ^ ":" ^ name
 
@@ -848,7 +850,7 @@ module Registry = struct
   let public = Hashtbl.create (module Name)
   let classes = Hashtbl.create (module String)
   let slots = Hashtbl.create (module String)
-  let rules = Hash_set.create (module Rule) ()
+  let rules = Hash_set.create (module Rule)
 
   let is_present ~package namespace name =
     match Hashtbl.find namespace package with
@@ -950,7 +952,7 @@ module Documentation = struct
       Buffer.add_string buffer "-- ";
       let column = ref 3 in
       let prev = ref ' ' in
-      let in_white () = !prev = ' ' in
+      let in_white () = Char.(!prev = ' ') in
       let push c =
         if !column >= max_column && in_white () then begin
           Buffer.add_string buffer "\n-- ";
@@ -977,7 +979,7 @@ module Documentation = struct
               Format.(pp_print_list ~pp_sep pp_print_string) ps)
 
     let pp ppf {parameters; provides; requires; name; comment} =
-      if comment <> "" then
+      if String.(comment <> "") then
         Format.fprintf ppf "%s@\n" (refmt comment);
       Format.fprintf ppf "@[<v2>%a%a ::=@\n"
         Name.pp name pp_parameters parameters;
@@ -2031,6 +2033,7 @@ module Record = struct
             | None -> s
             | Some {reader} -> reader data s)
     end)
+  [@@warning "-D"]
 
   let eq = Dict.Key.same
 
@@ -2083,7 +2086,7 @@ module Record = struct
   let pp ppf x = pp_hum ppf (inspect x)
   let pp_slots slots ppf x =
     let slots = Set.of_list (module String) slots in
-    let no_name = Set.nth slots 1 = None in
+    let no_name = Option.is_none (Set.nth slots 1) in
     match (inspect x : Sexp.t) with
     | Atom _ -> assert false
     | List xs ->
@@ -2324,7 +2327,7 @@ module Knowledge = struct
               fun {data} -> data
             let of_binable : Record.t -> 'a value =
               fun data -> {cls; data; time = next_second ()}
-          end)
+          end) [@@warning "-D"]
         type comparator_witness = Comparator.comparator_witness
         include Base.Comparable.Make_using_comparator(struct
             type t = (a,b) cls value
@@ -2521,7 +2524,7 @@ module Knowledge = struct
             type t = a obj
             let to_binable = ident
             let of_binable = ident
-          end)
+          end) [@@warning "-D"]
         include Base.Comparable.Make_using_comparator(Comparator)
       end in
       (module R)
@@ -3022,7 +3025,7 @@ module Knowledge = struct
 
     let check_magic data =
       let len = String.length magic in
-      if Bigstring.To_string.subo ~len data <> magic
+      if String.(Bigstring.To_string.subo ~len data <> magic)
       then invalid_arg "Not a valid knowledge base";
       len
 

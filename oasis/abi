@@ -7,7 +7,7 @@ Library bap_abi
   Path:             lib/bap_abi
   FindlibName:      bap-abi
   CompiledObject:   best
-  BuildDepends:     bap, core_kernel, ppx_jane
+  BuildDepends:     bap, core_kernel, ppx_bap
   Modules:          Bap_abi
 
 Library abi_plugin

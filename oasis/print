@@ -10,7 +10,7 @@ Library print_plugin
   FindlibName:      bap-plugin-print
   BuildDepends:     bap, text-tags, bap-demangle, core_kernel,
                     bap-core-theory, regular, graphlib, re.pcre,
-                    ogre, bap-knowledge
+                    ogre, bap-knowledge, core_kernel.caml_unix
   InternalModules:  Print_main
   XMETADescription: print project in various formats
   XMETAExtraLines:  tags="printer"

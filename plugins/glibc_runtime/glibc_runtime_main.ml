@@ -18,7 +18,7 @@ let references_glib_start_main doc =
   let open Ogre.Syntax in
   let query =
     Ogre.request Image.Scheme.external_reference
-      ~that:(fun (_,name) -> name = "__libc_start_main")
+      ~that:(fun (_,name) -> Poly.(name = "__libc_start_main"))
     >>| Option.is_some in
   match Ogre.eval query doc with
   | Ok r -> r

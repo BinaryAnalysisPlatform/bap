@@ -53,7 +53,9 @@ module Props = struct
     type t = Z.t
     include Sexpable.Of_stringable(Bits)
     include Binable.Of_stringable(Bits)
+    [@@warning "-D"]
   end
+
 
   let name = snd
 

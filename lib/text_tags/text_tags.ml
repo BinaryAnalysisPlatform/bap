@@ -1,6 +1,8 @@
 open Core_kernel
 open Format
 
+module Unix = Caml_unix
+
 type mode = string
 exception Unknown_mode of string
 

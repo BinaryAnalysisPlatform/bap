@@ -7,5 +7,5 @@ Library knowledge
   Path: lib/knowledge
   FindlibName: bap-knowledge
   CompiledObject: best
-  BuildDepends: core_kernel, monads, ppx_jane
+  BuildDepends: core_kernel, core_kernel.caml_unix, monads, ppx_bap
   Modules: Bap_knowledge

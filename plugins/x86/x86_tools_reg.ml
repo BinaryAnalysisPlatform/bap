@@ -15,9 +15,9 @@ module Make(CPU : X86CPU) : RR = struct
         | #X86_asm.reg as t -> of_asm t
         | _ -> None)
 
-  let of_asm_exn reg = of_asm reg |> Option.value_exn
+  let of_asm_exn reg = Option.value_exn (of_asm reg)
 
-  let of_mc_exn reg = of_mc reg |> Option.value_exn
+  let of_mc_exn reg = Option.value_exn (of_mc reg)
 
   let to_asm t = t
 
@@ -71,10 +71,12 @@ module Make(CPU : X86CPU) : RR = struct
     | `XMM14 | `YMM14 -> CPU.ymms.(14)
     | `XMM15 | `YMM15 -> CPU.ymms.(15)
 
+  let here = Lexing.dummy_pos
 
   let var t =
     if CPU.avaliable t then var_all t
-    else Error.failwiths "invalid reg variable"
+    else Error.failwiths ~here
+        "invalid reg variable"
         t X86_asm.sexp_of_reg
 
   let bvar r = var r |> Bil.var
@@ -106,7 +108,7 @@ module Make(CPU : X86CPU) : RR = struct
       | #Reg.r32, `x86_64 -> Bil.(cast unsigned bitsize e)
       | #Reg.r32, `x86 | #Reg.r64, `x86_64 | #Reg.segment_base, _
       | #Reg.segment, _ | #Reg.r256, _ -> e
-      | #Reg.r64, `x86 -> Error.failwiths "invalid reg"
+      | #Reg.r64, `x86 -> Error.failwiths ~here "invalid reg"
                             r X86_asm.sexp_of_reg
     in
     Bil.(lhs := rhs)

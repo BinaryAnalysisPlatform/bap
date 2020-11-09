@@ -7,7 +7,7 @@ Library bap-plugin-stub_resolver
   Path:         plugins/stub_resolver/
   BuildDepends: bap, bap-abi, bap-knowledge, bap-core-theory, core_kernel,
                 bitvec, bitvec-order, bitvec-sexp,
-                bap-main, ppx_jane, ogre
+                bap-main, ppx_bap, ogre
   FindlibName:     bap-plugin-stub_resolver
   CompiledObject:  best
   Modules:         Stub_resolver
@@ -23,7 +23,7 @@ Library stub_resolver_tests
   FindlibName:    tests
   Build$:         flag(tests) && (flag(everything) || flag(stub_resolver))
   CompiledObject: best
-  BuildDepends:   bap, oUnit, core_kernel, ppx_jane, bap-plugin-stub_resolver
+  BuildDepends:   bap, oUnit, core_kernel, ppx_bap, bap-plugin-stub_resolver
   Install:        false
   Modules:        Stub_resolver_tests
 

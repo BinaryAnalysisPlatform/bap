@@ -7,7 +7,7 @@ Library dump_symbols_plugin
   Path:             plugins/dump_symbols
   FindlibName:      bap-plugin-dump_symbols
   CompiledObject:   best
-  BuildDepends:     bap, core_kernel, ppx_jane, graphlib, regular
+  BuildDepends:     bap, core_kernel, ppx_bap, graphlib, regular
   InternalModules:  Dump_symbols_main
   XMETADescription: dump symbol information as a list of blocks
   XMETAExtraLines:  tags="printer"

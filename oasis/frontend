@@ -9,4 +9,4 @@ Executable "bap"
   NativeOpt: -thread
   CompiledObject: best
   BuildDepends:   bap-main, bap, bap-core-theory, bap-knowledge,
-                  core_kernel, ppx_jane, findlib.dynload, regular
+                  core_kernel, ppx_bap, findlib.dynload, regular

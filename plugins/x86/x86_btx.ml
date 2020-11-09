@@ -57,8 +57,8 @@ module Make (Tools : X86_tools.S) (Backend : X86_backend.S) = struct
     X86_operands.ri ~f:(fun _mem base offset ->
         let base = RR.of_mc_exn base in
         let size = RR.width base in
-        let o = Imm.to_word offset ~width:(offset_width size) |>
-                Option.value_exn in
+        let o =
+          Option.value_exn (Imm.to_word offset ~width:(offset_width size)) in
         let base = RR.var base in
         let bil =
           let flags = set_flags op (Bil.var base) (Bil.int o) in
@@ -77,8 +77,7 @@ module Make (Tools : X86_tools.S) (Backend : X86_backend.S) = struct
           | `BT16mi8 | `BTC16mi8 | `BTR16mi8 | `BTS16mi8 -> `r16 in
         let a = local_var "a" @@ Size.in_bits MM.addr_size in
         let d = local_var "d" @@ Size.in_bits size in
-        let o = Imm.to_word offset ~width:(offset_width size) |>
-                Option.value_exn in
+        let o = Option.value_exn (Imm.to_word offset ~width:(offset_width size)) in
         let bil =
           let load = Bil.[
               a := MM.addr base_mem;

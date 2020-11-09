@@ -7,9 +7,8 @@ jobs:
     strategy:
       matrix:
           ocaml-version:
-            - 4.09.1
+            - 4.11.1
             - 4.08.1
-            - 4.07.1
 
     runs-on: ubuntu-latest
 

@@ -10,7 +10,7 @@ module Plugin_rules = struct
 
   let (/) = Pathname.concat
 
-  let default_packages = ["bap"; "core_kernel"; "ppx_jane"]
+  let default_packages = ["bap"; "core_kernel"; "ppx_bap"]
   let default_predicates = [
     "custom_ppx";
     "ppxlib";
@@ -20,7 +20,6 @@ module Plugin_rules = struct
     "thread";
     "debug";
     "custom";
-    "pp(ppx-jane -dump-ast -inline-test-drop)"
   ] @ List.map default_predicates ~f:(sprintf "predicate(%s)")
 
   let needs_threads ~predicates pkgs =

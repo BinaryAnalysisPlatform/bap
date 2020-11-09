@@ -53,7 +53,7 @@ end
 
   type name = KB.Name.t [@@deriving bin_io, compare, sexp]
 
-  let names = Hash_set.create (module KB.Name) ()
+  let names = Hash_set.create (module KB.Name)
   let short_names = Hashtbl.create (module String)
 
   let cls = KB.Class.declare ~package:"core-theory" "value" ()
@@ -153,11 +153,13 @@ end
         let to_sexpable x = x
         let of_sexpable x = x
       end)
+
     include Binable.Of_binable(Exp)(struct
         type t = top
         let to_binable x = x
         let of_binable x = x
-      end)
+      end)[@@warning "-D"]
+
     include Base.Comparable.Inherit(Exp)(struct
         type t = top
         let sexp_of_t x = Exp.sexp_of_t x

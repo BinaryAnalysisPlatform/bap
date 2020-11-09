@@ -7,5 +7,5 @@ Library bap_raw_plugin
   Path:             plugins/raw
   FindlibName:      bap-plugin-raw
   CompiledObject:   best
-  BuildDepends:     bap, core_kernel, ppx_jane, bap-main, bitvec, ogre
+  BuildDepends:     bap, core_kernel, ppx_bap, bap-main, bitvec, ogre, core_kernel.caml_unix
   Modules:          Raw_main

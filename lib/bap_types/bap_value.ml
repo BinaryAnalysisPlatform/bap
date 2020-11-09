@@ -155,7 +155,7 @@ module Univ = struct
         }
       let of_binable {Repr.typeid; data} =
         (info typeid).of_string data
-    end)
+    end) [@@warning "-D"]
 end
 
 let create  {key} x = Value.T (key,x)
@@ -265,7 +265,7 @@ module Dict = struct
       type t = Univ_map.t
       let to_binable = Data.of_dict
       let of_binable = Data.to_dict
-    end)
+    end) [@@warning "-D"]
   include Sexpable.Of_sexpable(Data)(struct
       type t = Univ_map.t
       let to_sexpable = Data.of_dict

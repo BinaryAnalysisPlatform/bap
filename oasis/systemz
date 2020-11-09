@@ -14,7 +14,7 @@ Library systemz_plugin
   XMETADescription: provide Systemz lifter
   Path:             plugins/systemz
   Build$:           flag(everything) || flag(systemz)
-  BuildDepends:     core_kernel, ppx_jane, ogre,
+  BuildDepends:     core_kernel, ppx_bap, ogre,
                     bap-core-theory, bap-knowledge, bap-main,
                     bap, bap-systemz
   FindlibName:      bap-plugin-systemz

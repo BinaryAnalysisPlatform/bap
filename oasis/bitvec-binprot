@@ -7,5 +7,5 @@ Library bitvec_binprot
   Path: lib/bitvec_binprot
   FindlibName: bitvec-binprot
   CompiledObject: best
-  BuildDepends: bitvec, bin_prot, ppx_jane
+  BuildDepends: bitvec, bin_prot, ppx_bap
   Modules: Bitvec_binprot

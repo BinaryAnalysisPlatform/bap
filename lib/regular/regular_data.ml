@@ -93,11 +93,19 @@ type 'a definition = {
 
 
 module Class = struct
-  type 'a t = {
+  type 'a key = {
     key : 'a Type_equal.Id.t;
   }
 
-  module Registry = Univ_map.Make(struct
+  type 'a t = 'a key
+
+  module Key = struct
+    type 'a t = 'a key
+    let to_type_id {key} = key
+    let sexp_of_t _ {key} = Sexp.Atom (Type_equal.Id.name key)
+  end
+
+  module Registry = Univ_map.Make(Key)(struct
       type 'a t = 'a definition
       let sexp_of_t _ = sexp_of_opaque
     end)
@@ -107,13 +115,13 @@ module Class = struct
   let declare ?(name="opaque") () =
     {key = Type_equal.Id.create ~name sexp_of_opaque}
 
-  let define {key} data =
+  let define key data =
     registry := Registry.add_exn !registry key data
 
-  let refine {key} ~f =
-    registry := Registry.update !registry key ~f:(function
+  let refine cls ~f =
+    registry := Registry.update !registry cls ~f:(function
         | None -> invalid_argf "Data class %s is not defined yet"
-                    (Type_equal.Id.name key) ()
+                    (Type_equal.Id.name cls.key) ()
         | Some x -> f x)
 
 
@@ -151,7 +159,7 @@ module Class = struct
   let find_cls table ?ver name =
     Option.map (find table ?ver name) ~f:(fun t -> t.cls)
 
-  let get (get,_) {key} =
+  let get (get,_) key =
     get (Registry.find_exn !registry key)
 
   let get_method fld cls ?ver name =

@@ -984,6 +984,7 @@ end
 
 type 'a path = 'a Path.t
 
+module Heap = Pairing_heap
 let shortest_path
     (type t) (type n) (type e)
     (module G : Graph with type t = t

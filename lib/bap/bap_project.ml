@@ -278,8 +278,7 @@ module Input = struct
       else Theory.Target.code_addr_size target in
     let endian = if Theory.Target.is_unknown target
       then Arch.endian arch else
-      if Theory.Target.endianness target =
-         Theory.Endianness.le
+      if Theory.Endianness.(Theory.Target.endianness target = le)
       then LittleEndian else BigEndian in
     let base = Option.value base ~default:(Addr.zero addr_size) in
     let mem = Memory.create endian base big |> ok_exn in
@@ -551,15 +550,17 @@ module DList = Doubly_linked
 
 type pass = {
   name : string;
-  main : (t -> t) sexp_opaque;
-  deps : string sexp_list;
+  main : (t -> t);
+  deps : string list;
   auto : bool;
   once : bool;
-  starts     : float stream sexp_opaque;
-  finishes   : float stream sexp_opaque;
-  failures   : float stream sexp_opaque;
-  successes  : float stream sexp_opaque;
-} [@@deriving sexp_of]
+  starts     : float stream;
+  finishes   : float stream;
+  failures   : float stream;
+  successes  : float stream;
+}
+
+let sexp_of_pass {name} = sexp_of_string name
 
 let passes : pass DList.t = DList.create ()
 let pass_registrations,pass_registered = Stream.create ()
@@ -582,7 +583,7 @@ let register_pass ?(autorun=false) ?(runonce=autorun) ?(deps=[]) ?name main : un
   let finishes =
     Stream.either successes failures |>
     Stream.map ~f:Either.value in
-  let now () = Unix.gettimeofday () in
+  let now () = Caml_unix.gettimeofday () in
   let main project =
     Signal.send started (now ());
     try

@@ -7,7 +7,7 @@ Library analyze_plugin
   Path: plugins/analyze
   FindlibName: bap-plugin-analyze
   CompiledObject: best
-  BuildDepends: core_kernel, monads, ppx_jane, linenoise,
+  BuildDepends: core_kernel, monads, ppx_bap, linenoise,
                 bap-knowledge, bap-core-theory, bap-main, bap,
                 bitvec
   InternalModules: Analyze_main, Analyze_core_commands

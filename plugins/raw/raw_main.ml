@@ -13,7 +13,7 @@ open Core_kernel
 open Extension.Syntax
 
 module Buffer = Caml.Buffer
-
+module Unix = Caml_unix
 
 module Spec = struct
   open Extension

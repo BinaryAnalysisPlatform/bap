@@ -6,7 +6,7 @@ Library bundle
   Build$:        flag(everything) || flag(bundle)
   Path:          lib/bap_bundle
   FindlibName:   bap-bundle
-  BuildDepends:  uri, camlzip, unix, core_kernel, ppx_jane
+  BuildDepends:  uri, camlzip, unix, core_kernel, core_kernel.caml_unix, ppx_bap
   Modules:       Bap_bundle
   InternalModules: Bap_bundle_config
 

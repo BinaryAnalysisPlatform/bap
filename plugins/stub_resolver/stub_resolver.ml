@@ -69,8 +69,8 @@ let unite_names t groups =
 let pick_representative = function
   | [] -> assert false
   | groups ->
-    List.min_elt groups ~compare:Int.compare |>
-    Option.value_exn
+    Option.value_exn (List.min_elt groups ~compare:Int.compare)
+
 
 let redirect t ~from ~to_ =
   Map.map t.groups ~f:(fun id ->

@@ -2,6 +2,8 @@ open Core_kernel
 open Regular.Std
 open Bap.Std
 
+module Unix = Caml_unix
+
 type event = value [@@deriving bin_io, sexp, compare]
 type monitor
 type proto

@@ -31,6 +31,7 @@ open Objdump_config
 open Bap_main
 
 module Log = Bap_main_event.Log
+module Unix = Caml_unix
 
 open KB.Syntax
 
