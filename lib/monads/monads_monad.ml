@@ -82,6 +82,17 @@ module Monad = struct
       include Lift.Syntax
       let (>=>) g f = Fn.compose f g [@@inline]
     end
+
+    module Let = struct
+      let (let*) = (>>=)
+      let (let+) = (>>|)
+      let (and+) x y =
+        x >>= fun x ->
+        y >>| fun y ->
+        (x,y)
+      let (and*) = (and+)
+    end
+
     open Syntax
 
     module Pair = struct
@@ -252,6 +263,7 @@ module Monad = struct
     let sequence = List.sequence
     let rec forever t = bind t (fun _ -> forever t)
     include Syntax
+    include Let
   end
 
   module Make(M : B) : S with type 'a t := 'a M.t =
@@ -433,6 +445,17 @@ module Ident
     let (!$$$$$) = ident
   end
 
+  module Let = struct
+    open Syntax
+    let (let*) = (>>=)
+    let (let+) = (>>|)
+    let (and+) x y =
+      x >>= fun x ->
+      y >>| fun y ->
+      (x,y)
+    let (and*) = (and+)
+  end
+
   module Let_syntax = struct
     include Syntax
     let return = ident
@@ -457,6 +480,7 @@ module Ident
   module Monad_infix = Syntax
   include Let_syntax.Let_syntax
   include Syntax
+  include Let
 end
 
 module OptionT = struct

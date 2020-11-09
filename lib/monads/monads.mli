@@ -203,7 +203,8 @@ open Core_kernel
     To use the library add [open Monads.Std] to your program. It will
     bring [Monoid] and [Monad] modules to your scope. A conventional
     way of writing a computation in a monad [M], is to open its syntax
-    with [open M.Syntax].
+    with [open M.Syntax] and/or [open M.Let] (for the monadic binding
+    operators).
 
     Given that monad is a concept that goes beyond OCaml language,
     i.e., it is more a design pattern rather than just a module type
@@ -982,6 +983,8 @@ module Std : sig
         val (!$$$$$) : ('a -> 'b -> 'c -> 'd -> 'e -> 'f) -> ('a t -> 'b t -> 'c t -> 'd t -> 'e t -> 'f t)
       end
 
+
+      (** Operators for binary monad.  *)
       module type S2 = sig
         type ('a,'e) t
 
@@ -1013,9 +1016,61 @@ module Std : sig
         val (!$$$$$) : ('a -> 'b -> 'c -> 'd -> 'e -> 'f) ->
           (('a,'s) t -> ('b,'s) t -> ('c,'s) t -> ('d,'s) t -> ('e,'s) t -> ('f,'s) t)
       end
+
+
+      (** Monadic bindings operators.
+
+          This operators allows to write
+
+          {[let* r = computation x in body]}
+
+          instead of the old infix style
+
+          {[computation x >>= fun r -> body]}
+
+          The [let*] and [and*] operators stand for the monad
+          part of the binding operators interface and [let+] with [and+]
+          stand for the applicative part of the binding operators
+          interface.
+
+          @since 2.2.0 and OCaml 4.08.0
+      *)
+      module Let : sig
+        module type S = sig
+          type 'a t
+
+          (** [let* r = f x in b] is [f x >>= fun r -> b]  *)
+          val (let*) : 'a t -> ('a -> 'b t) -> 'b t
+
+          (** monoidal product  *)
+          val (and*) : 'a t -> 'b t -> ('a * 'b) t
+
+          (** [let+ r = f x in b] is [f x >>| fun r -> b]  *)
+          val (let+) : 'a t -> ('a -> 'b) -> 'b t
+
+          (** monoidal product  *)
+          val (and+) : 'a t -> 'b t -> ('a * 'b) t
+        end
+
+        module type S2 = sig
+          type ('a,'e) t
+
+          (** [let* r = f x in b] is [f x >>= fun r -> b]  *)
+          val (let*) : ('a,'e) t -> ('a -> ('b,'e) t) -> ('b,'e) t
+
+          (** monoidal product  *)
+          val (and*) : ('a,'e) t -> ('b,'e) t -> ('a * 'b, 'e) t
+
+          (** [let+ r = f x in b] is [f x >>| fun r -> b]  *)
+          val (let+) : ('a,'e) t -> ('a -> 'b) -> ('b,'e) t
+
+          (** monoidal product  *)
+          val (and+) : ('a,'e) t -> ('b,'e) t -> ('a * 'b, 'e) t
+        end
+      end
     end
 
-    (** An unary monad interface.  *)
+    (** A unary monad interface.  *)
     module type S = sig
       type 'a t
 
@@ -1146,8 +1201,9 @@ module Std : sig
       module Seq : Collection.S with type 'a t := 'a Sequence.t
 
       include Syntax.S with type 'a t := 'a t
+      include Syntax.Let.S with type 'a t := 'a t
       include Monad.S with type 'a t := 'a t
-
+      module Let : Syntax.Let.S with type 'a t := 'a t
       (** Monadic operators, see
           {{!Std.Monad.Syntax.S}Monad.Syntax.S} for more.  *)
       module Syntax : Syntax.S with type 'a t := 'a t
@@ -1287,7 +1343,14 @@ module Std : sig
       module Seq : Collection.S with type 'a t := 'a Sequence.t
 
       include Syntax.S2 with type ('a,'e) t := ('a,'e) t
+      include Syntax.Let.S2 with type ('a,'e) t := ('a,'e) t
       include Monad.S2 with type ('a,'e) t := ('a,'e) t
+
+
+      (** Monadic Binding Operators.
+          @since 2.2.0
+      *)
+      module Let : Syntax.Let.S2 with type ('a,'e) t := ('a,'e) t
 
       (** Monadic operators, see
           {{!Std.Monad.Syntax.S2}Monad.Syntax.S2} for more.  *)
