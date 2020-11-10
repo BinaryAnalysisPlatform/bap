@@ -8,6 +8,7 @@ module Binable = Bin_prot.Utils.Make_binable(struct
     let to_binable = Std_bytes.unsafe_to_string
     let of_binable = Std_bytes.of_string
   end)
+[@@warning "-D"]
 
 module Stringable = struct
   type t = Std_bytes.t

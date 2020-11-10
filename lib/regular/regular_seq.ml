@@ -40,7 +40,7 @@ module Binable = Bin_prot.Utils.Make_binable1(struct
     type 'a t = 'a Sequence.t
     let to_binable = Sequence.to_list
     let of_binable = Sequence.of_list
-  end)
+  end)[@@warning "-D"]
 
 include Binable
 let compare_seq = compare
