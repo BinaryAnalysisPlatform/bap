@@ -218,6 +218,24 @@ module Monad = struct
       val (!$$$$$) : ('a -> 'b -> 'c -> 'd -> 'e -> 'f) ->
         (('a,'s) t -> ('b,'s) t -> ('c,'s) t -> ('d,'s) t -> ('e,'s) t -> ('f,'s) t)
     end
+
+    module Let = struct
+      module type S = sig
+        type 'a t
+        val (let*) : 'a t -> ('a -> 'b t) -> 'b t
+        val (and*) : 'a t -> 'b t -> ('a * 'b) t
+        val (let+) : 'a t -> ('a -> 'b) -> 'b t
+        val (and+) : 'a t -> 'b t -> ('a * 'b) t
+      end
+
+      module type S2 = sig
+        type ('a,'e) t
+        val (let*) : ('a,'e) t -> ('a -> ('b,'e) t) -> ('b,'e) t
+        val (and*) : ('a,'e) t -> ('b,'e) t -> ('a * 'b, 'e) t
+        val (let+) : ('a,'e) t -> ('a -> 'b) -> ('b,'e) t
+        val (and+) : ('a,'e) t -> ('b,'e) t -> ('a * 'b, 'e) t
+      end
+    end
   end
 
   module type S = sig
@@ -271,7 +289,9 @@ module Monad = struct
 
 
     include Syntax.S with type 'a t := 'a t
+    include Syntax.Let.S with type 'a t := 'a t
     include Monad.S with type 'a t := 'a t
+    module Let : Syntax.Let.S with type 'a t := 'a t
     module Syntax : Syntax.S with type 'a t := 'a t
   end
 
@@ -330,7 +350,9 @@ module Monad = struct
 
 
     include Syntax.S2 with type ('a,'e) t := ('a,'e) t
+    include Syntax.Let.S2 with type ('a,'e) t := ('a,'e) t
     include Monad.S2 with type ('a,'e) t := ('a,'e) t
+    module Let : Syntax.Let.S2 with type ('a,'e) t := ('a,'e) t
     module Syntax : Syntax.S2 with type ('a,'e) t := ('a,'e) t
   end
 end
