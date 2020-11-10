@@ -359,13 +359,25 @@ let sort_fns fns =
       Block.compare b1 b2);
   Seq.of_array fns
 
+let section_name memory start =
+  Memmap.lookup memory start |>
+  Seq.find_map ~f:(fun (mem,tag) ->
+      match Value.get Image.section tag with
+      | Some name when Addr.equal (Memory.min_addr mem) start ->
+        Some name
+      | _ -> None) |>
+  function Some name -> name
+         | None -> Format.asprintf ".section@%a" Addr.pp start
+
+
 let print_disasm pp_insn patterns ppf proj =
   let memory = Project.memory proj in
   let syms = Project.symbols proj in
   pp_open_tbox ppf ();
   setup_tabs ppf;
-  Memmap.filter_map memory ~f:(Value.get Image.section) |>
-  Memmap.to_sequence |> Seq.iter ~f:(fun (mem,sec) ->
+  Memmap.filter_map memory ~f:(Value.get Image.code_region) |>
+  Memmap.to_sequence |> Seq.iter ~f:(fun (mem,()) ->
+      let sec = section_name memory (Memory.min_addr mem) in
       Symtab.intersecting syms mem |>
       List.filter ~f:(fun (_,entry,_) ->
           matches patterns proj (Some (Block.addr entry))) |> function
