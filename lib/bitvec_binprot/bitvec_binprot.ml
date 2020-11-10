@@ -7,5 +7,5 @@ module Functions = Bin_prot.Utils.Make_binable(struct
     type t = Bitvec.t
     let to_binable = Bitvec.to_binary
     let of_binable = Bitvec.of_binary
-  end)
+  end) [@@warning "-D"]
 include Functions

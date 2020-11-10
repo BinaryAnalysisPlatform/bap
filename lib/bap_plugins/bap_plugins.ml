@@ -17,10 +17,12 @@ module Plugin = struct
   type t = {
     path : string;
     name : string;
-    bundle : bundle sexp_opaque;
-    loaded : unit future sexp_opaque;
-    finish : unit promise sexp_opaque;
-  } [@@deriving fields, sexp_of]
+    bundle : bundle;
+    loaded : unit future;
+    finish : unit promise;
+  } [@@deriving fields]
+
+  let sexp_of_t {path} = sexp_of_string path
 
   type system_event = [
     | `Opening  of string

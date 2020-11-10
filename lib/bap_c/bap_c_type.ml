@@ -79,7 +79,7 @@ type 'a qualifier = 'a Qualifier.t [@@deriving bin_io, compare, sexp]
 module Attr = struct
   type t = {
     name : string;
-    args : string sexp_list;
+    args : string list [@sexp.list];
   } [@@deriving bin_io, compare, sexp]
 end
 
@@ -90,7 +90,7 @@ module Spec = struct
   type ('a,'b) t = {
     qualifier : 'a;
     t : 'b;
-    attrs : attr sexp_list;
+    attrs : attr list [@sexp.list];
   } [@@deriving bin_io, compare, sexp]
 
 end
