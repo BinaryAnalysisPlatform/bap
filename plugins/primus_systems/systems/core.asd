@@ -61,13 +61,17 @@
                 No policy is specified"
   :depends-on (bap:promiscuous-executor)
   :components (bap:taint-primitives
-               bap:taint-signals))
+               bap:taint-signals
+               bap:propagate-taint-by-computation
+               bap:propagate-taint-exact))
 
 (defsystem bap:taint-analyzer
   :description "Uses promiscuous-executor for taint analysis.
-                Propagates taint by computation."
+                The default taint propagation policy is selected
+                using the --primus-taint-select-default-policy
+                option (defaults to propagate-by-computation)"
   :depends-on (bap:base-taint-analyzer)
-  :components (bap:propagate-taint-by-computation))
+  :components (bap:select-default-taint-policy))
 
 
 (defsystem bap:reflective-taint-analyzer
@@ -82,7 +86,7 @@
   :description "Uses promiscuous-executor for taint analysis.
                 Propagates taint exactly."
   :depends-on (bap:base-taint-analyzer)
-  :components (bap:propagate-taint-exact))
+  :components (bap:select-propagate-taint-exact-policy))
 
 
 (defsystem bap:constant-tracker

@@ -190,7 +190,7 @@ module Signals(Machine : Primus.Machine.S) = struct
 
 end
 
-let set_default_policy name =
+let policy_selector name : Primus.component=
   let module Init(Machine : Primus.Machine.S) = struct
     open Machine.Syntax
     module Policy = Taint.Propagation.Policy.Make(Machine)
@@ -201,7 +201,27 @@ let set_default_policy name =
       Policy.of_value v >>=
       Policy.set_default
   end in
-  Primus.Machine.add_component (module Init) [@warning "-D"]
+  (module Init)
+
+let register_policy_selector name =
+  Primus.Components.register_generic
+    ("select-"^name^"-policy")
+    (policy_selector name)
+    ~package:"bap"
+    ~desc:(sprintf "Selects the %s as the default taint propagation \
+                    policy. This policy could be overwritten per each \
+                    taint kind individually."
+             name)
+
+let enable_policy_selectors name =
+  Primus.Machine.add_component (policy_selector name) [@warning "-D"];
+  Primus.Components.register_generic "select-default-taint-policy"
+    (policy_selector name)
+    ~package:"bap"
+    ~desc:"Sets the default policy to the value selected by a user \
+           via the --primus-taint-default-policy command-line option.";
+  register_policy_selector "propagate-by-computation";
+  register_policy_selector "propagate-taint-exact"
 
 open Config;;
 manpage [
@@ -271,7 +291,7 @@ let () = when_ready (fun {get=(!!)} ->
              the memory and registers and deletes taints that are no \
              longer reachable.";
 
-    set_default_policy !!policy;
+    enable_policy_selectors !!policy;
     if !!enable_gc
     then Primus.Machine.add_component
         (module Taint.Gc.Conservative) [@warning "-D"])
