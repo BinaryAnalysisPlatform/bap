@@ -398,13 +398,13 @@ let create
     Signal.send Info.got_code code;
     Signal.send Info.got_spec spec;
     let run k =
+      let k = KB.(set_package package >>= fun () -> k) in
       State.Toplevel.run spec target ~code ~memory file k in
     let state = match state with
       | Some state -> state
       | None ->
         let compute_state =
           let open KB.Syntax in
-          set_package package >>= fun () ->
           Theory.Unit.for_file file >>= fun unit ->
           KB.collect State.slot unit >>= fun state ->
           if KB.Domain.is_empty (KB.Slot.domain State.slot) state
