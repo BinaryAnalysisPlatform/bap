@@ -12,8 +12,6 @@ module Plugin_rules = struct
 
   let default_packages = ["bap"; "core_kernel"; "ppx_bap"]
   let default_predicates = [
-    "custom_ppx";
-    "ppxlib";
   ]
 
   let default_tags = [
