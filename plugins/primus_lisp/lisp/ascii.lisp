@@ -10,8 +10,11 @@
       (= s 32)))
 
 (defun ascii-sign (s)
-  "(ascii-sign S) is 1 if S is + and -1 otherwise"
-  (if (= s ?+) 1 -1))
+  "(ascii-sign S) is 1 if S is +, -1 if it -, or 0 otherwise"
+  (case s
+    ?- -1
+    ?+  1
+    0))
 
 (defun ascii-is-digit (s)
   "(ascii-is-digit s) is true if S is an ascii representation of decimal digit"
