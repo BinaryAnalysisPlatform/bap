@@ -194,6 +194,8 @@ module Taint = struct
 
     open Machine.Syntax
 
+    let report_attached r t v =
+      Machine.Observation.make attach (r,t,v)
 
     let change v (Rel {field; key}) ~f =
       Machine.Local.update tainter ~f:(fun t ->
@@ -234,7 +236,9 @@ module Taint = struct
                 (Primus.Value.id value) ~f:(function
                     | None -> Object.Set.singleton taint
                     | Some taints -> Set.add taints taint)
-          }) >>| fun () -> taint
+          }) >>= fun () ->
+      report_attached Rel.direct taint value >>| fun () ->
+      taint
 
     let new_indirect ~addr ~len kind  =
       Taint.create kind >>= fun taint ->
@@ -242,7 +246,8 @@ module Taint = struct
       Machine.Local.get tainter >>= fun s ->
       Seq.range 0 len |>
       Machine.Seq.fold ~init:s.indirect ~f:(fun indirect off ->
-          Value.nsucc addr off >>| fun addr ->
+          Value.nsucc addr off >>= fun addr ->
+          report_attached Rel.indirect taint addr >>| fun () ->
           Map.update indirect addr ~f:(function
               | None -> Object.Set.singleton taint
               | Some taints -> Set.add taints taint)) >>= fun indirect ->
