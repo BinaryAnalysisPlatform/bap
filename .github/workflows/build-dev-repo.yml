@@ -40,7 +40,7 @@ jobs:
 
       - name: Configure Homebrew LLVM
         if: matrix.os == 'macos-latest'
-        run: echo '::set-env name=LLVM_CONFIG::/usr/local/opt/llvm@9/bin/llvm-config'
+        run: echo 'LLVM_CONFIG=/usr/local/opt/llvm@9/bin/llvm-config' >> $GITHUB_ENV
 
       - name: Install system dependencies
         run: opam depext -u bap
