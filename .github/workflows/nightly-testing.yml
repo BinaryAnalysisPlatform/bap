@@ -31,7 +31,7 @@ jobs:
           run: |
             brew update
             brew upgrade
-            echo '::set-env name=LLVM_CONFIG::/usr/local/opt/llvm@9/bin/llvm-config'
+            echo 'LLVM_CONFIG=/usr/local/opt/llvm@9/bin/llvm-config' >> $GITHUB_ENV
 
         - name: Add the Testing Repository
           run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
