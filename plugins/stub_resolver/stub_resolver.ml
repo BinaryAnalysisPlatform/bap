@@ -11,28 +11,31 @@ open KB.Syntax
 type groups = int Tid.Map.t
 type names = String.Set.t Int.Map.t
 
-type t = {
+type state = {
   groups : groups;
   names  : names;
   next   : int;
   stubs  : Tid.Set.t;
 }
 
-let tids = Knowledge.Domain.mapping (module Tid) "tids"
-    ~equal:Tid.equal
-    ~inspect:sexp_of_tid
+module Class = struct
+  type t
 
-let resolver = Knowledge.Class.declare
-    ~package "stub-resolver" ()
+  let t : (t,unit) KB.cls = Knowledge.Class.declare ~package "stubs" ()
 
-let result = Knowledge.Class.property
-    resolver "result" tids
-    ~persistent:(Knowledge.Persistent.of_binable (module struct
-                   type t = tid Tid.Map.t
-                   [@@deriving bin_io]
-                 end))
-    ~package
-    ~desc:"The mapping from stubs to real symbols"
+  let links = Knowledge.Class.property t "stub-refs"
+      ~package
+      ~desc:"Describes unambiguous connections between stubs \
+             and their implementations" @@
+    Knowledge.Domain.mapping (module Tid) "links"
+      ~equal:Tid.equal
+      ~inspect:sexp_of_tid
+
+  let stubs = KB.Class.property t "stub-tids"
+      ~package
+      ~desc:"The set of identified stubs" @@
+    KB.Domain.powerset (module Tid) "tids"
+end
 
 let empty = {
   groups = Map.empty (module Tid);
@@ -42,9 +45,14 @@ let empty = {
 }
 
 let is_stub sub =
-  KB.collect (Value.Tag.slot Sub.stub) (Term.tid sub) >>= function
-  | None -> KB.return false
-  | Some () -> KB.return true
+  if Term.has_attr sub Sub.stub then KB.return true
+  else match Term.get_attr sub address with
+    | None -> KB.return true
+    | Some addr ->
+      Theory.Label.for_addr (Word.to_bitvec addr) >>= fun sub ->
+      KB.collect (Value.Tag.slot Sub.stub) sub >>= function
+      | None -> KB.return false
+      | Some () -> KB.return true
 
 let aliases_of_sub s = KB.collect Theory.Label.aliases (Term.tid s)
 
@@ -126,19 +134,26 @@ let find_pairs t =
   unambiguous_pairs t.stubs
 
 let resolve prog =
-  Knowledge.Seq.fold ~init:empty
-    (Term.to_sequence sub_t prog) ~f:add >>|
-  find_pairs
+  Term.to_sequence sub_t prog |>
+  Knowledge.Seq.fold ~init:empty ~f:add >>| fun state ->
+  state, find_pairs state
 
 let provide prog =
-  Knowledge.Object.create resolver >>= fun obj ->
-  resolve prog >>= fun links ->
-  KB.provide result obj links >>= fun () ->
+  Knowledge.Object.create Class.t >>= fun obj ->
+  resolve prog >>= fun ({stubs},links) ->
+  KB.sequence [
+    KB.provide Class.links obj links;
+    KB.provide Class.stubs obj stubs;
+  ] >>= fun () ->
   KB.return obj
 
 let run prog =
-  match Knowledge.run resolver (provide prog) (Toplevel.current ()) with
-  | Ok (v,_) -> Knowledge.Value.get result v
+  match Knowledge.run Class.t (provide prog) (Toplevel.current ()) with
+  | Ok (v,_) -> v
   | Error cnf ->
     error "%a\n" Knowledge.Conflict.pp cnf;
-    Map.empty (module Tid)
+    KB.Value.empty Class.t
+
+type t = (Class.t,unit) KB.cls KB.Value.t
+let links = KB.Value.get Class.links
+let stubs = KB.Value.get Class.stubs
