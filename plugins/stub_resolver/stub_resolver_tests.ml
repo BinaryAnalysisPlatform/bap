@@ -121,7 +121,7 @@ let run name symbols expected should_fail _ctxt =
           Map.add_exn tids
             (tid_for_name_exn prog stub)
             (tid_for_name_exn prog impl)) in
-  let pairs = Stub_resolver.run prog in
+  let pairs = Stub_resolver.(links@@run prog) in
   let equal = Map.equal Tid.equal expected pairs in
   assert_bool name (equal || should_fail)
 

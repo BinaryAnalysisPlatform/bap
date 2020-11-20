@@ -316,8 +316,14 @@ let detect_stubs_by_signatures () : unit =
         Option.some_if (matches sigs mem) ())
 
 let update prog =
-  let links = Stub_resolver.run prog in
+  let resolver = Stub_resolver.run prog in
+  let stubs = Stub_resolver.stubs resolver
+  and links = Stub_resolver.links resolver in
   (object inherit Term.mapper
+    method! map_sub sub =
+      if Set.mem stubs (Term.tid sub)
+      then Term.set_attr sub Sub.stub ()
+      else sub
     method! map_jmp jmp =
       match Jmp.alt jmp with
       | None -> jmp
@@ -329,10 +335,10 @@ let update prog =
           | _ -> jmp
   end)#run prog
 
-let main = Project.map_program ~f:update
+let abi_pass = Project.map_program ~f:update
 
 let () = Extension.declare ~doc @@ fun ctxt ->
-  Bap_abi.register_pass main;
+  Bap_abi.register_pass abi_pass;
   mark_plt_as_stub ();
   detect_stubs_by_signatures ();
   Stubs.prepare ctxt;
