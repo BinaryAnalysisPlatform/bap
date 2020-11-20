@@ -158,12 +158,23 @@ module Std : sig
         and associate various attributes with it.
     *)
     module Object : sig
-      type t
+      type t [@@deriving sexp_of]
 
       (** the Primus Lisp type of objects.
           [@since 2.1]
       *)
       val t : Primus.Lisp.Type.t
+
+      (** [inspect obj] returns a s-exp representation of [obj]
+          for introspection.
+
+          @since 2.2.0
+      *)
+      val inspect : t -> Sexp.t
+
+      (** [to_string obj] returns a textual representation of [obj]
+          for introspection. *)
+      val to_string : t -> string
 
       module Make(Machine : Primus.Machine.S) : sig
 
@@ -177,7 +188,6 @@ module Std : sig
             establishes a surjection of objects onto the set of their
             kinds, i.e., it partitions the set of objects.  *)
         val create : Kind.t -> t Machine.t
-
 
         (** [kind obj] returns the kind of the object.  *)
         val kind : t -> Kind.t Machine.t
@@ -292,14 +302,27 @@ module Std : sig
           Kind.t ->
           Object.t Machine.t
 
-        (** [Taint.sanitize r k v] detaches all objects related to the
-            value [v] by the relation [r] that has the given kind [k].
+        (** [Taint.sanitize v r k] detaches all objects related to the
+            value [v] by the relation [r] that has the given kind [k]
+            from all values tracked by the taint engine.
 
             In terms of the low-level operations:
 
-            [detach v r (filter (has_kind k) (lookup v r))]
+            {v
+               for all v' in objects:
+                 detach v' r (filter (has_kind k) (lookup v r))
+            v}
+
+            @since 2.2.0 the semantics has changed: the sanitization
+            now affects all values not only v.
         *)
         val sanitize : Primus.value -> Rel.t -> Kind.t -> unit Machine.t
+
+
+        (** [objects] the set taint objects that are currently tracked.
+            @since 2.2.0
+        *)
+        val objects : Set.M(Object).t Machine.t
       end
     end
 
@@ -360,6 +383,56 @@ module Std : sig
 
     module Gc : sig
 
+      (** [taint_finalize (t,live)] occurs when a taint object is
+          collected. The parameter [live] is true if the taint object
+          is alive in some other machine, otherwise it is [true].
+
+          The precise interpretation of the [live] flag depends on the
+          execution mode of a machine. If each machine corresponds to
+          an execution path, then [live] is [true] when the taint is no
+          longer reachable in that execution path and when [live] is
+          [false] then the taint is truly dead and there are no other
+          machines (paths) that contain this taint. Such interpretation
+          could be used to implement may and must analysis.
+
+          Note: the event may occur during the GC collection cycle and
+          there could be a significant delay between the actual time
+          when the taint becomes unreachable and the time when the
+          observation is made.
+
+          Note: the event is only triggered is systems with a garbage
+          collector.
+
+          @since 2.2.0 the semantics of liveness was refined.
+
+      *)
+      val taint_finalize : (Object.t * bool) Primus.observation
+
+      (** Conservative Garbage Collector.
+
+          This component implements a (very) conservative garbage
+          collection algorithm, i.e., it may treat a lot of dead taints
+          as live but will never collect a taint that is reachable.
+
+          The algorithm tracks only variables (registers and
+          temporaries) and collects objects that are not stored in the
+          heap and no longer reachable via the variables.
+
+          Taint is live if either of the following is true: 1. it is
+          attached to a value of a variable in [Env.all]; 2. it is
+          attached to any address.
+
+          The second clause gives a possibility for
+          over-approximation, as we do not track, whether an address is
+          reachable from the current program location. So once a
+          tainted value is stored and the taint is attached to an
+          address, the only way to kill this taint, is to overwrite it
+          with another value using another store operation.
+
+          Currently, the garbage collection runs every machine instruction
+          but this may change in future.  *)
+      module Conservative : Primus.Machine.Component
+
       (** [taint_finalize (t,live)] occurs either when the taint [t]
           is no longer reachable or when when machine that created this
           taint finishes. In the former case [live] would be [true] in
@@ -369,31 +442,7 @@ module Std : sig
           could be a significant delay between the actual time when the
           taint become unreachable and the time when the observation is
           made. *)
-      val taint_finalize : (Object.t * bool) Primus.observation
 
-      (** Conservative Garbage Collector.
-
-          The conservative garbage collector may keep taints alive
-          even when they become unreachable. This is an
-          over-approximation and it is possible to devise a more precise
-          GC, especially if soundness is not required (or not strictly
-          required).
-
-          Taint is live if either of the following is true:
-          1. it is attached to a value of a variable in [Env.all];
-          2. it is attached to any address.
-
-          The second clause gives a possibility for
-          over-approximation, as we do not track, whether an address
-          is reachable from the current program location. So once a
-          tainted value is stored and the taint is attached to an
-          address, the only way to kill this taint, is to overwrite it
-          with another value using another store operation.
-
-          Currently, the garbage collection runs every basic block,
-          but this may change in future.
-      *)
-      module Conservative : Primus.Machine.Component
     end
   end
 end
