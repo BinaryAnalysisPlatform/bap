@@ -575,6 +575,26 @@ module Std : sig
                                and type 'a t := 'a state
 
 
+        (** Local state of other machines.
+
+            This module gives access to the state of other
+            machines. It is possible both to pry into others state and
+            even to change their state to enable full intermachine
+            communication. Use this module with care!
+
+            @since 2.2.0 *)
+        module Other : sig
+
+          (** [get machine state] returns the local [state] of the [machine].  *)
+          val get : id -> 'a state -> 'a t
+
+          (** [put machine state] sets the local [state] of the [machine].  *)
+          val put : id -> 'a state -> 'a -> unit t
+
+          (** [update machine state ~f] maps the local [state] of the [machine].  *)
+          val update : id -> 'a state -> f:('a -> 'a) -> unit t
+        end
+
         (** [raise exn] raises the machine exception [exn], intiating
             an abonormal control flow *)
         val raise : exn -> 'a t
@@ -2361,15 +2381,30 @@ module Std : sig
       end
     end
 
-    (** Evaluation environment.
+    (** The evaluation environment.
 
-        The Environment binds variables to values.*)
+        The environment binds variables to values and value
+        generators.
+
+        A variable is {i bound} if it was either bound to a value with
+        [set] or to a value generator with [add]. A variable is
+        {i unset} if it is bound but not bound to a value.
+
+        A variable is {i undefined} if it is not bound. Accessing an
+        undefined variable raises the [Undefined_var]
+        exception. Accessing an unset variable triggers the
+        [generated] observation and the variable becomes bound to the
+        generated value.
+    *)
     module Env : sig
 
       (** A variable is undefined, if it was never [add]ed to the
           environment.  *)
       type exn += Undefined_var of var
 
+
+      (** occurs when an unset variable is read. The generated value
+          is bound to the variable.  *)
       val generated : (var * value) observation
 
       (** [Env = Make(Machine)]  *)
@@ -2381,27 +2416,31 @@ module Std : sig
         (** [set var value] binds a variable [var] to the given [value].  *)
         val set : var -> value -> unit Machine.t
 
-
-        (** [add var generator] adds a variable [var] to the
-            environment. If a variable is read before it was defined
+        (** [add var generator] adds the variable [var] to the
+            environment. If the variable is read before it was bound
             with the [set] operation, then a value produces by the
-            generator will be automatically associated with the
+            [generator] will be automatically bound with the
             variable and returned. *)
         val add : var -> Generator.t -> unit Machine.t
 
 
-        (** [del v] deletes the variable [v] from the environment.
+        (** [del v] unsets the variable [v].
 
-            The variable [v] will no longer be bound.
+            The variable [v] is no longer bound to a value.
         *)
         val del : var -> unit Machine.t
 
 
         (** [has v] evaluates to [true] if [v] is bound.
-
             @since 2.1.0
         *)
         val has : var -> bool Machine.t
+
+        (** [is_set v] evaluates to [true] if [v] is bound to a value.
+
+            @since 2.2.0
+        *)
+        val is_set : var -> bool Machine.t
 
         (** [all] is a sequence of all variables defined in the
             environment. Note, the word _defined_ doesn't mean

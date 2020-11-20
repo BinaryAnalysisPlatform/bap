@@ -28,7 +28,7 @@ module Ident(Machine : Primus.Machine.S) = struct
   let of_value = Machine.return
 end
 
-(* registry of all ever created objects *)
+(* a global registry of all ever created objects *)
 type kinds = {
   objects : value Primus.Value.Map.t;
 }
@@ -54,14 +54,14 @@ module Object = struct
       | Some (k,_) -> Value.succ k
 
     let create kind =
-      Machine.Local.get kinds >>= fun s ->
+      Machine.Global.get kinds >>= fun s ->
       next_key s >>= fun key ->
-      Machine.Local.put kinds {
+      Machine.Global.put kinds {
         objects = Map.set s.objects ~key ~data:kind
       } >>| fun () -> key
 
     let kind v =
-      Machine.Local.get kinds >>= fun {objects} ->
+      Machine.Global.get kinds >>= fun {objects} ->
       match Map.find objects v with
       | None -> Machine.raise (Bad_object v)
       | Some x -> Machine.return x
@@ -73,6 +73,7 @@ module Object = struct
     Format.asprintf "%a" Word.pp_dec (Primus.Value.to_word x)
 
   let sexp_of_t x = Sexp.Atom (to_string x)
+  let inspect x = sexp_of_t x
 end
 
 type objects = Object.Set.t
@@ -174,6 +175,13 @@ module Rel = struct
   let indirect = indirect
 end
 
+(* a set of live tainted objects *)
+let objects {direct; indirect} : objects =
+  let to_set m : objects =
+    Map.to_sequence m |>
+    Seq.map ~f:snd |>
+    Seq.fold ~init:Object.Set.empty ~f:Set.union in
+  Set.union (to_set direct) (to_set indirect)
 
 module Taint = struct
   type Primus.exn += Bad_cast of Primus.value
@@ -256,17 +264,27 @@ module Taint = struct
 
     exception Bad_object of Primus.value
 
+    let kill_objects kill =
+      Map.filter_map ~f:(fun objects ->
+          match Set.diff objects kill with
+          | s when Set.is_empty s -> None
+          | s -> Some s)
+
     let sanitize v r k =
-      Machine.Local.get kinds >>= fun {objects} ->
-      change v r ~f:(function
-          | None -> None
-          | Some ts ->
-            let ts = Set.filter ts ~f:(fun t ->
-                match Map.find objects t with
-                | None -> false
-                | Some k' -> Kind.(k <> k')) in
-            if Set.is_empty ts then None
-            else Some ts)
+      Machine.Global.get kinds >>= fun {objects} ->
+      lookup v r >>| Set.filter ~f:(fun t ->
+          match Map.find objects t with
+          | None -> false
+          | Some k' -> Kind.(k <> k')) >>= fun kill ->
+      Machine.Local.update tainter ~f:(fun {direct; indirect} -> {
+            direct = kill_objects kill direct;
+            indirect = kill_objects kill indirect;
+          })
+
+
+
+    let objects =
+      Machine.Local.get tainter >>| objects
   end
 end
 
@@ -319,7 +337,7 @@ module Propagation = struct
             | Some kind -> has_selected policies ~policy ~kind)
 
       let collect_taints p (Rel ms) srcs s =
-        Machine.Local.get kinds >>= fun kinds ->
+        Machine.Global.get kinds >>= fun kinds ->
         Machine.Local.get policies >>| fun policies ->
         let filter = select_objects kinds policies ~policy:p in
         List.fold srcs ~init:Object.Set.empty ~f:(fun objs src ->
@@ -384,39 +402,39 @@ module Gc = struct
       Machine.Local.get tainter >>= fun s ->
       Env.all >>= fun vars ->
       Machine.Seq.fold vars ~init:Vid.Set.empty ~f:(fun live var ->
-          Env.get var >>| fun v ->
-          Set.add live (Value.id v)) >>= fun live ->
+          Env.is_set var >>= function
+          | false -> !!live
+          | true ->
+            Env.get var >>| fun v ->
+            Set.add live (Value.id v)) >>= fun live ->
       Machine.Local.put tainter {
         s with direct = Map.filter_keys s.direct ~f:(Set.mem live)
       }
 
-    (* a set of live tainted objects *)
-    let objects {direct; indirect} : objects =
-      let to_set m : objects =
-        Map.to_sequence m |>
-        Seq.map ~f:snd |>
-        Seq.fold ~init:Object.Set.empty ~f:Set.union in
-      Set.union (to_set direct) (to_set indirect)
+    let finish_taints ~live objects =
+      Set.to_sequence objects |> Machine.Seq.iter
+        ~f:(finish ~live)
 
     let main _ =
       Machine.Local.get gc >>= fun {old} ->
       collect_direct >>= fun () ->
       Machine.Local.get tainter >>= fun cur ->
-      let dead = Set.diff (objects old) (objects cur) in
-      Set.to_sequence dead |> Machine.Seq.iter
-        ~f:(finish ~live:false) >>= fun () ->
-      Machine.Local.put gc {old = cur}
-
-    let finalize _ =
-      Machine.Local.get tainter >>= fun cur ->
-      Set.to_sequence (objects cur) |>
-      Machine.Seq.iter ~f:(finish ~live:true)
-
-    let init () = Machine.sequence Primus.Interpreter.[
-        leave_blk >>> main;
-        Primus.Machine.kill >>> finalize;
+      let dying = Set.diff (objects old) (objects cur) in
+      Machine.forks () >>=
+      Machine.Seq.fold ~init:dying ~f:(fun dying id ->
+          Machine.Other.get id tainter >>| fun taints ->
+          Set.diff dying (objects taints)) >>= fun dead ->
+      let live = Set.diff dying dead in
+      Machine.sequence [
+        Machine.Local.put gc {old = cur};
+        finish_taints dead ~live:false;
+        finish_taints live ~live:true;
       ]
 
+    let init () =
+      Machine.sequence Primus.Interpreter.[
+          pc_change >>> main;
+        ]
 
   end
 end
