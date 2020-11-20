@@ -14,4 +14,5 @@ module Make(Machine : Machine) : sig
   val del : var -> unit Machine.t
   val has : var -> bool Machine.t
   val all : var seq Machine.t
+  val is_set : var -> bool Machine.t
 end
