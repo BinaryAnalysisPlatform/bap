@@ -108,12 +108,15 @@ module Make(M : Monad.S) = struct
   (* lifts state monad to the outer monad *)
   let lifts x = CM.lift (C.lift x)
 
-  let with_global_context (f : (unit -> 'a t)) =
+  let with_context cid (f : (unit -> 'a t)) =
     lifts (SM.current ())       >>= fun id ->
-    lifts (SM.switch SM.global) >>= fun () ->
+    lifts (SM.switch cid) >>= fun () ->
     f ()                >>= fun r  ->
     lifts (SM.switch id)        >>| fun () ->
     r
+
+  let with_global_context (f : (unit -> 'a t)) =
+    with_context SM.global f
 
   let get_local () : _ t = lifts (SM.gets @@ fun s -> s.local)
   let get_global () : _ t = with_global_context @@ fun () ->
@@ -189,39 +192,43 @@ module Make(M : Monad.S) = struct
         f (fun x -> k x)
   end
 
-  module Make_state(S : sig
-      val get : unit -> State.Bag.t t
-      val set : State.Bag.t -> unit t
-      val typ : string
-    end) = struct
-    type 'a m = 'a t
-    let get state =
-      S.get () >>= fun states ->
-      State.Bag.with_state states state
-        ~ready:return
-        ~create:(fun make ->
-            lifts (SM.get ()) >>= fun {proj} ->
-            return (make proj))
+  let make_get get state =
+    get () >>= fun states ->
+    State.Bag.with_state states state
+      ~ready:return
+      ~create:(fun make ->
+          lifts (SM.get ()) >>= fun {proj} ->
+          return (make proj))
 
-    let put state x =
-      S.get () >>= fun states ->
-      S.set (State.Bag.set states state x)
+  let make_put get set state x =
+    get () >>= fun states ->
+    set (State.Bag.set states state x)
 
-    let update data ~f =
-      get data >>= fun s -> put data (f s)
+  let make_update get put data ~f =
+    get data >>= fun s -> put data (f s)
+
+
+  module Local = struct
+    let get s = make_get get_local s
+    let put s = make_put get_local set_local s
+    let update s = make_update get put s
   end
 
-  module Local = Make_state(struct
-      let typ = "local"
-      let get = get_local
-      let set = set_local
-    end)
+  module Other = struct
+    let get_other pid state = with_context pid @@
+      fun () -> get_local state
+    let put_other pid state = with_context pid @@ fun () ->
+      set_local state
+    let get pid = make_get (get_other pid)
+    let put pid = make_put (get_other pid) (put_other pid)
+    let update pid = make_update (get pid) (put pid)
+  end
 
-  module Global = Make_state(struct
-      let typ = "global"
-      let get = get_global
-      let set = set_global
-    end)
+  module Global = struct
+    let get s = make_get get_global s
+    let put s = make_put get_global set_global s
+    let update s = make_update get put s
+  end
 
   let put proj = with_global_context @@ fun () ->
     lifts @@ SM.update @@ fun s -> {s with proj}

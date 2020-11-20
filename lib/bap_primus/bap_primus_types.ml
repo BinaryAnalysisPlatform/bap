@@ -70,8 +70,15 @@ module type Machine = sig
                                      (exit_status * project) m effect
   module Local  : State with type 'a m := 'a t
                          and type 'a t := 'a state
+
   module Global : State with type 'a m := 'a t
                          and type 'a t := 'a state
+
+  module Other : sig
+    val get : id -> 'a state -> 'a t
+    val put : id -> 'a state -> 'a -> unit t
+    val update : id -> 'a state -> f:('a -> 'a) -> unit t
+  end
 
   val raise : exn -> 'a t
   val catch : 'a t -> (exn -> 'a t) -> 'a t

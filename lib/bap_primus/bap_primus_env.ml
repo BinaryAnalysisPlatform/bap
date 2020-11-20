@@ -121,6 +121,10 @@ module Make(Machine : Machine) = struct
           Machine.Observation.make on_generated (var,x) >>| fun () ->
           x
 
+  let is_set var =
+    Machine.Local.get state >>| fun t ->
+    Map.mem t.values var
+
   let has var =
     Machine.Local.get state >>| fun t ->
     Map.mem t.values var || Map.mem t.random var
