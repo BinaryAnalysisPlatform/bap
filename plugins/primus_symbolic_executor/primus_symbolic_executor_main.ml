@@ -94,7 +94,7 @@ end = struct
         let name = Primus.Memory.Descriptor.name bank in
         Machine.Global.get memories >>= fun memories ->
         match Map.find memories name with
-        | None -> Machine.return ()
+        | None -> allocate bank addr addr
         | Some {lower; upper} -> allocate bank lower upper
 
     let set input value = match input with
