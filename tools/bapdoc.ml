@@ -4,7 +4,7 @@ open Core_kernel
 open Poly
 open Bap_plugins.Std
 
-
+module Unix = Caml_unix
 module Filename = Caml.Filename
 
 let libraries = [
