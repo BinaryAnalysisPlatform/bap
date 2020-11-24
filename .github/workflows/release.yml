@@ -3,6 +3,7 @@ name: release
 on:
   schedule:
     - cron: '0 0 * * SAT' # every Saturday
+  workflow_dispatch:
 
 jobs:
   build:
@@ -22,6 +23,8 @@ jobs:
            with:
              ocaml-version: 4.11.1+flambda
 
+        - name: Add the testing Repository
+          run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
          - name: Build deb packages
            run: ./tools/release.sh ${{ env.VERSION }}
 
