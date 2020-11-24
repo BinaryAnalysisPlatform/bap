@@ -150,7 +150,9 @@ let find_layer addr = List.find ~f:(function
     | {mem=Dynamic mem} -> inside mem addr
     | {mem=Static  mem} -> Memory.contains mem addr)
 
-let is_mapped addr {layers} = Option.is_some @@ find_layer addr layers
+let is_mapped addr {layers; values} =
+  Map.mem values addr ||
+  Option.is_some @@ find_layer addr layers
 
 let empty_state = {
   values = Addr.Map.empty;
@@ -259,11 +261,11 @@ module Make(Machine : Machine) = struct
     put_curr {layers; values} >>| fun () ->
     Map.find_exn values addr
 
-  let read addr {values;layers} = match find_layer addr layers with
-    | None -> pagefault addr
-    | Some layer -> match Map.find values addr with
-      | Some v -> Machine.return v
-      | None ->
+  let read addr {values;layers} = match Map.find values addr with
+    | Some v -> Machine.return v
+    | None -> match find_layer addr layers with
+      | None -> pagefault addr
+      | Some layer ->
         memory >>= fun {size} ->
         match layer.mem with
         | Static mem -> Value.of_word (read_word mem addr size)
@@ -271,15 +273,19 @@ module Make(Machine : Machine) = struct
           Generate.word g (Generator.width g) >>=
           remembered {values; layers} addr
 
-  let write addr value {values;layers} =
-    match find_layer addr layers with
-    | None -> pagefault addr
-    | Some {perms={readonly=true}} -> pagefault addr
-    | Some _ -> Machine.return {
-        layers;
-        values = Map.set values ~key:addr ~data:value;
-      }
+  let set_value s addr value = {
+    s with
+    values = Map.set s.values ~key:addr ~data:value
+  }
 
+  let write addr value s =
+    if Map.mem s.values addr
+    then Machine.return @@ set_value s addr value
+    else match find_layer addr s.layers with
+      | None -> pagefault addr
+      | Some {perms={readonly=true}} -> pagefault addr
+      | Some _ ->
+        Machine.return @@ set_value s addr value
 
   let add_layer layer t = {t with layers = layer :: t.layers}
   let (++) = add_layer
@@ -313,7 +319,6 @@ module Make(Machine : Machine) = struct
       initialize s.values lower upper f >>= fun values ->
       put_curr {s with values}
 
-
   let allocate
       ?readonly ?executable ?init ?generator base len =
     add_region ()
@@ -338,7 +343,6 @@ module Make(Machine : Machine) = struct
       s with values = Map.remove s.values addr
     }
 
-
   let load addr = get addr >>| Value.to_word
   let store addr value = Value.of_word value >>= set addr
 
@@ -346,7 +350,8 @@ module Make(Machine : Machine) = struct
     get_curr >>| is_mapped addr
 
   let is_writable addr =
-    get_curr >>| fun {layers} ->
+    get_curr >>| fun {layers; values} ->
+    Map.mem values addr ||
     find_layer addr layers |>
     function Some {perms={readonly}} -> not readonly
            | None -> false
