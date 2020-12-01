@@ -9,7 +9,6 @@ open Format
 
 module Lisp = struct
   module Context = Bap_primus_lisp_context
-  module Var = Bap_primus_lisp_var
   module Type = Bap_primus_lisp_type
   module Attribute = Bap_primus_lisp_attribute
 end
@@ -133,18 +132,35 @@ module Callgraph = struct
             List.fold (ids name) ~init:g ~f:(fun g id ->
                 G.Edge.insert (edge def.id id) g)))
 
+  let connect_with_entry = function
+    | Entry -> ident
+    | n ->
+      G.Edge.insert @@
+      G.Edge.create Entry n ()
+
+  let connect_with_exit = function
+    | Exit -> ident
+    | n ->
+      G.Edge.insert @@
+      G.Edge.create n Exit ()
+
   let close dir g =
-    let edge n = match dir with
-      | `In -> G.Edge.create Entry n ()
-      | `Out -> G.Edge.create n Exit () in
+    let fix = match dir with
+      | `In -> connect_with_entry
+      | `Out -> connect_with_exit in
     G.nodes g |> Seq.fold ~init:g ~f:(fun g n ->
         if G.Node.degree ~dir n g = 0
-        then G.Edge.insert (edge n) g
+        then fix n g
         else g)
 
   let build defs =
-    close `Out (close `In (build_kernel defs))
-
+    close `Out (close `In (build_kernel defs)) |> fun g ->
+    Graphlib.depth_first_search (module G) g
+      ~init:g ~start:Entry
+      ~start_tree:connect_with_entry |> fun g ->
+    Graphlib.depth_first_search (module G) g
+      ~init:g ~start:Exit ~rev:true
+      ~start_tree:connect_with_exit
   include G
 end
 
@@ -287,7 +303,7 @@ module Use = struct
 end
 
 (** Assign fresh indices to trees that were produced my macros or that
- ** has no indices at all.
+ ** have no indices at all.
  **
  ** We first scan through all meta definitions (i.e., macros, substs,
  ** and consts) to obtain a set of indices that we shall rewrite, and
@@ -784,9 +800,9 @@ module Typing = struct
         | Error (No_unification (_,t1,_,t2)) ->
           fprintf ppf "%a <> %a" pp_val t1 pp_val t2
         | Error (Unresolved_variable (_,v)) ->
-          fprintf ppf "ill-types(unresolve-variable %s)" v
+          fprintf ppf "ill-typed(unresolve-variable %s)" v
         | Error (Unresolved_function (_,s,_)) ->
-          fprintf ppf "ill-types(unresolve-function %s)" s
+          fprintf ppf "ill-typed(unresolve-function %s)" s
         | Error (Unresolved_signal (_,s,_)) ->
           fprintf ppf "ill-typed(unresolved-signal %s)" s
         | Error (Unresolved_parameter (_,s)) ->
@@ -1038,7 +1054,7 @@ module Typing = struct
         match Lisp.Attribute.Set.get
                 (Def.attributes def) Lisp.Context.t with
         | None -> true
-        | Some def -> Lisp.Context.(global <= def))
+        | Some def_ctxt -> Lisp.Context.(global <= def_ctxt))
 
   let find_signal (sigs : Def.signal Def.t list) name =
     List.find sigs ~f:(fun s -> String.equal (Def.name s) name)

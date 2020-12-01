@@ -206,7 +206,6 @@ module TypeErrorSummary(Machine : Primus.Machine.S) = struct
         errors (if errors > 1 then "s" else "")
 end
 
-
 let typecheck proj =
   let module Machine = struct
     type 'a m = 'a
@@ -218,9 +217,8 @@ let typecheck proj =
   match Main.run proj @@ Machine.return () with
   | Normal,_ -> ()
   | Exn err,_ ->
-    warning "Primus Frameworkd failed to initialize: %s@\n%!"
+    warning "Primus Framework failed to initialize: %s@\n%!"
       (Primus.Exn.to_string err)
-
 
 
 module TypeErrorPrinter(Machine : Primus.Machine.S) = struct
