@@ -48,6 +48,7 @@ include Loggers()
 
 let known_stub_names = [
   ".plt";
+  ".plt.sec";
   "__stubs";
   ".MIPS.stubs";
 ]
@@ -96,39 +97,55 @@ end = struct
     include Bitvec_sexp.Functions
   end
 
-  type t = {
-    lower : Bitvec.t;
-    upper : Bitvec.t
-  } [@@deriving equal, sexp]
+  module Interval = struct
+    type t = {
+      lower : Bitvec.t;
+      upper : Bitvec.t
+    } [@@deriving equal, compare, fields,sexp]
+    type point = Bitvec.t [@@deriving compare, sexp_of]
+  end
 
+  module Ranges = Interval_tree.Make(Interval)
 
-  let empty = {lower = Bitvec.zero; upper = Bitvec.zero}
+  type t = string Ranges.t
+
+  let empty = Ranges.empty
+
+  let mem = Ranges.contains
+
+  let keys xs = Seq.map ~f:fst @@ Ranges.to_sequence xs
+
+  let equal xs ys =
+    Seq.equal Interval.equal (keys xs) (keys ys)
+
+  let inspect xs =
+    Seq.sexp_of_t [%sexp_of: Interval.t * string] @@
+    Ranges.to_sequence xs
 
   let width = Ogre.(require Image.Scheme.bits >>| Int64.to_int_trunc)
 
-  let find stubs =
+  let collect stubs =
     width >>= fun width ->
     let module Addr = Bitvec.Make(struct
         let modulus = Bitvec.modulus width
       end) in
-    Ogre.request named_region ~that:(fun {info=name} ->
-        Set.mem stubs name) >>| function
-    | Some {addr; size} -> {
-        lower = Addr.int64 addr;
-        upper = Addr.(int64 addr + int64 size)
-      }
-    | None -> empty
+    Ogre.collect Ogre.Query.(select @@ from named_region) >>|
+    Seq.fold ~f:(fun intervals {info=name; addr; size} ->
+        if Set.mem stubs name
+        then Ranges.add intervals Interval.{
+            lower = Addr.int64 addr;
+            upper = Addr.(int64 addr + int64 size)
+          } name
+        else intervals)
+      ~init:empty
 
-  let mem {lower; upper} addr =
-    Bitvec.(lower <= addr) &&
-    Bitvec.(upper > addr)
 
   let stubs ctxt =
     List.fold (Extension.Configuration.get ctxt names)
       ~init:(Set.of_list (module String) known_stub_names)
       ~f:(fun init -> List.fold ~init ~f:Set.add)
 
-  let create ctxt doc = match Ogre.eval (find (stubs ctxt)) doc with
+  let create ctxt doc = match Ogre.eval (collect (stubs ctxt)) doc with
     | Ok plt -> plt
     | Error err ->
       warning "failed to find plt entries: %a" Error.pp err;
@@ -136,7 +153,7 @@ end = struct
 
   let t = KB.Domain.flat ~empty "interval"
       ~equal
-      ~inspect:sexp_of_t
+      ~inspect
 
   let slot = KB.Class.property Theory.Unit.cls "stubs-section" t
       ~package:"bap"
