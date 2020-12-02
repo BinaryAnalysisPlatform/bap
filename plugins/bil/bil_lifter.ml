@@ -198,62 +198,6 @@ let provide_bir () =
 
 
 module Relocations = struct
-
-  type t = {
-    rels : addr Addr.Map.t;
-    exts : string Addr.Map.t;
-  }
-
-  module Fact = Ogre.Make(Monad.Ident)
-
-  module Request = struct
-    open Image.Scheme
-    open Fact.Syntax
-
-    let of_aseq s =
-      Seq.fold s ~init:Addr.Map.empty ~f:(fun m (key,data) ->
-          Map.set m ~key ~data)
-
-    let arch =
-      Fact.collect Ogre.Query.(select (from arch)) >>= fun s ->
-      Fact.Seq.reduce ~f:(fun a1 a2 ->
-          if Arch.equal a1 a2 then Fact.return a1
-          else Fact.failf "arch is ambiguous: %a <> %a"
-              Arch.pp a1 Arch.pp a2 ())
-        (Seq.filter_map ~f:Arch.of_string s) >>= fun a ->
-      match a with
-      | Some a -> Fact.return a
-      | None -> Fact.return `unknown
-
-    let arch_width =
-      arch >>| fun arch -> Arch.addr_size arch |> Size.in_bits
-
-    let relocations =
-      arch_width >>= fun width ->
-      Fact.collect Ogre.Query.(select (from relocation)) >>= fun s ->
-      Fact.return
-        (of_aseq @@ Seq.map s ~f:(fun (addr, data) ->
-             Addr.of_int64 ~width addr, Addr.of_int64 ~width data))
-
-    let external_symbols  =
-      arch_width >>= fun width ->
-      Fact.collect Ogre.Query.(select (from external_reference)) >>| fun s ->
-      Seq.fold s ~init:Addr.Map.empty ~f:(fun addrs (addr, name) ->
-          Map.set addrs
-            ~key:(Addr.of_int64 ~width addr)
-            ~data:name)
-  end
-
-  let relocations = Fact.eval Request.relocations
-  let external_symbols = Fact.eval Request.external_symbols
-  let empty = {rels = Addr.Map.empty; exts = Addr.Map.empty}
-
-  let of_spec spec =
-    match relocations spec, external_symbols spec with
-    | Ok rels, Ok exts -> {rels; exts}
-    | Error e, _  | _, Error e -> Error.raise e
-
-
   let reference_analyzer = object
     inherit [addr Var.Map.t * Addr.Set.t] Stmt.visitor
     method! enter_move var exp (vars,refs) =
@@ -277,21 +221,9 @@ module Relocations = struct
   let addresses bil mem =
     let start = Memory.min_addr mem in
     let len = Memory.length mem in
-    Seq.append
+    Seq.map ~f:Addr.to_bitvec @@ Seq.append
       (Set.to_sequence (references bil))
       (Seq.init len ~f:(Addr.nsucc start))
-
-  let find_external {exts} bil mem =
-    Seq.find_map ~f:(Map.find exts) (addresses bil mem)
-
-  let find_internal {rels} bil mem =
-    Seq.find_map ~f:(Map.find rels) (addresses bil mem)
-
-  let subscribe () =
-    let open Future.Syntax in
-    Stream.hd Project.Info.spec >>|
-    of_spec
-
 
   let override_internal dst =
     Stmt.map (object inherit Stmt.mapper
@@ -304,18 +236,16 @@ module Relocations = struct
       method! map_jmp _ = [Call.create name]
     end)
 
-  let fixup info is_stub mem bil =
-    match Future.peek info with
+  let make_addr mem =
+    let width = Addr.bitwidth (Memory.min_addr mem) in
+    fun x -> Word.create x width
+
+  let fixup refs is_stub mem bil =
+    let lookup = Bap_references.lookup refs in
+    Seq.find_map (addresses bil mem) ~f:lookup |> function
     | None -> bil
-    | Some info ->
-      match find_internal info bil mem with
-      | Some dst ->
-        override_internal dst bil
-      | None ->
-        match find_external info bil mem with
-        | Some name ->
-          override_external is_stub name bil
-        | None -> bil
+    | Some Addr dst -> override_internal (make_addr mem dst) bil
+    | Some Name ext -> override_external is_stub ext bil
 end
 
 module Brancher = struct
@@ -459,9 +389,15 @@ let lift ~enable_intrinsics:{for_all; for_unk; for_special; predicates}
       then Ok (create_intrinsic arch mem insn)
       else Ok bil
 
+let references obj =
+  KB.collect Theory.Label.unit obj >>= function
+  | None -> KB.return @@
+    KB.Domain.empty (KB.Slot.domain Bap_references.slot)
+  | Some unit ->
+    KB.collect Bap_references.slot unit
+
 let provide_lifter ~enable_intrinsics ~with_fp () =
   info "providing a lifter for all BIL lifters";
-  let relocations = Relocations.subscribe () in
   let unknown = Theory.Semantics.empty in
   let context arch =
     sprintf "arch-%a" Arch.str arch ::
@@ -490,7 +426,8 @@ let provide_lifter ~enable_intrinsics ~with_fp () =
       let bil = Insn.bil sema in
       KB.collect (Value.Tag.slot Sub.stub) obj >>|
       Option.is_some >>= fun is_stub ->
-      let bil = Relocations.fixup relocations is_stub mem bil in
+      references obj >>= fun refs ->
+      let bil = Relocations.fixup refs is_stub mem bil in
       Lifter.run BilParser.t bil >>| fun sema ->
       let bil = Insn.bil sema in
       KB.Value.merge ~on_conflict:`drop_left

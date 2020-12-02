@@ -10,5 +10,5 @@ Library relocatable_plugin
   InternalModules: Rel_symbolizer
   BuildDepends:    bap, ogre, bap-knowledge, core_kernel, monads,
                    bitvec, bitvec-order, bitvec-sexp, bap-core-theory, ppx_bap,
-                   bap-main, bap-arm, bap-powerpc, bap-x86-cpu
+                   bap-main, bap-arm, bap-powerpc, bap-x86-cpu, bap-references
   XMETAExtraLines: tags="brancher, loader, ogre"

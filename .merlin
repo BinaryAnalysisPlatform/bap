@@ -44,6 +44,7 @@ B lib/bap
 B lib/bap_main
 B lib/bap_recipe
 B lib/bap_relation
+B lib/bap_references
 B lib/bap_abi
 B lib/bap_api
 B lib/bitvec

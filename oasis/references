@@ -1,0 +1,11 @@
+Flag references
+  Description: Build the references library
+  Default: false
+
+Library bap_references
+  Build$:       flag(everything) || flag(references)
+  Path:         lib/bap_references
+  FindlibName:  bap-references
+  BuildDepends: core_kernel, bap, bap-core-theory, bap-knowledge,
+                bitvec, bitvec-sexp, ogre, ppx_bap
+  Modules:      Bap_references
