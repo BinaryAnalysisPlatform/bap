@@ -519,21 +519,25 @@ module ToIR = struct
   (** Convert X87 bitvector (80-bit) to reduced precision version
       based on the contents of the precision-control field. This
       function also does the necessary rounding. *)
+  (** FIXME: We needed to comment out the precision-control rounding because the method of
+      converting to an fp type with unusual sigbits/expbits is not compatible with new bap. *)
   let x87_bv_to_fp_pc ?(rm=RNE) exp =
     let cmp_pc i = (binop EQ (X86_legacy_bil_convenience.it i (Reg 2)) (Var x87_pc)) in
-    let convert_00 = intel80tof ~rm exp |> ftof ~rm ~float_size:fp_pc_32_bits |> ftof ~rm ~float_size:fp_80_bits in
-    let convert_10 = intel80tof ~rm exp |> ftof ~rm ~float_size:fp_pc_64_bits |> ftof ~rm ~float_size:fp_80_bits in
+    let convert_00 = intel80tof ~rm exp |> (* ftof ~rm ~float_size:fp_pc_32_bits |> *) ftof ~rm ~float_size:fp_80_bits in
+    let convert_10 = intel80tof ~rm exp |> (* ftof ~rm ~float_size:fp_pc_64_bits |> *) ftof ~rm ~float_size:fp_80_bits in
     let convert_11 = intel80tof ~rm exp in
     (* TODO: should we detect when 0b01 occurs and raise an error? *)
     X86_legacy_bil_convenience.exp_ite (cmp_pc 0b00) convert_00
       (X86_legacy_bil_convenience.exp_ite (cmp_pc 0b10) convert_10 convert_11)
 
   (** Convert X87 float to 80-bit double-extended precision bitvector. *)
+  (** FIXME: We needed to comment out the precision-control rounding because the method of
+      converting to an fp type with unusual sigbits/expbits is not compatible with new bap. *)
   let x87_fp_to_bv_pc ?(rm=RNE) exp =
     let cmp_pc i = (binop EQ (X86_legacy_bil_convenience.it i (Reg 2)) (Var x87_pc)) in
-    let convert_00 = ftof ~rm ~float_size:fp_pc_32_bits exp |> ftof ~rm ~float_size:fp_80_bits |> ftointel80 ~rm in
-    let convert_10 = ftof ~rm ~float_size:fp_pc_64_bits exp |> ftof ~rm ~float_size:fp_80_bits |> ftointel80 ~rm in
-    let convert_11 = ftof ~rm ~float_size:fp_pc_79_bits exp |> ftointel80 ~rm in
+    let convert_00 = (* ftof ~rm ~float_size:fp_pc_32_bits *) exp |> ftof ~rm ~float_size:fp_80_bits |> ftointel80 ~rm in
+    let convert_10 = (* ftof ~rm ~float_size:fp_pc_64_bits *) exp |> ftof ~rm ~float_size:fp_80_bits |> ftointel80 ~rm in
+    let convert_11 = ftof ~rm ~float_size:fp_80_bits exp |> ftointel80 ~rm in
     X86_legacy_bil_convenience.exp_ite (cmp_pc 0b00) convert_00
       (X86_legacy_bil_convenience.exp_ite (cmp_pc 0b10) convert_10 convert_11)
 

@@ -35,9 +35,8 @@ val fp_64_bits: float_size
 val fp_80_bits: float_size
 val fp_128_bits: float_size
 
-val fp_pc_32_bits: float_size
-val fp_pc_64_bits: float_size
-val fp_pc_79_bits: float_size
+(* val fp_pc_32_bits: float_size
+   val fp_pc_64_bits: float_size *)
 
 val fp_16: typ
 val fp_32: typ

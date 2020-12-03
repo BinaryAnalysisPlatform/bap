@@ -71,9 +71,8 @@ and fp_64_bits = {exp_bits=11; sig_bits=53}
 and fp_80_bits = {exp_bits=15; sig_bits=64}
 and fp_128_bits = {exp_bits=15; sig_bits=113}
 
-let fp_pc_32_bits = {exp_bits=15; sig_bits=24}
-and fp_pc_64_bits = {exp_bits=15; sig_bits=53}
-and fp_pc_79_bits = {exp_bits=15; sig_bits=64}
+(* let fp_pc_32_bits = {exp_bits=15; sig_bits=24}
+   and fp_pc_64_bits = {exp_bits=15; sig_bits=53} *)
 
 let fp_16 = Float fp_16_bits
 and fp_32 = Float fp_32_bits
