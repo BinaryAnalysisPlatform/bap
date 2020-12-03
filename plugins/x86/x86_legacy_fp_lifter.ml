@@ -466,7 +466,7 @@ module Fp_lifter = struct
 
     let ld_fprr mem src =
       let index = decode src |> value_exn |> st_index_of_reg_t in
-      load_fp ~index |> ToIR.push_x87_stack |> Result.Ok
+      load_fp ~index |> ToIR.push_x87_stack |> fun x -> Result.Ok x
     in
 
     (** FSTP: Copy ST(0) to ST(i) and pop register stack. *)
