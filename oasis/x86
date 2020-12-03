@@ -24,7 +24,8 @@ Library x86_plugin
  Path:             plugins/x86
  FindlibName:      bap-plugin-x86
  BuildDepends:     bap, bap-abi, bap-c, bap-x86-cpu, bap-llvm, core_kernel,
-                   ppx_bap, bap-main, bap-future, bap-api, ogre
+                   ppx_bap, bap-main, bap-future, bap-api, ogre,
+                   zarith, bap-core-theory, bap-knowledge, bitvec
  Modules:          X86_backend, X86_prefix
  InternalModules:  X86_abi,
                    X86_btx,
@@ -57,7 +58,23 @@ Library x86_plugin
                    X86_tools_reg,
                    X86_tools_types,
                    X86_tools_vector,
-                   X86_utils
+                   X86_utils,
+                   X86_legacy_bil,
+                   X86_legacy_bil_ast,
+                   X86_legacy_bil_type,
+                   X86_legacy_bil_var,
+                   X86_legacy_bil_lifter,
+                   X86_legacy_bil_semantics,
+                   X86_legacy_bil_pp,
+                   X86_legacy_bil_arithmetic,
+                   X86_legacy_bil_big_int_convenience,
+                   X86_legacy_bil_convenience,
+                   X86_legacy_bil_disasm_i386,
+                   X86_legacy_bil_typecheck,
+                   X86_legacy_bil_var_temp,
+                   X86_legacy_fp_lifter,
+                   X86_legacy_bil_register,
+                   X86_legacy_operands
  XMETAExtraLines:  tags="disassembler, lifter, x86, abi"
 
 Library x86_test
