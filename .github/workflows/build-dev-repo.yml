@@ -10,6 +10,7 @@ jobs:
         os:
           - ubuntu-latest
           - macos-latest
+          - windows-latest
         ocaml-compiler:
           - 4.11.x
           - 4.08.x
