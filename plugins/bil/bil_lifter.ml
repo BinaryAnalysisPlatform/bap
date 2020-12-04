@@ -183,8 +183,6 @@ end
 module Optimizer = Theory.Parser.Make(Bil_semantics.Core)
 [@@inlined]
 
-
-
 let provide_bir () =
   KB.Rule.(declare ~package "reify-ir" |>
            require Theory.Semantics.slot |>
@@ -200,9 +198,9 @@ let provide_bir () =
 module Relocations = struct
 
   type t = {
-    rels : addr Addr.Map.t;
+    rels : Addr.t Addr.Map.t;
     exts : string Addr.Map.t;
-  }
+  } [@@deriving equal]
 
   module Fact = Ogre.Make(Monad.Ident)
 
@@ -248,6 +246,7 @@ module Relocations = struct
   let external_symbols = Fact.eval Request.external_symbols
   let empty = {rels = Addr.Map.empty; exts = Addr.Map.empty}
 
+
   let of_spec spec =
     match relocations spec, external_symbols spec with
     | Ok rels, Ok exts -> {rels; exts}
@@ -287,12 +286,6 @@ module Relocations = struct
   let find_internal {rels} bil mem =
     Seq.find_map ~f:(Map.find rels) (addresses bil mem)
 
-  let subscribe () =
-    let open Future.Syntax in
-    Stream.hd Project.Info.spec >>|
-    of_spec
-
-
   let override_internal dst =
     Stmt.map (object inherit Stmt.mapper
       method! map_jmp _ = [Bil.Jmp (Int dst)]
@@ -304,10 +297,18 @@ module Relocations = struct
       method! map_jmp _ = [Call.create name]
     end)
 
-  let fixup info is_stub mem bil =
-    match Future.peek info with
-    | None -> bil
-    | Some info ->
+  let relocations_slot =
+    KB.Class.property Theory.Unit.cls "bil-relocations"
+      ~package:"bap" @@
+    KB.Domain.flat ~empty ~equal "bil-relocations"
+
+  let fixup obj mem bil =
+    KB.collect Theory.Label.unit obj >>= function
+    | None -> !!bil
+    | Some unit ->
+      KB.collect relocations_slot unit >>= fun info ->
+      KB.collect (Value.Tag.slot Sub.stub) obj >>|
+      Option.is_some >>| fun is_stub ->
       match find_internal info bil mem with
       | Some dst ->
         override_internal dst bil
@@ -316,6 +317,10 @@ module Relocations = struct
         | Some name ->
           override_external is_stub name bil
         | None -> bil
+
+  let prepare () =
+    KB.promise relocations_slot @@ fun unit ->
+    KB.collect Image.Spec.slot unit >>| of_spec
 end
 
 module Brancher = struct
@@ -461,7 +466,6 @@ let lift ~enable_intrinsics:{for_all; for_unk; for_special; predicates}
 
 let provide_lifter ~enable_intrinsics ~with_fp () =
   info "providing a lifter for all BIL lifters";
-  let relocations = Relocations.subscribe () in
   let unknown = Theory.Semantics.empty in
   let context arch =
     sprintf "arch-%a" Arch.str arch ::
@@ -488,9 +492,7 @@ let provide_lifter ~enable_intrinsics ~with_fp () =
       let module Lifter = Theory.Parser.Make(Core) in
       Optimizer.run BilParser.t bil >>= fun sema ->
       let bil = Insn.bil sema in
-      KB.collect (Value.Tag.slot Sub.stub) obj >>|
-      Option.is_some >>= fun is_stub ->
-      let bil = Relocations.fixup relocations is_stub mem bil in
+      Relocations.fixup obj mem bil >>= fun bil ->
       Lifter.run BilParser.t bil >>| fun sema ->
       let bil = Insn.bil sema in
       KB.Value.merge ~on_conflict:`drop_left
@@ -502,10 +504,10 @@ let provide_lifter ~enable_intrinsics ~with_fp () =
            comment "denotates BIL in the Core Theory terms");
   Knowledge.promise Theory.Semantics.slot lifter
 
-
 let init ~enable_intrinsics ~with_fp () =
   provide_lifter ~enable_intrinsics ~with_fp ();
   provide_bir ();
+  Relocations.prepare ();
   Theory.declare !!(module Brancher : Theory.Core)
     ~package ~name:"jump-dests"
     ~desc:"an approximation of jump destinations"
