@@ -59,6 +59,7 @@ Library types
                    ogre,
                    bap-knowledge,
                    bap-core-theory,
+                   bap-main,
                    core_kernel,
                    ppx_bap
   InternalModules:
@@ -76,6 +77,7 @@ Library types
                    Bap_bitvector,
                    Bap_common,
                    Bap_context,
+                   Bap_core_theory_bil_parser,
                    Bap_eval,
                    Bap_eval_types,
                    Bap_exp,

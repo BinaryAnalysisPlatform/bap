@@ -5,31 +5,6 @@ open Bap_core_theory
 
 [@@@warning "-40"]
 
-
-module Call : sig
-  val create : string -> Stmt.t
-  val dst : Stmt.t -> string option
-end = struct
-  let prefix = "external:"
-  let create name =
-    Bil.special @@ sprintf "%s%s" prefix name
-
-  let dst = function
-    | Bil.Special p -> String.chop_prefix ~prefix p
-    | _ -> None
-end
-
-type context = Context
-let package = "bil-plugin-internal"
-let cls = KB.Class.declare ~package "context" Context
-let context = KB.Symbol.intern "context" cls
-let inherits slot =
-  let name = KB.Name.unqualified @@KB.Slot.name slot in
-  KB.Class.property cls ~package name
-    (KB.Slot.domain slot)
-
-let arch = inherits Arch.slot
-
 let exp = Exp.slot
 let stmt = Bil.slot
 
@@ -499,28 +474,21 @@ module Basic : Theory.Basic = struct
       else extract s !!hi !!lo !!e
     | _ -> extract s !!hi !!lo !!e
 
-  let arch lbl =
-    KB.collect Arch.slot lbl >>= function
-    | `unknown -> context >>= KB.collect arch
-    | r -> !!r
-
   let goto lbl =
     KB.collect Theory.Label.addr lbl >>= fun dst ->
-    arch lbl >>= fun arch ->
     match dst with
     | Some addr ->
-      let size = Size.in_bits (Arch.addr_size arch) in
+      Theory.Label.target lbl >>= fun target ->
+      let size = Theory.Target.code_addr_size target in
       let dst = Word.create addr size in
       ctrl Bil.[Jmp (Int dst)]
     | _ -> KB.collect Theory.Label.ivec lbl >>= function
       | Some ivec -> ctrl Bil.[CpuExn ivec]
       | None -> KB.collect Theory.Label.name lbl >>= fun name ->
         ctrl @@ match name with
-        | Some name -> [Call.create name]
+        | Some name -> [Bil.(encode call name)]
         | None -> [Bil.special (Format.asprintf "(goto %a)" Tid.pp lbl)]
 end
-
-
 
 module Core : Theory.Core = struct
   include Theory.Empty
