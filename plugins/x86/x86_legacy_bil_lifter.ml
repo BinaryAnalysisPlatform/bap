@@ -339,7 +339,7 @@ module Bap_integration = struct
         | _ -> var in
     List.map prog ~f:stmt
 
-  let empty = Theory.Program.Semantics.empty
+  let empty = Theory.Semantics.empty
 
   let lift (module Core : Theory.Core) arch mem insn =
     match fp_lifter arch mem insn with
@@ -374,7 +374,7 @@ module Bap_integration = struct
         KB.catch (lift theory arch mem insn)
           (fun _ -> !!empty)
       | _ -> Knowledge.return empty in
-    Knowledge.promise Theory.Program.Semantics.slot lifter
+    Knowledge.promise Theory.Semantics.slot lifter
 end
 
 let init () = Bap_integration.provide_lifter ()

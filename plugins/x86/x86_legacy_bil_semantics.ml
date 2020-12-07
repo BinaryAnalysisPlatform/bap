@@ -107,7 +107,7 @@ module Semantics = struct
   end
 
   let stmt = Knowledge.Class.property
-      Theory.Program.Semantics.cls "legacy-bil-stmt" Domain.stmt
+      Theory.Semantics.cls "legacy-bil-stmt" Domain.stmt
       ~public:true
       ~package
 
