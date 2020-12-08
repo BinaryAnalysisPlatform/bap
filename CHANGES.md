@@ -1,3 +1,68 @@
+2.2.0
+=====
+
+### Features
+
+- #1132 adds the missing toupper and tolower prototypes
+- #1134 implements better support for cross memory disassembling
+- #1142 Tweak jumping and eval cond
+- #1112 adds symbolizer based on radare2
+- #1155 removes the buffer tracking
+- #1160 makes build_plugin.sh more portable
+- #1164 splits oasis multipackages into sub-packages
+- #1171 creates a separate package for the strings plugin
+- #1170 prevents delay slots from becoming a basic block start
+- #1173 publishes and documents the new disassembler engine
+- #1177 enables unallocated memories in symbolic executor
+- #1119 enables multiple projects in the same knowledge base
+- #1187 renovates the LLVM backend
+- #1198 adds is-executable and format attributes and fixes glibc rt check
+- #1197 adds the specification command
+- #1196 implements support for ARM Modified Immediate Constants
+- #1209 improves symbolization facilities
+- #1212 enables enumeration of objects in the knowledge base
+- #1200 optimizes functional tests
+- #1217 a new portable and efficient knowledge base representation
+- #1217 a REPL for querying and modifying the knowledge base
+- #1220 removes section and other symbols from the ELF loader output
+- #1221 switches to Fowler-Noll-Vo hash algorithm for hashing names
+- #1225 optimizes the merge function for OGRE documents
+- #1225 implements bin_io and sexp protocol for OGRE docs
+- #1225 uses real names for Knowledge.Name.t sexp-serialization
+- #1225 overhauls the target/architecture abstraction (1/n)
+- #1226 overhauls the target/architecture abstraction (2/n)
+- #1227 overhauls the target/architecture abstraction (3/n)
+- #1229 upgrades bap to LLVM 11
+- #1230 adds a proper handling of unitialized memory in Primus.Memory.map
+- #1178 enables ARM Thumb/Thumb2 and interworking
+- #1116 updates to OCaml 4.{10,11}, drops 4.07, switches to core_kernel v0.14
+- #1234 adds binding operators to the monads library
+- #1235 prints only code regions, use sections for names
+- #1237 initializes the default policy in primus taint analyzers
+- #1241 makes the taint-attached observation on taint introductions
+- #1243 enables intermachine communication
+- #1244 tweaks the Taint Engine and partially rewrites the Taint GC
+- #1245 propagates stub resolver results to program term attributes
+- #1246 protects symbolic executor from segfaults when setting memory inputs
+- #1255 x86 floating-point lifter
+
+### Bug fixes
+
+- #1123 fixes an inifinite loop in certain Primus Lisp analysis
+- #1129 handles correctly XDG_CACHE_HOME
+- #1140 fixes getenv Lisp stub
+- #1147 fixes taint propagation for unmodeled subroutines
+- #1143 fixes the `fgetc` stub and the `channel-input` primitive return type
+- #1128 fix rev16 instruction
+- #1165 fixes barrier instructions with delay slots
+- #1219 fixes the implementation of strncasecmp and strcmp models
+- #1224 fixes a trivial typo in the symbolic fread implementation
+- #1222 Fix Pcmp instruction
+- #1233 fixes Machine.Observation.watch function and publishes fork/switch
+- #1238 fixes improper compartmentalization of project computations
+- #1240 fixes-bap-taint-gc fixes the sign handling in the atoi stub
+- #1251 fixes Primus Lisp typechecker (was missing errors)
+
 2.1.0
 =====
 
