@@ -38,12 +38,15 @@ jobs:
         - name: Install System Dependencies
           run: opam depext -u bap
 
+        - name: Install radare2 Dependencies
+          run: opam depext -u bap-radare2
+
         - name: Cleanup the Caches
           if: matrix.os == 'ubuntu-latest'
           run: sudo apt clean --yes
 
         - name: Build and Install BAP
-          run: opam install bap
+          run: opam install bap bap-radare2
 
         - name: Checkout the Tests
           uses: actions/checkout@v2
