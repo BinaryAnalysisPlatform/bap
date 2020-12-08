@@ -2,7 +2,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/BinaryAnalysisPlatform/bap/blob/master/LICENSE)
 [![Join the chat at https://gitter.im/BinaryAnalysisPlatform/bap](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/BinaryAnalysisPlatform/bap?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![docs](https://img.shields.io/badge/doc-master-green.svg)][docs]
-[![docs](https://img.shields.io/badge/doc-2.1.0-green.svg)][docs]
+[![docs](https://img.shields.io/badge/doc-2.2.0-green.svg)][docs]
 [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)][travis]
 
 ## Table of contents
@@ -29,8 +29,8 @@ BAP is developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by
 We provide binary packages packed for Debian and Red Hat derivatives. For other distributions we provide tgz archives. To install bap on a Debian derivative:
 
 ```bash
-wget https://github.com/BinaryAnalysisPlatform/bap/releases/download/v2.1.0/{bap,libbap,libbap-dev}_2.1.0.deb
-sudo dpkg -i {bap,libbap,libbap-dev}_2.1.0.deb
+wget https://github.com/BinaryAnalysisPlatform/bap/releases/download/v2.2.0/{bap,libbap,libbap-dev}_2.2.0.deb
+sudo dpkg -i {bap,libbap,libbap-dev}_2.2.0.deb
 ```
 
 ### From sources
