@@ -1586,7 +1586,7 @@ let insn arch mem insn =
   | Ok bil -> match Type.check bil with
     | Ok () -> Ok bil
     | Error err ->
-      warning "BIL is not well-type in the legacy lifter at %a - %a"
+      warning "BIL is not well-typed in the legacy lifter at %a - %a"
         pp_insn (mem,insn) Type.Error.pp err;
       Error (Error.of_string "type error")
 

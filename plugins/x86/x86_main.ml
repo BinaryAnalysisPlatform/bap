@@ -25,7 +25,7 @@ let () =
       `S "DESCRIPTION";
       `P "Provides lifter and implements a set of ABI for x86 and
     x86-64 architectures. No parameters are usually required. Once the
-    pluing is installed it will automatically provide it
+    plugin is installed it will automatically provide it
     services. However it is possible to override default abi, e.g.,
     when working with an executable compiled for MS Windows
     platform. For a full set of supported ABI use corresponding list
@@ -47,6 +47,7 @@ let () =
     Config.(param (some (enum abis)) name ~doc) in
   let x32 = abi `x86 "abi" in
   let x64 = abi `x86_64 "64-abi" in
+  let fp_lifter = Config.flag "with-floating-points" in
   let kind =
     let kinds = ["legacy", Legacy;
                  "modern", Modern;
@@ -59,4 +60,9 @@ let () =
            ~f:(fun (name, kind) ->
                Option.some_if (equal_kind kind default) name)) in
     Config.(param (enum kinds) "lifter" ~doc ~default) in
-  Config.when_ready (fun {Config.get=(!)} -> main !kind !x32 !x64)
+  Config.when_ready (fun {Config.get=(!!)} ->
+      main !!kind !!x32 !!x64;
+      if !!fp_lifter then begin
+        X86_legacy_bil_lifter.init ();
+        X86_legacy_bil_semantics.init ();
+      end)

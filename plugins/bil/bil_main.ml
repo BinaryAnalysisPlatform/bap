@@ -169,16 +169,16 @@ let () =
       ~package:"bap" ~name:"bil"
       ~desc:"semantics in BIL"
       ~provides:["bil"; "lifter"];
-
-    Theory.declare !!(module Bil_semantics.Core_with_fp_emulation : Theory.Core)
-      ~package:"bap" ~name:"bil-fp-emu"
-      ~extends:["bap:bil"]
-      ~desc: "semantics in BIL, including FP emulation"
-      ~context:["floating-point"]
-      ~provides:[
-        "bil";
-        "floating-point";
-        "lifter";
-      ];
+    if Syntax.(ctxt-->enable_fp_emu)
+    then Theory.declare !!(module Bil_semantics.Core_with_fp_emulation : Theory.Core)
+        ~package:"bap" ~name:"bil-fp-emu"
+        ~extends:["bap:bil"]
+        ~desc: "semantics in BIL, including FP emulation"
+        ~context:["floating-point"]
+        ~provides:[
+          "bil";
+          "floating-point";
+          "lifter";
+        ];
     Ok ()
   end

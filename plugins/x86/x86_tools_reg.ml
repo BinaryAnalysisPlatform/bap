@@ -70,6 +70,22 @@ module Make(CPU : X86CPU) : RR = struct
     | `XMM13 | `YMM13 -> CPU.ymms.(13)
     | `XMM14 | `YMM14 -> CPU.ymms.(14)
     | `XMM15 | `YMM15 -> CPU.ymms.(15)
+    | `XMM16 | `YMM16 -> CPU.ymms.(16)
+    | `XMM17 | `YMM17 -> CPU.ymms.(17)
+    | `XMM18 | `YMM18 -> CPU.ymms.(18)
+    | `XMM19 | `YMM19 -> CPU.ymms.(19)
+    | `XMM20 | `YMM20 -> CPU.ymms.(20)
+    | `XMM21 | `YMM21 -> CPU.ymms.(21)
+    | `XMM22 | `YMM22 -> CPU.ymms.(22)
+    | `XMM23 | `YMM23 -> CPU.ymms.(23)
+    | `XMM24 | `YMM24 -> CPU.ymms.(24)
+    | `XMM25 | `YMM25 -> CPU.ymms.(25)
+    | `XMM26 | `YMM26 -> CPU.ymms.(26)
+    | `XMM27 | `YMM27 -> CPU.ymms.(27)
+    | `XMM28 | `YMM28 -> CPU.ymms.(28)
+    | `XMM29 | `YMM29 -> CPU.ymms.(29)
+    | `XMM30 | `YMM30 -> CPU.ymms.(30)
+    | `XMM31 | `YMM31 -> CPU.ymms.(31)
 
   let here = Lexing.dummy_pos
 

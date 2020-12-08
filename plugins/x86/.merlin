@@ -1,3 +1,4 @@
+PKG zarith
 B ../../_build/plugins/x86
 B ../../_build/lib/bap_abi
 B ../../_build/lib/bap_api
