@@ -39,7 +39,7 @@ jobs:
           uses: actions/checkout@v2
           with:
             repository: BinaryAnalysisPlatform/bap
-            ref: v2.1.0
+            ref: v2.2.0
 
         - name: Install Extra System Dependencies
           run: sudo apt-get install dejagnu --yes

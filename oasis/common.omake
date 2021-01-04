@@ -1,12 +1,12 @@
 OASISFormat: 0.4
 Name:        bap
-Version:     2.2.0
+Version:     2.3.0-alpha
 OCamlVersion: >= 4.08.0
 Synopsis:    BAP Core Library
 Authors:     BAP Team
 Maintainers: Ivan Gotovchits <ivg@ieee.org>
 License:     MIT
-Copyrights:  (C) 2019 Carnegie Mellon University
+Copyrights:  (C) 2014-2021 Carnegie Mellon University
 Plugins:     META (0.4)
 AlphaFeatures: compiled_setup_ml
 BuildTools+: omake

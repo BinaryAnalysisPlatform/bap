@@ -39,40 +39,30 @@ release_package() {
     echo "releasing $pkg from $oldpath to $newpath..."
     mkdir -p $newpath
     cp -r $oldpath/* $newpath
-    if [ $# -gt 3 ]; then
-    cat > $newpath/url <<EOF
-archive: "$url"
-checksum: "$md5"
-EOF
-
-    fi
     sed -i "s/^version:.*/version: \"$new\"/" $newpath/opam
     sed -i "s/{= \"master\"}/{= \"$new\"}/" $newpath/opam
+    if [ $# -gt 3 ]; then
+        perl -i -pe  "BEGIN{undef $/;} s/url.\{.*\}//smg" $newpath/opam
+        cat >> $newpath/opam <<EOF
+url {
+  src: "$url"
+  checksum: "md5=$md5"
+  mirrors: "https://mirrors.aegis.cylab.cmu.edu/bap/$new/v$new.tar.gz"
+}
+EOF
+    fi
     git add $newpath
 }
 
-# add_mirror github-name package version
-add_mirror() {
-    url=packages/$2/$2.$3/url
-    if [ $1 = "bap" ]; then
-        mirror_url="https://mirrors.aegis.cylab.cmu.edu/bap/$3/v$3.tar.gz"
-        cat >> $url <<EOF
-mirrors: [
-         "$mirror_url"
-]
-EOF
-    git add $url
-    fi
-}
 
 # geturl pkgdir
 # prints an unquoted URL of the package repo, or prints nothing
 # if the package doesn't have the url file, or url doesn't point
 # to a m
 geturl() {
-    url=$1/url
-    if [ -f $1/url ]; then
-        perl -n -e '/src: "(.*)#master"/ && print $1' $url
+    url=$1/opam
+    if [ -f $url ]; then
+        perl -n -e '/src: "git\+(.*)#master"/ && print $1' $url
     fi
 }
 
@@ -97,7 +87,7 @@ latest_version() {
 # archive repo version
 # prints a path to the archive file
 archive() {
-    echo "$1/archive/v$2.tar.gz" | sed 's/git/https/'
+    echo "$1/archive/v$2.tar.gz"
 }
 
 # md5sum dir repo version
@@ -125,9 +115,8 @@ release_master_packages() {
             checksum=`getmd5sum $tmp $url $next_version`
             tarbal=`archive $url $next_version`
             release_package $pkg master $next_version $tarbal $checksum
-            add_mirror $git_name $pkg $next_version
         else
-            echo "skipping $pkg: no master url"
+            echo "skipping $pkg_path: no master url"
         fi
     done
     rm -rf $tmp
@@ -152,7 +141,7 @@ delete_nonmaster_packages() {
 release() {
     release_master_packages
     delete_master_packages
-    lint_packages
+    # lint_packages
 }
 
 
