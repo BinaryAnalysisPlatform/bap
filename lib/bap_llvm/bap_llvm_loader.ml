@@ -280,16 +280,17 @@ let provide_coff_segmentation = [
   foreach_by_name Ogre.Query.(from
                                 LLVM.section_entry
                               $ LLVM.coff_virtual_section_header
-                              $ LLVM.section_flags
-                              $ LLVM.code_entry) @@
-  fun (name, _, size, start) (_,addr,vsize) (_,(r,w,x)) (_,off,_) ->
+                              $ LLVM.section_flags) @@
+  fun (name, _, size, start) (_,addr,vsize) (_,(r,w,x)) ->
   let addr = Int64.(addr + bias) in [
     Ogre.provide segment addr vsize r w x;
     Ogre.provide mapped addr size start;
-    Ogre.provide code_region addr vsize off;
     Ogre.provide section addr vsize;
     Ogre.provide named_region addr vsize name;
-  ]
+  ] @ provide_if x [
+      Ogre.provide code_region addr vsize start;
+    ]
+
 ]
 
 let overload file_type info =
