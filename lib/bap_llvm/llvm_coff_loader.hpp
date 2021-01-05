@@ -35,10 +35,13 @@ void emit_section(const coff_section &sec, uint64_t base, bool is_rel, ogre_doc 
     uint64_t vsize = is_rel ? sec.SizeOfRawData : sec.VirtualSize;
     uint64_t fsize = sec.SizeOfRawData;
     uint64_t off = sec.PointerToRawData;
-    s.entry("llvm:section-entry") << sec.Name << vaddr << fsize << off;
-    s.entry("llvm:coff-virtual-section-header") << sec.Name << vaddr << vsize;
-    s.entry("llvm:section-flags") << sec.Name << r << w << x;
-    if (x) s.entry("llvm:code-entry") << sec.Name << off << fsize;
+    if (!is_rel || x) { // hush non-executable sections for object files, as they
+                        // all have the same address
+        s.entry("llvm:section-entry") << sec.Name << vaddr << fsize << off;
+        s.entry("llvm:coff-virtual-section-header") << sec.Name << vaddr << vsize;
+        s.entry("llvm:section-flags") << sec.Name << r << w << x;
+        if (x) s.entry("llvm:code-entry") << sec.Name << off << fsize;
+    }
 }
 
 error_or<uint64_t> symbol_file_offset(const coff_obj &obj, const SymbolRef &sym);
