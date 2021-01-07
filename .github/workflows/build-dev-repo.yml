@@ -42,6 +42,8 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: |
           rm -rf /usr/local/bin/2to3
+          brew unlink gcc@8
+          brew unlink gcc@9
           brew update
           brew upgrade
           echo 'LLVM_CONFIG=/usr/local/opt/llvm@9/bin/llvm-config' >> $GITHUB_ENV
