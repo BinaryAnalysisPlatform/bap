@@ -2127,6 +2127,8 @@ module Std : sig
     (** [special msg -> Special msg]  *)
     val special : string -> stmt
 
+
+
     (** [while_ cond stmts -> While (cond,stmts)]  *)
     val while_ : exp -> stmt list -> stmt
 
@@ -2331,6 +2333,94 @@ module Std : sig
         or which depends on it. The analysis doesn't track memory locations.
         @since 1.5 *)
     val prune_dead_virtuals : stmt list -> stmt list
+
+
+    (** {3 BIL Special values}
+
+        The [Special] statement enables encoding of arbitrary
+        semantics using [encode attr values] and [decode attr]
+        to get the values back. The meaning of the [attr] and
+        [values] is specific to the user domain.
+
+        Example, [encode call "malloc"], where
+        [call] is the BIL attribute that denotes a call to a
+        function. See {!call} for more information.
+
+    *)
+
+
+    (** BIL attributes.
+
+        BIL attributes serve the role of constructor for encoding
+        values as special statements. The attribute defines methods
+        for encoding and decoding values as a string as well as a
+        unique attribute name.
+
+        @since 2.3.0
+    *)
+    module Attribute : sig
+
+      (** the type of attributes  *)
+      type 'a t
+
+
+      (** [declare ?package name ~encode ~decode] declares a new attribute.
+
+          The attribute [package], [name] pair should be unique. If an
+          attribute with the given name is already registered the
+          registration will fail. *)
+      val declare :
+        ?package:string ->
+        encode:('a -> string) ->
+        decode:(string -> 'a) ->
+        string ->
+        'a t
+    end
+
+
+    (** [encode attr value] encodes [value] as a special statement.
+
+        @since 2.3.0    *)
+    val encode : 'a Attribute.t -> 'a -> stmt
+
+
+    (** [decode attr s] is [Some v] if [s] is [encode attr v].
+
+        @since 2.3.0
+    *)
+    val decode : 'a Attribute.t -> stmt -> 'a option
+
+    (** [call] is the attribute name for encoding calls.
+
+        @since 2.3.0
+    *)
+    val call : string Attribute.t
+
+
+    (** [intrinsic] is the attribute for intrinsic calls.
+
+        An intrinsic is a low-level, usually microarchitectural
+        operation.
+
+        @since 2.3.0
+    *)
+    val intrinsic: string Attribute.t
+
+
+    (** Core Theory specification of BIL.  *)
+    module Theory : sig
+
+
+      (** [parser] the parser enables reflection of the bil statements
+          into core theory terms. To reflect a bil program [prog] into
+          the theory [Theory], use
+          {[
+            let module Parser = Theory.Parser.Make(Theory) in
+            Parser.run Bil.Theory.parser bil
+          ]}
+      *)
+      val parser : (exp,_,stmt) Theory.Parser.t
+    end
 
     (** Maps BIL operators to bitvectors.
         @since 1.3

@@ -10,6 +10,17 @@ include Regular.S with type t := stmt
 
 val pp_stmts : Format.formatter -> stmt list -> unit
 
+module Attribute : sig
+  type 'a t
+  val declare :
+    ?package:string ->
+    encode:('a -> string) ->
+    decode:(string -> 'a) ->
+    string ->
+    'a t
+end
+
+
 module Stmt : sig
   val move : var -> exp -> stmt
   val jmp : exp -> stmt
@@ -17,6 +28,10 @@ module Stmt : sig
   val while_ : exp -> stmt list -> stmt
   val if_ : exp -> stmt list -> stmt list -> stmt
   val cpuexn : int -> stmt
+  val call : string Attribute.t
+  val intrinsic : string Attribute.t
+  val encode : 'a Attribute.t -> 'a -> stmt
+  val decode : 'a Attribute.t -> stmt -> 'a option
 end
 
 module Infix : sig

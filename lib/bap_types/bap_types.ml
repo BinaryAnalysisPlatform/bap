@@ -100,7 +100,10 @@ module Std = struct
     include Bap_bil_pass
     module Pass = Bap_bil_pass.Pass_pp
     include Bap_bil_optimizations
-
+    module Attribute = Bap_stmt.Attribute
+    module Theory = struct
+      let parser = Bap_core_theory_bil_parser.t
+    end
     let slot = Bap_stmt.slot
     let domain = Bap_stmt.domain
     let persistent = Bap_stmt.persistent
