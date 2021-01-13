@@ -8298,8 +8298,14 @@ module Std : sig
 
     type t = program term
 
-    (** [create ?tid ()] creates an empty program. If [tid]  *)
-    val create : ?tid:tid -> unit -> t
+    (** [create ?subs ?tid ()] creates a new program.
+
+        Creates a program from the given subs. If [tid] is not
+        specified then a fresh tid is generated.
+
+        @since 2.3.0 has the optional [subs] paramater.
+    *)
+    val create : ?subs:sub term list -> ?tid:tid -> unit -> t
 
     (** [lift symbols] takes a table of functions and return a whole
         program lifted into IR *)
@@ -8343,9 +8349,26 @@ module Std : sig
         considered an entry block.  *)
     type t = sub term
 
-    (** [create ?name ()] creates an empty subroutine with an optional
-        name. *)
-    val create : ?tid:tid -> ?name:string -> unit -> t
+    (** [create ?name ()] creates a new subroutine.
+
+        Creates a subroutine that includes given arguments and
+        blocks. The order of the terms is preserved with the first
+        block being the entry block. No references between blocks are
+        added, so the blocks shall be correctly linked and be
+        reachable from the entry block.
+
+        If [tid] is not specied then a fresh one is generated.
+        if [name] is not specified then a fresh name is derived from
+        the [tid].
+
+        @since 2.3.0 has the [args] optional parameter
+        @since 2.3.0 has the [blks] optional parameter
+    *)
+    val create :
+      ?args:arg term list ->
+      ?blks:blk term list ->
+      ?tid:tid ->
+      ?name:string -> unit -> t
 
     (** [lift entry] takes an basic block of assembler instructions,
         as an entry and lifts it to the subroutine term.  *)
@@ -8813,8 +8836,21 @@ module Std : sig
       | `Jmp of jmp term
     ]
 
-    (** [create ()] creates a new empty block.  *)
-    val create : ?tid:tid -> unit -> t
+    (** [create ?phis ?defs ?jmps ?tid ()] creates a new block.
+
+        Creates a new block that contains the passed [phis], [defs],
+        and [jmps]. If [tid] is not specified then a fresh one is
+        generated.
+
+        @since 2.3.0 has the optional [phis] parameter.
+        @since 2.3.0 has the optional [defs] parameter.
+        @since 2.3.0 has the optional [jmps] parameter.
+    *)
+    val create :
+      ?phis:phi term list ->
+      ?defs:def term list ->
+      ?jmps:jmp term list ->
+      ?tid:tid -> unit -> t
 
     (** [lift block] takes a basic block of assembly instructions and
         lifts it to a list of blk terms. The first term in the list
@@ -8857,8 +8893,7 @@ module Std : sig
         barrier [Insn.(is barrier) is [true]], then the [fall]
         destination is ignored, even if set.
 
-        @since 2.3.0
-    *)
+        @since 2.3.0 *)
     val from_insns :
       ?fall:[`Inter of Jmp.dst | `Intra of Jmp.dst ] ->
       ?addr:addr ->

@@ -193,7 +193,7 @@ end
 
 module Ir_program : sig
   type t = program term
-  val create : ?tid:tid -> unit -> t
+  val create : ?subs:sub term list -> ?tid:tid -> unit -> t
   val lookup : (_,'b) cls -> t -> tid -> 'b term option
   val parent : ('a,'b) cls -> t -> tid -> 'a term option
   module Builder : sig
@@ -208,7 +208,8 @@ end
 
 module Ir_sub : sig
   type t = sub term
-  val create : ?tid:tid -> ?name:string -> unit -> t
+  val create : ?args:arg term list -> ?blks:blk term list ->
+    ?tid:tid -> ?name:string -> unit -> t
   val name : t -> string
   val with_name : t -> string -> t
   module Builder : sig
@@ -241,7 +242,11 @@ module Ir_blk : sig
     | `Phi of phi term
     | `Jmp of jmp term
   ]
-  val create : ?tid:tid -> unit -> t
+  val create :
+    ?phis:phi term list ->
+    ?defs:def term list ->
+    ?jmps:jmp term list ->
+    ?tid:tid -> unit -> t
   val split_while : t -> f:(def term -> bool) -> t * t
   val split_after : t -> def term -> t * t
   val split_before : t -> def term -> t * t

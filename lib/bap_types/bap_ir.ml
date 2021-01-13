@@ -1471,9 +1471,7 @@ module Term = struct
           self#visit_exp e x) |>
       self#leave_jmp jmp
   end
-
 end
-
 
 module Ir_blk = struct
   type t = blk term
@@ -1533,15 +1531,28 @@ module Ir_blk = struct
     }
   end
 
-  let create ?(tid=Tid.create ()) () : blk term = {
-    tid;
-    dict = Dict.empty;
-    self = {
-      phis = [| |] ;
-      defs = [| |] ;
-      jmps = [| |] ;
-    }
-  }
+  let create ?(phis=[]) ?(defs=[]) ?(jmps=[])
+      ?(tid=Tid.create ()) () : blk term =
+    match phis,defs,jmps with
+    | [],[],[] -> {
+        tid;
+        dict = Dict.empty;
+        self = {
+          phis = [| |] ;
+          defs = [| |] ;
+          jmps = [| |] ;
+        }
+      }
+    | _ ->
+      let b = Builder.create ~tid ()
+          ~phis:(List.length phis)
+          ~defs:(List.length defs)
+          ~jmps:(List.length jmps) in
+      List.iter phis ~f:(Builder.add_phi b);
+      List.iter defs ~f:(Builder.add_def b);
+      List.iter jmps ~f:(Builder.add_jmp b);
+      Builder.result b
+
 
   (* splits [blk] at definition [i], with [i]'th definition in the
      second block *)
@@ -1717,7 +1728,7 @@ end
 module Ir_sub = struct
   type t = sub term
 
-  let create ?(tid=Tid.create ()) ?name () : t =
+  let new_empty ?(tid=Tid.create ()) ?name () : t =
     let name = match name with
       | Some name -> name
       | None -> match Tid.get_name tid with
@@ -1857,6 +1868,17 @@ module Ir_sub = struct
       make_term tid {name; args; blks}
   end
 
+  let create ?(args=[]) ?(blks=[]) ?tid ?name () : t =
+    match args,blks with
+    | [],[] -> new_empty ?tid ?name ()
+    | _ ->
+      let b = Builder.create ?tid ?name ()
+          ~args:(List.length args)
+          ~blks:(List.length blks) in
+      List.iter args ~f:(Builder.add_arg b);
+      List.iter blks ~f:(Builder.add_blk b);
+      Builder.result b
+
   let pp_blks pp ppf blks =
     Array.iter blks ~f:(Format.fprintf ppf "@;%a@;" pp)
 
@@ -1894,8 +1916,6 @@ end
 module Ir_program = struct
   type t = program term
 
-  let create ?(tid=Tid.create ()) () : t =
-    make_term tid (Program.empty ())
 
   let proj1 t cs = t.self.subs.(cs.(0))
   let proj2 f t cs = (f (proj1 t cs).self).(cs.(1))
@@ -1995,8 +2015,16 @@ module Ir_program = struct
         | None -> Tid.create () in
       let p = Program.empty () in
       make_term tid @@ Program.update p (Vec.to_array subs)
-
   end
+
+  let create ?(subs=[]) ?(tid=Tid.create ()) () : t =
+    match subs with
+    | [] -> make_term tid (Program.empty ())
+    | _ ->
+      let b = Builder.create ~tid ()
+          ~subs:(List.length subs) in
+      List.iter subs ~f:(Builder.add_sub b);
+      Builder.result b
 
   let pp_self ppf self =
     Format.fprintf ppf "program@;%a"
