@@ -105,6 +105,7 @@ module Std = struct
       let parser = Bap_core_theory_bil_parser.t
     end
     let slot = Bap_stmt.slot
+    let code = Bap_stmt.code
     let domain = Bap_stmt.domain
     let persistent = Bap_stmt.persistent
   end

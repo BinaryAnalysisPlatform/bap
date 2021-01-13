@@ -1992,8 +1992,13 @@ module Std : sig
     (** Instance of the persistence class  *)
     val persistent : stmt list Knowledge.persistent
 
-    (** the BIL property  *)
+    (** The denotation of the program semantics as a BIL program.  *)
     val slot : (Theory.Program.Semantics.cls, stmt list) Knowledge.slot
+
+    (** The representation of the program as a BIL program.
+
+        @since 2.3.0 *)
+    val code : (Theory.program, stmt list) KB.slot
 
     (** [printf "%a" pp_binop op] prints a binary operation [op].  *)
     val pp_binop : Format.formatter -> binop -> unit
