@@ -975,7 +975,10 @@ let lift_special ops insn =
   (* supervisor call *)
   | `SVC, [|`Imm word; cond; _|] ->
     let num = Word.extract_exn ~hi:23 word in
-    exec [Bil.(cpuexn (Word.to_int num |> ok_exn))] cond
+    exec [
+      let dst = Format.asprintf "__svc(%a)" Addr.pp num in
+      Bil.(encode call) dst
+    ] cond
 
   | `MRS, [|`Reg dest; cond; _|] ->
     let get_bits flag src lsb =
@@ -1091,7 +1094,7 @@ end
 
 
 (** Substitute PC with its value  *)
-let resolve_pc mem = Stmt.map (object(self)
+let resolve_pc mem = Stmt.map (object
     inherit Stmt.mapper as super
     method! map_var var =
       if Var.(equal var CPU.pc) then

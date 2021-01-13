@@ -1992,8 +1992,13 @@ module Std : sig
     (** Instance of the persistence class  *)
     val persistent : stmt list Knowledge.persistent
 
-    (** the BIL property  *)
+    (** The denotation of the program semantics as a BIL program.  *)
     val slot : (Theory.Program.Semantics.cls, stmt list) Knowledge.slot
+
+    (** The representation of the program as a BIL program.
+
+        @since 2.3.0 *)
+    val code : (Theory.program, stmt list) KB.slot
 
     (** [printf "%a" pp_binop op] prints a binary operation [op].  *)
     val pp_binop : Format.formatter -> binop -> unit
@@ -6679,9 +6684,18 @@ module Std : sig
       (** restarts last step.   *)
       val back : (_,_,'s,'r) state -> 's -> 'r
 
-      (** Basic instruction.
-          This instruction is an opaque pointer into C-backend, thus
-          it is protected with phantom types. *)
+      (** Basic instruction aka machine-specific instruction.
+
+          The machine-specific instruction is composed of a name,
+          operands, and kinds (or flags) that denote additional
+          information about the instruction.
+
+          The meaning of the name and operands is specific to a
+          particular machine and encoding (see {!Insn.encoding}). The
+          meaning of the instruction kinds is more or less universal.
+
+
+      *)
       module Insn : sig
 
         type ('a,'k) t = ('a,'k) insn
@@ -8284,8 +8298,14 @@ module Std : sig
 
     type t = program term
 
-    (** [create ?tid ()] creates an empty program. If [tid]  *)
-    val create : ?tid:tid -> unit -> t
+    (** [create ?subs ?tid ()] creates a new program.
+
+        Creates a program from the given subs. If [tid] is not
+        specified then a fresh tid is generated.
+
+        @since 2.3.0 has the optional [subs] paramater.
+    *)
+    val create : ?subs:sub term list -> ?tid:tid -> unit -> t
 
     (** [lift symbols] takes a table of functions and return a whole
         program lifted into IR *)
@@ -8329,9 +8349,26 @@ module Std : sig
         considered an entry block.  *)
     type t = sub term
 
-    (** [create ?name ()] creates an empty subroutine with an optional
-        name. *)
-    val create : ?tid:tid -> ?name:string -> unit -> t
+    (** [create ?name ()] creates a new subroutine.
+
+        Creates a subroutine that includes given arguments and
+        blocks. The order of the terms is preserved with the first
+        block being the entry block. No references between blocks are
+        added, so the blocks shall be correctly linked and be
+        reachable from the entry block.
+
+        If [tid] is not specied then a fresh one is generated.
+        if [name] is not specified then a fresh name is derived from
+        the [tid].
+
+        @since 2.3.0 has the [args] optional parameter
+        @since 2.3.0 has the [blks] optional parameter
+    *)
+    val create :
+      ?args:arg term list ->
+      ?blks:blk term list ->
+      ?tid:tid ->
+      ?name:string -> unit -> t
 
     (** [lift entry] takes an basic block of assembler instructions,
         as an entry and lifts it to the subroutine term.  *)
@@ -8480,213 +8517,6 @@ module Std : sig
     (** [pp_slots names] prints slots that are in [names].  *)
     val pp_slots : string list -> Format.formatter -> t -> unit
 
-    include Regular.S with type t := t
-  end
-
-  (** Basic block.
-
-      Logically block consists of a set of {{!Phi}phi nodes}, a
-      sequence of {{!Def}definitions} and a sequence of out-coming
-      edges, aka {{!Jmp}jumps}. A colloquial term for this three
-      entities is a {e block element}.
-
-      The order of Phi-nodes can be specified in any order, as
-      they execute simultaneously . Definitions are stored in the
-      order of execution. Jumps are specified in the order in which
-      they should be taken, i.e., jmp_n is taken only after
-      jmp_n-1 and if and only if the latter was not taken. For
-      example, if block ends with N jumps, where each n-th jump
-      have destination named t_n and condition c_n then it
-      would have the semantics as per the following OCaml program:
-
-      {v
-            if c_1 then jump t_1 else
-            if c_2 then jump t_2 else
-            if c_N then jump t_N else
-            stop
-      v} *)
-  module Blk : sig
-
-    type t = blk term
-
-    (** Union type for all element types  *)
-    type elt = [
-      | `Def of def term
-      | `Phi of phi term
-      | `Jmp of jmp term
-    ]
-
-    (** [create ()] creates a new empty block.  *)
-    val create : ?tid:tid -> unit -> t
-
-    (** [lift block] takes a basic block of assembly instructions and
-        lifts it to a list of blk terms. The first term in the list
-        is the entry. *)
-    val lift : cfg -> block -> blk term list
-
-    (** [from_insn insn] creates an IR representation of a single
-        machine instruction [insn].  *)
-    val from_insn : insn -> blk term list
-
-    (** [split_while blk ~f] splits [blk] into two block: the first
-        block holds all definitions for which [f p] is true and has
-        the same tid as [blk]. The second block is freshly created and
-        holds the rest definitions (if any). All successors of the
-        [blk] become successors of the second block, which becomes the
-        successor of the first block.
-
-        Note: if [f def] is [true] for all blocks, then the second
-        block will not contain any definitions, i.e., the result would
-        be the same as of {{!split_bot}split_bot} function. *)
-    val split_while : t -> f:(def term -> bool) -> t * t
-
-    (** [split_after blk def] creates two new blocks, where the first
-        block contains all defintions up to [def] inclusive, the
-        second contains the rest.
-
-        Note: if def is not in a [blk] then the first block will contain
-        all the defintions, and the second block will be empty.  *)
-    val split_after : t -> def term -> t * t
-
-    (** [split_before blk def] is like {{!split_after}split_after} but
-        [def] will fall into the second [blk] *)
-    val split_before : t -> def term -> t * t
-
-    (** [split_top blk] returns two blocks, where first block shares
-        the same tid as [blk] and has all $\Phi$-nodes of [blk], but
-        has only one destination, namely the second block. Second
-        block has new tidentity, but inherits all definitions and
-        jumps from the [blk]. *)
-    val split_top : t -> t * t
-
-    (** [split_top blk] returns two blocks, where first block shares
-        the same tid as [blk], has all $\Phi$-nodes and definitions
-        from [blk], but has only one destination, namely the second
-        block. Second block has new tidentity, all jumps from the
-        [blk]. *)
-    val split_bot : t -> t * t
-
-    (** [elts ~rev blk] return all elements of the [blk].  if [rev] is
-        false or left unspecified, then elements are returned in the
-        following order: $\Phi$-nodes, defs (in normal order), jmps in
-        the order in which they will be taken.  If [rev] is true, the
-        order will be the following: all jumps in the opposite order,
-        then definitions in the opposite order, and finally
-        $\Phi$-nodes. *)
-    val elts : ?rev:bool -> t -> elt seq
-
-    (** [map_exp b ~f] applies function [f] for each expression in
-        block [b]. By default function [f] will be applied to all
-        values of type [exp], including right hand sides of phi-nodes,
-        definitions, jump conditions and targets.  If [skip] parameter
-        is specified, then terms of corresponding kind will be
-        skipped, i.e., function [f] will not be applied to them. *)
-    val map_exp :
-      ?skip:[`phi | `def | `jmp] list -> (** defaults to [[]]  *)
-      t -> f:(exp -> exp) -> t
-
-    (** [map_elt ?phi ?def ?jmp blk] applies provided functions to the
-        terms of corresponding classes. All functions default to the
-        identity function. *)
-    val map_elts :
-      ?phi:(phi term -> phi term) ->
-      ?def:(def term -> def term) ->
-      ?jmp:(jmp term -> jmp term) -> blk term -> blk term
-
-    (** [substitute ?skip blk x y] substitutes each occurrence of
-        expression [x] with expression [y] in block [blk]. The
-        substitution is performed deeply. If [skip] parameter is
-        specified, then terms of corresponding kind will be left
-        untouched.  *)
-    val substitute :
-      ?skip:[`phi | `def | `jmp] list -> (** defaults to [[]]  *)
-      t -> exp -> exp -> t
-
-    (** [map_lhs blk ~f] applies [f] to every left hand side variable
-        in def and phi subterms of [blk]. If [skip] parameter is
-        specified, then terms of corresponding kind will be left
-        untouched. E.g., [map_lhs ~skip:[`phi] ~f:(substitute vars)]
-        will perform a substitution only on definitions (and will
-        ignore phi-nodes) *)
-    val map_lhs :
-      ?skip:[`phi | `def ] list -> (** defaults to [[]]  *)
-      t -> f:(var -> var) -> t
-
-    (** [find_var blk var] finds a last definition of a variable [var]
-        in a block [blk].  *)
-    val find_var : t -> var -> [
-        | `Phi of phi term
-        | `Def of def term
-      ] option
-
-    (** [defines_var blk x] true if there exists such phi term or def
-        term with left hand side equal to [x]  *)
-    val defines_var : t -> var -> bool
-
-    (** [free_vars blk] returns a set of variables that occurs free
-        in block [blk]. A variable is free, if it occurs unbound in the
-        expression and there is no preceding definition of this variable
-        in a block [blk].  *)
-    val free_vars : t -> Var.Set.t
-
-    (** [uses_var blk x] true if variable [x] is in [free_vars blk].
-        If you need to call this function on several variables it is
-        better to compute [free_vars] explicitly and use [Set.mem]
-        function.  *)
-    val uses_var : t -> var -> bool
-
-    (** [occurs blk after:x def] if [def] is occurs after definition
-        [def] in [blk].  *)
-    val occurs : t -> after:tid -> tid -> bool
-
-    (** Builder interface.  *)
-    module Builder : sig
-      (** This interface provides an efficient way to build new
-          blocks. It is also useful, when rebuilding existing block.
-          It is the user responsibility to preserve the uniqueness of
-          identifiers throughout the program instance.  *)
-      type t
-
-      (** [create ~tid ~phis ~defs ~jmp ()] creates a block builder.
-          If [tid] parameter is specified, then the new block will
-          have this tid. If any of [phis], [defs] or [jmps] parameters
-          are specified, the provtided number would be used as a hint
-          of the expected amount of the corresponding entries. Since
-          it is the hint, it can mismatch with the actual size. The
-          hint must be a positive number.  *)
-      val create : ?tid:tid -> ?phis:int -> ?defs:int -> ?jmps:int -> unit -> t
-
-      (** [init blk] creates a builder based on an existing
-          block. If [copy_phis], [copy_defs] or [copy_jmps] is [true]
-          (defaults to [false]), then prepopulate builder with
-          corresponding terms from block [blk]. If [same_tid] is true
-          (default), then a resulting block will have the same [tid]
-          as block [blk]. Otherwise, a fresh new [tid] will be created. *)
-      val init :
-        ?same_tid :bool ->       (** defaults to [true]  *)
-        ?copy_phis:bool ->       (** defaults to [false] *)
-        ?copy_defs:bool ->       (** defaults to [false] *)
-        ?copy_jmps:bool ->       (** defaults to [false] *)
-        blk term -> t
-
-      (** appends a definition  *)
-      val add_def : t -> def term -> unit
-
-      (** appends a jump  *)
-      val add_jmp : t -> jmp term -> unit
-
-      (** appends a phi node  *)
-      val add_phi : t -> phi term -> unit
-
-      (** appends generic element *)
-      val add_elt : t -> elt -> unit
-
-      (** returns current result  *)
-      val result  : t -> blk term
-    end
-
-    (** [pp_slots names] prints slots that are in [names].  *)
-    val pp_slots : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
 
@@ -8967,6 +8797,266 @@ module Std : sig
 
     (** [remove def id] removes definition with a given [id]  *)
     val remove : t -> tid -> t
+
+    (** [pp_slots names] prints slots that are in [names].  *)
+    val pp_slots : string list -> Format.formatter -> t -> unit
+    include Regular.S with type t := t
+  end
+
+  (** Basic block.
+
+      Logically block consists of a set of {{!Phi}phi nodes}, a
+      sequence of {{!Def}definitions} and a sequence of out-coming
+      edges, aka {{!Jmp}jumps}. A colloquial term for this three
+      entities is a {e block element}.
+
+      The order of Phi-nodes can be specified in any order, as
+      they execute simultaneously . Definitions are stored in the
+      order of execution. Jumps are specified in the order in which
+      they should be taken, i.e., jmp_n is taken only after
+      jmp_n-1 and if and only if the latter was not taken. For
+      example, if block ends with N jumps, where each n-th jump
+      have destination named t_n and condition c_n then it
+      would have the semantics as per the following OCaml program:
+
+      {v
+            if c_1 then jump t_1 else
+            if c_2 then jump t_2 else
+            if c_N then jump t_N else
+            stop
+      v} *)
+  module Blk : sig
+
+    type t = blk term
+
+    (** Union type for all element types  *)
+    type elt = [
+      | `Def of def term
+      | `Phi of phi term
+      | `Jmp of jmp term
+    ]
+
+    (** [create ?phis ?defs ?jmps ?tid ()] creates a new block.
+
+        Creates a new block that contains the passed [phis], [defs],
+        and [jmps]. If [tid] is not specified then a fresh one is
+        generated.
+
+        @since 2.3.0 has the optional [phis] parameter.
+        @since 2.3.0 has the optional [defs] parameter.
+        @since 2.3.0 has the optional [jmps] parameter.
+    *)
+    val create :
+      ?phis:phi term list ->
+      ?defs:def term list ->
+      ?jmps:jmp term list ->
+      ?tid:tid -> unit -> t
+
+    (** [lift block] takes a basic block of assembly instructions and
+        lifts it to a list of blk terms. The first term in the list
+        is the entry. *)
+    val lift : cfg -> block -> blk term list
+
+    (** [from_insn ?addr insn] creates an IR representation of a single
+        machine instruction [insn].
+
+        Uses the [Term.slot] to get the IR representation of an
+        instruction, trying to keep the number of basic blocks minimal
+        (by coalescing adjacent data operations).
+
+        If [addr] is specified then the term identifier of the first
+        block will be specific to that address and the [address]
+        attribute will be set to the passed value.
+
+        @since 2.3.0 has [addr] parameter.
+    *)
+    val from_insn : ?addr:addr -> insn -> blk term list
+
+    (** [from_insns block] translates a basic block of instructions
+        into IR.
+
+        Takes a list of instructions in the execution order and
+        translates them into a list of IR blks that are properly
+        connected. The instructions shall belong to a single basic
+        block.
+
+        The first element of the result is the entry block. If [addr]
+        is set then it will have the term identifier equal to
+        [Term.for_addr addr] and the [address] attribute will be set to
+        [addr].
+
+        The [fall] parameter designates the fallthrough destination of
+        the basic block. The destination could be either
+        interprocedural ([`Inter]) or intraprocedural ([`Intra]). In
+        the latter case it will be reified into a jump of the call
+        kind. If the last instruction (the basic block terminator) is a
+        barrier [Insn.(is barrier) is [true]], then the [fall]
+        destination is ignored, even if set.
+
+        @since 2.3.0 *)
+    val from_insns :
+      ?fall:[`Inter of Jmp.dst | `Intra of Jmp.dst ] ->
+      ?addr:addr ->
+      insn list ->
+      blk term list
+
+
+    (** [split_while blk ~f] splits [blk] into two block: the first
+        block holds all definitions for which [f p] is true and has
+        the same tid as [blk]. The second block is freshly created and
+        holds the rest definitions (if any). All successors of the
+        [blk] become successors of the second block, which becomes the
+        successor of the first block.
+
+        Note: if [f def] is [true] for all blocks, then the second
+        block will not contain any definitions, i.e., the result would
+        be the same as of {{!split_bot}split_bot} function. *)
+    val split_while : t -> f:(def term -> bool) -> t * t
+
+    (** [split_after blk def] creates two new blocks, where the first
+        block contains all defintions up to [def] inclusive, the
+        second contains the rest.
+
+        Note: if def is not in a [blk] then the first block will contain
+        all the defintions, and the second block will be empty.  *)
+    val split_after : t -> def term -> t * t
+
+    (** [split_before blk def] is like {{!split_after}split_after} but
+        [def] will fall into the second [blk] *)
+    val split_before : t -> def term -> t * t
+
+    (** [split_top blk] returns two blocks, where first block shares
+        the same tid as [blk] and has all $\Phi$-nodes of [blk], but
+        has only one destination, namely the second block. Second
+        block has new tidentity, but inherits all definitions and
+        jumps from the [blk]. *)
+    val split_top : t -> t * t
+
+    (** [split_top blk] returns two blocks, where first block shares
+        the same tid as [blk], has all $\Phi$-nodes and definitions
+        from [blk], but has only one destination, namely the second
+        block. Second block has new tidentity, all jumps from the
+        [blk]. *)
+    val split_bot : t -> t * t
+
+    (** [elts ~rev blk] return all elements of the [blk].  if [rev] is
+        false or left unspecified, then elements are returned in the
+        following order: $\Phi$-nodes, defs (in normal order), jmps in
+        the order in which they will be taken.  If [rev] is true, the
+        order will be the following: all jumps in the opposite order,
+        then definitions in the opposite order, and finally
+        $\Phi$-nodes. *)
+    val elts : ?rev:bool -> t -> elt seq
+
+    (** [map_exp b ~f] applies function [f] for each expression in
+        block [b]. By default function [f] will be applied to all
+        values of type [exp], including right hand sides of phi-nodes,
+        definitions, jump conditions and targets.  If [skip] parameter
+        is specified, then terms of corresponding kind will be
+        skipped, i.e., function [f] will not be applied to them. *)
+    val map_exp :
+      ?skip:[`phi | `def | `jmp] list -> (** defaults to [[]]  *)
+      t -> f:(exp -> exp) -> t
+
+    (** [map_elt ?phi ?def ?jmp blk] applies provided functions to the
+        terms of corresponding classes. All functions default to the
+        identity function. *)
+    val map_elts :
+      ?phi:(phi term -> phi term) ->
+      ?def:(def term -> def term) ->
+      ?jmp:(jmp term -> jmp term) -> blk term -> blk term
+
+    (** [substitute ?skip blk x y] substitutes each occurrence of
+        expression [x] with expression [y] in block [blk]. The
+        substitution is performed deeply. If [skip] parameter is
+        specified, then terms of corresponding kind will be left
+        untouched.  *)
+    val substitute :
+      ?skip:[`phi | `def | `jmp] list -> (** defaults to [[]]  *)
+      t -> exp -> exp -> t
+
+    (** [map_lhs blk ~f] applies [f] to every left hand side variable
+        in def and phi subterms of [blk]. If [skip] parameter is
+        specified, then terms of corresponding kind will be left
+        untouched. E.g., [map_lhs ~skip:[`phi] ~f:(substitute vars)]
+        will perform a substitution only on definitions (and will
+        ignore phi-nodes) *)
+    val map_lhs :
+      ?skip:[`phi | `def ] list -> (** defaults to [[]]  *)
+      t -> f:(var -> var) -> t
+
+    (** [find_var blk var] finds a last definition of a variable [var]
+        in a block [blk].  *)
+    val find_var : t -> var -> [
+        | `Phi of phi term
+        | `Def of def term
+      ] option
+
+    (** [defines_var blk x] true if there exists such phi term or def
+        term with left hand side equal to [x]  *)
+    val defines_var : t -> var -> bool
+
+    (** [free_vars blk] returns a set of variables that occurs free
+        in block [blk]. A variable is free, if it occurs unbound in the
+        expression and there is no preceding definition of this variable
+        in a block [blk].  *)
+    val free_vars : t -> Var.Set.t
+
+    (** [uses_var blk x] true if variable [x] is in [free_vars blk].
+        If you need to call this function on several variables it is
+        better to compute [free_vars] explicitly and use [Set.mem]
+        function.  *)
+    val uses_var : t -> var -> bool
+
+    (** [occurs blk after:x def] if [def] is occurs after definition
+        [def] in [blk].  *)
+    val occurs : t -> after:tid -> tid -> bool
+
+    (** Builder interface.  *)
+    module Builder : sig
+      (** This interface provides an efficient way to build new
+          blocks. It is also useful, when rebuilding existing block.
+          It is the user responsibility to preserve the uniqueness of
+          identifiers throughout the program instance.  *)
+      type t
+
+      (** [create ~tid ~phis ~defs ~jmp ()] creates a block builder.
+          If [tid] parameter is specified, then the new block will
+          have this tid. If any of [phis], [defs] or [jmps] parameters
+          are specified, the provtided number would be used as a hint
+          of the expected amount of the corresponding entries. Since
+          it is the hint, it can mismatch with the actual size. The
+          hint must be a positive number.  *)
+      val create : ?tid:tid -> ?phis:int -> ?defs:int -> ?jmps:int -> unit -> t
+
+      (** [init blk] creates a builder based on an existing
+          block. If [copy_phis], [copy_defs] or [copy_jmps] is [true]
+          (defaults to [false]), then prepopulate builder with
+          corresponding terms from block [blk]. If [same_tid] is true
+          (default), then a resulting block will have the same [tid]
+          as block [blk]. Otherwise, a fresh new [tid] will be created. *)
+      val init :
+        ?same_tid :bool ->       (** defaults to [true]  *)
+        ?copy_phis:bool ->       (** defaults to [false] *)
+        ?copy_defs:bool ->       (** defaults to [false] *)
+        ?copy_jmps:bool ->       (** defaults to [false] *)
+        blk term -> t
+
+      (** appends a definition  *)
+      val add_def : t -> def term -> unit
+
+      (** appends a jump  *)
+      val add_jmp : t -> jmp term -> unit
+
+      (** appends a phi node  *)
+      val add_phi : t -> phi term -> unit
+
+      (** appends generic element *)
+      val add_elt : t -> elt -> unit
+
+      (** returns current result  *)
+      val result  : t -> blk term
+    end
 
     (** [pp_slots names] prints slots that are in [names].  *)
     val pp_slots : string list -> Format.formatter -> t -> unit

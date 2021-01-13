@@ -1550,11 +1550,17 @@ module ToIR = struct
     | Leave t when List.is_empty pref -> (* #UD if Lock prefix is used *)
       Bil.Move (rsp, rbp_e)
       ::to_ir mode addr next ss pref has_rex has_vex (Pop(t, o_rbp))
-    | Interrupt3 -> [Bil.Special "int3"]
-    | Interrupt(Oimm i) ->
-      (** use [BV.string_of_value ~hex:true] here *)
-      [Bil.Special ("int " ^ Addr.string_of_value i)]
-    | Sysenter | Syscall -> [Bil.Special "syscall"]
+    | Interrupt3 -> [Bil.CpuExn 3]
+    | Interrupt(Oimm i) -> [
+        match Addr.to_int i with
+        | Ok i -> Bil.cpuexn i
+        | Error _ ->
+          let dst = asprintf "interrupt@%s" (Addr.string_of_value i) in
+          Bil.(encode call dst)
+      ]
+    | Sysenter | Syscall -> [
+        Bil.(encode call "syscall")
+      ]
     (* Match everything exhaustively *)
     | Leave _ ->  unimplemented "to_ir: Leave"
     | Lea _ ->  unimplemented "to_ir: Lea"

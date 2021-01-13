@@ -15,6 +15,7 @@ let package = "bap"
 module Optimizer = Theory.Parser.Make(Bil_semantics.Core)
 [@@inlined]
 
+
 let provide_bir () =
   KB.Rule.(declare ~package "reify-ir" |>
            require Theory.Semantics.slot |>
@@ -296,46 +297,70 @@ let lift ~enable_intrinsics:{for_all; for_unk; for_special; predicates}
       then Ok (create_intrinsic arch mem insn)
       else Ok bil
 
-let provide_lifter ~enable_intrinsics ~with_fp () =
+let provide_bil ~enable_intrinsics () =
+  KB.Rule.(declare ~package "bil-lifter" |>
+           require Memory.slot |>
+           require Disasm_expert.Basic.Insn.slot |>
+           provide Bil.code |>
+           comment "uses legacy lifters to provide BIL code.");
+  let unknown = KB.Domain.empty Bil.domain in
+  let (>>?) x f = x >>= function
+    | None -> KB.return unknown
+    | Some x -> f x in
+  let enable_intrinsics = split_specs enable_intrinsics in
+  KB.promise Bil.code @@ fun obj ->
+  Knowledge.collect Arch.slot obj >>= fun arch ->
+  Knowledge.collect Memory.slot obj >>? fun mem ->
+  Knowledge.collect Disasm_expert.Basic.Insn.slot obj >>? fun insn ->
+  match lift ~enable_intrinsics arch mem insn with
+  | Error err ->
+    info "BIL: the BIL lifter failed with %a" Error.pp err;
+    !!unknown
+  | Ok [] -> !!unknown
+  | Ok bil ->
+    Optimizer.run Bil.Theory.parser bil >>= fun sema ->
+    let bil = Insn.bil sema in
+    Relocations.fixup obj mem bil
+
+let provide_basic () =
+  KB.Rule.(declare ~package "machine-code" |>
+           require Disasm_expert.Basic.Insn.slot |>
+           provide Theory.Semantics.slot |>
+           comment "translates machine code instructions into CT terms ");
+  KB.promise Theory.Semantics.slot @@ fun obj ->
+  KB.collect Disasm_expert.Basic.Insn.slot obj >>= function
+  | None -> !!Theory.Semantics.empty
+  | Some insn ->
+    KB.collect Bil.code obj >>| fun bil ->
+    Insn.of_basic ~bil insn
+
+let provide_lifter ~with_fp () =
   info "providing a lifter for all BIL lifters";
-  let unknown = Theory.Semantics.empty in
   let context arch =
     sprintf "arch-%a" Arch.str arch ::
     if with_fp
     then "floating-point" :: base_context
     else base_context in
-  let (>>?) x f = x >>= function
-    | None -> KB.return unknown
-    | Some x -> f x in
-  let enable_intrinsics = split_specs enable_intrinsics in
+  let is_empty = KB.Domain.is_empty Bil.domain in
   let lifter obj =
     Knowledge.collect Arch.slot obj >>= fun arch ->
     Theory.instance ~context:(context arch) () >>=
     Theory.require >>= fun (module Core) ->
-    Knowledge.collect Memory.slot obj >>? fun mem ->
-    Knowledge.collect Disasm_expert.Basic.Insn.slot obj >>? fun insn ->
-    match lift ~enable_intrinsics arch mem insn with
-    | Error err ->
-      info "BIL: the BIL lifter failed with %a" Error.pp err;
-      !!Insn.empty
-    | Ok bil ->
+    KB.collect Bil.code obj >>= fun bil ->
+    if is_empty bil then !!Insn.empty
+    else
       let module Lifter = Theory.Parser.Make(Core) in
-      Optimizer.run Bil.Theory.parser bil >>= fun sema ->
-      let bil = Insn.bil sema in
-      Relocations.fixup obj mem bil >>= fun bil ->
-      Lifter.run Bil.Theory.parser bil >>| fun sema ->
-      let bil = Insn.bil sema in
-      KB.Value.merge ~on_conflict:`drop_left
-        sema (Insn.of_basic ~bil insn) in
+      Lifter.run Bil.Theory.parser bil in
   KB.Rule.(declare ~package "bil-semantics" |>
-           require Memory.slot |>
-           require Disasm_expert.Basic.Insn.slot |>
+           require Bil.code |>
            provide Theory.Semantics.slot |>
            comment "denotates BIL in the Core Theory terms");
   Knowledge.promise Theory.Semantics.slot lifter
 
 let init ~enable_intrinsics ~with_fp () =
-  provide_lifter ~enable_intrinsics ~with_fp ();
+  provide_bil ~enable_intrinsics ();
+  provide_basic ();
+  provide_lifter ~with_fp ();
   provide_bir ();
   Relocations.prepare ();
   Theory.declare !!(module Brancher : Theory.Core)

@@ -5,7 +5,7 @@ open X86_tools_types
 module Make (RR : RR) (FR : FR) (IV : IV) : PR = struct
   type t = X86_prefix.t [@@deriving sexp, compare]
 
-  let lock bil = Bil.special "lock" :: bil
+  let lock bil = Bil.(encode intrinsic "lock") :: bil
 
   module Rep = struct
     let rcx =

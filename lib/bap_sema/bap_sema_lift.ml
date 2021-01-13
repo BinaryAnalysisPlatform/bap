@@ -80,8 +80,7 @@ module IrBuilder = struct
 
   let ir_of_insn insn = KB.Value.get Term.slot insn
 
-  let set_attributes ?mem insn blks =
-    let addr = Option.map ~f:Memory.min_addr mem in
+  let set_attributes ?addr insn blks =
     let set_attributes k b =
       Term.map k b ~f:(fun t ->
           let t = Term.set_attr t Disasm.insn insn in
@@ -94,9 +93,9 @@ module IrBuilder = struct
   (* [lift_insn ?mem insn blks]
      pre: the first block of [blks] is the exit block;
      post: the first block of [lift_insn insn blks] is the new exit block. *)
-  let lift_insn ?mem insn blks =
+  let lift_insn ?addr insn blks =
     append blks @@
-    set_attributes ?mem insn (ir_of_insn insn)
+    set_attributes ?addr insn (ir_of_insn insn)
 
   let with_first_blk_addressed addr = function
     | [] -> []
@@ -118,8 +117,8 @@ module IrBuilder = struct
     | Int (_,pad) ->
       let pad = Ir_blk.create ~tid:pad () in
       let pad = match return with
-        | None -> pad
-        | Some dst -> Term.append jmp_t pad (Ir_jmp.reify ~dst ()) in
+        | Some (`Intra dst) -> Term.append jmp_t pad (Ir_jmp.reify ~dst ())
+        | _ -> pad in
       Some pad
     | _ -> None
 
@@ -164,39 +163,96 @@ module IrBuilder = struct
     | [] -> []
     | x :: xs -> f x @ xs
 
-  let blk ?symtab cfg block : blk term list =
-    let tid = Tid.for_addr (Block.addr block) in
-    let blks =
-      Block.insns block |>
-      List.fold ~init:[Ir_blk.create ~tid ()] ~f:(fun blks (mem,insn) ->
-          lift_insn ~mem insn blks) in
-    let fall = intra_fall cfg block in
+  let with_first_blk_optionally_addressed = function
+    | None -> fun x -> x
+    | Some addr -> with_first_blk_addressed addr
+
+  (* packs a list of IR blks that represent blks obtained from
+   * the instructions of the same basic block into a set of maximal
+   * blocks, coalescing them whenever possible.
+   *
+   * Parameters:
+   * - [is_call] designates if the last instruction in the basic block
+   * is the call instruction. If set, then the last jump will be turned
+   * into a call.
+   * - [is_barrier] designates if the last instruction is a barrier,
+   * i.e., such an instruction after which the control-flow never falls
+   * to the next instruction or is no expected to be returned from a
+   * subroutine.
+   * - [fall] could be set to [`Intra dst] or [`Inter dst] and
+   * designates the basic block fall through destination, which could
+   * be either an intraprocedural or interprocedural control flow. If
+   * the fall is interprocedural then it will be reified into a jump
+   * of the call kind.
+   *
+   *
+  *)
+  let pack
+    : ?is_call:bool ->
+      ?is_barrier:bool ->
+      ?fall:[> `Inter of Ir_jmp.dst | `Intra of Ir_jmp.dst ] ->
+      ?addr:addr ->
+      blk term list -> blk term list =
+    fun ?(is_call=false) ?(is_barrier=false) ?fall ?addr blks ->
     let blks = with_landing_pads fall blks in
-    let x = Block.terminator block in
-    let is_call = Insn.(is call x) || has_explicit_call symtab block
-    and is_barrier = Insn.(is barrier x) in
-    with_first_blk_addressed (Block.addr block) @@
+    with_first_blk_optionally_addressed addr @@
     concat_map_fst_and_rev blks @@ function
     | x when is_barrier -> [x]
     | x -> match fall with
-      | Some dst -> [
+      | None -> [if is_call || has_call x then turn_into_call None x else x]
+      | Some (`Intra dst) -> [
           fall_if_possible dst @@
           if is_call || has_call x
-          then turn_into_call fall x
+          then turn_into_call (Some dst) x
           else x
         ]
+      | Some (`Inter dst) ->
+        if is_call || has_call x then
+          let next = Ir_blk.create () in
+          let fall = Ir_jmp.resolved (Term.tid next) in
+          let next = insert_inter_fall dst next in [
+            next;
+            fall_if_possible fall @@
+            turn_into_call (Some fall) x
+          ]
+        else [insert_inter_fall dst x]
+
+  let insns ?fall ?addr insns =
+    let tid = match addr with
+      | None -> Tid.create ()
+      | Some addr -> Tid.for_addr addr in
+    let blks,termi = List.fold insns
+        ~init:([Ir_blk.create ~tid ()],None)
+        ~f:(fun (blks,_) insn ->
+            lift_insn insn blks,Some insn) in
+    match termi with
+    | None -> blks
+    | Some x ->
+      pack blks
+        ?fall
+        ?addr
+        ~is_call:(Insn.(is call x))
+        ~is_barrier:Insn.(is barrier x)
+
+  let blk ?symtab cfg block : blk term list =
+    let addr = Block.addr block in
+    let tid = Tid.for_addr addr in
+    let blks =
+      Block.insns block |>
+      List.fold ~init:[Ir_blk.create ~tid ()] ~f:(fun blks (mem,insn) ->
+          let addr = Memory.min_addr mem in
+          lift_insn ~addr insn blks) in
+    let fall = match intra_fall cfg block with
+      | Some dst -> Some (`Intra dst)
       | None -> match inter_fall symtab block with
-        | None -> [if is_call || has_call x then turn_into_call None x else x]
-        | Some dst ->
-          if is_call || has_call x then
-            let next = Ir_blk.create () in
-            let fall = Ir_jmp.resolved (Term.tid next) in
-            let next = insert_inter_fall dst next in [
-              next;
-              fall_if_possible fall @@
-              turn_into_call (Some fall) x
-            ]
-          else [insert_inter_fall dst x]
+        | Some dst -> Some (`Inter dst)
+        | None -> None in
+    let x = Block.terminator block in
+    pack blks
+      ?fall
+      ~addr
+      ~is_call:(Insn.(is call x) || has_explicit_call symtab block)
+      ~is_barrier:Insn.(is barrier x)
 end
 
 let blk cfg block = IrBuilder.blk cfg block
@@ -328,5 +384,8 @@ let program symtab =
 
 let sub blk cfg = lift_sub blk cfg
 
-let insn insn =
-  List.rev @@ IrBuilder.lift_insn insn [Ir_blk.create ()]
+let insn ?addr insn =
+  let tid = Option.map addr ~f:Tid.for_addr in
+  List.rev @@ IrBuilder.lift_insn ?addr insn [Ir_blk.create ?tid ()]
+
+let insns = IrBuilder.insns

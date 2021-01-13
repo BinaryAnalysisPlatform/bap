@@ -270,7 +270,9 @@ let stmt : type t. (t,exp,rmode,stmt) Theory.Parser.stmt_parser =
       | Float {exp_bits=11; sig_bits=53} -> S.set_ieee754 n Theory.IEEE754.binary64 x
       | Float {exp_bits=15; sig_bits=64} -> S.set_ieee754 n Theory.IEEE754.binary80 x
       | Float {exp_bits=15; sig_bits=113} -> S.set_ieee754 n Theory.IEEE754.binary128 x
-      | _ -> S.special "unsupported-type"
+      | _ ->
+        warning "unsupported floating point type";
+        S.error
     else match t with
       | Reg 1 -> S.set_bit n x
       | Reg m -> S.set_reg n m x
@@ -280,7 +282,9 @@ let stmt : type t. (t,exp,rmode,stmt) Theory.Parser.stmt_parser =
       | Float {exp_bits=11; sig_bits=53} -> S.set_ieee754 n Theory.IEEE754.binary64 x
       | Float {exp_bits=15; sig_bits=64} -> S.set_ieee754 n Theory.IEEE754.binary80 x
       | Float {exp_bits=15; sig_bits=113} -> S.set_ieee754 n Theory.IEEE754.binary128 x
-      | _ -> S.special "unsupported-type" in
+      | _ ->
+        warning "unsupported floating point type";
+        S.error in
   function
   | Move (v,x,_) -> set v x
   | Jmp (x,_) -> S.jmp x

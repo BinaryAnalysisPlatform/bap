@@ -36,15 +36,19 @@ module Special = struct
       ~decode:ident
       ~package:"bap"
 
-
   let prefix = "@attribute:"
+
+
   let encode {Attribute.constr; encode} data =
-    prefix ^
-    Sexp.to_string @@
-    Sexp.List [
-      Atom (KB.Name.show constr);
-      Atom (encode data);
-    ]
+    match encode data with
+    | "" -> prefix ^ KB.Name.show constr
+    | data ->
+      prefix ^
+      Sexp.to_string @@
+      Sexp.List [
+        Atom (KB.Name.show constr);
+        Atom data;
+      ]
 
   let decode_payload {Attribute.constr; decode} name data =
     let name = KB.Name.read name in
@@ -52,11 +56,15 @@ module Special = struct
     then Some (decode data)
     else None
 
+  let has_attribute = function
+    | Stmt.Special s -> String.is_prefix ~prefix s
+    | _ -> false
 
   let decode attr s = match String.chop_prefix ~prefix s with
     | None -> None
     | Some payload -> match Sexp.of_string payload with
       | exception _ -> None
+      | Sexp.Atom name -> decode_payload attr name ""
       | Sexp.List [Atom name; Atom data] -> decode_payload attr name data
       | _ -> None
 
@@ -168,7 +176,6 @@ module Stmts_data = struct
     set_default_reader "bin"
 end
 
-
 let domain = Knowledge.Domain.flat "bil"
     ~empty:[]
     ~inspect:(function
@@ -187,3 +194,8 @@ let slot = Knowledge.Class.property ~package:"bap"
     ~persistent Theory.Semantics.cls "bil" domain
     ~public:true
     ~desc:"semantics of statements in BIL"
+
+let code = KB.Class.property ~package:"bap"
+    ~persistent Theory.Program.cls "bil-code" domain
+    ~public:true
+    ~desc:"the code of the program in BIL"
