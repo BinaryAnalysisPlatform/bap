@@ -7,7 +7,7 @@ module AMD64 = X86_backend.AMD64
 
 type endbr = [ `ENDBR32 | `ENDBR64 ] [@@deriving bin_io, sexp, compare, enumerate]
 
-let lift _mem _insn = Ok [ Bil.special "end-of-branch" ]
+let lift _mem _insn = Ok [ Bil.(encode intrinsic "endbr")]
 
 let () =
   Bap_main.Extension.declare @@ fun _ctxt ->

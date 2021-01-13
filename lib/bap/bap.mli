@@ -6679,9 +6679,18 @@ module Std : sig
       (** restarts last step.   *)
       val back : (_,_,'s,'r) state -> 's -> 'r
 
-      (** Basic instruction.
-          This instruction is an opaque pointer into C-backend, thus
-          it is protected with phantom types. *)
+      (** Basic instruction aka machine-specific instruction.
+
+          The machine-specific instruction is composed of a name,
+          operands, and kinds (or flags) that denote additional
+          information about the instruction.
+
+          The meaning of the name and operands is specific to a
+          particular machine and encoding (see {!Insn.encoding}). The
+          meaning of the instruction kinds is more or less universal.
+
+
+      *)
       module Insn : sig
 
         type ('a,'k) t = ('a,'k) insn
