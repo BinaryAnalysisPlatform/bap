@@ -1,4 +1,5 @@
 open Bap.Std
+open Bap_core_theory
 open Core_kernel
 open Graphlib.Std
 open Regular.Std
@@ -16,6 +17,7 @@ end
 module Def = Bap_primus_lisp_def
 
 type t = {
+  target : Theory.Target.t;
   context : Lisp.Context.t;
   sources : Source.t;
   codes : Def.prim Def.t list;
@@ -31,7 +33,8 @@ type t = {
 
 type program = t
 
-let empty = {
+let empty target = {
+  target;
   context = Lisp.Context.empty;
   sources = Source.empty;
   codes = [];
@@ -257,6 +260,7 @@ let pp_program ppf {pars; mets; defs;} =
   pp_items pp_def defs
 
 let pp ppf prog = pp_program ppf prog
+let pp_ast ppf ast = Ast.pp ppf ast
 
 module Use = struct
   let empty = String.Map.empty
@@ -1111,8 +1115,8 @@ module Typing = struct
       gamma :    Gamma.t;
     }
 
-    let empty = {
-      program = empty;
+    let empty target = {
+      program = empty target;
       gamma = Gamma.empty;
     }
 

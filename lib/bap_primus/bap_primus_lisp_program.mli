@@ -1,4 +1,5 @@
 open Bap.Std
+open Bap_core_theory
 
 open Bap_primus_lisp_types
 open Bap_primus_lisp_type
@@ -9,10 +10,11 @@ type t
 type program = t
 type 'a item
 
-val empty : t
+val empty : Theory.Target.t -> t
 val merge : t -> t -> t
 val add : t -> 'a item -> 'a Def.t -> t
 val get : t -> 'a item -> 'a Def.t list
+val target : t -> Theory.Target.t
 val context : t -> Context.t
 val sources : t -> Source.t
 val with_sources : t -> Source.t -> t
@@ -34,7 +36,7 @@ end
 module Type : sig
   type env
   type error
-  val empty : env
+  val empty : Theory.Target.t -> env
   val infer : ?externals:(string * signature) list -> Var.t seq -> program -> env
   val check : Var.t seq -> program -> error list
   val errors : env -> error list
@@ -42,3 +44,4 @@ module Type : sig
 end
 
 val pp : Format.formatter -> t -> unit
+val pp_ast : Format.formatter -> ast -> unit

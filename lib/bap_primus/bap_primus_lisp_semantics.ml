@@ -4,6 +4,7 @@ open Bap_core_theory
 
 open Bap_primus_lisp_types
 
+module Program = Bap_primus_lisp_program
 module Resolve = Bap_primus_lisp_resolve
 module Def = Bap_primus_lisp_def
 module Check = Bap_primus_lisp_type.Check
@@ -55,13 +56,7 @@ let create eff res =
 
 
 module Prelude(CT : Theory.Core) = struct
-  let word_size = 32
-
-  module Word = Bitvec.M32
-
   let bits = Theory.Bitv.define
-  let words = bits word_size
-
   let label = KB.Object.create Theory.Program.cls
 
   let rec seq = function
@@ -130,17 +125,25 @@ let abi_generic = "abi-args"
 
 let reify theory prog name =
   Theory.require theory >>= fun (module CT) ->
+  let target = Program.target prog in
+  let word = Theory.Target.bits target in
   let open Prelude(CT) in
   let rec eval : ast -> t KB.t = function
     | {data=Int {data={exp=x; typ=Type m}}} -> pure@@bigint x m
+    | {data=Int {data={exp=x; typ=Any}}} -> pure@@bigint x word
     | {data=Var {data={exp=n; typ=Type m}}} -> pure@@var n m
+    | {data=Var {data={exp=n; typ=Any}}} -> pure@@var n word
     | {data=Ite (cnd,yes,nay)} -> ite cnd yes nay
     | {data=Let ({data={exp=n; typ=Type t}},x,y)} -> let_ n t x y
+    | {data=Let ({data={exp=n; typ=Any}},x,y)} -> let_ n word x y
     | {data=App (Dynamic name,args)} -> app name args
     | {data=Seq xs} -> seq_ xs
     | {data=Set ({data={exp=n; typ=Type t}},x)} -> set_ n t x
+    | {data=Set ({data={exp=n; typ=Any}},x)} -> set_ n word x
     | {data=Rep (cnd,body)} -> rep cnd body
-    | _ -> undefined
+    | x ->
+      Format.eprintf "Skipping undefined:@\n%a@\n" Program.pp_ast x;
+      undefined
   and ite cnd yes nay =
     let* S {eff=ceff; res=cres} = eval cnd in
     let* S {eff=yeff; res=yres} = eval yes in

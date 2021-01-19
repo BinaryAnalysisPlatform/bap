@@ -545,8 +545,8 @@ module Parse = struct
   let declarations =
     List.fold ~init:Attribute.Set.empty ~f:declaration
 
-  let source constraints source =
-    let init = Program.with_context Program.empty constraints in
+  let source constraints target source =
+    let init = Program.with_context (Program.empty target) constraints in
     let init = Program.with_sources init source in
     let state = Source.fold source ~init ~f:(fun _ trees state ->
         List.fold trees ~init:state ~f:(meta (declarations trees))) in
@@ -617,7 +617,7 @@ module Load = struct
       load_trees paths Source.empty (features_of_list fs) |>
       transitive_closure paths in
     try
-      Parse.source (Context.of_project proj) source
+      Parse.source (Context.of_project proj) (Project.target proj) source
     with Parse_error (err,trees) ->
       raise (Fail (Parse_error (err, loc source trees)))
 end
