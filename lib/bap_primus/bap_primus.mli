@@ -5,6 +5,7 @@ open Bap.Std
 open Monads.Std
 open Bap_future.Std
 open Bap_strings.Std
+open Bap_core_theory
 
 module Std : sig
 
@@ -3403,6 +3404,15 @@ ident ::= ?any atom that is not recognized as a <word>?
 
         (** [pp_program ppf program] dumps program definitions into the formatter [ppf]   *)
         val pp_program : Format.formatter -> program -> unit
+      end
+
+      module Semantics : sig
+        type t
+        type value = unit Theory.Value.t
+        val create : insn -> value -> t
+        val effect : t -> insn
+        val result : t -> value
+        val reify : Theory.t -> program -> string -> t option KB.t
       end
 
       module Doc : sig

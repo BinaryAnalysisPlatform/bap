@@ -2,6 +2,7 @@ open Core_kernel
 open Bap.Std
 open Format
 open Bap_primus_types
+open Bap_core_theory
 
 type program
 type message
@@ -12,6 +13,15 @@ module Load : sig
   val program : ?paths:string list -> Project.t -> string list -> (program,error) result
   val pp_program : formatter -> program -> unit
   val pp_error : formatter -> error -> unit
+end
+
+module Semantics : sig
+  type t
+  type value = unit Theory.Value.t
+  val create : insn -> value -> t
+  val effect : t -> insn
+  val result : t -> value
+  val reify : Theory.t -> program -> string -> t option KB.t
 end
 
 module Doc : sig

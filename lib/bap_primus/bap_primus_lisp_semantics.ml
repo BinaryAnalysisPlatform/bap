@@ -15,7 +15,7 @@ open KB.Let
 
 type words
 
-type 'a value = 'a Theory.Bitv.t Theory.Value.t
+type value = unit Theory.Value.t
 type effect = unit Theory.Effect.t
 
 type t = semantics
@@ -42,6 +42,16 @@ let lisp_machine =
 
 let forget x =
   KB.Value.refine x (Theory.Value.Sort.forget (sort x))
+
+let effect (S {eff}) = eff
+let result (S {res}) = forget res
+let create eff res =
+  let s = sort res in
+  match Theory.Bitv.refine s with
+  | Some s -> S {eff; res = KB.Value.refine res s}
+  | None ->
+    let unk = Theory.Bitv.define 1 in
+    S {eff; res = Theory.Value.empty unk}
 
 
 module Prelude(CT : Theory.Core) = struct
