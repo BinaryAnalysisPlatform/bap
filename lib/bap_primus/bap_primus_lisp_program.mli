@@ -26,7 +26,8 @@ module Items : sig
   val func  : Def.func  item
   val meth  : Def.meth  item
   val para  : Def.para item
-  val primitive  : Def.prim item
+  val primitive : Def.prim item
+  val semantics : Def.sema item
   val signal : Def.signal item
 end
 

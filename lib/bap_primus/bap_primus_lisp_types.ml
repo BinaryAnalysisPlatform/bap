@@ -1,6 +1,7 @@
 open Core_kernel
 open Bap.Std
 open Bap_primus_sexp
+open Bap_core_theory
 
 module Index = Bap_primus_lisp_index
 module Loc = Bap_primus_lisp_loc
@@ -26,6 +27,11 @@ type word = Z.t term indexed [@@deriving compare]
 type var = string term indexed [@@deriving compare]
 type sym = string indexed [@@deriving compare]
 type loc = Loc.t
+
+type semantics = S : {
+    eff : insn;
+    res : 'a Theory.Bitv.t Theory.Value.t;
+  } -> semantics
 
 type error = ..
 exception Fail of error

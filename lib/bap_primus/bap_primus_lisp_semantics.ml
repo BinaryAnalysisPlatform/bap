@@ -1,9 +1,13 @@
-
 open Core_kernel
 open Bap.Std
 open Bap_core_theory
 
 open Bap_primus_lisp_types
+
+module Resolve = Bap_primus_lisp_resolve
+module Def = Bap_primus_lisp_def
+module Check = Bap_primus_lisp_type.Check
+module Key = Bap_primus_lisp_program.Items
 
 open KB.Syntax
 open KB.Let
@@ -14,23 +18,39 @@ type words
 type 'a value = 'a Theory.Bitv.t Theory.Value.t
 type effect = unit Theory.Effect.t
 
-type s = S : {
-    eff : effect;
-    res : 'a value;
-  } -> s
+type t = semantics
 
-module Lifter(CT : Theory.Core) = struct
+type KB.Conflict.t += Unresolved_definition of Resolve.resolution
+
+
+let lookup prog item name = match Resolve.semantics prog item name () with
+  | None -> !!None
+  | Some (Error problem) ->
+    KB.fail (Unresolved_definition problem)
+  | Some (Ok (fn,_)) -> !!(Some fn)
+
+let prim prog name =
+  lookup prog Key.semantics name >>| function
+  | None -> None
+  | Some sema -> Some (Def.Semantics.body sema)
+
+let sort = Theory.Value.sort
+let size x = Theory.Bitv.size (sort x)
+let lisp_machine =
+  Theory.Effect.Sort.(join [data "unrepresented-lisp-machine"] [top])
+
+
+let forget x =
+  KB.Value.refine x (Theory.Value.Sort.forget (sort x))
+
+
+module Prelude(CT : Theory.Core) = struct
   let word_size = 32
 
   module Word = Bitvec.M32
 
-
-  let prims _ = None
-
-
   let bits = Theory.Bitv.define
   let words = bits word_size
-
 
   let label = KB.Object.create Theory.Program.cls
 
@@ -54,6 +74,8 @@ module Lifter(CT : Theory.Core) = struct
     let x = Bitvec.(bigint x mod m) in
     CT.int s x
 
+  let zero = bigint Z.zero 1
+
   let (:=) = CT.set
 
   let full eff res =
@@ -72,9 +94,6 @@ module Lifter(CT : Theory.Core) = struct
   let blk lbl xs =
     seq [CT.blk lbl pass skip; seq xs]
 
-  let sort = Theory.Value.sort
-  let size x = Theory.Bitv.size (sort x)
-
   let cast s x =
     CT.cast (bits s) CT.b0 !!x
 
@@ -84,22 +103,25 @@ module Lifter(CT : Theory.Core) = struct
     cast s y >>= fun y ->
     f x y
 
-  let zero = bigint Z.zero 1
 
   let nil = pure @@ zero
 
   let var n m =
     CT.var@@Theory.Var.define (bits m) n
 
-
-  let lisp_machine =
-    Theory.Effect.Sort.(join [data "unrepresented-lisp-machine"] [top])
-
   let undefined =
     full [CT.perform lisp_machine] zero
+end
 
+let abi_name_specific name =
+  sprintf "abi-args-%s"  name
 
-  let rec eval : ast -> s KB.t = function
+let abi_generic = "abi-args"
+
+let reify theory prog name =
+  Theory.require theory >>= fun (module CT) ->
+  let open Prelude(CT) in
+  let rec eval : ast -> t KB.t = function
     | {data=Int {data={exp=x; typ=Type m}}} -> pure@@bigint x m
     | {data=Var {data={exp=n; typ=Type m}}} -> pure@@var n m
     | {data=Ite (cnd,yes,nay)} -> ite cnd yes nay
@@ -133,16 +155,26 @@ module Lifter(CT : Theory.Core) = struct
             (CT.goto head) skip
         ]]
     ] !!cres
-  and app name xs = match prims name with
+  and app name xs =
+    map xs >>= fun (eff,xs) ->
+    prim prog name >>= function
     | None ->
-      KB.List.map xs ~f:eval >>= fun xs ->
-      let* S {eff; res} = args name xs in
       let* dst = Theory.Label.for_name name in
+      let* S {eff; res} = args name xs in
       full [
         !!eff;
         ctrl [CT.goto dst]
       ] !!res
-    | Some s -> s
+    | Some prim ->
+      let* S {eff=eff'; res} = prim theory xs in
+      full [!!eff; !!eff'] !!res
+  and map args =
+    seq [] >>= fun eff ->
+    KB.List.fold args ~init:(eff,[]) ~f:(fun (eff,args) arg ->
+        let* S {eff=eff'; res} = eval arg in
+        let+ eff = seq [!!eff; !!eff'] in
+        (eff,forget res::args)) >>| fun (eff,args) ->
+    eff, List.rev args
   and seq_ xs =
     nil >>= fun init ->
     KB.List.fold ~init xs ~f:(fun (S {eff}) x  ->
@@ -162,6 +194,14 @@ module Lifter(CT : Theory.Core) = struct
       data [v := !!x];
       !!effb;
     ] !!resb
-  and args _name _xs = assert false
-
-end
+  and args name xs =
+    prim prog (abi_name_specific name) >>= function
+    | Some prim -> prim theory xs
+    | None -> prim prog abi_generic >>= function
+      | None -> nil
+      | Some prim -> prim theory xs in
+  lookup prog Key.func name >>= function
+  | Some fn ->
+    eval (Def.Func.body fn) >>| fun sema ->
+    Some sema
+  | None -> !!None

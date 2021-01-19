@@ -1,5 +1,6 @@
 open Bap_primus_types
 open Bap_primus_lisp_types
+open Bap_core_theory
 
 module Attribute = Bap_primus_lisp_attribute
 module Type = Bap_primus_lisp_type
@@ -17,6 +18,7 @@ type macro
 type subst
 type const
 type prim
+type sema
 type closure = (module Closure)
 type 'a primitive
 type para
@@ -86,6 +88,14 @@ module Closure : sig
   val create : ?types:Type.signature -> ?docs:string -> string -> closure -> prim t
   val signature : prim t -> Type.signature option
   val body : prim t -> closure
+end
+
+module Semantics : sig
+  type body = Theory.t -> unit Theory.Value.t list -> semantics KB.t
+  val create : ?types:Type.signature -> ?docs:string -> string ->
+    body -> sema t
+  val signature : sema t -> Type.signature option
+  val body : sema t -> body
 end
 
 module Signal : sig

@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 open Bap.Std
 open Format
 open Bap_c.Std
@@ -8,7 +9,6 @@ open Bap_primus_sexp
 open Bap_primus_lisp_types
 
 module Attribute = Bap_primus_lisp_attribute
-module Loc = Bap_primus_lisp_loc
 module Index = Bap_primus_lisp_index
 module Type = Bap_primus_lisp_type
 
@@ -59,6 +59,14 @@ type closure = (module Closure)
 
 type prim = {
   lambda : closure;
+  types : Type.signature option;
+}
+
+type semfun = Theory.t -> unit Theory.Value.t list -> semantics KB.t
+
+
+type sema = {
+  sema : semfun;
   types : Type.signature option;
 }
 
@@ -241,5 +249,24 @@ module Closure = struct
 
   let body p = p.data.code.lambda
 
-  let signature p = p.data.code.types
+  let signature : prim t -> Type.signature option = fun p -> p.data.code.types
+end
+
+module Semantics = struct
+  type body = semfun
+  let create ?types ?(docs="") name sema = {
+    data = {
+      meta = {name;docs; attrs=Attribute.Set.empty};
+      code = {
+        types;
+        sema;
+      };
+    };
+    id = Id.null;
+    eq = Eq.null;
+  }
+
+  let body p = p.data.code.sema
+
+  let signature : sema t -> Type.signature option = fun p -> p.data.code.types
 end

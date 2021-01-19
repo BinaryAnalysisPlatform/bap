@@ -19,6 +19,7 @@ type t = {
   context : Lisp.Context.t;
   sources : Source.t;
   codes : Def.prim Def.t list;
+  semas : Def.sema Def.t list;
   macros : Def.macro Def.t list;
   substs : Def.subst Def.t list;
   consts : Def.const Def.t list;
@@ -34,6 +35,7 @@ let empty = {
   context = Lisp.Context.empty;
   sources = Source.empty;
   codes = [];
+  semas = [];
   defs = [];
   mets = [];
   pars = [];
@@ -64,6 +66,7 @@ module Items = struct
   let meth = Fields.mets
   let para = Fields.pars
   let primitive = Fields.codes
+  let semantics = Fields.semas
   let signal = Fields.sigs
 end
 

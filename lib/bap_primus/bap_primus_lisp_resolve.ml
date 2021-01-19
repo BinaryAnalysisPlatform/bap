@@ -191,6 +191,8 @@ let macro prog item name code =
 let primitive prog item name () =
   run one interns overload_primitive prog item name
 
+let semantics = primitive
+
 let subst prog item name () =
   run one interns overload_primitive prog item name
 
