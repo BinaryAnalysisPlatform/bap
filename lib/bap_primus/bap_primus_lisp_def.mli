@@ -18,7 +18,6 @@ type macro
 type subst
 type const
 type prim
-type sema
 type closure = (module Closure)
 type 'a primitive
 type para
@@ -88,14 +87,6 @@ module Closure : sig
   val create : ?types:Type.signature -> ?docs:string -> string -> closure -> prim t
   val signature : prim t -> Type.signature option
   val body : prim t -> closure
-end
-
-module Semantics : sig
-  type body = Theory.t -> unit Theory.Value.t list -> semantics KB.t
-  val create : ?types:Type.signature -> ?docs:string -> string ->
-    body -> sema t
-  val signature : sema t -> Type.signature option
-  val body : sema t -> body
 end
 
 module Signal : sig

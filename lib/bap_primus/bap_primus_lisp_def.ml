@@ -62,14 +62,6 @@ type prim = {
   types : Type.signature option;
 }
 
-type semfun = Theory.t -> unit Theory.Value.t list -> semantics KB.t
-
-
-type sema = {
-  sema : semfun;
-  types : Type.signature option;
-}
-
 type 'a spec = {meta : meta; code : 'a}
 type 'a t = 'a spec indexed
 type 'a def = ?docs:string -> ?attrs:attrs -> string -> 'a
@@ -250,23 +242,4 @@ module Closure = struct
   let body p = p.data.code.lambda
 
   let signature : prim t -> Type.signature option = fun p -> p.data.code.types
-end
-
-module Semantics = struct
-  type body = semfun
-  let create ?types ?(docs="") name sema = {
-    data = {
-      meta = {name;docs; attrs=Attribute.Set.empty};
-      code = {
-        types;
-        sema;
-      };
-    };
-    id = Id.null;
-    eq = Eq.null;
-  }
-
-  let body p = p.data.code.sema
-
-  let signature : sema t -> Type.signature option = fun p -> p.data.code.types
 end

@@ -3406,15 +3406,6 @@ ident ::= ?any atom that is not recognized as a <word>?
         val pp_program : Format.formatter -> program -> unit
       end
 
-      module Semantics : sig
-        type t
-        type value = unit Theory.Value.t
-        val create : insn -> value -> t
-        val effect : t -> insn
-        val result : t -> value
-        val reify : Theory.t -> program -> string -> t option KB.t
-      end
-
       module Doc : sig
 
         (** Abstract Element of a document.
@@ -3614,6 +3605,23 @@ ident ::= ?any atom that is not recognized as a <word>?
             [err] into the formatter [ppf] *)
         val pp_error : Format.formatter -> error -> unit
       end
+
+
+      (* module Semantics : sig
+       *   type t
+       *   type value = unit Theory.Value.t
+       *   val create : insn -> value -> t
+       *   val effect : t -> insn
+       *   val result : t -> value
+       *   val reify : Theory.t -> program -> string -> t option KB.t
+       *   val define :
+       *     ?types:Type.signature ->
+       *     ?docs:string ->
+       *     string ->
+       *     (Theory.t -> unit Theory.Value.t list -> t KB.t) ->
+       *     program -> program
+       *
+       * end *)
 
 
       (** Lisp Machine Message interface.

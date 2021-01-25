@@ -15,15 +15,6 @@ module Load : sig
   val pp_error : formatter -> error -> unit
 end
 
-module Semantics : sig
-  type t
-  type value = unit Theory.Value.t
-  val create : insn -> value -> t
-  val effect : t -> insn
-  val result : t -> value
-  val reify : Theory.t -> program -> string -> t option KB.t
-end
-
 module Doc : sig
   module type Element = sig
     type t
@@ -146,6 +137,16 @@ module Make (Machine : Machine) : sig
 
   (* deprecated *)
   val link_primitives : primitives -> unit Machine.t
+end
+
+module Semantics : sig
+  type primitive
+
+  module Primitive : sig
+    type t = primitive
+    val name : t -> string
+    val args : t -> unit Theory.Value.t list
+  end
 end
 
 val init : ?log:formatter -> ?paths:string list -> string list -> unit

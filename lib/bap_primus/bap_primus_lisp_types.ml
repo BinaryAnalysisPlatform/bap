@@ -28,11 +28,6 @@ type var = string term indexed [@@deriving compare]
 type sym = string indexed [@@deriving compare]
 type loc = Loc.t
 
-type semantics = S : {
-    eff : insn;
-    res : 'a Theory.Bitv.t Theory.Value.t;
-  } -> semantics
-
 type error = ..
 exception Fail of error
 
