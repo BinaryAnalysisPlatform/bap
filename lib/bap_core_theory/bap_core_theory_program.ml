@@ -3,6 +3,7 @@ open Bitvec_order.Comparators
 open Bap_knowledge
 
 let package = "core-theory"
+module Value  = Bap_core_theory_value
 module Effect = Bap_core_theory_effect
 module Target = Bap_core_theory_target
 
@@ -288,6 +289,11 @@ module Semantics = struct
       ~persistent:(Knowledge.Persistent.of_binable (module Self))
       ~public:true
       ~desc:"the program semantics"
+  let value = Knowledge.Class.property ~package cls "value" Value.Top.domain
+      ~persistent:(Knowledge.Persistent.of_binable (module Value.Top))
+      ~public:true
+      ~desc:"the program semantics"
+
   include Self
 end
 
