@@ -17,7 +17,6 @@ end
 module Def = Bap_primus_lisp_def
 
 type t = {
-  target : Theory.Target.t;
   context : Lisp.Context.t;
   sources : Source.t;
   codes : Def.prim Def.t list;
@@ -32,8 +31,7 @@ type t = {
 
 type program = t
 
-let empty target = {
-  target;
+let empty  = {
   context = Lisp.Context.empty;
   sources = Source.empty;
   codes = [];
@@ -1112,8 +1110,8 @@ module Typing = struct
       gamma :    Gamma.t;
     }
 
-    let empty target = {
-      program = empty target;
+    let empty = {
+      program = empty;
       gamma = Gamma.empty;
     }
 

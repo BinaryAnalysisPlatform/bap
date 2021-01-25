@@ -10,11 +10,10 @@ type t
 type program = t
 type 'a item
 
-val empty : Theory.Target.t -> t
+val empty : t
 val merge : t -> t -> t
 val add : t -> 'a item -> 'a Def.t -> t
 val get : t -> 'a item -> 'a Def.t list
-val target : t -> Theory.Target.t
 val context : t -> Context.t
 val sources : t -> Source.t
 val with_sources : t -> Source.t -> t
@@ -35,7 +34,7 @@ end
 module Type : sig
   type env
   type error
-  val empty : Theory.Target.t -> env
+  val empty : env
   val infer : ?externals:(string * signature) list -> Var.t seq -> program -> env
   val check : Var.t seq -> program -> error list
   val errors : env -> error list

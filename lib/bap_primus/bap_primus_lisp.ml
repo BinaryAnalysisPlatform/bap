@@ -56,8 +56,8 @@ let state = Bap_primus_state.declare ~inspect
            vars = Var.Map.empty;
          };
          cur = Id.null;
-         program = Lisp.Program.empty (Project.target proj);
-         typeenv = Lisp.Program.Type.empty (Project.target proj);
+         program = Lisp.Program.empty;
+         typeenv = Lisp.Program.Type.empty;
          signals = String.Map.empty;
          width = width_of_ctxt proj;
        })
