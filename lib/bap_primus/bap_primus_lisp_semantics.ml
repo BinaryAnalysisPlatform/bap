@@ -21,6 +21,18 @@ type effect = unit Theory.Effect.t
 
 type KB.Conflict.t += Unresolved_definition of Resolve.resolution
 
+let language = Theory.Language.declare ~package:"bap" "primus-lisp"
+
+let program = KB.Class.property Theory.Source.cls "primus-lisp-program" @@
+  KB.Domain.flat "lisp-program"
+    ~empty:Program.empty
+    ~equal:Program.equal
+    ~join:(fun x y -> Ok (Program.merge x y))
+    ~inspect:(fun p ->
+        let r = Format.asprintf "%a" Program.pp p in
+        Sexp.Atom r)
+
+
 let lookup prog item name = match Resolve.semantics prog item name () with
   | None -> !!None
   | Some (Error problem) ->
@@ -239,8 +251,26 @@ module Prelude(CT : Theory.Core) = struct
       sym name >>= fun x ->
       Primitive.eval "abi-pass-arguments" (forget x::xs) in
     lookup prog Key.func name >>= function
-    | Some fn ->
-      eval (Def.Func.body fn) >>| fun sema ->
-      Some sema
-    | None -> !!None
+    | Some fn -> eval (Def.Func.body fn)
+    | None -> !!Insn.empty
 end
+
+let provide () =
+  KB.promise Theory.Semantics.slot @@ fun obj ->
+  KB.collect Theory.Label.name obj >>= function
+  | None -> !!Insn.empty
+  | Some name ->
+    KB.collect Theory.Label.unit obj >>= function
+    | None -> !!Insn.empty
+    | Some unit ->
+      KB.collect Theory.Unit.source unit >>= fun src ->
+      KB.collect Theory.Unit.target unit >>= fun target ->
+      let lang = KB.Value.get Theory.Source.language src in
+      if Theory.Language.equal lang language then
+        let prog = KB.Value.get program src in
+        Theory.instance () >>= Theory.require >>= fun (module Core) ->
+        let open Prelude(Core) in
+        reify prog target name
+      else !!Insn.empty
+
+let () = provide ()             (* todo:  move to a plugin *)
