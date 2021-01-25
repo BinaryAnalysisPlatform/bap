@@ -37,6 +37,8 @@ and token = Atom of string | List of tree list
 (** [empty] source repository  *)
 val empty : t
 
+val equal : t -> t -> bool
+
 val is_empty : t -> bool
 
 (** [load source filename] loads the source code from the given

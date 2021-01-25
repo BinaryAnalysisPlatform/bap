@@ -46,6 +46,11 @@ let empty = {
 
 let is_empty {lastid} = Id.equal Id.null lastid
 
+let equal_inputs = String.Map.equal String.equal
+
+let equal x y = phys_equal x y ||
+                equal_inputs x.inputs y.inputs
+
 let nextid p = {
   p with lastid = Id.next p.lastid
 }

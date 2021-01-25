@@ -44,6 +44,9 @@ let empty  = {
   consts=[];
 }
 
+let equal p1 p2 =
+  Source.equal p1.sources p2.sources
+
 let merge p1 p2 =
   let p1,p2 = if Source.is_empty p1.sources then
       p1,p2 else
@@ -53,6 +56,7 @@ let merge p1 p2 =
     codes = p1.codes @ p2.codes;
     context = Lisp.Context.merge p1.context p2.context;
   }
+
 
 
 type 'a item = ([`Read | `Set_and_create ], t, 'a Def.t list) Fieldslib.Field.t_with_perm
