@@ -233,6 +233,38 @@ module TypeErrorPrinter(Machine : Primus.Machine.S) = struct
     Primus.Lisp.Type.error >>> report
 end
 
+let load_lisp_unit paths features =
+  let open Bap_core_theory in
+  let open KB.Syntax in
+  let open struct
+    (* we shall probably publish the unit name,
+       or devise some sort of a naming scheme
+       (that should also be described) *)
+    let lisp_unit = KB.Symbol.intern "lisp" Theory.Unit.cls
+
+    let empty = KB.Value.empty Theory.Source.cls
+
+    let is_lisp unit =
+      lisp_unit >>| Theory.Unit.equal unit
+
+    let pack prog =
+      let (:=) prop x src = KB.Value.put prop src x in [
+        Theory.Source.language := Primus.Lisp.Semantics.language;
+        Primus.Lisp.Semantics.program := prog;
+      ] |> List.fold ~f:(|>)
+          ~init:(KB.Value.empty Theory.Source.cls)
+  end in
+  KB.promise Theory.Unit.source @@ fun unit ->
+  is_lisp unit >>= function
+  | false -> !!empty
+  | true ->
+    KB.collect Theory.Unit.target unit >>| fun target ->
+    pack @@
+    load_program paths features @@
+    Project.empty target
+
+
+
 let () =
   Config.manpage [
     `S "DESCRIPTION";
@@ -266,7 +298,6 @@ let () =
     Config.(param (list string) ~doc:"load specified module" "load"
               ~default:["posix"]) in
 
-
   let redirects =
     let doc = sprintf
         "establishes a redirection between an emulated file path and a
@@ -298,4 +329,6 @@ let () =
         ~desc:"Prints Primus Lisp type errors into the standard output.";
       Channels.init !!redirects;
       Primitives.init ();
+      Primus_lisp_semantic_primitives.provide ();
+      load_lisp_unit paths features;
       load_lisp_program !!dump paths features)
