@@ -12,10 +12,10 @@ module Primitive : sig
   val args : t -> unit Theory.Value.t list
 end
 
-(* val language : Theory.language
- * val program : (Theory.Source.cls, program) KB.slot
- * val primitive : (Theory.program, primitive option) KB.slot
- * val attribute : 'a Attribute.t -> (Theory.Label.t -> unit KB.t) -> unit *)
+val language : Theory.language
+val program : (Theory.Source.cls, program) KB.slot
+val primitive : (Theory.program, primitive option) KB.slot
+(* val attribute : 'a Attribute.t -> (Theory.Label.t -> unit KB.t) -> unit *)
 
 
 (*

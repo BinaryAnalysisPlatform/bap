@@ -58,6 +58,8 @@ module Primitive = struct
     KB.collect Theory.Semantics.slot obj
 end
 
+let primitive = Primitive.slot
+
 type primitive = Primitive.t
 
 let sort = Theory.Value.sort

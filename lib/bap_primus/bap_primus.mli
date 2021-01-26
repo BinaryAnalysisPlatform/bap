@@ -3375,6 +3375,21 @@ ident ::= ?any atom that is not recognized as a <word>?
       type message
 
 
+      module Semantics : sig
+        type primitive
+
+        module Primitive : sig
+          type t = primitive
+          val name : t -> string
+          val args : t -> unit Theory.Value.t list
+        end
+
+        val language : Theory.language
+        val program : (Theory.Source.cls, program) KB.slot
+        val primitive : (Theory.program, primitive option) KB.slot
+      end
+
+
       (** Primus Lisp program loader  *)
       module Load : sig
 
