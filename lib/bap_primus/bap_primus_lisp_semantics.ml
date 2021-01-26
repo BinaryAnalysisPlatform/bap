@@ -155,9 +155,22 @@ module Prelude(CT : Theory.Core) = struct
   let undefined =
     full [CT.perform lisp_machine] zero
 
-  let require_bitv x f =
+  let coerce_bits s x f =
     let open Theory.Value.Match in
-    let| () = can Theory.Bitv.refine x f in
+    let| () = can Theory.Bitv.refine x @@ fun x ->
+      CT.cast s CT.b0 !!x >>= f in
+    let| () = can Theory.Bool.refine x @@ fun cnd ->
+      CT.ite !!cnd
+        (CT.int s Bitvec.one)
+        (CT.int s Bitvec.zero) >>= fun x ->
+      f x in
+    undefined
+
+  let coerce_bool x f =
+    let open Theory.Value.Match in
+    let| () = can Theory.Bool.refine x f in
+    let| () = can Theory.Bitv.refine x @@ fun x ->
+      CT.non_zero !!x >>= fun x -> f x in
     undefined
 
 
@@ -177,18 +190,16 @@ module Prelude(CT : Theory.Core) = struct
       | {data=Set ({data={exp=n; typ=Type t}},x)} -> set_ n t x
       | {data=Set ({data={exp=n; typ=Any}},x)} -> set_ n word x
       | {data=Rep (cnd,body)} -> rep cnd body
-      | x ->
-        Format.eprintf "Skipping undefined:@\n%a@\n" Program.pp_ast x;
-        undefined
+      | _ -> undefined
     and ite cnd yes nay =
       let* cnd = eval cnd in
       let* yes = eval yes in
       let* nay = eval nay in
-      require_bitv (res cnd) @@ fun cres ->
+      coerce_bool (res cnd) @@ fun cres ->
       Theory.Var.fresh Theory.Bool.t >>= fun c ->
       full [
         !!cnd;
-        data [c := CT.non_zero !!cres];
+        data [c := !!cres];
         CT.branch (CT.var c) !!yes !!nay;
       ] @@
       CT.ite (CT.var c) !!(res yes) !!(res nay)
@@ -196,19 +207,19 @@ module Prelude(CT : Theory.Core) = struct
       let* cnd = eval cnd in
       let* body = eval body in
       let* head = label and* loop = label and* tail = label in
-      require_bitv (res cnd) @@ fun cres ->
+      coerce_bool (res cnd) @@ fun cres ->
       full [
         blk head [ctrl [CT.goto tail]];
         blk loop [!!body];
         blk tail [!!cnd; ctrl [
-            CT.branch (CT.non_zero !!cres)
-              (CT.goto head) skip
+            CT.branch !!cres (CT.goto head) skip
           ]]
       ] !!cres
     and app name xs =
       map xs >>= fun (aeff,xs) ->
-      lookup prog Key.func name >>= function
-      | Some _ ->
+      Primitive.eval name (List.map ~f:forget xs) >>= fun peff ->
+      if KB.Domain.is_empty Theory.Semantics.domain peff
+      then
         let* dst = Theory.Label.for_name name in
         let* eff = args name xs in
         full [
@@ -216,11 +227,8 @@ module Prelude(CT : Theory.Core) = struct
           !!eff;
           ctrl [CT.goto dst]
         ] !!(res eff)
-      | None ->
-        seq [
-          !!aeff;
-          Primitive.eval name (List.map ~f:forget xs)
-        ]
+      else
+        full [!!aeff; !!peff] !!(res peff)
     and map args =
       seq [] >>= fun eff ->
       KB.List.fold args ~init:(eff,[]) ~f:(fun (eff,args) arg ->
@@ -236,13 +244,13 @@ module Prelude(CT : Theory.Core) = struct
     and set_ n t x =
       let* eff = eval x in
       let v = Theory.Var.define (bits t) n in
-      require_bitv (res eff) @@ fun reff ->
+      coerce_bits (bits t) (res eff) @@ fun reff ->
       full [!!eff; data [v := !!reff]] !!reff
     and let_ v t x b =
       let* x = eval x in
       let* b = eval b in
       let v = Theory.Var.define (bits t) v in
-      require_bitv (res x) @@ fun rx ->
+      coerce_bits (bits t) (res x) @@ fun rx ->
       cast t rx >>= fun rx ->
       full [
         !!x;
