@@ -180,17 +180,16 @@ type 'a t = (cls,'a sort) KB.cls KB.value
 let cls = Sort.cls
 let empty s : 'a t = KB.Value.empty (KB.Class.refine cls s)
 let sort v : 'a sort = KB.Class.sort (KB.Value.cls v)
+let resort : ('a sort -> 'b sort option) -> 'a t -> 'b t option =
+  fun refine v ->
+  Option.(refine (sort v) >>| KB.Value.refine v)
+
 let forget : 'a t -> unit t = fun v ->
   KB.Value.refine v @@ Sort.forget @@ sort v
 
 module type Sort = sig
   val refine : unit sort -> 'a sort option
 end
-
-
-let map_sort : (unit sort -> 'a sort option) -> unit t -> 'a t option =
-  fun refine v ->
-  Option.(refine (sort v) >>| KB.Value.refine v)
 
 module Top = struct
   let cls = KB.Class.refine cls Sort.Top.t
@@ -301,14 +300,12 @@ end = struct
   type 'a value = 'a t
   type 'b t = (unit -> 'b) -> 'b
   let (let|) = (@@)
-  let map_sort refine v =
-    Option.(refine (sort v) >>| KB.Value.refine v)
   let can cast x action k =
-    match map_sort cast x with
+    match resort cast x with
     | None -> k ()
     | Some x -> action x
   let both castx x casty y action k =
-    match map_sort castx x, map_sort casty y with
+    match resort castx x, resort casty y with
     | Some x, Some y -> action x y
     | _ -> k ()
 end

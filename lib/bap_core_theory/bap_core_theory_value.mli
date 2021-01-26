@@ -12,7 +12,7 @@ val cls : (cls,unit) KB.cls
 
 val empty : 'a sort -> 'a t
 val sort : 'a t -> 'a sort
-
+val resort : ('a sort -> 'b sort option) -> 'a t -> 'b t option
 val forget : 'a t -> unit t
 
 module Top : sig

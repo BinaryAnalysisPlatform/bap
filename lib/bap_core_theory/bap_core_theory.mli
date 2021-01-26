@@ -435,6 +435,16 @@ module Theory : sig
     val sort : 'a t -> 'a sort
 
 
+    (** [resort refine x] applies [refine] to the sort of [x].
+
+        Returns the value [x] with the refined sort, if applicable,
+        otherwise returns the original value.
+
+        @since 2.3.0
+    *)
+    val resort : ('a sort -> 'b sort option) -> 'a t -> 'b t option
+
+
     (** [forget v] erases the type index of the value.
 
         The returned value has the monomorphized [Top.t] type and can
