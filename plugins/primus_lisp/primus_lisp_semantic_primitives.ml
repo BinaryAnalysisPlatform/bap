@@ -28,18 +28,24 @@ module Primitives(CT : Theory.Core) = struct
 
   let one s = CT.int s @@ Bitvec.one
 
-  let monoid s f init = function
+  let require_one = function
+    | [x] -> !!x
+    | _ -> illformed "requires exactly one argument"
+
+  let require_bitv x = match to_bitv x with
+    | Some x -> !!x
+    | None -> illformed "requires a bitvector"
+
+  let all_bitv = KB.List.map ~f:require_bitv
+
+  let monoid s f init xs =
+    all_bitv xs >>= function
     | [] -> forget@@init s
     | x :: xs ->
-      KB.List.fold ~init:x  xs ~f:(fun res x ->
-          match to_bitv res, to_bitv x with
-          | Some res, Some x  ->
-            CT.cast s CT.b0 !!x >>= fun x ->
-            Format.eprintf "Reducing: %a with %a@\n%!"
-              KB.Value.pp res KB.Value.pp x;
-            f !!res !!x >>|
-            Theory.Value.forget
-          | _ -> forget@@CT.unk s)
+      KB.List.fold ~init:x xs ~f:(fun res x ->
+          CT.cast s CT.b0 !!x >>= fun x ->
+          f !!res !!x) |>
+      forget
 
   let is_one x = CT.(inv@@is_zero x)
 
@@ -55,15 +61,20 @@ module Primitives(CT : Theory.Core) = struct
 
   let order f xs = forget@@is_ordered f xs
 
-  let require_one = function
-    | [x] -> !!x
-    | _ -> illformed "requires exactly one argument"
+  let all f xs =
+    CT.b1 >>= fun init ->
+    KB.List.fold ~init xs ~f:(fun r x ->
+        match to_bitv x with
+        | None -> illformed "requires bitvec"
+        | Some x ->
+          CT.and_ !!r (f !!x)) |>
+    forget
 
   let unary f xs =
-    require_one xs >>= fun x ->
-    match to_bitv x with
-    | Some x -> forget@@f !!x
-    | None -> illformed "requires a bitvector"
+    require_one xs >>= require_bitv >>= fun x ->
+    forget@@f !!x
+
+
 
   let pure res =
     res >>= fun res ->
@@ -101,6 +112,10 @@ module Primitives(CT : Theory.Core) = struct
     | ">" -> pure@@order CT.ugt args
     | "<=" -> pure@@order CT.ule args
     | ">=" -> pure@@order CT.uge args
+    | "is-zero"
+    | "not" -> pure@@all CT.is_zero args
+    (* | "is-positive" -> pure@@all is_positive args *)
+
     | other ->
       Format.eprintf "ignoring %S@\n%!" other;
       !!nothing

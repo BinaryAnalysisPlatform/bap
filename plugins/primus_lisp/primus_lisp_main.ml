@@ -240,7 +240,7 @@ let load_lisp_unit paths features =
     (* we shall probably publish the unit name,
        or devise some sort of a naming scheme
        (that should also be described) *)
-    let lisp_unit = KB.Symbol.intern "lisp" Theory.Unit.cls
+    let lisp_unit = KB.Symbol.intern ~package:"primus" "lisp" Theory.Unit.cls
 
     let empty = KB.Value.empty Theory.Source.cls
 
@@ -256,12 +256,19 @@ let load_lisp_unit paths features =
   end in
   KB.promise Theory.Unit.source @@ fun unit ->
   is_lisp unit >>= function
-  | false -> !!empty
+  | false ->
+    Format.eprintf "Not a lisp unit!@\n";
+    !!empty
   | true ->
+    Format.eprintf "Got a lisp unit, providing sources!@\n";
     KB.collect Theory.Unit.target unit >>| fun target ->
-    pack @@
-    load_program paths features @@
-    Project.empty target
+    let prog =
+      load_program paths features @@
+      Project.empty target in
+    Format.eprintf "Loaded the program:@\n%a@\n"
+      Primus.Lisp.Load.pp_program prog;
+    pack prog
+
 
 
 
