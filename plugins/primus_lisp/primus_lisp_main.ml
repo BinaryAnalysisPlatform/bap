@@ -249,8 +249,6 @@ let load_lisp_unit ~paths ~features =
       provide Lisp.Semantics.program |>
       comment "loads a program to the Lisp unit"
     end);
-  Format.eprintf "Promising to provide features: %s@\n%!"
-    (String.concat ~sep:", " features);
   KB.promise Theory.Unit.source @@ fun unit ->
   Lisp.Unit.is_lisp unit >>= function
   | false -> !!empty
@@ -325,6 +323,6 @@ let () =
       Channels.init !!redirects;
       Primitives.init ();
       Primus_lisp_semantic_primitives.provide ();
-      Format.eprintf "Calling load_lisp_unit@\n%!";
       load_lisp_unit ~paths ~features;
+      Primus.Lisp.Semantics.enable ();
       load_lisp_program !!dump paths features)

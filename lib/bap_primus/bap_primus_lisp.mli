@@ -152,6 +152,7 @@ module Semantics : sig
   val primitive : (Theory.program, primitive option) KB.slot
   val symbol : (Theory.Value.cls, String.t option) KB.slot
   val static : (Theory.Value.cls, Bitvec.t option) KB.slot
+  val enable : unit -> unit
 end
 
 module Unit : sig

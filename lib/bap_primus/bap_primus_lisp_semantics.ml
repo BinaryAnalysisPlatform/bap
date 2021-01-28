@@ -303,7 +303,6 @@ let provide () =
       require Theory.Label.unit |>
       require Theory.Unit.source |>
       require Theory.Unit.target |>
-      require Theory.Source.language |>
       require program |>
       provide Theory.Semantics.slot |>
       comment "reifies Primus Lisp definitions"
@@ -315,19 +314,14 @@ let provide () =
     KB.collect Theory.Label.unit obj >>= function
     | None -> !!Insn.empty
     | Some unit ->
-      KB.collect Theory.Unit.source unit >>= fun src ->
-      KB.collect Theory.Unit.target unit >>= fun target ->
-      let lang = KB.Value.get Theory.Source.language src in
-      Format.eprintf "Got a unit with source %a@\n%!"
-        KB.Value.pp src;
-      if Theory.Language.equal lang language then
-        let () = Format.eprintf "Language matches!@\n%!" in
+      Unit.is_lisp unit >>= function
+      | false -> !!Insn.empty
+      | true ->
+        KB.collect Theory.Unit.source unit >>= fun src ->
+        KB.collect Theory.Unit.target unit >>= fun target ->
         let prog = KB.Value.get program src in
         Theory.instance () >>= Theory.require >>= fun (module Core) ->
         let open Prelude(Core) in
         reify prog target name
-      else
-        let () = Format.eprintf "Not our language@\n%!" in
-        !!Insn.empty
 
-let () = provide ()             (* todo:  move to a plugin *)
+let enable () = provide ()             (* todo:  move to a plugin *)

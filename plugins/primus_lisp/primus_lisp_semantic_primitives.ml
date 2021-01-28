@@ -179,6 +179,12 @@ end
 module Sema = Primus.Lisp.Semantics
 
 let provide () =
+  KB.Rule.(begin
+      declare "primus-lisp-core-primitives" |>
+      require Sema.primitive   |>
+      provide Theory.Semantics.slot |>
+      comment "implements semantics for the core primitives"
+    end);
   KB.promise Theory.Semantics.slot @@ fun obj ->
   KB.collect Sema.primitive obj >>= function
   | None -> !!nothing
