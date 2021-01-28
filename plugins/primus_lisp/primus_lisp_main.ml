@@ -256,21 +256,12 @@ let load_lisp_unit paths features =
   end in
   KB.promise Theory.Unit.source @@ fun unit ->
   is_lisp unit >>= function
-  | false ->
-    Format.eprintf "Not a lisp unit!@\n";
-    !!empty
+  | false -> !!empty
   | true ->
-    Format.eprintf "Got a lisp unit, providing sources!@\n";
     KB.collect Theory.Unit.target unit >>| fun target ->
-    let prog =
-      load_program paths features @@
-      Project.empty target in
-    Format.eprintf "Loaded the program:@\n%a@\n"
-      Primus.Lisp.Load.pp_program prog;
-    pack prog
-
-
-
+    pack @@
+    load_program paths features @@
+    Project.empty target
 
 let () =
   Config.manpage [

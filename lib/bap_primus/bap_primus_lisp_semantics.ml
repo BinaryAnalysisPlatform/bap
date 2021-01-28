@@ -74,7 +74,16 @@ let create eff res =
 let res = KB.Value.get Theory.Semantics.value
 
 let symbol =
-  KB.Class.property Theory.Value.cls "lisp-symbol" KB.Domain.string
+  KB.Class.property Theory.Value.cls "lisp-symbol" @@
+  KB.Domain.optional "symbol"
+    ~equal:String.equal
+    ~inspect:(fun x -> Sexp.Atom x)
+
+let static =
+  KB.Class.property Theory.Value.cls "static-value" @@
+  KB.Domain.optional "bitvec"
+    ~equal:Bitvec.equal
+    ~inspect:(fun x -> Sexp.Atom (Bitvec.to_string x))
 
 module Prelude(CT : Theory.Core) = struct
   let bits = Theory.Bitv.define
@@ -150,7 +159,7 @@ module Prelude(CT : Theory.Core) = struct
 
   let sym name =
     KB.return @@
-    KB.Value.put symbol (Theory.Value.empty (bits symsort)) name
+    KB.Value.put symbol (Theory.Value.empty (bits symsort)) (Some name)
 
   let undefined =
     full [CT.perform lisp_machine] zero
@@ -172,7 +181,6 @@ module Prelude(CT : Theory.Core) = struct
     let| () = can Theory.Bitv.refine x @@ fun x ->
       CT.non_zero !!x >>= fun x -> f x in
     undefined
-
 
   let reify prog target name =
     let word = Theory.Target.bits target in
@@ -259,7 +267,7 @@ module Prelude(CT : Theory.Core) = struct
       ] !!(res b)
     and args name xs =
       sym name >>= fun x ->
-      Primitive.eval "abi-pass-arguments" (forget x::xs) in
+      Primitive.eval "invoke-subroutine" (forget x::xs) in
     lookup prog Key.func name >>= function
     | Some fn -> eval (Def.Func.body fn)
     | None -> !!Insn.empty
