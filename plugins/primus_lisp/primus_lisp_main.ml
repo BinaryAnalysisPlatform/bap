@@ -233,29 +233,26 @@ module TypeErrorPrinter(Machine : Primus.Machine.S) = struct
     Primus.Lisp.Type.error >>> report
 end
 
-let load_lisp_unit paths features =
-  let open Bap_core_theory in
-  let open KB.Syntax in
-  let open struct
-    (* we shall probably publish the unit name,
-       or devise some sort of a naming scheme
-       (that should also be described) *)
-    let lisp_unit = KB.Symbol.intern ~package:"primus" "lisp" Theory.Unit.cls
-
-    let empty = KB.Value.empty Theory.Source.cls
-
-    let is_lisp unit =
-      lisp_unit >>| Theory.Unit.equal unit
-
-    let pack prog =
-      let (:=) prop x src = KB.Value.put prop src x in [
-        Theory.Source.language := Primus.Lisp.Semantics.language;
-        Primus.Lisp.Semantics.program := prog;
-      ] |> List.fold ~f:(|>)
-          ~init:(KB.Value.empty Theory.Source.cls)
-  end in
+let load_lisp_unit ~paths ~features =
+  let open Bap_core_theory in let open KB.Syntax in
+  let module Lisp = Primus.Lisp in
+  let (:=) p x v = KB.Value.put p v x in
+  let empty = KB.Value.empty Theory.Source.cls in
+  let pack prog = List.fold ~init:empty [
+      Theory.Source.language := Lisp.Unit.language;
+      Lisp.Semantics.program := prog;
+    ] ~f:(|>) in
+  KB.Rule.(begin
+      declare "primus-lisp-program" |>
+      require Theory.Label.unit          |>
+      require Theory.Unit.target         |>
+      provide Lisp.Semantics.program |>
+      comment "loads a program to the Lisp unit"
+    end);
+  Format.eprintf "Promising to provide features: %s@\n%!"
+    (String.concat ~sep:", " features);
   KB.promise Theory.Unit.source @@ fun unit ->
-  is_lisp unit >>= function
+  Lisp.Unit.is_lisp unit >>= function
   | false -> !!empty
   | true ->
     KB.collect Theory.Unit.target unit >>| fun target ->
@@ -328,5 +325,6 @@ let () =
       Channels.init !!redirects;
       Primitives.init ();
       Primus_lisp_semantic_primitives.provide ();
-      load_lisp_unit paths features;
+      Format.eprintf "Calling load_lisp_unit@\n%!";
+      load_lisp_unit ~paths ~features;
       load_lisp_program !!dump paths features)

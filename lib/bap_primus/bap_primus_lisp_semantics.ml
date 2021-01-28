@@ -273,7 +273,41 @@ module Prelude(CT : Theory.Core) = struct
     | None -> !!Insn.empty
 end
 
+module Unit = struct
+  let slot = KB.Class.property Theory.Unit.cls "lisp-unit"
+      ~package:"bap"
+      ~public:true @@ KB.Domain.optional "unit-name"
+      ~inspect:sexp_of_string
+      ~equal:equal_string
+
+
+  let create ?(name="core") target : Theory.Unit.t KB.t =
+    let* unit = KB.Symbol.intern ~package:"lisp" name Theory.Unit.cls in
+    KB.sequence [
+      KB.provide slot unit (Some name);
+      KB.provide Theory.Unit.target unit target
+    ] >>| fun () ->
+    unit
+
+  let is_lisp obj =
+    KB.collect slot obj >>| Option.is_some
+
+  let language = language
+end
+
+
 let provide () =
+  KB.Rule.(begin
+      declare "primus-lisp-semantics" |>
+      require Theory.Label.name |>
+      require Theory.Label.unit |>
+      require Theory.Unit.source |>
+      require Theory.Unit.target |>
+      require Theory.Source.language |>
+      require program |>
+      provide Theory.Semantics.slot |>
+      comment "reifies Primus Lisp definitions"
+    end);
   KB.promise Theory.Semantics.slot @@ fun obj ->
   KB.collect Theory.Label.name obj >>= function
   | None -> !!Insn.empty
@@ -284,11 +318,16 @@ let provide () =
       KB.collect Theory.Unit.source unit >>= fun src ->
       KB.collect Theory.Unit.target unit >>= fun target ->
       let lang = KB.Value.get Theory.Source.language src in
+      Format.eprintf "Got a unit with source %a@\n%!"
+        KB.Value.pp src;
       if Theory.Language.equal lang language then
+        let () = Format.eprintf "Language matches!@\n%!" in
         let prog = KB.Value.get program src in
         Theory.instance () >>= Theory.require >>= fun (module Core) ->
         let open Prelude(Core) in
         reify prog target name
-      else !!Insn.empty
+      else
+        let () = Format.eprintf "Not our language@\n%!" in
+        !!Insn.empty
 
 let () = provide ()             (* todo:  move to a plugin *)
