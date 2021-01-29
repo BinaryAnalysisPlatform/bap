@@ -1,16 +1,20 @@
 open Core_kernel
+open Bap_knowledge
 open Bap.Std
 
 open Bap_primus_lisp_types
 
 module Attribute = Bap_primus_lisp_attribute
 module Var = Bap_primus_lisp_var
+module KB = Knowledge
 
-let fail err t = raise (Attribute.Bad_syntax (err,t))
+let fail err t = Attribute.Parse.fail err t
 
 module Variables = struct
 
-  type t = var list
+  type t = Set.M(Var).t
+
+  let domain = KB.Domain.powerset (module Var) "vars"
 
   type Attribute.error += Expect_atom
   type Attribute.error += Var_error of Var.read_error
@@ -21,16 +25,17 @@ module Variables = struct
       | Ok v -> v
       | Error err -> fail (Var_error err) [t]
 
-  let parse = List.map ~f:var
+  let parse xs = List.map xs ~f:var |>
+                 Var.Set.of_list
 
-  let global = Attribute.register
-      ~name:"global"
-      ~add:List.append
+  let global = Attribute.declare "global"
+      ~package:"primus"
+      ~domain
       ~parse
 
-  let static = Attribute.register
-      ~name:"static"
-      ~add:List.append
+  let static = Attribute.declare "static"
+      ~package:"primus"
+      ~domain
       ~parse
 end
 
@@ -51,22 +56,24 @@ let parse_name = function
 
 
 module External = struct
-  type t = string list
+  type t = String.Set.t
+  let domain = KB.Domain.powerset (module String) "names"
 
-  let parse = List.map ~f:parse_name
+  let parse xs = List.map xs ~f:parse_name |>
+                 String.Set.of_list
 
-  let t = Attribute.register
-      ~name:"external"
-      ~add:List.append
+  let t = Attribute.declare "external"
+      ~package:"primus"
+      ~domain
       ~parse
 end
 
 
 module Advice = struct
-  type cmethod = Before | After [@@deriving compare, sexp]
+  type cmethod = Before | After [@@deriving compare, equal, sexp]
 
   module Methods = Map.Make_plain(struct
-      type t = cmethod [@@deriving compare, sexp]
+      type t = cmethod [@@deriving compare, equal, sexp]
     end)
 
   type Attribute.error +=
@@ -75,7 +82,23 @@ module Advice = struct
     | Empty
     | No_targets
 
-  type t = {methods : String.Set.t Methods.t}
+  type t = {methods : String.Set.t Methods.t} [@@deriving compare, equal]
+
+
+  let empty = {methods = Methods.empty}
+  let join {methods=xs} {methods=ys} = Ok {
+      methods = Map.merge xs ys ~f:(fun ~key:_ -> function
+          | `Left xs | `Right xs -> Some xs
+          | `Both (xs,ys) -> Some (Set.union xs ys))
+    }
+
+  let order xs ys : KB.Order.partial = match compare xs ys with
+    | 1 -> GT
+    | 0 -> EQ
+    | _ -> LT
+
+  let domain = KB.Domain.define "methods"
+      ~join ~order ~empty
 
   let methods = String.Map.of_alist_exn [
       ":before", Before;
@@ -106,12 +129,8 @@ module Advice = struct
       | _ when Char.(s.[0] = ':') -> fail (Unknown_method s) [lit]
       | _ -> parse_targets Before trees
 
-  let add d1 d2 = {
-    methods = Map.merge d1.methods d2.methods ~f:(fun ~key -> function
-        | `Both (xs,ys) -> Some (Set.union xs ys)
-        | `Left xs | `Right xs -> Some xs)
-  }
-
-  let t = Attribute.register ~name:"advice"
-      ~parse ~add
+  let t = Attribute.declare "advice"
+      ~package:"primus"
+      ~domain
+      ~parse
 end

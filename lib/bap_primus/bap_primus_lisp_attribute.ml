@@ -1,59 +1,99 @@
 open Core_kernel
+open Bap_core_theory
 open Bap.Std
 
 open Bap_primus_lisp_types
 
-type attrs = Univ_map.t
+module Name = KB.Name
+
+type cls
+let cls : (cls,unit) KB.cls = KB.Class.declare  "attributes" ()
+    ~package:"primus"
+    ~public:true
+
+type attrs = (cls,unit) KB.cls KB.Value.t
 type set = attrs
 
 type error = ..
 
-type error += Expect_list
-
 exception Unknown_attr of string * tree
-exception Bad_syntax of error * tree list
+exception Failure of error * tree list
 
 
 type 'a attr = {
-  key : 'a Univ_map.Key.t;
-  add : 'a -> 'a -> 'a;
+  slot : (cls,'a) KB.slot;
   parse : tree list -> 'a;
 }
 
-type 'a t = 'a Univ_map.Key.t
+type 'a t = 'a attr
 
 type parser = Parser of (set -> tree list -> set)
 
-let parsers : parser String.Table.t = String.Table.create ()
+let parsers : (Name.t, parser) Hashtbl.t =
+  Hashtbl.create (module Name)
 
-let make_parser attr attrs sexp =
-  let value = attr.parse sexp in
-  Univ_map.update attrs attr.key ~f:(function
-      | None -> value
-      | Some value' -> attr.add value value')
+module Parse = struct
+  type nonrec tree = tree
+  type nonrec error = error = ..
 
-let register ~name ~add ~parse =
-  let attr = {
-    key = Univ_map.Key.create ~name sexp_of_opaque;
-    add;
-    parse = parse;
-  } in
+  type error += Expect_atom | Expect_list
+
+
+
+  let atom = function
+    | {data=Atom s} -> Some s
+    | _ -> None
+  let list = function
+    | {data=List ts} -> Some ts
+    | _ -> None
+
+  let tree ~atom ~list = function
+    | {data=Atom s} -> atom s
+    | {data=List ts} -> list ts
+
+  let fail err ts = raise (Failure (err,ts))
+end
+
+type Parse.error += Conflict of KB.conflict
+
+let make_parser {parse; slot} attrs tree =
+  let merge = KB.Domain.join @@ KB.Slot.domain slot in
+  match merge (KB.Value.get slot attrs) (parse tree) with
+  | Ok value -> KB.Value.put slot attrs value
+  | Error err -> Parse.fail (Conflict err) tree
+
+
+let declare ?desc ?package ~domain ~parse name =
+  let slot = KB.Class.property cls name domain
+      ?package ?desc ~public:true in
+  let attr = {slot; parse} in
   let parser = Parser (make_parser attr) in
+  let name = KB.Slot.name slot in
   Hashtbl.add_exn parsers ~key:name ~data:parser;
-  attr.key
+  attr
 
 let expected_parsers () =
-  String.Table.keys parsers |> String.concat ~sep:" | "
+  Hashtbl.keys parsers |> List.map ~f:Name.show |>
+  String.concat ~sep:" | "
 
 let parse s attrs name values = match Hashtbl.find parsers name with
-  | None -> raise (Unknown_attr (name,s))
+  | None -> raise (Unknown_attr (Name.show name,s))
   | Some (Parser run) -> run attrs values
 
 let parse attrs = function
-  | {data=List ({data=Atom name} as s :: values)} -> parse s attrs name values
-  | s -> raise (Bad_syntax (Expect_list,[s]))
+  | {data=List ({data=Atom name} as s :: values)} ->
+    let name = Name.read ~package:"primus" name in
+    parse s attrs name values
+  | s -> Parse.(fail Expect_list) [s]
 
 module Set = struct
-  let get = Univ_map.find
-  let empty = Univ_map.empty
+  let get {slot} = KB.Value.get slot
+  module Self = (val KB.Value.derive cls)
+
+  let slot = KB.Class.property Theory.Program.cls "primus-attrs" Self.domain
+      ~public:true
+      ~package:"bap"
+      ~persistent:(KB.Persistent.of_binable (module Self))
+
+  include Self
 end

@@ -36,7 +36,10 @@ module Type : sig
   type env
   type error
   val empty : env
+  val equal : env -> env -> bool
+  val merge : env -> env -> env
   val infer : ?externals:(string * signature) list -> Var.t seq -> program -> env
+  val program : env -> program
   val check : Var.t seq -> program -> error list
   val errors : env -> error list
   val pp_error : Format.formatter -> error -> unit

@@ -288,9 +288,9 @@ module Interpreter(Machine : Machine) = struct
 
 
   let is_external_call name def =
-    match Attribute.Set.get (Lisp.Def.attributes def) External.t with
-    | None -> false
-    | Some names -> List.mem ~equal:String.equal names name
+    let calls =
+      Attribute.Set.get External.t (Lisp.Def.attributes def) in
+    Set.mem calls name
 
   let notify_when ?rval cond obs name args =
     if cond then Machine.Observation.post obs ~f:(fun notify ->
@@ -350,14 +350,13 @@ module Interpreter(Machine : Machine) = struct
     Lisp.Program.get program func |>
     Machine.List.fold ~init ~f:(fun r def ->
         let name = Lisp.Def.name def in
-        match Attribute.Set.get (Lisp.Def.attributes def) Advice.t with
-        | None -> Machine.return r
-        | Some adv ->
-          if Set.mem (Advice.targets adv stage) primary
-          then match stage with
-            | After ->  eval_lisp name (args @ [r])
-            | Before -> eval_lisp name args
-          else Machine.return r)
+        let adv =
+          Attribute.Set.get Advice.t (Lisp.Def.attributes def) in
+        if Set.mem (Advice.targets adv stage) primary
+        then match stage with
+          | After  -> eval_lisp name (args @ [r])
+          | Before -> eval_lisp name args
+        else Machine.return r)
 
   and eval_primitive name args =
     Machine.Local.get state >>= fun {program} ->
@@ -511,8 +510,8 @@ type program = Lisp.Program.t
 module Load = Lisp.Parse
 module Type = struct
   include Lisp.Program.Type
-  type t = arch -> Lisp.Type.t
-  type signature = arch -> Lisp.Type.signature
+  type t = Theory.Target.t -> Lisp.Type.t
+  type signature = Theory.Target.t -> Lisp.Type.signature
 
   type parameters = [
     | `All of t
@@ -531,8 +530,8 @@ module Type = struct
     let var s _ = Lisp.Type.var s
     let sym _ = Lisp.Type.sym
     let word n _ = Lisp.Type.word n
-    let int arch =
-      Lisp.Type.word (Size.in_bits (Arch.addr_size arch))
+    let int t =
+      Lisp.Type.word (Theory.Target.bits t)
     let bool = word 1
     let byte = word 8
     let a : t = var "a"
@@ -608,11 +607,11 @@ module Make(Machine : Machine) = struct
       Env.all >>= fun evars ->
       let pvars = vars_of_prog (Project.program proj) in
       let vars = Seq.append evars pvars in
-      let arch = Project.arch proj in
+      let t = Project.target proj in
       let externals =
         invoke_subroutine_signature ::
         signatures_of_subs (Project.program proj) |>
-        List.map ~f:(fun (n,s) -> n,s arch) in
+        List.map ~f:(fun (n,s) -> n,s t) in
       let typeenv =
         Lisp.Program.Type.infer ~externals vars s.program in
       Lisp.Program.Type.errors typeenv |>
@@ -628,11 +627,9 @@ module Make(Machine : Machine) = struct
   let collect_externals s =
     Lisp.Program.get s.program Lisp.Program.Items.func |>
     List.fold ~init:String.Map.empty  ~f:(fun toload def ->
-        match Attribute.Set.get (Lisp.Def.attributes def) External.t with
-        | Some names ->
-          List.fold names ~init:toload ~f:(fun toload name ->
-              Map.add_multi toload ~key:name ~data:def)
-        | _ -> toload) |>
+        let names = Attribute.Set.get External.t (Lisp.Def.attributes def) in
+        Set.fold names ~init:toload ~f:(fun toload name ->
+            Map.add_multi toload ~key:name ~data:def)) |>
     Map.to_sequence
 
 
@@ -640,11 +637,11 @@ module Make(Machine : Machine) = struct
     let open Lisp.Attributes in
     let default_width = Theory.Target.bits target in
     let add attr def vars =
-      match Attribute.Set.get (Lisp.Def.attributes def) attr with
-      | None -> vars
-      | Some vars' -> Set.union vars @@
-        Var.Set.of_list @@
-        List.map ~f:(var_of_lisp_var default_width) vars' in
+      let vars' =
+        Set.to_list @@ Attribute.Set.get attr (Lisp.Def.attributes def) in
+      Set.union vars @@
+      Var.Set.of_list @@
+      List.map ~f:(var_of_lisp_var default_width) vars' in
     Lisp.Program.get s.program Lisp.Program.Items.func |>
     List.fold ~init:Var.Set.empty  ~f:(fun vars def ->
         add Variables.global def vars |>
@@ -761,13 +758,13 @@ module Make(Machine : Machine) = struct
         })
 
   let define ?types ?docs name body =
-    Machine.gets Project.arch >>= fun arch ->
+    Machine.gets Project.target >>= fun arch ->
     let types = Option.map types ~f:(fun t -> t arch) in
     Lisp.Def.Closure.create ?types ?docs name body |>
     link_primitive
 
   let signal ?params ?(doc="undocumented") obs proj =
-    Machine.gets Project.arch >>= fun arch ->
+    Machine.gets Project.target >>= fun arch ->
     let specialize = List.map ~f:(fun p -> p arch) in
     let name = Bap_primus_observation.name obs in
     let default_types = Lisp.Type.signature [] ~rest:Any Any in
@@ -889,3 +886,4 @@ end
 let primitive = lisp_primitive
 module Semantics = Bap_primus_lisp_semantics
 module Unit = Semantics.Unit
+module Attribute = Lisp.Attribute

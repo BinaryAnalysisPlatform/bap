@@ -39,7 +39,7 @@ end
 module Type : sig
   type t
   type env
-  type signature
+  type signature = Theory.Target.t -> Bap_primus_lisp_type.signature
   type error
 
   type parameters = [
@@ -140,25 +140,57 @@ module Make (Machine : Machine) : sig
 end
 
 module Semantics : sig
-  type primitive
-
-  module Primitive : sig
-    type t = primitive
-    val name : t -> string
-    val args : t -> unit Theory.Value.t list
-  end
+  type KB.conflict += Unresolved_definition of string
+  type KB.conflict += Illtyped_program of Type.error list
 
   val program : (Theory.Source.cls, program) KB.slot
-  val primitive : (Theory.program, primitive option) KB.slot
+  val definition : (Theory.program, Theory.Label.t option) KB.slot
+  val name : (Theory.program, string option) KB.slot
+  val args : (Theory.program, unit Theory.Value.t list option) KB.slot
   val symbol : (Theory.Value.cls, String.t option) KB.slot
   val static : (Theory.Value.cls, Bitvec.t option) KB.slot
-  val enable : unit -> unit
+  val enable : ?stdout:Format.formatter -> unit -> unit
+  val declare :
+    ?types:Type.signature ->
+    ?docs:string -> string -> unit
+
 end
 
 module Unit : sig
   val create : ?name:string -> Theory.Target.t -> Theory.Unit.t KB.t
   val is_lisp : Theory.Unit.t -> bool KB.t
   val language : Theory.language
+end
+
+module Attribute : sig
+  type 'a t
+  type set
+
+  module Parse : sig
+    type tree
+    type error = ..
+    type error += Expect_atom | Expect_list
+    val atom : tree -> string option
+    val list : tree -> tree list option
+    val tree :
+      atom:(string -> 'a) ->
+      list:(tree list -> 'a) ->
+      tree -> 'a
+    val fail : error -> tree list -> _
+  end
+
+  val declare :
+    ?desc:string ->
+    ?package:string ->
+    domain:'a KB.domain ->
+    parse:(Parse.tree list -> 'a) ->
+    string -> 'a t
+
+  module Set : sig
+    include KB.Value.S with type t := set
+    val get : 'a t -> set -> 'a
+    val slot : (Theory.program, set) KB.slot
+  end
 end
 
 val init : ?log:formatter -> ?paths:string list -> string list -> unit

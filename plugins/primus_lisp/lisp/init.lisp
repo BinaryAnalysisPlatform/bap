@@ -48,7 +48,7 @@
   (let ((key k))
     (case/dispatch key x xs)))
 
-(defun non-zero (x)
+(defmacro non-zero (x)
   "(non-zero X) is true if X is not zero"
   (not (is-zero x)))
 
@@ -56,11 +56,11 @@
   "(+= X Y) assigns a sum of X and Y to variable X"
   (set x (+ x y)))
 
-(defun -1 (x)
+(defmacro -1 (x)
   "(-1 X) returns the predecessor of X"
   (- x 1))
 
-(defun +1 (x)
+(defmacro +1 (x)
   "(+1 x) returns the successor of X"
   (+ x 1))
 
@@ -92,6 +92,11 @@
    form is 0:1"
   (let ((r x)) (if r r (or xs))))
 (defmacro or (x) x)
+
+(defmacro set$ (s x)
+  "(set$ s x) set the value of the symbol s to x, returns x.
+   Like set but without implicit quotation."
+  (set-symbol-value s x))
 
 (defmacro sign (x)
   "returns 1 if X > 0, 0 if X = 0, and -1 if X < 0"

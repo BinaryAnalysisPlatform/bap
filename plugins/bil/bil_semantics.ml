@@ -488,6 +488,11 @@ module Basic : Theory.Basic = struct
         ctrl @@ match name with
         | Some name -> [Bil.(encode call name)]
         | None -> [Bil.special (Format.asprintf "(goto %a)" Tid.pp lbl)]
+
+
+  let fbits x =
+    x >>= fun x ->
+    unk @@ Theory.Float.bits (sort x)
 end
 
 module Core : Theory.Core = struct
