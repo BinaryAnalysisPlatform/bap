@@ -198,7 +198,6 @@ let provide_function_starts_and_names ctxt : unit =
   let open Theory.Label in
   declare "subroutines"  addr is_subroutine;
   declare "names" addr possible_name;
-  declare "addrs" name addr;
   property KB.promise is_subroutine addr is_known;
   property (KB.propose agent) possible_name addr ident
 

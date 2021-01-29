@@ -308,15 +308,15 @@ let provide () =
       comment "reifies Primus Lisp definitions"
     end);
   KB.promise Theory.Semantics.slot @@ fun obj ->
-  KB.collect Theory.Label.name obj >>= function
+  KB.collect Theory.Label.unit obj >>= function
   | None -> !!Insn.empty
-  | Some name ->
-    KB.collect Theory.Label.unit obj >>= function
-    | None -> !!Insn.empty
-    | Some unit ->
-      Unit.is_lisp unit >>= function
-      | false -> !!Insn.empty
-      | true ->
+  | Some unit ->
+    Unit.is_lisp unit >>= function
+    | false -> !!Insn.empty
+    | true ->
+      KB.collect Theory.Label.name obj >>= function
+      | None -> !!Insn.empty
+      | Some name ->
         KB.collect Theory.Unit.source unit >>= fun src ->
         KB.collect Theory.Unit.target unit >>= fun target ->
         let prog = KB.Value.get program src in
@@ -324,4 +324,4 @@ let provide () =
         let open Prelude(Core) in
         reify prog target name
 
-let enable () = provide ()             (* todo:  move to a plugin *)
+let enable () = provide ()
