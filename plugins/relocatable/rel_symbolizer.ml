@@ -249,6 +249,7 @@ let () = Extension.declare ~doc @@ fun _ctxt ->
   KB.Rule.(declare ~package:"bap" "resolve-stubs" |>
            require Theory.Label.addr |>
            require Theory.Label.unit |>
+           require Theory.Semantics.slot |>
            require References.slot |>
            provide Theory.Label.possible_name |>
            comment "analyzes stubs for external references");

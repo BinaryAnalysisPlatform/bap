@@ -60,6 +60,7 @@ B lib/bap_image
 B lib/bap_plugins
 B lib/bap_primus
 B lib/bap_sema
+B lib/bap_strings
 B lib/bap_types
 B lib/bap_core_theory
 B lib/graphlib

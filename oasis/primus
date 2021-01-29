@@ -10,7 +10,7 @@ Library bap_primus
   CompiledObject: best
   BuildDepends: bap, bap-abi, bap-c, uuidm, bap-future, parsexp, bap-strings,
                 core_kernel, regular, monads, graphlib, bap-knowledge,
-                zarith, bitvec, zarith, ppx_bap
+                bap-core-theory, zarith, bitvec, zarith, ppx_bap
 
   Modules: Bap_primus
   InternalModules:
@@ -32,6 +32,7 @@ Library bap_primus
            Bap_primus_lisp_parse,
            Bap_primus_lisp_program,
            Bap_primus_lisp_resolve,
+           Bap_primus_lisp_semantics,
            Bap_primus_lisp_source,
            Bap_primus_lisp_type,
            Bap_primus_lisp_types,

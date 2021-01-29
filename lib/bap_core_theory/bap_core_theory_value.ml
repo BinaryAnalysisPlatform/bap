@@ -37,6 +37,7 @@ module Sort : sig
 
   module Top : sig
     type t = top [@@deriving bin_io, compare, sexp]
+    val t : top
     include Base.Comparable.S with type t := t
   end
 
@@ -148,6 +149,9 @@ end
 
   module Top = struct
     type t = top
+    let any = Name.declare ~package "Top"
+    let t = forget (sym any)
+
     include Sexpable.Of_sexpable(Exp)(struct
         type t = top
         let to_sexpable x = x
@@ -176,7 +180,21 @@ type 'a t = (cls,'a sort) KB.cls KB.value
 let cls = Sort.cls
 let empty s : 'a t = KB.Value.empty (KB.Class.refine cls s)
 let sort v : 'a sort = KB.Class.sort (KB.Value.cls v)
+let resort : ('a sort -> 'b sort option) -> 'a t -> 'b t option =
+  fun refine v ->
+  Option.(refine (sort v) >>| KB.Value.refine v)
 
+let forget : 'a t -> unit t = fun v ->
+  KB.Value.refine v @@ Sort.forget @@ sort v
+
+module type Sort = sig
+  val refine : unit sort -> 'a sort option
+end
+
+module Top = struct
+  let cls = KB.Class.refine cls Sort.Top.t
+  include (val KB.Value.derive cls)
+end
 
 module Bool : sig
   type t
@@ -264,4 +282,30 @@ end
   let rmode = Sort.Name.declare "Rmode"
   let t = Sort.(sym rmode)
   let refine x = Sort.refine rmode x
+end
+
+type 'a value = 'a t
+
+module Match : sig
+  type 'a t
+  type 'a refiner = unit sort -> 'a sort option
+  val (let|) : 'b t -> (unit -> 'b) -> 'b
+  val can : 'a refiner -> unit value -> ('a value -> 'b) -> 'b t
+  val both :
+    'a refiner -> unit value ->
+    'b refiner -> unit value ->
+    ('a value -> 'b value -> 'c) -> 'c t
+end = struct
+  type 'a refiner = unit sort -> 'a sort option
+  type 'a value = 'a t
+  type 'b t = (unit -> 'b) -> 'b
+  let (let|) = (@@)
+  let can cast x action k =
+    match resort cast x with
+    | None -> k ()
+    | Some x -> action x
+  let both castx x casty y action k =
+    match resort castx x, resort casty y with
+    | Some x, Some y -> action x y
+    | _ -> k ()
 end

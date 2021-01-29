@@ -1,4 +1,5 @@
 open Bap.Std
+open Bap_core_theory
 
 open Bap_primus_lisp_types
 open Bap_primus_lisp_type
@@ -10,6 +11,7 @@ type program = t
 type 'a item
 
 val empty : t
+val equal : t -> t -> bool
 val merge : t -> t -> t
 val add : t -> 'a item -> 'a Def.t -> t
 val get : t -> 'a item -> 'a Def.t list
@@ -26,7 +28,7 @@ module Items : sig
   val func  : Def.func  item
   val meth  : Def.meth  item
   val para  : Def.para item
-  val primitive  : Def.prim item
+  val primitive : Def.prim item
   val signal : Def.signal item
 end
 
@@ -41,3 +43,4 @@ module Type : sig
 end
 
 val pp : Format.formatter -> t -> unit
+val pp_ast : Format.formatter -> ast -> unit

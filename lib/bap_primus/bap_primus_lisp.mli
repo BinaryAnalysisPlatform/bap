@@ -2,6 +2,7 @@ open Core_kernel
 open Bap.Std
 open Format
 open Bap_primus_types
+open Bap_core_theory
 
 type program
 type message
@@ -136,6 +137,28 @@ module Make (Machine : Machine) : sig
 
   (* deprecated *)
   val link_primitives : primitives -> unit Machine.t
+end
+
+module Semantics : sig
+  type primitive
+
+  module Primitive : sig
+    type t = primitive
+    val name : t -> string
+    val args : t -> unit Theory.Value.t list
+  end
+
+  val program : (Theory.Source.cls, program) KB.slot
+  val primitive : (Theory.program, primitive option) KB.slot
+  val symbol : (Theory.Value.cls, String.t option) KB.slot
+  val static : (Theory.Value.cls, Bitvec.t option) KB.slot
+  val enable : unit -> unit
+end
+
+module Unit : sig
+  val create : ?name:string -> Theory.Target.t -> Theory.Unit.t KB.t
+  val is_lisp : Theory.Unit.t -> bool KB.t
+  val language : Theory.language
 end
 
 val init : ?log:formatter -> ?paths:string list -> string list -> unit

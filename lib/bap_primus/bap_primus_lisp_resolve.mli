@@ -19,7 +19,8 @@ val extern : (typ -> 'a -> bool) -> (Def.func, 'a list, (var * 'a) list) one
 val defun  : (typ -> 'a -> bool) -> (Def.func, 'a list, (var * 'a) list) one
 val meth : (typ -> 'a -> bool) -> (Def.meth, 'a list, (var * 'a) list) many
 val macro : (Def.macro, tree list, (string * tree list) list) one
-val primitive  : (Def.prim, unit, unit) one
+val primitive : (Def.prim, unit, unit) one
+val semantics : ('a, unit, unit) one
 val subst : (Def.subst, unit, unit) one
 val const : (Def.const, unit, unit) one
 

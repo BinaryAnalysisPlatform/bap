@@ -3,15 +3,34 @@ open Caml.Format
 open Bap_knowledge
 
 module KB = Knowledge
-
 type +'a sort
 type cls
 
 type 'a t = (cls,'a sort) KB.cls KB.value
+type 'a value = 'a t
 val cls : (cls,unit) KB.cls
 
 val empty : 'a sort -> 'a t
 val sort : 'a t -> 'a sort
+val resort : ('a sort -> 'b sort option) -> 'a t -> 'b t option
+val forget : 'a t -> unit t
+
+module Top : sig
+  type t = (cls,unit sort) KB.cls KB.value
+  val cls : (cls,unit sort) KB.cls
+  include KB.Value.S with type t := t
+end
+
+module Match : sig
+  type 'a t
+  type 'a refiner = unit sort -> 'a sort option
+  val (let|) : 'b t -> (unit -> 'b) -> 'b
+  val can : 'a refiner -> unit value -> ('a value -> 'b) -> 'b t
+  val both :
+    'a refiner -> unit value ->
+    'b refiner -> unit value ->
+    ('a value -> 'b value -> 'c) -> 'c t
+end
 
 module Sort : sig
   type +'a t = 'a sort
@@ -40,6 +59,7 @@ module Sort : sig
 
   module Top : sig
     type t = unit sort [@@deriving bin_io, compare, sexp]
+    val t : t
     include Base.Comparable.S with type t := t
   end
 

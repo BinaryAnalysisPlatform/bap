@@ -1,4 +1,5 @@
 open Bap.Std
+open Bap_core_theory
 open Core_kernel
 open Graphlib.Std
 open Regular.Std
@@ -30,7 +31,7 @@ type t = {
 
 type program = t
 
-let empty = {
+let empty  = {
   context = Lisp.Context.empty;
   sources = Source.empty;
   codes = [];
@@ -43,6 +44,9 @@ let empty = {
   consts=[];
 }
 
+let equal p1 p2 =
+  Source.equal p1.sources p2.sources
+
 let merge p1 p2 =
   let p1,p2 = if Source.is_empty p1.sources then
       p1,p2 else
@@ -52,6 +56,7 @@ let merge p1 p2 =
     codes = p1.codes @ p2.codes;
     context = Lisp.Context.merge p1.context p2.context;
   }
+
 
 
 type 'a item = ([`Read | `Set_and_create ], t, 'a Def.t list) Fieldslib.Field.t_with_perm
@@ -254,6 +259,7 @@ let pp_program ppf {pars; mets; defs;} =
   pp_items pp_def defs
 
 let pp ppf prog = pp_program ppf prog
+let pp_ast ppf ast = Ast.pp ppf ast
 
 module Use = struct
   let empty = String.Map.empty

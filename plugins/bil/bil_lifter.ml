@@ -24,8 +24,9 @@ let provide_bir () =
            comment "reifies IR");
   KB.promise Theory.Semantics.slot @@ fun obj ->
   KB.collect Theory.Semantics.slot obj >>| fun sema ->
-  let bir = Bil_ir.reify @@  KB.Value.get Bil_ir.slot sema in
-  KB.Value.put Term.slot sema bir
+  match Bil_ir.reify @@  KB.Value.get Bil_ir.slot sema with
+  | [] -> Insn.empty
+  | bir -> KB.Value.put Term.slot sema bir
 
 
 module Relocations = struct

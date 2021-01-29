@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 open Bap.Std
 open Format
 open Bap_c.Std
@@ -8,7 +9,6 @@ open Bap_primus_sexp
 open Bap_primus_lisp_types
 
 module Attribute = Bap_primus_lisp_attribute
-module Loc = Bap_primus_lisp_loc
 module Index = Bap_primus_lisp_index
 module Type = Bap_primus_lisp_type
 
@@ -241,5 +241,5 @@ module Closure = struct
 
   let body p = p.data.code.lambda
 
-  let signature p = p.data.code.types
+  let signature : prim t -> Type.signature option = fun p -> p.data.code.types
 end

@@ -1,5 +1,6 @@
 open Bap_primus_types
 open Bap_primus_lisp_types
+open Bap_core_theory
 
 module Attribute = Bap_primus_lisp_attribute
 module Type = Bap_primus_lisp_type

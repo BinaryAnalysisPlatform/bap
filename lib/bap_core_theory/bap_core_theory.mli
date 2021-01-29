@@ -414,6 +414,7 @@ module Theory : sig
     (** the value type is an instance of Knowledge.value   *)
     type 'a t = (cls,'a sort) KB.cls KB.value
 
+    type 'a value = 'a t
 
     (** the class of all values.  *)
     val cls : (cls,unit) KB.cls
@@ -432,6 +433,106 @@ module Theory : sig
         The value sort holds static information about values of that
         sort. *)
     val sort : 'a t -> 'a sort
+
+
+    (** [resort refine x] applies [refine] to the sort of [x].
+
+        Returns the value [x] with the refined sort, if applicable,
+        otherwise returns the original value.
+
+        @since 2.3.0
+    *)
+    val resort : ('a sort -> 'b sort option) -> 'a t -> 'b t option
+
+
+    (** [forget v] erases the type index of the value.
+
+        The returned value has the monomorphized [Top.t] type and can
+        be stored in containers, serialized, etc.
+
+        To restore the type index use the {!refine} function.
+
+        @since 2.3.0
+
+        Note: this is a convenient function that just does
+        [Knowledge.Value.refine v @@ Sort.forget @@ sort v]
+    *)
+    val forget : 'a t -> unit t
+
+    (** A value with an erased sort type index.
+
+        The monomorphized value could be stored in a container,
+        serialized and deserialized and otherwise treated as a
+        regular value. To erase the type index, use the
+        [Value.forget] function.
+
+        The type index could be restored using [Value.refine] or
+        [Value.Sort.refine] functions.
+
+        @since 2.3.0
+    *)
+    module Top : sig
+      type t = (cls,unit sort) KB.cls KB.value
+      val cls : (cls, unit sort) KB.cls
+      include KB.Value.S with type t := t
+    end
+
+
+    (** A eDSL for dispatching on multiple types.
+
+        The syntax involves only two operators, [can] that
+        applys a sort refinining function, and [let|]
+        glues several cases together. Let's start with a simple
+        example,
+        {[
+          let f x = Match.(begin
+              let| x = can Bool.refine x @@ fun x ->
+                (* here x has type [Bool.t value] *)
+                `Bool x in
+              let| x = can Bitv.refine x @@ fun x ->
+                (* and here x is ['a Bitv.t value] *)
+                `Bitv x in
+              let| x = can Mem.refine x @@ fun x ->
+                (* and now x is [('a,'b) Mem.t value] *)
+                `Mem x in
+              `Other x
+            end)
+        ]}
+
+        In general, the syntax is
+        {v
+          let| x = can s1 x @@ fun (x : t1) ->
+            body1 in
+          ...
+          let| x = can sN x @@ fun (x : tN) ->
+            bodyN in
+          default
+        v}
+
+        where [s1],...,[sN] a refiners to types [t1],...,[tN],
+        respectively.
+
+        {3 Semantics}
+
+        If in [can s1 x body] the sort of [x] can be refined to [t1] using
+        the refiner [s1] then [body] is applied to the value [x] with
+        the refined sort (and freshly generated type index if
+        needed) and the result of the whole expression is [body x]
+        and the nested below expressions are never
+        evaluated. Otherwise, if there is no refinement, the
+        expression [can s1 x body] is evaluated to [x]
+        and the next case is tried until the [default] case is hit.
+    *)
+    module Match : sig
+      type 'a t
+      type 'a refiner = unit sort -> 'a sort option
+      val (let|) : 'b t -> (unit -> 'b) -> 'b
+      val can : 'a refiner -> unit value -> ('a value -> 'b) -> 'b t
+      val both :
+        'a refiner -> unit value ->
+        'b refiner -> unit value ->
+        ('a value -> 'b value -> 'c) -> 'c t
+    end
 
 
     (** Value Sorts.
@@ -828,7 +929,6 @@ module Theory : sig
   type 'a value = 'a Value.t
   type 'a effect = 'a Effect.t
 
-
   (** The sort for boolean values.
 
       Booleans are one bit values.
@@ -1120,8 +1220,12 @@ module Theory : sig
 
     (** the slot to store program semantics.  *)
     val slot : (program, t) Knowledge.slot
+
+    val value : (cls, unit Value.t) Knowledge.slot
+
     include Knowledge.Value.S with type t := t
   end
+
 
   (** The denotation of programs.
 

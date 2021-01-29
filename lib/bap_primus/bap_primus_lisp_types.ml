@@ -1,6 +1,7 @@
 open Core_kernel
 open Bap.Std
 open Bap_primus_sexp
+open Bap_core_theory
 
 module Index = Bap_primus_lisp_index
 module Loc = Bap_primus_lisp_loc

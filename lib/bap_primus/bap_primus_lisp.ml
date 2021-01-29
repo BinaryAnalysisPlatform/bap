@@ -887,3 +887,5 @@ module Doc = struct
 end
 
 let primitive = lisp_primitive
+module Semantics = Bap_primus_lisp_semantics
+module Unit = Semantics.Unit

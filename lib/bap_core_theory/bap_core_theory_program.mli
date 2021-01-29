@@ -1,6 +1,7 @@
 open Core_kernel
 open Bap_knowledge
 
+module Value  = Bap_core_theory_value
 module Effect = Bap_core_theory_effect
 module Target = Bap_core_theory_target
 
@@ -11,11 +12,13 @@ type compiler
 
 type t = (program,unit) Knowledge.cls Knowledge.value
 val cls : (program,unit) Knowledge.cls
+
 module Semantics : sig
   type cls = Effect.cls
   type t = unit Effect.t
   val cls : (cls, unit Effect.sort) Knowledge.cls
   val slot : (program, t) Knowledge.slot
+  val value : (cls, unit Value.t) Knowledge.slot
   include Knowledge.Value.S with type t := t
 end
 
