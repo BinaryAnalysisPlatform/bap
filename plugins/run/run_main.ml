@@ -1,5 +1,6 @@
 open Core_kernel
 open Bap_knowledge
+open Bap_core_theory
 open Bap.Std
 open Bap_primus.Std
 open Graphlib.Std
@@ -102,8 +103,8 @@ let string_of_name = function
   | `tid t -> Tid.to_string t
   | `addr x -> Addr.string_of_value x
 
-let name_of_entry arch entry =
-  let width = Arch.addr_size arch |> Size.in_bits in
+let name_of_entry target entry =
+  let width = Theory.Target.bits target in
   if String.is_empty entry
   then invalid_arg "An entry point should be a non-empty string"
   else match entry.[0] with
@@ -167,7 +168,7 @@ let parse_entry_points proj entry =
   | ["all-subroutines"] -> all_subroutines prog
   | ["marked-subroutines"] -> all_subroutines ~marked:true prog
   | [] -> List.(entry_points prog >>| fun x -> `tid x)
-  | xs -> List.(xs >>| name_of_entry (Project.arch proj))
+  | xs -> List.(xs >>| name_of_entry (Project.target proj))
 
 let parse_entry_points proj entries = match entries with
   | ["only-queue"] -> []

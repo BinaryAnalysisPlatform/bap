@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 open Bap.Std
 open Bap_primus.Std
 open X86_cpu
@@ -30,12 +31,12 @@ module SetupPLT(Machine : Primus.Machine.S) = struct
     Seq.map ~f:fst
 
   let load_table =
-    Machine.arch >>= fun arch ->
+    Machine.gets Project.target >>|
+    Theory.Target.bits >>| Size.of_int_exn >>= fun word_size ->
     section_memory ".got.plt" >>| fun memory ->
     Seq.fold memory ~init:[]
       ~f:(fun acc mem ->
-          let step = (Arch.addr_size arch :> size) in
-          Memory.fold mem ~word_size:step ~init:[] ~f:(fun a w -> a :: w))
+          Memory.fold mem ~word_size ~init:[] ~f:(fun a w -> a :: w))
 
   let filter_plt addrs =
     section_memory ".plt" >>= fun memory ->

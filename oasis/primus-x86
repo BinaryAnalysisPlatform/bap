@@ -7,7 +7,7 @@ Library primus_x86_plugin
   Build$: flag(everything) || flag(primus_x86)
   FindlibName: bap-plugin-primus_x86
   CompiledObject: best
-  BuildDepends: bap, bap-primus, core_kernel, bap-x86-cpu, regular
+  BuildDepends: bap, bap-core-theory, bap-primus, core_kernel, bap-x86-cpu, regular
   XMETADescription: x86 support package
   Modules: Primus_x86_main
   InternalModules: Primus_x86_loader

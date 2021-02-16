@@ -520,14 +520,35 @@ module Theory : sig
         needed) and the result of the whole expression is [body x]
         and the nested below expressions are never
         evaluated. Otherwise, if there is no refinement, the
-        expression [can s1 x body] is evaluated to [x]
+        expression [can s1 x body] is evaluated to [()]
         and the next case is tried until the [default] case is hit.
+
+        @since 2.3.0
     *)
     module Match : sig
       type 'a t
       type 'a refiner = unit sort -> 'a sort option
       val (let|) : 'b t -> (unit -> 'b) -> 'b
+
+
+      (** [let| () = can s x f in can't] refines [x] to [s].
+
+          If the sort of [x] could be refined with [s] then [f]
+          is called with the refined value [x'] and the whole
+          expression is evaluated to [f x']. Otherwise, the control is
+          passed to [can't].
+      *)
       val can : 'a refiner -> unit value -> ('a value -> 'b) -> 'b t
+
+
+      (** [let| () = both sx x sy y f in no] applies two refiners in parallel.
+
+          If both [x] and [y] could be refined with [sx] and [sy]
+          respectively then [f x' y'] is called with the refined
+          values and becomes the value of the expression. Otherwise,
+          [no] is evaluated and becomes the value of the whole
+          expression.
+      *)
       val both :
         'a refiner -> unit value ->
         'b refiner -> unit value ->
@@ -1083,7 +1104,6 @@ module Theory : sig
     (** [resort v] changes the sort of the variable.  *)
     val resort : 'a t -> 'b Value.sort -> 'b t
 
-
     (** [versioned v n] creates the [n]th version of the variable [v].
 
         Variable versions could be used to represent the same variable
@@ -1201,6 +1221,12 @@ module Theory : sig
   (** the name of the code encoding.
       @since 2.2.0 *)
   type language
+
+  (** a target-specific role of a variable or other entity.
+
+      @since 2.3.0
+  *)
+  type role
 
   (** The semantics of programs.
 
@@ -1322,6 +1348,8 @@ module Theory : sig
 
         For the description of parameters see the corresponding
         accessor functions in this module.
+
+        @since 2.3.0 has the regs optional parameter.
     *)
     val declare :
       ?parent:t ->               (** defaults to [unknown] *)
@@ -1330,6 +1358,7 @@ module Theory : sig
       ?data:_ Mem.t Var.t ->     (** defaults to [mem : Mem(bits,byte)] *)
       ?code:_ Mem.t Var.t ->     (** defaults to [mem : Mem(bits,byte)] *)
       ?vars:unit Var.t list ->   (** defaults to [[]] *)
+      ?regs:(role list * unit Var.t list) list -> (** defaults to [[]] *)
       ?endianness:endianness ->  (** defaults to [Endian.big] *)
       ?system:system ->          (** defaults to [System.unknown]  *)
       ?abi:abi ->                (** defaults to [Abi.unknown] *)
@@ -1475,9 +1504,42 @@ module Theory : sig
 
         The set includes both general-purpose, floating-points, and
         status registers, as well variables that denote memories and
-        other entities specific to the target.
+        other entities specific to the target. The set includes
+        all variables that were passed to the target definition,
+        through [data], [code], [vars], and [regs] variables.
+
+        @see also [regs].
+
     *)
     val vars : t -> Set.M(Var.Top).t
+
+
+    (** [regs ?exclude ?roles target] returns a set of registers.
+
+        If the [roles] list is passed then narrows down the list to
+        registers that have all the specified roles. If [exclude] is
+        specified then excludes all registers that have those roles.
+
+        Example,
+
+        {[regs ~roles:[general; integer] ~exclude:[stack_pointer; frame_pointer]}
+
+        @since 2.3.0
+    *)
+    val regs :
+      ?exclude:role list ->
+      ?roles:role list ->
+      t -> Set.M(Var.Top).t
+
+    (** [reg target role] returns a register with the given [role].
+
+        Returns a register from a set of registers
+        [regs ~roles:[role] ?exlude t]. If the set is not singleton
+        and [unique] is [true] (defaults to [false]) returns [None].
+
+        @since 2.3.0
+    *)
+    val reg : ?exclude:role list -> ?unique:bool -> t -> role -> unit Var.t option
 
     (** [endianness target] describes the byte order.
 
@@ -1739,84 +1801,146 @@ module Theory : sig
     include Knowledge.Object.S with type t := t
   end
 
+  module Enum = KB.Enum [@@deprecated "[since 2021-02] use KB.Enum instead"]
 
-  (** An extensible enumerated type.
 
-      An enumerated type is a set of names that are represented
-      underneath the hood using the [KB.Name.t].
 
-      The enumerated type had to be declared before used and is
-      commonly referenced as a module declared constant. It is
-      possible, however to reference the enumerated type value using
-      its string representation, via the [read] function.
+  (** A target-specific role of program entities.
 
-      @since 2.2.0
+      An extensible enumeration for target and application-specific
+      roles of variables, registers, and other entities.
+
+      @since 2.3.0
   *)
-  module Enum : sig
+  module Role : sig
+    type t = role
 
-    (** The enumerated type interface  *)
-    module type S = sig
-      include Base.Comparable.S
-      include Binable.S with type t := t
-      include Stringable.S with type t := t
-      include Pretty_printer.S with type t := t
-      include Sexpable.S with type t := t
+    (** Common roles for registers.
 
-      (** [declare ?package name] declares a new element of the enumeration.
+        This module enumerates the blessed set of the register roles
+        that have common meaning among various architectures. Feel
+        free to create target-specific register roles and publish them
+        via your target support libraries. Look for such
+        target-specific roles in the XXX_target modules.
 
-          Fails if the name is already declared. *)
-      val declare : ?package:string -> string -> t
+        The register roles are specifically grouped in a single module
+        to enable local-opening of this module.
+    *)
+    module Register : sig
 
-      (** [read ?package name] reads the element from its textual representation.
 
-          Fails if the name doesn't represent a previously declared
-          element of the enumeration.
+      (** the general purpose register
 
-          If [name] is unqualified then [package] is used as the
-          package name. The [package] itself defaults to ["user"].
+          The general purpose registers is a class of register that
+          are used for arithmetic and logic units. On targets with
+          floating-point and vector arithmetic unit this class
+          includes the floating-point and vector registers as well.
 
-          See also [of_string s] from the [Stringable] interface which
-          is equal to [read s]
+          To narrow down the list, specify additional roles, e.g., to
+          get the list of general-purpose integer arithmetic registers
+          use [[general; integer]].
       *)
-      val read : ?package:string -> string -> t
+      val general : t
 
-      (** [name x] is the name that corresponds to the element [x]  *)
-      val name : t -> KB.Name.t
+      (** the special-purpose register.
 
-      (** [unknown] is the placeholder for unknown element.  *)
-      val unknown : t
+          The special-purpose register include (but are not limited to)
+          status registers and commonly are accessed using special
+          instructions (couldn't be the targets of common load/store
+          and arithmetic operations of a computation unit).
+      *)
+      val special : t
 
-      (** [is_unknown t] is true if [t] is [unknown].  *)
-      val is_unknown : t -> bool
+      (** the register is used by the integer arithmetic unit
 
-      (** [domain] the type class implementing the domain structure.
+          This role can be assigned both to general and special
+          purpose registers. E.g., to get integer arithemtic status
+          control registers use [[special; integer]].  *)
+      val integer : t
 
-          Each enumeration type forms a flat domain with the [unknown]
-          element at the bottom. *)
-      val domain : t KB.domain
+      (** the register is used by the floating-point arithmetic unit
 
-      (** [persistent] the persistance type class.
 
-          The enumeration types are persistent and are derived from
-          the [KB.Name.persistent] type class, i.e., they are
-          represented as 63-bit numbers. *)
-      val persistent : t KB.persistent
+          This role can be assigned both to general and special
+          purpose registers. E.g., to get floating-point arithemtic status
+          control registers use [[special; floating]].
+      *)
+      val floating : t
 
-      (** the hash value of the enum  *)
-      val hash : t -> int
+      (** the register is used by the vector processing unit
 
-      (** [members ()] the list of all members of the enumeration type. *)
-      val members : unit -> t list
+          This role can be assigned both to general and special
+          purpose registers. E.g., to get floating-point arithemtic status
+          control registers use [[special; vector]].
+      *)
+      val vector : t
+
+      (** the register is used to track the run-time stack  *)
+      val stack_pointer : t
+
+      (** the register is used to track stack frames  *)
+      val frame_pointer : t
+
+      (** the register holds the return address in subroutine calls   *)
+      val link : t
+
+      (** the register is used to store thread-local storage  *)
+      val thread : t
+
+      (** the register is used in the privileged mode. *)
+      val privileged : t
+
+      (** the register holds a constant and is read-only.  *)
+      val constant : t
+
+      (** the constant register that always holds zero.  *)
+      val zero : t
+
+
+      (** the program status register  *)
+      val status : t
+
+      (** the zero flag register
+
+          Is set when an arithmetic operation results in zero.*)
+      val zero_flag : t
+
+
+      (** the sign (aka negative) flag register
+
+          Is set when an arithmetic operation results in a negative value.*)
+      val sign_flag : t
+
+      (** the carry flag register
+
+          Is set when an arithmetic operation results in carry.*)
+      val carry_flag : t
+
+      (** the overflow flag register
+
+          Is set when an arithmetic operation results in overflow.*)
+      val overflow_flag : t
+
+      (** the parity flag register
+
+          Is set depending on the parity of the number of bits of a
+          recently set value .*)
+      val parity_flag : t
+
+      (** the non-CPU register  *)
+      val hardware : t
+
+      (** the reserved register with undefined behavior.  *)
+      val reserved : t
     end
 
-    (** Creates a new enumerated type.  *)
-    module Make() : S
+    include KB.Enum.S with type t := t
   end
 
   (** The source code language.
 
       @since 2.2.0 *)
-  module Language : Enum.S with type t = language
+  module Language : KB.Enum.S with type t = language
 
   (** Defines how multibyte words are stored in the memory.
 
@@ -1827,7 +1951,7 @@ module Theory : sig
 
       @since 2.2.0  *)
   module Endianness : sig
-    include Enum.S with type t = endianness
+    include KB.Enum.S with type t = endianness
     (** In the big endian ordering the most significant byte of the
         word is stored at the smallest address.   *)
     val eb : endianness
@@ -1845,15 +1969,19 @@ module Theory : sig
 
   (** The Operating System.
       @since 2.2.0  *)
-  module System : Enum.S with type t = system
+  module System : KB.Enum.S with type t = system
 
   (** The Application Binary Interface name.
       @since 2.2.0 *)
-  module Abi : Enum.S with type t = abi
+  module Abi : KB.Enum.S with type t = abi
 
   (** The Application Floating-point Binary Interface name.
       @since 2.2.0 *)
-  module Fabi : Enum.S with type t = fabi
+  module Fabi : KB.Enum.S with type t = fabi
+
+  (** The file type that is used to pack the unit.
+      @since 2.3.0 *)
+  module Filetype : KB.Enum.S with type t = filetype
 
   (** Information about the compiler.
 

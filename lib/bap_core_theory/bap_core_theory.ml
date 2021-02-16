@@ -24,7 +24,8 @@ module Theory = struct
   module Abi = Target.Abi
   module Fabi = Target.Fabi
   module Filetype = Target.Filetype
-  module Enum = Target.Enum
+  module Enum = KB.Enum
+  module Role = Target.Role
 
   type program = Program.cls
   type source = Source.t
@@ -33,6 +34,7 @@ module Theory = struct
   type endianness = Endianness.t
   type language = Language.t
   type compiler = Compiler.t
+  type role = Role.t
   type system = System.t
   type abi = Abi.t
   type fabi = Fabi.t

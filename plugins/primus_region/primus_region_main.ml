@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 open Bap.Std
 open Bap_primus.Std
 
@@ -81,8 +82,7 @@ module Count(Machine : Primus.Machine.S) = struct
   [@@@warning "-P"]
 
   let run [reg] =
-    Machine.gets Project.arch >>= fun arch ->
-    let width = Size.in_bits @@ Arch.addr_size arch in
+    Machine.gets Project.target >>| Theory.Target.bits >>= fun width ->
     Machine.Local.get state >>= (fun {regions} ->
         match Map.find regions reg with
         | None -> nil

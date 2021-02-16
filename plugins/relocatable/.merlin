@@ -1,4 +1,8 @@
 B ../../_build/plugins/relocatable
+B ../../lib/arm
+B ../../lib/bap_mips
+B ../../lib/bap_powerpc
+B ../../lib/x86_cpu/
 S .
 
 REC

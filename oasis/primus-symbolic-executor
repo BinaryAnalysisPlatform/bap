@@ -8,7 +8,7 @@ Library primus_symbolic_executor_plugin
   Path:         plugins/primus_symbolic_executor
   BuildDepends: bap-primus, bap, core_kernel, bitvec, ppx_bap,
                 zarith, z3, regular, bap-main, monads,
-                bap-primus-track-visited
+                bap-primus-track-visited, bap-core-theory
   FindlibName:     bap-plugin-primus_symbolic_executor
   CompiledObject:  best
   InternalModules: Primus_symbolic_executor_main

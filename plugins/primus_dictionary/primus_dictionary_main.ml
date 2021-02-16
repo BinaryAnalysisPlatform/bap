@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 open Bap.Std
 open Bap_primus.Std
 
@@ -91,9 +92,7 @@ module Length(Machine : Primus.Machine.S) = struct
   include Pre(Machine)
 
   let run [dic] =
-    Machine.gets Project.arch >>|
-    Arch.addr_size >>|
-    Size.in_bits >>= fun width ->
+    Machine.gets Project.target >>| Theory.Target.bits >>= fun width ->
     Machine.Local.get state >>= fun s ->
     match Map.find s.dicts dic with
     | None -> nil

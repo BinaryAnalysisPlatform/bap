@@ -21,16 +21,6 @@ open Bap_core_theory
 
 include Loggers()
 
-let arch =
-  let open Ogre.Syntax in
-  Ogre.request Image.Scheme.arch >>| function
-  | None -> `unknown
-  | Some arch -> match Arch.of_string arch with
-    | None -> `unknown
-    | Some arch -> arch
-
-let width = Ogre.(arch >>| Arch.addr_size >>| Size.in_bits)
-
 module Bitvec = struct
   include Bitvec
   include Bitvec_sexp.Functions
@@ -73,8 +63,8 @@ end = struct
     | None | Some 0 -> s
     | Some len -> String.subo ~len s
 
-  let collect init merge map src =
-    width >>| Bitvec.modulus >>= fun m ->
+  let collect t init merge map src =
+    let m = Bitvec.modulus (Theory.Target.code_addr_size t) in
     Ogre.collect Ogre.Query.(select (from src)) >>|
     Seq.fold ~init ~f:(fun exts (addr, value) ->
         Map.update exts Bitvec.(int64 addr mod m) ~f:(function
@@ -99,11 +89,11 @@ end = struct
     | Ref (Addr _) as x when compare_value x y <> 0 -> Bad
     | _ -> y
 
-  let extract =
-    collect empty merge_name name external_reference >>= fun names ->
-    collect names merge_addr addr relocation
+  let extract t =
+    collect t empty merge_name name external_reference >>= fun names ->
+    collect t names merge_addr addr relocation
 
-  let create doc = match Ogre.eval extract doc with
+  let create t doc = match Ogre.eval (extract t) doc with
     | Ok exts -> exts
     | Error err ->
       warning "Failed to obtain external references: %a" Error.pp err;
@@ -128,7 +118,8 @@ end = struct
   let prepare () =
     let open KB.Syntax in
     KB.promise slot @@ fun unit ->
-    KB.collect Image.Spec.slot unit >>| create
+    KB.collect Theory.Unit.target unit >>= fun t ->
+    KB.collect Image.Spec.slot unit >>| create t
 end
 
 let plt_agent = Knowledge.Agent.register

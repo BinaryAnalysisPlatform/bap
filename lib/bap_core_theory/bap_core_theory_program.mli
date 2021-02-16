@@ -34,7 +34,7 @@ module Source : sig
   val file : (cls,string option) slot
 end
 
-module Language : Target.Enum.S with type t = language
+module Language : Knowledge.Enum.S with type t = language
 
 module Unit : sig
   open Knowledge

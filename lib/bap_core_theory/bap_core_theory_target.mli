@@ -11,6 +11,7 @@ type system
 type abi
 type fabi
 type filetype
+type role
 type options = (options_cls,unit) KB.Class.t KB.Value.t and options_cls
 
 val declare :
@@ -20,6 +21,7 @@ val declare :
   ?data:_ Mem.t Var.t ->
   ?code:_ Mem.t Var.t ->
   ?vars:unit Var.t list ->
+  ?regs:(role list * unit Var.t list) list ->
   ?endianness:endianness ->
   ?system:system ->
   ?abi:abi ->
@@ -52,6 +54,11 @@ val code_addr_size : t -> int
 val data : t -> (unit,unit) Mem.t Var.t
 val code : t -> (unit,unit) Mem.t Var.t
 val vars : t -> Set.M(Var.Top).t
+val regs :
+  ?exclude:role list ->
+  ?roles:role list ->
+  t -> Set.M(Var.Top).t
+val reg : ?exclude:role list -> ?unique:bool -> t -> role -> unit Var.t option
 val endianness : t -> endianness
 val system : t -> system
 val abi : t -> abi
@@ -62,38 +69,45 @@ val options : t -> options
 val domain : t KB.Domain.t
 val persistent : t KB.Persistent.t
 
-module Enum : sig
-  module type S = sig
-    include Base.Comparable.S
-    include Binable.S with type t := t
-    include Stringable.S with type t := t
-    include Pretty_printer.S with type t := t
-    include Sexpable.S with type t := t
-    val declare : ?package:string -> string -> t
-    val read : ?package:string -> string -> t
-    val name : t -> KB.Name.t
-    val unknown : t
-    val is_unknown : t -> bool
-    val domain : t KB.domain
-    val persistent : t KB.persistent
-    val hash : t -> int
-    val members : unit -> t list
-  end
-
-  module Make() : S
-end
-
 module Endianness : sig
-  include Enum.S with type t = endianness
+  include KB.Enum.S with type t = endianness
   val le : endianness
   val eb : endianness
   val bi : endianness
 end
 
-module System : Enum.S with type t = system
-module Filetype : Enum.S with type t = filetype
-module Abi : Enum.S with type t = abi
-module Fabi : Enum.S with type t = fabi
+module Role : sig
+  type t = role
+  module Register : sig
+    val general : t
+    val special : t
+    val integer : t
+    val floating : t
+    val vector : t
+    val stack_pointer : t
+    val frame_pointer : t
+    val link : t
+    val thread : t
+    val privileged : t
+    val constant : t
+    val zero : t
+    val status : t
+    val zero_flag : t
+    val sign_flag : t
+    val carry_flag : t
+    val overflow_flag : t
+    val parity_flag : t
+    val hardware : t
+    val reserved : t
+  end
+
+  include KB.Enum.S with type t := t
+end
+
+module System : KB.Enum.S with type t = system
+module Filetype : KB.Enum.S with type t = filetype
+module Abi : KB.Enum.S with type t = abi
+module Fabi : KB.Enum.S with type t = fabi
 
 module Options : sig
   type cls = options_cls

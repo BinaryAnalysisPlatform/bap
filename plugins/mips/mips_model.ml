@@ -67,8 +67,8 @@ end
 module Vars = struct
   open Bitwidth
 
-  let fpr = make_regs (Type.imm fpr_bitwidth) "f" range32
-  let fpri = make_regs_i (Type.imm fpr_bitwidth) "f" range32
+  let fpr = make_regs (Type.imm fpr_bitwidth) "F" range32
+  let fpri = make_regs_i (Type.imm fpr_bitwidth) "F" range32
 end
 
 let of_vars vars =
@@ -188,13 +188,12 @@ module Make_cpu(M : MIPS) : CPU = struct
   (* MIPS doesn't have flags, but structure requires them
    * We just make a stubs here *)
   let flag n = Var.create n bool_t
-  let zf = flag "ZF"
-  let cf = flag "CF"
-  let vf = flag "VF"
-  let nf = flag "NF"
+  let zf = flag "undefined"
+  let cf = flag "undefined"
+  let vf = flag "undefined"
+  let nf = flag "undefined"
 
   let flags = Var.Set.of_list [
-      vf; cf; nf; zf;
     ]
 
   let is = Var.same

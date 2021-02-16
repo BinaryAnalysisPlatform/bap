@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 open Bap.Std
 open Bap_primus.Std
 open Monads.Std
@@ -899,9 +900,8 @@ module SymbolicPrimitives(Machine : Primus.Machine.S) = struct
     | _ -> Primus.Generator.static ~width 0
 
   let arch_addr_size =
-    Machine.gets Project.arch >>|
-    Arch.addr_size >>|
-    Size.in_bits
+    Machine.gets Project.target >>| Theory.Target.bits
+
 
   let create_value var rest =
     arch_addr_size >>= fun default_width ->

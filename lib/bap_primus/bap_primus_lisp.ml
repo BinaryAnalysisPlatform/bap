@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 open Bap.Std
 open Format
 open Bap_c.Std
@@ -44,8 +45,7 @@ type state = {
 
 let inspect {env} = sexp_of_bindings env
 
-let width_of_ctxt proj =
-  Size.in_bits (Arch.addr_size (Project.arch proj))
+let width_of_ctxt proj = Theory.Target.bits (Project.target proj)
 
 let state = Bap_primus_state.declare ~inspect
     ~name:"lisp-env"
@@ -636,9 +636,9 @@ module Make(Machine : Machine) = struct
     Map.to_sequence
 
 
-  let collect_globals arch s =
+  let collect_globals target s =
     let open Lisp.Attributes in
-    let default_width = Size.in_bits (Arch.addr_size arch) in
+    let default_width = Theory.Target.bits target in
     let add attr def vars =
       match Attribute.Set.get (Lisp.Def.attributes def) attr with
       | None -> vars
@@ -658,8 +658,8 @@ module Make(Machine : Machine) = struct
     | _ -> Machine.return ()
 
   let link_globals () =
-    Machine.gets Project.arch >>= fun arch ->
-    Machine.Local.get state >>| collect_globals arch >>=
+    Machine.gets Project.target >>= fun target ->
+    Machine.Local.get state >>| collect_globals target >>=
     Machine.Seq.iter ~f:link_global
 
   let find_sub prog name =

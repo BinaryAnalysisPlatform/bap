@@ -1,4 +1,4 @@
-let package = "core-theory"
+let package = "core"
 
 open Core_kernel
 open Bap_knowledge
@@ -11,80 +11,42 @@ module Bitv = Val.Bitv
 module Sort = Val.Sort
 module Name = KB.Name
 
-type t = Name.t [@@deriving bin_io, compare, sexp]
-type target = t
-type endianness = Name.t
-type system = Name.t
-type abi = Name.t
-type filetype = Name.t
-type fabi = Name.t
-type name = Name.t
-
-module Enum = struct
-  module type S = sig
-    include Base.Comparable.S
-    include Binable.S with type t := t
-    include Stringable.S with type t := t
-    include Pretty_printer.S with type t := t
-    include Sexpable.S with type t := t
-    val declare : ?package:string -> string -> t
-    val read : ?package:string -> string -> t
-    val name : t -> KB.Name.t
-    val unknown : t
-    val is_unknown : t -> bool
-    val domain : t KB.domain
-    val persistent : t KB.persistent
-    val hash : t -> int
-    val members : unit -> t list
-  end
-
-  module Make() = struct
-    type t = Name.t [@@deriving bin_io, sexp]
-
-    let elements = Hash_set.create (module Name)
-    let declare ?package name =
-      let name = Name.create ?package name in
-      if Hash_set.mem elements name
-      then invalid_argf
-          "Enum.declare: the element %s is already declared \
-           please choose a unique name" (Name.to_string name) ();
-      Hash_set.add elements name;
-      name
-
-    let read ?package name =
-      let name = Name.read ?package name in
-      if not (Hash_set.mem elements name)
-      then invalid_argf "Enum.read: %s is not a member of the given \
-                         enumeration." (Name.to_string name) ();
-      name
-
-    let name x = x
-    let unknown = Name.of_string ":unknown"
-    let is_unknown = Name.equal unknown
-    let hash = Name.hash
-    let members () = Hash_set.to_list elements
-    include Base.Comparable.Make(Name)
-    include (Name : Stringable.S with type t := t)
-    include (Name : Pretty_printer.S with type t := t)
-    let domain = Knowledge.Domain.flat "enum"
-        ~inspect:sexp_of_t
-        ~empty:unknown
-        ~equal
-    let persistent = KB.Persistent.name
-  end
-end
-
 module Endianness = struct
-  include Enum.Make()
+  include KB.Enum.Make()
   let le = declare ~package "le"
   let eb = declare ~package "eb"
   let bi = declare ~package "bi"
 end
 
-module System = Enum.Make()
-module Abi = Enum.Make()
-module Fabi = Enum.Make()
-module Filetype = Enum.Make()
+module System = KB.Enum.Make()
+module Abi = KB.Enum.Make()
+module Fabi = KB.Enum.Make()
+module Filetype = KB.Enum.Make()
+module Role = struct
+  include KB.Enum.Make()
+  module Register = struct
+    let general = declare ~package "general"
+    let special = declare ~package "special"
+    let integer = declare ~package "integer"
+    let floating = declare ~package "floating"
+    let vector = declare ~package "vector"
+    let stack_pointer = declare ~package "stack-pointer"
+    let frame_pointer = declare ~package "frame-pointer"
+    let link = declare ~package "link"
+    let thread = declare ~package "thread"
+    let privileged = declare ~package "privileged"
+    let constant = declare ~package "constant"
+    let zero = declare ~package "zero"
+    let status = declare ~package "status"
+    let hardware = declare ~package "hardware"
+    let reserved = declare ~package "reserved"
+    let zero_flag = declare ~package "zero-flag"
+    let carry_flag = declare ~package "carry-flag"
+    let sign_flag = declare ~package "sign-flag"
+    let overflow_flag = declare ~package "overflow-flag"
+    let parity_flag = declare ~package "parity-flag"
+  end
+end
 
 module Options = struct
   type cls = Options
@@ -93,6 +55,18 @@ module Options = struct
   let to_string x = Format.asprintf "%a" pp x
   include (val KB.Value.derive cls)
 end
+
+module Self = KB.Enum.Make()
+
+type t = Self.t [@@deriving bin_io, compare, sexp]
+type target = t
+type endianness = Endianness.t
+type role = Role.t
+type system = System.t
+type abi = Abi.t
+type filetype = Filetype.t
+type fabi = Fabi.t
+type name = Name.t
 
 type options = Options.t and options_cls = Options.cls
 
@@ -105,16 +79,16 @@ type info = {
   data : mem;
   code : mem;
   vars : Set.M(Var.Top).t;
-  endianness : Name.t;
-  system : Name.t;
-  abi : Name.t;
-  fabi : Name.t;
-  filetype : Name.t;
-  options : Options.t;
+  regs : Set.M(Var.Top).t Map.M(Role).t;
+  endianness : endianness;
+  system : system;
+  abi : abi;
+  fabi : fabi;
+  filetype : filetype;
+  options : options;
   names : String.Caseless.Set.t
 }
 
-module Self = Enum.Make()
 let unknown = Self.unknown
 
 let mem name k v =
@@ -137,18 +111,29 @@ let unknown = {
   data = pack@@mem "mem" 32 8;
   code = pack@@mem "mem" 32 8;
   vars = Set.empty (module Var.Top);
+  regs = Map.empty (module Role);
   endianness = Endianness.eb;
-  system = unknown;
-  abi = unknown;
-  fabi = unknown;
-  filetype = unknown;
+  system = System.unknown;
+  abi = Abi.unknown;
+  fabi = Fabi.unknown;
+  filetype = Filetype.unknown;
   options = Options.empty;
   names = String.Caseless.Set.empty;
 }
 
-let targets = Hashtbl.of_alist_exn (module Name) [
+let targets = Hashtbl.of_alist_exn (module Self) [
     unknown.parent, unknown
   ]
+
+let make_roles = List.fold
+    ~f:(fun spec (roles,vars) ->
+        let vars = Set.of_list (module Var.Top) vars in
+        List.fold roles ~init:spec ~f:(fun spec role ->
+            Map.update spec role ~f:(function
+                | None -> vars
+                | Some vars' -> Set.union vars vars')))
+    ~init:(Map.empty (module Role))
+
 
 let extend parent
     ?(bits=parent.bits)
@@ -156,6 +141,7 @@ let extend parent
     ?(data=unpack@@parent.data)
     ?(code=unpack@@parent.code)
     ?vars
+    ?regs
     ?(endianness=parent.endianness)
     ?(system=parent.system)
     ?(abi=parent.abi)
@@ -171,6 +157,9 @@ let extend parent
   vars = Option.value_map vars
       ~default:parent.vars
       ~f:(Set.of_list (module Var.Top));
+  regs = Option.value_map regs
+      ~default:parent.regs
+      ~f:make_roles;
   names = Option.value_map nicknames
       ~default:parent.names
       ~f:String.Caseless.Set.of_list;
@@ -178,31 +167,31 @@ let extend parent
 
 let declare
     ?(parent=unknown.parent)
-    ?bits ?byte ?data ?code ?vars ?endianness
+    ?bits ?byte ?data ?code ?vars ?regs ?endianness
     ?system ?abi ?fabi ?filetype ?options
     ?nicknames ?package name =
-  let name = Name.create ?package name in
-  if Hashtbl.mem targets name
+  let t = Self.declare ?package name in
+  if Hashtbl.mem targets t
   then failwithf "A target with name %s already exists \
                   in the package %s, please choose another \
                   name or package"
-      (Name.unqualified name)
-      (Name.package name) ();
+      (Name.unqualified (Self.name t))
+      (Name.package (Self.name t)) ();
   let p = Hashtbl.find_exn targets parent in
-  let info = extend ?bits ?byte ?data ?code ?vars ?endianness
+  let info = extend ?bits ?byte ?data ?code ?vars ?regs ?endianness
       ?system ?abi ?fabi ?filetype ?options ?nicknames p parent in
-  Hashtbl.add_exn targets name info;
-  name
+  Hashtbl.add_exn targets t info;
+  t
 
 let lookup ?package name =
-  let name = Name.read ?package name in
+  let name = Self.read ?package name in
   if Hashtbl.mem targets name then Some name
   else None
 
 let get ?package name =
-  let name = Name.read ?package name in
+  let name = Self.read ?package name in
   if not (Hashtbl.mem targets name)
-  then invalid_argf "Unknown target %s" (Name.to_string name) ();
+  then invalid_argf "Unknown target %s" (Self.to_string name) ();
   name
 
 let read = get
@@ -212,12 +201,60 @@ let info name = match Hashtbl.find targets name with
   | Some t -> t
 
 let parent t = (info t).parent
-let name t = t
+let name t = Self.name t
 let bits t = (info t).bits
 let byte t = (info t).byte
 let data t = unpack@@(info t).data
 let code t = unpack@@(info t).code
-let vars t = (info t).vars
+
+let collect_regs ?pred init roles =
+  Map.fold roles ~init ~f:(fun ~key:_ ~data:vars' vars ->
+      match pred with
+      | None -> Set.union vars vars'
+      | Some pred -> Set.union vars (Set.filter vars' pred))
+
+let vars t =
+  let (+) s (Var v) = Set.add s (Var.forget v) in
+  let {code; data; vars; regs} = info t in
+  collect_regs (vars + code + data) regs
+
+let has_role roles var role = match Map.find roles role with
+  | None -> false
+  | Some vars -> Set.mem vars var
+
+let is_excluded exclude info = match exclude with
+  | None -> fun _ -> false
+  | Some excluded ->
+    fun var -> List.exists excluded ~f:(has_role info.regs var)
+
+let is_included roles info = match roles with
+  | None -> fun _ -> true
+  | Some included ->
+    fun var -> List.for_all included ~f:(has_role info.regs var)
+
+let regs ?exclude ?roles t =
+  let info = info t in
+  let pred = match exclude,roles with
+    | None,None -> None
+    | _ -> Some (fun v ->
+        is_included roles info v &&
+        not (is_excluded exclude info v)) in
+  collect_regs ?pred (Set.empty (module Var.Top)) info.regs
+
+(* length > 1 *)
+let non_unique s = Option.is_some (Set.nth s 1)
+
+let reg ?exclude ?(unique=false) t role =
+  let info = info t in
+  match Map.find info.regs role with
+  | None -> None
+  | Some vars ->
+    let vars = Set.filter vars ~f:(fun v ->
+        not (is_excluded exclude info v)) in
+    match Set.choose vars with
+    | Some _ when unique && non_unique vars -> None
+    | x -> x
+
 
 let data_addr_size,
     code_addr_size =
@@ -234,19 +271,19 @@ let options t = (info t).options
 
 let parents target =
   let rec closure ps p =
-    if Name.equal unknown.parent p
+    if Self.equal unknown.parent p
     then List.rev (p::ps)
     else closure (p::ps) (parent p) in
   closure [] (parent target)
 
-let is_unknown c = Name.equal c unknown.parent
+let is_unknown c = Self.equal c unknown.parent
 let is_known c = not@@is_unknown c
 
 let rec belongs p c =
-  Name.equal p c || is_known c && belongs p (parent c)
+  Self.equal p c || is_known c && belongs p (parent c)
 
 let rec matches_name t name =
-  String.Caseless.equal (Name.unqualified t) name ||
+  String.Caseless.equal (Name.unqualified (Self.name t)) name ||
   is_known t && matches_name (parent t) name
 
 let rec matches t name =
@@ -254,7 +291,7 @@ let rec matches t name =
   Set.mem nicks name || matches_name t name
 
 let order t1 t2 : KB.Order.partial =
-  if Name.equal t1 t2 then EQ
+  if Self.equal t1 t2 then EQ
   else if belongs t1 t2 then LT
   else if belongs t2 t1 then GT
   else NC
@@ -271,6 +308,7 @@ let sort_family_by_order =
 let sort_by_parent_name =
   List.sort ~compare:(fun f1 f2 -> match f1,f2 with
       | t1::_, t2::_ ->
+        let t1 = Self.name t1 and t2 = Self.name t2 in
         String.compare (Name.unqualified t1) (Name.unqualified t2)
       | _ -> 0)
 
@@ -280,8 +318,8 @@ let family t =
   sort_family_by_order
 
 let partition xs =
-  let families = Map.empty (module Name) in
-  let universe = Set.of_list (module Name) xs in
+  let families = Map.empty (module Self) in
+  let universe = Set.of_list (module Self) xs in
   let rec grandest t =
     let p = parent t in
     if is_known p && Set.mem universe p

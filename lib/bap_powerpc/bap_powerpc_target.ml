@@ -19,8 +19,9 @@ let bool = Theory.Bool.t
 
 let reg t n = Theory.Var.define t n
 
-let array ?(index=string_of_int) t pref size =
-  List.init size ~f:(fun i -> reg t (pref ^ index i))
+let array t fmt size =
+  let fmt = Scanf.format_from_string fmt "%d" in
+  List.init size ~f:(fun i -> reg t (sprintf fmt i))
 
 let untyped = List.map ~f:Theory.Var.forget
 let (@<) xs ys = untyped xs @ untyped ys
@@ -46,9 +47,9 @@ let define ?(parent=parent) bits endianness =
   let size = Theory.Bitv.size bits in
   let mems = Theory.Mem.define bits r8 in
   let data = Theory.Var.define mems "mem" in
-  let vars = array bits "R" 32 @<
-             array bits "F" 32 @<
-             array r128 "VR" 32 @<
+  let vars = array bits "R%d" 32 @<
+             array r64 "F%d" 32 @<
+             array r128 "V%d" 32 @<
              flags @<
              [reg bits "CTR"; reg bits "LR"; reg bits "TAR" ] @<
              [data] in
@@ -59,7 +60,20 @@ let define ?(parent=parent) bits endianness =
     ~vars
     ~code:data
     ~data:data
-
+    ~regs:Theory.Role.Register.[
+        [general; integer], untyped@@array bits "R%d" 32;
+        [general; floating], untyped@@array r64 "F%d" 32;
+        [general; vector], untyped@@array r128  "V%d" 32;
+        [stack_pointer], untyped@@[reg bits "R1"];
+        [link], untyped@@[reg bits "LR"];
+        [status], untyped flags;
+        [constant; zero], untyped@@[reg bits "ZERO"];
+        [zero_flag], untyped@@array bool "CR%dEQ" 8;
+        [sign_flag], untyped@@array bool "CR%dLT" 8;
+        [carry_flag], untyped@@[reg bool "CA"; reg bool "CA32"];
+        [overflow_flag], untyped@@List.(["SO"; "OV"; "OV32"] >>| reg bool);
+        [status; floating], untyped@@List.(["FL"; "FE"; "FG"; "FU"] >>| reg bool);
+      ]
 
 let powerpc32bi = define r32 Theory.Endianness.bi
 let powerpc32eb = define r32 Theory.Endianness.eb ~parent:powerpc32bi
