@@ -135,7 +135,7 @@ cat > $DEBIAN/control <<EOF
 Package: libbap
 Architecture: $ARCH
 Maintainer: Ivan Gotovchits
-Depends: libgmp10, zlib1g, libstdc++6, libffi6, libtinfo5
+Depends: libgmp10, zlib1g, libstdc++6, libffi7, libtinfo5
 Priority: optional
 Version: $BAP_VERSION
 Description: Binary Analysis Platform C Library
