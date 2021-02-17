@@ -5,7 +5,9 @@ set -e
 sudo apt-get update
 sudo apt-get install alien autoconf --yes
 
+# cmd line args
 BAP_VERSION=$1
+FFI_VERSION=${2:-6}
 echo "version is $BAP_VERSION"
 
 
@@ -135,7 +137,7 @@ cat > $DEBIAN/control <<EOF
 Package: libbap
 Architecture: $ARCH
 Maintainer: Ivan Gotovchits
-Depends: libgmp10, zlib1g, libstdc++6, libffi6, libtinfo5
+Depends: libgmp10, zlib1g, libstdc++6, libffi$FFI_VERSION, libtinfo5
 Priority: optional
 Version: $BAP_VERSION
 Description: Binary Analysis Platform C Library
