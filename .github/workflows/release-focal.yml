@@ -1,0 +1,65 @@
+name: release-focal
+
+on:
+  schedule:
+    - cron: '0 0 * * SUN' # every Saturday
+  workflow_dispatch:
+
+jobs:
+  build:
+     runs-on: ubuntu-20.04
+
+     env:
+       OPAMJOBS: 2
+       OPAMRETRES: 8
+       VERSION: 2.3.0
+
+     steps:
+         - name: Checkout code
+           uses: actions/checkout@v2
+
+         - name: Install OCaml
+           uses: avsm/setup-ocaml@v1
+           with:
+             ocaml-version: 4.11.1+flambda
+
+         - name: Add the testing Repository
+           run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
+         - name: Build deb packages
+           run: ./tools/release.sh ${{ env.VERSION }}+libffi7 7
+
+           # caution: this action overwrite the tag and deletes
+           # releases that are associated with it
+         - name: Get upload URL
+           id: geturl
+           run:   |
+             upload_url=$(curl -sL https://api.github.com/repos/${{ github.repository }}/releases/latest?access_token=${{ secrets.GITHUB_TOKEN }} | jq -r '.upload_url')
+             echo ::set-output name=upload_url::$upload_url
+         - name: Upload Release Asset bap
+           uses: actions/upload-release-asset@v1
+           env:
+             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+           with:
+             upload_url: ${{ steps.geturl.outputs.upload_url }}
+             asset_path: bap/bap_${{ env.VERSION }}+libffi7.deb
+             asset_name: bap_${{ env.VERSION }}+libffi7.deb
+             asset_content_type: application/vnd.debian.binary-package
+         - name: Upload Release Asset libbap
+           uses: actions/upload-release-asset@v1
+           env:
+             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+           with:
+             upload_url: ${{ steps.geturl.outputs.upload_url }}
+             asset_path: bap/libbap_${{ env.VERSION }}+libffi7.deb
+             asset_name: libbap_${{ env.VERSION }}+libffi7.deb
+             asset_content_type: application/vnd.debian.binary-package
+         - name: Upload Release Asset libbap-dev
+           uses: actions/upload-release-asset@v1
+           env:
+             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+           with:
+             upload_url: ${{ steps.geturl.outputs.upload_url }}
+             asset_path: bap/libbap-dev_${{ env.VERSION }}+libffi7.deb
+             asset_name: libbap-dev_${{ env.VERSION }}+libffi7.deb
+             asset_content_type: application/vnd.debian.binary-package
+           
