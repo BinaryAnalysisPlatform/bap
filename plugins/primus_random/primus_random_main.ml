@@ -180,6 +180,7 @@ when the $(b,--primus-promiscuous-mode) is enabled.
 |}
 
 open Core_kernel
+open Bap_core_theory
 open Bap_main
 open Bap.Std
 open Bap_primus.Std
@@ -472,8 +473,7 @@ let main ctxt =
        and then add more specific on top of it.
     *)
     let initialize_regions _ =
-      Machine.arch >>= fun arch ->
-      let width = Arch.addr_size arch |> Size.in_bits in
+      Machine.gets Project.target >>| Theory.Target.bits >>= fun width ->
       List.rev generators |>
       Machine.List.iter ~f:(function
           | {Generator.predicate=Mem Default|Any} -> Machine.return ()
@@ -515,8 +515,7 @@ let main ctxt =
         | _ -> Machine.return ()
 
     let init () =
-      Machine.arch >>= fun arch ->
-      let width = Arch.addr_size arch |> Size.in_bits in
+      Machine.gets Project.target >>| Theory.Target.bits >>= fun width ->
       let generator = Generator.first_match ~seed ~width (function
           | Mem Default | Any -> true
           | _ -> false) generators in

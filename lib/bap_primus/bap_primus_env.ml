@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 open Bap.Std
 open Bap_primus_types
 open Format
@@ -98,8 +99,8 @@ module Make(Machine : Machine) = struct
           s with values = Map.set s.values ~key:var ~data:x
         })
 
-  let null = Machine.get () >>| Project.arch >>| Arch.addr_size >>= fun s ->
-    Value.zero (Size.in_bits s)
+  let null =
+    Machine.gets Project.target >>| Theory.Target.bits >>= Value.zero
 
 
   let del var =

@@ -48,7 +48,7 @@ let string_property ?(domain=name) ~desc cls name =
     ~public:true
     ~desc
 
-module Language = Target.Enum.Make()
+module Language = Knowledge.Enum.Make()
 type language = Language.t
 
 module Source = struct

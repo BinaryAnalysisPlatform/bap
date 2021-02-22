@@ -122,10 +122,8 @@ end = struct
     Seq.sexp_of_t [%sexp_of: Interval.t * string] @@
     Ranges.to_sequence xs
 
-  let width = Ogre.(require Image.Scheme.bits >>| Int64.to_int_trunc)
-
-  let collect stubs =
-    width >>= fun width ->
+  let collect t stubs =
+    let width = Theory.Target.code_addr_size t in
     let module Addr = Bitvec.Make(struct
         let modulus = Bitvec.modulus width
       end) in
@@ -145,7 +143,7 @@ end = struct
       ~init:(Set.of_list (module String) known_stub_names)
       ~f:(fun init -> List.fold ~init ~f:Set.add)
 
-  let create ctxt doc = match Ogre.eval (collect (stubs ctxt)) doc with
+  let create ctxt t doc = match Ogre.eval (collect t (stubs ctxt)) doc with
     | Ok plt -> plt
     | Error err ->
       warning "failed to find plt entries: %a" Error.pp err;
@@ -158,7 +156,7 @@ end = struct
   let slot = KB.Class.property Theory.Unit.cls "stubs-section" t
       ~package:"bap"
       ~public:true
-      ~desc:"an address interval of a stubs section"
+      ~desc:"addresses of the stub sections"
 
   let declare () =
     let open KB.Rule in
@@ -171,8 +169,9 @@ end = struct
     let open KB.Syntax in
     declare ();
     KB.promise slot @@ fun unit ->
+    KB.collect Theory.Unit.target unit >>= fun t ->
     KB.collect Image.Spec.slot unit >>|
-    create ctxt
+    create ctxt t
 end
 
 module Signatures : sig

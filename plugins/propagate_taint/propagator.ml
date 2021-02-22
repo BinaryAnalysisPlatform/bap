@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 open Regular.Std
 open Bap.Std
 
@@ -142,9 +143,9 @@ let memory_lookup proj addr =
     | _ -> None
 
 let register_lookup proj =
-  let arch = Project.arch proj in
-  let width = Arch.addr_size arch |> Size.in_bits in
+  let width = Theory.Target.bits (Project.target proj) in
   let mem_start = Word.of_int64 ~width 0x40000000L in
+  let arch = Project.arch proj in
   let module Target = (val target_of_arch arch) in
   fun var -> Option.some_if (Target.CPU.is_sp var) mem_start
 

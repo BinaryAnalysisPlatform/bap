@@ -5,7 +5,7 @@ Flag primus_dictionary
 Library primus_dictionary_library_plugin
   Build$:       flag(everything) || flag(primus_dictionary)
   Path:         plugins/primus_dictionary
-  BuildDepends: bap-primus, bap, core_kernel
+  BuildDepends: bap-primus, bap, core_kernel, bap-core-theory
   FindlibName:     bap-plugin-primus_dictionary
   CompiledObject:  best
   InternalModules: Primus_dictionary_main

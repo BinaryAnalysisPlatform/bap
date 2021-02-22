@@ -36,5 +36,11 @@ let z9 = Theory.Target.declare ~package "systemz9" ~parent
     ~code:mem
     ~data:mem
     ~vars
+    ~regs:Theory.Role.Register.[
+        [general; integer], untyped gpr;
+        [general; floating], untyped fpr;
+        [link],  untyped [reg r64 "R14"];
+        [stack_pointer], untyped [reg r64 "R15"];
+      ]
 
 let llvm_encoding = Theory.Language.declare ~package "llvm-systemz"

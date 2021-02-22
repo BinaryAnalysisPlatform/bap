@@ -240,7 +240,7 @@ module Make_ppc(S : Spec) : PowerPC = struct
 
   module Bitwidth = struct
     let gpr_bitwidth = S.gpr_bitwidth
-    let fpr_bitwidth = S.gpr_bitwidth
+    let fpr_bitwidth = 64
     let lr_bitwidth  = S.gpr_bitwidth
     let ctr_bitwidth = S.gpr_bitwidth
     let tar_bitwidth = S.gpr_bitwidth

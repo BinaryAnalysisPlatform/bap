@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 open Bap.Std
 open Monads.Std
 open Bap_primus.Std
@@ -60,9 +61,7 @@ module Signals(Machine : Primus.Machine.S) = struct
   let value = Machine.return
   let word = Value.of_word
   let int x =
-    Machine.arch >>= fun arch ->
-    let word_size = Arch.addr_size arch in
-    let width = Size.in_bits word_size in
+    Machine.gets Project.target >>| Theory.Target.bits >>= fun width ->
     word (Word.of_int ~width x)
 
   let sym x = Value.Symbol.to_value x

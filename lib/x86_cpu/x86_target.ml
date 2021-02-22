@@ -26,6 +26,11 @@ let (@<) xs ys = untyped xs @ untyped ys
 let array ?(index=string_of_int) t pref size =
   List.init size ~f:(fun i -> reg t (pref ^ index i))
 
+module Role = struct
+  let index = Theory.Role.declare ~package:"x86" "index"
+  let segment = Theory.Role.declare ~package:"x86" "segment"
+end
+
 module M16 = struct
   let main = [
     reg r16 "AX";
@@ -62,8 +67,26 @@ module M16 = struct
 
   let mems = Theory.Mem.define r16 r8
   let data = Theory.Var.define mems "mem"
-
   let vars = main @< index @< segment @< flags @< [data]
+  let status_regs = Theory.Role.Register.[
+      [status], untyped flags;
+      [integer], untyped [
+        reg bool "CF";
+        reg bool "PF";
+        reg bool "AF";
+        reg bool "ZF";
+        reg bool "SF";
+        reg bool "OF";
+      ];
+    ]
+
+  let regs = Theory.Role.Register.[
+      [general; integer], main @< index @< segment;
+      [stack_pointer], untyped [reg r16 "SP"];
+      [frame_pointer], untyped [reg r16 "BP"];
+      [Role.index], untyped index;
+      [Role.segment], untyped segment;
+    ] @ status_regs
 end
 
 module M32 = struct
@@ -103,6 +126,26 @@ module M32 = struct
   let i486 = i386 @< stx
   let i586 = i486 @< mmx
   let i686 = i586 @< xmmx
+
+  let i386regs = Theory.Role.Register.[
+      [general; integer], main @< index @< segment;
+      [stack_pointer], untyped [reg r32 "ESP"];
+      [frame_pointer], untyped [reg r32 "EBP"];
+      [Role.index], untyped index;
+      [Role.segment], untyped segment;
+    ] @ M16.status_regs
+
+  let i486regs = i386regs @ Theory.Role.Register.[
+      [general; floating], untyped stx;
+    ]
+
+  let i586regs = i486regs @ Theory.Role.Register.[
+      [general; floating], untyped mmx;
+    ]
+
+  let i686regs = i586regs @ Theory.Role.Register.[
+      [general; floating], untyped xmmx;
+    ]
 end
 
 module M64 = struct
@@ -140,6 +183,15 @@ module M64 = struct
 
   let vars = main @< index @< segment @< rx @< stx @< mmx @< xmmx @<
              flags @< [data]
+
+  let regs =  Theory.Role.Register.[
+      [general; integer], main @< index @< segment @< rx;
+      [general; floating], stx @< mmx @< xmmx;
+      [stack_pointer], untyped [reg r64 "RSP"];
+      [frame_pointer], untyped [reg r64 "RBP"];
+      [Role.index], untyped index;
+      [Role.segment], untyped segment;
+    ] @ M16.status_regs
 end
 
 let parent = Theory.Target.declare ~package "x86"
@@ -152,6 +204,7 @@ let i86 = Theory.Target.declare ~package "i86"
     ~data:M16.data
     ~code:M16.data
     ~vars:M16.vars
+    ~regs:M16.regs
     ~endianness:Theory.Endianness.le
 
 let i186 = Theory.Target.declare ~package "i186"
@@ -169,19 +222,25 @@ let i386 = Theory.Target.declare ~package "i386"
     ~data:M32.data
     ~code:M32.data
     ~vars:M32.i386
+    ~regs:M32.i386regs
 
 let i486 = Theory.Target.declare ~package "i486"
     ~parent:i386
     ~nicknames:["486"; "80486"]
     ~vars:M32.i486
+    ~regs:M32.i486regs
 
 let i586 = Theory.Target.declare ~package "i586"
     ~parent:i486
     ~nicknames:["586"; "80586"; "p5"]
+    ~vars:M32.i586
+    ~regs:M32.i586regs
 
 let i686 = Theory.Target.declare ~package "i686"
     ~parent:i586
     ~nicknames:["686"; "80686"; "p6"]
+    ~vars:M32.i686
+    ~regs:M32.i686regs
 
 let amd64 = Theory.Target.declare ~package "amd64"
     ~parent:i686
@@ -190,6 +249,7 @@ let amd64 = Theory.Target.declare ~package "amd64"
     ~data:M64.data
     ~code:M64.data
     ~vars:M64.vars
+    ~regs:M64.regs
 
 
 let family = [amd64; i686; i586; i486; i386; i86]

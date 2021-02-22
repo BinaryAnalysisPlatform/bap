@@ -20,6 +20,7 @@ let bool = Theory.Bool.t
 let reg t n = Theory.Var.define t n
 
 let gpr_names = [
+  "ZERO";
   "AT";
   "V0"; "V1";
   "A0"; "A1"; "A2"; "A3";
@@ -42,20 +43,31 @@ let name size order  =
 
 let parent = Theory.Target.declare ~package "mips"
 
+let array bits pref n =
+  List.init n ~f:(fun i -> reg bits (sprintf "%s%d" pref i))
+
 let define ?(parent=parent) bits endianness =
   let size = Theory.Bitv.size bits in
   let gprs = List.map gpr_names ~f:(reg bits) in
+  let fprs = array bits "R" 32 in
   let mems = Theory.Mem.define bits r8 in
   let data = Theory.Var.define mems "mem" in
-  let vars = gprs @< [data] in
+  let vars = gprs @< fprs @< [data] in
+  let regs = List.map ~f:(fun name -> Theory.Var.forget (reg bits name)) in
   Theory.Target.declare ~package (name size endianness)
     ~parent
     ~bits:size
     ~endianness
-    ~vars
     ~code:data
     ~data:data
-
+    ~vars
+    ~regs:Theory.Role.Register.[
+        [general; integer], regs gpr_names;
+        [general; floating], untyped fprs;
+        [stack_pointer], regs ["SP"];
+        [frame_pointer], regs ["FP"];
+        [link], regs ["RA"];
+      ]
 
 let mips32bi = define r32 Theory.Endianness.bi
 let mips32eb = define r32 Theory.Endianness.eb ~parent:mips32bi

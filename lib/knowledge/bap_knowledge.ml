@@ -3194,6 +3194,63 @@ module Knowledge = struct
   module Name = Name
   type name = Name.t
   module Documentation = Documentation
+
+  module Enum = struct
+    module type S = sig
+      type t
+      val declare : ?package:string -> string -> t
+      val read : ?package:string -> string -> t
+      val name : t -> Name.t
+      val unknown : t
+      val is_unknown : t -> bool
+      val domain : t domain
+      val persistent : t persistent
+      val hash : t -> int
+      val members : unit -> t list
+
+
+      include Base.Comparable.S with type t := t
+      include Binable.S with type t := t
+      include Stringable.S with type t := t
+      include Pretty_printer.S with type t := t
+      include Sexpable.S with type t := t
+    end
+
+    module Make() = struct
+      type t = Name.t [@@deriving bin_io, sexp]
+
+      let elements = Hash_set.create (module Name)
+      let declare ?package name =
+        let name = Name.create ?package name in
+        if Hash_set.mem elements name
+        then invalid_argf
+            "Enum.declare: the element %s is already declared \
+             please choose a unique name" (Name.to_string name) ();
+        Hash_set.add elements name;
+        name
+
+      let read ?package name =
+        let name = Name.read ?package name in
+        if not (Hash_set.mem elements name)
+        then invalid_argf "Enum.read: %s is not a member of the given \
+                           enumeration." (Name.to_string name) ();
+        name
+
+      let name x = x
+      let unknown = Name.of_string ":unknown"
+      let is_unknown = Name.equal unknown
+      let hash = Name.hash
+      let members () = Hash_set.to_list elements
+      include Base.Comparable.Make(Name)
+      include (Name : Stringable.S with type t := t)
+      include (Name : Pretty_printer.S with type t := t)
+      let domain = Domain.flat "enum"
+          ~inspect:sexp_of_t
+          ~empty:unknown
+          ~equal
+      let persistent = Persistent.name
+    end
+  end
 end
 
 type 'a knowledge = 'a Knowledge.t

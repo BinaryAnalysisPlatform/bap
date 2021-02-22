@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 open Bap.Std
 open Bap_primus.Std
 
@@ -101,7 +102,7 @@ let init redirections =
     module Eval = Primus.Interpreter.Make(Machine)
     module Value = Primus.Value.Make(Machine)
     let addr_width =
-      Machine.arch >>| Arch.addr_size >>| Size.in_bits
+      Machine.gets Project.target >>| Theory.Target.bits
     let nil = Value.b0
     let error = addr_width >>= fun w -> Value.of_word (Word.ones w)
     let ok = addr_width >>= Value.zero

@@ -34,14 +34,47 @@ let data = CT.Var.define mems (Var.name Arm_env.mem)
 let of_bil v =
   CT.Var.define (Var.sort v) (Var.name v)
 
-let vars32 = List.map ~f:of_bil Arm_env.[
+let regs xs = untyped@@List.map ~f:of_bil xs
+
+let vars32 = regs Arm_env.[
     r0; r1; r2; r3; r4; r5; r6; r7; r8; r9;
     r10; r11; r12; sp; lr; mem;
     nf; zf; cf; vf; qf;
   ]
 
-let vars32_fp = vars32 @ untyped @@ array r64 "D" 16
 
+let thumb = Theory.Role.declare ~package:"arm" "thumb"
+
+let status_regs = Theory.Role.Register.[
+    [status; integer], regs Arm_env.[nf; zf; cf; vf; qf];
+    [carry_flag], regs Arm_env.[cf];
+    [sign_flag], regs Arm_env.[nf];
+    [zero_flag], regs Arm_env.[zf];
+    [overflow_flag], regs Arm_env.[vf];
+  ]
+
+let regs32 = Theory.Role.Register.[
+    [general; integer], regs Arm_env.[
+        r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12;
+        sp; lr;
+      ];
+    [stack_pointer], regs Arm_env.[sp];
+    [frame_pointer], regs Arm_env.[r11];
+    [link], regs Arm_env.[lr];
+    [thumb], regs Arm_env.[
+        r0; r1; r2; r3; r4; r5; r6; r7; sp; lr;
+      ];
+  ] @ status_regs
+
+let vfp2regs = Theory.Role.Register.[
+    [general; floating], untyped@@array r64 "D" 16;
+  ]
+
+let vfp3regs = Theory.Role.Register.[
+    [general; floating], untyped@@array r64 "D" 32;
+  ]
+
+let vars32_fp = vars32 @ untyped @@ array r64 "D" 16
 
 let gp64 = array r64 "X" 30
 let fp64 = array r128 "Q" 32
@@ -57,6 +90,14 @@ let flags64 = [
 ]
 
 let vars64 = gp64 @< fp64 @< sp64 @< lr64 @< flags64 @< [data64]
+
+let regs64 = Theory.Role.Register.[
+    [general; integer], gp64 @< sp64 @< lr64;
+    [general; floating], untyped fp64;
+    [stack_pointer], untyped sp64;
+    [link], untyped lr64;
+  ] @ status_regs
+
 
 let parent = CT.Target.declare ~package "arm"
 
@@ -120,6 +161,7 @@ module Family (Order : Endianness) = struct
         ~code:data
         ~data:data
         ~vars:vars32
+        ~regs:regs32
 
   let v4t   = v4 <: "armv4t"
   let v5    = v4 <: "armv5"
@@ -142,18 +184,21 @@ module Family (Order : Endianness) = struct
         ~code:data
         ~data:data
         ~vars:vars32
+        ~regs:regs32
 
   let v7m = v7 <: "armv7-m"
 
   let v7fp  = CT.Target.declare ~package (ordered "armv7+fp") ~parent:v7
       ~nicknames:["armv7+fp"]
       ~vars:vars32_fp
+      ~regs:(regs32@vfp3regs)
 
   let v7a    = v7 <: "armv7-a"
   let v7afp  = CT.Target.declare ~package (ordered "armv7-a+fp")
       ~nicknames:["armv7-a+fp"]
       ~parent:v7a
       ~vars:vars32_fp
+      ~regs:(regs32@vfp3regs)
 
   let v8a =
     CT.Target.declare ~package (ordered "armv8-a") ~parent:v7
@@ -162,6 +207,7 @@ module Family (Order : Endianness) = struct
       ~code:data64
       ~data:data64
       ~vars:vars64
+      ~regs:regs64
 
   let v81a = v8a  <: "armv8.1-a"
   let v82a = v81a <: "armv8.2-a"

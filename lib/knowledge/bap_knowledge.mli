@@ -1438,6 +1438,82 @@ module Knowledge : sig
     include Pretty_printer.S with type t := t
   end
 
+
+  (** An extensible enumerated type.
+
+      An enumerated type is a set of names that are represented
+      underneath the hood using the [KB.Name.t].
+
+      The enumerated type had to be declared before used and is
+      commonly referenced as a module declared constant. It is
+      possible, however to reference the enumerated type value using
+      its string representation, via the [read] function.
+
+      @since 2.3.0 (was introduced in 2.2.0 in the Bap_core_theory
+      interface as Theory.Enum, since then was moved here).
+  *)
+  module Enum : sig
+
+    (** The enumerated type interface  *)
+    module type S = sig
+      type t
+      (** [declare ?package name] declares a new element of the enumeration.
+
+          Fails if the name is already declared. *)
+      val declare : ?package:string -> string -> t
+
+      (** [read ?package name] reads the element from its textual representation.
+
+          Fails if the name doesn't represent a previously declared
+          element of the enumeration.
+
+          If [name] is unqualified then [package] is used as the
+          package name. The [package] itself defaults to ["user"].
+
+          See also [of_string s] from the [Stringable] interface which
+          is equal to [read s]
+      *)
+      val read : ?package:string -> string -> t
+
+      (** [name x] is the name that corresponds to the element [x]  *)
+      val name : t -> Name.t
+
+      (** [unknown] is the placeholder for unknown element.  *)
+      val unknown : t
+
+      (** [is_unknown t] is true if [t] is [unknown].  *)
+      val is_unknown : t -> bool
+
+      (** [domain] the type class implementing the domain structure.
+
+          Each enumeration type forms a flat domain with the [unknown]
+          element at the bottom. *)
+      val domain : t domain
+
+      (** [persistent] the persistance type class.
+
+          The enumeration types are persistent and are derived from
+          the [KB.Name.persistent] type class, i.e., they are
+          represented as 63-bit numbers. *)
+      val persistent : t persistent
+
+      (** the hash value of the enum  *)
+      val hash : t -> int
+
+      (** [members ()] the list of all members of the enumeration type. *)
+      val members : unit -> t list
+
+      include Base.Comparable.S with type t := t
+      include Binable.S with type t := t
+      include Stringable.S with type t := t
+      include Pretty_printer.S with type t := t
+      include Sexpable.S with type t := t
+    end
+
+    (** Creates a new enumerated type.  *)
+    module Make() : S
+  end
+
   (** the s-expression denoting the conflict. *)
   val sexp_of_conflict : conflict -> Sexp.t
 

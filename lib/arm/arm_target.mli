@@ -13,6 +13,8 @@ open Bap_core_theory
 *)
 val parent : Theory.Target.t
 
+(** A role for registers available in the thumb mode.  *)
+val thumb : Theory.role
 
 (** The family of little endian targets.
 

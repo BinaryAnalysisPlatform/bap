@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 open Bap.Std
 open Format
 
@@ -121,24 +122,21 @@ let generated,on_generated =
     ~desc:"Occurs when a new value is generated during the load operation"
 
 
-let virtual_memory arch =
-  let module Target = (val target_of_arch arch) in
-  let mem = Target.CPU.mem in
-  match Var.typ mem with
-  | Type.Imm _ | Type.Unk as t ->
-    invalid_argf "The CPU.mem variable %a:%a is not a storage"
-      Var.pps mem Type.pps t ()
-  | Type.Mem (ks,vs) ->
-    let ks = Size.in_bits ks and vs = Size.in_bits vs in
-    Descriptor.create ks vs (Var.name mem)
-
+let virtual_memory target =
+  let mem = Theory.Target.data target in
+  let s = Theory.Var.sort mem in
+  let ks = Theory.Mem.keys s and vs = Theory.Mem.vals s in
+  Descriptor.create
+    (Theory.Bitv.size ks)
+    (Theory.Bitv.size vs)
+    (Theory.Var.name mem)
 
 let state = Bap_primus_machine.State.declare
     ~uuid:"4b94186d-3ae9-48e0-8a93-8c83c747bdbb"
     ~inspect:inspect_memory
     ~name:"memory" @@ fun p -> {
     mems = Descriptor.Map.empty;
-    curr = virtual_memory (Project.arch p);
+    curr = virtual_memory (Project.target p);
   }
 
 let inside {lower; upper} addr =
@@ -305,8 +303,7 @@ module Make(Machine : Machine) = struct
       ?init
       ?generator
       ~lower ~upper () =
-    Machine.gets Project.arch >>= fun arch ->
-    let width = Arch.addr_size arch |> Size.in_bits in
+    Machine.gets Project.target >>| Theory.Target.bits >>= fun width ->
     get_curr >>| add_layer {
       perms={readonly; executable};
       mem = Dynamic {lower;upper; value = match generator with

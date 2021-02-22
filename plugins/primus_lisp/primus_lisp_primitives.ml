@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 open Bap.Std
 open Bap_primus.Std
 
@@ -28,7 +29,7 @@ module Closure(Machine : Primus.Machine.S) = struct
   let failf = Lisp.failf
 
   let addr_width =
-    Machine.arch >>| Arch.addr_size >>| Size.in_bits
+    Machine.gets Project.target >>| Theory.Target.bits
   let endian =
     Machine.arch >>| Arch.endian
   let null = addr_width >>= Value.zero
@@ -129,8 +130,7 @@ module Closure(Machine : Primus.Machine.S) = struct
 
   let memory_allocate addr size rest =
     let module Memory = Primus.Memory.Make(Machine) in
-    Machine.gets Project.arch >>= fun arch ->
-    let width = Arch.addr_size arch |> Size.in_bits in
+    Machine.gets Project.target >>| Theory.Target.bits >>= fun width ->
     let gen = match rest with
       | []  -> Ok None
       | [x] -> make_static_generator width (Value.to_word x)

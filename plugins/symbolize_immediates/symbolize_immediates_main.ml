@@ -22,5 +22,3 @@ let resolver arch syms =
           Bil.(make_var sym + int off)
       | None -> Bil.Int addr
   end)
-
-
