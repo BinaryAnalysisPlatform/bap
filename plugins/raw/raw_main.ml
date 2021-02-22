@@ -17,13 +17,6 @@ module Unix = Caml_unix
 
 module Spec = struct
   open Extension
-  let arch_t =
-    let parse s = match Arch.of_string s with
-      | None -> invalid_argf "Unknown architecture %s" s ()
-      | Some a -> a in
-    let default = `x86_64 in
-    Type.define ~parse ~print:Arch.to_string default
-
   let addr_t =
     Type.define
       ~parse:Bitvec.of_string
@@ -32,7 +25,13 @@ module Spec = struct
 
   let arch = Configuration.parameter
       ~doc:"Specifies the ISA of raw bytes"
-      arch_t "arch"
+      Type.(string=?"x86-64") "arch"
+
+  let bits = Configuration.parameter
+      ~doc:"The number of bits in the machine word. If not specified \
+            then it will be derived from the architecture or default \
+            to 32 if the architecture is not known."
+      Type.(int=?32) "bits"
 
   let entry_points = Configuration.parameter
       ~doc:"Address (or addresses) of entry points"
@@ -53,6 +52,7 @@ end
 
 let doc_template = {|
 (declare arch (name str))
+(declare bits (size int))
 (declare base-address (addr int))
 (declare entry-point (addr int))
 (declare mapped (addr int) (size int) (off int))
@@ -63,6 +63,7 @@ let doc_template = {|
 (declare code-start (addr int))
 
 (arch $arch)
+(bits $bits)
 (base-address $base)
 (entry-point $entry)
 (mapped $base $length $offset)
@@ -76,9 +77,14 @@ let register_loader ctxt =
   Image.register_loader ~name:"raw" (module struct
     let generate measure input =
       let options = Spec.[
-          "arch", Arch.to_string (ctxt-->arch);
+          "arch", (ctxt-->arch);
           "offset", Int64.to_string @@ ctxt-->offset;
           "base", Bitvec.to_string @@ ctxt-->base_address;
+          "bits", Int.to_string @@ begin
+            match Arch.of_string (ctxt-->arch) with
+            | None -> ctxt-->bits
+            | Some arch -> Size.in_bits (Arch.addr_size arch)
+          end;
           "entry", begin match ctxt-->entry_points with
             | [] -> Bitvec.to_string @@ ctxt-->base_address;
             | x :: _ -> Bitvec.to_string x
