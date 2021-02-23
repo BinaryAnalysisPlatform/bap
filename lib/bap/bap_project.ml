@@ -226,7 +226,7 @@ module Input = struct
     | LT | EQ -> target'
     | GT -> target
     | NC -> invalid_argf "the derived target %s is incompatible \
-                          with the target specified by the user - %s"
+                          with the user-specified target %s."
               (Theory.Target.to_string target')
               (Theory.Target.to_string target) ()
 

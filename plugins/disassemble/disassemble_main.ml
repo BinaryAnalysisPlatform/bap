@@ -85,6 +85,7 @@ let man = {|
 open Bap_knowledge
 open Core_kernel
 open Bap.Std
+open Bap_core_theory
 open Regular.Std
 open Monads.Std
 open Format
@@ -245,6 +246,23 @@ let loader =
     Extension.Type.(string =? "llvm")
     "loader"
 
+let target =
+  let t = Extension.Type.define Theory.Target.unknown
+      ~name:"NAME"
+      ~digest:(fun t -> Caml.Digest.string@@Theory.Target.to_string t)
+      ~parse:(fun s -> match Theory.Target.lookup ~package:"bap" s with
+          | Some t -> t
+          | None ->
+            invalid_argf "unknown target %S, please see \
+                          `bap list targets' for the full list \
+                          of targets" s ())
+      ~print:Theory.Target.to_string in
+  Extension.Command.parameter t "target"
+    ~doc:"Refines the target architecture of the binary. \
+          See `bap list targets` for the full hierarchy of targets. \
+          The specified target must be a refinement of the actual \
+          target stored in the binary, otherwise an error is signaled."
+
 let validate_input file =
   Result.ok_if_true (Sys.file_exists file)
     ~error:(Fail (Expects_a_regular_file file))
@@ -344,7 +362,7 @@ let save_knowledge ~had_knowledge ~update digest = function
 
 
 
-let create_and_process input outputs passes loader update kb ctxt =
+let create_and_process input outputs passes loader target update kb ctxt =
   let package = input in
   let digest = make_digest [
       Extension.Configuration.digest ctxt;
@@ -352,7 +370,7 @@ let create_and_process input outputs passes loader update kb ctxt =
       loader;
     ] in
   let had_knowledge = load_knowledge digest kb in
-  let input = Project.Input.file ~loader ~filename:input in
+  let input = Project.Input.load ~target ~loader input in
   Project.create ~package
     input |> proj_error >>= fun proj ->
   process passes outputs proj >>| fun proj ->
@@ -362,18 +380,18 @@ let create_and_process input outputs passes loader update kb ctxt =
 let _disassemble_command_registered : unit =
   let args =
     let open Extension.Command in
-    args $input $outputs $old_style_passes $passes $loader
+    args $input $outputs $old_style_passes $passes $loader $target
     $update $knowledge in
   Extension.Command.declare ~doc:man "disassemble"
     ~requires:features_used args @@
-  fun input outputs old_style_passes passes loader update kb ctxt ->
+  fun input outputs old_style_passes passes loader target update kb ctxt ->
   setup_gc_unless_overriden ();
   validate_knowledge update kb >>= fun () ->
   validate_input input >>= fun () ->
   validate_passes_style old_style_passes (List.concat passes) >>=
   validate_passes >>= fun passes ->
   Dump_formats.parse outputs >>= fun outputs ->
-  create_and_process input outputs passes loader update kb ctxt >>= fun _ ->
+  create_and_process input outputs passes loader target update kb ctxt >>= fun _ ->
   Ok ()
 
 let _compare_command_registered : unit =
@@ -412,11 +430,12 @@ let _compare_command_registered : unit =
     $old_style_passes
     $passes
     $loader
+    $target
     $update
     $knowledge in
   Extension.Command.declare "compare" ~doc ~requires:features_used args @@
   fun collator input inputs outputs old_style_passes passes
-    loader update kb ctxt ->
+    loader target update kb ctxt ->
   match Project.Collator.find ~package:"bap" collator with
   | None -> Error (Fail (Unknown_collator collator))
   | Some collator ->
@@ -427,7 +446,7 @@ let _compare_command_registered : unit =
     Dump_formats.parse outputs >>= fun outputs ->
     let projs =
       Seq.map (Seq.of_list (input::inputs)) ~f:(fun input ->
-          create_and_process input outputs passes loader
+          create_and_process input outputs passes loader target
             update kb ctxt) in
     let exception Escape of Extension.Error.t in
     try
@@ -477,8 +496,11 @@ let nice_pp_error ppf er =
     | With_backtrace (r, backtrace) ->
       Format.fprintf ppf "%a@\n%a" pp r
         pp_backtrace (String.strip backtrace);
-    | String s -> Format.fprintf ppf "%s" s
+    | Sexp (Sexp.List [Atom "Invalid_argument"; Atom s])
+    | String s ->
+      Format.fprintf ppf "%a" pp_print_text s;
     | _ ->
+      Format.eprintf "Error: %a@\n" Sexp.pp_hum (R.sexp_of_t r);
       let msg = Error.to_string_hum er in
       Format.fprintf ppf "%s" msg  in
   Format.fprintf ppf "%a" pp (R.of_info (Error.to_info er))
@@ -494,7 +516,7 @@ let string_of_failure = function
   | Incompatible_options (o1,o2) ->
     sprintf "Bad invocation: the options `%s' and `%s' can not be used together" o1 o2
   | Project err ->
-    asprintf "Failed to build the project:@\n%a" nice_pp_error err
+    asprintf "@[Failed to build the project:@ %a@]" nice_pp_error err
   | Pass (Project.Pass.Unsat_dep (p,s)) ->
     sprintf "Can't run passes - the dependency %S of pass %S is not available."
       s (Project.Pass.name p)
