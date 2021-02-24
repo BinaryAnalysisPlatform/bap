@@ -57,7 +57,8 @@ information (not detailed) about only those %ss that have
 the specified names" what what what
 
 
-let sys_path = Primus_systems_config.path
+
+
 let paths = Extension.Configuration.parameters
     Extension.Type.(list dir) "add-path"
     ~doc:"adds the path to the list of paths where Primus systems \
@@ -68,21 +69,27 @@ let provides = [
   "primus-systems";
 ]
 
+let systems root = Filename.of_parts [root; "primus"; "systems"]
+
 let () = Extension.declare ~provides ~doc @@ fun ctxt ->
   let usr_paths = Extension.Configuration.get ctxt paths |>
                   List.concat in
-  [Filename.current_dir_name] @ usr_paths @ [sys_path] |>
+  [Filename.current_dir_name] @ usr_paths @ Extension.Configuration.[
+      systems datadir;
+      systems sysdatadir;
+    ] |>
   List.iter ~f:(fun path ->
-      Sys.readdir path |>
-      Array.iter ~f:(fun file ->
-          if String.is_suffix file ~suffix:".asd" then
-            let path = Filename.concat path file in
-            match Primus.System.from_file path with
-            | Error failed ->
-              eprintf "Failed to parse system %s: %a@\n%!"
-                file Primus.System.pp_parse_error failed
-            | Ok systems ->
-              List.iter systems ~f:(Primus.System.Repository.add)));
+      if Sys.file_exists path && Sys.is_directory path then
+        Sys.readdir path |>
+        Array.iter ~f:(fun file ->
+            if String.is_suffix file ~suffix:".asd" then
+              let path = Filename.concat path file in
+              match Primus.System.from_file path with
+              | Error failed ->
+                eprintf "Failed to parse system %s: %a@\n%!"
+                  file Primus.System.pp_parse_error failed
+              | Ok systems ->
+                List.iter systems ~f:(Primus.System.Repository.add)));
   Ok ()
 
 let names =

@@ -23,14 +23,29 @@ val save : ?comp:string -> mode:string -> path:string -> arch -> bytes ->
 
 
 (** [load ?comp ?path ~mode arch] finds a signature for the specified
-    [arch-comp-path] triple. The [path] defaults to [default_path].*)
+    [arch-comp-path] triple.
+
+    If [path] is not set, the the signatures are looked up first in
+    [default_path] and, if not found, in [system_path].
+
+    Since 2.3.0 the path search has changed to look into two
+    locations.
+*)
 val load : ?comp:string -> ?path:string -> mode:string -> arch ->
   (bytes,error) Result.t
 
 
-(** default path for the signatures database  *)
+(** default path for the user's signatures database.
+
+    Since 2.3.0 it is pointed to the user-specific location, not
+    to the system-wide. See also {!system_path}.
+*)
 val default_path : string
 
+(** the path to the system-wide location of signatures.
+
+    @since 2.3.0*)
+val system_path : string
 
 (** a human readable representation of an error.  *)
 val string_of_error : error -> string

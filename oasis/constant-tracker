@@ -11,5 +11,5 @@ Library constant_tracker_plugin
   CompiledObject:  best
   InternalModules: Constant_tracker_main
   XMETADescription: Constant Tracking Analysis based on Primus
-  DataFiles:        lisp/*.lisp ($constant_tracker_lisp_path)
+  DataFiles:        lisp/*.lisp ($datadir/bap/primus/site-lisp)
   XMETAExtraLines:  tags="primus, lisp, analysis"

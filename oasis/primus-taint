@@ -10,6 +10,6 @@ Library primus_taint_plugin
   CompiledObject: best
   BuildDepends: bap-primus, bap-taint, bap, core_kernel, regular, monads
   XMETADescription: a taint analysis control interface
-  DataFiles:        lisp/*.lisp ($primus_taint_lisp_path)
+  DataFiles:        lisp/*.lisp ($datadir/bap/primus/site-lisp)
   InternalModules: Primus_taint_main, Primus_taint_policies
   XMETAExtraLines:  tags="dataflow, pass, taint, primus, primus-lisp"

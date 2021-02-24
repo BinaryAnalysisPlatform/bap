@@ -1,5 +1,0 @@
-let () =
-  add_variable ~doc:"path to store api files" "api_path"
-    ~define:(function
-        | None -> "$datadir/bap-api"
-        | Some p -> p)

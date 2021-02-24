@@ -442,7 +442,9 @@ type ctxt
 
     @parameter default_command, if specified, then this command will
     be used when command line arguments are provided but do not
-    specify a command. @since 2.1.0.
+    specify a command.
+
+    @since 2.1.0.
 *)
 val init :
   ?features:string list ->
@@ -1135,9 +1137,40 @@ module Extension : sig
     val version : string
 
 
-    (** [datadir] a directory for BAP readonly data. *)
+    (** [datadir] a directory for user-specific BAP readonly data.
+
+        The folder is either $XDG_DATA_HOME/bap or
+        $HOME/.local/share/bap if the former is not set.
+
+        If $HOME is also not set then it defaults just to the
+        current workding directory.
+
+        Plugins are encouraged to use this folder as the base folder
+        and store their information in subfolders of it.
+
+        before 2.3.0 the value of this parameter was equal to [sysconfdir]
+    *)
     val datadir : string
 
+
+
+    (** [cachedir] folder for user-specific non-essential data files.
+
+        It is either $XDG_CACHE_HOME/bap or $HOME/.cache/bap or
+        $TMP/bap/cache, depending on whether the corresponding
+        variables are set.
+
+        @since 2.3.0
+    *)
+    val cachedir : string
+
+
+    (** [sysdatadir] a directory for system-specific BAP readonly data
+
+        @since 2.3.0 before that version it was named [datadir]
+
+    *)
+    val sysdatadir : string
 
     (** [libdir] a directory for BAP object files,
         libraries, and internal binaries that are not intended to be

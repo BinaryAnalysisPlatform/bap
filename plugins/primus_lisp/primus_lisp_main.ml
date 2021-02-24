@@ -6,10 +6,18 @@ open Bap_primus.Std
 open Format
 include Self()
 
-module Lisp_config = Primus_lisp_config
 module Primitives = Primus_lisp_primitives
 module Semantics_primitives = Primus_lisp_semantic_primitives
 module Channels = Primus_lisp_io
+module Configuration = Bap_main.Extension.Configuration
+
+let library_paths =
+  let (/) = Filename.concat in Configuration.[
+      datadir / "primus" / "lisp";
+      sysdatadir / "primus" / "site-lisp";
+      sysdatadir / "primus" / "lisp";
+    ] |> List.filter ~f:(fun p ->
+      Sys.file_exists p && Sys.is_directory p)
 
 let dump_program prog =
   let margin = get_margin () in
@@ -329,12 +337,18 @@ module Semantics = struct
         then paths,site::fs
         else paths,fs)
 
-  let path = Filename.concat Lisp_config.library "semantics"
+  let default_sites =
+    let (/) = Filename.concat in Configuration.[
+        datadir / "primus" / "semantics";
+        sysdatadir / "primus" / "semantics";
+      ] |> List.filter ~f:(fun p ->
+        Sys.file_exists p && Sys.is_directory p)
+
 
   let load_lisp_sources sites =
-    let sites = path :: sites in
+    let sites = sites @ default_sites in
     let paths, features = collect_features sites in
-    let paths = Filename.current_dir_name :: Lisp_config.library :: paths in
+    let paths = Filename.current_dir_name :: paths @ library_paths in
     let prog t =
       pack@@load_program paths features@@Project.empty t in
     KB.promise Theory.Unit.source @@ fun this ->
@@ -410,7 +424,7 @@ let () =
         Project.register_pass' ~deps:["api"] ~autorun:true Documentation.print;
       if !!enable_typecheck then
         Project.register_pass' ~deps:["api"] ~autorun:true typecheck;
-      let paths = [Filename.current_dir_name] @ !!libs @ [Lisp_config.library] in
+      let paths = [Filename.current_dir_name] @ !!libs @ library_paths in
       let features = "init" :: !!features in
       Primus.Components.register_generic ~package:"bap" "lisp-type-checker"
         (module TypeErrorSummary)

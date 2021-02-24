@@ -11,5 +11,5 @@ Library primus_test_library_plugin
   CompiledObject:  best
   InternalModules: Primus_test_main
   XMETADescription: Primus Program Testing and Verification Kit
-  DataFiles:        lisp/*.lisp ($primus_test_lisp_path)
+  DataFiles:        lisp/*.lisp ($datadir/bap/primus/site-lisp)
   XMETAExtraLines:  tags="primus, lisp"

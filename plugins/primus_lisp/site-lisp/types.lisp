@@ -91,7 +91,3 @@
 (defun ptr_t () (word-width))
 (defun double () 64)
 (defun float () 32)
-
-(defmacro cast (type x) (extract  (-1 (type)) 0 x))
-(defmacro bitwidth (type) (type))
-(defmacro sizeof (type) (/ (bitwidth type) 8))

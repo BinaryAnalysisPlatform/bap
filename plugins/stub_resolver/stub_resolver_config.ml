@@ -1,1 +1,0 @@
-let signatures_path = "/home/ivg/.opam/4.09.0/share/bap"

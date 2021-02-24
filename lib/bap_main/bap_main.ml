@@ -31,13 +31,48 @@ type plugin_info = {
 
 *)
 module ConfigFile : sig
-  (** [read filename] reads configuration from
-      a file with the given [filename].
+  (** reads the configuration from all configuration files.
 
-      Fails, if the file doesn't exist or is malformed.
+      The order of the paramaters in the returned mapping matters,
+      the first occurence comes from the most specific file and must
+      prevail over the later occurences.
   *)
-  val read_or_fail : string -> (string * string) list
+  val read : unit -> (string * string) list
 end = struct
+  let conf_dirs = [
+    [`V "HOME"; `P ".config"; `P "bap"];
+    [`V "XDG_CONFIG_HOME"; `P "bap"];
+    [`P Bap_main_config.confdir];
+  ]
+
+  let eval_parts xs = Option.all @@ List.map xs ~f:(function
+      | `P p -> Some p
+      | `V v -> Sys.getenv_opt v)
+
+  let concat_parts xs =
+    Option.(eval_parts xs >>= List.reduce ~f:Filename.concat)
+
+  let dedup xs =
+    let elts = Hash_set.of_list (module String) xs in
+    List.filter xs ~f:(fun elt ->
+        let fresh = Hash_set.mem elts elt in
+        if fresh then Hash_set.remove elts elt;
+        fresh)
+
+  let readdir dir =
+    let files = Sys.readdir dir |>
+                Array.map ~f:(Filename.concat dir) in
+    Array.sort files ~compare:String.compare;
+    Array.to_list files
+
+  let files init =
+    List.filter_map init ~f:concat_parts |>
+    List.concat_map ~f:(fun dir ->
+        if Sys.file_exists dir &&
+           Sys.is_directory dir
+        then readdir dir
+        else [])
+
   let is_empty =
     String.for_all ~f:Char.is_whitespace
 
@@ -57,7 +92,8 @@ end = struct
         Some (String.strip k, String.strip v)
 
   let read_or_fail filename =
-    if not (Stdlib.Sys.file_exists filename) then []
+    if not (Sys.file_exists filename) ||
+       Sys.is_directory filename then []
     else try In_channel.with_file filename ~f:(fun ch ->
         In_channel.input_lines ch |>
         List.filter_mapi ~f:parse_config_entry)
@@ -68,6 +104,9 @@ end = struct
         fail "File %S, line %d, characters %d-%d\n\
               Syntax error: expects <parameter> = <value>"
           filename (linenum+1) 1 (String.length str + 1)
+
+  let read () =
+    List.concat_map (files conf_dirs) ~f:read_or_fail
 end
 
 module Type = struct
@@ -152,12 +191,19 @@ module Type = struct
     | r -> r
 
   let digest_path p =
-    if Sys.is_directory p then snd (digest_files p)
-    else Digest.file p
+    if Sys.file_exists p then
+      if Sys.is_directory p then snd (digest_files p)
+      else Digest.file p
+    else Digest.string "no-file"
+
+  let digest_file p =
+    if Sys.file_exists p
+    then Digest.file p
+    else Digest.string "no-file"
 
   let file = wrap ~digest:digest_path Arg.file ""
   let dir = wrap ~digest:digest_path Arg.dir ""
-  let non_dir_file = wrap ~digest:Digest.file Arg.non_dir_file ""
+  let non_dir_file = wrap ~digest:digest_file Arg.non_dir_file ""
 
 
   (* lift cmdliner into our converters *)
@@ -639,6 +685,11 @@ module Grammar : sig
     ?command:string ->
     ?err:Format.formatter ->
     string array -> (unit, Error.t) Result.t
+
+  val load_plugins :
+    ?env:string list ->
+    ?provides:string list ->
+    library:string list -> unit -> (plugin, string * Base.Error.t) Result.t list
 end = struct
   open Cmdliner
 
@@ -832,16 +883,12 @@ end = struct
         cons = merge cons info.cons
       }
 
-  let () = Stream.observe Plugins.events @@ function
+  let hook_plugin_loads () =
+    let config = ConfigFile.read () in
+    Stream.observe Plugins.events @@ function
     | `Loaded p ->
       let name = Plugin.name p in
-      let (/) = Stdlib.Filename.concat in
-      let filename = Bap_main_config.confdir / "config" in
-      let ctxt = {
-        name;
-        config = ConfigFile.read_or_fail filename
-      } in
-      let term = !plugin_spec ctxt in
+      let term = !plugin_spec {name; config} in
       let info = update_from_bundle !plugin_info p in
       let man = match !plugin_page with
         | [] -> Markdown.to_manpage info.docs
@@ -858,6 +905,10 @@ end = struct
       Hashtbl.add_exn plugin_specs name term;
     | `Errored _ -> reset_plugin ()
     | _ -> ()
+
+  let load_plugins ?env ?provides ~library ()=
+    hook_plugin_loads ();
+    Plugins.load ?env ?provides ~library ()
 
   let option_name ctxt name = sprintf "%s-%s" ctxt.name name
 
@@ -1112,6 +1163,23 @@ module Extension = struct
     let doc_enum = Arg.doc_alts_enum
 
     include Bap_main_config
+    let sysdatadir = datadir
+
+    let (/) = Filename.concat
+
+    let datadir =
+      match Sys.getenv_opt "XDG_DATA_HOME" with
+      | Some dir -> dir / "bap"
+      | None -> match Sys.getenv_opt "HOME" with
+        | Some dir -> dir / ".local" / "share" / "bap"
+        | None -> Sys.getcwd ()
+
+    let cachedir = match Sys.getenv_opt "XDG_CACHE_HOME" with
+      | Some dir -> dir / "bap"
+      | None -> match Sys.getenv_opt "HOME" with
+        | Some dir -> dir / ".cache" / "bap"
+        | None -> Filename.get_temp_dir_name () / "bap" / "cache"
+
     include Context
   end
 
@@ -1195,7 +1263,9 @@ let init
       | None -> match Pre.(extract ?env plugin_locations argv) with
         | None -> []
         | Some libs -> libs in
-    let result = Plugins.load ?env:features ?provides:requires ~library () in
+    let result =
+      Grammar.load_plugins ()
+        ?env:features ?provides:requires ~library in
     let plugins,failures =
       List.partition_map result ~f:(function
           | Ok p -> First p
