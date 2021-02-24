@@ -239,7 +239,7 @@ module Parse = struct
 
   let parse_declaration attrs tree =
     try Attribute.parse attrs tree
-    with Attribute.Bad_syntax (err,trees) ->
+    with Attribute.Failure (err,trees) ->
       raise (Attribute_parse_error (err,trees,tree))
 
   let parse_declarations attrs =
@@ -284,11 +284,9 @@ module Parse = struct
     | _ -> false
 
   let constrained prog attrs =
-    match Attribute.Set.get attrs Context.t with
-    | None -> prog
-    | Some constraints ->
-      Program.with_context prog @@
-      Context.merge (Program.context prog) constraints
+    Program.with_context prog @@
+    Context.merge (Program.context prog) @@
+    Attribute.Set.get Context.t attrs
 
   let defun ?docs ?(attrs=[]) name p body prog gattrs tree =
     let attrs = parse_declarations gattrs attrs in

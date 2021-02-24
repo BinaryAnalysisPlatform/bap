@@ -37,9 +37,8 @@ type exn += Failed of string * Context.t * resolution
 
 let interns d name = String.equal (Def.name d) name
 let externs def name =
-  match Attribute.Set.get (Def.attributes def) External.t with
-  | None -> false
-  | Some names -> List.mem ~equal:String.equal names name
+  let names = Attribute.Set.get External.t (Def.attributes def) in
+  Set.mem names name
 
 
 
@@ -48,26 +47,24 @@ let stage1 has_name defs name =
   List.filter defs ~f:(fun def -> has_name def name)
 
 let context def =
-  match Attribute.Set.get (Def.attributes def) Context.t with
-  | Some cx -> cx
-  | None -> Context.empty
+  Attribute.Set.get Context.t (Def.attributes def)
 
 
 let compare_def d1 d2 =
-  Context.(compare (context d1) (context d2))
+  Context.(order (context d1) (context d2))
 
 (* all definitions that satisfy the [ctxts] constraint *)
 let stage2 (global : Context.t) defs =
-  List.filter defs ~f:(fun def -> Context.(global <= context def))
+  List.filter defs ~f:(fun def -> Context.(context def <= global))
 
-(* returns a set of lower bounds from the given set of definitions. *)
+(* returns a set of upper bounds from the given set of definitions. *)
 let stage3 s2  =
   List.fold s2 ~init:[] ~f:(fun cs d -> match cs with
       | [] -> [d]
       | c :: cs -> match compare_def d c with
-        | Same | Equiv -> d :: c :: cs
-        | More -> c :: cs
-        | Less -> [d])
+        | EQ | NC -> d :: c :: cs
+        | LT -> c :: cs
+        | GT -> [d])
 
 (* ensures that all definitions belong to the same context class.
 
@@ -95,7 +92,7 @@ let stage3 s2  =
 let stage4 = function
   | [] -> []
   | x :: xs -> if List.for_all xs ~f:(fun y -> match compare_def x y with
-      | Same -> true
+      | EQ -> true
       | _ -> false)
     then x::xs
     else []

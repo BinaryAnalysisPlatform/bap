@@ -184,15 +184,17 @@ let declare
   t
 
 let lookup ?package name =
-  let name = Self.read ?package name in
-  if Hashtbl.mem targets name then Some name
-  else None
+  try Some (Self.read ?package name)
+  with _exn -> None
 
 let get ?package name =
-  let name = Self.read ?package name in
-  if not (Hashtbl.mem targets name)
-  then invalid_argf "Unknown target %s" (Self.to_string name) ();
-  name
+  match lookup ?package name with
+  | None ->
+    invalid_argf
+      "Unknown target %s. \
+       Use `bap list targets' for the list of targets"
+      name ();
+  | Some t -> t
 
 let read = get
 

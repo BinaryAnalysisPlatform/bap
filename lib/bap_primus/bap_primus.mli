@@ -3223,8 +3223,8 @@ module Std : sig
         [memory-written], but also proclaims it as advice function to
         the [memory-write] function that should before it is called.
 
-        If an advisor is attached before the advised function, then
-        it the advisor will be called with the same arguments as the
+        If an advisor is attached before the advised function then
+        the advisor will be called with the same arguments as the
         advised function. The return value of the advisor is
         ignored. The advisor function will be called as a normal Lisp
         function, with all expected overloading and name resolving. So
@@ -3237,7 +3237,7 @@ module Std : sig
         the advised function. The value returned by the advisor will
         override the result of the advised function. If there are
         several advisors attached after the same function, then they
-        will be called in the unspecified order.
+        will be called in an unspecified order.
 
 
         {2 Signaling Mechanims}
@@ -3345,7 +3345,12 @@ var ::= <ident> | <ident>:<size>
 attribute ::=
   | (external <ident> ...)
   | (context (<ident> <ident> ...) ...)
+  | (global <ident> ...)
+  | (static <ident> ...)
+  | (advice <cmethod> <ident> ...)
   | (<ident> ?ident-specific-format?)
+
+cmethod ::= :before | :after
 
 docstring ::= <text>
 
@@ -3373,135 +3378,6 @@ ident ::= ?any atom that is not recognized as a <word>?
       (** an abstract type that represents messages send with the
           [msg] form. *)
       type message
-
-
-      (** The static semantics of Primus Lisp.
-
-          @warning this module is currently highly experimental and is
-          subject to change. Use with caution.
-
-          @since 2.3.0
-      *)
-      module Semantics : sig
-
-        (** A Primus Lisp primitive  *)
-        type primitive
-
-        (** a program is a property of the Unit source. *)
-        val program : (Theory.Source.cls, program) KB.slot
-
-        (** a primitive operation  *)
-        val primitive : (Theory.program, primitive option) KB.slot
-
-        (** a statically known symbolic value  *)
-        val symbol : (Theory.Value.cls, String.t option) KB.slot
-
-        (** a statically known value of an operation *)
-        val static : (Theory.Value.cls, Bitvec.t option) KB.slot
-
-        (** [enable ()] enables the semantics of Primus Lisp programs.
-
-            This function registers a rule in the knowledge base that
-            has the following form,
-
-            {v
-              -- reifies Primus Lisp definitions
-              primus-lisp-semantics ::=
-                primus-lisp-program
-                core-theory:unit-target
-                core-theory:unit-source
-                core-theory:label-unit
-                core-theory:label-name
-                ---------------------------
-                core-theory:semantics
-            v}
-
-            The rule provides semantics to the program objects that
-            belong to a Primus Lisp unit (created with [Unit.create)].
-            The [Theory.Label.name] property of the program object is
-            use to lookup for a matching definition in the program
-            that is stored in the unit's source.
-
-            This function is by default called by the [primus-lisp]
-            plugin. This plugin also implements core primitives and
-            provides a loader that will load all features specified
-            via the [--primus-lisp-load] command-line argument to any
-            Primus Lisp unit. Therefore, if the [primus-lisp] plugin
-            is loaded in order to reify a lisp definition into a
-            {!Theory.Semantics} value, use the following code,
-
-            {[
-              let reify_def name : unit Theory.eff =
-                Theory.Label.for_name name >>= fun obj ->
-                Unit.create Theory.Target.unknown >>= fun unit ->
-                KB.provide Theory.Label.unit obj (Some unit) >>= fun () ->
-                KB.collect Theory.Semantics.slot obj
-            ]}
-
-            Note, if you don't want to use the program loader provided
-            by the [primus-lisp] plugin then just set manually the
-            source field with the Lisp program of you choice.
-        *)
-        val enable : unit -> unit
-
-
-        (** Primus primitives.
-
-            New primitives are implemented as a knowledge base
-            promises to provide [Theory.Semantics.slot] for an
-            object that has the [primitive] property.
-
-            Example,
-
-            {[
-              KB.promise Theory.Semantics.slot @@ fun obj ->
-              KB.collect Sema.primitive obj >>= function
-              | None -> Insn.empty
-              | Some p -> match Primitive.name p with
-                | "boo" ->
-                  Theory.instance () >>= Theory.require >>=
-                  fun (module CT) ->
-                  (* ... operations in CT ... *)
-
-                | _ -> !!Insn.empty
-            ]}
-
-        *)
-        module Primitive : sig
-          type t = primitive
-
-
-          (** the primitive name  *)
-          val name : t -> string
-
-          (** the list of primitive arguments. *)
-          val args : t -> unit Theory.Value.t list
-        end
-      end
-
-
-      (** A Primus Lisp module.
-
-          Primus Lisp programs are packed in modules in the knowledge
-          base. The module has the {!Theory.Unit.source} field that
-          contains the program and other relevant fields. The source
-          language is set to {!Unit.language}.
-      *)
-      module Unit : sig
-
-        (** [create ?name target] creates a Lisp unit.
-
-            The unit target field is set to [target] and the name is
-            interned in the [lisp] package. *)
-        val create : ?name:string -> Theory.Target.t -> Theory.Unit.t KB.t
-
-
-        (** [is_lisp unit] is true if [unit] was created with {!create}. *)
-        val is_lisp : Theory.Unit.t -> bool KB.t
-
-        (** The language identifier for Primus Lisp.  *)
-        val language : Theory.language
-      end
 
       (** Primus Lisp program loader  *)
       module Load : sig
@@ -3588,7 +3464,7 @@ ident ::= ?any atom that is not recognized as a <word>?
         type t
 
 
-        (** Typing environemnt is a mapping from expressions to types.  *)
+        (** Typing environment is a mapping from expressions to types.  *)
         type env
 
         (** Definition signature  *)
@@ -3733,6 +3609,268 @@ ident ::= ?any atom that is not recognized as a <word>?
             [err] into the formatter [ppf] *)
         val pp_error : Format.formatter -> error -> unit
       end
+
+      (** The static semantics of Primus Lisp program.
+
+          @warning this module is currently highly experimental and is
+          subject to change. Use with caution.
+
+          @since 2.3.0
+      *)
+      module Semantics : sig
+
+
+        (** occurs when no matching definition is found
+
+            The reason why no match is selected is provided as the
+            payload.
+        *)
+        type KB.conflict += Unresolved_definition of string
+
+
+        (** occurs when the Lisp program is ill-typed  *)
+        type KB.conflict += Illtyped_program of Type.error list
+
+
+        (** a property of the program source object in which
+            a Lisp program is stored.
+
+            This property is used by the Lisp semantics provider to
+            lookup for the definitions.
+        *)
+        val program : (Theory.Source.cls, program) KB.slot
+
+
+        (** The Primus Lisp definition to which the program belongs.
+
+            This property stores the label to the original program for
+            which the semantics was requested. It is useful in the
+            implementation of primitives that require access to the
+            context, for example, to access the original instruction
+            address (when Primus Lisp is used to represent the
+            semantics of an instruction) or to the declared attribute
+            of the Primus Lisp definition.
+        *)
+        val definition : (Theory.program, Theory.Label.t option) KB.slot
+
+        (** the name of a lisp program *)
+        val name : (Theory.program, string option) KB.slot
+
+        (** the arguments of a lisp program   *)
+        val args : (Theory.program, unit Theory.Value.t list option) KB.slot
+
+        (** a statically known symbolic value  *)
+        val symbol : (Theory.Value.cls, String.t option) KB.slot
+
+        (** a statically known value of an operation *)
+        val static : (Theory.Value.cls, Bitvec.t option) KB.slot
+
+        (** [enable ()] enables the semantics of Primus Lisp programs.
+
+            This function registers a rule in the knowledge base that
+            has the following form,
+
+            {v
+              -- reifies Primus Lisp definitions
+              primus-lisp-semantics ::=
+                bap:primus-lisp-program
+                core-theory:unit-target
+                core-theory:unit-source
+                core-theory:label-unit
+                bap:lisp-args
+                bap:lisp-name
+                -----------------------
+                core-theory:semantics
+
+            v}
+
+            The rule provides semantics to the program objects that
+            have a unit with Primus Lisp source code available (the
+            {!program} property).
+
+            This function is by default called by the [primus-lisp]
+            plugin. This plugin also implements core primitives and
+            provides a loader that will load all features specified
+            via the [--primus-lisp-load] command-line argument to any
+            Primus Lisp unit. Therefore, if the [primus-lisp] plugin
+            is loaded in order to reify a lisp definition into a
+            {!Theory.Semantics} value, use the following code,
+
+            {[
+              let reify_def name : unit Theory.eff =
+                Theory.Label.for_name name >>= fun obj ->
+                Unit.create Theory.Target.unknown >>= fun unit ->
+                KB.provide Theory.Label.unit obj (Some unit) >>= fun () ->
+                KB.collect Theory.Semantics.slot obj
+            ]}
+
+            Note, if you don't want to use the program loader provided
+            by the [primus-lisp] plugin then just set manually the
+            source field with the Lisp program of you choice.
+
+            @param stdout is the formatter that is used by the [msg]
+            form to print messages.
+        *)
+        val enable : ?stdout:Format.formatter -> unit -> unit
+
+
+        (** Primus primitives.
+
+            New primitives are implemented as a knowledge base
+            promises to provide [Theory.Semantics.slot] for an
+            object that has the [primitive] property.
+
+            Example,
+
+            {[
+              KB.promise Theory.Semantics.slot @@ fun obj ->
+              KB.collect Sema.primitive obj >>= function
+              | None -> Insn.empty
+              | Some p -> match Primitive.name p with
+                | "boo" ->
+                  Theory.instance () >>= Theory.require >>=
+                  fun (module CT) ->
+                  (* ... operations in CT ... *)
+
+                | _ -> !!Insn.empty
+            ]}
+
+        *)
+        val declare :
+          ?types:Type.signature ->
+          ?docs:string -> string -> unit
+      end
+
+
+      (** A Primus Lisp module.
+
+          Primus Lisp programs are packed in modules in the knowledge
+          base. The module has the {!Theory.Unit.source} field that
+          contains the program and other relevant fields. The source
+          language is set to {!Unit.language}.
+
+          @since 2.3.0
+      *)
+      module Unit : sig
+
+        (** [create ?name target] creates a Lisp unit.
+
+            The unit target field is set to [target] and the name is
+            interned in the [lisp] package. *)
+        val create : ?name:string -> Theory.Target.t -> Theory.Unit.t KB.t
+
+
+        (** [is_lisp unit] is true if [unit] was created with {!create}. *)
+        val is_lisp : Theory.Unit.t -> bool KB.t
+
+        (** The language identifier for Primus Lisp.  *)
+        val language : Theory.language
+      end
+
+      (** Primus Lisp Attributes.
+
+          This module enables declaring new attributes as well as
+          accessing definition attributes via the knowledge base using
+          {!Attribute.Set.slot}.
+
+          @since 2.3.0
+      *)
+      module Attribute : sig
+
+        (** the abstract type the enables access to an attribute.  *)
+        type 'a t
+
+
+        (** the abstract type denoting a set of attributes  *)
+        type set
+
+
+        (** The interface to the abstract parse tree.
+
+            The parse tree is a functionally an s-expression.
+        *)
+        module Parse : sig
+          type tree
+
+
+          (** an extensible type for reporting ill-formed attributes.  *)
+          type error = ..
+          type error += Expect_atom | Expect_list
+
+
+          (** [atom tree] is [Some atom] if tree is an atom.  *)
+          val atom : tree -> string option
+
+          (** [list tree] is [Some list] if tree is an list.  *)
+          val list : tree -> tree list option
+
+
+          (** [tree ~atom:f ~list:g tree] parses tree.
+
+              Calls [f x] if [atom tree] is not [None],
+              otherwise calls [g x]. *)
+          val tree :
+            atom : (string -> 'a) ->
+            list : (tree list -> 'a) ->
+            tree -> 'a
+
+          (** [fail problem tree] reports an ill-formed attribute
+              declaration.
+
+              The passed [tree] is used to properly report error
+              that references the original source code and its
+              location.
+
+              It could be an empty if the problem is somewhat generic
+              and doesn't reference any particular tree or source. *)
+          val fail : error -> tree list -> _
+        end
+
+
+        (** [declare ~domain ~parse name] declares a new attribute.
+
+            The [domain] defines the domain structure of the attribute
+            carrier. When attributes are accumulated they should agree
+            with respect to the domain ordering. The [domain]'s [join]
+            function will be used to accumulate attributes of a
+            definition that are declared on different scopes.
+
+            The [parse] function denotes the concrete syntax of the
+            attribute, it is called for each declaration of the form
+            {v(<name> <payload>v} and applied to the
+            {v<payload>v}. The result is then merged with the existing
+            value of this attribute using the join function from the
+            provided domain.
+        *)
+        val declare :
+          ?desc:string ->
+          ?package:string ->
+          domain:'a KB.domain ->
+          parse:(Parse.tree list -> 'a) ->
+          string -> 'a t
+
+
+        (** The set of attributes.
+
+            We represent the set of attributes as an abstracted value.
+        *)
+        module Set : sig
+          include KB.Value.S with type t := set
+
+          (** [get attr set] extracts the value of the attribute from
+              the set.  *)
+          val get : 'a t -> set -> 'a
+
+
+          (** provides access to the definition's set of attributes.
+
+              This slot is provided when {!Semantics.enable} function
+              is called (it is called if the primus-lisp plugin is
+              enabled.  *)
+          val slot : (Theory.program, set) KB.slot
+        end
+      end
+
 
       (** Lisp Machine Message interface.
 

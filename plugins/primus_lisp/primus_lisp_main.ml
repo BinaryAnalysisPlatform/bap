@@ -8,7 +8,14 @@ include Self()
 
 module Lisp_config = Primus_lisp_config
 module Primitives = Primus_lisp_primitives
+module Semantics_primitives = Primus_lisp_semantic_primitives
 module Channels = Primus_lisp_io
+
+let dump_program prog =
+  let margin = get_margin () in
+  set_margin 64;
+  printf "%a@\n%!" Primus.Lisp.Load.pp_program prog;
+  set_margin margin
 
 let load_program paths features project =
   match Primus.Lisp.Load.program ~paths project features with
@@ -16,12 +23,6 @@ let load_program paths features project =
   | Error err ->
     let err = asprintf "%a" Primus.Lisp.Load.pp_error err in
     invalid_arg err
-
-let dump_program prog =
-  let margin = get_margin () in
-  set_margin 64;
-  printf "%a@\n%!" Primus.Lisp.Load.pp_program prog;
-  set_margin margin
 
 module Documentation = struct
   let pp_index ppf index =
@@ -232,30 +233,121 @@ module TypeErrorPrinter(Machine : Primus.Machine.S) = struct
     Primus.Lisp.Type.error >>> report
 end
 
-let load_lisp_unit ~paths ~features =
-  let open Bap_core_theory in let open KB.Syntax in
-  let module Lisp = Primus.Lisp in
-  let (:=) p x v = KB.Value.put p v x in
-  let empty = KB.Value.empty Theory.Source.cls in
+module Semantics = struct
+  open Bap_core_theory
+  open KB.Syntax
+  module Lisp = Primus.Lisp
+  module Insn = Disasm_expert.Basic.Insn
+
+  let (:=) p x v = KB.Value.put p v x
+  let empty = KB.Value.empty Theory.Source.cls
   let pack prog = List.fold ~init:empty [
       Theory.Source.language := Lisp.Unit.language;
       Lisp.Semantics.program := prog;
-    ] ~f:(|>) in
-  KB.Rule.(begin
-      declare "primus-lisp-program" |>
-      require Theory.Label.unit          |>
-      require Theory.Unit.target         |>
-      provide Lisp.Semantics.program |>
-      comment "loads a program to the Lisp unit"
-    end);
-  KB.promise Theory.Unit.source @@ fun unit ->
-  Lisp.Unit.is_lisp unit >>= function
-  | false -> !!empty
-  | true ->
-    KB.collect Theory.Unit.target unit >>| fun target ->
-    pack @@
-    load_program paths features @@
-    Project.empty target
+    ] ~f:(|>)
+
+  let load_lisp_unit ~paths ~features =
+    KB.Rule.(begin
+        declare "primus-lisp-program" |>
+        require Theory.Label.unit          |>
+        require Theory.Unit.target         |>
+        provide Lisp.Semantics.program |>
+        comment "loads a program to the Lisp unit"
+      end);
+    KB.promise Theory.Unit.source @@ fun unit ->
+    Lisp.Unit.is_lisp unit >>= function
+    | false -> !!empty
+    | true ->
+      KB.collect Theory.Unit.target unit >>| fun target ->
+      pack @@
+      load_program paths features @@
+      Project.empty target
+
+  let args_of_ops (module CT : Theory.Core) target insn =
+    let bits = Theory.Target.bits target in
+    let word = Theory.Bitv.define bits in
+    let bitv x = Bitvec.(int64 x mod modulus bits) in
+    Insn.ops insn |> Array.to_list |>
+    List.map ~f:(function
+        | Op.Fmm _ -> CT.unk word
+        | Op.Imm x ->
+          let x = bitv (Imm.to_int64 x) in
+          CT.int word x >>| fun v ->
+          KB.Value.put Lisp.Semantics.static v (Some x)
+        | Op.Reg v ->
+          let name = Reg.name v in
+          CT.var @@ Theory.Var.define word name >>| fun v ->
+          KB.Value.put Lisp.Semantics.symbol v (Some name)) |>
+    List.map ~f:(fun x -> x >>| Theory.Value.forget) |>
+    KB.List.all
+
+  let translate_ops_to_args () =
+    KB.Rule.(begin
+        declare "translate-ops-to-lisp-args" |>
+        require Insn.slot |>
+        provide Lisp.Semantics.args |>
+        comment "translates instruction operands to lisp arguments"
+      end);
+    KB.promise Lisp.Semantics.args @@ fun this ->
+    KB.collect Insn.slot this >>=? fun insn ->
+    Theory.instance () >>= Theory.require >>= fun theory ->
+    Theory.Label.target this >>= fun target ->
+    args_of_ops theory target insn >>| Option.some
+
+  let translate_opcode_to_name () =
+    KB.Rule.(begin
+        declare "translate-opcode-to-lisp-name" |>
+        require Insn.slot |>
+        provide Lisp.Semantics.name |>
+        comment "translates opcode to the lisp definition name"
+      end);
+    KB.promise Lisp.Semantics.name @@ fun this ->
+    KB.collect Insn.slot this >>|? fun insn ->
+    let name = sprintf "%s:%s" (Insn.encoding insn) (Insn.name insn) in
+    Some name
+
+  let strip_extension = String.chop_suffix ~suffix:".lisp"
+
+  let include_files features folder =
+    Sys.readdir folder |> Array.to_list |>
+    List.fold ~init:features ~f:(fun features file ->
+        match strip_extension file with
+        | None -> features
+        | Some name -> name::features)
+
+
+
+  let collect_features sites =
+    List.fold sites ~init:(sites,["init"]) ~f:(fun (paths,fs) site ->
+        if Sys.file_exists site
+        then if Sys.is_directory site
+          then site::paths,include_files fs site
+          else match strip_extension site with
+            | None -> paths,site::fs
+            | Some name -> paths,name::fs
+        else if Sys.file_exists (site^".lisp")
+        then paths,site::fs
+        else paths,fs)
+
+  let path = Filename.concat Lisp_config.library "semantics"
+
+  let load_lisp_sources sites =
+    let sites = path :: sites in
+    let paths, features = collect_features sites in
+    let paths = Filename.current_dir_name :: Lisp_config.library :: paths in
+    let prog t =
+      pack@@load_program paths features@@Project.empty t in
+    KB.promise Theory.Unit.source @@ fun this ->
+    Primus.Lisp.Unit.is_lisp this >>= function
+    | true -> !!empty
+    | false ->
+      KB.collect Theory.Unit.target this >>| prog
+
+  let enable_lifter sites =
+    translate_ops_to_args ();
+    translate_opcode_to_name ();
+    load_lisp_sources sites;
+end
 
 let () =
   Config.manpage [
@@ -290,6 +382,20 @@ let () =
     Config.(param (list string) ~doc:"load specified module" "load"
               ~default:["posix"]) in
 
+  let semantics =
+    Config.(param (list string) "semantics"
+              ~doc:"The list of paths, names, and folders \
+                    that contain the program semantics definitions.") in
+
+
+  let semantics_stdout =
+    Config.(param (some string) "semantics-stdout"
+              ~doc:"redirects messages in the semantic definitions to \
+                    the specified file.") in
+
+
+
+
   let redirects =
     let doc = sprintf
         "establishes a redirection between an emulated file path and a
@@ -321,7 +427,17 @@ let () =
         ~desc:"Prints Primus Lisp type errors into the standard output.";
       Channels.init !!redirects;
       Primitives.init ();
-      Primus_lisp_semantic_primitives.provide ();
-      load_lisp_unit ~paths ~features;
-      Primus.Lisp.Semantics.enable ();
+      Semantics_primitives.provide ();
+      Semantics_primitives.enable_extraction ();
+      Semantics.load_lisp_unit ~paths ~features;
+      let stdout = Option.map !!semantics_stdout ~f:(fun file ->
+          let ch = Out_channel.create file in
+          let ppf = Format.formatter_of_out_channel ch in
+          at_exit (fun () ->
+              Format.pp_print_flush ppf ();
+              Out_channel.close ch);
+          ppf) in
+      Primus.Lisp.Semantics.enable ?stdout ();
+      if Poly.(!!semantics <> ["disable"])
+      then Semantics.enable_lifter !!semantics;
       load_lisp_program !!dump paths features)

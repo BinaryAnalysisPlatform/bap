@@ -4,12 +4,12 @@ open Bap_primus_lisp_types
 module Attribute = Bap_primus_lisp_attribute
 
 module External : sig
-  val t : string list Attribute.t
+  val t : String.Set.t Attribute.t
 end
 
 module Variables : sig
-  val global : var list Attribute.t
-  val static : var list Attribute.t
+  val global : Set.M(Bap_primus_lisp_var).t Attribute.t
+  val static : Set.M(Bap_primus_lisp_var).t Attribute.t
 end
 
 module Advice : sig

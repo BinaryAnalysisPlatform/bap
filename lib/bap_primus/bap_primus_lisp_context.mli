@@ -235,6 +235,7 @@
 *)
 
 open Core_kernel
+open Bap_core_theory
 open Bap.Std
 
 module Attribute = Bap_primus_lisp_attribute
@@ -251,40 +252,8 @@ val create : (string * string list) list -> t
 
 val empty : t
 
-
-
-(** [cx <= cx'] is true if [cx] is same as [cx'] or if [cx] is more
-    specific. Where a context [c] is the same as context [c'] if [c]
-    is as specific as [c'], i.e., no more, no less.
-
-    This is a partial order relation, i.e., it is possible that both
-    contexts are neither same, nor one is less than of another, nor
-    vice verse.
-
-    Examples:
-
-    {v
-
-    ((arch arm v7)) <= ((arch arm)) => true
-    ((arch arm v7) (compiler gcc)) <= ((arch arm)) => false
-    v}
-*)
+val order : t -> t -> KB.Order.partial
 val (<=) : t -> t -> bool
-
-
-(** Partial ordering between context classes.
-
-    We define thepartial order in terms of how generic is a
-    definition.
-
-*)
-type porder =
-  | Less     (** less generic:     c1 <= c2  && not(c2 <= c1) *)
-  | Same     (** exactly the same: c1 <= c2  &&   c2 <= c1  *)
-  | Equiv    (** not comparable :  not(c1 <= c2) && not(c2 <= c1) *)
-  | More     (** more generic :  not(c1 <= c2) &&   c2 <= c1  *)
-
-val compare : t -> t -> porder
 val pp : Format.formatter -> t -> unit
 
 val merge : t -> t -> t
