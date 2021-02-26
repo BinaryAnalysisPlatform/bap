@@ -11,10 +11,10 @@ Library bap-plugin-stub_resolver
   FindlibName:     bap-plugin-stub_resolver
   CompiledObject:  best
   Modules:         Stub_resolver
-  InternalModules: Stub_resolver_main, Stub_resolver_config
+  InternalModules: Stub_resolver_main
   XMETADescription: Substitutes calls to stubs with calls to real functions
   XMETAExtraLines:  tags="abi"
-  DataFiles:        signatures/*.stubs ($stub_resolver_stubs_path)
+  DataFiles:        signatures/*.stubs ($datadir/bap/signatures)
 
 
 Library stub_resolver_tests

@@ -53,7 +53,11 @@ let known_stub_names = [
   ".MIPS.stubs";
 ]
 
-let default_signatures_folder = Stub_resolver_config.signatures_path
+let system_signatures_folder =
+  Filename.concat Extension.Configuration.sysdatadir "signatures"
+
+let user_signatures_folder =
+  Filename.concat Extension.Configuration.datadir "signatures"
 
 let names = Extension.Configuration.parameters
     Extension.Type.(list string) "names"
@@ -80,8 +84,8 @@ let signatures = Extension.Configuration.parameters
            also acceptable. The signature length is automatically \
            inferred from the word, i.e., the leading zeros are not \
            discarded. By default we search in the current working \
-           folder and in " ^
-          default_signatures_folder)
+           folder, " ^ user_signatures_folder ^ ", and in " ^
+          system_signatures_folder )
 
 module Stubs : sig
   type t
@@ -230,8 +234,10 @@ end = struct
 
   let paths ctxt =
     Filename.current_dir_name ::
-    default_signatures_folder ::
-    List.concat (Extension.Configuration.get ctxt signatures)
+    List.concat (Extension.Configuration.get ctxt signatures) @ [
+      user_signatures_folder;
+      system_signatures_folder;
+    ]
 
   let collect ctxt target =
     let paths = paths ctxt in

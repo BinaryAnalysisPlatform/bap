@@ -3,6 +3,8 @@ open Result
 open Bap.Std
 include Self()
 
+module Configuration = Bap_main.Extension.Configuration
+
 let try_with f = match try_with f with
   | Ok r -> Ok r
   | Error exn -> Error (`Fail exn)
@@ -51,6 +53,7 @@ module Api_path = struct
   let try_with_access f p =
     try Ok (f p)
     with _ -> Error `No_access
+
 
   let exists p = try_with_access FileUtil.(test Exists) (to_string p)
 
@@ -227,10 +230,18 @@ let env_paths = match getenv "BAP_API_PATH" with
   | None -> []
   | Some p -> Path.path_of_string p
 
-let all_paths o =
-  env_paths @
-  List.map ~f:Api_path.of_string
-    (Api_config.api_path @ Api_options.api_paths o)
+let paths = List.map ~f:Api_path.of_string
+
+let all_paths o = List.rev@@List.concat [
+    paths@@Api_options.api_paths o;
+    env_paths;
+    paths@@Configuration.[
+        Filename.concat datadir "api";
+        Filename.concat sysdatadir "api";
+      ]
+  ] |> List.filter ~f:(fun p -> match Api_path.is_dir p with
+    | Ok r -> r
+    | Error _ -> false)
 
 let get_file file = Some file
 

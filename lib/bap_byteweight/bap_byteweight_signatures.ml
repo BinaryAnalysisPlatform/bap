@@ -3,6 +3,8 @@ open Regular.Std
 open Bap.Std
 include Self()
 
+module Config = Bap_main.Extension.Configuration
+
 let (/) = Filename.concat
 
 type error = [
@@ -21,13 +23,25 @@ let zip_error entry err =
 let entry ?(comp="default") ~mode arch =
   Arch.to_string arch / comp / mode
 
-let default_path =
-  try Sys.getenv "BAP_SIGFILE"
-  with Caml.Not_found -> Config.datadir / "sigs.zip"
+let make_path root = root / "signatures" / "byteweight.zip"
+
+let system_path = make_path Config.sysdatadir
+
+let default_path = match Sys.getenv_opt "BAP_SIGFILE" with
+  | Some path -> path
+  | None -> make_path Config.datadir
+
+let paths = [default_path; system_path]
+
+let resolve_path user = match user with
+  | Some path -> path
+  | None ->
+    match List.find paths ~f:Sys.file_exists with
+    | Some path -> path
+    | None -> fail `No_signatures
 
 let load_exn ?comp ?path ~mode arch =
-  let path = Option.value path ~default:default_path in
-  if not (Sys.file_exists path) then fail `No_signatures;
+  let path = resolve_path path in
   let zip = try Zip.open_in path with
     | Sys_error msg -> fail (`Sys_error msg)
     | Zip.Error (_,ent,err) -> zip_error ent err in

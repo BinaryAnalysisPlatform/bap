@@ -72,6 +72,7 @@ open Bap_main
 module BW = Bap_byteweight.Bytes
 module Sigs = Bap_byteweight_signatures
 module Digest = Caml.Digest
+module Config = Extension.Configuration
 
 type failure =
   | Image of Error.t
@@ -360,7 +361,8 @@ module Parameters = struct
   let src = Command.argument Type.("SRC" %: non_dir_file =? "sigs.zip")
       ~doc:"Signatures file"
 
-  let dst = Command.argument Type.(path =? Sigs.default_path)
+  let dst =
+    Command.argument Type.(path =? Sigs.default_path)
       ~doc:"Destination"
 
   let output = Command.parameter Type.(string =? "sigs.zip") "o"

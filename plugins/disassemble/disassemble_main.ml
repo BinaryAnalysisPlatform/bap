@@ -500,7 +500,6 @@ let nice_pp_error ppf er =
     | String s ->
       Format.fprintf ppf "%a" pp_print_text s;
     | _ ->
-      Format.eprintf "Error: %a@\n" Sexp.pp_hum (R.sexp_of_t r);
       let msg = Error.to_string_hum er in
       Format.fprintf ppf "%s" msg  in
   Format.fprintf ppf "%a" pp (R.of_info (Error.to_info er))

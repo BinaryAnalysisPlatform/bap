@@ -139,3 +139,7 @@
 (defmacro case/dispatch (k k' x) (when (= k k') x))
 (defmacro case/dispatch (k k' x xs)
   (if (= k k') x (case/dispatch k xs)))
+
+(defmacro cast (type x) (extract  (-1 (type)) 0 x))
+(defmacro bitwidth (type) (type))
+(defmacro sizeof (type) (/ (bitwidth type) 8))

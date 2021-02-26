@@ -8,7 +8,7 @@ Library bap_byteweight
   Build$:          flag(everything) || flag(byteweight)
   CompiledObject:  best
   Modules:         Bap_byteweight, Bap_byteweight_signatures
-  BuildDepends:    bap, core_kernel, uri, regular, camlzip, ppx_bap
+  BuildDepends:    bap, bap-main, core_kernel, uri, regular, camlzip, ppx_bap
 
 Library byteweight_plugin
   Path:             plugins/byteweight

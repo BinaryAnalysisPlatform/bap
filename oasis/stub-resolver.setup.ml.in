@@ -1,5 +1,0 @@
-let () =
-  add_variable ~doc:"the path to stubs signatures" "stub_resolver_stubs_path"
-    ~define:(function
-        | None -> BaseEnv.var_get "datadir" / "bap"
-        | Some p -> p)

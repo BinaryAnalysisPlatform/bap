@@ -8,7 +8,7 @@ Library "bap-piqi"
   Build$: flag(everything) || flag(piqi_printers)
   FindLibName: bap-piqi
   BuildTools: ocamlbuild, piqi
-  DataFiles:    *.piqi
+  DataFiles:    *.piqi ($datadir/bap/piqi)
   CompiledObject: best
   BuildDepends: piqirun,piqirun.pb,piqirun.ext,bap
   Modules:   Bir_piqi, Bil_piqi
