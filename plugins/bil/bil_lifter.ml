@@ -318,8 +318,10 @@ let provide_basic () =
   KB.collect Disasm_expert.Basic.Insn.slot obj >>= function
   | None -> !!Theory.Semantics.empty
   | Some insn ->
-    KB.collect Bil.code obj >>| fun bil ->
-    Insn.of_basic ~bil insn
+    KB.Object.repr Theory.Program.cls obj >>= fun lbl ->
+    KB.collect Bil.code obj >>| function
+    | [] -> Theory.Semantics.empty
+    | bil -> Insn.of_basic ~bil insn
 
 let provide_lifter ~with_fp () =
   info "providing a lifter for all BIL lifters";
