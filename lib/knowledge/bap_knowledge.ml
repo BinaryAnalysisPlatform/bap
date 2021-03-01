@@ -6,7 +6,7 @@ module Unix = Caml_unix
 type ('a,'b) eq = ('a,'b) Type_equal.t = T : ('a,'a) eq
 
 module Order = struct
-  type partial = LT | EQ | GT | NC [@@deriving equal]
+  type partial = LT | EQ | GT | NC [@@deriving sexp, equal]
   module type S = sig
     type t
     val order : t -> t -> partial
@@ -1101,6 +1101,12 @@ module Dict = struct
       else failwith "types are not equal"
   end
   type 'a key = 'a Key.t
+
+  (* five leaves holding from zero to four elements and
+     three non-leaf trees that can either lean left (when
+     the left tree/leg is shorter, lean right (the right one
+     is shorter), or stand on equal legs.
+  *)
   type record =
     | T0
     | T1 : 'a key * 'a -> record
@@ -1118,6 +1124,78 @@ module Dict = struct
     | LR : record * 'a key * 'a * record -> record (* h(x) = h(y) + 1 *)
 
   type t = record
+
+  let pp_field ppf (k,v) =
+    Format.fprintf ppf "%s : %a"
+      (Name.to_string (Key.name k))
+      Sexp.pp_hum (Key.to_sexp k v)
+
+  let rec pp_fields ppf = function
+    | T0 -> ()
+    | T1 (ka,a) ->
+      Format.fprintf ppf "%a" pp_field (ka,a)
+    | T2 (ka,a,kb,b) ->
+      Format.fprintf ppf "%a;@ %a"
+        pp_field (ka,a)
+        pp_field (kb,b)
+    | T3 (ka,a,kb,b,kc,c) ->
+      Format.fprintf ppf "%a;@ %a;@ %a"
+        pp_field (ka,a)
+        pp_field (kb,b)
+        pp_field (kc,c)
+    | T4 (ka,a,kb,b,kc,c,kd,d) ->
+      Format.fprintf ppf "%a;@ %a;@ %a;@ %a"
+        pp_field (ka,a)
+        pp_field (kb,b)
+        pp_field (kc,c)
+        pp_field (kd,d)
+    | LR (x,ka,a,y) ->
+      Format.fprintf ppf "%a;@ %a;@ %a"
+        pp_fields x pp_field (ka,a) pp_fields y
+    | LL (x,ka,a,y) ->
+      Format.fprintf ppf "%a;@ %a;@ %a"
+        pp_fields x pp_field (ka,a) pp_fields y
+    | EQ (x,ka,a,y) ->
+      Format.fprintf ppf "%a;@ %a;@ %a"
+        pp_fields x pp_field (ka,a) pp_fields y
+
+  let pp ppf t =
+    Format.fprintf ppf "{@[<2>@,%a@]}" pp_fields t
+
+  let pp_elt ppf (k,v) =
+    Format.fprintf ppf "%d:%a" (Key.uid k) Sexp.pp_hum (Key.to_sexp k v)
+
+  let pp_elt ppf (k,_) =
+    Format.fprintf ppf "%d" (Key.uid k)
+
+  let rec pp_tree ppf = function
+    | T0 -> Format.fprintf ppf "()"
+    | T1 (ka,a) ->
+      Format.fprintf ppf "(%a)" pp_elt (ka,a)
+    | T2 (ka,a,kb,b) ->
+      Format.fprintf ppf "(%a,%a)"
+        pp_elt (ka,a)
+        pp_elt (kb,b)
+    | T3 (ka,a,kb,b,kc,c) ->
+      Format.fprintf ppf "(%a,%a,%a)"
+        pp_elt (ka,a)
+        pp_elt (kb,b)
+        pp_elt (kc,c)
+    | T4 (ka,a,kb,b,kc,c,kd,d) ->
+      Format.fprintf ppf "(%a,%a,%a,%a)"
+        pp_elt (ka,a)
+        pp_elt (kb,b)
+        pp_elt (kc,c)
+        pp_elt (kd,d)
+    | LR (x,k,a,y) ->
+      Format.fprintf ppf "LR(%a,%a,%a)"
+        pp_tree x pp_elt (k,a) pp_tree y
+    | LL (x,k,a,y) ->
+      Format.fprintf ppf "LL(%a,%a,%a)"
+        pp_tree x pp_elt (k,a) pp_tree y
+    | EQ (x,k,a,y) ->
+      Format.fprintf ppf "EQ(%a,%a,%a)"
+        pp_tree x pp_elt (k,a) pp_tree y
 
   let empty = T0
   let is_empty = function
@@ -1703,29 +1781,29 @@ module Dict = struct
         | 0 -> ret@@fun f -> LL (x,ka,app f ka kb b a,y)
         | 1 -> upsert ka a y
                  ~update:(fun k -> ret@@fun f -> LL (x,kb,b,k f))
-                 ~insert:(fun y -> add@@ t += y)
+                 ~insert:(fun y -> add (t += y))
         | _ ->
           upsert ka a x
             ~update:(fun k -> ret@@fun f -> LL (k f,kb,b, y))
-            ~insert:(fun x -> add@@ x =+ t)
+            ~insert:(fun x -> add (x =+ t))
       end
     | EQ (x,kb,b,y) -> begin match cmp ka kb with
         | 0 -> ret@@fun f -> EQ (x,ka,app f ka kb b a,y)
         | 1 -> upsert ka a y
                  ~update:(fun k -> ret@@fun f -> EQ (x,kb,b,k f))
-                 ~insert:(fun y -> add@@ t += y)
+                 ~insert:(fun y -> add (t += y))
         | _ -> upsert ka a x
                  ~update:(fun k -> ret@@fun f -> EQ (k f,kb,b,y))
-                 ~insert:(fun x -> add@@ x =+ t)
+                 ~insert:(fun x -> add (x =+ t))
       end
     | LR (x,kb,b,y) -> begin match cmp ka kb with
         | 0 -> ret@@fun f -> LR (x,ka,app f ka kb b a,y)
         | 1 -> upsert ka a y
                  ~update:(fun k -> ret@@fun f -> LR (x,kb,b,k f))
-                 ~insert:(fun y -> add@@ t += y)
+                 ~insert:(fun y -> add (t += y))
         | _ -> upsert ka a x
                  ~update:(fun k -> ret@@fun f -> LR (k f,kb,b,y))
-                 ~insert:(fun x -> add@@ x =+ t)
+                 ~insert:(fun x -> add (x =+ t))
       end
 
   let monomorphic_merge
@@ -1821,74 +1899,6 @@ module Dict = struct
     })
 
 
-  let pp_field ppf (k,v) =
-    Format.fprintf ppf "%s : %a"
-      (Name.to_string (Key.name k))
-      Sexp.pp_hum (Key.to_sexp k v)
-
-  let rec pp_fields ppf = function
-    | T0 -> ()
-    | T1 (ka,a) ->
-      Format.fprintf ppf "%a" pp_field (ka,a)
-    | T2 (ka,a,kb,b) ->
-      Format.fprintf ppf "%a;@ %a"
-        pp_field (ka,a)
-        pp_field (kb,b)
-    | T3 (ka,a,kb,b,kc,c) ->
-      Format.fprintf ppf "%a;@ %a;@ %a"
-        pp_field (ka,a)
-        pp_field (kb,b)
-        pp_field (kc,c)
-    | T4 (ka,a,kb,b,kc,c,kd,d) ->
-      Format.fprintf ppf "%a;@ %a;@ %a;@ %a"
-        pp_field (ka,a)
-        pp_field (kb,b)
-        pp_field (kc,c)
-        pp_field (kd,d)
-    | LR (x,ka,a,y) ->
-      Format.fprintf ppf "%a;@ %a;@ %a"
-        pp_fields x pp_field (ka,a) pp_fields y
-    | LL (x,ka,a,y) ->
-      Format.fprintf ppf "%a;@ %a;@ %a"
-        pp_fields x pp_field (ka,a) pp_fields y
-    | EQ (x,ka,a,y) ->
-      Format.fprintf ppf "%a;@ %a;@ %a"
-        pp_fields x pp_field (ka,a) pp_fields y
-
-  let pp ppf t =
-    Format.fprintf ppf "{@[<2>@,%a@]}" pp_fields t
-
-  let pp_elt ppf (k,v) =
-    Format.fprintf ppf "%a" Sexp.pp_hum (Key.to_sexp k v)
-
-  let rec pp_tree ppf = function
-    | T0 -> Format.fprintf ppf "()"
-    | T1 (ka,a) ->
-      Format.fprintf ppf "(%a)" pp_elt (ka,a)
-    | T2 (ka,a,kb,b) ->
-      Format.fprintf ppf "(%a,%a)"
-        pp_elt (ka,a)
-        pp_elt (kb,b)
-    | T3 (ka,a,kb,b,kc,c) ->
-      Format.fprintf ppf "(%a,%a,%a)"
-        pp_elt (ka,a)
-        pp_elt (kb,b)
-        pp_elt (kc,c)
-    | T4 (ka,a,kb,b,kc,c,kd,d) ->
-      Format.fprintf ppf "(%a,%a,%a,%a)"
-        pp_elt (ka,a)
-        pp_elt (kb,b)
-        pp_elt (kc,c)
-        pp_elt (kd,d)
-    | LR (x,k,a,y) ->
-      Format.fprintf ppf "LR(%a,%a,%a)"
-        pp_tree x pp_elt (k,a) pp_tree y
-    | LL (x,k,a,y) ->
-      Format.fprintf ppf "LL(%a,%a,%a)"
-        pp_tree x pp_elt (k,a) pp_tree y
-    | EQ (x,k,a,y) ->
-      Format.fprintf ppf "EQ(%a,%a,%a)"
-        pp_tree x pp_elt (k,a) pp_tree y
 
   let pp_key ppf {Key.name} =
     Format.fprintf ppf "%s" (Name.to_string name)
@@ -1943,12 +1953,15 @@ module Record = struct
     }
 
   let order : t -> t -> Order.partial = fun x y ->
-    match x <:= y, y <:= x with
-    | true,false  -> LT
-    | true,true   -> EQ
-    | false,true  -> GT
-    | false,false -> NC
-
+    match x,y with
+    | Dict.T0,Dict.T0 -> EQ
+    | Dict.T0,_ -> LT
+    | _,Dict.T0 -> GT
+    | _ -> match x <:= y, y <:= x with
+      | true,false  -> LT
+      | true,true   -> EQ
+      | false,true  -> GT
+      | false,false -> NC
 
   let commit (type p) {Domain.join} (key : p Key.t) v x =
     match Dict.find key v with
@@ -1977,20 +1990,23 @@ module Record = struct
     }
 
   let try_merge ~on_conflict old our =
-    Dict.foreach our ~init:(Ok old) {
-      visit = fun kb b out ->
-        match out with
-        | Error _ as err -> err
-        | Ok out -> match Dict.find kb old with
-          | None -> Ok (Dict.insert kb b out)
-          | Some a -> match (domain kb).join kb a b with
-            | Ok b -> Ok (Dict.set kb b out)
-            | Error err -> match on_conflict with
-              | `drop_both -> assert false
-              | `drop_left -> Ok (Dict.set kb b out)
-              | `drop_right -> Ok (Dict.set kb a out)
-              | `fail -> Error err
-    }
+    match old, our with
+    | Dict.T0,x | x, Dict.T0 -> Ok x
+    | _ ->
+      Dict.foreach our ~init:(Ok old) {
+        visit = fun kb b out ->
+          match out with
+          | Error _ as err -> err
+          | Ok out -> match Dict.find kb old with
+            | None -> Ok (Dict.insert kb b out)
+            | Some a -> match (domain kb).join kb a b with
+              | Ok b -> Ok (Dict.set kb b out)
+              | Error err -> match on_conflict with
+                | `drop_both -> assert false
+                | `drop_left -> Ok (Dict.set kb b out)
+                | `drop_right -> Ok (Dict.set kb a out)
+                | `fail -> Error err
+      }
 
 
   let join x y = try_merge ~on_conflict:`fail x y
