@@ -632,8 +632,11 @@ let provide_semantics ?(stdout=Format.std_formatter) () =
     } in
   Theory.instance () >>= Theory.require >>= fun (module Core) ->
   let open Prelude(Core) in
-  Meta.run (reify stdout prog obj target name args) meta >>| fun (res,_) ->
-  res
+  Meta.run (reify stdout prog obj target name args) meta >>= fun (res,_) ->
+  KB.collect Disasm_expert.Basic.Insn.slot obj >>| function
+  | Some basic when Insn.(res <> empty) ->
+    Insn.with_basic res basic
+  | _ -> res
 
 let provide_attributes () =
   let open KB.Syntax in
