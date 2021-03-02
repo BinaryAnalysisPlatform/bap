@@ -1099,6 +1099,9 @@ module Dict = struct
         | Y.Id -> Type_equal.T
         | _ -> failwith "broken type equality"
       else failwith "types are not equal"
+
+    let (<) x y = uid x < uid y [@@inline]
+    let (>) x y = uid x > uid y [@@inline]
   end
   type 'a key = 'a Key.t
 
@@ -1521,6 +1524,7 @@ module Dict = struct
 
   let app = merge
 
+
   let rec upsert ~update:ret ~insert:add ka a t = match t with
     | T0 -> add (make1 ka a)
     | T1 (kb,b) -> if eq ka kb
@@ -1720,32 +1724,60 @@ module Record = struct
   let uid = Key.uid
   let domain k = Hashtbl.find_exn vtables (uid k)
 
-  let (<:=) x y = Dict.foreach ~init:true x {
-      visit = fun k x yes ->
-        yes && match Dict.find k y with
-        | None -> false
-        | Some y -> match (domain k).order k x y with
-          | LT | EQ -> true
-          | GT | NC -> false
-    }
+  exception Not
+
+  let (<:=) x y =
+    try
+      Dict.foreach ~init:() x {
+        visit = fun k x () ->
+          match Dict.find k y with
+          | None -> raise Not
+          | Some y -> match (domain k).order k x y with
+            | LT | EQ -> ()
+            | GT | NC -> raise Not
+      };
+      true
+    with Not -> false
 
   let order : t -> t -> Order.partial = fun x y ->
-    match x,y with
-    | Dict.T0,Dict.T0 -> EQ
-    | Dict.T0,_ -> LT
-    | _,Dict.T0 -> GT
-    | _ -> match x <:= y, y <:= x with
-      | true,false  -> LT
-      | true,true   -> EQ
-      | false,true  -> GT
-      | false,false -> NC
+    if phys_equal x y then EQ
+    else match x,y with
+      | T0, (T1 _ | T2 _ | T3 _ | T4 _) -> LT
+      | (T1 _ | T2 _ | T3 _ | T4 _), T0 -> GT
+      | _ -> match x <:= y, y <:= x with
+        | true,false  -> LT
+        | true,true   -> EQ
+        | false,true  -> GT
+        | false,false -> NC
 
-  let commit (type p) {Domain.join} (key : p Key.t) v x =
-    match Dict.find key v with
-    | None -> Ok (Dict.insert key x v)
-    | Some y -> match join y x with
-      | Ok x -> Ok (Dict.set key x v)
-      | Error err -> Error err
+  exception Merge_conflict of conflict
+
+  let domain_merge = {
+    Dict.merge = fun k x y ->
+      match (domain k).join k x y with
+      | Ok x -> x
+      | Error err -> raise (Merge_conflict err)
+  }
+
+  let resolving_merge on_conflict = {
+    Dict.merge = fun k x y ->
+      match (domain k).join k x y with
+      | Ok b -> b
+      | Error err -> match on_conflict with
+        | `drop_left -> y
+        | `drop_right -> x
+        | `fail -> raise (Merge_conflict err)
+  }
+
+
+  let commit (type p) _ (key : p Key.t) v x =
+    match v with
+    | Dict.T0 -> Ok (Dict.make1 key x)
+    | _ ->
+      try Result.return@@Dict.upsert key x v
+          ~insert:ident
+          ~update:(fun k -> k domain_merge)
+      with Merge_conflict err -> Error err
 
   let put k v x = Dict.set k x v
   let get
@@ -1755,38 +1787,59 @@ module Record = struct
     | None -> empty
     | Some x -> x
 
-  exception Merge_conflict of conflict
+  let non_intersecting_merge x y =
+    match x,y with
+    | Dict.T0,x | x, Dict.T0 -> Some  x
+    | T1 (ka, a), T1 (kb, b)
+      when Key.(ka < kb) ->
+      Some (Dict.make2 ka a kb b)
+    | T1 (ka, a), T2 (kb, b, kc, c)
+      when Key.(ka < kb) ->
+      Some  (Dict.make3 ka a kb b kc c)
+    | T1 (ka, a), T3 (kb, b, kc, c, kd, d)
+      when Key.(ka < kb) ->
+      Some (Dict.make4 ka a kb b kc c kd d)
+    | T1 (ka, a), T4 (kb, b, kc, c, kd, d, ke, e)
+      when Key.(ka < kb) ->
+      Some (Dict.make5 ka a kb b kc c kd d ke e)
+    | T2 (ka, a, kb, b), T2 (kc, c, kd, d)
+      when Key.(kb < kc) ->
+      Some (Dict.make4 ka a kb b kc c kd d)
+    | T2 (ka, a, kb, b), T3 (kc, c, kd, d, ke, e)
+      when Key.(kb < kc) ->
+      Some (Dict.make5 ka a kb b kc c kd d ke e)
+    | T2 (ka, a, kb, b), T4 (kc, c, kd, d, ke, e, kf, f)
+      when Key.(kb < kc) ->
+      Some (Dict.make6 ka a kb b kc c kd d ke e kf f)
+    | T3 (ka, a, kb, b, kc, c), T3 (kd, d, ke, e, kf, f)
+      when Key.(kc < kd) ->
+      Some (Dict.make6 ka a kb b kc c kd d ke e kf f)
+    | T3 (ka, a, kb, b, kc, c), T4 (kd, d, ke, e, kf, f, kg, g)
+      when Key.(kc < kd) ->
+      Some (Dict.make7 ka a kb b kc c kd d ke e kf f kg g)
+    | T4 (ka, a, kb, b, kc, c, kd, d), T4 (ke, e, kf, f, kg, g, kh, h)
+      when Key.(kd < ke) ->
+      Some (Dict.make8 ka a kb b kc c kd d ke e kf f kg g kh h)
+    | _ -> None
 
-  let merge_or_keep old our =
-    Dict.foreach our ~init:old {
-      visit = fun kb b out -> match Dict.find kb old with
-        | None -> Dict.insert kb b out
-        | Some a -> match (domain kb).join kb a b with
-          | Ok b -> Dict.set kb b out
-          | Error _ -> out
-    }
+  let make_merge m old our =
+    if phys_equal old our
+    then Ok our
+    else match non_intersecting_merge old our with
+      | Some r -> Ok r
+      | None -> match non_intersecting_merge our old with
+        | Some r -> Ok r
+        | None ->
+          try Result.return@@Dict.foreach our ~init:old {
+              visit = fun kb b out ->
+                Dict.upsert kb b out
+                  ~update:(fun k -> k m)
+                  ~insert:(fun x -> x)
+            }
+          with Merge_conflict err -> Error err
 
-  let try_merge ~on_conflict old our =
-    match old, our with
-    | Dict.T0,x | x, Dict.T0 -> Ok x
-    | _ ->
-      Dict.foreach our ~init:(Ok old) {
-        visit = fun kb b out ->
-          match out with
-          | Error _ as err -> err
-          | Ok out -> match Dict.find kb old with
-            | None -> Ok (Dict.insert kb b out)
-            | Some a -> match (domain kb).join kb a b with
-              | Ok b -> Ok (Dict.set kb b out)
-              | Error err -> match on_conflict with
-                | `drop_both -> assert false
-                | `drop_left -> Ok (Dict.set kb b out)
-                | `drop_right -> Ok (Dict.set kb a out)
-                | `fail -> Error err
-      }
-
-
-  let join x y = try_merge ~on_conflict:`fail x y
+  let join = make_merge domain_merge
+  let try_merge ~on_conflict = make_merge (resolving_merge on_conflict)
 
   let eq = Dict.Key.same
 
@@ -2059,7 +2112,7 @@ module Knowledge = struct
       : type a b. (a value, b value) Type_equal.t -> (a,b) Type_equal.t =
       fun T -> T
 
-    type strategy = [`drop_left | `drop_right | `drop_both]
+    type strategy = [`drop_left | `drop_right ]
 
     let merge ?(on_conflict=`drop_old) x y =
       let on_conflict : strategy = match on_conflict with
