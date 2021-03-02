@@ -1257,14 +1257,11 @@ module Dict = struct
       f.visit kc c |>
       f.visit kd d
     | LL (x,k,a,y) ->
-      let init = f.visit k a init in
-      foreach y ~init:(foreach x ~init f) f
+      foreach y f ~init:(f.visit k a @@ foreach x ~init f)
     | EQ (x,k,a,y) ->
-      let init = f.visit k a init in
-      foreach y ~init:(foreach x ~init f) f
+      foreach y f ~init:(f.visit k a @@ foreach x ~init f)
     | LR (x,k,a,y) ->
-      let init = f.visit k a init in
-      foreach y ~init:(foreach x ~init f) f
+      foreach y f ~init:(f.visit k a @@ foreach x ~init f)
 
   type ('b,'r) app = {
     app : 'a. 'a key -> 'a -> 'b -> 'r
