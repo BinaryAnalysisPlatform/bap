@@ -6,7 +6,7 @@ module Unix = Caml_unix
 type ('a,'b) eq = ('a,'b) Type_equal.t = T : ('a,'a) eq
 
 module Order = struct
-  type partial = LT | EQ | GT | NC [@@deriving equal]
+  type partial = LT | EQ | GT | NC [@@deriving sexp, equal]
   module type S = sig
     type t
     val order : t -> t -> partial
@@ -1099,8 +1099,17 @@ module Dict = struct
         | Y.Id -> Type_equal.T
         | _ -> failwith "broken type equality"
       else failwith "types are not equal"
+
+    let (<) x y = uid x < uid y [@@inline]
+    let (>) x y = uid x > uid y [@@inline]
   end
   type 'a key = 'a Key.t
+
+  (* five leaves holding from zero to four elements and
+     three non-leaf trees that can either lean left (when
+     the left tree/leg is shorter, lean right (the right one
+     is shorter), or stand on equal legs.
+  *)
   type record =
     | T0
     | T1 : 'a key * 'a -> record
@@ -1118,6 +1127,78 @@ module Dict = struct
     | LR : record * 'a key * 'a * record -> record (* h(x) = h(y) + 1 *)
 
   type t = record
+
+  let pp_field ppf (k,v) =
+    Format.fprintf ppf "%s : %a"
+      (Name.to_string (Key.name k))
+      Sexp.pp_hum (Key.to_sexp k v)
+
+  let rec pp_fields ppf = function
+    | T0 -> ()
+    | T1 (ka,a) ->
+      Format.fprintf ppf "%a" pp_field (ka,a)
+    | T2 (ka,a,kb,b) ->
+      Format.fprintf ppf "%a;@ %a"
+        pp_field (ka,a)
+        pp_field (kb,b)
+    | T3 (ka,a,kb,b,kc,c) ->
+      Format.fprintf ppf "%a;@ %a;@ %a"
+        pp_field (ka,a)
+        pp_field (kb,b)
+        pp_field (kc,c)
+    | T4 (ka,a,kb,b,kc,c,kd,d) ->
+      Format.fprintf ppf "%a;@ %a;@ %a;@ %a"
+        pp_field (ka,a)
+        pp_field (kb,b)
+        pp_field (kc,c)
+        pp_field (kd,d)
+    | LR (x,ka,a,y) ->
+      Format.fprintf ppf "%a;@ %a;@ %a"
+        pp_fields x pp_field (ka,a) pp_fields y
+    | LL (x,ka,a,y) ->
+      Format.fprintf ppf "%a;@ %a;@ %a"
+        pp_fields x pp_field (ka,a) pp_fields y
+    | EQ (x,ka,a,y) ->
+      Format.fprintf ppf "%a;@ %a;@ %a"
+        pp_fields x pp_field (ka,a) pp_fields y
+
+  let pp ppf t =
+    Format.fprintf ppf "{@[<2>@,%a@]}" pp_fields t
+
+  let pp_elt ppf (k,v) =
+    Format.fprintf ppf "%d:%a" (Key.uid k) Sexp.pp_hum (Key.to_sexp k v)
+
+  let pp_elt ppf (k,_) =
+    Format.fprintf ppf "%d" (Key.uid k)
+
+  let rec pp_tree ppf = function
+    | T0 -> Format.fprintf ppf "()"
+    | T1 (ka,a) ->
+      Format.fprintf ppf "(%a)" pp_elt (ka,a)
+    | T2 (ka,a,kb,b) ->
+      Format.fprintf ppf "(%a,%a)"
+        pp_elt (ka,a)
+        pp_elt (kb,b)
+    | T3 (ka,a,kb,b,kc,c) ->
+      Format.fprintf ppf "(%a,%a,%a)"
+        pp_elt (ka,a)
+        pp_elt (kb,b)
+        pp_elt (kc,c)
+    | T4 (ka,a,kb,b,kc,c,kd,d) ->
+      Format.fprintf ppf "(%a,%a,%a,%a)"
+        pp_elt (ka,a)
+        pp_elt (kb,b)
+        pp_elt (kc,c)
+        pp_elt (kd,d)
+    | LR (x,k,a,y) ->
+      Format.fprintf ppf "LR(%a,%a,%a)"
+        pp_tree x pp_elt (k,a) pp_tree y
+    | LL (x,k,a,y) ->
+      Format.fprintf ppf "LL(%a,%a,%a)"
+        pp_tree x pp_elt (k,a) pp_tree y
+    | EQ (x,k,a,y) ->
+      Format.fprintf ppf "EQ(%a,%a,%a)"
+        pp_tree x pp_elt (k,a) pp_tree y
 
   let empty = T0
   let is_empty = function
@@ -1144,10 +1225,10 @@ module Dict = struct
     EQ (make2 ka a kb b,kc,c,make2 kd d ke e)
   [@@inline]
   let make6 ka a kb b kc c kd d ke e kf f =
-    EQ (T1 (ka,a),kb,b,T4(kc,c,kd,d,ke,e,kf,f))
+    EQ (T2 (ka,a,kb,b),kc,c,T3(kd,d,ke,e,kf,f))
   [@@inline]
   let make7 ka a kb b kc c kd d ke e kf f kg g =
-    EQ (T2 (ka,a,kb,b),kc,c, T4 (kd,d,ke,e,kf,f,kg,g))
+    EQ (T3 (ka,a,kb,b,kc,c), kd,d, T3 (ke,e,kf,f,kg,g))
   [@@inline]
   let make8 ka a kb b kc c kd d ke e kf f kg g kh h =
     EQ (T3 (ka,a,kb,b,kc,c),kd,d, T4(ke,e,kf,f,kg,g,kh,h))
@@ -1179,14 +1260,11 @@ module Dict = struct
       f.visit kc c |>
       f.visit kd d
     | LL (x,k,a,y) ->
-      let init = f.visit k a init in
-      foreach y ~init:(foreach x ~init f) f
+      foreach y f ~init:(f.visit k a @@ foreach x ~init f)
     | EQ (x,k,a,y) ->
-      let init = f.visit k a init in
-      foreach y ~init:(foreach x ~init f) f
+      foreach y f ~init:(f.visit k a @@ foreach x ~init f)
     | LR (x,k,a,y) ->
-      let init = f.visit k a init in
-      foreach y ~init:(foreach x ~init f) f
+      foreach y f ~init:(f.visit k a @@ foreach x ~init f)
 
   type ('b,'r) app = {
     app : 'a. 'a key -> 'a -> 'b -> 'r
@@ -1194,40 +1272,6 @@ module Dict = struct
 
   let cmp x y = Key.compare x y [@@inline]
   let eq x y = Key.compare x y = 0 [@@inline]
-
-  let rec pop_min t {app} = match t with
-    | T0 -> failwith "pop_min: empty"
-    | T1 (ka,a) -> app ka a T0
-    | T2 (ka,a,kb,b) -> app ka a (T1 (kb,b))
-    | T3 (ka,a,kb,b,kc,c) -> app ka a (T2 (kb,b,kc,c))
-    | T4 (ka,a,kb,b,kc,c,kd,d) -> app ka a (T3 (kb,b,kc,c,kd,d))
-    | LL (x,ka,a,y) -> pop_min x {app = fun kb b x -> app kb b (LL (x,ka,a,y))}
-    | EQ (x,ka,a,y) -> pop_min x {app = fun kb b x -> app kb b (EQ (x,ka,a,y))}
-    | LR (x,ka,a,y) -> pop_min x {app = fun kb b x -> app kb b (LR (x,ka,a,y))}
-  [@@inline]
-
-  let rec pop_max t {app} = match t with
-    | T0 -> failwith "pop_max: empty"
-    | T1 (ka,a) -> app ka a T0
-    | T2 (ka,a,kb,b) -> app kb b (T1 (ka,a))
-    | T3 (ka,a,kb,b,kc,c) -> app kc c (T2 (ka,a,kb,b))
-    | T4 (ka,a,kb,b,kc,c,kd,d) -> app kd d (T3 (ka,a,kb,b,kc,c))
-    | LL (x,ka,a,y) -> pop_max y {app = fun kb b y -> app kb b (LL (x,ka,a,y))}
-    | EQ (x,ka,a,y) -> pop_max y {app = fun kb b y -> app kb b (EQ (x,ka,a,y))}
-    | LR (x,ka,a,y) -> pop_max y {app = fun kb b y -> app kb b (LR (x,ka,a,y))}
-  [@@inline]
-
-  let shake_left = function
-    | LL (T0,ka,a,EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j))) ->
-      LL (T1 (ka,a),kb,b,EQ (T3 (kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)))
-    | LL (T1(kx,x),ka,a,EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j))) ->
-      LL (T2 (kx,x,ka,a),kb,b,EQ (T3 (kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)))
-    | LL (T2(kx,x,ky,y),ka,a,EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j))) ->
-      LL (T3 (kx,x,ky,y,ka,a),kb,b,EQ (T3 (kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)))
-    | LL (T3(kx,x,ky,y,kz,z),ka,a,EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j))) ->
-      LL (T4 (kx,x,ky,y,kz,z,ka,a),kb,b, EQ (T3 (kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)))
-    | _ -> assert false
-  [@@inline]
 
   exception Rol_wrong_rank of record
   exception Ror_wrong_rank of record
@@ -1451,192 +1495,6 @@ module Dict = struct
       else if ka <$ ke
       then make5 kb b kc c kd d ka a ke e
       else make5 kb b kc c kd d ke e ka a
-    | EQ (T0,kb,b,T4(kc,c,kd,d,ke,e,kf,f)) ->
-      if ka <$ kd then
-        if ka <$ kc then
-          if ka <$ kb
-          then make6 ka a kb b kc c kd d ke e kf f
-          else make6 kb b ka a kc c kd d ke e kf f
-        else make6 kb b kc c ka a kd d ke e kf f
-      else
-      if ka <$ ke then
-        make6 kb b kc c kd d ka a ke e kf f
-      else if ka <$ kf
-      then make6 kb b kc c kd d ke e ka a kf f
-      else make6 kb b kc c kd d ke e kf f ka a
-    | EQ (T4(kb,b,kc,c,kd,d,ke,e),kf,f,T0) ->
-      if ka <$ kd then
-        if ka <$ kc then
-          if ka <$ kb
-          then make6 ka a kb b kc c kd d ke e kf f
-          else make6 kb b ka a kc c kd d ke e kf f
-        else make6 kb b kc c ka a kd d ke e kf f
-      else
-      if ka <$ ke then
-        make6 kb b kc c kd d ka a ke e kf f
-      else if ka <$ kf
-      then make6 kb b kc c kd d ke e ka a kf f
-      else make6 kb b kc c kd d ke e kf f ka a
-    | EQ (T1 (kb,b),kc,c,T4(kd,d,ke,e,kf,f,kg,g)) ->
-      if ka <$ kd then
-        if ka <$ kc then
-          if ka <$ kb
-          then make7 ka a kb b kc c kd d ke e kf f kg g
-          else make7 kb b ka a kc c kd d ke e kf f kg g
-        else make7 kb b kc c ka a kd d ke e kf f kg g
-      else
-      if ka <$ kf then
-        if ka <$ ke
-        then make7 kb b kc c kd d ka a ke e kf f kg g
-        else make7 kb b kc c kd d ke e ka a kf f kg g
-      else if ka <$ kg
-      then make7 kb b kc c kd d ke e kf f ka a kg g
-      else make7 kb b kc c kd d ke e kf f kg g ka a
-    | EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T1(kg,g)) ->
-      if ka <$ kd then
-        if ka <$ kc then
-          if ka <$ kb
-          then make7 ka a kb b kc c kd d ke e kf f kg g
-          else make7 kb b ka a kc c kd d ke e kf f kg g
-        else make7 kb b kc c ka a kd d ke e kf f kg g
-      else
-      if ka <$ kf then
-        if ka <$ ke
-        then make7 kb b kc c kd d ka a ke e kf f kg g
-        else make7 kb b kc c kd d ke e ka a kf f kg g
-      else if ka <$ kg
-      then make7 kb b kc c kd d ke e kf f ka a kg g
-      else make7 kb b kc c kd d ke e kf f kg g ka a
-    | EQ (T2 (kb,b,kc,c),kd,d,T4(ke,e,kf,f,kg,g,kh,h)) ->
-      if ka <$ ke then
-        if ka <$ kc then
-          if ka <$ kb
-          then make8 ka a kb b kc c kd d ke e kf f kg g kh h
-          else make8 kb b ka a kc c kd d ke e kf f kg g kh h
-        else
-        if ka <$ kd
-        then make8 kb b kc c ka a kd d ke e kf f kg g kh h
-        else make8 kb b kc c kd d ka a ke e kf f kg g kh h
-      else
-      if ka <$ kg then
-        if ka <$ kf
-        then make8 kb b kc c kd d ke e ka a kf f kg g kh h
-        else make8 kb b kc c kd d ke e kf f ka a kg g kh h
-      else if ka <$ kh
-      then make8 kb b kc c kd d ke e kf f kg g ka a kh h
-      else make8 kb b kc c kd d ke e kf f kg g kh h ka a
-    | EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T2(kg,g,kh,h)) ->
-      if ka <$ ke then
-        if ka <$ kc then
-          if ka <$ kb
-          then make8 ka a kb b kc c kd d ke e kf f kg g kh h
-          else make8 kb b ka a kc c kd d ke e kf f kg g kh h
-        else
-        if ka <$ kd
-        then make8 kb b kc c ka a kd d ke e kf f kg g kh h
-        else make8 kb b kc c kd d ka a ke e kf f kg g kh h
-      else
-      if ka <$ kg then
-        if ka <$ kf
-        then make8 kb b kc c kd d ke e ka a kf f kg g kh h
-        else make8 kb b kc c kd d ke e kf f ka a kg g kh h
-      else if ka <$ kh
-      then make8 kb b kc c kd d ke e kf f kg g ka a kh h
-      else make8 kb b kc c kd d ke e kf f kg g kh h ka a
-    | EQ (T3 (kb,b,kc,c,kd,d),ke,e,T4(kf,f,kg,g,kh,h,ki,i)) ->
-      if ka <$ ke then
-        if ka <$ kc then
-          if ka <$ kb
-          then make9 ka a kb b kc c kd d ke e kf f kg g kh h ki i
-          else make9 kb b ka a kc c kd d ke e kf f kg g kh h ki i
-        else
-        if ka <$ kd
-        then make9 kb b kc c ka a kd d ke e kf f kg g kh h ki i
-        else make9 kb b kc c kd d ka a ke e kf f kg g kh h ki i
-      else
-      if ka <$ kg then
-        if ka <$ kf
-        then make9 kb b kc c kd d ke e ka a kf f kg g kh h ki i
-        else make9 kb b kc c kd d ke e kf f ka a kg g kh h ki i
-      else if ka <$ kh
-      then make9 kb b kc c kd d ke e kf f kg g ka a kh h ki i
-      else if ka <$ ki then
-        make9 kb b kc c kd d ke e kf f kg g kh h ka a ki i
-      else
-        make9 kb b kc c kd d ke e kf f kg g kh h ki i ka a
-    | EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T3(kg,g,kh,h,ki,i)) ->
-      if ka <$ ke then
-        if ka <$ kc then
-          if ka <$ kb
-          then make9 ka a kb b kc c kd d ke e kf f kg g kh h ki i
-          else make9 kb b ka a kc c kd d ke e kf f kg g kh h ki i
-        else
-        if ka <$ kd
-        then make9 kb b kc c ka a kd d ke e kf f kg g kh h ki i
-        else make9 kb b kc c kd d ka a ke e kf f kg g kh h ki i
-      else
-      if ka <$ kg then
-        if ka <$ kf
-        then make9 kb b kc c kd d ke e ka a kf f kg g kh h ki i
-        else make9 kb b kc c kd d ke e kf f ka a kg g kh h ki i
-      else if ka <$ kh
-      then make9 kb b kc c kd d ke e kf f kg g ka a kh h ki i
-      else if ka <$ ki then
-        make9 kb b kc c kd d ke e kf f kg g kh h ka a ki i
-      else
-        make9 kb b kc c kd d ke e kf f kg g kh h ki i ka a
-    | EQ (T4 (kb,b,kc,c,kd,d,ke,e),kf,f,T4(kg,g,kh,h,ki,i,kj,j)) ->
-      if ka <$ kf then
-        if ka <$ kc then
-          if ka <$ kb
-          then make10 ka a kb b kc c kd d ke e kf f kg g kh h ki i kj j
-          else make10 kb b ka a kc c kd d ke e kf f kg g kh h ki i kj j
-        else
-        if ka <$ ke
-        then if ka <$ kd
-          then make10 kb b kc c ka a kd d ke e kf f kg g kh h ki i kj j
-          else make10 kb b kc c kd d ka a ke e kf f kg g kh h ki i kj j
-        else make10 kb b kc c kd d ke e ka a kf f kg g kh h ki i kj j
-      else
-      if ka <$ ki then
-        if ka <$ kh
-        then
-          if ka <$ kg
-          then make10 kb b kc c kd d ke e kf f ka a kg g kh h ki i kj j
-          else make10 kb b kc c kd d ke e kf f kg g ka a kh h ki i kj j
-        else make10 kb b kc c kd d ke e kf f kg g kh h ka a ki i kj j
-      else if ka <$ kj
-      then make10 kb b kc c kd d ke e kf f kg g kh h ki i ka a kj j
-      else make10 kb b kc c kd d ke e kf f kg g kh h ki i kj j ka a
-
-    | LL ((T0| T1 _ | T2 _ | T3 _ as b),k,x,
-          (EQ (T4 _,_,_,T4 _) as c)) as t ->
-      if ka <$ k
-      then LL (insert ka a b,k,x,c)
-      else insert ka a (shake_left t)
-
-    | LL ((T4 _ as b),k,x,c) when ka <$ k ->
-      EQ (insert ka a b,k,x,c)
-    | LR (b,k,x,(T4 _ as c)) when k <$ ka ->
-      EQ (b,k,x,insert ka a c)
-
-    | EQ ((EQ (T4 _,_,_,T4 _) as b),k,_,(EQ (T4 _,_,_,T4 _) as c)) as t ->
-      if ka <$ k
-      then insert ka a b =+ t
-      else t += insert ka a c
-    | EQ (x,kb,b,(EQ (T4 _,_,_,T4 _) as y)) ->
-      if ka <$ kb
-      then EQ (insert ka a x,kb,b,y)
-      else pop_min y @@ {app = fun kc c y ->
-          EQ (insert kb b x,kc,c,insert ka a y)
-        }
-    | EQ ((EQ (T4 _,_,_,T4 _) as x),kb,b,y) ->
-      if ka <$ kb
-      then pop_max x @@ {app = fun kc c x ->
-          EQ (insert ka a x,kc,c,insert kb b y)
-        }
-      else EQ (x,kb,b,insert ka a y)
-
     | LL (b,k,_,c) as t ->
       if ka <$ k
       then insert ka a b =+ t
@@ -1665,6 +1523,7 @@ module Dict = struct
     merge kb b a
 
   let app = merge
+
 
   let rec upsert ~update:ret ~insert:add ka a t = match t with
     | T0 -> add (make1 ka a)
@@ -1703,29 +1562,29 @@ module Dict = struct
         | 0 -> ret@@fun f -> LL (x,ka,app f ka kb b a,y)
         | 1 -> upsert ka a y
                  ~update:(fun k -> ret@@fun f -> LL (x,kb,b,k f))
-                 ~insert:(fun y -> add@@ t += y)
+                 ~insert:(fun y -> add (t += y))
         | _ ->
           upsert ka a x
             ~update:(fun k -> ret@@fun f -> LL (k f,kb,b, y))
-            ~insert:(fun x -> add@@ x =+ t)
+            ~insert:(fun x -> add (x =+ t))
       end
     | EQ (x,kb,b,y) -> begin match cmp ka kb with
         | 0 -> ret@@fun f -> EQ (x,ka,app f ka kb b a,y)
         | 1 -> upsert ka a y
                  ~update:(fun k -> ret@@fun f -> EQ (x,kb,b,k f))
-                 ~insert:(fun y -> add@@ t += y)
+                 ~insert:(fun y -> add (t += y))
         | _ -> upsert ka a x
                  ~update:(fun k -> ret@@fun f -> EQ (k f,kb,b,y))
-                 ~insert:(fun x -> add@@ x =+ t)
+                 ~insert:(fun x -> add (x =+ t))
       end
     | LR (x,kb,b,y) -> begin match cmp ka kb with
         | 0 -> ret@@fun f -> LR (x,ka,app f ka kb b a,y)
         | 1 -> upsert ka a y
                  ~update:(fun k -> ret@@fun f -> LR (x,kb,b,k f))
-                 ~insert:(fun y -> add@@ t += y)
+                 ~insert:(fun y -> add (t += y))
         | _ -> upsert ka a x
                  ~update:(fun k -> ret@@fun f -> LR (k f,kb,b,y))
-                 ~insert:(fun x -> add@@ x =+ t)
+                 ~insert:(fun x -> add (x =+ t))
       end
 
   let monomorphic_merge
@@ -1821,74 +1680,6 @@ module Dict = struct
     })
 
 
-  let pp_field ppf (k,v) =
-    Format.fprintf ppf "%s : %a"
-      (Name.to_string (Key.name k))
-      Sexp.pp_hum (Key.to_sexp k v)
-
-  let rec pp_fields ppf = function
-    | T0 -> ()
-    | T1 (ka,a) ->
-      Format.fprintf ppf "%a" pp_field (ka,a)
-    | T2 (ka,a,kb,b) ->
-      Format.fprintf ppf "%a;@ %a"
-        pp_field (ka,a)
-        pp_field (kb,b)
-    | T3 (ka,a,kb,b,kc,c) ->
-      Format.fprintf ppf "%a;@ %a;@ %a"
-        pp_field (ka,a)
-        pp_field (kb,b)
-        pp_field (kc,c)
-    | T4 (ka,a,kb,b,kc,c,kd,d) ->
-      Format.fprintf ppf "%a;@ %a;@ %a;@ %a"
-        pp_field (ka,a)
-        pp_field (kb,b)
-        pp_field (kc,c)
-        pp_field (kd,d)
-    | LR (x,ka,a,y) ->
-      Format.fprintf ppf "%a;@ %a;@ %a"
-        pp_fields x pp_field (ka,a) pp_fields y
-    | LL (x,ka,a,y) ->
-      Format.fprintf ppf "%a;@ %a;@ %a"
-        pp_fields x pp_field (ka,a) pp_fields y
-    | EQ (x,ka,a,y) ->
-      Format.fprintf ppf "%a;@ %a;@ %a"
-        pp_fields x pp_field (ka,a) pp_fields y
-
-  let pp ppf t =
-    Format.fprintf ppf "{@[<2>@,%a@]}" pp_fields t
-
-  let pp_elt ppf (k,v) =
-    Format.fprintf ppf "%a" Sexp.pp_hum (Key.to_sexp k v)
-
-  let rec pp_tree ppf = function
-    | T0 -> Format.fprintf ppf "()"
-    | T1 (ka,a) ->
-      Format.fprintf ppf "(%a)" pp_elt (ka,a)
-    | T2 (ka,a,kb,b) ->
-      Format.fprintf ppf "(%a,%a)"
-        pp_elt (ka,a)
-        pp_elt (kb,b)
-    | T3 (ka,a,kb,b,kc,c) ->
-      Format.fprintf ppf "(%a,%a,%a)"
-        pp_elt (ka,a)
-        pp_elt (kb,b)
-        pp_elt (kc,c)
-    | T4 (ka,a,kb,b,kc,c,kd,d) ->
-      Format.fprintf ppf "(%a,%a,%a,%a)"
-        pp_elt (ka,a)
-        pp_elt (kb,b)
-        pp_elt (kc,c)
-        pp_elt (kd,d)
-    | LR (x,k,a,y) ->
-      Format.fprintf ppf "LR(%a,%a,%a)"
-        pp_tree x pp_elt (k,a) pp_tree y
-    | LL (x,k,a,y) ->
-      Format.fprintf ppf "LL(%a,%a,%a)"
-        pp_tree x pp_elt (k,a) pp_tree y
-    | EQ (x,k,a,y) ->
-      Format.fprintf ppf "EQ(%a,%a,%a)"
-        pp_tree x pp_elt (k,a) pp_tree y
 
   let pp_key ppf {Key.name} =
     Format.fprintf ppf "%s" (Name.to_string name)
@@ -1933,29 +1724,60 @@ module Record = struct
   let uid = Key.uid
   let domain k = Hashtbl.find_exn vtables (uid k)
 
-  let (<:=) x y = Dict.foreach ~init:true x {
-      visit = fun k x yes ->
-        yes && match Dict.find k y with
-        | None -> false
-        | Some y -> match (domain k).order k x y with
-          | LT | EQ -> true
-          | GT | NC -> false
-    }
+  exception Not
+
+  let (<:=) x y =
+    try
+      Dict.foreach ~init:() x {
+        visit = fun k x () ->
+          match Dict.find k y with
+          | None -> raise Not
+          | Some y -> match (domain k).order k x y with
+            | LT | EQ -> ()
+            | GT | NC -> raise Not
+      };
+      true
+    with Not -> false
 
   let order : t -> t -> Order.partial = fun x y ->
-    match x <:= y, y <:= x with
-    | true,false  -> LT
-    | true,true   -> EQ
-    | false,true  -> GT
-    | false,false -> NC
+    if phys_equal x y then EQ
+    else match x,y with
+      | T0, (T1 _ | T2 _ | T3 _ | T4 _) -> LT
+      | (T1 _ | T2 _ | T3 _ | T4 _), T0 -> GT
+      | _ -> match x <:= y, y <:= x with
+        | true,false  -> LT
+        | true,true   -> EQ
+        | false,true  -> GT
+        | false,false -> NC
+
+  exception Merge_conflict of conflict
+
+  let domain_merge = {
+    Dict.merge = fun k x y ->
+      match (domain k).join k x y with
+      | Ok x -> x
+      | Error err -> raise (Merge_conflict err)
+  }
+
+  let resolving_merge on_conflict = {
+    Dict.merge = fun k x y ->
+      match (domain k).join k x y with
+      | Ok b -> b
+      | Error err -> match on_conflict with
+        | `drop_left -> y
+        | `drop_right -> x
+        | `fail -> raise (Merge_conflict err)
+  }
 
 
-  let commit (type p) {Domain.join} (key : p Key.t) v x =
-    match Dict.find key v with
-    | None -> Ok (Dict.insert key x v)
-    | Some y -> match join y x with
-      | Ok x -> Ok (Dict.set key x v)
-      | Error err -> Error err
+  let commit (type p) _ (key : p Key.t) v x =
+    match v with
+    | Dict.T0 -> Ok (Dict.make1 key x)
+    | _ ->
+      try Result.return@@Dict.upsert key x v
+          ~insert:ident
+          ~update:(fun k -> k domain_merge)
+      with Merge_conflict err -> Error err
 
   let put k v x = Dict.set k x v
   let get
@@ -1965,35 +1787,59 @@ module Record = struct
     | None -> empty
     | Some x -> x
 
-  exception Merge_conflict of conflict
+  let non_intersecting_merge x y =
+    match x,y with
+    | Dict.T0,x | x, Dict.T0 -> Some  x
+    | T1 (ka, a), T1 (kb, b)
+      when Key.(ka < kb) ->
+      Some (Dict.make2 ka a kb b)
+    | T1 (ka, a), T2 (kb, b, kc, c)
+      when Key.(ka < kb) ->
+      Some  (Dict.make3 ka a kb b kc c)
+    | T1 (ka, a), T3 (kb, b, kc, c, kd, d)
+      when Key.(ka < kb) ->
+      Some (Dict.make4 ka a kb b kc c kd d)
+    | T1 (ka, a), T4 (kb, b, kc, c, kd, d, ke, e)
+      when Key.(ka < kb) ->
+      Some (Dict.make5 ka a kb b kc c kd d ke e)
+    | T2 (ka, a, kb, b), T2 (kc, c, kd, d)
+      when Key.(kb < kc) ->
+      Some (Dict.make4 ka a kb b kc c kd d)
+    | T2 (ka, a, kb, b), T3 (kc, c, kd, d, ke, e)
+      when Key.(kb < kc) ->
+      Some (Dict.make5 ka a kb b kc c kd d ke e)
+    | T2 (ka, a, kb, b), T4 (kc, c, kd, d, ke, e, kf, f)
+      when Key.(kb < kc) ->
+      Some (Dict.make6 ka a kb b kc c kd d ke e kf f)
+    | T3 (ka, a, kb, b, kc, c), T3 (kd, d, ke, e, kf, f)
+      when Key.(kc < kd) ->
+      Some (Dict.make6 ka a kb b kc c kd d ke e kf f)
+    | T3 (ka, a, kb, b, kc, c), T4 (kd, d, ke, e, kf, f, kg, g)
+      when Key.(kc < kd) ->
+      Some (Dict.make7 ka a kb b kc c kd d ke e kf f kg g)
+    | T4 (ka, a, kb, b, kc, c, kd, d), T4 (ke, e, kf, f, kg, g, kh, h)
+      when Key.(kd < ke) ->
+      Some (Dict.make8 ka a kb b kc c kd d ke e kf f kg g kh h)
+    | _ -> None
 
-  let merge_or_keep old our =
-    Dict.foreach our ~init:old {
-      visit = fun kb b out -> match Dict.find kb old with
-        | None -> Dict.insert kb b out
-        | Some a -> match (domain kb).join kb a b with
-          | Ok b -> Dict.set kb b out
-          | Error _ -> out
-    }
+  let make_merge m old our =
+    if phys_equal old our
+    then Ok our
+    else match non_intersecting_merge old our with
+      | Some r -> Ok r
+      | None -> match non_intersecting_merge our old with
+        | Some r -> Ok r
+        | None ->
+          try Result.return@@Dict.foreach our ~init:old {
+              visit = fun kb b out ->
+                Dict.upsert kb b out
+                  ~update:(fun k -> k m)
+                  ~insert:(fun x -> x)
+            }
+          with Merge_conflict err -> Error err
 
-  let try_merge ~on_conflict old our =
-    Dict.foreach our ~init:(Ok old) {
-      visit = fun kb b out ->
-        match out with
-        | Error _ as err -> err
-        | Ok out -> match Dict.find kb old with
-          | None -> Ok (Dict.insert kb b out)
-          | Some a -> match (domain kb).join kb a b with
-            | Ok b -> Ok (Dict.set kb b out)
-            | Error err -> match on_conflict with
-              | `drop_both -> assert false
-              | `drop_left -> Ok (Dict.set kb b out)
-              | `drop_right -> Ok (Dict.set kb a out)
-              | `fail -> Error err
-    }
-
-
-  let join x y = try_merge ~on_conflict:`fail x y
+  let join = make_merge domain_merge
+  let try_merge ~on_conflict = make_merge (resolving_merge on_conflict)
 
   let eq = Dict.Key.same
 
@@ -2266,7 +2112,7 @@ module Knowledge = struct
       : type a b. (a value, b value) Type_equal.t -> (a,b) Type_equal.t =
       fun T -> T
 
-    type strategy = [`drop_left | `drop_right | `drop_both]
+    type strategy = [`drop_left | `drop_right ]
 
     let merge ?(on_conflict=`drop_old) x y =
       let on_conflict : strategy = match on_conflict with
