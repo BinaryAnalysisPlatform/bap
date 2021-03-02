@@ -1222,10 +1222,10 @@ module Dict = struct
     EQ (make2 ka a kb b,kc,c,make2 kd d ke e)
   [@@inline]
   let make6 ka a kb b kc c kd d ke e kf f =
-    EQ (T1 (ka,a),kb,b,T4(kc,c,kd,d,ke,e,kf,f))
+    EQ (T2 (ka,a,kb,b),kc,c,T3(kd,d,ke,e,kf,f))
   [@@inline]
   let make7 ka a kb b kc c kd d ke e kf f kg g =
-    EQ (T2 (ka,a,kb,b),kc,c, T4 (kd,d,ke,e,kf,f,kg,g))
+    EQ (T3 (ka,a,kb,b,kc,c), kd,d, T3 (ke,e,kf,f,kg,g))
   [@@inline]
   let make8 ka a kb b kc c kd d ke e kf f kg g kh h =
     EQ (T3 (ka,a,kb,b,kc,c),kd,d, T4(ke,e,kf,f,kg,g,kh,h))
