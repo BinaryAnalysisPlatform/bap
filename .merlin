@@ -49,6 +49,7 @@ B lib/bap_api
 B lib/bitvec
 B lib/bitvec_order
 B lib/bitvec_sexp
+B lib/bitvec_binprot
 B lib/bap_bundle
 B lib/bap_c
 B lib/bap_config

@@ -412,8 +412,9 @@ module Primitives(CT : Theory.Core) = struct
     bitv dst >>= fun dst ->
     bitv data >>= fun data ->
     let mem = Theory.Target.data t in
+    let byte = Theory.Mem.vals (Theory.Var.sort mem) in
     let (:=) = CT.set in
-    CT.(mem := store (var mem) !!dst !!data)
+    CT.(mem := store (var mem) !!dst (low byte !!data))
 
   let store_word t xs =
     binary xs @@ fun dst data ->
@@ -488,8 +489,13 @@ module Primitives(CT : Theory.Core) = struct
   let low = mk_cast CT.low
   let high = mk_cast CT.high
 
+  let target lbl =
+    KB.collect Primus.Lisp.Semantics.definition lbl >>= function
+    | None -> Theory.Label.target lbl
+    | Some lbl -> Theory.Label.target lbl
+
   let dispatch lbl name args =
-    Theory.Label.target lbl >>= fun t ->
+    target lbl >>= fun t ->
     let bits = Theory.Target.bits t in
     let module Z = struct
       include Bitvec.Make(struct
