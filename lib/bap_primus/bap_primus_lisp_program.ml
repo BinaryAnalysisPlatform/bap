@@ -18,7 +18,9 @@ module Def = Bap_primus_lisp_def
 
 type t = {
   context : Lisp.Context.t;
+  package : string;
   sources : Source.t;
+  imports : Set.M(String).t Map.M(String).t;
   codes : Def.prim Def.t list;
   macros : Def.macro Def.t list;
   substs : Def.subst Def.t list;
@@ -31,9 +33,13 @@ type t = {
 
 type program = t
 
-let empty  = {
+let default_package = "user"
+
+let empty = {
   context = Lisp.Context.empty;
   sources = Source.empty;
+  package = default_package;
+  imports = Map.empty (module String);
   codes = [];
   defs = [];
   mets = [];
@@ -43,6 +49,48 @@ let empty  = {
   substs=[];
   consts=[];
 }
+
+let with_package program package = {program with package}
+let package program = program.package
+let reset_package program =
+  with_package program default_package
+
+
+let import ~dst ~src = List.concat_map ~f:(fun def ->
+    if String.equal (KB.Name.package (Def.name def)) src
+    then [
+      def; Def.import dst def;
+    ] else [def])
+
+let finish_imports program =
+  let init = {
+    program with imports = Map.empty (module String);
+  } in
+  Map.fold program.imports ~init
+    ~f:(fun ~key:dst ~data:srcs program ->
+        Set.fold srcs ~init:program ~f:(fun program src -> {
+              program with
+              codes  = import ~dst ~src program.codes;
+              macros = import ~dst ~src program.macros;
+              substs = import ~dst ~src program.substs;
+              consts = import ~dst ~src program.consts;
+              defs   = import ~dst ~src program.defs;
+              mets   = import ~dst ~src program.mets;
+              pars   = import ~dst ~src program.pars;
+              sigs   = import ~dst ~src program.sigs;
+            }))
+
+
+let use_package ?package from program =
+  let package = match package with
+    | None -> program.package
+    | Some other -> other in {
+    program with
+    imports = Map.update program.imports package ~f:(function
+        | None -> Set.singleton (module String) from;
+        | Some imports -> Set.add imports from)
+  }
+
 
 let equal p1 p2 =
   Source.equal p1.sources p2.sources
@@ -55,6 +103,8 @@ let merge p1 p2 =
     sigs = p1.sigs @ p2.sigs;
     codes = p1.codes @ p2.codes;
     context = Lisp.Context.merge p1.context p2.context;
+    imports = Map.merge_skewed p1.imports p2.imports
+        ~combine:(fun ~key:_ -> Set.union)
   }
 
 
@@ -101,12 +151,12 @@ module Callgraph = struct
         end)
     end)(Unit)
 
-  let empty = String.Set.empty
+  let empty = Set.empty (module KB.Name)
   let (++) = Set.union
-  let call = String.Set.singleton
+  let call = Set.singleton (module KB.Name)
   let union xs ~f =
     List.map xs ~f |>
-    String.Set.union_list
+    Set.union_list (module KB.Name)
 
   let rec calls = function
     | {data=App ((Dynamic v),xs); } -> call v ++ union xs ~f:calls
@@ -117,9 +167,12 @@ module Callgraph = struct
     | {data=Set (_,x)} -> calls x
 
 
+
+
   (** computes a mapping from name to id of definitions  *)
   let compute_ids defs =
-    List.fold defs ~init:String.Map.empty ~f:(fun ids def ->
+    let init = Map.empty (module KB.Name) in
+    List.fold defs ~init ~f:(fun ids def ->
         Map.add_multi ids ~key:(Def.name def) ~data:def.id)
 
   let edge id id' =
@@ -184,7 +237,7 @@ let pp_term pp_exp ppf = function
   | {data={exp; typ}} ->
     fprintf ppf "@[<v2>%a:%a@]" pp_exp exp Lisp.Type.pp typ
 let pp_word = pp_term Z.pp_print
-let pp_var = pp_term String.pp
+let pp_var = pp_term KB.Name.pp
 
 let rec concat_prog p =
   List.concat_map p ~f:(function
@@ -198,7 +251,7 @@ module Ast = struct
     | Int x ->
       pp_word ppf x
     | Sym x ->
-      pp_print_string ppf x.data
+      KB.Name.pp ppf x.data
     | Var x ->
       pp_var ppf x
     | Ite (c,t,e) ->
@@ -220,7 +273,7 @@ module Ast = struct
     | Err msg ->
       fprintf ppf "@[<2>(error@ %s)@]" msg
   and pp_binding ppf = function
-    | Dynamic x -> fprintf ppf "%s" x
+    | Dynamic x -> fprintf ppf "%a" KB.Name.pp x
     | Static _ -> fprintf ppf "<lambda>"
   and pp_exps ppf xs = pp_print_list ~pp_sep:pp_print_space pp ppf xs
   and pp_fmt ppf xs = pp_print_list pp_fmt_elt ppf xs
@@ -234,20 +287,20 @@ module Ast = struct
 end
 
 let pp_def ppf d =
-  fprintf ppf "@[<2>(defun %s @[<2>(%a)@]@ %a)@]@,"
-    (Def.name d)
+  fprintf ppf "@[<2>(defun %a @[<2>(%a)@]@ %a)@]@,"
+    KB.Name.pp (Def.name d)
     (pp_print_list ~pp_sep:pp_print_space pp_var) (Def.Func.args d)
     Ast.pp_prog (Def.Func.body d)
 
 let pp_met ppf d =
-  fprintf ppf "@[<2>(defmethod %s @[<2>(%a)@]@ %a)@]@,"
-    (Def.name d)
+  fprintf ppf "@[<2>(defmethod %a @[<2>(%a)@]@ %a)@]@,"
+    KB.Name.pp (Def.name d)
     (pp_print_list ~pp_sep:pp_print_space pp_var) (Def.Meth.args d)
     Ast.pp_prog (Def.Meth.body d)
 
 let pp_par ppf d =
-  fprintf ppf "@[<2>(defparamerter %s@,%a@,%S)@]"
-    (Def.name d)
+  fprintf ppf "@[<2>(defparamerter %a@,%a@,%S)@]"
+    KB.Name.pp (Def.name d)
     Ast.pp_prog (Def.Para.default d)
     (Def.docs d)
 
@@ -262,18 +315,18 @@ let pp ppf prog = pp_program ppf prog
 let pp_ast ppf ast = Ast.pp ppf ast
 
 module Use = struct
-  let empty = String.Map.empty
+  let empty = Map.empty (module KB.Name)
   let union = union empty
-  let use = String.Map.singleton
+  let use = Map.singleton (module KB.Name)
 
   type t = {
-    calls : Id.t String.Map.t Id.Map.t;
-    vars  : Id.t String.Map.t Id.Map.t; (* def -> var -> use  *)
+    calls : Id.t Map.M(KB.Name).t Id.Map.t;
+    vars  : Id.t Map.M(KB.Name).t Id.Map.t; (* def -> var -> use  *)
   }
 
   let vars bound ast =
     let use bound {exp=v} id =
-      if Set.mem bound v then String.Map.empty
+      if Set.mem bound v then empty
       else use v id in
     let rec free bound = function
       | {data=(Int _ | Err _ | Sym _)}  -> empty
@@ -299,7 +352,7 @@ module Use = struct
         let body = Def.Func.body def in
         let bound = Def.Func.args def |>
                     List.map ~f:(fun {data={exp}} -> exp) |>
-                    String.Set.of_list in
+                    Set.of_list (module KB.Name) in
         let vs = vars bound body in
         let cs = calls body in
         {
@@ -453,10 +506,10 @@ module Typing = struct
   } [@@deriving compare, sexp]
 
   type type_error =
-    | Unresolved_variable of Id.t * string
-    | Unresolved_function of Id.t * string * signature list
-    | Unresolved_signal of Id.t * string * signature option
-    | Unresolved_parameter of Id.t * string
+    | Unresolved_variable of Id.t * KB.Name.t
+    | Unresolved_function of Id.t * KB.Name.t * signature list
+    | Unresolved_signal of Id.t * KB.Name.t * signature option
+    | Unresolved_parameter of Id.t * KB.Name.t
     | No_unification of Id.t * tval * Id.t * tval
   [@@deriving compare, sexp_of]
 
@@ -806,13 +859,13 @@ module Typing = struct
         | Error (No_unification (_,t1,_,t2)) ->
           fprintf ppf "%a <> %a" pp_val t1 pp_val t2
         | Error (Unresolved_variable (_,v)) ->
-          fprintf ppf "ill-typed(unresolve-variable %s)" v
+          fprintf ppf "ill-typed(unresolve-variable %a)" KB.Name.pp v
         | Error (Unresolved_function (_,s,_)) ->
-          fprintf ppf "ill-typed(unresolve-function %s)" s
+          fprintf ppf "ill-typed(unresolve-function %a)" KB.Name.pp s
         | Error (Unresolved_signal (_,s,_)) ->
-          fprintf ppf "ill-typed(unresolved-signal %s)" s
+          fprintf ppf "ill-typed(unresolved-signal %a)" KB.Name.pp s
         | Error (Unresolved_parameter (_,s)) ->
-          fprintf ppf "ill-typed(unresolved-parameter %s)" s
+          fprintf ppf "ill-typed(unresolved-parameter %a)" KB.Name.pp s
 
 
     let pp ppf {vars; vals} =
@@ -827,10 +880,10 @@ module Typing = struct
 
   type t = {
     ctxt : Lisp.Context.t;
-    globs : int String.Map.t;
-    prims : signature String.Map.t;
+    globs : int Map.M(KB.Name).t;
+    prims : signature Map.M(KB.Name).t;
     funcs : Def.func Def.t list;
-    paras : String.Set.t;
+    paras : Set.M(KB.Name).t;
   }
 
   let pp_args ppf args =
@@ -911,7 +964,7 @@ module Typing = struct
     match Map.find glob.prims name with
     | Some sign -> [prenex_signature id sign]
     | None -> List.fold glob.funcs ~init:[] ~f:(fun sigs def ->
-        if String.equal (Def.name def) name
+        if KB.Name.equal (Def.name def) name
         then signature_of_gamma def gamma :: sigs
         else sigs)
 
@@ -939,6 +992,7 @@ module Typing = struct
         else Gamma.fail var.id (Unresolved_variable (var.id,name)) gamma
 
   let is_special var =
+    let var = KB.Name.unqualified var in
     String.is_prefix ~prefix:"*" var &&
     String.is_suffix ~suffix:"*" var
 
@@ -1028,29 +1082,32 @@ module Typing = struct
       | None -> gamma
       | Some f ->
         let args = Def.Func.args f in
-        let vars = List.fold args ~init:String.Map.empty ~f:push in
+        let init = Map.empty (module KB.Name) in
+        let vars = List.fold args ~init ~f:push in
         let gamma = List.fold args ~init:gamma ~f:(fun gamma v ->
             Gamma.constr v.id v.data.typ gamma) in
         let gamma = infer_ast glob vars (Def.Func.body f) gamma in
         gamma
 
   let make_globs =
-    Seq.fold ~init:String.Map.empty ~f:(fun vars v ->
-        match Var.typ v with
+    let init = Map.empty (module KB.Name) in
+    Seq.fold ~init ~f:(fun vars (v,t) -> match t with
         | Type.Imm x ->
-          Map.set vars ~key:(Var.name v) ~data:x
+          Map.set vars ~key:v ~data:x
         | Type.Mem _
         | Type.Unk -> vars)
+
 
   let make_prims {codes} init =
     List.fold codes ~init ~f:(fun ps p ->
         match Def.Closure.signature p with
         | None -> ps
         | Some types ->
+          Format.eprintf "make_prims: %a@\n" KB.Name.pp (Def.name p);
           Map.set ps ~key:(Def.name p) ~data:types)
 
   let make_paras {pars} =
-    List.fold pars ~init:String.Set.empty ~f:(fun pars par ->
+    List.fold pars ~init:(Set.empty (module KB.Name)) ~f:(fun pars par ->
         Set.add pars (Def.name par))
 
   let gamma_equal g1 g2 = Gamma.compare g1 g2 = 0
@@ -1063,7 +1120,7 @@ module Typing = struct
         Lisp.Context.(def_ctxt <= global))
 
   let find_signal (sigs : Def.signal Def.t list) name =
-    List.find sigs ~f:(fun s -> String.equal (Def.name s) name)
+    List.find sigs ~f:(fun s -> KB.Name.equal (Def.name s) name)
 
   let check_methods glob {context; mets; sigs} g =
     applicable context mets |>
@@ -1080,15 +1137,20 @@ module Typing = struct
             let problem = Unresolved_signal (met.id,name,Some pars) in
             Gamma.fail met.id problem g
           | Some g ->
-            let vars = List.fold args ~init:String.Map.empty ~f:push in
+            let init = Map.empty (module KB.Name) in
+            let vars = List.fold args ~init ~f:push in
             let g = List.fold args ~init:g ~f:(fun g v ->
                 Gamma.constr v.id v.data.typ g) in
             infer_ast glob vars (Def.Meth.body met) g)
 
   let infer externals vars p : Gamma.t =
+    let vars = Seq.map vars ~f:(fun v ->
+        KB.Name.read (Var.name v), Var.typ v) in
+    let externals = List.map externals ~f:(fun (v,s) ->
+        KB.Name.read v, s) in
     let glob = {
       ctxt = p.context;
-      prims = make_prims p (String.Map.of_alist_exn externals);
+      prims = make_prims p (Map.of_alist_exn (module KB.Name) externals);
       globs = make_globs vars;
       funcs = p.defs;
       paras = make_paras p;
@@ -1170,26 +1232,26 @@ module Typing = struct
 
     let pp_error ppf {sources; problem} = match problem with
       | Unresolved_variable (exp,name) ->
-        fprintf ppf "Unresolved variable `%s':@\n%a@\n"
-          name pp_exp (sources,exp)
+        fprintf ppf "Unresolved variable `%a':@\n%a@\n"
+          KB.Name.pp name pp_exp (sources,exp)
       | Unresolved_function (exp,name,[]) ->
-        fprintf ppf "Unresolved function or primitive `%s':@\n%a@\n"
-          name pp_exp (sources,exp)
+        fprintf ppf "Unresolved function or primitive `%a':@\n%a@\n"
+          KB.Name.pp name pp_exp (sources,exp)
       | Unresolved_function (exp,name,sigs) ->
-        fprintf ppf "No matching signature for `%s':@\n%a@\nTried:@\n%a@\n"
-          name pp_exp (sources,exp) pp_sigs sigs
+        fprintf ppf "No matching signature for `%a':@\n%a@\nTried:@\n%a@\n"
+          KB.Name.pp name pp_exp (sources,exp) pp_sigs sigs
       | Unresolved_signal (exp,name,None) ->
-        fprintf ppf "Unresolved signal for method `%s':@\n%a\n"
-          name pp_exp (sources,exp)
+        fprintf ppf "Unresolved signal for method `%a':@\n%a\n"
+          KB.Name.pp name pp_exp (sources,exp)
       | Unresolved_signal (exp,name,Some signature) ->
         fprintf ppf "
-The signal `%s' has signature `%a'. This signature doesn't match with
+The signal `%a' has signature `%a'. This signature doesn't match with
 the inferred type of the method:@\n%a"
-          name pp_signature signature pp_exp (sources,exp)
+          KB.Name.pp name pp_signature signature pp_exp (sources,exp)
       | Unresolved_parameter (exp,name) ->
-        fprintf ppf "The variable `%s' is treated as parameter, \
+        fprintf ppf "The variable `%a' is treated as parameter, \
                      but there is no such parameter:@\n%a"
-          name pp_exp (sources,exp)
+          KB.Name.pp name pp_exp (sources,exp)
       | No_unification (x,t1,y,t2) ->
         fprintf ppf "
 Type error: expected %a got %a. Details follow, the expression:

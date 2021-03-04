@@ -1,6 +1,7 @@
+(in-package core)
+
 ;; pointer arithmetic
 
-(require types)
 
 (defmacro ptr+ (t p n)
   "(ptr+ T P N) increments N times the

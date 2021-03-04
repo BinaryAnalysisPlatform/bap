@@ -118,7 +118,7 @@ let primitive defn name args =
   let open KB.Syntax in
   KB.Object.scoped Theory.Program.cls @@ fun obj ->
   KB.sequence [
-    KB.provide Property.name obj (Some name);
+    KB.provide Property.name obj (Some (KB.Name.to_string name));
     KB.provide definition obj (Some defn);
     KB.provide Property.args obj (Some args);
   ] >>= fun () ->
@@ -200,7 +200,8 @@ let make_reg var =
   let res = KB.Value.put symbol empty (Some name) in
   KB.Value.put static_slot res (Some value)
 
-let sym str =
+let sym name =
+  let str = KB.Name.to_string name in
   let v = update_value empty @@ fun v ->
     KB.Value.put symbol v (Some str) in
   match str with
@@ -219,17 +220,17 @@ let machine_var_by_name t name =
 
 let make_var ?t:constr target name  =
   let word = Theory.Target.bits target in
-  match machine_var_by_name target name with
+  match machine_var_by_name target (KB.Name.unqualified name) with
   | Some v -> v
   | None ->
     let t = Option.value constr ~default:word in
-    Theory.Var.forget@@Theory.Var.define (bits t) name
+    Theory.Var.forget@@Theory.Var.define (bits t) (KB.Name.to_string name)
 
 let lookup_parameter prog v =
-  let name = Theory.Var.name v in
+  let name = KB.Name.read @@ Theory.Var.name v in
   Program.get prog Key.para |>
   List.find ~f:(fun p ->
-      String.equal (Def.name p) name) |> function
+      KB.Name.equal (Def.name p) name) |> function
   | None -> None
   | Some p -> Some (Def.Para.default p)
 
@@ -262,7 +263,7 @@ module Env = struct
       | Any | Name _ -> word
       | Symbol -> symsort
       | Type m -> m in
-    Theory.Var.forget@@Theory.Var.define (bits s) n
+    Theory.Var.forget@@Theory.Var.define (bits s) (KB.Name.to_string n)
 
   let set_args ws bs = Meta.update @@ fun s -> {
       s with binds = List.fold bs ~init:s.binds ~f:(fun s (v,x) ->
@@ -417,6 +418,8 @@ module Prelude(CT : Theory.Core) = struct
     Seq.map ~f:(fun v -> Theory.Var.name v, v) |>
     Map.of_sequence_exn (module String)
 
+  let prim_name name = KB.Name.read ~package:"core" name
+
 
   let reify ppf prog defn target name args =
     let word = Theory.Target.bits target in
@@ -487,7 +490,8 @@ module Prelude(CT : Theory.Core) = struct
         else Meta.lift@@primitive defn name xs
       | Some (Ok (fn,_)) when is_external fn ->
         sym (Def.name fn) >>= fun dst ->
-        Meta.lift@@primitive defn "invoke-subroutine" (res dst::xs)
+        Meta.lift@@primitive defn
+          (prim_name "invoke-subroutine") (res dst::xs)
       | Some (Ok (fn,bs)) ->
         Env.set_args word bs >>= fun () ->
         Scope.clear >>= fun scope ->
@@ -538,7 +542,7 @@ module Prelude(CT : Theory.Core) = struct
       if Set.mem zeros v
       then bigint Z.zero word
       else Meta.lift@@make_reg v >>= fun v ->
-        call ~toplevel:true "get-register" [v]
+        call ~toplevel:true (prim_name "get-register") [v]
     and arg x =
       match KB.Value.get symbol x with
       | None -> !!x
@@ -551,11 +555,11 @@ module Prelude(CT : Theory.Core) = struct
       | None when Set.mem consts v -> !!empty
       | None when Set.mem pseudos v ->
         Meta.lift@@make_reg v >>= fun v ->
-        call ~toplevel:true "set-register" [v]
+        call ~toplevel:true (prim_name "set-register") [v]
       | None -> eval x >>= assign target v
     and let_ ?(t=word) v x b =
       let* xeff = eval x in
-      let orig = Theory.Var.define (bits t) v in
+      let orig = Theory.Var.define (bits t) (KB.Name.to_string v) in
       if is_parameter prog orig
       then
         Env.set orig (res xeff) >>= fun () ->
@@ -667,6 +671,7 @@ let provide_semantics ?(stdout=Format.std_formatter) () =
     } in
   Theory.instance () >>= Theory.require >>= fun (module Core) ->
   let open Prelude(Core) in
+  let name = KB.Name.read name in
   Meta.run (reify stdout prog obj target name args) meta >>= fun (res,_) ->
   KB.collect Disasm_expert.Basic.Insn.slot obj >>| function
   | Some basic when Insn.(res <> empty) ->
@@ -684,6 +689,7 @@ let provide_attributes () =
   KB.collect Property.name this >>=? fun name ->
   obtain_typed_program unit >>|
   Program.Type.program >>= fun prog ->
+  let name = KB.Name.read ~package:"core" name in
   match Resolve.semantics prog Key.func name () with
   | None -> !!empty
   | Some (Error problem) ->

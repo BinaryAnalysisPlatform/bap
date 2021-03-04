@@ -171,6 +171,6 @@ let domain = KB.Domain.define "context"
     ~empty ~order ~join
 
 let t = Attribute.declare "context"
-    ~package:"primus"
+    ~package:"core"
     ~domain
     ~parse

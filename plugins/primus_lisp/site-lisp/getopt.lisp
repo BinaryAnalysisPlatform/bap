@@ -1,6 +1,11 @@
+(require posix-init)
 (require type)
 (require array)
 (require strstr)
+
+(in-package posix)
+(declare (visibility :private))
+
 
 (declare (global (optind opterr optopt optarg)))
 
@@ -60,9 +65,10 @@
      (getopt-no-argument argv opts))
    (incr optind)))
 
-
 (defun getopt (argc argv opts)
-  (declare (external "getopt"))
+  (declare
+   (visibility :public)
+   (external "getopt"))
   (when (= 0 optind)
     (set optind 1)
     (set lastidx 0))

@@ -8,6 +8,8 @@ module Attribute = Bap_primus_lisp_attribute
 module Var = Bap_primus_lisp_var
 module KB = Knowledge
 
+let package = "core"
+
 let fail err t = Attribute.Parse.fail err t
 
 module Variables = struct
@@ -29,12 +31,12 @@ module Variables = struct
                  Var.Set.of_list
 
   let global = Attribute.declare "global"
-      ~package:"primus"
+      ~package
       ~domain
       ~parse
 
   let static = Attribute.declare "static"
-      ~package:"primus"
+      ~package
       ~domain
       ~parse
 end
@@ -57,15 +59,50 @@ let parse_name = function
 
 module External = struct
   type t = String.Set.t
+
   let domain = KB.Domain.powerset (module String) "names"
 
   let parse xs = List.map xs ~f:parse_name |>
                  String.Set.of_list
 
   let t = Attribute.declare "external"
-      ~package:"primus"
+      ~package
       ~domain
       ~parse
+end
+
+module Visibility = struct
+  type visibility = Private | Public [@@deriving equal]
+  type t = visibility list [@@deriving equal]
+
+  type Attribute.error += Expect_public_or_private
+
+  let order x y : KB.Order.partial =
+    match List.length x, List.length y with
+    | m,n when m < n -> LT
+    | m,n when m > n -> GT
+    | _ -> if List.equal equal_visibility x y then EQ else NC
+
+  let domain = KB.Domain.define "visibility-list"
+      ~empty:[]
+      ~order
+      ~inspect:(function
+          | [] | Public :: _ -> Sexp.Atom "public"
+          | _ -> Sexp.Atom "private")
+      ~join:(fun was now -> Ok (now@was))
+
+  let parse = function
+    | [{data=Atom ":public"}] -> [Public]
+    | [{data=Atom ":private"}] -> [Private]
+    | s -> fail Expect_public_or_private s
+
+  let t = Attribute.declare "visibility"
+      ~package ~domain ~parse
+
+  let is_public = function
+    | []  | Public :: _ -> true
+    | _ -> false
+
 end
 
 

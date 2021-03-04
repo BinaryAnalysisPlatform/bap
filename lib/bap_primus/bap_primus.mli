@@ -3349,8 +3349,12 @@ attribute ::=
   | (static <ident> ...)
   | (advice <cmethod> <ident> ...)
   | (<ident> ?ident-specific-format?)
+  | (visibility <visibility>)
+  | <ident>
 
 cmethod ::= :before | :after
+
+visibility ::= :public | :private
 
 docstring ::= <text>
 
@@ -3926,7 +3930,7 @@ ident ::= ?any atom that is not recognized as a <word>?
       (* dedocumented due to deprecation *)
       module Primitive : sig
         type 'a t
-        val create : ?docs:string -> string -> (value list -> 'a) -> 'a t
+        val create : ?docs:string -> ?package:string -> string -> (value list -> 'a) -> 'a t
       end [@@deprecated "[since 2018-03] use [Closure]"]
 
       (* undocumented since it is deprecated *)
@@ -3986,8 +3990,11 @@ ident ::= ?any atom that is not recognized as a <word>?
               end
             ]}
         *)
-        val define : ?types:Type.signature ->
-          ?docs:string -> string -> closure -> unit Machine.t
+        val define :
+          ?types:Type.signature ->
+          ?docs:string ->
+          ?package:string ->
+          string -> closure -> unit Machine.t
 
 
         (** [signal ?params ?docs obs proj] defines a new signal.

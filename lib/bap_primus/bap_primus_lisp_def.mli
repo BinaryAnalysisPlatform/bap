@@ -25,11 +25,12 @@ type signal
 
 type attrs = Attribute.set
 
-val name : 'a t -> string
+val name : 'a t -> KB.Name.t
+val import : string -> 'a t -> 'a t
 val docs : 'a t -> string
 val attributes : 'a t -> attrs
 
-type 'a def = ?docs:string -> ?attrs:attrs -> string -> 'a
+type 'a def = ?docs:string -> ?attrs:attrs -> KB.Name.t -> 'a
 
 module Func : sig
   val create : (var list -> ast -> tree -> func t) def
@@ -78,19 +79,20 @@ end
 
 module Primitive : sig
   type nonrec 'a t = 'a primitive t
-  val create : ?docs:string -> string -> (value list -> 'a) -> 'a t
+  val create : ?docs:string -> ?package:string -> string -> (value list -> 'a) -> 'a t
   val body : 'a t -> (value list -> 'a)
 end
 
 module Closure : sig
   val of_primitive : 'a Primitive.t -> closure -> prim t
-  val create : ?types:Type.signature -> ?docs:string -> string -> closure -> prim t
+  val create : ?types:Type.signature -> ?docs:string -> ?package:string
+    -> string -> closure -> prim t
   val signature : prim t -> Type.signature option
   val body : prim t -> closure
 end
 
 module Signal : sig
-  val create : ?docs:string -> types:Type.signature -> string -> signal t
+  val create : ?docs:string -> types:Type.signature -> KB.Name.t -> signal t
   val signature : signal t -> Type.signature
 end
 

@@ -1,3 +1,5 @@
+(defpackage core)
+(in-package core)
 
 (defconstant true 1:1  "true is another name for 1:1")
 (defconstant false 0:1 "false is another name for 0:1")

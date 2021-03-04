@@ -1,12 +1,12 @@
 open Bap.Std
 open Core_kernel
+open Bap_core_theory
 open Format
 open Bap_primus_lisp_types
 
 module Attribute = Bap_primus_lisp_attribute
 module Context = Bap_primus_lisp_context
 module Def = Bap_primus_lisp_def
-module Value = Bap_primus_value
 module Loc = Bap_primus_lisp_loc
 module Program = Bap_primus_lisp_program
 
@@ -26,7 +26,7 @@ type resolution = {
 
 
 type ('t,'a,'b) resolver =
-  Program.t -> 't Program.item -> string -> 'a ->
+  Program.t -> 't Program.item -> KB.Name.t -> 'a ->
   ('b,resolution) result option
 
 type ('t,'a,'b) one = ('t,'a,'t Def.t * 'b) resolver
@@ -35,10 +35,10 @@ type ('t,'a,'b) many = ('t,'a,('t Def.t * 'b) list) resolver
 
 type exn += Failed of string * Context.t * resolution
 
-let interns d name = String.equal (Def.name d) name
+let interns d name = KB.Name.equal (Def.name d) name
 let externs def name =
   let names = Attribute.Set.get External.t (Def.attributes def) in
-  Set.mem names name
+  Set.mem names (KB.Name.unqualified name)
 
 
 
@@ -188,7 +188,8 @@ let macro prog item name code =
 let primitive prog item name () =
   run one interns overload_primitive prog item name
 
-let semantics = primitive
+let semantics prog item name () =
+  run one interns overload_primitive prog item name
 
 let subst prog item name () =
   run one interns overload_primitive prog item name

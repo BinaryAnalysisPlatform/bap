@@ -17,9 +17,13 @@ val add : t -> 'a item -> 'a Def.t -> t
 val get : t -> 'a item -> 'a Def.t list
 val context : t -> Context.t
 val sources : t -> Source.t
+val package : t -> string
 val with_sources : t -> Source.t -> t
 val with_context : t -> Context.t -> t
-
+val with_package : t -> string -> t
+val reset_package : t -> t
+val use_package : ?package:string -> string -> t -> t
+val finish_imports : t -> t
 
 module Items : sig
   val macro : Def.macro item

@@ -16,7 +16,7 @@ module Type = Bap_primus_lisp_type
 type attrs = Attribute.set
 
 type meta = {
-  name : string;
+  name : KB.Name.t;
   docs : string;
   attrs : attrs;
 } [@@deriving fields]
@@ -64,7 +64,7 @@ type prim = {
 
 type 'a spec = {meta : meta; code : 'a}
 type 'a t = 'a spec indexed
-type 'a def = ?docs:string -> ?attrs:attrs -> string -> 'a
+type 'a def = ?docs:string -> ?attrs:attrs -> KB.Name.t -> 'a
 
 let name {data={meta}} = name meta
 let docs {data={meta}} = docs meta
@@ -77,6 +77,16 @@ let create data tree = {
   id = tree.id;
   eq = tree.eq;
 }
+
+let import package def : 'a t =
+  let name = KB.Name.create ~package @@
+    KB.Name.unqualified (name def) in {
+    def with data = {
+      def.data with meta = {def.data.meta with name}
+    }
+  }
+
+
 
 module Func = struct
   let args = field args
@@ -101,7 +111,10 @@ module Signal = struct
 
   let create ?(docs="") ~types name : t = {
     data = {
-      meta = {name; docs; attrs=Attribute.Set.empty};
+      meta = {
+        name;
+        docs;
+        attrs=Attribute.Set.empty};
       code = types;
     };
     id = Source.Id.null;
@@ -200,9 +213,13 @@ end
 
 module Primitive = struct
   type nonrec 'a t = 'a primitive t
-  let create ?(docs="") name code = {
+  let create ?(docs="") ?package name code = {
     data = {
-      meta = {name;docs; attrs=Attribute.Set.empty};
+      meta = {
+        name = KB.Name.read ?package name;
+        docs;
+        attrs = Attribute.Set.empty
+      };
       code;
     };
     id = Id.null;
@@ -227,9 +244,12 @@ module Closure = struct
          types=None;
        }}}
 
-  let create ?types ?(docs="") name lambda = {
+  let create ?types ?(docs="") ?(package="core") name lambda = {
     data = {
-      meta = {name;docs; attrs=Attribute.Set.empty};
+      meta = {
+        name = KB.Name.read ~package name;
+        docs;
+        attrs=Attribute.Set.empty};
       code = {
         types;
         lambda;

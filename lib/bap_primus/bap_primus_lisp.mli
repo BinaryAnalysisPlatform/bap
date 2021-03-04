@@ -93,7 +93,7 @@ type closure = (module Closure)
 
 module Primitive : sig
   type 'a t
-  val create : ?docs:string -> string -> (value list -> 'a) -> 'a t
+  val create : ?docs:string -> ?package:string -> string -> (value list -> 'a) -> 'a t
 end
 
 val message : message observation
@@ -119,7 +119,8 @@ module Make (Machine : Machine) : sig
 
   val types : Type.env Machine.t
 
-  val define : ?types:Type.signature -> ?docs:string -> string -> closure -> unit Machine.t
+  val define : ?types:Type.signature -> ?docs:string ->
+    ?package:string -> string -> closure -> unit Machine.t
 
   val signal :
     ?params:[< Type.parameters] ->

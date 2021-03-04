@@ -18,3 +18,8 @@ module Advice : sig
   val t : t Attribute.t
   val targets : t -> cmethod -> String.Set.t
 end
+
+module Visibility : sig
+  type t
+  val is_public : t -> bool
+end

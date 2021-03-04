@@ -1,3 +1,6 @@
+(require posix-init)
+(in-package posix)
+
 (require string)
 (require types)
 
@@ -81,6 +84,7 @@
 
 ;; pre: both old-ptr and new-len are not null
 (defun realloc/update-chunk (old-ptr new-len)
+  (declare (visibility :private))
   (let ((old-len (malloc/get-chunk-size old-ptr)))
     (if (>= old-len new-len) (realloc/shrink-chunk old-ptr new-len)
       (let ((new-ptr (malloc new-len)))
@@ -90,6 +94,7 @@
         new-ptr))))
 
 (defun realloc/as-free (ptr)
+  (declare (visibility :private))
   (free ptr)
   *malloc-zero-sentinel*)
 
@@ -108,16 +113,19 @@
 
 
 (defun malloc-heap-size ()
+  (declare (visibility :private))
   *malloc/total-bytes-allocated*)
 
 
 (defun malloc-will-reach-limit (n)
+  (declare (visibility :private))
   (or (and *malloc-max-chunk-size*
            (> n *malloc-max-chunk-size*))
       (and *malloc-max-arena-size*
            (> (malloc-heap-size) *malloc-max-arena-size*))))
 
 (defun malloc/fill-edges (ptr n)
+  (declare (visibility :private))
   (when *malloc-guard-edges*
     (memset ptr
             *malloc-guard-pattern*
@@ -128,6 +136,7 @@
 
 
 (defun malloc/allocate-arena (len)
+  (declare (visibility :private))
   (set *malloc-arena-start* brk)
   (+= brk len)
   (set *malloc-arena-end* brk)
@@ -141,6 +150,7 @@
                      *malloc-uniform-max-value*)))
 
 (defun malloc/initialize (ptr len)
+  (declare (visibility :private))
   (if *malloc-initialize-memory*
       (memory-allocate ptr len *malloc-initial-value*)
     (when (or *malloc-uniform-min-value*
@@ -150,16 +160,20 @@
                        *malloc-uniform-max-value*))))
 
 (defun malloc/grow-arena-if-needed (len)
+  (declare (visibility :private))
   (let ((free-space (- *malloc-arena-end* *malloc/brk*)))
     (when (> len free-space)
       (malloc/allocate-arena (max *malloc-arena-initial-size* len)))))
 
 (defun realloc/shrink-chunk (ptr len)
+  (declare (visibility :private))
   (malloc/put-chunk-size ptr len)
   ptr)
 
 (defun malloc/put-chunk-size (ptr len)
+  (declare (visibility :private))
   (write-word int ptr len))
 
 (defun malloc/get-chunk-size (ptr)
+  (declare (visibility :private))
   (read-word int (- ptr (sizeof int))))

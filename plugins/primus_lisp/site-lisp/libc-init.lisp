@@ -1,8 +1,8 @@
 ;; for the invoke-procedure we need a type of the invoked function
 ;; so, the function must be present in the static representation of a program.
-
-(require pointers)
-(require memory)
+(require posix-init)
+(in-package posix)
+(declare (visibility :private))
 
 (defun init (main argc argv auxv)
   "GNU libc initialization stub"

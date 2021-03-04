@@ -82,9 +82,13 @@ let parse s attrs name values = match Hashtbl.find parsers name with
 
 let parse attrs = function
   | {data=List ({data=Atom name} as s :: values)} ->
-    let name = Name.read ~package:"primus" name in
+    let name = Name.read ~package:"core" name in
     parse s attrs name values
-  | s -> Parse.(fail Expect_list) [s]
+  | {data=Atom name} as s ->
+    let name = Name.read ~package:"core" name in
+    parse s attrs name []
+  | _ -> attrs
+
 
 module Set = struct
   let get {slot} = KB.Value.get slot
@@ -92,7 +96,7 @@ module Set = struct
 
   let slot = KB.Class.property Theory.Program.cls "primus-attrs" Self.domain
       ~public:true
-      ~package:"bap"
+      ~package:"primus"
       ~persistent:(KB.Persistent.of_binable (module Self))
 
   include Self
