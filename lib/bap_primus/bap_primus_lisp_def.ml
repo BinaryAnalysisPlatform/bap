@@ -16,7 +16,7 @@ module Type = Bap_primus_lisp_type
 type attrs = Attribute.set
 
 type meta = {
-  name : KB.Name.t;
+  name : string;
   docs : string;
   attrs : attrs;
 } [@@deriving fields]
@@ -64,7 +64,7 @@ type prim = {
 
 type 'a spec = {meta : meta; code : 'a}
 type 'a t = 'a spec indexed
-type 'a def = ?docs:string -> ?attrs:attrs -> KB.Name.t -> 'a
+type 'a def = ?docs:string -> ?attrs:attrs -> string -> 'a
 
 let name {data={meta}} = name meta
 let docs {data={meta}} = docs meta
@@ -78,13 +78,11 @@ let create data tree = {
   eq = tree.eq;
 }
 
-let import package def : 'a t =
-  let name = KB.Name.create ~package @@
-    KB.Name.unqualified (name def) in {
-    def with data = {
-      def.data with meta = {def.data.meta with name}
-    }
+let rename def name : 'a t = {
+  def with data = {
+    def.data with meta = {def.data.meta with name}
   }
+}
 
 
 
@@ -216,7 +214,7 @@ module Primitive = struct
   let create ?(docs="") ?package name code = {
     data = {
       meta = {
-        name = KB.Name.read ?package name;
+        name = KB.Name.show@@KB.Name.read ?package name;
         docs;
         attrs = Attribute.Set.empty
       };
@@ -247,7 +245,7 @@ module Closure = struct
   let create ?types ?(docs="") ?(package="core") name lambda = {
     data = {
       meta = {
-        name = KB.Name.read ~package name;
+        name = KB.Name.show@@KB.Name.read ~package name;
         docs;
         attrs=Attribute.Set.empty};
       code = {

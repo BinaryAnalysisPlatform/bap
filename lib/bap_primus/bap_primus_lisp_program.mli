@@ -15,6 +15,8 @@ val equal : t -> t -> bool
 val merge : t -> t -> t
 val add : t -> 'a item -> 'a Def.t -> t
 val get : t -> 'a item -> 'a Def.t list
+val fold : t -> 'a item -> init:'s ->
+  f:(package:string -> 'a Def.t list -> 's -> 's) -> 's
 val context : t -> Context.t
 val sources : t -> Source.t
 val package : t -> string
@@ -22,8 +24,9 @@ val with_sources : t -> Source.t -> t
 val with_context : t -> Context.t -> t
 val with_package : t -> string -> t
 val reset_package : t -> t
-val use_package : ?package:string -> string -> t -> t
-val finish_imports : t -> t
+val use_package : t -> ?target:string -> string -> t
+val in_package : string -> t -> (t -> 'a) -> 'a
+
 
 module Items : sig
   val macro : Def.macro item
@@ -42,7 +45,7 @@ module Type : sig
   val empty : env
   val equal : env -> env -> bool
   val merge : env -> env -> env
-  val infer : ?externals:(string * signature) list -> Var.t seq -> program -> env
+  val infer : ?externals:(KB.Name.t * signature) list -> Var.t seq -> program -> env
   val program : env -> program
   val check : Var.t seq -> program -> error list
   val errors : env -> error list

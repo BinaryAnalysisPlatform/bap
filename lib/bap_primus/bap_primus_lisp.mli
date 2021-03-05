@@ -153,7 +153,7 @@ module Semantics : sig
   val enable : ?stdout:Format.formatter -> unit -> unit
   val declare :
     ?types:Type.signature ->
-    ?docs:string -> string -> unit
+    ?docs:string -> ?package:string -> string -> unit
 
 end
 

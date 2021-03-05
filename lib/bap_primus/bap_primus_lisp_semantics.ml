@@ -78,7 +78,7 @@ type info = {
   docs : string;
 }
 
-let library = Hashtbl.create (module String)
+let library = Hashtbl.create (module KB.Name)
 
 module Property = struct
   let name = KB.Class.property Theory.Program.cls ~package "lisp-name" @@
@@ -130,10 +130,12 @@ let declare
         rest = Some any;
         ret = any;
       })
-    ?(docs="undocumented") name =
+    ?(docs="undocumented") ?package name =
+  let name = KB.Name.read ?package name in
   if Hashtbl.mem library name
   then invalid_argf "A primitive `%s' already exists, please \
-                     choose a different name for your primitive" name ();
+                     choose a different name for your primitive"
+      (KB.Name.show name) ();
   Hashtbl.add_exn library name {
     docs;
     types
@@ -200,8 +202,7 @@ let make_reg var =
   let res = KB.Value.put symbol empty (Some name) in
   KB.Value.put static_slot res (Some value)
 
-let sym name =
-  let str = KB.Name.to_string name in
+let sym str =
   let v = update_value empty @@ fun v ->
     KB.Value.put symbol v (Some str) in
   match str with
@@ -227,10 +228,12 @@ let make_var ?t:constr target name  =
     Theory.Var.forget@@Theory.Var.define (bits t) (KB.Name.to_string name)
 
 let lookup_parameter prog v =
-  let name = KB.Name.read @@ Theory.Var.name v in
+  let v = KB.Name.read @@ Theory.Var.name v in
+  let name = KB.Name.unqualified v in
+  Program.in_package (KB.Name.package v) prog @@ fun prog ->
   Program.get prog Key.para |>
   List.find ~f:(fun p ->
-      KB.Name.equal (Def.name p) name) |> function
+      String.equal (Def.name p) name) |> function
   | None -> None
   | Some p -> Some (Def.Para.default p)
 
@@ -434,7 +437,7 @@ module Prelude(CT : Theory.Core) = struct
       | {data=Int {data={exp=x}}} -> bigint x word
       | {data=Var {data={exp=n; typ=Type t}}} -> lookup@@var ~t n
       | {data=Var {data={exp=n}}} -> lookup@@var n
-      | {data=Sym {data=s}} -> sym s
+      | {data=Sym {data=s}} -> sym (KB.Name.show s)
       | {data=Ite (cnd,yes,nay)} -> ite cnd yes nay
       | {data=Let ({data={exp=n; typ=Type t}},x,y)} -> let_ ~t n x y
       | {data=Let ({data={exp=n}},x,y)} -> let_ n x y

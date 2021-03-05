@@ -18,6 +18,7 @@ val enable : ?stdout:Format.formatter -> unit -> unit
 val declare :
   ?types:(Theory.Target.t -> Bap_primus_lisp_type.signature) ->
   ?docs:string ->
+  ?package:string ->
   string -> unit
 
 module Unit : sig

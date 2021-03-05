@@ -296,13 +296,9 @@ module Parse = struct
     Context.merge (Program.context prog) @@
     Attribute.Set.get Context.t attrs
 
-  let qualify prog = KB.Name.read ~package:(Program.package prog)
-
-
   let defun ?docs ?(attrs=[]) name p body prog gattrs tree =
     let attrs = parse_declarations gattrs attrs in
     let es = List.map ~f:(parse (constrained prog attrs)) body in
-    let name = qualify prog name in
     let params = params prog in
     Program.add prog func @@ Def.Func.create ?docs ~attrs name (params p) {
       data = Seq es;
@@ -313,7 +309,6 @@ module Parse = struct
   let defmethod ?docs ?(attrs=[]) name p body prog gattrs tree =
     let attrs = parse_declarations gattrs attrs in
     let es = List.map ~f:(parse (constrained prog attrs)) body in
-    let name = qualify prog name in
     let params = params prog in
     Program.add prog meth @@ Def.Meth.create ?docs ~attrs name (params p) {
       data = Seq es;
@@ -322,7 +317,6 @@ module Parse = struct
     } tree
 
   let defmacro ?docs ?(attrs=[]) name ps body prog gattrs tree =
-    let name = qualify prog name in
     Program.add prog macro @@
     Def.Macro.create ?docs
       ~attrs:(parse_declarations gattrs attrs) name
@@ -330,14 +324,12 @@ module Parse = struct
       body tree
 
   let defparameter ?docs ?(attrs=[]) name body prog gattrs tree =
-    let name = qualify prog name in
     let attrs = parse_declarations gattrs attrs in
     Program.add prog para @@
     Def.Para.create ?docs
       ~attrs name (parse (constrained prog attrs) body) tree
 
   let defsubst ?docs ?(attrs=[]) name body prog gattrs tree =
-    let name = qualify prog name in
     let syntax = match body with
       | s :: _ when is_keyarg s -> Some s
       | _ -> None in
@@ -347,7 +339,6 @@ module Parse = struct
       (reader syntax body) tree
 
   let defconst ?docs ?(attrs=[]) name body prog gattrs tree =
-    let name = qualify prog name in
     Program.add prog const @@
     Def.Const.create ?docs
       ~attrs:(parse_declarations gattrs attrs) name ~value:body tree
@@ -356,7 +347,7 @@ module Parse = struct
   let use_package ?package prog packages =
     List.map packages ~f:atom |>
     List.fold ~init:prog ~f:(fun prog from ->
-        Program.use_package ?package from prog)
+        Program.use_package prog ?target:package from)
 
   let defpackage name prog trees =
     List.fold ~init:prog trees ~f:(fun prog -> function

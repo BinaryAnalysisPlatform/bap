@@ -35,12 +35,10 @@ type ('t,'a,'b) many = ('t,'a,('t Def.t * 'b) list) resolver
 
 type exn += Failed of string * Context.t * resolution
 
-let interns d name = KB.Name.equal (Def.name d) name
+let interns d name = String.equal (Def.name d) name
 let externs def name =
   let names = Attribute.Set.get External.t (Def.attributes def) in
-  Set.mem names (KB.Name.unqualified name)
-
-
+  Set.mem names name
 
 (* all definitions with the given name *)
 let stage1 has_name defs name =
@@ -153,6 +151,8 @@ let one = function
 let many xs = Some xs
 
 let run choose namespace overload prog item name =
+  Program.in_package (KB.Name.package name) prog @@ fun prog ->
+  let name = KB.Name.unqualified name in
   let ctxts = Program.context prog in
   let defs = Program.get prog item in
   let s1 = stage1 namespace defs name in

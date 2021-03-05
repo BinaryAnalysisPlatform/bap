@@ -28,6 +28,12 @@ open Lisp.Program.Items
 type exn += Runtime_error of string
 type exn += Unresolved of KB.Name.t * Lisp.Resolve.resolution
 
+type advisors = {
+  after : Set.M(KB.Name).t;
+  before : Set.M(KB.Name).t;
+}
+
+
 type bindings = {
   vars  : int Var.Map.t;
   stack : (Var.t * value) list
@@ -36,6 +42,7 @@ type state = {
   program : Lisp.Program.t;
   typeenv : Lisp.Program.Type.env;
   signals : subscription String.Map.t;
+  advices : advisors Map.M(KB.Name).t;
   width : int;
   env : bindings;
   cur : Id.t;
@@ -56,6 +63,7 @@ let state = Bap_primus_state.declare ~inspect
          cur = Id.null;
          program = Lisp.Program.empty;
          typeenv = Lisp.Program.Type.empty;
+         advices = Map.empty (module KB.Name);
          signals = String.Map.empty;
          width = width_of_ctxt proj;
        })
@@ -64,6 +72,39 @@ let state = Bap_primus_state.declare ~inspect
 let lisp_primitive,primitive_called = Bap_primus_observation.provide
     ~inspect:Bap_primus_linker.sexp_of_call "lisp-primitive"
     ~desc:"Occurs when the Lisp primitive is invoked."
+
+let show = KB.Name.show
+
+
+let make_advisors cmethod name =
+  let empty = Set.empty (module KB.Name) in
+  let names = Set.add empty name in
+  match cmethod with
+  | Advice.Before -> {before = names; after = empty}
+  | Advice.After ->   {after = names; before = empty}
+
+let merge_advisors x y = {
+  before = Set.union x.before y.before;
+  after = Set.union x.after y.after;
+}
+
+let add_advisor cmethod advisor advices advised =
+  let advisor = make_advisors cmethod advisor in
+  Map.update advices (KB.Name.read advised) ~f:(function
+      | None -> advisor
+      | Some other -> merge_advisors other advisor)
+
+let prepare_advisors prog =
+  Lisp.Program.fold prog func ~f:(fun ~package defs init ->
+      List.fold defs ~init ~f:(fun init def ->
+          let adv =
+            Attribute.Set.get Advice.t (Lisp.Def.attributes def) in
+          let advisor =
+            KB.Name.create ~package (Lisp.Def.name def) in
+          List.fold Advice.[After; Before] ~init
+            ~f:(fun init cmethod ->
+                let targets = Advice.targets adv cmethod in
+                Set.fold targets ~init ~f:(add_advisor cmethod advisor))))
 
 module Errors(Machine : Machine) = struct
   open Machine.Syntax
@@ -307,6 +348,13 @@ module Interpreter(Machine : Machine) = struct
         | [] -> failwith "Bug: empty closure context"
         | _ :: frames -> frames)
 
+  let lookup_parameter prog {data={exp=name}} =
+    Lisp.Program.in_package (KB.Name.package name) prog @@ fun prog ->
+    Lisp.Program.get prog para |>
+    List.find ~f:(fun p ->
+        String.equal (Lisp.Def.name p) (KB.Name.unqualified name))
+
+
   (* Still an open question. Shall we register an call to an external
      function, that is done not directly from a program, but
      internally from other lisp function?
@@ -334,47 +382,46 @@ module Interpreter(Machine : Machine) = struct
       Machine.raise (Unresolved (name,resolution))
     | Some (Ok (fn,bs)) ->
       let is_external = is_external_call name fn in
-      let name = KB.Name.show name in
       let bs,frame_size = Vars.make_frame s.width bs in
       Eval.const Word.b0 >>= fun init ->
-      notify_when is_external Trace.call_entered name args >>= fun () ->
+      notify_when is_external Trace.call_entered (show name) args >>= fun () ->
       eval_advices Advice.Before init name args >>= fun _ ->
       Machine.Local.put state (Vars.push_frame bs s) >>= fun () ->
       eval_exp (Lisp.Def.Func.body fn) >>= fun r ->
       Machine.Local.update state ~f:(Vars.pop frame_size) >>= fun () ->
-      notify_when is_external Trace.call_returned name args ~rval:r >>= fun () ->
+      notify_when is_external Trace.call_returned (show name) args ~rval:r >>= fun () ->
       eval_advices Advice.After r name args
 
   and eval_advices stage init primary args =
-    Machine.Local.get state >>= fun {program} ->
-    Lisp.Program.get program func |>
-    Machine.List.fold ~init ~f:(fun r def ->
-        let name = Lisp.Def.name def in
-        let adv =
-          Attribute.Set.get Advice.t (Lisp.Def.attributes def) in
-        if Set.mem (Advice.targets adv stage) primary
-        then match stage with
+    Machine.Local.get state >>= fun {advices} ->
+    match Map.find advices primary with
+    | None -> Machine.return init
+    | Some {before; after} ->
+      let names = match stage with
+        | After -> after
+        | Before -> before in
+      Set.to_sequence names |>
+      Machine.Seq.fold ~init ~f:(fun r name ->
+          match stage with
           | After  -> eval_lisp name (args @ [r])
-          | Before -> eval_lisp name args
-        else Machine.return r)
+          | Before -> eval_lisp name args)
 
   and eval_primitive name args =
     Machine.Local.get state >>= fun {program} ->
     match Lisp.Resolve.primitive program primitive name () with
-    | None -> failf "unresolved primitive %s" (KB.Name.show name) ()
-    | Some (Error _) -> failf "conflicting primitive %s" (KB.Name.show name) ()
+    | None -> failf "unresolved primitive %s" (show name) ()
+    | Some (Error _) -> failf "conflicting primitive %s" (show name) ()
     | Some (Ok (code,())) ->
       let module Body = (val (Lisp.Def.Closure.body code)) in
       let module Code = Body(Machine) in
-      let name = KB.Name.show name in
       Eval.const Word.b0 >>= fun init ->
       eval_advices Advice.Before init name args >>= fun _ ->
-      push_context name args >>= fun () ->
+      push_context (KB.Name.unqualified name) args >>= fun () ->
       Code.run args >>= fun r ->
       pop_context >>= fun () ->
       Eval.tick >>= fun () ->
       Machine.Observation.post primitive_called ~f:(fun k ->
-          k (name,args@[r])) >>= fun () ->
+          k (show name,args@[r])) >>= fun () ->
       eval_advices Advice.After r name args
 
   and eval_exp exp  =
@@ -386,7 +433,7 @@ module Interpreter(Machine : Machine) = struct
       width >>= fun width ->
       let bv = Bitvec.(bigint v mod modulus width) in
       Eval.const (Word.create bv width) in
-    let sym v = Value.Symbol.to_value (KB.Name.show v.data) in
+    let sym v = Value.Symbol.to_value (show v.data) in
     let rec eval = function
       | {data=Int {data={exp;typ}}} -> int exp typ
       | {data=Var v} -> lookup v
@@ -411,20 +458,16 @@ module Interpreter(Machine : Machine) = struct
       eval e2 >>= fun r ->
       Machine.Local.update state ~f:(Vars.pop 1) >>= fun () ->
       Machine.return r
-    and lookup v =
+    and lookup v' =
       Machine.Local.get state >>= fun {env; width; program} ->
-      let v = var_of_lisp_var width v in
+      let v = var_of_lisp_var width v' in
       if Map.mem env.vars v
       then
         Machine.return @@
         List.Assoc.find_exn ~equal:Var.equal env.stack v
       else Env.has v >>= function
         | true -> Eval.get v
-        | false ->
-          Lisp.Program.get program para |>
-          List.find ~f:(fun p ->
-              let v = KB.Name.read (Var.name v) in
-              KB.Name.equal (Lisp.Def.name p) v) |> function
+        | false -> lookup_parameter program v' |> function
           | None -> Eval.get v
           | Some p ->
             eval (Lisp.Def.Para.default p) >>= fun x ->
@@ -604,15 +647,7 @@ module Make(Machine : Machine) = struct
     let invoke_subroutine_signature =
       "invoke-subroutine", Type.Spec.(one int // all any @-> any)
 
-
-    let finish_imports =
-      Machine.Local.update state ~f:(fun s -> {
-            s with program = Lisp.Program.finish_imports s.program;
-          })
-
-
     let run =
-      finish_imports >>= fun () ->
       Machine.get () >>= fun proj ->
       Machine.Local.get state >>= fun s ->
       Env.all >>= fun evars ->
@@ -622,7 +657,7 @@ module Make(Machine : Machine) = struct
       let externals =
         invoke_subroutine_signature ::
         signatures_of_subs (Project.program proj) |>
-        List.map ~f:(fun (n,s) -> n,s t) in
+        List.map ~f:(fun (n,s) -> KB.Name.read n,s t) in
       let typeenv =
         Lisp.Program.Type.infer ~externals vars s.program in
       Lisp.Program.Type.errors typeenv |>
@@ -732,15 +767,14 @@ module Make(Machine : Machine) = struct
           eval_args >>= fun bs ->
           let args = List.rev_map ~f:snd bs in
           Value.b0 >>= fun init ->
-          let name = KB.Name.show name in
           Interp.eval_advices Advice.Before init name args >>= fun _ ->
           Machine.Local.update state ~f:(Vars.push_frame bs) >>= fun () ->
-          Interp.notify_when true Trace.call_entered name args >>= fun () ->
-          Interp.notify_when true Trace.lisp_call_entered name args >>= fun () ->
+          Interp.notify_when true Trace.call_entered (show name) args >>= fun () ->
+          Interp.notify_when true Trace.lisp_call_entered (show name) args >>= fun () ->
           Interp.eval_exp (Lisp.Def.Func.body fn) >>= fun r ->
           Machine.Local.update state ~f:(Vars.pop frame_size) >>= fun () ->
-          Interp.notify_when true Trace.lisp_call_returned name args ~rval:r >>= fun () ->
-          Interp.notify_when true Trace.call_returned name args ~rval:r >>= fun () ->
+          Interp.notify_when true Trace.lisp_call_returned (show name) args ~rval:r >>= fun () ->
+          Interp.notify_when true Trace.call_returned (show name) args ~rval:r >>= fun () ->
           Interp.eval_advices Advice.After r name args >>= fun r ->
           eval_ret r
       end in
@@ -791,12 +825,12 @@ module Make(Machine : Machine) = struct
       | Some (`Gen (ts,t)) ->
         Lisp.Type.signature (specialize ts) ~rest:(t arch) Any in
     let name = KB.Name.read name in
-    let r = Lisp.Def.Signal.create ~types ~docs:doc name in
+    let r = Lisp.Def.Signal.create ~types ~docs:doc (show name) in
     Machine.Observation.subscribe obs (fun x ->
         proj x >>= Self.eval_signal name) >>= fun sub ->
     Machine.Local.update state ~f:(fun s -> {
           s with program = Lisp.Program.add s.program signal r;
-                 signals = Map.add_exn s.signals (KB.Name.show name) sub;
+                 signals = Map.add_exn s.signals (show name) sub;
         })
 
 
@@ -813,7 +847,7 @@ module Make(Machine : Machine) = struct
           module Unpacked = Library(M)
           let run =
             Unpacked.defs () |> List.find ~f:(fun d ->
-                KB.Name.equal (Lisp.Def.name d) (Lisp.Def.name def)) |> function
+                String.equal (Lisp.Def.name d) (Lisp.Def.name def)) |> function
             | Some code -> (Lisp.Def.Primitive.body code)
             | _ -> assert false
         end in
@@ -829,7 +863,7 @@ module Make(Machine : Machine) = struct
     let known_methods =
       Lisp.Program.get s.program meth |>
       List.fold ~init:String.Set.empty ~f:(fun mets met ->
-          Set.add mets (KB.Name.show (Lisp.Def.name met))) in
+          Set.add mets (Lisp.Def.name met)) in
     let useless_subscriptions =
       Map.fold s.signals ~init:[] ~f:(fun ~key:name ~data:sub subs ->
           if Set.mem known_methods name then subs
@@ -874,7 +908,7 @@ module Doc = struct
 
   let describe prog item =
     Lisp.Program.get prog item |> List.map ~f:(fun x ->
-        let name = Name.create (KB.Name.show (Lisp.Def.name x)) in
+        let name = Name.create (Lisp.Def.name x) in
         let info = Info.create ~desc:(Lisp.Def.docs x) name in
         name,Info.desc info) |> normalize
 

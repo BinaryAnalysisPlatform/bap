@@ -25,12 +25,12 @@ type signal
 
 type attrs = Attribute.set
 
-val name : 'a t -> KB.Name.t
-val import : string -> 'a t -> 'a t
+val name : 'a t -> string
+val rename : 'a t -> string -> 'a t
 val docs : 'a t -> string
 val attributes : 'a t -> attrs
 
-type 'a def = ?docs:string -> ?attrs:attrs -> KB.Name.t -> 'a
+type 'a def = ?docs:string -> ?attrs:attrs -> string -> 'a
 
 module Func : sig
   val create : (var list -> ast -> tree -> func t) def
@@ -92,7 +92,7 @@ module Closure : sig
 end
 
 module Signal : sig
-  val create : ?docs:string -> types:Type.signature -> KB.Name.t -> signal t
+  val create : ?docs:string -> types:Type.signature -> string -> signal t
   val signature : signal t -> Type.signature
 end
 

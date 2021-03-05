@@ -1035,7 +1035,7 @@ let provide () =
       comment "implements semantics for the core primitives"
     end);
   List.iter export ~f:(fun (name,types,docs) ->
-      Primus.Lisp.Semantics.declare ~types ~docs name);
+      Primus.Lisp.Semantics.declare ~types ~docs ~package:"core" name);
   let (let*?) x f = x >>= function
     | None -> !!nothing
     | Some x -> f x in

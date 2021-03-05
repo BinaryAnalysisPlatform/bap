@@ -3742,7 +3742,8 @@ ident ::= ?any atom that is not recognized as a <word>?
         *)
         val declare :
           ?types:Type.signature ->
-          ?docs:string -> string -> unit
+          ?docs:string ->
+          ?package:string -> string -> unit
       end
 
 
