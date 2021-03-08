@@ -194,7 +194,8 @@ let provide_macho_segments =
                               $ LLVM.segment_cmd_flags
                               $ LLVM.virtual_segment_cmd) @@
   fun (name, off, size) (_,(r,w,x)) (_,addr,vsize) ->
-  let addr =  Int64.(bias + addr) in [
+  let addr = Int64.(bias + addr) in
+  provide_if Int64.(size <> 0L) [
     Ogre.provide segment addr vsize r w x;
     Ogre.provide named_region addr vsize name;
     Ogre.provide mapped addr size off;
@@ -228,7 +229,8 @@ let map_sections_to_segments =
                                 LLVM.section_entry
                               $ LLVM.section_flags) @@
   fun (name,addr,size,off) (_,(r,w,x)) ->
-  let addr = Int64.(addr + bias) in [
+  let addr = Int64.(addr + bias) in
+  provide_if Int64.(size <> 0L) [
     Ogre.provide segment addr size r w x >>= fun () ->
     Ogre.provide mapped addr size off  >>= fun () ->
     Ogre.provide named_region addr size name
@@ -262,7 +264,7 @@ let provide_elf_segments =
                               $ LLVM.elf_program_header_flags) @@
   fun (name,off,size) (_, addr, vsize) (_,ld,r,w,x) ->
   let addr = Int64.(addr + bias) in
-  provide_if ld [
+  provide_if (ld && Int64.(size <> 0L)) [
     Ogre.provide segment addr vsize r w x;
     Ogre.provide mapped addr size off;
     Ogre.provide named_region addr vsize name;
@@ -282,14 +284,15 @@ let provide_coff_segmentation = [
                               $ LLVM.coff_virtual_section_header
                               $ LLVM.section_flags) @@
   fun (name, _, size, start) (_,addr,vsize) (_,(r,w,x)) ->
-  let addr = Int64.(addr + bias) in [
+  let addr = Int64.(addr + bias) in
+  provide_if Int64.(size <> 0L) [
     Ogre.provide segment addr vsize r w x;
     Ogre.provide mapped addr size start;
     Ogre.provide section addr vsize;
     Ogre.provide named_region addr vsize name;
   ] @ provide_if x [
-      Ogre.provide code_region addr vsize start;
-    ]
+    Ogre.provide code_region addr vsize start;
+  ]
 
 ]
 
