@@ -87,6 +87,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     | Ok segs ->
       Machine.Seq.fold ~init:null segs
         ~f:(fun endp {Image.Scheme.addr; size; info=(_,w,x)} ->
+            assert Int64.(size <> 0L);
             make_word addr >>= fun lower ->
             make_word Int64.(size-1L) >>= fun diff ->
             let upper = Word.(lower + diff) in
