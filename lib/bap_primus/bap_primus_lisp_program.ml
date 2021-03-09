@@ -73,15 +73,22 @@ let fold_library library ~init ~f =
   Map.fold library ~init ~f:(fun ~key:package ~data init ->
       f ~package data init)
 
+let (++) xs ys : _ Def.t list =
+  let add (ids,defs) def =
+    if Set.mem ids def.id then ids,defs
+    else Set.add ids def.id, def::defs in
+  let init = Set.empty (module Id),[] in
+  snd@@List.fold ys ~f:add ~init:(List.fold ~init xs ~f:add)
+
 let merge_packages p1 p2 = {
-  codes = p1.codes @ p2.codes;
-  defs = p1.defs @ p2.defs;
-  mets = p1.mets @ p2.mets;
-  pars = p1.pars @ p2.pars;
-  sigs = p1.sigs @ p2.sigs;
-  macros = p1.macros @ p2.macros;
-  substs = p1.substs @ p2.substs;
-  consts = p1.consts @ p2.consts;
+  codes = p1.codes ++ p2.codes;
+  defs = p1.defs ++ p2.defs;
+  mets = p1.mets ++ p2.mets;
+  pars = p1.pars ++ p2.pars;
+  sigs = p1.sigs ++ p2.sigs;
+  macros = p1.macros ++ p2.macros;
+  substs = p1.substs ++ p2.substs;
+  consts = p1.consts ++ p2.consts;
 }
 
 let use_package program ?(target=program.package) from = {
