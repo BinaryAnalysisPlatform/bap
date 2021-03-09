@@ -670,13 +670,16 @@ module Make(Machine : Machine) = struct
   let typecheck = Typechecker.run
   let types = Machine.Local.get state >>| fun s -> s.typeenv
 
-  let collect_externals s =
-    Lisp.Program.get s.program Lisp.Program.Items.func |>
-    List.fold ~init:String.Map.empty  ~f:(fun toload def ->
-        let names = Attribute.Set.get External.t (Lisp.Def.attributes def) in
-        Set.fold names ~init:toload ~f:(fun toload name ->
-            Map.add_multi toload ~key:name ~data:def)) |>
-    Map.to_sequence
+  let export_externals program =
+    Lisp.Program.fold program func ~f:(fun ~package:_ defs prog ->
+        List.fold ~init:prog defs ~f:(fun prog def ->
+            Attribute.Set.get External.t (Lisp.Def.attributes def) |>
+            Set.fold ~init:prog ~f:(fun prog name ->
+                let name = KB.Name.show @@
+                  KB.Name.create ~package:"external" name in
+                let def = Lisp.Def.rename def name in
+                Lisp.Program.add prog func def)))
+      ~init:program
 
 
   let collect_globals target s =
@@ -722,13 +725,14 @@ module Make(Machine : Machine) = struct
         args,ret,tid,addr
 
 
-  let link_feature (name,_defs) =
+  let link_feature program def =
     Machine.get () >>= fun proj ->
     Machine.Local.get state >>= fun s ->
+    let name = Lisp.Def.name def in
     let args,ret,tid,addr = find_sub (Project.program proj) name in
-    let name = KB.Name.read name in
+    let name = KB.Name.create ~package:"external" name in
     Lisp.Resolve.extern Lisp.Check.arg
-      s.program
+      program
       Lisp.Program.Items.func name args |> function
     | None -> Machine.return ()
     | Some (Error _) when Option.is_none tid -> Machine.return ()
@@ -781,8 +785,13 @@ module Make(Machine : Machine) = struct
       Linker.link ?addr ?tid ~name:(KB.Name.unqualified name) (module Code)
 
   let link_features () =
-    Machine.Local.get state >>| collect_externals >>=
-    Machine.Seq.iter ~f:link_feature
+    Machine.Local.update state ~f:(fun s -> {
+          s with program = export_externals s.program;
+        }) >>= fun () ->
+    Machine.Local.get state >>= fun s ->
+    Lisp.Program.in_package "external" s.program  @@ fun prog ->
+    Lisp.Program.get prog func |>
+    Machine.List.iter ~f:(link_feature prog)
 
   let copy_primitives ~src ~dst =
     Lisp.Program.get src primitive |>
