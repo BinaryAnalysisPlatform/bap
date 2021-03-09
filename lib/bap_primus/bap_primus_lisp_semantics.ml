@@ -131,7 +131,7 @@ let declare
         ret = any;
       })
     ?(docs="undocumented") ?package name =
-  let name = KB.Name.read ?package name in
+  let name = KB.Name.create ?package name in
   if Hashtbl.mem library name
   then invalid_argf "A primitive `%s' already exists, please \
                      choose a different name for your primitive"

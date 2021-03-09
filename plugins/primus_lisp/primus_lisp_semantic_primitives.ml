@@ -130,6 +130,10 @@ let export = Primus.Lisp.Type.Spec.[
     "load-byte", one int @-> byte,
     "(load-byte PTR) loads one byte from the address PTR";
 
+    "memory-read", one int @-> byte,
+    "(memory-read PTR) loads one byte from the address PTR \
+     (synonymous to load-byte)";
+
     "load-word", one int @-> int,
     "(load-word PTR) loads one word from the address PTR";
 
