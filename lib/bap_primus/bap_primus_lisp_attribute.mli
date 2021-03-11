@@ -21,11 +21,11 @@ val declare :
   ?desc:string ->
   ?package:string ->
   domain:'a KB.domain ->
-  parse:(tree list -> 'a) ->
+  parse:(package:string -> tree list -> 'a) ->
   string -> 'a t
 
 
-val parse : set -> tree -> set
+val parse : package:string -> set -> tree -> set
 
 module Set : sig
   include KB.Value.S with type t := set

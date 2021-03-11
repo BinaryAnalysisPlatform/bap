@@ -3851,7 +3851,7 @@ ident ::= ?any atom that is not recognized as a <word>?
           ?desc:string ->
           ?package:string ->
           domain:'a KB.domain ->
-          parse:(Parse.tree list -> 'a) ->
+          parse:(package:string -> Parse.tree list -> 'a) ->
           string -> 'a t
 
 

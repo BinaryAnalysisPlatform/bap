@@ -90,7 +90,7 @@ let merge_advisors x y = {
 
 let add_advisor cmethod advisor advices advised =
   let advisor = make_advisors cmethod advisor in
-  Map.update advices (KB.Name.read advised) ~f:(function
+  Map.update advices advised ~f:(function
       | None -> advisor
       | Some other -> merge_advisors other advisor)
 

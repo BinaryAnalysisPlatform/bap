@@ -1,2 +1,4 @@
 (require core)
-(defpackage primus (:use core))
+(defpackage primus
+  (:documentation "the runtime state of the Primus Machine")
+  (:use core))

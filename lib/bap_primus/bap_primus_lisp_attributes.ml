@@ -21,14 +21,14 @@ module Variables = struct
   type Attribute.error += Expect_atom
   type Attribute.error += Var_error of Var.read_error
 
-  let var t = match t with
+  let var package t = match t with
     | {data=List _} -> fail Expect_atom [t]
-    | {data=Atom v; id; eq} -> match Var.read id eq v with
+    | {data=Atom v; id; eq} -> match Var.read ~package id eq v with
       | Ok v -> v
       | Error err -> fail (Var_error err) [t]
 
-  let parse xs = List.map xs ~f:var |>
-                 Var.Set.of_list
+  let parse ~package xs = List.map xs ~f:(var package) |>
+                          Var.Set.of_list
 
   let global = Attribute.declare "global"
       ~package
@@ -62,8 +62,8 @@ module External = struct
 
   let domain = KB.Domain.powerset (module String) "names"
 
-  let parse xs = List.map xs ~f:parse_name |>
-                 String.Set.of_list
+  let parse ~package:_ xs = List.map xs ~f:parse_name |>
+                            String.Set.of_list
 
   let t = Attribute.declare "external"
       ~package
@@ -91,7 +91,7 @@ module Visibility = struct
           | _ -> Sexp.Atom "private")
       ~join:(fun was now -> Ok (now@was))
 
-  let parse = function
+  let parse ~package:_ = function
     | [{data=Atom ":public"}] -> [Public]
     | [{data=Atom ":private"}] -> [Private]
     | s -> fail Expect_public_or_private s
@@ -119,7 +119,7 @@ module Advice = struct
     | Empty
     | No_targets
 
-  type t = {methods : String.Set.t Methods.t} [@@deriving compare, equal]
+  type t = {methods : Set.M(KB.Name).t Methods.t} [@@deriving compare, equal]
 
 
   let empty = {methods = Methods.empty}
@@ -143,28 +143,34 @@ module Advice = struct
     ]
 
   let targets {methods} m = match Map.find methods m with
-    | None -> String.Set.empty
+    | None -> Set.empty (module KB.Name)
     | Some targets -> targets
 
-  let parse_targets met ss = match ss with
+
+  let parse_target package = function
+    | {data=Atom x} -> KB.Name.read ~package x
+    | s -> fail Expect_atom [s]
+
+  let parse_targets package met ss = match ss with
     | [] -> fail No_targets ss
     | ss ->
       List.fold ss ~init:{methods=Methods.empty} ~f:(fun {methods} t -> {
             methods = Map.update methods met ~f:(function
-                | None -> String.Set.singleton (parse_name t)
-                | Some ts -> Set.add ts (parse_name t))
+                | None -> Set.singleton (module KB.Name)
+                            (parse_target package t)
+                | Some ts -> Set.add ts (parse_target package t))
           })
 
-  let parse trees = match trees with
+  let parse ~package trees = match trees with
     | [] -> fail Empty trees
     | {data=List _} as s :: _  ->  fail Bad_syntax [s]
     | {data=Atom s} as lit :: ss ->
       if String.is_empty s then fail (Unknown_method s) [lit];
       match s with
-      | ":before" -> parse_targets Before ss
-      | ":after" -> parse_targets After ss
+      | ":before" -> parse_targets package Before ss
+      | ":after" -> parse_targets package After ss
       | _ when Char.(s.[0] = ':') -> fail (Unknown_method s) [lit]
-      | _ -> parse_targets Before trees
+      | _ -> parse_targets package Before trees
 
   let t = Attribute.declare "advice"
       ~package:"primus"

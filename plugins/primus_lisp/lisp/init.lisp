@@ -1,4 +1,4 @@
-(defpackage core)
+(defpackage core (:documentation "the core definitions"))
 (in-package core)
 
 (defconstant true 1:1  "true is another name for 1:1")

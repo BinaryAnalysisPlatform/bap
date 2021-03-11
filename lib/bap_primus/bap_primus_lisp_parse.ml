@@ -250,8 +250,9 @@ module Parse = struct
     with Attribute.Failure (err,trees) ->
       raise (Attribute_parse_error (err,trees,tree))
 
-  let parse_declarations attrs =
-    List.fold ~init:attrs ~f:Attribute.parse
+  let parse_declarations prog attrs =
+    let package = Program.package prog in
+    List.fold ~init:attrs ~f:(Attribute.parse ~package)
 
   let ascii xs =
     let rec loop xs acc = match xs with
@@ -297,7 +298,7 @@ module Parse = struct
     Attribute.Set.get Context.t attrs
 
   let defun ?docs ?(attrs=[]) name p body prog gattrs tree =
-    let attrs = parse_declarations gattrs attrs in
+    let attrs = parse_declarations prog gattrs attrs in
     let es = List.map ~f:(parse (constrained prog attrs)) body in
     let params = params prog in
     Program.add prog func @@ Def.Func.create ?docs ~attrs name (params p) {
@@ -307,7 +308,7 @@ module Parse = struct
     } tree
 
   let defmethod ?docs ?(attrs=[]) name p body prog gattrs tree =
-    let attrs = parse_declarations gattrs attrs in
+    let attrs = parse_declarations prog gattrs attrs in
     let es = List.map ~f:(parse (constrained prog attrs)) body in
     let params = params prog in
     Program.add prog meth @@ Def.Meth.create ?docs ~attrs name (params p) {
@@ -319,12 +320,12 @@ module Parse = struct
   let defmacro ?docs ?(attrs=[]) name ps body prog gattrs tree =
     Program.add prog macro @@
     Def.Macro.create ?docs
-      ~attrs:(parse_declarations gattrs attrs) name
+      ~attrs:(parse_declarations prog gattrs attrs) name
       (metaparams ps)
       body tree
 
   let defparameter ?docs ?(attrs=[]) name body prog gattrs tree =
-    let attrs = parse_declarations gattrs attrs in
+    let attrs = parse_declarations prog gattrs attrs in
     Program.add prog para @@
     Def.Para.create ?docs
       ~attrs name (parse (constrained prog attrs) body) tree
@@ -335,13 +336,13 @@ module Parse = struct
       | _ -> None in
     Program.add prog subst @@
     Def.Subst.create ?docs
-      ~attrs:(parse_declarations gattrs attrs) name
+      ~attrs:(parse_declarations prog gattrs attrs) name
       (reader syntax body) tree
 
   let defconst ?docs ?(attrs=[]) name body prog gattrs tree =
     Program.add prog const @@
     Def.Const.create ?docs
-      ~attrs:(parse_declarations gattrs attrs) name ~value:body tree
+      ~attrs:(parse_declarations prog gattrs attrs) name ~value:body tree
 
 
   let use_package ?package prog packages =
@@ -353,6 +354,8 @@ module Parse = struct
     List.fold ~init:prog trees ~f:(fun prog -> function
         | {data=List ({data=Atom ":use"} :: packages)} ->
           use_package ~package:name prog packages
+        | {data=List ({data=Atom ":documentation"} :: _)} ->
+          prog
         | s -> fail (Bad_def Defpkg) s)
 
   let toplevels = String.Set.of_list [
@@ -369,11 +372,15 @@ module Parse = struct
       "use-package";
     ]
 
-  let declaration gattrs s = match s with
+  let declaration prog gattrs s = match s with
+    | {data = List [
+        {data=Atom "in-package"};
+        {data=Atom package}]} ->
+      Program.with_package prog package, gattrs
     | {data=List ({data=Atom "declare"} :: attrs)} ->
-      parse_declarations gattrs attrs
+      prog,parse_declarations prog gattrs attrs
     | {data=List ({data=Atom toplevel} as here :: _)} ->
-      if Set.mem toplevels toplevel then gattrs
+      if Set.mem toplevels toplevel then prog,gattrs
       else fail Unknown_toplevel here
     | _ -> fail Bad_toplevel s
 
@@ -578,18 +585,20 @@ module Parse = struct
     | {data=List ({data=Atom "defconst"}::_)} -> fail (Bad_def Const) s
     | _ -> state
 
-  let declarations =
-    List.fold ~init:Attribute.Set.empty ~f:declaration
+  let declarations prog trees =
+    snd@@List.fold trees ~f:(fun (prog,attrs) tree ->
+        declaration prog attrs tree)
+      ~init:(prog,Attribute.Set.empty)
 
   let source constraints source =
     let init = Program.with_context Program.empty constraints in
     let init = Program.with_sources init source in
     let state = Source.fold source ~init ~f:(fun _ trees state ->
         let state = Program.reset_package state in
-        List.fold trees ~init:state ~f:(meta (declarations trees))) in
+        List.fold trees ~init:state ~f:(meta (declarations state trees))) in
     Source.fold source ~init:state ~f:(fun _ trees state ->
         let state = Program.reset_package state in
-        List.fold trees ~init:state ~f:(stmt (declarations trees)))
+        List.fold trees ~init:state ~f:(stmt (declarations state trees)))
 end
 
 module Load = struct

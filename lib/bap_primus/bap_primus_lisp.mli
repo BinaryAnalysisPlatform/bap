@@ -184,7 +184,7 @@ module Attribute : sig
     ?desc:string ->
     ?package:string ->
     domain:'a KB.domain ->
-    parse:(Parse.tree list -> 'a) ->
+    parse:(package:string -> Parse.tree list -> 'a) ->
     string -> 'a t
 
   module Set : sig

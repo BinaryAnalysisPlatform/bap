@@ -68,6 +68,18 @@ let get_package program package =
   | None -> empty_package
   | Some pkg -> pkg
 
+let targets {exports} package = match Map.find exports package with
+  | None -> Set.empty (module String)
+  | Some packs -> packs
+
+(* [transitive_closure p] is the set of packages in which
+   definition from p are visible (p including).
+*)
+let rec transitive_closure program from =
+  let init = Set.singleton (module String) from in
+  Set.fold (targets program from) ~f:(fun init pack ->
+      Set.union init (transitive_closure program pack))
+    ~init
 
 let fold_library library ~init ~f =
   Map.fold library ~init ~f:(fun ~key:package ~data init ->
@@ -102,9 +114,13 @@ let use_package program ?(target=program.package) from = {
   exports = Map.update program.exports from ~f:(function
       | None -> Set.singleton (module String) target;
       | Some exports -> Set.add exports target);
-  library = Map.update program.library target ~f:(function
-      | None -> get_package program from
-      | Some pkg -> merge_packages pkg (get_package program from))
+  library =
+    Set.fold (transitive_closure program from) ~f:(fun library target ->
+        Map.update library target ~f:(function
+            | None -> get_package program from
+            | Some pkg ->
+              merge_packages pkg (get_package program from)))
+      ~init:program.library
 }
 
 let equal p1 p2 =
@@ -165,9 +181,7 @@ let add prog fld elt =
   let package = KB.Name.package name in
   let name = KB.Name.unqualified name in
   let prog,elt = refresh prog @@ Def.rename elt name in
-  let packages = match Map.find prog.exports package with
-    | None -> Set.singleton (module String) package
-    | Some packages -> Set.add packages package in {
+  let packages = transitive_closure prog package in {
     prog with
     library = Set.fold packages ~f:(fun lib pkg ->
         Map.update lib pkg ~f:(function

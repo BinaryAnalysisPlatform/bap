@@ -107,7 +107,7 @@ let push cs name vs =
       | Some vs' -> Set.union vs vs')
 
 
-let parse : tree list -> t =
+let parse ~package:_ : tree list -> t =
   List.fold ~init:Name.Map.empty ~f:(fun cs tree ->
       let (name,vs) = context_of_tree tree in
       push cs name vs)
