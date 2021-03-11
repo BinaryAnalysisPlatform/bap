@@ -1223,7 +1223,9 @@ let enable_logging = function
 let load_recipe recipe =
   let paths = [
     Stdlib.Filename.current_dir_name;
-    Extension.Configuration.datadir] in
+    Extension.Configuration.datadir;
+    Extension.Configuration.sysdatadir;
+  ] in
   match Bap_recipe.load ~paths recipe with
   | Ok r ->
     Stdlib.at_exit (fun () -> Bap_recipe.close r);

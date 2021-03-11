@@ -102,7 +102,8 @@ type Extension.Error.t += Recipe_error of Recipe.error
 
 let recipe_paths = [
   Filename.current_dir_name;
-  Extension.Configuration.datadir
+  Extension.Configuration.datadir;
+  Extension.Configuration.sysdatadir;
 ]
 
 let cleanup ~keep r =
