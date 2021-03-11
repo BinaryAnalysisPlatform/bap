@@ -179,6 +179,90 @@ module Closure(Machine : Primus.Machine.S) = struct
     build [] (Value.to_word ptr) >>=
     Value.Symbol.to_value
 
+  type dir = [`down | `up] [@@deriving equal]
+
+  let stack_slot exp =
+    let open Bil.Types in match exp with
+    | BinOp (PLUS, Var sp, Int off) -> Some (sp,`down,off)
+    | BinOp (MINUS,Var sp, Int off) -> Some (sp,`up,off)
+    | _ -> None
+
+  let update_frame slot addr n =
+    match slot, stack_slot addr with
+    | slot,None -> slot
+    | None, Some (sp,dir,off) ->
+      Some (sp,dir,Word.(off ++ Size.in_bytes n))
+    | Some (sp,dir,off), Some (sp',dir',off') ->
+      if Var.same sp sp' && equal_dir dir dir' then
+        let off = Word.max off off' in
+        Some (sp,dir,Word.(off ++ Size.in_bytes n))
+      else Some (sp,dir,off)
+
+  let find_max_slot =
+    Seq.fold ~init:None ~f:(fun slot arg ->
+        match Arg.rhs arg with
+        | Bil.Load (_,addr,_,n) -> update_frame slot addr n
+        | _ -> slot)
+
+  let allocate_stack_frame args =
+    match find_max_slot args with
+    | None -> Machine.return None
+    | Some (sp,dir,max) ->
+      let sign = if equal_dir dir `down then Bil.MINUS else Bil.PLUS in
+      Eval.get sp >>= fun sp_value ->
+      Eval.const max >>= fun frame_size ->
+      Eval.binop sign sp_value frame_size >>=
+      Eval.set sp >>= fun () ->
+      Machine.return (Some (sp,sp_value))
+
+  let is_out_intent a = match Arg.intent a with
+    | Some Out -> true
+    | _ -> false
+
+
+  let eval_sub : value list -> 'x = function
+    | [] -> failf "invoke-subroutine: requires at least one argument" ()
+    | sub_addr :: sub_args ->
+      Machine.get () >>= fun proj ->
+      Term.enum sub_t (Project.program proj) |>
+      Seq.find ~f:(fun sub -> match Term.get_attr sub address with
+          | None -> false
+          | Some addr -> Word.(addr = Value.to_word sub_addr)) |> function
+      | None  ->
+        failf "invoke-subroutine: no function for %a" Value.pps
+          sub_addr ()
+      | Some sub ->
+        let args = Term.enum arg_t sub in
+        allocate_stack_frame args >>= fun frame ->
+        Seq.zip args (Seq.of_list sub_args) |>
+        Machine.Seq.iter ~f:(fun (arg,x) ->
+            let open Bil.Types in
+            if not (is_out_intent arg)
+            then match Arg.rhs arg with
+              | Var v -> Eval.set v x
+              | Load (_,BinOp (op, Var sp, Int off),endian,size) ->
+                Eval.get sp  >>= fun sp ->
+                Eval.const off >>= fun off ->
+                Eval.binop op sp off >>= fun addr ->
+                Eval.store addr x endian size
+              | exp ->
+                failf "%s: can't pass argument %s - %s %a"
+                  "invoke-subroutine" (Arg.lhs arg |> Var.name)
+                  "unsupported ABI" Exp.pps exp ()
+            else Machine.return ()) >>= fun () ->
+        Linker.exec (`addr (Value.to_word sub_addr)) >>= fun () ->
+        Machine.Seq.find_map args ~f:(fun arg ->
+            if is_out_intent arg
+            then Eval.get (Arg.lhs arg) >>| Option.some
+            else Machine.return None) >>= fun rval ->
+        let teardown_frame = match frame with
+          | Some (sp,bp) -> Eval.set sp bp
+          | None -> Machine.return () in
+        teardown_frame >>= fun () -> match rval with
+        | None -> Eval.const Word.b0
+        | Some rval -> Machine.return rval
+
+
   let run args =
     Closure.name >>= fun name -> match name, args with
     | "reg-name",[arg] -> reg_name arg
@@ -220,6 +304,7 @@ module Closure(Machine : Primus.Machine.S) = struct
     | "symbol-concat",args -> symbol_concat args
     | "set-symbol-value", [reg; x] -> set_value reg x
     | "symbol-of-string", [ptr] -> symbol_of_cstring ptr
+    | "invoke-subroutine", args -> eval_sub args
     | name,_ -> Lisp.failf "%s: invalid number of arguments" name ()
 end
 
@@ -334,8 +419,10 @@ module Primitives(Machine : Primus.Machine.S) = struct
         "(reg-name N) returns the name of the register with the index N";
       def "symbol-of-string" (one int @-> sym)
         "(symbol-of-string ptr) returns a symbol from a
-         null-terminated string."
-
+         null-terminated string.";
+      def "invoke-subroutine" (one int // all any @-> any)
+        "(invoke-subroutine addr args ...) calls the subroutine
+         at the specified address."
     ]
 end
 

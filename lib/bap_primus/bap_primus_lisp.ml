@@ -237,94 +237,10 @@ module Interpreter(Machine : Machine) = struct
 
   let width () = Machine.Local.get state >>| fun {width} -> width
 
-
-  let stack_slot exp =
-    let open Bil.Types in match exp with
-    | BinOp (PLUS, Var sp, Int off) -> Some (sp,`down,off)
-    | BinOp (MINUS,Var sp, Int off) -> Some (sp,`up,off)
-    | _ -> None
-
-  let update_frame slot addr n =
-    match slot, stack_slot addr with
-    | slot,None -> slot
-    | None, Some (sp,dir,off) ->
-      Some (sp,dir,Word.(off ++ Size.in_bytes n))
-    | Some (sp,dir,off), Some (sp',dir',off') ->
-      if Var.same sp sp' && equal_dir dir dir' then
-        let off = Word.max off off' in
-        Some (sp,dir,Word.(off ++ Size.in_bytes n))
-      else Some (sp,dir,off)
-
-
-  let find_max_slot =
-    Seq.fold ~init:None ~f:(fun slot arg ->
-        match Arg.rhs arg with
-        | Bil.Load (_,addr,_,n) -> update_frame slot addr n
-        | _ -> slot)
-
-  let allocate_stack_frame args =
-    match find_max_slot args with
-    | None -> Machine.return None
-    | Some (sp,dir,max) ->
-      let sign = if equal_dir dir `down then Bil.MINUS else Bil.PLUS in
-      Eval.get sp >>= fun sp_value ->
-      Eval.const max >>= fun frame_size ->
-      Eval.binop sign sp_value frame_size >>=
-      Eval.set sp >>= fun () ->
-      Machine.return (Some (sp,sp_value))
-
-  let is_out_intent a = match Arg.intent a with
-    | Some Out -> true
-    | _ -> false
-
   let is_zero x =
     Value.zero (Value.bitwidth x) >>= fun zero ->
     Eval.binop Bil.EQ x zero
 
-  (* we won't notify linker about a call, since the callee will
-     notify it itself. Basically, it is the responsibility of a
-     callee to register itself as a call, if it is a call. *)
-  let eval_sub : value list -> 'x = function
-    | [] -> failf "invoke-subroutine: requires at least one argument" ()
-    | sub_addr :: sub_args ->
-      Machine.get () >>= fun proj ->
-      Term.enum sub_t (Project.program proj) |>
-      Seq.find ~f:(fun sub -> match Term.get_attr sub address with
-          | None -> false
-          | Some addr -> Word.(addr = sub_addr.value)) |> function
-      | None  ->
-        failf "invoke-subroutine: no function for %a" Addr.pps
-          sub_addr.value ()
-      | Some sub ->
-        let args = Term.enum arg_t sub in
-        allocate_stack_frame args >>= fun frame ->
-        Seq.zip args (Seq.of_list sub_args) |>
-        Machine.Seq.iter ~f:(fun (arg,x) ->
-            let open Bil.Types in
-            if not (is_out_intent arg)
-            then match Arg.rhs arg with
-              | Var v -> Eval.set v x
-              | Load (_,BinOp (op, Var sp, Int off),endian,size) ->
-                Eval.get sp  >>= fun sp ->
-                Eval.const off >>= fun off ->
-                Eval.binop op sp off >>= fun addr ->
-                Eval.store addr x endian size
-              | exp ->
-                failf "%s: can't pass argument %s - %s %a"
-                  "invoke-subroutine" (Arg.lhs arg |> Var.name)
-                  "unsupported ABI" Exp.pps exp ()
-            else Machine.return ()) >>= fun () ->
-        Linker.exec (`addr sub_addr.value) >>= fun () ->
-        Machine.Seq.find_map args ~f:(fun arg ->
-            if is_out_intent arg
-            then Eval.get (Arg.lhs arg) >>| Option.some
-            else Machine.return None) >>= fun rval ->
-        let teardown_frame = match frame with
-          | Some (sp,bp) -> Eval.set sp bp
-          | None -> Machine.return () in
-        teardown_frame >>= fun () -> match rval with
-        | None -> Eval.const Word.b0
-        | Some rval -> Machine.return rval
 
 
   let is_external_call name def =
@@ -474,10 +390,7 @@ module Interpreter(Machine : Machine) = struct
     and app n args =
       Machine.List.map args ~f:eval >>= fun args -> match n with
       | Static _ -> assert false
-      | Dynamic n ->
-        if String.equal (KB.Name.unqualified n) "invoke-subroutine"
-        then eval_sub args
-        else eval_lisp n args
+      | Dynamic n -> eval_lisp n args
     and seq es =
       let rec loop = function
         | [] -> Eval.const Word.b0
@@ -644,8 +557,6 @@ module Make(Machine : Machine) = struct
         method! enter_var v vs = Set.add vs v
       end)#run prog Var.Set.empty |> Set.to_sequence
 
-    let invoke_subroutine_signature =
-      "invoke-subroutine", Type.Spec.(one int // all any @-> any)
 
     let run =
       Machine.get () >>= fun proj ->
@@ -655,7 +566,6 @@ module Make(Machine : Machine) = struct
       let vars = Seq.append evars pvars in
       let t = Project.target proj in
       let externals =
-        invoke_subroutine_signature ::
         signatures_of_subs (Project.program proj) |>
         List.map ~f:(fun (n,s) -> KB.Name.read n,s t) in
       let typeenv =
