@@ -210,8 +210,8 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     load_segments () >>= fun e1 ->
     map_segments () >>= fun e2 ->
     let endp = Addr.max e1 e2 in
-    set_word "endp" endp >>= fun () ->
-    set_word "brk"  endp >>= fun () ->
+    set_word "posix:endp" endp >>= fun () ->
+    set_word "posix:brk"  endp >>= fun () ->
     setup_registers () >>= fun () ->
     init_names ()
 end

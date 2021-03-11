@@ -11,6 +11,7 @@ type program = t
 type 'a item
 
 val empty : t
+val is_empty : t -> bool
 val equal : t -> t -> bool
 val merge : t -> t -> t
 val add : t -> 'a item -> 'a Def.t -> t

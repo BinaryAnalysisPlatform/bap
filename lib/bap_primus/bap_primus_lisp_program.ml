@@ -31,7 +31,7 @@ type t = {
   context : Lisp.Context.t;
   package : string;
   sources : Source.t;
-  imports : Set.M(String).t Map.M(String).t;
+  exports : Set.M(String).t Map.M(String).t;
   library : package Map.M(String).t;
 } [@@deriving fields]
 
@@ -54,7 +54,7 @@ let empty = {
   context = Lisp.Context.empty;
   sources = Source.empty;
   package = default_package;
-  imports = Map.empty (module String);
+  exports = Map.empty (module String);
   library = Map.empty (module String);
 }
 
@@ -80,6 +80,12 @@ let (++) xs ys : _ Def.t list =
   let init = Set.empty (module Id),[] in
   snd@@List.fold ys ~f:add ~init:(List.fold ~init xs ~f:add)
 
+let pp_defs ppf =
+  Format.pp_print_list (fun ppf x ->
+      Format.fprintf ppf "%s" (Def.name x))
+    ~pp_sep:Format.pp_print_space
+    ppf
+
 let merge_packages p1 p2 = {
   codes = p1.codes ++ p2.codes;
   defs = p1.defs ++ p2.defs;
@@ -93,9 +99,9 @@ let merge_packages p1 p2 = {
 
 let use_package program ?(target=program.package) from = {
   program with
-  imports = Map.update program.imports target ~f:(function
-      | None -> Set.singleton (module String) from;
-      | Some imports -> Set.add imports from);
+  exports = Map.update program.exports from ~f:(function
+      | None -> Set.singleton (module String) target;
+      | Some exports -> Set.add exports target);
   library = Map.update program.library target ~f:(function
       | None -> get_package program from
       | Some pkg -> merge_packages pkg (get_package program from))
@@ -110,13 +116,19 @@ let is_empty p = Map.is_empty p.library
 let merge_libraries l1 l2 =
   Map.merge_skewed l1 l2 ~combine:(fun ~key:_ -> merge_packages)
 
-let merge p1 p2 =
-  let p1,p2 = if is_empty p1 then
-      p1,p2 else
-      p2,p1 in {
-    p2 with
+let reexport program =
+  Map.fold program.exports ~f:(fun ~key:from ~data:targets program ->
+      Set.fold targets ~f:(fun program target ->
+          use_package program ~target from)
+        ~init:program)
+    ~init:program
+
+
+let merge p1 p2 = reexport {
+    p1 with
     context = Lisp.Context.merge p1.context p2.context;
-    imports = Map.merge_skewed p1.imports p2.imports
+    library = merge_libraries p1.library p2.library;
+    exports = Map.merge_skewed p1.exports p2.exports
         ~combine:(fun ~key:_ -> Set.union)
   }
 
@@ -140,12 +152,20 @@ end
 let add_to_package (fld : 'a item) x p =
   Field.fset fld p (x :: Field.get fld p)
 
+
+let refresh p def =
+  if Id.(def.id = null) then
+    let fresh = Id.next@@Source.lastid p.sources in
+    {p with sources = Source.derived p.sources ~from:def.id fresh},
+    {def with id = fresh}
+  else p,def
+
 let add prog fld elt =
   let name = KB.Name.read ~package:prog.package (Def.name elt) in
   let package = KB.Name.package name in
   let name = KB.Name.unqualified name in
-  let elt = Def.rename elt name in
-  let packages = match Map.find prog.imports package with
+  let prog,elt = refresh prog @@ Def.rename elt name in
+  let packages = match Map.find prog.exports package with
     | None -> Set.singleton (module String) package
     | Some packages -> Set.add packages package in {
     prog with

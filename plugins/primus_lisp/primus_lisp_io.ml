@@ -229,10 +229,10 @@ let init redirections =
         let v = Var.create name (Type.imm width) in
         Value.of_int ~width descr >>= Env.set v in
       Machine.sequence [
-        set "*standard-input*" 0;
-        set "*standard-output*" 1;
-        set "*error-output*" 2; (* CL name *)
-        set "*standard-error*" 2; (* conventional name *)
+        set "posix:*standard-input*" 0;
+        set "posix:*standard-output*" 1;
+        set "posix:*error-output*" 2; (* CL name *)
+        set "posix:*standard-error*" 2; (* conventional name *)
       ]
 
     let setup_redirections =

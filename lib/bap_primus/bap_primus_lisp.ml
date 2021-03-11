@@ -378,8 +378,7 @@ module Interpreter(Machine : Machine) = struct
     Lisp.Resolve.defun Lisp.Check.value s.program func name args |>
     function
     | None -> eval_primitive name args
-    | Some (Error resolution) ->
-      Machine.raise (Unresolved (name,resolution))
+    | Some (Error resolution) -> Machine.raise (Unresolved (name,resolution))
     | Some (Ok (fn,bs)) ->
       let is_external = is_external_call name fn in
       let bs,frame_size = Vars.make_frame s.width bs in
@@ -565,11 +564,12 @@ module Type = struct
     | `Tuple of t list
   ]
 
-
   let error,notify_error =
     Bap_primus_observation.provide "lisp-type-error"
       ~desc:"Occurs when the Lisp type error is detected \
              by the type checker"
+      ~inspect:(fun err ->
+          Sexp.Atom (Format.asprintf "%a" pp_error err))
 
   module Spec = struct
     let any _ = Lisp.Type.any
@@ -731,10 +731,11 @@ module Make(Machine : Machine) = struct
     let name = Lisp.Def.name def in
     let args,ret,tid,addr = find_sub (Project.program proj) name in
     let name = KB.Name.create ~package:"external" name in
-    Lisp.Resolve.extern Lisp.Check.arg
+    Lisp.Resolve.defun Lisp.Check.arg
       program
       Lisp.Program.Items.func name args |> function
-    | None -> Machine.return ()
+    | None ->
+      Machine.return ()
     | Some (Error _) when Option.is_none tid -> Machine.return ()
     | Some (Error err) -> Machine.raise (Unresolved (name,err))
     | Some (Ok (fn,bs)) ->
@@ -790,8 +791,8 @@ module Make(Machine : Machine) = struct
         }) >>= fun () ->
     Machine.Local.get state >>= fun s ->
     Lisp.Program.in_package "external" s.program  @@ fun prog ->
-    Lisp.Program.get prog func |>
-    Machine.List.iter ~f:(link_feature prog)
+    let defs = Lisp.Program.get prog func in
+    Machine.List.iter ~f:(link_feature prog) defs
 
   let copy_primitives ~src ~dst =
     Lisp.Program.get src primitive |>
