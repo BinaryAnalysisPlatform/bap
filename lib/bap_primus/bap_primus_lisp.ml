@@ -691,10 +691,12 @@ module Make(Machine : Machine) = struct
       Set.union vars @@
       Var.Set.of_list @@
       List.map ~f:(var_of_lisp_var default_width) vars' in
-    Lisp.Program.get s.program Lisp.Program.Items.func |>
-    List.fold ~init:Var.Set.empty  ~f:(fun vars def ->
-        add Variables.global def vars |>
-        add Variables.static def) |>
+    Lisp.Program.fold s.program func
+      ~init:Var.Set.empty
+      ~f:(fun ~package:_ defs init ->
+          List.fold defs ~init ~f:(fun vars def ->
+              add Variables.global def vars |>
+              add Variables.static def)) |>
     Set.to_sequence
 
 
