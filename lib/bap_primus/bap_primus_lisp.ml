@@ -731,7 +731,7 @@ module Make(Machine : Machine) = struct
     let name = Lisp.Def.name def in
     let args,ret,tid,addr = find_sub (Project.program proj) name in
     let name = KB.Name.create ~package:"external" name in
-    Lisp.Resolve.defun Lisp.Check.arg
+    Lisp.Resolve.extern Lisp.Check.arg
       program
       Lisp.Program.Items.func name args |> function
     | None ->

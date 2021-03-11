@@ -36,9 +36,6 @@ type ('t,'a,'b) many = ('t,'a,('t Def.t * 'b) list) resolver
 type exn += Failed of string * Context.t * resolution
 
 let interns d name = String.equal (Def.name d) name
-let externs def name =
-  let names = Attribute.Set.get External.t (Def.attributes def) in
-  Set.mem names name
 
 (* all definitions with the given name *)
 let stage1 has_name defs name =
@@ -174,7 +171,7 @@ let run choose namespace overload prog item name =
       })
 
 let extern typechecks prog item name args =
-  run one externs (overload_defun typechecks args) prog item name
+  run one interns (overload_defun typechecks args) prog item name
 
 let defun typechecks prog item name args =
   run one interns (overload_defun typechecks args) prog item name

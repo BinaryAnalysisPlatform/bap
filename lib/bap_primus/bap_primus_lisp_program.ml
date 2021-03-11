@@ -139,9 +139,13 @@ let reexport program =
         ~init:program)
     ~init:program
 
+let merge_sources s1 s2 =
+  if Id.(Source.lastid s1 > Source.lastid s2)
+  then s1 else s2
 
 let merge p1 p2 = reexport {
     p1 with
+    sources = merge_sources p1.sources p2.sources;
     context = Lisp.Context.merge p1.context p2.context;
     library = merge_libraries p1.library p2.library;
     exports = Map.merge_skewed p1.exports p2.exports

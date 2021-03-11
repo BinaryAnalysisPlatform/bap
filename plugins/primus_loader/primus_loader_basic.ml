@@ -188,7 +188,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     fun _argv_frame_ptr ->
     assert Word.(argv_frame_ptr = _argv_frame_ptr);
     save_word endian argc sp >>= fun _ ->
-    set_word "environ" envp_table_ptr
+    set_word "posix:environ" envp_table_ptr
 
 
   let names prog = (object

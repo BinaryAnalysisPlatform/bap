@@ -498,6 +498,11 @@ module Parse = struct
         {data=Atom "in-package"};
         {data=Atom package}]} ->
       Program.with_package state package
+    | {data = List ({data=Atom "defpackage"} ::
+                    {data=Atom name} :: elts)} ->
+      defpackage name state elts
+    | {data = List ({data=Atom "use-package"} :: elts)} ->
+      use_package state elts
     | {data=List [
         {data=Atom "defconstant"};
         {data=Atom name};
