@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 open Bap.Std
 open Bap_primus.Std
 open Bap_future.Std
@@ -42,7 +43,13 @@ let strip name =
   else name
 
 let has_name name p =
-  String.equal (Primus.Observation.Provider.name p) name
+  let name = KB.Name.read name in
+  let obsname = KB.Name.read @@ Primus.Observation.Provider.name p in
+  if String.(KB.Name.package name = "user")
+  then String.equal
+      (KB.Name.unqualified obsname)
+      (KB.Name.unqualified name)
+  else KB.Name.equal obsname name
 
 let remove_provider name = List.filter ~f:(Fn.non (has_name name))
 
