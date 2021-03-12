@@ -1,4 +1,5 @@
 ;; up to 4 Mb each chunk, up to 128 Mbytes total
+(in-package posix)
 
 (defmethod init ()
   (set *malloc-max-chunk-size* (* 4 1024 1024))

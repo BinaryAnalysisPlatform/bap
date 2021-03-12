@@ -5,9 +5,17 @@
   (:documentation "the runtime state of the Primus Machine")
   (:use core))
 
+(defpackage target
+  (:documentation "target-specific definitions (registers, etc)"))
+
+(defpackage program
+  (:documentation "program-specific definitions (program global variables)"))
+
 (defpackage user
   (:documentation "the default user-space package")
-  (:use core primus))
+  (:use core primus target program))
+
+
 
 (in-package core)
 

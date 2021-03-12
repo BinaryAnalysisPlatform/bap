@@ -42,6 +42,8 @@ type const = {
   value : string;
 }
 
+type place = Bap.Std.var
+
 type para = {
   default : ast;
 }
@@ -228,6 +230,22 @@ module Primitive = struct
 end
 
 
+module Place = struct
+  let create ?package name var = {
+    data = {
+      meta = {
+        name = KB.Name.show@@KB.Name.read ?package name;
+        docs = "";
+        attrs = Attribute.Set.empty;
+      };
+      code = var;
+    };
+    id = Id.null;
+    eq = Eq.null;
+  }
+
+  let location p = p.data.code
+end
 
 module type Primitives = functor (Machine : Machine) ->  sig
   val defs : unit -> value Machine.t Primitive.t list

@@ -1,4 +1,12 @@
-(require posix)
+(defpackage llvm-x86-64
+  (:documentation "x86-64 intrinsics")
+  (:use posix amd64))
+
+(in-package llvm-x86-64)
+
+(declare (context (target amd64))
+         (visibility :private))
+
 (require types)
 
 (defmacro lower-all (r) (set r false))

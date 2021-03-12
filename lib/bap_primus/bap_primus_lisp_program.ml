@@ -21,6 +21,7 @@ type package = {
   macros : Def.macro Def.t list;
   substs : Def.subst Def.t list;
   consts : Def.const Def.t list;
+  places : Def.place Def.t list;
   defs : Def.func Def.t list;
   mets : Def.meth Def.t list;
   pars : Def.para Def.t list;
@@ -48,6 +49,7 @@ let empty_package = {
   macros=[];
   substs=[];
   consts=[];
+  places=[];
 }
 
 let empty = {
@@ -113,6 +115,7 @@ let merge_packages p1 p2 = {
   macros = p1.macros ++ p2.macros;
   substs = p1.substs ++ p2.substs;
   consts = p1.consts ++ p2.consts;
+  places = p1.places ++ p2.places;
 }
 
 let use_package program ?(target=program.package) from = {
@@ -164,15 +167,20 @@ module Items = struct
   let macro = macros
   let subst = substs
   let const = consts
+  let place = places
   let func = defs
   let meth = mets
   let para = pars
   let primitive = codes
   let signal = sigs
+
 end
 
 let add_to_package (fld : 'a item) x p =
-  Field.fset fld p (x :: Field.get fld p)
+  if List.exists (Field.get fld p) ~f:(fun d ->
+      String.equal (Def.name x) (Def.name d) &&
+      Id.equal x.id d.id) then p
+  else Field.fset fld p (x :: Field.get fld p)
 
 let add prog fld elt =
   let name = KB.Name.read ~package:prog.package (Def.name elt) in
@@ -1280,14 +1288,25 @@ module Typing = struct
           Map.add_multi funcs name def))
       ~init:empty_names
 
+  let add_places prog vars =
+    fold prog Items.place ~f:(fun ~package places vars ->
+        List.fold places ~f:(fun vars place ->
+            let name = KB.Name.read ~package (Def.name place) in
+            let var = Def.Place.location place in
+            match Var.typ var with
+            | Type.Imm n -> Map.set vars name n
+            | _ -> vars)
+          ~init:vars)
+      ~init:vars
+
   let infer externals vars (p : program) :  Gamma.t =
-    let vars = Seq.map vars ~f:(fun v ->
+    let vars = make_globs@@Seq.map vars ~f:(fun v ->
         KB.Name.read (Var.name v), Var.typ v) in
     let library = applicable p.context p.library in
     let glob = {
       ctxt = p.context;
       prims = make_prims p (Map.of_alist_exn (module KB.Name) externals);
-      globs = make_globs vars;
+      globs = add_places p vars;
       funcs = make_defs library;
       paras = make_paras p;
     } in

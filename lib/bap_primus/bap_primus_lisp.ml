@@ -43,6 +43,7 @@ type state = {
   typeenv : Lisp.Program.Type.env;
   signals : subscription String.Map.t;
   advices : advisors Map.M(KB.Name).t;
+  places : Var.t Map.M(KB.Name).t;
   width : int;
   env : bindings;
   cur : Id.t;
@@ -64,6 +65,7 @@ let state = Bap_primus_state.declare ~inspect
          program = Lisp.Program.empty;
          typeenv = Lisp.Program.Type.empty;
          advices = Map.empty (module KB.Name);
+         places = Map.empty (module KB.Name);
          signals = String.Map.empty;
          width = width_of_ctxt proj;
        })
@@ -75,6 +77,15 @@ let lisp_primitive,primitive_called = Bap_primus_observation.provide
 
 let show = KB.Name.show
 
+
+let collect_registers target =
+  List.fold (target :: Theory.Target.parents target) ~f:(fun regs t ->
+      let package = KB.Name.unqualified (Theory.Target.name t) in
+      Theory.Target.regs t |> Set.to_sequence |>
+      Seq.fold ~init:regs ~f:(fun regs v ->
+          let name = KB.Name.create ~package (Theory.Var.name v) in
+          Map.set regs name (Var.reify v)))
+    ~init:(Map.empty (module KB.Name))
 
 let make_advisors cmethod name =
   let empty = Set.empty (module KB.Name) in
@@ -349,6 +360,9 @@ module Interpreter(Machine : Machine) = struct
       let bv = Bitvec.(bigint v mod modulus width) in
       Eval.const (Word.create bv width) in
     let sym v = Value.Symbol.to_value (show v.data) in
+    let var width places v = match Map.find places v.data.exp with
+      | None -> var_of_lisp_var width v
+      | Some v -> v in
     let rec eval = function
       | {data=Int {data={exp;typ}}} -> int exp typ
       | {data=Var v} -> lookup v
@@ -366,16 +380,16 @@ module Interpreter(Machine : Machine) = struct
       eval c >>= fun c ->
       Eval.branch c (eval e1) (eval e2)
     and let_ v e1 e2 =
-      Machine.Local.get state >>= fun {width} ->
+      Machine.Local.get state >>= fun {width; places} ->
       eval e1 >>= fun w ->
-      let v = var_of_lisp_var width v in
+      let v = var width places v in
       Machine.Local.update state ~f:(Vars.push v w) >>=  fun () ->
       eval e2 >>= fun r ->
       Machine.Local.update state ~f:(Vars.pop 1) >>= fun () ->
       Machine.return r
     and lookup v' =
-      Machine.Local.get state >>= fun {env; width; program} ->
-      let v = var_of_lisp_var width v' in
+      Machine.Local.get state >>= fun {env; width; program; places} ->
+      let v = var width places v' in
       if Map.mem env.vars v
       then
         Machine.return @@
@@ -399,7 +413,7 @@ module Interpreter(Machine : Machine) = struct
       loop es
     and set v w =
       Machine.Local.get state >>= fun s ->
-      let v = var_of_lisp_var s.width v in
+      let v = var s.width s.places v in
       if Map.mem s.env.vars v
       then
         Machine.Local.put state (Vars.replace v w s) >>| fun () ->
@@ -552,18 +566,10 @@ module Make(Machine : Machine) = struct
       Seq.map ~f:(fun s -> Sub.name s, signature_of_sub s) |>
       Seq.to_list
 
-    let vars_of_prog prog =
-      (object inherit [Var.Set.t] Term.visitor
-        method! enter_var v vs = Set.add vs v
-      end)#run prog Var.Set.empty |> Set.to_sequence
-
-
     let run =
       Machine.get () >>= fun proj ->
       Machine.Local.get state >>= fun s ->
-      Env.all >>= fun evars ->
-      let pvars = vars_of_prog (Project.program proj) in
-      let vars = Seq.append evars pvars in
+      Env.all >>= fun vars ->
       let t = Project.target proj in
       let externals =
         signatures_of_subs (Project.program proj) |>
@@ -595,30 +601,95 @@ module Make(Machine : Machine) = struct
   let collect_globals target s =
     let open Lisp.Attributes in
     let default_width = Theory.Target.bits target in
-    let add attr def vars =
-      let vars' =
-        Set.to_list @@ Attribute.Set.get attr (Lisp.Def.attributes def) in
-      Set.union vars @@
-      Var.Set.of_list @@
-      List.map ~f:(var_of_lisp_var default_width) vars' in
+    let vars def =
+      let get attr =
+        Set.map (module Var) ~f:(var_of_lisp_var default_width) @@
+        Attribute.Set.get attr (Lisp.Def.attributes def) in
+      Var.Set.union_list [
+        get Variables.global;
+        get Variables.static
+      ] in
     Lisp.Program.fold s.program func
       ~init:Var.Set.empty
-      ~f:(fun ~package:_ defs init ->
-          List.fold defs ~init ~f:(fun vars def ->
-              add Variables.global def vars |>
-              add Variables.static def)) |>
-    Set.to_sequence
+      ~f:(fun ~package:_ defs acc ->
+          Var.Set.union_list@@
+          acc::List.map defs ~f:vars)
 
+  let link_global var =
+    Env.has var >>= function
+    | true -> Machine.return ()
+    | false -> match Var.typ var with
+      | Imm m ->
+        Value.zero m >>= Env.set var
+      | _ -> Machine.return ()
 
-  let link_global var = match Var.typ var with
-    | Imm m ->
-      Value.zero m >>= Env.set var
-    | _ -> Machine.return ()
-
-  let link_globals () =
+  let add_registers () =
     Machine.gets Project.target >>= fun target ->
-    Machine.Local.get state >>| collect_globals target >>=
-    Machine.Seq.iter ~f:link_global
+    let regs = collect_registers target in
+    Machine.Local.update state ~f:(fun s -> {
+          s with
+          program = Map.fold regs ~f:(fun ~key:name ~data:r prog ->
+              let package = KB.Name.package name in
+              let name = KB.Name.unqualified name in
+              Lisp.Program.add prog place @@
+              Lisp.Def.Place.create ~package name r)
+              ~init:s.program
+        })
+
+  let add_globals () =
+    Machine.gets Project.target >>= fun target ->
+    Machine.Local.get state >>|
+    collect_globals target >>= fun vars ->
+    Machine.Local.update state ~f:(fun s -> {
+          s with
+          program = Set.fold vars ~f:(fun prog v ->
+              let name = KB.Name.read (Var.name v) in
+              let package = KB.Name.package name in
+              let name = KB.Name.unqualified name in
+              Lisp.Program.add prog place @@
+              Lisp.Def.Place.create ~package name v)
+              ~init:s.program
+        })
+
+  let collect_program_vars =
+    let vars_of_prog prog =
+      (object inherit [Var.Set.t] Term.visitor
+        method! enter_var v vs = Set.add vs v
+      end)#run prog Var.Set.empty |> Set.to_sequence in
+    Machine.gets Project.program >>| vars_of_prog
+
+  let add_program_vars () =
+    collect_program_vars >>= fun vars ->
+    Machine.Local.update state ~f:(fun s -> {
+          s with
+          program = Seq.fold vars ~f:(fun prog v ->
+              Lisp.Program.add prog place @@
+              Lisp.Def.Place.create ~package:"target"
+                (Var.name v) v)
+              ~init:s.program
+        })
+
+
+  let init_places () =
+    Machine.Local.update state ~f:(fun s -> {
+          s with
+          places =
+            Lisp.Program.fold s.program place ~init:s.places
+              ~f:(fun ~package regs places ->
+                  List.fold regs ~init:places ~f:(fun places reg ->
+                      let name =
+                        KB.Name.create ~package (Lisp.Def.name reg) in
+                      let place = Lisp.Def.Place.location reg in
+                      Map.set places name place))
+        })
+
+  let link_places () =
+    init_places () >>= fun () ->
+    Machine.Local.get state >>= fun {places} ->
+    Map.to_sequence places |>
+    Machine.Seq.iter ~f:(fun (_,v) ->
+        link_global v)
+
 
   let find_sub prog name =
     Term.enum sub_t prog |>
@@ -715,7 +786,10 @@ module Make(Machine : Machine) = struct
     Machine.Local.get state >>= fun s ->
     let s = {s with program = Lisp.Program.merge s.program program} in
     Machine.Local.put state s >>= fun () ->
-    link_globals () >>=
+    add_registers () >>=
+    add_globals >>=
+    add_program_vars >>=
+    link_places >>=
     link_features
 
   let program = Machine.Local.get state >>| fun s -> s.program

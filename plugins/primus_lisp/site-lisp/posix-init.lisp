@@ -1,2 +1,2 @@
 (require core)
-(defpackage posix (:use core primus target))
+(defpackage posix (:use core primus program target))

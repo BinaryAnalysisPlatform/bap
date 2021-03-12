@@ -17,6 +17,7 @@ type meth
 type macro
 type subst
 type const
+type place
 type prim
 type closure = (module Closure)
 type 'a primitive
@@ -70,6 +71,11 @@ end
 module Const : sig
   val create : (value:string -> tree -> const t) def
   val value : const t -> tree
+end
+
+module Place : sig
+  val create : ?package:string -> string -> Bap.Std.Var.t -> place t
+  val location : place t -> Bap.Std.Var.t
 end
 
 module Subst : sig

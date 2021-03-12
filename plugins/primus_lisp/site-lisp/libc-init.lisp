@@ -4,6 +4,7 @@
 (in-package posix)
 (declare (visibility :private))
 
+
 (defun init (main argc argv auxv)
   "GNU libc initialization stub"
   (declare (external "__libc_start_main"))
@@ -19,7 +20,8 @@
 
 
 (defun setup-stack-canary ()
-  (declare (context (abi "sysv")))
+  (declare (context (abi "sysv"))
+           (global program:FS_BASE))
   (set FS_BASE (- brk 0x28))
   (memory-allocate brk (sizeof ptr_t))
   (write-word ptr_t brk 0xDEADBEEFBEAFDEAD)
