@@ -1,4 +1,14 @@
-(defpackage core (:documentation "the core definitions"))
+(defpackage core
+  (:documentation "the core definitions"))
+
+(defpackage primus
+  (:documentation "the runtime state of the Primus Machine")
+  (:use core))
+
+(defpackage user
+  (:documentation "the default user-space package")
+  (:use core primus))
+
 (in-package core)
 
 (defconstant true 1:1  "true is another name for 1:1")
