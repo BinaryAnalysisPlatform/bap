@@ -86,10 +86,16 @@ let fold_library library ~init ~f =
       f ~package data init)
 
 let (++) xs ys : _ Def.t list =
-  let add (ids,defs) def =
-    if Set.mem ids def.id then ids,defs
-    else Set.add ids def.id, def::defs in
-  let init = Set.empty (module Id),[] in
+  let remember set def = Map.update set (Def.name def) ~f:(function
+      | None -> Set.singleton (module Id) def.id
+      | Some ids -> Set.add ids def.id) in
+  let is_presented set def = match Map.find set (Def.name def) with
+    | None -> false
+    | Some ids -> Set.mem ids def.id in
+  let add (set,defs) def =
+    if is_presented set def then set,defs
+    else remember set def, def::defs in
+  let init = Map.empty (module String),[] in
   snd@@List.fold ys ~f:add ~init:(List.fold ~init xs ~f:add)
 
 let pp_defs ppf =
@@ -139,13 +145,9 @@ let reexport program =
         ~init:program)
     ~init:program
 
-let merge_sources s1 s2 =
-  if Id.(Source.lastid s1 > Source.lastid s2)
-  then s1 else s2
-
 let merge p1 p2 = reexport {
     p1 with
-    sources = merge_sources p1.sources p2.sources;
+    sources = p2.sources;
     context = Lisp.Context.merge p1.context p2.context;
     library = merge_libraries p1.library p2.library;
     exports = Map.merge_skewed p1.exports p2.exports
@@ -172,19 +174,11 @@ end
 let add_to_package (fld : 'a item) x p =
   Field.fset fld p (x :: Field.get fld p)
 
-
-let refresh p def =
-  if Id.(def.id = null) then
-    let fresh = Id.next@@Source.lastid p.sources in
-    {p with sources = Source.derived p.sources ~from:def.id fresh},
-    {def with id = fresh}
-  else p,def
-
 let add prog fld elt =
   let name = KB.Name.read ~package:prog.package (Def.name elt) in
   let package = KB.Name.package name in
   let name = KB.Name.unqualified name in
-  let prog,elt = refresh prog @@ Def.rename elt name in
+  let elt = Def.rename elt name in
   let packages = transitive_closure prog package in {
     prog with
     library = Set.fold packages ~f:(fun lib pkg ->
@@ -483,11 +477,15 @@ end = struct
       map defs ~f:reduce |> ids_of_trees
     ]
 
-  let macro_ids p = Id.Set.union_list [
-      ids_of_defs p.macros List.map Def.Macro.body;
-      ids_of_defs p.consts List.map Def.Const.value;
-      ids_of_defs p.substs List.concat_map Def.Subst.body;
-    ]
+  let macro_ids prog =
+    fold_library prog ~f:(fun ~package:_ p macros ->
+        Id.Set.union_list [
+          macros;
+          ids_of_defs p.macros List.map Def.Macro.body;
+          ids_of_defs p.consts List.map Def.Const.value;
+          ids_of_defs p.substs List.concat_map Def.Subst.body;
+        ])
+      ~init:Id.Set.empty
 
   let derive from  =
     State.get () >>= fun src ->
@@ -542,20 +540,19 @@ end = struct
     and map_all xs = State.List.map xs ~f:map in
     map (get def) >>| set def
 
-  let reindex_package p =
+  let reindex_package macros p =
     let def = Def.Func.body,Def.Func.with_body in
     let met = Def.Meth.body,Def.Meth.with_body in
     let par = Def.Para.default,Def.Para.with_default in
-    let macros = macro_ids p in
     State.List.map p.defs ~f:(reindex def macros) >>= fun defs ->
     State.List.map p.mets ~f:(reindex met macros) >>= fun mets ->
     State.List.map p.pars ~f:(reindex par macros) >>= fun pars ->
     State.return (defs,mets,pars)
 
-  let package prog pkgname =
+  let package prog macros pkgname =
     let pkg = get_package prog pkgname in
     let (defs,mets,pars),sources =
-      State.run (reindex_package pkg) prog.sources in
+      State.run (reindex_package macros pkg) prog.sources in
     {
       prog with
       sources;
@@ -566,8 +563,19 @@ end = struct
     }
 
   let program prog =
-    Map.keys prog.library |>
-    List.fold ~init:prog ~f:package
+    let macros = macro_ids prog.library in
+    fold_library prog.library ~f:(fun ~package pkg prog ->
+        let (defs,mets,pars),sources =
+          State.run (reindex_package macros pkg) prog.sources in
+        {
+          prog with
+          sources;
+          library = Map.set prog.library package {
+              pkg with
+              defs; mets; pars
+            }
+        })
+      ~init:prog
 
 end
 
