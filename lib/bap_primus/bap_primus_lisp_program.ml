@@ -12,6 +12,7 @@ module Lisp = struct
   module Context = Bap_primus_lisp_context
   module Type = Bap_primus_lisp_type
   module Attribute = Bap_primus_lisp_attribute
+  module Attributes = Bap_primus_lisp_attributes
 end
 
 module Def = Bap_primus_lisp_def
@@ -65,10 +66,32 @@ let package program = program.package
 let reset_package program =
   with_package program default_package
 
-let get_package program package =
+let is_public def =
+  Lisp.Attributes.Visibility.is_public @@
+  Lisp.Attribute.Set.get Lisp.Attributes.Visibility.t
+    (Def.attributes def)
+
+type def_filter = {
+  visit: 'a. 'a Def.t -> bool;
+}
+let filter_package pkg {visit=f} = {
+  codes = List.filter pkg.codes ~f;
+  defs = List.filter pkg.defs ~f;
+  mets = List.filter pkg.mets ~f;
+  pars = List.filter pkg.pars ~f;
+  sigs = List.filter pkg.sigs ~f;
+  macros = List.filter pkg.macros ~f;
+  substs = List.filter pkg.substs ~f;
+  consts = List.filter pkg.consts ~f;
+  places = List.filter pkg.places ~f;
+}
+
+
+let get_package ?(public=false) program package =
   match Map.find program.library package with
   | None -> empty_package
-  | Some pkg -> pkg
+  | Some pkg ->
+    if public then filter_package pkg {visit = is_public} else pkg
 
 let targets {exports} package = match Map.find exports package with
   | None -> Set.empty (module String)
@@ -119,19 +142,22 @@ let merge_packages p1 p2 = {
   places = p1.places ++ p2.places;
 }
 
-let use_package program ?(target=program.package) from = {
-  program with
-  exports = Map.update program.exports from ~f:(function
-      | None -> Set.singleton (module String) target;
-      | Some exports -> Set.add exports target);
-  library =
-    Set.fold (transitive_closure program from) ~f:(fun library target ->
-        Map.update library target ~f:(function
-            | None -> get_package program from
-            | Some pkg ->
-              merge_packages pkg (get_package program from)))
-      ~init:program.library
-}
+let use_package program ?(target=program.package) from =
+  let program = {
+    program with
+    exports = Map.update program.exports from ~f:(function
+        | None -> Set.singleton (module String) target;
+        | Some exports -> Set.add exports target)
+  } in {
+    program with
+    library =
+      Set.fold (transitive_closure program from) ~f:(fun library target ->
+          Map.update library target ~f:(function
+              | None -> get_package ~public:true program from
+              | Some pkg ->
+                merge_packages pkg (get_package ~public:true program from)))
+        ~init:program.library
+  }
 
 let equal p1 p2 =
   Source.equal p1.sources p2.sources
@@ -185,18 +211,20 @@ let add_to_package (fld : 'a item) x p =
 
 let add prog fld elt =
   let name = KB.Name.read ~package:prog.package (Def.name elt) in
-  let package = KB.Name.package name in
+  let parent = KB.Name.package name in
   let name = KB.Name.unqualified name in
   let elt = Def.rename elt name in
-  let packages = transitive_closure prog package in {
+  let is_public = is_public elt in
+  let packages = transitive_closure prog parent in {
     prog with
     library = Set.fold packages ~f:(fun lib pkg ->
-        Map.update lib pkg ~f:(function
+        if is_public || String.equal pkg parent
+        then Map.update lib pkg ~f:(function
             | None -> add_to_package fld elt empty_package
-            | Some pkg -> add_to_package fld elt pkg))
+            | Some pkg -> add_to_package fld elt pkg)
+        else lib)
         ~init:prog.library;
   }
-
 
 let get p (fld : 'a item) =
   match Map.find p.library p.package with

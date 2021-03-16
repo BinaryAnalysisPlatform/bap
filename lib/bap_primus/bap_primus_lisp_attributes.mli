@@ -22,5 +22,6 @@ end
 
 module Visibility : sig
   type t
+  val t : t Attribute.t
   val is_public : t -> bool
 end
