@@ -359,7 +359,7 @@ module Interpreter(Machine : Machine) = struct
       width >>= fun width ->
       let bv = Bitvec.(bigint v mod modulus width) in
       Eval.const (Word.create bv width) in
-    let sym v = Value.Symbol.to_value (show v.data) in
+    let sym v = Value.Symbol.to_value (KB.Name.unqualified v.data) in
     let var width places v = match Map.find places v.data.exp with
       | None -> var_of_lisp_var width v
       | Some v -> v in
