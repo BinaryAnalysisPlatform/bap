@@ -106,16 +106,15 @@ let add_advisor cmethod advisor advices advised =
       | Some other -> merge_advisors other advisor)
 
 let prepare_advisors prog =
-  Lisp.Program.fold prog func ~f:(fun ~package defs init ->
-      List.fold defs ~init ~f:(fun init def ->
-          let adv =
-            Attribute.Set.get Advice.t (Lisp.Def.attributes def) in
-          let advisor =
-            KB.Name.create ~package (Lisp.Def.name def) in
-          List.fold Advice.[After; Before] ~init
-            ~f:(fun init cmethod ->
-                let targets = Advice.targets adv cmethod in
-                Set.fold targets ~init ~f:(add_advisor cmethod advisor))))
+  Lisp.Program.fold prog func ~f:(fun ~package def init ->
+      let adv =
+        Attribute.Set.get Advice.t (Lisp.Def.attributes def) in
+      let advisor =
+        KB.Name.create ~package (Lisp.Def.name def) in
+      List.fold Advice.[After; Before] ~init
+        ~f:(fun init cmethod ->
+            let targets = Advice.targets adv cmethod in
+            Set.fold targets ~init ~f:(add_advisor cmethod advisor)))
 
 module Errors(Machine : Machine) = struct
   open Machine.Syntax
@@ -587,14 +586,13 @@ module Make(Machine : Machine) = struct
   let types = Machine.Local.get state >>| fun s -> s.typeenv
 
   let export_externals program =
-    Lisp.Program.fold program func ~f:(fun ~package:_ defs prog ->
-        List.fold ~init:prog defs ~f:(fun prog def ->
-            Attribute.Set.get External.t (Lisp.Def.attributes def) |>
-            Set.fold ~init:prog ~f:(fun prog name ->
-                let name = KB.Name.show @@
-                  KB.Name.create ~package:"external" name in
-                let def = Lisp.Def.rename def name in
-                Lisp.Program.add prog func def)))
+    Lisp.Program.fold program func ~f:(fun ~package:_ def prog ->
+        Attribute.Set.get External.t (Lisp.Def.attributes def) |>
+        Set.fold ~init:prog ~f:(fun prog name ->
+            let name = KB.Name.show @@
+              KB.Name.create ~package:"external" name in
+            let def = Lisp.Def.rename def name in
+            Lisp.Program.add prog func def))
       ~init:program
 
 
@@ -611,9 +609,8 @@ module Make(Machine : Machine) = struct
       ] in
     Lisp.Program.fold s.program func
       ~init:Var.Set.empty
-      ~f:(fun ~package:_ defs acc ->
-          Var.Set.union_list@@
-          acc::List.map defs ~f:vars)
+      ~f:(fun ~package:_ def acc ->
+          Var.Set.union acc (vars def))
 
   let link_global var =
     Env.has var >>= function
@@ -675,12 +672,11 @@ module Make(Machine : Machine) = struct
           s with
           places =
             Lisp.Program.fold s.program place ~init:s.places
-              ~f:(fun ~package regs places ->
-                  List.fold regs ~init:places ~f:(fun places reg ->
-                      let name =
-                        KB.Name.create ~package (Lisp.Def.name reg) in
-                      let place = Lisp.Def.Place.location reg in
-                      Map.set places name place))
+              ~f:(fun ~package reg places ->
+                  let name =
+                    KB.Name.create ~package (Lisp.Def.name reg) in
+                  let place = Lisp.Def.Place.location reg in
+                  Map.set places name place)
         })
 
   let link_places () =
@@ -859,11 +855,9 @@ module Make(Machine : Machine) = struct
     let known_methods =
       Lisp.Program.fold s.program meth
         ~init:(Set.empty (module KB.Name))
-        ~f:(fun ~package defs mets ->
-            List.fold defs ~init:mets  ~f:(fun mets met ->
-                let name =
-                  KB.Name.create ~package (Lisp.Def.name met) in
-                Set.add mets name)) in
+        ~f:(fun ~package met mets ->
+            Set.add mets @@
+            KB.Name.create ~package (Lisp.Def.name met)) in
     let useless_subscriptions =
       Map.fold s.signals ~init:[] ~f:(fun ~key:name ~data:sub subs ->
           if Set.mem known_methods name then subs

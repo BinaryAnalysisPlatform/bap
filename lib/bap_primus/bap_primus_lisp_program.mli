@@ -17,7 +17,7 @@ val merge : t -> t -> t
 val add : t -> 'a item -> 'a Def.t -> t
 val get : t -> 'a item -> 'a Def.t list
 val fold : t -> 'a item -> init:'s ->
-  f:(package:string -> 'a Def.t list -> 's -> 's) -> 's
+  f:(package:string -> 'a Def.t -> 's -> 's) -> 's
 val context : t -> Context.t
 val sources : t -> Source.t
 val package : t -> string

@@ -94,7 +94,7 @@ module Set = struct
   let get {slot} = KB.Value.get slot
   module Self = (val KB.Value.derive cls)
 
-  let slot = KB.Class.property Theory.Program.cls "primus-attrs" Self.domain
+  let slot = KB.Class.property Theory.Program.cls "attributes" Self.domain
       ~public:true
       ~package:"primus"
       ~persistent:(KB.Persistent.of_binable (module Self))

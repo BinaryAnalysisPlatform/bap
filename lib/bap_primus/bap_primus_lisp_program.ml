@@ -205,7 +205,8 @@ let get p (fld : 'a item) =
 
 let fold {library} fld ~init ~f =
   Map.fold library ~init ~f:(fun ~key:package ~data x ->
-      f ~package (Field.get fld data) x)
+      List.fold ~init:x (Field.get fld data) ~f:(fun x def ->
+          f ~package def x))
 
 let in_package package p f = f {p with package}
 
@@ -1290,14 +1291,12 @@ module Typing = struct
       ~init:empty_names
 
   let add_places prog vars =
-    fold prog Items.place ~f:(fun ~package places vars ->
-        List.fold places ~f:(fun vars place ->
-            let name = KB.Name.read ~package (Def.name place) in
-            let var = Def.Place.location place in
-            match Var.typ var with
-            | Type.Imm n -> Map.set vars name n
-            | _ -> vars)
-          ~init:vars)
+    fold prog Items.place ~f:(fun ~package place vars ->
+        let name = KB.Name.read ~package (Def.name place) in
+        let var = Def.Place.location place in
+        match Var.typ var with
+        | Type.Imm n -> Map.set vars name n
+        | _ -> vars)
       ~init:vars
 
   let infer externals vars (p : program) :  Gamma.t =
