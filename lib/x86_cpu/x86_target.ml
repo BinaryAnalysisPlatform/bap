@@ -4,10 +4,11 @@ open Bap.Std
 
 let package = "bap"
 
-type r128 and r80 and r64 and r32 and r16 and r8
+type r256 and r128 and r80 and r64 and r32 and r16 and r8
 
 type 'a bitv = 'a Theory.Bitv.t Theory.Value.sort
 
+let r256 : r128 bitv = Theory.Bitv.define 256
 let r128 : r128 bitv = Theory.Bitv.define 128
 let r80 : r80 bitv = Theory.Bitv.define 80
 let r64 : r64 bitv = Theory.Bitv.define 64
@@ -175,18 +176,18 @@ module M64 = struct
 
   let stx = M32.stx
   let mmx = M32.mmx
-  let xmmx = array r128 "XMM" 16
+  let ymmx = array r256 "YMM" 16
 
   let flags = M32.flags
   let mems = Theory.Mem.define r64 r8
   let data = Theory.Var.define mems "mem"
 
-  let vars = main @< index @< segment @< rx @< stx @< mmx @< xmmx @<
+  let vars = main @< index @< segment @< rx @< stx @< mmx @< ymmx @<
              flags @< [data]
 
   let regs =  Theory.Role.Register.[
       [general; integer], main @< index @< segment @< rx;
-      [general; floating], stx @< mmx @< xmmx;
+      [general; floating], stx @< mmx @< ymmx;
       [stack_pointer], untyped [reg r64 "RSP"];
       [frame_pointer], untyped [reg r64 "RBP"];
       [Role.index], untyped index;
