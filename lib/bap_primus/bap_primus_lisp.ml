@@ -105,7 +105,7 @@ let add_advisor cmethod advisor advices advised =
       | None -> advisor
       | Some other -> merge_advisors other advisor)
 
-let prepare_advisors prog =
+let collect_advisors prog =
   Lisp.Program.fold prog func ~f:(fun ~package def init ->
       let adv =
         Attribute.Set.get Advice.t (Lisp.Def.attributes def) in
@@ -115,6 +115,7 @@ let prepare_advisors prog =
         ~f:(fun init cmethod ->
             let targets = Advice.targets adv cmethod in
             Set.fold targets ~init ~f:(add_advisor cmethod advisor)))
+    ~init:(Map.empty (module KB.Name))
 
 module Errors(Machine : Machine) = struct
   open Machine.Syntax
@@ -256,7 +257,7 @@ module Interpreter(Machine : Machine) = struct
   let is_external_call name def =
     let calls =
       Attribute.Set.get External.t (Lisp.Def.attributes def) in
-    Set.mem calls (KB.Name.unqualified name)
+    Set.mem calls name
 
   let notify_when ?rval cond obs name args =
     if cond then Machine.Observation.post obs ~f:(fun notify ->
@@ -299,23 +300,24 @@ module Interpreter(Machine : Machine) = struct
      inside the Lisp interpreter since this looks more conservative,
      though, of course, it depends on a particular policy.
   *)
-  let rec eval_lisp name args : value Machine.t =
+  let rec eval_lisp fullname args : value Machine.t =
     Machine.Local.get state >>= fun s ->
-    Lisp.Resolve.defun Lisp.Check.value s.program func name args |>
+    Lisp.Resolve.defun Lisp.Check.value s.program func fullname args |>
     function
-    | None -> eval_primitive name args
-    | Some (Error resolution) -> Machine.raise (Unresolved (name,resolution))
+    | None -> eval_primitive fullname args
+    | Some (Error resolution) -> Machine.raise (Unresolved (fullname,resolution))
     | Some (Ok (fn,bs)) ->
+      let name = Lisp.Def.name fn in
       let is_external = is_external_call name fn in
       let bs,frame_size = Vars.make_frame s.width bs in
       Eval.const Word.b0 >>= fun init ->
-      notify_when is_external Trace.call_entered (show name) args >>= fun () ->
-      eval_advices Advice.Before init name args >>= fun _ ->
+      notify_when is_external Trace.call_entered name args >>= fun () ->
+      eval_advices Advice.Before init fullname args >>= fun _ ->
       Machine.Local.put state (Vars.push_frame bs s) >>= fun () ->
       eval_exp (Lisp.Def.Func.body fn) >>= fun r ->
       Machine.Local.update state ~f:(Vars.pop frame_size) >>= fun () ->
-      notify_when is_external Trace.call_returned (show name) args ~rval:r >>= fun () ->
-      eval_advices Advice.After r name args
+      notify_when is_external Trace.call_returned name args ~rval:r >>= fun () ->
+      eval_advices Advice.After r fullname args
 
   and eval_advices stage init primary args =
     Machine.Local.get state >>= fun {advices} ->
@@ -762,7 +764,7 @@ module Make(Machine : Machine) = struct
       end in
       Linker.link ?addr ?tid ~name (module Code)
 
-  let link_features () =
+  let link_features =
     Machine.Local.update state ~f:(fun s -> {
           s with program = export_externals s.program;
         }) >>= fun () ->
@@ -776,11 +778,21 @@ module Make(Machine : Machine) = struct
     List.fold ~init:dst ~f:(fun dst p ->
         Lisp.Program.add dst primitive p)
 
-  let link_program program =
-    Machine.Local.get state >>= fun s ->
-    let s = {s with program = Lisp.Program.merge s.program program} in
-    Machine.Local.put state s >>=
-    link_features
+  let link_advisors =
+    Machine.Local.update state ~f:(fun s -> {
+          s with advices = collect_advisors s.program
+        })
+
+  let set_program program =
+    Machine.Local.update state ~f:(fun s -> {
+          s with program = Lisp.Program.merge s.program program
+        })
+
+  let link_program program = Machine.sequence [
+      set_program program;
+      link_features;
+      link_advisors;
+    ]
 
   let typecheck = Machine.sequence [
       add_registers ();
