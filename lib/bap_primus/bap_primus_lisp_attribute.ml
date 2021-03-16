@@ -87,7 +87,7 @@ let parse ~package attrs = function
   | {data=Atom name} as s ->
     let name = Name.read ~package:"core" name in
     parse package s attrs name []
-  | _ -> attrs
+  | s -> Parse.(fail Expect_list) [s]
 
 
 module Set = struct
