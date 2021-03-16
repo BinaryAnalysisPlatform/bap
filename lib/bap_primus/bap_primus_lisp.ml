@@ -707,14 +707,14 @@ module Make(Machine : Machine) = struct
     Machine.Local.get state >>= fun s ->
     let name = Lisp.Def.name def in
     let args,ret,tid,addr = find_sub (Project.program proj) name in
-    let name = KB.Name.create ~package:"external" name in
+    let fullname = KB.Name.create ~package:"external" name in
     Lisp.Resolve.extern Lisp.Check.arg
       program
-      Lisp.Program.Items.func name args |> function
+      Lisp.Program.Items.func fullname args |> function
     | None ->
       Machine.return ()
     | Some (Error _) when Option.is_none tid -> Machine.return ()
-    | Some (Error err) -> Machine.raise (Unresolved (name,err))
+    | Some (Error err) -> Machine.raise (Unresolved (fullname,err))
     | Some (Ok (fn,bs)) ->
       let bs,frame_size = Vars.make_frame s.width bs in
       let module Code(Machine : Machine) = struct
@@ -749,18 +749,18 @@ module Make(Machine : Machine) = struct
           eval_args >>= fun bs ->
           let args = List.rev_map ~f:snd bs in
           Value.b0 >>= fun init ->
-          Interp.eval_advices Advice.Before init name args >>= fun _ ->
+          Interp.eval_advices Advice.Before init fullname args >>= fun _ ->
           Machine.Local.update state ~f:(Vars.push_frame bs) >>= fun () ->
-          Interp.notify_when true Trace.call_entered (show name) args >>= fun () ->
-          Interp.notify_when true Trace.lisp_call_entered (show name) args >>= fun () ->
+          Interp.notify_when true Trace.call_entered name args >>= fun () ->
+          Interp.notify_when true Trace.lisp_call_entered name args >>= fun () ->
           Interp.eval_exp (Lisp.Def.Func.body fn) >>= fun r ->
           Machine.Local.update state ~f:(Vars.pop frame_size) >>= fun () ->
-          Interp.notify_when true Trace.lisp_call_returned (show name) args ~rval:r >>= fun () ->
-          Interp.notify_when true Trace.call_returned (show name) args ~rval:r >>= fun () ->
-          Interp.eval_advices Advice.After r name args >>= fun r ->
+          Interp.notify_when true Trace.lisp_call_returned name args ~rval:r >>= fun () ->
+          Interp.notify_when true Trace.call_returned name args ~rval:r >>= fun () ->
+          Interp.eval_advices Advice.After r fullname args >>= fun r ->
           eval_ret r
       end in
-      Linker.link ?addr ?tid ~name:(KB.Name.unqualified name) (module Code)
+      Linker.link ?addr ?tid ~name (module Code)
 
   let link_features () =
     Machine.Local.update state ~f:(fun s -> {
