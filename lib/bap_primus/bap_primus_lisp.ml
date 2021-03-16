@@ -582,7 +582,6 @@ module Make(Machine : Machine) = struct
   end
 
 
-  let typecheck = Typechecker.run
   let types = Machine.Local.get state >>| fun s -> s.typeenv
 
   let export_externals program =
@@ -656,27 +655,26 @@ module Make(Machine : Machine) = struct
     Machine.gets Project.program >>| vars_of_prog
 
   let add_program_vars () =
-    collect_program_vars >>= fun vars ->
+    collect_program_vars >>= fun pvars ->
+    Env.all >>= fun evars ->
+    let vars = Seq.append pvars evars in
     Machine.Local.update state ~f:(fun s -> {
           s with
           program = Seq.fold vars ~f:(fun prog v ->
               Lisp.Program.add prog place @@
-              Lisp.Def.Place.create ~package:"target"
+              Lisp.Def.Place.create ~package:"program"
                 (Var.name v) v)
               ~init:s.program
         })
 
-
   let init_places () =
     Machine.Local.update state ~f:(fun s -> {
           s with
-          places =
-            Lisp.Program.fold s.program place ~init:s.places
-              ~f:(fun ~package reg places ->
-                  let name =
-                    KB.Name.create ~package (Lisp.Def.name reg) in
-                  let place = Lisp.Def.Place.location reg in
-                  Map.set places name place)
+          places = Lisp.Program.fold s.program place
+              ~f:(fun ~package r places -> Map.set places
+                     ~key:(KB.Name.create ~package (Lisp.Def.name r))
+                     ~data:(Lisp.Def.Place.location r))
+              ~init:s.places
         })
 
   let link_places () =
@@ -781,12 +779,16 @@ module Make(Machine : Machine) = struct
   let link_program program =
     Machine.Local.get state >>= fun s ->
     let s = {s with program = Lisp.Program.merge s.program program} in
-    Machine.Local.put state s >>= fun () ->
-    add_registers () >>=
-    add_globals >>=
-    add_program_vars >>=
-    link_places >>=
+    Machine.Local.put state s >>=
     link_features
+
+  let typecheck = Machine.sequence [
+      add_registers ();
+      add_globals ();
+      add_program_vars ();
+      link_places ();
+      Typechecker.run;
+    ]
 
   let program = Machine.Local.get state >>| fun s -> s.program
 

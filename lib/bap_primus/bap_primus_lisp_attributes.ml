@@ -100,8 +100,8 @@ module Visibility = struct
       ~package ~domain ~parse
 
   let is_public = function
-    | []  | Public :: _ -> true
-    | _ -> false
+    | Private :: _ -> false
+    | _ -> true
 
 end
 
