@@ -307,10 +307,11 @@ module Parse = struct
       eq = tree.eq;
     } tree
 
-  let defmethod ?docs ?(attrs=[]) name p body prog gattrs tree =
+  let defmethod ?docs ?(attrs=[]) name' p body prog gattrs tree =
     let attrs = parse_declarations prog gattrs attrs in
     let es = List.map ~f:(parse (constrained prog attrs)) body in
     let params = params prog in
+    let name = KB.Name.show@@KB.Name.read ~package:"primus" name' in
     Program.add prog meth @@ Def.Meth.create ?docs ~attrs name (params p) {
       data = Seq es;
       id = tree.id;

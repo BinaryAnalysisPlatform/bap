@@ -80,7 +80,8 @@ let targets {exports} package = match Map.find exports package with
 let rec transitive_closure program from =
   let init = Set.singleton (module String) from in
   Set.fold (targets program from) ~f:(fun init pack ->
-      Set.union init (transitive_closure program pack))
+      if Set.mem init pack then init
+      else Set.union init (transitive_closure program pack))
     ~init
 
 let fold_library library ~init ~f =

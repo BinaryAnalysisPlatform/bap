@@ -41,7 +41,7 @@ type bindings = {
 type state = {
   program : Lisp.Program.t;
   typeenv : Lisp.Program.Type.env;
-  signals : subscription String.Map.t;
+  signals : subscription Map.M(KB.Name).t;
   advices : advisors Map.M(KB.Name).t;
   places : Var.t Map.M(KB.Name).t;
   width : int;
@@ -66,7 +66,7 @@ let state = Bap_primus_state.declare ~inspect
          typeenv = Lisp.Program.Type.empty;
          advices = Map.empty (module KB.Name);
          places = Map.empty (module KB.Name);
-         signals = String.Map.empty;
+         signals = Map.empty (module KB.Name);
          width = width_of_ctxt proj;
        })
 
@@ -826,7 +826,7 @@ module Make(Machine : Machine) = struct
         proj x >>= Self.eval_signal name) >>= fun sub ->
     Machine.Local.update state ~f:(fun s -> {
           s with program = Lisp.Program.add s.program signal r;
-                 signals = Map.add_exn s.signals (show name) sub;
+                 signals = Map.add_exn s.signals name sub;
         })
 
 
@@ -857,9 +857,13 @@ module Make(Machine : Machine) = struct
   let optimize () =
     Machine.Local.get state >>= fun s ->
     let known_methods =
-      Lisp.Program.get s.program meth |>
-      List.fold ~init:String.Set.empty ~f:(fun mets met ->
-          Set.add mets (Lisp.Def.name met)) in
+      Lisp.Program.fold s.program meth
+        ~init:(Set.empty (module KB.Name))
+        ~f:(fun ~package defs mets ->
+            List.fold defs ~init:mets  ~f:(fun mets met ->
+                let name =
+                  KB.Name.create ~package (Lisp.Def.name met) in
+                Set.add mets name)) in
     let useless_subscriptions =
       Map.fold s.signals ~init:[] ~f:(fun ~key:name ~data:sub subs ->
           if Set.mem known_methods name then subs
