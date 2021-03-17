@@ -173,16 +173,33 @@ let export = Primus.Lisp.Type.Spec.[
 
     "cast-unsigned", tuple [int; a] @-> b,
     "(cast-unsigned S X) performs unsigned extension of X to the size of S bits";
+
+    "extract", tuple [any; any; any] @-> any,
+    "(extract HI LO X) extracts bits from HI to LO (both ends
+    including) of X, the returned value has HI-LO+1 bits. ";
+
+    "concat", (all any @-> any),
+    "(concat X Y Z ...) concatenates words X, Y, Z, ... into one big word";
+
   ]
 
 type KB.conflict += Illformed of string
+                 | Failed_primitive of KB.Name.t * unit Theory.value list * string
 
 let illformed fmt =
   Format.kasprintf (fun msg ->
       KB.fail (Illformed msg)) fmt
 
+let string_of_error name args err =
+  Format.asprintf
+    "Failed to apply primitive %a: %s@\nApplied as:@\n@[<hov2>(%a %a)@]"
+    KB.Name.pp name err KB.Name.pp name
+    Format.(pp_print_list ~pp_sep:pp_print_space KB.Value.pp) args
+
 let () = KB.Conflict.register_printer (function
-    | Illformed msg-> Some ("illformed lisp program " ^ msg)
+    | Illformed msg -> Some ("illformed lisp program " ^ msg)
+    | Failed_primitive (name,args,err) ->
+      Some (string_of_error name args err)
     | _ -> None)
 
 
@@ -1046,9 +1063,15 @@ let provide () =
   KB.promise Theory.Semantics.slot @@ fun obj ->
   let*? name = KB.collect Lisp.name obj in
   let*? args = KB.collect Lisp.args obj in
-  Theory.instance () >>= Theory.require >>= fun (module CT) ->
-  let module P = Primitives(CT) in
-  P.dispatch obj (KB.Name.unqualified name) args
+  if String.equal (KB.Name.package name) "core"
+  then
+    Theory.instance () >>= Theory.require >>= fun (module CT) ->
+    let module P = Primitives(CT) in
+    KB.catch (P.dispatch obj (KB.Name.unqualified name) args) @@ function
+    | Illformed err ->
+      KB.fail (Failed_primitive (name,args,err))
+    | other -> KB.fail other
+  else !!nothing
 
 
 let enable_extraction () =
