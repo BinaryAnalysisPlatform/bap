@@ -42,7 +42,7 @@ type const = {
   value : string;
 }
 
-type place = Bap.Std.var
+type place = Theory.Var.Top.t
 
 type semafun = Theory.Label.t -> Theory.Value.Top.t list -> Theory.Semantics.t KB.t
 
@@ -265,7 +265,7 @@ module Place = struct
         docs = "";
         attrs = Attribute.Set.empty;
       };
-      code = var;
+      code = Theory.Var.forget var;
     };
     id = Id.null;
     eq = Eq.null;

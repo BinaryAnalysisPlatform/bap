@@ -49,6 +49,11 @@ let program =
         let r = Format.asprintf "%a" Program.pp p in
         Sexp.Atom r)
 
+type program = {
+  typed : Program.Type.env;
+  places : Var.t Map.M(KB.Name).t;
+}
+
 let typed = KB.Class.property Theory.Source.cls "typed-program"
     ~package @@
   KB.Domain.flat "typed-lisp-program"
@@ -208,7 +213,7 @@ let machine_var_by_name t name =
   Set.find (Theory.Target.vars t) ~f:(fun v ->
       String.equal (Theory.Var.name v) name)
 
-let make_var ?t:constr target name  =
+let make_var ?t:constr _prog target name  =
   let word = Theory.Target.bits target in
   match machine_var_by_name target (KB.Name.unqualified name) with
   | Some v -> v
@@ -415,7 +420,7 @@ module Prelude(CT : Theory.Core) = struct
 
   let reify ppf prog defn target name args =
     let word = Theory.Target.bits target in
-    let var ?t n = make_var ?t target n in
+    let var ?t n = make_var ?t prog target n in
     let regs roles = Theory.Target.regs target ~roles in
     let consts = regs [Theory.Role.Register.constant] in
     let pseudos = regs [Theory.Role.Register.pseudo] in

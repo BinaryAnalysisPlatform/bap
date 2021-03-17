@@ -39,8 +39,8 @@ let reify ~width {data={exp;typ}} =
   let open Bap.Std in
   let exp = KB.Name.show exp in
   match typ with
-  | Type t -> Var.create exp (Type.Imm t)
-  | _ -> Var.create exp (Type.Imm width)
+  | Type t -> Theory.Var.define (Theory.Bitv.define t) exp
+  | _ -> Theory.Var.define (Theory.Bitv.define width) exp
 
 
 include Comparable.Make_plain(struct

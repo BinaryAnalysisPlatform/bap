@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 open Bap_primus_lisp_types
 
 type t = var [@@deriving compare, sexp_of]
@@ -9,4 +10,4 @@ val to_string : t -> string
 type read_error = Empty | Not_a_var | Bad_type | Bad_format
 
 val read : ?package:string -> Id.t -> Eq.t -> string -> (t,read_error) result
-val reify : width:int -> t -> Bap.Std.Var.t
+val reify : width:int -> t -> 'a Theory.Bitv.t Theory.Var.t

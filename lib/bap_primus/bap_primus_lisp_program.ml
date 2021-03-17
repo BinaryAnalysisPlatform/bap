@@ -263,25 +263,27 @@ module Places = struct
         Theory.Target.regs t |> Set.to_sequence |>
         Seq.fold ~init:regs ~f:(fun regs v ->
             let name = KB.Name.create ~package (Theory.Var.name v) in
-            Map.set regs name (Var.reify v)))
+            Map.set regs name v))
       ~init:(Map.empty (module KB.Name))
 
 
   let collect_globals target program =
     let open Lisp.Attributes in
-    let width = Theory.Target.bits target in
+    let var v = Theory.Var.forget @@
+      Lisp_var.reify v
+        ~width:(Theory.Target.bits target) in
     let vars def =
       let get attr =
-        Set.map (module Var) ~f:(Lisp_var.reify ~width) @@
+        Set.map (module Theory.Var.Top) ~f:var @@
         Attribute.Set.get attr (Def.attributes def) in
-      Var.Set.union_list [
+      Set.union_list (module Theory.Var.Top) [
         get Variables.global;
         get Variables.static
       ] in
     fold program Items.func
-      ~init:Var.Set.empty
+      ~init:(Set.empty (module Theory.Var.Top))
       ~f:(fun ~package:_ def acc ->
-          Var.Set.union acc (vars def))
+          Set.union acc (vars def))
 
 
   let add_registers target prog =
@@ -296,7 +298,7 @@ module Places = struct
   let add_globals target prog =
     let vars = collect_globals target prog in
     Set.fold vars ~f:(fun prog v ->
-        let name = KB.Name.read (Var.name v) in
+        let name = KB.Name.read (Theory.Var.name v) in
         let package = KB.Name.package name in
         let name = KB.Name.unqualified name in
         add prog Items.place @@
@@ -306,7 +308,7 @@ module Places = struct
   let add_vars ~package vars lisp =
     Seq.fold vars ~f:(fun prog v ->
         add prog Items.place @@
-        Def.Place.create ~package (Var.name v) v)
+        Def.Place.create ~package (Theory.Var.name v) v)
       ~init:lisp
 
   let add ?(globals=Seq.empty) lisp target =
@@ -1392,7 +1394,7 @@ module Typing = struct
   let add_places prog =
     fold prog Items.place ~f:(fun ~package place vars ->
         let name = KB.Name.read ~package (Def.name place) in
-        let var = Def.Place.location place in
+        let var = Var.reify@@Def.Place.location place in
         match Var.typ var with
         | Type.Imm n -> Map.set vars name n
         | _ -> vars)

@@ -134,7 +134,7 @@ module Locals(Machine : Machine) = struct
 
   let make_frame width bs =
     List.fold ~init:([],0) bs ~f:(fun (xs,n) (v,x) ->
-        (Lisp.Var.reify ~width v,x)::xs, n+1)
+        (Var.reify@@Lisp.Var.reify ~width v,x)::xs, n+1)
 
   let rec update xs x ~f = match xs with
     | [] -> []
@@ -347,7 +347,7 @@ module Interpreter(Machine : Machine) = struct
       Eval.const (Word.create bv width) in
     let sym v = Value.Symbol.to_value (KB.Name.unqualified v.data) in
     let var width places v = match Map.find places v.data.exp with
-      | None -> Lisp.Var.reify ~width v
+      | None -> Var.reify@@Lisp.Var.reify ~width v
       | Some v -> v in
     let rec eval = function
       | {data=Int {data={exp;typ}}} -> int exp typ
@@ -588,6 +588,8 @@ module Make(Machine : Machine) = struct
         Value.zero m >>= Env.set var
       | _ -> Machine.return ()
 
+  let reflect v = Theory.Var.define (Var.sort v)(Var.name v)
+
 
   let collect_program_vars prog =
     (object inherit [Var.Set.t] Term.visitor
@@ -599,7 +601,7 @@ module Make(Machine : Machine) = struct
     Machine.get () >>= fun project ->
     Env.all >>= fun evars ->
     let pvars = collect_program_vars (Project.program project) in
-    let globals = Seq.append evars pvars in
+    let globals = Seq.(append evars pvars >>| reflect) in
     let target = Project.target project in
     Machine.Local.update state ~f:(fun s -> {
           s with
@@ -613,7 +615,7 @@ module Make(Machine : Machine) = struct
           places = Lisp.Program.fold s.program place
               ~f:(fun ~package r places -> Map.set places
                      ~key:(KB.Name.create ~package (Lisp.Def.name r))
-                     ~data:(Lisp.Def.Place.location r))
+                     ~data:(Var.reify@@Lisp.Def.Place.location r))
               ~init:s.places
         })
 

@@ -85,8 +85,8 @@ module Const : sig
 end
 
 module Place : sig
-  val create : ?package:string -> string -> Bap.Std.Var.t -> place t
-  val location : place t -> Bap.Std.Var.t
+  val create : ?package:string -> string -> _ Theory.Var.t -> place t
+  val location : place t -> Theory.Var.Top.t
 end
 
 module Subst : sig
