@@ -50,16 +50,19 @@ let program =
         Sexp.Atom r)
 
 type program = {
-  typed : Program.Type.env;
-  places : Var.t Map.M(KB.Name).t;
+  prog : Program.t;
+  places : unit Theory.var Map.M(KB.Name).t;
+  pseudo_regs : unit Theory.var Map.M(String).t;
+  consts : Set.M(Theory.Var.Top).t;
+  pseudos : Set.M(Theory.Var.Top).t;
+  zeros : Set.M(Theory.Var.Top).t;
 }
 
 let typed = KB.Class.property Theory.Source.cls "typed-program"
     ~package @@
-  KB.Domain.flat "typed-lisp-program"
-    ~empty:Program.Type.empty
-    ~equal:Program.Type.equal
-    ~join:(fun x y -> Ok (Program.Type.merge x y))
+  KB.Domain.optional "typed-lisp-program"
+    ~equal:(fun x y ->
+        Program.equal x.prog y.prog)
 
 let fail s = Meta.lift (KB.fail s)
 
@@ -213,9 +216,9 @@ let machine_var_by_name t name =
   Set.find (Theory.Target.vars t) ~f:(fun v ->
       String.equal (Theory.Var.name v) name)
 
-let make_var ?t:constr _prog target name  =
+let make_var ?t:constr places target name  =
   let word = Theory.Target.bits target in
-  match machine_var_by_name target (KB.Name.unqualified name) with
+  match Map.find places name with
   | Some v -> v
   | None ->
     let t = Option.value constr ~default:word in
@@ -410,22 +413,14 @@ module Prelude(CT : Theory.Core) = struct
       Env.del v >>= fun () ->
       full [!!eff; data [v := !(res eff)]] !!(res eff)
 
-  let index_by_name regs =
-    Set.to_sequence regs |>
-    Seq.map ~f:(fun v -> Theory.Var.name v, v) |>
-    Map.of_sequence_exn (module String)
 
   let prim_name name = KB.Name.read ~package:"core" name
 
 
-  let reify ppf prog defn target name args =
+  let reify ppf program defn target name args =
     let word = Theory.Target.bits target in
-    let var ?t n = make_var ?t prog target n in
-    let regs roles = Theory.Target.regs target ~roles in
-    let consts = regs [Theory.Role.Register.constant] in
-    let pseudos = regs [Theory.Role.Register.pseudo] in
-    let zeros = regs [Theory.Role.Register.zero] in
-    let pseudo_regs = index_by_name pseudos in
+    let {prog; places; pseudo_regs; consts; pseudos; zeros} = program in
+    let var ?t n = make_var ?t places target n in
     let rec eval : ast -> unit Theory.Effect.t Meta.t = function
       | {data=Int {data={exp=x; typ=Type m}}} -> bigint x m
       | {data=Int {data={exp=x}}} -> bigint x word
@@ -630,23 +625,47 @@ let link_library target prog =
       Def.Sema.create ~docs ~types name (primitive name))
     ~init:prog
 
+let index_by_name regs =
+  Set.to_sequence regs |>
+  Seq.map ~f:(fun v -> Theory.Var.name v, v) |>
+  Map.of_sequence_exn (module String)
+
+
 let obtain_typed_program unit =
   let open KB.Syntax in
   KB.collect Theory.Unit.source unit >>= fun src ->
   KB.collect Theory.Unit.target unit >>= fun target ->
-  let prog = KB.Value.get typed src in
-  match Program.Type.(equal empty prog) with
-  | false -> !!prog
-  | true ->
+  match KB.Value.get typed src with
+  | Some prog -> !!prog
+  | None ->
     let prog =
       link_library target @@
       Program.with_places (KB.Value.get program src) target in
     let tprog = Program.Type.infer prog in
+    let prog = Program.Type.program tprog in
+    let regs roles = Theory.Target.regs target ~roles in
+    let consts = regs [Theory.Role.Register.constant] in
+    let pseudos = regs [Theory.Role.Register.pseudo] in
+    let zeros = regs [Theory.Role.Register.zero] in
+    let pseudo_regs = index_by_name pseudos in
+    let places = Program.fold prog Key.place
+        ~f:(fun ~package place places ->
+            let name = KB.Name.create ~package (Def.name place) in
+            Map.set places name (Def.Place.location place))
+        ~init:(Map.empty (module KB.Name)) in
+    let program = {
+      prog;
+      consts;
+      zeros;
+      pseudos;
+      pseudo_regs;
+      places;
+    } in
     match Program.Type.errors tprog with
     | [] ->
-      let src = KB.Value.put typed src tprog in
+      let src = KB.Value.put typed src (Some program) in
       KB.provide Theory.Unit.source unit src >>| fun () ->
-      tprog
+      program
     | errs -> KB.fail (Illtyped_program errs)
 
 
@@ -671,9 +690,8 @@ let provide_semantics ?(stdout=Format.std_formatter) () =
   KB.collect Theory.Label.unit obj >>=? fun unit ->
   KB.collect Property.name obj >>=? fun name ->
   KB.collect Property.args obj >>= fun args ->
-  obtain_typed_program unit >>= fun typed ->
+  obtain_typed_program unit >>= fun prog ->
   KB.collect Theory.Unit.target unit >>= fun target ->
-  let prog = Program.Type.program typed in
   let bits = Theory.Target.bits target in
   let module Arith = Bitvec.Make(struct
       let modulus = Bitvec.modulus bits
@@ -700,8 +718,7 @@ let provide_attributes () =
   KB.promise Attribute.Set.slot @@ fun this ->
   KB.collect Theory.Label.unit this >>=? fun unit ->
   KB.collect Property.name this >>=? fun name ->
-  obtain_typed_program unit >>|
-  Program.Type.program >>= fun prog ->
+  obtain_typed_program unit >>= fun {prog} ->
   match Resolve.semantics prog Key.func name () with
   | None -> !!empty
   | Some (Error problem) ->
