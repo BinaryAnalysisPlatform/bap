@@ -44,6 +44,13 @@ type const = {
 
 type place = Bap.Std.var
 
+type semafun = Theory.Label.t -> Theory.Value.Top.t list -> Theory.Semantics.t KB.t
+
+type sema = {
+  apply : semafun;
+  types : Type.signature;
+}
+
 type para = {
   default : ast;
 }
@@ -106,6 +113,25 @@ end
 
 module Meth = Func
 
+module Sema = struct
+  type body = semafun
+
+  let create ?(docs="") ~types name apply : sema t = {
+    data = {
+      meta = {
+        name = KB.Name.show name;
+        docs;
+        attrs=Attribute.Set.empty};
+      code = {apply; types};
+    };
+    id = Source.Id.null;
+    eq = Source.Eq.null;
+  }
+
+  let types : sema t -> Type.signature = fun {data={code}} -> code.types
+  let apply {data={code}} = code.apply
+end
+
 module Signal = struct
   type nonrec t = signal t
 
@@ -123,6 +149,7 @@ module Signal = struct
 
   let signature {data={code}} = code
 end
+
 
 
 module Para =  struct

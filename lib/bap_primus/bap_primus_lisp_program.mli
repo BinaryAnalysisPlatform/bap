@@ -37,6 +37,7 @@ module Items : sig
   val func  : Def.func  item
   val meth  : Def.meth  item
   val para  : Def.para item
+  val semantics : Def.sema item
   val primitive : Def.prim item
   val signal : Def.signal item
 end
@@ -47,7 +48,7 @@ module Type : sig
   val empty : env
   val equal : env -> env -> bool
   val merge : env -> env -> env
-  val infer : ?externals:(KB.Name.t * signature) list -> Var.t seq -> program -> env
+  val infer : ?externals:(string * signature) list -> program -> env
   val program : env -> program
   val check : Var.t seq -> program -> error list
   val errors : env -> error list

@@ -12,6 +12,7 @@ end
 
 type 'a spec
 type 'a t = 'a spec indexed
+type sema
 type func
 type meth
 type macro
@@ -32,6 +33,16 @@ val docs : 'a t -> string
 val attributes : 'a t -> attrs
 
 type 'a def = ?docs:string -> ?attrs:attrs -> string -> 'a
+
+
+module Sema : sig
+  type body = Theory.Label.t -> Theory.Value.Top.t list -> Theory.Semantics.t KB.t
+  val create : ?docs:string -> types:Type.signature ->
+    KB.Name.t -> body ->
+    sema t
+  val apply : sema t -> body
+  val types : sema t -> Type.signature
+end
 
 module Func : sig
   val create : (var list -> ast -> tree -> func t) def

@@ -555,13 +555,12 @@ module Make(Machine : Machine) = struct
     let run =
       Machine.get () >>= fun proj ->
       Machine.Local.get state >>= fun s ->
-      Env.all >>= fun vars ->
       let t = Project.target proj in
       let externals =
         signatures_of_subs (Project.program proj) |>
-        List.map ~f:(fun (n,s) -> KB.Name.read n,s t) in
+        List.map ~f:(fun (n,s) -> n,s t) in
       let typeenv =
-        Lisp.Program.Type.infer ~externals vars s.program in
+        Lisp.Program.Type.infer ~externals s.program in
       Lisp.Program.Type.errors typeenv |>
       Machine.List.iter ~f:(fun s ->
           Machine.Observation.make Type.notify_error s) >>= fun () ->

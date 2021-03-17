@@ -113,17 +113,6 @@ let definition =
     ~equal:Theory.Label.equal
     ~inspect:Theory.Label.sexp_of_t
 
-
-let primitive defn name args =
-  let open KB.Syntax in
-  KB.Object.scoped Theory.Program.cls @@ fun obj ->
-  KB.sequence [
-    KB.provide Property.name obj (Some name);
-    KB.provide definition obj (Some defn);
-    KB.provide Property.args obj (Some args);
-  ] >>= fun () ->
-  KB.collect Theory.Semantics.slot obj
-
 let declare
     ?(types=fun _ -> Type.{
         args = [];
@@ -488,13 +477,9 @@ module Prelude(CT : Theory.Core) = struct
         ] !!cres
     and call ?(toplevel=false) name xs =
       match Resolve.defun check_arg prog Key.func name xs with
-      | None ->
-        if toplevel then !!Insn.empty
-        else Meta.lift@@primitive defn name xs
       | Some (Ok (fn,_)) when is_external fn ->
         sym (Def.name fn) >>= fun dst ->
-        Meta.lift@@primitive defn
-          (prim_name "invoke-subroutine") (res dst::xs)
+        call (prim_name "invoke-subroutine") (res dst::xs)
       | Some (Ok (fn,bs)) ->
         Env.set_args word bs >>= fun () ->
         Scope.clear >>= fun scope ->
@@ -503,6 +488,14 @@ module Prelude(CT : Theory.Core) = struct
         Env.del_args word bs >>= fun () ->
         !!eff
       | Some (Error problem) -> unresolved problem
+      | None when toplevel -> !!Insn.empty
+      | None ->
+        match Resolve.semantics prog Key.semantics name () with
+        | Some Ok (sema,()) ->
+          Meta.lift@@
+          Def.Sema.apply sema defn xs
+        | Some (Error problem) -> unresolved problem
+        | None -> fail (Unresolved_definition (KB.Name.show name))
     and app name xs =
       map xs >>= fun (aeff,xs) ->
       call name xs >>= fun peff ->
@@ -615,6 +608,23 @@ end
 
 type KB.conflict += Illtyped_program of Program.Type.error list
 
+let primitive name defn args =
+  let open KB.Syntax in
+  KB.Object.scoped Theory.Program.cls @@ fun obj ->
+  KB.sequence [
+    KB.provide Property.name obj (Some name);
+    KB.provide definition obj (Some defn);
+    KB.provide Property.args obj (Some args);
+  ] >>= fun () ->
+  KB.collect Theory.Semantics.slot obj
+
+let link_library target prog =
+  Hashtbl.fold library ~f:(fun ~key:name ~data:{types; docs} prog ->
+      let types = types target in
+      Program.add prog Program.Items.semantics @@
+      Def.Sema.create ~docs ~types name (primitive name))
+    ~init:prog
+
 let obtain_typed_program unit =
   let open KB.Syntax in
   KB.collect Theory.Unit.source unit >>= fun src ->
@@ -623,11 +633,10 @@ let obtain_typed_program unit =
   match Program.Type.(equal empty prog) with
   | false -> !!prog
   | true ->
-    let prog = Program.with_places (KB.Value.get program src) target in
-    let externals = Hashtbl.to_alist library |>
-                    List.Assoc.map ~f:(fun {types} ->
-                        types target) in
-    let tprog = Program.Type.infer ~externals Seq.empty prog in
+    let prog =
+      link_library target @@
+      Program.with_places (KB.Value.get program src) target in
+    let tprog = Program.Type.infer prog in
     match Program.Type.errors tprog with
     | [] ->
       let src = KB.Value.put typed src tprog in

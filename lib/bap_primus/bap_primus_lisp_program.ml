@@ -18,6 +18,7 @@ end
 module Def = Bap_primus_lisp_def
 
 type package = {
+  semas : Def.sema Def.t list;
   codes : Def.prim Def.t list;
   macros : Def.macro Def.t list;
   substs : Def.subst Def.t list;
@@ -42,6 +43,7 @@ type program = t
 let default_package = "user"
 
 let empty_package = {
+  semas = [];
   codes = [];
   defs = [];
   mets = [];
@@ -75,6 +77,7 @@ type def_filter = {
   visit: 'a. 'a Def.t -> bool;
 }
 let filter_package pkg {visit=f} = {
+  semas = List.filter pkg.semas ~f;
   codes = List.filter pkg.codes ~f;
   defs = List.filter pkg.defs ~f;
   mets = List.filter pkg.mets ~f;
@@ -131,6 +134,7 @@ let pp_defs ppf =
     ppf
 
 let merge_packages p1 p2 = {
+  semas = p1.semas ++ p2.semas;
   codes = p1.codes ++ p2.codes;
   defs = p1.defs ++ p2.defs;
   mets = p1.mets ++ p2.mets;
@@ -199,8 +203,8 @@ module Items = struct
   let meth = mets
   let para = pars
   let primitive = codes
+  let semantics = semas
   let signal = sigs
-
 end
 
 let add_to_package (fld : 'a item) x p =
@@ -1310,23 +1314,21 @@ module Typing = struct
         gamma
 
   let empty_names = Map.empty (module KB.Name)
-  let make_globs =
-    Seq.fold ~init:empty_names ~f:(fun vars (v,t) -> match t with
-        | Type.Imm x ->
-          Map.set vars ~key:v ~data:x
-        | Type.Mem _
-        | Type.Unk -> vars)
 
 
-  let make_prims {library} init =
-    fold_library library ~init ~f:(fun ~package {codes} init ->
-        List.fold codes ~init ~f:(fun ps p ->
-            match Def.Closure.signature p with
-            | None -> ps
-            | Some types ->
-              let name = KB.Name.create ~package (Def.name p) in
-              Map.set ps name types))
+  let collect_prims program item signature init =
+    fold program item ~init ~f:(fun ~package def ps ->
+        match signature def with
+        | None -> ps
+        | Some types ->
+          let name = KB.Name.create ~package (Def.name def) in
+          Map.set ps name types)
 
+
+  let make_prims program init =
+    let sema_types d = Some (Def.Sema.types d) in
+    collect_prims program Items.primitive Def.Closure.signature @@
+    collect_prims program Items.semantics sema_types init
 
   let make_paras {library} =
     fold_library library ~f:(fun ~package {pars} init ->
@@ -1387,34 +1389,28 @@ module Typing = struct
           Map.add_multi funcs name def))
       ~init:empty_names
 
-  let add_places prog vars =
+  let add_places prog =
     fold prog Items.place ~f:(fun ~package place vars ->
         let name = KB.Name.read ~package (Def.name place) in
         let var = Def.Place.location place in
         match Var.typ var with
         | Type.Imm n -> Map.set vars name n
         | _ -> vars)
-      ~init:vars
+      ~init:(Map.empty (module KB.Name))
 
-  let make_externals program externals =
-    List.concat_map externals ~f:(fun (name,s) ->
-        let base = KB.Name.unqualified name in
-        transitive_closure program (KB.Name.package name) |>
-        Set.to_list |>
-        List.map ~f:(fun package -> KB.Name.create ~package base,s)) |>
-    Map.of_alist_reduce (module KB.Name) ~f:(fun s1 s2 ->
-        if Poly.(s1 = s2) then s1
-        else invalid_arg "duplicating primitives")
+  let make_externals =
+    List.fold ~f:(fun exts (n,s) ->
+        let n = KB.Name.create ~package:"external" n in
+        Map.set exts n s)
+      ~init:(Map.empty (module KB.Name))
 
-  let infer externals vars (p : program) :  Gamma.t =
-    let externals = make_externals p externals in
-    let vars = make_globs@@Seq.map vars ~f:(fun v ->
-        KB.Name.read (Var.name v), Var.typ v) in
+  let infer externals (p : program) :  Gamma.t =
+    let externals = make_externals externals in
     let library = applicable p.context p.library in
     let glob = {
       ctxt = p.context;
       prims = make_prims p externals;
-      globs = add_places p vars;
+      globs = add_places p;
       funcs = make_defs library;
       paras = make_paras p;
     } in
@@ -1453,9 +1449,9 @@ module Typing = struct
     }
 
 
-    let infer ?(externals=[]) vars program =
+    let infer ?(externals=[]) program =
       let program = Reindex.program program in
-      let gamma = infer externals vars program in
+      let gamma = infer externals program in
       {program; gamma}
 
     let errors {program={sources}; gamma} =
@@ -1467,7 +1463,7 @@ module Typing = struct
             | Ok _ -> errs
             | Error problem -> {sources; problem} :: errs)
 
-    let check vars program : error list = errors (infer vars program)
+    let check _vars program : error list = errors (infer program)
 
     let pp_sigs ppf sigs =
       List.iteri sigs ~f:(fun i s ->
