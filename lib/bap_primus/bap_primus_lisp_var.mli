@@ -9,3 +9,4 @@ val to_string : t -> string
 type read_error = Empty | Not_a_var | Bad_type | Bad_format
 
 val read : ?package:string -> Id.t -> Eq.t -> string -> (t,read_error) result
+val reify : width:int -> t -> Bap.Std.Var.t

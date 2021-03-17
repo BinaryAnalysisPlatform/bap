@@ -35,6 +35,14 @@ let read ?package id eq = function
         let x = KB.Name.read ?package (x ^ ":" ^ sz) in
         Ok {data={exp=x; typ=Any}; id; eq}
 
+let reify ~width {data={exp;typ}} =
+  let open Bap.Std in
+  let exp = KB.Name.show exp in
+  match typ with
+  | Type t -> Var.create exp (Type.Imm t)
+  | _ -> Var.create exp (Type.Imm width)
+
+
 include Comparable.Make_plain(struct
     type t = var [@@deriving compare,sexp_of]
   end)

@@ -83,8 +83,8 @@ let library = Hashtbl.create (module KB.Name)
 module Property = struct
   let name = KB.Class.property Theory.Program.cls ~package "lisp-name" @@
     KB.Domain.optional "lisp-name"
-      ~equal:String.equal
-      ~inspect:sexp_of_string
+      ~equal:KB.Name.equal
+      ~inspect:KB.Name.sexp_of_t
 
   type args = Theory.Value.Top.t list [@@deriving equal, sexp]
 
@@ -118,7 +118,7 @@ let primitive defn name args =
   let open KB.Syntax in
   KB.Object.scoped Theory.Program.cls @@ fun obj ->
   KB.sequence [
-    KB.provide Property.name obj (Some (KB.Name.to_string name));
+    KB.provide Property.name obj (Some name);
     KB.provide definition obj (Some defn);
     KB.provide Property.args obj (Some args);
   ] >>= fun () ->
@@ -623,14 +623,11 @@ let obtain_typed_program unit =
   match Program.Type.(equal empty prog) with
   | false -> !!prog
   | true ->
-    let prog = KB.Value.get program src in
-    let vars = Theory.Target.vars target |>
-               Set.to_sequence |>
-               Seq.map ~f:Var.reify in
+    let prog = Program.with_places (KB.Value.get program src) target in
     let externals = Hashtbl.to_alist library |>
                     List.Assoc.map ~f:(fun {types} ->
                         types target) in
-    let tprog = Program.Type.infer ~externals vars prog in
+    let tprog = Program.Type.infer ~externals Seq.empty prog in
     match Program.Type.errors tprog with
     | [] ->
       let src = KB.Value.put typed src tprog in
@@ -674,7 +671,6 @@ let provide_semantics ?(stdout=Format.std_formatter) () =
     } in
   Theory.instance () >>= Theory.require >>= fun (module Core) ->
   let open Prelude(Core) in
-  let name = KB.Name.read name in
   Meta.run (reify stdout prog obj target name args) meta >>= fun (res,_) ->
   KB.collect Disasm_expert.Basic.Insn.slot obj >>| function
   | Some basic when Insn.(res <> empty) ->
@@ -692,7 +688,6 @@ let provide_attributes () =
   KB.collect Property.name this >>=? fun name ->
   obtain_typed_program unit >>|
   Program.Type.program >>= fun prog ->
-  let name = KB.Name.read ~package:"core" name in
   match Resolve.semantics prog Key.func name () with
   | None -> !!empty
   | Some (Error problem) ->

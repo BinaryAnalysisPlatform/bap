@@ -146,7 +146,7 @@ module Semantics : sig
 
   val program : (Theory.Source.cls, program) KB.slot
   val definition : (Theory.program, Theory.Label.t option) KB.slot
-  val name : (Theory.program, string option) KB.slot
+  val name : (Theory.program, KB.Name.t option) KB.slot
   val args : (Theory.program, unit Theory.Value.t list option) KB.slot
   val symbol : (Theory.Value.cls, String.t option) KB.slot
   val static : (Theory.Value.cls, Bitvec.t option) KB.slot

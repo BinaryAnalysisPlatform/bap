@@ -1048,7 +1048,8 @@ let provide () =
   let*? args = KB.collect Lisp.args obj in
   Theory.instance () >>= Theory.require >>= fun (module CT) ->
   let module P = Primitives(CT) in
-  P.dispatch obj name args
+  P.dispatch obj (KB.Name.unqualified name) args
+
 
 let enable_extraction () =
   Theory.declare ~provides:["extraction"; "primus-lisp"; "lisp"]

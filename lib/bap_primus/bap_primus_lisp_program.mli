@@ -23,11 +23,11 @@ val sources : t -> Source.t
 val package : t -> string
 val with_sources : t -> Source.t -> t
 val with_context : t -> Context.t -> t
+val with_places : ?globals:Var.t seq -> t -> Theory.target -> t
 val with_package : t -> string -> t
 val reset_package : t -> t
 val use_package : t -> ?target:string -> string -> t
 val in_package : string -> t -> (t -> 'a) -> 'a
-
 
 module Items : sig
   val macro : Def.macro item

@@ -77,16 +77,6 @@ let lisp_primitive,primitive_called = Bap_primus_observation.provide
 
 let show = KB.Name.show
 
-
-let collect_registers target =
-  List.fold (target :: Theory.Target.parents target) ~f:(fun regs t ->
-      let package = KB.Name.unqualified (Theory.Target.name t) in
-      Theory.Target.regs t |> Set.to_sequence |>
-      Seq.fold ~init:regs ~f:(fun regs v ->
-          let name = KB.Name.create ~package (Theory.Var.name v) in
-          Map.set regs name (Var.reify v)))
-    ~init:(Map.empty (module KB.Name))
-
 let make_advisors cmethod name =
   let empty = Set.empty (module KB.Name) in
   let names = Set.add empty name in
@@ -136,11 +126,6 @@ module Errors(Machine : Machine) = struct
 end
 
 
-let var_of_lisp_var width {data={exp;typ}} =
-  let exp = KB.Name.show exp in
-  match typ with
-  | Type t -> Var.create exp (Type.Imm t)
-  | _ -> Var.create exp (Type.Imm width)
 
 module Locals(Machine : Machine) = struct
   open Machine.Syntax
@@ -149,7 +134,7 @@ module Locals(Machine : Machine) = struct
 
   let make_frame width bs =
     List.fold ~init:([],0) bs ~f:(fun (xs,n) (v,x) ->
-        (var_of_lisp_var width v,x)::xs, n+1)
+        (Lisp.Var.reify ~width v,x)::xs, n+1)
 
   let rec update xs x ~f = match xs with
     | [] -> []
@@ -362,7 +347,7 @@ module Interpreter(Machine : Machine) = struct
       Eval.const (Word.create bv width) in
     let sym v = Value.Symbol.to_value (KB.Name.unqualified v.data) in
     let var width places v = match Map.find places v.data.exp with
-      | None -> var_of_lisp_var width v
+      | None -> Lisp.Var.reify ~width v
       | Some v -> v in
     let rec eval = function
       | {data=Int {data={exp;typ}}} -> int exp typ
@@ -596,23 +581,6 @@ module Make(Machine : Machine) = struct
             Lisp.Program.add prog func def))
       ~init:program
 
-
-  let collect_globals target s =
-    let open Lisp.Attributes in
-    let default_width = Theory.Target.bits target in
-    let vars def =
-      let get attr =
-        Set.map (module Var) ~f:(var_of_lisp_var default_width) @@
-        Attribute.Set.get attr (Lisp.Def.attributes def) in
-      Var.Set.union_list [
-        get Variables.global;
-        get Variables.static
-      ] in
-    Lisp.Program.fold s.program func
-      ~init:Var.Set.empty
-      ~f:(fun ~package:_ def acc ->
-          Var.Set.union acc (vars def))
-
   let link_global var =
     Env.has var >>= function
     | true -> Machine.return ()
@@ -621,55 +589,26 @@ module Make(Machine : Machine) = struct
         Value.zero m >>= Env.set var
       | _ -> Machine.return ()
 
-  let add_registers () =
-    Machine.gets Project.target >>= fun target ->
-    let regs = collect_registers target in
-    Machine.Local.update state ~f:(fun s -> {
-          s with
-          program = Map.fold regs ~f:(fun ~key:name ~data:r prog ->
-              let package = KB.Name.package name in
-              let name = KB.Name.unqualified name in
-              Lisp.Program.add prog place @@
-              Lisp.Def.Place.create ~package name r)
-              ~init:s.program
-        })
 
-  let add_globals () =
-    Machine.gets Project.target >>= fun target ->
-    Machine.Local.get state >>|
-    collect_globals target >>= fun vars ->
-    Machine.Local.update state ~f:(fun s -> {
-          s with
-          program = Set.fold vars ~f:(fun prog v ->
-              let name = KB.Name.read (Var.name v) in
-              let package = KB.Name.package name in
-              let name = KB.Name.unqualified name in
-              Lisp.Program.add prog place @@
-              Lisp.Def.Place.create ~package name v)
-              ~init:s.program
-        })
+  let collect_program_vars prog =
+    (object inherit [Var.Set.t] Term.visitor
+      method! enter_var v vs = Set.add vs v
+    end)#run prog Var.Set.empty |> Set.to_sequence
 
-  let collect_program_vars =
-    let vars_of_prog prog =
-      (object inherit [Var.Set.t] Term.visitor
-        method! enter_var v vs = Set.add vs v
-      end)#run prog Var.Set.empty |> Set.to_sequence in
-    Machine.gets Project.program >>| vars_of_prog
 
-  let add_program_vars () =
-    collect_program_vars >>= fun pvars ->
+  let add_places =
+    Machine.get () >>= fun project ->
     Env.all >>= fun evars ->
-    let vars = Seq.append pvars evars in
+    let pvars = collect_program_vars (Project.program project) in
+    let globals = Seq.append evars pvars in
+    let target = Project.target project in
     Machine.Local.update state ~f:(fun s -> {
           s with
-          program = Seq.fold vars ~f:(fun prog v ->
-              Lisp.Program.add prog place @@
-              Lisp.Def.Place.create ~package:"program"
-                (Var.name v) v)
-              ~init:s.program
+          program =
+            Lisp.Program.with_places ~globals s.program target
         })
 
-  let init_places () =
+  let init_places =
     Machine.Local.update state ~f:(fun s -> {
           s with
           places = Lisp.Program.fold s.program place
@@ -680,7 +619,8 @@ module Make(Machine : Machine) = struct
         })
 
   let link_places () =
-    init_places () >>= fun () ->
+    add_places >>= fun () ->
+    init_places >>= fun () ->
     Machine.Local.get state >>= fun {places} ->
     Map.to_sequence places |>
     Machine.Seq.iter ~f:(fun (_,v) ->
@@ -795,9 +735,6 @@ module Make(Machine : Machine) = struct
     ]
 
   let typecheck = Machine.sequence [
-      add_registers ();
-      add_globals ();
-      add_program_vars ();
       link_places ();
       Typechecker.run;
     ]

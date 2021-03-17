@@ -59,11 +59,16 @@ module Spec = struct
       ~parse:Bitvec.of_string
       ~print:Bitvec.to_string
 
+  let unknown = KB.Name.create ":unknown"
+  let name = Type.define unknown
+      ~parse:KB.Name.read
+      ~print:KB.Name.show
+
   let target = Type.define Theory.Target.unknown
       ~print:Theory.Target.to_string
       ~parse:(Theory.Target.get ~package:"bap")
 
-  let names = Command.arguments Type.string
+  let names = Command.arguments name
   let target = Command.parameter target "target"
       ~aliases:["t"; "arch"]
   let slots = Command.parameters Type.(list string) "slots"
@@ -87,7 +92,7 @@ let show target slots addr name =
       KB.provide Primus.Lisp.Semantics.name obj (Some name);
     ] >>= fun () ->
     KB.collect Theory.Semantics.slot obj >>| fun sema ->
-    Format.eprintf "%s:@ %a@." name pp sema
+    Format.eprintf "%a:@ %a@." KB.Name.pp name pp sema
   end
 
 let () = Extension.Command.declare ~doc "show-lisp" Spec.t @@

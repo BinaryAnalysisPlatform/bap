@@ -311,7 +311,7 @@ module Semantics = struct
       end);
     KB.promise Lisp.Semantics.name @@ fun this ->
     KB.collect Insn.slot this >>|? fun insn ->
-    let name = sprintf "%s:%s" (Insn.encoding insn) (Insn.name insn) in
+    let name = KB.Name.create ~package:(Insn.encoding insn) (Insn.name insn) in
     Some name
 
   let strip_extension = String.chop_suffix ~suffix:".lisp"

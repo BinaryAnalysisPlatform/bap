@@ -3658,7 +3658,7 @@ ident ::= ?any atom that is not recognized as a <word>?
         val definition : (Theory.program, Theory.Label.t option) KB.slot
 
         (** the name of a lisp program *)
-        val name : (Theory.program, string option) KB.slot
+        val name : (Theory.program, KB.Name.t option) KB.slot
 
         (** the arguments of a lisp program   *)
         val args : (Theory.program, unit Theory.Value.t list option) KB.slot

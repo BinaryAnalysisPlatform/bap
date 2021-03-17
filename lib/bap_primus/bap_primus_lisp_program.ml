@@ -249,6 +249,75 @@ let (++) = Map.merge ~f:(fun ~key:_ -> function
 let union init xs ~f =
   List.fold xs ~init ~f:(fun vs x -> vs ++ f x)
 
+
+module Places = struct
+  module Lisp_var = Bap_primus_lisp_var
+
+  let collect_registers target =
+    List.fold (target :: Theory.Target.parents target) ~f:(fun regs t ->
+        let package = KB.Name.unqualified (Theory.Target.name t) in
+        Theory.Target.regs t |> Set.to_sequence |>
+        Seq.fold ~init:regs ~f:(fun regs v ->
+            let name = KB.Name.create ~package (Theory.Var.name v) in
+            Map.set regs name (Var.reify v)))
+      ~init:(Map.empty (module KB.Name))
+
+
+  let collect_globals target program =
+    let open Lisp.Attributes in
+    let width = Theory.Target.bits target in
+    let vars def =
+      let get attr =
+        Set.map (module Var) ~f:(Lisp_var.reify ~width) @@
+        Attribute.Set.get attr (Def.attributes def) in
+      Var.Set.union_list [
+        get Variables.global;
+        get Variables.static
+      ] in
+    fold program Items.func
+      ~init:Var.Set.empty
+      ~f:(fun ~package:_ def acc ->
+          Var.Set.union acc (vars def))
+
+
+  let add_registers target prog =
+    let regs = collect_registers target in
+    Map.fold regs ~f:(fun ~key:name ~data:r prog ->
+        let package = KB.Name.package name in
+        let name = KB.Name.unqualified name in
+        add prog Items.place @@
+        Def.Place.create ~package name r)
+      ~init:prog
+
+  let add_globals target prog =
+    let vars = collect_globals target prog in
+    Set.fold vars ~f:(fun prog v ->
+        let name = KB.Name.read (Var.name v) in
+        let package = KB.Name.package name in
+        let name = KB.Name.unqualified name in
+        add prog Items.place @@
+        Def.Place.create ~package name v)
+      ~init:prog
+
+  let add_vars ~package vars lisp =
+    Seq.fold vars ~f:(fun prog v ->
+        add prog Items.place @@
+        Def.Place.create ~package (Var.name v) v)
+      ~init:lisp
+
+  let add ?(globals=Seq.empty) lisp target =
+    List.fold ~init:lisp ~f:(|>) [
+      add_registers target;
+      add_globals target;
+      add_vars ~package:"program" globals;
+      add_vars ~package:"target" @@
+      Seq.map ~f:snd @@
+      Map.to_sequence (collect_registers target)
+    ]
+end
+
+let with_places = Places.add
+
 type node =
   | Entry
   | Defun of Id.t
@@ -1327,13 +1396,24 @@ module Typing = struct
         | _ -> vars)
       ~init:vars
 
+  let make_externals program externals =
+    List.concat_map externals ~f:(fun (name,s) ->
+        let base = KB.Name.unqualified name in
+        transitive_closure program (KB.Name.package name) |>
+        Set.to_list |>
+        List.map ~f:(fun package -> KB.Name.create ~package base,s)) |>
+    Map.of_alist_reduce (module KB.Name) ~f:(fun s1 s2 ->
+        if Poly.(s1 = s2) then s1
+        else invalid_arg "duplicating primitives")
+
   let infer externals vars (p : program) :  Gamma.t =
+    let externals = make_externals p externals in
     let vars = make_globs@@Seq.map vars ~f:(fun v ->
         KB.Name.read (Var.name v), Var.typ v) in
     let library = applicable p.context p.library in
     let glob = {
       ctxt = p.context;
-      prims = make_prims p (Map.of_alist_exn (module KB.Name) externals);
+      prims = make_prims p externals;
       globs = add_places p vars;
       funcs = make_defs library;
       paras = make_paras p;
