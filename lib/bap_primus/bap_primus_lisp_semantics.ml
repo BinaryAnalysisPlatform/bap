@@ -413,10 +413,6 @@ module Prelude(CT : Theory.Core) = struct
       Env.del v >>= fun () ->
       full [!!eff; data [v := !(res eff)]] !!(res eff)
 
-
-  let prim_name name = KB.Name.read ~package:"core" name
-
-
   let reify ppf program defn target name args =
     let word = Theory.Target.bits target in
     let {prog; places; pseudo_regs; consts; pseudos; zeros} = program in
@@ -479,7 +475,7 @@ module Prelude(CT : Theory.Core) = struct
       match Resolve.defun check_arg prog Key.func name xs with
       | Some (Ok (fn,_)) when is_external fn ->
         sym (Def.name fn) >>= fun dst ->
-        call (prim_name "invoke-subroutine") (res dst::xs)
+        prim "invoke-subroutine" (res dst::xs)
       | Some (Ok (fn,bs)) ->
         Env.set_args word bs >>= fun () ->
         Scope.clear >>= fun scope ->
@@ -538,7 +534,7 @@ module Prelude(CT : Theory.Core) = struct
       if Set.mem zeros v
       then bigint Z.zero word
       else Meta.lift@@make_reg v >>= fun v ->
-        call ~toplevel:true (prim_name "get-register") [v]
+        prim ~package:"target" "get-register" [v]
     and arg x =
       match KB.Value.get symbol x with
       | None -> !!x
@@ -551,7 +547,7 @@ module Prelude(CT : Theory.Core) = struct
       | None when Set.mem consts v -> !!empty
       | None when Set.mem pseudos v ->
         Meta.lift@@make_reg v >>= fun v ->
-        call ~toplevel:true (prim_name "set-register") [v]
+        prim ~package:"target" "set-register" [v]
       | None -> eval x >>= assign target v
     and let_ ?(t=word) v x b =
       let* xeff = eval x in
@@ -570,7 +566,9 @@ module Prelude(CT : Theory.Core) = struct
         full [
           !!aeff;
           !!beff;
-        ] !!(res beff) in
+        ] !!(res beff)
+    and prim ?(package="core") name args =
+      call (KB.Name.read ~package name) args in
     let desugar args = Meta.List.map args ~f:arg in
     match args with
     | Some args -> desugar args >>= call ~toplevel:true name
@@ -734,7 +732,8 @@ let enable ?stdout () =
 let static = static_slot
 
 let () = KB.Conflict.register_printer @@ function
-  | Unresolved_definition s -> Some s
+  | Unresolved_definition s ->
+    Option.some @@ sprintf "unresolved defintion %s" s
   | Property.Unequal_arity ->
     Some "The number of arguments is different"
   | Illtyped_program errs ->
