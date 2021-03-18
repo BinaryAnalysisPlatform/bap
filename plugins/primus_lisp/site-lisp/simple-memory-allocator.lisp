@@ -1,4 +1,3 @@
-(require posix-init)
 (in-package posix)
 
 (require string)

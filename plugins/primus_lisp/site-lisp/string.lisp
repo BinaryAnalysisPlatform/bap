@@ -1,4 +1,3 @@
-(require posix-init)
 (require types)
 (require pointers)
 (require memory)

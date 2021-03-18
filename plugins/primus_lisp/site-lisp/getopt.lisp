@@ -1,4 +1,3 @@
-(require posix-init)
 (require type)
 (require array)
 (require strstr)
