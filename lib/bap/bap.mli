@@ -5512,6 +5512,7 @@ module Std : sig
 
     (** [entry_point addr] is an address from which a kernel should start *)
     val entry_point : t -> addr
+    
     (** [filename image] a name of file from which an image was
         loaded (if any) *)
     val filename : t -> string option
