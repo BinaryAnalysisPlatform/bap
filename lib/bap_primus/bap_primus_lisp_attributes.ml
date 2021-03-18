@@ -147,33 +147,33 @@ module Advice = struct
     | Some targets -> targets
 
 
-  let parse_target package = function
-    | {data=Atom x} -> KB.Name.read ~package x
+  let parse_target = function
+    | {data=Atom x} -> KB.Name.read ~package:"external" x
     | s -> fail Expect_atom [s]
 
-  let parse_targets package met ss = match ss with
+  let parse_targets met ss = match ss with
     | [] -> fail No_targets ss
     | ss ->
       List.fold ss ~init:{methods=Methods.empty} ~f:(fun {methods} t -> {
             methods = Map.update methods met ~f:(function
                 | None -> Set.singleton (module KB.Name)
-                            (parse_target package t)
-                | Some ts -> Set.add ts (parse_target package t))
+                            (parse_target t)
+                | Some ts -> Set.add ts (parse_target t))
           })
 
-  let parse ~package trees = match trees with
+  let parse ~package:_ trees = match trees with
     | [] -> fail Empty trees
     | {data=List _} as s :: _  ->  fail Bad_syntax [s]
     | {data=Atom s} as lit :: ss ->
       if String.is_empty s then fail (Unknown_method s) [lit];
       match s with
-      | ":before" -> parse_targets package Before ss
-      | ":after" -> parse_targets package After ss
+      | ":before" -> parse_targets Before ss
+      | ":after" -> parse_targets After ss
       | _ when Char.(s.[0] = ':') -> fail (Unknown_method s) [lit]
-      | _ -> parse_targets package Before trees
+      | _ -> parse_targets Before trees
 
   let t = Attribute.declare "advice"
-      ~package:"primus"
+      ~package
       ~domain
       ~parse
 end
