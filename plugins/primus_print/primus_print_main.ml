@@ -43,13 +43,9 @@ let strip name =
   else name
 
 let has_name name p =
-  let name = KB.Name.read name in
-  let obsname = KB.Name.read @@ Primus.Observation.Provider.name p in
-  if String.(KB.Name.package name = "user")
-  then String.equal
-      (KB.Name.unqualified obsname)
-      (KB.Name.unqualified name)
-  else KB.Name.equal obsname name
+  let name = KB.Name.read ~package:"primus" name in
+  let obsname = Primus.Observation.Provider.fullname p in
+  KB.Name.equal obsname name
 
 let remove_provider name = List.filter ~f:(Fn.non (has_name name))
 

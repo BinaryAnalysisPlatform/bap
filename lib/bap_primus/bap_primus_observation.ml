@@ -150,7 +150,14 @@ let list () = list_providers () |>
 
 module Provider = struct
   type t = provider
-  let name t = Name.show @@ Info.name t.info
+  let name t =
+    let name = Info.name t.info in
+    let short = Name.unqualified name in
+    match Name.package name with
+    | "primus" -> short
+    | package -> sprintf "%s:%s" package short
+
+  let fullname t = Info.name t.info
   let data t = t.data
   let triggers t = t.triggers
   let observers t = t.observers

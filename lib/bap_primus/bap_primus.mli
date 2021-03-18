@@ -253,8 +253,20 @@ module Std : sig
       module Provider : sig
         type t = provider
 
-        (** unique name of a provider *)
+        (** the string representation of the provider name.
+
+            The [name t] is the textual representation of
+            [fullname t] except that names in the package
+            ["primus"] are printed unqualifed and all other
+            names are qualified.
+        *)
         val name : t -> string
+
+        (** the name of a provider.
+
+            @since 2.3.0
+        *)
+        val fullname : t -> KB.Name.t
 
         (** a total number of observers that subscribed to this provider  *)
         val observers : t -> int
@@ -2819,7 +2831,8 @@ module Std : sig
         - [core] - the core of the Primus Lisp language;
         - [primus] - the Primus Lisp runtime;
         - [program] - the binary program runtime;
-        - [target] - the target CPU environment.
+        - [target] - the target CPU environment;
+        - [posix] - the definitions of the posix runtime.
 
         In addition to these packages, each target (architecture)
         known to bap (see [bap list targets]) forms a package that
@@ -2830,10 +2843,9 @@ module Std : sig
         with the other option is to use the [target] package in which
         CPU registers of the currently analyzed binary are added.
 
-        Another important packages to consider is [posix] that
-        contains definitions of the [posix] runtime, e.g.,
-        [posix:malloc] and there is also a special [external] package
-        where all externally visible definitions are put.
+        Another important packages to consider is the [external] package
+        where all externally visible definitions are put, see more
+        about it in the [external] attribute description.
 
         {3 Name Visibility}
 
