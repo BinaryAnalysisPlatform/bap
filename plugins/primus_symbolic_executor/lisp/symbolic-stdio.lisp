@@ -1,3 +1,5 @@
+(in-package posix)
+
 (require types)
 
 (declare (static opened-descriptors
@@ -11,6 +13,7 @@
 (defconstant symbolic-stdin minimum-stream-number)
 
 (defun symbolic-open-input (name)
+  (declare (visibility :private))
   (let ((next-desc (+1 opened-descriptors))
         (desc (symbolic-value (symbol-concat name '-desc)
                               (bitwidth int)
@@ -37,12 +40,14 @@
 
 
 (defun symbolic-copy-to-concrete (memory cptr sptr len)
+  (declare (visibility :private))
   (while (> len 0)
     (memory-write (+ cptr len -1)
                   (symbolic-memory-read memory (+ sptr len -1)))
     (decr len)))
 
 (defun symbolic-copy-from-concrete (memory sdst csrc len)
+  (declare (visibility :private))
   (while (> len 0)
     (symbolic-memory-write memory (+ sdst len -1)
                            (memory-read (+ csrc len -1)))
@@ -106,6 +111,7 @@
   (fgetc symbolic-stdin))
 
 (defun init-symbolic-stdin ()
+  (declare (visibility :private))
   (dict-add 'symbolic-open-fpos 0 0)
   (dict-add 'symbolic-open-size 0 *symbolic-initial-file-size*)
   (dict-add 'symbolic-open-data 0
@@ -113,7 +119,6 @@
   (set opened-descriptors 2)
   (dict-add 'symbolic-streams opened-streams 0)
   (set opened-streams minimum-stream-number))
-
 
 (defmethod init ()
   (init-symbolic-stdin))

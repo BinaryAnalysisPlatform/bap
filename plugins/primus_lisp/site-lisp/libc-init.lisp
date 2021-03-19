@@ -1,8 +1,8 @@
 ;; for the invoke-procedure we need a type of the invoked function
 ;; so, the function must be present in the static representation of a program.
+(in-package posix)
+(declare (visibility :private))
 
-(require pointers)
-(require memory)
 
 (defun init (main argc argv auxv)
   "GNU libc initialization stub"
@@ -19,7 +19,8 @@
 
 
 (defun setup-stack-canary ()
-  (declare (context (abi "sysv")))
+  (declare (context (abi "sysv"))
+           (global program:FS_BASE))
   (set FS_BASE (- brk 0x28))
   (memory-allocate brk (sizeof ptr_t))
   (write-word ptr_t brk 0xDEADBEEFBEAFDEAD)

@@ -49,12 +49,20 @@ let program =
         let r = Format.asprintf "%a" Program.pp p in
         Sexp.Atom r)
 
+type program = {
+  prog : Program.t;
+  places : unit Theory.var Map.M(KB.Name).t;
+  pseudo_regs : unit Theory.var Map.M(String).t;
+  consts : Set.M(Theory.Var.Top).t;
+  pseudos : Set.M(Theory.Var.Top).t;
+  zeros : Set.M(Theory.Var.Top).t;
+}
+
 let typed = KB.Class.property Theory.Source.cls "typed-program"
     ~package @@
-  KB.Domain.flat "typed-lisp-program"
-    ~empty:Program.Type.empty
-    ~equal:Program.Type.equal
-    ~join:(fun x y -> Ok (Program.Type.merge x y))
+  KB.Domain.optional "typed-lisp-program"
+    ~equal:(fun x y ->
+        Program.equal x.prog y.prog)
 
 let fail s = Meta.lift (KB.fail s)
 
@@ -78,13 +86,13 @@ type info = {
   docs : string;
 }
 
-let library = Hashtbl.create (module String)
+let library = Hashtbl.create (module KB.Name)
 
 module Property = struct
   let name = KB.Class.property Theory.Program.cls ~package "lisp-name" @@
     KB.Domain.optional "lisp-name"
-      ~equal:String.equal
-      ~inspect:sexp_of_string
+      ~equal:KB.Name.equal
+      ~inspect:KB.Name.sexp_of_t
 
   type args = Theory.Value.Top.t list [@@deriving equal, sexp]
 
@@ -113,27 +121,18 @@ let definition =
     ~equal:Theory.Label.equal
     ~inspect:Theory.Label.sexp_of_t
 
-
-let primitive defn name args =
-  let open KB.Syntax in
-  KB.Object.scoped Theory.Program.cls @@ fun obj ->
-  KB.sequence [
-    KB.provide Property.name obj (Some name);
-    KB.provide definition obj (Some defn);
-    KB.provide Property.args obj (Some args);
-  ] >>= fun () ->
-  KB.collect Theory.Semantics.slot obj
-
 let declare
     ?(types=fun _ -> Type.{
         args = [];
         rest = Some any;
         ret = any;
       })
-    ?(docs="undocumented") name =
+    ?(docs="undocumented") ?package name =
+  let name = KB.Name.create ?package name in
   if Hashtbl.mem library name
   then invalid_argf "A primitive `%s' already exists, please \
-                     choose a different name for your primitive" name ();
+                     choose a different name for your primitive"
+      (KB.Name.show name) ();
   Hashtbl.add_exn library name {
     docs;
     types
@@ -155,7 +154,6 @@ let symbol =
   KB.Domain.optional "symbol"
     ~equal:String.equal
     ~inspect:(fun x -> Sexp.Atom x)
-
 
 let static_slot =
   KB.Class.property Theory.Value.cls "static-value"
@@ -187,6 +185,20 @@ let (!) = KB.(!!)
 
 let empty = Theory.Effect.empty Theory.Effect.Sort.bot
 
+let intern name =
+  let open KB.Syntax in
+  KB.Symbol.intern name Theory.Value.cls >>|
+  KB.Object.id >>| Int63.to_int64 >>|
+  Bitvec.M64.int64
+
+let make_reg var =
+  let open KB.Syntax in
+  let empty = Theory.Value.empty (Theory.Var.sort var) in
+  let name = Theory.Var.name var in
+  intern name >>| fun value ->
+  let res = KB.Value.put symbol empty (Some name) in
+  KB.Value.put static_slot res (Some value)
+
 let sym str =
   let v = update_value empty @@ fun v ->
     KB.Value.put symbol v (Some str) in
@@ -194,9 +206,7 @@ let sym str =
   | "nil" -> Meta.return@@set_static v Bitvec.zero
   | name ->
     Meta.lift @@
-    KB.Symbol.intern name Theory.Value.cls >>|
-    KB.Object.id >>| Int63.to_int64 >>|
-    Bitvec.M64.int64 >>|
+    intern name >>|
     set_static v
 
 let is_machine_var t v =
@@ -206,16 +216,18 @@ let machine_var_by_name t name =
   Set.find (Theory.Target.vars t) ~f:(fun v ->
       String.equal (Theory.Var.name v) name)
 
-let make_var ?t:constr target name  =
+let make_var ?t:constr places target name  =
   let word = Theory.Target.bits target in
-  match machine_var_by_name target name with
+  match Map.find places name with
   | Some v -> v
   | None ->
     let t = Option.value constr ~default:word in
-    Theory.Var.forget@@Theory.Var.define (bits t) name
+    Theory.Var.forget@@Theory.Var.define (bits t) (KB.Name.to_string name)
 
 let lookup_parameter prog v =
-  let name = Theory.Var.name v in
+  let v = KB.Name.read @@ Theory.Var.name v in
+  let name = KB.Name.unqualified v in
+  Program.in_package (KB.Name.package v) prog @@ fun prog ->
   Program.get prog Key.para |>
   List.find ~f:(fun p ->
       String.equal (Def.name p) name) |> function
@@ -251,7 +263,7 @@ module Env = struct
       | Any | Name _ -> word
       | Symbol -> symsort
       | Type m -> m in
-    Theory.Var.forget@@Theory.Var.define (bits s) n
+    Theory.Var.forget@@Theory.Var.define (bits s) (KB.Name.to_string n)
 
   let set_args ws bs = Meta.update @@ fun s -> {
       s with binds = List.fold bs ~init:s.binds ~f:(fun s (v,x) ->
@@ -401,15 +413,16 @@ module Prelude(CT : Theory.Core) = struct
       Env.del v >>= fun () ->
       full [!!eff; data [v := !(res eff)]] !!(res eff)
 
-  let reify ppf prog defn target name args =
+  let reify ppf program defn target name args =
     let word = Theory.Target.bits target in
-    let var ?t n = make_var ?t target n in
+    let {prog; places; pseudo_regs; consts; pseudos; zeros} = program in
+    let var ?t n = make_var ?t places target n in
     let rec eval : ast -> unit Theory.Effect.t Meta.t = function
       | {data=Int {data={exp=x; typ=Type m}}} -> bigint x m
       | {data=Int {data={exp=x}}} -> bigint x word
       | {data=Var {data={exp=n; typ=Type t}}} -> lookup@@var ~t n
       | {data=Var {data={exp=n}}} -> lookup@@var n
-      | {data=Sym {data=s}} -> sym s
+      | {data=Sym {data=s}} -> sym (KB.Name.show s)
       | {data=Ite (cnd,yes,nay)} -> ite cnd yes nay
       | {data=Let ({data={exp=n; typ=Type t}},x,y)} -> let_ ~t n x y
       | {data=Let ({data={exp=n}},x,y)} -> let_ n x y
@@ -460,12 +473,9 @@ module Prelude(CT : Theory.Core) = struct
         ] !!cres
     and call ?(toplevel=false) name xs =
       match Resolve.defun check_arg prog Key.func name xs with
-      | None ->
-        if toplevel then !!Insn.empty
-        else Meta.lift@@primitive defn name xs
       | Some (Ok (fn,_)) when is_external fn ->
         sym (Def.name fn) >>= fun dst ->
-        Meta.lift@@primitive defn "invoke-subroutine" (res dst::xs)
+        prim "invoke-subroutine" (res dst::xs)
       | Some (Ok (fn,bs)) ->
         Env.set_args word bs >>= fun () ->
         Scope.clear >>= fun scope ->
@@ -474,6 +484,14 @@ module Prelude(CT : Theory.Core) = struct
         Env.del_args word bs >>= fun () ->
         !!eff
       | Some (Error problem) -> unresolved problem
+      | None when toplevel -> !!Insn.empty
+      | None ->
+        match Resolve.semantics prog Key.semantics name () with
+        | Some Ok (sema,()) ->
+          Meta.lift@@
+          Def.Sema.apply sema defn xs
+        | Some (Error problem) -> unresolved problem
+        | None -> fail (Unresolved_definition (KB.Name.show name))
     and app name xs =
       map xs >>= fun (aeff,xs) ->
       call name xs >>= fun peff ->
@@ -508,20 +526,32 @@ module Prelude(CT : Theory.Core) = struct
         Env.lookup v >>= function
         | Some v -> pure !!v
         | None -> match lookup_parameter prog v with
-          | None -> pure@@Meta.lift@@CT.var v
-          | Some def ->
-            let* eff = eval def in
-            assign target v eff
+          | Some def -> eval def >>= assign target v
+          | None -> match Map.find pseudo_regs (Theory.Var.name v) with
+            | None -> pure@@Meta.lift@@CT.var v
+            | Some v -> reg v
+    and reg v =
+      if Set.mem zeros v
+      then bigint Z.zero word
+      else Meta.lift@@make_reg v >>= fun v ->
+        prim ~package:"target" "get-register" [v]
+    and arg x =
+      match KB.Value.get symbol x with
+      | None -> !!x
+      | Some sym -> match Map.find pseudo_regs sym with
+        | None -> !!x
+        | Some v -> reg v >>| res
     and set_ v x =
-      let* eff = eval x in
       Scope.lookup v >>= function
-      | Some v ->
-        assign target ~local:true v eff
-      | None ->
-        assign target v eff
+      | Some v -> eval x >>= assign target ~local:true v
+      | None when Set.mem consts v -> !!empty
+      | None when Set.mem pseudos v ->
+        Meta.lift@@make_reg v >>= fun v ->
+        prim ~package:"target" "set-register" [v]
+      | None -> eval x >>= assign target v
     and let_ ?(t=word) v x b =
       let* xeff = eval x in
-      let orig = Theory.Var.define (bits t) v in
+      let orig = Theory.Var.define (bits t) (KB.Name.to_string v) in
       if is_parameter prog orig
       then
         Env.set orig (res xeff) >>= fun () ->
@@ -536,9 +566,12 @@ module Prelude(CT : Theory.Core) = struct
         full [
           !!aeff;
           !!beff;
-        ] !!(res beff) in
+        ] !!(res beff)
+    and prim ?(package="core") name args =
+      call (KB.Name.read ~package name) args in
+    let desugar args = Meta.List.map args ~f:arg in
     match args with
-    | Some args -> call ~toplevel:true name args
+    | Some args -> desugar args >>= call ~toplevel:true name
     | None ->
       resolve prog Key.func name >>= function
       | Some fn ->
@@ -573,27 +606,64 @@ end
 
 type KB.conflict += Illtyped_program of Program.Type.error list
 
+let primitive name defn args =
+  let open KB.Syntax in
+  KB.Object.scoped Theory.Program.cls @@ fun obj ->
+  KB.sequence [
+    KB.provide Property.name obj (Some name);
+    KB.provide definition obj (Some defn);
+    KB.provide Property.args obj (Some args);
+  ] >>= fun () ->
+  KB.collect Theory.Semantics.slot obj
+
+let link_library target prog =
+  Hashtbl.fold library ~f:(fun ~key:name ~data:{types; docs} prog ->
+      let types = types target in
+      Program.add prog Program.Items.semantics @@
+      Def.Sema.create ~docs ~types name (primitive name))
+    ~init:prog
+
+let index_by_name regs =
+  Set.to_sequence regs |>
+  Seq.map ~f:(fun v -> Theory.Var.name v, v) |>
+  Map.of_sequence_exn (module String)
+
+
 let obtain_typed_program unit =
   let open KB.Syntax in
   KB.collect Theory.Unit.source unit >>= fun src ->
   KB.collect Theory.Unit.target unit >>= fun target ->
-  let prog = KB.Value.get typed src in
-  match Program.Type.(equal empty prog) with
-  | false -> !!prog
-  | true ->
-    let prog = KB.Value.get program src in
-    let vars = Theory.Target.vars target |>
-               Set.to_sequence |>
-               Seq.map ~f:Var.reify in
-    let externals = Hashtbl.to_alist library |>
-                    List.Assoc.map ~f:(fun {types} ->
-                        types target) in
-    let tprog = Program.Type.infer ~externals vars prog in
+  match KB.Value.get typed src with
+  | Some prog -> !!prog
+  | None ->
+    let prog =
+      link_library target @@
+      Program.with_places (KB.Value.get program src) target in
+    let tprog = Program.Type.infer prog in
+    let prog = Program.Type.program tprog in
+    let regs roles = Theory.Target.regs target ~roles in
+    let consts = regs [Theory.Role.Register.constant] in
+    let pseudos = regs [Theory.Role.Register.pseudo] in
+    let zeros = regs [Theory.Role.Register.zero] in
+    let pseudo_regs = index_by_name pseudos in
+    let places = Program.fold prog Key.place
+        ~f:(fun ~package place places ->
+            let name = KB.Name.create ~package (Def.name place) in
+            Map.set places name (Def.Place.location place))
+        ~init:(Map.empty (module KB.Name)) in
+    let program = {
+      prog;
+      consts;
+      zeros;
+      pseudos;
+      pseudo_regs;
+      places;
+    } in
     match Program.Type.errors tprog with
     | [] ->
-      let src = KB.Value.put typed src tprog in
+      let src = KB.Value.put typed src (Some program) in
       KB.provide Theory.Unit.source unit src >>| fun () ->
-      tprog
+      program
     | errs -> KB.fail (Illtyped_program errs)
 
 
@@ -618,9 +688,8 @@ let provide_semantics ?(stdout=Format.std_formatter) () =
   KB.collect Theory.Label.unit obj >>=? fun unit ->
   KB.collect Property.name obj >>=? fun name ->
   KB.collect Property.args obj >>= fun args ->
-  obtain_typed_program unit >>= fun typed ->
+  obtain_typed_program unit >>= fun prog ->
   KB.collect Theory.Unit.target unit >>= fun target ->
-  let prog = Program.Type.program typed in
   let bits = Theory.Target.bits target in
   let module Arith = Bitvec.Make(struct
       let modulus = Bitvec.modulus bits
@@ -632,8 +701,11 @@ let provide_semantics ?(stdout=Format.std_formatter) () =
     } in
   Theory.instance () >>= Theory.require >>= fun (module Core) ->
   let open Prelude(Core) in
-  Meta.run (reify stdout prog obj target name args) meta >>| fun (res,_) ->
-  res
+  Meta.run (reify stdout prog obj target name args) meta >>= fun (res,_) ->
+  KB.collect Disasm_expert.Basic.Insn.slot obj >>| function
+  | Some basic when Insn.(res <> empty) ->
+    Insn.with_basic res basic
+  | _ -> res
 
 let provide_attributes () =
   let open KB.Syntax in
@@ -644,8 +716,7 @@ let provide_attributes () =
   KB.promise Attribute.Set.slot @@ fun this ->
   KB.collect Theory.Label.unit this >>=? fun unit ->
   KB.collect Property.name this >>=? fun name ->
-  obtain_typed_program unit >>|
-  Program.Type.program >>= fun prog ->
+  obtain_typed_program unit >>= fun {prog} ->
   match Resolve.semantics prog Key.func name () with
   | None -> !!empty
   | Some (Error problem) ->
@@ -661,7 +732,8 @@ let enable ?stdout () =
 let static = static_slot
 
 let () = KB.Conflict.register_printer @@ function
-  | Unresolved_definition s -> Some s
+  | Unresolved_definition s ->
+    Option.some @@ sprintf "unresolved defintion %s" s
   | Property.Unequal_arity ->
     Some "The number of arguments is different"
   | Illtyped_program errs ->

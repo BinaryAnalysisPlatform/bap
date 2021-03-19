@@ -253,8 +253,20 @@ module Std : sig
       module Provider : sig
         type t = provider
 
-        (** unique name of a provider *)
+        (** the string representation of the provider name.
+
+            The [name t] is the textual representation of
+            [fullname t] except that names in the package
+            ["primus"] are printed unqualifed and all other
+            names are qualified.
+        *)
         val name : t -> string
+
+        (** the name of a provider.
+
+            @since 2.3.0
+        *)
+        val fullname : t -> KB.Name.t
 
         (** a total number of observers that subscribed to this provider  *)
         val observers : t -> int
@@ -2644,8 +2656,8 @@ module Std : sig
         {2 Overview}
 
         Primus Lisp is a dialect of Lisp, that can be used to interact
-        with a native program. Primus Lisp is close to Common Lisp and
-        to the Emacs Lisp dialect.
+        with a native program. Primus Lisp is close to the Common Lisp and
+        Emacs Lisp dialects.
 
         Primus Lips is a low-level language that doesn't provide many
         abstractions, as it tries to be as close to the machine
@@ -2659,25 +2671,28 @@ module Std : sig
 
         Primus Lisp is primarily used for the following tasks:
         - writing function summaries (aka stubs);
+        - writing insturction semantics (aka lifters);
+        - stubbing missing hardware;
         - setting up program environment;
         - exploring and observing program behavior.
 
+        A Primus Lisp program is a set of files with each file
+        consisting of:
 
-        A Primus Lisp program is a file, that can contain the
-        following entities:
         - feature requests;
+        - package definitions;
         - declarations;
         - constants
         - substitutions;
-        - methods;
         - macros;
-        - functions;
+        - methods;
+        - functions.
 
         The entities may be specified in any order, however the above
         order constitutes a good programming practice.
 
-        Each file provides (implements) a feature, that has the same
-        name as the name of the file without an extension and
+        Each file provides (implements) a {i feature} that has the same
+        name as the name of the file without an extension and parent
         directories. Thus the namespace of features is flat. A feature
         is usually a function, macro definition, or any other
         definition, or a collection of definition, gathered under the
@@ -2689,22 +2704,44 @@ module Std : sig
         implementation of all functions specified in the POSIX
         standard (not all at the time of writing).
 
-        A collection of files is called a library.  To use features
-        provided by another file, the file should be requested with
-        the [(require <ident>)] form, where [<ident>] is the name of
-        the feature. A file with the requested name is searched in the
-        library, and loaded, making all its definitions available in
-        the lexical scope, that follows the [require] form. If a
-        feature is already provided, then nothing
-        happens. Dependencies should not contain cycles.
+        A collection of directories with lisp files is called a
+        library. A feature (a lisp file) is loaded using the
+        [(require <feature>)] form, where [<feature>] is the name
+        of the feature. E.g., to load the [posix.lisp] file, use
+        [(require posix)]. The loaded feature may, in turn load
+        other features.
 
-        Top-level declarations specify attributes that are shared by
-        all definitions in a file. For example, a declaration
+        When all required features are loaded the Primus Lisp program
+        is formed, which is a set of mutually recursive
+        definitions. In Primus Lisp the same name can have multiple
+        definitions and features may be mutually recursive, e.g.,
+        [foo] may [(require bar)] and [bar] may [(require foo)]. The
+        order in which features are loaded is not important.
+
+        All definitions in Primus Lisp (since 2.3.0) are packaged in
+        namespaces. A namespace (called {i package} in Primus Lisp) is
+        a collection of definitions. A package can {i use} other packages,
+        in that case all public definitions from the used package are
+        copied to the destination package. The order in which packages
+        are defined is irrelevant, e.g., it possible to use a package
+        before it is defined as well as extend the set of used
+        packages several times. It is even possible to form cycles in
+        the use-package relation, e.g., a package [foo] may use
+        package [bar] and [bar] can use [foo]. In that case
+        definitions made in [foo] are always copied to [bar] and
+        definitions made in [bar] are copied to [foo], which
+        effectively maintains equality between [foo] and [bar] as
+        one is always a copy of another.
+
+        Names visibility as well as other attributes of definitions
+        are controled with {i declarations}. The top-level
+        declarations specify attributes that are shared by all
+        definitions in a feature (file). For example, a declaration
 
         {v (declare (context (arch armv7)) v}
 
-        makes all definitions visible only in the context of the ARMv7
-        architecture.
+        makes all definitions {i applicable} (existent) only in the
+        context of the ARMv7 architecture.
 
         Constants and substitutions are primitive abstractions that
         give names to code fragments. Macros are program
@@ -2713,10 +2750,113 @@ module Std : sig
         with the context declarations. Finally, a function can be
         advised with another function using the [advice-add] function.
 
+        {2 Package System}
 
-        {2 Type system}
+        The Primus Lisp package system enables name clashes-free
+        environment in the presence of mutually recursive definition
+        of the whole program with type class-based names
+        overloading. An important feature of the package system is
+        independence on the order of package definitions and
+        inclusions and tolerance to cycles in package dependencies.
 
-        Primus Lips has a gradual type system.  A type defines all
+        Despite that the package system prevents name clashes in a
+        such complex environment it is easy to understand. A package
+        is just a dictionary of definitions, where a defintion is a
+        function, macros, variable, primitive, etc. The namespace of
+        each package is flat, i.e., all definitions have simple
+        unqualified names, e.g., [malloc], [foo], [*bar*]. The
+        namespace of the packages names is also flat, e.g., [posix],
+        [core], [primus]. To access a definition [<def>] in a package
+        [<pkg>] use [<pkg>:<foo>], e.g., [posix:malloc],
+        [core:*bar*]. When a name is missing a package designator,
+        e.g., [foo] the parser automatically adds the name of the
+        {i current} package. The current package defaults to [user] and
+        is set with the [in-package] form, e.g., [(in-package posix)]
+        sets the current package to [posix] and all unqualified names
+        read after it and until the end of the file (or another
+        [in-package] stanza) will be qualified with the [posix]
+        package. Therefore, it is important to understand that every
+        identifier in Primus Lisp, be it a variable, a function or a
+        macro name, a symbol, and so on, is having a package, even
+        though most of the time it left implicit and we commonly use
+        unqualified names.
+
+        The [(use-package foo)] makes all definitions from the package
+        [foo] available in the current package. Since Primus Lisp
+        enables multiple definitions of the same name, no special
+        considerations to prevent shadowing and the definitions are
+        simply added to the current package. It also doesn't matter
+        whether the [use-package] stanza occurs before, in between, or
+        after the definitions of [foo] are loaded as well as it
+        doesn't matter whether it occurs with respect to the
+        defintions of the current package. The mental model is that
+        [(use-package foo)] establishes a relation {i uses} between
+        the current package and the package [foo] and all definitions
+        from [foo] are copied to the current package no matter whether
+        they were lexically made before or after this relation was
+        discovered. Since the definitions from [foo] are now in the
+        current package, they are also copied to all packages that use
+        the current package and so on, in the transitive closure of
+        the uses relation.
+
+        The [use-package] stanza is pretty low-level and it is better
+        to use [defpackage] to define a package, ideally, once. The
+        [defpackage] form takes the name of the package and a list of
+        packages that it uses as well as the documentation that
+        describes the package purpose. E.g.,
+        {v
+          (defpackage riscv
+            (:use target program)
+            (:documentation "general riscv instruction semantics"))
+        v}
+
+        In the example above we specified that the [riscv] package
+        imports definitions from the [target] and [program] packages.
+
+        In Primus Lisp it is not required that the package should be
+        defined before it is used but it is still a good idea to
+        define the package beforehand and, ideally, keep the
+        definition in a single place. With that said, it is possible
+        to have multiple definitions (or no definitios) of a package
+        spread across multiple files. Therefore, it is possible to
+        extend the set of packages that some package uses with all
+        pitfalls and perils. We highly advice to refrain from touching
+        the use-list of packages that you do not control.
+
+        Primus Lisp comes with a set of predefined packages and all of
+        them are used by the [user] package, which is the default
+        package (so their definitions could be used unqualified by
+        default):
+
+        - [core] - the core of the Primus Lisp language;
+        - [primus] - the Primus Lisp runtime;
+        - [program] - the binary program runtime;
+        - [target] - the target CPU environment;
+        - [posix] - the definitions of the posix runtime.
+
+        In addition to these packages, each target (architecture)
+        known to bap (see [bap list targets]) forms a package that
+        is prefilled with the registers of that target, e.g.,
+        [i86:SP], [amd64:RSP], and so on (the target package name is
+        formed from the unqualified name of the target name
+        itself). This gives an additional way to refer to registers,
+        with the other option is to use the [target] package in which
+        CPU registers of the currently analyzed binary are added.
+
+        Another important packages to consider is the [external] package
+        where all externally visible definitions are put, see more
+        about it in the [external] attribute description.
+
+        {3 Name Visibility}
+
+        By default all names defined in a package are public and are
+        exported to all packages that use this package. It is,
+        possible to control the visibility of a name using the
+        visibility attribute. See attributes below for more information.
+
+        {2 Type System}
+
+        Primus Lisp has a gradual type system.  A type defines all
         possible values of an expression. In Primus Lisp, expression
         values can be only scalar, i.e., machine words of different
         widths. The width is always specified in the number of
@@ -3205,22 +3345,114 @@ module Std : sig
         definition is considered only if its context is a subtype of
         the current type context.
 
-        {2 Advice mechanism}
+        {2 Attributes}
+
+        Each Primus Lisp definition has a set of attributes that
+        defines its various properties. The set of attributes is
+        extensible and language users can define their own and
+        attach arbitrary meaning to them. In that sense attributes is
+        the language extension mechanism. There is, however, a set of
+        core attributes that have predefined meaning and that are
+        described above.
+
+        Attributes are declared using the [declare] stanza, e.g.,
+        [(declare (context (target riscv)))]. Attributes can be
+        defined on the top level, in that case, they will be attached
+        to each definition in this feature, alternatively, the can
+        be attached to a definition, e.g.,
+
+        {v
+         (defun malloc (n)
+           "allocates a memory region of size N"
+           (declare (external "malloc"))
+           ...)
+        v}
+
+        The set of attributes of a definition is the union of
+        attributes attached to it and global to the feature
+        attributes.
+
+        {3 The external attribute}
+
+        This attributes instructs the Primus Lisp program loader that
+        the definition has external linkage and must be linked instead
+        of the corresponding definition in the binary program. E.g.,
+        adding [(external "malloc")] will link the current definition
+        instead of the [malloc] function defined in the binary.
+
+        When the program is linked, the linker will scan all
+        definitions and for each definition that has
+        [(external <n1> <n2> ...)] will be copied to the [external]
+        package under names [<n1>], [<n2>], and so on. Next, when the
+        binary program is linked, for each function in the binary the
+        linker will search the [external] package for the matching
+        definition.
+
+        Note, is is possible to use directly the [external] package to
+        make your definitions externally available.
+
+
+        {3 The context attribute}
+
+        This attribute defines the context in which the definition is
+        applicable. See the {!Context} chapter for more details on it.
+
+        {3 Name Visibility}
+
+        The [visibility] attribute controls whether the definition
+        will be exported to the packages that use the package where it
+        is defined. There are two kinds of visibilities - [:public]
+        and [:private]. By default, all definitions have the [:public]
+        visibility. To make a definition private (so that it won't be
+        accessible in other packages even if they use your package)
+        add the visibility declaration to it, e.g.,
+        {v
+          (defun conditional-jump (cmp off)
+            (declare (visibility :private))
+            (let ((pc (get-program-counter)))
+              (when cmp
+                (exec-addr (+ pc off)))))
+        v}
+
+        It is also possible to make all definitions in a feature
+        private by default using a global visibility declaration,
+        e.g.,
+
+        {v
+        (declare (visibility :private))
+        v}
+
+        and make some definitions public by adding corresponding
+        public declarations.
+
+        {3 Global and Static definitions}
+
+        The [global] and [static] definitions create variables (with,
+        correspondingly public and private visibility), e.g.,
+
+        [(global errno-location)]
+
+        Creates an [errno-location] variable in the Primus Lisp
+        runtime state. The names are read in the current package
+        namespace.
+
+
+        {3 Advice mechanism}
 
         Primus Lisp also provides a mechanism for non-intrusive
-        extending existing function definitions. An existing
-        definition maybe advised with another definition. A piece of
+        extending existing Primus Lisp function definitions.
+        A definition maybe advised with another definition. A piece of
         advice maybe added to a function that will be called either
         before or after the evaluation of an advised function, e.g.,
 
         {v
           (defun memory-written (a x)
-            (declare (advice :before memory-write))
+            (declare (advice :before core:memory-write))
             (msg "write $x to $a"))
         v}
 
         This definition not only defines a new function called
-        [memory-written], but also proclaims it as advice function to
+        [memory-written], but also proclaims it as an advice function to
         the [memory-write] function that should before it is called.
 
         If an advisor is attached before the advised function then
@@ -3238,6 +3470,10 @@ module Std : sig
         override the result of the advised function. If there are
         several advisors attached after the same function, then they
         will be called in an unspecified order.
+
+        All names in the [advice] declaration are parsed with the
+        current package set to [external] to enable seamless advising
+        of the function stubs.
 
 
         {2 Signaling Mechanims}
@@ -3348,9 +3584,13 @@ attribute ::=
   | (global <ident> ...)
   | (static <ident> ...)
   | (advice <cmethod> <ident> ...)
+  | (visibility <visibility>)
   | (<ident> ?ident-specific-format?)
+  | <ident>
 
 cmethod ::= :before | :after
+
+visibility ::= :public | :private
 
 docstring ::= <text>
 
@@ -3366,8 +3606,16 @@ int   ::= ?decimal-octal-hex-or-bin format?
 
 size  ::= ?decimal?
 
-ident ::= ?any atom that is not recognized as a <word>?
-        v}
+ident ::= <package>:<name>
+
+name ::= text
+
+package ::= text
+
+text ::= ?any atom that is not recognized as a <word>?
+
+
+    v}
     *)
     module Lisp : sig
 
@@ -3654,7 +3902,7 @@ ident ::= ?any atom that is not recognized as a <word>?
         val definition : (Theory.program, Theory.Label.t option) KB.slot
 
         (** the name of a lisp program *)
-        val name : (Theory.program, string option) KB.slot
+        val name : (Theory.program, KB.Name.t option) KB.slot
 
         (** the arguments of a lisp program   *)
         val args : (Theory.program, unit Theory.Value.t list option) KB.slot
@@ -3738,7 +3986,8 @@ ident ::= ?any atom that is not recognized as a <word>?
         *)
         val declare :
           ?types:Type.signature ->
-          ?docs:string -> string -> unit
+          ?docs:string ->
+          ?package:string -> string -> unit
       end
 
 
@@ -3846,7 +4095,7 @@ ident ::= ?any atom that is not recognized as a <word>?
           ?desc:string ->
           ?package:string ->
           domain:'a KB.domain ->
-          parse:(Parse.tree list -> 'a) ->
+          parse:(package:string -> Parse.tree list -> 'a) ->
           string -> 'a t
 
 
@@ -3926,7 +4175,7 @@ ident ::= ?any atom that is not recognized as a <word>?
       (* dedocumented due to deprecation *)
       module Primitive : sig
         type 'a t
-        val create : ?docs:string -> string -> (value list -> 'a) -> 'a t
+        val create : ?docs:string -> ?package:string -> string -> (value list -> 'a) -> 'a t
       end [@@deprecated "[since 2018-03] use [Closure]"]
 
       (* undocumented since it is deprecated *)
@@ -3986,8 +4235,11 @@ ident ::= ?any atom that is not recognized as a <word>?
               end
             ]}
         *)
-        val define : ?types:Type.signature ->
-          ?docs:string -> string -> closure -> unit Machine.t
+        val define :
+          ?types:Type.signature ->
+          ?docs:string ->
+          ?package:string ->
+          string -> closure -> unit Machine.t
 
 
         (** [signal ?params ?docs obs proj] defines a new signal.

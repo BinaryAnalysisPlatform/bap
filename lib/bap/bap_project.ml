@@ -360,7 +360,6 @@ let pp_disasm_error ppf = function
     fprintf ppf "<%s>: %a"
       (Disasm_expert.Basic.Insn.asm insn) Error.pp err
 
-
 let set_package package = match package with
   | None -> KB.return ()
   | Some pkg -> KB.Symbol.set_package pkg

@@ -1,3 +1,6 @@
+(in-package posix)
+(declare (visibility :private))
+
 (require types)
 (require ascii)
 
@@ -26,13 +29,13 @@
   (cast type (read-ascii-word s)))
 
 (defun atoi  (s)
-  (declare (external "atoi"))
+  (declare (visibility :public) (external "atoi"))
   (make-converter int s))
 
 (defun atol  (s)
-  (declare (external "atol"))
+  (declare (visibility :public) (external "atol"))
   (make-converter long s))
 
 (defun atoll (s)
-  (declare (external "atoll"))
+  (declare (visibility :public) (external "atoll"))
   (make-converter long-long s))

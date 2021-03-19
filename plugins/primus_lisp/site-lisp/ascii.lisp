@@ -1,3 +1,5 @@
+(in-package posix)
+
 (defun ascii-is-special (s)
   "(ascii-special S) is true if S is an ascii special character"
   (< s 32))
@@ -41,7 +43,6 @@
 (defun ascii-to-lower (c)
   (declare (external "tolower"))
   (if (ascii-is-upper c) (logor c 32) c))
-
 
 (defun ascii-to-upper (c)
   (declare (external "toupper"))

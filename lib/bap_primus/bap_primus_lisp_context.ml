@@ -35,7 +35,7 @@ let of_project proj =
   let t = Project.target proj in
   let targets =
     t :: Theory.Target.parents t |>
-    List.map ~f:Theory.Target.to_string in
+    List.map ~f:(fun t -> KB.Name.unqualified @@ Theory.Target.name t) in
   Name.Map.of_alist_exn [
     "arch", features @@ [
       Arch.to_string (Project.arch proj);
@@ -107,7 +107,7 @@ let push cs name vs =
       | Some vs' -> Set.union vs vs')
 
 
-let parse : tree list -> t =
+let parse ~package:_ : tree list -> t =
   List.fold ~init:Name.Map.empty ~f:(fun cs tree ->
       let (name,vs) = context_of_tree tree in
       push cs name vs)
@@ -171,6 +171,6 @@ let domain = KB.Domain.define "context"
     ~empty ~order ~join
 
 let t = Attribute.declare "context"
-    ~package:"primus"
+    ~package:"core"
     ~domain
     ~parse

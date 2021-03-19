@@ -1,3 +1,27 @@
+(defpackage core
+  (:documentation "the core definitions"))
+
+(defpackage primus
+  (:documentation "the runtime state of the Primus Machine")
+  (:use core))
+
+(defpackage target
+  (:documentation "target-specific definitions (registers, etc)"))
+
+(defpackage program
+  (:documentation "program-specific definitions (program global variables)"))
+
+(defpackage posix
+  (:documentation "posix runtime defintions")
+  (:use core primus program target))
+
+(defpackage user
+  (:documentation "the default user-space package")
+  (:use core primus target program posix))
+
+
+
+(in-package core)
 
 (defconstant true 1:1  "true is another name for 1:1")
 (defconstant false 0:1 "false is another name for 0:1")

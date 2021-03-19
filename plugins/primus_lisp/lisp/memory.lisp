@@ -1,3 +1,5 @@
+(require init)
+(in-package core)
 ;; functions to access memory
 
 (defun points-to-null (p)

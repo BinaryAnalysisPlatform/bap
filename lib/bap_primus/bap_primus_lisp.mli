@@ -93,7 +93,7 @@ type closure = (module Closure)
 
 module Primitive : sig
   type 'a t
-  val create : ?docs:string -> string -> (value list -> 'a) -> 'a t
+  val create : ?docs:string -> ?package:string -> string -> (value list -> 'a) -> 'a t
 end
 
 val message : message observation
@@ -119,7 +119,8 @@ module Make (Machine : Machine) : sig
 
   val types : Type.env Machine.t
 
-  val define : ?types:Type.signature -> ?docs:string -> string -> closure -> unit Machine.t
+  val define : ?types:Type.signature -> ?docs:string ->
+    ?package:string -> string -> closure -> unit Machine.t
 
   val signal :
     ?params:[< Type.parameters] ->
@@ -145,14 +146,14 @@ module Semantics : sig
 
   val program : (Theory.Source.cls, program) KB.slot
   val definition : (Theory.program, Theory.Label.t option) KB.slot
-  val name : (Theory.program, string option) KB.slot
+  val name : (Theory.program, KB.Name.t option) KB.slot
   val args : (Theory.program, unit Theory.Value.t list option) KB.slot
   val symbol : (Theory.Value.cls, String.t option) KB.slot
   val static : (Theory.Value.cls, Bitvec.t option) KB.slot
   val enable : ?stdout:Format.formatter -> unit -> unit
   val declare :
     ?types:Type.signature ->
-    ?docs:string -> string -> unit
+    ?docs:string -> ?package:string -> string -> unit
 
 end
 
@@ -183,7 +184,7 @@ module Attribute : sig
     ?desc:string ->
     ?package:string ->
     domain:'a KB.domain ->
-    parse:(Parse.tree list -> 'a) ->
+    parse:(package:string -> Parse.tree list -> 'a) ->
     string -> 'a t
 
   module Set : sig

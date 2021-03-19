@@ -1,3 +1,5 @@
+(in-package posix)
+
 (defun model-ilp32 (type)
   (case type
     'char 8

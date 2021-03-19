@@ -27,6 +27,7 @@ module Role = struct
   module Register = struct
     let general = declare ~package "general"
     let special = declare ~package "special"
+    let pseudo = declare ~package "pseudo"
     let integer = declare ~package "integer"
     let floating = declare ~package "floating"
     let vector = declare ~package "vector"
@@ -45,6 +46,10 @@ module Role = struct
     let sign_flag = declare ~package "sign-flag"
     let overflow_flag = declare ~package "overflow-flag"
     let parity_flag = declare ~package "parity-flag"
+    let function_argument = declare ~package "function-argument"
+    let function_return = declare ~package "function-return"
+    let caller_saved = declare ~package "caller-saved"
+    let callee_saved = declare ~package "callee-saved"
   end
 end
 

@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 open Bap.Std
 open Bap_future.Std
 open Monads.Std
@@ -45,6 +46,7 @@ val list : unit -> Info.t list
 module Provider : sig
   type t = provider
   val name : t -> string
+  val fullname : t -> KB.Name.t
   val observers : t -> int
   val triggers : t -> unit stream
   val data : t -> Sexp.t stream

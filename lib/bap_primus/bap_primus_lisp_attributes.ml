@@ -8,6 +8,8 @@ module Attribute = Bap_primus_lisp_attribute
 module Var = Bap_primus_lisp_var
 module KB = Knowledge
 
+let package = "core"
+
 let fail err t = Attribute.Parse.fail err t
 
 module Variables = struct
@@ -19,22 +21,22 @@ module Variables = struct
   type Attribute.error += Expect_atom
   type Attribute.error += Var_error of Var.read_error
 
-  let var t = match t with
+  let var package t = match t with
     | {data=List _} -> fail Expect_atom [t]
-    | {data=Atom v; id; eq} -> match Var.read id eq v with
+    | {data=Atom v; id; eq} -> match Var.read ~package id eq v with
       | Ok v -> v
       | Error err -> fail (Var_error err) [t]
 
-  let parse xs = List.map xs ~f:var |>
-                 Var.Set.of_list
+  let parse ~package xs = List.map xs ~f:(var package) |>
+                          Var.Set.of_list
 
   let global = Attribute.declare "global"
-      ~package:"primus"
+      ~package
       ~domain
       ~parse
 
   let static = Attribute.declare "static"
-      ~package:"primus"
+      ~package
       ~domain
       ~parse
 end
@@ -57,15 +59,50 @@ let parse_name = function
 
 module External = struct
   type t = String.Set.t
+
   let domain = KB.Domain.powerset (module String) "names"
 
-  let parse xs = List.map xs ~f:parse_name |>
-                 String.Set.of_list
+  let parse ~package:_ xs = List.map xs ~f:parse_name |>
+                            String.Set.of_list
 
   let t = Attribute.declare "external"
-      ~package:"primus"
+      ~package
       ~domain
       ~parse
+end
+
+module Visibility = struct
+  type visibility = Private | Public [@@deriving equal]
+  type t = visibility list [@@deriving equal]
+
+  type Attribute.error += Expect_public_or_private
+
+  let order x y : KB.Order.partial =
+    match List.length x, List.length y with
+    | m,n when m < n -> LT
+    | m,n when m > n -> GT
+    | _ -> if List.equal equal_visibility x y then EQ else NC
+
+  let domain = KB.Domain.define "visibility-list"
+      ~empty:[]
+      ~order
+      ~inspect:(function
+          | [] | Public :: _ -> Sexp.Atom "public"
+          | _ -> Sexp.Atom "private")
+      ~join:(fun was now -> Ok (now@was))
+
+  let parse ~package:_ = function
+    | [{data=Atom ":public"}] -> [Public]
+    | [{data=Atom ":private"}] -> [Private]
+    | s -> fail Expect_public_or_private s
+
+  let t = Attribute.declare "visibility"
+      ~package ~domain ~parse
+
+  let is_public = function
+    | Private :: _ -> false
+    | _ -> true
+
 end
 
 
@@ -82,7 +119,7 @@ module Advice = struct
     | Empty
     | No_targets
 
-  type t = {methods : String.Set.t Methods.t} [@@deriving compare, equal]
+  type t = {methods : Set.M(KB.Name).t Methods.t} [@@deriving compare, equal]
 
 
   let empty = {methods = Methods.empty}
@@ -106,19 +143,25 @@ module Advice = struct
     ]
 
   let targets {methods} m = match Map.find methods m with
-    | None -> String.Set.empty
+    | None -> Set.empty (module KB.Name)
     | Some targets -> targets
+
+
+  let parse_target = function
+    | {data=Atom x} -> KB.Name.read ~package:"external" x
+    | s -> fail Expect_atom [s]
 
   let parse_targets met ss = match ss with
     | [] -> fail No_targets ss
     | ss ->
       List.fold ss ~init:{methods=Methods.empty} ~f:(fun {methods} t -> {
             methods = Map.update methods met ~f:(function
-                | None -> String.Set.singleton (parse_name t)
-                | Some ts -> Set.add ts (parse_name t))
+                | None -> Set.singleton (module KB.Name)
+                            (parse_target t)
+                | Some ts -> Set.add ts (parse_target t))
           })
 
-  let parse trees = match trees with
+  let parse ~package:_ trees = match trees with
     | [] -> fail Empty trees
     | {data=List _} as s :: _  ->  fail Bad_syntax [s]
     | {data=Atom s} as lit :: ss ->
@@ -130,7 +173,7 @@ module Advice = struct
       | _ -> parse_targets Before trees
 
   let t = Attribute.declare "advice"
-      ~package:"primus"
+      ~package
       ~domain
       ~parse
 end

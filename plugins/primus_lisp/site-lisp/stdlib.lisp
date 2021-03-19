@@ -4,6 +4,8 @@
 (require simple-memory-allocator)
 (require types)
 
+(in-package posix)
+
 (defun getenv (name)
   "finds a value of an environment variable with the given name"
   (declare (external "getenv"))

@@ -1,3 +1,6 @@
+(in-package posix)
+(declare (visibility :private))
+
 (require posix)
 (require types)
 
@@ -8,5 +11,6 @@
   (+= brk (sizeof int)))
 
 (defun errno-location ()
-  (declare (external "__errno_location"))
+  (declare (visibility :public)
+           (external "__errno_location"))
   errno-location)

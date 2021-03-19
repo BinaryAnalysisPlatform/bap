@@ -1,15 +1,14 @@
 open Bap.Std
+open Bap_core_theory
 
 open Bap_primus_lisp_types
-module Context = Bap_primus_lisp_context
 module Def = Bap_primus_lisp_def
 module Program = Bap_primus_lisp_program
-module Value = Bap_primus_value
 
 type resolution
 
 type ('t,'a,'b) resolver =
-  Program.t -> 't Program.item -> string -> 'a ->
+  Program.t -> 't Program.item -> KB.Name.t -> 'a ->
   ('b,resolution) result option
 
 type ('t,'a,'b) one = ('t,'a,'t Def.t * 'b) resolver

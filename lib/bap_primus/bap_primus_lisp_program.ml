@@ -12,28 +12,38 @@ module Lisp = struct
   module Context = Bap_primus_lisp_context
   module Type = Bap_primus_lisp_type
   module Attribute = Bap_primus_lisp_attribute
+  module Attributes = Bap_primus_lisp_attributes
 end
 
 module Def = Bap_primus_lisp_def
 
-type t = {
-  context : Lisp.Context.t;
-  sources : Source.t;
+type package = {
+  semas : Def.sema Def.t list;
   codes : Def.prim Def.t list;
   macros : Def.macro Def.t list;
   substs : Def.subst Def.t list;
   consts : Def.const Def.t list;
+  places : Def.place Def.t list;
   defs : Def.func Def.t list;
   mets : Def.meth Def.t list;
   pars : Def.para Def.t list;
   sigs : Def.signal Def.t list;
 } [@@deriving fields]
 
+type t = {
+  context : Lisp.Context.t;
+  package : string;
+  sources : Source.t;
+  exports : Set.M(String).t Map.M(String).t;
+  library : package Map.M(String).t;
+} [@@deriving fields]
+
 type program = t
 
-let empty  = {
-  context = Lisp.Context.empty;
-  sources = Source.empty;
+let default_package = "user"
+
+let empty_package = {
+  semas = [];
   codes = [];
   defs = [];
   mets = [];
@@ -42,40 +52,202 @@ let empty  = {
   macros=[];
   substs=[];
   consts=[];
+  places=[];
 }
+
+let empty = {
+  context = Lisp.Context.empty;
+  sources = Source.empty;
+  package = default_package;
+  exports = Map.empty (module String);
+  library = Map.empty (module String);
+}
+
+let with_package program package = {program with package}
+let package program = program.package
+let reset_package program =
+  with_package program default_package
+
+let is_public def =
+  Lisp.Attributes.Visibility.is_public @@
+  Lisp.Attribute.Set.get Lisp.Attributes.Visibility.t
+    (Def.attributes def)
+
+type def_filter = {
+  visit: 'a. 'a Def.t -> bool;
+}
+let filter_package pkg {visit=f} = {
+  semas = List.filter pkg.semas ~f;
+  codes = List.filter pkg.codes ~f;
+  defs = List.filter pkg.defs ~f;
+  mets = List.filter pkg.mets ~f;
+  pars = List.filter pkg.pars ~f;
+  sigs = List.filter pkg.sigs ~f;
+  macros = List.filter pkg.macros ~f;
+  substs = List.filter pkg.substs ~f;
+  consts = List.filter pkg.consts ~f;
+  places = List.filter pkg.places ~f;
+}
+
+
+let get_package ?(public=false) program package =
+  match Map.find program.library package with
+  | None -> empty_package
+  | Some pkg ->
+    if public then filter_package pkg {visit = is_public} else pkg
+
+let targets {exports} package = match Map.find exports package with
+  | None -> Set.empty (module String)
+  | Some packs -> packs
+
+(* [transitive_closure p] is the set of packages in which
+   definition from p are visible (p including).
+*)
+let rec transitive_closure program from =
+  let init = Set.singleton (module String) from in
+  Set.fold (targets program from) ~f:(fun init pack ->
+      if Set.mem init pack then init
+      else Set.union init (transitive_closure program pack))
+    ~init
+
+let fold_library library ~init ~f =
+  Map.fold library ~init ~f:(fun ~key:package ~data init ->
+      f ~package data init)
+
+let (++) xs ys : _ Def.t list =
+  let remember set def = Map.update set (Def.name def) ~f:(function
+      | None -> Set.singleton (module Id) def.id
+      | Some ids -> Set.add ids def.id) in
+  let is_presented set def = match Map.find set (Def.name def) with
+    | None -> false
+    | Some ids -> Set.mem ids def.id in
+  let add (set,defs) def =
+    if is_presented set def then set,defs
+    else remember set def, def::defs in
+  let init = Map.empty (module String),[] in
+  snd@@List.fold ys ~f:add ~init:(List.fold ~init xs ~f:add)
+
+let pp_defs ppf =
+  Format.pp_print_list (fun ppf x ->
+      Format.fprintf ppf "%s" (Def.name x))
+    ~pp_sep:Format.pp_print_space
+    ppf
+
+let merge_packages p1 p2 = {
+  semas = p1.semas ++ p2.semas;
+  codes = p1.codes ++ p2.codes;
+  defs = p1.defs ++ p2.defs;
+  mets = p1.mets ++ p2.mets;
+  pars = p1.pars ++ p2.pars;
+  sigs = p1.sigs ++ p2.sigs;
+  macros = p1.macros ++ p2.macros;
+  substs = p1.substs ++ p2.substs;
+  consts = p1.consts ++ p2.consts;
+  places = p1.places ++ p2.places;
+}
+
+let use_package program ?(target=program.package) from =
+  let program = {
+    program with
+    exports = Map.update program.exports from ~f:(function
+        | None -> Set.singleton (module String) target;
+        | Some exports -> Set.add exports target)
+  } in {
+    program with
+    library =
+      Set.fold (transitive_closure program from) ~f:(fun library target ->
+          Map.update library target ~f:(function
+              | None -> get_package ~public:true program from
+              | Some pkg ->
+                merge_packages pkg (get_package ~public:true program from)))
+        ~init:program.library
+  }
 
 let equal p1 p2 =
   Source.equal p1.sources p2.sources
 
-let merge p1 p2 =
-  let p1,p2 = if Source.is_empty p1.sources then
-      p1,p2 else
-      p2,p1 in {
-    p2 with
-    sigs = p1.sigs @ p2.sigs;
-    codes = p1.codes @ p2.codes;
+
+let is_empty p = Map.is_empty p.library
+
+let merge_libraries l1 l2 =
+  Map.merge_skewed l1 l2 ~combine:(fun ~key:_ -> merge_packages)
+
+let reexport program =
+  Map.fold program.exports ~f:(fun ~key:from ~data:targets program ->
+      Set.fold targets ~f:(fun program target ->
+          use_package program ~target from)
+        ~init:program)
+    ~init:program
+
+let merge p1 p2 = reexport {
+    p1 with
+    sources = p2.sources;
     context = Lisp.Context.merge p1.context p2.context;
+    library = merge_libraries p1.library p2.library;
+    exports = Map.merge_skewed p1.exports p2.exports
+        ~combine:(fun ~key:_ -> Set.union)
   }
 
 
-
-type 'a item = ([`Read | `Set_and_create ], t, 'a Def.t list) Fieldslib.Field.t_with_perm
+type full_access = [`Read | `Set_and_create ]
+type 'a item =
+  (full_access, package, 'a Def.t list) Fieldslib.Field.t_with_perm
 
 module Items = struct
-  let macro = Fields.macros
-  let subst = Fields.substs
-  let const = Fields.consts
-  let func = Fields.defs
-  let meth = Fields.mets
-  let para = Fields.pars
-  let primitive = Fields.codes
-  let signal = Fields.sigs
+  open Fields_of_package
+  let macro = macros
+  let subst = substs
+  let const = consts
+  let place = places
+  let func = defs
+  let meth = mets
+  let para = pars
+  let primitive = codes
+  let semantics = semas
+  let signal = sigs
 end
 
-let add p (fld : 'a item) x =
-  Field.fset fld p (x :: Field.get fld p)
+let add_to_package (fld : 'a item) x p =
+  if List.exists (Field.get fld p) ~f:(fun d ->
+      String.equal (Def.name x) (Def.name d) &&
+      Id.equal x.id d.id) then p
+  else Field.fset fld p (x :: Field.get fld p)
 
-let get p (fld : 'a item) = Field.get fld p
+
+let is_applicable {context=global} def =
+  let def_ctxt =
+    Lisp.Attribute.Set.get Lisp.Context.t
+      (Def.attributes def) in
+  Lisp.Context.(def_ctxt <= global)
+
+let add prog fld elt =
+  let name = KB.Name.read ~package:prog.package (Def.name elt) in
+  let parent = KB.Name.package name in
+  let name = KB.Name.unqualified name in
+  let elt = Def.rename elt name in
+  let is_public = is_public elt in
+  let packages = transitive_closure prog parent in {
+    prog with
+    library = Set.fold packages ~f:(fun lib pkg ->
+        if is_public || String.equal pkg parent
+        then Map.update lib pkg ~f:(function
+            | None -> add_to_package fld elt empty_package
+            | Some pkg -> add_to_package fld elt pkg)
+        else lib)
+        ~init:prog.library;
+  }
+
+let get p (fld : 'a item) =
+  match Map.find p.library p.package with
+  | None -> []
+  | Some pkg -> Field.get fld pkg
+
+let fold {library} fld ~init ~f =
+  Map.fold library ~init ~f:(fun ~key:package ~data x ->
+      List.fold ~init:x (Field.get fld data) ~f:(fun x def ->
+          f ~package def x))
+
+let in_package package p f = f {p with package}
 
 let with_context p context = {p with context}
 let with_sources p sources = {p with sources}
@@ -85,6 +257,77 @@ let (++) = Map.merge ~f:(fun ~key:_ -> function
 
 let union init xs ~f =
   List.fold xs ~init ~f:(fun vs x -> vs ++ f x)
+
+
+module Places = struct
+  module Lisp_var = Bap_primus_lisp_var
+
+  let collect_registers target =
+    List.fold (target :: Theory.Target.parents target) ~f:(fun regs t ->
+        let package = KB.Name.unqualified (Theory.Target.name t) in
+        Theory.Target.regs t |> Set.to_sequence |>
+        Seq.fold ~init:regs ~f:(fun regs v ->
+            let name = KB.Name.create ~package (Theory.Var.name v) in
+            Map.set regs name v))
+      ~init:(Map.empty (module KB.Name))
+
+
+  let collect_globals target program =
+    let open Lisp.Attributes in
+    let var v = Theory.Var.forget @@
+      Lisp_var.reify v
+        ~width:(Theory.Target.bits target) in
+    let vars def =
+      let get attr =
+        Set.map (module Theory.Var.Top) ~f:var @@
+        Attribute.Set.get attr (Def.attributes def) in
+      Set.union_list (module Theory.Var.Top) [
+        get Variables.global;
+        get Variables.static
+      ] in
+    fold program Items.func
+      ~init:(Set.empty (module Theory.Var.Top))
+      ~f:(fun ~package:_ def acc ->
+          Set.union acc (vars def))
+
+
+  let add_registers target prog =
+    let regs = collect_registers target in
+    Map.fold regs ~f:(fun ~key:name ~data:r prog ->
+        let package = KB.Name.package name in
+        let name = KB.Name.unqualified name in
+        add prog Items.place @@
+        Def.Place.create ~package name r)
+      ~init:prog
+
+  let add_globals target prog =
+    let vars = collect_globals target prog in
+    Set.fold vars ~f:(fun prog v ->
+        let name = KB.Name.read (Theory.Var.name v) in
+        let package = KB.Name.package name in
+        let name = KB.Name.unqualified name in
+        add prog Items.place @@
+        Def.Place.create ~package name v)
+      ~init:prog
+
+  let add_vars ~package vars lisp =
+    Seq.fold vars ~f:(fun prog v ->
+        add prog Items.place @@
+        Def.Place.create ~package (Theory.Var.name v) v)
+      ~init:lisp
+
+  let add ?(globals=Seq.empty) lisp target =
+    List.fold ~init:lisp ~f:(|>) [
+      add_registers target;
+      add_globals target;
+      add_vars ~package:"program" globals;
+      add_vars ~package:"target" @@
+      Seq.map ~f:snd @@
+      Map.to_sequence (collect_registers target)
+    ]
+end
+
+let with_places = Places.add
 
 type node =
   | Entry
@@ -101,12 +344,12 @@ module Callgraph = struct
         end)
     end)(Unit)
 
-  let empty = String.Set.empty
+  let empty = Set.empty (module KB.Name)
   let (++) = Set.union
-  let call = String.Set.singleton
+  let call = Set.singleton (module KB.Name)
   let union xs ~f =
     List.map xs ~f |>
-    String.Set.union_list
+    Set.union_list (module KB.Name)
 
   let rec calls = function
     | {data=App ((Dynamic v),xs); } -> call v ++ union xs ~f:calls
@@ -116,11 +359,14 @@ module Callgraph = struct
     | {data=(Let (_,x,y) | Rep (x,y))} -> calls x ++ calls y
     | {data=Set (_,x)} -> calls x
 
-
   (** computes a mapping from name to id of definitions  *)
   let compute_ids defs =
-    List.fold defs ~init:String.Map.empty ~f:(fun ids def ->
-        Map.add_multi ids ~key:(Def.name def) ~data:def.id)
+    let init = Map.empty (module KB.Name) in
+    fold_library defs ~init ~f:(fun ~package {defs} init ->
+        List.fold defs ~init ~f:(fun ids def ->
+            let name = KB.Name.create ~package (Def.name def) in
+            Map.add_multi ids ~key:name ~data:def.id))
+
 
   let edge id id' =
     G.Edge.create (Defun id) (Defun id') ()
@@ -131,11 +377,12 @@ module Callgraph = struct
       fun name -> match Map.find ids name with
         | None -> []
         | Some x -> x in
-    List.fold defs ~init:G.empty ~f:(fun g def ->
-        let g = G.Node.insert (Defun def.id) g in
-        Set.fold (calls (Def.Func.body def)) ~init:g ~f:(fun g name ->
-            List.fold (ids name) ~init:g ~f:(fun g id ->
-                G.Edge.insert (edge def.id id) g)))
+    Map.fold ~init:G.empty defs ~f:(fun ~key:_ ~data:{defs} g ->
+        List.fold defs ~init:g ~f:(fun g def ->
+            let g = G.Node.insert (Defun def.id) g in
+            Set.fold (calls (Def.Func.body def)) ~init:g ~f:(fun g name ->
+                List.fold (ids name) ~init:g ~f:(fun g id ->
+                    G.Edge.insert (edge def.id id) g))))
 
   let connect_with_entry = function
     | Entry -> ident
@@ -158,8 +405,8 @@ module Callgraph = struct
         then fix n g
         else g)
 
-  let build defs =
-    close `Out (close `In (build_kernel defs)) |> fun g ->
+  let build library =
+    close `Out (close `In (build_kernel library)) |> fun g ->
     Graphlib.depth_first_search (module G) g
       ~init:g ~start:Entry
       ~start_tree:connect_with_entry |> fun g ->
@@ -178,13 +425,6 @@ let pp_callgraph ppf g =
         | Defun id -> asprintf "%a" Id.pp id)
     g
 
-let pp_term pp_exp ppf = function
-  | {data={exp; typ=Any}} ->
-    fprintf ppf "@[<v2>%a@]" pp_exp exp
-  | {data={exp; typ}} ->
-    fprintf ppf "@[<v2>%a:%a@]" pp_exp exp Lisp.Type.pp typ
-let pp_word = pp_term Z.pp_print
-let pp_var = pp_term String.pp
 
 let rec concat_prog p =
   List.concat_map p ~f:(function
@@ -192,13 +432,35 @@ let rec concat_prog p =
       | x -> [x])
 
 module Ast = struct
+  let package = ref "user"
+
+  let with_package p ~f =
+    let p' = !package in
+    package := p;
+    let x = f () in
+    package := p';
+    x
+
+  let pp_name ppf name =
+    if String.equal (KB.Name.package name) !package
+    then Format.fprintf ppf "%s" (KB.Name.unqualified name)
+    else KB.Name.pp ppf name
+
+  let pp_term pp_exp ppf = function
+    | {data={exp; typ=Any}} ->
+      fprintf ppf "@[<v2>%a@]" pp_exp exp
+    | {data={exp; typ}} ->
+      fprintf ppf "@[<v2>%a:%a@]" pp_exp exp Lisp.Type.pp typ
+  let pp_word = pp_term Z.pp_print
+  let pp_var = pp_term pp_name
+
   let rec pp ppf {data} =
     fprintf ppf "@[<v2>%a@]" pp_exp data
   and pp_exp ppf = function
     | Int x ->
       pp_word ppf x
     | Sym x ->
-      pp_print_string ppf x.data
+      pp_name ppf x.data
     | Var x ->
       pp_var ppf x
     | Ite (c,t,e) ->
@@ -220,7 +482,7 @@ module Ast = struct
     | Err msg ->
       fprintf ppf "@[<2>(error@ %s)@]" msg
   and pp_binding ppf = function
-    | Dynamic x -> fprintf ppf "%s" x
+    | Dynamic x -> fprintf ppf "%a" pp_name x
     | Static _ -> fprintf ppf "<lambda>"
   and pp_exps ppf xs = pp_print_list ~pp_sep:pp_print_space pp ppf xs
   and pp_fmt ppf xs = pp_print_list pp_fmt_elt ppf xs
@@ -236,13 +498,13 @@ end
 let pp_def ppf d =
   fprintf ppf "@[<2>(defun %s @[<2>(%a)@]@ %a)@]@,"
     (Def.name d)
-    (pp_print_list ~pp_sep:pp_print_space pp_var) (Def.Func.args d)
+    (pp_print_list ~pp_sep:pp_print_space Ast.pp_var) (Def.Func.args d)
     Ast.pp_prog (Def.Func.body d)
 
 let pp_met ppf d =
   fprintf ppf "@[<2>(defmethod %s @[<2>(%a)@]@ %a)@]@,"
     (Def.name d)
-    (pp_print_list ~pp_sep:pp_print_space pp_var) (Def.Meth.args d)
+    (pp_print_list ~pp_sep:pp_print_space Ast.pp_var) (Def.Meth.args d)
     Ast.pp_prog (Def.Meth.body d)
 
 let pp_par ppf d =
@@ -251,29 +513,34 @@ let pp_par ppf d =
     Ast.pp_prog (Def.Para.default d)
     (Def.docs d)
 
-let pp_program ppf {pars; mets; defs;} =
+let pp_package ppf {pars; mets; defs;} =
   let pp_items pp items =
     fprintf ppf "@[<v>%a@]" (pp_print_list pp) items in
   pp_items pp_par pars;
   pp_items pp_met mets;
   pp_items pp_def defs
 
-let pp ppf prog = pp_program ppf prog
+let pp ppf prog =
+  Map.iteri prog.library ~f:(fun ~key:package ~data:pkg ->
+      Ast.with_package package ~f:(fun () ->
+          Format.fprintf ppf "(in-package %s)@\n%a@\n" package
+            pp_package pkg))
+
 let pp_ast ppf ast = Ast.pp ppf ast
 
 module Use = struct
-  let empty = String.Map.empty
+  let empty = Map.empty (module KB.Name)
   let union = union empty
-  let use = String.Map.singleton
+  let use = Map.singleton (module KB.Name)
 
   type t = {
-    calls : Id.t String.Map.t Id.Map.t;
-    vars  : Id.t String.Map.t Id.Map.t; (* def -> var -> use  *)
+    calls : Id.t Map.M(KB.Name).t Id.Map.t;
+    vars  : Id.t Map.M(KB.Name).t Id.Map.t; (* def -> var -> use  *)
   }
 
   let vars bound ast =
     let use bound {exp=v} id =
-      if Set.mem bound v then String.Map.empty
+      if Set.mem bound v then empty
       else use v id in
     let rec free bound = function
       | {data=(Int _ | Err _ | Sym _)}  -> empty
@@ -299,7 +566,7 @@ module Use = struct
         let body = Def.Func.body def in
         let bound = Def.Func.args def |>
                     List.map ~f:(fun {data={exp}} -> exp) |>
-                    String.Set.of_list in
+                    Set.of_list (module KB.Name) in
         let vs = vars bound body in
         let cs = calls body in
         {
@@ -325,7 +592,9 @@ end
  ** identifiers. Otherwise, they could be unified, for example in the
  ** Type checker.
  **)
-module Reindex = struct
+module Reindex : sig
+  val program : program -> program
+end = struct
   module State = Monad.State.Make(Source)(Monad.Ident)
   open State.Syntax
   type 'a m = 'a Monad.State.T1(Source)(Monad.Ident).t
@@ -342,11 +611,15 @@ module Reindex = struct
       map defs ~f:reduce |> ids_of_trees
     ]
 
-  let macro_ids p = Id.Set.union_list [
-      ids_of_defs p.macros List.map Def.Macro.body;
-      ids_of_defs p.consts List.map Def.Const.value;
-      ids_of_defs p.substs List.concat_map Def.Subst.body;
-    ]
+  let macro_ids prog =
+    fold_library prog ~f:(fun ~package:_ p macros ->
+        Id.Set.union_list [
+          macros;
+          ids_of_defs p.macros List.map Def.Macro.body;
+          ids_of_defs p.consts List.map Def.Const.value;
+          ids_of_defs p.substs List.concat_map Def.Subst.body;
+        ])
+      ~init:Id.Set.empty
 
   let derive from  =
     State.get () >>= fun src ->
@@ -401,20 +674,42 @@ module Reindex = struct
     and map_all xs = State.List.map xs ~f:map in
     map (get def) >>| set def
 
-  let reindex_all p =
+  let reindex_package macros p =
     let def = Def.Func.body,Def.Func.with_body in
     let met = Def.Meth.body,Def.Meth.with_body in
     let par = Def.Para.default,Def.Para.with_default in
-    let macros = macro_ids p in
     State.List.map p.defs ~f:(reindex def macros) >>= fun defs ->
     State.List.map p.mets ~f:(reindex met macros) >>= fun mets ->
     State.List.map p.pars ~f:(reindex par macros) >>= fun pars ->
     State.return (defs,mets,pars)
 
-  let program p =
+  let package prog macros pkgname =
+    let pkg = get_package prog pkgname in
     let (defs,mets,pars),sources =
-      State.run (reindex_all p) p.sources in
-    {p with defs; mets; pars; sources}
+      State.run (reindex_package macros pkg) prog.sources in
+    {
+      prog with
+      sources;
+      library = Map.set prog.library pkgname {
+          pkg with
+          defs; mets; pars
+        }
+    }
+
+  let program prog =
+    let macros = macro_ids prog.library in
+    fold_library prog.library ~f:(fun ~package pkg prog ->
+        let (defs,mets,pars),sources =
+          State.run (reindex_package macros pkg) prog.sources in
+        {
+          prog with
+          sources;
+          library = Map.set prog.library package {
+              pkg with
+              defs; mets; pars
+            }
+        })
+      ~init:prog
 
 end
 
@@ -827,10 +1122,10 @@ module Typing = struct
 
   type t = {
     ctxt : Lisp.Context.t;
-    globs : int String.Map.t;
-    prims : signature String.Map.t;
-    funcs : Def.func Def.t list;
-    paras : String.Set.t;
+    globs : int Map.M(KB.Name).t;
+    prims : signature Map.M(KB.Name).t;
+    funcs : Def.func Def.t list Map.M(KB.Name).t;
+    paras : Set.M(KB.Name).t;
   }
 
   let pp_args ppf args =
@@ -910,10 +1205,11 @@ module Typing = struct
   let signatures glob id gamma name =
     match Map.find glob.prims name with
     | Some sign -> [prenex_signature id sign]
-    | None -> List.fold glob.funcs ~init:[] ~f:(fun sigs def ->
-        if String.equal (Def.name def) name
-        then signature_of_gamma def gamma :: sigs
-        else sigs)
+    | None -> match Map.find glob.funcs name with
+      | None -> []
+      | Some funcs ->
+        List.map funcs ~f:(fun def ->
+            signature_of_gamma def gamma)
 
 
   let apply glob id name args gamma =
@@ -922,7 +1218,7 @@ module Typing = struct
         apply_signature id args gamma s) |>
     List.hd |> function
     | None ->
-      Gamma.fail id (Unresolved_function (id, name,sigs)) gamma
+      Gamma.fail id (Unresolved_function (id, KB.Name.show name,sigs)) gamma
     | Some gamma -> gamma
 
   let last xs = match List.rev xs with
@@ -936,16 +1232,19 @@ module Typing = struct
       | Some n -> Gamma.constr var.id (Type n) gamma
       | None ->
         if Set.mem paras name then gamma
-        else Gamma.fail var.id (Unresolved_variable (var.id,name)) gamma
+        else Gamma.fail var.id
+            (Unresolved_variable (var.id,KB.Name.show name)) gamma
 
   let is_special var =
+    let var = KB.Name.unqualified var in
     String.is_prefix ~prefix:"*" var &&
     String.is_suffix ~suffix:"*" var
 
   let constr_special {paras} var gamma =
     let name = var.data.exp in
     if is_special name && not (Set.mem paras name)
-    then Gamma.fail var.id (Unresolved_parameter (var.id,name)) gamma
+    then Gamma.fail var.id
+        (Unresolved_parameter (var.id,KB.Name.show name)) gamma
     else gamma
 
   let push vars {data; id} =
@@ -1018,7 +1317,9 @@ module Typing = struct
     infer bindings ast
 
   let find_func funcs id =
-    List.find funcs ~f:(fun f -> Id.(f.id = id))
+    Map.to_sequence funcs |>
+    Seq.find_map ~f:(fun (_,funcs) ->
+        List.find funcs ~f:(fun f -> Id.(f.id = id)))
 
   let transfer glob node gamma =
     match node with
@@ -1028,72 +1329,115 @@ module Typing = struct
       | None -> gamma
       | Some f ->
         let args = Def.Func.args f in
-        let vars = List.fold args ~init:String.Map.empty ~f:push in
+        let init = Map.empty (module KB.Name) in
+        let vars = List.fold args ~init ~f:push in
         let gamma = List.fold args ~init:gamma ~f:(fun gamma v ->
             Gamma.constr v.id v.data.typ gamma) in
         let gamma = infer_ast glob vars (Def.Func.body f) gamma in
         gamma
 
-  let make_globs =
-    Seq.fold ~init:String.Map.empty ~f:(fun vars v ->
-        match Var.typ v with
-        | Type.Imm x ->
-          Map.set vars ~key:(Var.name v) ~data:x
-        | Type.Mem _
-        | Type.Unk -> vars)
+  let empty_names = Map.empty (module KB.Name)
 
-  let make_prims {codes} init =
-    List.fold codes ~init ~f:(fun ps p ->
-        match Def.Closure.signature p with
+
+  let collect_prims program item signature init =
+    fold program item ~init ~f:(fun ~package def ps ->
+        match signature def with
         | None -> ps
         | Some types ->
-          Map.set ps ~key:(Def.name p) ~data:types)
+          let name = KB.Name.create ~package (Def.name def) in
+          Map.set ps name types)
 
-  let make_paras {pars} =
-    List.fold pars ~init:String.Set.empty ~f:(fun pars par ->
-        Set.add pars (Def.name par))
+
+  let make_prims program init =
+    let sema_types d = Some (Def.Sema.types d) in
+    collect_prims program Items.primitive Def.Closure.signature @@
+    collect_prims program Items.semantics sema_types init
+
+  let make_paras {library} =
+    fold_library library ~f:(fun ~package {pars} init ->
+        List.fold pars ~init ~f:(fun pars par ->
+            let name = KB.Name.read ~package (Def.name par) in
+            Set.add pars name))
+      ~init:(Set.empty (module KB.Name))
+
 
   let gamma_equal g1 g2 = Gamma.compare g1 g2 = 0
 
   let applicable global =
-    List.filter ~f:(fun def ->
+    let filter elts = List.filter elts ~f:(fun def ->
         let def_ctxt =
           Lisp.Attribute.Set.get Lisp.Context.t
             (Def.attributes def) in
-        Lisp.Context.(def_ctxt <= global))
+        Lisp.Context.(def_ctxt <= global)) in
+    Map.map ~f:(fun pkg -> {
+          pkg with
+          defs = filter pkg.defs;
+          mets = filter pkg.mets;
+          pars = filter pkg.pars;
+        })
 
-  let find_signal (sigs : Def.signal Def.t list) name =
-    List.find sigs ~f:(fun s -> String.equal (Def.name s) name)
+  let find_signal library name =
+    match Map.find library (KB.Name.package name) with
+    | None -> None
+    | Some {sigs} ->
+      let name = KB.Name.unqualified name in
+      List.find sigs ~f:(fun s -> String.equal (Def.name s) name)
 
-  let check_methods glob {context; mets; sigs} g =
-    applicable context mets |>
-    List.fold ~init:g ~f:(fun g met ->
-        let name = Def.name met in
-        match find_signal sigs name with
-        | None ->
-          Gamma.fail met.id (Unresolved_signal (met.id,name,None)) g
-        | Some s ->
-          let args = Def.Meth.args met in
-          let pars = Def.Signal.signature s in
-          match apply_signature ~allow_partial:true met.id args g pars with
-          | None ->
-            let problem = Unresolved_signal (met.id,name,Some pars) in
-            Gamma.fail met.id problem g
-          | Some g ->
-            let vars = List.fold args ~init:String.Map.empty ~f:push in
-            let g = List.fold args ~init:g ~f:(fun g v ->
-                Gamma.constr v.id v.data.typ g) in
-            infer_ast glob vars (Def.Meth.body met) g)
+  let check_methods glob {context; library} g =
+    applicable context library |>
+    fold_library ~init:g ~f:(fun ~package {mets} g ->
+        List.fold mets ~init:g ~f:(fun g met ->
+            let name = Def.name met in
+            let fullname = KB.Name.read ~package name in
+            match find_signal library fullname with
+            | None ->
+              Gamma.fail met.id (Unresolved_signal (met.id,name,None)) g
+            | Some s ->
+              let args = Def.Meth.args met in
+              let pars = Def.Signal.signature s in
+              match apply_signature ~allow_partial:true met.id args g pars with
+              | None ->
+                let problem = Unresolved_signal (met.id,name,Some pars) in
+                Gamma.fail met.id problem g
+              | Some g ->
+                let init = Map.empty (module KB.Name) in
+                let vars = List.fold args ~init ~f:push in
+                let g = List.fold args ~init:g ~f:(fun g v ->
+                    Gamma.constr v.id v.data.typ g) in
+                infer_ast glob vars (Def.Meth.body met) g))
 
-  let infer externals vars p : Gamma.t =
+  let make_defs = fold_library ~f:(fun ~package {defs} funcs ->
+      List.fold defs ~init:funcs ~f:(fun funcs def ->
+          let name = KB.Name.read ~package (Def.name def) in
+          Map.add_multi funcs name def))
+      ~init:empty_names
+
+  let add_places prog =
+    fold prog Items.place ~f:(fun ~package place vars ->
+        let name = KB.Name.read ~package (Def.name place) in
+        let var = Var.reify@@Def.Place.location place in
+        match Var.typ var with
+        | Type.Imm n -> Map.set vars name n
+        | _ -> vars)
+      ~init:(Map.empty (module KB.Name))
+
+  let make_externals =
+    List.fold ~f:(fun exts (n,s) ->
+        let n = KB.Name.create ~package:"external" n in
+        Map.set exts n s)
+      ~init:(Map.empty (module KB.Name))
+
+  let infer externals (p : program) :  Gamma.t =
+    let externals = make_externals externals in
+    let library = applicable p.context p.library in
     let glob = {
       ctxt = p.context;
-      prims = make_prims p (String.Map.of_alist_exn externals);
-      globs = make_globs vars;
-      funcs = p.defs;
+      prims = make_prims p externals;
+      globs = add_places p;
+      funcs = make_defs library;
       paras = make_paras p;
     } in
-    let g = Callgraph.build (applicable p.context p.defs) in
+    let g = Callgraph.build library in
     let init = Solution.create Callgraph.Node.Map.empty Gamma.empty in
     let equal = gamma_equal in
     let fp =
@@ -1128,9 +1472,9 @@ module Typing = struct
     }
 
 
-    let infer ?(externals=[]) vars program =
+    let infer ?(externals=[]) program =
       let program = Reindex.program program in
-      let gamma = infer externals vars program in
+      let gamma = infer externals program in
       {program; gamma}
 
     let errors {program={sources}; gamma} =
@@ -1142,7 +1486,7 @@ module Typing = struct
             | Ok _ -> errs
             | Error problem -> {sources; problem} :: errs)
 
-    let check vars program : error list = errors (infer vars program)
+    let check _vars program : error list = errors (infer program)
 
     let pp_sigs ppf sigs =
       List.iteri sigs ~f:(fun i s ->

@@ -3,6 +3,8 @@
 (require memory)
 (require ascii)
 
+(in-package posix)
+
 (defun strlen (p)
   (declare (external "strlen"))
   (let ((len 0))
@@ -62,11 +64,12 @@
 
 
 (defmacro find-character (dir p c n)
+  (declare (visibility :private))
   (prog
-   (while (and n (not (points-to char p c)))
-    (decr n)
-    (dir p))
-   (if (points-to char p c) p 0)))
+      (while (and n (not (points-to char p c)))
+        (decr n)
+        (dir p))
+     (if (points-to char p c) p 0)))
 
 (defun memchr (p c n)
   (declare (external "memchr"))
@@ -128,6 +131,7 @@
 (defun strlen/with-null (s)
   "returns a length of the string S
    (including the terminating null character)"
+  (declare (visibility :private))
   (+1 (strlen s)))
 
 (defun strncmp (s1 s2 n)
@@ -163,6 +167,7 @@
 
 
 (defmacro find-substring (compare hay needle)
+  (declare (visibility :private))
   (let ((found 0)
         (n (strlen needle)))
     (while (and (memory-read hay) (not found))

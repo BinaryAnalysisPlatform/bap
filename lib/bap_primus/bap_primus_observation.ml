@@ -31,10 +31,10 @@ type 'a mstream = {
 let providers : (string,provider) Hashtbl.t = Hashtbl.create (module String)
 
 
-let provider ?desc ?package name =
+let provider ?desc ?(package="primus") name =
   let data,newdata = Stream.create () in
   let triggers,newtrigger = Stream.create () in
-  let name = Name.create ?package name in
+  let name = Name.create ~package name in
   let info = Info.create ?desc name in
   let key = Univ_map.Key.create ~name:(Name.show name) ident in
   {info; newdata; data; triggers; newtrigger; observers=0; key}
@@ -150,7 +150,14 @@ let list () = list_providers () |>
 
 module Provider = struct
   type t = provider
-  let name t = Name.show @@ Info.name t.info
+  let name t =
+    let name = Info.name t.info in
+    let short = Name.unqualified name in
+    match Name.package name with
+    | "primus" -> short
+    | package -> sprintf "%s:%s" package short
+
+  let fullname t = Info.name t.info
   let data t = t.data
   let triggers t = t.triggers
   let observers t = t.observers

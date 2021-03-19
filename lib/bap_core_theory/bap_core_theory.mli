@@ -1155,6 +1155,12 @@ module Theory : sig
     val scoped : 'a Value.sort -> ('a t -> 'b pure) -> 'b pure
 
 
+    (** [printf "%a" Theory.Var.pp v] pretty-prints the identifier
+        of the variable [v].
+
+        @since 2.3.0  *)
+    val pp : Format.formatter -> 'a t -> unit
+
     (** Variable identifiers.  *)
     module Ident : sig
       type t = ident [@@deriving bin_io, compare, sexp]
@@ -1851,6 +1857,17 @@ module Theory : sig
       *)
       val special : t
 
+
+
+      (** the pseudo-register.
+
+          The pseudo-registers do not correspond to a real physical or
+          logical register in the instruction set but rather an alias
+          or a hard-wired register, such as constant zero or an
+          instruction register or a program counter.
+      *)
+      val pseudo : t
+
       (** the register is used by the integer arithmetic unit
 
           This role can be assigned both to general and special
@@ -1932,6 +1949,25 @@ module Theory : sig
 
       (** the reserved register with undefined behavior.  *)
       val reserved : t
+
+
+      (** {3 Calling Conventions} *)
+
+      (** the register is used to pass function arguments  *)
+      val function_argument : t
+
+      (** the register is used to return values from functions  *)
+      val function_return : t
+
+
+      (** the register is volatile and should be preserved by the caller  *)
+      val caller_saved : t
+
+
+      (** the register is preserved across calls and must be
+          preserved by the callee.   *)
+      val callee_saved : t
+
     end
 
     include KB.Enum.S with type t := t

@@ -12,11 +12,13 @@ end
 
 type 'a spec
 type 'a t = 'a spec indexed
+type sema
 type func
 type meth
 type macro
 type subst
 type const
+type place
 type prim
 type closure = (module Closure)
 type 'a primitive
@@ -26,10 +28,21 @@ type signal
 type attrs = Attribute.set
 
 val name : 'a t -> string
+val rename : 'a t -> string -> 'a t
 val docs : 'a t -> string
 val attributes : 'a t -> attrs
 
 type 'a def = ?docs:string -> ?attrs:attrs -> string -> 'a
+
+
+module Sema : sig
+  type body = Theory.Label.t -> Theory.Value.Top.t list -> Theory.Semantics.t KB.t
+  val create : ?docs:string -> types:Type.signature ->
+    KB.Name.t -> body ->
+    sema t
+  val apply : sema t -> body
+  val types : sema t -> Type.signature
+end
 
 module Func : sig
   val create : (var list -> ast -> tree -> func t) def
@@ -71,6 +84,11 @@ module Const : sig
   val value : const t -> tree
 end
 
+module Place : sig
+  val create : ?package:string -> string -> _ Theory.Var.t -> place t
+  val location : place t -> Theory.Var.Top.t
+end
+
 module Subst : sig
   val create : (tree list -> tree -> subst t) def
   val body : subst t -> tree list
@@ -78,13 +96,14 @@ end
 
 module Primitive : sig
   type nonrec 'a t = 'a primitive t
-  val create : ?docs:string -> string -> (value list -> 'a) -> 'a t
+  val create : ?docs:string -> ?package:string -> string -> (value list -> 'a) -> 'a t
   val body : 'a t -> (value list -> 'a)
 end
 
 module Closure : sig
   val of_primitive : 'a Primitive.t -> closure -> prim t
-  val create : ?types:Type.signature -> ?docs:string -> string -> closure -> prim t
+  val create : ?types:Type.signature -> ?docs:string -> ?package:string
+    -> string -> closure -> prim t
   val signature : prim t -> Type.signature option
   val body : prim t -> closure
 end

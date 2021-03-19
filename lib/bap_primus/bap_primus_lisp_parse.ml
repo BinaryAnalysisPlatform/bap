@@ -1,6 +1,7 @@
 open Core_kernel
 open Bap.Std
 open Format
+open Bap_core_theory
 
 open Bap_primus_lisp_types
 
@@ -14,7 +15,7 @@ module Resolve = Bap_primus_lisp_resolve
 module Program = Bap_primus_lisp_program
 module Type = Bap_primus_lisp_type
 
-type defkind = Func | Macro | Const | Subst | Meth | Para
+type defkind = Func | Macro | Const | Subst | Meth | Para | Inpkg | Defpkg
 
 type format_error =
   | Expect_digit
@@ -36,7 +37,7 @@ type parse_error =
   | Bad_ascii
   | Bad_hex
   | Unknown_subst_syntax
-  | Unresolved of defkind * string * Resolve.resolution
+  | Unresolved of defkind * KB.Name.t * Resolve.resolution
 
 
 exception Parse_error of parse_error * tree list
@@ -90,6 +91,7 @@ module Parse = struct
     List.concat_map cs ~f:(function
         | {data=List _} as cs -> [cs]
         | {data=Atom x} as atom ->
+          let x = KB.Name.read ~package:(Program.package prog) x in
           match Resolve.subst prog subst x () with
           | None -> [atom]
           | Some (Error s) -> fail (Unresolved (Subst,x,s)) atom
@@ -97,12 +99,12 @@ module Parse = struct
             Def.Subst.body d |> List.map ~f:(fun tree ->
                 {tree with id = atom.id}))
 
-  let let_var : tree -> var = function
+  let let_var prog : tree -> var = function
     | {data=List _} as s -> fail Bad_let_binding s
-    | {data=Atom x; id; eq} as s -> match Var.read id eq x with
+    | {data=Atom x; id; eq} as s ->
+      match Var.read ~package:(Program.package prog) id eq x with
       | Error e -> fail (Bad_var_literal e) s
       | Ok var -> var
-
 
   let fmt prog fmt tree =
     let fmt = unqoute fmt in
@@ -144,6 +146,8 @@ module Parse = struct
 
 
   let parse prog tree =
+    let package = Program.package prog in
+    let qualify = KB.Name.read ~package in
     let rec exp : tree -> ast = fun tree ->
       let cons data : ast = {data; id=tree.id; eq=tree.eq} in
 
@@ -156,7 +160,7 @@ module Parse = struct
           List.fold_right bs ~init:(seq e es) ~f:(fun b e ->
               match b with
               | {data=List [v; x]; id; eq} ->
-                {data=Let (let_var v,exp x,e); id; eq}
+                {data=Let (let_var prog v,exp x,e); id; eq}
               | s -> fail Bad_let_binding s)
         | _ -> bad_form "let" tree in
 
@@ -170,7 +174,7 @@ module Parse = struct
         | _ -> bad_form "msg" tree in
 
       let set = function
-        | [v; e] -> cons (Set (let_var v, exp e))
+        | [v; e] -> cons (Set (let_var prog v, exp e))
         | _ -> bad_form "set" tree in
 
       let prog_ es = cons (Seq (exps es)) in
@@ -189,7 +193,8 @@ module Parse = struct
         "error", error;
       ] in
 
-      let macro op args = match Resolve.macro prog macro op args with
+      let macro op args =
+        match Resolve.macro prog macro op args with
         | None -> cons (App (Dynamic op, exps args))
         | Some (Ok (macro,bs)) -> exp (Def.Macro.apply macro bs)
         | Some (Error err) -> fail (Unresolved (Macro,op,err)) tree in
@@ -199,12 +204,13 @@ module Parse = struct
         | {data=List _} as s :: _  -> fail Bad_app s
         | {data=Atom op} :: exps ->
           match List.Assoc.find ~equal:String.equal forms op with
-          | None -> macro op (expand prog exps)
+          | None -> macro (qualify op) (expand prog exps)
           | Some form -> form exps in
 
       let sym ({id;eq;data=r} as s)  =
-        if is_symbol r then cons (Sym { s with data = symbol s.data})
-        else match Var.read id eq r with
+        if is_symbol r
+        then cons (Sym { s with data = qualify@@symbol s.data})
+        else match Var.read ~package id eq r with
           | Error e -> fail (Bad_var_literal e) tree
           | Ok v -> cons (Var v) in
 
@@ -215,8 +221,10 @@ module Parse = struct
 
       let start : tree -> ast = function
         | {data=List xs} -> list xs
-        | {data=Atom x} as t -> match Resolve.const prog const x () with
-          | None -> lit {t with data=x}
+        | {data=Atom ux} as t ->
+          let x = KB.Name.read ~package ux in
+          match Resolve.const prog const x () with
+          | None -> lit {t with data=ux}
           | Some Error err -> fail (Unresolved (Const,x,err)) t
           | Some (Ok (const,())) -> exp (Def.Const.value const) in
       start tree
@@ -224,8 +232,8 @@ module Parse = struct
     and exps : tree list -> ast list = fun xs -> List.map xs ~f:exp in
     exp tree
 
-  let params = function
-    | {data=List vars} -> List.map ~f:let_var vars
+  let params prog = function
+    | {data=List vars} -> List.map ~f:(let_var prog) vars
     | s -> fail Bad_param_list s
 
   let atom = function
@@ -242,8 +250,9 @@ module Parse = struct
     with Attribute.Failure (err,trees) ->
       raise (Attribute_parse_error (err,trees,tree))
 
-  let parse_declarations attrs =
-    List.fold ~init:attrs ~f:Attribute.parse
+  let parse_declarations prog attrs =
+    let package = Program.package prog in
+    List.fold ~init:attrs ~f:(Attribute.parse ~package)
 
   let ascii xs =
     let rec loop xs acc = match xs with
@@ -289,17 +298,20 @@ module Parse = struct
     Attribute.Set.get Context.t attrs
 
   let defun ?docs ?(attrs=[]) name p body prog gattrs tree =
-    let attrs = parse_declarations gattrs attrs in
+    let attrs = parse_declarations prog gattrs attrs in
     let es = List.map ~f:(parse (constrained prog attrs)) body in
+    let params = params prog in
     Program.add prog func @@ Def.Func.create ?docs ~attrs name (params p) {
       data = Seq es;
       id = tree.id;
       eq = tree.eq;
     } tree
 
-  let defmethod ?docs ?(attrs=[]) name p body prog gattrs tree =
-    let attrs = parse_declarations gattrs attrs in
+  let defmethod ?docs ?(attrs=[]) name' p body prog gattrs tree =
+    let attrs = parse_declarations prog gattrs attrs in
     let es = List.map ~f:(parse (constrained prog attrs)) body in
+    let params = params prog in
+    let name = KB.Name.show@@KB.Name.read ~package:"primus" name' in
     Program.add prog meth @@ Def.Meth.create ?docs ~attrs name (params p) {
       data = Seq es;
       id = tree.id;
@@ -309,12 +321,12 @@ module Parse = struct
   let defmacro ?docs ?(attrs=[]) name ps body prog gattrs tree =
     Program.add prog macro @@
     Def.Macro.create ?docs
-      ~attrs:(parse_declarations gattrs attrs) name
+      ~attrs:(parse_declarations prog gattrs attrs) name
       (metaparams ps)
       body tree
 
   let defparameter ?docs ?(attrs=[]) name body prog gattrs tree =
-    let attrs = parse_declarations gattrs attrs in
+    let attrs = parse_declarations prog gattrs attrs in
     Program.add prog para @@
     Def.Para.create ?docs
       ~attrs name (parse (constrained prog attrs) body) tree
@@ -325,13 +337,27 @@ module Parse = struct
       | _ -> None in
     Program.add prog subst @@
     Def.Subst.create ?docs
-      ~attrs:(parse_declarations gattrs attrs) name
+      ~attrs:(parse_declarations prog gattrs attrs) name
       (reader syntax body) tree
 
   let defconst ?docs ?(attrs=[]) name body prog gattrs tree =
     Program.add prog const @@
     Def.Const.create ?docs
-      ~attrs:(parse_declarations gattrs attrs) name ~value:body tree
+      ~attrs:(parse_declarations prog gattrs attrs) name ~value:body tree
+
+
+  let use_package ?package prog packages =
+    List.map packages ~f:atom |>
+    List.fold ~init:prog ~f:(fun prog from ->
+        Program.use_package prog ?target:package from)
+
+  let defpackage name prog trees =
+    List.fold ~init:prog trees ~f:(fun prog -> function
+        | {data=List ({data=Atom ":use"} :: packages)} ->
+          use_package ~package:name prog packages
+        | {data=List ({data=Atom ":documentation"} :: _)} ->
+          prog
+        | s -> fail (Bad_def Defpkg) s)
 
   let toplevels = String.Set.of_list [
       "declare";
@@ -342,18 +368,34 @@ module Parse = struct
       "defun";
       "defmethod";
       "require";
+      "in-package";
+      "defpackage";
+      "use-package";
     ]
 
-  let declaration gattrs s = match s with
+  let declaration prog gattrs s = match s with
+    | {data = List [
+        {data=Atom "in-package"};
+        {data=Atom package}]} ->
+      Program.with_package prog package, gattrs
     | {data=List ({data=Atom "declare"} :: attrs)} ->
-      parse_declarations gattrs attrs
+      prog,parse_declarations prog gattrs attrs
     | {data=List ({data=Atom toplevel} as here :: _)} ->
-      if Set.mem toplevels toplevel then gattrs
+      if Set.mem toplevels toplevel then prog,gattrs
       else fail Unknown_toplevel here
     | _ -> fail Bad_toplevel s
 
 
   let stmt gattrs state s = match s with
+    | {data = List ({data=Atom "defpackage"} ::
+                    {data=Atom name} :: elts)} ->
+      defpackage name state elts
+    | {data = List ({data=Atom "use-package"} :: elts)} ->
+      use_package state elts
+    | {data = List [
+        {data=Atom "in-package"};
+        {data=Atom package}]} ->
+      Program.with_package state package
     | {data = List (
         {data=Atom "defun"} ::
         {data=Atom name} ::
@@ -453,6 +495,15 @@ module Parse = struct
 
 
   let meta gattrs state s = match s with
+    | {data = List [
+        {data=Atom "in-package"};
+        {data=Atom package}]} ->
+      Program.with_package state package
+    | {data = List ({data=Atom "defpackage"} ::
+                    {data=Atom name} :: elts)} ->
+      defpackage name state elts
+    | {data = List ({data=Atom "use-package"} :: elts)} ->
+      use_package state elts
     | {data=List [
         {data=Atom "defconstant"};
         {data=Atom name};
@@ -540,16 +591,20 @@ module Parse = struct
     | {data=List ({data=Atom "defconst"}::_)} -> fail (Bad_def Const) s
     | _ -> state
 
-  let declarations =
-    List.fold ~init:Attribute.Set.empty ~f:declaration
+  let declarations prog trees =
+    snd@@List.fold trees ~f:(fun (prog,attrs) tree ->
+        declaration prog attrs tree)
+      ~init:(prog,Attribute.Set.empty)
 
   let source constraints source =
     let init = Program.with_context Program.empty constraints in
     let init = Program.with_sources init source in
     let state = Source.fold source ~init ~f:(fun _ trees state ->
-        List.fold trees ~init:state ~f:(meta (declarations trees))) in
+        let state = Program.reset_package state in
+        List.fold trees ~init:state ~f:(meta (declarations state trees))) in
     Source.fold source ~init:state ~f:(fun _ trees state ->
-        List.fold trees ~init:state ~f:(stmt (declarations trees)))
+        let state = Program.reset_package state in
+        List.fold trees ~init:state ~f:(stmt (declarations state trees)))
 end
 
 module Load = struct
@@ -655,6 +710,8 @@ let string_of_defkind = function
   | Macro -> "macro"
   | Const -> "constant"
   | Subst -> "substitution"
+  | Inpkg -> "in-package"
+  | Defpkg -> "defpackage"
 
 
 let string_of_def_syntax = function
@@ -664,6 +721,8 @@ let string_of_def_syntax = function
   | Macro -> "(defmacro <ident> (<ident> ...) [<docstring>] [<declarations>] <exp>)"
   | Const -> "(defconstant <ident> [<docstring>] [<declarations>] <atom>)"
   | Subst -> "(defsubst <ident> [<docstring>] [<declarations>] [:<syntax>] <atom> ...)"
+  | Inpkg -> "(in-package <ident>)"
+  | Defpkg -> "(defpackage <ident> (:use <package-list>) (:documentation <docstring>))"
 
 let pp_parse_error ppf err = match err with
   | Bad_var_literal e ->
@@ -691,11 +750,12 @@ let pp_parse_error ppf err = match err with
   | Unknown_subst_syntax ->
     fprintf ppf "unknown substitution syntax"
   | Unresolved (k,n,r) ->
-    fprintf ppf "unable to resolve %s `%s', because %a"
-      (string_of_defkind k) n Resolve.pp_resolution r
+    fprintf ppf "unable to resolve %s `%a', because %a"
+      (string_of_defkind k) KB.Name.pp n Resolve.pp_resolution r
   | Bad_def def ->
     fprintf ppf "bad %s definition, expect %s"
       (string_of_defkind def) (string_of_def_syntax def)
+
 
 let pp_request ppf req = match req with
   | Cmdline ->

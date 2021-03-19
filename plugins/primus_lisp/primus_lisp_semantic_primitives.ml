@@ -130,6 +130,10 @@ let export = Primus.Lisp.Type.Spec.[
     "load-byte", one int @-> byte,
     "(load-byte PTR) loads one byte from the address PTR";
 
+    "memory-read", one int @-> byte,
+    "(memory-read PTR) loads one byte from the address PTR \
+     (synonymous to load-byte)";
+
     "load-word", one int @-> int,
     "(load-word PTR) loads one word from the address PTR";
 
@@ -169,16 +173,33 @@ let export = Primus.Lisp.Type.Spec.[
 
     "cast-unsigned", tuple [int; a] @-> b,
     "(cast-unsigned S X) performs unsigned extension of X to the size of S bits";
+
+    "extract", tuple [any; any; any] @-> any,
+    "(extract HI LO X) extracts bits from HI to LO (both ends
+    including) of X, the returned value has HI-LO+1 bits. ";
+
+    "concat", (all any @-> any),
+    "(concat X Y Z ...) concatenates words X, Y, Z, ... into one big word";
+
   ]
 
 type KB.conflict += Illformed of string
+                 | Failed_primitive of KB.Name.t * unit Theory.value list * string
 
 let illformed fmt =
   Format.kasprintf (fun msg ->
       KB.fail (Illformed msg)) fmt
 
+let string_of_error name args err =
+  Format.asprintf
+    "Failed to apply primitive %a: %s@\nApplied as:@\n@[<hov2>(%a %a)@]"
+    KB.Name.pp name err KB.Name.pp name
+    Format.(pp_print_list ~pp_sep:pp_print_space KB.Value.pp) args
+
 let () = KB.Conflict.register_printer (function
-    | Illformed msg-> Some ("illformed lisp program " ^ msg)
+    | Illformed msg -> Some ("illformed lisp program " ^ msg)
+    | Failed_primitive (name,args,err) ->
+      Some (string_of_error name args err)
     | _ -> None)
 
 
@@ -232,6 +253,7 @@ module Primitives(CT : Theory.Core) = struct
     | _ -> illformed "requires exactly three arguments"
 
   let const x = KB.Value.get Primus.Lisp.Semantics.static x
+  let symbol x = KB.Value.get Primus.Lisp.Semantics.symbol x
   let set_const v x =
     KB.Value.put Primus.Lisp.Semantics.static v (Some x)
   let const_int s x = CT.int s x >>| fun v -> set_const v x
@@ -240,22 +262,34 @@ module Primitives(CT : Theory.Core) = struct
   let false_ = CT.b0 >>| fun v -> set_const v Bitvec.zero
   let const_bool x = if x then true_ else false_
 
+  let bool b =
+    let s = Theory.Bitv.define 1 in
+    let b1 = const_int s Bitvec.M1.one
+    and b0 = const_int s Bitvec.M1.zero in
+    match const b with
+    | Some r ->
+      if Bitvec.(equal r zero)
+      then b0
+      else b1
+    | None -> CT.ite !!b b1 b0
+
+  let intern name =
+    KB.Symbol.intern name Theory.Value.cls >>|
+    KB.Object.id >>| Int63.to_int64 >>|
+    Bitvec.M64.int64
+
+
   let bitv x =
     match Theory.Value.resort Theory.Bitv.refine x with
     | Some x -> !!x
     | None -> match Theory.Value.resort Theory.Bool.refine x with
-      | None -> illformed "defined for bits or bools"
-      | Some b ->
-        let s = Theory.Bitv.define 1 in
-        let b1 = const_int s Bitvec.M1.one
-        and b0 = const_int s Bitvec.M1.zero in
-        match const b with
-        | Some r ->
-          if Bitvec.(equal r zero)
-          then b0
-          else b1
-        | None -> CT.ite !!b b1 b0
-
+      | Some b -> bool b
+      | None -> match symbol x with
+        | None -> illformed "defined for bitvecs, bools, or syms"
+        | Some name ->
+          let s = Theory.Bitv.define 64 in
+          let x = KB.Value.refine x s in
+          intern name >>| set_const x
 
   let nbitv = KB.List.map ~f:bitv
 
@@ -399,8 +433,9 @@ module Primitives(CT : Theory.Core) = struct
     bitv dst >>= fun dst ->
     bitv data >>= fun data ->
     let mem = Theory.Target.data t in
+    let byte = Theory.Mem.vals (Theory.Var.sort mem) in
     let (:=) = CT.set in
-    CT.(mem := store (var mem) !!dst !!data)
+    CT.(mem := store (var mem) !!dst (low byte !!data))
 
   let store_word t xs =
     binary xs @@ fun dst data ->
@@ -455,20 +490,14 @@ module Primitives(CT : Theory.Core) = struct
       | None -> !!(empty s)
       | Some addr -> forget@@const_int s addr
 
-  let get_symbol sym =
-    match KB.Value.get Primus.Lisp.Semantics.symbol sym with
-    | Some sym -> sym
-    | None -> match KB.Value.get pslot sym with
-      | Some (Atom name) -> name ^ ":symbol"
-      | _ -> "#unknown:symbol"
-
-
   let set_symbol sym x =
-    let sym = get_symbol sym in
-    bitv x >>= fun x ->
-    let s = sort x in
-    let var = Theory.Var.define s sym in
-    CT.set var !!x
+    match KB.Value.get Primus.Lisp.Semantics.symbol sym with
+    | None -> pass
+    | Some sym ->
+      bitv x >>= fun x ->
+      let s = sort x in
+      let var = Theory.Var.define s sym in
+      CT.set var !!x
 
   let mk_cast cast xs =
     binary xs @@ fun sz x ->
@@ -481,8 +510,13 @@ module Primitives(CT : Theory.Core) = struct
   let low = mk_cast CT.low
   let high = mk_cast CT.high
 
+  let target lbl =
+    KB.collect Primus.Lisp.Semantics.definition lbl >>= function
+    | None -> Theory.Label.target lbl
+    | Some lbl -> Theory.Label.target lbl
+
   let dispatch lbl name args =
-    Theory.Label.target lbl >>= fun t ->
+    target lbl >>= fun t ->
     let bits = Theory.Target.bits t in
     let module Z = struct
       include Bitvec.Make(struct
@@ -1022,16 +1056,23 @@ let provide () =
       comment "implements semantics for the core primitives"
     end);
   List.iter export ~f:(fun (name,types,docs) ->
-      Primus.Lisp.Semantics.declare ~types ~docs name);
+      Primus.Lisp.Semantics.declare ~types ~docs ~package:"core" name);
   let (let*?) x f = x >>= function
     | None -> !!nothing
     | Some x -> f x in
   KB.promise Theory.Semantics.slot @@ fun obj ->
   let*? name = KB.collect Lisp.name obj in
   let*? args = KB.collect Lisp.args obj in
-  Theory.instance () >>= Theory.require >>= fun (module CT) ->
-  let module P = Primitives(CT) in
-  P.dispatch obj name args
+  if String.equal (KB.Name.package name) "core"
+  then
+    Theory.instance () >>= Theory.require >>= fun (module CT) ->
+    let module P = Primitives(CT) in
+    KB.catch (P.dispatch obj (KB.Name.unqualified name) args) @@ function
+    | Illformed err ->
+      KB.fail (Failed_primitive (name,args,err))
+    | other -> KB.fail other
+  else !!nothing
+
 
 let enable_extraction () =
   Theory.declare ~provides:["extraction"; "primus-lisp"; "lisp"]

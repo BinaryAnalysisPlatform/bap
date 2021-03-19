@@ -22,12 +22,12 @@ exception Failure of error * tree list
 
 type 'a attr = {
   slot : (cls,'a) KB.slot;
-  parse : tree list -> 'a;
+  parse : package:string -> tree list -> 'a;
 }
 
 type 'a t = 'a attr
 
-type parser = Parser of (set -> tree list -> set)
+type parser = Parser of (string -> set -> tree list -> set)
 
 let parsers : (Name.t, parser) Hashtbl.t =
   Hashtbl.create (module Name)
@@ -56,9 +56,9 @@ end
 
 type Parse.error += Conflict of KB.conflict
 
-let make_parser {parse; slot} attrs tree =
+let make_parser {parse; slot} package attrs tree =
   let merge = KB.Domain.join @@ KB.Slot.domain slot in
-  match merge (KB.Value.get slot attrs) (parse tree) with
+  match merge (KB.Value.get slot attrs) (parse ~package tree) with
   | Ok value -> KB.Value.put slot attrs value
   | Error err -> Parse.fail (Conflict err) tree
 
@@ -76,23 +76,27 @@ let expected_parsers () =
   Hashtbl.keys parsers |> List.map ~f:Name.show |>
   String.concat ~sep:" | "
 
-let parse s attrs name values = match Hashtbl.find parsers name with
+let parse package s attrs name values = match Hashtbl.find parsers name with
   | None -> raise (Unknown_attr (Name.show name,s))
-  | Some (Parser run) -> run attrs values
+  | Some (Parser run) -> run package attrs values
 
-let parse attrs = function
+let parse ~package attrs = function
   | {data=List ({data=Atom name} as s :: values)} ->
-    let name = Name.read ~package:"primus" name in
-    parse s attrs name values
+    let name = Name.read ~package:"core" name in
+    parse package s attrs name values
+  | {data=Atom name} as s ->
+    let name = Name.read ~package:"core" name in
+    parse package s attrs name []
   | s -> Parse.(fail Expect_list) [s]
+
 
 module Set = struct
   let get {slot} = KB.Value.get slot
   module Self = (val KB.Value.derive cls)
 
-  let slot = KB.Class.property Theory.Program.cls "primus-attrs" Self.domain
+  let slot = KB.Class.property Theory.Program.cls "attributes" Self.domain
       ~public:true
-      ~package:"bap"
+      ~package:"primus"
       ~persistent:(KB.Persistent.of_binable (module Self))
 
   include Self

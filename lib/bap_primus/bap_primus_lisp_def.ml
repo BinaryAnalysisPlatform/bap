@@ -42,6 +42,15 @@ type const = {
   value : string;
 }
 
+type place = Theory.Var.Top.t
+
+type semafun = Theory.Label.t -> Theory.Value.Top.t list -> Theory.Semantics.t KB.t
+
+type sema = {
+  apply : semafun;
+  types : Type.signature;
+}
+
 type para = {
   default : ast;
 }
@@ -78,6 +87,14 @@ let create data tree = {
   eq = tree.eq;
 }
 
+let rename def name : 'a t = {
+  def with data = {
+    def.data with meta = {def.data.meta with name}
+  }
+}
+
+
+
 module Func = struct
   let args = field args
   let body = field body
@@ -96,12 +113,34 @@ end
 
 module Meth = Func
 
+module Sema = struct
+  type body = semafun
+
+  let create ?(docs="") ~types name apply : sema t = {
+    data = {
+      meta = {
+        name = KB.Name.show name;
+        docs;
+        attrs=Attribute.Set.empty};
+      code = {apply; types};
+    };
+    id = Source.Id.null;
+    eq = Source.Eq.null;
+  }
+
+  let types : sema t -> Type.signature = fun {data={code}} -> code.types
+  let apply {data={code}} = code.apply
+end
+
 module Signal = struct
   type nonrec t = signal t
 
   let create ?(docs="") ~types name : t = {
     data = {
-      meta = {name; docs; attrs=Attribute.Set.empty};
+      meta = {
+        name;
+        docs;
+        attrs=Attribute.Set.empty};
       code = types;
     };
     id = Source.Id.null;
@@ -110,6 +149,7 @@ module Signal = struct
 
   let signature {data={code}} = code
 end
+
 
 
 module Para =  struct
@@ -200,9 +240,13 @@ end
 
 module Primitive = struct
   type nonrec 'a t = 'a primitive t
-  let create ?(docs="") name code = {
+  let create ?(docs="") ?package name code = {
     data = {
-      meta = {name;docs; attrs=Attribute.Set.empty};
+      meta = {
+        name = KB.Name.show@@KB.Name.read ?package name;
+        docs;
+        attrs = Attribute.Set.empty
+      };
       code;
     };
     id = Id.null;
@@ -213,6 +257,22 @@ module Primitive = struct
 end
 
 
+module Place = struct
+  let create ?package name var = {
+    data = {
+      meta = {
+        name = KB.Name.show@@KB.Name.read ?package name;
+        docs = "";
+        attrs = Attribute.Set.empty;
+      };
+      code = Theory.Var.forget var;
+    };
+    id = Id.null;
+    eq = Eq.null;
+  }
+
+  let location p = p.data.code
+end
 
 module type Primitives = functor (Machine : Machine) ->  sig
   val defs : unit -> value Machine.t Primitive.t list
@@ -227,9 +287,12 @@ module Closure = struct
          types=None;
        }}}
 
-  let create ?types ?(docs="") name lambda = {
+  let create ?types ?(docs="") ?(package="core") name lambda = {
     data = {
-      meta = {name;docs; attrs=Attribute.Set.empty};
+      meta = {
+        name = KB.Name.show@@KB.Name.read ~package name;
+        docs;
+        attrs=Attribute.Set.empty};
       code = {
         types;
         lambda;

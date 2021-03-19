@@ -2,6 +2,7 @@
 (require memory)
 (require types)
 
+(in-package posix)
 
 (defun fputc (char stream)
   (declare (external "fputc" "putc"))
@@ -74,12 +75,14 @@
     (or failure written)))
 
 (defun input-item-nth-char (ptr size item desc i)
+  (declare (visibility :private))
   (let ((c (fgetc desc)))
     (if (= c -1) 0
-      (memory-write (+ ptr (* size item) i) (cast char c))
-      1)))
+        (memory-write (+ ptr (* size item) i) (cast char c))
+        1)))
 
 (defun input-item (buf size item fd)
+  (declare (visibility :private))
   (let ((i 0))
     (while (and (< i size)
                 (input-item-nth-char buf size item fd i))
@@ -105,6 +108,7 @@
   (channel-input stream))
 
 (defun terminate-string-and-return-null (ptr)
+  (declare (visibility :private))
   (memory-write ptr 0:8)
   0)
 
@@ -131,6 +135,6 @@
   (declare (external "getchar"))
   (fgetc *standard-input*))
 
-(defmethod machine-kill ()
+(defmethod primus:machine-kill ()
   (channel-flush *standard-output*)
   (channel-flush *standard-error*))

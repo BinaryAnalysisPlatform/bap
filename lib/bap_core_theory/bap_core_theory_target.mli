@@ -81,6 +81,7 @@ module Role : sig
   module Register : sig
     val general : t
     val special : t
+    val pseudo : t
     val integer : t
     val floating : t
     val vector : t
@@ -99,6 +100,10 @@ module Role : sig
     val parity_flag : t
     val hardware : t
     val reserved : t
+    val function_argument : t
+    val function_return : t
+    val caller_saved : t
+    val callee_saved : t
   end
 
   include KB.Enum.S with type t := t

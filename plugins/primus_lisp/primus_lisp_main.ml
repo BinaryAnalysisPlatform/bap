@@ -311,7 +311,7 @@ module Semantics = struct
       end);
     KB.promise Lisp.Semantics.name @@ fun this ->
     KB.collect Insn.slot this >>|? fun insn ->
-    let name = sprintf "%s:%s" (Insn.encoding insn) (Insn.name insn) in
+    let name = KB.Name.create ~package:(Insn.encoding insn) (Insn.name insn) in
     Some name
 
   let strip_extension = String.chop_suffix ~suffix:".lisp"
@@ -326,7 +326,7 @@ module Semantics = struct
 
 
   let collect_features sites =
-    List.fold sites ~init:(sites,["init"]) ~f:(fun (paths,fs) site ->
+    List.fold sites ~init:(sites,["core"]) ~f:(fun (paths,fs) site ->
         if Sys.file_exists site
         then if Sys.is_directory site
           then site::paths,include_files fs site
@@ -425,7 +425,7 @@ let () =
       if !!enable_typecheck then
         Project.register_pass' ~deps:["api"] ~autorun:true typecheck;
       let paths = [Filename.current_dir_name] @ !!libs @ library_paths in
-      let features = "init" :: !!features in
+      let features = "core" :: !!features in
       Primus.Components.register_generic ~package:"bap" "lisp-type-checker"
         (module TypeErrorSummary)
         ~desc:"Typechecks program and outputs the summary in the standard output.";
