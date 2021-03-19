@@ -420,13 +420,6 @@ let pp_callgraph ppf g =
         | Defun id -> asprintf "%a" Id.pp id)
     g
 
-let pp_term pp_exp ppf = function
-  | {data={exp; typ=Any}} ->
-    fprintf ppf "@[<v2>%a@]" pp_exp exp
-  | {data={exp; typ}} ->
-    fprintf ppf "@[<v2>%a:%a@]" pp_exp exp Lisp.Type.pp typ
-let pp_word = pp_term Z.pp_print
-let pp_var = pp_term KB.Name.pp
 
 let rec concat_prog p =
   List.concat_map p ~f:(function
@@ -434,13 +427,35 @@ let rec concat_prog p =
       | x -> [x])
 
 module Ast = struct
+  let package = ref "user"
+
+  let with_package p ~f =
+    let p' = !package in
+    package := p;
+    let x = f () in
+    package := p';
+    x
+
+  let pp_name ppf name =
+    if String.equal (KB.Name.package name) !package
+    then Format.fprintf ppf "%s" (KB.Name.unqualified name)
+    else KB.Name.pp ppf name
+
+  let pp_term pp_exp ppf = function
+    | {data={exp; typ=Any}} ->
+      fprintf ppf "@[<v2>%a@]" pp_exp exp
+    | {data={exp; typ}} ->
+      fprintf ppf "@[<v2>%a:%a@]" pp_exp exp Lisp.Type.pp typ
+  let pp_word = pp_term Z.pp_print
+  let pp_var = pp_term pp_name
+
   let rec pp ppf {data} =
     fprintf ppf "@[<v2>%a@]" pp_exp data
   and pp_exp ppf = function
     | Int x ->
       pp_word ppf x
     | Sym x ->
-      KB.Name.pp ppf x.data
+      pp_name ppf x.data
     | Var x ->
       pp_var ppf x
     | Ite (c,t,e) ->
@@ -462,7 +477,7 @@ module Ast = struct
     | Err msg ->
       fprintf ppf "@[<2>(error@ %s)@]" msg
   and pp_binding ppf = function
-    | Dynamic x -> fprintf ppf "%a" KB.Name.pp x
+    | Dynamic x -> fprintf ppf "%a" pp_name x
     | Static _ -> fprintf ppf "<lambda>"
   and pp_exps ppf xs = pp_print_list ~pp_sep:pp_print_space pp ppf xs
   and pp_fmt ppf xs = pp_print_list pp_fmt_elt ppf xs
@@ -478,13 +493,13 @@ end
 let pp_def ppf d =
   fprintf ppf "@[<2>(defun %s @[<2>(%a)@]@ %a)@]@,"
     (Def.name d)
-    (pp_print_list ~pp_sep:pp_print_space pp_var) (Def.Func.args d)
+    (pp_print_list ~pp_sep:pp_print_space Ast.pp_var) (Def.Func.args d)
     Ast.pp_prog (Def.Func.body d)
 
 let pp_met ppf d =
   fprintf ppf "@[<2>(defmethod %s @[<2>(%a)@]@ %a)@]@,"
     (Def.name d)
-    (pp_print_list ~pp_sep:pp_print_space pp_var) (Def.Meth.args d)
+    (pp_print_list ~pp_sep:pp_print_space Ast.pp_var) (Def.Meth.args d)
     Ast.pp_prog (Def.Meth.body d)
 
 let pp_par ppf d =
@@ -502,8 +517,9 @@ let pp_package ppf {pars; mets; defs;} =
 
 let pp ppf prog =
   Map.iteri prog.library ~f:(fun ~key:package ~data:pkg ->
-      Format.fprintf ppf "(in-package %s)@\n%a@\n" package
-        pp_package pkg)
+      Ast.with_package package ~f:(fun () ->
+          Format.fprintf ppf "(in-package %s)@\n%a@\n" package
+            pp_package pkg))
 
 let pp_ast ppf ast = Ast.pp ppf ast
 
