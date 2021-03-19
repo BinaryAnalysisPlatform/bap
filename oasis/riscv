@@ -1,0 +1,24 @@
+Flag riscv
+ Description: Build Riscv lifter
+ Default: false
+
+Library "bap-riscv"
+ Build$:           flag(everything) || flag(riscv)
+ XMETADescription: common definitions for Riscv targets
+ Path: lib/bap_riscv
+ BuildDepends: core_kernel, bap-knowledge, bap-core-theory
+ FindlibName: bap-riscv
+ Modules: Bap_riscv_target
+
+Library riscv_plugin
+  XMETADescription: provide Riscv target
+  Path:             plugins/riscv
+  Build$:           flag(everything) || flag(riscv)
+  BuildDepends:     core_kernel, ppx_bap, ogre,
+                    bap-core-theory, bap-knowledge, bap-main,
+                    bap, bap-riscv, bap-c, bap-abi, bap-api,
+                    monads
+  FindlibName:      bap-plugin-riscv
+  InternalModules:  Riscv_main
+  DataFiles:        semantics/*.lisp ($datadir/bap/primus/semantics)
+  XMETAExtraLines:  tags="riscv, riscv64, riscv32"
