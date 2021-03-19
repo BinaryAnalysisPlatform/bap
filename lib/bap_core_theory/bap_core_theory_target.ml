@@ -27,6 +27,7 @@ module Role = struct
   module Register = struct
     let general = declare ~package "general"
     let special = declare ~package "special"
+    let pseudo = declare ~package "pseudo"
     let integer = declare ~package "integer"
     let floating = declare ~package "floating"
     let vector = declare ~package "vector"

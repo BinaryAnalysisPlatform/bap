@@ -447,10 +447,11 @@ include Printable.Make(struct
 let hexdump t = Format.asprintf "%a" pp_hex t
 
 
-let domain = KB.Domain.optional ~inspect:sexp_of_t "mem"
+let domain = KB.Domain.optional "mem"
     ~equal:(fun x y ->
         Addr.equal x.addr y.addr &&
         Int.equal x.size y.size)
+    ~inspect:(fun x -> Sexp.Atom (String.strip (to_string x)))
 
 let slot = KB.Class.property ~package:"bap"
     Theory.Program.cls "mem" domain

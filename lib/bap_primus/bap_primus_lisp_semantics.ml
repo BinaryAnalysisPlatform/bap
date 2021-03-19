@@ -156,7 +156,6 @@ let symbol =
     ~equal:String.equal
     ~inspect:(fun x -> Sexp.Atom x)
 
-
 let static_slot =
   KB.Class.property Theory.Value.cls "static-value"
     ~package
@@ -187,6 +186,20 @@ let (!) = KB.(!!)
 
 let empty = Theory.Effect.empty Theory.Effect.Sort.bot
 
+let intern name =
+  let open KB.Syntax in
+  KB.Symbol.intern name Theory.Value.cls >>|
+  KB.Object.id >>| Int63.to_int64 >>|
+  Bitvec.M64.int64
+
+let make_reg var =
+  let open KB.Syntax in
+  let empty = Theory.Value.empty (Theory.Var.sort var) in
+  let name = Theory.Var.name var in
+  intern name >>| fun value ->
+  let res = KB.Value.put symbol empty (Some name) in
+  KB.Value.put static_slot res (Some value)
+
 let sym str =
   let v = update_value empty @@ fun v ->
     KB.Value.put symbol v (Some str) in
@@ -194,9 +207,7 @@ let sym str =
   | "nil" -> Meta.return@@set_static v Bitvec.zero
   | name ->
     Meta.lift @@
-    KB.Symbol.intern name Theory.Value.cls >>|
-    KB.Object.id >>| Int63.to_int64 >>|
-    Bitvec.M64.int64 >>|
+    intern name >>|
     set_static v
 
 let is_machine_var t v =
@@ -401,9 +412,20 @@ module Prelude(CT : Theory.Core) = struct
       Env.del v >>= fun () ->
       full [!!eff; data [v := !(res eff)]] !!(res eff)
 
+  let index_by_name regs =
+    Set.to_sequence regs |>
+    Seq.map ~f:(fun v -> Theory.Var.name v, v) |>
+    Map.of_sequence_exn (module String)
+
+
   let reify ppf prog defn target name args =
     let word = Theory.Target.bits target in
     let var ?t n = make_var ?t target n in
+    let regs roles = Theory.Target.regs target ~roles in
+    let consts = regs [Theory.Role.Register.constant] in
+    let pseudos = regs [Theory.Role.Register.pseudo] in
+    let zeros = regs [Theory.Role.Register.zero] in
+    let pseudo_regs = index_by_name pseudos in
     let rec eval : ast -> unit Theory.Effect.t Meta.t = function
       | {data=Int {data={exp=x; typ=Type m}}} -> bigint x m
       | {data=Int {data={exp=x}}} -> bigint x word
@@ -508,17 +530,29 @@ module Prelude(CT : Theory.Core) = struct
         Env.lookup v >>= function
         | Some v -> pure !!v
         | None -> match lookup_parameter prog v with
-          | None -> pure@@Meta.lift@@CT.var v
-          | Some def ->
-            let* eff = eval def in
-            assign target v eff
+          | Some def -> eval def >>= assign target v
+          | None -> match Map.find pseudo_regs (Theory.Var.name v) with
+            | None -> pure@@Meta.lift@@CT.var v
+            | Some v -> reg v
+    and reg v =
+      if Set.mem zeros v
+      then bigint Z.zero word
+      else Meta.lift@@make_reg v >>= fun v ->
+        call ~toplevel:true "get-register" [v]
+    and arg x =
+      match KB.Value.get symbol x with
+      | None -> !!x
+      | Some sym -> match Map.find pseudo_regs sym with
+        | None -> !!x
+        | Some v -> reg v >>| res
     and set_ v x =
-      let* eff = eval x in
       Scope.lookup v >>= function
-      | Some v ->
-        assign target ~local:true v eff
-      | None ->
-        assign target v eff
+      | Some v -> eval x >>= assign target ~local:true v
+      | None when Set.mem consts v -> !!empty
+      | None when Set.mem pseudos v ->
+        Meta.lift@@make_reg v >>= fun v ->
+        call ~toplevel:true "set-register" [v]
+      | None -> eval x >>= assign target v
     and let_ ?(t=word) v x b =
       let* xeff = eval x in
       let orig = Theory.Var.define (bits t) v in
@@ -537,8 +571,9 @@ module Prelude(CT : Theory.Core) = struct
           !!aeff;
           !!beff;
         ] !!(res beff) in
+    let desugar args = Meta.List.map args ~f:arg in
     match args with
-    | Some args -> call ~toplevel:true name args
+    | Some args -> desugar args >>= call ~toplevel:true name
     | None ->
       resolve prog Key.func name >>= function
       | Some fn ->

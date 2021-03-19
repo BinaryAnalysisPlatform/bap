@@ -1155,6 +1155,12 @@ module Theory : sig
     val scoped : 'a Value.sort -> ('a t -> 'b pure) -> 'b pure
 
 
+    (** [printf "%a" Theory.Var.pp v] pretty-prints the identifier
+        of the variable [v].
+
+        @since 2.3.0  *)
+    val pp : Format.formatter -> 'a t -> unit
+
     (** Variable identifiers.  *)
     module Ident : sig
       type t = ident [@@deriving bin_io, compare, sexp]
@@ -1850,6 +1856,17 @@ module Theory : sig
           and arithmetic operations of a computation unit).
       *)
       val special : t
+
+
+
+      (** the pseudo-register.
+
+          The pseudo-registers do not correspond to a real physical or
+          logical register in the instruction set but rather an alias
+          or a hard-wired register, such as constant zero or an
+          instruction register or a program counter.
+      *)
+      val pseudo : t
 
       (** the register is used by the integer arithmetic unit
 

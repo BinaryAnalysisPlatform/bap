@@ -67,6 +67,7 @@ let pp_ident ppf ident = match ident with
   | Var {num; ver} ->
     Format.fprintf ppf "#%a%a" Int63.pp num pp_ver ver
 
+let pp ppf (_,v) = Format.fprintf ppf "%a" pp_ident v
 let name (_,v) = Format.asprintf "%a" pp_ident v
 let ident (_,v) = v
 let sort (s,_) = s

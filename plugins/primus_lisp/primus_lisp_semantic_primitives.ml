@@ -232,6 +232,7 @@ module Primitives(CT : Theory.Core) = struct
     | _ -> illformed "requires exactly three arguments"
 
   let const x = KB.Value.get Primus.Lisp.Semantics.static x
+  let symbol x = KB.Value.get Primus.Lisp.Semantics.symbol x
   let set_const v x =
     KB.Value.put Primus.Lisp.Semantics.static v (Some x)
   let const_int s x = CT.int s x >>| fun v -> set_const v x
@@ -240,22 +241,34 @@ module Primitives(CT : Theory.Core) = struct
   let false_ = CT.b0 >>| fun v -> set_const v Bitvec.zero
   let const_bool x = if x then true_ else false_
 
+  let bool b =
+    let s = Theory.Bitv.define 1 in
+    let b1 = const_int s Bitvec.M1.one
+    and b0 = const_int s Bitvec.M1.zero in
+    match const b with
+    | Some r ->
+      if Bitvec.(equal r zero)
+      then b0
+      else b1
+    | None -> CT.ite !!b b1 b0
+
+  let intern name =
+    KB.Symbol.intern name Theory.Value.cls >>|
+    KB.Object.id >>| Int63.to_int64 >>|
+    Bitvec.M64.int64
+
+
   let bitv x =
     match Theory.Value.resort Theory.Bitv.refine x with
     | Some x -> !!x
     | None -> match Theory.Value.resort Theory.Bool.refine x with
-      | None -> illformed "defined for bits or bools"
-      | Some b ->
-        let s = Theory.Bitv.define 1 in
-        let b1 = const_int s Bitvec.M1.one
-        and b0 = const_int s Bitvec.M1.zero in
-        match const b with
-        | Some r ->
-          if Bitvec.(equal r zero)
-          then b0
-          else b1
-        | None -> CT.ite !!b b1 b0
-
+      | Some b -> bool b
+      | None -> match symbol x with
+        | None -> illformed "defined for bitvecs, bools, or syms"
+        | Some name ->
+          let s = Theory.Bitv.define 64 in
+          let x = KB.Value.refine x s in
+          intern name >>| set_const x
 
   let nbitv = KB.List.map ~f:bitv
 
@@ -455,20 +468,14 @@ module Primitives(CT : Theory.Core) = struct
       | None -> !!(empty s)
       | Some addr -> forget@@const_int s addr
 
-  let get_symbol sym =
-    match KB.Value.get Primus.Lisp.Semantics.symbol sym with
-    | Some sym -> sym
-    | None -> match KB.Value.get pslot sym with
-      | Some (Atom name) -> name ^ ":symbol"
-      | _ -> "#unknown:symbol"
-
-
   let set_symbol sym x =
-    let sym = get_symbol sym in
-    bitv x >>= fun x ->
-    let s = sort x in
-    let var = Theory.Var.define s sym in
-    CT.set var !!x
+    match KB.Value.get Primus.Lisp.Semantics.symbol sym with
+    | None -> pass
+    | Some sym ->
+      bitv x >>= fun x ->
+      let s = sort x in
+      let var = Theory.Var.define s sym in
+      CT.set var !!x
 
   let mk_cast cast xs =
     binary xs @@ fun sz x ->

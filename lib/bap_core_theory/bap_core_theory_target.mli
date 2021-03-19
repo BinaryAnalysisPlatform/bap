@@ -81,6 +81,7 @@ module Role : sig
   module Register : sig
     val general : t
     val special : t
+    val pseudo : t
     val integer : t
     val floating : t
     val vector : t

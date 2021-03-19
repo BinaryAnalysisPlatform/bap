@@ -24,6 +24,7 @@ val is_virtual : 'a t -> bool
 val is_mutable : 'a t -> bool
 val fresh : 'a sort -> 'a t knowledge
 val scoped : 'a sort -> ('a t -> 'b pure) -> 'b pure
+val pp : Format.formatter -> 'a t -> unit
 
 module Ident : sig
   type t = ident [@@deriving bin_io, compare, sexp]
