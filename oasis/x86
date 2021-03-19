@@ -25,7 +25,7 @@ Library x86_plugin
  FindlibName:      bap-plugin-x86
  BuildDepends:     bap, bap-abi, bap-c, bap-x86-cpu, bap-llvm, core_kernel,
                    ppx_bap, bap-main, bap-future, bap-api, ogre,
-                   zarith, bap-core-theory, bap-knowledge, bitvec
+                   zarith, bap-core-theory, bap-knowledge, bitvec, str
  Modules:          X86_backend, X86_prefix
  InternalModules:  X86_abi,
                    X86_btx,
