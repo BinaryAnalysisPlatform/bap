@@ -17,6 +17,12 @@
               (logand main 0xfffffffe) ; to handle thumb jumps
               argc argv)))
 
+(defun riscv-reset-LR-to-prevent-infinite-loop (main argv base other)
+  (declare (context (target riscv))
+           (advice :before __libc_start_main)
+           (visibility :private))
+  (set X1 0))
+
 
 (defun setup-stack-canary ()
   (declare (context (abi "sysv"))
