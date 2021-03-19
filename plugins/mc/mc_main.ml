@@ -321,8 +321,13 @@ let new_insn arch mem insn =
 
 let lift arch mem insn =
   match KB.run Theory.Program.cls (new_insn arch mem insn) KB.empty with
-  | Ok (code,_) -> Ok (KB.Value.get Theory.Semantics.slot code)
   | Error conflict -> fail (Inconsistency conflict)
+  | Ok (code,_) ->
+    Result.return @@
+    let sema = KB.Value.get Theory.Semantics.slot code in
+    if Insn.(equal empty sema)
+    then Insn.of_basic insn
+    else sema
 
 let print_insn_size formats mem =
   List.iter formats ~f:(fun _fmt ->
