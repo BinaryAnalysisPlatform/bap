@@ -1949,6 +1949,25 @@ module Theory : sig
 
       (** the reserved register with undefined behavior.  *)
       val reserved : t
+
+
+      (** {3 Calling Conventions} *)
+
+      (** the register is used to pass function arguments  *)
+      val function_argument : t
+
+      (** the register is used to return values from functions  *)
+      val function_return : t
+
+
+      (** the register is volatile and should be preserved by the caller  *)
+      val caller_saved : t
+
+
+      (** the register is preserved across calls and must be
+          preserved by the callee.   *)
+      val callee_saved : t
+
     end
 
     include KB.Enum.S with type t := t
