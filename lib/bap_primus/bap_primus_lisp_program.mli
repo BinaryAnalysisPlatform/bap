@@ -29,6 +29,8 @@ val reset_package : t -> t
 val use_package : t -> ?target:string -> string -> t
 val in_package : string -> t -> (t -> 'a) -> 'a
 
+val is_applicable : t -> 'a Def.t -> bool
+
 module Items : sig
   val macro : Def.macro item
   val subst : Def.subst item

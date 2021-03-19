@@ -97,14 +97,16 @@ let add_advisor cmethod advisor advices advised =
 
 let collect_advisors prog =
   Lisp.Program.fold prog func ~f:(fun ~package def init ->
-      let adv =
-        Attribute.Set.get Advice.t (Lisp.Def.attributes def) in
-      let advisor =
-        KB.Name.create ~package (Lisp.Def.name def) in
-      List.fold Advice.[After; Before] ~init
-        ~f:(fun init cmethod ->
-            let targets = Advice.targets adv cmethod in
-            Set.fold targets ~init ~f:(add_advisor cmethod advisor)))
+      if Lisp.Program.is_applicable prog def then
+        let adv =
+          Attribute.Set.get Advice.t (Lisp.Def.attributes def) in
+        let advisor =
+          KB.Name.create ~package (Lisp.Def.name def) in
+        List.fold Advice.[After; Before] ~init
+          ~f:(fun init cmethod ->
+              let targets = Advice.targets adv cmethod in
+              Set.fold targets ~init ~f:(add_advisor cmethod advisor))
+      else init)
     ~init:(Map.empty (module KB.Name))
 
 module Errors(Machine : Machine) = struct

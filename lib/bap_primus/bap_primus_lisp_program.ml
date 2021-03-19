@@ -213,6 +213,13 @@ let add_to_package (fld : 'a item) x p =
       Id.equal x.id d.id) then p
   else Field.fset fld p (x :: Field.get fld p)
 
+
+let is_applicable {context=global} def =
+  let def_ctxt =
+    Lisp.Attribute.Set.get Lisp.Context.t
+      (Def.attributes def) in
+  Lisp.Context.(def_ctxt <= global)
+
 let add prog fld elt =
   let name = KB.Name.read ~package:prog.package (Def.name elt) in
   let parent = KB.Name.package name in
@@ -241,8 +248,6 @@ let fold {library} fld ~init ~f =
           f ~package def x))
 
 let in_package package p f = f {p with package}
-
-
 
 let with_context p context = {p with context}
 let with_sources p sources = {p with sources}
