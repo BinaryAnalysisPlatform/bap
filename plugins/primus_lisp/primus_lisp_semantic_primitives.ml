@@ -16,7 +16,10 @@ let export = Primus.Lisp.Type.Spec.[
      returns 0. If one number is supplied returns its negation.";
 
     "neg", one any @-> any,
-    "(neg X) returns the negation of X. Same as (- X).";
+    "(neg X) returns the negation (2-complement) of X. Same as (- X).";
+
+    "lnot", one a @-> a,
+    "(lnot X) returns a bitwise logical negation of X.";
 
     "*", all any @-> any,
     "(*  X Y ... Z) returns X * Y * ... * Z, performing any necessary \
@@ -176,11 +179,19 @@ let export = Primus.Lisp.Type.Spec.[
 
     "extract", tuple [any; any; any] @-> any,
     "(extract HI LO X) extracts bits from HI to LO (both ends
-    including) of X, the returned value has HI-LO+1 bits. ";
+    including) of X, the returned value has HI-LO+1 bits.
+    Both HI and LO must be static.";
 
     "concat", (all any @-> any),
     "(concat X Y Z ...) concatenates words X, Y, Z, ... into one big word";
 
+    "select", (all any @-> any),
+    "(select B1 B2 ... BN X) returns a word that is a concatenation
+    of bits B1, B2, ... BN of X. All of the B1, ..., BN must be
+    static.";
+    "nth", (one any @-> bool),
+    "(nth N X) returns the Nth bit of X. N must be static. \
+     The function is equivalent to (select N X)";
   ]
 
 type KB.conflict += Illformed of string
@@ -291,12 +302,36 @@ module Primitives(CT : Theory.Core) = struct
           let x = KB.Value.refine x s in
           intern name >>| set_const x
 
+  let to_int x =
+    bitv x >>| const >>| function
+    | Some sz when Bitvec.fits_int sz -> Some (Bitvec.to_int sz)
+    | _ -> None
+
+  let static x =
+    to_int x >>= function
+    | None -> illformed "expects a staticly known value"
+    | Some x -> !!x
+
+
   let nbitv = KB.List.map ~f:bitv
+
+  let join_types s xs =
+    List.max_elt xs ~compare:(fun x y ->
+        let xs = sort x and ys = sort y in
+        Theory.Bitv.(compare_int (size xs) (size ys))) |> function
+    | None -> s
+    | Some v -> sort v
+
+  let with_nbitv s xs f = match xs with
+    | [] -> f s []
+    | xs ->
+      nbitv xs >>= fun xs ->
+      f (join_types s xs) xs
 
   type 'a bitv = 'a Theory.Bitv.t Theory.Value.sort
 
   let monoid s sf df init xs =
-    nbitv xs >>= function
+    with_nbitv s xs @@ fun s xs -> match xs with
     | [] -> forget@@const_int s init
     | x :: xs ->
       KB.List.fold ~init:x xs ~f:(fun res x ->
@@ -400,12 +435,9 @@ module Primitives(CT : Theory.Core) = struct
         Theory.Endianness.eb then CT.b1 else CT.b0
 
   let to_sort x =
-    bitv x >>| const >>= function
-    | None -> illformed "the sort specification must be static"
-    | Some sz ->
-      if Bitvec.fits_int sz then
-        !!(Theory.Bitv.define (Bitvec.to_int sz))
-      else illformed "cast size must fit into it"
+    to_int x >>= function
+    | None -> illformed "the sort specification must be static and small"
+    | Some x -> KB.return (Theory.Bitv.define x)
 
   let load_word t xs =
     let mem = CT.var @@ Theory.Target.data t in
@@ -475,13 +507,22 @@ module Primitives(CT : Theory.Core) = struct
     | None -> forget@@CT.neg !!x
     | Some v -> forget@@const_int (sort x) v
 
-  let one_op_x op x =
-    bitv x >>= fun x -> match const x with
-    | None -> forget@@CT.(op (int (sort x) Bitvec.one) !!x)
-    | Some v -> forget@@const_int (sort x) v
+  let apply_static s x =
+    let m = Bitvec.modulus (Theory.Bitv.size s) in
+    forget@@const_int s Bitvec.(x mod m)
 
-  let reciprocal = one_op_x CT.div
-  let sreciprocal = one_op_x CT.sdiv
+  let lnot x =
+    bitv x >>= fun x -> match const x with
+    | None -> forget@@CT.not !!x
+    | Some v -> apply_static (sort x) (Bitvec.lnot v)
+
+  let one_op_x sop dop x =
+    bitv x >>= fun x -> match const x with
+    | None -> forget@@CT.(dop (int (sort x) Bitvec.one) !!x)
+    | Some v -> apply_static (sort x) (sop v Bitvec.one)
+
+  let reciprocal = one_op_x Bitvec.div CT.div
+  let sreciprocal = one_op_x Bitvec.sdiv CT.sdiv
 
   let get_pc s lbl =
     KB.collect Primus.Lisp.Semantics.definition lbl >>= function
@@ -499,16 +540,81 @@ module Primitives(CT : Theory.Core) = struct
       let var = Theory.Var.define s sym in
       CT.set var !!x
 
-  let mk_cast cast xs =
+  let mk_cast t cast xs =
     binary xs @@ fun sz x ->
     to_sort sz >>= fun s ->
-    bitv x >>= fun x ->
-    forget@@cast s !!x
+    bitv x >>= fun x -> match const x with
+    | None -> forget@@cast s !!x
+    | Some v ->
+      let r = Theory.Bitv.size s in
+      let w = Theory.Bitv.size @@ Theory.Value.sort x in
+      forget@@const_int s@@match t with
+      | `hi -> Bitvec.extract ~hi:(w-1) ~lo:(w-r) v
+      | `lo -> Bitvec.extract ~hi:r ~lo:0 v
+      | `se ->
+        let signed = Bitvec.(msb v mod modulus w) in
+        if signed && w < r then
+          let open Bitvec.Make(struct
+              let modulus = Bitvec.modulus r
+            end) in
+          (ones lsl int Int.(r - w)) lor v
+        else Bitvec.extract ~hi:r ~lo:0 v
 
-  let signed = mk_cast CT.signed
-  let unsigned = mk_cast CT.unsigned
-  let low = mk_cast CT.low
-  let high = mk_cast CT.high
+  let signed = mk_cast `se CT.signed
+  let unsigned = mk_cast `lo CT.unsigned
+  let low = mk_cast `lo CT.low
+  let high = mk_cast `hi CT.high
+
+  let extract xs =
+    ternary xs @@ fun hi lo x ->
+    to_int hi >>= fun hi ->
+    to_int lo >>= fun lo ->
+    bitv x >>= fun x ->
+    match hi,lo with
+    | None,_|_,None ->
+      illformed "extract: bit numbers must be statically known"
+    | Some hi, Some lo ->
+      if hi < lo
+      then illformed "extract: high must be no les the low"
+      else
+        let s = Theory.Bitv.define (hi-lo+1) in
+        forget@@match const x with
+        | None ->
+          CT.extract s (int s hi) (int s lo) !!x
+        | Some x ->
+          const_int s @@ Bitvec.extract ~hi ~lo x
+
+  let concat xs = nbitv xs >>= function
+    | [] -> forget@@int (Theory.Bitv.define 1) 0
+    | x :: xs ->
+      forget @@
+      KB.List.fold xs ~init:x ~f:(fun x y ->
+          let sx = Theory.(Bitv.size@@Value.sort x)
+          and sy = Theory.(Bitv.size@@Value.sort y) in
+          let sz = Theory.Bitv.define (sx + sy) in
+          match const x, const y with
+          | Some x, Some y ->
+            const_int sz @@ Bitvec.append sx sy x y
+          | _ -> CT.append sz !!x !!y)
+
+  let select s xs = match List.rev xs with
+    | [] -> forget@@int s 0
+    | x::bs ->
+      bitv x >>= fun x ->
+      KB.List.map (List.rev bs) ~f:static >>= fun bs ->
+      let rs = Theory.Bitv.define (List.length bs) in
+      forget@@match const x with
+      | Some x -> const_int rs @@ Bitvec.select bs x
+      | None -> match bs with
+        | [] -> assert false
+        | b :: bs ->
+          let b1 = Theory.Bitv.define 1 in
+          CT.extract b1 (int s b) (int s b) !!x >>= fun init ->
+          KB.List.fold bs ~init ~f:(fun r b ->
+              let n = Theory.(Bitv.size @@ Value.sort r) in
+              let s = Theory.Bitv.define (n+1) in
+              CT.append s !!r
+                (CT.extract b1 (int s b) (int s b) !!x))
 
   let target lbl =
     KB.collect Primus.Lisp.Semantics.definition lbl >>= function
@@ -538,6 +644,7 @@ module Primitives(CT : Theory.Core) = struct
     | "s/",[x]-> pure@@sreciprocal x
     | "s/",_-> pure@@monoid s Z.sdiv CT.sdiv Z.one args
     | "mod",_-> pure@@monoid s Z.rem CT.modulo Z.one args
+    | "lnot",[x] -> pure@@lnot x
     | "signed-mod",_-> pure@@monoid s Z.srem CT.smodulo Z.one args
     | "lshift",_-> pure@@monoid s Z.lshift CT.lshift Z.one args
     | "rshift",_-> pure@@monoid s Z.rshift CT.rshift Z.one args
@@ -568,6 +675,9 @@ module Primitives(CT : Theory.Core) = struct
     | "cast-high",xs -> pure@@high xs
     | "cast-signed",xs -> pure@@signed xs
     | "cast-unsigned",xs -> pure@@unsigned xs
+    | "extract",xs -> pure@@extract xs
+    | "concat", xs -> pure@@concat xs
+    | ("select"|"nth"),xs -> pure@@select s xs
     | _ -> !!nothing
 end
 
