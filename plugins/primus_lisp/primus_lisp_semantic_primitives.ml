@@ -143,8 +143,14 @@ let export = Primus.Lisp.Type.Spec.[
     "load-bits", tuple [any; int] @-> int,
     "(load-word SIZE PTR) loads a SIZE-bit long word from the address PTR";
 
-    "load-half", one int @-> int,
-    "(load-half PTR) loads half-word from the address PTR";
+    "load-hword", one int @-> any,
+    "(load-hword PTR) loads half-word from the address PTR";
+
+    "load-dword", one int @-> any,
+    "(load-hword PTR) loads double-word from the address PTR";
+
+    "load-qword", one int @-> any,
+    "(load-hword PTR) loads quad-word from the address PTR";
 
     "store-byte", tuple[int; any] @-> any,
     "(store-byte POS VAL) stores byte VAL at the memory position POS";
@@ -285,10 +291,10 @@ module Primitives(CT : Theory.Core) = struct
     | None -> CT.ite !!b b1 b0
 
   let intern name =
-    KB.Symbol.intern name Theory.Value.cls >>|
+    let name = KB.Name.read name in
+    KB.Symbol.intern (KB.Name.unqualified name) Theory.Value.cls >>|
     KB.Object.id >>| Int63.to_int64 >>|
     Bitvec.M64.int64
-
 
   let bitv x =
     match Theory.Value.resort Theory.Bitv.refine x with
@@ -439,19 +445,17 @@ module Primitives(CT : Theory.Core) = struct
     | None -> illformed "the sort specification must be static and small"
     | Some x -> KB.return (Theory.Bitv.define x)
 
-  let load_word t xs =
+  let word_loader f t xs =
     let mem = CT.var @@ Theory.Target.data t in
-    let s = Theory.Bitv.define (Theory.Target.bits t) in
+    let s = Theory.Bitv.define (f (Theory.Target.bits t)) in
     let b = is_big_endian t in
     unary xs >>= bitv >>= fun addr ->
     forget@@CT.(loadw s b mem !!addr)
 
-  let loadn t xs =
-    let mem = CT.var @@ Theory.Target.data t in
-    binary xs @@ fun sz x ->
-    to_sort sz >>= fun s ->
-    bitv x >>= fun x ->
-    forget@@CT.(loadw s (is_big_endian t) mem !!x)
+  let load_word = word_loader ident
+  let load_half = word_loader (fun s -> s / 2)
+  let load_double = word_loader @@ ( * ) 2
+  let load_quad = word_loader @@ ( * ) 4
 
   let load_bits t xs =
     let mem = CT.var @@ Theory.Target.data t in
@@ -533,12 +537,13 @@ module Primitives(CT : Theory.Core) = struct
 
   let set_symbol sym x =
     match KB.Value.get Primus.Lisp.Semantics.symbol sym with
-    | None -> pass
     | Some sym ->
       bitv x >>= fun x ->
       let s = sort x in
       let var = Theory.Var.define s sym in
       CT.set var !!x
+    | None ->
+      illformed "set-symbol-value (set$) requires a symbol"
 
   let mk_cast t cast xs =
     binary xs @@ fun sz x ->
@@ -665,6 +670,9 @@ module Primitives(CT : Theory.Core) = struct
     | "exec-addr",_-> ctrl@@exec_addr args
     | ("load-byte"|"memory-read"),_-> pure@@load_byte t args
     | "load-word",_-> pure@@load_word t args
+    | "load-hword",_-> pure@@load_half t args
+    | "load-qword",_-> pure@@load_quad t args
+    | "load-dword",_-> pure@@load_double t args
     | "load-bits",_-> pure@@load_bits t args
     | ("store-byte"|"memory-write"),_-> data@@store_byte t args
     | "store-word",_-> data@@store_word t args
@@ -680,7 +688,6 @@ module Primitives(CT : Theory.Core) = struct
     | ("select"|"nth"),xs -> pure@@select s xs
     | _ -> !!nothing
 end
-
 
 module CST : Theory.Core = struct
   type t = Sexp.t
