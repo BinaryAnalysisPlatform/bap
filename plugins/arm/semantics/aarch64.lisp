@@ -6,8 +6,11 @@
 
 (in-package aarch64)
 
-(defun MOVZXi (dst imm shift)
-  (set$ dst imm))
+(defun MOVZXi (dst imm pos)
+  (set$ dst (lshift imm pos)))
+
+(defun MOVZWi (dst imm pos)
+  (set$ (base-reg dst) (lshift imm pos)))
 
 (defun ADDXri (dst src imm _shift)
   (set$ dst (+ src imm)))
@@ -19,6 +22,11 @@
   (set$ dst (cast-signed
              (word-width)
              (load-word (+ reg (lshift off 2))))))
+
+(defun LDRWui (dst reg off)
+  (set$ (base-reg dst)
+        (cast-unsigned (word-width)
+                       (load-hword (+ reg (lshift off 2))))))
 
 (defun UBFMXri (xd xr ir is)
   (let ((rs (word-width)))
@@ -34,7 +42,7 @@
 
 
 (defun ORRXrs (rd rn rm is)
-  (set$ rd (logor rn (lshift rm is))))
+  (set$ rd (logor rn (shifted rm is))))
 
 (defun setw (rd x)
   (set$ rd (cast-unsigned (word-width) x)))
@@ -70,6 +78,7 @@
   (set$ rd (+ rn (shifted rm off))))
 
 (defun shifted (rm off)
+  (declare (visibility :private))
   (let ((typ (extract 7 6 off))
         (off (extract 5 0 off)))
     (case typ
@@ -135,3 +144,51 @@
     0b101 (= NF VF)
     0b110 (logand (= NF VF) (= ZF 0))
     true))
+
+(defun target:get-register (reg)
+  (case reg
+    'WZR 0:32
+    'XZR 0:64
+    (extract 31 0 (base-reg reg))))
+
+(defun target:set-register (reg val)
+  (case reg
+    'WZR ()
+    'XZR ()
+    (set$ reg (cast-unsigned 64 val))))
+
+(defun base-reg (reg)
+  (case reg
+    'W0  'X0
+    'W1  'X1
+    'W2  'X2
+    'W3  'X3
+    'W4  'X4
+    'W5  'X5
+    'W6  'X6
+    'W7  'X7
+    'W8  'X8
+    'W9  'X9
+    'W10 'X10
+    'W11 'X11
+    'W12 'X12
+    'W13 'X13
+    'W14 'X14
+    'W15 'X15
+    'W16 'X16
+    'W17 'X17
+    'W18 'X18
+    'W19 'X19
+    'W20 'X20
+    'W21 'X21
+    'W22 'X22
+    'W23 'X23
+    'W24 'X24
+    'W25 'X25
+    'W26 'X26
+    'W27 'X27
+    'W28 'X28
+    'W29 'FP
+    'W30 'LR
+    'WSP 'SP
+    (msg "unknown register")))
