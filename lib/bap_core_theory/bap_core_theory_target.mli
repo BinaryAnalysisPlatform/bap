@@ -54,6 +54,7 @@ val code_addr_size : t -> int
 val data : t -> (unit,unit) Mem.t Var.t
 val code : t -> (unit,unit) Mem.t Var.t
 val vars : t -> Set.M(Var.Top).t
+val var : t -> string -> Var.Top.t option
 val regs :
   ?exclude:role list ->
   ?roles:role list ->

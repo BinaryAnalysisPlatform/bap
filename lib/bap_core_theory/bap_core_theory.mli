@@ -1547,6 +1547,16 @@ module Theory : sig
     *)
     val reg : ?exclude:role list -> ?unique:bool -> t -> role -> unit Var.t option
 
+
+    (** [var target name] returns a target variable with the given name.
+
+        The variable is searched in all variables and registers
+        provided in target declaration. The search is O(log(N)).
+
+        @since 2.3.0
+    *)
+    val var : t -> string -> unit Var.t option
+
     (** [endianness target] describes the byte order.
 
         Describes how multibyte words are stored in the main memory. *)
@@ -2407,8 +2417,6 @@ module Theory : sig
 
 
     (** [loadw s e m k] loads a word from the memory [m].
-
-
 
         if [e] evaluates to [b1] (big endian case),
         then the term evaluates to [low s (m[k] @ m[k+1] @ ... @ m[k+n] )],
