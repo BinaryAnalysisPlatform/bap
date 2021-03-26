@@ -6,6 +6,8 @@
 
 (in-package aarch64)
 
+(defun word () (word-width))
+
 (defun MOVZXi (dst imm pos)
   (set$ dst (lshift imm pos)))
 
@@ -18,38 +20,44 @@
 (defun LDRXui (dst reg off)
   (set$ dst (load-word (+ reg (lshift off 3)))))
 
-(defun LDRSWui (dst reg off)
+(defun LDRSWui (dst base off)
   (set$ dst (cast-signed
-             (word-width)
-             (load-word (+ reg (lshift off 2))))))
+             (word)
+             (load-word (+ base (lshift off 2))))))
 
 (defun LDRWui (dst reg off)
   (set$ (base-reg dst)
-        (cast-unsigned (word-width)
-                       (load-hword (+ reg (lshift off 2))))))
+        (cast-unsigned (word) (load-hword (+ reg (lshift off 2))))))
 
-(defun UBFMXri (xd xr ir is)
-  (let ((rs (word-width)))
+(defmacro make-BFM (cast xd xr ir is)
+  (let ((rs (word)))
     (if (< is ir)
         (if (and (/= is (- rs 1)) (= (+ is 1) ir))
             (set$ xd (lshift xr (- rs ir)))
             (set$ xd (lshift
-                      (cast-unsigned rs (extract is 0 xr))
+                      (cast rs (extract is 0 xr))
                       (- rs ir))))
         (if (= is (- rs 1))
             (set$ xd (rshift xr ir))
-            (set$ xd (cast-unsigned rs (extract is ir xr)))))))
+            (set$ xd (cast rs (extract is ir xr)))))))
 
+(defun UBFMXri (xd xr ir is)
+  (make-BFM cast-unsigned xd xr ir is))
+
+(defun SBFMXri (xd xr ir is)
+  (make-BFM cast-signed xd xr ir is))
 
 (defun ORRXrs (rd rn rm is)
   (set$ rd (logor rn (shifted rm is))))
 
-(defun setw (rd x)
-  (set$ rd (cast-unsigned (word-width) x)))
+(defun ORRWrs (rd rn rm is)
+  (set$ (base-reg rd)
+        (logor (base-reg rn)
+               (shifted (base-reg rm) is))))
 
 (defun ADRP (dst imm)
   (set$ dst (+ (get-program-counter)
-               (cast-signed (word-width) (lshift imm 12)))))
+               (cast-signed (word) (lshift imm 12)))))
 
 (defun ADDWrs (dst r1 v s)
   (set$ dst (+ r1 (lshift v s))))
@@ -74,6 +82,9 @@
 (defun SUBXrs (rd rn rm off)
   (set$ rd (- rn (shifted rm off))))
 
+(defun SUBXri (rd rn imm off)
+  (set$ rd (- rn (shifted imm off))))
+
 (defun ADDXrs (rd rn rm off)
   (set$ rd (+ rn (shifted rm off))))
 
@@ -87,23 +98,32 @@
       0b10 (arshift rm off))))
 
 (defun STPXpre (dst t1 t2 _ off)
-  (let ((word (/ (word-width) 8))
-        (off (lshift off 3)))
+  (let ((off (lshift off 3)))
     (store-word (+ dst off) t1)
-    (store-word (+ dst off word) t2)
+    (store-word (+ dst off (sizeof word)) t2)
     (set$ dst (+ dst off))))
 
 (defun LDPXpost (dst r1 r2 base off)
-  (let ((word (/ (word-width) 8))
-        (off (lshift off 3)))
+  (let ((off (lshift off 3)))
     (set$ r1 (load-word base))
-    (set$ r2 (load-word (+ base word)))
+    (set$ r2 (load-word (+ base (sizeof word))))
     (set$ dst (+ dst off))))
+
+(defun LDPXi (r1 r2 base off)
+  (let ((off (lshift off 3)))
+    (set$ r1 (load-word (+ base off)))
+    (set$ r2 (load-word (+ base off (sizeof word))))))
 
 (defun STRXui (src reg off)
   (let ((off (lshift off 3)))
     (store-word (+ reg off) src)))
 
+(defun STRWui (src reg off)
+  (let ((off (lshift off 2)))
+    (store-word (+ reg off) src)))
+
+(defun STRBBui (src reg off)
+  (store-byte (+ reg off) (base-reg src)))
 
 (defun relative-jump (off)
   (exec-addr (+ (get-program-counter) (lshift off 2))))
@@ -158,37 +178,38 @@
     (set$ reg (cast-unsigned 64 val))))
 
 (defun base-reg (reg)
-  (case reg
-    'W0  'X0
-    'W1  'X1
-    'W2  'X2
-    'W3  'X3
-    'W4  'X4
-    'W5  'X5
-    'W6  'X6
-    'W7  'X7
-    'W8  'X8
-    'W9  'X9
-    'W10 'X10
-    'W11 'X11
-    'W12 'X12
-    'W13 'X13
-    'W14 'X14
-    'W15 'X15
-    'W16 'X16
-    'W17 'X17
-    'W18 'X18
-    'W19 'X19
-    'W20 'X20
-    'W21 'X21
-    'W22 'X22
-    'W23 'X23
-    'W24 'X24
-    'W25 'X25
-    'W26 'X26
-    'W27 'X27
-    'W28 'X28
-    'W29 'FP
-    'W30 'LR
-    'WSP 'SP
-    (msg "unknown register")))
+  (case (symbol reg)
+    'W0  X0
+    'W1  X1
+    'W2  X2
+    'W3  X3
+    'W4  X4
+    'W5  X5
+    'W6  X6
+    'W7  X7
+    'W8  X8
+    'W9  X9
+    'W10 X10
+    'W11 X11
+    'W12 X12
+    'W13 X13
+    'W14 X14
+    'W15 X15
+    'W16 X16
+    'W17 X17
+    'W18 X18
+    'W19 X19
+    'W20 X20
+    'W21 X21
+    'W22 X22
+    'W23 X23
+    'W24 X24
+    'W25 X25
+    'W26 X26
+    'W27 X27
+    'W28 X28
+    'W29 FP
+    'W30 LR
+    'WSP SP
+    'WZR XZR
+    (msg "unknown register $0" reg)))
