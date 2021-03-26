@@ -29,6 +29,10 @@
   (set$ (base-reg dst)
         (cast-unsigned (word) (load-hword (+ reg (lshift off 2))))))
 
+(defun LDRBBui (dst reg off)
+  (set$ (base-reg dst)
+        (cast-unsigned (word) (load-hword (+ reg off)))))
+
 (defmacro make-BFM (cast xd xr ir is)
   (let ((rs (word)))
     (if (< is ir)
@@ -66,7 +70,7 @@
   (ADDWrs dst r1 imm s))
 
 (defun add-with-carry (rd x y c)
-  (let ((r (+ x y c)))
+  (let ((r (+ c y x)))
     (set NF (msb r))
     (set VF (overflow r x y))
     (set ZF (is-zero r))
@@ -78,6 +82,17 @@
 
 (defun SUBSXrs (rd rn rm off)
   (add-with-carry rd rn (lnot (shifted rm off)) 1))
+
+(defun SUBSWrs (rd rn rm off)
+  (add-with-carry
+   (base-reg rd)
+   (base-reg rn) (lnot (shifted (base-reg rm) off)) 1))
+
+(defun SUBSWri (rd rn imm off)
+  (add-with-carry (base-reg rd) (base-reg rn) (lnot (shifted imm off)) 1))
+
+(defun SUBSXri (rd rn imm off)
+  (add-with-carry rd rn (lnot (shifted imm off)) 1))
 
 (defun SUBXrs (rd rn rm off)
   (set$ rd (- rn (shifted rm off))))
@@ -150,6 +165,18 @@
   (when (is-zero reg)
     (relative-jump off)))
 
+(defun CBZX (reg off)
+  (when (is-zero (base-reg reg))
+    (relative-jump off)))
+
+(defun CBNZX (reg off)
+  (when (/= reg 0)
+    (relative-jump off)))
+
+(defun CBNZW (reg off)
+  (when (/= (base-reg reg) 0)
+    (relative-jump off)))
+
 (defun Bcc (cnd off)
   (when (condition-holds cnd)
     (relative-jump off)))
@@ -164,18 +191,6 @@
     0b101 (= NF VF)
     0b110 (logand (= NF VF) (= ZF 0))
     true))
-
-(defun target:get-register (reg)
-  (case reg
-    'WZR 0:32
-    'XZR 0:64
-    (extract 31 0 (base-reg reg))))
-
-(defun target:set-register (reg val)
-  (case reg
-    'WZR ()
-    'XZR ()
-    (set$ reg (cast-unsigned 64 val))))
 
 (defun base-reg (reg)
   (case (symbol reg)
