@@ -252,6 +252,10 @@ let is_included roles info = match roles with
   | Some included ->
     fun var -> List.for_all included ~f:(has_role info.regs var)
 
+let has_roles t roles var =
+  let {regs} = info t and var = Var.forget var in
+  List.for_all roles ~f:(has_role regs var)
+
 let regs ?exclude ?roles t =
   let info = info t in
   let pred = match exclude,roles with

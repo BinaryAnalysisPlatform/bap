@@ -1574,6 +1574,12 @@ module Theory : sig
     *)
     val var : t -> string -> unit Var.t option
 
+
+    (** [has_roles t roles v] is true if [v] has all the [roles] in [t].
+
+        @since 2.3.0 *)
+    val has_roles : t -> role list -> 'a Var.t -> bool
+
     (** [endianness target] describes the byte order.
 
         Describes how multibyte words are stored in the main memory. *)
