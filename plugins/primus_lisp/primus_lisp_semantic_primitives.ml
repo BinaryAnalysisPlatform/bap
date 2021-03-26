@@ -171,6 +171,9 @@ let export = Primus.Lisp.Type.Spec.[
     "(set-symbol-value S X) sets the value of the symbol S to X.
          Returns X";
 
+    "symbol", one any @-> sym,
+    "(symbol X) returns a symbol representation of X.";
+
     "cast-low", tuple [int; a] @-> b,
     "(cast-low S X) extracts low S bits from X.";
 
@@ -233,6 +236,12 @@ let pslot = KB.Class.property Theory.Value.cls "val"
     ~package:"core"
     ~public:true
     domain
+
+let var_slot = KB.Class.property Theory.Value.cls "variable"
+    ~package:"core" @@
+  KB.Domain.optional "var"
+    ~equal:Theory.Var.Top.equal
+    ~inspect:Theory.Var.Top.sexp_of_t
 
 let nothing = KB.Value.empty Theory.Semantics.cls
 let size = Theory.Bitv.size
@@ -535,15 +544,19 @@ module Primitives(CT : Theory.Core) = struct
       | None -> !!(empty s)
       | Some addr -> forget@@const_int s addr
 
-  let set_symbol sym x =
-    match KB.Value.get Primus.Lisp.Semantics.symbol sym with
-    | Some sym ->
-      bitv x >>= fun x ->
-      let s = sort x in
-      let var = Theory.Var.define s sym in
+  let set_symbol v x =
+    match KB.Value.get var_slot v with
+    | Some var ->
       CT.set var !!x
     | None ->
-      illformed "set-symbol-value (set$) requires a symbol"
+      illformed "set-variable (set$) requires a value reified to a variable"
+
+  let symbol s v =
+    match KB.Value.get var_slot v with
+    | Some var ->
+      intern (Theory.Var.name var) >>= const_int s |> forget
+    | None ->
+      illformed "symbol requires a value reified to a variable"
 
   let mk_cast t cast xs =
     binary xs @@ fun sz x ->
@@ -679,6 +692,7 @@ module Primitives(CT : Theory.Core) = struct
     | "get-program-counter",[]
     | "get-current-program-counter",[] -> pure@@get_pc s lbl
     | "set-symbol-value",[sym;x] -> data@@set_symbol sym x
+    | "symbol",[x] ->  pure@@symbol s x
     | "cast-low",xs -> pure@@low xs
     | "cast-high",xs -> pure@@high xs
     | "cast-signed",xs -> pure@@signed xs
@@ -687,6 +701,13 @@ module Primitives(CT : Theory.Core) = struct
     | "concat", xs -> pure@@concat xs
     | ("select"|"nth"),xs -> pure@@select s xs
     | _ -> !!nothing
+end
+
+module VarTheory : Theory.Core = struct
+  include Theory.Empty
+  let var v =
+    var v >>| fun x ->
+    KB.Value.put var_slot x (Some (Theory.Var.forget v))
 end
 
 module CST : Theory.Core = struct
@@ -1164,6 +1185,13 @@ end
 
 module Lisp = Primus.Lisp.Semantics
 
+let enable_var_theory () =
+  Theory.declare ~provides:["primus-lisp"; "lisp"]
+    ~package:"core"
+    ~name:"vars"
+    ~desc:"tracks terms that are variables"
+    (KB.return (module VarTheory : Theory.Core))
+
 let provide () =
   KB.Rule.(begin
       declare "primus-lisp-core-primitives" |>
@@ -1174,6 +1202,7 @@ let provide () =
     end);
   List.iter export ~f:(fun (name,types,docs) ->
       Primus.Lisp.Semantics.declare ~types ~docs ~package:"core" name);
+  enable_var_theory ();
   let (let*?) x f = x >>= function
     | None -> !!nothing
     | Some x -> f x in
@@ -1193,5 +1222,5 @@ let provide () =
 
 let enable_extraction () =
   Theory.declare ~provides:["extraction"; "primus-lisp"; "lisp"]
-    ~package:"bap"
-    ~name:"primus-lisp" (KB.return (module CST : Theory.Core))
+    ~package:"core"
+    ~name:"syntax" (KB.return (module CST : Theory.Core))
