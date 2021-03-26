@@ -53,9 +53,6 @@ let program =
 type program = {
   prog : Program.t;
   places : unit Theory.var Map.M(KB.Name).t;
-  consts : Set.M(Theory.Var.Top).t;
-  pseudos : Set.M(Theory.Var.Top).t;
-  zeros : Set.M(Theory.Var.Top).t;
 }
 
 let typed = KB.Class.property Theory.Source.cls "typed-program"
@@ -433,7 +430,7 @@ module Prelude(CT : Theory.Core) = struct
 
   let reify ppf program defn target name args =
     let word = Theory.Target.bits target in
-    let {prog; places; consts; zeros} = program in
+    let {prog; places} = program in
     let var ?t n = make_var ?t places target n in
     let rec eval : ast -> unit Theory.Effect.t Meta.t = function
       | {data=Int {data={exp=x; typ=Type m}}} -> bigint x m
@@ -547,13 +544,10 @@ module Prelude(CT : Theory.Core) = struct
         | Some v -> pure !!v
         | None -> match lookup_parameter prog v with
           | Some def -> eval def >>= assign target v
-          | None -> if Set.mem zeros v
-            then bigint Z.zero word
-            else pure@@Meta.lift@@CT.var v
+          | None -> pure@@Meta.lift@@CT.var v
     and set_ v x =
       Scope.lookup v >>= function
       | Some v -> eval x >>= assign target ~local:true v
-      | None when Set.mem consts v -> !!empty
       | None -> eval x >>= assign target v
     and let_ ?(t=word) v x b =
       let* xeff = eval x in
@@ -641,24 +635,18 @@ let obtain_typed_program unit =
       Program.with_places (KB.Value.get program src) target in
     let tprog = Program.Type.infer prog in
     let prog = Program.Type.program tprog in
-    let regs roles = Theory.Target.regs target ~roles in
-    let consts = regs [Theory.Role.Register.constant] in
-    let pseudos = regs [Theory.Role.Register.pseudo] in
-    let zeros = regs [Theory.Role.Register.zero] in
     let places = Program.fold prog Key.place
         ~f:(fun ~package place places ->
             let name = KB.Name.create ~package (Def.name place) in
             Map.set places name (Def.Place.location place))
         ~init:(Map.empty (module KB.Name)) in
-    let program = {prog; consts; zeros; pseudos; places} in
+    let program = {prog; places} in
     match Program.Type.errors tprog with
     | [] ->
       let src = KB.Value.put typed src (Some program) in
       KB.provide Theory.Unit.source unit src >>| fun () ->
       program
     | errs -> KB.fail (Illtyped_program errs)
-
-
 
 let provide_semantics ?(stdout=Format.std_formatter) () =
   let open KB.Syntax in
