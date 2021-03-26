@@ -129,13 +129,18 @@ module IR = struct
   let ctrl cfg = ret cfg
 
   let set v x =
-    x >>= fun x ->
-    fresh >>= fun entry ->
-    fresh >>= fun tid ->
-    data {
-      entry;
-      blks = [{name=entry; jmps=[]; defs=[Def.reify ~tid v x]}]
-    }
+    KB.Object.scoped Theory.Program.cls @@ fun lbl ->
+    Theory.Label.target lbl >>= fun t ->
+    if Theory.Target.has_roles t [Theory.Role.Register.constant] v
+    then !!empty
+    else
+      x >>= fun x ->
+      fresh >>= fun entry ->
+      fresh >>= fun tid ->
+      data {
+        entry;
+        blks = [{name=entry; jmps=[]; defs=[Def.reify ~tid v x]}]
+      }
 
   let goto ?(is_call=false) ?cnd ~tid dst =
     if is_call

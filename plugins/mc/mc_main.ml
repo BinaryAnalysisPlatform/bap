@@ -311,17 +311,18 @@ let new_insn arch mem insn =
   KB.Object.create Theory.Program.cls >>= fun code ->
   KB.Symbol.intern "unit" Theory.Unit.cls >>= fun unit ->
   provide_target unit code arch >>= fun () ->
-  KB.provide Theory.Label.unit code (Some unit) >>= fun () ->
-  KB.provide Memory.slot code (Some mem) >>= fun () ->
-  KB.provide Dis.Insn.slot code (Some insn) >>| fun () ->
-  code
+  KB.promising Theory.Label.unit ~promise:(fun _ -> !!(Some unit)) @@begin fun () ->
+    KB.provide Memory.slot code (Some mem) >>= fun () ->
+    KB.provide Dis.Insn.slot code (Some insn) >>= fun () ->
+    KB.collect Theory.Semantics.slot code >>| fun _ ->
+    code
+  end
 
 let lift arch mem insn =
-  match KB.run Theory.Program.cls (new_insn arch mem insn) KB.empty with
+  match Toplevel.try_eval Theory.Semantics.slot (new_insn arch mem insn) with
   | Error conflict -> fail (Inconsistency conflict)
-  | Ok (code,_) ->
+  | Ok sema ->
     Result.return @@
-    let sema = KB.Value.get Theory.Semantics.slot code in
     if Insn.(equal empty sema)
     then Insn.of_basic insn
     else sema
