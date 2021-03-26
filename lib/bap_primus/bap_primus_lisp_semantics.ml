@@ -213,13 +213,6 @@ let sym str =
 let static x =
   KB.Value.get static_slot (res x)
 
-let intern_value x = match KB.Value.get symbol x with
-  | None -> !!x
-  | Some sym ->
-    Meta.lift @@
-    intern sym >>| fun v ->
-    KB.Value.put static_slot x (Some v)
-
 let reify_sym x = match static x with
   | Some _ -> Meta.return x
   | None -> match KB.Value.get symbol (res x) with
@@ -285,14 +278,20 @@ module Env = struct
       | Type m -> m in
     Theory.Var.forget@@Theory.Var.define (bits s) (KB.Name.to_string n)
 
-  let set_args ws bs = Meta.update @@ fun s -> {
-      s with binds = List.fold bs ~init:s.binds ~f:(fun s (v,x) ->
-      Map.set s (var ws v) x)
-    }
+  let set_args ws bs =
+    Meta.get () >>= fun s ->
+    let binds,old =
+      List.fold bs ~init:(s.binds,[]) ~f:(fun (s,old) (v,x) ->
+          let v = var ws v in
+          Map.set s v x,(v,Map.find s v) :: old) in
+    Meta.put {s with binds} >>| fun () ->
+    List.rev old
 
-  let del_args ws bs = Meta.update @@ fun s -> {
-      s with binds = List.fold bs ~init:s.binds ~f:(fun s (v,_) ->
-      Map.remove s (var ws v))
+  let del_args bs = Meta.update @@ fun s -> {
+      s with binds = List.fold bs ~init:s.binds ~f:(fun s (v,x) ->
+      match x with
+      | None -> Map.remove s v
+      | Some x -> Map.set s v x)
     }
 end
 
@@ -332,7 +331,6 @@ module Scope = struct
   let restore scope = Meta.update @@ fun s -> {
       s with scope
     }
-
 
 end
 
@@ -498,11 +496,11 @@ module Prelude(CT : Theory.Core) = struct
         sym (Def.name fn) >>= fun dst ->
         prim "invoke-subroutine" (res dst::xs)
       | Some (Ok (fn,bs)) ->
-        Env.set_args word bs >>= fun () ->
+        Env.set_args word bs >>= fun bs ->
         Scope.clear >>= fun scope ->
         eval (Def.Func.body fn) >>= fun eff ->
         Scope.restore scope >>= fun () ->
-        Env.del_args word bs >>= fun () ->
+        Env.del_args bs >>= fun () ->
         !!eff
       | Some (Error problem) -> unresolved problem
       | None when toplevel -> !!Insn.empty
