@@ -99,6 +99,8 @@ let regs64 = Theory.Role.Register.[
     [general; floating], untyped [fp64];
     [stack_pointer], untyped [sp64];
     [frame_pointer], untyped [fp64];
+    [function_argument], array r64 "X" 8 @< array r64 "Q" 8;
+    [function_return], [reg r64 "X0"] @< [reg r128 "Q0"];
     [constant; zero; pseudo], [zr64] @< [zr32];
     [pseudo], array r32 "W" 31 @< [reg r32 "WSP"];
     [link], untyped [lr64];

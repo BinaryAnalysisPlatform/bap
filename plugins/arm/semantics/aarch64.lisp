@@ -60,14 +60,15 @@
                (shifted (base-reg rm) is))))
 
 (defun ADRP (dst imm)
-  (set$ dst (+ (get-program-counter)
-               (cast-signed (word) (lshift imm 12)))))
+  (set$ dst (+
+             (logand (get-program-counter) (lshift -1 12))
+             (cast-signed (word) (lshift imm 12)))))
 
 (defun ADDWrs (dst r1 v s)
-  (set$ dst (+ r1 (lshift v s))))
+  (set$ (base-reg dst) (+ (base-reg r1) (lshift (base-reg v) s))))
 
 (defun ADDWri (dst r1 imm s)
-  (ADDWrs dst r1 imm s))
+  (set$ (base-reg dst) (+ (base-reg r1) (lshift imm s))))
 
 (defun add-with-carry (rd x y c)
   (let ((r (+ c y x)))
@@ -141,7 +142,7 @@
 
 (defun STRWui (src reg off)
   (let ((off (lshift off 2)))
-    (store-word (+ reg off) src)))
+    (store-word (+ reg off) (base-reg src))))
 
 (defun STRBBui (src reg off)
   (store-byte (+ reg off) (base-reg src)))
@@ -189,13 +190,20 @@
 
 (defun condition-holds (cnd)
   (case cnd
-    0b000 ZF
-    0b001 CF
-    0b010 NF
-    0b011 VF
-    0b100 (logand CF (lnot ZF))
-    0b101 (= NF VF)
-    0b110 (logand (= NF VF) (= ZF 0))
+    0b0000 ZF
+    0b0001 (lnot ZF)
+    0b0010 CF
+    0b0010 (lnot CF)
+    0b0100 NF
+    0b0101 (lnot NF)
+    0b0110 VF
+    0b0111 (lnot VF)
+    0b1000 (logand CF (lnot ZF))
+    0b1001 (logor (lnot CF) ZF)
+    0b1010 (= NF VF)
+    0b1011 (/= NF VF)
+    0b1100 (logand (= NF VF) (= ZF 0))
+    0b1101 (logor (/= NF VF) (/= ZF 0))
     true))
 
 (defun base-reg (reg)
