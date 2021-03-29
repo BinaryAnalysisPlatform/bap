@@ -14,8 +14,8 @@
 (defun MOVZWi (dst imm pos)
   (set$ (base-reg dst) (lshift imm pos)))
 
-(defun ADDXri (dst src imm _shift)
-  (set$ dst (+ src imm)))
+(defun ADDXri (dst src imm off)
+  (set$ dst (+ src (lshift imm off))))
 
 (defun LDRXui (dst reg off)
   (set$ dst (load-word (+ reg (lshift off 3)))))
@@ -23,7 +23,7 @@
 (defun LDRSWui (dst base off)
   (set$ dst (cast-signed
              (word)
-             (load-word (+ base (lshift off 2))))))
+             (load-hword (+ base (lshift off 2))))))
 
 (defun LDRWui (dst reg off)
   (set$ (base-reg dst)
@@ -31,7 +31,7 @@
 
 (defun LDRBBui (dst reg off)
   (set$ (base-reg dst)
-        (cast-unsigned (word) (load-hword (+ reg off)))))
+        (cast-unsigned (word) (load-byte (+ reg off)))))
 
 (defmacro make-BFM (cast xd xr ir is)
   (let ((rs (word)))
@@ -79,7 +79,7 @@
     (set$ rd r)))
 
 (defun SUBXrx64 (rd rn rm off)
-  (set$ rd (- rn (shifted rm off))))
+  (set$ rd (- rn (extended rm off))))
 
 (defun SUBSXrs (rd rn rm off)
   (add-with-carry rd rn (lnot (shifted rm off)) 1))
@@ -90,16 +90,20 @@
    (base-reg rn) (lnot (shifted (base-reg rm) off)) 1))
 
 (defun SUBSWri (rd rn imm off)
-  (add-with-carry (base-reg rd) (base-reg rn) (lnot (shifted imm off)) 1))
+  (add-with-carry (base-reg rd) (base-reg rn) (lnot (lshift imm off)) 1))
+
 
 (defun SUBSXri (rd rn imm off)
-  (add-with-carry rd rn (lnot (shifted imm off)) 1))
+  (add-with-carry rd rn (lnot (lshift imm off)) 1))
 
 (defun SUBXrs (rd rn rm off)
   (set$ rd (- rn (shifted rm off))))
 
 (defun SUBXri (rd rn imm off)
-  (set$ rd (- rn (shifted imm off))))
+  (set$ rd (- rn (lshift imm off))))
+
+(defun SUBWri (rd rn imm off)
+  (set$ (base-reg rd) (- (base-reg rn) (lshift imm off))))
 
 (defun ADDXrs (rd rn rm off)
   (set$ rd (+ rn (shifted rm off))))
@@ -112,6 +116,27 @@
       0b00 (lshift rm off)
       0b01 (rshift rm off)
       0b10 (arshift rm off))))
+
+(defun unsigned-extend (n rm)
+  (cast-unsigned (word) (cast-low n rm)))
+
+(defun signed-extend (n rm)
+  (cast-signed (word) (cast-low n rm)))
+
+(defun extended (rm bits)
+  (declare (visibility :private))
+  (let ((typ (extract 5 3 bits))
+        (off (extract 2 0 bits)))
+    (lshift (case typ
+              0b000 (unsigned-extend 8 rm)
+              0b001 (unsigned-extend 16 rm)
+              0b010 (unsigned-extend 32 rm)
+              0b011 rm
+              0b100 (signed-extend 8 rm)
+              0b101 (signed-extend 16 rm)
+              0b110 (signed-extend 32 rm)
+              0b111 rm)
+            off)))
 
 (defun STPXpre (dst t1 t2 _ off)
   (let ((off (lshift off 3)))
@@ -134,15 +159,17 @@
   (let ((off (lshift off 3)))
     (store-word (+ reg off) src)))
 
+(defun STRWui (src reg off)
+  (let ((off (lshift off 2)))
+    (store-word (+ reg off) (cast-low 32 (base-reg src)))))
+
 (defun STRXroX (rt rn rm _ shift)
   (store-word (+ rn (lshift rm (* shift 3))) rt))
 
 (defun LDRXroX (rt rn rm _ shift)
   (set$ rt (load-word (+ rn (lshift rm (* shift 3))))))
 
-(defun STRWui (src reg off)
-  (let ((off (lshift off 2)))
-    (store-word (+ reg off) (base-reg src))))
+
 
 (defun STRBBui (src reg off)
   (store-byte (+ reg off) (base-reg src)))
