@@ -38,5 +38,6 @@ Library arm_plugin
   FindlibName:      bap-plugin-arm
   BuildDepends:     bap, bap-abi, bap-arm, bap-c, core_kernel, bap-main, bap-api
   InternalModules:  Arm_main, Arm_gnueabi
+  DataFiles:        semantics/*.lisp ($datadir/bap/primus/semantics)
   XMETADescription: provide ARM lifter
   XMETAExtraLines:  tags="arm, lifter"

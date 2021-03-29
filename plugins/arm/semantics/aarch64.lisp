@@ -133,6 +133,12 @@
   (let ((off (lshift off 3)))
     (store-word (+ reg off) src)))
 
+(defun STRXroX (rt rn rm _ shift)
+  (store-word (+ rn (lshift rm (* shift 3))) rt))
+
+(defun LDRXroX (rt rn rm _ shift)
+  (set$ rt (load-word (+ rn (lshift rm (* shift 3))))))
+
 (defun STRWui (src reg off)
   (let ((off (lshift off 2)))
     (store-word (+ reg off) src)))
@@ -165,7 +171,7 @@
   (when (is-zero reg)
     (relative-jump off)))
 
-(defun CBZX (reg off)
+(defun CBZW (reg off)
   (when (is-zero (base-reg reg))
     (relative-jump off)))
 
