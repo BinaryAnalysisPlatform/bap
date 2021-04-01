@@ -77,6 +77,11 @@ type options = Options.t and options_cls = Options.cls
 
 type mem = Var : ('a,'b) Mem.t Var.t -> mem
 
+type alignment = {
+  code : int;
+  data : int;
+}
+
 type info = {
   parent : target;
   bits : int;
@@ -86,6 +91,7 @@ type info = {
   vars : Set.M(Var.Top).t;
   regs : Set.M(Var.Top).t Map.M(Role).t;
   endianness : endianness;
+  alignment : alignment;
   system : system;
   abi : abi;
   fabi : fabi;
@@ -113,6 +119,7 @@ let unknown = {
   parent = unknown;
   bits = 32;
   byte = 8;
+  alignment = {code=8; data=8};
   data = pack@@mem "mem" 32 8;
   code = pack@@mem "mem" 32 8;
   vars = Set.empty (module Var.Top);
@@ -150,6 +157,8 @@ let extend parent
     ?(byte=parent.byte)
     ?(data=unpack@@parent.data)
     ?(code=unpack@@parent.code)
+    ?(data_alignment=parent.alignment.data)
+    ?(code_alignment=parent.alignment.code)
     ?vars
     ?regs
     ?(endianness=parent.endianness)
@@ -173,6 +182,10 @@ let extend parent
     system; abi; fabi; filetype; data; code; regs;
     vars = collect_regs (vars + code + data) regs;
     options;
+    alignment = {
+      code=code_alignment;
+      data=data_alignment;
+    };
     names = Option.value_map nicknames
         ~default:parent.names
         ~f:String.Caseless.Set.of_list;
@@ -180,7 +193,9 @@ let extend parent
 
 let declare
     ?(parent=unknown.parent)
-    ?bits ?byte ?data ?code ?vars ?regs ?endianness
+    ?bits ?byte ?data ?code
+    ?data_alignment ?code_alignment
+    ?vars ?regs ?endianness
     ?system ?abi ?fabi ?filetype ?options
     ?nicknames ?package name =
   let t = Self.declare ?package name in
@@ -191,7 +206,8 @@ let declare
       (Name.unqualified (Self.name t))
       (Name.package (Self.name t)) ();
   let p = Hashtbl.find_exn targets parent in
-  let info = extend ?bits ?byte ?data ?code ?vars ?regs ?endianness
+  let info = extend ?bits ?byte ?data ?code
+      ?data_alignment ?code_alignment ?vars ?regs ?endianness
       ?system ?abi ?fabi ?filetype ?options ?nicknames p parent in
   Hashtbl.add_exn targets t info;
   t
@@ -270,6 +286,9 @@ let data_addr_size,
   let keys v = Bitv.size @@ Mem.keys @@ Var.sort v in
   (fun t -> keys @@ data t),
   (fun t -> keys @@ code t)
+
+let data_alignment t = (info t).alignment.data
+let code_alignment t = (info t).alignment.code
 
 let endianness t = (info t).endianness
 let system t = (info t).system

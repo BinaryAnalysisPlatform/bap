@@ -49,7 +49,7 @@ type value =
 
 (** abstraction of a С datum.
 
-    The datum is a sequence of bits, that represent a particular C
+    The datum is a sequence of bits that represenst a particular C
     value. We abstract datum as either an immediate value of the given
     size and value lattice, or a sequence of data, or a pointer to a
     datum.*)

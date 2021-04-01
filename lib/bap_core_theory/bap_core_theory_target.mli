@@ -20,6 +20,8 @@ val declare :
   ?byte:int ->
   ?data:_ Mem.t Var.t ->
   ?code:_ Mem.t Var.t ->
+  ?data_alignment:int ->
+  ?code_alignment:int ->
   ?vars:unit Var.t list ->
   ?regs:(role list * unit Var.t list) list ->
   ?endianness:endianness ->
@@ -51,6 +53,8 @@ val bits : t -> int
 val byte : t -> int
 val data_addr_size : t -> int
 val code_addr_size : t -> int
+val data_alignment : t -> int
+val code_alignment : t -> int
 val data : t -> (unit,unit) Mem.t Var.t
 val code : t -> (unit,unit) Mem.t Var.t
 val vars : t -> Set.M(Var.Top).t
