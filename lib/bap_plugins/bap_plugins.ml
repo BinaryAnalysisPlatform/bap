@@ -72,12 +72,11 @@ module Plugin = struct
   let find_library name =
     try Some (find_library_exn name) with _ -> None
 
-  let load_unit ?(don't_register=false) ~reason ~name pkg : unit or_error =
+  let load_unit ~reason ~name pkg : unit or_error =
     try
       notify (`Linking name);
       !load pkg;
-      if not (don't_register)
-      then Units.record name reason;
+      Units.record name reason;
       Ok ()
     with
     | Dynlink.Error err -> Units.handle_error name reason err
@@ -115,28 +114,29 @@ module Plugin = struct
       overwritten). This is a known bug/issue in the OCaml runtime
       that we need to workaround.
   *)
-  let load_entry ?don't_register plugin name =
+  let load_entry ?(main=false) plugin name =
     let suffix = if Dynlink.is_native then ".cmxs" else ".cma" in
     let name = Filename.basename name in
     let dst = Filename.(temp_file name suffix) in
     let path = Uri.of_string (name ^ suffix) in
-    let reason = `Requested_by plugin.name in
+    let reason = if main
+      then `Provided_by plugin.name
+      else `Requested_by plugin.name in
     Bundle.get_file ~name:dst plugin.bundle path |> function
     | Some uri ->
       let path = Uri.to_string uri in
-      let result = load_unit ?don't_register ~reason ~name path in
+      let result = load_unit ~reason ~name path in
       do_if_not_debugging Sys.remove path;
       result
     | None -> match find_library name with
       | Some lib ->
         let name = Filename.(basename name |> chop_extension) in
-        load_unit ?don't_register ~reason ~name lib
+        load_unit ~reason ~name lib
       | None -> Or_error.error_string "dependency not found"
 
   let validate_unit _plugin main =
     match Units.lookup main with
     | None -> Ok ()
-    | Some (`Provided_by name) when String.equal name main -> Ok ()
     | Some reason ->
       let with_whom = match reason with
         | `In_core -> "host program"
@@ -173,12 +173,10 @@ module Plugin = struct
       let old_bundle = main_bundle () in
       set_main_bundle (bundle plugin);
       load_entries plugin reqs >>= fun () ->
-      load_entry ~don't_register:true plugin main >>| fun () ->
+      load_entry ~main:true plugin main >>| fun () ->
       Promise.fulfill plugin.finish ();
       notify (`Loaded plugin);
-      set_main_bundle old_bundle;
-      let reason = `Provided_by plugin.name in
-      List.iter mains ~f:(fun unit -> Units.record unit reason)
+      set_main_bundle old_bundle
 
 
   let with_argv argv f = match argv with
