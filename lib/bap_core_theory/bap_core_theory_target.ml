@@ -77,6 +77,11 @@ type options = Options.t and options_cls = Options.cls
 
 type mem = Var : ('a,'b) Mem.t Var.t -> mem
 
+type alignment = {
+  code : int;
+  data : int;
+}
+
 type info = {
   parent : target;
   bits : int;
@@ -86,6 +91,7 @@ type info = {
   vars : Set.M(Var.Top).t;
   regs : Set.M(Var.Top).t Map.M(Role).t;
   endianness : endianness;
+  alignment : alignment;
   system : system;
   abi : abi;
   fabi : fabi;
@@ -113,6 +119,7 @@ let unknown = {
   parent = unknown;
   bits = 32;
   byte = 8;
+  alignment = {code=8; data=8};
   data = pack@@mem "mem" 32 8;
   code = pack@@mem "mem" 32 8;
   vars = Set.empty (module Var.Top);
@@ -139,12 +146,19 @@ let make_roles = List.fold
                 | Some vars' -> Set.union vars vars')))
     ~init:(Map.empty (module Role))
 
+let collect_regs ?pred init roles =
+  Map.fold roles ~init ~f:(fun ~key:_ ~data:vars' vars ->
+      match pred with
+      | None -> Set.union vars vars'
+      | Some pred -> Set.union vars (Set.filter vars' pred))
 
 let extend parent
     ?(bits=parent.bits)
     ?(byte=parent.byte)
     ?(data=unpack@@parent.data)
     ?(code=unpack@@parent.code)
+    ?(data_alignment=parent.alignment.data)
+    ?(code_alignment=parent.alignment.code)
     ?vars
     ?regs
     ?(endianness=parent.endianness)
@@ -153,26 +167,35 @@ let extend parent
     ?(fabi=parent.fabi)
     ?(filetype=parent.filetype)
     ?(options=parent.options)
-    ?nicknames name = {
-  parent=name; bits; byte; endianness;
-  system; abi; fabi; filetype;
-  options;
-  data = pack data;
-  code = pack code;
-  vars = Option.value_map vars
+    ?nicknames name =
+  let code = pack code
+  and data = pack data
+  and vars = Option.value_map vars
       ~default:parent.vars
       ~f:(Set.of_list (module Var.Top));
-  regs = Option.value_map regs
+  and regs = Option.value_map regs
       ~default:parent.regs
-      ~f:make_roles;
-  names = Option.value_map nicknames
-      ~default:parent.names
-      ~f:String.Caseless.Set.of_list;
-}
+      ~f:make_roles in
+  let (+) s (Var v) = Set.add s (Var.forget v) in
+  {
+    parent=name; bits; byte; endianness;
+    system; abi; fabi; filetype; data; code; regs;
+    vars = collect_regs (vars + code + data) regs;
+    options;
+    alignment = {
+      code=code_alignment;
+      data=data_alignment;
+    };
+    names = Option.value_map nicknames
+        ~default:parent.names
+        ~f:String.Caseless.Set.of_list;
+  }
 
 let declare
     ?(parent=unknown.parent)
-    ?bits ?byte ?data ?code ?vars ?regs ?endianness
+    ?bits ?byte ?data ?code
+    ?data_alignment ?code_alignment
+    ?vars ?regs ?endianness
     ?system ?abi ?fabi ?filetype ?options
     ?nicknames ?package name =
   let t = Self.declare ?package name in
@@ -183,7 +206,8 @@ let declare
       (Name.unqualified (Self.name t))
       (Name.package (Self.name t)) ();
   let p = Hashtbl.find_exn targets parent in
-  let info = extend ?bits ?byte ?data ?code ?vars ?regs ?endianness
+  let info = extend ?bits ?byte ?data ?code
+      ?data_alignment ?code_alignment ?vars ?regs ?endianness
       ?system ?abi ?fabi ?filetype ?options ?nicknames p parent in
   Hashtbl.add_exn targets t info;
   t
@@ -213,17 +237,6 @@ let bits t = (info t).bits
 let byte t = (info t).byte
 let data t = unpack@@(info t).data
 let code t = unpack@@(info t).code
-
-let collect_regs ?pred init roles =
-  Map.fold roles ~init ~f:(fun ~key:_ ~data:vars' vars ->
-      match pred with
-      | None -> Set.union vars vars'
-      | Some pred -> Set.union vars (Set.filter vars' pred))
-
-let vars t =
-  let (+) s (Var v) = Set.add s (Var.forget v) in
-  let {code; data; vars; regs} = info t in
-  collect_regs (vars + code + data) regs
 
 let has_role roles var role = match Map.find roles role with
   | None -> false
@@ -262,12 +275,20 @@ let reg ?exclude ?(unique=false) t role =
     | Some _ when unique && non_unique vars -> None
     | x -> x
 
+let vars t = (info t).vars
+
+let var t name =
+  let key = Var.define Sort.Top.t name in
+  Set.binary_search (vars t) ~compare:Var.Top.compare `First_equal_to key
 
 let data_addr_size,
     code_addr_size =
   let keys v = Bitv.size @@ Mem.keys @@ Var.sort v in
   (fun t -> keys @@ data t),
   (fun t -> keys @@ code t)
+
+let data_alignment t = (info t).alignment.data
+let code_alignment t = (info t).alignment.code
 
 let endianness t = (info t).endianness
 let system t = (info t).system

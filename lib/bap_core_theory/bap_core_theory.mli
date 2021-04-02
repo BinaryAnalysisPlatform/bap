@@ -1363,6 +1363,8 @@ module Theory : sig
       ?byte:int ->               (** defaults to [8]  *)
       ?data:_ Mem.t Var.t ->     (** defaults to [mem : Mem(bits,byte)] *)
       ?code:_ Mem.t Var.t ->     (** defaults to [mem : Mem(bits,byte)] *)
+      ?data_alignment:int ->     (** defaults to 8 bit *)
+      ?code_alignment:int ->     (** defaults to 8 bit *)
       ?vars:unit Var.t list ->   (** defaults to [[]] *)
       ?regs:(role list * unit Var.t list) list -> (** defaults to [[]] *)
       ?endianness:endianness ->  (** defaults to [Endian.big] *)
@@ -1500,6 +1502,21 @@ module Theory : sig
         from the sort of the keys of the [data] memory variable. *)
     val code_addr_size : t -> int
 
+
+    (** The required data addresses alignment in bits.
+
+        The target [t] requires that all data addresses are
+        multiples of [data_alignment t]-bit words.
+    *)
+    val data_alignment : t -> int
+
+    (** The required code addresses alignment in bits.
+
+        The target [t] requires that all code addresses are
+        multiples of [code_alignment t]-bit words.
+    *)
+    val code_alignment : t -> int
+
     (** [data target] the main memory variable. *)
     val data : t -> (unit,unit) Mem.t Var.t
 
@@ -1546,6 +1563,16 @@ module Theory : sig
         @since 2.3.0
     *)
     val reg : ?exclude:role list -> ?unique:bool -> t -> role -> unit Var.t option
+
+
+    (** [var target name] returns a target variable with the given name.
+
+        The variable is searched in all variables and registers
+        provided in target declaration. The search is O(log(N)).
+
+        @since 2.3.0
+    *)
+    val var : t -> string -> unit Var.t option
 
     (** [endianness target] describes the byte order.
 
@@ -2407,8 +2434,6 @@ module Theory : sig
 
 
     (** [loadw s e m k] loads a word from the memory [m].
-
-
 
         if [e] evaluates to [b1] (big endian case),
         then the term evaluates to [low s (m[k] @ m[k+1] @ ... @ m[k+n] )],

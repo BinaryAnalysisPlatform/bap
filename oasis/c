@@ -8,7 +8,8 @@ Library bap_c
   Path: lib/bap_c
   FindlibName: bap-c
   CompiledObject: best
-  BuildDepends: bap, bap-api, core_kernel, ppx_bap, monads, regular
+  BuildDepends: bap, bap-abi, bap-api, core_kernel, ppx_bap, monads, regular,
+                bap-core-theory, bap-knowledge
   Modules: Bap_c,
            Bap_c_abi,
            Bap_c_attr,
