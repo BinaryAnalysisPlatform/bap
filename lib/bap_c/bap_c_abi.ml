@@ -311,6 +311,8 @@ module Arg = struct
 
     let bits self = self.bits
 
+    let deplet self = {self with args = Map.empty (module Int)}
+
     let pop self = match Map.min_elt self.args with
       | None -> None
       | Some (k,x) ->
@@ -434,7 +436,7 @@ module Arg = struct
         Arg.return res
     let pop s n = update s n File.pop
     let popn ~n s a = update s a (File.popn n)
-
+    let deplet s n = update s n @@ fun s -> Some (File.deplet s,())
   end
 
   let size s t = match s.ruler#bits t with
@@ -491,6 +493,10 @@ module Arg = struct
   let align_even file =
     let* s = Arg.get () in
     Arena.popn ~n:2 s file >>| ignore
+
+  let deplet file =
+    let* s = Arg.get () in
+    Arena.deplet s file
 
   let switch where = Arg.update @@ fun s -> {s with where}
   let where = Arg.gets @@ fun s -> s.where
