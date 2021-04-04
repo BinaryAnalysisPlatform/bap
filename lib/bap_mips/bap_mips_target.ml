@@ -64,6 +64,7 @@ let define ?(parent=parent) bits endianness =
     ~regs:Theory.Role.Register.[
         [general; integer], regs gpr_names;
         [general; floating], untyped fprs;
+        [constant; zero; pseudo], regs ["ZERO"];
         [stack_pointer], regs ["SP"];
         [frame_pointer], regs ["FP"];
         [link], regs ["RA"];

@@ -17,10 +17,10 @@ type conflict = exn = ..
 
 module Conflict = struct
   type t = conflict = ..
-  let pp = Exn.pp
-  let register_printer pr = Caml.Printexc.register_printer pr
-  let sexp_of_t = Exn.sexp_of_t
-  let to_string = Exn.to_string
+  let to_string = Caml.Printexc.to_string
+  let pp ppf err = Format.fprintf ppf "%s" (to_string err)
+  let register_printer = Caml.Printexc.register_printer
+  let sexp_of_t err = Sexp.Atom (to_string err)
 end
 
 module type Id = sig
@@ -337,7 +337,13 @@ end = struct
                            Change one of them."
             (full name) (full name') ()
 
-    let fullname = Hashtbl.find_exn registry
+    let fullname id = match Hashtbl.find registry id with
+      | Some name -> name
+      | None -> {
+          package="id";
+          name=sprintf "%Lx" (Int63.to_int64 id)
+        }
+
     include Int63
     let sexp_of_t id =
       Sexp.Atom (Full.to_string (fullname id))

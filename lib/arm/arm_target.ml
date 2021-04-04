@@ -76,10 +76,13 @@ let vfp3regs = Theory.Role.Register.[
 
 let vars32_fp = vars32 @ untyped @@ array r64 "D" 16
 
-let gp64 = array r64 "X" 30
+let gp64 = array r64 "X" 29
 let fp64 = array r128 "Q" 32
-let sp64 = [reg r64 "SP"]
-let lr64 = [reg r64 "LR"]
+let fp64 = reg r64 "FP"       (* X29 *)
+let lr64 = reg r64 "LR"       (* X30 *)
+let sp64 = reg r64 "SP"       (* X31 *)
+let zr64 = reg r64 "XZR"
+let zr32 = reg r32 "WZR"
 let mems64 = CT.Mem.define r64 r8
 let data64 = CT.Var.define mems64 "mem"
 let flags64 = [
@@ -89,13 +92,18 @@ let flags64 = [
   reg bool "VF";
 ]
 
-let vars64 = gp64 @< fp64 @< sp64 @< lr64 @< flags64 @< [data64]
+let vars64 = gp64 @< [fp64; sp64; lr64] @< flags64 @< [data64]
 
 let regs64 = Theory.Role.Register.[
-    [general; integer], gp64 @< sp64 @< lr64;
-    [general; floating], untyped fp64;
-    [stack_pointer], untyped sp64;
-    [link], untyped lr64;
+    [general; integer], gp64 @< [fp64; lr64; sp64];
+    [general; floating], untyped [fp64];
+    [stack_pointer], untyped [sp64];
+    [frame_pointer], untyped [fp64];
+    [function_argument], array r64 "X" 8 @< array r64 "Q" 8;
+    [function_return], [reg r64 "X0"] @< [reg r128 "Q0"];
+    [constant; zero; pseudo], [zr64] @< [zr32];
+    [pseudo], array r32 "W" 31 @< [reg r32 "WSP"];
+    [link], untyped [lr64];
   ] @ status_regs
 
 
@@ -375,7 +383,7 @@ let enable_arch () =
 
 let llvm_a32 = CT.Language.declare ~package "llvm-A32"
 let llvm_t32 = CT.Language.declare ~package "llvm-T32"
-let llvm_a64 = CT.Language.declare ~package "llvm-A64"
+let llvm_a64 = CT.Language.declare ~package "llvm-aarch64"
 
 module Dis = Disasm_expert.Basic
 

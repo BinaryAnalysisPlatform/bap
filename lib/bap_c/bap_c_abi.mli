@@ -286,6 +286,12 @@ module Arg : sig
   *)
   val align_even : arena -> unit t
 
+  (** [deplet arena] unconditionally consumes all registers in arena.
+
+      The computation is never rejected.
+  *)
+  val deplet : arena -> unit t
+
   (** [reference arena t] passes the argument of type [t] as a pointer
       to [t] via the first available register in [arena].
 

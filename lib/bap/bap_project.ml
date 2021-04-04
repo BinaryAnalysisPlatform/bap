@@ -44,21 +44,17 @@ let with_filename spec target code memory path =
   let width = Theory.Target.code_addr_size target in
   let bias = query spec Image.Scheme.bias |> Option.map
                ~f:(fun x -> Bitvec.(int64 x mod modulus width)) in
-  KB.promising Theory.Label.unit ~promise:(fun label ->
-      KB.collect Theory.Label.addr label >>=? fun addr ->
-      let addr = Word.create addr width in
-      if Memmap.contains code addr then
-        Theory.Unit.for_file path >>= fun unit ->
-        KB.sequence [
-          KB.provide Image.Spec.slot unit spec;
-          KB.provide Theory.Unit.bias unit bias;
-          KB.provide Theory.Unit.target unit target;
-          KB.provide Image.Spec.slot unit spec;
-          KB.provide Theory.Unit.path unit (Some path);
-          KB.provide memory_slot unit memory;
-        ] >>| fun () ->
-        Some unit
-      else KB.return None)
+  KB.promising Theory.Label.unit ~promise:(fun _ ->
+      Theory.Unit.for_file path >>= fun unit ->
+      KB.sequence [
+        KB.provide Image.Spec.slot unit spec;
+        KB.provide Theory.Unit.bias unit bias;
+        KB.provide Theory.Unit.target unit target;
+        KB.provide Image.Spec.slot unit spec;
+        KB.provide Theory.Unit.path unit (Some path);
+        KB.provide memory_slot unit memory;
+      ] >>| fun () ->
+      Some unit)
 
 
 module State = struct

@@ -55,7 +55,7 @@ testsuite:
 	git clone https://github.com/BinaryAnalysisPlatform/bap-testsuite.git testsuite
 
 check: testsuite
-	make REVISION=eaa6b5e -C testsuite
+	make REVISION=3720beda -C testsuite
 
 .PHONY: indent check-style status-clean
 

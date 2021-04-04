@@ -64,6 +64,7 @@ val regs :
   ?roles:role list ->
   t -> Set.M(Var.Top).t
 val reg : ?exclude:role list -> ?unique:bool -> t -> role -> unit Var.t option
+val has_roles : t -> role list -> _ Var.t -> bool
 val endianness : t -> endianness
 val system : t -> system
 val abi : t -> abi

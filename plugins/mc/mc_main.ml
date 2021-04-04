@@ -117,7 +117,9 @@ type output = [
   | `kinds
   | `size
   | `invalid
-] [@@deriving compare]
+  | `addr
+  | `memory
+] [@@deriving compare, enumerate]
 
 type target =
   | Target of {
@@ -132,15 +134,6 @@ type target =
       bits : int;
     }
 
-let outputs = [
-  `insn;
-  `bil;
-  `bir;
-  `sema;
-  `kinds;
-  `size;
-  `invalid;
-]
 
 let fail err = Error (Fail err)
 
@@ -193,7 +186,7 @@ module Spec = struct
       ~doc: "The order of bytes in the target's word \
              (used with triple or arch)."
 
-  let outputs =
+  let outputs : (output,string list) List.Assoc.t Extension.Command.param =
     let name_of_output = function
       | `insn -> "insn"
       | `bil  -> "bil"
@@ -201,12 +194,14 @@ module Spec = struct
       | `sema -> "sema"
       | `kinds -> "kinds"
       | `size -> "size"
+      | `addr -> "addr"
+      | `memory -> "memory"
       | `invalid -> "invalid" in
 
     let as_flag = function
       | `insn | `bil | `bir -> ["pretty"]
       | `sema -> ["all-slots"]
-      | `kinds | `size | `invalid -> [enabled] in
+      | `kinds | `size | `invalid | `memory | `addr -> [enabled] in
 
     let doc = function
       | `insn -> "Print the decoded instruction."
@@ -215,10 +210,12 @@ module Spec = struct
       | `sema -> "Print the knowledge base."
       | `kinds -> "Print semantics tags associated with instruction."
       | `size -> "Print the instruction size."
+      | `addr -> "Print the instruction address"
+      | `memory -> "Print the instruction memory representation"
       | `invalid -> "Print invalid instructions." in
 
     let name s = "show-" ^ name_of_output s in
-    Extension.Command.dictionary ~doc ~as_flag outputs
+    Extension.Command.dictionary ~doc ~as_flag all_of_output
       Type.(list string) name
 
   let base =
@@ -314,17 +311,18 @@ let new_insn arch mem insn =
   KB.Object.create Theory.Program.cls >>= fun code ->
   KB.Symbol.intern "unit" Theory.Unit.cls >>= fun unit ->
   provide_target unit code arch >>= fun () ->
-  KB.provide Theory.Label.unit code (Some unit) >>= fun () ->
-  KB.provide Memory.slot code (Some mem) >>= fun () ->
-  KB.provide Dis.Insn.slot code (Some insn) >>| fun () ->
-  code
+  KB.promising Theory.Label.unit ~promise:(fun _ -> !!(Some unit)) @@begin fun () ->
+    KB.provide Memory.slot code (Some mem) >>= fun () ->
+    KB.provide Dis.Insn.slot code (Some insn) >>= fun () ->
+    KB.collect Theory.Semantics.slot code >>| fun _ ->
+    code
+  end
 
 let lift arch mem insn =
-  match KB.run Theory.Program.cls (new_insn arch mem insn) KB.empty with
+  match Toplevel.try_eval Theory.Semantics.slot (new_insn arch mem insn) with
   | Error conflict -> fail (Inconsistency conflict)
-  | Ok (code,_) ->
+  | Ok sema ->
     Result.return @@
-    let sema = KB.Value.get Theory.Semantics.slot code in
     if Insn.(equal empty sema)
     then Insn.of_basic insn
     else sema
@@ -332,6 +330,14 @@ let lift arch mem insn =
 let print_insn_size formats mem =
   List.iter formats ~f:(fun _fmt ->
       printf "%#x@\n" (Memory.length mem))
+
+let print_insn_addr formats mem =
+  List.iter formats ~f:(fun _enabled ->
+      printf "%a:@\n" Addr.pp (Memory.min_addr mem))
+
+let print_insn_memory formats mem =
+  List.iter formats ~f:(fun _enabled ->
+      printf "%a@\n" Memory.pp mem)
 
 let print_insn insn_formats insn =
   List.iter insn_formats ~f:(fun fmt ->
@@ -356,6 +362,7 @@ let print_sema formats sema = match formats with
     let pp = KB.Value.pp_slots some_slots in
     printf "%a@\n" pp sema
 
+
 let equal_output = [%compare.equal: output]
 
 let is_enabled = function
@@ -369,6 +376,8 @@ let formats outputs kind =
 
 let print arch mem code formats =
   lift arch mem code >>| fun insn ->
+  print_insn_memory (formats `memory) mem;
+  print_insn_addr (formats `addr) mem;
   print_insn_size (formats `size) mem;
   print_insn (formats `insn) insn;
   print_bil (formats `bil) insn;
@@ -419,11 +428,13 @@ let validate_formats formats =
   List.map formats ~f:(function
       | (`insn|`bil|`bir) as kind,fmts ->
         validate_module kind fmts
-      | (`kinds|`size|`invalid),[] -> Ok ()
-      | (`kinds|`size|`invalid),[opt]
+      | (`kinds|`size|`invalid|`addr|`memory),[] -> Ok ()
+      | (`kinds|`size|`invalid|`addr|`memory),[opt]
         when String.equal enabled opt -> Ok ()
       | `kinds,_ -> Error (No_formats_expected "kinds")
       | `size,_ -> Error (No_formats_expected "size")
+      | `addr,_ -> Error (No_formats_expected "addr")
+      | `memory,_ -> Error (No_formats_expected "memory")
       | `invalid,_ -> Error (No_formats_expected "invalid")
       | `sema,_ ->
         (* no validation right now, since the knowledge introspection
