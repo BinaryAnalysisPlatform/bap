@@ -83,6 +83,17 @@ let data (size : #Bap_c_size.base) (t : Bap_c_type.t) =
     | `Function _ -> Ptr (Imm ((size#pointer :> size),Top)) in
   data t
 
+let array_to_pointer (t : ctype) : ctype =
+  match t with
+  | `Array ({t={element}} as s) -> `Pointer {s with t = element}
+  | t -> t
+
+let decay_arrays : proto -> proto = fun proto -> {
+    proto with
+    return = array_to_pointer proto.return;
+    args = List.Assoc.map ~f:array_to_pointer proto.args;
+  }
+
 let create_arg i addr_size intent name t (data,exp) sub =
   let typ = match data with
     | Bap_c_data.Imm (sz,_) -> Type.Imm (Size.in_bits sz)
@@ -139,6 +150,7 @@ let create_api_processor size abi : Bap_api.t =
 
 
     method private apply_args sub attrs t =
+      let t = decay_arrays t in
       match abi.insert_args sub attrs t with
       | None ->
         super#map_sub sub
