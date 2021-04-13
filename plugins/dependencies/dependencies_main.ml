@@ -37,9 +37,7 @@ module Unit = struct
       ~of_bigstring:(Binable.of_bigstring (module Io))
 
   let writer = Data.Write.create ()
-      ~to_bigstring:(Binable.to_bigstring (module Io))
-
-  let cache = Data.Cache.Service.request reader writer
+      ~to_bigstring:(fun data -> Binable.to_bigstring (module Io) data)
 
   let search paths file =
     if Sys.file_exists file then Some file
@@ -68,12 +66,16 @@ module Unit = struct
       let empty =
         Data.Cache.Digest.create ~namespace:"dependencies" in
       let digest = Data.Cache.Digest.add empty "%s%s" context name in
+      let cache = Data.Cache.Service.request reader writer in
       match Data.Cache.load cache digest with
       | None ->
         let data = of_image loader name in
         Data.Cache.save cache digest data;
+        info "caching %s as %a" name Data.Cache.Digest.pp digest;
         data
-      | Some data -> data
+      | Some data ->
+        info "%s is cached" name;
+        data
 
 
   let pp_elts ppf elts =
@@ -145,7 +147,7 @@ module Elf = struct
   let libraries img =
     match section_by_name img ".dynstr" with
     | None ->
-      info "not a dynamic object";
+      warning "not a dynamic object";
       Seq.empty
     | Some strtab ->
       Seq.of_list (dynamic_contents img) |>
@@ -159,7 +161,6 @@ end
 
 let () = Extension.Command.(begin
     declare "dependencies" (args $paths $input)
-      ~requires:["loader"]
   end) @@ fun paths input ctxt ->
   let context = Extension.Configuration.digest ctxt in
   let r = Unit.load ~context Elf.loader (List.concat paths) input in
