@@ -1,9 +1,15 @@
 open Core_kernel
 open Bap.Std
+open Regular.Std
 open Bap_main
+
+include Loggers()
 
 let input = Extension.Command.argument
     ~doc:"The input file" Extension.Type.("FILE" %: string =? "a.out")
+
+let paths = Extension.Command.parameters Extension.Type.(list string)
+    "library-paths"
 
 module Loader = struct
   type t = {
@@ -12,14 +18,78 @@ module Loader = struct
   }
 end
 
-
 module Unit = struct
   type t = {
     name : string;
-    imports : Set.M(String).t;
-    libraries : Set.M(String).t;
+    imports : string list;
+    libraries : string list;
   } [@@deriving bin_io, compare, sexp]
 
+  let empty name = {
+    name;
+    imports = [];
+    libraries = [];
+  }
+
+  module Io = struct type nonrec t = t [@@deriving bin_io] end
+
+  let reader = Data.Read.create ()
+      ~of_bigstring:(Binable.of_bigstring (module Io))
+
+  let writer = Data.Write.create ()
+      ~to_bigstring:(Binable.to_bigstring (module Io))
+
+  let cache = Data.Cache.Service.request reader writer
+
+  let search paths file =
+    if Sys.file_exists file then Some file
+    else List.find_map paths ~f:(fun folder ->
+        let path = Filename.concat folder file in
+        Option.some_if (Sys.file_exists path) path)
+
+  let of_image {Loader.libraries; imports} name =
+    match Image.create ~backend:"llvm" name with
+    | Error err ->
+      warning "failed to load the file %S: %a@\n"
+        name Error.pp err;
+      empty name
+    | Ok (img,_) -> {
+        name;
+        libraries = Seq.to_list (libraries img);
+        imports = Seq.to_list (imports img);
+      }
+
+  let load ~context loader paths name =
+    match search paths name with
+    | None ->
+      warning "missing dependency: %s" name;
+      empty name
+    | Some name ->
+      let empty =
+        Data.Cache.Digest.create ~namespace:"dependencies" in
+      let digest = Data.Cache.Digest.add empty "%s%s" context name in
+      match Data.Cache.load cache digest with
+      | None ->
+        let data = of_image loader name in
+        Data.Cache.save cache digest data;
+        data
+      | Some data -> data
+
+
+  let pp_elts ppf elts =
+    Format.pp_print_list Format.pp_print_string ppf elts
+      ~pp_sep:Format.pp_print_space
+
+  let pp_field ppf = function
+    | (_,[]) -> ()
+    | (name,elts) ->
+      Format.fprintf ppf "@ @[<hv2>(%s@ %a)@]"
+        name pp_elts elts
+
+  let pp ppf {name; imports; libraries} =
+    Format.fprintf ppf "@[<hv2>(%s%a%a)@]" name
+      pp_field ("imports",imports)
+      pp_field ("libraries",libraries)
 
 end
 
@@ -74,7 +144,9 @@ module Elf = struct
 
   let libraries img =
     match section_by_name img ".dynstr" with
-    | None -> Seq.empty
+    | None ->
+      info "not a dynamic object";
+      Seq.empty
     | Some strtab ->
       Seq.of_list (dynamic_contents img) |>
       Seq.filter_map ~f:(fun {tag; off} ->
@@ -85,17 +157,11 @@ module Elf = struct
   let loader = {Loader.libraries; imports = Spec.(query imports)}
 end
 
-let print_plain =
-  Seq.iter ~f:(Format.printf "%s@\n")
-
 let () = Extension.Command.(begin
-    declare "dependencies" (args $input)
+    declare "dependencies" (args $paths $input)
       ~requires:["loader"]
-  end) @@ fun input _ctxt ->
-  match Image.create ~backend:"llvm" input with
-  | Error err ->
-    invalid_argf "failed to parse the file: %s"
-      (Error.to_string_hum err) ()
-  | Ok (img,_warns) ->
-    print_plain @@ Elf.libraries img;
-    Ok ()
+  end) @@ fun paths input ctxt ->
+  let context = Extension.Configuration.digest ctxt in
+  let r = Unit.load ~context Elf.loader (List.concat paths) input in
+  Format.printf "%a@." Unit.pp r;
+  Ok ()

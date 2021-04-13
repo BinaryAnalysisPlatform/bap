@@ -8,6 +8,6 @@ Library dependencies_plugin
   Path: plugins/dependencies
   FindlibName: bap-plugin-dependencies
   CompiledObject: best
-  BuildDepends: bap, core_kernel, bap-main, ogre
+  BuildDepends: bap, core_kernel, bap-main, ogre, regular, ppx_bap
   InternalModules: Dependencies_main
   XMETAExtraLines: tags="command, dependencies"
