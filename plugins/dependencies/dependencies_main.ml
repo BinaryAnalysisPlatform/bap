@@ -5,12 +5,6 @@ open Bap_main
 
 include Loggers()
 
-let input = Extension.Command.argument
-    ~doc:"The input file" Extension.Type.("FILE" %: string =? "a.out")
-
-let paths = Extension.Command.parameters Extension.Type.(list string)
-    "library-paths"
-
 module Loader = struct
   type t = {
     libraries : image -> string seq;
@@ -92,6 +86,38 @@ module Unit = struct
     Format.fprintf ppf "@[<hv2>(%s%a%a)@]" name
       pp_field ("imports",imports)
       pp_field ("libraries",libraries)
+end
+
+module State = struct
+  type t = {
+    root : string;
+    units : Unit.t Map.M(String).t;
+  }
+
+  let load ~recursive ~context paths loader root =
+    let load = Unit.load ~context loader paths in
+    let unit = load root in
+    let init = {
+      root;
+      units = Map.singleton (module String) root unit;
+    } in
+    let rec closure state name =
+      if Map.mem state.units name then state
+      else
+        let unit = load name in
+        let state = {
+          state with units = Map.add_exn state.units name unit
+        } in
+        load_deps state unit
+    and load_deps state unit =
+      List.fold unit.libraries ~init:state ~f:closure in
+    if recursive
+    then load_deps init unit
+    else init
+
+  let pp ppf {units} =
+    Map.iter units ~f:(fun unit ->
+        Format.fprintf ppf "%a@\n" Unit.pp unit)
 
 end
 
@@ -159,10 +185,21 @@ module Elf = struct
   let loader = {Loader.libraries; imports = Spec.(query imports)}
 end
 
+
+let input = Extension.Command.argument
+    ~doc:"The input file" Extension.Type.("FILE" %: string =? "a.out")
+
+let paths = Extension.Command.parameters Extension.Type.(list string)
+    "library-paths"
+
+let recursive = Extension.Command.flag "recursive"
+    ~aliases:["r"]
+
 let () = Extension.Command.(begin
-    declare "dependencies" (args $paths $input)
-  end) @@ fun paths input ctxt ->
+    declare "dependencies" (args $recursive $paths $input)
+      ~requires:["loader"; "cache"]
+  end) @@ fun recursive paths input ctxt ->
   let context = Extension.Configuration.digest ctxt in
-  let r = Unit.load ~context Elf.loader (List.concat paths) input in
-  Format.printf "%a@." Unit.pp r;
+  let r = State.load ~recursive ~context (List.concat paths) Elf.loader input in
+  Format.printf "%a@." State.pp r;
   Ok ()
