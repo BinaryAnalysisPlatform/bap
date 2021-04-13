@@ -4,7 +4,7 @@ Flag specification
 
 Library specification_plugin
   Build$: flag(everything) || flag(specification)
-  XMETADescription: implements the specification command
+  XMETADescription: prints the specification of the binary (like readelf)
   Path: plugins/specification
   FindlibName: bap-plugin-specification
   CompiledObject: best

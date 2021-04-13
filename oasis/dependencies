@@ -1,0 +1,13 @@
+Flag dependencies
+  Description: Enable the dependencies command
+  Default: false
+
+Library dependencies_plugin
+  Build$: flag(everything) || flag(dependencies)
+  XMETADescription: analyses the binary dependencies
+  Path: plugins/dependencies
+  FindlibName: bap-plugin-dependencies
+  CompiledObject: best
+  BuildDepends: bap, core_kernel, bap-main, ogre
+  InternalModules: Dependencies_main
+  XMETAExtraLines: tags="command, dependencies"
