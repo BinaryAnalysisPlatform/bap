@@ -9,6 +9,7 @@ module Loader = struct
   type t = {
     libraries : image -> string seq;
     imports : image -> string seq;
+    exports : image -> string seq;
   }
 end
 
@@ -16,12 +17,14 @@ module Unit = struct
   type t = {
     name : string;
     imports : string list;
+    exports : string list;
     libraries : string list;
   } [@@deriving bin_io, compare, sexp]
 
   let empty name = {
     name;
     imports = [];
+    exports = [];
     libraries = [];
   }
 
@@ -39,7 +42,7 @@ module Unit = struct
         let path = Filename.concat folder file in
         Option.some_if (Sys.file_exists path) path)
 
-  let of_image {Loader.libraries; imports} name =
+  let of_image {Loader.libraries; imports; exports} name =
     match Image.create ~backend:"llvm" name with
     | Error err ->
       warning "failed to load the file %S: %a@\n"
@@ -49,6 +52,7 @@ module Unit = struct
         name;
         libraries = Seq.to_list (libraries img);
         imports = Seq.to_list (imports img);
+        exports = Seq.to_list (exports img);
       }
 
   let load ~context loader paths name =
@@ -82,9 +86,10 @@ module Unit = struct
       Format.fprintf ppf "@ @[<hv2>(%s@ %a)@]"
         name pp_elts elts
 
-  let pp ppf {name; imports; libraries} =
-    Format.fprintf ppf "@[<hv2>(%s%a%a)@]" name
+  let pp ppf {name; imports; exports; libraries} =
+    Format.fprintf ppf "@[<hv2>(%s%a%a%a)@]" name
       pp_field ("imports",imports)
+      pp_field ("exports",exports)
       pp_field ("libraries",libraries)
 end
 
@@ -124,9 +129,16 @@ end
 module Spec = struct
   open Image.Scheme
 
-  let imports =
-    Ogre.foreach Ogre.Query.(select (from external_reference))
-      ~f:(fun (_, name) -> name)
+  let imports = Ogre.foreach Ogre.Query.(begin
+      select (from external_reference $ named_symbol)
+        ~join:[[field name]]
+        ~where:(named_symbol.(addr) = int 0L)
+    end) ~f:(fun (_, name) _ -> name)
+
+  let exports = Ogre.foreach Ogre.Query.(begin
+      select (from named_symbol)
+        ~where:(named_symbol.(addr) <> int 0L)
+    end) ~f:(fun (_, name) -> name)
 
   let query what image =
     match Ogre.eval what (Image.spec image) with
@@ -182,7 +194,11 @@ module Elf = struct
           | Ok 1, Ok off -> Some (read ~strtab off)
           | _ -> None)
 
-  let loader = {Loader.libraries; imports = Spec.(query imports)}
+  let loader = {
+    Loader.libraries;
+    imports = Spec.(query imports);
+    exports = Spec.(query exports);
+  }
 end
 
 
