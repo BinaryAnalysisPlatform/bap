@@ -52,7 +52,7 @@ module Unit = struct
         name Error.pp err;
       empty name
     | Ok (img,_) -> {
-        name;
+        name = Filename.basename name;
         libraries = Seq.to_list (libraries img);
         imports = set_of_seq (imports img);
         exports = set_of_seq (exports img);
@@ -78,17 +78,24 @@ module Unit = struct
         info "%s is cached" name;
         data
 
+  let print_set ~pp_nil ~pp_sep ~pp_elt ppf elts =
+    match Set.max_elt elts with
+    | None -> pp_nil ppf ()
+    | Some last ->
+      Set.iter elts ~f:(fun elt ->
+          pp_elt ppf elt;
+          if not (String.equal elt last)
+          then pp_sep ppf ())
+
   module Sexp = struct
     let pp_list ppf elts =
       Format.pp_print_list Format.pp_print_string ppf elts
         ~pp_sep:Format.pp_print_space
 
-    let pp_set ppf elts =
-      let last = Set.max_elt_exn elts in
-      Set.iter elts ~f:(fun elt ->
-          Format.pp_print_string ppf elt;
-          if not (String.equal elt last)
-          then Format.pp_print_space ppf ())
+    let pp_set = print_set
+        ~pp_nil:Format.pp_print_space
+        ~pp_sep:Format.pp_print_space
+        ~pp_elt:Format.pp_print_string
 
     let pp_list_field ppf = function
       | (_,[]) -> ()
@@ -117,17 +124,9 @@ module Unit = struct
   module Json = struct
     let pp_elt ppf = Format.fprintf ppf "%S"
     let pp_sep ppf () = Format.fprintf ppf ",@ "
-
-    let pp_set ppf elts = match Set.max_elt elts with
-      | None -> ()
-      | Some last ->
-        Set.iter elts ~f:(fun elt ->
-            pp_elt ppf elt;
-            if not (String.equal last elt)
-            then pp_sep ppf ())
-
+    let pp_nil _ () = ()
+    let pp_set = print_set ~pp_nil ~pp_sep ~pp_elt
     let pp_list = Format.pp_print_list pp_elt ~pp_sep
-
     let pp ppf {name; imports; exports; libraries} =
       Format.fprintf ppf {|@[<hv2>
   %S: {
@@ -137,6 +136,28 @@ module Unit = struct
   }
 @]|}
         name pp_set imports pp_set exports pp_list libraries
+  end
+
+  module Yaml = struct
+    let pp_elt ppf = Format.fprintf ppf "    - %s"
+    let pp_sep = Format.pp_print_newline
+    let pp_nil ppf () = Format.pp_print_string ppf ""
+    let pp_set = print_set ~pp_nil ~pp_elt ~pp_sep
+    let pp_elts = Format.pp_print_list ~pp_sep pp_elt
+    let pp_list ppf xs = match xs with
+      | [] -> pp_nil ppf ()
+      | xs -> pp_elts ppf xs
+
+    let pp ppf {name; imports; exports; libraries} =
+      Format.fprintf ppf {|
+%s:
+  imports:
+%a
+  exports:
+%a
+  libraries:
+%a
+|} name pp_set imports pp_set exports pp_list libraries
   end
 
 end
@@ -187,6 +208,8 @@ module State = struct
   let pp_json ppf g =
     Format.fprintf ppf "@[<hv2>{%a}@]"
       (print_units ~pp_sep:pp_comma Unit.Json.pp) g
+
+  let pp_yaml = print_units Unit.Yaml.pp
 end
 
 module Spec = struct
@@ -274,9 +297,10 @@ let recursive = Extension.Command.flag "recursive"
     ~aliases:["r"]
 
 let formats = Extension.Type.enum [
-    "graph", State.pp_graph;
+    "yaml", State.pp_yaml;
     "sexp", State.pp_sexp;
     "json", State.pp_json;
+    "graph", State.pp_graph;
   ]
 
 let format = Extension.Command.parameter formats "format"
