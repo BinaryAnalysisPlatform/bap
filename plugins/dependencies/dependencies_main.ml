@@ -114,6 +114,31 @@ module Unit = struct
           Format.fprintf ppf "%S -> %S@\n" name dep)
   end
 
+  module Json = struct
+    let pp_elt ppf = Format.fprintf ppf "%S"
+    let pp_sep ppf () = Format.fprintf ppf ",@ "
+
+    let pp_set ppf elts = match Set.max_elt elts with
+      | None -> ()
+      | Some last ->
+        Set.iter elts ~f:(fun elt ->
+            pp_elt ppf elt;
+            if not (String.equal last elt)
+            then pp_sep ppf ())
+
+    let pp_list = Format.pp_print_list pp_elt ~pp_sep
+
+    let pp ppf {name; imports; exports; libraries} =
+      Format.fprintf ppf {|@[<hv2>
+  %S: {
+    "imports": [@,%a],
+    "exports": [@,%a],
+    "libraries": [@,%a]
+  }
+@]|}
+        name pp_set imports pp_set exports pp_list libraries
+  end
+
 end
 
 module State = struct
@@ -143,11 +168,13 @@ module State = struct
     then load_deps init unit
     else init
 
-  let print_units pp_unit ppf {units} =
-    Map.iter units ~f:(fun unit ->
-        Format.fprintf ppf "%a@\n" pp_unit unit)
-
-
+  let print_units ?(pp_sep=Format.pp_print_cut) pp_unit ppf {units} =
+    match Map.max_elt units with
+    | None -> ()
+    | Some (last,_) ->
+      Map.iteri units ~f:(fun ~key:name ~data:unit ->
+          Format.fprintf ppf "%a@\n" pp_unit unit;
+          if not (String.equal name last) then pp_sep ppf ())
 
   let pp_sexp = print_units Unit.Sexp.pp
 
@@ -155,6 +182,11 @@ module State = struct
     Format.fprintf ppf "@[digraph %S {@\n%a}" g.root
       (print_units Unit.Deps.pp) g
 
+  let pp_comma ppf () = Format.fprintf ppf ",@\n"
+
+  let pp_json ppf g =
+    Format.fprintf ppf "@[<hv2>{%a}@]"
+      (print_units ~pp_sep:pp_comma Unit.Json.pp) g
 end
 
 module Spec = struct
@@ -244,6 +276,7 @@ let recursive = Extension.Command.flag "recursive"
 let formats = Extension.Type.enum [
     "graph", State.pp_graph;
     "sexp", State.pp_sexp;
+    "json", State.pp_json;
   ]
 
 let format = Extension.Command.parameter formats "format"
