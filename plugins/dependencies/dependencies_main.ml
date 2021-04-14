@@ -16,15 +16,15 @@ end
 module Unit = struct
   type t = {
     name : string;
-    imports : string list;
-    exports : string list;
+    imports : Set.M(String).t;
+    exports : Set.M(String).t;
     libraries : string list;
   } [@@deriving bin_io, compare, sexp]
 
   let empty name = {
     name;
-    imports = [];
-    exports = [];
+    imports = Set.empty (module String);
+    exports = Set.empty (module String);
     libraries = [];
   }
 
@@ -42,6 +42,9 @@ module Unit = struct
         let path = Filename.concat folder file in
         Option.some_if (Sys.file_exists path) path)
 
+  let set_of_seq =
+    Seq.fold ~f:Set.add ~init:(Set.empty (module String))
+
   let of_image {Loader.libraries; imports; exports} name =
     match Image.create ~backend:"llvm" name with
     | Error err ->
@@ -51,8 +54,8 @@ module Unit = struct
     | Ok (img,_) -> {
         name;
         libraries = Seq.to_list (libraries img);
-        imports = Seq.to_list (imports img);
-        exports = Seq.to_list (exports img);
+        imports = set_of_seq (imports img);
+        exports = set_of_seq (exports img);
       }
 
   let load ~context loader paths name =
@@ -75,22 +78,42 @@ module Unit = struct
         info "%s is cached" name;
         data
 
+  module Sexp = struct
+    let pp_list ppf elts =
+      Format.pp_print_list Format.pp_print_string ppf elts
+        ~pp_sep:Format.pp_print_space
 
-  let pp_elts ppf elts =
-    Format.pp_print_list Format.pp_print_string ppf elts
-      ~pp_sep:Format.pp_print_space
+    let pp_set ppf elts =
+      let last = Set.max_elt_exn elts in
+      Set.iter elts ~f:(fun elt ->
+          Format.pp_print_string ppf elt;
+          if not (String.equal elt last)
+          then Format.pp_print_space ppf ())
 
-  let pp_field ppf = function
-    | (_,[]) -> ()
-    | (name,elts) ->
-      Format.fprintf ppf "@ @[<hv2>(%s@ %a)@]"
-        name pp_elts elts
+    let pp_list_field ppf = function
+      | (_,[]) -> ()
+      | (name,elts) ->
+        Format.fprintf ppf "@ @[<hv2>(%s@ %a)@]"
+          name pp_list elts
 
-  let pp ppf {name; imports; exports; libraries} =
-    Format.fprintf ppf "@[<hv2>(%s%a%a%a)@]" name
-      pp_field ("imports",imports)
-      pp_field ("exports",exports)
-      pp_field ("libraries",libraries)
+    let pp_set_field ppf (name,elts) =
+      if not (Set.is_empty elts) then
+        Format.fprintf ppf "@ @[<hv2>(%s@ %a)@]"
+          name pp_set elts
+
+    let pp ppf {name; imports; exports; libraries} =
+      Format.fprintf ppf "@[<hv2>(%s%a%a%a)@]" name
+        pp_set_field ("imports",imports)
+        pp_set_field ("exports",exports)
+        pp_list_field ("libraries",libraries)
+  end
+
+  module Deps = struct
+    let pp ppf {name; libraries} =
+      List.iter libraries ~f:(fun dep ->
+          Format.fprintf ppf "%S -> %S@\n" name dep)
+  end
+
 end
 
 module State = struct
@@ -120,9 +143,17 @@ module State = struct
     then load_deps init unit
     else init
 
-  let pp ppf {units} =
+  let print_units pp_unit ppf {units} =
     Map.iter units ~f:(fun unit ->
-        Format.fprintf ppf "%a@\n" Unit.pp unit)
+        Format.fprintf ppf "%a@\n" pp_unit unit)
+
+
+
+  let pp_sexp = print_units Unit.Sexp.pp
+
+  let pp_graph ppf g =
+    Format.fprintf ppf "@[digraph %S {@\n%a}" g.root
+      (print_units Unit.Deps.pp) g
 
 end
 
@@ -201,7 +232,6 @@ module Elf = struct
   }
 end
 
-
 let input = Extension.Command.argument
     ~doc:"The input file" Extension.Type.("FILE" %: string =? "a.out")
 
@@ -211,11 +241,19 @@ let paths = Extension.Command.parameters Extension.Type.(list string)
 let recursive = Extension.Command.flag "recursive"
     ~aliases:["r"]
 
+let formats = Extension.Type.enum [
+    "graph", State.pp_graph;
+    "sexp", State.pp_sexp;
+  ]
+
+let format = Extension.Command.parameter formats "format"
+    ~aliases:["o"]
+
 let () = Extension.Command.(begin
-    declare "dependencies" (args $recursive $paths $input)
+    declare "dependencies" (args $format $recursive $paths $input)
       ~requires:["loader"; "cache"]
-  end) @@ fun recursive paths input ctxt ->
+  end) @@ fun pp recursive paths input ctxt ->
   let context = Extension.Configuration.digest ctxt in
   let r = State.load ~recursive ~context (List.concat paths) Elf.loader input in
-  Format.printf "%a@." State.pp r;
+  Format.printf "%a@." pp r;
   Ok ()
