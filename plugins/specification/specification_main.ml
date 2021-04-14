@@ -8,6 +8,7 @@ the OGRE format.
 open Core_kernel
 open Bap_main
 open Bap.Std
+open Regular.Std
 
 type problem =
   | Unknown_loader of string
@@ -28,17 +29,34 @@ let loader =
 
 let problem is = Error (Fail is)
 
+let reader = Data.Read.create ()
+    ~of_bigstring:(Binable.of_bigstring (module Ogre.Doc))
+let writer = Data.Write.create ()
+    ~to_bigstring:(Binable.to_bigstring (module Ogre.Doc))
+
 let () = Extension.Command.(begin
     declare "specification" (args $input $loader)
       ~doc
       ~requires:["loader"]
-  end) @@ fun input loader _ctxt ->
-  match Image.find_loader loader with
-  | None -> problem (Unknown_loader loader)
-  | Some (module Load) -> match Load.from_file input with
-    | Ok (Some spec) -> Format.printf "%a@\n%!" Ogre.Doc.pp spec; Ok ()
-    | Ok None -> Ok ()
-    | Error err -> problem (Loader_error err)
+  end) @@ fun input loader ctxt ->
+  let digest = Data.Cache.Digest.create ~namespace:"specification" in
+  let digest = Data.Cache.Digest.add digest "%s%s%s"
+      input loader (Extension.Configuration.digest ctxt) in
+  let cache = Data.Cache.Service.request reader writer in
+  match Data.Cache.load cache digest with
+  | Some spec ->
+    Format.printf "%a@\n%!" Ogre.Doc.pp spec;
+    Ok ()
+  | None -> match Image.find_loader loader with
+    | None -> problem (Unknown_loader loader)
+    | Some (module Load) -> match Load.from_file input with
+      | Ok (Some spec) ->
+        Data.Cache.save cache digest spec;
+        Format.printf "%a@\n%!" Ogre.Doc.pp spec;
+        Ok ()
+      | Ok None -> Ok ()
+      | Error err -> problem (Loader_error err)
+
 
 let string_of_problem = function
   | Unknown_loader name ->
