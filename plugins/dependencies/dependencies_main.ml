@@ -5,21 +5,54 @@ open Bap_main
 
 include Loggers()
 
-module Loader = struct
-  type t = {
-    libraries : image -> string seq;
-    imports : image -> string seq;
-    exports : image -> string seq;
-  }
+
+type info = {
+  name : string;
+  imports : Set.M(String).t;
+  exports : Set.M(String).t;
+  libraries : string list;
+} [@@deriving bin_io, compare, sexp]
+
+
+module Spec = struct
+  open Image.Scheme
+  open Ogre.Syntax
+
+  let imports = Ogre.foreach Ogre.Query.(begin
+      select (from external_reference $ named_symbol)
+        ~join:[[field name]]
+        ~where:(named_symbol.(addr) = int 0L)
+    end) ~f:(fun (_, name) _ -> name)
+
+  let exports = Ogre.foreach Ogre.Query.(begin
+      select (from named_symbol)
+        ~where:(named_symbol.(addr) <> int 0L)
+    end) ~f:(fun (_, name) -> name)
+
+
+  let libraries = Ogre.collect Ogre.Query.(select (from require))
+
+  let set_of_seq =
+    Seq.fold ~f:Set.add ~init:(Set.empty (module String))
+
+  let build name =
+    imports >>| set_of_seq >>= fun imports ->
+    exports >>| set_of_seq >>= fun exports ->
+    libraries >>| Seq.to_list >>| fun libraries -> {
+      name; libraries;
+      imports;
+      exports;
+    }
+
+  let query name image =
+    match Ogre.eval (build name) (Image.spec image) with
+    | Error err ->
+      failwithf "Query failed: %s" (Error.to_string_hum err) ()
+    | Ok r -> r
 end
 
 module Unit = struct
-  type t = {
-    name : string;
-    imports : Set.M(String).t;
-    exports : Set.M(String).t;
-    libraries : string list;
-  } [@@deriving bin_io, compare, sexp]
+  type t = info [@deriving bin_io, compare, sexp]
 
   let empty name = {
     name;
@@ -28,7 +61,7 @@ module Unit = struct
     libraries = [];
   }
 
-  module Io = struct type nonrec t = t [@@deriving bin_io] end
+  module Io = struct type t = info [@@deriving bin_io] end
 
   let reader = Data.Read.create ()
       ~of_bigstring:(Binable.of_bigstring (module Io))
@@ -42,23 +75,15 @@ module Unit = struct
         let path = Filename.concat folder file in
         Option.some_if (Sys.file_exists path) path)
 
-  let set_of_seq =
-    Seq.fold ~f:Set.add ~init:(Set.empty (module String))
-
-  let of_image {Loader.libraries; imports; exports} name =
+  let of_image name =
     match Image.create ~backend:"llvm" name with
     | Error err ->
       warning "failed to load the file %S: %a@\n"
         name Error.pp err;
       empty name
-    | Ok (img,_) -> {
-        name = Filename.basename name;
-        libraries = Seq.to_list (libraries img);
-        imports = set_of_seq (imports img);
-        exports = set_of_seq (exports img);
-      }
+    | Ok (img,_) -> Spec.query name img
 
-  let load ~context loader paths name =
+  let load ~context paths name =
     match search paths name with
     | None ->
       warning "missing dependency: %s" name;
@@ -70,7 +95,7 @@ module Unit = struct
       let cache = Data.Cache.Service.request reader writer in
       match Data.Cache.load cache digest with
       | None ->
-        let data = of_image loader name in
+        let data = of_image name in
         Data.Cache.save cache digest data;
         info "caching %s as %a" name Data.Cache.Digest.pp digest;
         data
@@ -168,8 +193,8 @@ module State = struct
     units : Unit.t Map.M(String).t;
   }
 
-  let load ~recursive ~context paths loader root =
-    let load = Unit.load ~context loader paths in
+  let load ~recursive ~context paths root =
+    let load = Unit.load ~context paths in
     let unit = load root in
     let init = {
       root;
@@ -212,81 +237,6 @@ module State = struct
   let pp_yaml = print_units Unit.Yaml.pp
 end
 
-module Spec = struct
-  open Image.Scheme
-
-  let imports = Ogre.foreach Ogre.Query.(begin
-      select (from external_reference $ named_symbol)
-        ~join:[[field name]]
-        ~where:(named_symbol.(addr) = int 0L)
-    end) ~f:(fun (_, name) _ -> name)
-
-  let exports = Ogre.foreach Ogre.Query.(begin
-      select (from named_symbol)
-        ~where:(named_symbol.(addr) <> int 0L)
-    end) ~f:(fun (_, name) -> name)
-
-  let query what image =
-    match Ogre.eval what (Image.spec image) with
-    | Error err ->
-      failwithf "Query failed: %s" (Error.to_string_hum err) ()
-    | Ok r -> r
-end
-
-module Elf = struct
-
-  type dyn = {
-    tag : word;
-    off : word;
-  }
-
-  let section_by_name img name =
-    Image.memory img |>
-    Memmap.to_sequence |>
-    Seq.find_map ~f:(fun (mem,tag) ->
-        match Value.get Image.section tag with
-        | Some n when String.equal n name -> Some mem
-        | _ -> None)
-
-  let dynamic_contents img =
-    match section_by_name img ".dynamic" with
-    | None -> []
-    | Some mem ->
-      let word_size = (Image.addr_size img :> Size.t) in
-      Memory.fold ~word_size mem ~f:(fun data (acc,dyn) ->
-          match dyn with
-          | None -> acc,Some data
-          | Some tag -> {tag;off=data}::acc,None)
-        ~init:([],None) |> function
-      | acc,_ -> List.rev acc
-
-  let read ~strtab pos =
-    let strtab = Memory.to_buffer strtab in
-    let rec loop off =
-      if Char.equal (Bigsubstring.get strtab off) '\x00'
-      then Bigsubstring.sub strtab ~pos ~len:(off-pos)
-      else loop (off+1) in
-    Bigsubstring.to_string @@ loop pos
-
-  let libraries img =
-    match section_by_name img ".dynstr" with
-    | None ->
-      warning "not a dynamic object";
-      Seq.empty
-    | Some strtab ->
-      Seq.of_list (dynamic_contents img) |>
-      Seq.filter_map ~f:(fun {tag; off} ->
-          match Word.to_int tag, Word.to_int off with
-          | Ok 1, Ok off -> Some (read ~strtab off)
-          | _ -> None)
-
-  let loader = {
-    Loader.libraries;
-    imports = Spec.(query imports);
-    exports = Spec.(query exports);
-  }
-end
-
 let input = Extension.Command.argument
     ~doc:"The input file" Extension.Type.("FILE" %: string =? "a.out")
 
@@ -311,6 +261,6 @@ let () = Extension.Command.(begin
       ~requires:["loader"; "cache"]
   end) @@ fun pp recursive paths input ctxt ->
   let context = Extension.Configuration.digest ctxt in
-  let r = State.load ~recursive ~context (List.concat paths) Elf.loader input in
+  let r = State.load ~recursive ~context (List.concat paths) input in
   Format.printf "%a@." pp r;
   Ok ()

@@ -5792,6 +5792,13 @@ module Std : sig
       val format : (string, (string -> 'a) -> 'a) Ogre.attribute
 
 
+      (** [(require library)] defines that the unit requires
+          [library].
+
+          @since 2.3.0 *)
+      val require : (string, (string -> 'a) -> 'a) Ogre.attribute
+
+
       (** (is-little-endian FLAG)] is set for files with words encoded in the
           little-endian order.
 

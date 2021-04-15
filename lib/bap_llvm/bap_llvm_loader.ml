@@ -301,15 +301,89 @@ let overload file_type info =
   Ogre.sequence @@
   provide_if (String.equal file file_type) info
 
+module ElfDyn = struct
+  type dyn = {
+    tag : word;
+    off : word;
+  }
+
+  type img = {
+    data : Bigstring.t;
+    endian : Word.endian;
+    width : int;
+  }
+
+  let required attr k =
+    Ogre.request attr >>= function
+    | None -> Ogre.return ()
+    | Some x -> k x
+
+  let section_by_name {data; endian; width} sec_name =
+    Ogre.collect Ogre.Query.(begin
+        select (from (LLVM.section_entry))
+          ~where:(LLVM.section_entry.(name) = str sec_name)
+      end) >>| Seq.hd >>| function
+    | None -> None
+    | Some (_,addr,len,pos) ->
+      let len = Int64.to_int_trunc len
+      and pos = Int64.to_int_trunc pos in
+      let addr = Addr.of_int64 ~width addr in
+      match Memory.create ~pos ~len endian addr data with
+      | Ok mem -> Some mem
+      | _ -> None
+
+  let word_size img = Size.of_int_exn img.width
+
+  let dynamic_contents img =
+    section_by_name img ".dynamic" >>| function
+    | None -> []
+    | Some mem ->
+      Memory.fold ~word_size:(word_size img) mem ~f:(fun data (acc,dyn) ->
+          match dyn with
+          | None -> acc,Some data
+          | Some tag -> {tag;off=data}::acc,None)
+        ~init:([],None) |> function
+      | acc,_ -> List.rev acc
+
+  let read ~strtab pos =
+    let strtab = Memory.to_buffer strtab in
+    let rec loop off =
+      if Char.equal (Bigsubstring.get strtab off) '\x00'
+      then Bigsubstring.sub strtab ~pos ~len:(off-pos)
+      else loop (off+1) in
+    Bigsubstring.to_string @@ loop pos
+
+
+  let libraries data =
+    required is_little_endian @@ fun is_little ->
+    required bits @@ fun bits ->
+    let endian = if is_little then LittleEndian else BigEndian in
+    let img = {endian; data; width = Int64.to_int_exn bits} in
+    section_by_name img ".dynstr" >>= function
+    | None -> Ogre.return ()
+    | Some strtab ->
+      dynamic_contents img >>|
+      Seq.of_list >>=
+      Ogre.Seq.iter ~f:(fun {tag; off} ->
+          match Word.to_int tag, Word.to_int off with
+          | Ok 1, Ok off ->
+            Ogre.provide require (read ~strtab off)
+          | _ -> Ogre.return ())
+
+end
+
+let provide_elf_segmentation_and_libraries data =
+  provide_elf_segmentation @ [ElfDyn.libraries data;]
+
 (** translates llvm-specific specification into the image specification  *)
-let translate user_base =
+let translate data user_base =
   Ogre.sequence [
     provide_base_and_bias user_base;
     provide_entry;
     Ogre.sequence [
-      overload "elf"   provide_elf_segmentation;
-      overload "coff"  provide_coff_segmentation;
-      overload "macho" provide_macho_segmentation;
+      overload "elf"   @@ provide_elf_segmentation_and_libraries data;
+      overload "coff"  @@ provide_coff_segmentation;
+      overload "macho" @@ provide_macho_segmentation;
     ];
     provide_symbols;
     provide_relocations;
@@ -325,8 +399,8 @@ let pdb_path ~pdb filename =
     else pdb
   else ""
 
-let translate_to_image_spec base doc =
-  match Ogre.exec (translate base) doc with
+let translate_to_image_spec data base doc =
+  match Ogre.exec (translate data base) doc with
   | Ok doc -> Ok (Some doc)
   | Error er -> Error er
 
@@ -341,7 +415,7 @@ let from_data ~base ~pdb filename data =
   let open Or_error.Monad_infix in
   load_doc ~pdb filename data >>=
   Ogre.Doc.from_string >>=
-  translate_to_image_spec base
+  translate_to_image_spec data base
 
 let map_file path =
   let fd = Unix.(openfile path [O_RDONLY] 0o400) in

@@ -18,6 +18,7 @@ static std::string scheme =
     "(declare subarch (name str))\n"
     "(declare system (name str))\n"
     "(declare vendor (name str))\n"
+    "(declare require (name str))\n"
     "(declare llvm:code-entry (name str) (off int) (size int))\n"
     "(declare llvm:base-address (addr int))\n"
     "(declare llvm:entry-point (addr int))\n"
@@ -33,7 +34,8 @@ static std::string scheme =
     "(declare llvm:symbol-entry (name str) (addr int) (size int) (off int) (value int))\n"
     "(declare llvm:elf-virtual-program-header (name str) (addr int) (size int))\n"
     "(declare llvm:coff-virtual-section-header (name str) (addr int) (size int))\n"
-    "(declare llvm:virtual-segment-command (name str) (addr int) (size int))\n";
+    "(declare llvm:virtual-segment-command (name str) (addr int) (size int))\n"
+    "(declare llvm:coff-import-library (name str))\n";
 
 
 namespace loader {

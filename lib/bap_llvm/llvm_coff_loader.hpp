@@ -344,6 +344,15 @@ error_or<uint64_t> symbol_file_offset(const coff_obj &obj, const SymbolRef &sym)
         return failure("failed to get the section");
     }
 }
+
+void emit_import_directories(const coff_obj &obj, ogre_doc &s) {
+    for (auto dir : obj.import_directories()) {
+        StringRef name;
+        if (!dir.getName(name))
+            s.entry("require") << name.str();
+    }
+}
+
 } // namespace coff_loader
 
 error_or<std::string> load(ogre_doc &s, const llvm::object::COFFObjectFile &obj, const char* pdb_path) {
@@ -356,6 +365,7 @@ error_or<std::string> load(ogre_doc &s, const llvm::object::COFFObjectFile &obj,
     emit_symbols(obj, s);
     emit_relocations(obj, s);
     emit_exported_symbols(obj, s);
+    emit_import_directories(obj, s);
     if (pdb_path)
         pdb_loader::load(obj, pdb_path, s);
     return s.str();

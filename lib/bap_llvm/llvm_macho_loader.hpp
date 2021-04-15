@@ -230,6 +230,23 @@ void emit_relocation(const macho &obj, const RelocationRef &rel, section_iterato
     emit_relocation(obj, prim::relocation_offset(rel), rel.getSymbol(), sec, s);
 }
 
+void emit_libraries(const macho &obj, ogre_doc &s) {
+  for (const auto &entry : obj.load_commands()) {
+    if (entry.C.cmd == MachO::LC_LOAD_DYLIB ||
+        entry.C.cmd == MachO::LC_ID_DYLIB ||
+        entry.C.cmd == MachO::LC_LOAD_WEAK_DYLIB ||
+        entry.C.cmd == MachO::LC_REEXPORT_DYLIB ||
+        entry.C.cmd == MachO::LC_LAZY_LOAD_DYLIB ||
+        entry.C.cmd == MachO::LC_LOAD_UPWARD_DYLIB) {
+      MachO::dylib_command cmd = obj.getDylibIDLoadCommand(entry);
+      if (cmd.dylib.name < cmd.cmdsize) {
+        auto *name = static_cast<const char*>(entry.Ptr) + cmd.dylib.name;
+        s.entry("require") << name;
+      }
+    }
+  }
+}
+
 symbol_iterator get_symbol(const macho &obj, std::size_t index);
 
 void emit_dyn_relocation(const macho &obj, uint32_t sym_num, uint64_t off, ogre_doc &s) {
@@ -470,6 +487,7 @@ error_or<std::string> load(ogre_doc &s, const llvm::object::MachOObjectFile &obj
     emit_sections(obj, s);
     emit_symbols(obj, s);
     emit_relocations(obj, s);
+    emit_libraries(obj, s);
     return s.str();
 }
 

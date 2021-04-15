@@ -123,6 +123,7 @@ module Scheme = struct
   let vendor    () = declare "vendor" (scheme name) ident
   let system    () = declare "system" (scheme name) ident
   let format    () = declare "format" (scheme name) ident
+  let require   () = declare "require" (scheme name) ident
   let abi    () = declare "abi" (scheme name) ident
   let bits    () = declare "bits" (scheme size) ident
   let is_little_endian () = declare "is-little-endian" (scheme flag) ident
