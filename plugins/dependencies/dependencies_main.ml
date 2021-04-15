@@ -1,3 +1,59 @@
+let doc = "
+# DESCRIPTION
+
+Outputs program dependencies such as libraries and symbols. The
+information is collected recursively with various output options,
+including dependency graph, YAML, JSON, and SEXP.
+
+The information includes the list of imported libraries as well as a
+set of imported and exported symbols. The information could be
+collected recursively, when the $(b,--recursive) option is
+specified. In a recursive mode, the list of paths where to search for
+libraries could be specified with the $(b,--library-path) option that
+accepts a list of paths. It is also possible to use the host ldconfig
+cache (or specify custom library config) via the $(b,ldconfig)
+parameter. Information about each individual dependency is cached, so
+consecutive calls to bap will reuse the available information and
+terminate quickly.
+
+# EXAMPLES
+
+The default format YAML, which suits best for human consumption. The
+tool is designed to be used together with YAML and JSON query tools,
+suchs as $(b,yq) and $(b,jq), e.g.,
+
+- Getting the list of imported libraries
+
+```
+bap dependencies /bin/ls | yq e '.ls.libraries' -
+
+```
+
+- Counting the number of imported symbols
+
+```
+bap dependencies /bin/ls | yq e '.ls.imports | length' -
+```
+
+- Generating the dependency graph
+
+```
+bap dependency /bin/ls -ograph
+```
+
+- Running recursively using the ldconfig cache
+
+```
+bap dependency /bin/ls --recursive --ldconfig
+```
+
+- Specifying custom ldconfig with a custom root folder (for mounted images)
+
+```
+bap dependency /bin/ls --root=/mnt/image --ldconfig='cat ld.so.cache'
+```
+"
+
 open Core_kernel
 open Bap.Std
 open Regular.Std
@@ -107,8 +163,15 @@ module Unit = struct
     | None -> None
     | Some cache -> Ldconfig.lookup cache name
 
-  let search ?ldconfig paths file =
+  let reroot ?root path = match root with
+    | Some root when Filename.is_absolute path ->
+      Filename.concat root path
+    | _ -> path
+
+  let search ?root ?ldconfig paths file =
+    let file = reroot ?root file in
     if Sys.file_exists file then Some file
+    else if Filename.is_absolute file then None
     else match search_cache ldconfig file with
       | Some path -> Some path
       | None -> List.find_map paths ~f:(fun folder ->
@@ -123,8 +186,8 @@ module Unit = struct
       empty name
     | Ok (img,_) -> Spec.query name img
 
-  let load ?ldconfig ~context paths name =
-    match search ?ldconfig paths name with
+  let load ?root ?ldconfig ~context paths name =
+    match search ?root ?ldconfig paths name with
     | None ->
       warning "missing dependency: %s" name;
       empty name
@@ -233,13 +296,14 @@ module State = struct
     units : Unit.t Map.M(String).t;
   }
 
-  let load ?ldconfig ~recursive ~context paths root =
+  let load ?root ?ldconfig ~recursive ~context paths path =
     let ldconfig = Option.map ldconfig ~f:Ldconfig.load in
-    let load = Unit.load ?ldconfig ~context paths in
-    let unit = load root in
+    let load = Unit.load ?root ?ldconfig ~context paths in
+    let unit = load path in
+    let path = Filename.basename path in
     let init = {
-      root;
-      units = Map.singleton (module String) root unit;
+      root=path;
+      units = Map.singleton (module String) path unit;
     } in
     let rec closure state name =
       if Map.mem state.units name then state
@@ -283,31 +347,52 @@ let input = Extension.Command.argument
 
 let paths = Extension.Command.parameters Extension.Type.(list string)
     "library-paths"
+    ~doc:"Specify a list of directories where to search for libraries."
 
 let recursive = Extension.Command.flag "recursive"
     ~aliases:["r"]
+    ~doc:"Calls the commmand recursively on the obtained dependencies. "
 
 let ldconfig = Extension.Command.parameter
     Extension.Type.(some string) "ldconfig"
     ~as_flag:(Some "ldconfig -p")
+    ~doc:"A command that returns an ldconfig-like cache. \
+          If the option is specified without an argument then a \
+          system ldconfig is used (with the $(b,-p) option) to \
+          obtain the library cache. If an argument is passed \
+          it should be a command that returns a list of entries, \
+          separated with $(b,=>), with the right entry being a \
+          path to a library. (See $(b,ldconfig -p) for an example."
 
+let root = Extension.Command.parameter
+    Extension.Type.(some string) "root"
+    ~doc: "Specify the default root directory. \
+           All absolute paths (including those that are specified \
+           on the command line) are prefixed with the specified root."
 
 let formats = Extension.Type.enum [
-    "yaml", State.pp_yaml;
-    "sexp", State.pp_sexp;
-    "json", State.pp_json;
-    "graph", State.pp_graph;
+    "yaml", `Yaml;
+    "sexp", `Sexp;
+    "json", `Json;
+    "graph", `Graph;
   ]
+
+let pp = function
+  | `Yaml -> State.pp_yaml
+  | `Sexp -> State.pp_sexp
+  | `Json -> State.pp_json
+  | `Graph -> State.pp_graph
 
 let format = Extension.Command.parameter formats "format"
     ~aliases:["o"]
 
 let () = Extension.Command.(begin
-    declare "dependencies" (args $ldconfig $format $recursive $paths $input)
+    declare "dependencies" ~doc
+      (args $root $ldconfig $format $recursive $paths $input)
       ~requires:["loader"; "cache"]
-  end) @@ fun ldconfig pp recursive paths input ctxt ->
+  end) @@ fun root ldconfig fmt  recursive paths input ctxt ->
   let context = Extension.Configuration.digest ctxt in
   let paths = List.concat paths in
-  let r = State.load ?ldconfig ~recursive ~context paths input in
-  Format.printf "%a@." pp r;
+  let r = State.load ?root ?ldconfig ~recursive ~context paths input in
+  Format.printf "%a@." (pp fmt) r;
   Ok ()
