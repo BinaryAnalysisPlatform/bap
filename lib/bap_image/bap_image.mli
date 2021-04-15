@@ -106,6 +106,7 @@ module Scheme : sig
   val format : (string, (string -> 'a) -> 'a)  Ogre.attribute
   val vendor : (string, (string -> 'a) -> 'a) Ogre.attribute
   val system : (string, (string -> 'a) -> 'a) Ogre.attribute
+  val require : (string, (string -> 'a) -> 'a) Ogre.attribute
   val abi : (string, (string -> 'a) -> 'a) Ogre.attribute
   val bits : (size, (size -> 'a) -> 'a) Ogre.attribute
   val is_little_endian : (bool, (bool -> 'a) -> 'a) Ogre.attribute
