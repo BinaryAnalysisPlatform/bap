@@ -14,6 +14,38 @@ type info = {
 } [@@deriving bin_io, compare, sexp]
 
 
+module Ldconfig : sig
+  type cache
+  val load : string -> cache
+  val lookup : cache -> string -> string option
+end = struct
+  type cache = string Map.M(String).t
+
+  let parse_line s =
+    match String.split (String.strip s) ~on:'>' with
+    | [] | [_] | _ :: _ :: _ :: _ -> None
+    | [_;s] -> Some (String.strip s)
+
+  let load ldconfig =
+    let ldconfig = UnixLabels.open_process_in ldconfig in
+    protect ~f:(fun () ->
+        In_channel.fold_lines ldconfig ~f:(fun cache s ->
+            match parse_line s with
+            | None -> cache
+            | Some path ->
+              Map.set cache (Filename.basename path) path)
+          ~init:String.Map.empty)
+      ~finally:(fun () ->
+          match UnixLabels.close_process_in ldconfig with
+          | WEXITED 0 -> ()
+          | WEXITED n ->
+            warning "ldconfig terminated with a non-zero code: %d" n
+          | WSIGNALED _ | WSTOPPED _->
+            warning "ldconfig was killed or suspended by a signal")
+
+  let lookup = Map.find
+end
+
 module Spec = struct
   open Image.Scheme
   open Ogre.Syntax
@@ -39,7 +71,8 @@ module Spec = struct
     imports >>| set_of_seq >>= fun imports ->
     exports >>| set_of_seq >>= fun exports ->
     libraries >>| Seq.to_list >>| fun libraries -> {
-      name; libraries;
+      name = Filename.basename name;
+      libraries;
       imports;
       exports;
     }
@@ -69,11 +102,18 @@ module Unit = struct
   let writer = Data.Write.create ()
       ~to_bigstring:(fun data -> Binable.to_bigstring (module Io) data)
 
-  let search paths file =
+
+  let search_cache cache name = match cache with
+    | None -> None
+    | Some cache -> Ldconfig.lookup cache name
+
+  let search ?ldconfig paths file =
     if Sys.file_exists file then Some file
-    else List.find_map paths ~f:(fun folder ->
-        let path = Filename.concat folder file in
-        Option.some_if (Sys.file_exists path) path)
+    else match search_cache ldconfig file with
+      | Some path -> Some path
+      | None -> List.find_map paths ~f:(fun folder ->
+          let path = Filename.concat folder file in
+          Option.some_if (Sys.file_exists path) path)
 
   let of_image name =
     match Image.create ~backend:"llvm" name with
@@ -83,8 +123,8 @@ module Unit = struct
       empty name
     | Ok (img,_) -> Spec.query name img
 
-  let load ~context paths name =
-    match search paths name with
+  let load ?ldconfig ~context paths name =
+    match search ?ldconfig paths name with
     | None ->
       warning "missing dependency: %s" name;
       empty name
@@ -193,8 +233,9 @@ module State = struct
     units : Unit.t Map.M(String).t;
   }
 
-  let load ~recursive ~context paths root =
-    let load = Unit.load ~context paths in
+  let load ?ldconfig ~recursive ~context paths root =
+    let ldconfig = Option.map ldconfig ~f:Ldconfig.load in
+    let load = Unit.load ?ldconfig ~context paths in
     let unit = load root in
     let init = {
       root;
@@ -246,6 +287,11 @@ let paths = Extension.Command.parameters Extension.Type.(list string)
 let recursive = Extension.Command.flag "recursive"
     ~aliases:["r"]
 
+let ldconfig = Extension.Command.parameter
+    Extension.Type.(some string) "ldconfig"
+    ~as_flag:(Some "ldconfig -p")
+
+
 let formats = Extension.Type.enum [
     "yaml", State.pp_yaml;
     "sexp", State.pp_sexp;
@@ -257,10 +303,11 @@ let format = Extension.Command.parameter formats "format"
     ~aliases:["o"]
 
 let () = Extension.Command.(begin
-    declare "dependencies" (args $format $recursive $paths $input)
+    declare "dependencies" (args $ldconfig $format $recursive $paths $input)
       ~requires:["loader"; "cache"]
-  end) @@ fun pp recursive paths input ctxt ->
+  end) @@ fun ldconfig pp recursive paths input ctxt ->
   let context = Extension.Configuration.digest ctxt in
-  let r = State.load ~recursive ~context (List.concat paths) input in
+  let paths = List.concat paths in
+  let r = State.load ?ldconfig ~recursive ~context paths input in
   Format.printf "%a@." pp r;
   Ok ()
