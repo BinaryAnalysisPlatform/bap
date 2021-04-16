@@ -380,6 +380,45 @@ module Doc = struct
   let pp ppf t =
     fprintf ppf "%a@\n%a" pp_scheme t pp_body t
 
+  module Yaml = struct
+    let pp_typ ppf typ =
+      pp_print_string ppf (Type.string_of_typ typ)
+
+    let pp_headers = pp_print_list
+        ~pp_sep:(fun ppf () -> pp_print_string ppf ", ")
+        (fun ppf {Type.fname; ftype} ->
+           fprintf ppf "%S : %a" fname pp_typ ftype)
+
+    let pp_scheme ppf {scheme} =
+      fprintf ppf "scheme:@\n";
+      Map.iteri scheme ~f:(fun ~key:n ~data:s ->
+          fprintf ppf "  %S : {%a}@\n" n pp_headers s)
+
+
+    let pp_objects = pp_print_list
+        ~pp_sep:(fun ppf () -> pp_print_string ppf "    ")
+        pp_print_string
+
+    let pp_body ppf {scheme; entries} =
+      Map.iteri entries ~f:(fun ~key:name ~data:entries ->
+          fprintf ppf "%S:@\n" name;
+          List.iter entries ~f:(fun {fields} ->
+              let objects =
+                List.map (Map.find_exn scheme name) ~f:(fun {fname; ftype} ->
+                    let v = Map.find_exn fields fname in
+                    match ftype with
+                    | Type.Str -> asprintf "%S: %S@\n" fname v
+                    | _ -> asprintf "%S: %s@\n" fname v) in
+              match objects with
+              | [] -> ()
+              | _ -> fprintf ppf "  - %a" pp_objects objects))
+    let pp ppf doc =
+      pp_scheme ppf doc;
+      pp_body ppf doc
+  end
+
+  let pp_yaml = Yaml.pp
+
   let load channel = Or_error.try_with_join ~backtrace:true (fun () ->
       of_sexps (Sexp.input_sexps channel))
 
