@@ -559,6 +559,11 @@ module Doc : sig
   (** [pp ppf doc] prints a [doc] in the specified formatter [ppf]  *)
   val pp : Format.formatter -> doc -> unit
 
+  (** [pp_yamp ppf doc] prints doc to [ppf] in the YAML format.
+
+      @since 2.3.0  *)
+  val pp_yaml : Format.formatter -> doc -> unit
+
 
   (** [clear doc] removes all facts from the document.
 
