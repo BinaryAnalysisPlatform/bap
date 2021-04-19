@@ -19,6 +19,9 @@ module Make(CT : Theory.Core) : sig
   (** [add sp, #x] aka add(7)  *)
   val addspi : int -> unit eff
 
+  (** [adcs rd rn rm]  *)
+  val adcs : r32 reg -> r32 reg -> r32 reg -> unit eff
+
   (** [subs rd, rn, #x] aka sub(1) *)
   val subi3 : r32 reg -> r32 reg -> int -> unit eff
 
