@@ -57,6 +57,15 @@ module Make(CT : Theory.Core) = struct
       vf := overflow_from_add (var r) (var rn) (var rm);
     ]
 
+
+  let adcs rd rn rm = with_result rd @@ fun r -> [
+      r := var rn + var rm + CT.unsigned s32 (var zf);
+      nf := msb (var r);
+      zf := is_zero (var r);
+      cf := carry_from_add (var r) (var rn);
+      vf := overflow_from_add (var r) (var rn) (var rm);
+    ]
+
   let addspi off = data [
       sp += const off;
     ]

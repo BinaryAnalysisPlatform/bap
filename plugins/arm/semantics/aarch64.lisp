@@ -1,7 +1,8 @@
 (require bits)
+(require arm-bits)
 
 (declare (context (target armv8-a+le)))
-(defpackage aarch64 (:use core target))
+(defpackage aarch64 (:use core target arm))
 (defpackage llvm-aarch64 (:use aarch64))
 
 (in-package aarch64)
@@ -70,13 +71,6 @@
 (defun ADDWri (dst r1 imm s)
   (set$ (base-reg dst) (+ (base-reg r1) (lshift imm s))))
 
-(defun add-with-carry (rd x y c)
-  (let ((r (+ c y x)))
-    (set NF (msb r))
-    (set VF (overflow r x y))
-    (set ZF (is-zero r))
-    (set CF (carry r x y))
-    (set$ rd r)))
 
 (defun SUBXrx64 (rd rn rm off)
   (set$ rd (- rn (extended rm off))))

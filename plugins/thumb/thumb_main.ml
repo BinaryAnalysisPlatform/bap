@@ -64,7 +64,7 @@ module Thumb(CT : Theory.Core) = struct
   let has_pc = List.exists ~f:is_pc
   let remove_pc = List.filter ~f:(Fn.non is_pc)
 
-  let lift_move _addr opcode insn =
+  let lift_move addr opcode insn =
     let module T = Thumb_mov.Make(CT) in
     let open T in
     match opcode, (MC.Insn.ops insn : Op.t array) with
@@ -74,6 +74,8 @@ module Thumb(CT : Theory.Core) = struct
       addi8 (reg rd) (imm x)
     | `tADDrr, [|Reg rd; _; Reg rn; Reg rm; _; _|] ->
       addrr (reg rd) (reg rn) (reg rm)
+    | `tADC, [|Reg rd; Reg _; Reg rn; Reg rm; _; _|] ->
+      adcs (reg rd) (reg rn) (reg rm)
     | `tADDrSPi, [|Reg rd; _; Imm x; _; _;|] ->
       addrspi (reg rd) (imm x * 4)
     | `tADDspi, [|_; _; Imm x; _; _|] ->
@@ -105,7 +107,7 @@ module Thumb(CT : Theory.Core) = struct
     | `tORR, [|Reg rd; _; _; Reg rm; _; _|] ->
       lorr (reg rd) (reg rm)
     | insn ->
-      info "unhandled move instruction: %a" pp_insn insn;
+      info "unhandled move instruction: %a: %a" Bitvec.pp addr pp_insn insn;
       !!Insn.empty
 
 
