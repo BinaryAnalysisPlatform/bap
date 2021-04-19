@@ -169,15 +169,17 @@ module Thumb(CT : Theory.Core) = struct
       info "unhandled memory operation: %a" pp_insn insn;
       !!Insn.empty
 
+  let lift_bits opcode insn =
+    let open Thumb_bits.Make(CT) in
+    match opcode, (MC.Insn.ops insn : Op.t array) with
+    | `tSXTB, [|Reg rd; Reg rm; _; _|] -> sx (reg rd) (reg rm)
+    | `tSXTH, [|Reg rd; Reg rm; _; _|] -> sx (reg rd) (reg rm)
+    | `tUXTB, [|Reg rd; Reg rm; _; _|] -> ux (reg rd) (reg rm)
+    | `tUXTH, [|Reg rd; Reg rm; _; _|] -> ux (reg rd) (reg rm)
+    | insn ->
+      info "unhandled bit-wise instruction: %a" pp_insn insn;
+      !!Insn.empty
 
-  (* let lift_bits insn ops =
-   *   let open Bits in
-   *   match insn, ops with
-   *   | `tSXTB, [|dest; src; _unknown; _|] -> sxtb dest src
-   *   | `tSXTH, [|dest; src; _unknown; _|] -> sxth dest src
-   *   | `tUXTB, [|dest; src; _unknown; _|] -> uxtb dest src
-   *   | `tUXTH, [|dest; src; _unknown; _|] -> uxth dest src
-   *   | _ -> [] *)
 
   (* these are not entirely complete *)
   let lift_branch pc opcode insn =
@@ -192,6 +194,8 @@ module Thumb(CT : Theory.Core) = struct
     | `tBLXr, [|_; _; Reg dst|]-> blxr pc (reg dst)
     | `tBX, [|Reg dst; _; _|]when is_pc (reg dst) -> bxi pc 0
     | `tBX, [|Reg dst;_;_|] -> bxr (reg dst)
+    | `tCBNZ, [|Reg rn; Imm c|] -> cbnz pc (reg rn) (imm c)
+    | `tCBZ, [|Reg rn; Imm c|] -> cbz pc (reg rn) (imm c)
     | insn ->
       info "unhandled branch: %a" pp_insn insn;
       !!Insn.empty
@@ -200,9 +204,7 @@ module Thumb(CT : Theory.Core) = struct
     | #opmem as op -> lift_mem addr op insn
     | #opmov as op -> lift_move addr op insn
     | #opbranch as op -> lift_branch addr op insn
-    | op ->
-      info "unsupported opcode: %s" (string_of_opcode op);
-      !!Insn.empty
+    | #opbit as op -> lift_bits op insn
 end
 
 
@@ -237,7 +239,8 @@ module Main = struct
       match decode_opcode (MC.Insn.name insn) with
       | None ->
         info "failed to decode MC instruction, unknown opcode: \
-              %s => %a"
+              %a: %s => %a"
+          Memory.pp mem
           (MC.Insn.asm insn)
           Sexp.pp_hum (MC.Insn.sexp_of_t insn);
         !!Insn.empty

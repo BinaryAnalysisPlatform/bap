@@ -89,6 +89,8 @@ type opbranch = [
   | `tBLXi
   | `tBLXr
   | `tBX
+  | `tCBNZ
+  | `tCBZ
 ] [@@deriving bin_io, compare, sexp, enumerate]
 
 type opcode = [

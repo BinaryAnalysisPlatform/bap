@@ -78,4 +78,14 @@ module Make(CT : Theory.Core) = struct
     ]
 
   let blxr pc dst = blr pc dst
+
+  let cbnz pc rn dst =
+    CT.branch CT.(inv@@is_zero (var rn))
+      (goto (pc +> dst))
+      (seq [])
+
+  let cbz pc rn dst =
+    CT.branch CT.(inv@@is_zero (var rn))
+      (goto (pc +> dst))
+      (seq [])
 end
