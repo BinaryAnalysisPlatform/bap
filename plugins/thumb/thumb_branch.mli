@@ -29,4 +29,10 @@ module Make(CT : Theory.Core) : sig
 
   (** [bl rm] or [blx rm]  *)
   val blr : Bitvec.t -> r32 reg -> eff
+
+  (** [cbnz rm <label>]  *)
+  val cbnz : Bitvec.t -> r32 reg -> int -> eff
+
+  (** [cbz rm <label>]  *)
+  val cbz : Bitvec.t -> r32 reg -> int -> eff
 end

@@ -194,6 +194,8 @@ module Thumb(CT : Theory.Core) = struct
     | `tBLXr, [|_; _; Reg dst|]-> blxr pc (reg dst)
     | `tBX, [|Reg dst; _; _|]when is_pc (reg dst) -> bxi pc 0
     | `tBX, [|Reg dst;_;_|] -> bxr (reg dst)
+    | `tCBNZ, [|Reg rn; Imm c|] -> cbnz pc (reg rn) (imm c)
+    | `tCBZ, [|Reg rn; Imm c|] -> cbz pc (reg rn) (imm c)
     | insn ->
       info "unhandled branch: %a" pp_insn insn;
       !!Insn.empty
@@ -237,7 +239,8 @@ module Main = struct
       match decode_opcode (MC.Insn.name insn) with
       | None ->
         info "failed to decode MC instruction, unknown opcode: \
-              %s => %a"
+              %a: %s => %a"
+          Memory.pp mem
           (MC.Insn.asm insn)
           Sexp.pp_hum (MC.Insn.sexp_of_t insn);
         !!Insn.empty
