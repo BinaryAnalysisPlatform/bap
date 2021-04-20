@@ -11,13 +11,14 @@ module Semantics_primitives = Primus_lisp_semantic_primitives
 module Channels = Primus_lisp_io
 module Configuration = Bap_main.Extension.Configuration
 
+let is_folder p = Sys.file_exists p && Sys.is_directory p
+
 let library_paths =
   let (/) = Filename.concat in Configuration.[
       datadir / "primus" / "lisp";
       sysdatadir / "primus" / "site-lisp";
       sysdatadir / "primus" / "lisp";
-    ] |> List.filter ~f:(fun p ->
-      Sys.file_exists p && Sys.is_directory p)
+    ] |> List.filter ~f:is_folder
 
 let dump_program prog =
   let margin = get_margin () in
@@ -316,41 +317,21 @@ module Semantics = struct
     let name = KB.Name.create ~package:(Insn.encoding insn) (Insn.name insn) in
     Some name
 
-  let strip_extension = String.chop_suffix ~suffix:".lisp"
+  let strip_lisp_extension = String.chop_suffix ~suffix:".lisp"
 
-  let include_files features folder =
+  let collect_features folder =
     Sys.readdir folder |> Array.to_list |>
-    List.fold ~init:features ~f:(fun features file ->
-        match strip_extension file with
-        | None -> features
-        | Some name -> name::features)
+    List.filter_map ~f:strip_lisp_extension
 
+  let default_paths = let (/) = Filename.concat in Configuration.[
+      datadir / "primus" / "semantics";
+      sysdatadir / "primus" / "semantics";
+    ]
 
-
-  let collect_features sites =
-    List.fold sites ~init:(sites,["core"]) ~f:(fun (paths,fs) site ->
-        if Sys.file_exists site
-        then if Sys.is_directory site
-          then site::paths,include_files fs site
-          else match strip_extension site with
-            | None -> paths,site::fs
-            | Some name -> paths,name::fs
-        else if Sys.file_exists (site^".lisp")
-        then paths,site::fs
-        else paths,fs)
-
-  let default_sites =
-    let (/) = Filename.concat in Configuration.[
-        datadir / "primus" / "semantics";
-        sysdatadir / "primus" / "semantics";
-      ] |> List.filter ~f:(fun p ->
-        Sys.file_exists p && Sys.is_directory p)
-
-
-  let load_lisp_sources sites =
-    let sites = sites @ default_sites in
-    let paths, features = collect_features sites in
-    let paths = Filename.current_dir_name :: paths @ library_paths in
+  let load_lisp_sources paths =
+    let paths = List.filter ~f:is_folder (paths @ default_paths) in
+    let features = "core"::List.concat_map ~f:collect_features paths in
+    let paths = paths @ library_paths in
     let prog t =
       pack@@load_program paths features@@Project.empty t in
     KB.promise Theory.Unit.source @@ fun this ->
@@ -399,18 +380,23 @@ let () =
               ~default:["posix"]) in
 
   let semantics =
-    Config.(param (list string) "semantics"
-              ~doc:"The list of paths, names, and folders \
-                    that contain the program semantics definitions.") in
-
+    let doc = sprintf "prepend the specified folders to the list of
+      folders where semantics files are searched. Every file that has
+      the $(b,.lisp) extension in these folders will be loaded and
+      linked to the Primus Lisp program that is used to define program
+      semantics. The initial list of folders contains $(b,%s) and
+      $(b,%s). When features are loaded, the first found file that has
+      the matching name is loaded, so it is possible to override
+      features stored in the system or local data directories. When
+      set to $(b,disable) this option disables the Primus Lisp lifter."
+        (List.nth_exn Semantics.default_paths 0)
+        (List.nth_exn Semantics.default_paths 1) in
+    Config.(param (list string) "semantics" ~doc) in
 
   let semantics_stdout =
     Config.(param (some string) "semantics-stdout"
               ~doc:"redirects messages in the semantic definitions to \
                     the specified file.") in
-
-
-
 
   let redirects =
     let doc = sprintf
