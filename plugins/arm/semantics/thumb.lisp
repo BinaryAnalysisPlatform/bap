@@ -53,7 +53,7 @@
   (set$ rd (+ rn rm)))
 
 (defun tSBC (rd _ rn rm _ _)
-  (add-with-carry rd rn (- rm) CF))
+  (add-with-carry rd rn (lnot rm) CF))
 
 (defun tRSB (rd _ rn _ _)
   "rsbs	r3, r2, #0"
