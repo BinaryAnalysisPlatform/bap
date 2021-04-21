@@ -345,16 +345,23 @@ module Primitives(CT : Theory.Core) = struct
 
   type 'a bitv = 'a Theory.Bitv.t Theory.Value.sort
 
+  let coerce s x =
+    if Theory.Value.Sort.same (Theory.Value.sort x) s then !!x
+    else match const x with
+      | Some x -> const_int s x
+      | None -> CT.cast s CT.b0 !!x
+
   let monoid s sf df init xs =
     with_nbitv s xs @@ fun s xs -> match xs with
     | [] -> forget@@const_int s init
     | x :: xs ->
-      KB.List.fold ~init:x xs ~f:(fun res x ->
+      let* init = coerce s x in
+      KB.List.fold ~init xs ~f:(fun res x ->
           match const res, const x with
           | Some res, Some x ->
             const_int s@@sf res x
           | _ ->
-            CT.cast s CT.b0 !!x >>= fun x ->
+            let* x = coerce s x in
             df !!res !!x) |>
       forget
 
