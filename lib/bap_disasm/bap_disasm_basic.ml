@@ -561,6 +561,9 @@ let make_name target encoding =
     (Theory.Language.to_string encoding)
     (Theory.Target.to_string target)
 
+let encoding_name encoding =
+  KB.Name.unqualified @@ Theory.Language.name encoding
+
 let register encoding construct =
   if Hashtbl.mem constructors encoding
   then invalid_argf "A disassembler backend for the encoding %s \
@@ -578,10 +581,7 @@ let register encoding construct =
           d.users <- d.users + 1;
           Hashtbl.add_exn disassemblers ~key:name ~data:d
         end;
-        Ok dis)
-
-let encoding_name encoding =
-  KB.Name.unqualified @@ Theory.Language.name encoding
+        Ok {dis with enc = encoding_name encoding})
 
 let lookup target encoding =
   let name = make_name target encoding in
@@ -595,7 +595,7 @@ let lookup target encoding =
     | Some create -> create target
 
 let create ?(debug_level=0) ?(cpu="") ?(attrs="") ?(backend="llvm") triple =
-  let name = sprintf "%s-%s%s" backend triple cpu in
+  let name = String.concat ~sep:"-" [backend; triple; cpu] ^ attrs in
   match Hashtbl.find disassemblers name with
   | Some d ->
     d.users <- d.users + 1;

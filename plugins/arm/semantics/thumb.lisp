@@ -4,7 +4,7 @@
 (declare (context (target armv4+le)))
 
 (defpackage thumb (:use core target arm))
-(defpackage llvm-thumbv7 (:use thumb))
+(defpackage llvm-thumb (:use thumb))
 
 (in-package thumb)
 

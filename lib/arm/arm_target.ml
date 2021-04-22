@@ -382,7 +382,7 @@ let enable_arch () =
 
 
 let llvm_a32 = CT.Language.declare ~package "llvm-armv7"
-let llvm_t32 = CT.Language.declare ~package "llvm-thumbv7"
+let llvm_t32 = CT.Language.declare ~package "llvm-thumb"
 let llvm_a64 = CT.Language.declare ~package "llvm-aarch64"
 
 module Dis = Disasm_expert.Basic
