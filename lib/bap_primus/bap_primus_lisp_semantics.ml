@@ -46,9 +46,6 @@ let program =
     ~empty:Program.empty
     ~equal:Program.equal
     ~join:(fun x y -> Ok (Program.merge x y))
-    ~inspect:(fun p ->
-        let r = Format.asprintf "%a" Program.pp p in
-        Sexp.Atom r)
 
 type program = {
   prog : Program.t;
