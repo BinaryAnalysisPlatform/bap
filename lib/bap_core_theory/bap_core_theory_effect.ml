@@ -5,7 +5,7 @@ module KB = Knowledge
 
 type cls = Effects
 
-let package = "core-theory"
+let package = "core"
 
 module Sort = struct
   type effects = Top | Set of Set.M(KB.Name).t

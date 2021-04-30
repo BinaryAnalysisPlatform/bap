@@ -4,7 +4,7 @@ open Caml.Format
 open Bap_knowledge
 module KB = Knowledge
 
-let package = "core-theory"
+let package = "core"
 
 
 module Sort : sig
@@ -57,7 +57,7 @@ end
   let names = Hash_set.create (module KB.Name)
   let short_names = Hashtbl.create (module String)
 
-  let cls = KB.Class.declare ~package:"core-theory" "value" ()
+  let cls = KB.Class.declare ~package:"core" "value" ()
       ~public:true
       ~desc:"the denotation of an expression"
 

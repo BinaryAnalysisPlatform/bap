@@ -2,7 +2,7 @@ open Core_kernel
 open Bitvec_order.Comparators
 open Bap_knowledge
 
-let package = "core-theory"
+let package = "core"
 module Value  = Bap_core_theory_value
 module Effect = Bap_core_theory_effect
 module Target = Bap_core_theory_target

@@ -7,7 +7,7 @@ open Knowledge.Syntax
 
 module Value = Knowledge.Value
 
-let package = "core-theory"
+let package = "core"
 
 type const = Const [@@deriving bin_io, compare, sexp]
 type mut = Mut [@@deriving bin_io, compare, sexp]
