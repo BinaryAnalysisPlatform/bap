@@ -36,6 +36,7 @@ type t = {
   sources : Source.t;
   exports : Set.M(String).t Map.M(String).t;
   library : package Map.M(String).t;
+  pkgdocs : string Map.M(String).t;
 } [@@deriving fields]
 
 type program = t
@@ -61,6 +62,7 @@ let empty = {
   package = default_package;
   exports = Map.empty (module String);
   library = Map.empty (module String);
+  pkgdocs = Map.empty (module String);
 }
 
 let with_package program package = {program with package}
@@ -146,6 +148,16 @@ let merge_packages p1 p2 = {
   places = p1.places ++ p2.places;
 }
 
+let update_package_documentation prog package docs = {
+  prog with pkgdocs = Map.set prog.pkgdocs package docs;
+}
+
+let packages {library; pkgdocs} =
+  Map.keys library |>
+  List.map ~f:(fun pkg -> pkg, match Map.find pkgdocs pkg with
+    | None -> ""
+    | Some docs -> docs)
+
 let use_package program ?(target=program.package) from =
   let program = {
     program with
@@ -169,6 +181,14 @@ let equal p1 p2 =
 
 let is_empty p = Map.is_empty p.library
 
+let merge_pkgdocs =
+  Map.merge ~f:(fun ~key:_ -> function
+      | `Left docs | `Right docs -> Some docs
+      | `Both ("","") -> Some ""
+      | `Both (d,"")
+      | `Both ("",d) -> Some d
+      | `Both (d1,_) -> Some d1)
+
 let merge_libraries l1 l2 =
   Map.merge_skewed l1 l2 ~combine:(fun ~key:_ -> merge_packages)
 
@@ -181,13 +201,13 @@ let reexport program =
 
 let merge p1 p2 = reexport {
     p1 with
+    pkgdocs = merge_pkgdocs p1.pkgdocs p2.pkgdocs;
     sources = p2.sources;
     context = Lisp.Context.merge p1.context p2.context;
     library = merge_libraries p1.library p2.library;
     exports = Map.merge_skewed p1.exports p2.exports
         ~combine:(fun ~key:_ -> Set.union)
   }
-
 
 type full_access = [`Read | `Set_and_create ]
 type 'a item =
@@ -1537,7 +1557,7 @@ the inferred type of the method:@\n%a"
       | No_unification (x,t1,y,t2) ->
         fprintf ppf "
 Type error: expected %a got %a. Details follow, the expression:
-%ahas type %a, but it is expected to have type %a after its unification
+%a has type %a, but it is expected to have type %a after its unification
 with the expression:@\n%a@\n"
           pp_val t1 pp_val t2
           pp_exp (sources,x) pp_val t1 pp_val t2 pp_exp (sources,y)

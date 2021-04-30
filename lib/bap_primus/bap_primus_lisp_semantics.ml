@@ -163,9 +163,6 @@ let static_slot =
     ~equal:Bitvec.equal
     ~inspect:(fun x -> Sexp.Atom (Bitvec.to_string x))
 
-
-
-
 let update_value r f =
   let v = KB.Value.get Theory.Semantics.value r in
   KB.Value.put Theory.Semantics.value r (f v)
@@ -647,6 +644,12 @@ let obtain_typed_program unit =
       KB.provide Theory.Unit.source unit src >>| fun () ->
       program
     | errs -> KB.fail (Illtyped_program errs)
+
+
+let typed_program unit =
+  let open KB.Syntax in
+  obtain_typed_program unit >>| fun {prog} -> prog
+
 
 let provide_semantics ?(stdout=Format.std_formatter) () =
   let open KB.Syntax in

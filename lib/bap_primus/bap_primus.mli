@@ -3671,7 +3671,7 @@ text ::= ?any atom that is not recognized as a <word>?
         end
 
         module Category : Element
-        module Name     : Element
+        module Name     = Knowledge.Name
         module Descr    : Element
 
 
@@ -3988,6 +3988,13 @@ text ::= ?any atom that is not recognized as a <word>?
           ?types:Type.signature ->
           ?docs:string ->
           ?package:string -> string -> unit
+
+
+        (** [documentation unit] documentation for [unit]'s lisp source.
+
+            Typechecks and loads the unit lisp source and generates
+            its documentation. *)
+        val documentation : Theory.Unit.t -> Doc.index KB.t
       end
 
 

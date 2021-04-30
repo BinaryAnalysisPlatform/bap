@@ -34,14 +34,6 @@ let load_program paths features project =
     invalid_arg err
 
 module Documentation = struct
-  let pp_index ppf index =
-    List.iter index ~f:(fun (cat,elts) ->
-        fprintf ppf "* %a@\n" Primus.Lisp.Doc.Category.pp cat;
-        List.iter elts ~f:(fun (name,desc) ->
-            fprintf ppf "** ~%a~@\n%a@\n"
-              Primus.Lisp.Doc.Name.pp name
-              Primus.Lisp.Doc.Descr.pp desc))
-
   let print proj =
     let module Machine = struct
       type 'a m = 'a
@@ -51,8 +43,8 @@ module Documentation = struct
     let module Doc = Primus.Lisp.Doc.Make(Machine) in
     let module Main = Primus.Machine.Main(Machine) in
     let print =
-      Doc.generate_index >>| fun index ->
-      printf "%a@\n%!" pp_index index in
+      Doc.generate_index >>|
+      Primus_lisp_documentation.print "user" in
     match Main.run proj print with
     | Normal, _ -> ()
     | Exn e, _ ->

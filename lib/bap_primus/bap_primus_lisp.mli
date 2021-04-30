@@ -22,7 +22,7 @@ module Doc : sig
   end
 
   module Category : Element
-  module Name     : Element
+  module Name     = KB.Name
   module Descr    : Element
   type index = (Category.t * (Name.t * Descr.t) list) list
 
@@ -155,6 +155,7 @@ module Semantics : sig
     ?types:Type.signature ->
     ?docs:string -> ?package:string -> string -> unit
 
+  val documentation : Theory.Unit.t -> Doc.index KB.t
 end
 
 module Unit : sig
