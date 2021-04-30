@@ -28,7 +28,7 @@ let features = Set.of_list (module String)
 let names = Set.of_list (module Name)
 
 module Empty = struct
-  let name = Name.create ~package:"core-theory" "empty"
+  let name = Name.create ~package:"core" "empty"
   let requires = ["empty"]
   let provides = [Name.show name]
   module Self = Bap_core_theory_empty.Core
@@ -308,7 +308,7 @@ let domain = Knowledge.Domain.define "theory"
     ~order
 
 let slot = Knowledge.Class.property theory "instance" domain
-    ~package:"core-theory"
+    ~package:"core"
     ~desc:"The theory structure"
 
 
@@ -352,7 +352,7 @@ let theory_for_id id =
   let sym = sprintf "'%s" @@
     List.to_string (Set.to_list id) ~f:Name.show in
   Knowledge.Symbol.intern sym theory
-    ~package:"core-theory-internal"
+    ~package:"core-internal"
 
 let is_instantiated id =
   Knowledge.collect slot id >>| fun t ->

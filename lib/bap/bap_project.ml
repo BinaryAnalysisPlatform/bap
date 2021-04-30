@@ -874,12 +874,12 @@ module Analysis = struct
   let program =
     argument "<label>"
       ~parse:(parse_object Theory.Program.cls)
-      ~desc:(sprintf "an object of the core-theory:program class")
+      ~desc:(sprintf "an object of the core:program class")
 
   let unit =
     argument "<unit>"
       ~parse:(parse_object Theory.Unit.cls)
-      ~desc:(sprintf "an object of the core-theory:unit class")
+      ~desc:(sprintf "an object of the core:unit class")
 
   let parse_bitvec ~fail str =
     try !!(Bitvec.of_string str)

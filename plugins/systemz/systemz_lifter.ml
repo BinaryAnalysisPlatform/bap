@@ -81,7 +81,7 @@ end
 
    The only input parameter is a label that denotes a program
    location, aka a knowledge base object of type
-   core-theory:program. The label is like a generalized address - it
+   core:program. The label is like a generalized address - it
    uniquely identifies a program location, even across modules.
 
    To build the semantics the lifter can access various properties of
@@ -93,7 +93,7 @@ end
    function with other lifters (itself included, of course).
 
    The list of properties of that class  can be obtained using the
-   following command: `bap list classes -f core-theory:program`.
+   following command: `bap list classes -f core:program`.
 
    The return type [unit Theory.eff] is the denotation of effects that
    the instruction performs. The ['a Theory.eff] type is an

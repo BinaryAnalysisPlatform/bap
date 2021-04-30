@@ -14,7 +14,7 @@ module Core : Core = struct
 
   let name =
     KB.Symbol.intern "empty" theory
-      ~package:"core-theory"
+      ~package:"core"
       ~public:true
       ~desc:"The empty theory."
 
