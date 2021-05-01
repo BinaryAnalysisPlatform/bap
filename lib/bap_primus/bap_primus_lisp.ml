@@ -855,12 +855,19 @@ module Doc = struct
     Map.to_alist
 
   let describe prog item =
-    Lisp.Program.get prog item |> List.map ~f:(fun x ->
-        let name = Name.create (Lisp.Def.name x) in
-        let info = Info.create ~desc:(Lisp.Def.docs x) name in
-        name,Info.desc info) |> normalize
+    Lisp.Program.fold prog item ~init:[] ~f:(fun ~package def defs ->
+        let name = Name.create ~package (Lisp.Def.name def) in
+        let info = Info.create ~desc:(Lisp.Def.docs def) name in
+        (name,Info.desc info) :: defs) |> normalize
 
-  let index p = Lisp.Program.Items.[
+  let describe_packages prog =
+    Lisp.Program.packages prog |>
+    List.map ~f:(fun (n,d) -> KB.Name.create n, d)
+
+  let remove_empty = List.filter ~f:(function (_,[]) -> false | _ -> true)
+
+  let create_index p = remove_empty@@Lisp.Program.Items.[
+      "Packages", describe_packages p;
       "Macros", describe p macro;
       "Substitutions", describe p subst;
       "Constants", describe p const;
@@ -868,6 +875,7 @@ module Doc = struct
       "Methods", describe p meth;
       "Parameters", describe p para;
       "Primitives", describe p primitive;
+      "Primitives", describe p semantics;
       "Signals", describe p signal;
     ]
 
@@ -875,11 +883,16 @@ module Doc = struct
     open Machine.Syntax
     let generate_index : index Machine.t =
       Machine.Local.get state >>| fun s ->
-      index s.program
+      create_index s.program
   end
 end
 
 let primitive = lisp_primitive
-module Semantics = Bap_primus_lisp_semantics
+module Semantics = struct
+  include Bap_primus_lisp_semantics
+  let documentation unit =
+    KB.Syntax.(typed_program unit >>| Doc.create_index)
+end
+
 module Unit = Semantics.Unit
 module Attribute = Lisp.Attribute

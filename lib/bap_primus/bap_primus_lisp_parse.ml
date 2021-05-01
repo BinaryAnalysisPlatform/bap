@@ -68,7 +68,7 @@ let is_quoted s =
 let is_symbol s =
   String.length s > 1 && Char.(s.[0] = '\'')
 
-let unqoute s =
+let unquote s =
   if is_quoted s
   then String.sub ~pos:1 ~len:(String.length s - 2) s
   else s
@@ -107,7 +107,7 @@ module Parse = struct
       | Ok var -> var
 
   let fmt prog fmt tree =
-    let fmt = unqoute fmt in
+    let fmt = unquote fmt in
     let fail err off =
       let pos =
         Loc.nth_char (loc (Program.sources prog) [tree]) (off+1) in
@@ -355,8 +355,8 @@ module Parse = struct
     List.fold ~init:prog trees ~f:(fun prog -> function
         | {data=List ({data=Atom ":use"} :: packages)} ->
           use_package ~package:name prog packages
-        | {data=List ({data=Atom ":documentation"} :: _)} ->
-          prog
+        | {data=List [{data=Atom ":documentation"}; {data=Atom docs}]} ->
+          Program.update_package_documentation prog name (unquote docs)
         | s -> fail (Bad_def Defpkg) s)
 
   let toplevels = String.Set.of_list [

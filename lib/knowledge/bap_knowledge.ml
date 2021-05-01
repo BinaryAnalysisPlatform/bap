@@ -3071,7 +3071,8 @@ module Knowledge = struct
     module Make() = struct
       type t = Name.t [@@deriving bin_io, sexp]
 
-      let elements = Hash_set.create (module Name)
+      let unknown = Name.of_string ":unknown"
+      let elements = Hash_set.of_list (module Name) [unknown]
       let declare ?package name =
         let name = Name.create ?package name in
         if Hash_set.mem elements name
@@ -3089,7 +3090,6 @@ module Knowledge = struct
         name
 
       let name x = x
-      let unknown = Name.of_string ":unknown"
       let is_unknown = Name.equal unknown
       let hash = Name.hash
       let members () = Hash_set.to_list elements

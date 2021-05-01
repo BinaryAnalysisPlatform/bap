@@ -4,15 +4,14 @@ open Bap.Std
 open Bap_primus.Std
 open Format
 
+include Self()
+
 module Generator = Primus.Generator
 
 module type Param = sig
   val stack_size : int
   val stack_base : int64
 end
-
-type Primus.exn += No_stack of Theory.Target.t
-
 
 module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
   open Param
@@ -33,10 +32,10 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     Env.set var
 
   let stack_pointer =
-    Machine.gets Project.target >>= fun t ->
+    Machine.gets Project.target >>| fun t ->
     match Theory.Target.reg t Theory.Role.Register.stack_pointer with
-    | None -> Machine.raise (No_stack t)
-    | Some sp -> Machine.return (Var.reify sp)
+    | None -> None
+    | Some sp -> Some (Var.reify sp)
 
 
   (* bottom points to the end of the stack, ala STL end pointer.
@@ -49,12 +48,16 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     make_word stack_base >>= fun bottom ->
     let top = Addr.(bottom -- stack_size) in
     Val.of_word bottom >>= fun bottom ->
-    stack_pointer >>= fun sp ->
-    Env.set sp bottom >>= fun () ->
-    Mem.allocate
-      ~readonly:false
-      ~executable:false
-      top stack_size
+    stack_pointer >>= function
+    | None ->
+      warning "unable to initialize stack - no stack pointer@\n";
+      Machine.return ()
+    | Some sp ->
+      Env.set sp bottom >>= fun () ->
+      Mem.allocate
+        ~readonly:false
+        ~executable:false
+        top stack_size
 
   let setup_registers () =
     let zero = Generator.static 0 in
@@ -215,12 +218,3 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     setup_registers () >>= fun () ->
     init_names ()
 end
-
-
-let () = Primus.Exn.add_printer (function
-    | No_stack t ->
-      Option.some @@
-      Format.asprintf "Unable to load a program for the target %a. \
-                       No valid stack pointer was provided"
-        Theory.Target.pp t
-    | _ -> None)

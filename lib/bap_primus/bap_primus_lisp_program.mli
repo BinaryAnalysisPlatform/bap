@@ -28,7 +28,8 @@ val with_package : t -> string -> t
 val reset_package : t -> t
 val use_package : t -> ?target:string -> string -> t
 val in_package : string -> t -> (t -> 'a) -> 'a
-
+val packages : t -> (string * string) list
+val update_package_documentation : t -> string -> string -> t
 val is_applicable : t -> 'a Def.t -> bool
 
 module Items : sig
