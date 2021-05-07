@@ -1,7 +1,7 @@
 (require bits)
 (require arm-bits)
 
-(declare (context (target armv4+le)))
+(declare (context (target arm)))
 
 (defpackage thumb (:use core target arm))
 (defpackage llvm-thumb (:use thumb))

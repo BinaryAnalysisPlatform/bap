@@ -16,11 +16,15 @@ let interworking =
     ~doc:"Enable ARM/Thumb interworking. Defaults to (auto),
           i.e., to the automatic detection of interworking"
 
+type arms = [
+  | Arch.arm
+  | Arch.armeb
+] [@@deriving enumerate]
 
 let () = Bap_main.Extension.declare ~doc @@ fun ctxt ->
   let interworking = ctxt-->interworking in
   Arm_target.load ?interworking ();
-  List.iter Arch.all_of_arm ~f:(fun arch ->
+  List.iter all_of_arms ~f:(fun arch ->
       register_target (arch :> arch) (module ARM);
       Arm_gnueabi.setup ());
   Ok ()

@@ -388,7 +388,9 @@ let llvm_a64 = CT.Language.declare ~package "llvm-aarch64"
 module Dis = Disasm_expert.Basic
 
 let register ?attrs encoding triple =
-  Dis.register encoding @@ fun _ ->
+  Dis.register encoding @@ fun t ->
+  let triple = if Theory.Endianness.(eb = Theory.Target.endianness t)
+    then triple ^ "eb" else triple in
   Dis.create ?attrs ~backend:"llvm" triple
 
 let symbol_values doc =

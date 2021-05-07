@@ -55,22 +55,85 @@ bool ends_with(const std::string& str, const std::string &suffix) {
 
 
 class MemoryObject {
-    memory mem;
+    const char *data;
+    uint64_t base;
+    uint64_t size;
+    uint64_t offset;
 public:
-    MemoryObject(memory mem) : mem(mem) {}
+    MemoryObject() :
+        data(NULL),
+        base(0),
+        size(0),
+        offset(0)
+        {}
+    explicit MemoryObject(const memory &mem) {
+        set_memory(mem);
+    }
+
+    virtual ~MemoryObject() {}
 
     uint64_t getBase() const {
-        return mem.base;
+        return base;
     }
 
-    uint64_t getExtent() {
-        return mem.loc.len;
+    uint64_t getExtent() const {
+        return size;
     }
 
+    virtual llvm::ArrayRef<uint8_t> view(uint64_t pc) {
+        int off = pc - base;
+        int len = size - off;
+        return llvm::ArrayRef<uint8_t>((const uint8_t*)&data[offset+off], len);
+    }
+
+    void set_memory(const memory &m) {
+        data = m.data;
+        base = m.base;
+        size = m.loc.len;
+        offset = m.loc.off;
+    }
+};
+
+// at any time provides a view on the first two bytes
+// of the memory in a reversed order.
+// Necessary to fix #1299 until it is resolved in upstream
+// (see https://reviews.llvm.org/D48811 for the upstream fix).
+
+class ReversingMemoryObject2 : public MemoryObject {
+    uint8_t buf[4];
+public:
     llvm::ArrayRef<uint8_t> view(uint64_t pc) {
-        int off = pc - this->getBase();
-        int len = this->getExtent() - off;
-        return llvm::ArrayRef<uint8_t>((const uint8_t*)&mem.data[mem.loc.off+off], len);
+        auto data = MemoryObject::view(pc);
+        int size = data.size();
+        if (size > 1) {
+            buf[0] = data[1];
+            buf[1] = data[0];
+        }
+        if (size > 3) {
+            buf[2] = data[3];
+            buf[3] = data[2];
+        }
+        return llvm::ArrayRef<uint8_t>(&buf[0],std::min(4,size));
+    }
+};
+
+// at any time provides a view on the first four bytes
+// of the memory in a reversed order.
+class ReversingMemoryObject4 : public MemoryObject {
+    uint8_t buf[4];
+public:
+    llvm::ArrayRef<uint8_t> view(uint64_t pc) {
+        auto data = MemoryObject::view(pc);
+        int size = data.size();
+        if (size > 3) {
+            buf[0] = data[3];
+            buf[1] = data[2];
+        }
+        if (size > 1) {
+            buf[2] = data[1];
+            buf[3] = data[0];
+        }
+        return llvm::ArrayRef<uint8_t>(&buf[0],std::min(4,size));
     }
 };
 
@@ -256,6 +319,18 @@ public:
         self->ins_tab = self->create_table(ins_info->getNumOpcodes(), ins_info);
         self->reg_tab = self->create_table(reg_info->getNumRegs(), reg_info);
         self->init_prefixes();
+
+        switch (t.getArch()) {
+        case llvm::Triple::armeb:
+            self->mem.reset(new ReversingMemoryObject4());
+            break;
+        case llvm::Triple::thumbeb:
+            self->mem.reset(new ReversingMemoryObject2());
+            break;
+        default:
+            self->mem.reset(new MemoryObject());
+        };
+
         return {self, {0} };
     }
 
@@ -268,9 +343,8 @@ public:
         return reg_tab;
     }
 
-    //! this member function will not be needed anymore
     void set_memory(memory m) {
-        mem.reset(new MemoryObject(m));
+        mem->set_memory(m);
     }
 
     bool is_prefix() const {
