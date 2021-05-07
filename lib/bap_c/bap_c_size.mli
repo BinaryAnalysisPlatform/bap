@@ -34,11 +34,12 @@ class base :  model -> object
         - if type is void then alignment is 8 bits.*)
     method alignment : t -> size
 
-    (** [padding t off] computes a required padding at given offset
-        that should be inserted before value of type [t] to satisfy
-        the alignment restriction for [t], as determined by the
-        [alignment] method.  *)
+    (* this method was deprecated as
+       1) it has an incorrect type (padding can have any number of bits)
+       2) padding is fully defined by the alignemnt and there is no
+          need to parameterize it. *)
     method padding : t -> bits -> size option
+    [@@deprecated "since [2021-05] this method is ignored"]
 
 
     (** [array spec] if array [spec] is complete, then returns a

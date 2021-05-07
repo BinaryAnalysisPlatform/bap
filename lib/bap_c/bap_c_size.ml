@@ -59,7 +59,9 @@ class base (m : model) = object(self)
     let align = Size.in_bits (self#alignment t) in
     match (align - offset mod align) mod align with
     | 0 -> None
-    | n -> Some (Size.of_int_exn n)
+    | n -> match Size.of_int n with
+      | Error _ -> None
+      | Ok s -> Some s
 
   method alignment (t : Bap_c_type.t) : size =
     let byte = `r8 in
@@ -99,13 +101,12 @@ class base (m : model) = object(self)
 
   method structure : compound unqualified -> Int.t option =
     fun {Spec.t={Compound.fields}} ->
+    let padding t offset =
+      let align = Size.in_bits (self#alignment t) in
+      (align - offset mod align) mod align in
     List.fold fields ~init:(Some 0) ~f:(fun sz (_,field) -> match sz with
         | None -> None
         | Some sz -> match self#bits field with
           | None -> None
-          | Some sz' ->
-            let pad = match self#padding field sz with
-              | None -> 0
-              | Some sz -> Size.in_bits sz in
-            Some (sz + sz' + pad))
+          | Some sz' -> Some (sz + sz' + padding field sz))
 end
