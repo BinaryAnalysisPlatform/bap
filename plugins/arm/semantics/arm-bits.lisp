@@ -1,5 +1,5 @@
 (defpackage arm (:use core target))
-(declare  (context (target armv4+le)))
+(declare  (context (target arm)))
 
 (in-package arm)
 

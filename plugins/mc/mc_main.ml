@@ -90,7 +90,6 @@ type error =
   | Bad_insn of mem * int * int
   | Create_mem of Error.t
   | No_input
-  | Unknown_arch
   | Invalid_base of string
   | Trailing_data of int
   | Inconsistency of KB.conflict
@@ -651,9 +650,6 @@ let string_of_failure = function
       KB.Conflict.pp conflict
   | Bad_user_input -> "Could not parse: malformed input"
   | No_input -> "No input was received"
-  | Unknown_arch ->
-    sprintf "Unknown architecture. Supported architectures:\n%s" @@
-    String.concat ~sep:"\n" @@ List.map Arch.all ~f:Arch.to_string
   | Trailing_data 1 -> "the last byte wasn't disassembled"
   | Trailing_data left ->
     sprintf "%d bytes were left non disassembled" left
