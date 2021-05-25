@@ -10,9 +10,9 @@ jobs:
       matrix:
           os:
             - ubuntu-latest
-          ocaml-version:
-            - 4.11.1
-            - 4.08.1
+          ocaml-compiler:
+            - 4.11.x
+            - 4.08.x
 
     runs-on: ${{ matrix.os }}
 
@@ -21,10 +21,10 @@ jobs:
       OPAMRETRES: 8
 
     steps:
-        - name: Use OCaml ${{ matrix.ocaml-version }}
+        - name: Use OCaml ${{ matrix.ocaml-compiler }}
           uses: ocaml/setup-ocaml@v2
           with:
-            ocaml-compiler: ${{ matrix.ocaml-version }}
+            ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
         - name: Configure Homebrew
           if: matrix.os == 'macos-latest'
@@ -67,25 +67,25 @@ jobs:
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}
           with:
-            name: opam-log-${{ matrix.os }}-${{ matrix.ocaml-version }}
+            name: opam-log-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
             path: ~/.opam/log
 
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}
           with:
-            name: bap-log-${{ matrix.os }}-${{ matrix.ocaml-version }}
+            name: bap-log-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
             path: ~/.local/state/bap
 
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}
           with:
-            name: unit-tests-log-${{ matrix.os }}-${{ matrix.ocaml-version }}
+            name: unit-tests-log-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
             path: _build/oUnit-*.log
 
         - uses: actions/upload-artifact@v2
           if: ${{ always() }}
           with:
-            name: fun-tests-log-${{ matrix.os }}-${{ matrix.ocaml-version }}
+            name: fun-tests-log-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
             path: |
               testsuite/*.log
               testsuite/logs

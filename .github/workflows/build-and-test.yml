@@ -19,7 +19,7 @@ jobs:
          - name: Install OCaml
            uses: ocaml/setup-ocaml@v2
            with:
-             ocaml-compiler: 4.08.1
+             ocaml-compiler: 4.08.x
 
          - name: Add the testing Repository
            run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
