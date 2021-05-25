@@ -22,9 +22,9 @@ jobs:
     steps:
 
         - name: Use OCaml ${{ matrix.ocaml-version }}
-          uses: avsm/setup-ocaml@v1
+          uses: ocaml/setup-ocaml@v2
           with:
-            ocaml-version: ${{ matrix.ocaml-version }}
+            ocaml-compiler: ${{ matrix.ocaml-version }}
 
         - name: Install System Dependencies
           run: opam depext -y bap

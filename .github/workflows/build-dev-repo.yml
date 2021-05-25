@@ -28,9 +28,9 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Use OCaml ${{ matrix.ocaml-version }}
-        uses: avsm/setup-ocaml@v1
+        uses: ocaml/setup-ocaml@v2
         with:
-          ocaml-version: ${{ matrix.ocaml-version }}
+          ocaml-compiler: ${{ matrix.ocaml-version }}
 
       - name: Add the testing Repository
         run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing

@@ -19,9 +19,9 @@ jobs:
            uses: actions/checkout@v2
 
          - name: Install OCaml
-           uses: avsm/setup-ocaml@v1
+           uses: ocaml/setup-ocaml@v2
            with:
-             ocaml-version: 4.11.1+flambda
+             ocaml-compiler: 4.11.1+flambda
 
          - name: Add the testing Repository
            run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
