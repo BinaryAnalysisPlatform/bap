@@ -14,6 +14,7 @@ let () = Config.manpage [
     `P "$(b,bap-api)(3), $(b,bap-c)(3), $(b,bap-plugin-api)(1)"
   ]
 
+
 let int size sign : C.Type.basic = match size,sign with
   | (NO_SIZE,(NO_SIGN|SIGNED)) -> `sint
   | (SHORT,(NO_SIGN|SIGNED)) -> `sshort
@@ -73,7 +74,7 @@ let name_groups : name_group list -> 'a list =
       List.map ns ~f:(fun (n,t,attrs,_) -> n,t,attrs))
 
 let single_names : single_name list -> 'a list =
-  List.map ~f:(fun (_,s,(n,t,attrs,_)) -> n,t,attrs)
+  List.map ~f:(fun (_,_,(n,t,attrs,_)) -> n,t,attrs)
 
 let rec gnu_attr = function
   | GNU_NONE -> None
@@ -83,7 +84,8 @@ let rec gnu_attr = function
   | GNU_ID s -> Some C.Type.Attr.{name = s; args = []}
   | GNU_CST _
   | GNU_EXTENSION
-  | GNU_INLINE  -> None
+  | GNU_INLINE
+  | GNU_TYPE_ARG _ -> None
 and gnu_attrs_args = List.filter_map ~f:(function
     | GNU_ID s
     | GNU_CST
@@ -142,11 +144,16 @@ type tag = {
 
 let ctype gamma {lookup} t =
   let rec ctype : base_type -> C.Type.t = function
-    | NO_TYPE | TYPE_LINE _ | OLD_PROTO _ | BITFIELD _ | VOID -> `Void
+    | NO_TYPE | TYPE_LINE _ | OLD_PROTO _ | BITFIELD _
+    | BUILTIN_TYPE _ | VOID -> `Void
+    | BOOL -> basic `bool
     | CHAR sign -> basic @@ char sign
     | INT (size,sign) -> basic @@ int size sign
     | FLOAT _ -> basic @@ `float
     | DOUBLE long -> basic @@ if long then `long_double else `double
+    | COMPLEX_FLOAT -> basic `cfloat
+    | COMPLEX_DOUBLE -> basic `cdouble
+    | COMPLEX_LONG_DOUBLE -> basic `clong_double
     | PTR t -> pointer @@ ctype t
     | RESTRICT_PTR t -> restrict @@ ctype t
     | ARRAY (et,ice) -> array (size ice) @@ ctype et
@@ -161,7 +168,7 @@ let ctype gamma {lookup} t =
     | CONST t -> qualify const @@ ctype t
     | VOLATILE t -> qualify volatile @@ ctype t
     | GNU_TYPE (a,t) -> with_attrs (gnu_attrs a) @@ ctype t
-  and enum_items tag =
+  and enum_items _ =
     List.map ~f:(fun (name,exp) -> match exp with
         | CONSTANT (CONST_INT x) ->
           name, Option.try_with (fun () -> Int64.of_string x)
@@ -200,7 +207,7 @@ let parse (size : C.Size.base) parse lexbuf =
   let tags = String.Table.create () in
   let gamma name = match Hashtbl.find env name with
     | Some t -> t
-    | None -> invalid_argf "unbound type %s" name () in
+    | None -> `Void in
   let lookup what name = match Hashtbl.find tags name with
     | Some t -> t
     | None -> what name [] in
@@ -231,19 +238,40 @@ let parse (size : C.Size.base) parse lexbuf =
   Hashtbl.map_inplace env ~f:resolve;
   Hashtbl.to_alist env
 
-let parser size name =
-  In_channel.with_file name ~f:(fun input ->
-      let open Clexer in
-      init {
-        !current_handle with
-        h_in_channel = input;
-        h_file_name = name;
-        h_out_channel = stderr;
-      };
-      init_lexicon ();
-      let lexbuf = Lexing.from_function (get_buffer current_handle) in
-      let parser = Cparser.file initial in
-      try Ok (parse size parser lexbuf) with exn ->
-        Or_error.of_exn exn)
+exception Cpp_failed
 
-let () = Config.when_ready @@ fun _ -> C.Parser.provide parser
+let with_file cpp name f =
+  match cpp with
+  | None -> In_channel.with_file name ~f
+  | Some cpp ->
+    let cmd = sprintf "%s %S" cpp name in
+    let input = Caml_unix.open_process_in cmd in
+    protect ~f:(fun () -> f input)
+      ~finally:(fun () ->
+          match Caml_unix.close_process_in input with
+          | WEXITED 0 -> ()
+          | _ -> raise Cpp_failed)
+
+let parser cpp size name =
+  with_file cpp name @@ fun input ->
+  let open Clexer in
+  init {
+    !current_handle with
+    h_in_channel = input;
+    h_file_name = name;
+    h_out_channel = stderr;
+  };
+  init_lexicon ();
+  let lexbuf = Lexing.from_function (get_buffer current_handle) in
+  let parser = Cparser.file initial in
+  try Ok (parse size parser lexbuf) with exn ->
+    Or_error.of_exn exn
+
+let cpp = Config.param Config.(some string)
+    ~as_flag:(Some "cpp")
+    ~doc:"Preprocess headers with the specified preprocessor."
+    "preprocess"
+    ~synonyms:["pp"]
+
+let () = Config.when_ready @@ fun {get} ->
+  C.Parser.provide (parser (get cpp))

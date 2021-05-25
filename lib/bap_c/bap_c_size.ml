@@ -12,7 +12,7 @@ type bits = Int.t
 class base (m : model) = object(self)
   method integer (t : integer) : size =
     match m,t with
-    | _,#char -> `r8
+    | _,(`bool|#char) -> `r8
     | _,#short -> `r16
     | `LP32,#cint -> `r16
     | (`ILP32|`LLP64|`LP64),#cint -> `r32

@@ -37,7 +37,7 @@ type signed =
 [@@deriving bin_io,compare,sexp,enumerate]
 
 type unsigned =
-  [`uchar | `ushort | `uint | `ulong | `ulong_long]
+  [`bool | `uchar | `ushort | `uint | `ulong | `ulong_long]
 [@@deriving bin_io,compare,sexp,enumerate]
 
 type enum =
