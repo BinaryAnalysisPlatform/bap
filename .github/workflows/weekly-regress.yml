@@ -24,6 +24,7 @@ jobs:
         - name: Use OCaml ${{ matrix.ocaml-version }}
           uses: ocaml/setup-ocaml@v2
           with:
+            dune-cache: true
             ocaml-compiler: ${{ matrix.ocaml-version }}
 
         - name: Install System Dependencies

@@ -18,6 +18,7 @@ jobs:
       - name: Setup OCaml
         uses: ocaml/setup-ocaml@v2
         with:
+          dune-cache: true
           ocaml-compile: 4.08.1
 
       - name: Check the Style

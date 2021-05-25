@@ -21,6 +21,7 @@ jobs:
          - name: Install OCaml
            uses: ocaml/setup-ocaml@v2
            with:
+             dune-cache: true
              ocaml-compiler: 4.11.1+flambda
 
          - name: Add the testing Repository
