@@ -3,15 +3,15 @@ name: weekly-regression-tests
 
 on:
   schedule:
-    - cron: '0 0 * * SUN' # Every Sunday at 00:00 UTC */
+    - cron: "0 0 * * SUN" # Every Sunday at 00:00 UTC */
 
 jobs:
   build:
     strategy:
       matrix:
-          ocaml-compiler:
-            - 4.11.x
-            - 4.08.x
+        ocaml-compiler:
+          - 4.11.x
+          - 4.08.x
 
     runs-on: ubuntu-latest
 
@@ -20,49 +20,48 @@ jobs:
       OPAMRETRES: 8
 
     steps:
+      - name: Use OCaml ${{ matrix.ocaml-compiler }}
+        uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
-        - name: Use OCaml ${{ matrix.ocaml-compiler }}
-          uses: ocaml/setup-ocaml@v2
-          with:
-            ocaml-compiler: ${{ matrix.ocaml-compiler }}
+      - name: Install System Dependencies
+        run: opam depext -y bap
 
-        - name: Install System Dependencies
-          run: opam depext -y bap
+      - name: Cleanup the Caches
+        run: sudo apt clean --yes
 
-        - name: Cleanup the Caches
-          run: sudo apt clean --yes
+      - name: Build and Install BAP
+        run: opam install bap
 
-        - name: Build and Install BAP
-          run: opam install bap
+      - name: Checkout the Tests
+        uses: actions/checkout@v2
+        with:
+          repository: BinaryAnalysisPlatform/bap
+          ref: v2.2.0
 
-        - name: Checkout the Tests
-          uses: actions/checkout@v2
-          with:
-            repository: BinaryAnalysisPlatform/bap
-            ref: v2.2.0
+      - name: Install Extra System Dependencies
+        run: sudo apt-get install dejagnu --yes
 
-        - name: Install Extra System Dependencies
-          run: sudo apt-get install dejagnu --yes
+      - name: Run Functional Tests
+        run: opam exec -- make check
 
-        - name: Run Functional Tests
-          run: opam exec -- make check
+      - uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: opam-log-${{ matrix.ocaml-compiler }}
+          path: ~/.opam/log
 
-        - uses: actions/upload-artifact@v2
-          if: ${{ always() }}
-          with:
-            name: opam-log-${{ matrix.ocaml-compiler }}
-            path: ~/.opam/log
+      - uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: bap-log-${{ matrix.ocaml-compiler }}
+          path: ~/.local/state/bap
 
-        - uses: actions/upload-artifact@v2
-          if: ${{ always() }}
-          with:
-            name: bap-log-${{ matrix.ocaml-compiler }}
-            path: ~/.local/state/bap
-
-        - uses: actions/upload-artifact@v2
-          if: ${{ always() }}
-          with:
-            name: fun-tests-log-${{ matrix.ocaml-compiler }}
-            path: |
-              testsuite/*.log
-              testsuite/logs
+      - uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: fun-tests-log-${{ matrix.ocaml-compiler }}
+          path: |
+            testsuite/*.log
+            testsuite/logs

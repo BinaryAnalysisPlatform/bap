@@ -7,12 +7,12 @@ jobs:
   build:
     strategy:
       matrix:
-          os:
-            - ubuntu-latest
-            - macos-latest
-          ocaml-compiler:
-            - 4.11.x
-            - 4.08.x
+        os:
+          - ubuntu-latest
+          - macos-latest
+        ocaml-compiler:
+          - 4.11.x
+          - 4.08.x
 
     runs-on: ${{ matrix.os }}
 

@@ -6,74 +6,73 @@ on:
 
 jobs:
   build:
-     runs-on: ubuntu-latest
+    runs-on: ubuntu-latest
 
-     env:
-       OPAMJOBS: 2
-       OPAMRETRES: 8
+    env:
+      OPAMJOBS: 2
+      OPAMRETRES: 8
 
-     steps:
-         - name: Checkout code
-           uses: actions/checkout@v2
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-         - name: Install OCaml
-           uses: ocaml/setup-ocaml@v2
-           with:
-             ocaml-compiler: 4.08.x
+      - name: Install OCaml
+        uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: 4.08.x
 
-         - name: Add the testing Repository
-           run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
+      - name: Add the testing Repository
+        run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
 
+      - name: Pin OASIS
+        run: opam pin add oasis https://github.com/BinaryAnalysisPlatform/oasis.git
 
-         - name: Pin OASIS
-           run: opam pin add oasis https://github.com/BinaryAnalysisPlatform/oasis.git
+      - name: Pin BAP
+        run: opam pin add bap . --no-action
 
-         - name: Pin BAP
-           run: opam pin add bap . --no-action
+      - name: Install system dependencies
+        run: opam depext -u bap
 
-         - name: Install system dependencies
-           run: opam depext -u bap
+      - name: Install opam dependencies
+        run: |
+          opam install bap --deps-only
+          opam install omake
 
-         - name: Install opam dependencies
-           run: |
-               opam install bap --deps-only
-               opam install omake
+      - name: Configure BAP
+        run: |
+          opam exec -- ./configure-omake \
+            --enable-tests \
+            --with-llvm-version=9 \
+            --with-llvm-config=llvm-config-9
 
-         - name: Configure BAP
-           run: |
-               opam exec -- ./configure-omake \
-                 --enable-tests \
-                 --with-llvm-version=9 \
-                 --with-llvm-config=llvm-config-9
+      - name: Build BAP
+        run: opam exec -- make
 
-         - name: Build BAP
-           run: opam exec -- make
+      - name: Install BAP
+        run: opam exec -- make reinstall
 
-         - name: Install BAP
-           run: opam exec -- make reinstall
+      - name: Run Unit Tests
+        run: opam exec -- make test
 
-         - name: Run Unit Tests
-           run: opam exec -- make test
+      - name: Run Functional Tests
+        run: opam exec -- make check
 
-         - name: Run Functional Tests
-           run: opam exec -- make check
+      - uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: bap-log
+          path: ~/.local/state/bap
 
-         - uses: actions/upload-artifact@v2
-           if: ${{ always() }}
-           with:
-             name: bap-log
-             path: ~/.local/state/bap
+      - uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: unit-tests-log
+          path: _build/oUnit-*.log
 
-         - uses: actions/upload-artifact@v2
-           if: ${{ always() }}
-           with:
-             name: unit-tests-log
-             path: _build/oUnit-*.log
-
-         - uses: actions/upload-artifact@v2
-           if: ${{ always() }}
-           with:
-             name: fun-tests-log
-             path: |
-               testsuite/*.log
-               testsuite/logs
+      - uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: fun-tests-log
+          path: |
+            testsuite/*.log
+            testsuite/logs

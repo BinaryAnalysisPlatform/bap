@@ -2,17 +2,17 @@ name: nightly-regression-tests
 
 on:
   schedule:
-    - cron: '0 6 * * *' # Every day at 06:00 UTC, 2 am EDT
+    - cron: "0 6 * * *" # Every day at 06:00 UTC, 2 am EDT
 
 jobs:
   build:
     strategy:
       matrix:
-          os:
-            - ubuntu-latest
-          ocaml-compiler:
-            - 4.11.x
-            - 4.08.x
+        os:
+          - ubuntu-latest
+        ocaml-compiler:
+          - 4.11.x
+          - 4.08.x
 
     runs-on: ${{ matrix.os }}
 
@@ -21,71 +21,71 @@ jobs:
       OPAMRETRES: 8
 
     steps:
-        - name: Use OCaml ${{ matrix.ocaml-compiler }}
-          uses: ocaml/setup-ocaml@v2
-          with:
-            ocaml-compiler: ${{ matrix.ocaml-compiler }}
+      - name: Use OCaml ${{ matrix.ocaml-compiler }}
+        uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
-        - name: Configure Homebrew
-          if: matrix.os == 'macos-latest'
-          run: |
-            rm -rf /usr/local/bin/2to3
-            brew unlink gcc@8
-            brew unlink gcc@9
-            brew update
-            brew upgrade
-            echo 'LLVM_CONFIG=/usr/local/opt/llvm@9/bin/llvm-config' >> $GITHUB_ENV
+      - name: Configure Homebrew
+        if: matrix.os == 'macos-latest'
+        run: |
+          rm -rf /usr/local/bin/2to3
+          brew unlink gcc@8
+          brew unlink gcc@9
+          brew update
+          brew upgrade
+          echo 'LLVM_CONFIG=/usr/local/opt/llvm@9/bin/llvm-config' >> $GITHUB_ENV
 
-        - name: Add the Testing Repository
-          run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
-        - name: Install System Dependencies
-          run: opam depext -u bap
+      - name: Add the Testing Repository
+        run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
+      - name: Install System Dependencies
+        run: opam depext -u bap
 
-        - name: Install radare2 Dependencies
-          run: opam depext -u bap-radare2
+      - name: Install radare2 Dependencies
+        run: opam depext -u bap-radare2
 
-        - name: Cleanup the Caches
-          if: matrix.os == 'ubuntu-latest'
-          run: sudo apt clean --yes
+      - name: Cleanup the Caches
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt clean --yes
 
-        - name: Build and Install BAP
-          run: opam install bap bap-radare2
+      - name: Build and Install BAP
+        run: opam install bap bap-radare2
 
-        - name: Checkout the Tests
-          uses: actions/checkout@v2
-          with:
-            repository: BinaryAnalysisPlatform/bap
+      - name: Checkout the Tests
+        uses: actions/checkout@v2
+        with:
+          repository: BinaryAnalysisPlatform/bap
 
-        - name: Install Extra System Dependencies
-          run: |
-              opam pin add bap . -n
-              opam depext -u bap
+      - name: Install Extra System Dependencies
+        run: |
+          opam pin add bap . -n
+          opam depext -u bap
 
-        - name: Run Functional Tests
-          run: opam exec -- make check
+      - name: Run Functional Tests
+        run: opam exec -- make check
 
-        - uses: actions/upload-artifact@v2
-          if: ${{ always() }}
-          with:
-            name: opam-log-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
-            path: ~/.opam/log
+      - uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: opam-log-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
+          path: ~/.opam/log
 
-        - uses: actions/upload-artifact@v2
-          if: ${{ always() }}
-          with:
-            name: bap-log-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
-            path: ~/.local/state/bap
+      - uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: bap-log-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
+          path: ~/.local/state/bap
 
-        - uses: actions/upload-artifact@v2
-          if: ${{ always() }}
-          with:
-            name: unit-tests-log-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
-            path: _build/oUnit-*.log
+      - uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: unit-tests-log-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
+          path: _build/oUnit-*.log
 
-        - uses: actions/upload-artifact@v2
-          if: ${{ always() }}
-          with:
-            name: fun-tests-log-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
-            path: |
-              testsuite/*.log
-              testsuite/logs
+      - uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: fun-tests-log-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
+          path: |
+            testsuite/*.log
+            testsuite/logs
