@@ -24,6 +24,7 @@ jobs:
         uses: ocaml/setup-ocaml@v2
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
+          dune-cache: true
 
       - name: Install System Dependencies
         run: opam depext -y bap
