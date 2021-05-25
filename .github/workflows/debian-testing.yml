@@ -2,16 +2,17 @@ name: Debian-testing
 
 on:
   schedule:
-    - cron: '0 0 * * WED'
+    - cron: "0 0 * * WED"
 
 jobs:
-   build:
-     runs-on: ubuntu-latest
-     steps:
-     - uses: actions/checkout@master
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-     - name: Build on Debian Testing
-       uses: docker/build-push-action@v1
-       with:
-         push: false
-         dockerfile: docker/debian/testing/Dockerfile
+      - name: Build on Debian Testing
+        uses: docker/build-push-action@v2
+        with:
+          push: false
+          file: docker/debian/testing/Dockerfile
