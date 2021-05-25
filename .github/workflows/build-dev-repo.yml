@@ -7,12 +7,12 @@ jobs:
   build:
     strategy:
       matrix:
-          os:
-            - ubuntu-latest
-            - macos-latest
-          ocaml-version:
-            - 4.11.1
-            - 4.08.1
+        os:
+          - ubuntu-latest
+          - macos-latest
+        ocaml-compiler:
+          - 4.11.x
+          - 4.08.x
 
     runs-on: ${{ matrix.os }}
 
@@ -27,10 +27,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Use OCaml ${{ matrix.ocaml-version }}
+      - name: Use OCaml ${{ matrix.ocaml-compiler }}
         uses: ocaml/setup-ocaml@v2
         with:
-          ocaml-compiler: ${{ matrix.ocaml-version }}
+          ocaml-compiler: ${{ matrix.ocaml-compiler }}
+          dune-cache: ${{  matrix.os != 'macos-latest' }}
 
       - name: Add the testing Repository
         run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
@@ -60,5 +61,5 @@ jobs:
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
         with:
-          name: opam-log-${{ matrix.os }}-${{ matrix.ocaml-version }}
+          name: opam-log-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
           path: ~/.opam/log

@@ -18,7 +18,8 @@ jobs:
       - name: Setup OCaml
         uses: ocaml/setup-ocaml@v2
         with:
-          ocaml-compile: 4.08.1
+          ocaml-compiler: 4.08.x
+          dune-cache: true
 
       - name: Check the Style
         run: opam install -y ocp-indent && opam exec -- make check-style

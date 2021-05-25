@@ -6,9 +6,9 @@ jobs:
   build:
     strategy:
       matrix:
-          ocaml-version:
-            - 4.11.1
-            - 4.08.1
+        ocaml-compiler:
+          - 4.11.x
+          - 4.08.x
 
     runs-on: ubuntu-latest
 
@@ -17,28 +17,29 @@ jobs:
       OPAMRETRES: 8
 
     steps:
-        - name: Use OCaml ${{ matrix.ocaml-version }}
-          uses: ocaml/setup-ocaml@v2
-          with:
-            ocaml-compiler: ${{ matrix.ocaml-version }}
+      - name: Use OCaml ${{ matrix.ocaml-compiler }}
+        uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: ${{ matrix.ocaml-compiler }}
+          dune-cache: true
 
-        - name: Add the testing Repository
-          run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
+      - name: Add the testing Repository
+        run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
 
-        - name: Install system dependencies
-          run: opam depext -u bap
+      - name: Install system dependencies
+        run: opam depext -u bap
 
-        - name: Cleanup the Caches
-          run: sudo apt clean --yes
+      - name: Cleanup the Caches
+        run: sudo apt clean --yes
 
-        - name: Check the Space
-          run: df -h
+      - name: Check the Space
+        run: df -h
 
-        - name: Build and Install BAP Packages
-          run: opam clean -a; opam install bap
+      - name: Build and Install BAP Packages
+        run: opam clean -a; opam install bap
 
-        - uses: actions/upload-artifact@v2
-          if: ${{ always() }}
-          with:
-            name: opam-log-${{ matrix.ocaml-version }}
-            path: ~/.opam/log
+      - uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: opam-log-${{ matrix.ocaml-compiler }}
+          path: ~/.opam/log
