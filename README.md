@@ -2,8 +2,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/BinaryAnalysisPlatform/bap/blob/master/LICENSE)
 [![Join the chat at https://gitter.im/BinaryAnalysisPlatform/bap](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/BinaryAnalysisPlatform/bap?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![docs](https://img.shields.io/badge/doc-master-green.svg)][docs]
-[![docs](https://img.shields.io/badge/doc-2.2.0-green.svg)][docs]
-[![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)][travis]
+[![docs](https://img.shields.io/badge/doc-2.3.0-green.svg)][docs]
 
 ## Table of contents
 *   [Overview](#overview)
@@ -29,8 +28,8 @@ BAP is developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by
 We provide binary packages packed for Debian and Red Hat derivatives. For other distributions we provide tgz archives. To install bap on a Debian derivative:
 
 ```bash
-wget https://github.com/BinaryAnalysisPlatform/bap/releases/download/v2.2.0/{bap,libbap,libbap-dev}_2.2.0.deb
-sudo dpkg -i {bap,libbap,libbap-dev}_2.2.0.deb
+wget https://github.com/BinaryAnalysisPlatform/bap/releases/download/v2.3.0/{bap,libbap,libbap-dev}_2.3.0.deb
+sudo dpkg -i {bap,libbap,libbap-dev}_2.3.0.deb
 ```
 
 ### From sources
@@ -38,11 +37,11 @@ sudo dpkg -i {bap,libbap,libbap-dev}_2.2.0.deb
 Our binary packages do not include the OCaml development environment. If you are going to write an analysis in OCaml you need to install BAP from the source code using either [opam][opam-install] or by cloning and building this repository directly. The opam method is the recommended one. Once it is installed the following three commands should install the platform in a newly created switch.
 
 ```bash
-opam init --comp=4.09.0              # inits opam and install the OCaml compiler
-eval `opam config env`               # activates opam environment
-opam depext --install bap            # installs bap and its dependencies
+opam init --comp=4.09.0   # inits opam and install the OCaml compiler
+eval `opam config env`    # activates opam environment
+opam depext --install bap # installs bap and its dependencies
 ```
-The `opam depext --install bap` command will try to fulfill the system dependencies of BAP, e.g., LLVM and is the common point of failure, especially on uncommon distributions or for rare versions of LLVM. If it fails, try to install the system dependencies manually, using your operating system package manager, and then use the common `opam install bap` command, to install BAP. If it still doesn't work, do not hesitate to drop by our [chat][gitter] and seek help there. It is manned with friendly people that will be happy to help.
+The `opam depext --install bap` command will try to install the system dependencies of BAP. If it fails, try to install the system dependencies manually, using your operating system package manager, and then use the common `opam install bap` command, to install BAP. If it still doesn't work, do not hesitate to drop by our [chat][gitter] and seek help there. It is manned with friendly people that will be happy to help.
 
 The instruction above will get you the latest stable release of BAP. If you're interested in our rolling releases, which are automatically updated every time a commit to the master branch happens, then you can add our testing repository to opam, with the following command
 ```bash
