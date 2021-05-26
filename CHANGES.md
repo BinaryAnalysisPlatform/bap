@@ -1,3 +1,44 @@
+2.3.0
+=====
+
+- #1263 fixes PE/COFF sections decoding
+- #1265 introduces BIL special encodings and publishes BIL CT parser
+- #1266 introduces the BIL code slot and a few convenience functions
+- #1268 adds a Primus Lisp fronted
+- #1273 rewrites the read-symbols plugin to enable multiple files support
+- #1274 updates the raw loader to enable better support for targets
+- #1275 overhauls target/value abstraction and introduces roles (4/n)
+- #1276 adds the --target parameter to disassemble and compare commands
+- #1277 enables writing program semantics (lifting) in Primus Lisp
+- #1278 moves to centralized and uniform path handling
+- #1286 adds namepspaces (packages) to Primus Lisp
+- #1287 adds riscv32 and riscv64 support
+- #1288 restores output for non-empty instructions
+- #1289 fixes the unit tracking mechanism
+- #1290 implements ABI description eDSL
+- #1291 adds armv8 (aarch64) lifter
+- #1293 implements the array to pointer conversion in C ABI processor
+- #1294 introduces bap dependencies command
+- #1296 uses ARM EABI for Thumb binaries
+- #1295 adds YAML as an alternative output of the specification command
+- #1297 adds the missing ux*, sx*, s?bz instructions
+- #1298 adds more thumb-specific instructions
+- #1304 adds the --show-knowledge option to bap mc
+- #1303 preserves the encoding name of the instruction
+- #1307 renames the core-theory package to just core
+- #1306 adds `bap primus-lisp-documentation` command
+- #1309 adds support for big-endian arm and thumb architectures
+
+### Bug Fixes
+
+- #1272 fixes two bugs in the Memory module
+- #1280 fixes, cleans, and optimizes KB AVL tree implementation
+- #1281 prunes empty segments
+- #1282 fixes recipes search paths
+- #1285 fixes a missing str dependency in the x86 plugin
+- #1308 fixes a bug in the method that computes C padding.
+- #1310 removes the old unit tracking module, fixes the modern one
+
 2.2.0
 =====
 
