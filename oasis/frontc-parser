@@ -8,6 +8,6 @@ Library frontc_parser_plugin
   Path: plugins/frontc_parser
   FindlibName: bap-plugin-frontc_parser
   CompiledObject: best
-  BuildDepends: bap, bap-c, FrontC, core_kernel, ppx_bap
+  BuildDepends: bap, bap-c, FrontC, core_kernel, ppx_bap, core_kernel.caml_unix
   InternalModules: Frontc_parser_main
   XMETAExtraLines: tags="api,c,parser"

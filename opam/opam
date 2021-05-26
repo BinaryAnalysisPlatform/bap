@@ -17,7 +17,7 @@ depends: [
   "core_kernel" {>= "v0.14" & < "v0.15"}
   "ezjsonm"
   "fileutils"
-  "FrontC"
+  "FrontC" {>= "4.1" & < "4.2"}
   "oasis" {build & >= "0.4.10"}
   "ounit" {build}
   "ocamlgraph" {>= "1.8.6"}
