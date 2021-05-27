@@ -29,17 +29,20 @@ jobs:
       - name: Install System Dependencies
         run: opam depext -y bap
 
+      - name: Install radare2 Dependencies
+        run: opam depext -u bap-radare2
+
       - name: Cleanup the Caches
         run: sudo apt clean --yes
 
       - name: Build and Install BAP
-        run: opam install bap
+        run: opam install bap bap-radare2
 
       - name: Checkout the Tests
         uses: actions/checkout@v2
         with:
           repository: BinaryAnalysisPlatform/bap
-          ref: v2.2.0
+          ref: v2.3.0
 
       - name: Install Extra System Dependencies
         run: sudo apt-get install dejagnu --yes

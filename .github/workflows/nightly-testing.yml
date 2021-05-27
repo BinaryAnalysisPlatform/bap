@@ -26,6 +26,7 @@ jobs:
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
           dune-cache: true
+          cache-prefix: nightly
 
       - name: Configure Homebrew
         if: matrix.os == 'macos-latest'
