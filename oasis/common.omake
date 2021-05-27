@@ -1,6 +1,6 @@
 OASISFormat: 0.4
 Name:        bap
-Version:     2.3.0
+Version:     2.4.0-alpha
 OCamlVersion: >= 4.08.0
 Synopsis:    BAP Core Library
 Authors:     BAP Team
