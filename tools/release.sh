@@ -41,7 +41,7 @@ cd bap-repo
 LLVM_VERSION=$(opam config var conf-bap-llvm:package-version)
 LLVM_CONFIG=$(opam config var conf-bap-llvm:config)
 
-SIGURL=https://github.com/BinaryAnalysisPlatform/bap/releases/download/v2.1.0
+SIGURL=https://github.com/BinaryAnalysisPlatform/bap/releases/download/v2.3.0
 echo BAP version is $BAP_VERSION
 echo LLVM is $LLVM_VERSION
 
@@ -69,29 +69,23 @@ mkdir -p bap/bap_$BAP_VERSION/DEBIAN
 SHARED=bap/bap_$BAP_VERSION/$PREFIX/share
 BINDIR=bap/bap_$BAP_VERSION/$PREFIX/bin
 LIBDIR=bap/bap_$BAP_VERSION/$PREFIX/lib/bap
-SIGDIR=bap/bap_$BAP_VERSION/$PREFIX/share/bap
 DEBIAN=bap/bap_$BAP_VERSION/DEBIAN
-PRIMUS=$SHARED/primus/site-lisp
-BAPAPI=$SHARED/bap-api
 
-mkdir -p $BINDIR $LIBDIR $SIGDIR $DEBIAN $PRIMUS $BAPAPI
+SIGDIR=$SHARED/bap/signatures/
+
+mkdir -p $SHARED $BINDIR $LIBDIR $DEBIAN
+
+cp -r $PREFIX/share/bap $SHARED/bap
 
 for binary in $BINARIES; do
     cp $PREFIX/bin/$binary bap/bap_$BAP_VERSION/$PREFIX/bin
 done;
 
 cp $PREFIX/lib/bap/*.plugin $LIBDIR
-curl -L $SIGURL/sigs.zip > $SIGDIR/sigs.zip
 
-
-LISPSRC="primus_lisp primus_taint primus_test constant_tracker primus_symbolic_executor"
-for src in $LISPSRC; do
-    cp bap-repo/plugins/$src/lisp/*.lisp $PRIMUS/
-done;
-
-cp -r bap-repo/plugins/api/api/c $BAPAPI
-cp bap-repo/plugins/primus_systems/systems/*.asd $SHARED/primus
-
+echo "Installing Byteweight signatures"
+mkdir -p $SIGDIR
+curl -L $SIGURL/sigs.zip > $SIGDIR/byteweight.zip
 
 cat > $DEBIAN/control <<EOF
 Package: bap
