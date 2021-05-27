@@ -3,6 +3,7 @@ name: nightly-regression-tests
 on:
   schedule:
     - cron: "0 6 * * *" # Every day at 06:00 UTC, 2 am EDT
+  workflow_dispatch:
 
 jobs:
   build:
