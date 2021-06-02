@@ -137,12 +137,12 @@ EOF
 
 cat > $DEBIAN/postinst <<EOF
 #!/bin/sh
-sudo ldconfig
+ldconfig
 EOF
 
 cat > $DEBIAN/postrm <<EOF
 #!/bin/sh
-sudo ldconfig
+ldconfig
 EOF
 
 chmod a+x $DEBIAN/postinst
@@ -170,12 +170,12 @@ EOF
 cat > $DEBIAN/postinst <<EOF
 #!/bin/sh
 ln -sf $PREFIX/lib/libbap.so.$BAP_VERSION $PREFIX/lib/libbap.so
-sudo ldconfig
+ldconfig
 EOF
 
 cat > $DEBIAN/postrm <<EOF
 #!/bin/sh
-sudo ldconfig
+ldconfig
 EOF
 
 chmod a+x $DEBIAN/postinst
