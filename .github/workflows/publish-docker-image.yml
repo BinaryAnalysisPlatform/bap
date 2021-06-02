@@ -19,5 +19,6 @@ jobs:
       - name: Publish Ubuntu image to Registry
         uses: docker/build-push-action@v2
         with:
+          push: true
           tags: binaryanalysisplatform/bap:latest
           file: docker/ubuntu/xenial/Dockerfile
