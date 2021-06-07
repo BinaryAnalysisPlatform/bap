@@ -13,7 +13,7 @@ depends: [
   "camlzip"
   "linenoise" {>= "1.1" & < "2.0"}
   "cmdliner" {>= "1.0" & < "2.0"}
-  "ppx_bap"  {= "master"}
+  "ppx_bap" {>= "v0.14" & < "v0.15"}
   "core_kernel" {>= "v0.14" & < "v0.15"}
   "ezjsonm"
   "fileutils"
