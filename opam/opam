@@ -32,11 +32,10 @@ depends: [
   "conf-bap-llvm" {>= "1.1"}
   "parsexp"
   "bap-signatures"
-  "result"
   "z3"
   "conf-radare2"
   "yojson"
-  "result" {= "1.4"}
+  "result"
 ]
 depopts: [
   "conf-ida"
