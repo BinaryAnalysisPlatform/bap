@@ -1,0 +1,24 @@
+Flag ghidra
+ Description: Build with the ghidra backend
+ Default: false
+
+Library bap_ghidra
+  Path:          lib/bap_ghidra
+  Build$:        flag(everything) || flag(ghidra)
+  BuildDepends:  bap, core_kernel, ppx_bap, mmap
+  FindlibName:   bap-ghidra
+  Modules:       Bap_ghidra
+  CCOpt:         -fPIC
+  CCLib:         -L/usr/lib/ghidra -lsla
+  CSources:      ghidra_disasm.h,
+                 ghidra_disasm.c,
+                 ghidra_stubs.c
+
+Library ghidra_plugin
+  XMETADescription: provide loader and disassembler using GHIDRA library
+  Path:            plugins/ghidra
+  Build$:          flag(everything) || flag(ghidra)
+  FindlibName:     bap-plugin-ghidra
+  InternalModules: Ghidra_main
+  BuildDepends:    bap, bap-ghidra, bap-main, core_kernel
+  XMETAExtraLines: tags="disassembler, ghidra, p-code, lifter, semantics"
