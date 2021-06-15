@@ -21,4 +21,5 @@ Library ghidra_plugin
   FindlibName:     bap-plugin-ghidra
   InternalModules: Ghidra_main
   BuildDepends:    bap, bap-ghidra, bap-main, core_kernel
+  DataFiles:        semantics/*.lisp ($datadir/bap/primus/semantics)
   XMETAExtraLines: tags="disassembler, ghidra, p-code, lifter, semantics"

@@ -3,7 +3,7 @@
 # for more documentation.
 
 CFLAGS += -O2
-CXXFLAGS += -O2 -std=c++11 -fPIC
+CXXFLAGS += -O2 -std=c++11 -fPIC -I$(ROOT)/lib/bap_disasm
 OCAMLMKLIBFLAGS += -L/usr/lib/ghidra -lsla
 
 include _oasis_hier.om

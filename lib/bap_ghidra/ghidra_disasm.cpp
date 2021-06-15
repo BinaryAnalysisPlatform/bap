@@ -1,303 +1,310 @@
-#include "ghidra_disasm.hpp"
-
 #include <ghidra/loadimage.hh>
 #include <ghidra/sleigh.hh>
 #include <ghidra/emulate.hh>
 
+#include "ghidra_disasm.hpp"
+
+#include "disasm.hpp"
+
 #include <iostream>
+#include <memory>
+#include <algorithm>
+#include <map>
+#include <vector>
 
-// These are the bytes for an example x86 binary
-// These bytes are loaded at address 0x80483b4
-static uint1 myprog[] = {
-  0x8d, 0x4c, 0x24, 0x04, 0x83, 0xe4, 0xf0, 0xff, 0x71, 0xfc, 0x55,
-  0x89, 0xe5, 0x51, 0x81, 0xec, 0xb4, 0x01, 0x00, 0x00, 0xc7, 0x45, 0xf4,
-  0x00, 0x00, 0x00, 0x00, 0xeb, 0x12, 0x8b, 0x45, 0xf4, 0xc7, 0x84,
-  0x85, 0x64, 0xfe, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x83, 0x45, 0xf4,
-  0x01, 0x83, 0x7d, 0xf4, 0x63, 0x7e, 0xe8, 0xc7, 0x45, 0xf4, 0x02,
-  0x00, 0x00, 0x00, 0xeb, 0x28, 0x8b, 0x45, 0xf4, 0x01, 0xc0, 0x89, 0x45,
-  0xf8, 0xeb, 0x14, 0x8b, 0x45, 0xf8, 0xc7, 0x84, 0x85, 0x64, 0xfe,
-  0xff, 0xff, 0x01, 0x00, 0x00, 0x00, 0x8b, 0x45, 0xf4, 0x01, 0x45, 0xf8,
-  0x83, 0x7d, 0xf8, 0x63, 0x7e, 0xe6, 0x83, 0x45, 0xf4, 0x01, 0x83,
-  0x7d, 0xf4, 0x31, 0x7e, 0xd2, 0xc7, 0x04, 0x24, 0x40, 0x85, 0x04, 0x08,
-  0xe8, 0x9c, 0xfe, 0xff, 0xff, 0xc7, 0x45, 0xf4, 0x02, 0x00, 0x00,
-  0x00, 0xeb, 0x25, 0x8b, 0x45, 0xf4, 0x8b, 0x84, 0x85, 0x64, 0xfe, 0xff,
-  0xff, 0x85, 0xc0, 0x75, 0x13, 0x8b, 0x45, 0xf4, 0x89, 0x44, 0x24,
-  0x04, 0xc7, 0x04, 0x24, 0x47, 0x85, 0x04, 0x08, 0xe8, 0x62, 0xfe, 0xff,
-  0xff, 0x83, 0x45, 0xf4, 0x01, 0x83, 0x7d, 0xf4, 0x63, 0x7e, 0xd5,
-  0x81, 0xc4, 0xb4, 0x01, 0x00, 0x00, 0x59, 0x5d, 0x8d, 0x61, 0xfc, 0xc3,
-  0x90, 0x90, 0x90, 0x90, 0x55, 0x89, 0xe5, 0x5d, 0xc3, 0x8d, 0x74,
-  0x26, 0x00, 0x8d, 0xbc, 0x27, 0x00, 0x00, 0x00, 0x00, 0x55, 0x89, 0xe5,
-  0x57, 0x56, 0x53, 0xe8, 0x5e, 0x00, 0x00, 0x00, 0x81, 0xc3, 0xa5,
-  0x11, 0x00, 0x00, 0x83, 0xec, 0x1c, 0xe8, 0xd7, 0xfd, 0xff, 0xff, 0x8d,
-  0x83, 0x20, 0xff, 0xff, 0xff, 0x89, 0x45, 0xf0, 0x8d, 0x83, 0x20,
-  0xff, 0xff, 0xff, 0x29, 0x45, 0xf0, 0xc1, 0x7d, 0xf0, 0x02, 0x8b, 0x55,
-  0xf0, 0x85, 0xd2, 0x74, 0x2b, 0x31, 0xff, 0x89, 0xc6, 0x8d, 0xb6,
-  0x00, 0x00, 0x00, 0x00, 0x8b, 0x45, 0x10, 0x83, 0xc7, 0x01, 0x89, 0x44,
-  0x24, 0x08, 0x8b, 0x45, 0x0c, 0x89, 0x44, 0x24, 0x04, 0x8b, 0x45,
-  0x08, 0x89, 0x04, 0x24, 0xff, 0x16, 0x83, 0xc6, 0x04, 0x39, 0x7d, 0xf0,
-  0x75, 0xdf, 0x83, 0xc4, 0x1c, 0x5b, 0x5e, 0x5f, 0x5d, 0xc3, 0x8b,
-  0x1c, 0x24, 0xc3, 0x90, 0x90, 0x90, 0x55, 0x89, 0xe5, 0x53, 0xbb, 0x50,
-  0x95, 0x04, 0x08, 0x83, 0xec, 0x04, 0xa1, 0x50, 0x95, 0x04, 0x08,
-  0x83, 0xf8, 0xff, 0x74, 0x0c, 0x83, 0xeb, 0x04, 0xff, 0xd0, 0x8b, 0x03,
-  0x83, 0xf8, 0xff, 0x75, 0xf4, 0x83, 0xc4, 0x04, 0x5b, 0x5d, 0xc3,
-  0x55, 0x89, 0xe5, 0x53, 0x83, 0xec, 0x04, 0xe8, 0x00, 0x00, 0x00, 0x00,
-  0x5b, 0x81, 0xc3, 0x0c, 0x11, 0x00, 0x00, 0xe8, 0x00, 0xfe, 0xff,
-  0xff, 0x59, 0x5b, 0xc9, 0xc3, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x02,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x50, 0x72, 0x69, 0x6d, 0x65, 0x73,
-  0x00, 0x25, 0x64, 0x0a, 0x00, 0x00
-};  // Size of 408 bytes
-
-// This is a tiny LoadImage class which feeds the executable bytes to the translator
-class MyLoadImage : public LoadImage {
-  uintb baseaddr;
-  int4 length;
-  uint1 *data;
+class Loader : public LoadImage {
+    bap::memory mem;
 public:
-  MyLoadImage(uintb ad,uint1 *ptr,int4 sz) : LoadImage("nofile") { baseaddr = ad; data = ptr; length = sz; }
-  virtual void loadFill(uint1 *ptr,int4 size,const Address &addr);
-  virtual string getArchType(void) const { return "myload"; }
-  virtual void adjustVma(long adjust) { }
-};
+    Loader() : LoadImage("nofile"), mem() {}
 
-// This is the only important method for the LoadImage. It returns bytes from the static array
-// depending on the address range requested
-void MyLoadImage::loadFill(uint1 *ptr,int4 size,const Address &addr)
+    explicit Loader(const bap::memory &mem) : LoadImage("nofile"), mem(mem) {}
 
-{
-  uintb start = addr.getOffset();
-  uintb max = baseaddr + (length-1);
-  for(int4 i=0;i<size;++i) {	// For every byte requestes
-    uintb curoff = start + i; // Calculate offset of byte
-    if ((curoff < baseaddr)||(curoff>max)) {	// If byte does not fall in window
-      ptr[i] = 0;		// return 0
-      continue;
+    virtual void loadFill(uint1 *dst, int4 len, const Address &addr) {
+        int4 off = offset(addr);
+        if (off < mem.loc.len && off + len <= mem.loc.len) {
+            std::copy_n(mem.data + off, len, dst);
+        } else {
+            std::fill_n(dst, len, 0);
+            if (off < mem.loc.len) {
+                std::copy(mem.data + off, mem.data + mem.loc.len, dst);
+            }
+        }
     }
-    uintb diff = curoff - baseaddr;
-    ptr[i] = data[(int4)diff];	// Otherwise return data from our window
-  }
-}
 
-// -------------------------------
-//
-// These are the classes/routines relevant to doing disassembly
+    virtual void adjustVma(long adjust) {
+        mem.base += adjust;
+    }
 
-// Here is a simple class for emitting assembly.  In this case, we send the strings straight
-// to standard out.
-class AssemblyRaw : public AssemblyEmit {
-public:
-  virtual void dump(const Address &addr,const string &mnem,const string &body) {
-    addr.printRaw(cout);
-    cout << ": " << mnem << ' ' << body << endl;
-  }
+    virtual std::string getArchType() const {return "bap";};
+
+    void set_memory(const bap::memory &next_mem) {
+        mem = next_mem;
+    }
+
+    int offset(const Address &addr) const {
+        return addr.getOffset() - mem.base + mem.loc.off;
+    }
+
+    int address(const uint64_t offset) const {
+        return mem.base + (offset - mem.loc.off);
+    }
+
+    bool is_mapped(uint64_t addr) const {
+        return addr >= mem.base && addr - mem.base < mem.loc.len;
+    }
 };
 
-static void dumpAssembly(Translate &trans)
-
-{ // Print disassembly of binary code
-  AssemblyRaw assememit;	// Set up the disassembly dumper
-  int4 length;			// Number of bytes of each machine instruction
-
-  Address addr(trans.getDefaultCodeSpace(),0x80483b4); // First disassembly address
-  Address lastaddr(trans.getDefaultCodeSpace(),0x804846c); // Last disassembly address
-
-  while(addr < lastaddr) {
-    length = trans.printAssembly(assememit,addr);
-    addr = addr + length;
-  }
+bap::table table_from_string(const std::string &data) {
+    bap::table res;
+    res.data = data.c_str();
+    res.size = data.length();
+    return res;
 }
 
-// -------------------------------
-//
-// These are the classes/routines relevant to printing a pcode translation
-
-// Here is a simple class for emitting pcode. We simply dump an appropriate string representation
-// straight to standard out.
-class PcodeRawOut : public PcodeEmit {
+class OpcodesTable {
+    std::string opnames;
+    std::map<OpCode,int> offsets;
 public:
-  virtual void dump(const Address &addr,OpCode opc,VarnodeData *outvar,VarnodeData *vars,int4 isize);
+    OpcodesTable() {
+        std::stringstream ss;
+        int offset = 0;
+        for (int i = 0; i < CPUI_MAX; i++) {
+            OpCode op = static_cast<OpCode>(i);
+            std::string name = get_opname(op);
+            ss << name << '\000';
+            offsets[op] = offset;
+            offset += name.length() + 1;
+        }
+        opnames = ss.str();
+    }
+
+    bap::table table() const {
+        return table_from_string(opnames);
+    }
+
+    int intern(OpCode op) const {
+        return offsets.at(op);
+    }
 };
 
-static void print_vardata(ostream &s,VarnodeData &data)
-
-{
-  s << '(' << data.space->getName() << ',';
-  data.space->printOffset(s,data.offset);
-  s << ',' << dec << data.size << ')';
-}
-
-void PcodeRawOut::dump(const Address &addr,OpCode opc,VarnodeData *outvar,VarnodeData *vars,int4 isize)
-
-{
-  if (outvar != (VarnodeData *)0) {
-    print_vardata(cout,*outvar);
-    cout << " = ";
-  }
-  cout << get_opname(opc);
-  // Possibly check for a code reference or a space reference
-  for(int4 i=0;i<isize;++i) {
-    cout << ' ';
-    print_vardata(cout,vars[i]);
-  }
-  cout << endl;
-}
-
-static void dumpPcode(Translate &trans)
-
-{ // Dump pcode translation of machine instructions
-  PcodeRawOut emit;		// Set up the pcode dumper
-  AssemblyRaw assememit;	// Set up the disassembly dumper
-  int4 length;			// Number of bytes of each machine instruction
-
-  Address addr(trans.getDefaultCodeSpace(),0x80483b4); // First address to translate
-  Address lastaddr(trans.getDefaultCodeSpace(),0x80483bf); // Last address
-
-  while(addr < lastaddr) {
-    cout << "--- ";
-    trans.printAssembly(assememit,addr);
-    length = trans.oneInstruction(emit,addr); // Translate instruction
-    addr = addr + length;		// Advance to next instruction
-  }
-}
-
-// -------------------------------------
-//
-// These are the classes/routines relevant for emulating the executable
-
-// A simple class for emulating the system "puts" call.
-// It justs looks up the string data and dumps it to standard out.
-class PutsCallBack : public BreakCallBack {
+class RegistersTable {
+    std::string regnames;
+    std::map<VarnodeData,int> offsets;
 public:
-  virtual bool addressCallback(const Address &addr);
+    RegistersTable() : regnames(), offsets() {}
+
+    void populate_registers(const Translate& translator) {
+        offsets = {};
+        std::map<VarnodeData,std::string> registers;
+        int offset = 0;
+        std::stringstream ss;
+        translator.getAllRegisters(registers);
+        for (const auto& elt : registers) {
+            VarnodeData node = elt.first;
+            std::string name = elt.second;
+            ss << name << '\000';
+            offsets[node] = offset;
+            offset += name.length() + 1;
+        }
+        regnames = ss.str();
+    }
+
+    bap::table table() const {
+        return table_from_string(regnames);
+    }
+
+    bap::reg create_reg(const VarnodeData &node) const{
+        bap::reg reg;
+        if (node.space->getType() == IPTR_INTERNAL) {
+            reg.code = node.offset;
+            reg.name = -1;
+        } else {
+            auto pos = offsets.find(node);
+            if (pos != offsets.end()) {
+                reg.code = pos->second;
+                reg.name = pos->second;
+            } else {
+                reg.code = 0;
+                reg.name = 0;
+            }
+        }
+        return reg;
+    }
 };
 
-bool PutsCallBack::addressCallback(const Address &addr)
 
-{
-  MemoryState *mem = static_cast<EmulateMemory *>(emulate)->getMemoryState();
-  uint1 buffer[256];
-  uint4 esp = mem->getValue("ESP");
-  AddrSpace *ram = mem->getTranslate()->getSpaceByName("ram");
-
-  uint4 param1 = mem->getValue(ram,esp+4,4);
-  mem->getChunk(buffer,ram,param1,255);
-
-  cout << (char *)&buffer << endl;
-
-  uint4 returnaddr = mem->getValue(ram,esp,4);
-  mem->setValue("ESP",esp+8);
-  emulate->setExecuteAddress(Address(ram,returnaddr));
-
-  return true;			// This replaces the indicated instruction
-}
-
-// A simple class for emulating the system "printf" call.
-// We don't really emulate all of it.  The only printf call in the example
-// has an initial string of "%d\n". So we grab the second parameter from the
-// memory state and print it as an integer
-class PrintfCallBack : public BreakCallBack {
+class AssemblyBuilder : public AssemblyEmit {
+    std::string data;
 public:
-  virtual bool addressCallback(const Address &addr);
+    void dump(const Address&, const std::string &mnem, const std::string &ops) {
+        data = mnem + " " + ops;
+    }
+
+    std::string result() const {
+        return data;
+    }
 };
 
-bool PrintfCallBack::addressCallback(const Address &addr)
-
-{
-  MemoryState *mem = static_cast<EmulateMemory *>(emulate)->getMemoryState();
-
-  AddrSpace *ram = mem->getTranslate()->getSpaceByName("ram");
-
-  uint4 esp = mem->getValue("ESP");
-  uint4 param2 = mem->getValue(ram,esp+8,4);
-  cout << (int4)param2 << endl;
-
-  uint4 returnaddr = mem->getValue(ram,esp,4);
-  mem->setValue("ESP",esp+12);
-  emulate->setExecuteAddress(Address(ram,returnaddr));
-
-  return true;
-}
-
-// A callback that terminates the emulation
-class TerminateCallBack : public BreakCallBack {
+class InstructionBuilder : public PcodeEmit {
+    const Loader &loader;
+    const RegistersTable &registers;
+    const OpcodesTable &opcodes;
+    bap::insn insn;
 public:
-  virtual bool addressCallback(const Address &addr);
+    InstructionBuilder(const Loader &loader_,
+                       const RegistersTable &registers_,
+                       const OpcodesTable &opcodes_) :
+        loader(loader_), registers(registers_), opcodes(opcodes_) {}
+
+    virtual void dump(const Address &addr,
+                      OpCode opcode,
+                      VarnodeData *outvar,
+                      VarnodeData *invars,
+                      int4 number_of_inputs) {
+        insn.code = opcode;
+        insn.name = opcodes.intern(opcode);
+        insn.loc.off = loader.offset(addr);
+        if (outvar != nullptr) {
+            insn.ops.push_back(operand(*outvar));
+        }
+
+        for (int i = 0; i < number_of_inputs; i++) {
+            insn.ops.push_back(operand(invars[i]));
+        }
+    }
+
+    bap::insn result(int len) {
+        insn.loc.len = len;
+        return insn;
+    }
+
+private:
+    bap::operand operand(const VarnodeData &node) const {
+        bap::operand result = {};
+        if (node.space->getType() == IPTR_CONSTANT) {
+            result.type = bap_disasm_op_imm;
+            result.imm_val = node.offset;
+        } else {
+            result.type = bap_disasm_op_reg;
+            result.reg_val = registers.create_reg(node);
+        }
+        return result;
+    }
 };
 
-bool TerminateCallBack::addressCallback(const Address &addr)
+class Disassembler : public bap::disassembler_interface {
+    Loader loader;
+    DocumentStorage specification;
+    ContextInternal context;
+    Sleigh translator;
+    OpcodesTable opcodes;
+    RegistersTable regs;
+    bap::insn current;
 
-{
-  emulate->setHalt(true);
+public:
+    explicit Disassembler(const std::string &slafile)
+        : translator(&loader, &context), current() {
+        Document *doc = specification.openDocument(slafile);
+        specification.registerTag(doc->getRoot());
+        translator.initialize(specification);
+        regs.populate_registers(translator);
+    }
 
-  return true;
-}
+    virtual void set_memory(bap::memory mem) {
+        loader.set_memory(mem);
+    }
 
-static void doEmulation(Translate &trans,LoadImage &loader)
+    virtual bap::table insn_table() const {
+        return opcodes.table();
+    }
 
-{
-  // Set up memory state object
-  MemoryImage loadmemory(trans.getDefaultCodeSpace(),8,4096,&loader);
-  MemoryPageOverlay ramstate(trans.getDefaultCodeSpace(),8,4096,&loadmemory);
-  MemoryHashOverlay registerstate(trans.getSpaceByName("register"),8,4096,4096,(MemoryBank *)0);
-  MemoryHashOverlay tmpstate(trans.getUniqueSpace(),8,4096,4096,(MemoryBank *)0);
+    virtual bap::table reg_table() const {
+        return regs.table();
+    }
 
-  MemoryState memstate(&trans);	// Instantiate the memory state object
-  memstate.setMemoryBank(&ramstate);
-  memstate.setMemoryBank(&registerstate);
-  memstate.setMemoryBank(&tmpstate);
+    virtual void step(uint64_t pc) {
+        current = {};
+        if (loader.is_mapped(pc)) {
+            InstructionBuilder builder(loader, regs, opcodes);
+            Address addr(translator.getDefaultCodeSpace(), pc);
+            int length = translator.oneInstruction(builder, addr);
+            current = builder.result(length);
+        }
+    }
 
-  BreakTableCallBack breaktable(&trans); // Set up the callback object
-  EmulatePcodeCache emulater(&trans,&memstate,&breaktable); // Set up the emulator
+    virtual bap::insn get_insn() const {
+        return current;
+    }
 
-  // Set up the initial register state for execution
-  memstate.setValue("ESP",0xbffffffc);
-  emulater.setExecuteAddress(Address(trans.getDefaultCodeSpace(),0x80483b4));
+    virtual std::string get_asm() const {
+        uint64_t pc = loader.address(current.loc.off);
+        if (loader.is_mapped(pc)) {
+            AssemblyBuilder builder;
+            Address addr(translator.getDefaultCodeSpace(), pc);
+            translator.printAssembly(builder,addr);
+            return builder.result();
+        }
+        return "#undefined";
+    }
 
-  // Register callbacks
-  PutsCallBack putscallback;
-  PrintfCallBack printfcallback;
-  TerminateCallBack terminatecallback;
-  breaktable.registerAddressCallback(Address(trans.getDefaultCodeSpace(),0x80482c8),&putscallback);
-  breaktable.registerAddressCallback(Address(trans.getDefaultCodeSpace(),0x80482b8),&printfcallback);
-  breaktable.registerAddressCallback(Address(trans.getDefaultCodeSpace(),0x804846b),&terminatecallback);
+    virtual bool satisfies(bap_disasm_insn_p_type p) const {
+        bool current_is_invalid = current.code == 0;
+        if (current_is_invalid) {
+            return p == is_invalid;
+        } else {
+            OpCode op = static_cast<OpCode>(current.code);
+            switch (p) {
+            case is_true: return true;
+            case is_return: return op == CPUI_RETURN;
+            case is_call: return
+                    op == CPUI_CALL ||
+                    op == CPUI_CALLIND ||
+                    op == CPUI_CALLOTHER;
+            case is_barrier: return
+                    op == CPUI_BRANCH ||
+                    op == CPUI_BRANCHIND;
+            case is_terminator: return satisfies(is_branch);
+            case is_branch: return
+                    op == CPUI_BRANCH ||
+                    op == CPUI_CBRANCH ||
+                    op == CPUI_BRANCHIND;
+            case is_indirect_branch: return
+                    op == CPUI_BRANCHIND;
+            case is_conditional_branch: return
+                    op == CPUI_CBRANCH;
+            case is_unconditional_branch: return
+                    op == CPUI_BRANCH ||
+                    op == CPUI_BRANCHIND;
+            case may_affect_control_flow: return
+                    satisfies(is_branch) ||
+                    satisfies(is_call);
+            case may_store: return op == CPUI_STORE;
+            case may_load: return op == CPUI_LOAD;
+            }
+        }
+    }
 
-  emulater.setHalt(false);
+    virtual bool supports(bap_disasm_insn_p_type) const {
+        return true;
+    }
+};
 
-  do {
-    emulater.executeInstruction();
-  } while(!emulater.getHalt());
-}
+const std::string testsla = "/usr/share/ghidra/Ghidra/Processors/x86/data/languages/x86.sla";
 
-static void test() {
-  // Set up the loadimage
-  MyLoadImage loader(0x80483b4,myprog,408);
-  //  loader->open();
-  //    loader->adjustVma(adjustvma);
 
-  // Set up the context object
-  ContextInternal context;
+struct Factory : bap::disasm_factory {
+    bap::result<bap::disassembler_interface>
+    create(const char *triple, const char *cpu, int debug_level) {
+        bap::result<bap::disassembler_interface> r;
+        auto dis = std::make_shared<Disassembler>(testsla);
+        r.dis = dis;
+        r.ok = 0;
+        return r;
+    }
+};
 
-  // Set up the assembler/pcode-translator
-  string sleighfilename = "/usr/share/ghidra/Ghidra/Processors/x86/data/languages/x86.sla";
-  Sleigh trans(&loader,&context);
-
-  // Read sleigh file into DOM
-  DocumentStorage docstorage;
-  Element *sleighroot = docstorage.openDocument(sleighfilename)->getRoot();
-  docstorage.registerTag(sleighroot);
-  trans.initialize(docstorage); // Initialize the translator
-
-  // Now that context symbol names are loaded by the translator
-  // we can set the default context
-
-  context.setVariableDefault("addrsize",1); // Address size is 32-bit
-  context.setVariableDefault("opsize",1); // Operand size is 32-bit
-
-  // dumpAssembly(trans);
-  // dumpPcode(trans);
-  // doEmulation(trans,loader);
-}
 
 int disasm_ghidra_init () {
-    test();
+    register_disassembler("ghidra", std::make_shared<Factory>());
     return 0;
 }
