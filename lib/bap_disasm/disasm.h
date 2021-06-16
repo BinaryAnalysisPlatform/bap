@@ -255,7 +255,7 @@ void bap_disasm_run(bap_disasm_type disasm);
  */
 void bap_disasm_insns_clear(bap_disasm_type disasm);
 
-/* returns the amount of instructions in the decompiler queue.  */
+/* returns the number of instructions in the decompiler queue.  */
 int bap_disasm_insns_size(bap_disasm_type disasm);
 
 
@@ -339,8 +339,9 @@ int bap_disasm_insn_op_reg_code(bap_disasm_type disasm,
                                 int insn,
                                 int op);
 
-/* returns value of the integer immediate value.
- * @pre op_type = imm
+/* returns value of the integer immediate value or the subinstruction index.
+ * @pre op_type = imm || op_typ = insn
+ *
  */
 int64_t bap_disasm_insn_op_imm_value(bap_disasm_type disasm,
                                      int insn,

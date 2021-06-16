@@ -70,7 +70,6 @@ struct reg {
 typedef int64_t imm;
 typedef double  fmm;
 
-
 struct operand {
     bap_disasm_op_type type;
 
@@ -78,6 +77,7 @@ struct operand {
         reg reg_val;
         imm imm_val;
         fmm fmm_val;
+        insn *sub_val;
     };
 };
 
