@@ -126,7 +126,7 @@ public:
     }
 
     bap::reg create_reg(const VarnodeData &node) const{
-        bap::reg reg;
+        bap::reg reg = {};
         if (node.space->getType() == IPTR_INTERNAL) {
             reg.code = node.offset;
             reg.name = -1;
@@ -135,9 +135,6 @@ public:
             if (pos != offsets.end()) {
                 reg.code = pos->second;
                 reg.name = pos->second;
-            } else {
-                reg.code = 0;
-                reg.name = 0;
             }
         }
         return reg;
