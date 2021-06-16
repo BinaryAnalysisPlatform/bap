@@ -401,6 +401,34 @@ module Insn = struct
       Theory.Program.cls "insn" domain
       ~public:true
       ~desc:"a decoded machine instruction"
+
+  let provide_sequence_semantics () =
+    let open KB.Syntax in
+    KB.promise Theory.Semantics.slot @@ fun obj ->
+    KB.collect slot obj >>= function
+    | None -> !!Theory.Semantics.empty
+    | Some insn when not (String.equal (name insn) "seq") ->
+      !!Theory.Semantics.empty
+    | Some insn ->
+      Theory.instance () >>= Theory.require >>= fun (module CT) ->
+      Seq.of_array insn.subs |>
+      KB.Seq.map ~f:(fun sub ->
+          KB.Object.scoped Theory.Program.cls @@ fun obj ->
+          KB.provide slot obj (Some sub) >>= fun () ->
+          KB.collect Theory.Semantics.slot obj) >>=
+      KB.Seq.reduce ~f:(fun xs ys ->
+          CT.seq !!xs !!ys) >>| function
+      | None -> Theory.Semantics.empty
+      | Some r -> r
+
+  let () =
+    let open KB.Rule in
+    declare "sequential-instruction" |>
+    require slot |>
+    provide Theory.Semantics.slot |>
+    comment "computes sequential instructions semantics";
+    provide_sequence_semantics ()
+
 end
 
 type ('a,'k) insn = ('a,'k) Insn.t
