@@ -77,7 +77,7 @@ public:
         for (int i = 0; i < CPUI_MAX; i++) {
             OpCode op = static_cast<OpCode>(i);
             cpui_offsets[op] = ss.tellp();
-            ss << get_opname(op) << '\000';
+            ss << "pcode:" << get_opname(op) << '\000';
         }
         core_offsets[CORE_SEQ] = ss.tellp();
         ss << "core:seq" << '\000';
