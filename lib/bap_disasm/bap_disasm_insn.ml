@@ -356,6 +356,33 @@ include Regular.Make(struct
 let pp_asm ppf insn =
   Format.fprintf ppf "%s" (normalize_asm (asm insn))
 
+let provide_sequence_semantics () =
+  let open KB.Syntax in
+  KB.promise Theory.Semantics.slot @@ fun obj ->
+  KB.collect Insn.slot obj >>= function
+  | None -> !!Theory.Semantics.empty
+  | Some insn when not (String.equal (Insn.name insn) "seq") ->
+    !!Theory.Semantics.empty
+  | Some insn ->
+    Theory.instance () >>= Theory.require >>= fun (module CT) ->
+    Seq.of_array (Insn.subs insn) |>
+    KB.Seq.map ~f:(fun sub ->
+        KB.Object.scoped Theory.Program.cls @@ fun obj ->
+        KB.provide Insn.slot obj (Some sub) >>= fun () ->
+        KB.collect Theory.Semantics.slot obj) >>=
+    KB.Seq.reduce ~f:(fun xs ys ->
+        CT.seq !!xs !!ys) >>| function
+    | None -> Theory.Semantics.empty
+    | Some r -> with_basic r insn
+
+let () =
+  let open KB.Rule in
+  declare "sequential-instruction" |>
+  require Insn.slot |>
+  provide Theory.Semantics.slot |>
+  comment "computes sequential instructions semantics";
+  provide_sequence_semantics ()
+
 let () =
   Data.Write.create ~pp:Adt.pp () |>
   add_writer ~desc:"Abstract Data Type pretty printing format"
