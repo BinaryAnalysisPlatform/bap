@@ -35,8 +35,8 @@
 (defun PIECE (r x y)
   (set$ r (concat x y)))
 
-(defun SUBPIECE (r s x)
-  (set$ r (cast-low s x)))
+(defun SUBPIECE (r x s)
+  (set$ r (rshift x (* 8 s))))
 
 (defun INT_EQUAL (r x y)
   (set$ r (= x y)))
@@ -60,8 +60,9 @@
   ;; TODO: fix the width
   (set$ r (cast-unsigned (word-width) x)))
 
-(defun INT_SEXT (r s x)
-  (set$ r (cast-signed s x)))
+(defun INT_SEXT (r x)
+  ;; TODO: fix the width
+  (set$ r (cast-signed (word-width) x)))
 
 (defun INT_ADD (r x y)
   (set$ r (+ x y)))
