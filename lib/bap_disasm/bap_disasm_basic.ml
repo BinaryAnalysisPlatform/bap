@@ -146,8 +146,8 @@ module Reg = struct
         if reg_code = 0 then "Nil"
         else
           let off = C.insn_op_reg_name !!dis ~insn ~oper in
-          if off = -1
-          then sprintf "#%d" reg_code
+          if reg_code < 0
+          then sprintf "%c%d" (Char.of_int_exn off) ~-reg_code
           else Table.lookup (get dis).reg_table off in
       {reg_code; reg_name} in
     {insn; oper; data}

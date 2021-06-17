@@ -103,6 +103,7 @@ public:
 class RegistersTable {
     std::string regnames;
     std::map<VarnodeData,int> offsets;
+    std::set<int> known_spaces;
 public:
     RegistersTable() : regnames(), offsets() {}
 
@@ -115,6 +116,7 @@ public:
         for (const auto& elt : registers) {
             VarnodeData node = elt.first;
             std::string name = elt.second;
+            known_spaces.insert(node.space->getIndex());
             offsets[node] = ss.tellp();
             ss << name << '\000';
         }
@@ -127,9 +129,9 @@ public:
 
     bap::reg create_reg(const VarnodeData &node) const{
         bap::reg reg = {};
-        if (node.space->getType() == IPTR_INTERNAL) {
-            reg.code = node.offset;
-            reg.name = -1;
+        if (is_virtual(node)) {
+            reg.code = -node.offset;
+            reg.name = node.space->getShortcut();
         } else {
             auto pos = offsets.find(node);
             if (pos != offsets.end()) {
@@ -138,6 +140,11 @@ public:
             }
         }
         return reg;
+    }
+private:
+    bool is_virtual(const VarnodeData &node) const {
+        return known_spaces.find(node.space->getIndex()) ==
+            known_spaces.end();
     }
 };
 
@@ -154,16 +161,20 @@ public:
     }
 };
 
+
 class InstructionBuilder : public PcodeEmit {
     const Loader &loader;
     const RegistersTable &registers;
     const OpcodesTable &opcodes;
+    const AddrSpaceManager &spaces;
     std::vector<bap::insn> insns;
 public:
     InstructionBuilder(const Loader &loader_,
                        const RegistersTable &registers_,
-                       const OpcodesTable &opcodes_) :
-        loader(loader_), registers(registers_), opcodes(opcodes_) {}
+                       const OpcodesTable &opcodes_,
+                       const AddrSpaceManager &spaces_) :
+        loader(loader_), registers(registers_),
+        opcodes(opcodes_), spaces(spaces_) {}
 
     virtual void dump(const Address &addr,
                       OpCode opcode,
@@ -213,7 +224,7 @@ public:
 private:
     bap::operand operand(const VarnodeData &node) const {
         bap::operand result = {};
-        if (node.space->getType() == IPTR_CONSTANT) {
+        if (is_constant(node.space) || is_address(node.space)) {
             result.type = bap_disasm_op_imm;
             result.imm_val = node.offset;
         } else {
@@ -222,6 +233,23 @@ private:
         }
         return result;
     }
+
+    bool is_address(const AddrSpace *space) const {
+        return is_code(space) || is_data(space);
+    }
+
+    bool is_data(const AddrSpace *space) const {
+        return spaces.getDefaultDataSpace() == space;
+    }
+
+    bool is_code(const AddrSpace *space) const {
+        return spaces.getDefaultCodeSpace() == space;
+    }
+
+    bool is_constant(const AddrSpace *space) const {
+        return space->getType() == IPTR_CONSTANT;
+    }
+
 };
 
 class Disassembler : public bap::disassembler_interface {
@@ -238,7 +266,7 @@ public:
     explicit Disassembler(const std::string &slafile)
         : translator(&loader, &context)
         , current()
-        , builder(loader, regs, opcodes) {
+        , builder(loader, regs, opcodes, translator) {
         Document *doc = specification.openDocument(slafile);
         specification.registerTag(doc->getRoot());
         translator.initialize(specification);
