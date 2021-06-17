@@ -12,7 +12,7 @@
   (store-word ptr val))
 
 (defun LOAD (dst _ ptr)
-  (load-word ptr))
+  (set$ dst (load-word ptr)))
 
 (defun BRANCH (dst)
   (exec-addr dst))
