@@ -69,10 +69,11 @@ enum CoreOpCode {
 class OpcodesTable {
     std::string opnames;
     std::map<OpCode,int> cpui_offsets;
-    std::map<CoreOpCode, int> core_offsets;
+    std::map<CoreOpCode,int> core_offsets;
+    std::map<int,int> user_offsets;
 
 public:
-    OpcodesTable() {
+    void populate_opcodes(const Translate &translator) {
         std::stringstream ss;
         for (int i = 0; i < CPUI_MAX; i++) {
             OpCode op = static_cast<OpCode>(i);
@@ -81,6 +82,12 @@ public:
         }
         core_offsets[CORE_SEQ] = ss.tellp();
         ss << "core:seq" << '\000';
+        std::vector<string> userops;
+        translator.getUserOpNames(userops);
+        for (int op = 0; op < userops.size(); op++) {
+            user_offsets[op] = ss.tellp();
+            ss << userops[op] << '\000';
+        }
         opnames = ss.str();
     }
 
@@ -98,6 +105,9 @@ public:
         }
     }
 
+    int intern_user(int op) const {
+        return user_offsets.at(op);
+    }
 };
 
 class RegistersTable {
@@ -183,8 +193,16 @@ public:
                       int4 number_of_inputs) {
         insns.push_back(bap::insn());
         int p = insns.size() - 1;
-        insns[p].code = opcode;
-        insns[p].name = opcodes.intern(opcode);
+        if (opcode != CPUI_CALLOTHER) {
+            insns[p].code = opcode;
+            insns[p].name = opcodes.intern(opcode);
+        } else {
+            int opcode = invars[0].offset;
+            insns[p].code = opcode;
+            insns[p].name = opcodes.intern_user(opcode);
+            number_of_inputs -= 1;
+            invars += 1;
+        }
         insns[p].loc.off = loader.offset(addr);
         if (outvar != nullptr) {
             insns[p].ops.push_back(operand(*outvar));
@@ -272,6 +290,7 @@ public:
         translator.initialize(specification);
         context.setVariableDefault("addrsize", 1);
         context.setVariableDefault("opsize", 1);
+        opcodes.populate_opcodes(translator);
         regs.populate_registers(translator);
     }
 
