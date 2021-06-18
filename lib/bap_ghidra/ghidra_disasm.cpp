@@ -300,6 +300,48 @@ private:
     }
 };
 
+bool matches(const bap::insn &insn, bap_disasm_insn_p_type p) {
+    if (insn.code == 0) {
+        return p == is_invalid;
+    } else {
+        std::vector<bap::operand> ops = insn.ops;
+        bool sat = std::any_of(ops.begin(), ops.end(), [p](bap::operand oper) {
+            return
+                oper.type == bap_disasm_op_insn &&
+                matches(*oper.sub_val, p);
+        });
+
+        OpCode op = static_cast<OpCode>(insn.code);
+        switch (p) {
+        case is_true:
+            sat = true;
+        case may_store:
+            sat |= op == CPUI_STORE;
+            break;
+        case may_load:
+            sat |= op == CPUI_LOAD;
+            break;
+        case is_conditional_branch:
+            sat |= op == CPUI_CBRANCH;
+            break;
+        case may_affect_control_flow:
+        case is_terminator:
+        case is_branch:
+            sat |= op == CPUI_CBRANCH;
+        case is_barrier:
+        case is_unconditional_branch:
+            sat |= op == CPUI_BRANCH;
+        case is_call:
+            sat |= p != is_barrier && (op == CPUI_CALL || op == CPUI_CALLIND);
+        case is_indirect_branch:
+            sat |= p != is_call && op == CPUI_BRANCHIND || op == CPUI_CALLIND;
+        case is_return:
+            sat |= p != is_call && op == CPUI_RETURN;
+        }
+        return sat;
+    }
+ }
+
 class Disassembler : public bap::disassembler_interface {
     Loader loader;
     DocumentStorage specification;
@@ -362,40 +404,7 @@ public:
     }
 
     virtual bool satisfies(bap_disasm_insn_p_type p) const {
-        bool current_is_invalid = current.code == 0;
-        if (current_is_invalid) {
-            return p == is_invalid;
-        } else {
-            OpCode op = static_cast<OpCode>(current.code);
-            switch (p) {
-            case is_true: return true;
-            case is_return: return op == CPUI_RETURN;
-            case is_call: return
-                    op == CPUI_CALL ||
-                    op == CPUI_CALLIND ||
-                    op == CPUI_CALLOTHER;
-            case is_barrier: return
-                    op == CPUI_BRANCH ||
-                    op == CPUI_BRANCHIND;
-            case is_terminator: return satisfies(is_branch);
-            case is_branch: return
-                    op == CPUI_BRANCH ||
-                    op == CPUI_CBRANCH ||
-                    op == CPUI_BRANCHIND;
-            case is_indirect_branch: return
-                    op == CPUI_BRANCHIND;
-            case is_conditional_branch: return
-                    op == CPUI_CBRANCH;
-            case is_unconditional_branch: return
-                    op == CPUI_BRANCH ||
-                    op == CPUI_BRANCHIND;
-            case may_affect_control_flow: return
-                    satisfies(is_branch) ||
-                    satisfies(is_call);
-            case may_store: return op == CPUI_STORE;
-            case may_load: return op == CPUI_LOAD;
-            }
-        }
+        return matches(current, p);
     }
 
     virtual bool supports(bap_disasm_insn_p_type) const {
