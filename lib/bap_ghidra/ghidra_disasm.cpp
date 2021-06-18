@@ -61,15 +61,27 @@ bap::table table_from_string(const std::string &data) {
     return res;
 }
 
-enum CoreOpCode {
-    CORE_SEQ = CPUI_MAX,
-    CORE_MAX
+enum ExtraOpCode {
+    CORE_SEQ = CPUI_MAX,        // a sequence of subinstructions
+    EXTRA_GOTO,                 // intra-instruction branch
+    EXTRA_CGOTO,                // intra-instruction cbranch
+    EXTRA_MAX
 };
+
+
+std::string get_extra_opname(ExtraOpCode op) {
+    switch (op) {
+    case CORE_SEQ: return "core:seq";
+    case EXTRA_GOTO: return "pcode-extra:GOTO";
+    case EXTRA_CGOTO: return "pcode-extra:CGOTO";
+    }
+}
 
 class OpcodesTable {
     std::string opnames;
     std::map<OpCode,int> cpui_offsets;
-    std::map<CoreOpCode,int> core_offsets;
+    std::map<ExtraOpCode,int> extra_offsets;
+    // user-defined opcodes have a separate indexing
     std::map<int,int> user_offsets;
 
 public:
@@ -80,8 +92,13 @@ public:
             cpui_offsets[op] = ss.tellp();
             ss << "pcode:" << get_opname(op) << '\000';
         }
-        core_offsets[CORE_SEQ] = ss.tellp();
-        ss << "core:seq" << '\000';
+
+        for (int i = CPUI_MAX; i < EXTRA_MAX; i++) {
+            ExtraOpCode op = static_cast<ExtraOpCode>(i);
+            extra_offsets[op] = ss.tellp();
+            ss << get_extra_opname(op) << '\000';
+        }
+
         std::vector<string> userops;
         translator.getUserOpNames(userops);
         for (int op = 0; op < userops.size(); op++) {
@@ -98,8 +115,8 @@ public:
     int intern(int op) const {
         if (op > 0 && op < CPUI_MAX) {
             return cpui_offsets.at(static_cast<OpCode>(op));
-        } else if (op > 0 && op < CORE_MAX) {
-            return core_offsets.at(static_cast<CoreOpCode>(op));
+        } else if (op >= CPUI_MAX && op < EXTRA_MAX) {
+            return extra_offsets.at(static_cast<ExtraOpCode>(op));
         } else {
             return 0;
         }
@@ -193,16 +210,18 @@ public:
                       int4 number_of_inputs) {
         insns.push_back(bap::insn());
         int p = insns.size() - 1;
-        if (opcode != CPUI_CALLOTHER) {
-            insns[p].code = opcode;
-            insns[p].name = opcodes.intern(opcode);
-        } else {
+        if (opcode == CPUI_CALLOTHER) {
             int opcode = invars[0].offset;
             insns[p].code = opcode;
             insns[p].name = opcodes.intern_user(opcode);
             number_of_inputs -= 1;
             invars += 1;
+        } else {
+            int newcode = extended_opcode(opcode, invars);
+            insns[p].code = newcode;
+            insns[p].name = opcodes.intern(newcode);
         }
+
         insns[p].loc.off = loader.offset(addr);
         if (outvar != nullptr) {
             insns[p].ops.push_back(operand(*outvar));
@@ -225,7 +244,7 @@ public:
         } else {
             bap::insn insn;
             insn.code = CORE_SEQ;
-            insn.name = opcodes.intern(CORE_SEQ);
+            insn.name = opcodes.intern(insn.code);
             for (int i = 0; i < insns.size(); i++) {
                 bap::operand op;
                 op.type = bap_disasm_op_insn;
@@ -268,6 +287,17 @@ private:
         return space->getType() == IPTR_CONSTANT;
     }
 
+    // we represent overloaded instructions, such as
+    // BRANCH and CBRANCH with explicit opcodes,
+    // GOTO and CGOTO correspondingly.
+    int extended_opcode(OpCode op, VarnodeData *ivars) {
+        if ((op == CPUI_BRANCH || op == CPUI_CBRANCH) &&
+            is_constant(ivars[0].space)) {
+            return op == CPUI_BRANCH ? EXTRA_GOTO : EXTRA_CGOTO;
+        } else {
+            return op;
+        }
+    }
 };
 
 class Disassembler : public bap::disassembler_interface {
