@@ -166,6 +166,51 @@ module Slot = struct
       ~persistent
       ~public:true
       ~desc:"a set of destinations of a control-flow instruction"
+
+
+  type KB.Conflict.t += Different_sizes
+
+  let subs =
+    let dom = Theory.Semantics.domain in
+    let open KB.Order in
+    let exception Escape of KB.Conflict.t in
+    let order x y = match x,y with
+      | [||],[||] -> EQ
+      | [||],_ -> LT
+      | _,[||] -> GT
+      | xs, ys ->
+        if Array.length xs <> Array.length ys then NC
+        else Array.fold2_exn xs ys ~init:EQ ~f:(fun result x y ->
+            match result with
+            | NC -> NC
+            | _ -> match result, KB.Domain.order dom x y with
+              | EQ, GT -> GT
+              | EQ, LT -> LT
+              | r, r' -> if Poly.equal r r' then r' else NC) in
+    let join xs ys = match xs, ys with
+      | [||],x | x,[||] -> Ok x
+      | xs, ys ->
+        try
+          if Array.length xs <> Array.length ys
+          then Error Different_sizes
+          else Result.return @@ Array.map2_exn xs ys ~f:(fun x y ->
+              match KB.Domain.join dom x y with
+              | Ok z -> z
+              | Error problem -> raise (Escape problem))
+        with Escape problem -> Error problem in
+    let inspect xs =
+      Sexp.List (List.map ~f:(KB.Domain.inspect dom)
+                   (Array.to_list xs)) in
+    let domain = KB.Domain.define ~empty:[||] "instructions"
+        ~order ~join ~inspect in
+    KB.Class.property Theory.Semantics.cls "subinstructions"
+      ~package:"bap"
+      ~public:true
+      ~desc:"a sequence of subinstructions"
+      ~persistent:(KB.Persistent.of_binable (module struct
+                     type t = Theory.Semantics.t array [@@deriving bin_io]
+                   end))
+      domain
 end
 
 let normalize_asm asm =
@@ -356,6 +401,34 @@ include Regular.Make(struct
 let pp_asm ppf insn =
   Format.fprintf ppf "%s" (normalize_asm (asm insn))
 
+let freshnum =
+  let cls = KB.Class.declare "seqnum-counter" ()
+      ~package:"bap" in
+  let open KB.Syntax in
+  KB.Object.create cls >>| KB.Object.id
+
+let seqnum = KB.Class.property Theory.Program.cls "seqnum"
+    ~public:true
+    ~persistent:(KB.Persistent.of_binable (module struct
+                   type t = Int63.t option [@@deriving bin_io]
+                 end))
+    ~desc:"the sequential number of a subinstruction"
+    ~package:"bap" @@
+  KB.Domain.optional "int"
+    ~equal:Int63.equal
+
+let parent = KB.Class.property Theory.Program.cls "parent-instruction"
+    ~public:true
+    ~desc:"provides the parent of a subinstruction."
+    (KB.Slot.domain Insn.slot)
+
+let label_for_seqnum ?package num =
+  let open KB.Syntax in
+  let s = Format.asprintf "seq%a" Int63.pp num in
+  KB.Symbol.intern ?package s Theory.Program.cls >>= fun obj ->
+  KB.provide seqnum obj (Some num) >>| fun () ->
+  obj
+
 let provide_sequence_semantics () =
   let open KB.Syntax in
   KB.promise Theory.Semantics.slot @@ fun obj ->
@@ -363,17 +436,18 @@ let provide_sequence_semantics () =
   | None -> !!Theory.Semantics.empty
   | Some insn when not (String.equal (Insn.name insn) "seq") ->
     !!Theory.Semantics.empty
-  | Some insn ->
-    Theory.instance () >>= Theory.require >>= fun (module CT) ->
-    Seq.of_array (Insn.subs insn) |>
-    KB.Seq.map ~f:(fun sub ->
-        KB.Object.scoped Theory.Program.cls @@ fun obj ->
-        KB.provide Insn.slot obj (Some sub) >>= fun () ->
-        KB.collect Theory.Semantics.slot obj) >>=
-    KB.Seq.reduce ~f:(fun xs ys ->
-        CT.seq !!xs !!ys) >>| function
-    | None -> Theory.Semantics.empty
-    | Some r -> with_basic r insn
+  | Some insn -> match Insn.subs insn with
+    | [||] -> !!Theory.Semantics.empty
+    | subs ->
+      Seq.of_array subs |>
+      KB.Seq.map ~f:(fun sub ->
+          KB.Object.scoped Theory.Program.cls @@ fun obj ->
+          KB.provide Insn.slot obj (Some sub) >>= fun () ->
+          KB.collect Theory.Semantics.slot obj) >>| fun subs ->
+      let sema =
+        KB.Value.put Slot.subs Theory.Semantics.empty
+          (Seq.to_array subs) in
+      with_basic sema insn
 
 let () =
   let open KB.Rule in
