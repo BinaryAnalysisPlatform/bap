@@ -49,6 +49,7 @@ module Slot : sig
   val ops :  op array option t
   val delay : int option t
   val dests : Set.M(Theory.Label).t option t
+  val subs : Theory.Semantics.t array t
 end
 
 

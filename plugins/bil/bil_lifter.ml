@@ -22,12 +22,15 @@ let provide_bir () =
            require Bil_ir.slot |>
            provide Theory.Semantics.slot |>
            comment "reifies IR");
+  let reify sema =
+    match Bil_ir.reify @@ KB.Value.get Bil_ir.slot sema with
+    | [] -> Insn.empty
+    | bir -> KB.Value.put Term.slot sema bir in
   KB.promise Theory.Semantics.slot @@ fun obj ->
   KB.collect Theory.Semantics.slot obj >>| fun sema ->
-  match Bil_ir.reify @@  KB.Value.get Bil_ir.slot sema with
-  | [] -> Insn.empty
-  | bir -> KB.Value.put Term.slot sema bir
-
+  let sema = reify sema in
+  let subs = Array.map ~f:reify (KB.Value.get Insn.Slot.subs sema) in
+  KB.Value.put Insn.Slot.subs sema subs
 
 module Relocations = struct
 

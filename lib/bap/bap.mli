@@ -6874,6 +6874,9 @@ module Std : sig
 
       (** the set of destinations (not including the fall-through edge).  *)
       val dests : Set.M(Theory.Label).t option t
+
+      (** the array of subinstructions *)
+      val subs : Theory.Semantics.t array t
     end
 
     (** [of_basic ?bil insn] derives semantics from the machine code instruction.*)
