@@ -1782,6 +1782,16 @@ module Theory : sig
     val is_subroutine : (program, bool option) KB.slot
 
 
+    (** [fresh] a fresh label (a shortcut for [KB.create cls]).
+
+        @since 2.4.0   *)
+    val fresh : t knowledge
+
+    (** [null] is a shortcut for [KB.null cls].
+
+        @since 2.4.0  *)
+    val null : t
+
     (** [for_addr x] generates a link to address [x].
 
         It is guaranteed that every call [for_addr ~package x] with

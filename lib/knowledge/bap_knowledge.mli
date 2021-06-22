@@ -501,6 +501,27 @@ module Knowledge : sig
     *)
     val scoped : ('a,_) cls -> ('a obj -> 'b knowledge) -> 'b knowledge
 
+
+    (** [null cls] is the null object of the class [cls].
+
+        For each class [cls] there is [null] that represents an
+        absence of object. It is unique and is represented as zero.
+
+        Dereference of the null object (e.g., using [collect]) always
+        returns an empty denotation. Any information stored in the
+        object is forgotten (discarded). Promises are never run on the
+        null object, therefore the promise will never receive the null
+        object as its input.
+
+        @since 2.4.0
+    *)
+    val null : ('a,_) cls -> 'a obj
+
+    (** [is_null obj] is [true] iff [obj] is the null object of its class.
+
+        @since 2.4.0 *)
+    val is_null : _ obj -> bool
+
     (** [repr x] returns a textual representation of the object [x] *)
     val repr : ('a,_) cls -> 'a t -> string knowledge
 
@@ -1214,7 +1235,7 @@ module Knowledge : sig
     val bool : bool option domain
 
 
-    (** [obj] is a flat domain with a nil object at the bottom.  *)
+    (** [obj] is a flat domain with a null object at the bottom.  *)
     val obj : ('a,_) cls -> 'a obj domain
 
 

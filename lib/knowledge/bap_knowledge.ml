@@ -2240,6 +2240,9 @@ module Knowledge = struct
       end >>| fun () ->
       obj
 
+    let null _ = Oid.null
+    let is_null = Oid.is_null
+
     (* an interesting question, what we shall do if
        1) an symbol is deleted
        2) a data object is deleted?
@@ -2337,16 +2340,20 @@ module Knowledge = struct
         | None -> uninterned_repr cls obj
 
     let repr cls obj =
-      get () >>| fun env ->
-      to_string cls env obj
+      if is_null obj then !!"nil"
+      else
+        get () >>| fun env ->
+        to_string cls env obj
 
-    let read cls input =
-      try
-        Scanf.sscanf input "#<%s %s@>" @@ fun _ obj ->
-        Knowledge.return (Oid.atom_of_string obj)
-      with _ ->
-        get () >>= fun {Env.package} ->
-        do_intern (Name.Full.read ~package input) cls
+    let read cls = function
+      | "nil" -> !!(null cls)
+      | input ->
+        try
+          Scanf.sscanf input "#<%s %s@>" @@ fun _ obj ->
+          Knowledge.return (Oid.atom_of_string obj)
+        with _ ->
+          get () >>= fun {Env.package} ->
+          do_intern (Name.Full.read ~package input) cls
 
     let cast : type a b. (a obj, b obj) Type_equal.t -> a obj -> b obj =
       fun Type_equal.T x -> x
@@ -2411,7 +2418,7 @@ module Knowledge = struct
 
   let provide : type a p. (a,p) slot -> a obj -> p -> unit Knowledge.t =
     fun slot obj x ->
-    if Domain.is_empty slot.dom x
+    if Object.is_null obj || Domain.is_empty slot.dom x
     then Knowledge.return ()
     else
       get () >>= function {classes} as s ->
@@ -2569,17 +2576,19 @@ module Knowledge = struct
 
   let collect : type a p. (a,p) slot -> a obj -> p Knowledge.t =
     fun slot id ->
-    status slot id >>= function
-    | Ready ->
-      current slot id
-    | Awoke ->
-      enqueue_promises slot id >>= fun () ->
-      current slot id
-    | Sleep ->
-      enter_slot slot id >>= fun () ->
-      collect_inner slot id (initial_promises slot) >>= fun () ->
-      leave_slot slot id >>= fun () ->
-      current slot id
+    if Object.is_null id
+    then !!(Domain.empty slot.dom)
+    else status slot id >>= function
+      | Ready ->
+        current slot id
+      | Awoke ->
+        enqueue_promises slot id >>= fun () ->
+        current slot id
+      | Sleep ->
+        enter_slot slot id >>= fun () ->
+        collect_inner slot id (initial_promises slot) >>= fun () ->
+        leave_slot slot id >>= fun () ->
+        current slot id
 
   let resolve slot obj =
     collect slot obj >>| Opinions.choice
@@ -2608,7 +2617,7 @@ module Knowledge = struct
 
     let obj {Class.name} =
       let name = Name.to_string name in
-      total ~inspect:(inspect_obj name) ~empty:Oid.zero
+      total ~inspect:(inspect_obj name) ~empty:Oid.null
         ~order:Oid.compare name
   end
   module Order = Order
