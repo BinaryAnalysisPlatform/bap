@@ -130,6 +130,11 @@ let export = Primus.Lisp.Type.Spec.[
     "exec-addr", one int @-> any,
     "(exec-addr ADDR) transfers control flow to ADDR.";
 
+    "goto-subinstruction", one int @-> any,
+    "(goto-subinstruction N) transfers control flow to a
+    subinstruction that is N instructions away from the current (N
+    could be negative).";
+
     "load-byte", one int @-> byte,
     "(load-byte PTR) loads one byte from the address PTR";
 
@@ -444,6 +449,22 @@ module Primitives(CT : Theory.Core) = struct
       Theory.Label.for_addr bitv >>= fun dst ->
       CT.goto dst
 
+  let goto_subinstruction lbl xs =
+    let open Bap.Std in
+    unary xs >>= bitv >>= fun dst ->
+    match const dst with
+    | None -> CT.jmp !!dst
+    | Some dst ->
+      KB.collect Primus.Lisp.Semantics.definition lbl >>= function
+      | None -> failwith "no definition"
+      | Some lbl ->
+        KB.collect Insn.Seqnum.slot lbl >>= function
+        | None -> failwith "no label for a subinstruction"
+        | Some pos ->
+          let dst = Bitvec.to_int dst + pos in
+          Bap.Std.Insn.Seqnum.label dst >>=
+          CT.goto
+
   let load_byte t xs =
     let mem = CT.var @@ Theory.Target.data t in
     unary xs >>= bitv >>= fun addr -> forget@@CT.(load mem !!addr)
@@ -685,6 +706,7 @@ module Primitives(CT : Theory.Core) = struct
     | "is-negative",_-> pure@@all Z.is_negative is_negative args
     | "word-width",_-> pure@@word_width s args
     | "exec-addr",_-> ctrl@@exec_addr args
+    | "goto-subinstruction",_ -> ctrl@@goto_subinstruction lbl args
     | ("load-byte"|"memory-read"),_-> pure@@load_byte t args
     | "load-word",_-> pure@@load_word t args
     | "load-hword",_-> pure@@load_half t args

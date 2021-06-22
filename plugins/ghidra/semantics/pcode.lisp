@@ -127,3 +127,9 @@
 
 (defun BOOL_XOR (r x y)
   (set$ r (logxor x y)))
+
+(defun pcode-extra:CGOTO (dst cnd)
+  (when cnd (goto-subinstruction dst)))
+
+(defun pcode-extra:GOTO (dst)
+  (goto-subinstruction dst))
