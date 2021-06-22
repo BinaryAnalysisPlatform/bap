@@ -20,11 +20,14 @@ type cfg = {
   entry : Theory.Label.t;
 } [@@deriving bin_io]
 
-type t = cfg option
+type t = cfg
+
+let null = KB.Object.null Theory.Program.cls
+let is_null x = KB.Object.is_null x
+let is_empty {entry} = is_null entry
 
 module BIR = struct
   type t = blk term list
-
 
   let add_def = Blk.Builder.add_def
   let add_jmp = Blk.Builder.add_jmp
@@ -47,55 +50,62 @@ module BIR = struct
     Blk.Builder.result b :: blks |>
     List.rev
 
-
   (* postconditions:
-     - the list is not empty
      - the first block is the entry block
      - the last block is the exit block
   *)
   let reify {entry; blks} =
-    List.fold blks ~init:(None,[]) ~f:(fun (s,blks) b ->
-        match make_blk b with
-        | [] -> assert false
-        | blk::blks' ->
-          if Tid.equal entry (Term.tid blk)
-          then (Some blk, List.rev_append blks' blks)
-          else (s, List.rev_append (blk::blks') blks)) |> function
-    | None,[] -> []
-    | None,_ -> failwith "No entry in IR builder"
-    | Some x, xs -> x :: xs
+    if is_null entry then [] else
+      List.fold blks ~init:(None,[]) ~f:(fun (s,blks) b ->
+          match make_blk b with
+          | [] -> assert false
+          | blk::blks' ->
+            if Tid.equal entry (Term.tid blk)
+            then (Some blk, List.rev_append blks' blks)
+            else (s, List.rev_append (blk::blks') blks)) |> function
+      | None,[] -> []
+      | None,_ -> failwith "No entry in IR builder"
+      | Some x, xs -> x :: xs
 end
+
 
 let pp_cfg ppf ir =
   fprintf ppf "%a" (pp_print_list Blk.pp) (BIR.reify ir)
 
 let inspect cfg = Sexp.Atom (asprintf "%a" pp_cfg cfg)
 
-let null = KB.Symbol.intern "null" Theory.Program.cls
-let is_null x =
-  null >>| fun null ->
-  Theory.Label.equal null x
+let relink label {entry; blks} =
+  if is_null entry then {
+    entry = label;
+    blks = [{name=label; defs=[]; jmps=[]}]
+  } else {
+    entry = label;
+    blks = List.map blks ~f:(fun blk ->
+        if Theory.Label.equal blk.name entry then {
+          blk with name = entry;
+        } else blk)
+  }
 
-let domain = KB.Domain.optional ~inspect "graph"
+let domain = KB.Domain.flat ~inspect "graph"
+    ~empty:{entry=null; blks=[]}
     ~equal:(fun x y -> Theory.Label.equal x.entry y.entry)
 
 let graph =
   KB.Class.property Theory.Semantics.cls "ir-graph" domain
     ~persistent:(KB.Persistent.of_binable (module struct
-                   type t = cfg option [@@deriving bin_io]
+                   type t = cfg [@@deriving bin_io]
                  end))
     ~package:"bap"
     ~public:true
     ~desc:"the graphical representation of the program"
+
 
 let slot = graph
 
 module IR = struct
   include Theory.Empty
   let ret = Knowledge.return
-
   let blk tid = {name=tid; defs=[]; jmps=[]}
-
 
   let def = (fun x -> x.defs), (fun x d -> {x with defs = d})
   let jmp = (fun x -> x.jmps), (fun x d -> match x.jmps with
@@ -116,15 +126,12 @@ module IR = struct
 
   let (++) b j = push_to_blk jmp b j
 
-  let reify x : cfg knowledge = match KB.Value.get graph x with
-    | Some g -> KB.return g
-    | None -> null >>| fun entry -> {
-        blks = [];
-        entry;
-      }
+  let reify x : cfg = KB.Value.get graph x
+  let (>>->) x f = x >>| reify >>= f
+
 
   let empty = Theory.Effect.empty Theory.Effect.Sort.bot
-  let ret cfg = !!(KB.Value.put graph empty (Some cfg))
+  let ret cfg = !!(KB.Value.put graph empty cfg)
   let data cfg = ret cfg
   let ctrl cfg = ret cfg
 
@@ -169,7 +176,7 @@ module IR = struct
   *)
   let repeat cnd body =
     cnd >>= fun cnd ->
-    body >>= reify >>= function
+    body >>| reify >>= function
     | {blks=[]} ->
       fresh >>= fun head ->
       fresh >>= fun tid ->
@@ -197,10 +204,8 @@ module IR = struct
     fresh >>= fun head ->
     fresh >>= fun tail ->
     cnd >>= fun cnd ->
-    yes >>= fun yes ->
-    nay >>= fun nay ->
-    reify yes >>= fun yes ->
-    reify nay >>= fun nay ->
+    yes >>-> fun yes ->
+    nay >>-> fun nay ->
     let jump = goto ~cnd in
     match yes, nay with
     | {entry; blks=[{defs=[]; jmps=[j]} as blk]},{blks=[]} -> ret {
@@ -272,23 +277,23 @@ module IR = struct
     }
 
   let appgraphs fst snd =
-    match fst, snd with
-    | {entry; blks}, {blks=[]}
-    | {blks=[]}, {entry; blks} -> ret {entry; blks}
-    | {entry; blks={jmps=[]} as x :: xs},{blks=[y]} -> ret {
-        entry;
-        blks = {x with defs = y.defs @ x.defs; jmps = y.jmps} :: xs
-      }
-    | {entry; blks=x::xs}, {entry=snd; blks=y::ys} ->
-      fresh >>= fun tid -> ret {
-        entry;
-        blks =
-          y ::
-          x ++ goto ~tid snd ::
-          List.rev_append xs ys
-      }
+    if is_empty fst then ret snd else
+    if is_empty snd then ret fst
+    else match fst, snd with
+      | _,{blks=[]} | {blks=[]}, _ -> assert false
+      | {entry; blks={jmps=[]} as x :: xs},{blks=[y]} -> ret {
+          entry;
+          blks = {x with defs = y.defs @ x.defs; jmps = y.jmps} :: xs
+        }
+      | {entry; blks=x::xs}, {entry=snd; blks=y::ys} ->
+        fresh >>= fun tid -> ret {
+          entry;
+          blks =
+            y ::
+            x ++ goto ~tid snd ::
+            List.rev_append xs ys
+        }
 
-  let (>>->) x f = x >>= reify >>= f
 
   let seq fst snd =
     fst >>-> fun fst ->
@@ -304,18 +309,18 @@ module IR = struct
       blks = [blk entry ++ goto ?is_call ~tid dst]
     }
 
-
-  let blk _entry defs jmps =
+  let blk label defs jmps =
     defs >>-> fun defs ->
     jmps >>-> fun jmps ->
-    appgraphs defs jmps
+    appgraphs defs jmps >>-> fun res ->
+    ret @@
+    if is_null label then res
+    else relink label res
 
   let goto = do_goto
 end
 
-let reify = function
-  | None -> []
-  | Some g -> BIR.reify g
+let reify = BIR.reify
 
 let init () = Theory.declare !!(module IR : Theory.Core)
     ~package:"bap" ~name:"bir"

@@ -197,7 +197,7 @@ module Semantics = struct
 
     let vsort x = sort x
     let effect x = KB.Value.get effects x
-    let esort x = Theory.Effect.sort
+    let esort _ = Theory.Effect.sort
 
     let (>>->) v f = v >>= fun v -> f (vsort v) (value v)
     let lift1 s f v = v >>-> fun sort -> function
@@ -421,10 +421,14 @@ module Semantics = struct
       y >>= fun y ->
       eff (effect x @ effect y)
 
-    let blk _ x y =
+    let blk lbl x y =
       x >>:= fun x ->
       y >>:= fun y ->
-      eff (x @ y)
+      if KB.Object.is_null lbl
+      then eff (x @ y)
+      else
+        KB.Object.repr Theory.Program.cls lbl >>= fun lbl ->
+        eff Bil.(Label (Name lbl,[]) :: x @ y)
 
     let let_ var rhs body =
       rhs >>-> fun _ rhs ->

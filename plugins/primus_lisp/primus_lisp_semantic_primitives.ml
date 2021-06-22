@@ -247,7 +247,7 @@ let nothing = KB.Value.empty Theory.Semantics.cls
 let size = Theory.Bitv.size
 let forget x = x >>| Theory.Value.forget
 let empty s = Theory.Value.(forget @@ empty s)
-let fresh = KB.Object.create Theory.Program.cls
+let null = KB.Object.null Theory.Program.cls
 let sort = Theory.Value.sort
 let bits x = size @@ sort x
 
@@ -411,16 +411,13 @@ module Primitives(CT : Theory.Core) = struct
   let pure res = full (seq []) res
 
   let ctrl eff =
-    let* lbl = fresh in
-    CT.blk lbl (seq []) eff
+    CT.blk null (seq []) eff
 
   let data eff =
-    let* lbl = fresh in
-    CT.blk lbl eff (seq [])
+    CT.blk null eff (seq [])
 
   let memory eff res =
-    let* lbl = fresh in
-    full CT.(blk lbl (perform eff) skip) res
+    full CT.(blk null (perform eff) skip) res
 
   let loads = memory Theory.Effect.Sort.rmem
   let stores = memory Theory.Effect.Sort.wmem

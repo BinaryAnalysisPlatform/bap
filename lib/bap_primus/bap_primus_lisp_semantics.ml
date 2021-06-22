@@ -326,7 +326,8 @@ module Scope = struct
 end
 
 module Prelude(CT : Theory.Core) = struct
-  let label = Meta.lift (KB.Object.create Theory.Program.cls)
+  let null = KB.Object.null Theory.Program.cls
+  let fresh = Meta.lift (KB.Object.create Theory.Program.cls)
 
   let rec seq = function
     | [] -> Meta.lift@@CT.perform Theory.Effect.Sort.bot
@@ -358,14 +359,12 @@ module Prelude(CT : Theory.Core) = struct
     create eff res
 
   let data xs =
-    label >>= fun lbl ->
     let* data = seq xs in
-    Meta.lift@@CT.blk lbl !data skip
+    Meta.lift@@CT.blk null !data skip
 
   let ctrl xs =
-    label >>= fun lbl ->
     let* ctrl = seq xs in
-    Meta.lift@@CT.blk lbl pass !ctrl
+    Meta.lift@@CT.blk null pass !ctrl
 
   let blk lbl xs = seq [
       Meta.lift@@CT.blk lbl pass skip;
@@ -472,7 +471,7 @@ module Prelude(CT : Theory.Core) = struct
           rep cnd body
       | None ->
         let* body = eval body in
-        let* head = label and* loop = label and* tail = label in
+        let* head = fresh and* loop = fresh and* tail = fresh in
         coerce_bool (res r) @@ fun cres ->
         full [
           blk head [ctrl [Meta.lift@@CT.goto tail]];
