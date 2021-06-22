@@ -456,10 +456,10 @@ module Primitives(CT : Theory.Core) = struct
     | None -> CT.jmp !!dst
     | Some dst ->
       KB.collect Primus.Lisp.Semantics.definition lbl >>= function
-      | None -> failwith "no definition"
+      | None -> illformed "no definition was provided for a label"
       | Some lbl ->
         KB.collect Insn.Seqnum.slot lbl >>= function
-        | None -> failwith "no label for a subinstruction"
+        | None -> illformed "not a subinstruction"
         | Some pos ->
           let dst = Bitvec.to_int dst + pos in
           Bap.Std.Insn.Seqnum.label dst >>=
