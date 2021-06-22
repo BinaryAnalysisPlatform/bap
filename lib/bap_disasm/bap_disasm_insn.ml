@@ -401,33 +401,37 @@ include Regular.Make(struct
 let pp_asm ppf insn =
   Format.fprintf ppf "%s" (normalize_asm (asm insn))
 
-let freshnum =
-  let cls = KB.Class.declare "seqnum-counter" ()
-      ~package:"bap" in
-  let open KB.Syntax in
-  KB.Object.create cls >>| KB.Object.id
 
-let seqnum = KB.Class.property Theory.Program.cls "seqnum"
-    ~public:true
-    ~persistent:(KB.Persistent.of_binable (module struct
-                   type t = Int63.t option [@@deriving bin_io]
-                 end))
-    ~desc:"the sequential number of a subinstruction"
-    ~package:"bap" @@
-  KB.Domain.optional "int"
-    ~equal:Int63.equal
+module Seqnum = struct
+  type t = int
+  let slot = KB.Class.property Theory.Program.cls "seqnum"
+      ~public:true
+      ~persistent:(KB.Persistent.of_binable (module struct
+                     type t = Int.t option [@@deriving bin_io]
+                   end))
+      ~desc:"the sequential number of a subinstruction"
+      ~package:"bap" @@
+    KB.Domain.optional "int"
+      ~inspect:Int.sexp_of_t
+      ~equal:Int.equal
 
-let parent = KB.Class.property Theory.Program.cls "parent-instruction"
-    ~public:true
-    ~desc:"provides the parent of a subinstruction."
-    (KB.Slot.domain Insn.slot)
+  let freshnum =
+    let cls = KB.Class.declare "seqnum-generator" ()
+        ~package:"bap" in
+    let open KB.Syntax in
+    KB.Object.create cls >>| KB.Object.id >>| Int63.to_int_exn
 
-let label_for_seqnum ?package num =
-  let open KB.Syntax in
-  let s = Format.asprintf "seq%a" Int63.pp num in
-  KB.Symbol.intern ?package s Theory.Program.cls >>= fun obj ->
-  KB.provide seqnum obj (Some num) >>| fun () ->
-  obj
+  let label ?package num =
+    let open KB.Syntax in
+    let s = Format.asprintf "subinstruction#%a" Int.pp num in
+    KB.Symbol.intern ?package s Theory.Program.cls >>= fun obj ->
+    KB.provide slot obj (Some num) >>| fun () ->
+    obj
+
+  let fresh = KB.Syntax.(freshnum >>= label)
+end
+
+
 
 let provide_sequence_semantics () =
   let open KB.Syntax in
@@ -439,15 +443,20 @@ let provide_sequence_semantics () =
   | Some insn -> match Insn.subs insn with
     | [||] -> !!Theory.Semantics.empty
     | subs ->
-      Seq.of_array subs |>
-      KB.Seq.map ~f:(fun sub ->
-          KB.Object.scoped Theory.Program.cls @@ fun obj ->
+      Theory.instance () >>= Theory.require >>= fun (module CT) ->
+      let subs = Array.to_list subs |>
+                 List.map ~f:(fun sub ->
+                     Seqnum.fresh >>| fun lbl ->
+                     lbl,sub) in
+      KB.all subs >>=
+      KB.List.map ~f:(fun (obj,sub) ->
           KB.provide Insn.slot obj (Some sub) >>= fun () ->
-          KB.collect Theory.Semantics.slot obj) >>| fun subs ->
-      let sema =
-        KB.Value.put Slot.subs Theory.Semantics.empty
-          (Seq.to_array subs) in
-      with_basic sema insn
+          KB.collect Theory.Semantics.slot obj >>= fun sema ->
+          let nil = Theory.Effect.empty Theory.Effect.Sort.bot in
+          CT.seq (CT.blk obj !!nil !!nil) !!sema) >>=
+      KB.List.reduce ~f:(fun s1 s2 -> CT.seq !!s1 !!s2) >>| function
+      | None -> empty
+      | Some sema -> with_basic sema insn
 
 let () =
   let open KB.Rule in

@@ -42,6 +42,12 @@ val should    : may  property -> t -> t
 val shouldn't : may  property -> t -> t
 
 
+module Seqnum : sig
+  type t = int
+  val label : ?package:string -> t -> Theory.Label.t KB.t
+  val slot : (Theory.program, t option) KB.slot
+end
+
 module Slot : sig
   type 'a t = (Theory.Effect.cls, 'a) KB.slot
   val name : string t
@@ -49,7 +55,6 @@ module Slot : sig
   val ops :  op array option t
   val delay : int option t
   val dests : Set.M(Theory.Label).t option t
-  val subs : Theory.Semantics.t array t
 end
 
 
