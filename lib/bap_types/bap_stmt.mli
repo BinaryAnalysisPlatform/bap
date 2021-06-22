@@ -20,7 +20,6 @@ module Attribute : sig
     'a t
 end
 
-
 module Stmt : sig
   val move : var -> exp -> stmt
   val jmp : exp -> stmt
@@ -30,6 +29,8 @@ module Stmt : sig
   val cpuexn : int -> stmt
   val call : string Attribute.t
   val intrinsic : string Attribute.t
+  val goto : string Attribute.t
+  val label : string Attribute.t
   val encode : 'a Attribute.t -> 'a -> stmt
   val decode : 'a Attribute.t -> stmt -> 'a option
 end

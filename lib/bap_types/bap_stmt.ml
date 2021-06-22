@@ -36,6 +36,16 @@ module Special = struct
       ~decode:ident
       ~package:"bap"
 
+  let label = Attribute.declare "label"
+      ~package:"bap"
+      ~encode:ident
+      ~decode:ident
+
+  let goto = Attribute.declare "goto"
+      ~package:"bap"
+      ~encode:ident
+      ~decode:ident
+
   let prefix = "@attribute:"
 
 
@@ -125,6 +135,8 @@ module Stmt = struct
     | _ -> None
   let call = Special.call
   let intrinsic = Special.intrinsic
+  let goto = Special.goto
+  let label = Special.label
 end
 
 module Infix = struct

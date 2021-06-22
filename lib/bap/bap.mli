@@ -2412,6 +2412,18 @@ module Std : sig
     val intrinsic: string Attribute.t
 
 
+    (** [label] a named code location.
+
+        @since 2.4.0  *)
+    val label : string Attribute.t
+
+
+    (** [goto] represents a control-flow transfer to a named label.
+
+        @since 2.4.0 *)
+    val goto : string Attribute.t
+
+
     (** Core Theory specification of BIL.  *)
     module Theory : sig
 
@@ -6874,9 +6886,6 @@ module Std : sig
 
       (** the set of destinations (not including the fall-through edge).  *)
       val dests : Set.M(Theory.Label).t option t
-
-      (** the array of subinstructions *)
-      val subs : Theory.Semantics.t array t
     end
 
     (** [of_basic ?bil insn] derives semantics from the machine code instruction.*)
@@ -6978,6 +6987,13 @@ module Std : sig
     (** [pp_adt] prints instruction in ADT format, suitable for reading
         by evaluating in many languages, e.g. Python, Js, etc *)
     val pp_adt : Format.formatter -> t -> unit
+
+    module Seqnum : sig
+      type t = int
+      val label : ?package:string -> t -> Theory.Label.t KB.t
+      val slot : (Theory.program, t option) KB.slot
+    end
+
 
     (** {3 Prefix Tree}
         This module provides a trie data structure where a sequence of
