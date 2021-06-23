@@ -442,10 +442,10 @@ class Factory : public bap::disasm_factory {
     std::map< string, LanguageDescription > languages;
     std::stringstream err;
 public:
-    int init(const std::vector<std::string> &shares) {
+    int init(const std::vector<std::string> &shares, bool print_targets) {
         try {
             init_languages_path(shares);
-            init_languages();
+            init_languages(print_targets);
         } catch (std::exception &e) {
             err << "Error: " << e.what() << "\n";
             return -1;
@@ -499,7 +499,7 @@ private:
         }
     }
 
-    void init_languages() {
+    void init_languages(bool print_targets) {
         std::vector<std::string> specs;
         paths.matchList(specs, ".ldefs", /*isSuffix*/true);
         for (auto spec : specs) {
@@ -515,25 +515,36 @@ private:
                     LanguageDescription language;
                     language.restoreXml(child);
                     languages[language.getId()] = language;
-                    std::cerr << "- " <<
-                        language.getId() << " - " <<
-                        language.getDescription() << "\n";
+                    if (print_targets)
+                        std::cout << "- " <<
+                            language.getId() << " - " <<
+                            language.getDescription() << "\n";
                 }
             }
         }
     }
 };
 
-int disasm_ghidra_init () {
-    std::vector<std::string> roots;
-    roots.push_back("/usr/share/ghidra");
+
+std::vector<std::string> split_path(const char *input) {
+    std::stringstream ss(input);
+    std::string path;
+    std::vector<std::string> paths;
+    while (std::getline(ss, path, ':')) {
+        paths.push_back(path);
+    }
+    return paths;
+}
+
+int disasm_ghidra_init (const char *path, int print_targets) {
+    std::vector<std::string> roots = split_path(path);
     auto factory = std::make_shared<Factory>();
-    int result = factory->init(roots);
+    int result = factory->init(roots, print_targets);
     if (result < 0) {
         factory->dump_errors();
         return result;
+    } else {
+        bap::register_disassembler("ghidra", factory);
+        return 0;
     }
-
-    bap::register_disassembler("ghidra", factory);
-    return 0;
 }
