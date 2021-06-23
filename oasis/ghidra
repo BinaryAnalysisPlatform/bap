@@ -9,7 +9,7 @@ Library bap_ghidra
   FindlibName:   bap-ghidra
   Modules:       Bap_ghidra
   CCOpt:         -fPIC
-  CCLib:         -L/usr/lib/ghidra -lsla
+  CCLib:         -L/usr/lib/ghidra -ldecomp
   CSources:      ghidra_disasm.h,
                  ghidra_disasm.c,
                  ghidra_stubs.c

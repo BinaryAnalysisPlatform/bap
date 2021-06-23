@@ -1,16 +1,21 @@
-#include <ghidra/loadimage.hh>
-#include <ghidra/sleigh.hh>
-#include <ghidra/emulate.hh>
-
-#include "ghidra_disasm.hpp"
-
-#include "disasm.hpp"
-
 #include <iostream>
 #include <memory>
 #include <algorithm>
 #include <map>
 #include <vector>
+#include <exception>
+#include <cerrno>
+#include <system_error>
+
+#include <ghidra/loadimage.hh>
+#include <ghidra/sleigh.hh>
+#include <ghidra/sleigh_arch.hh>
+#include <ghidra/emulate.hh>
+#include <ghidra/filemanage.hh>
+
+#include "ghidra_disasm.hpp"
+#include "disasm.hpp"
+
 
 class Loader : public LoadImage {
     bap::memory mem;
@@ -288,7 +293,7 @@ private:
     }
 
     // we represent overloaded instructions, such as
-    // BRANCH and CBRANCH with explicit opcodes,
+    // BRANCH and CBRANCH, with explicit opcodes,
     // GOTO and CGOTO correspondingly.
     int extended_opcode(OpCode op, VarnodeData *ivars) {
         if ((op == CPUI_BRANCH || op == CPUI_CBRANCH) &&
@@ -353,15 +358,15 @@ class Disassembler : public bap::disassembler_interface {
     InstructionBuilder builder;
 
 public:
-    explicit Disassembler(const std::string &slafile)
+    explicit Disassembler(const LanguageDescription &language,
+                          const FileManage &paths,
+                          std::ostream &err)
         : translator(&loader, &context)
         , current()
         , builder(loader, regs, opcodes, translator) {
-        Document *doc = specification.openDocument(slafile);
-        specification.registerTag(doc->getRoot());
+        load_document(paths, language.getProcessorSpec());
+        load_document(paths, language.getSlaFile());
         translator.initialize(specification);
-        context.setVariableDefault("addrsize", 1);
-        context.setVariableDefault("opsize", 1);
         opcodes.populate_opcodes(translator);
         regs.populate_registers(translator);
     }
@@ -410,24 +415,112 @@ public:
     virtual bool supports(bap_disasm_insn_p_type) const {
         return true;
     }
-};
 
-const std::string testsla = "/usr/share/ghidra/Ghidra/Processors/x86/data/languages/x86.sla";
-
-
-struct Factory : bap::disasm_factory {
-    bap::result<bap::disassembler_interface>
-    create(const char *triple, const char *cpu, int debug_level) {
-        bap::result<bap::disassembler_interface> r;
-        auto dis = std::make_shared<Disassembler>(testsla);
-        r.dis = dis;
-        r.ok = 0;
-        return r;
+private:
+    void load_document(const FileManage &paths, const std::string &name) {
+        std::string path;
+        paths.findFile(path, name);
+        specification.registerTag(specification.openDocument(path)->getRoot());
     }
 };
 
+class Factory : public bap::disasm_factory {
+    FileManage paths;
+    std::map< string, LanguageDescription > languages;
+    std::stringstream err;
+public:
+    int init(const std::vector<std::string> &shares) {
+        try {
+            init_languages_path(shares);
+            init_languages();
+        } catch (std::exception &e) {
+            err << "Error: " << e.what() << "\n";
+            return -1;
+        } catch (LowlevelError &e) {
+            err << "Error: " << e.explain << "\n";
+            return -1;
+        } catch (...) {
+            err << "Unknown error\n";
+        }
+        return 0;
+    }
+
+    void dump_errors() {
+        std::cerr << err.str();
+    }
+
+    bap::result<bap::disassembler_interface>
+    create(const char *triple, const char *cpu, int debug_level) {
+
+        debug_level = 1;
+
+        bap::result<bap::disassembler_interface> r;
+
+        auto it = languages.find(triple);
+        if (it == languages.end()) {
+            if (debug_level > 0) {
+                std::cerr << err.str();
+            }
+            r.err = bap_disasm_unsupported_target;
+        } else {
+            try {
+                r.dis = std::make_shared<Disassembler>(it->second, paths, err);
+            } catch (...) {
+                r.err = bap_disasm_unknown_error;
+                if (debug_level > 0) {
+                    std::cerr << err.str();
+                }
+            }
+        }
+        return r;
+    }
+
+private:
+    void init_languages_path(const std::vector<std::string> &shares) {
+        for (auto root : shares) {
+            std::vector<std::string> languages;
+            FileManage::scanDirectoryRecursive(languages, "languages", root, 16);
+            for (auto language : languages) {
+                paths.addDir2Path(language);
+            }
+        }
+    }
+
+    void init_languages() {
+        std::vector<std::string> specs;
+        paths.matchList(specs, ".ldefs", /*isSuffix*/true);
+        for (auto spec : specs) {
+            ifstream input(spec);
+            if (!input) {
+                std::error_code ec(errno, std::system_category());
+                err << "Failed to open the spec file at: " << spec << "\n";
+                throw std::system_error(ec);
+            }
+            std::unique_ptr<Document> doc(xml_tree(input));
+            for (const Element *child : doc->getRoot()->getChildren()) {
+                if (child->getName() == "language") {
+                    LanguageDescription language;
+                    language.restoreXml(child);
+                    languages[language.getId()] = language;
+                    std::cerr << "- " <<
+                        language.getId() << " - " <<
+                        language.getDescription() << "\n";
+                }
+            }
+        }
+    }
+};
 
 int disasm_ghidra_init () {
-    register_disassembler("ghidra", std::make_shared<Factory>());
+    std::vector<std::string> roots;
+    roots.push_back("/usr/share/ghidra");
+    auto factory = std::make_shared<Factory>();
+    int result = factory->init(roots);
+    if (result < 0) {
+        factory->dump_errors();
+        return result;
+    }
+
+    bap::register_disassembler("ghidra", factory);
     return 0;
 }
