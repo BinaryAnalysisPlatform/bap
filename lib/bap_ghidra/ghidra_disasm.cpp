@@ -367,6 +367,7 @@ public:
         load_document(paths, language.getProcessorSpec());
         load_document(paths, language.getSlaFile());
         translator.initialize(specification);
+        initialize_processor(err);
         opcodes.populate_opcodes(translator);
         regs.populate_registers(translator);
     }
@@ -421,6 +422,18 @@ private:
         std::string path;
         paths.findFile(path, name);
         specification.registerTag(specification.openDocument(path)->getRoot());
+    }
+
+    void initialize_processor(std::ostream &err) {
+        if (const Element *spec = specification.getTag("processor_spec")) {
+            for (auto elt : spec->getChildren()) {
+                if (elt->getName() == "context_data") {
+                    context.restoreFromSpec(elt, &translator);
+                }
+            }
+        } else {
+            err << "Warning: no processor specification was found\n";
+        }
     }
 };
 
