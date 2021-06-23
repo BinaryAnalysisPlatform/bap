@@ -292,6 +292,9 @@ let llvm_x86_encoding =
 let llvm_x86_64_encoding =
   Theory.Language.declare ~package "llvm-x86_64"
 
+let sleigh =
+  Theory.Language.declare ~package "sla-x86"
+
 let register_x86_llvm_disassembler () =
   Disasm_expert.Basic.register llvm_x86_encoding @@ fun _ ->
   Disasm_expert.Basic.create ~backend:"llvm" "x86"
@@ -300,19 +303,32 @@ let register_x86_64_llvm_disassembler () =
   Disasm_expert.Basic.register llvm_x86_64_encoding @@ fun _ ->
   Disasm_expert.Basic.create ~backend:"llvm" "x86_64"
 
-let enable_decoder () =
+let register_sleigh_disassembler () =
+  Disasm_expert.Basic.register sleigh @@ fun target ->
+  let target = if Theory.Target.belongs amd64 target
+    then "x86:LE:64:default"
+    else "x86:LE:32:default" in
+  Disasm_expert.Basic.create ~backend:"ghidra" target
+
+let enable_decoder backend =
   let open KB.Syntax in
   register_x86_llvm_disassembler ();
   register_x86_64_llvm_disassembler ();
+  register_sleigh_disassembler ();
   KB.promise Theory.Label.encoding @@ fun label ->
   Theory.Label.target label >>| fun t ->
-  if Theory.Target.belongs amd64 t
-  then llvm_x86_64_encoding else
   if Theory.Target.belongs parent t
-  then llvm_x86_encoding
+  then
+    if String.equal backend "llvm" then
+      if Theory.Target.belongs amd64 t
+      then llvm_x86_64_encoding else
+      if Theory.Target.belongs parent t
+      then llvm_x86_encoding
+      else Theory.Language.unknown
+    else sleigh
   else Theory.Language.unknown
 
-let load () =
+let load ?(backend="llvm") () =
   enable_loader ();
   enable_arch ();
-  enable_decoder ()
+  enable_decoder backend

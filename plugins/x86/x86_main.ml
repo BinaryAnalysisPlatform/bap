@@ -5,8 +5,9 @@ include Self()
 
 type kind = Legacy | Modern | Merge [@@deriving equal]
 
-let main kind x32 x64 =
-  X86_target.load ();
+let main backend kind x32 x64 =
+  X86_target.load ~backend ();
+  let kind = if String.(backend <> "llvm") then Modern else kind in
   let ia32, amd64 = match kind with
     | Legacy -> (module IA32L : Target), (module AMD64L : Target)
     | Modern -> (module IA32 : Target), (module AMD64 : Target)
@@ -48,6 +49,7 @@ let () =
   let x32 = abi `x86 "abi" in
   let x64 = abi `x86_64 "64-abi" in
   let fp_lifter = Config.flag "with-floating-points" in
+  let backend = Config.param Config.string "backend" in
   let kind =
     let kinds = ["legacy", Legacy;
                  "modern", Modern;
@@ -61,7 +63,7 @@ let () =
                Option.some_if (equal_kind kind default) name)) in
     Config.(param (enum kinds) "lifter" ~doc ~default) in
   Config.when_ready (fun {Config.get=(!!)} ->
-      main !!kind !!x32 !!x64;
+      main !!backend !!kind !!x32 !!x64;
       if !!fp_lifter then begin
         X86_legacy_bil_lifter.init ();
         X86_legacy_bil_semantics.init ();
