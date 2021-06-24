@@ -32,8 +32,9 @@ open Meta.Let
 type value = unit Theory.Value.t
 type effect = unit Theory.Effect.t
 
-type KB.Conflict.t += Unresolved_definition of string
-                   | User_error of string
+type KB.Conflict.t +=
+  | Unresolved_definition of string
+  | User_error of string
 
 let package = "bap"
 let language = Theory.Language.declare ~package "primus-lisp"
@@ -60,14 +61,17 @@ let typed = KB.Class.property Theory.Source.cls "typed-program"
 
 let fail s = Meta.lift (KB.fail s)
 
-let unresolved problem =
-  let msg = Format.asprintf "%a" Resolve.pp_resolution problem in
+let unresolved name problem =
+  let msg =
+    Format.asprintf "Failed to find a definition for %a. %a"
+      KB.Name.pp name
+      Resolve.pp_resolution problem in
   fail (Unresolved_definition msg)
 
 let resolve prog item name =
   match Resolve.semantics prog item name () with
   | None -> !!None
-  | Some (Error problem) -> unresolved problem
+  | Some (Error problem) -> unresolved name problem
   | Some (Ok (fn,_)) -> !!(Some fn)
 
 let check_arg _ _ = true
@@ -492,15 +496,19 @@ module Prelude(CT : Theory.Core) = struct
         Scope.restore scope >>= fun () ->
         Env.del_args bs >>= fun () ->
         !!eff
-      | Some (Error problem) -> unresolved problem
+      | Some (Error problem) ->
+        unresolved name problem
       | None when toplevel -> !!Insn.empty
       | None ->
         match Resolve.semantics prog Key.semantics name () with
         | Some Ok (sema,()) ->
           Meta.lift@@
           Def.Sema.apply sema defn xs
-        | Some (Error problem) -> unresolved problem
-        | None -> fail (Unresolved_definition (KB.Name.show name))
+        | Some (Error problem) -> unresolved name problem
+        | None ->
+          let msg = Format.asprintf "No definition is found for %a"
+              KB.Name.pp name in
+          fail (Unresolved_definition msg)
     and app name xs =
       map xs >>= fun (aeff,xs) ->
       call name xs >>= fun peff ->
@@ -696,13 +704,19 @@ let provide_attributes () =
   KB.collect Theory.Label.unit this >>=? fun unit ->
   KB.collect Property.name this >>=? fun name ->
   obtain_typed_program unit >>= fun {prog} ->
-  match Resolve.semantics prog Key.func name () with
-  | None -> !!empty
-  | Some (Error problem) ->
-    let msg = Format.asprintf "%a" Resolve.pp_resolution problem in
-    KB.fail (Unresolved_definition msg)
-  | Some (Ok (fn,_)) ->
-    !!(Def.attributes fn)
+  let package = KB.Name.package name
+  and name = KB.Name.unqualified name in
+  Program.in_package package prog @@ fun prog ->
+  Program.get prog Key.func |>
+  List.fold ~init:(Ok empty) ~f:(fun attrs fn ->
+      if String.equal (Def.name fn) name
+      then match attrs with
+        | Error c -> Error c
+        | Ok attrs ->
+          KB.Value.join attrs (Def.attributes fn)
+      else attrs) |> function
+  | Ok attrs -> !!attrs
+  | Error conflict -> KB.fail conflict
 
 let enable ?stdout () =
   provide_semantics ?stdout ();
@@ -711,8 +725,7 @@ let enable ?stdout () =
 let static = static_slot
 
 let () = KB.Conflict.register_printer @@ function
-  | Unresolved_definition s ->
-    Option.some @@ sprintf "unresolved defintion %s" s
+  | Unresolved_definition msg -> Option.some @@ sprintf "%s" msg
   | Property.Unequal_arity ->
     Some "The number of arguments is different"
   | User_error msg -> Some ("error: " ^ msg)
