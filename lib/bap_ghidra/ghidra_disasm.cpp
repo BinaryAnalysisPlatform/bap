@@ -404,13 +404,17 @@ public:
     virtual void step(uint64_t pc) {
         current = {};
         builder.reset();
-        if (loader.is_mapped(pc)) {
-            Address addr(translator.getDefaultCodeSpace(), pc);
-            int length = translator.oneInstruction(builder, addr);
-            current = builder.result(length);
-            if (!loader.is_mapped(pc + current.loc.len - 1)) {
-                current = {};
+        try {
+            if (loader.is_mapped(pc)) {
+                Address addr(translator.getDefaultCodeSpace(), pc);
+                int length = translator.oneInstruction(builder, addr);
+                current = builder.result(length);
+                if (!loader.is_mapped(pc + current.loc.len - 1)) {
+                    current = {};
+                }
             }
+        } catch (LowlevelError &err) {
+            current = {};
         }
     }
 
