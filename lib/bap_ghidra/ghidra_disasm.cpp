@@ -25,13 +25,15 @@ public:
     explicit Loader(const bap::memory &mem) : LoadImage("nofile"), mem(mem) {}
 
     virtual void loadFill(uint1 *dst, int4 len, const Address &addr) {
-        int4 off = offset(addr);
-        if (off < mem.loc.len && off + len <= mem.loc.len) {
+        int4 off = offset(addr) + mem.loc.off;
+        int4 beg = mem.loc.off;
+        int4 end = mem.loc.off + mem.loc.len;
+        if (off >= beg && off < end) {
             std::copy_n(mem.data + off, len, dst);
         } else {
             std::fill_n(dst, len, 0);
-            if (off < mem.loc.len) {
-                std::copy(mem.data + off, mem.data + mem.loc.len, dst);
+            if (off < end) {
+                std::copy(mem.data + off, mem.data + end, dst);
             }
         }
     }
@@ -47,11 +49,11 @@ public:
     }
 
     int offset(const Address &addr) const {
-        return addr.getOffset() - mem.base + mem.loc.off;
+        return addr.getOffset() - mem.base;
     }
 
-    int address(const uint64_t offset) const {
-        return mem.base + (offset - mem.loc.off);
+    uint64_t address(const uint64_t offset) const {
+        return mem.base + offset;
     }
 
     bool is_mapped(uint64_t addr) const {
@@ -391,6 +393,9 @@ public:
             Address addr(translator.getDefaultCodeSpace(), pc);
             int length = translator.oneInstruction(builder, addr);
             current = builder.result(length);
+            if (!loader.is_mapped(pc + current.loc.len - 1)) {
+                current = {};
+            }
         }
     }
 
