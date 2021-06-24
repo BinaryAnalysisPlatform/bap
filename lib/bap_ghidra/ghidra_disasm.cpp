@@ -70,8 +70,6 @@ bap::table table_from_string(const std::string &data) {
 
 enum ExtraOpCode {
     CORE_SEQ = CPUI_MAX,        // a sequence of subinstructions
-    EXTRA_GOTO,                 // intra-instruction branch
-    EXTRA_CGOTO,                // intra-instruction cbranch
     EXTRA_MAX
 };
 
@@ -79,8 +77,6 @@ enum ExtraOpCode {
 std::string get_extra_opname(ExtraOpCode op) {
     switch (op) {
     case CORE_SEQ: return "core:seq";
-    case EXTRA_GOTO: return "pcode-extra:GOTO";
-    case EXTRA_CGOTO: return "pcode-extra:CGOTO";
     }
 }
 
@@ -134,12 +130,18 @@ public:
     }
 };
 
+enum optype {Mem, Imm, optype_size};
+static const std::string typenames[] = {"mem", "imm"};
+
 class RegistersTable {
     std::string regnames;
     std::map<VarnodeData,int> offsets;
     std::set<int> known_spaces;
+    int types[optype_size];
+    AddrSpace *code;
+    AddrSpace *data;
 public:
-    RegistersTable() : regnames(), offsets() {}
+    RegistersTable() : regnames(), offsets(), code(), data() {}
 
     void populate_registers(const Translate& translator) {
         offsets = {};
@@ -154,14 +156,22 @@ public:
             offsets[node] = ss.tellp();
             ss << name << '\000';
         }
+
+        for (int i = 0; i < optype_size; i++) {
+            types[i] = ss.tellp();
+            ss << typenames[i] << '\000';
+        }
         regnames = ss.str();
+
+        code = translator.getDefaultCodeSpace();
+        data = translator.getDefaultDataSpace();
     }
 
     bap::table table() const {
         return table_from_string(regnames);
     }
 
-    bap::reg create_reg(const VarnodeData &node) const{
+    bap::reg create_reg(const VarnodeData &node) const {
         bap::reg reg = {};
         if (is_virtual(node)) {
             reg.code = -node.offset;
@@ -173,6 +183,13 @@ public:
                 reg.name = pos->second;
             }
         }
+        return reg;
+    }
+
+    bap::reg create_typ(const VarnodeData &node) const {
+        const AddrSpace *space = node.space;
+        int type = space == code || space == data ? Mem : Imm;
+        bap::reg reg = {types[type], types[type]};
         return reg;
     }
 private:
@@ -224,16 +241,18 @@ public:
             number_of_inputs -= 1;
             invars += 1;
         } else {
-            int newcode = extended_opcode(opcode, invars);
-            insns[p].code = newcode;
-            insns[p].name = opcodes.intern(newcode);
+            insns[p].code = opcode;
+            insns[p].name = opcodes.intern(opcode);
         }
 
         insns[p].loc.off = loader.offset(addr);
+
         if (outvar != nullptr) {
+            insns[p].ops.push_back(type(*outvar));
             insns[p].ops.push_back(operand(*outvar));
         }
         for (int i = 0; i < number_of_inputs; i++) {
+            insns[p].ops.push_back(type(invars[i]));
             insns[p].ops.push_back(operand(invars[i]));
         }
     }
@@ -278,6 +297,14 @@ private:
         return result;
     }
 
+    bap::operand type(const VarnodeData &node) {
+        bap::operand result = {};
+        result.type = bap_disasm_op_reg;
+        result.reg_val = registers.create_typ(node);
+        return result;
+    }
+
+
     bool is_address(const AddrSpace *space) const {
         return is_code(space) || is_data(space);
     }
@@ -292,18 +319,6 @@ private:
 
     bool is_constant(const AddrSpace *space) const {
         return space->getType() == IPTR_CONSTANT;
-    }
-
-    // we represent overloaded instructions, such as
-    // BRANCH and CBRANCH, with explicit opcodes,
-    // GOTO and CGOTO correspondingly.
-    int extended_opcode(OpCode op, VarnodeData *ivars) {
-        if ((op == CPUI_BRANCH || op == CPUI_CBRANCH) &&
-            is_constant(ivars[0].space)) {
-            return op == CPUI_BRANCH ? EXTRA_GOTO : EXTRA_CGOTO;
-        } else {
-            return op;
-        }
     }
 };
 
