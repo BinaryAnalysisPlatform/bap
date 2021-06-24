@@ -117,10 +117,10 @@ let export = Primus.Lisp.Type.Spec.[
      true. Equivalent to (is-zero X Y Z)";
 
     "is-positive", all any @-> any,
-    "(is-zero X Y ... Z) returns one if all numbers are positive.";
+    "(is-positive X Y ... Z) returns one if all numbers are positive.";
 
     "is-negative", all any @-> any,
-    "(is-zero X Y ... Z) returns one if all numbers are negative.";
+    "(is-negative X Y ... Z) returns one if all numbers are negative.";
 
     "word-width", all any @-> any,
     "(word-width X Y ... Z) returns the maximum width of its \
@@ -178,6 +178,9 @@ let export = Primus.Lisp.Type.Spec.[
 
     "symbol", one any @-> sym,
     "(symbol X) returns a symbol representation of X.";
+
+    "is-symbol", one any @-> bool,
+    "(is-symbol X) is true if X has a symbolic value.";
 
     "cast-low", tuple [int; a] @-> b,
     "(cast-low S X) extracts low S bits from X.";
@@ -583,6 +586,11 @@ module Primitives(CT : Theory.Core) = struct
     | None ->
       illformed "symbol requires a value reified to a variable"
 
+  let is_symbol v =
+    forget@@match KB.Value.get var_slot v with
+    | Some _ -> true_
+    | _ -> false_
+
   let mk_cast t cast xs =
     binary xs @@ fun sz x ->
     to_sort sz >>= fun s ->
@@ -719,6 +727,7 @@ module Primitives(CT : Theory.Core) = struct
     | "get-current-program-counter",[] -> pure@@get_pc s lbl
     | "set-symbol-value",[sym;x] -> data@@set_symbol sym x
     | "symbol",[x] ->  pure@@symbol s x
+    | "is-symbol", [x] -> pure@@is_symbol x
     | "cast-low",xs -> pure@@low xs
     | "cast-high",xs -> pure@@high xs
     | "cast-signed",xs -> pure@@signed xs
