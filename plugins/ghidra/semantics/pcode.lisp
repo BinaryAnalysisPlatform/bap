@@ -146,6 +146,9 @@
 (defun INT_SMOD (tr r tx x ty y)
   (set# tr r (get# signed-mod tx x ty y)))
 
+(defun BOOL_NEGATE (tr r tx x)
+  (set# tr r (get# lnot tx x)))
+
 (defun BOOL_AND (tr r tx x ty y)
   (set# tr r (get# logand tx x ty y)))
 
