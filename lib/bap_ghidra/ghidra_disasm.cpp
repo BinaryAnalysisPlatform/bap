@@ -130,9 +130,14 @@ public:
     }
 };
 
+// In pcode aliasing is represented by registers that have the same
+// space and offset (aka address) but different sizes. The ordering of
+// varnodes (see pcoderaw.hh) is defined in a such way that registers
+// with higher sizes precede registers with lower sizes, provided that
+// they have the same addresses.
 class RegistersTable {
     std::string regnames;
-    std::map<VarnodeData,int> offsets;
+    std::map<Address,int> offsets;
     std::set<int> known_spaces;
 public:
     RegistersTable() : regnames(), offsets() {}
@@ -146,9 +151,12 @@ public:
         for (const auto& elt : registers) {
             VarnodeData node = elt.first;
             std::string name = elt.second;
-            known_spaces.insert(node.space->getIndex());
-            offsets[node] = ss.tellp();
-            ss << name << '\000';
+            Address addr = node.getAddr();
+            if (offsets.find(addr) == offsets.end()) {
+                known_spaces.insert(node.space->getIndex());
+                offsets[addr] = ss.tellp();
+                ss << name << '\000';
+            }
         }
         regnames = ss.str();
     }
@@ -163,7 +171,7 @@ public:
             reg.code = -node.offset;
             reg.name = node.space->getShortcut();
         } else {
-            auto pos = offsets.find(node);
+            auto pos = offsets.find(node.getAddr());
             if (pos != offsets.end()) {
                 reg.code = pos->second;
                 reg.name = pos->second;
