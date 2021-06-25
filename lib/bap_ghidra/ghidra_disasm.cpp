@@ -130,18 +130,12 @@ public:
     }
 };
 
-enum optype {Mem, Imm, optype_size};
-static const std::string typenames[] = {"mem", "imm"};
-
 class RegistersTable {
     std::string regnames;
     std::map<VarnodeData,int> offsets;
     std::set<int> known_spaces;
-    int types[optype_size];
-    AddrSpace *code;
-    AddrSpace *data;
 public:
-    RegistersTable() : regnames(), offsets(), code(), data() {}
+    RegistersTable() : regnames(), offsets() {}
 
     void populate_registers(const Translate& translator) {
         offsets = {};
@@ -156,15 +150,7 @@ public:
             offsets[node] = ss.tellp();
             ss << name << '\000';
         }
-
-        for (int i = 0; i < optype_size; i++) {
-            types[i] = ss.tellp();
-            ss << typenames[i] << '\000';
-        }
         regnames = ss.str();
-
-        code = translator.getDefaultCodeSpace();
-        data = translator.getDefaultDataSpace();
     }
 
     bap::table table() const {
@@ -186,11 +172,8 @@ public:
         return reg;
     }
 
-    bap::reg create_typ(const VarnodeData &node) const {
-        const AddrSpace *space = node.space;
-        int type = space == code || space == data ? Mem : Imm;
-        bap::reg reg = {types[type], types[type]};
-        return reg;
+    bap::reg nil() const {
+        return {0, 0};
     }
 private:
     bool is_virtual(const VarnodeData &node) const {
@@ -299,11 +282,15 @@ private:
 
     bap::operand type(const VarnodeData &node) {
         bap::operand result = {};
-        result.type = bap_disasm_op_reg;
-        result.reg_val = registers.create_typ(node);
+        if (is_address(node.space)) {
+            result.type = bap_disasm_op_reg;
+            result.reg_val = registers.nil();
+        } else {
+            result.type = bap_disasm_op_imm;
+            result.imm_val = node.size * 8 /*bits in byte*/;
+        }
         return result;
     }
-
 
     bool is_address(const AddrSpace *space) const {
         return is_code(space) || is_data(space);

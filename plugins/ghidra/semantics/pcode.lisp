@@ -4,16 +4,17 @@
 (in-package pcode)
 
 (defmacro cast-word (x) (cast word-width x))
+(defmacro coerce (type x)
+  (if (/= (word-width x) type) (extract (-1 type) 0 x) x))
 
 (defmacro set# (typ dst src)
-  (case (symbol typ)
-    'mem (store-word (cast-word dst) src)
-    'imm (set$ dst src)))
+  (if (is-symbol typ)
+    (store-word (cast-word dst) src)
+    (set$ dst src)))
 
 (defmacro get# (typ src)
-  (case (symbol typ)
-    'mem (load-word (cast-word src))
-    'imm src))
+  (if (is-symbol typ) (load-word (cast-word src))
+    (coerce typ src)))
 
 (defmacro get# (op typ src)
   (op (get# typ src)))
@@ -24,16 +25,15 @@
 (defun COPY (td d ts s)
   (set# td d (get# ts s)))
 
-(defun STORE (_ _ _ ptr _ val)
-  (store-word ptr val))
+(defun STORE (_ _ _ ptr typ val)
+  (store-word ptr (get# typ val)))
 
 (defun LOAD (td dst _ _ _ ptr)
-  (set# td dst (load-word ptr)))
+  (set# td dst (load-bits td ptr)))
 
 (defun branch (typ dst)
-  (case (symbol typ)
-    'mem (exec-addr dst)
-    'imm (goto-subinstruction dst)))
+  (if (is-symbol typ) (exec-addr dst)
+      (goto-subinstruction dst)))
 
 (defun BRANCH (typ dst)
   (branch typ dst))
@@ -78,12 +78,10 @@
   (set# tr r (get# s<= tx x ty y)))
 
 (defun INT_ZEXT (tr r tx x)
-  ;; TODO: fix the width
-  (set# tr r (cast-unsigned (word-width) (get# tx x))))
+  (set# tr r (cast-unsigned tr (get# tx x))))
 
 (defun INT_SEXT (tr r tx x)
-  ;; TODO: fix the width
-  (set# tr r (cast-signed (word-width) (get# tx x))))
+  (set# tr r (cast-signed tr (get# tx x))))
 
 (defun INT_ADD (tr r tx x ty y)
   (set# tr r (get# + tx x ty y)))
@@ -95,19 +93,19 @@
   (let ((x (get# tx x))
         (y (get# ty y))
         (z (+ x y)))
-    (set# tr r (carry z x y))))
+    (set# tr r (coerce tr (carry z x y)))))
 
 (defun INT_SCARRY (tr r tx x ty y)
   (let ((x (get# tx x))
         (y (get# ty y))
         (z (+ x y)))
-    (set# tr r (overflow z x y))))
+    (set# tr r (coerce tr (overflow z x y)))))
 
 (defun INT_SBORROW (tr r tx x ty y)
   (let ((x (get# tx x))
         (y (get# ty y))
         (z (- x y)))
-    (set# tr r (overflow z x (- y)))))
+    (set# tr r (coerce tr (overflow z x (- y))))))
 
 (defun INT_2COMP (tr r tx x)
   (set# tr r (get# - tx x)))
