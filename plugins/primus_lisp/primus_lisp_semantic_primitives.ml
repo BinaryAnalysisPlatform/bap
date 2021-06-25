@@ -109,6 +109,22 @@ let export = Primus.Lisp.Type.Spec.[
     "(> X Y ... Z) returns one if all numbers are in monotonically \
      nonincreasing order.";
 
+    "s<", all any @-> any,
+    "(s< X Y ... Z) returns one if all numbers are in monotonically \
+     increasing signed order.";
+
+    "s>", all any @-> any,
+    "(s> X Y ... Z) returns one if all numbers are in monotonically \
+     decreasing signed order.";
+
+    "s<=", all any @-> any,
+    "(s<= X Y ... Z) returns one if all numbers are in monotonically \
+     nondecreasing signed order.";
+
+    "s>=", all any @-> any,
+    "(> X Y ... Z) returns one if all numbers are in monotonically \
+     nonincreasing signed order.";
+
     "is-zero", all any @-> any,
     "(is-zero X Y ... Z) returns one if all numbers are zero.";
 
@@ -164,7 +180,7 @@ let export = Primus.Lisp.Type.Spec.[
     "(store-word POS VAL) stores VAL at the memory position POS";
 
     "memory-write", tuple [int; byte] @-> int,
-    "(memory-write PTR X) stores X at PTR.";
+    "(memory-write PTR X) stores byte X at PTR.";
 
     "get-program-counter", unit @-> int,
     "(get-program-counter) returns the address of the current instruction";
@@ -258,6 +274,26 @@ let empty s = Theory.Value.(forget @@ empty s)
 let null = KB.Object.null Theory.Program.cls
 let sort = Theory.Value.sort
 let bits x = size @@ sort x
+
+
+module SBitvec = struct
+  let compare s x y =
+    let module Bitv = Bitvec.Make(struct
+        let modulus = Bitvec.modulus (Theory.Bitv.size s)
+      end) in
+    let x_is_neg = Bitv.msb x and y_is_neg = Bitv.msb y in
+    match x_is_neg, y_is_neg with
+    | true,false -> -1
+    | false,true -> 1
+    | _ -> Bitvec.compare x y
+
+  let (<) s x y = compare s x y < 0
+  let (>) s x y = compare s x y > 0
+  let (=) s x y = compare s x y = 0
+  let (<=) s x y = compare s x y <= 0
+  let (>=) s x y = compare s x y >= 0
+end
+
 
 module Primitives(CT : Theory.Core) = struct
 
@@ -705,9 +741,13 @@ module Primitives(CT : Theory.Core) = struct
     | "logxor",_-> pure@@monoid s Z.logxor CT.logxor Z.zero args
     | "=",_-> pure@@order Bitvec.(=) CT.eq args
     | "<",_-> pure@@order Bitvec.(<) CT.ult args
+    | "s<",_ -> pure@@order (SBitvec.(<) s) CT.slt args
     | ">",_-> pure@@order Bitvec.(>) CT.ugt args
+    | "s>",_ -> pure@@order (SBitvec.(>) s) CT.sgt args
     | "<=",_-> pure@@order Bitvec.(<=) CT.ule args
     | ">=",_-> pure@@order Bitvec.(>=) CT.uge args
+    | "s<=",_-> pure@@order (SBitvec.(<=) s) CT.ule args
+    | "s>=",_-> pure@@order (SBitvec.(>=) s) CT.uge args
     | "/=",_| "distinct",_-> pure@@forget@@distinct args
     | "is-zero",_| "not",_-> pure@@all Bitvec.(equal zero) CT.is_zero args
     | "is-positive",_-> pure@@all Z.is_positive is_positive args

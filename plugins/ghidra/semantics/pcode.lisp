@@ -68,14 +68,14 @@
 (defun INT_LESS (tr r tx x ty y)
   (set# tr r (get# < tx x ty y)))
 
-;; (defun INT_SLESS (tr r tx x ty y)
-;;   (set# r (s< x y)))
+(defun INT_SLESS (tr r tx x ty y)
+  (set# tr r (get# s< tx x ty y)))
 
 (defun INT_LESSEQUAL (tr r tx x ty y)
-  (set# tr r (<= x y)))
+  (set# tr r (get# <= tx x ty y)))
 
-;; (defun INT_SLESSEQUAL (tr r tx x ty y)
-;;   (set# r (s<= x y)))
+(defun INT_SLESSEQUAL (tr r tx x ty y)
+  (set# tr r (get# s<= tx x ty y)))
 
 (defun INT_ZEXT (tr r tx x)
   ;; TODO: fix the width
