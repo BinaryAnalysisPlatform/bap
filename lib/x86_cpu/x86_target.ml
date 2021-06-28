@@ -292,8 +292,8 @@ let llvm_x86_encoding =
 let llvm_x86_64_encoding =
   Theory.Language.declare ~package "llvm-x86_64"
 
-let sleigh =
-  Theory.Language.declare ~package "sla-x86"
+let pcode =
+  Theory.Language.declare ~package "pcode-x86"
 
 let register_x86_llvm_disassembler () =
   Disasm_expert.Basic.register llvm_x86_encoding @@ fun _ ->
@@ -304,7 +304,7 @@ let register_x86_64_llvm_disassembler () =
   Disasm_expert.Basic.create ~backend:"llvm" "x86_64"
 
 let register_sleigh_disassembler () =
-  Disasm_expert.Basic.register sleigh @@ fun target ->
+  Disasm_expert.Basic.register pcode @@ fun target ->
   let target = if Theory.Target.belongs amd64 target
     then "x86:LE:64:default"
     else "x86:LE:32:default" in
@@ -325,7 +325,7 @@ let enable_decoder backend =
       if Theory.Target.belongs parent t
       then llvm_x86_encoding
       else Theory.Language.unknown
-    else sleigh
+    else pcode
   else Theory.Language.unknown
 
 let load ?(backend="llvm") () =
