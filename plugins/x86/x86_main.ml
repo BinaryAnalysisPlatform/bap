@@ -1,4 +1,5 @@
 open Core_kernel
+open Poly
 open Bap.Std
 open X86_targets
 include Self()
@@ -6,8 +7,8 @@ include Self()
 type kind = Legacy | Modern | Merge [@@deriving equal]
 
 let main backend kind x32 x64 =
-  X86_target.load ~backend ();
-  let kind = if String.(backend <> "llvm") then Modern else kind in
+  X86_target.load ?backend ();
+  let kind = if backend = Some "ghidra" then Modern else kind in
   let ia32, amd64 = match kind with
     | Legacy -> (module IA32L : Target), (module AMD64L : Target)
     | Modern -> (module IA32 : Target), (module AMD64 : Target)
@@ -49,7 +50,7 @@ let () =
   let x32 = abi `x86 "abi" in
   let x64 = abi `x86_64 "64-abi" in
   let fp_lifter = Config.flag "with-floating-points" in
-  let backend = Config.param Config.string "backend" in
+  let backend = Config.param Config.(some string) "backend" in
   let kind =
     let kinds = ["legacy", Legacy;
                  "modern", Modern;
