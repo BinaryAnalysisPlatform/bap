@@ -133,7 +133,7 @@ let register encoding triple =
   Dis.register encoding @@ fun _ ->
   Dis.create ~backend:"llvm" triple
 
-let enable_decoder () =
+let enable_llvm_decoder () =
   let open KB.Syntax in
   register llvm_mips32 "mips";
   register llvm_mips64 "mips64";
@@ -145,7 +145,34 @@ let enable_decoder () =
     else llvm_mips64
   else Theory.Language.unknown
 
-let load () =
+let pcode = Theory.Language.declare ~package:"bap" "pcode-mips"
+
+let is_big t = Theory.Endianness.(Theory.Target.endianness t = eb)
+
+let register_ghidra_backend () =
+  Dis.register pcode @@ fun t ->
+  let triple =
+    match Theory.Target.belongs mips32bi t, is_big t with
+    | true,true  -> "MIPS:BE:32:default"
+    | true,false -> "MIPS:LE:32:default"
+    | false,true -> "MIPS:BE:64:default"
+    | false,false -> "MIPS:LE:64:default" in
+  Dis.create ~backend:"ghidra" triple
+
+let enable_pcode_decoder () =
+  register_ghidra_backend ();
+  let open KB.Syntax in
+  KB.promise Theory.Label.encoding @@ fun label ->
+  Theory.Label.target label >>| fun t ->
+  if Theory.Target.belongs parent t
+  then pcode
+  else Theory.Language.unknown
+
+let load ?(backend="llvm") () =
   enable_loader ();
-  enable_decoder ();
-  map_mips ()
+  map_mips ();
+  match backend with
+  | "llvm" -> enable_llvm_decoder ()
+  | "ghidra" -> enable_pcode_decoder ()
+  | s -> invalid_argf "unknown backend %S, expected %S or %S"
+           s "llvm" "ghidra" ()
