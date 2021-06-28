@@ -384,6 +384,7 @@ let enable_arch () =
 let llvm_a32 = CT.Language.declare ~package "llvm-armv7"
 let llvm_t32 = CT.Language.declare ~package "llvm-thumb"
 let llvm_a64 = CT.Language.declare ~package "llvm-aarch64"
+let pcode = CT.Language.declare ~package "pcode-arm"
 
 module Dis = Disasm_expert.Basic
 
@@ -459,6 +460,27 @@ let before_thumb2 t = t < LE.v6t2 || t < EB.v6t2
 let is_64bit t = LE.v8a <= t || EB.v8a <= t || Bi.v8a <= t
 let is_thumb_only t = LE.v7m <= t || EB.v7m <= t || Bi.v7m <= t
 
+let is_big t = Theory.Target.endianness t = Theory.Endianness.eb
+let is_little t = Theory.Target.endianness t = Theory.Endianness.le
+
+let register_pcode () =
+  Dis.register pcode @@ fun t ->
+  let triple = match is_64bit t,is_little t,is_big t with
+    | true,true,_ -> "ARM:LE:32:v8"
+    | true,_,true -> "ARM:BE:32:v8"
+    | true,_,_    -> "ARM:LEBE:32:v8LEInstruction"
+    | false,true,_ -> "ARM:LE:32:v7"
+    | false,_,true -> "ARM:BE:32:v7"
+    | false,_,_    -> "ARM:LEBE:32:v7LEInstruction" in
+  Dis.create ~backend:"ghidra" triple
+
+let enable_pcode () =
+  register_pcode ();
+  KB.promise Theory.Label.encoding @@ fun label ->
+  Theory.Label.target label >>| fun t ->
+  if is_arm t then pcode
+  else Theory.Language.unknown
+
 let guess_encoding interworking label target =
   if is_arm target then
     if is_64bit target then !!llvm_a64 else
@@ -472,7 +494,7 @@ let guess_encoding interworking label target =
         | false -> !!llvm_a32
   else !!CT.Language.unknown
 
-let enable_decoder ?interworking () =
+let enable_llvm ?interworking () =
   let open KB.Syntax in
   register llvm_a32 "armv7";
   register llvm_t32 "thumbv7" ~attrs:"+thumb2";
@@ -481,7 +503,9 @@ let enable_decoder ?interworking () =
   CT.Label.target label >>= guess_encoding interworking label
 
 
-let load ?interworking () =
+let load ?interworking ?(backend="llvm") () =
   enable_loader ();
   enable_arch ();
-  enable_decoder ?interworking ()
+  if String.equal backend "llvm"
+  then enable_llvm ?interworking ()
+  else enable_pcode ()
