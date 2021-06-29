@@ -283,7 +283,7 @@ module Ir_pp = struct
             | Some _ -> None) in
     let lines =
       List.concat @@ List.map [phis; defs; jmps] ~f:Seq.to_list in
-    let body = String.concat lines |> String.concat_map
+    let body = String.concat ~sep:"\n" lines |> String.concat_map
                  ~f:(function '\n' -> "\\l"
                             | c -> Char.to_string c) in
     sprintf "\\%s\n%s" (Term.name blk) body

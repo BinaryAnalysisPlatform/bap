@@ -70,7 +70,7 @@ end
 
 
 let pp_cfg ppf ir =
-  fprintf ppf "%a" (pp_print_list Blk.pp) (BIR.reify ir)
+  fprintf ppf "@[<v>%a@]" (pp_print_list Blk.pp) (BIR.reify ir)
 
 let inspect cfg = Sexp.Atom (asprintf "%a" pp_cfg cfg)
 
