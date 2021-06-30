@@ -483,9 +483,6 @@ public:
 
     bap::result<bap::disassembler_interface>
     create(const char *triple, const char *cpu, int debug_level) {
-
-        debug_level = 1;
-
         bap::result<bap::disassembler_interface> r;
 
         auto it = languages.find(triple);

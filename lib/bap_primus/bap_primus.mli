@@ -3987,8 +3987,9 @@ text ::= ?any atom that is not recognized as a <word>?
         val declare :
           ?types:Type.signature ->
           ?docs:string ->
-          ?package:string -> string -> unit
-
+          ?package:string ->
+          ?body:(Theory.Target.t -> (Theory.Label.t -> Theory.Value.Top.t list -> unit Theory.eff) KB.t) ->
+          string -> unit
 
         (** [documentation unit] documentation for [unit]'s lisp source.
 

@@ -79,9 +79,12 @@ let check_arg _ _ = true
 let is_external def =
   not @@ Set.is_empty (Attribute.Set.get External.t (Def.attributes def))
 
+type body = (Theory.Target.t -> (Theory.Label.t -> Theory.Value.Top.t list -> unit Theory.eff) KB.t)
+
 type info = {
   types : (Theory.Target.t -> Type.signature);
   docs : string;
+  body : body option;
 }
 
 let library = Hashtbl.create (module KB.Name)
@@ -125,7 +128,7 @@ let declare
         rest = Some any;
         ret = any;
       })
-    ?(docs="undocumented") ?package name =
+    ?(docs="undocumented") ?package ?body name =
   let name = KB.Name.create ?package name in
   if Hashtbl.mem library name
   then invalid_argf "A primitive `%s' already exists, please \
@@ -133,7 +136,8 @@ let declare
       (KB.Name.show name) ();
   Hashtbl.add_exn library name {
     docs;
-    types
+    types;
+    body;
   }
 
 
@@ -618,20 +622,29 @@ let primitive name defn args =
   KB.collect Theory.Semantics.slot obj
 
 let link_library target prog =
-  Hashtbl.fold library ~f:(fun ~key:name ~data:{types; docs} prog ->
+  let open KB.Let in
+  Hashtbl.to_alist library |>
+  KB.List.fold ~init:prog ~f:(fun prog (name,{types; docs; body}) ->
       let types = types target in
-      Program.add prog Program.Items.semantics @@
-      Def.Sema.create ~docs ~types name (primitive name))
-    ~init:prog
+      match body with
+      | None ->
+        KB.return @@
+        Program.add prog Program.Items.semantics @@
+        Def.Sema.create ~docs ~types name (primitive name)
+      | Some body ->
+        let+ fn = body target in
+        Program.add prog Program.Items.semantics @@
+        Def.Sema.create ~docs ~types name fn)
 
 let obtain_typed_program unit =
   let open KB.Syntax in
+  let open KB.Let in
   KB.collect Theory.Unit.source unit >>= fun src ->
   KB.collect Theory.Unit.target unit >>= fun target ->
   match KB.Value.get typed src with
   | Some prog -> !!prog
   | None ->
-    let prog =
+    let* prog =
       link_library target @@
       Program.with_places (KB.Value.get program src) target in
     let tprog = Program.Type.infer prog in

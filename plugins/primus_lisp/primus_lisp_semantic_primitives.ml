@@ -275,27 +275,12 @@ let null = KB.Object.null Theory.Program.cls
 let sort = Theory.Value.sort
 let bits x = size @@ sort x
 
-
-module SBitvec = struct
-  let compare s x y =
-    let module Bitv = Bitvec.Make(struct
-        let modulus = Bitvec.modulus (Theory.Bitv.size s)
-      end) in
-    let x_is_neg = Bitv.msb x and y_is_neg = Bitv.msb y in
-    match x_is_neg, y_is_neg with
-    | true,false -> -1
-    | false,true -> 1
-    | _ -> Bitvec.compare x y
-
-  let (<) s x y = compare s x y < 0
-  let (>) s x y = compare s x y > 0
-  let (=) s x y = compare s x y = 0
-  let (<=) s x y = compare s x y <= 0
-  let (>=) s x y = compare s x y >= 0
+module type Target = sig
+  val target : Theory.Target.t
 end
 
-
-module Primitives(CT : Theory.Core) = struct
+module Primitives(CT : Theory.Core)(T : Target) = struct
+  open T
 
   let rec seq = function
     | [] -> CT.perform Theory.Effect.Sort.bot
@@ -494,15 +479,12 @@ module Primitives(CT : Theory.Core) = struct
     match const dst with
     | None -> CT.jmp !!dst
     | Some dst ->
-      KB.collect Primus.Lisp.Semantics.definition lbl >>= function
-      | None -> illformed "no definition was provided for a label"
-      | Some lbl ->
-        KB.collect Insn.Seqnum.slot lbl >>= function
-        | None -> illformed "not a subinstruction"
-        | Some pos ->
-          let dst = Bitvec.to_int dst + pos in
-          Bap.Std.Insn.Seqnum.label dst >>=
-          CT.goto
+      KB.collect Insn.Seqnum.slot lbl >>= function
+      | None -> illformed "not a subinstruction"
+      | Some pos ->
+        let dst = Bitvec.to_int dst + pos in
+        Bap.Std.Insn.Seqnum.label dst >>=
+        CT.goto
 
   let load_byte t xs =
     let mem = CT.var @@ Theory.Target.data t in
@@ -602,11 +584,9 @@ module Primitives(CT : Theory.Core) = struct
   let sreciprocal = one_op_x Bitvec.sdiv CT.sdiv
 
   let get_pc s lbl =
-    KB.collect Primus.Lisp.Semantics.definition lbl >>= function
+    KB.collect Theory.Label.addr lbl >>= function
     | None -> !!(empty s)
-    | Some lbl -> KB.collect Theory.Label.addr lbl >>= function
-      | None -> !!(empty s)
-      | Some addr -> forget@@const_int s addr
+    | Some addr -> forget@@const_int s addr
 
   let set_symbol v x =
     match KB.Value.get var_slot v with
@@ -703,24 +683,39 @@ module Primitives(CT : Theory.Core) = struct
               CT.append s !!r
                 (CT.extract b1 (int s b) (int s b) !!x))
 
-  let target lbl =
-    KB.collect Primus.Lisp.Semantics.definition lbl >>= function
-    | None -> Theory.Label.target lbl
-    | Some lbl -> Theory.Label.target lbl
+  let bits = Theory.Target.bits target
+  module Z = struct
+    include Bitvec.Make(struct
+        let modulus = Bitvec.modulus bits
+      end)
+    let is_zero = Bitvec.equal zero
+    let is_negative = msb
+    let is_positive x =
+      not (is_negative x) && not (is_zero x)
+  end
+
+  let s = Theory.Bitv.define bits
+
+  module SBitvec = struct
+    let compare x y =
+      let module Bitv = Bitvec.Make(struct
+          let modulus = Bitvec.modulus (Theory.Bitv.size s)
+        end) in
+      let x_is_neg = Bitv.msb x and y_is_neg = Bitv.msb y in
+      match x_is_neg, y_is_neg with
+      | true,false -> -1
+      | false,true -> 1
+      | _ -> Bitvec.compare x y
+
+    let (<) x y = compare x y < 0
+    let (>) x y = compare x y > 0
+    let (=) x y = compare x y = 0
+    let (<=) x y = compare x y <= 0
+    let (>=) x y = compare x y >= 0
+  end
 
   let dispatch lbl name args =
-    target lbl >>= fun t ->
-    let bits = Theory.Target.bits t in
-    let module Z = struct
-      include Bitvec.Make(struct
-          let modulus = Bitvec.modulus bits
-        end)
-      let is_zero = Bitvec.equal zero
-      let is_negative = msb
-      let is_positive x =
-        not (is_negative x) && not (is_zero x)
-    end in
-    let s = Theory.Bitv.define bits in
+    let t = target in
     match name,args with
     | "+",_-> pure@@monoid s Z.add CT.add Z.zero args
     | "-",[x]|"neg",[x] -> pure@@neg x
@@ -741,13 +736,13 @@ module Primitives(CT : Theory.Core) = struct
     | "logxor",_-> pure@@monoid s Z.logxor CT.logxor Z.zero args
     | "=",_-> pure@@order Bitvec.(=) CT.eq args
     | "<",_-> pure@@order Bitvec.(<) CT.ult args
-    | "s<",_ -> pure@@order (SBitvec.(<) s) CT.slt args
+    | "s<",_ -> pure@@order SBitvec.(<) CT.slt args
     | ">",_-> pure@@order Bitvec.(>) CT.ugt args
-    | "s>",_ -> pure@@order (SBitvec.(>) s) CT.sgt args
+    | "s>",_ -> pure@@order SBitvec.(>) CT.sgt args
     | "<=",_-> pure@@order Bitvec.(<=) CT.ule args
     | ">=",_-> pure@@order Bitvec.(>=) CT.uge args
-    | "s<=",_-> pure@@order (SBitvec.(<=) s) CT.ule args
-    | "s>=",_-> pure@@order (SBitvec.(>=) s) CT.uge args
+    | "s<=",_-> pure@@order SBitvec.(<=) CT.ule args
+    | "s>=",_-> pure@@order SBitvec.(>=) CT.uge args
     | "/=",_| "distinct",_-> pure@@forget@@distinct args
     | "is-zero",_| "not",_-> pure@@all Bitvec.(equal zero) CT.is_zero args
     | "is-positive",_-> pure@@all Z.is_positive is_positive args
@@ -1267,32 +1262,20 @@ let enable_var_theory () =
     ~desc:"tracks terms that are variables"
     (KB.return (module VarTheory : Theory.Core))
 
+
 let provide () =
-  KB.Rule.(begin
-      declare "primus-lisp-core-primitives" |>
-      require Lisp.name |>
-      require Lisp.args |>
-      provide Theory.Semantics.slot |>
-      comment "implements semantics for the core primitives"
-    end);
-  List.iter export ~f:(fun (name,types,docs) ->
-      Primus.Lisp.Semantics.declare ~types ~docs ~package:"core" name);
   enable_var_theory ();
-  let (let*?) x f = x >>= function
-    | None -> !!nothing
-    | Some x -> f x in
-  KB.promise Theory.Semantics.slot @@ fun obj ->
-  let*? name = KB.collect Lisp.name obj in
-  let*? args = KB.collect Lisp.args obj in
-  if String.equal (KB.Name.package name) "core"
-  then
-    Theory.instance () >>= Theory.require >>= fun (module CT) ->
-    let module P = Primitives(CT) in
-    KB.catch (P.dispatch obj (KB.Name.unqualified name) args) @@ function
-    | Illformed err ->
-      KB.fail (Failed_primitive (name,args,err))
-    | other -> KB.fail other
-  else !!nothing
+  List.iter export ~f:(fun (name,types,docs) ->
+      Primus.Lisp.Semantics.declare ~types ~docs ~package:"core" name
+        ~body:(fun target ->
+            Theory.instance () >>= Theory.require >>= fun (module CT) ->
+            let module Target = struct let target = target end in
+            let module P = Primitives(CT)(Target) in
+            KB.return @@ fun obj args ->
+            KB.catch (P.dispatch obj name args) @@ function
+            | Illformed err ->
+              KB.fail (Failed_primitive (assert false,args,err))
+            | other -> KB.fail other))
 
 
 let enable_extraction () =
