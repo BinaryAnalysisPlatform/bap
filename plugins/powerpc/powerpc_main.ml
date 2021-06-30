@@ -37,10 +37,12 @@ module PowerPC32 = Make(T32)
 module PowerPC64 = Make(T64)
 module PowerPC64_le = Make(T64_le)
 
+let backend = Config.param Config.(some string) "backend"
+
 let () =
-  Config.when_ready (fun _ ->
+  Config.when_ready (fun {get} ->
       info "Providing PowerPC semantics in BIL";
-      Bap_powerpc_target.load ();
+      Bap_powerpc_target.load ?backend:(get backend)();
       Powerpc_add.init ();
       Powerpc_branch.init ();
       Powerpc_compare.init ();

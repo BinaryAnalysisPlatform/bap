@@ -129,7 +129,8 @@ let register encoding triple =
   Dis.register encoding @@ fun _ ->
   Dis.create ~backend:"llvm" triple
 
-let enable_decoder () =
+
+let enable_llvm_decoder () =
   let open KB.Syntax in
   register llvm_powerpc32 "powerpc";
   register llvm_powerpc64 "powerpc64";
@@ -141,7 +142,28 @@ let enable_decoder () =
     else llvm_powerpc64
   else Theory.Language.unknown
 
-let load () =
+let pcode = Theory.Language.declare ~package "pcode-powerpc"
+
+let enable_pcode_decoder () =
+  let open KB.Syntax in
+  Dis.register pcode @@begin fun t ->
+    let endian =
+      if Theory.(Endianness.(Target.endianness t = eb))
+      then "BE" else "LE" in
+    let triple = sprintf "PowerPC:%s:%d:default"
+        endian (Theory.Target.bits t) in
+    Dis.create ~backend:"ghidra" triple
+  end;
+  KB.promise Theory.Label.encoding @@begin fun label ->
+    Theory.Label.target label >>| fun t ->
+    if Theory.Target.belongs parent t then pcode
+    else Theory.Language.unknown
+  end
+
+let load ?(backend="llvm") () =
   enable_loader ();
-  enable_decoder ();
-  map_powerpc ()
+  map_powerpc ();
+  match backend with
+  | "llvm" -> enable_llvm_decoder ()
+  | "ghidra" -> enable_pcode_decoder ()
+  | s -> invalid_argf "Unknown disassembler backend: %S" s ()

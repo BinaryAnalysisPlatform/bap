@@ -36,4 +36,4 @@ val llvm_powerpc64 : Theory.language
     This includes parsing the loader output and enabling backward
     compatibility with the old [Arch.t] representation.
 *)
-val load : unit -> unit
+val load : ?backend:string -> unit -> unit
