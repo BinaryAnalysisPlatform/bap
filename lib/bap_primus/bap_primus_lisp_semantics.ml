@@ -51,6 +51,7 @@ let program =
 type program = {
   prog : Program.t;
   places : unit Theory.var Map.M(KB.Name).t;
+  names : Set.M(KB.Name).t;
 }
 
 let typed = KB.Class.property Theory.Source.cls "typed-program"
@@ -634,6 +635,13 @@ let link_library target prog =
         Program.add prog Program.Items.semantics @@
         Def.Sema.create ~docs ~types name fn)
 
+
+let collect_names key prog =
+  Program.fold prog key ~f:(fun ~package def names ->
+      let name = Def.name def in
+      Set.add names (KB.Name.create ~package name))
+    ~init:(Set.empty (module KB.Name))
+
 let obtain_typed_program unit =
   let open KB.Syntax in
   let open KB.Let in
@@ -652,7 +660,13 @@ let obtain_typed_program unit =
             let name = KB.Name.create ~package (Def.name place) in
             Map.set places name (Def.Place.location place))
         ~init:(Map.empty (module KB.Name)) in
-    let program = {prog; places} in
+    let names = Set.union_list (module KB.Name) [
+        collect_names Key.func prog;
+        collect_names Key.semantics prog;
+        collect_names Key.para prog;
+        collect_names Key.const prog
+      ] in
+    let program = {prog; places; names} in
     match Program.Type.errors tprog with
     | [] ->
       let src = KB.Value.put typed src (Some program) in
@@ -682,11 +696,13 @@ let provide_semantics ?(stdout=Format.std_formatter) () =
   let (>>=?) x f = x >>= function
     | None -> !!Insn.empty
     | Some x -> f x in
+  let require p k = if p then k () else !!Insn.empty in
   KB.promise Theory.Semantics.slot @@ fun obj ->
   KB.collect Theory.Label.unit obj >>=? fun unit ->
   KB.collect Property.name obj >>=? fun name ->
-  KB.collect Property.args obj >>= fun args ->
   obtain_typed_program unit >>= fun prog ->
+  require (Set.mem prog.names name) @@ fun () ->
+  KB.collect Property.args obj >>= fun args ->
   KB.collect Theory.Unit.target unit >>= fun target ->
   let bits = Theory.Target.bits target in
   let module Arith = Bitvec.Make(struct
