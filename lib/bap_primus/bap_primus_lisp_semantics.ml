@@ -240,11 +240,9 @@ let lookup_parameter prog v =
   let v = KB.Name.read @@ Theory.Var.name v in
   let name = KB.Name.unqualified v in
   Program.in_package (KB.Name.package v) prog @@ fun prog ->
-  Program.get prog Key.para |>
-  List.find ~f:(fun p ->
-      String.equal (Def.name p) name) |> function
-  | None -> None
-  | Some p -> Some (Def.Para.default p)
+  match Program.get ~name prog Key.para with
+  | p :: _ -> Some (Def.Para.default p)
+  | [] -> None
 
 let is_parameter prog v = Option.is_some (lookup_parameter prog v)
 
@@ -720,14 +718,12 @@ let provide_attributes () =
   let package = KB.Name.package name
   and name = KB.Name.unqualified name in
   Program.in_package package prog @@ fun prog ->
-  Program.get prog Key.func |>
+  Program.get ~name prog Key.func |>
   List.fold ~init:(Ok empty) ~f:(fun attrs fn ->
-      if String.equal (Def.name fn) name
-      then match attrs with
-        | Error c -> Error c
-        | Ok attrs ->
-          KB.Value.join attrs (Def.attributes fn)
-      else attrs) |> function
+      match attrs with
+      | Error c -> Error c
+      | Ok attrs ->
+        KB.Value.join attrs (Def.attributes fn)) |> function
   | Ok attrs -> !!attrs
   | Error conflict -> KB.fail conflict
 

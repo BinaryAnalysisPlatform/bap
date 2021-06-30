@@ -17,18 +17,22 @@ end
 
 module Def = Bap_primus_lisp_def
 
+type 'a defs = 'a Def.t list Map.M(String).t
+
 type package = {
-  semas : Def.sema Def.t list;
-  codes : Def.prim Def.t list;
-  macros : Def.macro Def.t list;
-  substs : Def.subst Def.t list;
-  consts : Def.const Def.t list;
-  places : Def.place Def.t list;
-  defs : Def.func Def.t list;
-  mets : Def.meth Def.t list;
-  pars : Def.para Def.t list;
-  sigs : Def.signal Def.t list;
+  semas : Def.sema defs;
+  codes : Def.prim defs;
+  macros : Def.macro defs;
+  substs : Def.subst defs;
+  consts : Def.const defs;
+  places : Def.place defs;
+  defs : Def.func defs;
+  mets : Def.meth defs;
+  pars : Def.para defs;
+  sigs : Def.signal defs;
 } [@@deriving fields]
+
+type library = package Map.M(String).t
 
 type t = {
   context : Lisp.Context.t;
@@ -43,17 +47,18 @@ type program = t
 
 let default_package = "user"
 
+let nodefs = Map.empty (module String)
 let empty_package = {
-  semas = [];
-  codes = [];
-  defs = [];
-  mets = [];
-  pars = [];
-  sigs = [];
-  macros=[];
-  substs=[];
-  consts=[];
-  places=[];
+  semas = nodefs;
+  codes = nodefs;
+  defs = nodefs;
+  mets = nodefs;
+  pars = nodefs;
+  sigs = nodefs;
+  macros=nodefs;
+  substs=nodefs;
+  consts=nodefs;
+  places=nodefs;
 }
 
 let empty = {
@@ -78,17 +83,24 @@ let is_public def =
 type def_filter = {
   visit: 'a. 'a Def.t -> bool;
 }
-let filter_package pkg {visit=f} = {
-  semas = List.filter pkg.semas ~f;
-  codes = List.filter pkg.codes ~f;
-  defs = List.filter pkg.defs ~f;
-  mets = List.filter pkg.mets ~f;
-  pars = List.filter pkg.pars ~f;
-  sigs = List.filter pkg.sigs ~f;
-  macros = List.filter pkg.macros ~f;
-  substs = List.filter pkg.substs ~f;
-  consts = List.filter pkg.consts ~f;
-  places = List.filter pkg.places ~f;
+
+let filter_defs defs {visit=f} =
+  Map.filter_map defs ~f:(fun defs ->
+      match List.filter defs ~f with
+      | [] -> None
+      | xs -> Some xs)
+
+let filter_package pkg f = {
+  semas = filter_defs pkg.semas f;
+  codes = filter_defs pkg.codes f;
+  defs = filter_defs pkg.defs f;
+  mets = filter_defs pkg.mets f;
+  pars = filter_defs pkg.pars f;
+  sigs = filter_defs pkg.sigs f;
+  macros = filter_defs pkg.macros f;
+  substs = filter_defs pkg.substs f;
+  consts = filter_defs pkg.consts f;
+  places = filter_defs pkg.places f;
 }
 
 
@@ -116,18 +128,24 @@ let fold_library library ~init ~f =
   Map.fold library ~init ~f:(fun ~key:package ~data init ->
       f ~package data init)
 
-let (++) xs ys : _ Def.t list =
+let fold_multi ~f = Map.fold ~f:(fun ~key:_ ~data x ->
+    List.fold data ~init:x ~f)
+
+let items xs = List.concat (Map.data xs)
+
+let (++) : 'a defs -> 'a defs -> 'a defs = fun xs ys ->
   let remember set def = Map.update set (Def.name def) ~f:(function
       | None -> Set.singleton (module Id) def.id
       | Some ids -> Set.add ids def.id) in
   let is_presented set def = match Map.find set (Def.name def) with
     | None -> false
     | Some ids -> Set.mem ids def.id in
-  let add (set,defs) def =
-    if is_presented set def then set,defs
-    else remember set def, def::defs in
-  let init = Map.empty (module String),[] in
-  snd@@List.fold ys ~f:add ~init:(List.fold ~init xs ~f:add)
+  let add ~key:name ~data:defs init =
+    List.fold defs ~init ~f:(fun (set,defs) def ->
+        if is_presented set def then set,defs
+        else remember set def, Map.add_multi defs name def) in
+  let init = Map.empty (module String),nodefs in
+  snd@@Map.fold ys ~f:add ~init:(Map.fold ~init xs ~f:add)
 
 let pp_defs ppf =
   Format.pp_print_list (fun ppf x ->
@@ -211,7 +229,7 @@ let merge p1 p2 = reexport {
 
 type full_access = [`Read | `Set_and_create ]
 type 'a item =
-  (full_access, package, 'a Def.t list) Fieldslib.Field.t_with_perm
+  (full_access, package, 'a defs) Fieldslib.Field.t_with_perm
 
 module Items = struct
   open Fields_of_package
@@ -228,11 +246,15 @@ module Items = struct
 end
 
 let add_to_package (fld : 'a item) x p =
-  if List.exists (Field.get fld p) ~f:(fun d ->
-      String.equal (Def.name x) (Def.name d) &&
-      Id.equal x.id d.id) then p
-  else Field.fset fld p (x :: Field.get fld p)
-
+  let defs = Field.get fld p
+  and name = Def.name x in
+  match Map.find defs name with
+  | None -> Field.fset fld p (Map.add_multi defs name x)
+  | Some ds ->
+    if List.exists ds ~f:(fun d ->
+        String.equal name (Def.name d) &&
+        Id.equal x.id d.id) then p
+    else Field.fset fld p (Map.add_multi defs name x)
 
 let is_applicable {context=global} def =
   let def_ctxt =
@@ -257,15 +279,25 @@ let add prog fld elt =
         ~init:prog.library;
   }
 
-let get p (fld : 'a item) =
+let get ?name p (fld : 'a item) =
   match Map.find p.library p.package with
   | None -> []
-  | Some pkg -> Field.get fld pkg
+  | Some pkg ->
+    let defs = Field.get fld pkg in
+    match name with
+    | None -> List.concat @@ Map.data defs
+    | Some name -> match Map.find defs name with
+      | None -> []
+      | Some xs -> xs
+
 
 let fold {library} fld ~init ~f =
   Map.fold library ~init ~f:(fun ~key:package ~data x ->
-      List.fold ~init:x (Field.get fld data) ~f:(fun x def ->
-          f ~package def x))
+      Map.fold (Field.get fld data) ~init:x
+        ~f:(fun ~key:_ ~data:defs x ->
+            List.fold defs ~init:x ~f:(fun x def ->
+                f ~package def x)))
+
 
 let in_package package p f = f {p with package}
 
@@ -380,10 +412,10 @@ module Callgraph = struct
     | {data=Set (_,x)} -> calls x
 
   (** computes a mapping from name to id of definitions  *)
-  let compute_ids defs =
+  let compute_ids (defs : library) =
     let init = Map.empty (module KB.Name) in
-    fold_library defs ~init ~f:(fun ~package {defs} init ->
-        List.fold defs ~init ~f:(fun ids def ->
+    fold_library defs ~init ~f:(fun ~package {defs} ids ->
+        fold_multi ~init:ids defs ~f:(fun ids def ->
             let name = KB.Name.create ~package (Def.name def) in
             Map.add_multi ids ~key:name ~data:def.id))
 
@@ -398,7 +430,7 @@ module Callgraph = struct
         | None -> []
         | Some x -> x in
     Map.fold ~init:G.empty defs ~f:(fun ~key:_ ~data:{defs} g ->
-        List.fold defs ~init:g ~f:(fun g def ->
+        fold_multi defs ~init:g ~f:(fun g def ->
             let g = G.Node.insert (Defun def.id) g in
             Set.fold (calls (Def.Func.body def)) ~init:g ~f:(fun g name ->
                 List.fold (ids name) ~init:g ~f:(fun g id ->
@@ -534,8 +566,8 @@ let pp_par ppf d =
     (Def.docs d)
 
 let pp_package ppf {pars; mets; defs;} =
-  let pp_items pp items =
-    fprintf ppf "@[<v>%a@]" (pp_print_list pp) items in
+  let pp_items pp xs =
+    fprintf ppf "@[<v>%a@]" (pp_print_list pp) (items xs) in
   pp_items pp_par pars;
   pp_items pp_met mets;
   pp_items pp_def defs
@@ -582,7 +614,7 @@ module Use = struct
 
   let collect {defs} =
     let init = {calls = Id.Map.empty; vars = Id.Map.empty} in
-    List.fold ~init defs ~f:(fun s def ->
+    fold_multi ~init defs ~f:(fun s def ->
         let body = Def.Func.body def in
         let bound = Def.Func.args def |>
                     List.map ~f:(fun {data={exp}} -> exp) |>
@@ -627,8 +659,8 @@ end = struct
 
   let ids_of_defs defs map reduce =
     Id.Set.union_list [
-      Id.Set.of_list @@ List.map defs ~f:(fun d -> d.id);
-      map defs ~f:reduce |> ids_of_trees
+      Id.Set.of_list @@ List.map (items defs) ~f:(fun d -> d.id);
+      map (items defs) ~f:reduce |> ids_of_trees
     ]
 
   let macro_ids prog =
@@ -698,10 +730,15 @@ end = struct
     let def = Def.Func.body,Def.Func.with_body in
     let met = Def.Meth.body,Def.Meth.with_body in
     let par = Def.Para.default,Def.Para.with_default in
-    State.List.map p.defs ~f:(reindex def macros) >>= fun defs ->
-    State.List.map p.mets ~f:(reindex met macros) >>= fun mets ->
-    State.List.map p.pars ~f:(reindex par macros) >>= fun pars ->
+    State.List.map (items p.defs) ~f:(reindex def macros) >>= fun defs ->
+    State.List.map (items p.mets) ~f:(reindex met macros) >>= fun mets ->
+    State.List.map (items p.pars) ~f:(reindex par macros) >>= fun pars ->
     State.return (defs,mets,pars)
+
+  let repack defs =
+    List.fold defs ~f:(fun defs def ->
+        Map.add_multi defs (Def.name def) def)
+      ~init:nodefs
 
   let package prog macros pkgname =
     let pkg = get_package prog pkgname in
@@ -712,7 +749,9 @@ end = struct
       sources;
       library = Map.set prog.library pkgname {
           pkg with
-          defs; mets; pars
+          defs = repack defs;
+          mets = repack mets;
+          pars = repack pars;
         }
     }
 
@@ -726,7 +765,9 @@ end = struct
           sources;
           library = Map.set prog.library package {
               pkg with
-              defs; mets; pars
+              defs = repack defs;
+              mets = repack mets;
+              pars = repack pars;
             }
         })
       ~init:prog
@@ -1375,7 +1416,7 @@ module Typing = struct
 
   let make_paras {library} =
     fold_library library ~f:(fun ~package {pars} init ->
-        List.fold pars ~init ~f:(fun pars par ->
+        fold_multi pars ~init ~f:(fun pars par ->
             let name = KB.Name.read ~package (Def.name par) in
             Set.add pars name))
       ~init:(Set.empty (module KB.Name))
@@ -1384,11 +1425,14 @@ module Typing = struct
   let gamma_equal g1 g2 = Gamma.compare g1 g2 = 0
 
   let applicable global =
-    let filter elts = List.filter elts ~f:(fun def ->
-        let def_ctxt =
-          Lisp.Attribute.Set.get Lisp.Context.t
-            (Def.attributes def) in
-        Lisp.Context.(def_ctxt <= global)) in
+    let filter elts = Map.filter_map elts ~f:(fun defs ->
+        List.filter defs ~f:(fun def ->
+            let def_ctxt =
+              Lisp.Attribute.Set.get Lisp.Context.t
+                (Def.attributes def) in
+            Lisp.Context.(def_ctxt <= global)) |> function
+        | [] -> None
+        | xs -> Some xs) in
     Map.map ~f:(fun pkg -> {
           pkg with
           defs = filter pkg.defs;
@@ -1401,12 +1445,14 @@ module Typing = struct
     | None -> None
     | Some {sigs} ->
       let name = KB.Name.unqualified name in
-      List.find sigs ~f:(fun s -> String.equal (Def.name s) name)
+      match Map.find sigs name with
+      | Some [x] -> Some x
+      | _ -> None
 
   let check_methods glob {context; library} g =
     applicable context library |>
     fold_library ~init:g ~f:(fun ~package {mets} g ->
-        List.fold mets ~init:g ~f:(fun g met ->
+        fold_multi mets ~init:g ~f:(fun g met ->
             let name = Def.name met in
             let fullname = KB.Name.read ~package name in
             match find_signal library fullname with
@@ -1427,7 +1473,7 @@ module Typing = struct
                 infer_ast glob vars (Def.Meth.body met) g))
 
   let make_defs = fold_library ~f:(fun ~package {defs} funcs ->
-      List.fold defs ~init:funcs ~f:(fun funcs def ->
+      fold_multi defs ~init:funcs ~f:(fun funcs def ->
           let name = KB.Name.read ~package (Def.name def) in
           Map.add_multi funcs name def))
       ~init:empty_names
