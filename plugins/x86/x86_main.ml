@@ -50,7 +50,8 @@ let () =
   let x32 = abi `x86 "abi" in
   let x64 = abi `x86_64 "64-abi" in
   let fp_lifter = Config.flag "with-floating-points" in
-  let backend = Config.param Config.(some string) "backend" in
+  let backend = Config.param Config.(some string) "backend"
+      ~synonyms:["64-backend"] in
   let kind =
     let kinds = ["legacy", Legacy;
                  "modern", Modern;
