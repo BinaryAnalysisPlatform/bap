@@ -24,6 +24,12 @@ jobs:
           ocaml-compiler: ocaml-variants.4.11.2+flambda
           dune-cache: true
 
+      - name: Install Ghidra
+        run: |
+          sudo add-apt-repository ppa:ivg/ghidra -y
+          sudo apt-get install libghidra-dev -y
+          sudo apt-get install libghidra-data -y
+
       - name: Add the testing Repository
         run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
       - name: Build deb packages
