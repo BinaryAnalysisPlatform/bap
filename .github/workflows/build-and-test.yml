@@ -22,12 +22,6 @@ jobs:
           ocaml-compiler: 4.08.x
           dune-cache: true
 
-      - name: Install Ghidra
-        run: |
-          sudo add-apt-repository ppa:ivg/ghidra -y
-          sudo apt-get install libghidra-dev -y
-          sudo apt-get install libghidra-data -y
-
       - name: Add the testing Repository
         run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
 
@@ -39,6 +33,12 @@ jobs:
 
       - name: Install system dependencies
         run: opam depext -u bap-extra
+
+      - name: Install Ghidra
+        run: |
+          sudo add-apt-repository ppa:ivg/ghidra -y
+          sudo apt-get install libghidra-dev -y
+          sudo apt-get install libghidra-data -y
 
       - name: Install opam dependencies
         run: |
