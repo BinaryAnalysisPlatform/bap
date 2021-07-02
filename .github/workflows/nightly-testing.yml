@@ -10,7 +10,7 @@ jobs:
     strategy:
       matrix:
         os:
-          - ubuntu-latest
+          - ubuntu-18.04
         ocaml-compiler:
           - 4.11.x
           - 4.08.x
