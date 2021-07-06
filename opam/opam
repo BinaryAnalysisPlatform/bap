@@ -52,6 +52,7 @@ build: [
     "--with-llvm-config=%{conf-bap-llvm:config}%" {conf-bap-llvm:installed}
     "--mandir=%{man}%"
     "--enable-everything"
+    "--disable-ghidra"
     "--enable-tests" {with-test}
     "--%{conf-ida:enable}%-ida"
     "--ida-path=%{conf-ida:path}%" {conf-ida:installed}
