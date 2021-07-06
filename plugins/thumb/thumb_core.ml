@@ -66,19 +66,14 @@ module Make(CT : Theory.Core) = struct
   let is_set flag = bool flag
   let is_clear flag = CT.(eq bit0 flag)
 
-  let label = KB.Object.create Theory.Program.cls
-  let data eff =
-    label >>= fun lbl ->
-    CT.blk lbl (seq eff) (seq [])
-
-  let ctrl eff =
-    label >>= fun lbl ->
-    CT.blk lbl (seq []) eff
+  let null = Theory.Label.null
+  let label = Theory.Label.fresh
+  let data eff = CT.blk null (seq eff) (seq [])
+  let ctrl eff = CT.blk null (seq []) eff
 
   let goto dst =
     Theory.Label.for_addr dst >>= fun dst ->
     ctrl (CT.goto dst)
-
 
   let with_result rd f =
     Theory.Var.fresh (Theory.Var.sort rd) >>= fun v ->

@@ -81,10 +81,6 @@ end
 
 
 module Table = struct
-  (* Bigstring.length is very slow... we should report a bug to the
-     mantis. They need to add "noalloc" to it, otherwise on each call
-     the whole GC machinery is triggered. For now we will store the
-     size, so that later we can check it for free. *)
   type t = {
     data : Bigstring.t;
     size : int;
@@ -150,7 +146,9 @@ module Reg = struct
         if reg_code = 0 then "Nil"
         else
           let off = C.insn_op_reg_name !!dis ~insn ~oper in
-          (Table.lookup (get dis).reg_table off) in
+          if reg_code < 0
+          then sprintf "%c%d" (Char.of_int_exn off) ~-reg_code
+          else Table.lookup (get dis).reg_table off in
       {reg_code; reg_name} in
     {insn; oper; data}
 
@@ -324,14 +322,21 @@ module Insn = struct
     asm  : bytes;
     kinds: kind list;
     opers: Op.t array;
+    subs : ins_info array;
   }
   type ('a,'k) t = ins_info
 
-  let sexp_of_t ins =
+  let rec sexp_of_t ins =
     let name = ins.name in
     let ops = Array.to_list ins.opers in
-    Sexp.List (Sexp.Atom name :: List.map ops ~f:(fun op ->
-        Sexp.Atom (Op.to_string op)))
+    let parent =
+      Sexp.List (Sexp.Atom name :: List.map ops ~f:(fun op ->
+          Sexp.Atom (Op.to_string op))) in
+    if Array.length ins.subs > 0
+    then
+      let subs = Array.map ins.subs ~f:sexp_of_t in
+      Sexp.List (parent :: Array.to_list subs)
+    else parent
 
   let compare {code=x} {code=y} = Int.compare x y
 
@@ -340,15 +345,36 @@ module Insn = struct
   let asm  x = Bytes.to_string x.asm
   let ops  x = x.opers
   let kinds x = x.kinds
+  let subs x = x.subs
   let is op x =
     let equal x y = Kind.compare x y = 0 in
     List.mem ~equal op.kinds x
 
-  let create ~asm ~kinds dis ~insn =
+  let rec create ?parent ~asm ~kinds dis ~insn =
+    let subs = Hashtbl.create (module Int) in
+    let opers =
+      Array.init (C.insn_ops_size !!dis ~insn) ~f:(fun oper ->
+          match C.insn_op_type !!dis ~insn ~oper with
+          | Reg -> Op.Reg Reg.(create dis ~insn ~oper)
+          | Imm -> Op.Imm Imm.(create dis ~insn ~oper)
+          | Fmm -> Op.Fmm Fmm.(create dis ~insn ~oper)
+          | Insn ->
+            let v = Imm.(create dis ~insn ~oper) in
+            let id = v.data.imm_small in
+            let sub = create ~parent:insn ~asm ~kinds dis ~insn:id in
+            let pos = Hashtbl.length subs in
+            Hashtbl.add_exn subs pos sub;
+            Op.Imm {v with data = {imm_small=pos; imm_large=None}}) in
+    let subs = Array.init (Hashtbl.length subs)
+        ~f:(Hashtbl.find_exn subs) in
     let code = C.insn_code !!dis ~insn in
-    let name =
+    let fullname =
       let off = C.insn_name !!dis ~insn in
+      KB.Name.read ~package:dis.enc @@
       Table.lookup (get dis).insn_table off in
+    let name = KB.Name.unqualified fullname
+    and encoding = KB.Name.package fullname in
+    let insn = Option.value parent ~default:insn in
     let asm =
       if asm then
         let data = Bytes.create (C.insn_asm_size !!dis ~insn) in
@@ -364,14 +390,7 @@ module Insn = struct
             then k :: ks
             else ks)
       else [] in
-    let opers =
-      Array.init (C.insn_ops_size !!dis ~insn) ~f:(fun oper ->
-          match C.insn_op_type !!dis ~insn ~oper with
-          | Reg -> Op.Reg Reg.(create dis ~insn ~oper)
-          | Imm -> Op.Imm Imm.(create dis ~insn ~oper)
-          | Fmm -> Op.Fmm Fmm.(create dis ~insn ~oper)
-          | Insn -> assert false) in
-    {code; name; asm; kinds; opers; encoding = dis.enc }
+    {code; name; asm; kinds; opers; encoding; subs }
 
   let encoding x = x.encoding
 

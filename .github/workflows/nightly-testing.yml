@@ -10,7 +10,7 @@ jobs:
     strategy:
       matrix:
         os:
-          - ubuntu-latest
+          - ubuntu-18.04
         ocaml-compiler:
           - 4.11.x
           - 4.08.x
@@ -29,30 +29,25 @@ jobs:
           dune-cache: true
           cache-prefix: nightly
 
-      - name: Configure Homebrew
-        if: matrix.os == 'macos-latest'
+      - name: Install Ghidra
         run: |
-          rm -rf /usr/local/bin/2to3
-          brew unlink gcc@8
-          brew unlink gcc@9
-          brew update
-          brew upgrade
-          echo 'LLVM_CONFIG=/usr/local/opt/llvm@9/bin/llvm-config' >> $GITHUB_ENV
+          sudo add-apt-repository ppa:ivg/ghidra -y
+          sudo apt-get install libghidra-dev -y
+          sudo apt-get install libghidra-data -y
 
       - name: Add the Testing Repository
         run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
       - name: Install System Dependencies
-        run: opam depext -u bap
+        run: opam depext -u bap-extra
 
       - name: Install radare2 Dependencies
         run: opam depext -u bap-radare2
 
       - name: Cleanup the Caches
-        if: matrix.os == 'ubuntu-latest'
         run: sudo apt clean --yes
 
       - name: Build and Install BAP
-        run: opam install bap bap-radare2
+        run: opam install bap-extra bap-radare2
 
       - name: Checkout the Tests
         uses: actions/checkout@v2

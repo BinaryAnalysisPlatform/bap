@@ -264,9 +264,8 @@ module Interpreter(Machine : Machine) = struct
 
   let lookup_parameter prog {data={exp=name}} =
     Lisp.Program.in_package (KB.Name.package name) prog @@ fun prog ->
-    Lisp.Program.get prog para |>
-    List.find ~f:(fun p ->
-        String.equal (Lisp.Def.name p) (KB.Name.unqualified name))
+    Lisp.Program.get ~name:(KB.Name.unqualified name) prog para |>
+    List.hd
 
 
   (* Still an open question. Shall we register an call to an external

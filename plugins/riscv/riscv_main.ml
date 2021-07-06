@@ -10,14 +10,15 @@ include Bap_main.Loggers()
 module Target = Bap_riscv_target
 module Dis = Disasm_expert.Basic
 
+type Extension.Error.t += Unknown_backend of string
+
 let provides = [
   "riscv";
   "riscv64";
   "riscv32";
 ]
 
-
-let provide_decoding () =
+let use_llvm_decoding () =
   KB.promise CT.Label.encoding @@ fun label ->
   CT.Label.target label >>| fun t ->
   if CT.Target.belongs Target.parent t
@@ -30,6 +31,21 @@ let provide_decoding () =
 let enable_llvm encoding triple =
   Dis.register encoding @@ fun _ ->
   Dis.create ~attrs:"+a,+c,+d,+m" ~backend:"llvm" triple
+
+let pcode = Theory.Language.declare ~package:"bap" "pcode-riscv"
+
+let enable_pcode () =
+  Dis.register pcode @@begin fun t ->
+    Dis.create ~backend:"ghidra" @@ sprintf "RISCV:LE:%d:default"
+      (Theory.Target.bits t)
+  end;
+  KB.promise Theory.Label.encoding @@begin fun label ->
+    Theory.Label.target label >>| fun t ->
+    if Theory.Target.belongs Target.parent t
+    then pcode
+    else Theory.Language.unknown
+  end
+
 
 let enable_loader () =
   let request_arch doc =
@@ -108,14 +124,24 @@ module Abi = struct
 end
 
 
-let main _ctxt =
-  enable_llvm Target.llvm64 "riscv64";
-  enable_llvm Target.llvm32 "riscv32";
+let backend =
+  let open Extension in
+  Configuration.parameter Type.(some string) "backend"
+
+let main ctxt =
   enable_loader ();
-  provide_decoding ();
   Abi.define Target.riscv32;
   Abi.define Target.riscv64;
-  Ok ()
+  match Extension.Configuration.get ctxt backend with
+  | Some "llvm" | None ->
+    use_llvm_decoding ();
+    enable_llvm Target.llvm64 "riscv64";
+    enable_llvm Target.llvm32 "riscv32";
+    Ok ()
+  | Some "ghidra" ->
+    enable_pcode ();
+    Ok ()
+  | Some s -> Error (Unknown_backend s)
 
 let () = Bap_main.Extension.declare main
     ~provides

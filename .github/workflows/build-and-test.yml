@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
 
     env:
       OPAMJOBS: 2
@@ -32,7 +32,13 @@ jobs:
         run: opam pin add bap . --no-action
 
       - name: Install system dependencies
-        run: opam depext -u bap
+        run: opam depext -u bap-extra
+
+      - name: Install Ghidra
+        run: |
+          sudo add-apt-repository ppa:ivg/ghidra -y
+          sudo apt-get install libghidra-dev -y
+          sudo apt-get install libghidra-data -y
 
       - name: Install opam dependencies
         run: |

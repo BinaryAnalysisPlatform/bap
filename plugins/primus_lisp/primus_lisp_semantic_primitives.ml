@@ -109,6 +109,22 @@ let export = Primus.Lisp.Type.Spec.[
     "(> X Y ... Z) returns one if all numbers are in monotonically \
      nonincreasing order.";
 
+    "s<", all any @-> any,
+    "(s< X Y ... Z) returns one if all numbers are in monotonically \
+     increasing signed order.";
+
+    "s>", all any @-> any,
+    "(s> X Y ... Z) returns one if all numbers are in monotonically \
+     decreasing signed order.";
+
+    "s<=", all any @-> any,
+    "(s<= X Y ... Z) returns one if all numbers are in monotonically \
+     nondecreasing signed order.";
+
+    "s>=", all any @-> any,
+    "(> X Y ... Z) returns one if all numbers are in monotonically \
+     nonincreasing signed order.";
+
     "is-zero", all any @-> any,
     "(is-zero X Y ... Z) returns one if all numbers are zero.";
 
@@ -117,10 +133,10 @@ let export = Primus.Lisp.Type.Spec.[
      true. Equivalent to (is-zero X Y Z)";
 
     "is-positive", all any @-> any,
-    "(is-zero X Y ... Z) returns one if all numbers are positive.";
+    "(is-positive X Y ... Z) returns one if all numbers are positive.";
 
     "is-negative", all any @-> any,
-    "(is-zero X Y ... Z) returns one if all numbers are negative.";
+    "(is-negative X Y ... Z) returns one if all numbers are negative.";
 
     "word-width", all any @-> any,
     "(word-width X Y ... Z) returns the maximum width of its \
@@ -129,6 +145,11 @@ let export = Primus.Lisp.Type.Spec.[
 
     "exec-addr", one int @-> any,
     "(exec-addr ADDR) transfers control flow to ADDR.";
+
+    "goto-subinstruction", one int @-> any,
+    "(goto-subinstruction N) transfers control flow to a
+    subinstruction that is N instructions away from the current (N
+    could be negative).";
 
     "load-byte", one int @-> byte,
     "(load-byte PTR) loads one byte from the address PTR";
@@ -159,7 +180,7 @@ let export = Primus.Lisp.Type.Spec.[
     "(store-word POS VAL) stores VAL at the memory position POS";
 
     "memory-write", tuple [int; byte] @-> int,
-    "(memory-write PTR X) stores X at PTR.";
+    "(memory-write PTR X) stores byte X at PTR.";
 
     "get-program-counter", unit @-> int,
     "(get-program-counter) returns the address of the current instruction";
@@ -173,6 +194,9 @@ let export = Primus.Lisp.Type.Spec.[
 
     "symbol", one any @-> sym,
     "(symbol X) returns a symbol representation of X.";
+
+    "is-symbol", one any @-> bool,
+    "(is-symbol X) is true if X has a symbolic value.";
 
     "cast-low", tuple [int; a] @-> b,
     "(cast-low S X) extracts low S bits from X.";
@@ -247,11 +271,16 @@ let nothing = KB.Value.empty Theory.Semantics.cls
 let size = Theory.Bitv.size
 let forget x = x >>| Theory.Value.forget
 let empty s = Theory.Value.(forget @@ empty s)
-let fresh = KB.Object.create Theory.Program.cls
+let null = KB.Object.null Theory.Program.cls
 let sort = Theory.Value.sort
 let bits x = size @@ sort x
 
-module Primitives(CT : Theory.Core) = struct
+module type Target = sig
+  val target : Theory.Target.t
+end
+
+module Primitives(CT : Theory.Core)(T : Target) = struct
+  open T
 
   let rec seq = function
     | [] -> CT.perform Theory.Effect.Sort.bot
@@ -411,16 +440,13 @@ module Primitives(CT : Theory.Core) = struct
   let pure res = full (seq []) res
 
   let ctrl eff =
-    let* lbl = fresh in
-    CT.blk lbl (seq []) eff
+    CT.blk null (seq []) eff
 
   let data eff =
-    let* lbl = fresh in
-    CT.blk lbl eff (seq [])
+    CT.blk null eff (seq [])
 
   let memory eff res =
-    let* lbl = fresh in
-    full CT.(blk lbl (perform eff) skip) res
+    full CT.(blk null (perform eff) skip) res
 
   let loads = memory Theory.Effect.Sort.rmem
   let stores = memory Theory.Effect.Sort.wmem
@@ -446,6 +472,19 @@ module Primitives(CT : Theory.Core) = struct
     | Some bitv ->
       Theory.Label.for_addr bitv >>= fun dst ->
       CT.goto dst
+
+  let goto_subinstruction lbl xs =
+    let open Bap.Std in
+    unary xs >>= bitv >>= fun dst ->
+    match const dst with
+    | None -> CT.jmp !!dst
+    | Some dst ->
+      KB.collect Insn.Seqnum.slot lbl >>= function
+      | None -> illformed "not a subinstruction"
+      | Some pos ->
+        let dst = Bitvec.to_int dst + pos in
+        Bap.Std.Insn.Seqnum.label dst >>=
+        CT.goto
 
   let load_byte t xs =
     let mem = CT.var @@ Theory.Target.data t in
@@ -545,11 +584,9 @@ module Primitives(CT : Theory.Core) = struct
   let sreciprocal = one_op_x Bitvec.sdiv CT.sdiv
 
   let get_pc s lbl =
-    KB.collect Primus.Lisp.Semantics.definition lbl >>= function
+    KB.collect Theory.Label.addr lbl >>= function
     | None -> !!(empty s)
-    | Some lbl -> KB.collect Theory.Label.addr lbl >>= function
-      | None -> !!(empty s)
-      | Some addr -> forget@@const_int s addr
+    | Some addr -> forget@@const_int s addr
 
   let set_symbol v x =
     match KB.Value.get var_slot v with
@@ -564,6 +601,11 @@ module Primitives(CT : Theory.Core) = struct
       intern (Theory.Var.name var) >>= const_int s |> forget
     | None ->
       illformed "symbol requires a value reified to a variable"
+
+  let is_symbol v =
+    forget@@match KB.Value.get var_slot v with
+    | Some _ -> true_
+    | _ -> false_
 
   let mk_cast t cast xs =
     binary xs @@ fun sz x ->
@@ -641,24 +683,39 @@ module Primitives(CT : Theory.Core) = struct
               CT.append s !!r
                 (CT.extract b1 (int s b) (int s b) !!x))
 
-  let target lbl =
-    KB.collect Primus.Lisp.Semantics.definition lbl >>= function
-    | None -> Theory.Label.target lbl
-    | Some lbl -> Theory.Label.target lbl
+  let bits = Theory.Target.bits target
+  module Z = struct
+    include Bitvec.Make(struct
+        let modulus = Bitvec.modulus bits
+      end)
+    let is_zero = Bitvec.equal zero
+    let is_negative = msb
+    let is_positive x =
+      not (is_negative x) && not (is_zero x)
+  end
+
+  let s = Theory.Bitv.define bits
+
+  module SBitvec = struct
+    let compare x y =
+      let module Bitv = Bitvec.Make(struct
+          let modulus = Bitvec.modulus (Theory.Bitv.size s)
+        end) in
+      let x_is_neg = Bitv.msb x and y_is_neg = Bitv.msb y in
+      match x_is_neg, y_is_neg with
+      | true,false -> -1
+      | false,true -> 1
+      | _ -> Bitvec.compare x y
+
+    let (<) x y = compare x y < 0
+    let (>) x y = compare x y > 0
+    let (=) x y = compare x y = 0
+    let (<=) x y = compare x y <= 0
+    let (>=) x y = compare x y >= 0
+  end
 
   let dispatch lbl name args =
-    target lbl >>= fun t ->
-    let bits = Theory.Target.bits t in
-    let module Z = struct
-      include Bitvec.Make(struct
-          let modulus = Bitvec.modulus bits
-        end)
-      let is_zero = Bitvec.equal zero
-      let is_negative = msb
-      let is_positive x =
-        not (is_negative x) && not (is_zero x)
-    end in
-    let s = Theory.Bitv.define bits in
+    let t = target in
     match name,args with
     | "+",_-> pure@@monoid s Z.add CT.add Z.zero args
     | "-",[x]|"neg",[x] -> pure@@neg x
@@ -679,15 +736,20 @@ module Primitives(CT : Theory.Core) = struct
     | "logxor",_-> pure@@monoid s Z.logxor CT.logxor Z.zero args
     | "=",_-> pure@@order Bitvec.(=) CT.eq args
     | "<",_-> pure@@order Bitvec.(<) CT.ult args
+    | "s<",_ -> pure@@order SBitvec.(<) CT.slt args
     | ">",_-> pure@@order Bitvec.(>) CT.ugt args
+    | "s>",_ -> pure@@order SBitvec.(>) CT.sgt args
     | "<=",_-> pure@@order Bitvec.(<=) CT.ule args
     | ">=",_-> pure@@order Bitvec.(>=) CT.uge args
+    | "s<=",_-> pure@@order SBitvec.(<=) CT.ule args
+    | "s>=",_-> pure@@order SBitvec.(>=) CT.uge args
     | "/=",_| "distinct",_-> pure@@forget@@distinct args
     | "is-zero",_| "not",_-> pure@@all Bitvec.(equal zero) CT.is_zero args
     | "is-positive",_-> pure@@all Z.is_positive is_positive args
     | "is-negative",_-> pure@@all Z.is_negative is_negative args
     | "word-width",_-> pure@@word_width s args
     | "exec-addr",_-> ctrl@@exec_addr args
+    | "goto-subinstruction",_ -> ctrl@@goto_subinstruction lbl args
     | ("load-byte"|"memory-read"),_-> pure@@load_byte t args
     | "load-word",_-> pure@@load_word t args
     | "load-hword",_-> pure@@load_half t args
@@ -700,6 +762,7 @@ module Primitives(CT : Theory.Core) = struct
     | "get-current-program-counter",[] -> pure@@get_pc s lbl
     | "set-symbol-value",[sym;x] -> data@@set_symbol sym x
     | "symbol",[x] ->  pure@@symbol s x
+    | "is-symbol", [x] -> pure@@is_symbol x
     | "cast-low",xs -> pure@@low xs
     | "cast-high",xs -> pure@@high xs
     | "cast-signed",xs -> pure@@signed xs
@@ -1199,32 +1262,20 @@ let enable_var_theory () =
     ~desc:"tracks terms that are variables"
     (KB.return (module VarTheory : Theory.Core))
 
+
 let provide () =
-  KB.Rule.(begin
-      declare "primus-lisp-core-primitives" |>
-      require Lisp.name |>
-      require Lisp.args |>
-      provide Theory.Semantics.slot |>
-      comment "implements semantics for the core primitives"
-    end);
-  List.iter export ~f:(fun (name,types,docs) ->
-      Primus.Lisp.Semantics.declare ~types ~docs ~package:"core" name);
   enable_var_theory ();
-  let (let*?) x f = x >>= function
-    | None -> !!nothing
-    | Some x -> f x in
-  KB.promise Theory.Semantics.slot @@ fun obj ->
-  let*? name = KB.collect Lisp.name obj in
-  let*? args = KB.collect Lisp.args obj in
-  if String.equal (KB.Name.package name) "core"
-  then
-    Theory.instance () >>= Theory.require >>= fun (module CT) ->
-    let module P = Primitives(CT) in
-    KB.catch (P.dispatch obj (KB.Name.unqualified name) args) @@ function
-    | Illformed err ->
-      KB.fail (Failed_primitive (name,args,err))
-    | other -> KB.fail other
-  else !!nothing
+  List.iter export ~f:(fun (name,types,docs) ->
+      Primus.Lisp.Semantics.declare ~types ~docs ~package:"core" name
+        ~body:(fun target ->
+            Theory.instance () >>= Theory.require >>= fun (module CT) ->
+            let module Target = struct let target = target end in
+            let module P = Primitives(CT)(Target) in
+            KB.return @@ fun obj args ->
+            KB.catch (P.dispatch obj name args) @@ function
+            | Illformed err ->
+              KB.fail (Failed_primitive (assert false,args,err))
+            | other -> KB.fail other))
 
 
 let enable_extraction () =

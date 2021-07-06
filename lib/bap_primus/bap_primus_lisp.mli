@@ -151,9 +151,14 @@ module Semantics : sig
   val symbol : (Theory.Value.cls, String.t option) KB.slot
   val static : (Theory.Value.cls, Bitvec.t option) KB.slot
   val enable : ?stdout:Format.formatter -> unit -> unit
+
   val declare :
     ?types:Type.signature ->
-    ?docs:string -> ?package:string -> string -> unit
+    ?docs:string ->
+    ?package:string ->
+    ?body:(Theory.Target.t -> (Theory.Label.t -> Theory.Value.Top.t list -> unit Theory.eff) KB.t) ->
+    string -> unit
+
 
   val documentation : Theory.Unit.t -> Doc.index KB.t
 end

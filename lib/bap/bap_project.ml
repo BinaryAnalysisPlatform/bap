@@ -39,22 +39,22 @@ let memory_slot = KB.Class.property Theory.Unit.cls "unit-memory"
     ~desc:"annotated memory regions of the unit"
     Memmap.domain
 
-let with_filename spec target code memory path =
+let with_filename spec target _code memory path f =
   let open KB.Syntax in
   let width = Theory.Target.code_addr_size target in
   let bias = query spec Image.Scheme.bias |> Option.map
                ~f:(fun x -> Bitvec.(int64 x mod modulus width)) in
+  Theory.Unit.for_file path >>= fun unit ->
+  KB.sequence [
+    KB.provide Image.Spec.slot unit spec;
+    KB.provide Theory.Unit.bias unit bias;
+    KB.provide Theory.Unit.target unit target;
+    KB.provide Image.Spec.slot unit spec;
+    KB.provide Theory.Unit.path unit (Some path);
+    KB.provide memory_slot unit memory;
+  ] >>= fun () ->
   KB.promising Theory.Label.unit ~promise:(fun _ ->
-      Theory.Unit.for_file path >>= fun unit ->
-      KB.sequence [
-        KB.provide Image.Spec.slot unit spec;
-        KB.provide Theory.Unit.bias unit bias;
-        KB.provide Theory.Unit.target unit target;
-        KB.provide Image.Spec.slot unit spec;
-        KB.provide Theory.Unit.path unit (Some path);
-        KB.provide memory_slot unit memory;
-      ] >>| fun () ->
-      Some unit)
+      !!(Some unit)) f
 
 
 module State = struct

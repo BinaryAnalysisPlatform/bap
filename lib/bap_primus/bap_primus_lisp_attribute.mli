@@ -11,7 +11,8 @@ open Bap_primus_lisp_types
 open Bap_core_theory
 
 type 'a t
-type set
+type cls
+type set = (cls, unit) KB.cls KB.value
 
 type error = ..
 exception Unknown_attr of string * tree

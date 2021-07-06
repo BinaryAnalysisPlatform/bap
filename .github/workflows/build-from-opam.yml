@@ -10,7 +10,7 @@ jobs:
           - 4.11.x
           - 4.08.x
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
 
     env:
       OPAMJOBS: 2
@@ -23,11 +23,17 @@ jobs:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
           dune-cache: true
 
+      - name: Install Ghidra
+        run: |
+          sudo add-apt-repository ppa:ivg/ghidra -y
+          sudo apt-get install libghidra-dev -y
+          sudo apt-get install libghidra-data -y
+
       - name: Add the testing Repository
         run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
 
       - name: Install system dependencies
-        run: opam depext -u bap
+        run: opam depext -u bap-extra
 
       - name: Cleanup the Caches
         run: sudo apt clean --yes
@@ -36,7 +42,7 @@ jobs:
         run: df -h
 
       - name: Build and Install BAP Packages
-        run: opam clean -a; opam install bap
+        run: opam clean -a; opam install bap-extra
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}

@@ -24,7 +24,7 @@ let provide_bir () =
            comment "reifies IR");
   KB.promise Theory.Semantics.slot @@ fun obj ->
   KB.collect Theory.Semantics.slot obj >>| fun sema ->
-  match Bil_ir.reify @@  KB.Value.get Bil_ir.slot sema with
+  match Bil_ir.reify @@ KB.Value.get Bil_ir.slot sema with
   | [] -> Insn.empty
   | bir -> KB.Value.put Term.slot sema bir
 
@@ -318,7 +318,6 @@ let provide_basic () =
   KB.collect Disasm_expert.Basic.Insn.slot obj >>= function
   | None -> !!Theory.Semantics.empty
   | Some insn ->
-    KB.Object.repr Theory.Program.cls obj >>= fun lbl ->
     KB.collect Bil.code obj >>| function
     | [] -> Theory.Semantics.empty
     | bil -> Insn.of_basic ~bil insn

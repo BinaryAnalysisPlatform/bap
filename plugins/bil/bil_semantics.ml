@@ -406,10 +406,14 @@ module Basic : Theory.Basic = struct
       y >>= fun y ->
       eff (effect x @ effect y)
 
-    let blk _ x y =
+    let blk lbl x y =
       x >>:= fun x ->
       y >>:= fun y ->
-      eff (x @ y)
+      if KB.Object.is_null lbl
+      then eff (x @ y)
+      else
+        let dst = Tid.to_string lbl in
+        eff Bil.(encode label dst :: x @ y)
 
     let recursive_simpl = Exp.simpl ~ignore:Bap.Std.Eff.[load;store;read]
 
@@ -441,7 +445,7 @@ module Basic : Theory.Basic = struct
       dst >>= fun dst -> ctrl [Bil.Jmp (bitv_exp dst)]
 
     let goto lbl = ctrl [
-        Bil.special @@ Format.asprintf "(goto %a)" Tid.pp lbl
+        Bil.(encode goto (Tid.to_string lbl))
       ]
 
 
@@ -504,7 +508,7 @@ module Basic : Theory.Basic = struct
       | None -> KB.collect Theory.Label.name lbl >>= fun name ->
         ctrl @@ match name with
         | Some name -> [Bil.(encode call name)]
-        | None -> [Bil.special (Format.asprintf "(goto %a)" Tid.pp lbl)]
+        | None -> [Bil.(encode goto (Tid.to_string lbl))]
 
 
   let fbits x =

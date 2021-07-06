@@ -49,7 +49,7 @@ module Systemz(CT : Theory.Core) = struct
      packs them into a basic block that has the required type of [unit
      eff].  *)
   let data xs =
-    KB.Object.create Theory.Program.cls >>= fun lbl ->
+    let lbl = KB.Object.null Theory.Program.cls in
     CT.blk lbl (seq xs) (seq [])
 
   let (@) = CT.append r64

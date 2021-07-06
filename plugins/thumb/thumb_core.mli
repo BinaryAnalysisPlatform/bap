@@ -51,8 +51,13 @@ module Make(CT : Theory.Core) : sig
   val load : 'a Bitv.t Value.sort -> r32 bitv -> 'a bitv
   val store : r32 bitv -> 'a bitv -> data eff
 
+
+  (** [null] is shorcut for [Theory.Label.null]  *)
+  val null : Theory.label
+
   (** [label] a fresh label  *)
   val label : Theory.label KB.t
+
   (** [data eff] labels [eff] as data effects  *)
   val data : data eff list -> unit eff
 

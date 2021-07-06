@@ -115,4 +115,4 @@ val llvm_a64 : Theory.language
     a symbol there with an odd address (which is used to indicate
     thumb encoding) then interworking is enabled.
 *)
-val load : ?interworking:bool -> unit -> unit
+val load : ?interworking:bool -> ?backend:string -> unit -> unit

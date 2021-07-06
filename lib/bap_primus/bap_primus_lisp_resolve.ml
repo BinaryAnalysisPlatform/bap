@@ -151,7 +151,7 @@ let run choose namespace overload prog item name =
   Program.in_package (KB.Name.package name) prog @@ fun prog ->
   let name = KB.Name.unqualified name in
   let ctxts = Program.context prog in
-  let defs = Program.get prog item in
+  let defs = Program.get ~name prog item in
   let s1 = stage1 namespace defs name in
   let s2 = stage2 ctxts s1 in
   let s3 = stage3 s2 in

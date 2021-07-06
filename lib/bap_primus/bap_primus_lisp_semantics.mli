@@ -21,7 +21,9 @@ val declare :
   ?types:(Theory.Target.t -> Bap_primus_lisp_type.signature) ->
   ?docs:string ->
   ?package:string ->
-  string -> unit
+  ?body:(Theory.Target.t -> (Theory.Label.t -> Theory.Value.Top.t list -> unit Theory.eff) KB.t) ->
+  string ->
+  unit
 
 module Unit : sig
   val create : ?name:string -> Theory.Target.t -> Theory.Unit.t KB.t

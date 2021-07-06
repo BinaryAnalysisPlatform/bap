@@ -2412,6 +2412,18 @@ module Std : sig
     val intrinsic: string Attribute.t
 
 
+    (** [label] a named code location.
+
+        @since 2.4.0  *)
+    val label : string Attribute.t
+
+
+    (** [goto] represents a control-flow transfer to a named label.
+
+        @since 2.4.0 *)
+    val goto : string Attribute.t
+
+
     (** Core Theory specification of BIL.  *)
     module Theory : sig
 
@@ -6975,6 +6987,40 @@ module Std : sig
     (** [pp_adt] prints instruction in ADT format, suitable for reading
         by evaluating in many languages, e.g. Python, Js, etc *)
     val pp_adt : Format.formatter -> t -> unit
+
+
+    (** Subinstruction Sequence Number.
+
+        A subinstruction sequence number plays the role of an address
+        for sub-instruction (which otherwise share the same physical
+        address).
+
+        Each subinstruction is having a unique address across the
+        whole program (not only unique across to other subinstructions
+        of the same instruction) and much like [Theory.Label.for_addr]
+        it is possible to get a label that corresponds to an
+        instruction with the given sequence number using
+        [Seqnum.label].
+
+        The sequence number is represented with an integer to enable
+        address arithemetics. A subinstruction that follows a
+        subinstruction with the sequence number [N] has the sequence
+        number [N+1].
+
+        @since 2.4.0
+    *)
+    module Seqnum : sig
+      type t = int
+
+
+      (** [label seqnum] returns the program label that corresponds
+          to [seqnum].  *)
+      val label : ?package:string -> t -> Theory.Label.t KB.t
+
+      (** [slot] for accessing the sequence number of a subinstruction.  *)
+      val slot : (Theory.program, t option) KB.slot
+    end
+
 
     (** {3 Prefix Tree}
         This module provides a trie data structure where a sequence of

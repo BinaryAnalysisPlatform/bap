@@ -60,7 +60,8 @@ reg operand_value<reg>(operand op) {
 
 template <>
 imm operand_value<imm>(operand op) {
-    assert(op.type == bap_disasm_op_imm);
+    assert(op.type == bap_disasm_op_imm ||
+           op.type == bap_disasm_op_insn);
     return op.imm_val;
 }
 
@@ -73,14 +74,13 @@ fmm operand_value<fmm>(operand op) {
 class disassembler {
     using predicates = std::vector<bap_disasm_insn_p_type>;
     using pred = predicates::value_type;
-    using subkey = std::pair<int,int>;
 
     shared_ptr<disassembler_interface> dis;
     predicates supported_predicates;
     predicates preds;
     vector<insn> insns;
+    vector<insn> subs;
     vector<string>  asms;
-    string asm_cache;
     vector<predicates> insn_preds;
     uint64_t base;
     int off;
@@ -157,6 +157,7 @@ public:
 
     void clear_insns() {
         insns.clear();
+        subs.clear();
         asms.clear();
         insn_preds.clear();
     }
@@ -182,12 +183,12 @@ public:
             return (insns[n].code == 0);
         }
 
-        if (store_preds) {
+        if (store_preds && n >= 0) {
             assert(n >= 0 && n < insn_preds.size());
             auto beg = insn_preds[n].begin(), end = insn_preds[n].end();
             return std::binary_search(beg, end, p);
         } else {
-            assert (n == queue_size() - 1);
+            assert (n == queue_size() - 1 || n < 0);
             return dis->satisfies(p);
         }
     }
@@ -197,13 +198,11 @@ public:
             assert(n >= 0 && n < asms.size());
             return asms[n];
         } else {
-            assert(n == queue_size() - 1);
-            if (asms.size() == 1)
+            assert(n == queue_size() - 1 || n < 0);
+            if (asms.size() == 1) {
                 return asms[0];
-            else {
-                if (asm_cache.empty())
-                    asm_cache = dis->get_asm();
-                return asm_cache;
+            } else {
+                return dis->get_asm();
             }
         }
     }
@@ -217,8 +216,7 @@ public:
     }
 
     const insn& nth_insn(int i) const {
-        assert(i < insns.size());
-        return insns[i];
+        return (i < 0) ? subs[-i-1] : insns[i];
     }
 
     template <typename OpVal>
@@ -239,8 +237,7 @@ private:
         dis->step(base + off);
         auto insn = dis->get_insn();
         off = insn.loc.off + insn.loc.len;
-        insns.push_back(insn);
-        asm_cache.clear();
+        push(insn);
 
         if (store_asms) {
             asms.push_back(dis->get_asm());
@@ -266,6 +263,16 @@ private:
                     return dis->satisfies(p);
                 });
         }
+    }
+
+    void push(insn i) {
+        for (auto &op : i.ops) {
+            if (op.type == bap_disasm_op_insn) {
+                subs.push_back(*op.sub_val);
+                op.imm_val = -subs.size();
+            }
+        }
+        insns.push_back(i);
     }
 };
 
@@ -443,4 +450,8 @@ imm bap_disasm_insn_op_imm_value(int d, int i, int op) {
 
 fmm bap_disasm_insn_op_fmm_value(int d, int i, int op) {
     return get(d)->oper_value<fmm>(i,op);
+}
+
+int bap_disasm_insn_op_insn_value(int d, int i, int op) {
+    return bap_disasm_insn_op_imm_value(d, i, op);
 }

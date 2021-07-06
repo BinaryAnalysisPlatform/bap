@@ -87,7 +87,7 @@ module Make(S : Core) = struct
 
   let pass = perform Effect.Sort.bot
   let skip = perform Effect.Sort.bot
-  let newlabel = Knowledge.Object.create Program.cls
+  let null = Program.Label.null
 
   let rec expw : type s b e r.
     context ->
@@ -397,7 +397,7 @@ module Make(S : Core) = struct
   and stmts : type e s r.
     context ->
     (e,r,s) parser -> s list -> unit eff = fun ctxt self -> function
-    | [] -> newlabel >>= fun lbl -> blk lbl pass skip
+    | [] -> blk null pass skip
     | x :: xs ->
       self.stmt (module struct
         type nonrec t = unit eff
@@ -410,25 +410,21 @@ module Make(S : Core) = struct
         let bind exp body =
           exp >>-> fun s exp ->
           Var.fresh s >>= fun v ->
-          newlabel >>= fun lbl ->
-          let b1 = blk lbl (set v !!exp) skip in
+          let b1 = blk null (set v !!exp) skip in
           seq b1 (body v)
 
         let error = Knowledge.fail Error
 
         let special _ =
-          newlabel >>= fun lbl ->
-          seq (blk lbl pass skip) (next xs)
+          seq (blk null pass skip) (next xs)
 
         let cpuexn n =
           Label.for_ivec n >>= fun dst ->
-          newlabel >>= fun lbl ->
-          seq (blk lbl pass (goto dst)) (next xs)
+          seq (blk null pass (goto dst)) (next xs)
 
         let while_ cnd ys =
-          newlabel >>= fun lbl ->
           seq
-            (blk lbl (repeat (expb ctxt self cnd) (stmtd ctxt self ys)) skip)
+            (blk null (repeat (expb ctxt self cnd) (stmtd ctxt self ys)) skip)
             (next xs)
 
         let if_ cnd yes nay =
@@ -439,23 +435,19 @@ module Make(S : Core) = struct
             (next xs)
 
         let jmp exp =
-          newlabel >>= fun lbl ->
-          seq (blk lbl pass (jmp (expw ctxt self exp))) (next xs)
+          seq (blk null pass (jmp (expw ctxt self exp))) (next xs)
 
         let call name =
-          newlabel >>= fun lbl ->
           Label.for_name name >>= fun dst ->
           Knowledge.provide Label.is_subroutine dst (Some true) >>= fun () ->
-          seq (blk lbl pass (goto dst)) (next xs)
+          seq (blk null pass (goto dst)) (next xs)
 
         let goto addr =
-          newlabel >>= fun lbl ->
           Label.for_addr addr >>= fun dst ->
-          seq (blk lbl pass (goto dst)) (next xs)
+          seq (blk null pass (goto dst)) (next xs)
 
         let move eff =
-          newlabel >>= fun lbl ->
-          seq (blk lbl eff skip) (next xs)
+          seq (blk null eff skip) (next xs)
         let set_bit var exp = move (set_bit ctxt self var exp)
         let set_reg var sz exp = move (set_reg ctxt self var sz exp)
         let set_mem var ks vs exp = move (set_mem ctxt self var ks vs exp)

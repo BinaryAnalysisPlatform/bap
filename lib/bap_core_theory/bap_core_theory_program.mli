@@ -86,6 +86,8 @@ module Label : sig
   val possible_name : (program, string option opinions) slot
   val is_valid : (program, bool option) slot
   val is_subroutine : (program, bool option) slot
+  val fresh : t knowledge
+  val null : t
   val for_addr : ?package:string -> Bitvec.t -> t knowledge
   val for_name : ?package:string -> string -> t knowledge
   val for_ivec : ?package:string -> int -> t knowledge

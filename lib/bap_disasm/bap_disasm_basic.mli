@@ -101,6 +101,7 @@ module Insn : sig
   val is : ('a,kinds) t -> kind -> bool
   val asm : (asm,'k) t -> string
   val ops  : ('a,'k) t -> op array
+  val subs : ('a,'k) t -> ('a,'k) t array
   val slot : (Theory.program,full_insn option) KB.slot
 end
 

@@ -37,9 +37,12 @@ module MIPS32_le = Make(M32LE)
 module MIPS64 = Make(M64BE)
 module MIPS64_le = Make(M64LE)
 
+let backend = Config.param Config.(some string) "backend"
+    ~doc:"Specify which backend to use"
+
 let () =
-  Config.when_ready (fun _ ->
-      Bap_mips_target.load ();
+  Config.when_ready (fun {get} ->
+      Bap_mips_target.load ?backend:(get backend) ();
       register_target `mips (module MIPS32);
       register_target `mipsel (module MIPS32_le);
       register_target `mips64 (module MIPS64);

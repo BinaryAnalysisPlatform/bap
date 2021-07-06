@@ -251,6 +251,9 @@ module Label = struct
 
   open Knowledge.Syntax
 
+  let null = Knowledge.Object.null cls
+  let fresh = Knowledge.Object.create cls
+
   let for_name ?package s =
     Knowledge.Symbol.intern ?package s cls >>= fun obj ->
     Knowledge.provide name obj (Some s) >>| fun () -> obj

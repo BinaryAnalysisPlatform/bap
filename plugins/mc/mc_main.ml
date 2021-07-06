@@ -343,7 +343,7 @@ let print_insn_memory formats mem =
 
 let print_knowledge formats =
   List.iter formats ~f:(fun _ ->
-      printf "%a" KB.pp_state (Toplevel.current ()))
+      printf "%a@." KB.pp_state (Toplevel.current ()))
 
 let print_insn insn_formats insn =
   List.iter insn_formats ~f:(fun fmt ->
@@ -353,13 +353,13 @@ let print_insn insn_formats insn =
 let print_bil formats insn =
   let bil = Insn.bil insn in
   List.iter formats ~f:(fun fmt ->
-      printf "%s@." (Bytes.to_string @@ Bil.to_bytes ~fmt bil))
+      printf "%a@." Bytes.pp (Bil.to_bytes ~fmt bil))
 
 let print_bir formats insn  =
   let bs = Blk.from_insn insn in
   List.iter formats ~f:(fun fmt ->
-      printf "%s" @@ String.concat ~sep:"\n"
-        (List.map bs ~f:(fun b -> Bytes.to_string @@ Blk.to_bytes ~fmt b)))
+      List.iter bs ~f:(fun b ->
+          printf "%a@." Bytes.pp (Blk.to_bytes ~fmt b)))
 
 let print_sema formats sema = match formats with
   | [] -> ()

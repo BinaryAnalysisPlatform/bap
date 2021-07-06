@@ -166,6 +166,51 @@ module Slot = struct
       ~persistent
       ~public:true
       ~desc:"a set of destinations of a control-flow instruction"
+
+
+  type KB.Conflict.t += Different_sizes
+
+  let subs =
+    let dom = Theory.Semantics.domain in
+    let open KB.Order in
+    let exception Escape of KB.Conflict.t in
+    let order x y = match x,y with
+      | [||],[||] -> EQ
+      | [||],_ -> LT
+      | _,[||] -> GT
+      | xs, ys ->
+        if Array.length xs <> Array.length ys then NC
+        else Array.fold2_exn xs ys ~init:EQ ~f:(fun result x y ->
+            match result with
+            | NC -> NC
+            | _ -> match result, KB.Domain.order dom x y with
+              | EQ, GT -> GT
+              | EQ, LT -> LT
+              | r, r' -> if Poly.equal r r' then r' else NC) in
+    let join xs ys = match xs, ys with
+      | [||],x | x,[||] -> Ok x
+      | xs, ys ->
+        try
+          if Array.length xs <> Array.length ys
+          then Error Different_sizes
+          else Result.return @@ Array.map2_exn xs ys ~f:(fun x y ->
+              match KB.Domain.join dom x y with
+              | Ok z -> z
+              | Error problem -> raise (Escape problem))
+        with Escape problem -> Error problem in
+    let inspect xs =
+      Sexp.List (List.map ~f:(KB.Domain.inspect dom)
+                   (Array.to_list xs)) in
+    let domain = KB.Domain.define ~empty:[||] "instructions"
+        ~order ~join ~inspect in
+    KB.Class.property Theory.Semantics.cls "subinstructions"
+      ~package:"bap"
+      ~public:true
+      ~desc:"a sequence of subinstructions"
+      ~persistent:(KB.Persistent.of_binable (module struct
+                     type t = Theory.Semantics.t array [@@deriving bin_io]
+                   end))
+      domain
 end
 
 let normalize_asm asm =
@@ -355,6 +400,71 @@ include Regular.Make(struct
 
 let pp_asm ppf insn =
   Format.fprintf ppf "%s" (normalize_asm (asm insn))
+
+
+module Seqnum = struct
+  type t = int
+  let slot = KB.Class.property Theory.Program.cls "seqnum"
+      ~public:true
+      ~persistent:(KB.Persistent.of_binable (module struct
+                     type t = Int.t option [@@deriving bin_io]
+                   end))
+      ~desc:"the sequential number of a subinstruction"
+      ~package:"bap" @@
+    KB.Domain.optional "int"
+      ~inspect:Int.sexp_of_t
+      ~equal:Int.equal
+
+  let freshnum =
+    let cls = KB.Class.declare "seqnum-generator" ()
+        ~package:"bap" in
+    let open KB.Syntax in
+    KB.Object.create cls >>| KB.Object.id >>| Int63.to_int_exn
+
+  let label ?package num =
+    let open KB.Syntax in
+    let s = Format.asprintf "subinstruction#%a" Int.pp num in
+    KB.Symbol.intern ?package s Theory.Program.cls >>= fun obj ->
+    KB.provide slot obj (Some num) >>| fun () ->
+    obj
+
+  let fresh = KB.Syntax.(freshnum >>= label)
+end
+
+
+
+let provide_sequence_semantics () =
+  let open KB.Syntax in
+  KB.promise Theory.Semantics.slot @@ fun obj ->
+  KB.collect Insn.slot obj >>= function
+  | None -> !!Theory.Semantics.empty
+  | Some insn when not (String.equal (Insn.name insn) "seq") ->
+    !!Theory.Semantics.empty
+  | Some insn -> match Insn.subs insn with
+    | [||] -> !!Theory.Semantics.empty
+    | subs ->
+      Theory.instance () >>= Theory.require >>= fun (module CT) ->
+      let subs = Array.to_list subs |>
+                 List.map ~f:(fun sub ->
+                     Seqnum.fresh >>| fun lbl ->
+                     lbl,sub) in
+      KB.all subs >>=
+      KB.List.map ~f:(fun (obj,sub) ->
+          KB.provide Insn.slot obj (Some sub) >>= fun () ->
+          KB.collect Theory.Semantics.slot obj >>= fun sema ->
+          let nil = Theory.Effect.empty Theory.Effect.Sort.bot in
+          CT.seq (CT.blk obj !!nil !!nil) !!sema) >>=
+      KB.List.reduce ~f:(fun s1 s2 -> CT.seq !!s1 !!s2) >>| function
+      | None -> empty
+      | Some sema -> with_basic sema insn
+
+let () =
+  let open KB.Rule in
+  declare "sequential-instruction" |>
+  require Insn.slot |>
+  provide Theory.Semantics.slot |>
+  comment "computes sequential instructions semantics";
+  provide_sequence_semantics ()
 
 let () =
   Data.Write.create ~pp:Adt.pp () |>
