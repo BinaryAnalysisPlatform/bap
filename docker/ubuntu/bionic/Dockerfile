@@ -2,9 +2,9 @@ FROM ocaml/opam2:ubuntu-18.04
 
 WORKDIR /home/opam
 
-RUN sudo add-apt-repository ppa:ivg/ghidra -y
- && sudo apt-get install libghidra-dev -y
- && sudo apt-get install libghidra-data -y
+RUN sudo add-apt-repository ppa:ivg/ghidra -y \
+ && sudo apt-get install libghidra-dev -y \
+ && sudo apt-get install libghidra-data -y \
  && sudo apt-get update  \
  && opam switch 4.09 \
  && eval "$(opam env)" \
