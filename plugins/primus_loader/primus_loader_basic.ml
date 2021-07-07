@@ -22,7 +22,8 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
   module Val = Primus.Value.Make(Machine)
 
   let make_word addr =
-    Machine.gets Project.target >>| Theory.Target.bits >>| fun width ->
+    Machine.gets Project.target >>|
+    Theory.Target.code_addr_size >>| fun width ->
     Addr.of_int64 ~width addr
 
   let set_word name x =
