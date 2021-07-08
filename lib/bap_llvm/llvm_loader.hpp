@@ -98,6 +98,18 @@ void verbose_fails(const error_or<T> &loaded) {
     }
 }
 
+int addr_size(const Triple &target, const object::ObjectFile *obj) {
+    if (target.isArch64Bit()) {
+        return 64;
+    } else if (target.isArch32Bit()) {
+        return 32;
+    } else if (target.isArch16Bit()) {
+        return 16;
+    } else {
+        return obj->getBytesInAddress() * 8;
+    }
+}
+
 void emit_common_header(ogre_doc &s, const object::ObjectFile *obj) {
     s.raw_entry(scheme);
     auto target = obj->makeTriple();
@@ -106,7 +118,7 @@ void emit_common_header(ogre_doc &s, const object::ObjectFile *obj) {
     s.entry("vendor") << target.getVendorName();
     s.entry("system") << target.getOSName();
     s.entry("abi") << prim::string_of_abi(target.getEnvironment());
-    s.entry("bits") << (obj->getBytesInAddress() * 8);
+    s.entry("bits") << addr_size(target, obj);
     s.entry("is-little-endian") << target.isLittleEndian();
 }
 
