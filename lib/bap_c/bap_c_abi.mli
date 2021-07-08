@@ -107,7 +107,7 @@ end
     function. The DSL describes the semantics of argument passing that
     is then reified to the [args] structure. The [DSL] is a choice
     monad that enables describing the argument passing grammar using
-    backtracing when the chosen strategy doesn't fit. The [reject ()]
+    backtracking when the chosen strategy doesn't fit. The [reject ()]
     operator will reject the current computation up until the nearest
     choice prompt, e.g., in the following example, computations [e1],
     [e2], and [e3] are rejected and any side-effects that they might

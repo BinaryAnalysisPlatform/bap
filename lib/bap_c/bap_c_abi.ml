@@ -330,10 +330,12 @@ module Arg = struct
       | Some (k,x) ->
         Some ({self with args = Map.remove self.args k},x)
 
-    let popn n self = match Map.split self.args n with
-      | _,None,_ -> None
-      | lt,Some (k,x),rt ->
-        Some ({self with args = Map.add_exn rt k x}, Map.data lt)
+    let popn n self = match Map.min_elt self.args with
+      | None -> None
+      | Some (k,_) -> match Map.split self.args (k+n) with
+        | _,None,_ -> None
+        | lt,Some (k,x),rt ->
+          Some ({self with args = Map.add_exn rt k x}, Map.data lt)
 
     let align n self = match Map.min_elt self.args with
       | None -> None
@@ -448,6 +450,7 @@ module Arg = struct
         Arg.return res
     let pop s n = update s n File.pop
     let popn ~n s a = update s a (File.popn n)
+    let align ~n s a = update s a (File.align n)
     let deplet s n = update s n @@ fun s -> Some (File.deplet s,())
   end
 
@@ -504,7 +507,7 @@ module Arg = struct
 
   let align_even file =
     let* s = Arg.get () in
-    Arena.popn ~n:2 s file >>| ignore
+    Arena.align ~n:2 s file >>| ignore
 
   let deplet file =
     let* s = Arg.get () in
