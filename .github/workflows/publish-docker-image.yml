@@ -2,6 +2,7 @@ name: Publish Docker
 on:
   schedule:
     - cron: "0 4 * * *" # Every day at 4:00 a.m. UTC, midnight EDT
+  workflow_dispatch:
 
 jobs:
   build:
