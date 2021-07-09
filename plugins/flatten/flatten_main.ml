@@ -2,7 +2,6 @@ open Bap.Std
 open Core_kernel
 include Self()
 
-exception Err of string
 
 let get_direct_typ (e : exp) : Type.t = match e with
   | Bil.Var v -> (match Var.typ v with
