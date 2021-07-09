@@ -133,17 +133,14 @@ Config.manpage [
   `S "DESCRIPTION";
   `P "Flatten all AST in the program.";
   `S "EXAMPLE";
-  `P "Transforms something like :
-  (setq #10
-    (-
-      (* 11 (+ #9 13))
-    17)
-  )
-
-  To :
-  (setq #11 (+ #9 13))
-  (setq #12 (* 11 #11))
-  (setq #10 (- #12 17))"
+`Pre {|
+  ;; input 
+  #10 := 11 * (#9 + 13) - 17
+  ;; output
+  #11 := #9 + 13
+  #12 := 11 * #11 
+  #10 := #12 - 17
+  |}
 
 ]
 
