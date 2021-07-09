@@ -1,0 +1,13 @@
+Flag flatten
+  Description: Build the flatten plugin
+  Default: false
+
+Library flatten_plugin
+  Build$: flag(everything) || flag(flatten)
+  XMETADescription: flattens (unrolls) BIR expressions into a trivial form
+  Path: plugins/flatten
+  FindlibName: bap-plugin-flatten
+  CompiledObject: best
+  BuildDepends: bap, core_kernel
+  InternalModules: Flatten_main
+  XMETAExtraLines: tags="pass,analysis,flatten,tac,3ac,unroll"

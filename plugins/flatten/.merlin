@@ -1,0 +1,7 @@
+PKG core_kernel
+PKG bap
+PKG ocamlgraph
+
+B _build
+FLG -short-paths
+FLG -w -4-33-40-41-42-43-34-44
