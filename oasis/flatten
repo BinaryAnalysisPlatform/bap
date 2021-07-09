@@ -8,6 +8,6 @@ Library flatten_plugin
   Path: plugins/flatten
   FindlibName: bap-plugin-flatten
   CompiledObject: best
-  BuildDepends: bap
+  BuildDepends: bap, core_kernel
   InternalModules: Flatten_main
   XMETAExtraLines: tags="pass,analysis,flatten,tac,3ac,unroll"
