@@ -4,10 +4,8 @@ include Self()
 
 
 let get_direct_typ (e : exp) : Type.t = match e with
-  | Bil.Var v -> (match Var.typ v with
-    | Type.Imm n -> Type.Imm n
-    | Type.Mem (n, m) -> Type.Mem (n, m)
-    | Type.Unk -> Type.Unk)
+  | Bil.Var v -> Var.typ v
+  | Bil.Unknown (_,t) -> t
   | Bil.Int w -> Type.Imm (Word.bitwidth w)
   | _ -> failwith "the expression is not flattened"
 
