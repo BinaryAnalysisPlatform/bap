@@ -2373,7 +2373,18 @@ module Theory : sig
     (** [seq x y] performs effect [x], after that perform effect [y].  *)
     val seq : 'a eff -> 'a eff -> 'a eff
 
-    (** [blk lbl data ctrl] a labeled sequence of effects. *)
+    (** [blk lbl data ctrl] an optionally labeled sequence of effects.
+
+        If [lbl] is [Label.null] then the block is unlabeled. If it is
+        not [Label.null] then the denotations will preserve the label
+        and assume that this [blk] is referenced from some other
+        blocks.
+
+        @since 2.4.0 the [blk] operator accepts (and welcomes)
+        [Label.null] as the label in cases when the block is not
+        really expected to be called from anywhere else.
+
+    *)
     val blk : label -> data eff -> ctrl eff -> unit eff
 
 

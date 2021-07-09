@@ -6,11 +6,13 @@ open Bap_knowledge
 open Bap_core_theory
 
 open Knowledge.Syntax
+open KB.Let
 
 include Self()
 
 type blk = {
   name : Theory.Label.t;
+  keep : bool;
   defs : def term list;
   jmps : jmp term list;
 } [@@deriving bin_io]
@@ -74,18 +76,6 @@ let pp_cfg ppf ir =
 
 let inspect cfg = Sexp.Atom (asprintf "%a" pp_cfg cfg)
 
-let relink label {entry; blks} =
-  if is_null entry then {
-    entry = label;
-    blks = [{name=label; defs=[]; jmps=[]}]
-  } else {
-    entry = label;
-    blks = List.map blks ~f:(fun blk ->
-        if Theory.Label.equal blk.name entry then {
-          blk with name = entry;
-        } else blk)
-  }
-
 let domain = KB.Domain.flat ~inspect "graph"
     ~empty:{entry=null; blks=[]}
     ~equal:(fun x y -> Theory.Label.equal x.entry y.entry)
@@ -102,10 +92,21 @@ let graph =
 
 let slot = graph
 
+
+(*
+   Invariants:
+   1. all non-empty denotations have a non-empty list of blocks
+   1.1 is_null entry <=> (blks = [])
+   2. if the denotation is non-empty then the list of blocks
+      has a block with the name equal to entry.
+   3. explicitly labeled blocks keep their names.
+
+
+  *)
 module IR = struct
   include Theory.Empty
   let ret = Knowledge.return
-  let blk tid = {name=tid; defs=[]; jmps=[]}
+  let blk ?(keep=true) tid = {name=tid; defs=[]; jmps=[]; keep}
 
   let def = (fun x -> x.defs), (fun x d -> {x with defs = d})
   let jmp = (fun x -> x.jmps), (fun x d -> match x.jmps with
@@ -135,9 +136,36 @@ module IR = struct
   let data cfg = ret cfg
   let ctrl cfg = ret cfg
 
-  let set v x =
+  let target =
     KB.Object.scoped Theory.Program.cls @@ fun lbl ->
-    Theory.Label.target lbl >>= fun t ->
+    Theory.Label.target lbl
+
+
+  let goto ?(is_call=false) ?cnd ~tid dst =
+    if is_call
+    then Jmp.reify ?cnd ~tid ~alt:(Jmp.resolved dst) ()
+    else Jmp.reify ?cnd ~tid ~dst:(Jmp.resolved dst) ()
+
+  let relink label {entry; blks} =
+    if is_null entry then KB.return {
+        entry = label;
+        blks = [{name=label; keep=true; defs=[]; jmps=[]}]
+      } else
+      let+ blks = List.fold_map blks ~init:`Unbound ~f:(fun r blk ->
+          if Theory.Label.equal blk.name entry
+          then if blk.keep then `Relink blk.name, blk
+            else `Relinked, {blk with name = label; keep=true}
+          else r,blk) |> function
+                  | `Relinked,blks -> KB.return blks
+                  | `Relink dst, blks ->
+                    let+ tid = fresh in
+                    blks @ [blk label ++ goto ~tid dst]
+                  | `Unbound,[] -> assert false
+                  | `Unbound,_ -> assert false      in
+      {entry = label; blks}
+
+  let set v x =
+    target >>= fun t ->
     if Theory.Target.has_roles t [Theory.Role.Register.constant] v
     then !!empty
     else
@@ -146,13 +174,13 @@ module IR = struct
       fresh >>= fun tid ->
       data {
         entry;
-        blks = [{name=entry; jmps=[]; defs=[Def.reify ~tid v x]}]
+        blks = [{
+            name=entry;
+            keep=false;
+            jmps=[];
+            defs=[Def.reify ~tid v x]
+          }]
       }
-
-  let goto ?(is_call=false) ?cnd ~tid dst =
-    if is_call
-    then Jmp.reify ?cnd ~tid ~alt:(Jmp.resolved dst) ()
-    else Jmp.reify ?cnd ~tid ~dst:(Jmp.resolved dst) ()
 
   (** reifies a [while (<cnd>) <body>] loop to
 
@@ -177,13 +205,14 @@ module IR = struct
   let repeat cnd body =
     cnd >>= fun cnd ->
     body >>| reify >>= function
-    | {blks=[]} ->
+    | {blks=[]} ->               (* empty denotation *)
       fresh >>= fun head ->
       fresh >>= fun tid ->
       data {
         entry = head;
         blks = [{
             name = head;
+            keep = true;
             defs = [];
             jmps = [goto ~cnd ~tid head]}]}
     | {entry=loop; blks=b::blks} ->
@@ -273,7 +302,7 @@ module IR = struct
     fresh >>= fun tid ->
     ctrl {
       entry;
-      blks = [blk entry ++ Jmp.reify ~tid ~dst:(Jmp.indirect dst) ()]
+      blks = [blk ~keep:false entry ++ Jmp.reify ~tid ~dst:(Jmp.indirect dst) ()]
     }
 
   let appgraphs fst snd =
@@ -281,19 +310,19 @@ module IR = struct
     if is_empty snd then ret fst
     else match fst, snd with
       | _,{blks=[]} | {blks=[]}, _ -> assert false
-      | {entry; blks={jmps=[]} as x :: xs},{blks=[y]} -> ret {
+      | {entry; blks={jmps=[]} as x :: xs},{blks=[{keep=false} as y]} ->
+        ret {
           entry;
           blks = {x with defs = y.defs @ x.defs; jmps = y.jmps} :: xs
         }
-      | {entry; blks=x::xs}, {entry=snd; blks=y::ys} ->
+      | {entry; blks=x::xs}, {entry=esnd; blks=y::ys} ->
         fresh >>= fun tid -> ret {
           entry;
           blks =
             y ::
-            x ++ goto ~tid snd ::
+            x ++ goto ~tid esnd ::
             List.rev_append xs ys
         }
-
 
   let seq fst snd =
     fst >>-> fun fst ->
@@ -306,16 +335,15 @@ module IR = struct
     KB.collect Theory.Label.is_subroutine dst >>= fun is_call ->
     ctrl {
       entry;
-      blks = [blk entry ++ goto ?is_call ~tid dst]
+      blks = [blk ~keep:false entry ++ goto ?is_call ~tid dst]
     }
 
   let blk label defs jmps =
     defs >>-> fun defs ->
     jmps >>-> fun jmps ->
     appgraphs defs jmps >>-> fun res ->
-    ret @@
-    if is_null label then res
-    else relink label res
+    if is_null label then ret res
+    else relink label res >>= ret
 
   let goto = do_goto
 end
