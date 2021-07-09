@@ -130,7 +130,7 @@ Config.manpage [
   `S "DESCRIPTION";
   `P "Flatten all AST in the program.";
   `S "EXAMPLE";
-`Pre {|
+  `Pre {|
   ;; input 
   #10 := 11 * (#9 + 13) - 17
   ;; output
