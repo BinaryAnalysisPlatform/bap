@@ -10,7 +10,7 @@ let get_direct_typ (e : exp) : Type.t = match e with
     | Type.Mem (n, m) -> Type.Mem (n, m)
     | Type.Unk -> Type.Unk)
   | Bil.Int w -> Type.Imm (Word.bitwidth w)
-  | _ -> raise (Err "Provided expression isn't direct")
+  | _ -> failwith "the expression is not flattened"
 
 let flatten_exp (exp : exp) (blk : blk term) (before : tid) : exp * blk term =
   let is_virtual = true in
