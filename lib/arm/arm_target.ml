@@ -76,35 +76,79 @@ let vfp3regs = Theory.Role.Register.[
 
 let vars32_fp = vars32 @ untyped @@ array r64 "D" 16
 
-let gp64 = array r64 "X" 29
-let fp64 = array r128 "Q" 32
+let rs = array r64 "R" 32
+let xs = array r64 "X" 32
+let ws = array r32 "W" 32
+let vs = array r128 "V" 32
+let qs = array r128 "Q" 32
+let ds = array r64 "D" 32
+let ss = array r32 "S" 32
+let hs = array r16 "H" 32
+let bs = array r8 "B" 32
 let fp64 = reg r64 "FP"       (* X29 *)
 let lr64 = reg r64 "LR"       (* X30 *)
 let sp64 = reg r64 "SP"       (* X31 *)
+let sp32 = reg r32 "WSP"      (* W31 *)
+let zr = reg r64 "ZR"
 let zr64 = reg r64 "XZR"
 let zr32 = reg r32 "WZR"
-let mems64 = CT.Mem.define r64 r8
-let data64 = CT.Var.define mems64 "mem"
-let flags64 = [
+let memsv8 = CT.Mem.define r64 r8
+let datav8 = CT.Var.define memsv8 "mem"
+let flagsv8 = [
   reg bool "NF";
   reg bool "ZF";
   reg bool "CF";
   reg bool "VF";
 ]
 
-let vars64 = gp64 @< [fp64; sp64; lr64] @< flags64 @< [data64]
+let (.$()) = List.nth_exn
 
-let regs64 = Theory.Role.Register.[
-    [general; integer], gp64 @< [fp64; lr64; sp64];
-    [general; floating], untyped [fp64];
-    [stack_pointer], untyped [sp64];
-    [frame_pointer], untyped [fp64];
-    [function_argument], array r64 "X" 8 @< array r64 "Q" 8;
-    [function_return], [reg r64 "X0"] @< [reg r128 "Q0"];
-    [constant; zero; pseudo], [zr64] @< [zr32];
-    [pseudo], array r32 "W" 31 @< [reg r32 "WSP"];
-    [link], untyped [lr64];
+let aliases =
+  xs @< ws @< qs @< ds @< ss @< hs @< bs
+  @<[fp64; lr64; sp64; zr; zr64]
+  @<[sp32; zr32]
+
+let varsv8 = rs @< flagsv8 @< [datav8]
+
+let regsv8 = Theory.Role.Register.[
+    [general; integer], untyped rs;
+    [general; floating], untyped xs;
+    [stack_pointer], untyped [reg r64 "R31"];
+    [frame_pointer], untyped [reg r64 "R29"];
+    [function_argument], array r64 "R" 8 @< array r64 "V" 8;
+    [function_return], [reg r64 "R0"] @< [reg r128 "V0"];
+    [constant; zero; pseudo], untyped [reg r64 "XZR"; reg r64 "ZR"];
+    [constant; zero; pseudo], untyped [reg r32 "WZR"];
+    [link], untyped [reg r64 "R30"];
+    [alias], aliases;
   ] @ status_regs
+
+let equal xs ys =
+  List.map2_exn xs ys ~f:Theory.Alias.(fun x y -> def x [reg y])
+
+let lower xs _ ys =
+  List.map2_exn xs ys ~f:Theory.Alias.(fun x y -> def x [unk; reg y])
+
+let are f x y = f x y
+
+let aliasing = Theory.Alias.[
+    [
+      def fp64 [reg xs.$(29)];
+      def lr64 [reg xs.$(30)];
+      def sp64 [reg xs.$(31)];
+      def sp64 [unk; reg sp32];
+      def zr [reg xs.$(31)];
+      def zr [reg zr64];
+      def zr [unk; reg zr32];
+    ];
+    are equal rs xs;
+    lower rs are ws;
+    are equal vs qs;
+    lower qs are ds;
+    lower ds are ss;
+    lower ss are hs;
+    lower hs are bs;
+  ] |> List.concat
 
 
 let parent = CT.Target.declare ~package "arm"
@@ -211,11 +255,12 @@ module Family (Order : Endianness) = struct
   let v8a =
     CT.Target.declare ~package (ordered "armv8-a") ~parent:v7
       ~nicknames:["armv8-a"]
+      ~aliasing
       ~bits:64
-      ~code:data64
-      ~data:data64
-      ~vars:vars64
-      ~regs:regs64
+      ~code:datav8
+      ~data:datav8
+      ~vars:varsv8
+      ~regs:regsv8
 
   let v81a = v8a  <: "armv8.1-a"
   let v82a = v81a <: "armv8.2-a"

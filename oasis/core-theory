@@ -20,6 +20,7 @@ Library bap_core_theory
         Bap_core_theory_program,
         Bap_core_theory_manager,
         Bap_core_theory_parser,
+        Bap_core_theory_pass,
         Bap_core_theory_target,
         Bap_core_theory_value,
         Bap_core_theory_var

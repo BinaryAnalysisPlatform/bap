@@ -293,7 +293,7 @@ module Semantics = struct
       end);
     KB.promise Lisp.Semantics.args @@ fun this ->
     KB.collect Insn.slot this >>=? fun insn ->
-    Theory.instance () >>= Theory.require >>= fun theory ->
+    Theory.current >>= fun theory ->
     Theory.Label.target this >>= fun target ->
     args_of_ops theory target insn >>| Option.some
 

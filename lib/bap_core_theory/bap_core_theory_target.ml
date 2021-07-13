@@ -27,6 +27,7 @@ module Role = struct
   module Register = struct
     let general = declare ~package "general"
     let special = declare ~package "special"
+    let alias = declare ~package "alias"
     let pseudo = declare ~package "pseudo"
     let integer = declare ~package "integer"
     let floating = declare ~package "floating"
@@ -82,6 +83,11 @@ type alignment = {
   data : int;
 }
 
+type aliases = {
+  subs : (int * Var.Top.t) Map.M(Var.Top).t;
+  sups : Var.Top.t Map.M(Int).t Map.M(Var.Top).t;
+}
+
 type info = {
   parent : target;
   bits : int;
@@ -90,6 +96,7 @@ type info = {
   code : mem;
   vars : Set.M(Var.Top).t;
   regs : Set.M(Var.Top).t Map.M(Role).t;
+  aliasing : aliases;
   endianness : endianness;
   alignment : alignment;
   system : system;
@@ -124,6 +131,10 @@ let unknown = {
   code = pack@@mem "mem" 32 8;
   vars = Set.empty (module Var.Top);
   regs = Map.empty (module Role);
+  aliasing = {
+    subs = Map.empty (module Var.Top);
+    sups = Map.empty (module Var.Top);
+  };
   endianness = Endianness.eb;
   system = System.unknown;
   abi = Abi.unknown;
@@ -152,6 +163,201 @@ let collect_regs ?pred init roles =
       | None -> Set.union vars vars'
       | Some pred -> Set.union vars (Set.filter vars' pred))
 
+module Alias = struct
+  type t = unit Var.t * (int * unit Var.t) list
+  type 'a part = 'a Bitv.t Var.t option
+
+  let regsize v = match Bitv.refine (Var.sort v) with
+    | Some s -> Bitv.size s
+    | None -> assert false
+
+  let init = {
+    sups = Map.empty (module Var.Top);
+    subs = Map.empty (module Var.Top);
+  }
+
+  let is_solved {subs; sups} v = (Map.mem subs v || Map.mem sups v)
+  let solved_variables {subs; sups} =
+    Map.length subs + Map.length sups
+
+  let add_sup sol lhs rhs =
+    let rhs = Map.of_alist_exn (module Int) rhs in {
+      sol with sups = Map.update sol.sups lhs ~f:(function
+        | None -> rhs
+        | Some rhs' ->
+          Map.merge rhs rhs' ~f:(fun ~key:_ -> function
+              | `Left x | `Right x -> Some x
+              | `Both (x,y) ->
+                if not (Var.Top.equal x y)
+                then failwith "invalid equation";
+                Some x))
+    }
+
+  let add_sub sol lhs rhs = {
+    sol with subs = Map.set sol.subs lhs rhs;
+  }
+
+  let pp_spec ppf spec =
+    List.iter spec ~f:(fun (lhs,rhs) ->
+        Format.fprintf ppf "%s = " (Var.name lhs);
+        List.iter rhs ~f:(fun (off,var) ->
+            Format.fprintf ppf "%d:%s " off (Var.name var));
+        Format.fprintf ppf "@\n%!")
+
+  let substitute_one sol lhs (n,r) =
+    match Map.find sol.subs r with
+    | Some (m,x) -> [n+m,x]
+    | None -> match Map.find sol.sups r with
+      | None -> [n,r]
+      | Some parts ->
+        let parts = Map.to_alist parts in
+        let partsize =
+          regsize @@ snd (List.hd_exn parts) in
+        if regsize lhs > partsize
+        then List.map parts ~f:(fun (m,r) -> (m+n,r))
+        else List.concat_map parts ~f:(fun (m,x) ->
+            if n >= m && n + regsize lhs <= m + regsize x
+            then [n-m,x]
+            else [])
+
+  let pp_aliases ppf {subs; sups} =
+    Map.iteri subs ~f:(fun ~key:alias ~data:(off,part) ->
+        Format.fprintf ppf "%s = extract:%d:%d[%s]@\n"
+          (Var.name alias)
+          (regsize alias + off) off
+          (Var.name part));
+    Map.iteri sups ~f:(fun ~key:alias ~data:parts ->
+        let parts = Map.data parts |> List.rev_map ~f:Var.name |>
+                    String.concat ~sep:"." in
+        Format.fprintf ppf "%s = %s@\n"
+          (Var.name alias) parts)
+
+  let pp_lhs () spec =
+    List.map ~f:fst spec |>
+    List.map ~f:Var.name |>
+    String.concat ~sep:" "
+
+  let report_unsolved spec =
+    invalid_argf "Failed to solve register aliasing. \
+                  Unable to resolve the following registers: (%a). \
+                  Please, provide extra constraints or mark them as \
+                  non-aliases."
+      pp_lhs spec ()
+
+
+  type equation = Var.Top.t * (int * Var.Top.t) list
+  [@@deriving equal]
+  type system = equation list
+  [@@deriving equal]
+
+  let no_progress = equal_system
+  let has_progress x y = not (no_progress x y)
+
+  let string_of_vars vars =
+    Set.to_list vars |>
+    List.map ~f:Var.name |>
+    String.concat ~sep:" "
+
+
+  let solve regs spec =
+    let aliases = match Map.find regs Role.Register.alias with
+      | None -> Set.empty (module Var.Top)
+      | Some vars -> vars in
+    let is_alias = Set.mem aliases in
+    let is_base = Fn.non is_alias in
+    let all_solved = List.for_all ~f:(fun (_,r) -> is_base r) in
+    let substitute spec sol =
+      List.map spec ~f:(function
+          | lhs,[rhs] -> lhs,substitute_one sol lhs rhs
+          | other -> other) in
+    let invert sol spec =
+      List.concat_map spec ~f:(fun (lhs,rhs) ->
+          match rhs with
+          | [off,rhs] when is_base lhs || is_solved sol lhs -> [rhs,[off,lhs]]
+          | [_] -> [lhs,rhs]
+          | rhs -> List.map rhs ~f:(fun (off,sub) -> sub,[off,lhs])) in
+    let reduce spec sol =
+      List.fold spec ~init:([],sol) ~f:(fun (spec,sol) (lhs,rhs) ->
+          if is_alias lhs && all_solved rhs then
+            spec, match rhs with
+            | [res] -> add_sub sol lhs res
+            | sum -> add_sup sol lhs sum
+          else (lhs,rhs)::spec,sol) in
+    let rec loop input sol steps =
+      let solved = solved_variables sol in
+      let spec,sol = reduce input sol in
+      let spec = invert sol spec in
+      let spec = substitute spec sol in
+      if solved_variables sol = solved then match spec with
+        | [] -> sol
+        | spec when steps > 0 -> loop spec sol (steps-1)
+        | spec -> report_unsolved spec
+      else loop spec sol (steps-1) in
+    loop spec init 10000
+
+  let error def =
+    Format.kasprintf @@ fun details ->
+    invalid_argf "%s: bad aliasing defintion of %s - %s"
+      "Theory.Alias.def" (Var.name def) details ()
+
+  let check var = function
+    | [] -> error var "the parts list is empty"
+    | parts ->
+      let total = Bitv.size (Var.sort var) in
+      let width = total / List.length parts in
+      List.iter parts ~f:(Option.iter ~f:(fun v ->
+          if Bitv.size (Var.sort v) <> width
+          then error var "the size of %s must be %d divided by %d"
+              (Var.name v) total (List.length parts)))
+
+  let def var parts : t =
+    check var parts;
+    let var = Var.forget var in
+    let total = regsize var in
+    let width = total / List.length parts in
+    var,
+    List.filter_mapi parts ~f:(fun i -> function
+        | None -> None
+        | Some reg ->
+          Some (total - i * width - width, Var.forget reg))
+
+  let reg x = Some x
+  let unk = None
+end
+
+module Origin = struct
+  type sup = Sup
+  type sub = Sub
+  type syn = Syn
+
+  type ('a,'k) t =
+    | Any : ('a,'k) t -> ('a,unit) t
+    | Sup : 'a Bitv.t Var.t list -> ('a,sup) t
+    | Sub : {hi : int; lo : int; base : 'a Bitv.t Var.t} -> ('a,sub) t
+
+  let forget : type k. ('a,k) t -> ('a,unit) t = function
+    | Any _ as x -> x
+    | x -> Any x
+
+  let cast_sub = function
+    | Any (Sub _ as x) -> Some x
+    | Any _ -> None
+
+  let cast_sup = function
+    | Any (Sup _ as x) -> Some x
+    | Any _ -> None
+
+  let reg (Sub {base=v}) = v
+  let hi (Sub {hi}) = hi
+  let lo (Sub {lo}) = lo
+  let is_alias (Sub {hi;lo;base}) =
+    hi - lo + 1 = Bitv.size (Var.sort base)
+
+  let regs (Sup regs) = regs
+end
+
+type ('a,'k) origin = ('a,'k) Origin.t
+
 let extend parent
     ?(bits=parent.bits)
     ?(byte=parent.byte)
@@ -161,6 +367,7 @@ let extend parent
     ?(code_alignment=parent.alignment.code)
     ?vars
     ?regs
+    ?aliasing
     ?(endianness=parent.endianness)
     ?(system=parent.system)
     ?(abi=parent.abi)
@@ -176,11 +383,15 @@ let extend parent
   and regs = Option.value_map regs
       ~default:parent.regs
       ~f:make_roles in
+  let aliasing = Option.value_map aliasing
+      ~default:parent.aliasing
+      ~f:(Alias.solve regs) in
   let (+) s (Var v) = Set.add s (Var.forget v) in
   {
     parent=name; bits; byte; endianness;
     system; abi; fabi; filetype; data; code; regs;
     vars = collect_regs (vars + code + data) regs;
+    aliasing;
     options;
     alignment = {
       code=code_alignment;
@@ -195,7 +406,7 @@ let declare
     ?(parent=unknown.parent)
     ?bits ?byte ?data ?code
     ?data_alignment ?code_alignment
-    ?vars ?regs ?endianness
+    ?vars ?regs ?aliasing ?endianness
     ?system ?abi ?fabi ?filetype ?options
     ?nicknames ?package name =
   let t = Self.declare ?package name in
@@ -207,7 +418,7 @@ let declare
       (Name.package (Self.name t)) ();
   let p = Hashtbl.find_exn targets parent in
   let info = extend ?bits ?byte ?data ?code
-      ?data_alignment ?code_alignment ?vars ?regs ?endianness
+      ?data_alignment ?code_alignment ?vars ?regs ?aliasing ?endianness
       ?system ?abi ?fabi ?filetype ?options ?nicknames p parent in
   Hashtbl.add_exn targets t info;
   t
@@ -284,6 +495,28 @@ let vars t = (info t).vars
 let var t name =
   let key = Var.define Sort.Top.t name in
   Set.binary_search (vars t) ~compare:Var.Top.compare `First_equal_to key
+
+let unalias t reg : ('a,unit) origin option =
+  let {sups; subs} = (info t).aliasing in
+  let reg = Var.forget reg in
+  let refine v =
+    match Bitv.refine (Var.sort v) with
+    | None ->
+      failwithf "broken invariant: non-register in a file: %s"
+        (Var.name v) ()
+    | Some s -> Var.resort v s in
+  match Map.find sups reg with
+  | Some parts ->
+    let parts =
+      Map.to_alist parts ~key_order:`Decreasing |>
+      List.map ~f:(fun (_,v) -> refine v) in
+    Some Origin.(forget (Sup parts))
+  | None -> match Map.find subs reg with
+    | None -> None
+    | Some (lo,v) ->
+      let hi = Alias.regsize reg - 1 in
+      let origin = Origin.Sub {hi; lo; base=refine v} in
+      Some Origin.(forget origin)
 
 let data_addr_size,
     code_addr_size =
@@ -363,6 +596,9 @@ let partition xs =
   sort_by_parent_name
 
 let families () = partition@@declared ()
+
+
+type alias = Alias.t
 
 include (Self : Base.Comparable.S with type t := t)
 include (Self : Stringable.S with type t := t)

@@ -1259,6 +1259,24 @@ module Theory : sig
   *)
   type role
 
+
+  (** a description of the register aliasing.
+
+      See {!Alias}.
+
+      @since 2.4.0
+  *)
+  type alias
+
+
+  (** a description of the origin of an aliased register.
+
+      See {!Origin}.
+
+      @since 2.4.0
+  *)
+  type ('a,'k) origin
+
   (** The semantics of programs.
 
       The semantics of a program is denoted with effects that this
@@ -1380,7 +1398,15 @@ module Theory : sig
         For the description of parameters see the corresponding
         accessor functions in this module.
 
-        @since 2.3.0 has the regs optional parameter.
+        If the target architecture has register aliases, i.e.,
+        registers that correspond to some parts of other registers,
+        then they should be properly described with the [aliasing]
+        parameter, using the {!Alias} language, in which each register
+        that has aliases is structurally defined in terms of its
+        subparts.
+
+        @since 2.3.0 has the [regs] optional parameter.
+        @since 2.4.0 has the [aliasing] optional parameters.
     *)
     val declare :
       ?parent:t ->               (** defaults to [unknown] *)
@@ -1392,6 +1418,7 @@ module Theory : sig
       ?code_alignment:int ->     (** defaults to 8 bit *)
       ?vars:unit Var.t list ->   (** defaults to [[]] *)
       ?regs:(role list * unit Var.t list) list -> (** defaults to [[]] *)
+      ?aliasing:alias list ->
       ?endianness:endianness ->  (** defaults to [Endian.big] *)
       ?system:system ->          (** defaults to [System.unknown]  *)
       ?abi:abi ->                (** defaults to [Abi.unknown] *)
@@ -1604,6 +1631,17 @@ module Theory : sig
 
         @since 2.3.0 *)
     val has_roles : t -> role list -> 'a Var.t -> bool
+
+
+    (** [unalias v] if [v] is an alias then returns its origin.
+
+        If [v] is defined in terms of other registers then the
+        returned value denotes [v] in terms of the original
+        register or registers. See {!Origin}.
+
+        @since 2.4.0
+    *)
+    val unalias : t -> 'a Var.t -> ('b,unit) origin option
 
     (** [endianness target] describes the byte order.
 
@@ -1877,7 +1915,166 @@ module Theory : sig
 
   module Enum = KB.Enum [@@deprecated "[since 2021-02] use KB.Enum instead"]
 
+  (** A simple DSL for describing registers aliasing rules.
 
+      CPU architectures commonly give names to registers parts or,
+      contrary, give names to a concatenation of registers. For
+      example, in x86 it is possible to address the second byte of the
+      [RAX] register using the [AH] register. Or, in AVR, the [Y]
+      register is refers to the concatenation of [R19] and [R18]
+      registers.
+
+      Such kind of relationships between the CPU registers could be
+      described using a system of equations of the form,
+
+      {v
+         Rn = Ri * ... * Rj
+         ...
+         Rm = Rj * ... * Rk
+      v}
+
+      In this system, the same register can occur on the left and right-hand
+      sides multiple times. The system is solved for the set of basis
+      registers, [b1;...;bN] so that each register that occurs in the
+      system but which is not a basis register can be expressed in
+      terms of the basis registers.
+
+      For example, given the following system,
+
+      {[
+        def r25r24 [reg 25; reg r24];
+        def w [reg r25r24];
+        def w [reg whi; reg wlo];
+      ]}
+
+      And assuming that [r25] and [r24] are basis registers, it will
+      be inferred that the [r25r24] and [w] are both concatenations of
+      [r25] and [r24] and that [whi] and [wlo] are synonyms for [r25]
+      and [r24], correspondingly. This information is available via
+      the {!Target.unalias} function that will express an alias
+      register in terms of corresponding basis registers, see
+      {!Origin} for more information.
+
+      The set of basis registers is defined from the register roles
+      using a simple rule that all registers that are not [alias] are
+      basis registers, therefore it is necessary to mark alias
+      registers as such, otherwise the system of equations will not
+      have a solution.
+
+      In a well-formed system of equations each alias is uniquely
+      defined in terms of a basis register.
+
+      @since 2.4.0
+  *)
+  module Alias : sig
+    type t = alias
+    type 'a part
+
+
+    (** [def x parts] defines [x] as a concatenation of [parts].
+
+        All elements of [parts] must have the same size [n] and
+        the size of [x] should be equal to [n * List.length parts]. If
+        this doesn't hold then the aliasing definition will fail.
+
+        The left-most position of the list of [parts] correspond to
+        the most-significant parts (the high part) of the base
+        register [x].
+
+        Example,
+
+        {[
+          [
+            def rax [unk; reg eax];
+            def eax [unk; reg ax];
+            def ax [reg ah; reg al]
+          ]
+        ]}
+    *)
+    val def : 'a Bitv.t Var.t -> 'b part list -> t
+
+
+    (** [reg x] defines [x] as a part.   *)
+    val reg : 'a Bitv.t Var.t -> 'a part
+
+    (** [unk] defines an unnamed part of the register.   *)
+    val unk : 'a part
+  end
+
+
+  (** The description of the origin of an aliased register.
+
+      When a register is defined in terms of other registers,
+      [Origin.t] describes the relationship between an aliased
+      register and its origin register or registers.
+
+      The [('s,'k) Origin.t] data type is parameterized with two type
+      variables. The ['s] type variable denotes the width of the
+      origin register(s) and ['k] denotes the kind of relationship
+      between the alias and its origin.
+
+      Currently, we recognize two kinds of relationships. The [sub]
+      kind defines the alias as a subset of the origin register, i.e.,
+      a contiguous sequnce of bits that are fully enclosed in the
+      origin register. The [sup] kind defines an alias as a superset
+      of a number of origin registers, i.e., it is a contiguous
+      sequence of bits formed as a concatenation of the origin
+      registers.
+
+      More kinds of relationships could be added later.
+
+      {3 Example of a subset relation}
+
+      Example, given the aliasing definition,
+      {[
+        [
+          def rax [unk; reg eax];
+          def eax [unk; reg ax];
+          def ax [ah; al];
+        ]
+      ]}
+
+      the [unalias ah] will retun the [origin] of [sub]-kind,
+      so that [reg origin] is [rax], [hi origin] is [15] and
+      [lo origin] is [8].
+      @since 2.4.0
+  *)
+  module Origin : sig
+
+    (** []  *)
+    type ('s,'k) t = ('s,'k) origin
+
+    (** type index of the *)
+    type sub
+    type sup
+
+    val cast_sub : ('a,unit) t -> ('a,sub) t option
+    val cast_sup : ('a,unit) t -> ('a,sup) t option
+
+
+    (** [reg origin] is the base register.
+
+        The returned value is never an alias itself. *)
+    val reg : ('a,sub) t -> 'a Bitv.t Var.t
+
+    val is_alias : ('a,sub) t -> bool
+
+
+    (** [hi origin] the inclusive upper bound.
+        When an alias is a subset of the [origin] register,
+        [hi origin] is the most significant bit of the alias
+        register.
+
+    *)
+    val hi : ('a,sub) t -> int
+
+    (** [lo origin] returns the inclusive upper bound of the origin register
+        to which an alias belongs. *)
+    val lo : ('a,sub) t -> int
+
+    val regs : ('a,sup) t -> 'a Bitv.t Var.t list
+
+  end
 
   (** A target-specific role of program entities.
 
@@ -1925,16 +2122,26 @@ module Theory : sig
       *)
       val special : t
 
-
-
       (** the pseudo-register.
 
-          The pseudo-registers do not correspond to a real physical or
-          logical register in the instruction set but rather an alias
-          or a hard-wired register, such as constant zero or an
-          instruction register or a program counter.
+          The pseudo-registers do not correspond to an actual storage
+          but rather a hard-wired register, such as constant zero, or an
+          instruction register, or a program counter.
       *)
       val pseudo : t
+
+
+      (** the alias register.
+
+          The register is not real register but is defined in terms of
+          other registers, e.g., as a subset of other register or a
+          concatenation of other registers, or somehow else.
+
+          See {!Alias} and {!Origin}.
+
+          @since 2.4.0
+      *)
+      val alias : t
 
       (** the register is used by the integer arithmetic unit
 
@@ -3137,6 +3344,33 @@ module Theory : sig
       @since 2.4.0
   *)
   val with_current : theory -> (unit -> 'a knowledge) -> 'a knowledge
+
+
+  (** Core Theory Transformations.
+
+      A transformation pass is a simple functor. This module provides
+      a collection of such functors and will be later extended with
+      the transformation pipeline framework.
+
+      @since 2.4.0
+  *)
+  module Pass : sig
+
+
+    (** The Variable Desugarer.
+
+        De-aliaes registers according to the aliasing
+        specification. Also follows the semantics of the constant
+        registers, e.g., translates assignments to registers that are
+        constants to nops and concretizes access to the zero
+        registers.
+
+        This pass is automatically applied to any theory instantiated
+        with {!instance} but it could be used for custom theories used
+        directly as arguments to functors.
+    *)
+    module Desugar(CT : Core) : Core
+  end
 
   (** Sorts implementing IEEE754 formats.
 

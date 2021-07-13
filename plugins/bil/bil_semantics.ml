@@ -167,15 +167,7 @@ module Basic : Theory.Basic = struct
 
     let var r =
       let v = Var.reify r in
-      let s = Theory.Var.sort r in
-      match Var.typ v with
-      | Mem _ | Unk -> exp s (Var v)
-      | Imm w ->
-        KB.Object.scoped Theory.Program.cls @@ fun lbl ->
-        Theory.Label.target lbl >>= fun t ->
-        if Theory.Target.has_roles t [Theory.Role.Register.zero] r
-        then exp s @@ Bil.Int (Word.zero w)
-        else exp s (Var v)
+      exp (Theory.Var.sort r) (Var v)
 
     let b0 = bit Bil.(int Word.b0)
     let b1 = bit Bil.(int Word.b1)
@@ -427,14 +419,9 @@ module Basic : Theory.Basic = struct
       | _ -> gen bs @@ Let (v,rhs,body)
 
     let set var rhs =
-      KB.Object.scoped Theory.Program.cls @@ fun lbl ->
-      Theory.Label.target lbl >>= fun t ->
-      if Theory.Target.has_roles t [Theory.Role.Register.constant] var
-      then data []
-      else
-        rhs >>-> fun _ rhs ->
-        let var = Var.reify var in
-        data [Bil.Move (var,rhs)]
+      rhs >>-> fun _ rhs ->
+      let var = Var.reify var in
+      data [Bil.Move (var,rhs)]
 
     let repeat cnd body =
       cnd >>= fun cnd ->

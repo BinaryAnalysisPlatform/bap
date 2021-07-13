@@ -26,6 +26,8 @@ module Theory = struct
   module Filetype = Target.Filetype
   module Enum = KB.Enum
   module Role = Target.Role
+  module Alias = Target.Alias
+  module Origin = Target.Origin
 
   type program = Program.cls
   type source = Source.t
@@ -35,6 +37,8 @@ module Theory = struct
   type language = Language.t
   type compiler = Compiler.t
   type role = Role.t
+  type alias = Alias.t
+  type ('a,'k) origin = ('a,'k) Origin.t
   type system = System.t
   type abi = Abi.t
   type fabi = Fabi.t
@@ -86,5 +90,6 @@ module Theory = struct
   module Empty : Core = Bap_core_theory_empty.Core
   module IEEE754 = Bap_core_theory_IEEE754
   module Parser = Bap_core_theory_parser
+  module Pass = Bap_core_theory_pass
   include Bap_core_theory_manager
 end
