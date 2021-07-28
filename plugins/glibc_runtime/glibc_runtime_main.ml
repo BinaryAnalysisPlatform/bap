@@ -5,6 +5,7 @@ functions (and adds the latter if it is absent).
 "
 open Core_kernel
 open Bap_main
+open Bap_core_theory
 open Bap.Std
 open Bap_c.Std
 
@@ -95,20 +96,27 @@ let detect_main_address prog =
   | _ -> None
 
 
-let reinsert_args_for_new_name sub name =
-  let sub = Term.filter arg_t sub ~f:(fun _ -> false) in
-  let sub = Term.del_attr sub C.proto in
-  Sub.with_name sub name
+let reinsert_args_for_new_name ?(abi=ident) sub name =
+  List.fold ~init:sub ~f:(|>) [
+    Term.filter arg_t ~f:(fun _ -> false);
+    (fun sub -> Term.del_attr sub C.proto);
+    (fun sub -> Sub.with_name sub name);
+    abi
+  ]
 
-let rename_main prog = match detect_main_address prog with
+let rename_main abi prog = match detect_main_address prog with
   | None -> prog
-  | Some addr ->
-    Term.map sub_t prog ~f:(fun sub ->
-        match Term.get_attr sub address with
-        | Some a when Addr.equal addr a ->
-          reinsert_args_for_new_name sub "main"
-        | _ -> sub)
+  | Some addr -> Term.map sub_t prog ~f:(fun sub ->
+      match Term.get_attr sub address with
+      | Some a when Addr.equal addr a ->
+        reinsert_args_for_new_name ~abi sub "main"
+      | _ -> sub)
 
+let find_abi_processor proj =
+  let (let*) = Option.(>>=) in
+  let* name = Project.get proj Bap_abi.name in
+  let* proc = C.Abi.get_processor name in
+  Some proc
 
 let rename_libc_start_main prog =
   if is_sub_absent prog "__libc_start_main"
@@ -122,17 +130,75 @@ let rename_libc_start_main prog =
         reinsert_args_for_new_name sub "__libc_start_main"
   else prog
 
-let fix_glibc_runtime prog =
-  rename_libc_start_main prog |>
-  rename_main
+module Main = struct
+  let cv = C.Type.Qualifier.{
+      const = false;
+      volatile = false;
+      restrict = ();
+    }
 
-let main ctxt proj =
-  if Extension.Configuration.get ctxt enable ||
-     is_glibc proj
-  then
-    Project.map_program proj ~f:fix_glibc_runtime
+  let cvr = C.Type.Qualifier.{
+      const = false;
+      volatile = false;
+      restrict = false;
+    }
+
+  let basic t = `Basic C.Type.Spec.{t; attrs=[]; qualifier=cv}
+  let ptr t = `Pointer C.Type.Spec.{t; attrs=[]; qualifier=cvr}
+
+  let proto : C.Type.proto = C.Type.Proto.{
+      variadic = false;
+      return = basic `sint;
+      args = [
+        "argc", basic `sint;
+        "argv", ptr (ptr (basic `char));
+      ];
+    }
+
+  let var t (data : C.Data.t) name =
+    match data with
+    | Imm (sz,_) -> Var.create name (Type.Imm (Size.in_bits sz))
+    | Ptr _ ->
+      Var.create name (Type.Imm (Theory.Target.code_addr_size t))
+    | _ -> assert false
+
+  let arg intent t (data,exp) name =
+    Arg.create ~intent (var t data name) exp
+
+  let abi proj main =
+    let t = Project.target proj in
+    match find_abi_processor proj with
+    | None -> main
+    | Some {C.Abi.insert_args} ->
+      match insert_args main [] proto with
+      | Some {C.Abi.return=Some ret; params=[argc; argv]} ->
+        List.fold ~init:main ~f:(Term.append arg_t)[
+          arg In t argc "main_argc";
+          arg Both t argv "main_argv";
+          arg Out t ret "main_result";
+        ]
+      | _ -> main
+end
+
+let fix_main proj =
+  let abi = Main.abi proj in
+  Project.map_program proj ~f:(rename_main abi)
+
+let is_enabled ctxt proj =
+  Extension.Configuration.get ctxt enable || is_glibc proj
+
+let recover_main ctxt proj =
+  if is_enabled ctxt proj &&
+     is_sub_absent (Project.program proj) "main"
+  then fix_main proj
   else proj
 
-let () = Extension.declare ~doc ~provides:["abi"] @@ fun ctxt ->
-  Bap_abi.register_pass (main ctxt);
+let discover_libc_start_main ctxt proj =
+  if is_enabled ctxt proj
+  then Project.map_program proj ~f:rename_libc_start_main
+  else proj
+
+let () = Extension.declare ~doc ~provides:["abi"; "api"] @@ fun ctxt ->
+  Bap_abi.register_pass (discover_libc_start_main ctxt);
+  Project.register_pass ~autorun:true ~deps:["api"] (recover_main ctxt);
   Ok ()

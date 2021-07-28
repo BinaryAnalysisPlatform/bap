@@ -12,4 +12,5 @@ let () = Config.manpage [
     `P "$(b,bap-plugin-x86)(1), $(b,bap-plugin-arm)(1), $(b,bap-abi)(3)"
   ]
 
-let () = Config.when_ready (fun _ -> Project.register_pass ~autorun:true Bap_abi.pass)
+let () = Config.when_ready (fun _ ->
+    Project.register_pass ~autorun:true Bap_abi.pass)
