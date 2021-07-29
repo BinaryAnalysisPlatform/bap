@@ -21,6 +21,7 @@ long          a64l(const char *)
 void          abort(void) __attribute__((noreturn));
 int           abs(int x) __attribute__((__const__, warn_unused_result));
 int           atexit(void (*callback)(void)) __attribute__((nonnull(1)));
+int           __cxa_atexit(void (*callback)(void)) __attribute__((nonnull(1)));
 double        atof(const char *)  __attribute__((pure, nonnull(1), warn_unused_result));
 int           atoi(const char *)  __attribute__((pure, nonnull(1), warn_unused_result));
 long          atol(const char *)  __attribute__((pure, nonnull(1), warn_unused_result));
@@ -117,25 +118,39 @@ int feof(FILE *stream) __attribute__((warn_unused_result));
 int ferror(FILE *stream) __attribute__((warn_unused_result));
 int fgetc(FILE *stream);
 int fgetc(FILE *stream);
+int fgetc_unlocked(FILE *stream);
+int fgetc_unlocked(FILE *stream);
 int fileno(FILE *stream) __attribute__((warn_unused_result));
 int fputc(int c, FILE *stream);
 int fputs(const char *s, FILE *stream);
+int fputc_unlocked(int c, FILE *stream);
+int fputs_unlocked(const char *s, FILE *stream);
 int getc(FILE *stream);
+int getc_unlocked(FILE *stream);
 int getchar(void);
 int putchar(int c);
+int getchar_unlocked(void);
+int putchar_unlocked(int c);
 int putc(int c, FILE *stream);
 int puts(const char *s);
+int putc_unlocked(int c, FILE *stream);
+int puts_unlocked(const char *s);
 int remove(const char *);
 int rename(const char *, const char *);
 int ungetc(int c, FILE *stream);
 
 size_t fread(void * restrict ptr, size_t size, size_t nmemb, FILE * restrict stream)
     __attribute__((warn_unused_result, storage(1,2,3)));
+size_t fread_unlocked(void * restrict ptr, size_t size, size_t nmemb, FILE * restrict stream)
+    __attribute__((warn_unused_result, storage(1,2,3)));
 size_t fwrite(const void * restrict ptr, size_t size, size_t nmemb, FILE * restrict stream)
+    __attribute__((warn_unused_result, storage(1,2,3)));
+size_t fwrite_unlocked(const void * restrict ptr, size_t size, size_t nmemb, FILE * restrict stream)
     __attribute__((warn_unused_result, storage(1,2,3)));
 void clearerr(FILE *stream);
 
 int fflush(FILE *stream);
+int fflush_unlocked(FILE *stream);
 
 int __isoc99_fscanf (FILE *__restrict __stream, const char *__restrict __format, ...)  __attribute__((warn_unused_result));
 int __isoc99_scanf (const char *__restrict __format, ...)  __attribute__((warn_unused_result));
@@ -354,6 +369,13 @@ int          gethostname(char *buf, size_t len) __attribute__((nonnull(1), stora
 char        *getlogin(void) __attribute__((warn_unused_result));
 int          getlogin_r(char *buf, size_t size) __attribute__((warn_unused_result, nonnull(1), storage(1,2)));
 int          getopt(int argc, char * const *argv, const char *shortopts);
+int getopt_long(int argc, char * const argv[],
+                const char *optstring,
+                const struct option *longopts, int *longindex);
+
+int getopt_long_only(int argc, char * const argv[],
+                     const char *optstring,
+                     const struct option *longopts, int *longindex);
 pid_t        getpgid(pid_t pid) __attribute__((warn_unused_result));
 pid_t        getpgrp(void) __attribute__((warn_unused_result));
 pid_t        getpid(void) __attribute__((warn_unused_result));
@@ -361,6 +383,8 @@ pid_t        getppid(void) __attribute__((warn_unused_result));
 pid_t        getsid(pid_t pid) __attribute__((warn_unused_result));
 uid_t        getuid(void) __attribute__((warn_unused_result));
 int          isatty(int fd);
+int          ioctl(int fd, unsigned long request, ...);
+int          getpagesize(void);
 int          lchown(const char *file, uid_t owner, gid_t group) __attribute__((warn_unused_result,nonnull(1)));
 int          link(const char *from, const char *to) __attribute__((warn_unused_result,nonnull(1,2)));
 int          linkat(int fromfd, const char *from, int tofd, const char *to, int flags) __attribute__((warn_unused_result,nonnull(2,4)));
@@ -448,3 +472,25 @@ int isblank(int c);
 
 int toupper(int c);
 int tolower(int c);
+
+
+// locale.h
+
+char *setlocale(int category, const char *locale);
+struct lconv *localeconv(void);
+
+// #include <libintl.h>
+char * bindtextdomain (const char * domainname, const char * dirname);
+char * textdomain (const char * domainname);
+
+// #include <setjmp.h>
+typedef void * jmp_buf;
+typedef void * sigjmp_buf;
+int setjmp(jmp_buf env);
+int sigsetjmp(sigjmp_buf env, int savesigs);
+void longjmp(jmp_buf env, int val);
+void siglongjmp(sigjmp_buf env, int val);
+int _setjmp(jmp_buf env);
+int _sigsetjmp(sigjmp_buf env, int savesigs);
+void _longjmp(jmp_buf env, int val);
+void _siglongjmp(sigjmp_buf env, int val);
