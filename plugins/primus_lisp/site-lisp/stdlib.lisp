@@ -32,7 +32,7 @@
 
 
 (defun atexit (cb)
-  (declare (external "atexit"))
+  (declare (external "atexit" "__cxa_atexit"))
   0)
 
 (defun abs (x)

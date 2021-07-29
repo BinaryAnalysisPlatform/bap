@@ -3,3 +3,8 @@
 (require string)
 (require errno)
 (require ascii)
+(require locale)
+(require libintl)
+(require unistd)
+(require setjmp)
+(require getopt)

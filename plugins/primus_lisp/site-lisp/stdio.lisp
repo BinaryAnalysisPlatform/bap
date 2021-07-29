@@ -5,15 +5,15 @@
 (in-package posix)
 
 (defun fputc (char stream)
-  (declare (external "fputc" "putc"))
+  (declare (external "fputc" "putc" "fputs_unlocked putc_unlocked"))
   (if (= 0 (channel-output stream char)) char -1))
 
 (defun putchar (char)
-  (declare (external "putchar"))
+  (declare (external "putchar" "putchar_unlocked"))
   (fputc char *standard-output*))
 
 (defun fputs (p stream)
-  (declare (external "fputs"))
+  (declare (external "fputs" "fputs_unlocked"))
   (while (not (points-to-null p))
     (fputc (cast int (memory-read p)) stream)
     (incr p))
@@ -22,11 +22,11 @@
     r))
 
 (defun puts (p)
-  (declare (external "puts"))
+  (declare (external "puts" "puts_unlocked"))
   (fputs p *standard-output*))
 
 (defun fflush (s)
-  (declare (external "fflush"))
+  (declare (external "fflush" "fflush_unlocked"))
   (channel-flush s))
 
 
@@ -36,12 +36,12 @@
 ;; ignoring modes, we will add them later, of course.
 (defun fopen (path mode)
   (declare (external "fopen" "open" "fdopen"))
-  (channel-open path))
+  (let ((file (channel-open path)))
+    (if (< file 0) 0 file)))
 
 (defun fileno (stream)
   (declare (external "fileno"))
   stream)
-
 
 (defun open3 (path flags mode)
   (declare (external "open"))
@@ -61,7 +61,7 @@
     i))
 
 (defun fwrite (buf size n stream)
-  (declare (external "fwrite"))
+  (declare (external "fwrite" "fwrite_unlocked"))
   (let ((i 0))
     (while (and (< i n)
                 (= size (output-item buf size i stream)))
@@ -90,7 +90,7 @@
     i))
 
 (defun fread (ptr size n stream)
-  (declare (external "fread"))
+  (declare (external "fread" "fread_unlocked"))
   (let ((i 0))
     (while (and
             (< i n)
@@ -104,7 +104,7 @@
 
 
 (defun fgetc (stream)
-  (declare (external "fgetc" "getc"))
+  (declare (external "fgetc" "getc" "fgetc_unlocked" "getc_unlocked"))
   (channel-input stream))
 
 (defun terminate-string-and-return-null (ptr)
@@ -113,7 +113,7 @@
   0)
 
 (defun fgets (ptr len str)
-  (declare (external "fgets"))
+  (declare (external "fgets" "fgets_unlocked"))
   (if (= len 0) (terminate-string-and-return-null ptr)
     (let ((i 0)
           (n (-1 len))
@@ -132,7 +132,7 @@
 
 
 (defun getchar ()
-  (declare (external "getchar"))
+  (declare (external "getchar" "getchar_unlocked"))
   (fgetc *standard-input*))
 
 (defmethod primus:machine-kill ()
