@@ -836,7 +836,7 @@ module CST : Theory.Core = struct
     x >>= fun v ->
     let s = esort v in
     match KB.Value.get eslot v with
-    | None -> ret (Theory.Effect.empty s)
+    | None -> f s (list [])
     | Some x -> f s x
 
 
