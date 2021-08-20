@@ -4,14 +4,14 @@ open Regular.Std
 (**
    {3 Graph library}
 
-   {!Graphlib} is a generic library that extends a well known
-   OCamlGraph library. {!Graphlib} uses its own and richer
+   {!Graphlib} is a generic library that extends a OCamlGraph
+   library.{!Graphlib} uses its own and richer
    {!Graph} interface that is isomorphic to OCamlGraph's [Sigs.P]
    signature for persistent graphs. Two functors witnesses
    isomorphism of the interfaces:
    {!Graphlib.To_ocamlgraph} and {!Graphlib.Of_ocamlgraph}. Thanks
    to these functors, any algorithm written for OCamlGraph can be
-   used on [Graphlibs] graph and vice verse.
+   used on [Graphlibs] graph and vice versa.
 
    The {!Graph} interface provides a richer interface in a Core
    style. Nodes and Edges implements the {!Opaque} interface,
@@ -62,25 +62,37 @@ open Regular.Std
    [G.Edge.insert].
 *)
 module Std : sig
-  (** {!Graph} nodes.  *)
+
+  (** {!Graph} nodes.
+      Semantics of operations is denoted using mathematical model,
+      described in {!Graph} interface.
+
+      The [node] and [label] types are almost always have identical
+      representation. For labeled graphs the comparison function for
+      the [node] is different than the comparison function for the
+      label, therefore it is a good idea to hide their representation
+      equality in the interface.
+  *)
   module type Node = sig
-    (** Semantics of operations is denoted using mathematical model,
-        described in {!Graph} interface.  *)
-
     type t                      (** node type is opaque  *)
-    type graph
-    type label
-    type edge
+    type graph                  (** the type of the node graph *)
+    type label                  (** the label type *)
+    type edge                   (** the edge type *)
 
-    (** [create label] creates a new node, and associates it with a
-        a given [label].  *)
+    (** [create x] creates a node labeled with [x].
+
+        For unlabeled graphs this is an identity function. *)
     val create : label -> t
 
-    (** [label n] returns a value associated with a node [n].  *)
+    (** [label n] the label of the node [n].  *)
     val label : t -> label
 
     (** [mem n g] is [true] if [n] is a member of nodes [N] of graph
-        [g].  *)
+        [g].
+
+        For labeled graphs the membership is tested without taking
+        into account the label of the node.
+    *)
     val mem : t -> graph -> bool
 
     (** [succs node graph] returns a sequence of successors of a
@@ -114,8 +126,11 @@ module Std : sig
     *)
     val insert : t -> graph -> graph
 
-    (** [update n l g] if node [n] is not in [N(g)] then return [g],
-        else return graph [g] where node [n] is labeled with [l].
+    (** [update n l g] for a graph with labeled nodes if node [n] is
+        not in [N(g)] then returns [g] else returns graph [g] where
+        node [n] is labeled with [l].
+
+        For unlabeled graph returns [g].
 
         Postconditions: {v
           - n ∉ N(g) -> n ∉ N(g').
@@ -212,18 +227,15 @@ module Std : sig
 
   (** Graph signature.  *)
   module type Graph = sig
-    (** Graph is mathematical data structure that is used to represent
-        relations between elements of a set. Usually, graph is defined
-        as an ordered pair of two sets - a set of vertices and a set
-        of edges that is a 2-subset of the set of nodes,
+
+    (** A graph is a set of relations between objects, defined
+        as a pair of two sets
 
         {v G = (V,E). v}
 
-        In Graphlib vertices (called nodes in our parlance) and edges
-        are labeled. That means that we can associate data with edges
-        and nodes. Thus graph should be considered as an associative
-        data structure. And from mathematics perspective graph is
-        represented as an ordered 6-tuple, consisting of a set of nodes,
+        where $V$ is a set of vertices and E is a set of vertices,
+        which is a subset of [V x V], therefore a more precise
+        definition is a 6-tuple, consisting of a set of nodes,
         edges, node labels, edge labels, and two functions that maps
         nodes and edges to their corresponding labels:
 
@@ -250,14 +262,6 @@ module Std : sig
         operation in terms of input and output arguments, we project
         graphs to its fields with the following notation
         [<field>(<graph>)], e.g., [N(g)] is a set of nodes of graph [g].
-
-        Only the strongest postcondition is specified, e.g., if it is
-        specified that [νn = l], then it also means that
-
-        [n ∈ N ∧ ∃u((u,v) ∈ E ∨ (v,u) ∈ E) ∧ l ∈ N' ∧ ...]
-
-        In other words the structure [G] of the graph G is an invariant
-        that is always preserved.
     *)
 
     (** type of graph  *)
@@ -714,12 +718,7 @@ module Std : sig
 
     (** [Labeled(Node)(Node_label)(Edge_label)] creates a graph
         structure with both nodes and edges labeled with abitrary
-        types.
-
-        Contrary to [Make] functor, where a node and a node label are
-        unified, the [Labeled] functor creates a graph data structure,
-        where they are different. Moreover, the node label is pure
-        abstract and can be any type, including functional.*)
+        types. *)
     module Labeled(Node : Opaque.S)(NL : T)(EL : T) : Graph
       with type node = (Node.t, NL.t) labeled
        and type Node.label = (Node.t, NL.t) labeled

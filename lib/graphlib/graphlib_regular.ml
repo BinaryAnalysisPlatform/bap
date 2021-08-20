@@ -82,12 +82,11 @@ module Make(Node : Opaque.S)(Label : T) = struct
     let remove_arrows = update_arrows remove_arrow
 
     let update n l g : graph = Map.find g n |> function
-      | None -> g
-      | Some {inc;out} ->
-        let n = (create l) in
-        Map.set g ~key:n ~data:{inc;out}  |>
-        insert_arrows Fields_of_node_info.out inc n |>
-        insert_arrows Fields_of_node_info.inc out n
+      | Some {inc;out} when Node.equal n l ->
+        Map.set g ~key:l ~data:{inc;out}  |>
+        insert_arrows Fields_of_node_info.out inc l |>
+        insert_arrows Fields_of_node_info.inc out l
+      | _ -> g
 
     let remove n g = match Map.find g n with
       | None -> g
