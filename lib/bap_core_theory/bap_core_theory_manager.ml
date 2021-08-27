@@ -311,19 +311,33 @@ let slot = Knowledge.Class.property theory "instance" domain
     ~package:"core"
     ~desc:"The theory structure"
 
+let current = Knowledge.Context.declare
+    ~package:"core" "*current-theory*"
+    !!(Knowledge.Object.null theory)
+
+module Theory = (val Knowledge.Object.derive theory)
+
+let theories = KB.Context.declare
+    ~package:"core" "*theories*"
+    !!None
+
+let theories () =
+  KB.Context.get theories >>= function
+  | Some theories -> !!theories
+  | None ->
+    let init = Map.empty (module Theory) in
+    Hashtbl.to_alist known_theories |>
+    Knowledge.List.fold ~init ~f:(fun theories (name,def) ->
+        Knowledge.Symbol.intern (Name.unqualified name) theory
+          ~package:(Name.package name) >>| fun name ->
+        Map.add_exn theories name def) >>= fun r ->
+    KB.Context.set theories (Some r) >>| fun () ->
+    r
+
 
 let str_ctxt () ctxt =
   List.to_string (Set.to_list ctxt) ~f:ident
 
-module Theory = (val Knowledge.Object.derive theory)
-
-let theories () =
-  let init = Map.empty (module Theory) in
-  Hashtbl.to_alist known_theories |>
-  Knowledge.List.fold ~init ~f:(fun theories (name,def) ->
-      Knowledge.Symbol.intern (Name.unqualified name) theory
-        ~package:(Name.package name) >>| fun name ->
-      Map.add_exn theories name def)
 
 let is_applicable ~provided ~requires =
   Set.for_all requires ~f:(Set.mem provided)
@@ -388,22 +402,30 @@ let instantiate t =
     id
 
 let instance ?context ?requires () =
-  theories () >>| Map.data >>| refine ?context ?requires >>= function
-  | [] -> theory_for_id Empty.theory.id
-  | [t] ->
-    instantiate t
-  | theories ->
-    List.fold theories ~init:(Set.empty (module Name)) ~f:(fun names t ->
-        Set.union names t.id) |>
-    theory_for_id >>= fun id ->
-    is_instantiated id >>= function
-    | true -> Knowledge.return id
-    | false ->
-      Knowledge.List.map theories
-        ~f:(instantiate >=> Knowledge.collect slot) >>|
-      List.reduce_balanced_exn ~f:merge >>=
-      Knowledge.provide slot id >>| fun () ->
-      id
+  KB.Context.get current >>= fun theory ->
+  match context, requires with
+  | None,None when not (Knowledge.Object.is_null theory) -> !!theory
+  | _ ->
+    theories () >>| Map.data >>| refine ?context ?requires >>= function
+    | [] -> theory_for_id Empty.theory.id
+    | [t] ->
+      instantiate t
+    | theories ->
+      List.fold theories ~init:(Set.empty (module Name)) ~f:(fun names t ->
+          Set.union names t.id) |>
+      theory_for_id >>= fun id ->
+      is_instantiated id >>= function
+      | true -> Knowledge.return id
+      | false ->
+        Knowledge.List.map theories
+          ~f:(instantiate >=> Knowledge.collect slot) >>|
+        List.reduce_balanced_exn ~f:merge >>=
+        Knowledge.provide slot id >>| fun () ->
+        id
+
+let with_current t f =
+  Knowledge.Context.with_var current t f
+
 
 let require name =
   let open Knowledge.Syntax in
@@ -412,6 +434,8 @@ let require name =
   | Some t -> t.structure
   | None -> Knowledge.collect slot name >>| fun t ->
     t.structure
+
+let current = (instance >=> require) ()
 
 
 module Documentation = struct

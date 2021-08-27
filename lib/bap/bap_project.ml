@@ -408,7 +408,10 @@ let create
     Signal.send Info.got_code code;
     Signal.send Info.got_spec spec;
     let run k =
-      let k = KB.(set_package package >>= fun () -> k) in
+      let k = KB.(set_package package >>= fun () ->
+                  Theory.instance () >>= fun theory ->
+                  Theory.with_current theory @@ fun () ->
+                  k) in
       State.Toplevel.run spec target ~code ~memory file k in
     let state = match state with
       | Some state -> state

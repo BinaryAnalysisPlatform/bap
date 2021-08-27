@@ -18,6 +18,10 @@ val instance :
 
 val require : theory -> (module Core) knowledge
 
+val with_current : theory -> (unit -> 'a knowledge) -> 'a knowledge
+
+val current : (module Core) knowledge
+
 module Documentation : sig
   module Theory : sig
     type t
