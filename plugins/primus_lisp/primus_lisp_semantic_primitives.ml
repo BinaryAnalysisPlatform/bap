@@ -372,7 +372,7 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     if Theory.Value.Sort.same (Theory.Value.sort x) s then !!x
     else match const x with
       | Some x -> const_int s x
-      | None -> CT.cast s CT.b0 !!x
+      | None -> CT.signed s !!x
 
   let monoid s sf df init xs =
     with_nbitv s xs @@ fun s xs -> match xs with

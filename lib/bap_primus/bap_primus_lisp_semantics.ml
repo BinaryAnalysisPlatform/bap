@@ -378,25 +378,10 @@ module Prelude(CT : Theory.Core) = struct
       seq xs;
     ]
 
-  let cast s x =
-    Meta.lift@@CT.cast (bits s) CT.b0 !x
-
   let nil = !!(Theory.Value.empty Theory.Bool.t)
   let undefined = full [] nil
   let purify eff =
     full [] !!(res eff)
-
-  let unified x y f =
-    Theory.Value.Match.(begin
-        let|() = both
-            Theory.Bitv.refine x
-            Theory.Bitv.refine y @@ fun x y ->
-          let s = Int.max (size x) (size y) in
-          cast s x >>= fun x ->
-          cast s y >>= fun y ->
-          f x y in
-        undefined
-      end)
 
   let coerce_bits s x f =
     let open Theory.Value.Match in
