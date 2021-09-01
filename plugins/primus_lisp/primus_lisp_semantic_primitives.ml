@@ -261,12 +261,6 @@ let pslot = KB.Class.property Theory.Value.cls "val"
     ~public:true
     domain
 
-let var_slot = KB.Class.property Theory.Value.cls "variable"
-    ~package:"core" @@
-  KB.Domain.optional "var"
-    ~equal:Theory.Var.Top.equal
-    ~inspect:Theory.Var.Top.sexp_of_t
-
 let nothing = KB.Value.empty Theory.Semantics.cls
 let size = Theory.Bitv.size
 let forget x = x >>| Theory.Value.forget
@@ -378,7 +372,7 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     if Theory.Value.Sort.same (Theory.Value.sort x) s then !!x
     else match const x with
       | Some x -> const_int s x
-      | None -> CT.cast s CT.b0 !!x
+      | None -> CT.signed s !!x
 
   let monoid s sf df init xs =
     with_nbitv s xs @@ fun s xs -> match xs with
@@ -589,21 +583,22 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | Some addr -> forget@@const_int s addr
 
   let set_symbol v x =
-    match KB.Value.get var_slot v with
-    | Some var ->
+    match KB.Value.get Primus.Lisp.Semantics.symbol v with
+    | Some name ->
+      let var = Theory.Var.define (Theory.Value.sort x) name in
       CT.set var !!x
     | None ->
-      illformed "set-variable (set$) requires a value reified to a variable"
+      illformed "requires a value reified to a variable"
 
   let symbol s v =
-    match KB.Value.get var_slot v with
-    | Some var ->
-      intern (Theory.Var.name var) >>= const_int s |> forget
+    match KB.Value.get Primus.Lisp.Semantics.symbol v with
+    | Some name ->
+      intern name >>= const_int s |> forget
     | None ->
       illformed "symbol requires a value reified to a variable"
 
   let is_symbol v =
-    forget@@match KB.Value.get var_slot v with
+    forget@@match KB.Value.get Primus.Lisp.Semantics.symbol v with
     | Some _ -> true_
     | _ -> false_
 
@@ -773,12 +768,6 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | _ -> !!nothing
 end
 
-module VarTheory : Theory.Core = struct
-  include Theory.Empty
-  let var v =
-    var v >>| fun x ->
-    KB.Value.put var_slot x (Some (Theory.Var.forget v))
-end
 
 module CST : Theory.Core = struct
   type t = Sexp.t
@@ -1255,16 +1244,7 @@ end
 
 module Lisp = Primus.Lisp.Semantics
 
-let enable_var_theory () =
-  Theory.declare ~provides:["primus-lisp"; "lisp"]
-    ~package:"core"
-    ~name:"vars"
-    ~desc:"tracks terms that are variables"
-    (KB.return (module VarTheory : Theory.Core))
-
-
 let provide () =
-  enable_var_theory ();
   List.iter export ~f:(fun (name,types,docs) ->
       Primus.Lisp.Semantics.declare ~types ~docs ~package:"core" name
         ~body:(fun target ->
@@ -1274,7 +1254,8 @@ let provide () =
             KB.return @@ fun obj args ->
             KB.catch (P.dispatch obj name args) @@ function
             | Illformed err ->
-              KB.fail (Failed_primitive (assert false,args,err))
+              let name = KB.Name.create ~package:"core" name in
+              KB.fail (Failed_primitive (name,args,err))
             | other -> KB.fail other))
 
 

@@ -165,22 +165,18 @@ module IR = struct
       {entry = label; blks}
 
   let set v x =
-    target >>= fun t ->
-    if Theory.Target.has_roles t [Theory.Role.Register.constant] v
-    then !!empty
-    else
-      x >>= fun x ->
-      fresh >>= fun entry ->
-      fresh >>= fun tid ->
-      data {
-        entry;
-        blks = [{
-            name=entry;
-            keep=false;
-            jmps=[];
-            defs=[Def.reify ~tid v x]
-          }]
-      }
+    x >>= fun x ->
+    fresh >>= fun entry ->
+    fresh >>= fun tid ->
+    data {
+      entry;
+      blks = [{
+          name=entry;
+          keep=false;
+          jmps=[];
+          defs=[Def.reify ~tid v x]
+        }]
+    }
 
   (** reifies a [while (<cnd>) <body>] loop to
 

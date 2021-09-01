@@ -9,10 +9,12 @@ let user_package = "user"
 
 module Value = Knowledge.Value
 module Name = Knowledge.Name
+module Desugar = Bap_core_theory_pass.Desugar
 
 type 'a theory = {
   name : Set.M(Name).t;
   desc : string;
+  desugared : Base.bool;
   requires : Set.M(String).t;
   provides : Set.M(String).t;
   structure : 'a;
@@ -36,6 +38,7 @@ module Empty = struct
     is_empty = true;
     name = names [name];
     desc = "The empty theory.";
+    desugared = false;
     requires = Set.of_list (module String) requires;
     provides = Set.of_list (module String) provides;
     structure = (module Self : Core);
@@ -63,13 +66,13 @@ let declare
     ?(context=[])
     ?(provides=[])
     ?package ~name structure =
-
   let name = Name.create ?package name in
   let extends = List.map extends ~f:Name.read in
   check_uniqueness name;
   Hashtbl.add_exn known_theories name {
     is_empty = false;
     name = names (name :: Empty.name :: extends);
+    desugared = false;
     desc; structure;
     requires = features context;
     provides = Set.add (features provides) (Name.show name);
@@ -279,7 +282,6 @@ let set_inclusion_order x y : Knowledge.Order.partial =
 let order t1 t2 = set_inclusion_order t1.name t2.name
 
 let merge t1 t2 = match order t1 t2 with
-  | EQ -> t1
   | LT -> t2
   | GT -> t1
   | NC -> {
@@ -288,8 +290,13 @@ let merge t1 t2 = match order t1 t2 with
       requires = Set.union t1.requires t2.requires;
       provides = Set.union t1.provides t2.provides;
       structure = join_cores t1.structure t2.structure;
+      desugared = false;
       id = Set.union t1.id t2.id;
     }
+  | EQ -> match t1.desugared, t2.desugared with
+    | true,false -> t1
+    | false,true -> t2
+    | _ -> t1
 
 let join t1 t2 = Ok (merge t1 t2)
 
@@ -363,8 +370,8 @@ let refine ?(context=[]) ?requires theories =
       is_required ~required ~provides)
 
 let theory_for_id id =
-  let sym = sprintf "'%s" @@
-    List.to_string (Set.to_list id) ~f:Name.show in
+  let sym = sprintf "'%s"
+      (List.to_string (Set.to_list id) ~f:Name.show) in
   Knowledge.Symbol.intern sym theory
     ~package:"core-internal"
 
@@ -411,7 +418,7 @@ let instance ?context ?requires () =
     | [t] ->
       instantiate t
     | theories ->
-      List.fold theories ~init:(Set.empty (module Name)) ~f:(fun names t ->
+      List.fold theories ~init:(names []) ~f:(fun names t ->
           Set.union names t.id) |>
       theory_for_id >>= fun id ->
       is_instantiated id >>= function
@@ -423,17 +430,26 @@ let instance ?context ?requires () =
         Knowledge.provide slot id >>| fun () ->
         id
 
-let with_current t f =
-  Knowledge.Context.with_var current t f
-
-
 let require name =
   let open Knowledge.Syntax in
   theories () >>= fun theories ->
   match Map.find theories name with
   | Some t -> t.structure
-  | None -> Knowledge.collect slot name >>| fun t ->
-    t.structure
+  | None ->
+    Knowledge.collect slot name >>= fun t ->
+    if t.desugared then !!(t.structure)
+    else
+      let module CT = (val t.structure) in
+      let t = {
+        t with desugared = true;
+               structure = (module Desugar(CT) : Core);
+      } in
+      KB.provide slot name t >>| fun () ->
+      t.structure
+
+
+let with_current t f =
+  Knowledge.Context.with_var current t f
 
 let current = (instance >=> require) ()
 

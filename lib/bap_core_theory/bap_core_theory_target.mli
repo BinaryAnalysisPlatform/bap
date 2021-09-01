@@ -2,6 +2,7 @@ open Core_kernel
 open Bap_knowledge
 
 module KB = Knowledge
+module Bitv = Bap_core_theory_value.Bitv
 module Var = Bap_core_theory_var
 module Mem = Bap_core_theory_value.Mem
 
@@ -12,7 +13,10 @@ type abi
 type fabi
 type filetype
 type role
+type ('a,'k) origin
 type options = (options_cls,unit) KB.Class.t KB.Value.t and options_cls
+
+type alias
 
 val declare :
   ?parent:t ->
@@ -24,6 +28,7 @@ val declare :
   ?code_alignment:int ->
   ?vars:unit Var.t list ->
   ?regs:(role list * unit Var.t list) list ->
+  ?aliasing:alias list ->
   ?endianness:endianness ->
   ?system:system ->
   ?abi:abi ->
@@ -65,6 +70,8 @@ val regs :
   t -> Set.M(Var.Top).t
 val reg : ?exclude:role list -> ?unique:bool -> t -> role -> unit Var.t option
 val has_roles : t -> role list -> _ Var.t -> bool
+val unalias : t -> 'a Var.t -> ('b,unit) origin option
+
 val endianness : t -> endianness
 val system : t -> system
 val abi : t -> abi
@@ -87,6 +94,7 @@ module Role : sig
   module Register : sig
     val general : t
     val special : t
+    val alias : t
     val pseudo : t
     val integer : t
     val floating : t
@@ -115,10 +123,33 @@ module Role : sig
   include KB.Enum.S with type t := t
 end
 
+
 module System : KB.Enum.S with type t = system
 module Filetype : KB.Enum.S with type t = filetype
 module Abi : KB.Enum.S with type t = abi
 module Fabi : KB.Enum.S with type t = fabi
+
+module Alias : sig
+  type t = alias
+  type 'a part
+  val def : 'a Bitv.t Var.t -> 'b part list -> alias
+  val reg : 'a Bitv.t Var.t -> 'a part
+  val unk : 'a part
+end
+
+module Origin : sig
+  type ('s,'k) t = ('s,'k) origin
+  type sub
+  type sup
+
+  val cast_sub : ('a,unit) t -> ('a,sub) t option
+  val cast_sup : ('a,unit) t -> ('a,sup) t option
+  val reg : ('a,sub) t -> 'a Bitv.t Var.t
+  val is_alias : ('a,sub) t -> bool
+  val hi : ('a,sub) t -> int
+  val lo : ('a,sub) t -> int
+  val regs : ('a,sup) t -> 'a Bitv.t Var.t list
+end
 
 module Options : sig
   type cls = options_cls

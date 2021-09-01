@@ -13,7 +13,7 @@
   (set$ dst (lshift imm pos)))
 
 (defun MOVZWi (dst imm pos)
-  (set$ (base-reg dst) (lshift imm pos)))
+  (set$ dst (lshift imm pos)))
 
 (defun ADDXri (dst src imm off)
   (set$ dst (+ src (lshift imm off))))
@@ -27,11 +27,11 @@
              (load-hword (+ base (lshift off 2))))))
 
 (defun LDRWui (dst reg off)
-  (set$ (base-reg dst)
+  (set$ dst
         (cast-unsigned (word) (load-hword (+ reg (lshift off 2))))))
 
 (defun LDRBBui (dst reg off)
-  (set$ (base-reg dst)
+  (set$ dst
         (cast-unsigned (word) (load-byte (+ reg off)))))
 
 (defmacro make-BFM (cast xd xr ir is)
@@ -56,9 +56,9 @@
   (set$ rd (logor rn (shifted rm is))))
 
 (defun ORRWrs (rd rn rm is)
-  (set$ (base-reg rd)
-        (logor (base-reg rn)
-               (shifted (base-reg rm) is))))
+  (set$ rd
+        (logor rn
+               (shifted rm is))))
 
 (defun ADRP (dst imm)
   (set$ dst (+
@@ -66,10 +66,10 @@
              (cast-signed (word) (lshift imm 12)))))
 
 (defun ADDWrs (dst r1 v s)
-  (set$ (base-reg dst) (+ (base-reg r1) (lshift (base-reg v) s))))
+  (set$ dst (+ r1 (lshift v s))))
 
 (defun ADDWri (dst r1 imm s)
-  (set$ (base-reg dst) (+ (base-reg r1) (lshift imm s))))
+  (set$ dst (+ r1 (lshift imm s))))
 
 
 (defun SUBXrx64 (rd rn rm off)
@@ -80,11 +80,11 @@
 
 (defun SUBSWrs (rd rn rm off)
   (add-with-carry
-   (base-reg rd)
-   (base-reg rn) (lnot (shifted (base-reg rm) off)) 1))
+   rd
+   rn (lnot (shifted rm off)) 1))
 
 (defun SUBSWri (rd rn imm off)
-  (add-with-carry (base-reg rd) (base-reg rn) (lnot (lshift imm off)) 1))
+  (add-with-carry rd rn (lnot (lshift imm off)) 1))
 
 
 (defun SUBSXri (rd rn imm off)
@@ -97,7 +97,7 @@
   (set$ rd (- rn (lshift imm off))))
 
 (defun SUBWri (rd rn imm off)
-  (set$ (base-reg rd) (- (base-reg rn) (lshift imm off))))
+  (set$ rd (- rn (lshift imm off))))
 
 (defun ADDXrs (rd rn rm off)
   (set$ rd (+ rn (shifted rm off))))
@@ -155,7 +155,7 @@
 
 (defun STRWui (src reg off)
   (let ((off (lshift off 2)))
-    (store-word (+ reg off) (cast-low 32 (base-reg src)))))
+    (store-word (+ reg off) (cast-low 32 src))))
 
 (defun STRXroX (rt rn rm _ shift)
   (store-word (+ rn (lshift rm (* shift 3))) rt))
@@ -166,7 +166,7 @@
 
 
 (defun STRBBui (src reg off)
-  (store-byte (+ reg off) (base-reg src)))
+  (store-byte (+ reg off) src))
 
 (defun relative-jump (off)
   (exec-addr (+ (get-program-counter) (lshift off 2))))
@@ -194,7 +194,7 @@
     (relative-jump off)))
 
 (defun CBZW (reg off)
-  (when (is-zero (base-reg reg))
+  (when (is-zero reg)
     (relative-jump off)))
 
 (defun CBNZX (reg off)
@@ -202,7 +202,7 @@
     (relative-jump off)))
 
 (defun CBNZW (reg off)
-  (when (/= (base-reg reg) 0)
+  (when (/= reg 0)
     (relative-jump off)))
 
 (defun Bcc (cnd off)
@@ -226,40 +226,3 @@
     0b1100 (logand (= NF VF) (= ZF 0))
     0b1101 (logor (/= NF VF) (/= ZF 0))
     true))
-
-(defun base-reg (reg)
-  (case (symbol reg)
-    'W0  X0
-    'W1  X1
-    'W2  X2
-    'W3  X3
-    'W4  X4
-    'W5  X5
-    'W6  X6
-    'W7  X7
-    'W8  X8
-    'W9  X9
-    'W10 X10
-    'W11 X11
-    'W12 X12
-    'W13 X13
-    'W14 X14
-    'W15 X15
-    'W16 X16
-    'W17 X17
-    'W18 X18
-    'W19 X19
-    'W20 X20
-    'W21 X21
-    'W22 X22
-    'W23 X23
-    'W24 X24
-    'W25 X25
-    'W26 X26
-    'W27 X27
-    'W28 X28
-    'W29 FP
-    'W30 LR
-    'WSP SP
-    'WZR XZR
-    (msg "unknown register $0" reg)))

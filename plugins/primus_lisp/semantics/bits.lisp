@@ -2,7 +2,7 @@
 
 (defun msb (x)
   "(msb X) is the most significant bit of X."
-  (select (- (word-width) 1) x))
+  (select (- (word-width x) 1) x))
 
 (defun lsb (x)
   "(msb X) is the least significant bit of X."

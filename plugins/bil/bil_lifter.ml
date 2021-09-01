@@ -12,7 +12,7 @@ include Self()
 
 let package = "bap"
 
-module Optimizer = Theory.Parser.Make(Bil_semantics.Core)
+module Optimizer = Theory.Parser.Make(Theory.Pass.Desugar(Bil_semantics.Core))
 [@@inlined]
 
 
