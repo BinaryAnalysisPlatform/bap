@@ -14,20 +14,31 @@ module Def = Bap_primus_lisp_def
 module Type = Bap_primus_lisp_type
 module Key = Bap_primus_lisp_program.Items
 
-module Meta = struct
-  module State = struct
-    type t = {
-      binds : unit Theory.Value.t Map.M(Theory.Var.Top).t;
-      arith : (module Bitvec.S);
-      scope : unit Theory.var list Map.M(Theory.Var.Top).t;
-    }
-  end
-  include Monad.State.T1(State)(KB)
-  include Monad.State.Make(State)(KB)
+open KB.Syntax
+open KB.Let
+
+module State = struct
+  type t = {
+    binds : unit Theory.Value.t Map.M(Theory.Var.Top).t;
+    arith : (module Bitvec.S);
+    scope : unit Theory.var list Map.M(Theory.Var.Top).t;
+  }
+
+  let empty = {
+    binds = Map.empty (module Theory.Var.Top);
+    arith = (module Bitvec.M32);
+    scope = Map.empty (module Theory.Var.Top);
+  }
+
+  let var = KB.Context.declare ~package:"bap" "lisp-interpter-state"
+      !!empty
+
+
+  let get = KB.Context.get var
+  let set = KB.Context.set var
+  let update = KB.Context.update var
 end
 
-open Meta.Syntax
-open Meta.Let
 
 type value = unit Theory.Value.t
 type effect = unit Theory.Effect.t
@@ -48,6 +59,8 @@ let program =
     ~equal:Program.equal
     ~join:(fun x y -> Ok (Program.merge x y))
 
+
+
 type program = {
   prog : Program.t;
   places : unit Theory.var Map.M(KB.Name).t;
@@ -60,14 +73,12 @@ let typed = KB.Class.property Theory.Source.cls "typed-program"
     ~equal:(fun x y ->
         Program.equal x.prog y.prog)
 
-let fail s = Meta.lift (KB.fail s)
-
 let unresolved name problem =
   let msg =
     Format.asprintf "Failed to find a definition for %a. %a"
       KB.Name.pp name
       Resolve.pp_resolution problem in
-  fail (Unresolved_definition msg)
+  KB.fail (Unresolved_definition msg)
 
 let resolve prog item name =
   match Resolve.semantics prog item name () with
@@ -203,9 +214,8 @@ let sym str =
   let v = update_value empty @@ fun v ->
     KB.Value.put symbol v (Some str) in
   match str with
-  | "nil" -> Meta.return@@set_static v Bitvec.zero
+  | "nil" -> KB.return@@set_static v Bitvec.zero
   | name ->
-    Meta.lift @@
     intern name >>|
     set_static v
 
@@ -214,11 +224,10 @@ let static x =
   KB.Value.get static_slot (res x)
 
 let reify_sym x = match static x with
-  | Some _ -> Meta.return x
+  | Some _ -> KB.return x
   | None -> match KB.Value.get symbol (res x) with
-    | None -> Meta.return x
+    | None -> KB.return x
     | Some name ->
-      Meta.lift @@
       intern name >>|
       set_static x
 
@@ -248,22 +257,21 @@ let lookup_parameter prog v =
 let is_parameter prog v = Option.is_some (lookup_parameter prog v)
 
 module Env = struct
-  open Meta.State
 
   let lookup v =
     let v = Theory.Var.forget v in
-    Meta.get () >>| fun {binds} ->
+    let+ {binds} = State.get in
     Map.find binds v
 
 
   let set v x =
-    Meta.update @@ fun s -> {
+    State.update @@ fun s -> {
       s with binds = Map.set s.binds
                  (Theory.Var.forget v) x
     }
 
   let del v =
-    Meta.update @@ fun s -> {
+    State.update @@ fun s -> {
       s with binds = Map.remove s.binds (Theory.Var.forget v)
     }
 
@@ -277,15 +285,15 @@ module Env = struct
     Theory.Var.forget@@Theory.Var.define (bits s) (KB.Name.to_string n)
 
   let set_args ws bs =
-    Meta.get () >>= fun s ->
+    let* s = State.get in
     let binds,old =
       List.fold bs ~init:(s.binds,[]) ~f:(fun (s,old) (v,x) ->
           let v = var ws v in
           Map.set s v x,(v,Map.find s v) :: old) in
-    Meta.put {s with binds} >>| fun () ->
+    State.set {s with binds} >>| fun () ->
     List.rev old
 
-  let del_args bs = Meta.update @@ fun s -> {
+  let del_args bs = State.update @@ fun s -> {
       s with binds = List.fold bs ~init:s.binds ~f:(fun s (v,x) ->
       match x with
       | None -> Map.remove s v
@@ -298,8 +306,8 @@ module Scope = struct
 
   let push orig =
     let orig = forget orig in
-    Meta.lift@@Theory.Var.fresh (Theory.Var.sort orig) >>= fun v ->
-    Meta.update  (fun s -> {
+    Theory.Var.fresh (Theory.Var.sort orig) >>= fun v ->
+    State.update  (fun s -> {
           s with scope = Map.update s.scope orig ~f:(function
         | None -> [v]
         | Some vs -> v::vs)
@@ -307,26 +315,26 @@ module Scope = struct
     v
 
   let lookup orig =
-    let+ {scope} = Meta.get () in
+    let+ {scope} = State.get in
     match Map.find scope orig with
     | None | Some [] -> None
     | Some (x :: _) -> Some x
 
   let pop orig =
-    Meta.update @@ fun s -> {
+    State.update @@ fun s -> {
       s with scope = Map.change s.scope (forget orig) ~f:(function
         | None | Some [] | Some [_] -> None
         | Some (_::xs) -> Some xs)
     }
 
   let clear =
-    let* s = Meta.get () in
-    let+ () = Meta.put {
+    let* s = State.get in
+    let+ () = State.set {
         s with scope = Map.empty (module Theory.Var.Top)
       } in
     s.scope
 
-  let restore scope = Meta.update @@ fun s -> {
+  let restore scope = State.update @@ fun s -> {
       s with scope
     }
 
@@ -334,15 +342,15 @@ end
 
 module Prelude(CT : Theory.Core) = struct
   let null = KB.Object.null Theory.Program.cls
-  let fresh = Meta.lift (KB.Object.create Theory.Program.cls)
+  let fresh = KB.Object.create Theory.Program.cls
 
   let rec seq = function
-    | [] -> Meta.lift@@CT.perform Theory.Effect.Sort.bot
+    | [] -> CT.perform Theory.Effect.Sort.bot
     | [x] -> x
     | x :: xs ->
       let* xs = seq xs in
       let* x = x in
-      Meta.lift@@CT.seq (KB.return x) (KB.return xs)
+      CT.seq (KB.return x) (KB.return xs)
 
   let skip = CT.perform Theory.Effect.Sort.bot
   let pass = CT.perform Theory.Effect.Sort.bot
@@ -355,10 +363,10 @@ module Prelude(CT : Theory.Core) = struct
     let s = bits m in
     let m = Bitvec.modulus m in
     let x = Bitvec.(bigint x mod m) in
-    pure @@ Meta.lift (CT.int s x) >>| fun r ->
+    pure @@ CT.int s x >>| fun r ->
     set_static r x
 
-  let (:=) v x = Meta.lift@@CT.set v x
+  let (:=) v x = CT.set v x
 
   let full eff res =
     seq eff >>= fun eff ->
@@ -367,14 +375,14 @@ module Prelude(CT : Theory.Core) = struct
 
   let data xs =
     let* data = seq xs in
-    Meta.lift@@CT.blk null !data skip
+    CT.blk null !data skip
 
   let ctrl xs =
     let* ctrl = seq xs in
-    Meta.lift@@CT.blk null pass !ctrl
+    CT.blk null pass !ctrl
 
   let blk lbl xs = seq [
-      Meta.lift@@CT.blk lbl pass skip;
+      CT.blk lbl pass skip;
       seq xs;
     ]
 
@@ -386,9 +394,9 @@ module Prelude(CT : Theory.Core) = struct
   let coerce_bits s x f =
     let open Theory.Value.Match in
     let| () = can Theory.Bitv.refine x @@ fun x ->
-      Meta.lift@@CT.cast s CT.b0 !x >>= f in
+      CT.cast s CT.b0 !x >>= f in
     let| () = can Theory.Bool.refine x @@ fun cnd ->
-      Meta.lift@@CT.ite !cnd
+      CT.ite !cnd
         (CT.int s Bitvec.one)
         (CT.int s Bitvec.zero) >>= fun x ->
       f x in
@@ -398,7 +406,7 @@ module Prelude(CT : Theory.Core) = struct
     let open Theory.Value.Match in
     let| () = can Theory.Bool.refine x f in
     let| () = can Theory.Bitv.refine x @@ fun x ->
-      Meta.lift@@CT.non_zero !x >>= fun x -> f x in
+      CT.non_zero !x >>= fun x -> f x in
     undefined
 
   let is_static eff = Option.is_some (static eff)
@@ -417,7 +425,7 @@ module Prelude(CT : Theory.Core) = struct
     let word = Theory.Target.bits target in
     let {prog; places} = program in
     let var ?t n = make_var ?t places target n in
-    let rec eval : ast -> unit Theory.Effect.t Meta.t = function
+    let rec eval : ast -> unit Theory.Effect.t KB.t = function
       | {data=Int {data={exp=x; typ=Type m}}} -> bigint x m
       | {data=Int {data={exp=x}}} -> bigint x word
       | {data=Var {data={exp=n; typ=Type t}}} -> lookup@@var ~t n
@@ -443,15 +451,15 @@ module Prelude(CT : Theory.Core) = struct
         else eval yes
       | None ->
         coerce_bool (res cnd) @@ fun cres ->
-        Meta.lift@@Theory.Var.fresh Theory.Bool.t >>= fun c ->
+        Theory.Var.fresh Theory.Bool.t >>= fun c ->
         let* yes = eval yes in
         let* nay = eval nay in
         full [
           !!cnd;
           data [c := !cres];
-          Meta.lift@@CT.branch (CT.var c) !yes !nay;
+          CT.branch (CT.var c) !yes !nay;
         ] @@
-        Meta.lift@@CT.ite (CT.var c) !(res yes) !(res nay)
+        CT.ite (CT.var c) !(res yes) !(res nay)
     and rep cnd body =
       let* r = eval cnd in
       match static r with
@@ -466,10 +474,10 @@ module Prelude(CT : Theory.Core) = struct
         let* head = fresh and* loop = fresh and* tail = fresh in
         coerce_bool (res r) @@ fun cres ->
         full [
-          blk head [ctrl [Meta.lift@@CT.goto tail]];
+          blk head [ctrl [CT.goto tail]];
           blk loop [!!body];
           blk tail [!!r; ctrl [
-              Meta.lift@@CT.branch !cres (CT.goto head) skip
+              CT.branch !cres (CT.goto head) skip
             ]]
         ] !!cres
     and call ?(toplevel=false) name xs =
@@ -490,27 +498,26 @@ module Prelude(CT : Theory.Core) = struct
       | None ->
         match Resolve.semantics prog Key.semantics name () with
         | Some Ok (sema,()) ->
-          Meta.lift@@
           Def.Sema.apply sema defn xs
         | Some (Error problem) -> unresolved name problem
         | None ->
           let msg = Format.asprintf "No definition is found for %a"
               KB.Name.pp name in
-          fail (Unresolved_definition msg)
+          KB.fail (Unresolved_definition msg)
     and app name xs =
       map xs >>= fun (aeff,xs) ->
       call name xs >>= fun peff ->
       full [!!aeff; !!peff] !!(res peff)
     and map args =
       seq [] >>= fun eff ->
-      Meta.List.fold args ~init:(eff,[]) ~f:(fun (eff,args) arg ->
+      KB.List.fold args ~init:(eff,[]) ~f:(fun (eff,args) arg ->
           let* eff' = eval arg in
           let+ eff = seq [!!eff; !!eff'] in
           (eff,forget (res eff')::args)) >>| fun (eff,args) ->
       eff, List.rev args
     and seq_ xs =
       pure nil >>= fun init ->
-      Meta.List.fold ~init xs ~f:(fun eff x  ->
+      KB.List.fold ~init xs ~f:(fun eff x  ->
           let* eff' = eval x in
           full [!!eff; !!eff'] !!(res eff'))
     and msg fmt args =
@@ -524,7 +531,7 @@ module Prelude(CT : Theory.Core) = struct
               | None -> Format.printf "@[<hv>%a@]" KB.Value.pp v);
       Format.fprintf ppf "@\n";
       !!aeff
-    and err msg = fail (User_error msg)
+    and err msg = KB.fail (User_error msg)
     and lookup v =
       Scope.lookup v >>= function
       | Some v -> lookup v
@@ -533,7 +540,7 @@ module Prelude(CT : Theory.Core) = struct
         | Some v -> pure !!v
         | None -> match lookup_parameter prog v with
           | Some def -> eval def >>= assign target v
-          | None -> pure@@Meta.lift@@CT.var v
+          | None -> pure@@CT.var v
     and set_ v x =
       Scope.lookup v >>= function
       | Some v -> eval x >>= assign target ~local:true v
@@ -690,17 +697,16 @@ let provide_semantics ?(stdout=Format.std_formatter) () =
   KB.collect Property.args obj >>= fun args ->
   KB.collect Theory.Unit.target unit >>= fun target ->
   let bits = Theory.Target.bits target in
-  let module Arith = Bitvec.Make(struct
-      let modulus = Bitvec.modulus bits
-    end) in
-  let meta = Meta.State.{
+  KB.Context.set State.var State.{
       binds = Map.empty (module Theory.Var.Top);
       scope = Map.empty (module Theory.Var.Top);
-      arith = (module Arith);
-    } in
-  Theory.instance () >>= Theory.require >>= fun (module Core) ->
+      arith = (module (Bitvec.Make(struct
+                         let modulus = Bitvec.modulus bits
+                       end)));
+    } >>= fun () ->
+  let* (module Core) = Theory.current in
   let open Prelude(Core) in
-  Meta.run (reify stdout prog obj target name args) meta >>= fun (res,_) ->
+  reify stdout prog obj target name args >>= fun res ->
   KB.collect Disasm_expert.Basic.Insn.slot obj >>| function
   | Some basic when Insn.(res <> empty) ->
     Insn.with_basic res basic
