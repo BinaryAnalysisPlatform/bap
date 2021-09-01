@@ -2017,6 +2017,7 @@ module Knowledge = struct
     type t = {
       classes : objects Map.M(Name).t;
       package : string;
+      context : Dict.t;
     }
   end
 
@@ -2026,6 +2027,7 @@ module Knowledge = struct
   let empty : Env.t = {
     package = user_package;
     classes = Map.empty (module Name);
+    context = Dict.empty;
   }
 
   module State = struct
@@ -3036,6 +3038,39 @@ module Knowledge = struct
   let objects cls = objects cls >>| fun {vals} ->
     Map.to_sequence vals |>
     Sequence.map ~f:fst
+
+  module Context = struct
+    type 'a var = {
+      nil : 'a knowledge;
+      key : 'a Dict.Key.t;
+    }
+
+    let declare ?(inspect=sexp_of_opaque) ?package name init =
+      let name = Name.create ?package name in {
+        nil = init;
+        key = Dict.Key.create ~name inspect;
+      }
+
+    let set {key} x = update @@ fun s -> {
+        s with context = Dict.set key x s.context
+      }
+
+    let get {key; nil} = get () >>= fun {context=s} ->
+      match Dict.find key s with
+      | None -> nil
+      | Some x -> !!x
+
+    let update v f =
+      get v >>= fun x ->
+      set v (f x)
+
+    let with_var v x f =
+      get v >>= fun x' ->
+      set v x >>= fun () ->
+      f () >>= fun r ->
+      set v x' >>| fun () ->
+      r
+  end
 
   module Rule = struct
     type def = Registry.def

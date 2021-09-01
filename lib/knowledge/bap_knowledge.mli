@@ -258,6 +258,57 @@ module Knowledge : sig
   val save : state -> string -> unit
 
 
+  (** Context variables.
+
+      Context variables could be used to implement stateful
+      analyses. They are not part of the knowledge base per se, but
+      enable convience that is otherwise achieavable through adding a
+      state to the knowledge monad using a monad transformer.
+
+      It is important to keep in mind that the contex variables are
+      not a part of the knowledge and that every knowledge computation
+      starts with a fresh set of variables, i.e., variables are not
+      persistent.
+
+      The data type of the context variable is not required to have
+      the domain structure or be comparable. The only requirement is
+      that when a variable is declared it should be initialized.
+
+      @since 2.4.0
+
+  *)
+  module Context : sig
+
+
+    (** an abstract type denoting a context variable and its name.  *)
+    type 'a var
+
+
+    (** [declare ~package name init] declares a new context variable.
+
+        The declared variable has the initial value [init]. The
+        [inspect] function could be used for debugging and
+        instrospection. *)
+    val declare : ?inspect:('a -> Sexp.t) -> ?package:string -> string ->
+      'a knowledge -> 'a var
+
+    (** [set v x] assings to the variable [v] a new value [x].  *)
+    val set : 'a var -> 'a -> unit knowledge
+
+    (** [get v] is the current value assigned to [v]. *)
+    val get : 'a var -> 'a knowledge
+
+    (** [update v f] applies [f] to the current value of [v] and
+        assigns the result back.
+    *)
+    val update : 'a var -> ('a -> 'a) -> unit knowledge
+
+
+    (** [with_var v x f] dynamically binds [v] to [x] while [f] is run.*)
+    val with_var : 'a var -> 'a -> (unit -> 'b knowledge) -> 'b knowledge
+  end
+
+
   (** prints the state of the knowledge base.  *)
   val pp_state : Format.formatter -> state -> unit
 
