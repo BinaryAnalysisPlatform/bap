@@ -266,8 +266,8 @@
 
     {[
       let () =
-        Theory.declare "my-constant-tracker"
-          Theory.instance ~require:["bap.std:constant-tracker"] >>=
+        Theory.declare "my-constant-tracker" @@
+        Theory.instance ~require:["bap.std:constant-tracker"] >>=
         Theory.require >>|
         fun (module Base) : Theory.core -> (module struct
           include Base
@@ -3030,22 +3030,30 @@ module Theory : sig
     (module Core) knowledge ->
     unit
 
-  (** [instance ()] creates an instance of the Core Theory.
+  (** [instance ()] returns the current or creates a new instance of
+      the core theory.
 
-      The instance is built from all theories that match the context
-      specified by the [features] list and provide features specified
-      by the [requires] list. If any theory is subsumed by other
-      theory, then it is excluded.
+      If no parameters of the [instance] function were specialized
+      and there is an instance of the current theory then this
+      instance is returned.
 
-      If no instances satisfy this requirement than the empty theory
+      Otherwise, the instance is built from all theories that match
+      the context specified by the [context] list and provide features
+      specified by the [requires] list. If any theory is subsumed by
+      other theory, then it is excluded.
+
+      If no instances satisfy this requirement then the empty theory
       is returned. If only one theory satisfies the requirement, then
       it is returned. If many theories match, then a join of all
       theories is computed, stored in the knowledge base, and the
       resulting theory is returned.
 
-      To manifest a theory into an structure, use the [require] function.
+      To manifest a theory into an structure, use the [require]
+      function. The [current] function is equivalent to the
+      composition [instance >=> require], use this function, if you
+      want to use the current theory.
 
-      @param features is a set of features that define the context,
+      @param context is a set of features that define the context,
       only those theories that have a context that is a subset of
       provided will be instantiated.
 
@@ -3053,6 +3061,8 @@ module Theory : sig
       required. Defaults to the set of all possible features, i.e., if
       unspecified, then all instances applicable to the context will
       be loaded.
+
+      @since 2.4.0 respects the currently set theory.
   *)
   val instance :
     ?context:string list ->
@@ -3062,15 +3072,19 @@ module Theory : sig
   (** [require theory] manifests the [theory] as an OCaml structure.
 
       It is only possible to create an instance of theory using the
-      {!instance} function. For example, the following will create an
-      theory that is a join all currently declared theories (which are
-      not specific to any context),
+      {!instance} function, but see also {!current}.
+
+      For example, the following will create an theory that is a join
+      all currently declared theories (which are not specific to any
+      context),
 
       {[
-        Theory.(instance>=>require) () -> fun (module Core) ->
+        let* (module CT) = Theory.(instance>=>require) () in
       ]}
 
-      To a create an instance for a specific context and requirements,
+      where [let*] comes from [KB.Let].
+
+      To create an instance for a specific context and requirements,
 
       {[
         Theory.instance ()
@@ -3088,6 +3102,41 @@ module Theory : sig
       ]}
   *)
   val require : theory -> (module Core) knowledge
+
+
+
+  (** [current] returns the current core theory structure.
+
+      This function is the same as [instance >=> require].
+
+      If there is no current theory set in the contex (via the
+      {!with_current} function) then a new structure is created,
+      otherwise returns the current selected theory.
+
+      An example of usage,
+
+      {[
+        let add x y =
+          let* (module CT) = current in
+          CT.add x y
+      ]}
+
+      @since 2.4.0
+  *)
+  val current : (module Core) knowledge
+
+  (** [with_current t f] sets [t] as the current theory in the scope of [f].
+
+      Evaluates compuation [f] in the theory of [t]. After [f] is
+      evaluated the current theory is restored. This function could be
+      safely called recursively, i.e., in a scope of another call to
+      [with_current]. Effectively, [with_current], which uses
+      [KB.Context.with_var] underneath the hood, creates a dynamic
+      scope for the theory variable.
+
+      @since 2.4.0
+  *)
+  val with_current : theory -> (unit -> 'a knowledge) -> 'a knowledge
 
   (** Sorts implementing IEEE754 formats.
 
