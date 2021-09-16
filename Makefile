@@ -9,7 +9,7 @@ build: setup.ml
 
 .PHONY: doc
 doc:
-	@ocamlbuild -pkgs bap,bap-plugins,core_kernel,core_kernel.caml_unix tools/bapdoc.native
+	@ocamlfind ocamlopt -linkpkg -package bap-plugins,core_kernel,core_kernel.caml_unix tools/bapdoc.ml -o bapdoc.native
 	make -C doc
 
 all:

@@ -22,13 +22,23 @@ let libraries = [
     "regular", "Regular.Std", "Regular", "Regular Data Library";
     "graphlib", "Graphlib.Std", "Graphlib", "Algorithms on graphs";
     "bitvec", "Bitvec", "", "Bitvectors and modular arithmetic";
+    "bitvec-binprot", "Bitvec_binprot", "",
+    "Provides Binprot serialization for bitvectors";
+    "bitvec-sexp", "Bitvec_sexp", "",
+    "Provides s-exp serialization for bitvectors";
+    "bitvec-order", "Bitvec_order", "",
+    "Implements Janestreet comparators for bitvectors";
     "bap-future", "Bap_future.Std", "Bap_future", "Futures and Streams";
     "ogre", "Ogre", "", "A sexp-based NoSQL database";
   ];
 
   "Hardware Specific Libraries", [
-    "bap-arm", "ARM", "", "ARM-specific definitions";
-    "bap-x86-cpu", "X86_cpu", "", "x86/x86-64 specific definitions";
+    "bap-arm", "ARM", "", "ARM definitions";
+    "bap-x86-cpu", "X86_cpu", "", "x86/x86-64 definitions";
+    "bap-mips", "Bap_mips_target", "", "MIPS definitions";
+    "bap-powerpc", "Bap_powerpc_target", "", "PowerPC definitions";
+    "bap-riscv", "Bap_riscv_target", "", "RISCV definitions";
+    "bap-systemz", "Bap_systemz_target", "", "SystemZ definitions";
   ];
 
   "Language and API/ABI Specific Libraries", [
@@ -37,21 +47,34 @@ let libraries = [
     "bap-c", "Bap_c.Std", "Bap_c", "Basic definitions of the C language";
   ];
 
+  "Analyses and Auxiliary Libraries", [
+    "bap-primus-track-visited", "Bap_primus_track_visited", "",
+    "The interface to the Primus coverage monitoring component";
+    "bap-beagle-prey", "Bap_beagle_prey", "",
+    "An interface to the Beagle string deobfuscation analysis";
+
+  ];
+
   "Utility Libraries", [
     "bap-bml", "Bap_bml", "", "writing term transformations";
     "bare", "Bare", "", "writing rules for matching for Primus observations";
     "bap-bundle", "Bap_bundle.Std", "Bap_bundle", "creating and opening bundles";
+    "bap-build", "Bap_build.Std", "Bap_build", "building bapbuild plugins";
     "bap-byteweight", "Bap_byteweight", "", "interface to the Byteweight subsystem";
     "bap-demangle", "Bap_demangle.Std", "Bap_demangle", "writing name demanglers";
-    "bap-dwarf", "Bap_dwarf.Std", "Bap_dwarf", "a native DWARF parser";
+    "bap-dwarf", "Bap_dwarf.Std", "Bap_dwarf", "a native DWARF parser" ;
+    "bap-elf", "Bap_elf.Std", "Bap_elf", "a native ELF parser";
     "bap-ida", "Bap_ida.Std", "Bap_ida","an interface to IDA Pro";
     "bap-llvm", "Bap_llvm.Std", "Bap_llvm", "an inteface to LLVM disassemblers and loaders";
+    "bap-ghidra", "Bap_ghidra", "Bap_ghidra", "an inteface to Ghidra";
     "bap-plugins", "Bap_plugins.Std", "Bap_plugins", "loading plugins";
     "bap-recipe", "Bap_recipe", "", "loading recipes (packs of command line arguments)";
     "bap-strings", "Bap_strings.Std", "Bap_strings", "various text utilities";
+    "bap-relation", "Bap_relation", "", "A representation of relations between two sets";
     "bap-traces", "Bap_traces.Std", "Bap_traces", "working with execution traces";
     "text-tags", "Text_tags", "", "Extension of Format's semantic tags";
   ];
+
 ]
 
 let frontends = [
@@ -205,7 +228,7 @@ let generate () =
   Out_channel.close out;
   let pkgs = remove_unresolved packages |> String.concat ~sep:" " in
   run
-    {|odig odoc --odoc-theme=odoc.default --index-title="BAP API" --no-tag-index --index-intro=%s %s|}
+    {|odig odoc --odoc-theme=odoc.default --index-title="BAP API" --no-tag-index --no-pkg-deps --index-intro=%s %s|}
     intro pkgs;
   run @@ "ln -s $(odig cache path)/html odoc";
   Sys.remove intro
