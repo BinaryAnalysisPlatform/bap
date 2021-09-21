@@ -309,7 +309,6 @@ let find_first_unvisited_blk prog =
 
 let main {Config.get=(!)} proj =
   let open Param in
-  let state = Toplevel.current () in
   let run_until_visited = !until_visited in
   let enqueue_jobs = if !in_isolation
     then enqueue_separate_jobs else enqueue_super_job in
@@ -330,7 +329,8 @@ let main {Config.get=(!)} proj =
           ~args:!argv ~envp:!envp
           ~name:(Primus.Linker.Name.to_string p)
           ~start:(exec p)) in
-  let rec run proj state =
+  let rec run proj =
+    let state = Toplevel.current () in
     let result = Primus.Jobs.run ~on_failure ~on_success proj state in
     let state = Primus.Jobs.knowledge result in
     Toplevel.set state;
@@ -339,14 +339,14 @@ let main {Config.get=(!)} proj =
     if run_until_visited
     then match find_first_unvisited_sub prog with
       | Some sub ->
-        enqueue_term sub; run proj state
+        enqueue_term sub; run proj
       | None -> match find_first_unvisited_blk prog with
         | Some blk ->
           enqueue_term blk;
-          run proj state
+          run proj
         | None -> proj
     else proj in
-  run proj state
+  run proj
 
 let deps = [
   "trivial-condition-form"
