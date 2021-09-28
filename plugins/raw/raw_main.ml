@@ -55,6 +55,7 @@ let doc_template = {|
 (declare bits (size int))
 (declare base-address (addr int))
 (declare entry-point (addr int))
+(declare is-little-endian (flag bool))
 (declare mapped (addr int) (size int) (off int))
 (declare code-region (addr int) (size int) (off int))
 (declare named-region (addr int) (size int) (name str))
@@ -66,6 +67,7 @@ let doc_template = {|
 (bits $bits)
 (base-address $base)
 (entry-point $entry)
+(is-little-endian $endian)
 (mapped $base $length $offset)
 (code-region $base $length $offset)
 (named-region $base $length code)
@@ -80,6 +82,10 @@ let register_loader ctxt =
           "arch", (ctxt-->arch);
           "offset", Int64.to_string @@ ctxt-->offset;
           "base", Bitvec.to_string @@ ctxt-->base_address;
+          "endian", Bool.to_string begin match Arch.of_string (ctxt-->arch) with
+            | None -> true
+            | Some arch -> Poly.equal (Arch.endian arch) LittleEndian
+          end;
           "bits", Int.to_string @@ begin
             match Arch.of_string (ctxt-->arch) with
             | None -> ctxt-->bits
