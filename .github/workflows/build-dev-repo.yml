@@ -15,6 +15,7 @@ jobs:
           - 4.08.x
 
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.os == 'macos-latest'}}
 
     env:
       TMPDIR: /tmp
