@@ -188,7 +188,7 @@ let export = Primus.Lisp.Type.Spec.[
     "get-current-program-counter", unit @-> int,
     "(get-current-program-counter) is an alias to (get-program-counter)";
 
-    "set-symbol-value", tuple [sym; a] @-> a,
+    "set-symbol-value", tuple [int; a] @-> a,
     "(set-symbol-value S X) sets the value of the symbol S to X.
          Returns X";
 
@@ -197,6 +197,10 @@ let export = Primus.Lisp.Type.Spec.[
 
     "is-symbol", one any @-> bool,
     "(is-symbol X) is true if X has a symbolic value.";
+
+    "alias-base-register", one int @-> int,
+    "(alias-base-register x) if X has a symbolic value that is an
+     aliased register returns the base register";
 
     "cast-low", tuple [int; a] @-> b,
     "(cast-low S X) extracts low S bits from X.";
@@ -582,13 +586,40 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | None -> !!(empty s)
     | Some addr -> forget@@const_int s addr
 
-  let set_symbol v x =
-    match KB.Value.get Primus.Lisp.Semantics.symbol v with
-    | Some name ->
-      let var = Theory.Var.define (Theory.Value.sort x) name in
-      CT.set var !!x
+  let require_symbol v k =
+    match symbol v with
+    | Some name -> k name
+    | None -> illformed "not a symbolic value"
+
+  let possibly_register target v =
+    require_symbol v @@ fun v ->
+    match Theory.Target.var target v with
+    | Some v -> !!v
     | None ->
-      illformed "requires a value reified to a variable"
+      let s = Theory.Bitv.define (Theory.Target.bits target) in
+      KB.return @@ Theory.Var.forget (Theory.Var.define s v)
+
+  let set_symbol t v x =
+    let* var = possibly_register t v in
+    let x = KB.Value.refine x (Theory.Var.sort var) in
+    CT.set var !!x
+
+  let alias_base_register target v =
+    let* r = possibly_register target v in
+    match Theory.Target.unalias target r with
+    | None ->
+      illformed "the register %a is not an alias in %a"
+        Theory.Var.pp r Theory.Target.pp target
+    | Some origin -> match Theory.Origin.cast_sub origin with
+      | None ->
+        illformed "the aliased register %a is not a subregister"
+          Theory.Var.pp r
+      | Some origin ->
+        let reg = Theory.Origin.reg origin in
+        let name = Theory.Var.name reg in
+        forget @@
+        CT.var reg >>| fun v ->
+        KB.Value.put Primus.Lisp.Semantics.symbol v (Some name)
 
   let symbol s v =
     match KB.Value.get Primus.Lisp.Semantics.symbol v with
@@ -755,9 +786,10 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | "store-word",_-> data@@store_word t args
     | "get-program-counter",[]
     | "get-current-program-counter",[] -> pure@@get_pc s lbl
-    | "set-symbol-value",[sym;x] -> data@@set_symbol sym x
+    | "set-symbol-value",[sym;x] -> data@@set_symbol t sym x
     | "symbol",[x] ->  pure@@symbol s x
     | "is-symbol", [x] -> pure@@is_symbol x
+    | "alias-base-register", [x] -> pure@@alias_base_register t x
     | "cast-low",xs -> pure@@low xs
     | "cast-high",xs -> pure@@high xs
     | "cast-signed",xs -> pure@@signed xs

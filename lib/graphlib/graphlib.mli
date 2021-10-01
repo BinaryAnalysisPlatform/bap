@@ -1176,7 +1176,7 @@ module Std : sig
         solution is always a lower approximation of a real solution,
         so it is always safe to use it).
 
-        @param the upper bound to the number of iterations the solver
+        @param steps the upper bound to the number of iterations the solver
         can make.
 
         @param start the entry node of the graph

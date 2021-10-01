@@ -432,7 +432,6 @@ module Prelude(CT : Theory.Core) = struct
       | {data=Var {data={exp=n}}} -> lookup@@var n
       | {data=Sym {data=s}} -> sym (KB.Name.unqualified s)
       | {data=Ite (cnd,yes,nay)} -> ite cnd yes nay
-      | {data=Let ({data={exp=n; typ=Type t}},x,y)} -> let_ ~t n x y
       | {data=Let ({data={exp=n}},x,y)} -> let_ n x y
       | {data=App (Dynamic name,args)} -> app name args
       | {data=Seq xs} -> seq_ xs
@@ -545,9 +544,10 @@ module Prelude(CT : Theory.Core) = struct
       Scope.lookup v >>= function
       | Some v -> eval x >>= assign target ~local:true v
       | None -> eval x >>= assign target v
-    and let_ ?(t=word) v x b =
+    and let_ v x b =
       let* xeff = eval x in
-      let orig = Theory.Var.define (bits t) (KB.Name.to_string v) in
+      let s = Theory.Value.sort (res xeff) in
+      let orig = Theory.Var.define s (KB.Name.to_string v) in
       if is_parameter prog orig
       then
         Env.set orig (res xeff) >>= fun () ->

@@ -320,7 +320,15 @@ module Semantics = struct
       sysdatadir / "primus" / "semantics";
     ]
 
+  let check_user_provided paths =
+    match List.find paths ~f:(Fn.non is_folder) with
+    | None -> ()
+    | Some path ->
+      invalid_argf "unable to load semantics from %S, \
+                    the path must exist and be a folder" path ()
+
   let load_lisp_sources paths =
+    check_user_provided paths;
     let paths = List.filter ~f:is_folder (paths @ default_paths) in
     let features = "core"::List.concat_map ~f:collect_features paths in
     let paths = paths @ library_paths in

@@ -1296,6 +1296,11 @@ module Theory : sig
     (** the slot to store program semantics.  *)
     val slot : (program, t) Knowledge.slot
 
+    (** the value of the effect.
+
+        Represents the value of side-effectful compuations.
+
+        @since 2.3.0 *)
     val value : (cls, unit Value.t) Knowledge.slot
 
     include Knowledge.Value.S with type t := t
@@ -2041,37 +2046,53 @@ module Theory : sig
   *)
   module Origin : sig
 
-    (** []  *)
+    (** the abstract representation of an aliased register origin.  *)
     type ('s,'k) t = ('s,'k) origin
 
-    (** type index of the *)
+    (** the type index of the sub-registers *)
     type sub
+
+    (** the type index for the super-registers  *)
     type sup
 
+    (** [cast_sub origin] recovers the kind of the origin.  *)
     val cast_sub : ('a,unit) t -> ('a,sub) t option
+
+    (** [cast_sup origin] recovers the kind of the origin.  *)
     val cast_sup : ('a,unit) t -> ('a,sup) t option
 
 
     (** [reg origin] is the base register.
 
-        The returned value is never an alias itself. *)
+        The returned value is never an alias itself, i.e., it is a
+        base register. *)
     val reg : ('a,sub) t -> 'a Bitv.t Var.t
 
+
+    (** [is_alias origin] if the the base register has the same size
+        and sort as the aliased register.  *)
     val is_alias : ('a,sub) t -> bool
 
 
     (** [hi origin] the inclusive upper bound.
         When an alias is a subset of the [origin] register,
         [hi origin] is the most significant bit of the alias
-        register.
-
-    *)
+        register. *)
     val hi : ('a,sub) t -> int
 
     (** [lo origin] returns the inclusive upper bound of the origin register
         to which an alias belongs. *)
     val lo : ('a,sub) t -> int
 
+
+    (** [regs origin] returns an ordered list of constituent registers.
+
+        The registers are sorted in the big endian order, i.e., the
+        first element of the list corresponds to the most significant
+        part of the base register. This is the same order, in which
+        the aliasing was specified, e.g., if the aliasing was defined
+        as, [def x [reg hix; reg lox], then [regs] will
+        return [hix; lox].*)
     val regs : ('a,sup) t -> 'a Bitv.t Var.t list
 
   end
