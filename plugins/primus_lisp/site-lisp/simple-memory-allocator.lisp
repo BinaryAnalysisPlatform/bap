@@ -66,9 +66,10 @@
         (malloc/put-chunk-size ptr n)
         (+ ptr header-size)))))
 
-(defun brk ()
+(defun brk (val)
   (declare (external "brk"))
-  brk)
+  (set brk val)
+  0)
 
 (defun sbrk (increment)
   (declare (external "sbrk"))
