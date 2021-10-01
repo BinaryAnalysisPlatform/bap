@@ -97,7 +97,8 @@ module Desugar(CT : Core) : Core = struct
       let open Bitvec.Make(struct
           let modulus = Bitvec.modulus dst_len
         end) in
-      let mask = (one lsl int src_len - one) lsl int off in
+      let mask =
+        lnot ((one lsl int src_len - one) lsl int off) in
       let x = CT.(logand (var dst) (int s mask)) in
       let off = int off in
       let y = if Bitvec.equal off zero
