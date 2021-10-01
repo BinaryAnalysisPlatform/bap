@@ -1,7 +1,8 @@
+(declare (context (target arm armv8-a+le)))
+
 (require bits)
 (require arm-bits)
 
-(declare (context (target armv8-a+le)))
 (defpackage aarch64 (:use core target arm))
 (defpackage llvm-aarch64 (:use aarch64))
 
@@ -13,7 +14,17 @@
   (set$ dst (lshift imm pos)))
 
 (defun MOVZWi (dst imm pos)
-  (set$ dst (lshift imm pos)))
+  (setw dst (lshift imm pos)))
+
+(defun MOVNWi (dst imm off)
+  (setw dst (lnot (lshift imm off))))
+
+(defmacro MOVK*i (dst reg imm off)
+  (let ((mask (lnot (lshift (- (lshift 1 16) 1) off))))
+    (set$ dst (logor (logand reg mask) (lshift imm off)))))
+
+(defun MOVKWi (dst reg imm off) (MOVK*i dst reg imm off))
+(defun MOVKXi (dst reg imm off) (MOVK*i dst reg imm off))
 
 (defun ADDXri (dst src imm off)
   (set$ dst (+ src (lshift imm off))))
@@ -27,38 +38,61 @@
              (load-hword (+ base (lshift off 2))))))
 
 (defun LDRWui (dst reg off)
-  (set$ dst
+  (setw dst
         (cast-unsigned (word) (load-hword (+ reg (lshift off 2))))))
 
 (defun LDRBBui (dst reg off)
+  (setw dst
+        (cast-unsigned (word) (load-byte (+ reg off)))))
+
+(defun LDRBBroX (dst reg off _ _)
   (set$ dst
         (cast-unsigned (word) (load-byte (+ reg off)))))
 
-(defmacro make-BFM (cast xd xr ir is)
+(defmacro make-BFM (set cast xd xr ir is)
   (let ((rs (word)))
     (if (< is ir)
         (if (and (/= is (- rs 1)) (= (+ is 1) ir))
-            (set$ xd (lshift xr (- rs ir)))
-            (set$ xd (lshift
+            (set xd (lshift xr (- rs ir)))
+            (set xd (lshift
                       (cast rs (extract is 0 xr))
                       (- rs ir))))
         (if (= is (- rs 1))
-            (set$ xd (rshift xr ir))
-            (set$ xd (cast rs (extract is ir xr)))))))
+            (set xd (rshift xr ir))
+            (set xd (cast rs (extract is ir xr)))))))
 
 (defun UBFMXri (xd xr ir is)
-  (make-BFM cast-unsigned xd xr ir is))
+  (make-BFM set$ cast-unsigned xd xr ir is))
+
+(defun UBFMWri (xd xr ir is)
+  (make-BFM setw cast-unsigned xd xr ir is))
 
 (defun SBFMXri (xd xr ir is)
-  (make-BFM cast-signed xd xr ir is))
+  (make-BFM set$ cast-signed xd xr ir is))
 
-(defun ORRXrs (rd rn rm is)
-  (set$ rd (logor rn (shifted rm is))))
+(defun SBFMWri (xd xr ir is)
+  (make-BFM setw cast-signed xd xr ir is))
 
-(defun ORRWrs (rd rn rm is)
-  (set$ rd
-        (logor rn
-               (shifted rm is))))
+(defmacro ORN*rs (set rd rn rm is)
+  (set rd (logor rn (lnot (lshift rm is)))))
+
+(defun ORNWrs (rd rn rm is) (ORN*rs setw rd rn rm is))
+(defun ORNXrs (rd rn rm is) (ORN*rs set$ rd rn rm is))
+
+(defmacro log*?rs (set op rd rn rm is)
+  (set rd (op rn (shifted rm is))))
+
+(defun ORRWrs (rd rn rm is) (log*?rs setw logor  rd rn rm is))
+(defun EORWrs (rd rn rm is) (log*?rs setw logxor rd rn rm is))
+(defun ANDWrs (rd rn rm is) (log*?rs setw logand rd rn rm is))
+(defun ORRXrs (rd rn rm is) (log*?rs set$ logor  rd rn rm is))
+(defun EORXrs (rd rn rm is) (log*?rs set$ logxor rd rn rm is))
+(defun ANDXrs (rd rn rm is) (log*?rs set$ logand rd rn rm is))
+
+
+(defun ANDWri (dst rn imm)
+  (setw dst (logand rn imm)))
+
 
 (defun ADRP (dst imm)
   (set$ dst (+
@@ -66,10 +100,13 @@
              (cast-signed (word) (lshift imm 12)))))
 
 (defun ADDWrs (dst r1 v s)
-  (set$ dst (+ r1 (lshift v s))))
+  (setw dst (+ r1 (lshift v s))))
+
+(defun SUBWrs (dst r1 v s)
+  (setw dst (- r1 (lshift v s))))
 
 (defun ADDWri (dst r1 imm s)
-  (set$ dst (+ r1 (lshift imm s))))
+  (setw dst (+ r1 (lshift imm s))))
 
 
 (defun SUBXrx64 (rd rn rm off)
@@ -79,12 +116,12 @@
   (add-with-carry rd rn (lnot (shifted rm off)) 1))
 
 (defun SUBSWrs (rd rn rm off)
-  (add-with-carry
+  (add-with-carry/clear-base
    rd
    rn (lnot (shifted rm off)) 1))
 
 (defun SUBSWri (rd rn imm off)
-  (add-with-carry rd rn (lnot (lshift imm off)) 1))
+  (add-with-carry/clear-base rd rn (lnot (lshift imm off)) 1))
 
 
 (defun SUBSXri (rd rn imm off)
@@ -97,7 +134,7 @@
   (set$ rd (- rn (lshift imm off))))
 
 (defun SUBWri (rd rn imm off)
-  (set$ rd (- rn (lshift imm off))))
+  (setw rd (- rn (lshift imm off))))
 
 (defun ADDXrs (rd rn rm off)
   (set$ rd (+ rn (shifted rm off))))
@@ -137,6 +174,11 @@
     (store-word (+ dst off) t1)
     (store-word (+ dst off (sizeof word)) t2)
     (set$ dst (+ dst off))))
+
+(defun STPXi (t1 t2 base off)
+  (let ((off (lshift off 4)))
+    (store-word base (+ base off))
+    (store-word base (+ base off (sizeof word)))))
 
 (defun LDPXpost (dst r1 r2 base off)
   (let ((off (lshift off 3)))
@@ -208,21 +250,3 @@
 (defun Bcc (cnd off)
   (when (condition-holds cnd)
     (relative-jump off)))
-
-(defun condition-holds (cnd)
-  (case cnd
-    0b0000 ZF
-    0b0001 (lnot ZF)
-    0b0010 CF
-    0b0010 (lnot CF)
-    0b0100 NF
-    0b0101 (lnot NF)
-    0b0110 VF
-    0b0111 (lnot VF)
-    0b1000 (logand CF (lnot ZF))
-    0b1001 (logor (lnot CF) ZF)
-    0b1010 (= NF VF)
-    0b1011 (/= NF VF)
-    0b1100 (logand (= NF VF) (= ZF 0))
-    0b1101 (logor (/= NF VF) (/= ZF 0))
-    true))
