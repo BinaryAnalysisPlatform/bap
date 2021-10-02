@@ -376,8 +376,8 @@ let () =
     Config.(param (list dir) ~doc:"paths to lisp libraries" "add") in
 
   let features =
-    Config.(param (list string) ~doc:"load specified module" "load"
-              ~default:["posix"]) in
+    Config.(param_all (list string) ~doc:"load specified module" "load"
+              ~default:[["posix"]]) in
 
   let semantics =
     let doc = sprintf "prepend the specified folders to the list of
@@ -413,7 +413,7 @@ let () =
       if !!enable_typecheck then
         Project.register_pass' ~deps:["api"] ~autorun:true typecheck;
       let paths = [Filename.current_dir_name] @ !!libs @ library_paths in
-      let features = "core" :: !!features in
+      let features = "core" :: List.concat !!features in
       Primus.Components.register_generic ~package:"bap" "lisp-type-checker"
         (module TypeErrorSummary)
         ~desc:"Typechecks program and outputs the summary in the standard output.";

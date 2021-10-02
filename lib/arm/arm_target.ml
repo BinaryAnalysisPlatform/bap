@@ -105,7 +105,7 @@ let (.$()) = List.nth_exn
 
 let aliases =
   xs @< ws @< qs @< ds @< ss @< hs @< bs
-  @<[fp64; lr64; sp64; zr; zr64]
+  @<[fp64; lr64; sp64; zr64]
   @<[sp32; zr32]
 
 let varsv8 = rs @< flagsv8 @< [datav8]
@@ -137,7 +137,6 @@ let aliasing = Theory.Alias.[
       def lr64 [reg xs.$(30)];
       def sp64 [reg xs.$(31)];
       def sp64 [unk; reg sp32];
-      def zr [reg xs.$(31)];
       def zr [reg zr64];
       def zr [unk; reg zr32];
     ];
@@ -152,10 +151,6 @@ let aliasing = Theory.Alias.[
 
 
 let parent = CT.Target.declare ~package "arm"
-
-module type v4 = sig
-end
-
 
 module type ARM = sig
   val endianness : CT.endianness
@@ -511,9 +506,8 @@ let is_little t = Theory.Target.endianness t = Theory.Endianness.le
 let register_pcode () =
   Dis.register pcode @@ fun t ->
   let triple = match is_64bit t,is_little t,is_big t with
-    | true,true,_ -> "ARM:LE:32:v8"
-    | true,_,true -> "ARM:BE:32:v8"
-    | true,_,_    -> "ARM:LEBE:32:v8LEInstruction"
+    | true,true,_ -> "AARCH64:LE:64:v8A"
+    | true,_,_ -> "AARCH64:BE:64:v8A"
     | false,true,_ -> "ARM:LE:32:v7"
     | false,_,true -> "ARM:BE:32:v7"
     | false,_,_    -> "ARM:LEBE:32:v7LEInstruction" in
