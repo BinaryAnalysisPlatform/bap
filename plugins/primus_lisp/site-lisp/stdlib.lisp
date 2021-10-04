@@ -8,13 +8,13 @@
 
 (defun getenv (name)
   "finds a value of an environment variable with the given name"
-  (declare (external "getenv"))
+  (declare (external "getenv" "secure_getenv"))
   (let ((p environ)
         (n (strlen name)))
     (while (and (not (points-to-null p))
                 (/= (memcmp (read-word ptr_t p) name n) 0))
       (set p (ptr+1 ptr_t p)))
-    (if (and (not (points-to-null p)) (/= p environ))
+    (if (not (points-to-null p))
         (let ((p (read-word ptr_t p)))
           (if (= (memory-read (+ p n)) ?=) (+ p n 1) 0))
       0)))
