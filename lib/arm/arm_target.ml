@@ -188,11 +188,14 @@ module Family (Order : Endianness) = struct
     let order = CT.Endianness.name endianness in
     name ^ "+" ^ KB.Name.unqualified order
 
-  let (<:) parent name =
+  let def ?code_alignment ~parent name =
     if CT.Target.is_unknown parent
     then CT.Target.unknown
     else CT.Target.declare ~package (ordered name) ~parent
+        ?code_alignment
         ~nicknames:[name]
+
+  let (<:) parent name = def ~parent name
 
   let is_bi_endian = CT.Endianness.(equal bi) endianness
 
@@ -201,6 +204,7 @@ module Family (Order : Endianness) = struct
     then CT.Target.unknown
     else CT.Target.declare ~package (ordered "armv4")
         ~parent
+        ~code_alignment:32
         ~nicknames:["armv4"]
         ~bits:32
         ~byte:8
@@ -210,7 +214,7 @@ module Family (Order : Endianness) = struct
         ~vars:vars32
         ~regs:regs32
 
-  let v4t   = v4 <: "armv4t"
+  let v4t = def "v4t" ~parent:v4 ~code_alignment:16
   let v5    = v4 <: "armv5"
   let v5t   = v5 <: "armv5t"
   let v5te  = v5t <: "armv5te"
@@ -225,6 +229,7 @@ module Family (Order : Endianness) = struct
     else CT.Target.declare ~package (ordered "armv7")
         ~parent
         ~nicknames:["armv7"]
+        ~code_alignment:16
         ~bits:32
         ~byte:8
         ~endianness
@@ -247,15 +252,32 @@ module Family (Order : Endianness) = struct
       ~vars:vars32_fp
       ~regs:(regs32@vfp3regs)
 
+
   let v8a =
     CT.Target.declare ~package (ordered "armv8-a") ~parent:v7
-      ~nicknames:["armv8-a"]
+      ~nicknames:["armv8-a"; "aarch64"]
       ~aliasing
+      ~code_alignment:32
       ~bits:64
       ~code:datav8
       ~data:datav8
       ~vars:varsv8
       ~regs:regsv8
+
+  let v8a32 =
+    Theory.Target.declare ~package (ordered "armv8-a+aarch32")
+      ~nicknames:["armv8-a+aarch32"]
+      ~parent:v7
+
+  let v8m32 =
+    Theory.Target.declare ~package (ordered "armv8-m+aarch32")
+      ~nicknames:["armv8-m+aarch32"]
+      ~parent:v7m
+
+  let v8r32 =
+    Theory.Target.declare ~package (ordered "armv8-r+aarch32")
+      ~nicknames:["armv8-r+aarch32"]
+      ~parent:v7
 
   let v81a = v8a  <: "armv8.1-a"
   let v82a = v81a <: "armv8.2-a"
@@ -264,7 +286,10 @@ module Family (Order : Endianness) = struct
   let v85a = v84a <: "armv8.5-a"
   let v86a = v85a <: "armv8.6-a"
 
+  let v9a = v86a <: "armv9-a"
+
   let parent = if is_bi_endian then v7 else v4
+
 end
 
 module LE = Family(struct let endianness = CT.Endianness.le end)
@@ -376,7 +401,12 @@ let arms : arms Map.M(CT.Target).t =
     LE.v6t2, `armv6;
     LE.v7, `armv7;
     LE.v7a, `armv7;
+    LE.v7m, `thumbv7;
     LE.v7afp, `armv7;
+    Bi.v7, `armv7;
+    Bi.v7a, `armv7;
+    Bi.v7m, `thumbv7;
+    Bi.v7afp, `armv7;
     LE.v8a, `aarch64;
     LE.v81a, `aarch64;
     LE.v82a, `aarch64;
@@ -397,6 +427,7 @@ let arms : arms Map.M(CT.Target).t =
     EB.v6t2,`armv6eb;
     EB.v7, `armv7eb;
     EB.v7a, `armv7eb;
+    EB.v7m, `thumbv7eb;
     EB.v7afp, `armv7eb;
     EB.v8a,  `aarch64_be;
     EB.v81a, `aarch64_be;
@@ -435,8 +466,18 @@ let register ?attrs encoding triple =
   Dis.create ?attrs ~backend:"llvm" triple
 
 let symbol_values doc =
-  let field = Ogre.Query.(select (from Image.Scheme.symbol_value)) in
-  match Ogre.eval (Ogre.collect field) doc with
+  let open Ogre.Let in
+  let open Image.Scheme in
+  let symbols =
+    let* symtab =
+      Ogre.(collect Query.(select (from symbol_value))) in
+    let+ entry = Ogre.request entry_point in
+    match entry with
+    | None -> symtab
+    | Some entry ->
+      let mask = Int64.(-1L lsl 1) in
+      Seq.cons Int64.(entry land mask, entry) symtab in
+  match Ogre.eval symbols doc with
   | Ok syms -> syms
   | Error err ->
     failwithf "Arm_target: broken file specification: %s"
@@ -447,6 +488,7 @@ module Encodings = struct
 
   let lsb x = Int64.(x land 1L)
   let is_thumb x = Int64.equal (lsb x) 1L
+
 
   let symbols_encoding spec =
     symbol_values spec |>
@@ -496,9 +538,15 @@ let (<) t p = t >= p && not (p >= t)
 let (<=) t p = t = p || t < p
 let is_arm = CT.Target.belongs parent
 
-let before_thumb2 t = t < LE.v6t2 || t < EB.v6t2
 let is_64bit t = LE.v8a <= t || EB.v8a <= t || Bi.v8a <= t
-let is_thumb_only t = LE.v7m <= t || EB.v7m <= t || Bi.v7m <= t
+
+let m_profiles = [
+  LE.v7m; EB.v7m; Bi.v7m;
+  LE.v8m32; EB.v8m32; Bi.v8m32;
+]
+let is_thumb_only t =
+  List.exists m_profiles ~f:(fun p -> p <= t)
+
 
 let is_big t = Theory.Target.endianness t = Theory.Endianness.eb
 let is_little t = Theory.Target.endianness t = Theory.Endianness.le

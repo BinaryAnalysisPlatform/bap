@@ -1,6 +1,9 @@
 (require bits)
 (require arm-bits)
 
+
+;; Note: page references are from ARM DDI 0403E.b
+
 (declare (context (target arm)))
 
 (defpackage thumb (:use core target arm))
@@ -63,3 +66,25 @@
   (set$ rd (* rn rm))
   (set ZF (is-zero rd))
   (set NF (msb rd)))
+
+
+(defun t2STRDi8 (rt1 rt2 rn imm pre _)
+  "strd rt1, rt2, [rn, off]"
+  (when (condition-holds pre)
+    (store-word (+ rn imm) rt1)
+    (store-word (+ rn imm (sizeof word-width)) rt2)))
+
+(defun t2ADDri12 (rd rn imm pre _)
+  "addw rd, rn, imm; A7-189, T4 "
+  (when (condition-holds pre)
+    (set$ rd (+ rn imm))))
+
+(defun t2STRHi12 (rt rn imm pre _)
+  "strh.w rt, [rn, imm]; A7-442; T2"
+  (when (condition-holds pre)
+    (store-word (+ rn imm) (cast-low 16 rt))))
+
+(defun t2B (off pre _)
+  "b.w imm; A7-207, T3"
+  (when (condition-holds pre)
+    (exec-addr (+ (get-program-counter) off 4))))
