@@ -101,6 +101,7 @@ let with_objdump_output demangler ~file ~f ~init =
 let agent =
   KB.Agent.register ~package:"bap" "objdump-symbolizer"
     ~desc:"extracts symbols objdump"
+    ~reliability:KB.Agent.doubtful
 
 module Repository : sig
   type t

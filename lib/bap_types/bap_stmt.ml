@@ -80,6 +80,11 @@ module Special = struct
 
   let pp_default ppf s = fprintf ppf "special@ @[<1>(%s)@]" s
 
+  let pp_cons ppf s =
+    pp_print_string ppf @@ match String.chop_prefix s ~prefix:"bap:" with
+    | None ->  s
+    | Some s -> s
+
   let pp ppf s = match String.chop_prefix ~prefix s with
     | None -> pp_default ppf s
     | Some data -> match Sexp.of_string data with
@@ -88,7 +93,7 @@ module Special = struct
         let pp_vals ppf xs = pp_print_list
             ~pp_sep:(fun ppf () -> pp_print_string ppf ", ")
             Sexp.pp_hum ppf xs in
-        fprintf ppf "%s(@[<hv2>%a@])" cons pp_vals vals
+        fprintf ppf "%a(@[<hv2>%a@])" pp_cons cons pp_vals vals
       | _ -> pp_default ppf s
 end
 
