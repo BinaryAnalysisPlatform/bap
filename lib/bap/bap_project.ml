@@ -39,6 +39,182 @@ let memory_slot = KB.Class.property Theory.Unit.cls "unit-memory"
     ~desc:"annotated memory regions of the unit"
     Memmap.domain
 
+module Symbols = struct
+  open KB.Let
+  open KB.Syntax
+
+  module Addr = struct
+    include Bitvec
+    include Bitvec_order
+    include Bitvec_binprot.Functions
+    include Bitvec_sexp.Functions
+  end
+
+  type table = {
+    roots : Set.M(Addr).t;
+    names : string Map.M(Addr).t;
+    aliases : Set.M(String).t Map.M(Addr).t;
+  } [@@deriving compare, equal, bin_io, sexp]
+
+  let empty = {
+    roots = Set.empty (module Addr);
+    names = Map.empty (module Addr);
+    aliases = Map.empty (module Addr);
+  }
+
+  let slot = KB.Class.property Theory.Unit.cls
+      ~package:"bap" "symbol-table"
+      ~persistent:(KB.Persistent.of_binable (module struct
+                     type t = table [@@deriving bin_io]
+                   end)) @@
+    KB.Domain.flat ~empty ~equal:equal_table "symbols"
+
+  let is_ident s =
+    String.length s > 0 &&
+    (Char.is_alpha s.[0] || Char.equal s.[0] '_') &&
+    String.for_all s ~f:(fun c -> Char.is_alphanum c ||
+                                  Char.equal c '_')
+
+  let from_spec t =
+    let collect fld = Ogre.collect Ogre.Query.(select @@ from fld) in
+    let open Ogre.Let in
+    let to_addr =
+      let m = Bitvec.modulus (Theory.Target.code_addr_size t) in
+      let n = Theory.Target.code_alignment t / Theory.Target.byte t in
+      let mask = Int64.(lnot (of_int n - 1L)) in
+      fun x ->
+        let x = Int64.(x land mask) in
+        Bitvec.(int64 x mod m) in
+    let add_alias aliases addr alias = Map.update aliases addr ~f:(function
+        | None -> Set.singleton (module String) alias
+        | Some names -> Set.add names alias) in
+    let pp_comma ppf () = Format.pp_print_string ppf ", " in
+    let pp_addrs =
+      Format.pp_print_list ~pp_sep:pp_comma Bitvec.pp
+    and pp_names =
+      Format.pp_print_list ~pp_sep:pp_comma Format.pp_print_string in
+    let* roots =
+      let+ roots =
+        let* starts = collect Image.Scheme.code_start in
+        let* values = collect Image.Scheme.symbol_value in
+        let+ entry = Ogre.request Image.Scheme.entry_point in
+        let roots = Seq.append starts (Seq.map ~f:fst values) in
+        match entry with
+        | None -> roots
+        | Some entry -> Seq.cons entry roots in
+      Seq.fold roots ~init:(Set.empty (module Bitvec_order))
+        ~f:(fun xs x -> Set.add xs (to_addr x)) in
+    let+ named_symbols = collect Image.Scheme.named_symbol in
+    let init = Bap_relation.empty Bitvec.compare String.compare in
+    Seq.fold named_symbols ~init ~f:(fun rel (data,name) ->
+        let addr = to_addr data in
+        if Set.mem roots addr && is_ident name
+        then Bap_relation.add rel (to_addr data) name
+        else rel) |> fun rel ->
+    Bap_relation.matching rel {empty with roots}
+      ~saturated:(fun k v t -> {
+            t with names = Map.add_exn t.names k v
+          })
+      ~unmatched:(fun reason t -> {
+            t with aliases = match reason with
+          | Non_injective_fwd (addrs,name) ->
+            info "the symbol %s has ambiguous addresses: %a@\n"
+              name pp_addrs addrs;
+            List.fold addrs ~init:t.aliases ~f:(fun aliases addr ->
+                add_alias aliases addr name)
+          | Non_injective_bwd (names,addr) ->
+            info "the symbol at %a has ambiguous names: %a@\n"
+              Bitvec.pp addr pp_names names;
+            List.fold names ~init:t.aliases ~f:(fun aliases name ->
+                add_alias aliases addr name)
+          })
+
+  let build_table t spec = match Ogre.eval (from_spec t) spec with
+    | Ok x -> x
+    | Error err ->
+      invalid_argf "Malformed ogre specification: %s"
+        (Error.to_string_hum err) ()
+
+  let collect_inputs from obj f =
+    KB.collect Theory.Label.unit obj >>=? fun unit ->
+    KB.collect Theory.Label.addr obj >>=? fun addr ->
+    let+ data = KB.collect from unit in
+    f data addr
+
+  let promised_table : unit =
+    KB.promise slot @@ fun unit ->
+    let* t = KB.collect Theory.Unit.target unit in
+    let+ s = KB.collect Image.Spec.slot unit in
+    build_table t s
+
+  let promised_roots : unit =
+    KB.Rule.(begin
+        declare "provides roots" |>
+        require Image.Spec.slot |>
+        provide Theory.Label.is_subroutine |>
+        comment "computes roots from spec";
+      end);
+    KB.promise Theory.Label.is_subroutine @@ fun obj ->
+    collect_inputs slot obj @@ fun {roots} addr ->
+    Option.some_if (Set.mem roots addr) true
+
+
+  let names_agent = KB.Agent.register
+      ~package:"bap" "specification-provider"
+      ~desc:"provides names obtained from the image specification."
+
+  let promised_names : unit =
+    KB.Rule.(begin
+        declare "provides names" |>
+        require Image.Spec.slot |>
+        provide Theory.Label.possible_name |>
+        comment "computes symbol names from spec";
+      end);
+    KB.propose names_agent Theory.Label.possible_name @@ fun obj ->
+    collect_inputs slot obj @@ fun {names} addr ->
+    Map.find names addr
+
+
+  let promised_aliases : unit =
+    KB.Rule.(begin
+        declare "provides aliases" |>
+        require Image.Spec.slot |>
+        provide Theory.Label.possible_name |>
+        comment "computes symbol aliases (names) from spec";
+      end);
+    KB.promise Theory.Label.aliases @@ fun obj ->
+    let* unit = KB.collect Theory.Label.unit obj in
+    let* addr = KB.collect Theory.Label.addr obj in
+    match unit,addr with
+    | None,_|_,None -> KB.return (Set.empty (module String))
+    | Some unit, Some addr ->
+      let+ {aliases} = KB.collect slot unit in
+      match Map.find aliases addr with
+      | None -> Set.empty (module String)
+      | Some aliases -> aliases
+
+  let gossiper = KB.Agent.register
+      ~package:"bap" "symbols-gossiper"
+      ~desc:"propses an alias as a possible name"
+      ~reliability:KB.Agent.unreliable
+
+  let gossiped_aliases : unit =
+    KB.Rule.(begin
+        declare "provides aliases as names" |>
+        require Image.Spec.slot |>
+        provide Theory.Label.possible_name |>
+        comment "uses aliases as an unreliable source of symbol names";
+      end);
+    KB.propose gossiper Theory.Label.possible_name @@ fun obj ->
+    let+ aliases = KB.collect Theory.Label.aliases obj in
+    match Set.find aliases ~f:is_ident with
+    | None -> Set.max_elt aliases
+    | ident -> ident
+end
+
+
+
+
 let with_filename spec target _code memory path f =
   let open KB.Syntax in
   let width = Theory.Target.code_addr_size target in
@@ -237,27 +413,11 @@ module Input = struct
     target = compute_target ?target (Image.spec img);
   }
 
-  let symtab_agent =
-    let reliability = KB.Agent.authorative in
-    KB.Agent.register "symtab"
-      ~reliability
-      ~desc:"extracts symbols from symbol tables"
-      ~package:"bap"
-
-  let provide_image file image =
-    let image_symbols = Symbolizer.(set_path (of_image image) file) in
-    let image_roots = Rooter.(set_path (of_image image) file) in
-    info "providing rooter and symbolizer from image of %a"
-      Sexp.pp_hum ([%sexp_of : string option] (Image.filename image));
-    Symbolizer.provide symtab_agent image_symbols;
-    Rooter.provide image_roots
-
   let of_image ?target ?loader filename =
     Image.create ?backend:loader filename >>| fun (img,warns) ->
     List.iter warns ~f:(fun e -> warning "%a" Error.pp e);
     let spec = Image.spec img in
     Signal.send Info.got_img img;
-    provide_image filename img;
     let finish proj = {
       proj with
       storage = Dict.set proj.storage Image.specification spec;

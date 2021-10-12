@@ -125,6 +125,7 @@ end
 let plt_agent = Knowledge.Agent.register
     ~package:"bap" "plt-symbolizer"
     ~desc:"extracts symbols from external relocations"
+    ~reliability:Knowledge.Agent.reliable
 
 open KB.Syntax
 
