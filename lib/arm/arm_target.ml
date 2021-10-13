@@ -521,16 +521,19 @@ let has_t32 label =
     Map.exists ~f:(Theory.Language.equal llvm_t32)
 
 
+let is_word_aligned x = Bitvec.(M32.(int 3 land x) = zero)
+
 let compute_encoding_from_symbol_table label =
   let (>>=?) x f = x >>= function
     | None -> !!Theory.Language.unknown
     | Some x -> f x in
   KB.collect CT.Label.unit label >>=? fun unit ->
   KB.collect CT.Label.addr label >>=? fun addr ->
-  KB.collect Encodings.slot unit >>= fun encodings ->
-  KB.return @@ match Map.find encodings addr with
-  | Some x -> x
-  | None -> CT.Language.unknown
+  KB.collect Encodings.slot unit >>| fun encodings ->
+  if not (is_word_aligned addr) then llvm_t32
+  else match Map.find encodings addr with
+    | Some x -> x
+    | None -> CT.Language.unknown
 
 (* here t < p means that t was introduced before p *)
 let (>=) t p = CT.Target.belongs t p
