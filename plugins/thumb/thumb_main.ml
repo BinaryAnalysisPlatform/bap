@@ -35,6 +35,8 @@ let (>>=?) x f = x >>= function
 
 module Thumb(CT : Theory.Core) = struct
 
+  module Thumb = Thumb_core.Make(CT)
+
   let reg r = Theory.Var.define s32 (Reg.name r)
   let imm x = Option.value_exn (Imm.to_int x)
   let regs rs = List.map rs ~f:(function
@@ -182,6 +184,10 @@ module Thumb(CT : Theory.Core) = struct
       info "unhandled bit-wise instruction: %a" pp_insn insn;
       !!Insn.empty
 
+  let unpredictable =
+    Theory.Label.for_name "arm:unpredictable" >>= CT.goto
+
+
 
   (* these are not entirely complete *)
   let lift_branch pc opcode insn =
@@ -192,7 +198,9 @@ module Thumb(CT : Theory.Core) = struct
     | `tBcc, [|Imm dst; Imm c; _|] -> bcc pc (cnd c) (imm dst)
     | `tBL,   [|_; _; Imm dst; _|]
     | `tBLXi, [|_; _; Imm dst|] -> bli pc (imm dst)
-    | `tBLXr, [|_; _; Reg dst|]when is_pc (reg dst) -> blxi pc 0
+    | `tBLXr, [|_; _; Reg dst|]when is_pc (reg dst) ->
+      (* blx pc is unpredictable in all versions of ARM *)
+      Thumb.ctrl unpredictable
     | `tBLXr, [|_; _; Reg dst|]-> blxr pc (reg dst)
     | `tBX, [|Reg dst; _; _|]when is_pc (reg dst) -> bxi pc 0
     | `tBX, [|Reg dst;_;_|] -> bxr (reg dst)

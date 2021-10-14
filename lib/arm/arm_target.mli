@@ -38,12 +38,16 @@ module LE : sig
   val v7a : Theory.Target.t
   val v7afp : Theory.Target.t
   val v8a : Theory.Target.t
+  val v8a32 : Theory.Target.t
+  val v8m32 : Theory.Target.t
+  val v8r32 : Theory.Target.t
   val v81a : Theory.Target.t
   val v82a : Theory.Target.t
   val v83a : Theory.Target.t
   val v84a : Theory.Target.t
   val v85a : Theory.Target.t
   val v86a : Theory.Target.t
+  val v9a : Theory.Target.t
 end
 
 
@@ -69,12 +73,16 @@ module EB : sig
   val v7a : Theory.Target.t
   val v7afp : Theory.Target.t
   val v8a : Theory.Target.t
+  val v8a32 : Theory.Target.t
+  val v8m32 : Theory.Target.t
+  val v8r32 : Theory.Target.t
   val v81a : Theory.Target.t
   val v82a : Theory.Target.t
   val v83a : Theory.Target.t
   val v84a : Theory.Target.t
   val v85a : Theory.Target.t
   val v86a : Theory.Target.t
+  val v9a : Theory.Target.t
 end
 
 
@@ -90,12 +98,16 @@ module Bi : sig
   val v7a : Theory.Target.t
   val v7afp : Theory.Target.t
   val v8a : Theory.Target.t
+  val v8a32 : Theory.Target.t
+  val v8m32 : Theory.Target.t
+  val v8r32 : Theory.Target.t
   val v81a : Theory.Target.t
   val v82a : Theory.Target.t
   val v83a : Theory.Target.t
   val v84a : Theory.Target.t
   val v85a : Theory.Target.t
   val v86a : Theory.Target.t
+  val v9a : Theory.Target.t
 end
 
 val llvm_a32 : Theory.language

@@ -25,6 +25,8 @@ let backend =
 type arms = [
   | Arch.arm
   | Arch.armeb
+  | Arch.thumb
+  | Arch.thumbeb
 ] [@@deriving enumerate]
 
 let () = Bap_main.Extension.declare ~doc @@ fun ctxt ->
