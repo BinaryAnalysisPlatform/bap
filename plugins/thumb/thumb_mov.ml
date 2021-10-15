@@ -29,10 +29,6 @@ module Make(CT : Theory.Core) = struct
       zf := is_zero (var rd);
     ]
 
-  let movr rd rn = data [
-      rd := var rn
-    ]
-
   let addi3 rd rn x = with_result rd @@ fun r -> [
       r := var rn + const x;
       nf := msb (var r);
