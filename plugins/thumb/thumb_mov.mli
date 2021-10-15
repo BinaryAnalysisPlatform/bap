@@ -40,9 +40,6 @@ module Make(CT : Theory.Core) : sig
   (** [movs rd, rn]  *)
   val movsr : r32 reg -> r32 reg -> unit eff
 
-  (** [mov rd, rn] with [d] or [n] greater than 7.  *)
-  val movr  : r32 reg -> r32 reg -> unit eff
-
   (** [asrs rd, rn, #i]  *)
   val asri : r32 reg -> r32 reg -> int -> unit eff
 

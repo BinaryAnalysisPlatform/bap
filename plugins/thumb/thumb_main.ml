@@ -94,8 +94,6 @@ module Thumb(CT : Theory.Core) = struct
       movi8 (reg rd) (imm x)
     | `tMOVSr, [|Reg rd; Reg rn|] ->
       movsr (reg rd) (reg rn)
-    | `tMOVr, [|Reg rd; Reg rn; _; _|] ->
-      movr (reg rd) (reg rn)
     | `tASRri, [|Reg rd; _; Reg rm; Imm x; _; _|] ->
       asri (reg rd) (reg rm) (imm x)
     | `tLSRri, [|Reg rd; _; Reg rm; Imm x; _; _|] ->
@@ -120,8 +118,7 @@ module Thumb(CT : Theory.Core) = struct
     | `tLDRi,   [|Reg rd; Reg rm; Imm i; _; _|]
     | `tLDRspi, [|Reg rd; Reg rm; Imm i; _; _|] ->
       ldri (reg rd) (reg rm) (imm i * 4)
-    | `tLDRr, [|Reg rd; Reg rm; Reg rn; _; _|]
-    | `t2LDRs, [|Reg rd; Reg rm; Reg rn; _; _; _|] ->
+    | `tLDRr, [|Reg rd; Reg rm; Reg rn; _; _|] ->
       ldrr (reg rd) (reg rm) (reg rn)
     | `tLDRpci, [|Reg rd; Imm i; _; _|] ->
       ldrpci (reg rd) W32.(pc + int 2) (imm i)

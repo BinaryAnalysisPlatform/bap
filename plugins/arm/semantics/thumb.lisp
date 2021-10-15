@@ -53,7 +53,7 @@
     (set NF (msb rd))))
 
 (defun tADDhirr (rd rn rm _ _)
-  (set$ rd (+ rn rm)))
+  (set$ rd (+ rn (t2reg rm))))
 
 (defun tSBC (rd _ rn rm _ _)
   (add-with-carry rd rn (lnot rm) CF))
@@ -87,4 +87,24 @@
 (defun t2B (off pre _)
   "b.w imm; A7-207, T3"
   (when (condition-holds pre)
-    (exec-addr (+ (get-program-counter) off 4))))
+    (exec-addr (+ (t2pc) off))))
+
+(defun t2LDRs (rt rn rm imm pre _)
+  (when (condition-holds pre)
+    (t2set rt (load-word (+ rn (lshift rm imm))))))
+
+(defun tMOVr (rt rn pre _)
+  (when (condition-holds pre)
+    (t2set rt rn)))
+
+(defun t2pc () (+ (get-program-counter) 4))
+
+(defun is-pc (r) (= (symbol r) 'PC))
+
+(defun t2reg (r)
+  (if (is-pc r) (t2pc) r))
+
+(defun t2set (reg val)
+  (if (is-pc reg)
+      (exec-addr val)
+    (set$ reg val)))

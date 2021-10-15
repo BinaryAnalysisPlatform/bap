@@ -4,7 +4,6 @@ open Bap.Std
 (* all the `mov` series, registers marked with `e` means extended *)
 type opmov = [
   | `tMOVi8 (* Rd imm8 *)
-  | `tMOVr (* Rde Rse *)
   | `tMOVSr (* Rd Rm affect CSPR *)
   | `tMVN (* Rd Rm *)
   | `tADC (* Rd Rn Rm *)
@@ -63,7 +62,7 @@ type opmem_multi = [
 
 type opmem = [
   | `tLDRi
-  | `tLDRr   | `t2LDRs
+  | `tLDRr
   | `tLDRpci | `t2LDRpci
   | `tLDRspi
   | `tLDRBi
