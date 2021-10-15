@@ -85,9 +85,11 @@ module Symbols = struct
       fun x ->
         let x = Int64.(x land mask) in
         Bitvec.(int64 x mod m) in
-    let add_alias aliases addr alias = Map.update aliases addr ~f:(function
+    let add_alias tab addr alias = {
+      tab with aliases = Map.update tab.aliases addr ~f:(function
         | None -> Set.singleton (module String) alias
-        | Some names -> Set.add names alias) in
+        | Some names -> Set.add names alias)
+    } in
     let pp_comma ppf () = Format.pp_print_string ppf ", " in
     let pp_addrs =
       Format.pp_print_list ~pp_sep:pp_comma Bitvec.pp
@@ -105,29 +107,26 @@ module Symbols = struct
       Seq.fold roots ~init:(Set.empty (module Bitvec_order))
         ~f:(fun xs x -> Set.add xs (to_addr x)) in
     let+ named_symbols = collect Image.Scheme.named_symbol in
-    let init = Bap_relation.empty Bitvec.compare String.compare in
-    Seq.fold named_symbols ~init ~f:(fun rel (data,name) ->
+    let init = {empty with roots},
+               Bap_relation.empty Bitvec.compare String.compare in
+    Seq.fold named_symbols ~init ~f:(fun (tab,rel) (data,name) ->
         let addr = to_addr data in
         if Set.mem roots addr && is_ident name
-        then Bap_relation.add rel (to_addr data) name
-        else rel) |> fun rel ->
-    Bap_relation.matching rel {empty with roots}
+        then tab,Bap_relation.add rel (to_addr data) name
+        else add_alias tab addr name, rel) |> fun (table,rel) ->
+    Bap_relation.matching rel table
       ~saturated:(fun k v t -> {
             t with names = Map.add_exn t.names k v
           })
-      ~unmatched:(fun reason t -> {
-            t with aliases = match reason with
+      ~unmatched:(fun reason t -> match reason with
           | Non_injective_fwd (addrs,name) ->
             info "the symbol %s has ambiguous addresses: %a@\n"
               name pp_addrs addrs;
-            List.fold addrs ~init:t.aliases ~f:(fun aliases addr ->
-                add_alias aliases addr name)
+            t
           | Non_injective_bwd (names,addr) ->
             info "the symbol at %a has ambiguous names: %a@\n"
               Bitvec.pp addr pp_names names;
-            List.fold names ~init:t.aliases ~f:(fun aliases name ->
-                add_alias aliases addr name)
-          })
+            t)
 
   let build_table t spec = match Ogre.eval (from_spec t) spec with
     | Ok x -> x
@@ -192,24 +191,6 @@ module Symbols = struct
       match Map.find aliases addr with
       | None -> Set.empty (module String)
       | Some aliases -> aliases
-
-  let gossiper = KB.Agent.register
-      ~package:"bap" "symbols-gossiper"
-      ~desc:"propses an alias as a possible name"
-      ~reliability:KB.Agent.unreliable
-
-  let gossiped_aliases : unit =
-    KB.Rule.(begin
-        declare "provides aliases as names" |>
-        require Image.Spec.slot |>
-        provide Theory.Label.possible_name |>
-        comment "uses aliases as an unreliable source of symbol names";
-      end);
-    KB.propose gossiper Theory.Label.possible_name @@ fun obj ->
-    let+ aliases = KB.collect Theory.Label.aliases obj in
-    match Set.find aliases ~f:is_ident with
-    | None -> Set.max_elt aliases
-    | ident -> ident
 end
 
 
@@ -231,6 +212,8 @@ let with_filename spec target _code memory path f =
   ] >>= fun () ->
   KB.promising Theory.Label.unit ~promise:(fun _ ->
       !!(Some unit)) f
+
+
 
 
 module State = struct
