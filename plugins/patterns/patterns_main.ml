@@ -283,19 +283,28 @@ module Target = struct
 end
 
 module Rule = struct
+  type sizes = {
+    total : int;
+    post : int;
+  }
   type t = {
+    sizes : sizes option;
     prepatterns : string list;
     postpatterns  : string list;
     actions : Action.t list
   }
 
   let empty = {
+    sizes = None;
     prepatterns = [];
     postpatterns = [];
     actions = []
   }
 
+  let sizes total post = {total; post}
+
   let collapse matches = {
+    sizes = List.find_map matches ~f:(fun {sizes} -> sizes);
     prepatterns = List.(matches >>= fun {prepatterns=xs} -> xs);
     postpatterns = List.(matches >>= fun {postpatterns=xs} -> xs);
     actions= List.(matches >>= fun {actions=xs} -> xs);
@@ -338,6 +347,11 @@ module Grammar = struct
     Attributes.(const Action.setcontext $ str "name" $ str "value")
     << close
 
+  let patternpairs_open_tag =
+    tag "patternpairs" >>|
+    Attributes.(const (fun x y -> Rule.sizes x y)
+                $ int "totalbits" $ int "postbits")
+
   let simple_action name repr =
     tag name >>$ Some repr << close
 
@@ -374,11 +388,13 @@ module Grammar = struct
   let postpatterns =
     patterns_with_actions "postpatterns"
 
+
   let patternpair =
-    tag "patternpairs" >>
+    required patternpairs_open_tag >>= fun sizes ->
     prepatterns >>= fun prepatterns ->
     postpatterns >>= fun matcher -> return {
-      matcher with prepatterns
+      matcher with prepatterns;
+                   sizes = Some sizes;
     } << close
 
   let singlepattern = patterns_with_actions "pattern"
