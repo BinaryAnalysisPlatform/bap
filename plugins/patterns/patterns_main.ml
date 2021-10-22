@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 
 module Name = struct
   type t = Xmlm.name
@@ -146,12 +147,6 @@ module Action = struct
 end
 
 module Pattern = struct
-  type t = {
-    bits : string;
-    mask : string;
-    pops : int;
-  }
-
   module Parser = struct
     type mode = Start | Wait | Bin | Hex
 
@@ -220,6 +215,71 @@ module Pattern = struct
         | Hex, '_' -> s
         | Hex, x -> nib x s)
   end
+
+
+  type t = {
+    bits : Z.t;
+    mask : Z.t;
+    pops : int;
+    size : int;
+  }
+
+  type token = {
+    pat : t;
+    pos : int;
+  }
+
+  let create input =
+    let {Parser.size; bits; mask} = Parser.run input in
+    {bits; mask; size; pops = Z.popcount mask}
+
+  let bits x = x.bits
+  let mask x = x.mask
+end
+
+module Target = struct
+  type spec = {
+    arch : string;
+    order : Theory.endianness;
+    bits : int;
+    rest : string option;
+  }
+
+  type problem =
+    | Expects_4tuple
+    | Wrong_endianness
+
+  type match_kind = Generic | Specific
+
+  exception Wrong_arch_spec of problem
+
+  let fail problem = raise (Wrong_arch_spec problem)
+
+  let create arch order bits rest =
+    let arch = String.lowercase arch in
+    let bits = Int.of_string bits in
+    let order = match order with
+      | "LE" -> Theory.Endianness.le
+      | "BE" -> Theory.Endianness.eb
+      | "LEBE" -> Theory.Endianness.bi
+      | _ -> fail Wrong_endianness in
+    let rest = match rest with
+      | "default" | "*" -> None
+      | other -> Some other in
+    {arch; bits; order; rest}
+
+  let parse str = match String.split str ~on:':' with
+    | [arch; order; bits; rest] -> create arch order bits rest
+    | _ -> fail Expects_4tuple
+
+  let matches target specs =
+    let bits = Theory.Target.bits target in
+    let order = Theory.Target.endianness target in
+    List.filter specs ~f:(fun s ->
+        bits = s.bits &&
+        Theory.Endianness.equal order s.order &&
+        Theory.Target.matches target s.arch)
+
 end
 
 module Rule = struct
