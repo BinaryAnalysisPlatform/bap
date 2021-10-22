@@ -145,7 +145,84 @@ module Action = struct
   let possiblefuncstart = Possiblefuncstart
 end
 
-module Match = struct
+module Pattern = struct
+  type t = {
+    bits : string;
+    mask : string;
+    pops : int;
+  }
+
+  module Parser = struct
+    type mode = Start | Wait | Bin | Hex
+
+    type state = {
+      bits : Z.t;
+      mask : Z.t;
+      size : int;
+      mode : mode;
+    }
+
+    let init = {
+      bits = Z.zero;
+      mask = Z.zero;
+      size = 0;
+      mode = Start
+    }
+
+    let switch mode s = {s with mode}
+
+    let bit bit s = {
+      mode = Bin;
+      size = s.size + 1;
+      bits = Z.(s.bits lsl 1 lor of_int bit);
+      mask = Z.(s.mask lsl 1 lor one);
+    }
+
+    let mask_bit s = {
+      mode = Bin;
+      size = s.size + 1;
+      bits = Z.(s.bits lsl 1);
+      mask = Z.(s.mask lsl 1)
+    }
+
+    let nib x s = {
+      mode = Hex;
+      size = s.size + 4;
+      bits = Z.(s.bits lsl 4 lor of_string_base 16 (String.of_char x));
+      mask = Z.(s.mask lsl 4 lor of_int 0xf)
+    }
+
+    let mask_nib s = {
+      mode = Hex;
+      size = s.size + 4;
+      bits = Z.(s.bits lsl 4);
+      mask = Z.(s.mask lsl 4)
+    }
+
+    let seq s f =
+      List.fold f ~init:s ~f:(fun s push -> push s)
+
+    let run = String.fold ~init ~f:(fun s c -> match s.mode,c with
+        | Start, '1' -> bit 1 s
+        | Start, '0' -> switch Wait s
+        | Start, '.' -> mask_bit s
+        | Start, _ -> s
+        | Wait, '0' -> seq s [bit 0; bit 0]
+        | Wait, '1' -> seq s [bit 0; bit 1]
+        | Wait, 'x' -> switch Hex s
+        | Wait, _ -> switch Start s
+        | Bin, '0' -> bit 0 s
+        | Bin, '1' -> bit 1 s
+        | Bin, '.' -> mask_bit s
+        | Bin, _ -> switch Start s
+        | Hex, ' ' -> switch Start s
+        | Hex, '.' -> mask_nib s
+        | Hex, '_' -> s
+        | Hex, x -> nib x s)
+  end
+end
+
+module Rule = struct
   type t = {
     prepatterns : string list;
     postpatterns  : string list;
@@ -163,9 +240,9 @@ module Match = struct
     postpatterns = List.(matches >>= fun {postpatterns=xs} -> xs);
     actions= List.(matches >>= fun {actions=xs} -> xs);
   }
-
-
 end
+
+
 
 module Grammar = struct
   open Parser
@@ -220,18 +297,18 @@ module Grammar = struct
 
   let action_elt =
     action >>| fun a -> {
-      Match.empty with actions = [a]
+      Rule.empty with actions = [a]
     }
 
   let data_elt =
     data >>| fun p -> {
-      Match.empty with postpatterns = [p]
+      Rule.empty with postpatterns = [p]
     }
 
   let patterns_with_actions name =
     tag name >>
     many (action_elt <|> data_elt) >>= fun matches ->
-    return (Match.collapse matches) <<
+    return (Rule.collapse matches) <<
     close
 
   let postpatterns =
