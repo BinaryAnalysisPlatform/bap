@@ -16,8 +16,9 @@ class substituter (x : var) (x' : var) = object
     if Var.equal x v then Var x' else super#map_var v
 
   method! map_let v ~exp ~body =
-    if Var.equal x v then Let (v, exp, body)
-    else Let (v, super#map_exp exp, super#map_exp body)
+    let exp = super#map_exp exp in
+    let body = if Var.equal x v then body else super#map_exp body in
+    Let (v, exp, body)
 end
 
 let flatten_exp (exp : exp) (blk : blk term) (before : tid) : exp * blk term =
