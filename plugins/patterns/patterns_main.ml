@@ -32,7 +32,34 @@ module Attributes = struct
 end
 
 
-module Parser = struct
+module Parser : sig
+  type 'a t
+  type error
+  val return : 'a -> 'a t
+  val ( >>= ) : 'a t -> ('a -> 'b t) -> 'b t
+  val ( >>| ) : 'a t -> ('a -> 'b) -> 'b t
+  val ( >> ) : 'a t -> 'b t -> 'b t
+  val ( >>$ ) : 'a t -> 'b -> 'b t
+  val ( << ) : 'a t -> 'b t -> 'a t
+  val ( <|> ) : 'a t -> 'a t -> 'a t
+  val (!*) : 'a t -> 'a list t
+  val (!+) : 'a t -> 'a list t
+
+  val star : 'a t -> 'a list t
+  val plus : 'a t -> 'a list t
+  val ignore : 'a t -> unit t
+  val required : 'a option t -> 'a t
+
+  val dtd : unit t
+  val close : unit t
+  val tag : string -> Xmlm.attribute list t
+  val matches_attr : string -> ('a * string) * 'b -> bool
+  val attr : string -> string -> string t
+  val data : string -> string t
+  val error : string -> 'a t
+  val run : 'a t -> Xmlm.input -> ('a,error) result
+  val pp_error : Format.formatter -> error -> unit
+end = struct
   type reject =
     | No_input
     | Unexpected of Xmlm.signal
@@ -40,31 +67,44 @@ module Parser = struct
     | Missing_attribute of {tag: string; attr : string}
     | Is_required
 
-  type 'a parser = Xmlm.input -> ('a,reject) result
+  type state = {
+    input : Xmlm.input;
+    empty : bool;
+  }
 
-  let unexpected signal = Error (Unexpected signal)
-  let return x _ = Ok x
-  let fail err _ = Error err
-  let reject signal _ = unexpected signal
+  type 'a parser = state -> state * ('a,reject) result
+  type 'a t = 'a parser
 
-  let read : _ parser = fun src ->
-    if Xmlm.eoi src then Error No_input
-    else Ok (Xmlm.input src)
-  let peek src =
-    if Xmlm.eoi src then Error No_input
-    else Ok (Xmlm.peek src)
+  type error = Xmlm.pos * reject
+
+  let empty v s = {s with empty=true},v
+  let unexpected signal = empty@@Error (Unexpected signal)
+  let return x s = s,Ok x
+  let fail err s = s,Error err
+  let reject signal s = unexpected signal s
+
+  let eof s = {s with empty=true},Error No_input
+
+  let read : _ parser = fun s ->
+    if Xmlm.eoi s.input then eof s
+    else {s with empty=false},Ok (Xmlm.input s.input)
+
+  let peek s =
+    if Xmlm.eoi s.input then eof s
+    else s,Ok (Xmlm.peek s.input)
 
   let (>>=) : 'a parser -> ('a -> 'b parser) -> 'b parser =
     fun p f s ->
     match p s with
-    | Error _ as err -> err
-    | Ok r -> f r s
+    | _,Error _ as err -> err
+    | s,Ok r -> f r s
 
   let (>>|) p f = p >>= fun x -> return (f x)
 
   let (>>) p q = p >>= fun _ -> q
 
-  let ignore p = p >>= fun _ -> return ()
+  let ignore p = p >>| ignore
+
   let drop = ignore read
   let consumed r =
     drop >>= fun () -> return r
@@ -98,38 +138,70 @@ module Parser = struct
     | `Data payload -> consumed payload
     | signal -> reject signal
 
-  let catch p fail s =
-    match p s with
-    | Ok _ as ok -> ok
-    | Error err -> fail err s
+  let (>>$) p x = p >> return x
+  let (<<) p q = p >>= fun x -> q >> return x
 
   let (<|>) : 'a parser -> 'a parser -> 'a parser = fun p q s ->
     match p s with
-    | Ok _ as ok -> ok
-    | Error Unexpected _ -> q s
-    | Error _ as err -> err
+    | _,Ok _ as ok -> ok
+    | s,Error (Unexpected _|Is_required) -> q s
+    | _,Error _ as err -> err
 
-  let (>>$) p x = p >> return x
-  let (<<) p q = p >>= fun x -> q >> return x
+  let many ?(plus=false) : 'a parser -> 'a list parser = fun p s ->
+    let finish xs s = {
+      s with empty = List.is_empty xs;
+    }, if List.is_empty xs && plus
+      then Error Is_required
+      else Ok (List.rev xs) in
+
+    let rec loop xs s =
+      match p s with
+      | {empty=false} as s,Ok x -> loop (x::xs) s
+      | {empty=true} as s,Ok x -> finish (x::xs) s
+      | s,Error Unexpected _ -> finish xs s
+      | _,Error _ as err -> err in
+    loop [] s
+
+  let star s = many ~plus:false s
+  let plus s = many ~plus:true s
+
+  let (!*) = star
+  let (!+) = plus
 
   let required p =
     p >>= function
     | None -> fail Is_required
     | Some x -> return x
 
-  let many : 'a parser -> 'a list parser = fun p s ->
-    let rec loop xs s =
-      match p s with
-      | Ok x -> loop (x::xs) s
-      | Error Unexpected _ -> Ok (List.rev xs)
-      | Error _ as err -> err in
-    loop [] s
+  let error msg : 'a parser = fun s -> s,(Error (User_error msg))
 
-  let error msg : 'a parser = fun _ -> (Error (User_error msg))
+  let run : 'a parser -> Xmlm.input -> _ =
+    fun p s -> match p {input=s; empty=true} with
+      | s,Error rej -> Error (Xmlm.pos s.input,rej)
+      | _,(Ok _ as ok) -> ok
 
-  let run p s = p s
+  let pp_error ppf ((lin,col),reject) =
+    Format.fprintf ppf "Parser failed at line %d, column %d.@\n" lin col;
+    match reject with
+    | No_input -> Format.fprintf ppf "Unexpected end of input"
+    | Unexpected (`El_start (name,_)) ->
+      Format.fprintf ppf "An unexpected tag %a" Xmlm.pp_name name
+    | Unexpected `El_end ->
+      Format.fprintf ppf "An unexpected end-tag"
+    | Unexpected `Dtd _ ->
+      Format.fprintf ppf "An unexpected start of the document (DTD)"
+    | Unexpected `Data data ->
+      Format.fprintf ppf "An unexpected element content: %S" data
+    | User_error msg ->
+      Format.fprintf ppf "%s" msg
+    | Missing_attribute {tag: string; attr : string} ->
+      Format.fprintf ppf "The attribute %S of the tag '%s' is required"
+        attr tag
+    | Is_required ->
+      Format.fprintf ppf "The element is required"
 
 end
+
 
 module Action = struct
   type t =
@@ -326,7 +398,7 @@ module Grammar = struct
   let files =
     dtd >>
     tag "patternconstraints" >>
-    many language <<
+    plus language <<
     close
 
   let data = data "data" << close
@@ -334,7 +406,7 @@ module Grammar = struct
 
   let prepatterns =
     tag "prepatterns" >>
-    many data <<
+    plus data <<
     close
 
   let align =
@@ -381,7 +453,7 @@ module Grammar = struct
 
   let patterns_with_actions name =
     tag name >>
-    many (action_elt <|> data_elt) >>= fun matches ->
+    !*(action_elt <|> data_elt) >>= fun matches ->
     return (Rule.collapse matches) <<
     close
 
@@ -400,7 +472,7 @@ module Grammar = struct
   let singlepattern = patterns_with_actions "pattern"
 
   let entries =
-    many (patternpair <|> singlepattern)
+    star (patternpair <|> singlepattern)
 
   let patternlist =
     dtd >>
@@ -413,7 +485,7 @@ module Grammar = struct
 
   let test =
     tag "test" >>
-    many (many foo <|> many bar) <<
+    plus foo <|> plus bar <<
     close
 
 end
