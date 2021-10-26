@@ -151,6 +151,10 @@ module Parser : sig
   (** [ignore p = p >>$ ()] *)
   val ignore : 'a t -> unit t
 
+
+  (** [choice [p; q; ...; z] is [p <|> q <|> ... z].  *)
+  val choice : 'a t list -> 'a t
+
   (** [required p] rejects [p] if it's value is [None] *)
   val required : 'a option t -> 'a t
 
@@ -350,6 +354,9 @@ end = struct
     | {empty=true},Error (Unexpected _|Is_required) -> q s
     | _,Error _ as err -> err
 
+
+  let choice parsers =
+    List.reduce_exn parsers ~f:(<|>)
 
   let fold ?(plus=false) : 'a parser -> ('b -> 'a -> 'b) -> 'b -> 'b parser =
     fun p f xs s ->
@@ -597,13 +604,26 @@ end
 module Grammar = struct
   open Parser
 
+  let file = tree "patternfile" data >>| snd
+
+  let file_with_compiler =
+    attr "compiler" "id" >>= fun compiler ->
+    file >>= fun file ->
+    return (compiler,file)
+    << close
+
+  let with_compilers id =
+    plus file_with_compiler >>| List.map ~f:(fun (comp,file) ->
+        sprintf "%s:%s" id comp, file)
+
+  let without_compilers id =
+    file >>= fun file ->
+    return [id,file]
+
   let language =
     attr "language" "id" >>= fun id ->
-    tag "patternfile" >>
-    data  >>= fun data ->
-    return (id,data)
-    << close
-    << close
+    (with_compilers id <|> without_compilers id) <<
+    close
 
   let files =
     dtd >>
