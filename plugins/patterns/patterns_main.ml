@@ -1,5 +1,6 @@
 open Core_kernel
 open Bap_core_theory
+open Bap.Std
 
 module Name = struct
   type t = Xmlm.name
@@ -434,7 +435,17 @@ module Action = struct
   let possiblefuncstart = Possiblefuncstart
 end
 
-module Pattern = struct
+module Pattern : sig
+  type t
+  type field
+
+  val create : string -> t
+  val concat : t -> t -> t
+  val size : t -> int
+  val nth : field -> t -> int -> int
+  val bits : field
+  val mask : field
+end = struct
   module Parser = struct
     type mode = Start | Wait | Bin | Hex
 
@@ -506,23 +517,39 @@ module Pattern = struct
 
 
   type t = {
+    repr : string;
     bits : Z.t;
     mask : Z.t;
     pops : int;
     size : int;
   }
 
-  type token = {
-    pat : t;
-    pos : int;
-  }
+  type field = t -> Z.t
 
-  let create input =
-    let {Parser.size; bits; mask} = Parser.run input in
-    {bits; mask; size; pops = Z.popcount mask}
+  let create repr =
+    let {Parser.size; bits; mask} = Parser.run repr in
+    {bits; mask; size; pops = Z.popcount mask; repr}
 
   let bits x = x.bits
   let mask x = x.mask
+  let size x = x.size
+
+
+  let concat x y = {
+    repr = x.repr ^ y.repr;
+    bits = Z.(x.bits lsl y.size lor y.bits);
+    mask = Z.(x.mask lsl y.size lor y.mask);
+    pops = x.pops + y.pops;
+    size = x.size + y.size;
+  }
+
+  let nth what x n =
+    let off = (x.size - n - 1) * 8 in
+    Z.to_int @@
+    Z.(what x asr off land of_int 0xff)
+
+  let pp ppf {repr} =
+    Format.fprintf ppf "%s" repr
 end
 
 module Target = struct
@@ -577,8 +604,8 @@ module Rule = struct
   }
   type t = {
     sizes : sizes option;
-    prepatterns : string list;
-    postpatterns  : string list;
+    prepatterns : Pattern.t list;
+    postpatterns  : Pattern.t list;
     actions : Action.t list
   }
 
@@ -597,6 +624,91 @@ module Rule = struct
     postpatterns = List.(matches >>= fun {postpatterns=xs} -> xs);
     actions= List.(matches >>= fun {actions=xs} -> xs);
   }
+end
+
+module Rules = struct
+  module Bytes = struct
+    type t =
+      | Sub of Bigsubstring.t
+      | Pat of Pattern.t
+
+
+    type token =
+      | Data of int
+      | Masked of {
+          mask : int;
+          data : int;
+        }
+    [@@deriving bin_io, sexp]
+
+    let compare_token x y = match x,y with
+      | Data x, Data y -> compare x y
+      | Masked x, Masked y -> compare x.data y.data
+      | Data x, Masked {mask; data=y}
+      | Masked {mask; data=x}, Data y ->
+        compare (x land mask) (y land mask)
+
+
+    let length = function
+      | Sub s -> Bigsubstring.length s
+      | Pat s -> Pattern.size s / 8
+
+    let token_hash = Hashtbl.hash
+
+    let nth_token bytes n = match bytes with
+      | Sub s -> Data (Char.to_int (Bigsubstring.get s n))
+      | Pat s -> Masked {
+          data = Pattern.(nth bits s n);
+          mask = Pattern.(nth mask s n);
+        }
+  end
+
+  module Trie = Trie.Make(Bytes)
+
+  type t = {
+    matches : Rule.t list Trie.t;
+    longest: int;
+  }
+
+  let is_large_enough sizes prep postp =
+    match sizes with
+    | None -> true
+    | Some {Rule.total; post} ->
+      Pattern.size postp >= post &&
+      Pattern.size postp + Pattern.size prep >= total
+
+
+  let create rules =
+    let matches = Trie.create () in
+    let longest = ref 0 in
+    List.iter rules ~f:(fun (r : Rule.t) ->
+        List.cartesian_product r.prepatterns r.postpatterns |>
+        List.iter ~f:(fun (pre,post) ->
+            if is_large_enough r.sizes pre post then
+              let p = Pattern.concat pre post in
+              longest := max !longest (Pattern.size p / 8);
+              Trie.change matches (Bytes.Pat p) (function
+                  | None -> Some [r]
+                  | Some rs -> Some (r::rs) )));
+    {matches; longest=longest.contents}
+
+  let search {matches; longest} mem f x =
+    let rec loop addr x =
+      match Memory.view mem ~from:addr ~words:longest with
+      | Error _ -> x
+      | Ok mem ->
+        let sub = Bytes.Sub (Memory.to_buffer mem) in
+        Trie.walk matches sub ~init:x ~f:(fun x rules ->
+            match rules with
+            | None -> x
+            | Some rules -> f addr rules) |>
+        loop (Addr.succ addr) in
+    loop (Memory.min_addr mem) x
+
+
+
+
+
 end
 
 
@@ -633,7 +745,8 @@ module Grammar = struct
 
   let data = tree "data" data >>| snd
 
-  let prepatterns = tree "prepatterns" (plus data) >>| snd
+  let prepatterns =
+    tree "prepatterns" (plus data) >>| snd >>| List.map ~f:Pattern.create
 
   let align =
     tag "align" >>|
@@ -674,7 +787,7 @@ module Grammar = struct
 
   let data_elt =
     data >>| fun p -> {
-      Rule.empty with postpatterns = [p]
+      Rule.empty with postpatterns = [Pattern.create p]
     }
 
   let patterns_with_actions name =
@@ -705,18 +818,6 @@ module Grammar = struct
     tag "patternlist" >>
     entries <<
     close
-
-  let foo = tag "foo" >>$ `foo << close
-  let bar = tag "bar" >>$ `bar << close
-
-
-  let bar = return `bar
-  let any = any >>$ `skip
-  let test =
-    tag "test" >>
-    many (return `foo <|> return `bar) <<
-    close
-
 end
 
 let test file rule =
