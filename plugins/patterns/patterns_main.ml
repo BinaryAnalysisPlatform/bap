@@ -427,12 +427,15 @@ module Action = struct
     | Funcstart
     | Codeboundary
     | Possiblefuncstart
+  [@@deriving sexp]
 
   let align mark bits = Align {mark; bits}
   let setcontext name value = Setcontext {name; value}
   let funcstart = Funcstart
   let codeboundary = Codeboundary
   let possiblefuncstart = Possiblefuncstart
+  let pp ppf action =
+    Format.fprintf ppf "%a" Sexp.pp_hum (sexp_of_t action)
 end
 
 module Pattern : sig
@@ -445,6 +448,7 @@ module Pattern : sig
   val nth : field -> t -> int -> int
   val bits : field
   val mask : field
+  val pp : Format.formatter -> t -> unit
 end = struct
   module Parser = struct
     type mode = Start | Wait | Bin | Hex
@@ -544,7 +548,7 @@ end = struct
   }
 
   let nth what x n =
-    let off = (x.size - n - 1) * 8 in
+    let off = (x.size / 8 - n - 1) * 8 in
     Z.to_int @@
     Z.(what x asr off land of_int 0xff)
 
@@ -624,94 +628,20 @@ module Rule = struct
     postpatterns = List.(matches >>= fun {postpatterns=xs} -> xs);
     actions= List.(matches >>= fun {actions=xs} -> xs);
   }
+
+  let pp_patterns = Format.pp_print_list Pattern.pp
+  let pp_actions = Format.pp_print_list Action.pp
+
+  let pp ppf {prepatterns; postpatterns; actions} =
+    Format.fprintf ppf "@[<v>\
+                        @[<v2>preps {@;%a@]@;}@;\
+                        @[<v2>posts {@;%a@]@;}@;\
+                        @[<v2>actions {@;%a@]@;}@;\
+                        @]"
+      pp_patterns prepatterns
+      pp_patterns postpatterns
+      pp_actions actions
 end
-
-module Rules = struct
-  module Bytes = struct
-    type t =
-      | Sub of Bigsubstring.t
-      | Pat of Pattern.t
-
-
-    type token =
-      | Data of int
-      | Masked of {
-          mask : int;
-          data : int;
-        }
-    [@@deriving bin_io, sexp]
-
-    let compare_token x y = match x,y with
-      | Data x, Data y -> compare x y
-      | Masked x, Masked y -> compare x.data y.data
-      | Data x, Masked {mask; data=y}
-      | Masked {mask; data=x}, Data y ->
-        compare (x land mask) (y land mask)
-
-
-    let length = function
-      | Sub s -> Bigsubstring.length s
-      | Pat s -> Pattern.size s / 8
-
-    let token_hash = Hashtbl.hash
-
-    let nth_token bytes n = match bytes with
-      | Sub s -> Data (Char.to_int (Bigsubstring.get s n))
-      | Pat s -> Masked {
-          data = Pattern.(nth bits s n);
-          mask = Pattern.(nth mask s n);
-        }
-  end
-
-  module Trie = Trie.Make(Bytes)
-
-  type t = {
-    matches : Rule.t list Trie.t;
-    longest: int;
-  }
-
-  let is_large_enough sizes prep postp =
-    match sizes with
-    | None -> true
-    | Some {Rule.total; post} ->
-      Pattern.size postp >= post &&
-      Pattern.size postp + Pattern.size prep >= total
-
-
-  let create rules =
-    let matches = Trie.create () in
-    let longest = ref 0 in
-    List.iter rules ~f:(fun (r : Rule.t) ->
-        List.cartesian_product r.prepatterns r.postpatterns |>
-        List.iter ~f:(fun (pre,post) ->
-            if is_large_enough r.sizes pre post then
-              let p = Pattern.concat pre post in
-              longest := max !longest (Pattern.size p / 8);
-              Trie.change matches (Bytes.Pat p) (function
-                  | None -> Some [r]
-                  | Some rs -> Some (r::rs) )));
-    {matches; longest=longest.contents}
-
-  let search {matches; longest} mem f x =
-    let rec loop addr x =
-      match Memory.view mem ~from:addr ~words:longest with
-      | Error _ -> x
-      | Ok mem ->
-        let sub = Bytes.Sub (Memory.to_buffer mem) in
-        Trie.walk matches sub ~init:x ~f:(fun x rules ->
-            match rules with
-            | None -> x
-            | Some rules -> f addr rules) |>
-        loop (Addr.succ addr) in
-    loop (Memory.min_addr mem) x
-
-
-
-
-
-end
-
-
 
 module Grammar = struct
   open Parser
@@ -813,17 +743,112 @@ module Grammar = struct
   let entries =
     star (patternpair <|> singlepattern)
 
-  let patternlist =
+  let patterns =
     dtd >>
     tag "patternlist" >>
     entries <<
     close
 end
 
-let test file rule =
+module Rules = struct
+  module Bytes = struct
+    type t =
+      | Sub of Bigsubstring.t
+      | Pat of Pattern.t
+
+    type masked = {
+      mask : int;
+      data : int;
+    } [@@deriving compare, bin_io]
+
+    type token =
+      | Data of int
+      | Masked of masked
+    [@@deriving bin_io]
+
+    let token_of_sexp = opaque_of_sexp
+    let sexp_of_token token = Sexp.Atom (match token with
+        | Data x -> sprintf "%02x" x
+        | Masked {mask; data} ->
+          sprintf "%02x:%02x" data mask)
+
+    let compare_token x y = match x,y with
+      | Data x, Data y -> compare x y
+      | Masked x, Masked y -> compare_masked x y
+      | Data x, Masked {mask; data=y}
+      | Masked {mask; data=x}, Data y ->
+        compare (x land mask) (y land mask)
+
+
+    let length = function
+      | Sub s -> Bigsubstring.length s
+      | Pat s -> Pattern.size s / 8
+
+    let token_hash = Hashtbl.hash
+
+    let nth_token bytes n = match bytes with
+      | Sub s -> Data (Char.to_int (Bigsubstring.get s n))
+      | Pat s -> Masked {
+          data = Pattern.(nth bits s n);
+          mask = Pattern.(nth mask s n);
+        }
+  end
+
+  module Trie = Trie.Make(Bytes)
+
+  type t = {
+    matches : Rule.t list Trie.t;
+    longest: int;
+  }
+
+  let is_large_enough sizes prep postp =
+    match sizes with
+    | None -> true
+    | Some {Rule.total; post} ->
+      Pattern.size postp >= post &&
+      Pattern.size postp + Pattern.size prep >= total
+
+
+  let create rules =
+    let matches = Trie.create () in
+    let longest = ref 0 in
+    List.iter rules ~f:(fun (r : Rule.t) ->
+        List.cartesian_product r.prepatterns r.postpatterns |>
+        List.iter ~f:(fun (pre,post) ->
+            if is_large_enough r.sizes pre post then
+              let p = Pattern.concat pre post in
+              longest := max !longest (Pattern.size p / 8);
+              Trie.change matches (Bytes.Pat p) (function
+                  | None -> Some [r]
+                  | Some rs -> Some (r::rs) )));
+    {matches; longest=longest.contents}
+
+  let search {matches; longest} mem f x =
+    Format.eprintf "Searching with substrings up to %d bytes@." longest;
+    let rec loop addr x =
+      match Memory.view mem ~from:addr ~words:longest with
+      | Error _ -> x
+      | Ok mem ->
+        Format.eprintf "Checking chunk:@\n%a@\n" Memory.pp mem;
+        let sub = Bytes.Sub (Memory.to_buffer mem) in
+        Trie.walk matches sub ~init:(x,0) ~f:(fun (x,i) rules ->
+            match rules with
+            | None ->
+              Format.eprintf "no match on byte %d@\n" i;
+              x,i+1
+            | Some rules ->
+              Format.eprintf "matches on byte %d@\n" i;
+              f addr rules, i+1) |> fst |>
+        loop (Addr.succ addr) in
+    loop (Memory.min_addr mem) x
+end
+
+let parse_rule rule file =
   In_channel.with_file file ~f:(fun ch ->
       let src = Xmlm.make_input ~strip:true (`Channel ch) in
       Parser.(run (dtd >> rule)) src)
+
+let parse_patterns = parse_rule Grammar.patterns
 
 let dump_signals file =
   In_channel.with_file file ~f:(fun ch ->
@@ -831,3 +856,44 @@ let dump_signals file =
       while not (Xmlm.eoi src) do
         Format.printf "%a@\n%!" Xmlm.pp_signal (Xmlm.input src);
       done)
+
+let pp_rules = Format.pp_print_list Rule.pp
+
+let with_rules spec k =
+  match parse_patterns spec with
+  | Error err ->
+    Format.eprintf "Failed to parse the spec: %a@." Parser.pp_error err
+  | Ok rules ->
+    let rules = Rules.create rules in
+    Format.printf "The rules are ready:@\n%a@\n@."
+      (Rules.Trie.pp pp_rules) rules.matches;
+    k rules
+
+let print_matches rules mem =
+  Rules.search rules mem (fun addr matches ->
+      Format.printf "@[<v2>matching %a {@;%a@]@\n"
+        Addr.pp addr
+        pp_rules matches) ()
+
+let test_on_file ~spec ~binary =
+  with_rules spec @@ fun rules ->
+  match Image.create ~backend:"llvm" binary with
+  | Error err ->
+    Format.eprintf "Failed to open the binary: %a@." Error.pp err
+  | Ok (img,_) ->
+    Table.iteri (Image.segments img) ~f:(fun mem seg ->
+        Format.printf "Analyzing segment %s:@.%a@."
+          (Image.Segment.name seg)
+          Memory.pp mem;
+        print_matches rules mem)
+
+
+
+let test_on_bytes ~spec bytes =
+  with_rules spec @@ fun rules ->
+  let data = Bigstring.of_string bytes in
+  let addr = Word.of_int32 0l in
+  match Memory.create LittleEndian addr data with
+  | Error err ->
+    Format.printf "Wrong memory: %a@." Error.pp err
+  | Ok mem -> print_matches rules mem
