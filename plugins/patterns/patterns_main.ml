@@ -427,7 +427,7 @@ module Action = struct
     | Funcstart
     | Codeboundary
     | Possiblefuncstart
-  [@@deriving sexp]
+  [@@deriving compare, equal, sexp]
 
   let align mark bits = Align {mark; bits}
   let setcontext name value = Setcontext {name; value}
@@ -436,6 +436,9 @@ module Action = struct
   let possiblefuncstart = Possiblefuncstart
   let pp ppf action =
     Format.fprintf ppf "%a" Sexp.pp_hum (sexp_of_t action)
+  include Base.Comparable.Make(struct
+      type nonrec t = t [@@deriving compare, sexp]
+    end)
 end
 
 module Pattern : sig
@@ -444,10 +447,12 @@ module Pattern : sig
 
   val create : string -> t
   val concat : t -> t -> t
+  val length : t -> int
   val size : t -> int
   val nth : field -> t -> int -> int
   val bits : field
   val mask : field
+  val matches : t -> pos:int -> int -> bool
   val pp : Format.formatter -> t -> unit
 end = struct
   module Parser = struct
@@ -537,6 +542,7 @@ end = struct
   let bits x = x.bits
   let mask x = x.mask
   let size x = x.size
+  let length x = x.size / 8
 
 
   let concat x y = {
@@ -551,6 +557,11 @@ end = struct
     let off = (x.size / 8 - n - 1) * 8 in
     Z.to_int @@
     Z.(what x asr off land of_int 0xff)
+
+  let matches x ~pos:n data =
+    let mask = nth mask x n
+    and bits = nth bits x n in
+    data land mask = bits
 
   let pp ppf {repr} =
     Format.fprintf ppf "%s" repr
@@ -602,10 +613,12 @@ module Target = struct
 end
 
 module Rule = struct
+
   type sizes = {
     total : int;
     post : int;
   }
+
   type t = {
     sizes : sizes option;
     prepatterns : Pattern.t list;
@@ -751,55 +764,24 @@ module Grammar = struct
 end
 
 module Rules = struct
-  module Bytes = struct
-    type t =
-      | Sub of Bigsubstring.t
-      | Pat of Pattern.t
-
-    type masked = {
-      mask : int;
-      data : int;
-    } [@@deriving compare, bin_io]
-
-    type token =
-      | Data of int
-      | Masked of masked
-    [@@deriving bin_io]
-
-    let token_of_sexp = opaque_of_sexp
-    let sexp_of_token token = Sexp.Atom (match token with
-        | Data x -> sprintf "%02x" x
-        | Masked {mask; data} ->
-          sprintf "%02x:%02x" data mask)
-
-    let compare_token x y = match x,y with
-      | Data x, Data y -> compare x y
-      | Masked x, Masked y -> compare_masked x y
-      | Data x, Masked {mask; data=y}
-      | Masked {mask; data=x}, Data y ->
-        compare (x land mask) (y land mask)
-
-
-    let length = function
-      | Sub s -> Bigsubstring.length s
-      | Pat s -> Pattern.size s / 8
-
-    let token_hash = Hashtbl.hash
-
-    let nth_token bytes n = match bytes with
-      | Sub s -> Data (Char.to_int (Bigsubstring.get s n))
-      | Pat s -> Masked {
-          data = Pattern.(nth bits s n);
-          mask = Pattern.(nth mask s n);
-        }
-  end
-
-  module Trie = Trie.Make(Bytes)
+  type case = {
+    pattern : Pattern.t;        (* the pattern to match *)
+    actions : Set.M(Action).t;  (* the actions to take *)
+    shifted : int;              (* the size of the prepattern *)
+  }
 
   type t = {
-    matches : Rule.t list Trie.t;
-    longest: int;
+    cases : case list;          (* all possible cases *)
+    known : Set.M(Action).t;    (* all possible actions from all cases *)
   }
+
+  let pp_case ppf {pattern} =
+    Pattern.pp ppf pattern
+
+  let pp ppf {cases} =
+    Format.fprintf ppf "@[<v>%a@]"
+      (Format.pp_print_list pp_case) cases
+
 
   let is_large_enough sizes prep postp =
     match sizes with
@@ -808,39 +790,61 @@ module Rules = struct
       Pattern.size postp >= post &&
       Pattern.size postp + Pattern.size prep >= total
 
+  let empty = {
+    cases = [];
+    known = Set.empty (module Action);
+  }
 
   let create rules =
-    let matches = Trie.create () in
-    let longest = ref 0 in
-    List.iter rules ~f:(fun (r : Rule.t) ->
+    List.fold rules ~init:empty ~f:(fun rules (r : Rule.t) ->
+        let actions = Set.of_list (module Action) r.actions in
+        let rules = {
+          rules with known = Set.union rules.known actions
+        } in
         List.cartesian_product r.prepatterns r.postpatterns |>
-        List.iter ~f:(fun (pre,post) ->
+        List.fold ~init:rules ~f:(fun rules (pre,post) ->
             if is_large_enough r.sizes pre post then
-              let p = Pattern.concat pre post in
-              longest := max !longest (Pattern.size p / 8);
-              Trie.change matches (Bytes.Pat p) (function
-                  | None -> Some [r]
-                  | Some rs -> Some (r::rs) )));
-    {matches; longest=longest.contents}
+              let p = Pattern.concat pre post in {
+                rules with
+                cases = {
+                  actions;
+                  pattern=p;
+                  shifted=Pattern.length pre;
+                } :: rules.cases
+              } else rules))
 
-  let search {matches; longest} mem f x =
-    Format.eprintf "Searching with substrings up to %d bytes@." longest;
-    let rec loop addr x =
-      match Memory.view mem ~from:addr ~words:longest with
-      | Error _ -> x
-      | Ok mem ->
-        Format.eprintf "Checking chunk:@\n%a@\n" Memory.pp mem;
-        let sub = Bytes.Sub (Memory.to_buffer mem) in
-        Trie.walk matches sub ~init:(x,0) ~f:(fun (x,i) rules ->
-            match rules with
-            | None ->
-              Format.eprintf "no match on byte %d@\n" i;
-              x,i+1
-            | Some rules ->
-              Format.eprintf "matches on byte %d@\n" i;
-              f addr rules, i+1) |> fst |>
-        loop (Addr.succ addr) in
-    loop (Memory.min_addr mem) x
+  let apply addr case f x =
+    let addr = Addr.nsucc addr case.shifted in
+    Set.fold case.actions ~init:x ~f:(fun x action ->
+        f addr action x)
+
+  let remove_actions work case = {
+    work with known = Set.diff work.known case.actions
+  }
+
+  let search cases mem f x =
+    let rec outer addr x =
+      if Word.(addr < Memory.max_addr mem)
+      then inner addr 0 cases x
+      else x
+    and inner addr pos work x =
+      if Set.is_empty work.known || List.is_empty work.cases
+      then outer (Addr.succ addr) x
+      else match Memory.get ~index:pos ~addr mem with
+        | Error _ -> x
+        | Ok byte ->
+          let byte = Word.to_int_exn byte in
+          let x,work =
+            List.fold work.cases ~init:(x,{work with cases=[]})
+              ~f:(fun (x,work) case ->
+                  let hits = Pattern.matches case.pattern ~pos byte in
+                  if hits && Pattern.length case.pattern = pos + 1
+                  then apply addr case f x, remove_actions work case
+                  else x, if hits then {
+                      work with cases = case :: work.cases
+                    } else work) in
+          inner addr (pos+1) work x in
+    outer (Memory.min_addr mem) x
 end
 
 let parse_rule rule file =
@@ -865,17 +869,16 @@ let with_rules spec k =
     Format.eprintf "Failed to parse the spec: %a@." Parser.pp_error err
   | Ok rules ->
     let rules = Rules.create rules in
-    Format.printf "The rules are ready:@\n%a@\n@."
-      (Rules.Trie.pp pp_rules) rules.matches;
+    Format.eprintf "Applying rules@\n%a@." Rules.pp rules;
     k rules
 
 let print_matches rules mem =
-  Rules.search rules mem (fun addr matches ->
-      Format.printf "@[<v2>matching %a {@;%a@]@\n"
+  Rules.search rules mem (fun addr action () ->
+      Format.printf "@[<v2>matching %a -> %a@]@\n"
         Addr.pp addr
-        pp_rules matches) ()
+        Action.pp action) ()
 
-let test_on_file ~spec ~binary =
+let test_on_file ~spec ~binary=
   with_rules spec @@ fun rules ->
   match Image.create ~backend:"llvm" binary with
   | Error err ->
