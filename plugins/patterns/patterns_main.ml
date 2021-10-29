@@ -847,6 +847,29 @@ module Rules = struct
     outer (Memory.min_addr mem) x
 end
 
+module Repository = struct
+  let patternconstraints =
+    FileUtil.(And (Is_file, Basename_is "patternconstraints.xml"))
+
+  let collect_patternconstraints root =
+    FileUtil.find patternconstraints root (fun xs x -> x::xs) []
+
+  let build roots =
+    List.concat_map roots ~f:collect_patternconstraints |>
+    List.concat_map ~f:(fun toc ->
+        let folder = FilePath.dirname toc in
+        In_channel.with_file toc ~f:(fun ch ->
+            let src = Xmlm.make_input ~strip:true (`Channel ch) in
+            match Parser.run Grammar.files src with
+            | Ok files ->
+              List.concat files |>
+              List.Assoc.map ~f:(fun file ->
+                  Filename.concat folder file)
+            | Error err ->
+              Format.eprintf "illformed file %s, %a" toc Parser.pp_error err;
+              []))
+end
+
 let parse_rule rule file =
   In_channel.with_file file ~f:(fun ch ->
       let src = Xmlm.make_input ~strip:true (`Channel ch) in
@@ -889,8 +912,6 @@ let test_on_file ~spec ~binary=
           (Image.Segment.name seg)
           Memory.pp mem;
         print_matches rules mem)
-
-
 
 let test_on_bytes ~spec bytes =
   with_rules spec @@ fun rules ->
