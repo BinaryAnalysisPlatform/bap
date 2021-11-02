@@ -419,7 +419,6 @@ end = struct
 
 end
 
-
 module Action = struct
   type t =
     | Align of {mark : int; bits : int}
@@ -568,12 +567,15 @@ end = struct
 end
 
 module Target = struct
+
+  (* None denotes any *)
   type spec = {
     arch : string;
-    order : Theory.endianness;
-    bits : int;
-    rest : string option;
-  }
+    order : Theory.endianness option;
+    bits : int option;
+    variant : string option;
+    compiler : string option;
+  } [@@deriving fields]
 
   type problem =
     | Expects_4tuple
@@ -585,31 +587,42 @@ module Target = struct
 
   let fail problem = raise (Wrong_arch_spec problem)
 
+  let with_default field k =
+    match field with
+    | "default"|"*" -> None
+    | other -> Some (k other)
+
   let create arch order bits rest =
     let arch = String.lowercase arch in
-    let bits = Int.of_string bits in
-    let order = match order with
+    let bits = with_default bits Int.of_string in
+    let order = with_default order @@ function
       | "LE" -> Theory.Endianness.le
       | "BE" -> Theory.Endianness.eb
-      | "LEBE" -> Theory.Endianness.bi
+      | "LEBE" ->  Theory.Endianness.bi
       | _ -> fail Wrong_endianness in
-    let rest = match rest with
-      | "default" | "*" -> None
-      | other -> Some other in
-    {arch; bits; order; rest}
+    let variant = match List.hd rest with
+      | None -> None
+      | Some var -> with_default var ident in
+    let compiler = match rest with
+      | [_;comp] -> with_default comp ident
+      | _ -> None in
+    {arch; bits; order; variant; compiler}
 
   let parse str = match String.split str ~on:':' with
-    | [arch; order; bits; rest] -> create arch order bits rest
+    | arch::order::bits::rest -> create arch order bits rest
     | _ -> fail Expects_4tuple
+
+  let field_matches equal value field = match field with
+    | None -> true
+    | Some field -> equal value field
 
   let matches target specs =
     let bits = Theory.Target.bits target in
     let order = Theory.Target.endianness target in
     List.filter specs ~f:(fun s ->
-        bits = s.bits &&
-        Theory.Endianness.equal order s.order &&
+        field_matches equal bits s.bits &&
+        field_matches Theory.Endianness.equal order s.order &&
         Theory.Target.matches target s.arch)
-
 end
 
 module Rule = struct
