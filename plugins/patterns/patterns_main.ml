@@ -577,9 +577,13 @@ module Target = struct
     compiler : string option;
   } [@@deriving fields]
 
+  type t =
+    | Name of Theory.Target.t
+    | Spec of spec
+
   type problem =
-    | Expects_4tuple
     | Wrong_endianness
+    | Unrecognized_target
 
   type match_kind = Generic | Specific
 
@@ -592,7 +596,7 @@ module Target = struct
     | "default"|"*" -> None
     | other -> Some (k other)
 
-  let create arch order bits rest =
+  let of_parts arch order bits rest =
     let arch = String.lowercase arch in
     let bits = with_default bits Int.of_string in
     let order = with_default order @@ function
@@ -606,23 +610,26 @@ module Target = struct
     let compiler = match rest with
       | [_;comp] -> with_default comp ident
       | _ -> None in
-    {arch; bits; order; variant; compiler}
+    Spec {arch; bits; order; variant; compiler}
 
   let parse str = match String.split str ~on:':' with
-    | arch::order::bits::rest -> create arch order bits rest
-    | _ -> fail Expects_4tuple
+    | arch::order::bits::rest -> of_parts arch order bits rest
+    | _ -> match Theory.Target.lookup ~package:"bap" str with
+      | None -> fail Unrecognized_target
+      | Some t -> Name t
 
   let field_matches equal value field = match field with
     | None -> true
     | Some field -> equal value field
 
-  let matches target specs =
-    let bits = Theory.Target.bits target in
-    let order = Theory.Target.endianness target in
-    List.filter specs ~f:(fun s ->
-        field_matches equal bits s.bits &&
-        field_matches Theory.Endianness.equal order s.order &&
-        Theory.Target.matches target s.arch)
+  let matches target = function
+    | Name t -> Theory.Target.belongs t target
+    | Spec s ->
+      let bits = Theory.Target.bits target in
+      let order = Theory.Target.endianness target in
+      field_matches equal bits s.bits &&
+      field_matches Theory.Endianness.equal order s.order &&
+      Theory.Target.matches target s.arch
 end
 
 module Rule = struct
