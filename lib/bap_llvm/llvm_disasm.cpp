@@ -7,6 +7,10 @@
 #include <llvm/Support/FormattedStream.h>
 #include <llvm/Support/TargetRegistry.h>
 #include <llvm/Support/CommandLine.h>
+#if LLVM_VERSION_MAJOR >= 12
+#include <llvm/Support/Process.h>
+#include <llvm/Support/StringSaver.h>
+#endif
 #include <llvm-c/Target.h>
 
 #if LLVM_VERSION_MAJOR >= 10
@@ -627,8 +631,27 @@ struct create_llvm_disassembler : disasm_factory {
 
 }
 
+static void parse_environment_options(const char *prog_name, const char *env_var) {
+#if LLVM_VERSION_MAJOR >= 12
+    llvm::Optional<std::string> env_value = llvm::sys::Process::GetEnv(llvm::StringRef(env_var));
+    if (!env_value)
+        return;
+
+    llvm::SmallVector<const char *, 20> new_argv;
+    llvm::BumpPtrAllocator alloc;
+    llvm::StringSaver saver(alloc);
+    new_argv.push_back(saver.save(prog_name).data());
+
+    llvm::cl::TokenizeGNUCommandLine(*env_value, saver, new_argv);
+    int new_argc = static_cast<int>(new_argv.size());
+    llvm::cl::ParseCommandLineOptions(new_argc, &new_argv[0], llvm::StringRef(""));
+#else
+    llvm::cl::ParseEnvironmentOptions(prog_name, env_var);
+#endif
+}
+
 int disasm_llvm_init() {
-    llvm::cl::ParseEnvironmentOptions("bap", "BAP_LLVM_OPTIONS");
+    parse_environment_options("bap", "BAP_LLVM_OPTIONS");
     bap::initialize_llvm();
     auto f = std::make_shared<bap::create_llvm_disassembler>();
     return bap::register_disassembler("llvm", f);
