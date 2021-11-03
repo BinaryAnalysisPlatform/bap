@@ -486,9 +486,10 @@ module Pattern : sig
   type field
 
   val create : string -> t
+  val empty : t
   val concat : t -> t -> t
   val length : t -> int
-  val size : t -> int
+  val weight : t -> int
   val nth : field -> t -> int -> int
   val bits : field
   val mask : field
@@ -579,10 +580,18 @@ end = struct
     let {Parser.size; bits; mask} = Parser.run repr in
     {bits; mask; size; pops = Z.popcount mask; repr}
 
+  let empty = {
+    repr = "";
+    bits = Z.zero;
+    mask = Z.zero;
+    pops = 0;
+    size = 0;
+  }
+
   let bits x = x.bits
   let mask x = x.mask
-  let size x = x.size
   let length x = x.size / 8
+  let weight x = x.pops
 
 
   let concat x y = {
@@ -821,30 +830,32 @@ module Rules = struct
     Format.fprintf ppf "@[<v>%a@]"
       (Format.pp_print_list pp_case) cases
 
-
   let is_large_enough sizes prep postp =
     match sizes with
     | None -> true
     | Some {Rule.total; post} ->
-      Pattern.size postp >= post &&
-      Pattern.size postp + Pattern.size prep >= total
+      Pattern.weight postp >= post &&
+      Pattern.weight postp + Pattern.weight prep >= total
 
   let empty = {
     cases = [];
     known = Set.empty (module Action);
   }
 
+  let patterns_product pre post =
+    let pre = match pre with
+      | [] -> [Pattern.empty]
+      | pre -> pre in
+    List.cartesian_product pre post
+
   let create rules =
     List.fold rules ~init:empty ~f:(fun rules (r : Rule.t) ->
-        let actions = Set.of_list (module Action) r.actions in
-        let rules = {
-          rules with known = Set.union rules.known actions
-        } in
-        List.cartesian_product r.prepatterns r.postpatterns |>
+        patterns_product r.prepatterns r.postpatterns |>
         List.fold ~init:rules ~f:(fun rules (pre,post) ->
             if is_large_enough r.sizes pre post then
+              let actions = Set.of_list (module Action) r.actions in
               let p = Pattern.concat pre post in {
-                rules with
+                known = Set.union rules.known actions;
                 cases = {
                   actions;
                   pattern=p;
