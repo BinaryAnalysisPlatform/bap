@@ -11,7 +11,7 @@ let get_direct_typ (e : exp) : Type.t = match e with
 
 class substituter (x : var) (x' : var) = object
   inherit Exp.mapper as super
-    
+
   method! map_var v =
     if Var.equal x v then Var x' else super#map_var v
 
