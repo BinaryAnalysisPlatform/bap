@@ -19,7 +19,11 @@ using namespace llvm::object;
 
 template <typename T>
 bool has_addresses(const ELFObjectFile<T> &obj) {
+#if LLVM_VERSION_MAJOR >= 12
+    auto hdr = &obj.getELFFile().getHeader();
+#else
     auto hdr = obj.getELFFile()->getHeader();
+#endif
     return (hdr->e_type == ELF::ET_EXEC ||
             hdr->e_type == ELF::ET_DYN ||
             hdr->e_type == ELF::ET_CORE);
@@ -28,7 +32,11 @@ bool has_addresses(const ELFObjectFile<T> &obj) {
 
 template <typename T>
 bool is_executable(const ELFObjectFile<T> &obj) {
+#if LLVM_VERSION_MAJOR >= 12
+    auto hdr = &obj.getELFFile().getHeader();
+#else
     auto hdr = obj.getELFFile()->getHeader();
+#endif
     return (hdr->e_type == ELF::ET_EXEC ||
             hdr->e_type == ELF::ET_DYN);
 }
@@ -42,7 +50,11 @@ bool is_executable(const ELFObjectFile<T> &obj) {
 template <typename T>
 uint64_t base_address(const ELFObjectFile<T> &obj) {
     uint64_t base = 0L;
+#if LLVM_VERSION_MAJOR >= 12
+    auto elf = obj.getELFFile();
+#else
     auto elf = *obj.getELFFile();
+#endif
     auto segs = prim::elf_program_headers(elf);
     auto code = segs.end();
 
@@ -58,7 +70,12 @@ uint64_t base_address(const ELFObjectFile<T> &obj) {
 template <typename T>
 uint64_t minimal_progbits_offset(const ELFObjectFile<T> &obj) {
     auto smallest = std::numeric_limits<uint64_t>::max();
-    for (auto sec :  prim::elf_sections(*obj.getELFFile())) {
+#if LLVM_VERSION_MAJOR >= 12
+    auto &elf_file = obj.getELFFile();
+#else
+    auto &elf_file = *obj.getELFFile();
+#endif
+    for (auto sec :  prim::elf_sections(elf_file)) {
         if (sec.sh_type == ELF::SHT_PROGBITS && sec.sh_offset < smallest) {
             smallest = sec.sh_offset;
         }
@@ -68,7 +85,11 @@ uint64_t minimal_progbits_offset(const ELFObjectFile<T> &obj) {
 
 template <typename T>
 void emit_entry_point(const ELFObjectFile<T> &obj, ogre_doc &s) {
+#if LLVM_VERSION_MAJOR >= 12
+    auto hdr = &obj.getELFFile().getHeader();
+#else
     auto hdr = obj.getELFFile()->getHeader();
+#endif
     s.entry("llvm:entry-point") << hdr->e_entry;
 }
 
@@ -80,7 +101,11 @@ std::string name_of_index(std::size_t i) {
 
 template <typename T>
 void emit_program_headers(const ELFObjectFile<T> &obj, ogre_doc &s) {
+#if LLVM_VERSION_MAJOR >= 12
+    auto hdrs = prim::elf_program_headers(obj.getELFFile());
+#else
     auto hdrs = prim::elf_program_headers(*obj.getELFFile());
+#endif
     for (auto it = hdrs.begin(); it != hdrs.end(); ++it) {
         bool ld = (it->p_type == ELF::PT_LOAD);
         bool r = static_cast<bool>(it->p_flags & ELF::PF_R);
@@ -162,7 +187,14 @@ bool is_external(uint64_t addr, uint64_t offset, uint64_t size) {
 
 template <typename T>
 void emit_symbol_entry(const ELFObjectFile<T> &obj, const SymbolRef &sym, ogre_doc &s) {
+#if LLVM_VERSION_MAJOR >= 12
+    auto sym_elf_or_error = obj.getSymbol(sym.getRawDataRefImpl());
+    if (!sym_elf_or_error)
+        return;
+    auto sym_elf = *sym_elf_or_error;
+#else
     auto sym_elf = obj.getSymbol(sym.getRawDataRefImpl());
+#endif
     auto name = prim::symbol_name(sym);
     auto addr = prim::symbol_address(sym);
     auto off = symbol_file_offset(obj, sym);
@@ -188,7 +220,11 @@ void emit_symbol_entries(const ELFObjectFile<T> &obj, symbol_iterator begin, sym
 
 template <typename T>
 void emit_symbol_entries(const ELFObjectFile<T> &obj, ogre_doc &s) {
+#if LLVM_VERSION_MAJOR >= 12
+    auto elf = &obj.getELFFile();
+#else
     auto elf = obj.getELFFile();
+#endif
     emit_symbol_entries(obj, obj.symbol_begin(), obj.symbol_end(), s);
     auto secs = prim::elf_sections(*elf);
     emit_symbol_entries(obj, obj.dynamic_symbol_begin(), obj.dynamic_symbol_end(), s);
