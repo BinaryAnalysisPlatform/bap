@@ -31,6 +31,7 @@ module Attributes = struct
     fun x _ -> Some x
 end
 
+type name = Name.t
 type attributes = Attributes.t
 
 
@@ -187,7 +188,7 @@ module Parser : sig
   (** [eoi] matches with the end of input.  *)
   val eoi : bool t
 
-  (** [any] recognizes with any XML tree.
+  (** [any] recognizes any XML tree.
 
       The recognized subtree is read (including all chidlren) and
       discarded.
@@ -204,6 +205,16 @@ module Parser : sig
       end-tag, see {!close}. This parser only matches the start-tag.
   *)
   val tag : string -> attributes t
+
+
+
+  (** [start] recognizes a start tag with any name.
+
+      Produces the name of the recognized tag together with the
+      attributes.
+  *)
+  val start : Xmlm.tag t
+
 
   (** [close] recognizes any end-tag. *)
   val close : unit t
@@ -289,6 +300,12 @@ end = struct
   let dtd = peek >>= function
     | `Dtd x -> consumed x
     | _ -> return None
+
+  let start =
+    peek >>= function
+    | `El_start (name,attrs) ->
+      consumed (name,attrs)
+    | s -> reject s
 
   let close =
     peek >>= function
@@ -419,24 +436,48 @@ end = struct
 
 end
 
-module Action = struct
-  type t =
-    | Align of {mark : int; bits : int}
-    | Setcontext of {name : string; value : string}
-    | Funcstart
-    | Codeboundary
-    | Possiblefuncstart
+module Action : sig
+  type t
+  val of_tag : Xmlm.tag -> t
+  val pp : Format.formatter -> t -> unit
+  include Base.Comparable.S with type t := t
+end = struct
+  type action = {
+    name : KB.Name.t;
+    args : string Map.M(KB.Name).t;
+  }
   [@@deriving compare, equal, sexp]
 
-  let align mark bits = Align {mark; bits}
-  let setcontext name value = Setcontext {name; value}
-  let funcstart = Funcstart
-  let codeboundary = Codeboundary
-  let possiblefuncstart = Possiblefuncstart
-  let pp ppf action =
-    Format.fprintf ppf "%a" Sexp.pp_hum (sexp_of_t action)
+  let xml_name ~default (pkg,name) = match pkg with
+    | "" -> KB.Name.create ~package:default name
+    | _ -> match Uri.(host@@of_string pkg) with
+      | None | Some "" -> KB.Name.create ~package:pkg name
+      | Some package -> KB.Name.create ~package name
+
+  let of_tag (name,args) = {
+    name = xml_name ~default:"bap" name;
+    args = List.map args ~f:(fun (k,v) ->
+        xml_name ~default:KB.Symbol.keyword k,v) |>
+           Map.of_alist_exn (module KB.Name)
+  }
+
+  let pp_arg ppf (name,value) =
+    Format.fprintf ppf "%a %S"
+      KB.Name.pp name value
+
+  let pp_args ppf args =
+    Format.pp_print_list ~pp_sep:Format.pp_print_space
+      pp_arg ppf (Map.to_alist args)
+
+  let pp ppf {name; args} =
+    if Map.is_empty args
+    then Format.fprintf ppf "(%a)" KB.Name.pp name
+    else Format.fprintf ppf "@[<hv2>(%a@ %a)@]"
+        KB.Name.pp name pp_args args
+
+  type t = action
   include Base.Comparable.Make(struct
-      type nonrec t = t [@@deriving compare, sexp]
+      type nonrec t = action [@@deriving compare, sexp]
     end)
 end
 
@@ -711,41 +752,14 @@ module Grammar = struct
   let prepatterns =
     tree "prepatterns" (plus data) >>| snd >>| List.map ~f:Pattern.create
 
-  let align =
-    tag "align" >>|
-    Attributes.(const Action.align $ int "mark" $ int "bits")
-    << close
-
-  let setcontext =
-    tag "setcontext" >>|
-    Attributes.(const Action.setcontext $ str "name" $ str "value")
-    << close
 
   let patternpairs_open_tag =
     tag "patternpairs" >>|
     Attributes.(const (fun x y -> Rule.sizes x y)
                 $ int "totalbits" $ int "postbits")
 
-  let simple_action name repr =
-    tag name >>$ Some repr << close
-
-  let funcstart =
-    simple_action "funcstart" Action.funcstart
-  let codeboundary =
-    simple_action "codeboundary" Action.codeboundary
-  let possiblefuncstart =
-    simple_action "possiblefuncstart" Action.possiblefuncstart
-
-  let action =
-    required align <|>
-    required setcontext <|>
-    required funcstart <|>
-    required codeboundary <|>
-    required possiblefuncstart
-
-  let action_elt =
-    action >>| fun a -> {
-      Rule.empty with actions = [a]
+  let action = start << close >>| fun a -> {
+      Rule.empty with actions = [Action.of_tag a]
     }
 
   let data_elt =
@@ -755,13 +769,12 @@ module Grammar = struct
 
   let patterns_with_actions name =
     tag name >>
-    !*(action_elt <|> data_elt) >>= fun matches ->
+    !*(data_elt <|> action) >>= fun matches ->
     return (Rule.collapse matches) <<
     close
 
   let postpatterns =
     patterns_with_actions "postpatterns"
-
 
   let patternpair =
     required patternpairs_open_tag >>= fun sizes ->
@@ -795,8 +808,14 @@ module Rules = struct
     known : Set.M(Action).t;    (* all possible actions from all cases *)
   }
 
-  let pp_case ppf {pattern} =
-    Pattern.pp ppf pattern
+  let pp_actions ppf actions =
+    Format.pp_print_list ~pp_sep:Format.pp_print_space
+      Action.pp ppf (Set.to_list actions)
+
+  let pp_case ppf {pattern; actions} =
+    Format.fprintf ppf "@[<hv2>%a ->@ %a@]"
+      Pattern.pp pattern
+      pp_actions actions
 
   let pp ppf {cases} =
     Format.fprintf ppf "@[<v>%a@]"
