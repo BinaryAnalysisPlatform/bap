@@ -1,6 +1,7 @@
 open Core_kernel
 open Bap_core_theory
 open Bap.Std
+include Bap_main.Loggers()
 
 module Name = struct
   type t = Xmlm.name
@@ -621,15 +622,16 @@ module Target = struct
   (* None denotes any *)
   type spec = {
     arch : string;
-    order : Theory.endianness option;
+    order : Theory.Endianness.t option;
     bits : int option;
     variant : string option;
     compiler : string option;
-  } [@@deriving fields]
+  } [@@deriving compare, sexp, fields]
 
-  type t =
-    | Name of Theory.Target.t
+  type target =
+    | Name of (Theory.Target.t [@sexp.opaque])
     | Spec of spec
+  [@@deriving compare, sexp]
 
   type problem =
     | Wrong_endianness
@@ -680,6 +682,11 @@ module Target = struct
       field_matches equal bits s.bits &&
       field_matches Theory.Endianness.equal order s.order &&
       Theory.Target.matches target s.arch
+
+  type t = target
+  include Base.Comparable.Make(struct
+      type t = target [@@deriving compare, sexp]
+    end)
 end
 
 module Rule = struct
@@ -842,6 +849,11 @@ module Rules = struct
     known = Set.empty (module Action);
   }
 
+  let concat x y = {
+    cases = x.cases @ y.cases;
+    known = Set.union x.known y.known;
+  }
+
   let patterns_product pre post =
     let pre = match pre with
       | [] -> [Pattern.empty]
@@ -897,27 +909,59 @@ module Rules = struct
     outer (Memory.min_addr mem) x
 end
 
-module Repository = struct
+module Repository : sig
+  val load : string list -> Theory.Target.t -> Rules.t
+end = struct
   let patternconstraints =
     FileUtil.(And (Is_file, Basename_is "patternconstraints.xml"))
 
   let collect_patternconstraints root =
     FileUtil.find patternconstraints root (fun xs x -> x::xs) []
 
-  let build roots =
+  let parse_file file grammar =
+    In_channel.with_file file ~f:(fun ch ->
+        Xmlm.make_input ~strip:true (`Channel ch) |>
+        Parser.run grammar |> function
+        | Ok result -> result
+        | Error problem ->
+          warning "failed to parse file %s: %a"
+            file Parser.pp_error problem;
+          [])
+
+  let collect roots =
     List.concat_map roots ~f:collect_patternconstraints |>
     List.concat_map ~f:(fun toc ->
         let folder = FilePath.dirname toc in
-        In_channel.with_file toc ~f:(fun ch ->
-            let src = Xmlm.make_input ~strip:true (`Channel ch) in
-            match Parser.run Grammar.files src with
-            | Ok files ->
-              List.concat files |>
-              List.Assoc.map ~f:(fun file ->
-                  Filename.concat folder file)
-            | Error err ->
-              Format.eprintf "illformed file %s, %a" toc Parser.pp_error err;
-              []))
+        parse_file toc Grammar.files |>
+        List.concat |> List.map ~f:(fun (target,file) ->
+            Target.parse target,
+            Filename.concat folder file))
+
+  let dedup selected =
+    let empty = Set.empty (module String) in
+    List.fold selected ~init:(empty,empty) ~f:(fun (digests,files) file ->
+        let digest = Caml.Digest.file file in
+        if Set.mem digests digest ||
+           Set.mem files file then digests,files
+        else Set.add digests digest,
+             Set.add files file) |>
+    snd |> Set.to_list
+
+  let select roots target =
+    collect roots |>
+    List.filter_map ~f:(fun (t,file) ->
+        Option.some_if
+          (Target.matches target t &&
+           Sys.file_exists file &&
+           not (Sys.is_directory file)) file) |>
+    dedup
+
+  let load roots target =
+    select roots target |>
+    List.concat_map ~f:(fun path ->
+        parse_file path Grammar.patterns) |>
+    Rules.create
+
 end
 
 let parse_rule rule file =
