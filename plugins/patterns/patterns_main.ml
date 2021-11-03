@@ -1,7 +1,14 @@
 open Core_kernel
 open Bap_core_theory
 open Bap.Std
-include Bap_main.Loggers()
+open Bap_main
+open Bap_primus.Std
+
+module Sigma = Primus.Lisp.Semantics
+module Lambda = Theory.Label
+
+
+include Loggers()
 
 module Name = struct
   type t = Xmlm.name
@@ -441,6 +448,11 @@ module Action : sig
   type t
   val of_tag : Xmlm.tag -> t
   val pp : Format.formatter -> t -> unit
+  val name : t -> KB.Name.t
+  val args : t -> unit Theory.Value.t
+  module Library : sig
+    val provide : unit -> unit
+  end
   include Base.Comparable.S with type t := t
 end = struct
   type action = {
@@ -462,6 +474,16 @@ end = struct
            Map.of_alist_exn (module KB.Name)
   }
 
+  let name action = action.name
+
+  let slot = KB.Class.property Theory.Value.cls "action-attributes"
+      ~package:"bap" @@ KB.Domain.mapping (module KB.Name)
+      ~equal:String.equal "attributes"
+
+  let args {args} =
+    KB.Value.put slot Theory.Value.Top.empty args
+
+
   let pp_arg ppf (name,value) =
     Format.fprintf ppf "%a %S"
       KB.Name.pp name value
@@ -475,6 +497,37 @@ end = struct
     then Format.fprintf ppf "(%a)" KB.Name.pp name
     else Format.fprintf ppf "@[<hv2>(%a@ %a)@]"
         KB.Name.pp name pp_args args
+
+  module Library = struct
+    type KB.conflict += Wrong_arity
+                     | Not_a_symbol
+
+    let nop = Theory.Effect.empty Theory.Effect.Sort.bot
+
+    let select_attribute args name =
+      match KB.Value.get Sigma.symbol name with
+      | None -> KB.fail Not_a_symbol
+      | Some name ->
+        let name = KB.Name.read name in
+        let empty = Theory.Value.Top.empty in
+        let value = match Map.find (KB.Value.get slot args) name with
+          | None ->
+            KB.Value.put Sigma.static empty (Some Bitvec.zero)
+          | Some value ->
+            KB.Value.put Sigma.symbol empty (Some value) in
+        KB.return @@
+        KB.Value.put Theory.Semantics.value nop value
+
+    let provide () =
+      let types = Primus.Lisp.Type.Spec.(tuple [any; sym] @-> sym) in
+      let docs = "(patterns-attribute ATTRS NAME) returns the \
+                  attribute NAME of the attributes ATTRS or NIL if no \
+                  such attribute is present" in
+      Sigma.declare ~types ~docs ~package:"bap" "patterns-attribute"
+        ~body:(fun _ -> KB.return @@ fun _lbl args -> match args with
+          | [args; name] -> select_attribute args name
+          | _ -> KB.fail Wrong_arity)
+  end
 
   type t = action
   include Base.Comparable.Make(struct
@@ -961,8 +1014,48 @@ end = struct
     List.concat_map ~f:(fun path ->
         parse_file path Grammar.patterns) |>
     Rules.create
+end
+
+module Analysis = struct
+  open KB.Syntax
+  open KB.Let
+
+  module Addr = struct
+    include Bitvec_order
+    include Bitvec_sexp
+  end
+
+  type outcome = {
+    roots : Set.M(Addr).t;
+    names : string Map.M(Addr).t
+  }
+
+  let collect_actions rules mem =
+    Map.empty (module Addr) |>
+    Rules.search rules mem @@ fun addr action actions ->
+    let action = Set.singleton (module Action) action in
+    Map.update actions (Word.to_bitvec addr) ~f:(function
+        | None -> action
+        | Some actions -> Set.union actions action)
+
+  let apply_actions unit actions =
+    Map.to_sequence actions |>
+    KB.Seq.iter ~f:(fun (addr,actions) ->
+        Set.to_sequence actions |>
+        KB.Seq.iter ~f:(fun action ->
+            let name = Some (Action.name action)
+            and args = Some [Action.args action] in
+            KB.Object.scoped Theory.Program.cls @@ fun lbl ->
+            KB.sequence [
+              KB.provide Lambda.unit lbl (Some unit);
+              KB.provide Lambda.addr lbl (Some addr);
+              KB.provide Sigma.name lbl name;
+              KB.provide Sigma.args lbl args;
+            ] >>= fun () ->
+            KB.collect Theory.Semantics.slot lbl >>| ignore))
 
 end
+
 
 let parse_rule rule file =
   In_channel.with_file file ~f:(fun ch ->
