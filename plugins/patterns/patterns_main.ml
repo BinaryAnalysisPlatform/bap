@@ -1042,6 +1042,7 @@ end = struct
   open KB.Let
 
   type KB.conflict += Expected of KB.Name.t
+                   | Invalid_arity
 
   module Addr = struct
     include Bitvec_order
@@ -1096,6 +1097,9 @@ end = struct
     let v = KB.Value.put Sigma.symbol Theory.Value.Top.empty (Some str) in
     KB.Value.put Theory.Semantics.value nop v
 
+  let vec vec =
+    KB.Value.put Sigma.static Theory.Value.Top.empty (Some vec)
+
   let accept c = c >>| fun _ -> sym "t"
   let reject c = c >>| fun _ -> sym "nil"
 
@@ -1115,6 +1119,13 @@ end = struct
     | _ ->
       reject @@
       KB.return ()
+
+  let declare_promise_root () =
+    let types = Primus.Lisp.Type.Spec.(tuple [int] @-> bool) in
+    Sigma.declare ~types ~package:"bap" "promise-root"
+      ~body:(fun _ -> !!(fun _ args -> match args with
+          | [addr] -> promise_root addr
+          | _ -> KB.fail Invalid_arity))
 
   let compute_outcome =
     let* roots = KB.Context.get roots in
@@ -1138,7 +1149,7 @@ end = struct
         Set.to_sequence actions |>
         KB.Seq.iter ~f:(fun action ->
             let name = Some (Action.name action)
-            and args = Some [Action.args action] in
+            and args = Some [vec addr; Action.args action] in
             KB.Object.scoped Theory.Program.cls @@ fun lbl ->
             KB.sequence [
               KB.provide Lambda.unit lbl (Some unit);
@@ -1148,7 +1159,7 @@ end = struct
             ] >>= fun () ->
             KB.collect Theory.Semantics.slot lbl >>| ignore))
 
-  let enable () =
+  let promise_outcome () =
     KB.promise slot @@ fun unit ->
     let* memory = KB.collect Project.memory_slot unit in
     let* rules = KB.collect Rules.slot unit in
@@ -1162,6 +1173,20 @@ end = struct
     compute_outcome >>= fun result ->
     reset_context >>| fun () ->
     result
+
+  let promise_roots () =
+    KB.promise Theory.Label.is_subroutine @@ fun lbl ->
+    KB.collect Theory.Label.addr lbl >>=? fun addr ->
+    KB.collect Theory.Label.unit lbl >>=? fun unit ->
+    KB.collect slot unit >>| fun {roots} ->
+    Option.some_if (Set.mem roots addr) true
+
+
+
+  let enable () =
+    promise_outcome ();
+    promise_roots ();
+    declare_promise_root ()
 
 end
 
@@ -1184,10 +1209,10 @@ let pp_rules = Format.pp_print_list Rule.pp
 let with_rules spec k =
   match parse_patterns spec with
   | Error err ->
-    Format.eprintf "Failed to parse the spec: %a@." Parser.pp_error err
+    warning "Failed to parse the spec: %a@." Parser.pp_error err
   | Ok rules ->
     let rules = Rules.create rules in
-    Format.eprintf "Applying rules@\n%a@." Rules.pp rules;
+    warning "Applying rules@\n%a@." Rules.pp rules;
     k rules
 
 let print_matches rules mem =
@@ -1200,7 +1225,7 @@ let test_on_file ~spec ~binary=
   with_rules spec @@ fun rules ->
   match Image.create ~backend:"llvm" binary with
   | Error err ->
-    Format.eprintf "Failed to open the binary: %a@." Error.pp err
+    warning "Failed to open the binary: %a@." Error.pp err
   | Ok (img,_) ->
     Table.iteri (Image.segments img) ~f:(fun mem seg ->
         Format.printf "Analyzing segment %s:@.%a@."
