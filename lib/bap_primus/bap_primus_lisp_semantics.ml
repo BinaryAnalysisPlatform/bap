@@ -265,6 +265,7 @@ let sym str =
   let v = update_value empty @@ fun v ->
     KB.Value.put symbol v (Some str) in
   match str with
+  | "t" -> KB.return@@set_static v Bitvec.one
   | "nil" -> KB.return@@set_static v Bitvec.zero
   | name ->
     intern name >>|

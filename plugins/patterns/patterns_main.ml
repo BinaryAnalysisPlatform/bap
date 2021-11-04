@@ -541,6 +541,7 @@ module Pattern : sig
 
   val create : string -> t
   val empty : t
+  val equal : t -> t -> bool
   val concat : t -> t -> t
   val length : t -> int
   val weight : t -> int
@@ -626,7 +627,7 @@ end = struct
     mask : Z.t;
     pops : int;
     size : int;
-  }
+  } [@@deriving equal]
 
   type field = t -> Z.t
 
@@ -870,12 +871,22 @@ module Rules = struct
     pattern : Pattern.t;        (* the pattern to match *)
     actions : Set.M(Action).t;  (* the actions to take *)
     shifted : int;              (* the size of the prepattern *)
-  }
+  } [@@deriving equal]
 
   type t = {
     cases : case list;          (* all possible cases *)
     known : Set.M(Action).t;    (* all possible actions from all cases *)
+  } [@@deriving equal]
+
+  let empty = {
+    cases = [];
+    known = Set.empty (module Action);
   }
+
+  let slot = KB.Class.property Theory.Unit.cls "pattern-rules"
+      ~package:"bap" @@ KB.Domain.flat ~empty ~equal "rules"
+
+
 
   let pp_actions ppf actions =
     Format.pp_print_list ~pp_sep:Format.pp_print_space
@@ -960,10 +971,12 @@ module Rules = struct
                     } else work) in
           inner addr (pos+1) work x in
     outer (Memory.min_addr mem) x
+
+
 end
 
 module Repository : sig
-  val load : string list -> Theory.Target.t -> Rules.t
+  val enable : string list -> unit
 end = struct
   let patternconstraints =
     FileUtil.(And (Is_file, Basename_is "patternconstraints.xml"))
@@ -1014,29 +1027,110 @@ end = struct
     List.concat_map ~f:(fun path ->
         parse_file path Grammar.patterns) |>
     Rules.create
+
+  let enable roots =
+    let open KB.Let in
+    KB.promise Rules.slot @@ fun unit ->
+    let+ target = KB.collect Theory.Unit.target unit in
+    load roots target
 end
 
-module Analysis = struct
+module Analysis : sig
+  val enable : unit -> unit
+end = struct
   open KB.Syntax
   open KB.Let
+
+  type KB.conflict += Expected of KB.Name.t
 
   module Addr = struct
     include Bitvec_order
     include Bitvec_sexp
+    include Bitvec_binprot
   end
+
+  let empty_roots = Set.empty (module Addr)
+  let empty_names = Bap_relation.empty Addr.compare String.compare
 
   type outcome = {
     roots : Set.M(Addr).t;
-    names : string Map.M(Addr).t
+    names : string Map.M(Addr).t;
+  } [@@deriving bin_io, compare, sexp, equal]
+
+  let empty = {
+    roots = Set.empty (module Addr);
+    names = Map.empty (module Addr);
   }
 
-  let collect_actions rules mem =
-    Map.empty (module Addr) |>
+  let slot = KB.Class.property Theory.Unit.cls "patterns-outcome"
+      ~package:"bap"
+      ~persistent:(KB.Persistent.of_binable (module struct
+                     type t = outcome [@@deriving bin_io]
+                   end)) @@
+    KB.Domain.flat ~empty ~equal:equal_outcome "outcome"
+
+  let roots = KB.Context.declare ~package:"bap" "patterns-roots"
+      !!empty_roots
+
+  let names = KB.Context.declare ~package:"bap" "patterns-names"
+      !!empty_names
+
+  let collect_actions rules mem actions =
+    actions |>
     Rules.search rules mem @@ fun addr action actions ->
     let action = Set.singleton (module Action) action in
     Map.update actions (Word.to_bitvec addr) ~f:(function
         | None -> action
         | Some actions -> Set.union actions action)
+
+  let (.$[]) v s = KB.Value.get s v
+  let (.$[]<-) v s x = KB.Value.put s v x
+
+  let (.?[]) v s = match KB.Value.get s v with
+    | None -> KB.fail (Expected (KB.Slot.name s))
+    | Some v -> !!v
+
+  let nop = Theory.Effect.empty Theory.Effect.Sort.bot
+
+  let sym str =
+    let v = KB.Value.put Sigma.symbol Theory.Value.Top.empty (Some str) in
+    KB.Value.put Theory.Semantics.value nop v
+
+  let accept c = c >>| fun _ -> sym "t"
+  let reject c = c >>| fun _ -> sym "nil"
+
+  let promise_root addr =
+    let* addr = addr.?[Sigma.static] in
+    accept @@
+    KB.Context.update roots (fun roots -> Set.add roots addr)
+
+  let promise_name addr name =
+    let* addr = addr.?[Sigma.static] in
+    let* name = name.?[Sigma.symbol] in
+    let* rel = KB.Context.get names in
+    match Bap_relation.(findl rel addr, findr rel name) with
+    | [],[] ->
+      accept @@
+      KB.Context.set names (Bap_relation.add rel addr name)
+    | _ ->
+      reject @@
+      KB.return ()
+
+  let compute_outcome =
+    let* roots = KB.Context.get roots in
+    let+ names = KB.Context.get names in {
+      roots;
+      names = Bap_relation.fold names
+          ~init:(Map.empty (module Addr))
+          ~f:(fun addr name names ->
+              Map.add_exn names addr name)
+    }
+
+
+  let reset_context = KB.sequence [
+      KB.Context.set roots empty_roots;
+      KB.Context.set names empty_names;
+    ]
 
   let apply_actions unit actions =
     Map.to_sequence actions |>
@@ -1054,8 +1148,22 @@ module Analysis = struct
             ] >>= fun () ->
             KB.collect Theory.Semantics.slot lbl >>| ignore))
 
-end
+  let enable () =
+    KB.promise slot @@ fun unit ->
+    let* memory = KB.collect Project.memory_slot unit in
+    let* rules = KB.collect Rules.slot unit in
+    let actions = Memmap.to_sequence memory |>
+                  Seq.fold ~f:(fun actions (mem,tag) ->
+                      if Value.is Image.code_region tag
+                      then collect_actions rules mem actions
+                      else actions)
+                    ~init:(Map.empty (module Addr)) in
+    apply_actions unit actions >>= fun () ->
+    compute_outcome >>= fun result ->
+    reset_context >>| fun () ->
+    result
 
+end
 
 let parse_rule rule file =
   In_channel.with_file file ~f:(fun ch ->
@@ -1108,3 +1216,10 @@ let test_on_bytes ~spec bytes =
   | Error err ->
     Format.printf "Wrong memory: %a@." Error.pp err
   | Ok mem -> print_matches rules mem
+
+
+let () = Extension.declare @@ fun _ctxt ->
+  Repository.enable ["/usr/share/ghidra"];
+  Analysis.enable ();
+  Action.Library.provide ();
+  Ok ()
