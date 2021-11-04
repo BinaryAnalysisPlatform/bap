@@ -1,13 +1,25 @@
 open Bap.Std
 open Core_kernel
-include Self()
 
+include Self()
 
 let get_direct_typ (e : exp) : Type.t = match e with
   | Bil.Var v -> Var.typ v
   | Bil.Unknown (_,t) -> t
   | Bil.Int w -> Type.Imm (Word.bitwidth w)
   | _ -> failwith "the expression is not flattened"
+
+class substituter (x : var) (x' : var) = object
+  inherit Exp.mapper as super
+
+  method! map_var v =
+    if Var.equal x v then Var x' else super#map_var v
+
+  method! map_let v ~exp ~body =
+    let exp = super#map_exp exp in
+    let body = if Var.equal x v then body else super#map_exp body in
+    Let (v, exp, body)
+end
 
 let flatten_exp (exp : exp) (blk : blk term) (before : tid) : exp * blk term =
   let is_virtual = true in
@@ -61,13 +73,15 @@ let flatten_exp (exp : exp) (blk : blk term) (before : tid) : exp * blk term =
       Term.prepend def_t ~before blk def
     | Bil.Let (v, x, y) ->
       let x, blk = aux x blk in
-      let y, blk = aux y blk in
-      let vtype = Var.typ v in
-      let var = Var.create ~is_virtual ~fresh "flt" vtype in
-      let e = Bil.Let (v, x, y) in
-      let def = Def.create var e in
-      Bil.Var var,
-      Term.prepend def_t ~before blk def
+      let var, blk = match x with
+        | Var v -> v, blk
+        | _ ->
+          let vtype = Var.typ v in
+          let var = Var.create ~is_virtual ~fresh "flt" vtype in
+          let def = Def.create var x in
+          var, Term.prepend def_t ~before blk def in
+      let y = (new substituter v var)#map_exp y in
+      aux y blk
     | Bil.Unknown (_, _) -> exp, blk
     | Bil.Ite (x, y, z) ->
       let x, blk = aux x blk in
