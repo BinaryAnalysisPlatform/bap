@@ -2442,7 +2442,14 @@ module Knowledge = struct
 
   let pids = ref Pid.zero
 
-  let register_promise (s : _ slot) run =
+  type conflict += Empty : ('a,'b) slot -> conflict
+
+  let with_empty ~missing scope =
+    Knowledge.catch (scope ())
+      (function Empty _ -> Knowledge.return missing
+              | other -> Knowledge.fail other)
+
+  let register_promise (type a b)(s : (a,b) slot) run =
     Pid.incr pids;
     let pid = !pids in
     Hashtbl.add_exn s.promises pid {run; pid};
@@ -2451,9 +2458,14 @@ module Knowledge = struct
   let remove_promise (s : _ slot) pid =
     Hashtbl.remove s.promises pid
 
+  let wrap (s : _ slot) get obj =
+    let missing = Domain.empty s.dom in
+    with_empty ~missing @@ fun () ->
+    get obj
+
   let promising s ~promise:get scoped =
     let pid = register_promise s @@ fun obj ->
-      get obj >>= fun x ->
+      wrap s get obj >>= fun x ->
       if Domain.is_empty s.dom x
       then Knowledge.return ()
       else provide s obj x in
@@ -2464,7 +2476,7 @@ module Knowledge = struct
   let promise s get =
     ignore @@
     register_promise s @@ fun obj ->
-    get obj >>= fun x ->
+    wrap s get obj >>= fun x ->
     if Domain.is_empty s.dom x
     then Knowledge.return ()
     else provide s obj x
@@ -2576,6 +2588,7 @@ module Knowledge = struct
       | GT | NC -> collect_inner slot obj promises
 
 
+
   let collect : type a p. (a,p) slot -> a obj -> p Knowledge.t =
     fun slot id ->
     if Object.is_null id
@@ -2591,6 +2604,13 @@ module Knowledge = struct
         collect_inner slot id (initial_promises slot) >>= fun () ->
         leave_slot slot id >>= fun () ->
         current slot id
+
+
+  let require (slot : _ slot) obj =
+    collect slot obj >>= fun x ->
+    if (Domain.is_empty slot.dom x)
+    then Knowledge.fail (Empty slot)
+    else !!x
 
   let resolve slot obj =
     collect slot obj >>| Opinions.choice
@@ -2792,9 +2812,16 @@ module Knowledge = struct
 
   module Syntax = struct
     include Knowledge.Syntax
+    include Knowledge.Let
+
     let (-->) x p = collect p x
     let (<--) p f = promise p f
     let (//) c s = Object.read c s
+
+    let (-->?) x p =
+      collect p x >>= function
+      | None -> Knowledge.fail (Empty p)
+      | Some x -> !!x
 
     let (>>=?) x f =
       x >>= function
@@ -2805,6 +2832,23 @@ module Knowledge = struct
       x >>| function
       | None -> None
       | Some x -> f x
+
+    let (let*?) = (>>=?)
+    let (let+?) = (>>|?)
+
+
+    let (.$[]) v s = Value.get s v
+    let (.$[]<-) v s x = Value.put s v x
+
+    let (.?[]) v s = match v.$[s] with
+      | Some v -> !!v
+      | None -> Knowledge.fail (Empty s)
+
+    let (.![]) v s =
+      let r = v.$[s] in
+      if Domain.is_empty (Slot.domain s) r
+      then Knowledge.fail (Empty s)
+      else !!r
   end
 
   module type S = sig

@@ -289,21 +289,17 @@ let provide_bil ~enable_intrinsics () =
            require Disasm_expert.Basic.Insn.slot |>
            provide Bil.code |>
            comment "uses legacy lifters to provide BIL code.");
-  let unknown = KB.Domain.empty Bil.domain in
-  let (>>?) x f = x >>= function
-    | None -> KB.return unknown
-    | Some x -> f x in
   let enable_intrinsics = split_specs enable_intrinsics in
   KB.promise Bil.code @@ fun obj ->
-  Knowledge.collect Arch.slot obj >>= fun arch ->
-  Theory.Label.target obj >>= fun target ->
-  Knowledge.collect Memory.slot obj >>? fun mem ->
-  Knowledge.collect Disasm_expert.Basic.Insn.slot obj >>? fun insn ->
+  let* arch = KB.require Arch.slot obj in
+  let* target = Theory.Label.target obj in
+  let* mem = obj-->?Memory.slot in
+  let* insn = obj-->?Disasm_expert.Basic.Insn.slot in
   match lift ~enable_intrinsics target arch mem insn with
   | Error err ->
     info "BIL: the BIL lifter failed with %a" Error.pp err;
-    !!unknown
-  | Ok [] -> !!unknown
+    KB.return []
+  | Ok [] -> KB.return []
   | Ok bil ->
     Optimizer.run Bil.Theory.parser bil >>= fun sema ->
     let bil = Insn.bil sema in

@@ -292,7 +292,7 @@ module Semantics = struct
         comment "translates instruction operands to lisp arguments"
       end);
     KB.promise Lisp.Semantics.args @@ fun this ->
-    KB.collect Insn.slot this >>=? fun insn ->
+    let*? insn = KB.collect Insn.slot this in
     Theory.current >>= fun theory ->
     Theory.Label.target this >>= fun target ->
     args_of_ops theory target insn >>| Option.some
@@ -306,8 +306,8 @@ module Semantics = struct
       end);
     KB.promise Lisp.Semantics.name @@ fun this ->
     KB.collect Insn.slot this >>|? fun insn ->
-    let name = KB.Name.create ~package:(Insn.encoding insn) (Insn.name insn) in
-    Some name
+    KB.Name.create ~package:(Insn.encoding insn) (Insn.name insn) |>
+    Option.some
 
   let strip_lisp_extension = String.chop_suffix ~suffix:".lisp"
 
