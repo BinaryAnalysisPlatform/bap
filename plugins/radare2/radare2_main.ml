@@ -20,12 +20,13 @@ let provide_roots file funcs =
     if Theory.Target.belongs Arm_target.parent t
     then !!None
     else
-      KB.collect Theory.Label.addr label >>=? fun addr ->
-      KB.collect Theory.Label.unit label >>=? fun unit ->
-      KB.collect Theory.Unit.bias unit >>= fun bias ->
-      KB.collect Theory.Unit.target unit >>|
-      Theory.Target.code_addr_size >>= fun bits ->
-      KB.collect Theory.Unit.path unit >>|? fun path ->
+      let*? addr = label-->Theory.Label.addr in
+      let*? unit = label--> Theory.Label.unit in
+      let*? path = unit-->Theory.Unit.path in
+      let* bias = unit-->Theory.Unit.bias in
+      let+ bits =
+        KB.collect Theory.Unit.target unit >>|
+        Theory.Target.code_addr_size in
       if String.equal path file then
         let bias = Option.value bias ~default:Bitvec.zero in
         let addr =

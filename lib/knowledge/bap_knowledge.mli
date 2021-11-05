@@ -164,6 +164,16 @@ module Knowledge : sig
       value of the property domain is returned as the result.  *)
   val collect : ('a,'p) slot -> 'a obj -> 'p t
 
+  (** [require p x] collects the property [p] and fails if it is empty.
+
+      When [require p x] fails in the scope of a {!promise},
+      {!proposal}, or in the scope of [with_empty], then the scoped
+      computation immediately returns the empty value.
+
+      @since 2.4.0
+  *)
+  val require : ('a,'p) slot -> 'a obj -> 'p t
+
 
   (** [resolve p x] resolves the multi-opinion property [p]
 
@@ -186,6 +196,7 @@ module Knowledge : sig
       then [provide p x v] diverges into a conflict.
   *)
   val provide : ('a,'p) slot -> 'a obj -> 'p -> unit t
+
   (** [suggest a p x v] suggests [v] as the value for the property [p].
 
       The same as [provide] except the provided value is predicated by
@@ -195,18 +206,21 @@ module Knowledge : sig
 
   (** [promise p f] promises to compute the property [p].
 
-      If no knowledge exists about the property [p] of
-      an object [x], then [f x] is invoked to provide an
-      initial value.
+      If the property [p] of [x] is not provided, then [f x] is
+      invoked to provide the initial value, when [p] is collected.
 
       If there are more than one promises, then they all must
       provide a consistent answer. The function [f] may refer
       to the property [p] directly or indirectly. In that case
       the least fixed point solution of all functions [g] involved
       in the property computation is computed.
+
+      @since 2.4.0 if [require] is called in the scope of the promise
+      and fails, the the whole promise immediately returns the empty
+      value of the property domain, i.e., [f] is wrapped into
+      [with_missing].
   *)
   val promise : ('a,'p) slot -> ('a obj -> 'p t) -> unit
-
 
   (** [promising p ~promise f] evaluates [f ()] under [promise] and
       retracts it after [f] is evaluated.
@@ -215,6 +229,12 @@ module Knowledge : sig
       evaluation of [f ()].
 
       @since 2.2.0
+
+
+      @since 2.4.0 if [require] is called in the scope of the promise
+      and fails, the the whole promise immediately returns the empty
+      value of the property domain, i.e., [promise] (not [f]) wrapped
+      into [with_missing].
   *)
   val promising : ('a,'p) slot -> promise:('a obj -> 'p t) ->
     (unit -> 's t) -> 's t
@@ -223,6 +243,12 @@ module Knowledge : sig
 
       The same as [promise] except that it promises a value for
       an opinion-based property.
+
+      @since 2.4.0 if [require] is called in the scope of the promise
+      and fails, the the whole promise immediately returns the empty
+      value of the property domain, i.e., [f] is wrapped into
+      [with_missing].
+
   *)
   val propose : agent -> ('a, 'p opinions) slot -> ('a obj -> 'p t) -> unit
 
@@ -233,9 +259,24 @@ module Knowledge : sig
       value for an opinion-based property.
 
       @since 2.2.0
+
+      @since 2.4.0 if [require] are called in the scope of the proposal
+      and fails, the the whole proposal immediately returns the empty
+      value of the property domain, i.e., [propose] (not [f]) wrapped
+      into [with_missing].
+
   *)
   val proposing : agent -> ('a, 'p opinions) slot ->
     propose:('a obj -> 'p t) -> (unit -> 's t) -> 's t
+
+
+  (** [with_empty ~missing f x] evaluates [f ()] and if it fails on an empty
+      immediately evaluates to [return missing].
+
+      @since 2.4.0
+  *)
+  val with_empty : missing:'r -> (unit -> 'r knowledge) -> 'r knowledge
+
 
   (** state with no knowledge  *)
   val empty : state
@@ -333,8 +374,60 @@ module Knowledge : sig
     include Monad.Syntax.S with type 'a t := 'a t
 
 
-    (** [x-->p] is [collect p x] *)
+    (** the monadic let-binding operators.
+
+        Brings [let*] for [bind] and [let+] for [map] to the scope
+        of the [Syntax] module.
+
+        @since 2.4.0 (before that an explicit [open Knowledge.Let] was
+        required.    *)
+    include Monad.Syntax.Let.S with type 'a t := 'a t
+
+
+    (** [let*? v = x in f] evaluates to [f y] if [v] is [Some r].
+
+        Otherwise evaluates to [return None].
+
+        This let-binding operator is synonumous to [>>=?]
+
+        @since 2.4.0
+    *)
+    val (let*?) : 'a option t -> ('a -> 'b option t) -> 'b option t
+
+    (** [let+? v = x in f] evaluates to [!!(f y)] if [v] is [Some r].
+
+        Otherwise evaluates to [return None].
+
+        This let-binding operator is synonumous to [>>|?]
+
+        @since 2.4.0
+    *)
+    val (let+?) : 'a option t -> ('a -> 'b option) -> 'b option t
+
+    (** [x-->p] is [collect p x].
+
+        Example,
+        {[
+          let* addr = label-->address in
+          ...
+        ]}
+    *)
     val (-->) : 'a obj -> ('a,'p) slot -> 'p t
+
+
+    (** [x-->?p] returns property [p] if it is not empty.
+
+        Otherwise, if [x-->p] evaluates to empty or to [None]
+        fails with the empty value conflict.
+
+        Example,
+        {[
+          let* addr = label-->?address in
+          ...
+        ]}
+
+        See also {!with_empty}. *)
+    val (-->?) : 'a obj -> ('a, 'p option) slot -> 'p t
 
 
     (** [p <-- f] is [promise p f]  *)
@@ -351,6 +444,42 @@ module Knowledge : sig
 
     (** [x >>|? f] evaluates to [f y] if [x] evaluates to [Some y].  *)
     val (>>|?) : 'a option t -> ('a -> 'b option) -> 'b option t
+
+
+    (** [x.$[p]] is the propery [p] of [x].
+
+        @since 2.4.0
+    *)
+    val (.$[]) : ('a,_) cls value -> ('a,'p) slot -> 'p
+
+
+    (** [x.$[p] <- r] updates the property [p] of [x] to [r].
+
+        Returns the value [x] with the new property. The previous
+        value is ignored so there is no merging or monotonicity check
+        involved.
+
+        @since 2.4.0 *)
+    val (.$[]<-) : ('a,'b) cls value -> ('a,'p) slot -> 'p -> ('a,'b) cls value
+
+
+    (** [x.?[p]] returns the non-[None] property [p] or fails.
+
+        The result is [return r] when [x.$[p]] is [Some r] or a
+        knowledge base conflict otherwise.
+
+        @since 2.4.0
+    *)
+    val (.?[]) : ('a,_) cls value -> ('a,'p option) slot -> 'p knowledge
+
+    (** [x.![p]] returns the property [p] or fails if it is empty.
+
+        The result is [return r] if not [Domain.is_empty dom r],
+        where [dom] is [Slot.domain p].
+
+        @since 2.4.0
+    *)
+    val (.![]) : ('a,_) cls value -> ('a,'p) slot -> 'p knowledge
   end
 
 
@@ -1387,7 +1516,6 @@ module Knowledge : sig
   *)
   module Conflict : sig
     type t = conflict = ..
-
 
     (** [to_string err] is the textual representation of the conflict [err]
 

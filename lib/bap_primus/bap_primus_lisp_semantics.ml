@@ -685,17 +685,14 @@ let provide_semantics ?(stdout=Format.std_formatter) () =
       provide Theory.Semantics.slot |>
       comment "reifies Primus Lisp definitions"
     end);
-  let (>>=?) x f = x >>= function
-    | None -> !!Insn.empty
-    | Some x -> f x in
   let require p k = if p then k () else !!Insn.empty in
   KB.promise Theory.Semantics.slot @@ fun obj ->
-  KB.collect Theory.Label.unit obj >>=? fun unit ->
-  KB.collect Property.name obj >>=? fun name ->
-  obtain_typed_program unit >>= fun prog ->
+  let* unit = obj-->?Theory.Label.unit in
+  let* name = obj-->?Property.name in
+  let* prog = obtain_typed_program unit in
   require (Set.mem prog.names name) @@ fun () ->
-  KB.collect Property.args obj >>= fun args ->
-  KB.collect Theory.Unit.target unit >>= fun target ->
+  let* args = obj-->Property.args in
+  let* target = KB.collect Theory.Unit.target unit in
   let bits = Theory.Target.bits target in
   KB.Context.set State.var State.{
       binds = Map.empty (module Theory.Var.Top);
@@ -706,7 +703,7 @@ let provide_semantics ?(stdout=Format.std_formatter) () =
     } >>= fun () ->
   let* (module Core) = Theory.current in
   let open Prelude(Core) in
-  reify stdout prog obj target name args >>= fun res ->
+  let* res = reify stdout prog obj target name args in
   KB.collect Disasm_expert.Basic.Insn.slot obj >>| function
   | Some basic when Insn.(res <> empty) ->
     Insn.with_basic res basic
