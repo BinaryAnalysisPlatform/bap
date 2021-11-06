@@ -361,18 +361,14 @@ module Bap_integration = struct
       let prog = fixrip next prog in
       Parser.run grammar prog
 
-  let (>>?) x f = x >>= function
-    | None -> KB.return empty
-    | Some x -> f x
-
   let provide_lifter () =
     info "providing a lifter for all Legacy AST lifters";
     let lifter obj =
       Knowledge.collect Arch.slot obj >>= fun arch ->
       Theory.instance ~context:["floating-point"] () >>=
       Theory.require >>= fun theory ->
-      Knowledge.collect Memory.slot obj >>? fun mem ->
-      Knowledge.collect Disasm_expert.Basic.Insn.slot obj >>? fun insn ->
+      let* mem = obj-->?Memory.slot in
+      let* insn = obj-->?Disasm_expert.Basic.Insn.slot in
       match arch with
       | `x86 | `x86_64 as arch ->
         KB.catch (lift theory arch mem insn)
