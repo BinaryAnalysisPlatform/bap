@@ -1248,7 +1248,7 @@ module Dict = struct
 
   type 'r visitor = {
     visit : 'a. 'a key -> 'a -> 'r -> 'r;
-  } [@@unboxed]
+  }
 
   let rec foreach x ~init f = match x with
     | T0 -> init
@@ -1274,7 +1274,7 @@ module Dict = struct
 
   type ('b,'r) app = {
     app : 'a. 'a key -> 'a -> 'b -> 'r
-  } [@@unboxed]
+  }
 
   let cmp x y = Key.compare x y [@@inline]
   let eq x y = Key.compare x y = 0 [@@inline]
@@ -1517,7 +1517,7 @@ module Dict = struct
   (* [merge k x y] *)
   type merge = {
     merge : 'a. 'a key -> 'a -> 'a -> 'a
-  } [@@unboxed]
+  }
   (* we could use a GADT, but it couldn't be unboxed,
      an since we could create merge functions a lot,
      it is better not to allocate them.*)
@@ -2030,17 +2030,42 @@ module Knowledge = struct
     context = Dict.empty;
   }
 
-  module State = struct
-    include Monad.State.T1(Env)(Monad.Ident)
-    include Monad.State.Make(Env)(Monad.Ident)
-  end
+
+  type 'a knowledge = {
+    run : 'r. reject:(conflict -> 'r) -> accept:('a -> state -> 'r) -> state -> 'r
+  }
 
   module Knowledge = struct
-    type 'a t = ('a,conflict) Result.t State.t
-    include Monad.Result.Make(Conflict)(State)
-  end
+    type 'a t = 'a knowledge
+    type _ error = conflict
+    let fail p : 'a t = {run = fun ~reject ~accept:_ _ -> reject p}
+    let catch x err = {
+      run = fun ~reject ~accept s -> x.run s
+          ~accept
+          ~reject:(fun p -> (err p).run ~reject ~accept s)
+    }
 
-  type 'a knowledge = 'a Knowledge.t
+    include Monad.Make(struct
+        type 'a t = 'a knowledge
+        let return x : 'a t = {
+          run = fun ~reject:_ ~accept s -> accept x s
+        }
+
+        let bind : 'a t -> ('a -> 'b t) -> 'b t = fun x f -> {
+            run = fun ~reject ~accept s -> x.run s
+                ~reject
+                ~accept:(fun x s ->
+                    (f x).run ~reject ~accept s)
+          }
+
+        let map : 'a t -> f:('a -> 'b) -> 'b t = fun x ~f -> {
+            run = fun ~reject ~accept s -> x.run s
+                ~reject
+                ~accept:(fun x s -> accept (f x) s)
+          }
+        let map = `Custom map
+      end)
+  end
 
   open Knowledge.Syntax
 
@@ -2206,10 +2231,21 @@ module Knowledge = struct
     end
   end
 
-  let get () = Knowledge.lift (State.get ())
-  let put s = Knowledge.lift (State.put s)
-  let gets f = Knowledge.lift (State.gets f)
-  let update f = Knowledge.lift (State.update f)
+  let get () : state knowledge = {
+    run = fun ~reject:_ ~accept s -> accept s s
+  } [@@inline]
+
+  let put s = {
+    run = fun ~reject:_ ~accept _ -> accept () s
+  } [@@inline]
+
+  let gets f = {
+    run = fun ~reject:_ ~accept s -> accept (f s) s
+  } [@@inline]
+
+  let update f = {
+    run = fun ~reject:_ ~accept s -> accept () (f s)
+  } [@@inline]
 
   let objects {Class.name} =
     get () >>| fun {classes} ->
@@ -2823,18 +2859,41 @@ module Knowledge = struct
       | None -> Knowledge.fail (Empty p)
       | Some x -> !!x
 
-    let (>>=?) x f =
-      x >>= function
-      | None -> Knowledge.return None
-      | Some x -> f x
+    let (>>=?) x f = {
+      run = fun ~reject ~accept s ->
+        x.run s
+          ~reject
+          ~accept:(fun x s ->
+              match x with
+              | None -> accept None s
+              | Some x ->
+                (f x).run ~accept ~reject s)
+    } [@@inline]
 
-    let (>>|?) x f =
-      x >>| function
-      | None -> None
-      | Some x -> f x
+    let (>>|?) x f = {
+      run = fun ~reject ~accept s ->
+        x.run s
+          ~reject
+          ~accept:(fun x s -> match x with
+              | None -> accept None s
+              | Some x -> accept (f x) s)
+    } [@@inline]
 
     let (let*?) = (>>=?)
     let (let+?) = (>>|?)
+
+    let (and+) x y = {
+      run = fun ~reject ~accept s ->
+        x.run s
+          ~reject
+          ~accept:(fun x s ->
+              y.run s
+                ~reject
+                ~accept:(fun y s ->
+                    accept (x,y) s))
+    } [@@inline]
+
+    let (and*) = (and+)
 
 
     let (.$[]) v s = Value.get s v
@@ -2876,11 +2935,9 @@ module Knowledge = struct
     | None -> Value.empty cls
     | Some x -> Value.create cls x
 
-  let run cls obj s =
-    match State.run (obj >>= get_value cls) s with
-    | Ok x,s -> Ok (x,s)
-    | Error err,_ -> Error err
-
+  let run cls obj s = (obj >>= get_value cls).run s
+      ~reject:(fun err -> Error err)
+      ~accept:(fun x s -> Ok (x,s))
 
   let pp_fullname ~package ppf {package=p; name} =
     if String.equal package p
