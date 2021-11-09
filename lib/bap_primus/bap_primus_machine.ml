@@ -58,11 +58,7 @@ module Make(M : Monad.S) = struct
 
   type r = (exit_status * project) M.t
 
-  type 'a machine = {
-    run :
-      reject:(exn -> state -> r) -> accept:('a -> state -> r) ->
-      state -> r
-  } and state = {
+  type state = {
     self    : id;
     args    : string array;
     envp    : string array;
@@ -74,6 +70,12 @@ module Make(M : Monad.S) = struct
     deathrow : id list;
     observations : unit machine Observation.observations;
     restricted : bool;
+  }
+  and 'a machine = {
+    run :
+      reject:(exn -> state -> r) ->
+      accept:('a -> state -> r) ->
+      state -> r
   }
 
   type 'a t = 'a machine
@@ -91,19 +93,19 @@ module Make(M : Monad.S) = struct
       let return x : 'a t = {
         run = fun ~reject:_ ~accept s ->
           accept x s
-      }
+      } [@@inline]
 
       let bind : 'a t -> ('a -> 'b t) -> 'b t = fun x f -> {
           run = fun ~reject ~accept s ->
             x.run s ~reject ~accept:(fun x s ->
                 (f x).run ~reject ~accept s)
-        }
+        } [@@inline]
 
       let map : 'a t -> f:('a -> 'b) -> 'b t = fun x ~f -> {
           run = fun ~reject ~accept s ->
             x.run s ~reject ~accept:(fun x s ->
                 accept (f x) s)
-        }
+        } [@@inline]
 
       let map = `Custom map
     end)
@@ -114,29 +116,30 @@ module Make(M : Monad.S) = struct
 
   let get () = {
     run = fun ~reject:_ ~accept s -> accept s s
-  }
+  } [@@inline]
 
   let gets f = {
     run = fun ~reject:_ ~accept s -> accept (f s) s
-  }
+  } [@@inline]
 
   let put s = {
     run = fun ~reject:_ ~accept _ -> accept () s
-  }
+  } [@@inline]
 
   let update f = {
     run = fun ~reject:_ ~accept s -> accept () (f s)
-  }
+  } [@@inline]
 
   let current () = gets (fun s -> s.self)
   let switch self = update (fun s -> {s with self})
 
-  let with_context cid (f : (unit -> 'a t)) =
-    current () >>= fun id ->
-    switch cid >>= fun () ->
-    f () >>= fun r  ->
-    switch id >>| fun () ->
-    r
+  let with_context cid (f : (unit -> 'a t)) = {
+    run = fun ~reject ~accept s ->
+      (f ()).run {s with self=cid}
+        ~reject
+        ~accept:(fun r s'->
+            accept r {s' with self=s.self})
+  }
 
   let get_local () : _ t = gets (fun s ->
       match Map.find s.local s.self with
