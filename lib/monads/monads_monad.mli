@@ -311,6 +311,8 @@ module State : sig
     type id
     module Id : sig
       include Identifiable.S with type t = id
+      val zero : t
+      val succ : t -> t
       val pp : Caml.Format.formatter -> id -> unit
     end
 
