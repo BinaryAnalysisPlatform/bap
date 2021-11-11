@@ -19,7 +19,9 @@
   (:documentation "the default user-space package")
   (:use core primus target program posix))
 
-
+(defpackage bap
+  (:documentation "bap-specific package")
+  (:use core primus target program posix))
 
 (in-package core)
 

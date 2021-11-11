@@ -484,6 +484,10 @@ let symbol_values doc =
       (Error.to_string_hum err) ()
 
 module Encodings = struct
+  open Bap_primus.Std
+  module Lambda = Primus.Lisp
+  module Sigma = Lambda.Semantics
+
   let empty = Map.empty (module Bitvec_order)
 
   let lsb x = Int64.(x land 1L)
@@ -506,11 +510,38 @@ module Encodings = struct
       ~empty
       ~equal:(Map.equal CT.Language.equal)
 
-  let () =
+  let set_encoding label x y =
+    let* addr = x.?[Sigma.static] in
+    let* code = y.?[Sigma.symbol] in
+    let* unit = label-->?Theory.Label.unit in
+    let* lang = match code with
+      | "t32" | "T32" -> !!llvm_t32
+      | "a32" | "A32" -> !!llvm_a32
+      | other ->
+        Sigma.failp "unknown encoding %s, expects :T32 or :A32" other in
+    let* encodings = unit-->slot in
+    KB.provide slot unit @@ Map.set encodings addr lang >>| fun () ->
+    Sigma.Effect.pure Sigma.Value.nil
+
+  let provide_primitive () =
+    let types = Lambda.Type.Spec.(tuple [int; sym] @-> sym) in
+    let docs = "(arm-set-encoding ADDR ENC) specifies the encoding \
+                of instruction at ADDR as ENC, where ENC is either, \
+                :T32 or :A32" in
+    Sigma.declare ~types ~docs ~package:"bap" "arm-set-encoding"
+      ~body:(fun _ -> KB.return @@ fun lbl args -> match args with
+        | [addr; encoding] -> set_encoding lbl addr encoding
+        | _ -> Sigma.failp "expected two arguments")
+
+  let provide_encodings () =
     let open KB.Syntax in
     KB.promise slot @@ fun label ->
     KB.collect Image.Spec.slot label >>|
     symbols_encoding
+
+  let provide () =
+    provide_encodings ();
+    provide_primitive ()
 end
 
 let has_t32 label =
@@ -596,6 +627,7 @@ let enable_llvm ?interworking () =
 let load ?interworking ?(backend="llvm") () =
   enable_loader ();
   enable_arch ();
+  Encodings.provide ();
   if String.equal backend "llvm"
   then enable_llvm ?interworking ()
   else enable_pcode ()

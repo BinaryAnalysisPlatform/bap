@@ -1112,7 +1112,7 @@ end = struct
 
   let declare_promise_root () =
     let types = Primus.Lisp.Type.Spec.(tuple [int] @-> bool) in
-    Sigma.declare ~types ~package:"bap" "promise-root"
+    Sigma.declare ~types ~package:"bap" "promise-function-start"
       ~body:(fun _ -> !!(fun _ args -> match args with
           | [addr] -> promise_root addr
           | _ -> KB.fail Invalid_arity))
