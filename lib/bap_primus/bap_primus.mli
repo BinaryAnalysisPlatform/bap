@@ -3867,7 +3867,6 @@ text ::= ?any atom that is not recognized as a <word>?
       *)
       module Semantics : sig
 
-
         (** occurs when no matching definition is found
 
             The reason why no match is selected is provided as the
@@ -3878,6 +3877,13 @@ text ::= ?any atom that is not recognized as a <word>?
 
         (** occurs when the Lisp program is ill-typed  *)
         type KB.conflict += Illtyped_program of Type.error list
+
+        (** occurs when a primitive fails.
+
+            See also, {!failp}
+
+            @since 2.4.0  *)
+        type KB.conflict += Failed_primitive of KB.Name.t * string
 
 
         (** a property of the program source object in which
@@ -3991,11 +3997,73 @@ text ::= ?any atom that is not recognized as a <word>?
           ?body:(Theory.Target.t -> (Theory.Label.t -> Theory.Value.Top.t list -> unit Theory.eff) KB.t) ->
           string -> unit
 
+        (** [failp err_msg args...] terminates a primitive with error.
+
+            Must be called from a primitive implementation to stop
+            the evaluation with the [Failed_primitive] conflict.
+
+            This conflict should used to report programmers errors
+            that are not representable via the type system (or slipped
+            through the gradual type checker).
+
+            @since 2.4.0
+        *)
+        val failp : ('a, Format.formatter, unit, 'b KB.t) format4 -> 'a
+
         (** [documentation unit] documentation for [unit]'s lisp source.
 
             Typechecks and loads the unit lisp source and generates
             its documentation. *)
         val documentation : Theory.Unit.t -> Doc.index KB.t
+
+        (** Pure semantic value.
+
+            @since 2.4.0  *)
+        module Value : sig
+          type t = unit Theory.Value.t
+
+          (** [static x] a value statically equal to [x].*)
+          val static : Bitvec.t -> t
+
+          (** [symbol s] a symbolic value.
+
+              A symbolic value is also static and the Primus Lisp
+              lifter will intern symbols by asigning a static value
+              for each symbol so that distinct symbols will have
+              distinct static values. *)
+          val symbol : string -> t
+
+
+          (** [custom prop x] creates a custom static value.
+
+              The property [prop] is set to [x] and the [symbol] slot
+              is set to [t], i.e., to [true] so that the value
+              evaluates to non-nil in the condition expressions.   *)
+          val custom : (Theory.Value.cls, 'a) KB.slot -> 'a -> t
+
+
+          (** the false value that evaluates to [nil] symbol having
+              [0] representation. *)
+          val nil : t
+        end
+
+
+        (** Effectful semantic values.
+
+            @since 2.4.0
+        *)
+        module Effect : sig
+          type t = unit Theory.Effect.t
+
+          (** [pure x] an empty effect with value [x]
+
+              sets the [Theory.Semantics.value] slot to [x].
+          *)
+          val pure : Value.t -> t
+
+          (** [return x] same as [KB.return@@pure x] *)
+          val return : Value.t -> t KB.t
+        end
       end
 
 

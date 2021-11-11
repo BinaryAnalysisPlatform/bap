@@ -143,6 +143,7 @@ end
 module Semantics : sig
   type KB.conflict += Unresolved_definition of string
   type KB.conflict += Illtyped_program of Type.error list
+  type KB.conflict += Failed_primitive of KB.Name.t * string
 
   val program : (Theory.Source.cls, program) KB.slot
   val definition : (Theory.program, Theory.Label.t option) KB.slot
@@ -151,6 +152,8 @@ module Semantics : sig
   val symbol : (Theory.Value.cls, String.t option) KB.slot
   val static : (Theory.Value.cls, Bitvec.t option) KB.slot
   val enable : ?stdout:Format.formatter -> unit -> unit
+  val failp : ('a, Format.formatter, unit, 'b KB.t) format4 -> 'a
+
 
   val declare :
     ?types:Type.signature ->
@@ -159,6 +162,20 @@ module Semantics : sig
     ?body:(Theory.Target.t -> (Theory.Label.t -> Theory.Value.Top.t list -> unit Theory.eff) KB.t) ->
     string -> unit
 
+  module Value : sig
+    type t = unit Theory.Value.t
+    val static : Bitvec.t -> t
+    val symbol : string -> t
+    val custom : (Theory.Value.cls, 'a) KB.slot -> 'a -> t
+    val nil : t
+  end
+
+
+  module Effect : sig
+    type t = unit Theory.Effect.t
+    val pure : Value.t -> t
+    val return : Value.t -> t KB.t
+  end
 
   val documentation : Theory.Unit.t -> Doc.index KB.t
 end
@@ -168,6 +185,8 @@ module Unit : sig
   val is_lisp : Theory.Unit.t -> bool KB.t
   val language : Theory.language
 end
+
+
 
 module Attribute : sig
   type 'a t

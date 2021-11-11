@@ -219,6 +219,21 @@ let sym str =
     intern name >>|
     set_static v
 
+module Value = struct
+  type t = value
+  let empty : t  = Theory.Value.Top.empty
+  let custom p x = empty.$[p] <- x
+  let static x = custom static_slot (Some x)
+  let symbol s = custom symbol (Some s)
+  let nil = static Bitvec.zero
+end
+
+module Effect = struct
+  type t = effect
+  let pure x : t = empty.$[Theory.Semantics.value] <- x
+  let return x : t KB.t = KB.return@@pure x
+end
+
 
 let static x =
   KB.Value.get static_slot (res x)
@@ -601,6 +616,12 @@ module Unit = struct
 end
 
 type KB.conflict += Illtyped_program of Program.Type.error list
+type KB.conflict += Failed_primitive of KB.Name.t * string
+type KB.conflict += Primitive_failed of string
+
+let failp fmt =
+  Format.kasprintf (fun msg ->
+      KB.fail (Primitive_failed msg)) fmt
 
 let primitive name defn args =
   let open KB.Syntax in
@@ -610,7 +631,10 @@ let primitive name defn args =
     KB.provide definition obj (Some defn);
     KB.provide Property.args obj (Some args);
   ] >>= fun () ->
-  KB.collect Theory.Semantics.slot obj
+  KB.catch (KB.collect Theory.Semantics.slot obj)
+    (function Primitive_failed msg ->
+       KB.fail (Failed_primitive (name,msg))
+            | other -> KB.fail other)
 
 let link_library target prog =
   let open KB.Let in
