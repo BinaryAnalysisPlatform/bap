@@ -499,24 +499,14 @@ end = struct
         KB.Name.pp name pp_args args
 
   module Library = struct
-    type KB.conflict += Wrong_arity
-                     | Not_a_symbol
-
-    let nop = Theory.Effect.empty Theory.Effect.Sort.bot
-
     let select_attribute args name =
       match KB.Value.get Sigma.symbol name with
-      | None -> KB.fail Not_a_symbol
+      | None -> Sigma.failp "expects a symbol for the attribute name"
       | Some name ->
-        let name = KB.Name.read name in
-        let empty = Theory.Value.Top.empty in
-        let value = match Map.find (KB.Value.get slot args) name with
-          | None ->
-            KB.Value.put Sigma.static empty (Some Bitvec.zero)
-          | Some value ->
-            KB.Value.put Sigma.symbol empty (Some value) in
-        KB.return @@
-        KB.Value.put Theory.Semantics.value nop value
+        Sigma.Effect.return @@
+        match Map.find (KB.Value.get slot args) (KB.Name.read name) with
+        | None -> Sigma.Value.nil
+        | Some x -> Sigma.Value.symbol x
 
     let provide () =
       let types = Primus.Lisp.Type.Spec.(tuple [any; sym] @-> sym) in
@@ -526,7 +516,7 @@ end = struct
       Sigma.declare ~types ~docs ~package:"bap" "patterns-attribute"
         ~body:(fun _ -> KB.return @@ fun _lbl args -> match args with
           | [args; name] -> select_attribute args name
-          | _ -> KB.fail Wrong_arity)
+          | _ -> Sigma.failp "expects two arguments")
   end
 
   type t = action
