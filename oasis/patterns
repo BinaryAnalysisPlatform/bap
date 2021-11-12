@@ -13,3 +13,4 @@ Library patterns_plugin
 
   InternalModules: Patterns_main
   XMETADescription: implements the byte patterns analysis plugin
+  DataFiles:        semantics/*.lisp ($datadir/bap/primus/semantics)
