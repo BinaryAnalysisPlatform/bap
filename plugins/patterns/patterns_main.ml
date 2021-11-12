@@ -499,14 +499,14 @@ end = struct
         KB.Name.pp name pp_args args
 
   module Library = struct
+    open KB.Syntax
     let select_attribute args name =
-      match KB.Value.get Sigma.symbol name with
-      | None -> Sigma.failp "expects a symbol for the attribute name"
-      | Some name ->
-        Sigma.Effect.return @@
-        match Map.find (KB.Value.get slot args) (KB.Name.read name) with
-        | None -> Sigma.Value.nil
-        | Some x -> Sigma.Value.symbol x
+      let* name = name.?[Sigma.symbol] in
+      let args = args.$[slot] in
+      Sigma.Effect.return @@
+      match Map.find args (KB.Name.read name) with
+      | None -> Sigma.Value.nil
+      | Some x -> Sigma.Value.symbol x
 
     let provide () =
       let types = Primus.Lisp.Type.Spec.(tuple [any; sym] @-> sym) in

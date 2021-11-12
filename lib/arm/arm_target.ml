@@ -506,17 +506,16 @@ module Encodings = struct
 
   let slot = KB.Class.property CT.Unit.cls
       ~package "symbols-encodings" @@
-    KB.Domain.flat "encodings"
-      ~empty
-      ~equal:(Map.equal CT.Language.equal)
+    KB.Domain.mapping (module Bitvec_order) "encodings"
+      ~equal:CT.Language.equal
 
   let set_encoding label x y =
     let* addr = x.?[Sigma.static] in
     let* code = y.?[Sigma.symbol] in
     let* unit = label-->?Theory.Label.unit in
     let* lang = match code with
-      | "t32" | "T32" -> !!llvm_t32
-      | "a32" | "A32" -> !!llvm_a32
+      | ":t32" | ":T32" -> !!llvm_t32
+      | ":a32" | ":A32" -> !!llvm_a32
       | other ->
         Sigma.failp "unknown encoding %s, expects :T32 or :A32" other in
     let* encodings = unit-->slot in
