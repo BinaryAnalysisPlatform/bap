@@ -512,7 +512,7 @@ module Prelude(CT : Theory.Core) = struct
       | None ->
         match Resolve.semantics prog Key.semantics name () with
         | Some Ok (sema,()) ->
-          Def.Sema.apply sema defn xs
+          Def.Sema.apply sema defn xs >>= reify_sym
         | Some (Error problem) -> unresolved name problem
         | None ->
           let msg = Format.asprintf "No definition is found for %a"
@@ -579,7 +579,7 @@ module Prelude(CT : Theory.Core) = struct
           !!beff;
         ] !!(res beff)
     and prim ?(package="core") name args =
-      call (KB.Name.read ~package name) args >>= reify_sym in
+      call (KB.Name.read ~package name) args in
     match args with
     | Some args ->
       call ~toplevel:true name args
