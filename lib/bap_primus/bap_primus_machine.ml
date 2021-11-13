@@ -53,30 +53,32 @@ let start,started =
     ~desc:"Occurs after the system start."
 
 module Make(M : Monad.S) = struct
-  module PE = struct
-    type t = (project, exn) Monad.Result.result
-  end
-  module SM = struct
-    include Monad.State.Multi.T2(M)
-    include Monad.State.Multi.Make2(M)
-  end
+  type id = Monad.State.Multi.id
+  module Id = Monad.State.Multi.Id
 
-  type 'a t  = (('a,exn) Monad.Result.result,PE.t sm) Monad.Cont.t
-  and 'a sm  = ('a,state) SM.t
-  and state = {
+  type r = (exit_status * project) M.t
+
+  type state = {
+    self    : id;
     args    : string array;
     envp    : string array;
-    curr    : unit -> unit t;
     proj    : project;
-    local   : State.Bag.t;
+    conts   : (unit -> unit machine) Map.M(Id).t;
+    local   : State.Bag.t Map.M(Id).t;
+    parent  : id Map.M(Id).t;
     global  : State.Bag.t;
     deathrow : id list;
-    observations : unit t Observation.observations;
+    observations : unit machine Observation.observations;
     restricted : bool;
   }
+  and 'a machine = {
+    run :
+      reject:(exn -> state -> r) ->
+      accept:('a -> state -> r) ->
+      state -> r
+  }
 
-  type 'a machine = 'a t
-  type 'a c = 'a t
+  type 'a t = 'a machine
   type 'a m = 'a M.t
   type 'a e =
     ?boot:unit t ->
@@ -84,71 +86,92 @@ module Make(M : Monad.S) = struct
     ?fini:unit t ->
     (exit_status * project) m effect
 
-  module C = Monad.Cont.Make(PE)(struct
-      type 'a t = 'a sm
-      include Monad.Make(struct
-          type 'a t = 'a sm
-          let return = SM.return
-          let bind m f = SM.bind m ~f
-          let map = `Custom SM.map
-        end)
-    end)
-
-  module CM = Monad.Result.Make(Exn)(struct
-      type 'a t = ('a, PE.t sm) Monad.Cont.t
-      include C
-    end)
-
   type _ error = exn
-  open CM
 
-  type id = Monad.State.Multi.id
-  module Id = Monad.State.Multi.Id
+  module Machine = Monad.Make(struct
+      type 'a t = 'a machine
+      let return x : 'a t = {
+        run = fun ~reject:_ ~accept s ->
+          accept x s
+      } [@@inline]
 
-  (* lifts state monad to the outer monad *)
-  let lifts x = CM.lift (C.lift x)
+      let bind : 'a t -> ('a -> 'b t) -> 'b t = fun x f -> {
+          run = fun ~reject ~accept s ->
+            x.run s ~reject ~accept:(fun x s ->
+                (f x).run ~reject ~accept s)
+        } [@@inline]
 
-  let with_context cid (f : (unit -> 'a t)) =
-    lifts (SM.current ())       >>= fun id ->
-    lifts (SM.switch cid) >>= fun () ->
-    f ()                >>= fun r  ->
-    lifts (SM.switch id)        >>| fun () ->
-    r
+      let map : 'a t -> f:('a -> 'b) -> 'b t = fun x ~f -> {
+          run = fun ~reject ~accept s ->
+            x.run s ~reject ~accept:(fun x s ->
+                accept (f x) s)
+        } [@@inline]
 
-  let with_global_context (f : (unit -> 'a t)) =
-    with_context SM.global f
+      let map = `Custom map
+    end)
+  open Machine
 
-  let get_local () : _ t = lifts (SM.gets @@ fun s -> s.local)
-  let get_global () : _ t = with_global_context @@ fun () ->
-    lifts (SM.gets @@ fun s -> s.global)
+  open Machine.Syntax
+  open Machine.Let
 
-  let set_local local = lifts @@ SM.update @@ fun s ->
-    {s with local}
+  let get () = {
+    run = fun ~reject:_ ~accept s -> accept s s
+  } [@@inline]
 
-  let set_global global = with_global_context @@ fun () ->
-    lifts (SM.update @@ fun s -> {s with global})
+  let gets f = {
+    run = fun ~reject:_ ~accept s -> accept (f s) s
+  } [@@inline]
 
-  let is_restricted () : bool t =
-    with_global_context @@ fun () ->
-    lifts (SM.gets @@ fun s -> s.restricted)
+  let put s = {
+    run = fun ~reject:_ ~accept _ -> accept () s
+  } [@@inline]
+
+  let update f = {
+    run = fun ~reject:_ ~accept s -> accept () (f s)
+  } [@@inline]
+
+  let current () = gets (fun s -> s.self)
+  let switch self = update (fun s -> {s with self})
+
+  let with_context cid (f : (unit -> 'a t)) = {
+    run = fun ~reject ~accept s ->
+      (f ()).run {s with self=cid}
+        ~reject
+        ~accept:(fun r s'->
+            accept r {s' with self=s.self})
+  }
+
+  let get_local () : _ t = gets (fun s ->
+      match Map.find s.local s.self with
+      | Some bag -> bag
+      | None -> State.Bag.empty)
+
+  let get_global () : _ t = gets (fun s -> s.global)
+
+  let set_local local = update @@ fun s -> {
+      s with local = Map.set s.local s.self local
+    }
+
+  let set_global global = update @@ fun s -> {
+      s with global
+    }
+
+  let is_restricted () : bool t = gets @@ fun s -> s.restricted
 
   module Observation = struct
     type 'a m = 'a t
     type nonrec 'a observation = 'a observation
     type nonrec 'a statement = 'a statement
 
-    let observations () = lifts (SM.gets @@ fun s -> s.observations)
-    let unrestricted () =
-      with_global_context @@ fun () ->
-      lifts (SM.gets @@ fun s ->
-             if s.restricted then None
-             else Some s.observations)
+    let observations () = gets @@ fun s -> s.observations
+    let unrestricted () = gets @@ fun s ->
+      if s.restricted then None
+      else Some s.observations
 
-    let set_observations observations = with_global_context @@ fun () ->
-      lifts (SM.update @@ fun s -> {s with observations})
+    let set_observations observations =
+      update @@ fun s -> {s with observations}
 
     let subscribe key observer =
-      with_global_context @@ fun () ->
       observations () >>= fun os ->
       let obs,sub = Observation.add_observer os key observer in
       set_observations obs >>| fun () -> sub
@@ -157,13 +180,11 @@ module Make(M : Monad.S) = struct
       subscribe key observer >>| fun _ -> ()
 
     let watch prov watcher =
-      with_global_context @@ fun () ->
       observations () >>= fun os ->
       let obs,_ = Observation.add_watcher os prov watcher in
       set_observations obs
 
     let cancel sub =
-      with_global_context @@ fun () ->
       observations () >>= fun os ->
       set_observations (Observation.cancel sub os)
 
@@ -171,33 +192,31 @@ module Make(M : Monad.S) = struct
 
     module Observation = Observation.Make(struct
         type 'a t = 'a machine
-        include CM
+        include Machine
       end)
 
-    let make key obs =
-      with_global_context unrestricted >>= function
+    let make key obs = unrestricted () >>= function
       | None -> return ()
       | Some os -> Observation.notify os key obs
 
     let make_even_if_restricted key obs =
-      with_global_context observations >>= fun os ->
+      observations () >>= fun os ->
       Observation.notify os key obs
 
-
     let post key ~f =
-      with_global_context unrestricted >>= function
+      unrestricted () >>= function
       | None -> return ()
       | Some os ->
         Observation.notify_if_observed os key @@ fun k ->
         f (fun x -> k x)
   end
 
-  let make_get get state =
-    get () >>= fun states ->
+  let make_get states state =
+    states () >>= fun states ->
     State.Bag.with_state states state
       ~ready:return
       ~create:(fun make ->
-          lifts (SM.get ()) >>= fun {proj} ->
+          get () >>= fun {proj} ->
           return (make proj))
 
   let make_put get set state x =
@@ -230,73 +249,110 @@ module Make(M : Monad.S) = struct
     let update s = make_update get put s
   end
 
-  let put proj = with_global_context @@ fun () ->
-    lifts @@ SM.update @@ fun s -> {s with proj}
-  let get () = with_global_context @@ fun () ->
-    lifts (SM.gets @@ fun s -> s.proj)
-  let project : project t = get ()
-  let gets f = get () >>| f
-  let update f = get () >>= fun s -> put (f s)
-  let modify m f = m >>= fun x -> update f >>= fun () -> return x
+  let global = Id.zero
+
+  let next_self s =
+    match Map.max_elt s.parent with
+    | None -> Id.succ global
+    | Some (id,_) -> Id.succ id
+
+  let fork_state () = update @@ fun s ->
+    let child = next_self s in {
+      s with
+      local = Map.change s.local child ~f:(fun _ ->
+          Map.find s.local s.self);
+      self = child;
+      parent = Map.set s.parent child s.self;
+    }
+
+  let switch_state self : unit t = update @@ fun s -> {s with self}
+  let store_curr k = update @@ fun s -> {
+      s with conts = Map.set s.conts s.self k
+    }
+
+  let get_curr = gets @@ fun {conts; self} ->
+    match Map.find conts self with
+    | None -> return
+    | Some k -> k
 
 
-  let fork_state () = lifts (SM.fork ())
-  let switch_state id : unit c = lifts (SM.switch id)
-  let store_curr k =
-    lifts (SM.update (fun s -> {s with curr = fun () -> k (Ok ())}))
+  let status x = gets @@ fun {self; conts} ->
+    if Id.equal self x then `Current else
+    if Map.mem conts x then `Live else `Dead
 
-  let lift x = lifts (SM.lift x)
-  let status x = lifts (SM.status x)
-  let forks () = lifts (SM.forks ())
-  let ancestor x  = lifts (SM.ancestor x)
-  let parent () = lifts (SM.parent ())
-  let global = SM.global
-  let current () = lifts (SM.current ())
+
+  let forks () = gets @@ fun s ->
+    let fs = Map.to_sequence s.conts |> Sequence.map ~f:fst in
+    Sequence.shift_right fs global
+
+  let ancestor xs = gets @@ fun {parent=ps; conts} ->
+    let is_alive = Map.mem conts in
+    let rec parent i = match Map.find ps i with
+      | None -> global
+      | Some p when is_alive p -> p
+      | Some p -> parent p in
+    let rec common xs =
+      match Base.List.map xs ~f:parent with
+      | [] -> global
+      | p :: ps when Base.List.for_all ps ~f:(Id.equal p) -> p
+      | ps -> common ps in
+    common xs
+
+  let current () = gets @@ fun s -> s.self
+
+  let parent () =
+    let* id = current () in
+    ancestor [id]
 
   let notify_fork pid =
     current () >>= fun cid ->
     Observation.make forked (pid,cid)
 
-  let restrict x =
-    with_global_context @@ fun () ->
-    lifts @@ SM.update (fun s -> {
-          s with restricted = x;
-        })
+  let call : f:(cc:('a -> _ t) -> 'a t) -> 'a t = fun ~f -> {
+      run = fun ~reject ~accept s ->
+        let cc x = {run = fun ~reject:_ ~accept:_ s -> accept x s} in
+        (f ~cc).run ~reject ~accept s
+    }
 
-  let sentence_to_death id =
-    with_global_context (fun () ->
-        lifts @@ SM.update (fun s -> {
-              s with deathrow = id :: s.deathrow
-            }))
+  let restrict x = update @@ fun s -> {
+      s with restricted = x
+    }
 
-  let do_kill id =
-    lifts @@ SM.kill id
+  let sentence_to_death id = update @@ fun s -> {
+      s with deathrow = id :: s.deathrow
+    }
 
-  let execute_sentenced =
-    with_global_context (fun () ->
-        lifts @@ SM.get () >>= fun s ->
-        CM.List.iter s.deathrow ~f:do_kill >>= fun () ->
-        lifts @@ SM.put {s with deathrow = []})
+  let drop id s = {
+    s with
+    conts = Map.remove s.conts id;
+    local = Map.remove s.local id;
+  }
 
-  let switch id : unit c =
+  let do_kill id = update (drop id)
+
+  let execute_sentenced = update @@ fun s ->
+    Base.List.fold s.deathrow ~init:{s with deathrow=[]} ~f:(fun s id ->
+        drop id s)
+
+  let switch id : unit t =
     is_restricted () >>= function
     | true -> failwith "switch in the restricted mode"
     | false ->
-      C.call ~f:(fun ~cc:k ->
+      call ~f:(fun ~cc:k ->
           current () >>= fun pid ->
           store_curr k >>= fun () ->
           switch_state id >>= fun () ->
-          lifts (SM.get ()) >>= fun s ->
+          get_curr >>= fun k ->
           execute_sentenced >>= fun () ->
           Observation.make switched (pid,id) >>= fun () ->
-          s.curr ())
+          k ())
 
 
-  let fork () : unit c =
+  let fork () : unit t =
     is_restricted () >>= function
     | true -> failwith "fork in the restricted mode"
     | false ->
-      C.call ~f:(fun ~cc:k ->
+      call ~f:(fun ~cc:k ->
           current () >>= fun pid ->
           store_curr k >>=
           fork_state >>= fun () ->
@@ -332,34 +388,60 @@ module Make(M : Monad.S) = struct
     restrict true >>= fun () ->
     Observation.make_even_if_restricted stopped sys
 
+  let fail exn = {
+    run = fun ~reject ~accept:_ s -> reject exn s
+  }
+
+  let catch x except = {
+    run = fun ~reject ~accept s ->
+      x.run s
+        ~accept
+        ~reject:(fun exn s ->
+            (except exn).run ~reject ~accept s)
+  }
+
+  let lift : 'a m -> 'a t = fun x -> {
+      run = fun ~reject:_ ~accept s ->
+        M.bind x ~f:(fun x -> accept x s)
+    }
+
   let raise exn =
     Observation.make raise_exn exn >>= fun () ->
     fail exn
   let catch = catch
 
+  let args = gets @@ fun s -> s.args
+  let envp = gets @@ fun s -> s.envp
+
+  let put proj = update @@ fun s -> {s with proj}
+  let get () = gets @@ fun s -> s.proj
+  let project : project t = get ()
+  let gets f = get () >>| f
+  let update f = get () >>= fun s -> put (f s)
+  let modify m f = m >>= fun x -> update f >>= fun () -> return x
+
   let project = get ()
   let program = project >>| Project.program
   let arch = project >>| Project.arch
-  let args = lifts (SM.gets @@ fun s -> s.args)
-  let envp = lifts (SM.gets @@ fun s -> s.envp)
 
 
   let init_state proj ~args ~envp = {
     args;
     envp;
-    curr = return;
+    self = global;
+    conts = Map.empty (module Id);
+    local = Map.empty (module Id);
+    parent = Map.empty (module Id);
     global = State.Bag.empty;
-    local = State.Bag.empty;
     observations = Bap_primus_observation.empty;
     deathrow = [];
     proj;
     restricted = true;
   }
 
-  let extract f =
-    let open SM.Syntax in
-    SM.switch SM.global >>= fun () ->
-    SM.gets f
+  let exec m s = m.run s
+      ~accept:(fun _ s -> M.return (Normal, s.proj))
+      ~reject:(fun exn s -> M.return (Exn exn,s.proj))
 
   let run : 'a t -> 'a e =
     fun user
@@ -383,22 +465,14 @@ module Make(M : Monad.S) = struct
         fini >>= fun () ->
         stop sys >>= fun () ->
         return x in
-      M.bind
-        (SM.run
-           (C.run machine (function
-                | Ok _ -> extract @@ fun s -> Ok s.proj
-                | Error err -> extract @@ fun _ -> Error err))
-           (init_state proj ~args ~envp))
-        (fun (r,{proj}) -> match r with
-           | Ok _ -> M.return (Normal, proj)
-           | Error e -> M.return (Exn e, proj))
+      exec machine (init_state proj ~args ~envp)
 
 
   module Syntax = struct
-    include CM.Syntax
+    include Machine.Syntax
     let (>>>) = Observation.observe
   end
 
-  include (CM : Monad.S with type 'a t := 'a t
-                         and module Syntax := Syntax)
+  include (Machine : Monad.S with type 'a t := 'a t
+                              and module Syntax := Syntax)
 end

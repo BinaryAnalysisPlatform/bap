@@ -1890,8 +1890,22 @@ module Std : sig
         type 'a contexts
 
         type id
+
+        (** Fork Identifiers. *)
         module Id : sig
           include Identifiable with type t = id
+
+
+          (** [zero] is the initial identifier.
+
+              @since 2.4.0  *)
+          val zero : t
+
+
+          (** [succ id] the successor of [id].
+
+              @since 2.4.0 *)
+          val succ : t -> t
           val pp : Format.formatter -> id -> unit
         end
 

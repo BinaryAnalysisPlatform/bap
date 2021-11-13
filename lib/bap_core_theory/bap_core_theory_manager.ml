@@ -80,52 +80,43 @@ let declare
   }
 
 let (++) x y =
-  x >>= fun x ->
-  y >>| fun y ->
+  let+ x = x and+ y = y in
   Value.merge x y
 [@@inline]
 
+
 let join1 p q x =
-  x >>= fun x ->
+  let* x = x in
   p !!x ++ q !!x
 [@@inline]
 
 let join1s p q s x =
-  x >>= fun x ->
+  let* x = x in
   p s !!x ++ q s !!x
 [@@inline]
 
 let join2 p q x y =
-  x >>= fun x ->
-  y >>= fun y ->
+  let* x = x and+ y = y in
   p !!x !!y ++ q !!x !!y
 [@@inline]
 
 let join2s p q s x y =
-  x >>= fun x ->
-  y >>= fun y ->
+  let* x = x and+ y = y in
   p s !!x !!y ++ q s !!x !!y
 [@@inline]
 
 let join3 p q x y z =
-  x >>= fun x ->
-  y >>= fun y ->
-  z >>= fun z ->
+  let* x = x and* y = y and* z = z in
   p !!x !!y !!z ++ q !!x !!y !!z
 [@@inline]
 
 let join3s p q s x y z =
-  x >>= fun x ->
-  y >>= fun y ->
-  z >>= fun z ->
+  let* x = x and* y = y and* z = z in
   p s !!x !!y !!z ++ q s !!x !!y !!z
 [@@inline]
 
 let join4 p q r x y z =
-  r >>= fun r ->
-  x >>= fun x ->
-  y >>= fun y ->
-  z >>= fun z ->
+  let* r = r and* x = x and* y = y and* z = z in
   p !!r !!x !!y !!z ++ q !!r !!x !!y !!z
 [@@inline]
 
