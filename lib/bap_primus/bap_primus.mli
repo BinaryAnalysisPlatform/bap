@@ -3867,6 +3867,11 @@ text ::= ?any atom that is not recognized as a <word>?
       *)
       module Semantics : sig
 
+        (** the representation of semantic values.
+
+            @since 2.4.0  *)
+        type value = unit Theory.Value.t
+
         (** occurs when no matching definition is found
 
             The reason why no match is selected is provided as the
@@ -3994,15 +3999,35 @@ text ::= ?any atom that is not recognized as a <word>?
           ?types:Type.signature ->
           ?docs:string ->
           ?package:string ->
-          ?body:(Theory.Target.t -> (Theory.Label.t -> Theory.Value.Top.t list -> unit Theory.eff) KB.t) ->
+          ?body:(Theory.Target.t -> (Theory.Label.t -> value list -> unit Theory.eff) KB.t) ->
           string -> unit
+
+
+        (** [signal ~params ~docs property args] declares a signal.
+
+            Emits a signal with arguments [args l v], when the
+            [property] value of a program label [l] changes to
+            [v]. The name of the signal is the same as the name of the
+            property.
+
+            The signal triggers all methods with the same method name
+            as the signal.
+
+            @since 2.4.0
+        *)
+        val signal :
+          ?params:[< Type.parameters] ->
+          ?docs:string ->
+          (Theory.program, 'p) KB.slot ->
+          (Theory.Label.t -> 'p -> value list KB.t) ->
+          unit
 
         (** [failp err_msg args...] terminates a primitive with error.
 
             Must be called from a primitive implementation to stop
             the evaluation with the [Failed_primitive] conflict.
 
-            This conflict should used to report programmers errors
+            This conflict should used to report programmer errors
             that are not representable via the type system (or slipped
             through the gradual type checker).
 
@@ -4020,7 +4045,7 @@ text ::= ?any atom that is not recognized as a <word>?
 
             @since 2.4.0  *)
         module Value : sig
-          type t = unit Theory.Value.t
+          type t = value
 
           (** [static x] a value statically equal to [x].*)
           val static : Bitvec.t -> t

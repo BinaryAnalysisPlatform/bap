@@ -626,7 +626,7 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | Some name ->
       intern name >>= const_int s |> forget
     | None ->
-      illformed "symbol requires a value reified to a variable"
+      illformed "symbol requires a symbolic value"
 
   let is_symbol v =
     forget@@match KB.Value.get Primus.Lisp.Semantics.symbol v with

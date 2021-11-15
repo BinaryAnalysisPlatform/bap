@@ -60,11 +60,12 @@ let program =
     ~join:(fun x y -> Ok (Program.merge x y))
 
 
+type kind = Prim | Defn | Meth | Data [@@deriving sexp]
 
 type program = {
   prog : Program.t;
   places : unit Theory.var Map.M(KB.Name).t;
-  names : Set.M(KB.Name).t;
+  names : kind Map.M(KB.Name).t;
 }
 
 let typed = KB.Class.property Theory.Source.cls "typed-program"
@@ -73,17 +74,33 @@ let typed = KB.Class.property Theory.Source.cls "typed-program"
     ~equal:(fun x y ->
         Program.equal x.prog y.prog)
 
+
+type problem =
+  | Resolution of Resolve.resolution
+  | Uncallable
+  | Unexpected of kind
+
+let pp_problem ppf = function
+  | Resolution err -> Resolve.pp_resolution ppf err
+  | Uncallable ->
+    Format.fprintf ppf "This item is not callable"
+  | Unexpected Prim -> ()
+  | Unexpected kind ->
+    Format.fprintf ppf "internal error, unexpected %a"
+      Sexp.pp (sexp_of_kind kind)
+
+
 let unresolved name problem =
   let msg =
-    Format.asprintf "Failed to find a definition for %a. %a"
+    Format.asprintf "Failed to find a definition for %a.@ %a@."
       KB.Name.pp name
-      Resolve.pp_resolution problem in
+      pp_problem problem in
   KB.fail (Unresolved_definition msg)
 
 let resolve prog item name =
   match Resolve.semantics prog item name () with
   | None -> !!None
-  | Some (Error problem) -> unresolved name problem
+  | Some (Error problem) -> unresolved name (Resolution problem)
   | Some (Ok (fn,_)) -> !!(Some fn)
 
 let check_arg _ _ = true
@@ -97,6 +114,7 @@ type info = {
   types : (Theory.Target.t -> Type.signature);
   docs : string;
   body : body option;
+  kind : [`meth | `defn]
 }
 
 let library = Hashtbl.create (module KB.Name)
@@ -134,23 +152,56 @@ let definition =
     ~equal:Theory.Label.equal
     ~inspect:Theory.Label.sexp_of_t
 
+let dummy_type _ = Type.{
+    args = [];
+    rest = Some any;
+    ret = any;
+  }
+
+
 let declare
-    ?(types=fun _ -> Type.{
-        args = [];
-        rest = Some any;
-        ret = any;
-      })
+    ?(types=dummy_type)
     ?(docs="undocumented") ?package ?body name =
   let name = KB.Name.create ?package name in
   if Hashtbl.mem library name
-  then invalid_argf "A primitive `%s' already exists, please \
-                     choose a different name for your primitive"
+  then invalid_argf "A semantic primitive `%s' already exists, \
+                     please choose a different name for your \
+                     primitive"
       (KB.Name.show name) ();
   Hashtbl.add_exn library name {
     docs;
     types;
     body;
+    kind = `defn;
   }
+
+let signal ?params ?(docs="undocumented") property reflect =
+  let name = KB.Slot.name property in
+  if Hashtbl.mem library name
+  then invalid_argf "The signal `%s' is already reflected."
+      (KB.Name.show name) ();
+  let app ts t = List.(ts >>| fun typ -> typ t) in
+  let types t = match params with
+    | None -> dummy_type t
+    | Some (`All typ) -> Type.signature ~rest:(typ t) [] Any
+    | Some (`Tuple ts) -> Type.signature (app ts t) Any
+    | Some (`Gen (ts,r)) ->
+      Type.signature ~rest:(r t) (app ts t) Any in
+  KB.observe property @@begin fun lbl x ->
+    let* args = reflect lbl x in
+    KB.sequence [
+      KB.provide Property.name lbl (Some name);
+      KB.provide Property.args lbl (Some args);
+    ] >>= fun () ->
+    KB.collect Theory.Semantics.slot lbl >>| ignore
+  end;
+  Hashtbl.add_exn library name {
+    docs;
+    types;
+    body=None;
+    kind=`meth;
+  }
+
 
 
 let sort = Theory.Value.sort
@@ -495,6 +546,13 @@ module Prelude(CT : Theory.Core) = struct
             ]]
         ] !!cres
     and call ?(toplevel=false) name xs =
+      match Map.find program.names name with
+      | None when toplevel -> !!Insn.empty
+      | Some Prim | None -> call_primitive name xs
+      | Some Defn -> call_defn name xs
+      | Some Meth -> call_meth name xs
+      | Some Data -> unresolved name Uncallable
+    and call_defn name xs =
       match Resolve.defun check_arg prog Key.func name xs with
       | Some (Ok (fn,_)) when is_external fn ->
         sym (Def.name fn) >>= fun dst ->
@@ -507,17 +565,26 @@ module Prelude(CT : Theory.Core) = struct
         Env.del_args bs >>= fun () ->
         !!eff
       | Some (Error problem) ->
-        unresolved name problem
-      | None when toplevel -> !!Insn.empty
-      | None ->
-        match Resolve.semantics prog Key.semantics name () with
-        | Some Ok (sema,()) ->
-          Def.Sema.apply sema defn xs >>= reify_sym
-        | Some (Error problem) -> unresolved name problem
-        | None ->
-          let msg = Format.asprintf "No definition is found for %a"
-              KB.Name.pp name in
-          KB.fail (Unresolved_definition msg)
+        unresolved name (Resolution problem)
+      | None -> unresolved name (Unexpected Defn)
+    and call_meth name xs =
+      match Resolve.meth check_arg prog Key.meth name xs with
+      | Some (Error problem) -> unresolved name (Resolution problem)
+      | Some (Ok mets) ->
+        KB.List.fold mets ~init:empty ~f:(fun effects (meth,bs) ->
+            Env.set_args word bs >>= fun bs ->
+            Scope.clear >>= fun scope ->
+            eval (Def.Meth.body meth) >>= fun eff ->
+            Scope.restore scope >>= fun () ->
+            Env.del_args bs >>| fun () ->
+            KB.Value.merge effects eff)
+      | None -> unresolved name (Unexpected Meth)
+    and call_primitive name xs =
+      match Resolve.semantics prog Key.semantics name () with
+      | Some Ok (sema,()) ->
+        Def.Sema.apply sema defn xs >>= reify_sym
+      | Some (Error problem) -> unresolved name (Resolution problem)
+      | None -> unresolved name (Unexpected Prim)
     and app name xs =
       map xs >>= fun (aeff,xs) ->
       call name xs >>= fun peff ->
@@ -639,24 +706,37 @@ let primitive name defn args =
 let link_library target prog =
   let open KB.Let in
   Hashtbl.to_alist library |>
-  KB.List.fold ~init:prog ~f:(fun prog (name,{types; docs; body}) ->
+  KB.List.fold ~init:prog ~f:(fun prog (name,{types; docs; body; kind}) ->
       let types = types target in
-      match body with
-      | None ->
+      match kind with
+      | `meth ->
         KB.return @@
-        Program.add prog Program.Items.semantics @@
-        Def.Sema.create ~docs ~types name (primitive name)
-      | Some body ->
-        let+ fn = body target in
-        Program.add prog Program.Items.semantics @@
-        Def.Sema.create ~docs ~types name fn)
+        Program.add prog Program.Items.signal @@
+        Def.Signal.create ~types ~docs (KB.Name.show name)
+      | `defn ->
+        match body with
+        | None ->
+          KB.return @@
+          Program.add prog Program.Items.semantics @@
+          Def.Sema.create ~docs ~types name (primitive name)
+        | Some body ->
+          let+ fn = body target in
+          Program.add prog Program.Items.semantics @@
+          Def.Sema.create ~docs ~types name fn)
 
 
-let collect_names key prog =
+let collect_names kind key prog =
   Program.fold prog key ~f:(fun ~package def names ->
       let name = Def.name def in
-      Set.add names (KB.Name.create ~package name))
-    ~init:(Set.empty (module KB.Name))
+      Map.set names (KB.Name.create ~package name) kind)
+    ~init:(Map.empty (module KB.Name))
+
+let merge_names names =
+  List.reduce names ~f:(Map.merge_skewed
+                          ~combine:(fun ~key:_ _ v -> v)) |>
+  function None -> Map.empty (module KB.Name)
+         | Some r -> r
+
 
 let obtain_typed_program unit =
   let open KB.Syntax in
@@ -676,11 +756,12 @@ let obtain_typed_program unit =
             let name = KB.Name.create ~package (Def.name place) in
             Map.set places name (Def.Place.location place))
         ~init:(Map.empty (module KB.Name)) in
-    let names = Set.union_list (module KB.Name) [
-        collect_names Key.func prog;
-        collect_names Key.semantics prog;
-        collect_names Key.para prog;
-        collect_names Key.const prog
+    let names = merge_names  [
+        collect_names Defn Key.func prog;
+        collect_names Prim Key.semantics prog;
+        collect_names Data Key.para prog;
+        collect_names Data Key.const prog;
+        collect_names Meth Key.meth prog;
       ] in
     let program = {prog; places; names} in
     match Program.Type.errors tprog with
@@ -714,7 +795,7 @@ let provide_semantics ?(stdout=Format.std_formatter) () =
   let* unit = obj-->?Theory.Label.unit in
   let* name = obj-->?Property.name in
   let* prog = obtain_typed_program unit in
-  require (Set.mem prog.names name) @@ fun () ->
+  require (Map.mem prog.names name) @@ fun () ->
   let* args = obj-->Property.args in
   let* target = KB.collect Theory.Unit.target unit in
   let bits = Theory.Target.bits target in

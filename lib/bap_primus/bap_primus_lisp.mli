@@ -141,6 +141,7 @@ module Make (Machine : Machine) : sig
 end
 
 module Semantics : sig
+  type value = unit Theory.Value.t
   type KB.conflict += Unresolved_definition of string
   type KB.conflict += Illtyped_program of Type.error list
   type KB.conflict += Failed_primitive of KB.Name.t * string
@@ -162,6 +163,7 @@ module Semantics : sig
     ?body:(Theory.Target.t -> (Theory.Label.t -> Theory.Value.Top.t list -> unit Theory.eff) KB.t) ->
     string -> unit
 
+
   module Value : sig
     type t = unit Theory.Value.t
     val static : Bitvec.t -> t
@@ -176,6 +178,13 @@ module Semantics : sig
     val pure : Value.t -> t
     val return : Value.t -> t KB.t
   end
+
+  val signal :
+    ?params:[< Type.parameters] ->
+    ?docs:string ->
+    (Theory.program,'p) KB.slot ->
+    (Theory.Label.t -> 'p -> Value.t list KB.t) ->
+    unit
 
   val documentation : Theory.Unit.t -> Doc.index KB.t
 end

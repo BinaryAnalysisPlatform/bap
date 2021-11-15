@@ -3,7 +3,7 @@ open Bap.Std
 open Bap_primus_lisp_types
 open Bap_primus_lisp_program
 
-
+type value = unit Theory.Value.t
 type KB.conflict += Unresolved_definition of string
 type KB.conflict += Illtyped_program of Type.error list
 type KB.conflict += Failed_primitive of KB.Name.t * string
@@ -28,6 +28,8 @@ val declare :
   string ->
   unit
 
+
+
 module Unit : sig
   val create : ?name:string -> Theory.Target.t -> Theory.Unit.t KB.t
   val is_lisp : Theory.Unit.t -> bool KB.t
@@ -49,3 +51,13 @@ module Effect : sig
   val pure : Value.t -> t
   val return : Value.t -> t KB.t
 end
+
+val signal :
+  ?params:[< `All of Theory.target -> Bap_primus_lisp_types.typ
+          | `Gen of
+               (Theory.target -> Bap_primus_lisp_types.typ) list *
+               (Theory.target -> Bap_primus_lisp_types.typ)
+          | `Tuple of (Theory.target -> Bap_primus_lisp_types.typ) list ] ->
+  ?docs:string -> (Theory.program, 'p) KB.slot ->
+  (Theory.Label.t -> 'p -> Value.t list KB.t) ->
+  unit
