@@ -508,7 +508,7 @@ end = struct
       | None -> Sigma.Value.nil
       | Some x -> Sigma.Value.symbol x
 
-    let provide () =
+    let provide_primitive () =
       let types = Primus.Lisp.Type.Spec.(tuple [any; sym] @-> sym) in
       let docs = "(patterns-attribute ATTRS NAME) returns the \
                   attribute NAME of the attributes ATTRS or NIL if no \
@@ -517,6 +517,17 @@ end = struct
         ~body:(fun _ -> KB.return @@ fun _lbl args -> match args with
           | [args; name] -> select_attribute args name
           | _ -> Sigma.failp "expects two arguments")
+
+    let provide_signal () =
+      let params = Primus.Lisp.Type.Spec.(tuple [sym; int; any]) in
+      let docs = "(patterns-action ACTION ADDR ATTRS) is signaled \
+                  when ACTION matches at ADDR. The ATTRS is key-value \
+                  set of attributes accessible with patterns-attribute" in
+      Sigma.signal ~params ~docs ~package:"bap" "patterns-action"
+
+    let provide () =
+      provide_primitive ();
+      provide_signal ()
   end
 
   type t = action
@@ -1134,17 +1145,21 @@ end = struct
     ]
 
   let apply_actions unit actions =
+    let name = KB.Name.create ~package:"bap" "patterns-action" in
     Map.to_sequence actions |>
     KB.Seq.iter ~f:(fun (addr,actions) ->
         Set.to_sequence actions |>
         KB.Seq.iter ~f:(fun action ->
-            let name = Some (Action.name action)
-            and args = Some [vec addr; Action.args action] in
+            let args = Some [
+                Sigma.Value.symbol (KB.Name.show (Action.name action));
+                vec addr;
+                Action.args action
+              ] in
             KB.Object.scoped Theory.Program.cls @@ fun lbl ->
             KB.sequence [
               KB.provide Lambda.unit lbl (Some unit);
               KB.provide Lambda.addr lbl (Some addr);
-              KB.provide Sigma.name lbl name;
+              KB.provide Sigma.name lbl (Some name);
               KB.provide Sigma.args lbl args;
             ] >>= fun () ->
             KB.collect Theory.Semantics.slot lbl >>| ignore))
