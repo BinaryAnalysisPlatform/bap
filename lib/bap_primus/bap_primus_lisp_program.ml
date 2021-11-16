@@ -115,7 +115,7 @@ let targets {exports} package = match Map.find exports package with
   | Some packs -> packs
 
 (* [transitive_closure p] is the set of packages in which
-   definition from p are visible (p including).
+   the definitions from p are visible (p including).
 *)
 let rec transitive_closure program from =
   let init = Set.singleton (module String) from in
@@ -1447,6 +1447,7 @@ module Typing = struct
       let name = KB.Name.unqualified name in
       match Map.find sigs name with
       | Some [x] -> Some x
+      | Some _ -> None
       | _ -> None
 
   let check_methods glob {context; library} g =

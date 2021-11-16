@@ -35,10 +35,10 @@ type ('t,'a,'b) many = ('t,'a,('t Def.t * 'b) list) resolver
 
 type exn += Failed of string * Context.t * resolution
 
-let interns d name = String.equal (Def.name d) name
+let has_name d name = String.equal (Def.name d) name
 
 (* all definitions with the given name *)
-let stage1 has_name defs name =
+let stage1 defs name =
   List.filter defs ~f:(fun def -> has_name def name)
 
 let context def =
@@ -147,12 +147,12 @@ let one = function
 
 let many xs = Some xs
 
-let run choose namespace overload prog item name =
+let run choose overload prog item name =
   Program.in_package (KB.Name.package name) prog @@ fun prog ->
   let name = KB.Name.unqualified name in
   let ctxts = Program.context prog in
   let defs = Program.get ~name prog item in
-  let s1 = stage1 namespace defs name in
+  let s1 = stage1 defs name in
   let s2 = stage2 ctxts s1 in
   let s3 = stage3 s2 in
   let s4 = stage4 s3 in
@@ -171,25 +171,25 @@ let run choose namespace overload prog item name =
       })
 
 let extern typechecks prog item name args =
-  run one interns (overload_defun typechecks args) prog item name
+  run one (overload_defun typechecks args) prog item name
 
 let defun typechecks prog item name args =
-  run one interns (overload_defun typechecks args) prog item name
+  run one (overload_defun typechecks args) prog item name
 
 let meth typechecks prog item name args =
-  run many interns (overload_meth typechecks args) prog item name
+  run many (overload_meth typechecks args) prog item name
 
 let macro prog item name code =
-  run one interns (overload_macro code) prog item name
+  run one (overload_macro code) prog item name
 
 let primitive prog item name () =
-  run one interns overload_primitive prog item name
+  run one overload_primitive prog item name
 
 let semantics prog item name () =
-  run one interns overload_primitive prog item name
+  run one overload_primitive prog item name
 
 let subst prog item name () =
-  run one interns overload_primitive prog item name
+  run one overload_primitive prog item name
 
 let const = subst
 
