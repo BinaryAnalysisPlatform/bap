@@ -450,6 +450,7 @@ module Action : sig
   val pp : Format.formatter -> t -> unit
   val name : t -> KB.Name.t
   val args : t -> unit Theory.Value.t
+  val property : (Theory.program, t option) KB.slot
   module Library : sig
     val provide : unit -> unit
   end
@@ -480,9 +481,11 @@ end = struct
       ~package:"bap" @@ KB.Domain.mapping (module KB.Name)
       ~equal:String.equal "attributes"
 
+  let property = KB.Class.property Theory.Program.cls "patterns-action"
+      ~package:"bap" @@ KB.Domain.optional ~equal:equal_action "action"
+
   let args {args} =
     KB.Value.put slot Theory.Value.Top.empty args
-
 
   let pp_arg ppf (name,value) =
     Format.fprintf ppf "%a %S"
@@ -523,7 +526,14 @@ end = struct
       let docs = "(patterns-action ACTION ADDR ATTRS) is signaled \
                   when ACTION matches at ADDR. The ATTRS is key-value \
                   set of attributes accessible with patterns-attribute" in
-      Sigma.signal ~params ~docs ~package:"bap" "patterns-action"
+      Sigma.signal ~params ~docs property @@ fun lbl action ->
+      let action = Option.value_exn action in
+      let* addr = lbl-->?Theory.Label.addr in
+      KB.return [
+        Sigma.Value.symbol (KB.Name.show (name action));
+        Sigma.Value.static addr;
+        args action;
+      ]
 
     let provide () =
       provide_primitive ();
@@ -1145,22 +1155,15 @@ end = struct
     ]
 
   let apply_actions unit actions =
-    let name = KB.Name.create ~package:"bap" "patterns-action" in
     Map.to_sequence actions |>
     KB.Seq.iter ~f:(fun (addr,actions) ->
         Set.to_sequence actions |>
         KB.Seq.iter ~f:(fun action ->
-            let args = Some [
-                Sigma.Value.symbol (KB.Name.show (Action.name action));
-                vec addr;
-                Action.args action
-              ] in
-            KB.Object.scoped Theory.Program.cls @@ fun lbl ->
+            let* lbl = KB.Object.create Theory.Program.cls in
             KB.sequence [
               KB.provide Lambda.unit lbl (Some unit);
               KB.provide Lambda.addr lbl (Some addr);
-              KB.provide Sigma.name lbl (Some name);
-              KB.provide Sigma.args lbl args;
+              KB.provide Action.property lbl (Some action)
             ] >>= fun () ->
             KB.collect Theory.Semantics.slot lbl >>| ignore))
 
