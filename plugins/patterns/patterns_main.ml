@@ -1,3 +1,113 @@
+let doc = "
+  # DESCRIPTION
+
+  Applies semantic actions to the matching byte patterns. The patterns
+  are specified in an XML format, described below, and the actions are
+  implemented with Primus Lisp methods. Used to identify function
+  starts, instruction encodings, function names, etc.
+
+  # INPUT FORMAT
+
+  The patterns are represented with XML files, each corresponding to a
+  specific target. The $(b,patternconstraints.xml) files are used as
+  the table of contents and contain mapping between targets and files
+  that provide patterns for that target.
+
+  The file scheme itself is derived from the Ghidra bytesearch
+  patterns, so that the patterns provided by Ghidra could be used as
+  is.
+
+  # PATTERNS SCHEME
+
+  The file with patterns must have a single element $(b, patternlist),
+  which contains a list of $(b,pattern) or $(b,patternpairs)
+  elements. The $(b,pattern) element is composed of a list of
+  $(b,data) elements and a list of action elements. The $(b,data)
+  element descibes the ditted pattern, and an action is any element
+  (other than $(b,data)), which is translated to a Primus Lisp singal,
+  $(b,bap:patterns-action name addr attrs), where $(b,name) is the
+  element name, $(b,addr) is the address where the pattern matches,
+  and $(b,attrs) is the list of element attributes, accessible via
+  $(b,patterns-attribute) function.
+
+  The $(b,patternspairs) element is very similar to the $(b,patterns)
+  element except that the list of patterns is described by a cartesian
+  product of two sets of patterns, $(b,prepatterns) and
+  $(b,postpatterns). Both $(b,prepatterns) and $(b,postpatterns) must
+  contain a non-empty list of $(b,data) elements and nothing more. The
+  resulting patterns are made by concatenating every prepattern with
+  every postpattern and leaving only those combinations that have the
+  total number of non-masked bits equal to $(b,totalbits) and the
+  total number of non-masked bits in the postpattern part equal to
+  $(b,postbits). When the resulting pattern matches with a sequence of
+  bytes, the address of a byte that matches with the start of the
+  postpattern is passed to the $(b,bap:patterns-action) method.
+
+  # PATTERNCONSTRAINTS SCHEME
+
+  The $(b,patternconstraints.xml) file is used as the table of
+  contents and contain a mapping between targets (languages in Ghidra
+  parlance) and paths to corresponding files, relative to the location
+  of the $(b,patternconstraints.xml) file.
+
+  The file must have a single $(b,patternconstraints) element that
+  contains a list of $(b,language) elements. The language element is
+  required to have the $(b,id) attribute which must be either the name
+  of a BAP target (see $(b,bap list targets)) or a Ghidra language
+  specification, which is four-tuple of elements, separated with
+  $(b,:). The first element is the architecture name, the second is
+  the endiannes, the third is the bitness, and the last is the
+  variant. Any field except the architecture, could use $(b,default)
+  or just $(b,*) as the wildcard character that matches with
+  anything. The endianness is specified as either $(b,LE) for little
+  or $(b,BE) for big endianness. For instructions in little endian and
+  data in big endian, use $(b,LEBE).
+
+  The $(b,language) element contains a list of $(b,patternfile)
+  or $(b,compiler) elements. The $(b,patternfile) element contains the
+  path to the patterns file, and the $(b,compiler) element contains
+  the $(b,patternfile) element with patterns specific to a compiler,
+  which is specified in the required $(b,id) attribute of the
+  $(b,compiler) element.
+
+
+  # DITTED PATTERNS
+
+  Each pattern is described as a ditted sequence of bits or nibbles.
+  Each bit is represented with $(b,0), $(b,1), and $(b,.) that match,
+  correspondigly with, zero, one, and any bit. And a nibble is a
+  a hexadecimal digit, matching with their corresponding
+  four-bit representation, or $(b,.), which matches with any four
+  bits (i.e., with any binary number in the range from $(b,0) to
+  $(b,0xF)). The nibble sequence must start with $(b,0x) and continues
+  until the next whitespace character. If the sequence doesn't start
+  with $(b,0x) then it is assumed to be a sequence of bits. Sequences
+  could be separated by the arbitrary number of whitespace characters.
+
+  # BUILTIN ACTIONS
+
+  All actions in the $(b,bap) namespace, which is set as the default
+  namespace when parsing the patterns file, are reserved to BAP. It
+  is possible to add arbitrary actions, provided that they are not
+  using the $(b,bap) namespace. The following set of actions have
+  predefined meaning.
+
+  $(b,functionstart) and $(b,possiblefuncstart) mark the matching
+  sequence as the function start. The attributes could be used to
+  impose an extra constraint. The current implementation ignore them,
+  but they will be implemented later.
+
+  $(b,setcontext) is used to control the disassembler context and
+  currently the following two attributes are recongized, $(b,name)
+  and $(b,value). When the name is set to $(b,TMode) then the matching
+  sequence has the encoding T32 if the value is $(b,1) and A32
+  otherwise.
+
+
+
+
+"
+
 open Core_kernel
 open Bap_core_theory
 open Bap.Std
@@ -717,9 +827,8 @@ module Target = struct
     let arch = String.lowercase arch in
     let bits = with_default bits Int.of_string in
     let order = with_default order @@ function
-      | "LE" -> Theory.Endianness.le
+      | "LE" | "LEBE" -> Theory.Endianness.le
       | "BE" -> Theory.Endianness.eb
-      | "LEBE" ->  Theory.Endianness.bi
       | _ -> fail Wrong_endianness in
     let variant = match List.hd rest with
       | None -> None
@@ -1229,7 +1338,7 @@ let print_matches rules mem =
         Addr.pp addr
         Action.pp action) ()
 
-let test_on_file ~spec ~binary=
+let test_on_file ~spec ~binary =
   with_rules spec @@ fun rules ->
   match Image.create ~backend:"llvm" binary with
   | Error err ->
@@ -1251,8 +1360,38 @@ let test_on_bytes ~spec bytes =
   | Ok mem -> print_matches rules mem
 
 
-let () = Extension.declare @@ fun _ctxt ->
-  Repository.enable ["/usr/share/ghidra"];
+let paths = Extension.Configuration.parameters
+    Extension.Type.dir "path"
+    ~doc:"Add the specified path to the list of patterns directories."
+
+let path = Extension.Command.argument Extension.Type.file
+let spec = Extension.Command.parameter Extension.Type.file
+    "specification" ~aliases:["s"]
+
+
+let provides = [
+  "symbolizer";
+  "rooter";
+  "function-starts";
+]
+
+let () = Extension.Command.(begin
+    declare "match-patterns"
+      ~doc:"Run the specified patterns file on the input file and \
+            prints the matches"
+      (args $ spec $ path)
+  end) @@
+  fun spec binary _ctxt ->
+  test_on_file ~spec ~binary;
+  Ok ()
+
+
+let () = Extension.declare ~provides ~doc @@ fun ctxt ->
+  let paths =
+    "/usr/share/ghidra" ::
+    Filename.concat Extension.Configuration.datadir "signatures" ::
+    Extension.Configuration.get ctxt paths in
+  Repository.enable paths;
   Analysis.enable ();
   Action.Library.provide ();
   Ok ()
