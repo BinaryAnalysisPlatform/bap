@@ -66,17 +66,23 @@ let is_quoted s =
   n > 1 && Char.(s.[0] = '"') && Char.(s.[n - 1] = '"')
 
 let is_symbol s =
-  String.length s > 1 && Char.(s.[0] = '\'')
+  String.length s > 1 && match s.[0] with
+  | '\'' | ':' -> true
+  | _ -> false
+
+
+let is_keyword s =
+  String.length s > 1 && Char.(s.[0] = ':')
+
 
 let unquote s =
   if is_quoted s
   then String.sub ~pos:1 ~len:(String.length s - 2) s
   else s
 
-let symbol s =
-  if is_symbol s
-  then String.subo ~pos:1 s
-  else s
+let symbol ~package s =
+  if is_keyword s then KB.Name.read s
+  else KB.Name.read ~package (String.subo ~pos:1 s)
 
 module Parse = struct
   open Program.Items
@@ -209,7 +215,7 @@ module Parse = struct
 
       let sym ({id;eq;data=r} as s)  =
         if is_symbol r
-        then cons (Sym { s with data = qualify@@symbol s.data})
+        then cons (Sym { s with data = symbol ~package s.data})
         else match Var.read ~package id eq r with
           | Error e -> fail (Bad_var_literal e) tree
           | Ok v -> cons (Var v) in
@@ -288,9 +294,6 @@ module Parse = struct
     | Some {data=Atom ":hex"} -> hex
     | Some here -> fail Unknown_subst_syntax here
 
-  let is_keyarg = function
-    | {data=Atom s} -> Char.(s.[0] = ':')
-    | _ -> false
 
   let constrained prog attrs =
     Program.with_context prog @@
@@ -330,6 +333,10 @@ module Parse = struct
     Program.add prog para @@
     Def.Para.create ?docs
       ~attrs name (parse (constrained prog attrs) body) tree
+
+  let is_keyarg = function
+    | {data=Atom s} -> is_keyword s
+    | _ -> false
 
   let defsubst ?docs ?(attrs=[]) name body prog gattrs tree =
     let syntax = match body with

@@ -269,6 +269,29 @@ module Knowledge : sig
   val proposing : agent -> ('a, 'p opinions) slot ->
     propose:('a obj -> 'p t) -> (unit -> 's t) -> 's t
 
+  (** [observe property push] calls [push] when the [property] changes.
+
+      Dual to [promise], [observe] enables forward-chaining rules and
+      propagates knowledge whenever [property] value is refined.
+
+      Calls [push x v] when the [property] value of an object [x] is
+      refined to [v]. It is guaranteed that [v] is never empty.
+
+      @since 2.4.0
+  *)
+  val observe : ('a,'p) slot -> ('a obj -> 'p -> unit knowledge) -> unit
+
+  (** [observing property ~observe:push scope] observes the property in a [scope].
+
+      This operation is dual to [promising] and it observes the
+      property only during the time when the [scope] computation is
+      evaluate and removes the observer after that.
+
+      @since 2.4.0
+
+  *)
+  val observing : ('a,'p) slot -> observe:('a obj -> 'p -> unit knowledge) ->
+    (unit -> 'r knowledge) -> 'r knowledge
 
   (** [with_empty ~missing f x] evaluates [f ()] and if it fails on an empty
       immediately evaluates to [return missing].

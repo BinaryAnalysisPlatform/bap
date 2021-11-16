@@ -2070,8 +2070,8 @@ module Knowledge = struct
   open Knowledge.Syntax
 
   module Slot = struct
-    type 'p promise = {
-      run : Oid.t -> unit Knowledge.t;
+    type ('p,'r) action = {
+      run : Oid.t -> 'r;
       pid : pid;
     }
 
@@ -2081,7 +2081,8 @@ module Knowledge = struct
       key : 'p Dict.Key.t;
       name : Name.t;
       desc : string option;
-      promises : (pid, 'p promise) Hashtbl.t;
+      promises : (pid, ('p,unit knowledge) action) Hashtbl.t;
+      watchers : (pid, ('p,'p -> unit knowledge) action) Hashtbl.t;
     }
 
     type pack = Pack : ('a,'p) t -> pack
@@ -2101,8 +2102,9 @@ module Knowledge = struct
       Option.iter persistent (Record.register_persistent key);
       Record.register_domain key dom;
       let promises = Hashtbl.create (module Pid) in
+      let watchers = Hashtbl.create (module Pid) in
       let cls = Class.refine cls () in
-      let slot = {cls; dom; key; name; desc; promises} in
+      let slot = {cls; dom; key; name; desc; promises; watchers} in
       register slot;
       slot
 
@@ -2454,26 +2456,36 @@ module Knowledge = struct
         trace;
       })
 
+  let commit : type a p. (a,p) slot -> a obj -> p -> unit Knowledge.t =
+    fun slot obj x ->
+    get () >>= function {classes} as s ->
+      let {Env.vals} as objs =
+        match Map.find classes slot.cls.name with
+        | None -> Env.empty_class
+        | Some objs -> objs in
+      try put {
+          s with classes = Map.set classes ~key:slot.cls.name ~data:{
+          objs with vals = Map.update vals obj ~f:(function
+          | None -> Record.(put slot.key empty x)
+          | Some v -> match Record.commit slot.dom slot.key v x with
+            | Ok r -> r
+            | Error err -> raise (Record.Merge_conflict err))}}
+      with Record.Merge_conflict err ->
+        non_monotonic slot obj err @@
+        Caml.Printexc.get_raw_backtrace ()
+
+  let notify {Slot.watchers} obj data =
+    Hashtbl.data watchers |>
+    Knowledge.List.iter ~f:(fun {Slot.run} ->
+        run obj data)
+
   let provide : type a p. (a,p) slot -> a obj -> p -> unit Knowledge.t =
     fun slot obj x ->
     if Object.is_null obj || Domain.is_empty slot.dom x
     then Knowledge.return ()
     else
-      get () >>= function {classes} as s ->
-        let {Env.vals} as objs =
-          match Map.find classes slot.cls.name with
-          | None -> Env.empty_class
-          | Some objs -> objs in
-        try put {
-            s with classes = Map.set classes ~key:slot.cls.name ~data:{
-            objs with vals = Map.update vals obj ~f:(function
-            | None -> Record.(put slot.key empty x)
-            | Some v -> match Record.commit slot.dom slot.key v x with
-              | Ok r -> r
-              | Error err -> raise (Record.Merge_conflict err))}}
-        with Record.Merge_conflict err ->
-          non_monotonic slot obj err @@
-          Caml.Printexc.get_raw_backtrace ()
+      commit slot obj x >>= fun () ->
+      notify slot obj x
 
 
   let pids = ref Pid.zero
@@ -2485,6 +2497,12 @@ module Knowledge = struct
       (function Empty _ -> Knowledge.return missing
               | other -> Knowledge.fail other)
 
+  let register_watcher (type a b)(s : (a,b) slot) run =
+    Pid.incr pids;
+    let pid = !pids in
+    Hashtbl.add_exn s.watchers pid {run; pid};
+    pid
+
   let register_promise (type a b)(s : (a,b) slot) run =
     Pid.incr pids;
     let pid = !pids in
@@ -2493,6 +2511,9 @@ module Knowledge = struct
 
   let remove_promise (s : _ slot) pid =
     Hashtbl.remove s.promises pid
+
+  let remove_watcher (s : _ slot) pid =
+    Hashtbl.remove s.watchers pid
 
   let wrap (s : _ slot) get obj =
     let missing = Domain.empty s.dom in
@@ -2641,6 +2662,15 @@ module Knowledge = struct
         leave_slot slot id >>= fun () ->
         current slot id
 
+
+  let observe s run =
+    ignore @@ register_watcher s run
+
+  let observing s ~observe:run scoped =
+    let pid = register_watcher s run in
+    scoped () >>= fun r ->
+    remove_watcher s pid;
+    Knowledge.return r
 
   let require (slot : _ slot) obj =
     collect slot obj >>= fun x ->
