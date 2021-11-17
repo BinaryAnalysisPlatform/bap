@@ -27,26 +27,6 @@ module Make(CT : Theory.Core) = struct
   open T
   open T.Syntax
 
-  let holds cond =
-    let is_set x = is_set ~@x and is_clear x = is_clear ~@x in
-    match cond with
-    | `EQ -> is_set zf
-    | `NE -> is_clear zf
-    | `CS -> is_set cf
-    | `CC -> is_clear cf
-    | `MI -> is_set nf
-    | `PL -> is_clear nf
-    | `VS -> is_set vf
-    | `VC -> is_clear vf
-    | `HI -> is_set cf && is_clear zf
-    | `LS -> is_clear cf || is_set zf
-    | `GE -> ~@nf = ~@vf
-    | `LT -> ~@nf <> ~@vf
-    | `GT -> is_clear zf && ~@nf = ~@vf
-    | `LE -> is_set zf || ~@nf <> ~@vf
-    | `AL -> assert false
-
-
   let b pc dst = goto (pc +> dst)
 
   let bcc pc cnd dst = match cnd with

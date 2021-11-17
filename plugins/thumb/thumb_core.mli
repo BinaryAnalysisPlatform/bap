@@ -1,4 +1,5 @@
 open Bap_core_theory
+open Thumb_opcodes
 
 open Theory
 
@@ -52,6 +53,26 @@ module Make(CT : Theory.Core) : sig
   val store : r32 bitv -> 'a bitv -> data eff
 
 
+  (** [holds cnd] evaluates to true iff [cnd] holds. *)
+  val holds : cond -> Theory.bool
+
+  (** [it_set v x k] assigns [x] to [v] in the scope of IT block.
+
+      Creates a function [cond -> unit eff] that performs two
+      different operations depending on whether its applied inside of
+      an IT block or not. An instruction is assumed to be in the IT
+      block if the passed condition is not [AL].
+
+      If inside an IT block, the assignment is turned into a
+      conditional, expression, [v := c ? x : v].
+
+      If outside of an IT block then a fresh variable [t] is created and
+      bound to [x], it is then passed to [t] and finally, [v] is set
+      to [t], i.e., the resulting compuation is [t := x; k t; v := t].
+  *)
+  val it_set : 'a var -> 'a pure -> ('a var -> data eff list) -> cond ->
+    unit eff
+
   (** [null] is shorcut for [Theory.Label.null]  *)
   val null : Theory.label
 
@@ -67,9 +88,8 @@ module Make(CT : Theory.Core) : sig
   (** [goto dst] emits a resolved jump  *)
   val goto : Bitvec.t -> unit eff
 
-  (** [with_result v f] is [seq @@ f r @ [set v := var r]],
-      where [r] is a fresh scoped variable. *)
-  val with_result : 'a var -> ('a var -> data eff list) -> unit eff
+  (** [branch c ys ns] if [c] holds evaluates [ys] else [ns]. *)
+  val branch : cond -> data eff list -> data eff list -> unit eff
 
   (** [bool flag] translates a one-bit value to a boolean value  *)
   val bool : r1 bitv -> bool
@@ -121,6 +141,24 @@ module Make(CT : Theory.Core) : sig
 
     (** [~@v] is the value of [v]  *)
     val (~@) : 'a reg -> 'a bitv
+
+
+    (** [~?cnd] is [holds cnd]  *)
+    val (~?) : cond -> Theory.bool
+
+    (** [v %=? x] conditional assignment.
+
+        Creates a function that turns [x] into a conditional
+        expression. If [cond] is [`AL], then the assignment
+        is unconditional. *)
+    val (<-?) : 'a var -> 'a pure -> cond -> unit eff
+
+
+    (** [p <--? x] conditional store.
+
+        if [cond] is not [`AL] turns the store into a conditional
+        expression, [mem := cnd ? mem[p] <- x : mem]  *)
+    val (<--?) : r32 bitv -> 'a bitv -> cond -> unit eff
 
     val (=) : 'a bitv -> 'a bitv -> bool
     val (<>) : 'a bitv -> 'a bitv -> bool
