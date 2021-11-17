@@ -41,7 +41,8 @@ cd bap-repo
 LLVM_VERSION=$(opam config var conf-bap-llvm:package-version)
 LLVM_CONFIG=$(opam config var conf-bap-llvm:config)
 
-SIGURL=https://github.com/BinaryAnalysisPlatform/bap/releases/download/v2.3.0
+# this is a bit recursive...
+SIGURL=https://github.com/BinaryAnalysisPlatform/bap/releases/download/v2.4.0-alpha/sigs.tar.gz
 echo BAP version is $BAP_VERSION
 echo LLVM is $LLVM_VERSION
 

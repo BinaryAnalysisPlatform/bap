@@ -95,6 +95,7 @@ include Self()
 open Bap_main
 
 let features_used = [
+  "function-starts";
   "disassembler";
   "lifter";
   "symbolizer";
