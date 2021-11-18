@@ -1387,9 +1387,11 @@ let () = Extension.Command.(begin
 
 
 let () = Extension.declare ~provides ~doc @@ fun ctxt ->
+  let (/) = Filename.concat in
   let paths =
     "/usr/share/ghidra" ::
-    Filename.concat Extension.Configuration.datadir "signatures" ::
+    Extension.Configuration.datadir / "signatures" ::
+    Extension.Configuration.sysdatadir / "signatures" ::
     Extension.Configuration.get ctxt paths in
   Repository.enable paths;
   Analysis.enable ();
