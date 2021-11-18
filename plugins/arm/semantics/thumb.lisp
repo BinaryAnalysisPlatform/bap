@@ -11,40 +11,43 @@
 
 (in-package thumb)
 
-(defmacro tLOGs (op rd rn rm)
+(defmacro tLOGs (op rd rn rm cnd)
   (prog (set$ rd (op rn rm))
-     (set ZF (is-zero rd))
-     (set NF (msb rd))))
+     (when (is-unconditional cnd)
+       (set ZF (is-zero rd))
+       (set NF (msb rd)))))
 
-(defun tEOR (rd _ rn rm _ _)
-  (tLOGs logxor rd rn rm))
+(defun tEOR (rd _ rn rm cnd _)
+  (tLOGs logxor rd rn rm cnd))
 
-(defun tAND (rd _ rn rm _ _)
-  (tLOGs logand rd rn rm))
+(defun tAND (rd _ rn rm cnd _)
+  (tLOGs logand rd rn rm cnd))
 
-(defun tBIC (rd _ rn rm _ _)
+(defun tBIC (rd _ rn rm cnd _)
   "bics rd, rn, rm ; with rn = rd"
-  (tLOGs logandnot rd rn rm))
+  (tLOGs logandnot rd rn rm cnd))
 
-(defun tMVN (rd _ rn _ _)
+(defun tMVN (rd _ rn cnd _)
   (set$ rd (lnot rn))
-  (set ZF (is-zero rd))
-  (set NF (msb rd)))
+  (when (is-unconditional cnd)
+    (set ZF (is-zero rd))
+    (set NF (msb rd))))
 
-(defun tREV (rd rn _ _)
-  (set$ rd (concat
-            (extract 7 0 rn)
-            (extract 15 8 rn)
-            (extract 23 16 rn)
-            (extract 31 24 rn))))
+(defun tREV (rd rn cnd _)
+  (when (condition-holds cnd)
+    (set$ rd (concat
+              (extract 7 0 rn)
+              (extract 15 8 rn)
+              (extract 23 16 rn)
+              (extract 31 24 rn)))))
 
-(defun tLSLrr (rd _ rn rm _ _)
+(defun tLSLrr (rd _ rn rm cnd _)
   "lsls rd, rn, rm"
-  (shift-with-carry lshift rd rn rm))
+  (shift-with-carry lshift rd rn rm cnd))
 
-(defun tLSRrr (rd _ rn rm _ _)
+(defun tLSRrr (rd _ rn rm cnd _)
   "lsrs rd, rn, rm"
-  (shift-with-carry rshift rd rn rm))
+  (shift-with-carry rshift rd rn rm cnd))
 
 (defun tTST (rn rm _ _)
   "tst rn, rm"
@@ -52,21 +55,23 @@
     (set ZF (is-zero rd))
     (set NF (msb rd))))
 
-(defun tADDhirr (rd rn rm _ _)
-  (set$ rd (+ rn (t2reg rm))))
+(defun tADDhirr (rd rn rm cnd _)
+  (when (condition-holds cnd)
+    (set$ rd (+ rn (t2reg rm)))))
 
-(defun tSBC (rd _ rn rm _ _)
-  (add-with-carry rd rn (lnot rm) CF))
+(defun tSBC (rd _ rn rm cnd _)
+  (add-with-carry/it-block rd rn (lnot rm) CF cnd))
 
-(defun tRSB (rd _ rn _ _)
+(defun tRSB (rd _ rn cnd _)
   "rsbs	r3, r2, #0"
-  (add-with-carry rd 0 (lnot rn) 1))
+  (add-with-carry/it-block rd 0 (lnot rn) 1 cnd))
 
-(defun tMUL (rd _ rn rm _ _)
-  (set$ rd (* rn rm))
-  (set ZF (is-zero rd))
-  (set NF (msb rd)))
-
+(defun tMUL (rd _ rn rm cnd _)
+  (when (condition-holds cnd)
+    (set$ rd (* rn rm))
+    (when (is-unconditional cnd)
+      (set ZF (is-zero rd))
+      (set NF (msb rd)))))
 
 (defun t2STRDi8 (rt1 rt2 rn imm pre _)
   "strd rt1, rt2, [rn, off]"

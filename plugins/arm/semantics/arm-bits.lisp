@@ -3,34 +3,41 @@
 
 (in-package arm)
 
+(defun set-flags (r x y)
+  (set NF (msb r))
+  (set VF (overflow r x y))
+  (set ZF (is-zero r))
+  (set CF (carry r x y)))
+
 (defun add-with-carry (rd x y c)
   (let ((r (+ c y x)))
-    (set NF (msb r))
-    (set VF (overflow r x y))
-    (set ZF (is-zero r))
-    (set CF (carry r x y))
+    (set-flags r x y)
     (set$ rd r)))
 
 (defun add-with-carry/clear-base (rd x y c)
   (let ((r (+ c y x)))
-    (set NF (msb r))
-    (set VF (overflow r x y))
-    (set ZF (is-zero r))
-    (set CF (carry r x y))
+    (set-flags r y x)
     (clear-base rd)
     (set$ rd r)))
 
-
+(defun add-with-carry/it-block (rd x y c cnd)
+  (when (condition-holds cnd)
+    (let ((r (+ c y x)))
+      (when (is-unconditional cnd)
+        (set-flags r x y))
+      (set$ rd r))))
 
 (defun logandnot (rd rn)
   (logand rd (lnot rn)))
 
-(defmacro shift-with-carry (shift rd rn rm)
-  (let ((r (cast-signed (word-width) rn)))
-    (set CF (msb r))
-    (set$ rd (shift r rm))
-    (set ZF (is-zero rd))
-    (set NF (msb rd))))
+(defmacro shift-with-carry (shift rd rn rm cnd)
+  (when (condition-holds cnd)
+    (let ((r (cast-signed (word-width) rn)))
+      (when (is-unconditional cnd)
+        (set CF (msb r))
+        (set$ rd (shift r rm))
+        (set ZF (is-zero rd))
+        (set NF (msb rd))))))
 
 (defun condition-holds (cnd)
   (case cnd
@@ -49,6 +56,9 @@
     0b1100 (logand (= NF VF) (lnot ZF))
     0b1101 (logor (/= NF VF) ZF)
     true))
+
+(defun is-unconditional (cnd)
+  (= cnd 0b1110))
 
 (defun clear-base (reg)
   (set$ (alias-base-register reg) 0))

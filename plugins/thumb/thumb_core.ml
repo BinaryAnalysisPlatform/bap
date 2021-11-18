@@ -43,6 +43,7 @@ module W1 = Bitvec.M1
 module W8 = Bitvec.M8
 module W32 = Bitvec.M32
 
+
 module Make(CT : Theory.Core) = struct
   let rec seq = function
     | [] -> CT.perform Theory.Effect.Sort.bot
@@ -117,5 +118,55 @@ module Make(CT : Theory.Core) = struct
     let lnot = CT.not
 
     let (~@) = CT.var
+
+    let (~?) cond =
+      let is_set x = is_set ~@x and is_clear x = is_clear ~@x in
+      match cond with
+      | `EQ -> is_set zf
+      | `NE -> is_clear zf
+      | `CS -> is_set cf
+      | `CC -> is_clear cf
+      | `MI -> is_set nf
+      | `PL -> is_clear nf
+      | `VS -> is_set vf
+      | `VC -> is_clear vf
+      | `HI -> is_set cf && is_clear zf
+      | `LS -> is_clear cf || is_set zf
+      | `GE -> ~@nf = ~@vf
+      | `LT -> ~@nf <> ~@vf
+      | `GT -> is_clear zf && ~@nf = ~@vf
+      | `LE -> is_set zf || ~@nf <> ~@vf
+      | `AL -> CT.b1
+
+
+    let (<-?) dst exp cnd =
+      data@@match cnd with
+      | `AL -> [dst := exp]
+      | cnd -> [dst := CT.ite ~?cnd exp (var dst)]
+
+    let (<--?) dst src = function
+      | `AL -> data [dst <-- src]
+      | cnd -> data [
+          mem :=
+            CT.ite ~?cnd
+              (CT.storew CT.b0 (var mem) dst src)
+              (var mem)
+        ]
   end
+
+  let holds = Syntax.(~?)
+
+  let it_set dst exp rest cnd =
+    let open Syntax in
+    match cnd with
+    | `AL ->
+      Theory.Var.fresh (Theory.Var.sort dst) >>= fun v ->
+      data @@ [v := exp] @ rest v @ CT.[set dst (var v)]
+    | cnd ->
+      data@@[dst := CT.ite ~?cnd exp (var dst)]
+
+
+  let branch cnd t f =
+    data@@[CT.branch (holds cnd) (seq t) (seq f)]
+
 end

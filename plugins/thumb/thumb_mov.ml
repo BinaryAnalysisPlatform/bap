@@ -17,8 +17,8 @@ module Make(CT : Theory.Core) = struct
 
   let borrow_from_sub ~rn ~rm = bit (rn < rm)
 
-  let movi8 rd x = data [
-      rd := const x;
+  let movi8 rd x = it_set rd (const x) @@ fun v -> [
+      v := const x;
       nf := if Int.(x lsr 7 = 1) then bit1 else bit0;
       zf := if Int.(x = 0) then bit1 else bit0;
     ]
@@ -29,123 +29,114 @@ module Make(CT : Theory.Core) = struct
       zf := is_zero (var rd);
     ]
 
-  let addi3 rd rn x = with_result rd @@ fun r -> [
-      r := var rn + const x;
+  let addi3 rd rn x = it_set rd (var rn + const x) @@ fun r -> [
       nf := msb (var r);
       zf := is_zero (var r);
       cf := carry_from_add (var r) (var rn);
       vf := overflow_from_add (var r) (var rn) (const x);
     ]
 
-  let addi8 rd x = with_result rd @@ fun r -> [
-      r := var rd + const x;
+  let addi8 rd x = it_set rd (var rd + const x) @@ fun r -> [
       nf := msb (var r);
       zf := is_zero (var r);
       cf := carry_from_add (var r) (var rd);
       vf := overflow_from_add (var r) (var rd) (const x);
     ]
 
-  let addrr rd rn rm = with_result rd @@ fun r -> [
-      r := var rn + var rm;
+  let addrr rd rn rm = it_set rd (var rn + var rm) @@ fun r -> [
       nf := msb (var r);
       zf := is_zero (var r);
       cf := carry_from_add (var r) (var rn);
       vf := overflow_from_add (var r) (var rn) (var rm);
     ]
 
-
-  let adcs rd rn rm = with_result rd @@ fun r -> [
-      r := var rn + var rm + CT.unsigned s32 (var zf);
+  let adcs rd rn rm =
+    it_set rd (var rn + var rm + CT.unsigned s32 (var cf)) @@ fun r -> [
       nf := msb (var r);
       zf := is_zero (var r);
       cf := carry_from_add (var r) (var rn);
       vf := overflow_from_add (var r) (var rn) (var rm);
     ]
 
-  let addspi off = data [
-      sp += const off;
-    ]
+  let addspi off =
+    it_set sp (var sp + const off) @@ fun _ -> []
 
-  let addrspi rd off = data [
-      rd := var sp + const off;
-    ]
+  let addrspi rd off =
+    it_set rd (var sp + const off) @@ fun _ -> []
 
-  let sub r x y = [
-    r := x - y;
+  let cmp x y r = [
     nf := msb (var r);
     zf := is_zero (var r);
     cf := lnot @@ borrow_from_sub x y;
     vf := overflow_from_sub (var r) x y;
-
   ]
 
-  let subi3 rd rn x = with_result rd @@ fun r ->
-    sub r (var rn) (const x)
 
-  let subi8 rd x = with_result rd @@ fun r ->
-    sub r (var rd) (const x)
+  let sub rd x y = it_set rd (x-y) (cmp x y)
 
-  let subrr rd rn rm = with_result rd @@ fun r ->
-    sub r (var rn) (var rm)
+  let subi3 rd rn x =
+    sub rd (var rn) (const x)
 
-  let subrspi rd off = data [
-      rd := var sp - const off;
-    ]
+  let subi8 rd x =
+    sub rd (var rd) (const x)
 
-  let subspi off = data [
-      sp -= const off;
-    ]
+  let subrr rd rn rm =
+    sub rd (var rn) (var rm)
+
+  let subrspi rd off =
+    rd <-? var sp - const off
+
+  let subspi off =
+    sp <-? var sp - const off
 
   let asri rd rm = function
-    | 0 -> data [
+    | 0 ->
+      it_set rd (CT.ite (CT.msb (var rm)) (const ~-1) (const 0))
+      @@ fun rd -> [
         cf := msb (var rm);
-        rd := CT.ite (CT.msb (var rm)) (const ~-1) (const 0);
         nf := msb (var rd);
         zf := is_zero (var rd);
       ]
-    | n -> data [
+    | n ->
+      it_set rd (var rm asr const n) @@ fun rd -> [
         cf := nth Int.(n-1) (var rm);
-        rd := var rm asr const n;
         nf := msb (var rd);
         zf := is_zero (var rd);
       ]
 
   let lsri rd rm = function
-    | 0 -> data [
+    | 0 ->
+      it_set rd (const 0) @@ fun _ -> [
         cf := msb (var rm);
-        rd := const 0;
         nf := bit0;
         zf := bit1;
       ]
-    | n -> data [
+    | n ->
+      it_set rd (var rm lsr const n) @@ fun rd -> [
         cf := nth Int.(n-1) (var rm);
-        rd := var rm lsr const n;
         nf := msb (var rd);
         zf := is_zero (var rd);
       ]
 
   let lsli rd rm = function
-    | 0 -> data [
-        rd := var rm;
+    | 0 -> it_set rd (var rm) @@ fun rd -> [
         nf := msb (var rd);
         zf := is_zero (var rd);
       ]
-    | n -> data [
+    | n -> it_set rd (var rm lsl const n) @@ fun rd -> [
         cf := nth Int.(32-n) (var rm);
-        rd := var rm lsl const n;
         nf := msb (var rd);
         zf := is_zero (var rd);
       ]
 
-  let lorr rd rm = data [
-      rd := var rd lor var rm;
+  let lorr rd rm = it_set rd (var rd lor var rm) @@ fun rd -> [
       nf := msb (var rd);
       zf := is_zero (var rd);
     ]
 
   let cmpi8 rd x = Theory.Var.fresh s32 >>= fun r ->
-    data @@ sub r (var rd) (const x)
+    data @@ cmp (var rd) (const x) r
 
   let cmpr rn rm = Theory.Var.fresh s32 >>= fun r ->
-    data @@ sub r (var rn) (var rm)
+    data @@ cmp (var rn) (var rm) r
 end
