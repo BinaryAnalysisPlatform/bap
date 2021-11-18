@@ -51,7 +51,7 @@ module Make(CT : Theory.Core) = struct
     ]
 
   let adcs rd rn rm =
-    it_set rd (var rn + var rm + CT.unsigned s32 (var zf)) @@ fun r -> [
+    it_set rd (var rn + var rm + CT.unsigned s32 (var cf)) @@ fun r -> [
       nf := msb (var r);
       zf := is_zero (var r);
       cf := carry_from_add (var r) (var rn);
