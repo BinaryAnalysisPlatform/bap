@@ -21,10 +21,11 @@
     (set$ rd r)))
 
 (defun add-with-carry/it-block (rd x y c cnd)
-  (let ((r (+ c y x)))
-    (when (is-unconditional cnd)
-      (set-flags r x y))
-    (set$ rd r)))
+  (when (condition-holds cnd)
+    (let ((r (+ c y x)))
+      (when (is-unconditional cnd)
+        (set-flags r x y))
+      (set$ rd r))))
 
 (defun logandnot (rd rn)
   (logand rd (lnot rn)))
