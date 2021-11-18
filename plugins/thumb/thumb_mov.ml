@@ -135,8 +135,8 @@ module Make(CT : Theory.Core) = struct
     ]
 
   let cmpi8 rd x = Theory.Var.fresh s32 >>= fun r ->
-    data @@ cmp (var rd) (const x) r
+    data @@ (r := var rd - const x) :: cmp (var rd) (const x) r
 
   let cmpr rn rm = Theory.Var.fresh s32 >>= fun r ->
-    data @@ cmp (var rn) (var rm) r
+    data @@ (r := var rn - var rm) :: cmp (var rn) (var rm) r
 end
