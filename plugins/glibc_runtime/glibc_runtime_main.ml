@@ -104,13 +104,16 @@ let reinsert_args_for_new_name ?(abi=ident) sub name =
     abi
   ]
 
-let rename_main abi prog = match detect_main_address prog with
-  | None -> prog
-  | Some addr -> Term.map sub_t prog ~f:(fun sub ->
-      match Term.get_attr sub address with
-      | Some a when Addr.equal addr a ->
-        reinsert_args_for_new_name ~abi sub "main"
-      | _ -> sub)
+let rename_main abi prog =
+  if is_sub_absent prog "main"
+  then match detect_main_address prog with
+    | None -> prog
+    | Some addr -> Term.map sub_t prog ~f:(fun sub ->
+        match Term.get_attr sub address with
+        | Some a when Addr.equal addr a ->
+          reinsert_args_for_new_name ~abi sub "main"
+        | _ -> sub)
+  else prog
 
 let find_abi_processor proj =
   let (let*) = Option.(>>=) in
@@ -181,15 +184,13 @@ module Main = struct
 end
 
 let fix_main proj =
-  let abi = Main.abi proj in
-  Project.map_program proj ~f:(rename_main abi)
+  Project.map_program proj ~f:(rename_main (Main.abi proj))
 
 let is_enabled ctxt proj =
   Extension.Configuration.get ctxt enable || is_glibc proj
 
 let recover_main ctxt proj =
-  if is_enabled ctxt proj &&
-     is_sub_absent (Project.program proj) "main"
+  if is_enabled ctxt proj
   then fix_main proj
   else proj
 
