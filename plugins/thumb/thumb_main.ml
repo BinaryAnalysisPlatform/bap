@@ -70,42 +70,42 @@ module Thumb(CT : Theory.Core) = struct
     let module T = Thumb_mov.Make(CT) in
     let open T in
     match opcode, (MC.Insn.ops insn : Op.t array) with
-    | `tADDi3, [| Reg rd; _; Reg rn; Imm x; _; _|] ->
-      addi3 (reg rd) (reg rn) (imm x)
-    | `tADDi8, [|Reg rd; _; _ ; Imm x; _; _|] ->
-      addi8 (reg rd) (imm x)
-    | `tADDrr, [|Reg rd; _; Reg rn; Reg rm; _; _|] ->
-      addrr (reg rd) (reg rn) (reg rm)
-    | `tADC, [|Reg rd; Reg _; Reg rn; Reg rm; _; _|] ->
-      adcs (reg rd) (reg rn) (reg rm)
-    | `tADDrSPi, [|Reg rd; _; Imm x; _; _;|] ->
-      addrspi (reg rd) (imm x * 4)
-    | `tADDspi, [|_; _; Imm x; _; _|] ->
-      addspi (imm x * 4)
-    | `tSUBi3, [| Reg rd; _; Reg rn; Imm x; _; _|] ->
-      subi3 (reg rd) (reg rn) (imm x)
-    | `tSUBi8, [|Reg rd; _; _ ; Imm x; _; _|] ->
-      subi8 (reg rd) (imm x)
-    | `tSUBrr, [|Reg rd; _; Reg rn; Reg rm; _; _|] ->
-      subrr (reg rd) (reg rn) (reg rm)
-    | `tSUBspi, [|_; _; Imm x; _; _|] ->
-      subspi (imm x * 4)
-    | `tMOVi8, [|Reg rd; _; Imm x; _; _|] ->
-      movi8 (reg rd) (imm x)
+    | `tADDi3, [| Reg rd; _; Reg rn; Imm x; Imm c; _|] ->
+      addi3 (reg rd) (reg rn) (imm x) (cnd c)
+    | `tADDi8, [|Reg rd; _; _ ; Imm x; Imm c; _|] ->
+      addi8 (reg rd) (imm x) (cnd c)
+    | `tADDrr, [|Reg rd; _; Reg rn; Reg rm; Imm c; _|] ->
+      addrr (reg rd) (reg rn) (reg rm) (cnd c)
+    | `tADC, [|Reg rd; Reg _; Reg rn; Reg rm; Imm c; _|] ->
+      adcs (reg rd) (reg rn) (reg rm) (cnd c)
+    | `tADDrSPi, [|Reg rd; _; Imm x; Imm c; _;|] ->
+      addrspi (reg rd) (imm x * 4) (cnd c)
+    | `tADDspi, [|_; _; Imm x; Imm c; _|] ->
+      addspi (imm x * 4) (cnd c)
+    | `tSUBi3, [| Reg rd; _; Reg rn; Imm x; Imm c; _|] ->
+      subi3 (reg rd) (reg rn) (imm x) (cnd c)
+    | `tSUBi8, [|Reg rd; _; _ ; Imm x; Imm c; _|] ->
+      subi8 (reg rd) (imm x) (cnd c)
+    | `tSUBrr, [|Reg rd; _; Reg rn; Reg rm; Imm c; _|] ->
+      subrr (reg rd) (reg rn) (reg rm) (cnd c)
+    | `tSUBspi, [|_; _; Imm x; Imm c; _|] ->
+      subspi (imm x * 4) (cnd c)
+    | `tMOVi8, [|Reg rd; _; Imm x; Imm c; _|] ->
+      movi8 (reg rd) (imm x) (cnd c)
     | `tMOVSr, [|Reg rd; Reg rn|] ->
       movsr (reg rd) (reg rn)
-    | `tASRri, [|Reg rd; _; Reg rm; Imm x; _; _|] ->
-      asri (reg rd) (reg rm) (imm x)
-    | `tLSRri, [|Reg rd; _; Reg rm; Imm x; _; _|] ->
-      lsri (reg rd) (reg rm) (imm x)
-    | `tLSLri, [|Reg rd; _; Reg rm; Imm x; _; _|] ->
-      lsli (reg rd) (reg rm) (imm x)
+    | `tASRri, [|Reg rd; _; Reg rm; Imm x; Imm c; _|] ->
+      asri (reg rd) (reg rm) (imm x) (cnd c)
+    | `tLSRri, [|Reg rd; _; Reg rm; Imm x; Imm c; _|] ->
+      lsri (reg rd) (reg rm) (imm x) (cnd c)
+    | `tLSLri, [|Reg rd; _; Reg rm; Imm x; Imm c; _|] ->
+      lsli (reg rd) (reg rm) (imm x) (cnd c)
     | `tCMPi8, [|Reg rn; Imm x;_;_|] ->
       cmpi8 (reg rn) (imm x)
     | `tCMPr, [|Reg rn; Reg rm;_;_|] ->
       cmpr (reg rn) (reg rm)
-    | `tORR, [|Reg rd; _; _; Reg rm; _; _|] ->
-      lorr (reg rd) (reg rm)
+    | `tORR, [|Reg rd; _; _; Reg rm; Imm c; _|] ->
+      lorr (reg rd) (reg rm) (cnd c)
     | insn ->
       info "unhandled move instruction: %a: %a" Bitvec.pp addr pp_insn insn;
       !!Insn.empty
@@ -115,53 +115,53 @@ module Thumb(CT : Theory.Core) = struct
     let module Mem = Thumb_mem.Make(CT) in
     let open Mem in
     match opcode, (MC.Insn.ops insn : Op.t array) with
-    | `tLDRi,   [|Reg rd; Reg rm; Imm i; _; _|]
-    | `tLDRspi, [|Reg rd; Reg rm; Imm i; _; _|] ->
-      ldri (reg rd) (reg rm) (imm i * 4)
-    | `tLDRr, [|Reg rd; Reg rm; Reg rn; _; _|] ->
-      ldrr (reg rd) (reg rm) (reg rn)
-    | `tLDRpci, [|Reg rd; Imm i; _; _|] ->
-      ldrpci (reg rd) W32.(pc + int 2) (imm i)
-    | `t2LDRpci, [|Reg rd; Imm i; _; _|] ->
-      ldrpci (reg rd) W32.(pc + int 4) (imm i)
-    | `tLDRBi, [|Reg rd; Reg rm; Imm i; _; _|] ->
-      ldrbi (reg rd) (reg rm) (imm i)
-    | `tLDRBr, [|Reg rd; Reg rm; Reg rn; _; _|] ->
-      ldrbr (reg rd) (reg rm) (reg rn)
-    | `tLDRSB, [|Reg rd; Reg rm; Reg rn; _; _|] ->
-      ldrsb (reg rd) (reg rm) (reg rn)
-    | `tLDRHi, [|Reg rd; Reg rm; Imm i; _; _|] ->
-      ldrhi (reg rd) (reg rm) (imm i * 2)
-    | `tLDRHr, [|Reg rd; Reg rm; Reg rn; _; _|] ->
-      ldrhr (reg rd) (reg rm) (reg rn)
-    | `tLDRSH, [|Reg rd; Reg rm; Reg rn; _; _|] ->
-      ldrsh (reg rd) (reg rm) (reg rn)
-    | `tSTRspi, [|Reg rd; Reg rm; Imm i; _; _|]
-    | `tSTRi,   [|Reg rd; Reg rm; Imm i; _; _|] ->
-      stri (reg rd) (reg rm) (imm i * 4)
-    | `tSTRr, [|Reg rd; Reg rm; Reg rn; _; _|] ->
-      strr (reg rd) (reg rm) (reg rn)
-    | `tSTRBi, [|Reg rd; Reg rm; Imm i;_;_|] ->
-      strbi (reg rd) (reg rm) (imm i)
-    | `tSTRBr, [|Reg rd; Reg rm; Reg rn; _; _|] ->
-      strbr (reg rd) (reg rm) (reg rn)
-    | `tSTRHi, [|Reg rd; Reg rm; Imm i; _; _|] ->
-      strhi (reg rd) (reg rm) (imm i * 2)
-    | `tSTRHr, [|Reg rd; Reg rm; Reg rn; _; _|] ->
-      strhr (reg rd) (reg rm) (reg rn)
+    | `tLDRi,   [|Reg rd; Reg rm; Imm i; Imm c; _|]
+    | `tLDRspi, [|Reg rd; Reg rm; Imm i; Imm c; _|] ->
+      ldri (reg rd) (reg rm) (imm i * 4) (cnd c)
+    | `tLDRr, [|Reg rd; Reg rm; Reg rn; Imm c; _|] ->
+      ldrr (reg rd) (reg rm) (reg rn) (cnd c)
+    | `tLDRpci, [|Reg rd; Imm i; Imm c; _|] ->
+      ldrpci (reg rd) W32.(pc + int 2) (imm i) (cnd c)
+    | `t2LDRpci, [|Reg rd; Imm i; Imm c; _|] ->
+      ldrpci (reg rd) W32.(pc + int 4) (imm i) (cnd c)
+    | `tLDRBi, [|Reg rd; Reg rm; Imm i; Imm c; _|] ->
+      ldrbi (reg rd) (reg rm) (imm i) (cnd c)
+    | `tLDRBr, [|Reg rd; Reg rm; Reg rn; Imm c; _|] ->
+      ldrbr (reg rd) (reg rm) (reg rn) (cnd c)
+    | `tLDRSB, [|Reg rd; Reg rm; Reg rn; Imm c; _|] ->
+      ldrsb (reg rd) (reg rm) (reg rn) (cnd c)
+    | `tLDRHi, [|Reg rd; Reg rm; Imm i; Imm c; _|] ->
+      ldrhi (reg rd) (reg rm) (imm i * 2) (cnd c)
+    | `tLDRHr, [|Reg rd; Reg rm; Reg rn; Imm c; _|] ->
+      ldrhr (reg rd) (reg rm) (reg rn) (cnd c)
+    | `tLDRSH, [|Reg rd; Reg rm; Reg rn; Imm c; _|] ->
+      ldrsh (reg rd) (reg rm) (reg rn) (cnd c)
+    | `tSTRspi, [|Reg rd; Reg rm; Imm i; Imm c; _|]
+    | `tSTRi,   [|Reg rd; Reg rm; Imm i; Imm c; _|] ->
+      stri (reg rd) (reg rm) (imm i * 4) (cnd c)
+    | `tSTRr, [|Reg rd; Reg rm; Reg rn; Imm c; _|] ->
+      strr (reg rd) (reg rm) (reg rn) (cnd c)
+    | `tSTRBi, [|Reg rd; Reg rm; Imm i; Imm c;_|] ->
+      strbi (reg rd) (reg rm) (imm i) (cnd c)
+    | `tSTRBr, [|Reg rd; Reg rm; Reg rn; Imm c; _|] ->
+      strbr (reg rd) (reg rm) (reg rn) (cnd c)
+    | `tSTRHi, [|Reg rd; Reg rm; Imm i; Imm c; _|] ->
+      strhi (reg rd) (reg rm) (imm i * 2) (cnd c)
+    | `tSTRHr, [|Reg rd; Reg rm; Reg rn; Imm c; _|] ->
+      strhr (reg rd) (reg rm) (reg rn) (cnd c)
     | #opmem_multi as op,ops ->
       begin match op, Array.to_list ops with
-        | `tSTMIA_UPD, Reg rd :: _ :: _ :: ar ->
-          stm (reg rd) (regs ar)
-        | `tLDMIA, Reg rd :: _ :: _ :: ar ->
-          ldm (reg rd) (regs ar)
-        | `tPUSH, _ :: _ :: ar ->
-          push (regs ar)
-        | `tPOP, _ :: _ :: ar ->
+        | `tSTMIA_UPD, Reg rd :: Imm c :: _ :: ar ->
+          stm (reg rd) (regs ar) (cnd c)
+        | `tLDMIA, Reg rd :: Imm c :: _ :: ar ->
+          ldm (reg rd) (regs ar) (cnd c)
+        | `tPUSH, Imm c :: _ :: ar ->
+          push (regs ar) (cnd c)
+        | `tPOP, Imm c :: _ :: ar ->
           let regs = regs ar in
           if has_pc regs
-          then popret (remove_pc regs)
-          else pop regs
+          then popret (remove_pc regs) (cnd c)
+          else pop regs (cnd c)
         | op,_ ->
           info "unhandled multi-reg instruction: %a" pp_insn (op,ops);
           !!Insn.empty
@@ -173,18 +173,16 @@ module Thumb(CT : Theory.Core) = struct
   let lift_bits opcode insn =
     let open Thumb_bits.Make(CT) in
     match opcode, (MC.Insn.ops insn : Op.t array) with
-    | `tSXTB, [|Reg rd; Reg rm; _; _|] -> sx (reg rd) (reg rm)
-    | `tSXTH, [|Reg rd; Reg rm; _; _|] -> sx (reg rd) (reg rm)
-    | `tUXTB, [|Reg rd; Reg rm; _; _|] -> ux (reg rd) (reg rm)
-    | `tUXTH, [|Reg rd; Reg rm; _; _|] -> ux (reg rd) (reg rm)
+    | `tSXTB, [|Reg rd; Reg rm; Imm c; _|] -> sx (reg rd) (reg rm) (cnd c)
+    | `tSXTH, [|Reg rd; Reg rm; Imm c; _|] -> sx (reg rd) (reg rm) (cnd c)
+    | `tUXTB, [|Reg rd; Reg rm; Imm c; _|] -> ux (reg rd) (reg rm) (cnd c)
+    | `tUXTH, [|Reg rd; Reg rm; Imm c; _|] -> ux (reg rd) (reg rm) (cnd c)
     | insn ->
       info "unhandled bit-wise instruction: %a" pp_insn insn;
       !!Insn.empty
 
   let unpredictable =
     Theory.Label.for_name "arm:unpredictable" >>= CT.goto
-
-
 
   (* these are not entirely complete *)
   let lift_branch pc opcode insn =

@@ -1,0 +1,16 @@
+Flag patterns
+  Description: Build the byte patterns plugin
+  Default: false
+
+Library patterns_plugin
+  Build$: flag(everything) || flag(patterns)
+  Path: plugins/patterns
+  FindlibName: bap-plugin-patterns
+  CompiledObject: best
+  BuildDepends: core_kernel, ppx_bap, bap-knowledge, bap-core-theory, bap-main, bap,
+                bitvec, bitvec-order, bitvec-binprot, bitvec-sexp, bap-relation,
+                zarith, xmlm, uri, bap-primus, fileutils
+
+  InternalModules: Patterns_main
+  XMETADescription: implements the byte patterns analysis plugin
+  DataFiles:        semantics/*.lisp ($datadir/bap/primus/semantics)

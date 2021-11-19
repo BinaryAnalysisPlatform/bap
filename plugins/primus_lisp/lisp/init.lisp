@@ -12,14 +12,16 @@
   (:documentation "program-specific definitions (program global variables)"))
 
 (defpackage posix
-  (:documentation "posix runtime defintions")
+  (:documentation "posix runtime definitions")
   (:use core primus program target))
 
 (defpackage user
   (:documentation "the default user-space package")
   (:use core primus target program posix))
 
-
+(defpackage bap
+  (:documentation "the bap framework package")
+  (:use core target program posix))
 
 (in-package core)
 
