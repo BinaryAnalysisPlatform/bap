@@ -98,6 +98,21 @@
   (when (condition-holds pre)
     (t2set rt (load-word (+ rn (lshift rm imm))))))
 
+(defun t2LDRSBi12 (rt rn imm pre _)
+  "ldrsb.w rt, [rn, imm]"
+  (when (condition-holds pre)
+    (t2set rt (cast-signed 32 (load-bits 8 (+ rn imm))))))
+
+(defun t2LDRSHi12 (rt rn imm pre _)
+  "ldrsh.w rt, [rn, imm]"
+  (when (condition-holds pre)
+    (t2set rt (cast-signed 32 (load-bits 16 (+ rn imm))))))
+
+(defun t2LDRHi12 (rt rn imm pre _)
+  "ldrh.w rt, [rn, imm]"
+  (when (condition-holds pre)
+    (t2set rt (cast-unsigned 32 (load-bits 16 (+ rn imm))))))
+
 (defun tMOVr (rt rn pre _)
   (when (condition-holds pre)
     (t2set rt rn)))
