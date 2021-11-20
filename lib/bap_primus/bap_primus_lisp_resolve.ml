@@ -141,14 +141,29 @@ let locs prog defs =
   List.map defs ~f:(fun def ->
       Source.loc src def.id) |> Loc.Set.of_list
 
-let one = function
-  | [x] -> Some x
-  | _ -> None
+type _ arity =
+  | One : ('a list -> 'a option) arity
+  | Many : ('a list -> 'a list option) arity
 
-let many xs = Some xs
+let apply : type r. r arity -> r = function
+  | Many -> Option.some
+  | One -> function
+    | [x] -> Some x
+    | _ -> None
+
+let is_unique : type r. r arity -> bool = function
+  | One -> true
+  | Many -> false
+
+let one = One
+let many = Many
+
 
 let run choose overload prog item name =
   Program.in_package (KB.Name.package name) prog @@ fun prog ->
+  let stage3,stage4 = if is_unique choose
+    then stage3,stage4
+    else ident,ident in
   let name = KB.Name.unqualified name in
   let ctxts = Program.context prog in
   let defs = Program.get ~name prog item in
@@ -157,7 +172,7 @@ let run choose overload prog item name =
   let s3 = stage3 s2 in
   let s4 = stage4 s3 in
   let s5 = overload s4 in
-  match choose s5 with
+  match apply choose s5 with
   | Some f -> Some (Ok f)
   | None -> match s1 with
     | [] -> None
