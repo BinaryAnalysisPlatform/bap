@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 open Regular.Std
 open Bap.Std
 
@@ -14,7 +15,7 @@ let width = 32
 
 (** Modified Immediate Constants  *)
 module MIC : sig
-  val decode : exp -> exp
+  val decode : Theory.language -> exp -> exp
 end = struct
   let ror value bits =
     let p1 = Word.(value lsr bits) in
@@ -31,12 +32,15 @@ end = struct
       let value = Word.extract_exn ~hi:31 value in
       ror value Word.(shift + shift)
 
-  let decode = function
-    | Bil.Int x -> Bil.Int (mic x)
+  let decode encoding = function
+    | Bil.Int x as v ->
+      if Theory.Language.equal encoding Arm_target.llvm_t32 then v
+      else Bil.Int (mic x)
     | other -> other
 end
 
-let lift ?dest src1 ?src2 (itype ) ?sreg ?simm raw ~wflag cond =
+let lift ?(encoding=Theory.Language.unknown)
+    ?dest src1 ?src2 (itype ) ?sreg ?simm raw ~wflag cond =
   let dest : var = match dest with
     | None     -> tmp reg32_t
     | Some (`Reg reg) -> Env.of_reg reg
@@ -71,7 +75,7 @@ let lift ?dest src1 ?src2 (itype ) ?sreg ?simm raw ~wflag cond =
       let shifted, carry = Shift.lift_i
           ~src:Bil.(var unshifted) simm reg32_t in
       s1, shifted, [Bil.move unshifted s2], carry
-    | _ -> s1, (MIC.decode s2), [], Bil.var Env.cf in
+    | _ -> s1, (MIC.decode encoding s2), [], Bil.var Env.cf in
 
   let stmts, flags = match itype, src1, src2 with
     | `MOV, `Imm i64, _
