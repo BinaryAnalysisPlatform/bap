@@ -1,4 +1,5 @@
 open Core_kernel
+open Bap_core_theory
 open Or_error
 open Bap.Std
 
@@ -26,197 +27,197 @@ let int32 x = Bil.int (word x)
 let string_of_ops ops =
   Format.asprintf "%a" Sexp.pp (sexp_of_array sexp_of_op ops)
 
-let lift_move mem ops (insn : move_insn) : stmt list =
+let lift_move ~encoding mem ops (insn : move_insn) : stmt list =
   let open Mov in
   match insn, ops with
   | `MOVi,  [|dest; src; cond; _; wflag|]
   | `MOVr,  [|dest; src; cond; _; wflag|] ->
-    lift ~dest src `MOV mem cond ~wflag
+    lift ~encoding ~dest src `MOV mem cond ~wflag
   | `MOVsr, [|dest; src; sreg; simm; cond; _; wflag|] ->
-    lift ~dest src `MOV mem cond ~wflag ~sreg ~simm
+    lift ~encoding ~dest src `MOV mem cond ~wflag ~sreg ~simm
   | `MOVsi, [|dest; src; shift_imm; cond; _; wflag|] ->
-    lift ~dest src `MOV ~simm:shift_imm mem cond ~wflag
+    lift ~encoding ~dest src `MOV ~simm:shift_imm mem cond ~wflag
 
   | `MOVPCLR, [|cond; wflag|] ->
-    lift ~dest:(`Reg `PC) (`Reg `LR) `MOV mem cond ~wflag
+    lift ~encoding ~dest:(`Reg `PC) (`Reg `LR) `MOV mem cond ~wflag
 
   | `MVNi, [|dest; src; cond; _; wflag|]
   | `MVNr, [|dest; src; cond; _; wflag|] ->
-    lift ~dest src `MVN mem cond ~wflag
+    lift ~encoding ~dest src `MVN mem cond ~wflag
 
   | `MVNsr, [|dest; src; shift_reg; shift_imm; cond; _; wflag|] ->
-    lift ~dest src `MVN ~sreg:shift_reg ~simm:shift_imm
+    lift ~encoding ~dest src `MVN ~sreg:shift_reg ~simm:shift_imm
       mem cond ~wflag
 
   | `MVNsi, [|dest; src; shift_imm; cond; _; wflag|] ->
-    lift ~dest src `MVN ~simm:shift_imm mem cond ~wflag
+    lift ~encoding ~dest src `MVN ~simm:shift_imm mem cond ~wflag
 
   | `ANDri, [|dest; src1; src2; cond; _; wflag|]
   | `ANDrr, [|dest; src1; src2; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `AND mem cond ~wflag
+    lift ~encoding ~dest src1 ~src2 `AND mem cond ~wflag
 
   | `ANDrsr, [|dest; src1; src2; shift_reg; shift_imm; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `AND ~sreg:shift_reg ~simm:shift_imm
+    lift ~encoding ~dest src1 ~src2 `AND ~sreg:shift_reg ~simm:shift_imm
       mem cond ~wflag
 
   | `ANDrsi, [|dest; src1; src2; shift_imm; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `AND ~simm:shift_imm
+    lift ~encoding ~dest src1 ~src2 `AND ~simm:shift_imm
       mem cond ~wflag
 
   | `BICri, [|dest; src1; src2; cond; _; wflag|]
   | `BICrr, [|dest; src1; src2; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `BIC mem cond ~wflag
+    lift ~encoding ~dest src1 ~src2 `BIC mem cond ~wflag
 
   | `BICrsr, [|dest; src1; src2; shift_reg; shift_imm; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `BIC ~sreg:shift_reg ~simm:shift_imm
+    lift ~encoding ~dest src1 ~src2 `BIC ~sreg:shift_reg ~simm:shift_imm
       mem cond ~wflag
 
   | `BICrsi, [|dest; src1; src2; shift_imm; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `BIC ~simm:shift_imm
+    lift ~encoding ~dest src1 ~src2 `BIC ~simm:shift_imm
       mem cond ~wflag
 
   | `EORri, [|dest; src1; src2; cond; _; wflag|]
   | `EORrr, [|dest; src1; src2; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `EOR mem cond ~wflag
+    lift ~encoding ~dest src1 ~src2 `EOR mem cond ~wflag
 
   | `EORrsr, [|dest; src1; src2; shift_reg; shift_imm; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `EOR ~sreg:shift_reg ~simm:shift_imm
+    lift ~encoding ~dest src1 ~src2 `EOR ~sreg:shift_reg ~simm:shift_imm
       mem cond ~wflag
 
   | `EORrsi, [|dest; src1; src2; shift_imm; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `EOR ~simm:shift_imm
+    lift ~encoding ~dest src1 ~src2 `EOR ~simm:shift_imm
       mem cond ~wflag
 
   | `ORRri, [|dest; src1; src2; cond; _; wflag|]
   | `ORRrr, [|dest; src1; src2; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `ORR mem cond ~wflag
+    lift ~encoding ~dest src1 ~src2 `ORR mem cond ~wflag
 
   | `ORRrsr, [|dest; src1; src2; shift_reg; shift_imm; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `ORR ~sreg:shift_reg ~simm:shift_imm
+    lift ~encoding ~dest src1 ~src2 `ORR ~sreg:shift_reg ~simm:shift_imm
       mem cond ~wflag
 
   | `ORRrsi, [|dest; src1; src2; shift_imm; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `ORR ~simm:shift_imm
+    lift ~encoding ~dest src1 ~src2 `ORR ~simm:shift_imm
       mem cond ~wflag
 
   | `TEQri, [|src1; src2; cond; _|]
   | `TEQrr, [|src1; src2; cond; _|] ->
-    lift src1 ~src2 `EOR mem cond ~wflag:(`Reg `CPSR)
+    lift ~encoding src1 ~src2 `EOR mem cond ~wflag:(`Reg `CPSR)
 
   | `TEQrsr, [|src1; src2; shift_reg; shift_imm; cond; _|] ->
-    lift src1 ~src2 `EOR ~sreg:shift_reg ~simm:shift_imm
+    lift ~encoding src1 ~src2 `EOR ~sreg:shift_reg ~simm:shift_imm
       mem cond ~wflag:(`Reg `CPSR)
 
   | `TEQrsi, [|_dest; src1; src2; shift_imm; cond; _|] ->
-    lift src1 ~src2 `EOR ~simm:shift_imm
+    lift ~encoding src1 ~src2 `EOR ~simm:shift_imm
       mem cond ~wflag:(`Reg `CPSR)
 
   | `TSTri, [|src1; src2; cond; _|]
   | `TSTrr, [|src1; src2; cond; _|] ->
-    lift src1 ~src2 `AND mem cond ~wflag:(`Reg `CPSR)
+    lift ~encoding src1 ~src2 `AND mem cond ~wflag:(`Reg `CPSR)
 
   | `TSTrsr, [|src1; src2; shift_reg; shift_imm; cond; _|] ->
-    lift src1 ~src2 `AND ~sreg:shift_reg ~simm:shift_imm
+    lift ~encoding src1 ~src2 `AND ~sreg:shift_reg ~simm:shift_imm
       mem cond ~wflag:(`Reg `CPSR)
 
   | `TSTrsi, [|src1; src2; shift_imm; cond; _|] ->
-    lift src1 ~src2 `AND ~simm:shift_imm
+    lift ~encoding src1 ~src2 `AND ~simm:shift_imm
       mem cond ~wflag:(`Reg `CPSR)
 
   | `ADDri, [|dest; src1; src2; cond; _; wflag|]
   | `ADDrr, [|dest; src1; src2; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `ADD mem cond ~wflag
+    lift ~encoding ~dest src1 ~src2 `ADD mem cond ~wflag
 
   | `ADDrsr, [|dest; src1; src2; shift_reg; shift_imm; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `ADD ~sreg:shift_reg ~simm:shift_imm
+    lift ~encoding ~dest src1 ~src2 `ADD ~sreg:shift_reg ~simm:shift_imm
       mem cond ~wflag
 
   | `ADDrsi, [|dest; src1; src2; shift_imm; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `ADD ~simm:shift_imm
+    lift ~encoding ~dest src1 ~src2 `ADD ~simm:shift_imm
       mem cond ~wflag
 
   | `SUBri, [|dest; src1; src2; cond; _; wflag|]
   | `SUBrr, [|dest; src1; src2; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `SUB mem cond ~wflag
+    lift ~encoding ~dest src1 ~src2 `SUB mem cond ~wflag
 
   | `SUBrsr, [|dest; src1; src2; shift_reg; shift_imm; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `SUB ~sreg:shift_reg ~simm:shift_imm
+    lift ~encoding ~dest src1 ~src2 `SUB ~sreg:shift_reg ~simm:shift_imm
       mem cond ~wflag
 
   | `SUBrsi, [|dest; src1; src2; shift_imm; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `SUB ~simm:shift_imm
+    lift ~encoding ~dest src1 ~src2 `SUB ~simm:shift_imm
       mem cond ~wflag
 
   | `ADCri, [|dest; src1; src2; cond; _; wflag|]
   | `ADCrr, [|dest; src1; src2; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `ADC mem cond ~wflag
+    lift ~encoding ~dest src1 ~src2 `ADC mem cond ~wflag
 
   | `ADCrsr, [|dest; src1; src2; shift_reg; shift_imm; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `ADC ~sreg:shift_reg ~simm:shift_imm
+    lift ~encoding ~dest src1 ~src2 `ADC ~sreg:shift_reg ~simm:shift_imm
       mem cond ~wflag
 
   | `ADCrsi, [|dest; src1; src2; shift_imm; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `ADC ~simm:shift_imm
+    lift ~encoding ~dest src1 ~src2 `ADC ~simm:shift_imm
       mem cond ~wflag
 
   | `SBCri, [|dest; src1; src2; cond; _; wflag|]
   | `SBCrr, [|dest; src1; src2; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `SBC mem cond ~wflag
+    lift ~encoding ~dest src1 ~src2 `SBC mem cond ~wflag
 
   | `SBCrsr, [|dest; src1; src2; shift_reg; shift_imm; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `SBC ~sreg:shift_reg ~simm:shift_imm
+    lift ~encoding ~dest src1 ~src2 `SBC ~sreg:shift_reg ~simm:shift_imm
       mem cond ~wflag
 
   | `SBCrsi, [|dest; src1; src2; shift_imm; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `SBC ~simm:shift_imm
+    lift ~encoding ~dest src1 ~src2 `SBC ~simm:shift_imm
       mem cond ~wflag
 
   | `RSBri, [|dest; src1; src2; cond; _; wflag|]
   | `RSBrr, [|dest; src1; src2; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `RSB mem cond ~wflag
+    lift ~encoding ~dest src1 ~src2 `RSB mem cond ~wflag
 
   | `RSBrsr, [|dest; src1; src2; shift_reg; shift_imm; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `RSB ~sreg:shift_reg ~simm:shift_imm
+    lift ~encoding ~dest src1 ~src2 `RSB ~sreg:shift_reg ~simm:shift_imm
       mem cond ~wflag
 
   | `RSBrsi, [|dest; src1; src2; shift_imm; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `RSB ~simm:shift_imm
+    lift ~encoding ~dest src1 ~src2 `RSB ~simm:shift_imm
       mem cond ~wflag
 
   | `RSCri, [|dest; src1; src2; cond; _; wflag|]
   | `RSCrr, [|dest; src1; src2; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `RSC mem cond ~wflag
+    lift ~encoding ~dest src1 ~src2 `RSC mem cond ~wflag
 
   | `RSCrsr, [|dest; src1; src2; shift_reg; shift_imm; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `RSC ~sreg:shift_reg ~simm:shift_imm
+    lift ~encoding ~dest src1 ~src2 `RSC ~sreg:shift_reg ~simm:shift_imm
       mem cond ~wflag
 
   | `RSCrsi, [|dest; src1; src2; shift_imm; cond; _; wflag|] ->
-    lift ~dest src1 ~src2 `RSC ~simm:shift_imm
+    lift ~encoding ~dest src1 ~src2 `RSC ~simm:shift_imm
       mem cond ~wflag
 
   | `CMPri, [|src1; src2; cond; _|]
   | `CMPrr, [|src1; src2; cond; _|] ->
-    lift src1 ~src2 `SUB mem cond ~wflag:(`Reg `CPSR)
+    lift ~encoding src1 ~src2 `SUB mem cond ~wflag:(`Reg `CPSR)
 
   | `CMPrsr, [|src1; src2; shift_reg; shift_imm; cond; _|] ->
-    lift src1 ~src2 `SUB ~sreg:shift_reg ~simm:shift_imm
+    lift ~encoding src1 ~src2 `SUB ~sreg:shift_reg ~simm:shift_imm
       mem cond ~wflag:(`Reg `CPSR)
 
   | `CMPrsi, [|src1; src2; shift_imm; cond; _|] ->
-    lift src1 ~src2 `SUB ~simm:shift_imm
+    lift ~encoding src1 ~src2 `SUB ~simm:shift_imm
       mem cond ~wflag:(`Reg `CPSR)
 
   | `CMNri, [|src1; src2; cond; _|]
   | `CMNzrr, [|src1; src2; cond; _|] ->
-    lift src1 ~src2 `ADD mem cond ~wflag:(`Reg `CPSR)
+    lift ~encoding src1 ~src2 `ADD mem cond ~wflag:(`Reg `CPSR)
 
   | `CMNzrsr, [|src1; src2; shift_reg; shift_imm; cond; _|] ->
-    lift src1 ~src2 `ADD ~sreg:shift_reg ~simm:shift_imm
+    lift ~encoding src1 ~src2 `ADD ~sreg:shift_reg ~simm:shift_imm
       mem cond ~wflag:(`Reg `CPSR)
 
   | `CMNzrsi, [|src1; src2; shift_imm; cond; _|] ->
-    lift src1 ~src2 `ADD ~simm:shift_imm
+    lift ~encoding src1 ~src2 `ADD ~simm:shift_imm
       mem cond ~wflag:(`Reg `CPSR)
 
   (** Special Data Instructions *)
@@ -1108,15 +1109,16 @@ let resolve_pc mem = Stmt.map (object
 
 let insn_exn mem insn : bil Or_error.t =
   let name = Basic.Insn.name insn in
+  let encoding = Theory.Language.read ~package:"bap" (Basic.Insn.encoding insn) in
   Memory.(Addr.Int_err.(!$(max_addr mem) - !$(min_addr mem)))
-  >>= Word.to_int >>= fun s -> Size.of_int ((s+1) * 8) >>= fun size ->
-  Memory.get ~scale:(size ) mem >>= fun word ->
+  >>= Word.to_int >>= fun s -> Size.of_int ((s+1) * 8) >>= fun scale ->
+  Memory.get ~scale mem >>= fun word ->
   match Arm_insn.of_basic insn with
   | None -> errorf "unsupported opcode: %s" name
   | Some arm_insn -> match arm_ops (Basic.Insn.ops insn) with
     | Error _ as fail -> fail
     | Ok ops -> Result.return @@ match arm_insn with
-      | #move_insn as op -> lift_move word ops op
+      | #move_insn as op -> lift_move ~encoding word ops op
       | #bits_insn as op -> lift_bits word ops op
       | #mult_insn as op -> lift_mult ops op
       | #mem_insn  as op -> lift_mem  ops op
