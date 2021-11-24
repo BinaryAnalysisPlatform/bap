@@ -3,6 +3,8 @@ open Bap_types.Std
 open Bap_core_theory
 open Bap_image_std
 
+include Bap_main.Loggers()
+
 open KB.Syntax
 
 module Dis = Bap_disasm_basic
@@ -422,6 +424,7 @@ let disassemble ~code ~data ~funs debt base : Machine.state KB.t =
       else f state current mem
     else f state encoding mem
   and skip state addr f =
+    info "encoding for %a is unknown, skipping" Addr.pp addr;
     Machine.view (Machine.skipped state addr) base
       ~empty:KB.return
       ~ready:(fun state current mem ->
@@ -446,17 +449,25 @@ let disassemble ~code ~data ~funs debt base : Machine.state KB.t =
             ~return:KB.return ~init:(Machine.switch init encoding)
             ~stopped:(fun d s -> step d (Machine.stopped s encoding))
             ~hit:(fun d mem insn s ->
-                new_insn mem insn >>= fun label ->
-                let encoding = Machine.encoding s in
-                KB.provide Theory.Label.encoding label encoding.coding >>= fun () ->
-                collect_dests encoding label >>= fun dests ->
-                if Set.is_empty dests.resolved &&
-                   not dests.indirect then
-                  step d @@ Machine.moved s encoding mem
-                else
-                  delay mem insn >>= fun delay ->
-                  step d @@ Machine.jumped s encoding mem dests delay)
-            ~invalid:(fun d _ s ->
+                KB.catch begin
+                  new_insn mem insn >>= fun label ->
+                  let encoding = Machine.encoding s in
+                  KB.provide Theory.Label.encoding label encoding.coding >>= fun () ->
+                  collect_dests encoding label >>= fun dests ->
+                  if Set.is_empty dests.resolved &&
+                     not dests.indirect then
+                    step d @@ Machine.moved s encoding mem
+                  else
+                    delay mem insn >>= fun delay ->
+                    step d @@ Machine.jumped s encoding mem dests
+                      delay
+                end @@ fun problem ->
+                warning "rejecting %a due to a conflict %a"
+                  Memory.pp mem KB.Conflict.pp problem;
+                step d (Machine.failed s encoding s.addr))
+            ~invalid:(fun d mem s ->
+                info "rejecting %a as an invalid instruction"
+                  Memory.pp mem;
                 step d (Machine.failed s encoding s.addr)))
     ~empty:KB.return
 

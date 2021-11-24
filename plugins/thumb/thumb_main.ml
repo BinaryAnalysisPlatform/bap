@@ -106,7 +106,7 @@ module Thumb(CT : Theory.Core) = struct
       cmpr (reg rn) (reg rm)
     | `tORR, [|Reg rd; _; _; Reg rm; Imm c; _|] ->
       lorr (reg rd) (reg rm) (cnd c)
-    | insn ->
+    | #opmov,_ as insn ->
       info "unhandled move instruction: %a: %a" Bitvec.pp addr pp_insn insn;
       !!Insn.empty
 
@@ -151,7 +151,8 @@ module Thumb(CT : Theory.Core) = struct
       strhr (reg rd) (reg rm) (reg rn) (cnd c)
     | #opmem_multi as op,ops ->
       begin match op, Array.to_list ops with
-        | `tSTMIA_UPD, Reg rd :: Imm c :: _ :: ar ->
+        | `tSTMIA_UPD, Reg rd :: Imm c :: _ :: ar
+        | `tSTMIA_UPD, Reg rd :: Reg _ :: Imm c :: _ :: ar ->
           stm (reg rd) (regs ar) (cnd c)
         | `tLDMIA, Reg rd :: Imm c :: _ :: ar ->
           ldm (reg rd) (regs ar) (cnd c)
@@ -166,7 +167,7 @@ module Thumb(CT : Theory.Core) = struct
           info "unhandled multi-reg instruction: %a" pp_insn (op,ops);
           !!Insn.empty
       end
-    | insn ->
+    | #opmem,_ as insn ->
       info "unhandled memory operation: %a" pp_insn insn;
       !!Insn.empty
 
@@ -177,7 +178,7 @@ module Thumb(CT : Theory.Core) = struct
     | `tSXTH, [|Reg rd; Reg rm; Imm c; _|] -> sx (reg rd) (reg rm) (cnd c)
     | `tUXTB, [|Reg rd; Reg rm; Imm c; _|] -> ux (reg rd) (reg rm) (cnd c)
     | `tUXTH, [|Reg rd; Reg rm; Imm c; _|] -> ux (reg rd) (reg rm) (cnd c)
-    | insn ->
+    | #opbit,_ as insn ->
       info "unhandled bit-wise instruction: %a" pp_insn insn;
       !!Insn.empty
 
@@ -192,7 +193,8 @@ module Thumb(CT : Theory.Core) = struct
     | `tB, [|Imm dst; _; _|] -> b pc (imm dst)
     | `tBcc, [|Imm dst; Imm c; _|] -> bcc pc (cnd c) (imm dst)
     | `tBL,   [|_; _; Imm dst; _|]
-    | `tBLXi, [|_; _; Imm dst|] -> bli pc (imm dst)
+    | `tBLXi, ([|_; _; Imm dst|] | [|_; _; Imm dst; _|] )  ->
+      bli pc (imm dst)
     | `tBLXr, [|_; _; Reg dst|]when is_pc (reg dst) ->
       (* blx pc is unpredictable in all versions of ARM *)
       Thumb.ctrl unpredictable
@@ -201,7 +203,7 @@ module Thumb(CT : Theory.Core) = struct
     | `tBX, [|Reg dst;_;_|] -> bxr (reg dst)
     | `tCBNZ, [|Reg rn; Imm c|] -> cbnz pc (reg rn) (imm c)
     | `tCBZ, [|Reg rn; Imm c|] -> cbz pc (reg rn) (imm c)
-    | insn ->
+    | #opbranch,_ as insn ->
       info "unhandled branch: %a" pp_insn insn;
       !!Insn.empty
 
@@ -216,22 +218,6 @@ end
 module Main = struct
   open Bap.Std
 
-  let cmnz_opcode = Word.of_int 10 0x10b
-
-  (* this is a temporary fix since bap-mc disassembler couldn't recognize CMN *)
-  let fix_cmnz insn mem = match insn with
-    | Some insn -> Some insn
-    | None ->
-      let opcode =
-        let open Or_error.Monad_infix in
-        let scale = Size.of_int_exn 16 in
-        Memory.get ~scale mem >>=
-        Word.extract ~hi:15 ~lo:6 in
-      match opcode with
-      | Ok opcode when Word.equal opcode cmnz_opcode ->
-        Some `tCMNz
-      | _ -> None
-
   let load () =
     KB.promise Theory.Semantics.slot @@ fun label ->
     KB.collect Theory.Label.encoding label >>= fun encoding ->
@@ -242,13 +228,7 @@ module Main = struct
       let module Thumb = Thumb(Core) in
       let addr = Word.to_bitvec@@Memory.min_addr mem in
       match decode_opcode (MC.Insn.name insn) with
-      | None ->
-        info "failed to decode MC instruction, unknown opcode: \
-              %a: %s => %a"
-          Memory.pp mem
-          (MC.Insn.asm insn)
-          Sexp.pp_hum (MC.Insn.sexp_of_t insn);
-        !!Insn.empty
+      | None -> !!Insn.empty
       | Some opcode ->
         try
           Thumb.lift_insn addr opcode insn >>| fun sema ->
