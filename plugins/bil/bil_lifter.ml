@@ -274,10 +274,8 @@ let lift ~enable_intrinsics:{for_all; for_unk; for_special; predicates}
   else
     let module Target = (val target_of_arch arch) in
     match Target.lift mem insn with
-    | Error _ as err ->
-      if for_unk
-      then Ok (create_intrinsic target mem insn)
-      else err
+    | Error _ as err -> err
+    | Ok [] when for_unk -> Ok (create_intrinsic target mem insn)
     | Ok bil ->
       if for_special && has_special bil
       then Ok (create_intrinsic target mem insn)
