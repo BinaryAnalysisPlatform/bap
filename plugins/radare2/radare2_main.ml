@@ -34,7 +34,6 @@ let provide_roots file funcs =
           Bitvec.((addr - bias) mod modulus bits) in
         Option.some_if (Hashtbl.mem funcs addr) true
       else None in
-  promise_property Theory.Label.is_valid;
   promise_property Theory.Label.is_subroutine
 
 let strip str =

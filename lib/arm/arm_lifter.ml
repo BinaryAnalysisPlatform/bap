@@ -357,13 +357,15 @@ let lift_bits mem ops (insn : bits_insn ) =
 let lift_mult ops insn =
   let open Mul in
   match insn,ops with
-  | `MUL, [|`Reg dest; src1; src2; cond; _rflag; wflag|] ->
+  | `MUL, [|`Reg dest; src1; src2; cond; _; wflag|]
+  | `MUL, [|`Reg dest; src1; src2; cond; wflag|] ->
     let flags = Flags.set_nzf Bil.(var (Env.of_reg dest)) reg32_t in
     exec [
       assn (Env.of_reg dest) Bil.(exp_of_op src1 * exp_of_op src2)
     ] ~flags ~wflag cond
 
-  | `MLA, [|`Reg dest; src1; src2; addend; cond; _rflag; wflag|] ->
+  | `MLA, [|`Reg dest; src1; src2; addend; cond; _; wflag|]
+  | `MLA, [|`Reg dest; src1; src2; addend; cond; wflag|] ->
     let flags = Flags.set_nzf Bil.(var Bil.(Env.of_reg dest)) reg32_t in
     exec [
       assn (Env.of_reg dest)
@@ -376,18 +378,24 @@ let lift_mult ops insn =
         Bil.(exp_of_op addend - exp_of_op src1 * exp_of_op src2)
     ] cond
 
-  | `UMULL, [|lodest; hidest; src1; src2; cond; _rflag; wflag|] ->
+  | `UMULL, [|lodest; hidest; src1; src2; cond; _; wflag|]
+  | `UMULL, [|lodest; hidest; src1; src2; cond; wflag|] ->
     lift_mull ~lodest ~hidest ~src1 ~src2 Unsigned ~wflag cond
 
-  | `SMULL, [|lodest; hidest; src1; src2; cond; _rflag; wflag|] ->
+  | `SMULL, [|lodest; hidest; src1; src2; cond; _; wflag|]
+  | `SMULL, [|lodest; hidest; src1; src2; cond; wflag|] ->
     lift_mull ~lodest ~hidest ~src1 ~src2 Signed ~wflag cond
 
   | `UMLAL, [|lodest; hidest; src1; src2;
-              _loadd; _hiadd; cond; _rflag; wflag|] ->
+              _loadd; _hiadd; cond; _; wflag|]
+  | `UMLAL, [|lodest; hidest; src1; src2;
+              _loadd; _hiadd; cond; wflag|] ->
     lift_mull ~lodest ~hidest ~src1 ~src2 Unsigned ~addend:true ~wflag cond
 
   | `SMLAL, [|lodest; hidest; src1; src2;
-              _loadd; _hiadd; cond; _rflag; wflag|] ->
+              _loadd; _hiadd; cond; _; wflag|]
+  | `SMLAL, [|lodest; hidest; src1; src2;
+              _loadd; _hiadd; cond; wflag|] ->
     lift_mull ~lodest ~hidest ~src1 ~src2 Signed ~addend:true ~wflag cond
 
   (* signed 16bit mul plus a 32bit bit accum, Q *)
@@ -876,6 +884,13 @@ let lift_mem ops insn =
     in
     exec insns cond
 
+  | `LDREX, [|dest1; `Reg _ as dest2; base; cond; _|] ->
+    let insns =
+      Mem_shift.lift_r_op ~dest1 ~dest2 ~base ~offset:(`Imm (word 0))
+        Offset Unsigned W Ld
+    in
+    exec insns cond
+
   | `LDREXB, [|dest1; base; cond; _|] ->
     let insns =
       Mem_shift.lift_r_op ~dest1 ~base ~offset:(`Imm (word 0))
@@ -901,6 +916,13 @@ let lift_mem ops insn =
   | `STREX, [|`Reg dest1; src1; base; cond; _|] ->
     let insns =
       Mem_shift.lift_r_op ~dest1:src1 ~base ~offset:(`Imm (word 0))
+        Offset Unsigned W St in
+    let result = [Bil.move (Env.of_reg dest1) (int32 0)] in
+    exec (insns @ result) cond
+
+  | `STREX, [|`Reg dest1; src1; `Reg _ as src2; base; cond; _|] ->
+    let insns =
+      Mem_shift.lift_r_op ~dest1:src1 ~dest2:src2 ~base ~offset:(`Imm (word 0))
         Offset Unsigned W St in
     let result = [Bil.move (Env.of_reg dest1) (int32 0)] in
     exec (insns @ result) cond
@@ -1108,13 +1130,12 @@ let resolve_pc mem = Stmt.map (object
   end)
 
 let insn_exn mem insn : bil Or_error.t =
-  let name = Basic.Insn.name insn in
   let encoding = Theory.Language.read ~package:"bap" (Basic.Insn.encoding insn) in
   Memory.(Addr.Int_err.(!$(max_addr mem) - !$(min_addr mem)))
   >>= Word.to_int >>= fun s -> Size.of_int ((s+1) * 8) >>= fun scale ->
   Memory.get ~scale mem >>= fun word ->
   match Arm_insn.of_basic insn with
-  | None -> errorf "unsupported opcode: %s" name
+  | None -> Ok []
   | Some arm_insn -> match arm_ops (Basic.Insn.ops insn) with
     | Error _ as fail -> fail
     | Ok ops -> Result.return @@ match arm_insn with
