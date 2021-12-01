@@ -57,6 +57,7 @@ let sort_of_typ t =
   | Type.Unk -> ret @@ unknown
 
 module Generator = struct
+  let counter = ref 0xC00000;
   module Toplevel = Bap_toplevel
   open KB.Syntax
 
@@ -76,6 +77,10 @@ module Generator = struct
       Theory.Var.fresh s >>|  Theory.Var.ident
     end;
     Toplevel.get ident
+
+  let fresh _ =
+    decr counter;
+    Theory.Var.Ident.of_string (sprintf "#%d" !counter)
 end
 
 let create ?(is_virtual=false) ?(fresh=false) name typ =
