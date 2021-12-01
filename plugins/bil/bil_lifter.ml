@@ -274,10 +274,8 @@ let lift ~enable_intrinsics:{for_all; for_unk; for_special; predicates}
   else
     let module Target = (val target_of_arch arch) in
     match Target.lift mem insn with
-    | Error _ as err ->
-      if for_unk
-      then Ok (create_intrinsic target mem insn)
-      else err
+    | Error _ as err -> err
+    | Ok [] when for_unk -> Ok (create_intrinsic target mem insn)
     | Ok bil ->
       if for_special && has_special bil
       then Ok (create_intrinsic target mem insn)
@@ -297,7 +295,7 @@ let provide_bil ~enable_intrinsics () =
   let* insn = obj-->?Disasm_expert.Basic.Insn.slot in
   match lift ~enable_intrinsics target arch mem insn with
   | Error err ->
-    info "BIL: the BIL lifter failed with %a" Error.pp err;
+    warning "BIL: the BIL lifter failed with %a" Error.pp err;
     KB.return []
   | Ok [] -> KB.return []
   | Ok bil ->
@@ -327,12 +325,12 @@ let provide_lifter ~with_fp () =
     else base_context in
   let is_empty = KB.Domain.is_empty Bil.domain in
   let lifter obj =
-    Theory.Label.target obj >>= fun target ->
-    Theory.instance ~context:(context target) () >>=
-    Theory.require >>= fun (module Core) ->
     KB.collect Bil.code obj >>= fun bil ->
     if is_empty bil then !!Insn.empty
     else
+      Theory.Label.target obj >>= fun target ->
+      Theory.instance ~context:(context target) () >>=
+      Theory.require >>= fun (module Core) ->
       let module Lifter = Theory.Parser.Make(Core) in
       Lifter.run Bil.Theory.parser bil in
   KB.Rule.(declare ~package "bil-semantics" |>

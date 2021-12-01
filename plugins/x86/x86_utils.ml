@@ -141,6 +141,7 @@ let sig_to_mask =
   | MSB -> Bytemask
 
 exception Arch_exception of Arch.x86 * string [@@deriving sexp]
+exception No_semantics
 
 (** disfailwith is a non-fatal disassembly exception. *)
 let disfailwith m s =
@@ -149,7 +150,7 @@ let disfailwith m s =
     | X8664 -> `x86_64 in
   raise (Arch_exception (a, s))
 
-let unimplemented a s  = disfailwith a ("disasm x86: unimplemented feature: "^s)
+let unimplemented _ _ = raise No_semantics
 
 (* eflags *)
 let df_to_offset mode e =

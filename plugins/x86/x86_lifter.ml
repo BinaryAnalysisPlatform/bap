@@ -1584,12 +1584,15 @@ let disasm_instr mode mem addr =
 let insn arch mem insn =
   let mode = match arch with `x86 -> X86 | `x86_64 -> X8664 in
   let addr = Memory.min_addr mem in
-  Or_error.try_with (fun () -> disasm_instr mode mem addr) |> function
-  | Error err ->
-    warning "the legacy lifter failed at %a - %a"
-      pp_insn (mem,insn) Error.pp err;
-    Error err
-  | Ok bil -> match Type.check bil with
+  match disasm_instr mode mem addr with
+  | exception No_semantics -> Ok []
+  | exception Arch_exception (_,msg) ->
+    Or_error.errorf "invalid instruction: %s" msg
+  | exception exn ->
+    Or_error.errorf "internal error in the legacy lifter: %s@\n%s@\n"
+      (Exn.to_string exn)
+      (Printexc.get_backtrace ())
+  | bil -> match Type.check bil with
     | Ok () -> Ok bil
     | Error err ->
       warning "BIL is not well-typed in the legacy lifter at %a - %a"

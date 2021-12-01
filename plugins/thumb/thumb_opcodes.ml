@@ -3,43 +3,24 @@ open Bap.Std
 
 (* all the `mov` series, registers marked with `e` means extended *)
 type opmov = [
-  | `tMOVi8 (* Rd imm8 *)
-  | `tMOVSr (* Rd Rm affect CSPR *)
-  | `tMVN (* Rd Rm *)
-  | `tADC (* Rd Rn Rm *)
-  | `tADDi3 (* Rd Rs imm *)
-  | `tADDi8 (* Rd imm *)
-  | `tADDrr (* Rd Rn Rm *)
-  | `tADDhirr (* Rde Rse *)
-  | `tADR (* Rd imm *)
-  | `tADDrSPi (* Rd imm *)
-  | `tADDspi (* imm *)
-  | `tAND
+  |  `tADC
+  | `tADDi3
+  | `tADDi8
+  | `tADDrSPi
+  | `tADDrr
+  | `tADDspi
   | `tASRri
-  | `tASRrr
-  | `tBIC
-  | `tCMNz
   | `tCMPi8
   | `tCMPr
-  | `tCMPhir
-  | `tEOR
   | `tLSLri
-  | `tLSLrr
   | `tLSRri
-  | `tLSRrr
+  | `tMOVSr
+  | `tMOVi8
   | `tORR
-  | `tRSB (* NEG *)
-  | `tREV
-  | `tREV16
-  | `tREVSH
-  | `tROR
-  | `tSBC (* Rd Rm *)
-  | `tSUBi3 (* See the corresponding ADD insns. *)
+  | `tSUBi3
   | `tSUBi8
   | `tSUBrr
   | `tSUBspi
-  | `tTST
-  | `tMUL (* Rd Rn *)
 ] [@@deriving bin_io, compare, sexp, enumerate]
 
 type opbit = [
@@ -61,36 +42,29 @@ type opmem_multi = [
 
 
 type opmem = [
-  | `tLDRi
-  | `tLDRr
-  | `tLDRpci | `t2LDRpci
-  | `tLDRspi
+  | opmem_multi
+  | `t2LDRpci
   | `tLDRBi
   | `tLDRBr
   | `tLDRHi
   | `tLDRHr
   | `tLDRSB
   | `tLDRSH
-  | `tSTRi
-  | `tSTRr
-  | `tSTRspi
+  | `tLDRi
+  | `tLDRpci
+  | `tLDRr
+  | `tLDRspi
   | `tSTRBi
   | `tSTRBr
   | `tSTRHi
   | `tSTRHr
-  | opmem_multi
+  | `tSTRi
+  | `tSTRr
+  | `tSTRspi
 ] [@@deriving bin_io, compare, sexp, enumerate]
 
-type opbranch = [
-  | `tBcc
-  | `tB
-  | `tBL
-  | `tBLXi
-  | `tBLXr
-  | `tBX
-  | `tCBNZ
-  | `tCBZ
-] [@@deriving bin_io, compare, sexp, enumerate]
+type opbranch = [ `tB | `tBL | `tBLXi | `tBLXr | `tBX | `tBcc | `tCBNZ | `tCBZ ]
+[@@deriving bin_io, compare, sexp, enumerate]
 
 type opcode = [
   | opmov
