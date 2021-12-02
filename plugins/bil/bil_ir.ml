@@ -26,7 +26,9 @@ type t = cfg
 
 let null = KB.Object.null Theory.Program.cls
 let is_null x = KB.Object.is_null x
-let is_empty {entry} = is_null entry
+let is_empty = function
+  | {entry; blks=[]} -> is_null entry
+  | _ -> false
 
 module BIR = struct
   type t = blk term list
