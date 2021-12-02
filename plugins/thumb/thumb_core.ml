@@ -166,7 +166,8 @@ module Make(CT : Theory.Core) = struct
       data@@[dst := CT.ite ~?cnd exp (var dst)]
 
 
-  let branch cnd t f =
-    data@@[CT.branch (holds cnd) (seq t) (seq f)]
+  let branch cnd t f = match cnd with
+    | `AL -> data [seq t]
+    | _ -> data@@[CT.branch (holds cnd) (seq t) (seq f)]
 
 end

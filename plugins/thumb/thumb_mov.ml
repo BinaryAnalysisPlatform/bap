@@ -18,7 +18,6 @@ module Make(CT : Theory.Core) = struct
   let borrow_from_sub ~rn ~rm = bit (rn < rm)
 
   let movi8 rd x = it_set rd (const x) @@ fun v -> [
-      v := const x;
       nf := if Int.(x lsr 7 = 1) then bit1 else bit0;
       zf := if Int.(x = 0) then bit1 else bit0;
     ]
@@ -58,11 +57,9 @@ module Make(CT : Theory.Core) = struct
       vf := overflow_from_add (var r) (var rn) (var rm);
     ]
 
-  let addspi off =
-    it_set sp (var sp + const off) @@ fun _ -> []
+  let addspi off = sp <-? var sp + const off
 
-  let addrspi rd off =
-    it_set rd (var sp + const off) @@ fun _ -> []
+  let addrspi rd off = rd <-? var sp + const off
 
   let cmp x y r = [
     nf := msb (var r);
