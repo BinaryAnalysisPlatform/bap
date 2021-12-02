@@ -26,7 +26,9 @@ type t = cfg
 
 let null = KB.Object.null Theory.Program.cls
 let is_null x = KB.Object.is_null x
-let is_empty {entry} = is_null entry
+let is_empty = function
+  | {entry; blks=[]} -> is_null entry
+  | _ -> false
 
 module BIR = struct
   type t = blk term list
@@ -301,6 +303,15 @@ module IR = struct
       blks = [blk ~keep:false entry ++ Jmp.reify ~tid ~dst:(Jmp.indirect dst) ()]
     }
 
+  let is_call jmp = Option.is_some (Jmp.alt jmp)
+
+  let fall ~tid x dst = match x.jmps with
+    | [jmp] when is_call jmp -> {
+        x with jmps = [
+        Jmp.with_dst jmp (Some (Jmp.resolved dst))
+      ]}
+    | jmps -> {x with jmps = goto ~tid dst :: jmps}
+
   let appgraphs fst snd =
     if is_empty fst then ret snd else
     if is_empty snd then ret fst
@@ -316,7 +327,7 @@ module IR = struct
           entry;
           blks =
             y ::
-            x ++ goto ~tid esnd ::
+            fall ~tid x esnd ::
             List.rev_append xs ys
         }
 

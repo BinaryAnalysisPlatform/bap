@@ -6,6 +6,7 @@ open Bap_core_theory_value
 type 'a t
 type ord
 type ident [@@deriving bin_io, compare, sexp]
+type id
 type 'a pure = 'a Bap_core_theory_value.t knowledge
 
 
@@ -25,6 +26,8 @@ val is_mutable : 'a t -> bool
 val fresh : 'a sort -> 'a t knowledge
 val scoped : 'a sort -> ('a t -> 'b pure) -> 'b pure
 val pp : Format.formatter -> 'a t -> unit
+
+val reset_temporary_counter : unit knowledge
 
 module Ident : sig
   type t = ident [@@deriving bin_io, compare, sexp]

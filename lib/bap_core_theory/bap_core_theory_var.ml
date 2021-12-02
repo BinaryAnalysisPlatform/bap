@@ -4,23 +4,22 @@ open Caml.Format
 open Bap_knowledge
 open Bap_core_theory_value
 open Knowledge.Syntax
+open Knowledge.Let
 
 module Value = Knowledge.Value
 
 let package = "core"
 
-type const = Const [@@deriving bin_io, compare, sexp]
-type mut = Mut [@@deriving bin_io, compare, sexp]
 
-let const = Knowledge.Class.declare ~package "const-var" Const
-    ~desc:"local immutable variables"
 
-let mut = Knowledge.Class.declare ~package "mut-var" Mut
-    ~desc:"temporary mutable variables"
+let pure = KB.Context.declare ~package "let-variables" !!Int63.zero
+let temp = KB.Context.declare ~package "tmp-variables" !!Int63.zero
+
+type id = Int63.t [@@deriving bin_io, compare, hash, sexp]
 
 type ident =
-  | Var of {num : Int63.t; ver : int}
-  | Let of {num : Int63.t}
+  | Var of {num : id; ver : int}
+  | Let of {num : id}
   | Reg of {name : String.Caseless.t; ver : int}
 [@@deriving bin_io, compare, hash, sexp]
 
@@ -92,17 +91,25 @@ let version v = match ident v with
   | Let _ -> 0
   | Reg {ver} | Var {ver} -> ver
 
+let incr var =
+  let* v = Knowledge.Context.get var in
+  let+ () = Knowledge.Context.set var (Int63.succ v) in
+  v
+
 let fresh s =
-  Knowledge.Object.create mut >>| fun v ->
-  create s (Var {num = Knowledge.Object.id v; ver=0})
+  let+ num = incr pure in
+  create s (Var {num; ver=0})
+
+let reset_temporary_counter = KB.Context.set temp Int63.zero
 
 type 'a pure = 'a Bap_core_theory_value.t knowledge
 
 (* we're ensuring that a variable is immutable by constraining
    the scope computation to be pure. *)
 let scoped : 'a sort -> ('a t -> 'b pure) -> 'b pure = fun s f ->
-  Knowledge.Object.scoped const @@ fun v ->
-  f @@ create s (Let {num = Knowledge.Object.id v})
+  let* num = Knowledge.Context.get pure in
+  Knowledge.Context.with_var pure (Int63.succ num) @@ fun () ->
+  f @@ create s (Let {num})
 
 module Ident = struct
   type t = ident [@@deriving bin_io, compare, hash, sexp]
