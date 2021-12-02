@@ -303,6 +303,15 @@ module IR = struct
       blks = [blk ~keep:false entry ++ Jmp.reify ~tid ~dst:(Jmp.indirect dst) ()]
     }
 
+  let is_call jmp = Option.is_some (Jmp.alt jmp)
+
+  let fall ~tid x dst = match x.jmps with
+    | [jmp] when is_call jmp -> {
+        x with jmps = [
+        Jmp.with_dst jmp (Some (Jmp.resolved dst))
+      ]}
+    | jmps -> {x with jmps = goto ~tid dst :: jmps}
+
   let appgraphs fst snd =
     if is_empty fst then ret snd else
     if is_empty snd then ret fst
@@ -318,7 +327,7 @@ module IR = struct
           entry;
           blks =
             y ::
-            x ++ goto ~tid esnd ::
+            fall ~tid x esnd ::
             List.rev_append xs ys
         }
 
