@@ -305,11 +305,21 @@ module IR = struct
 
   let is_call jmp = Option.is_some (Jmp.alt jmp)
 
+  let is_unconditional jmp = match Jmp.cond jmp with
+    | Int w when Word.(w = b1) -> true
+    | _ -> false
+
   let fall ~tid x dst = match x.jmps with
-    | [jmp] when is_call jmp -> {
+    | [jmp] when is_call jmp ->
+      let jmp' = Jmp.with_dst jmp @@ Some (Jmp.resolved dst) in
+      if is_unconditional jmp then {
+        x with jmps = [jmp'];
+      } else {
         x with jmps = [
-        Jmp.with_dst jmp (Some (Jmp.resolved dst))
-      ]}
+          Jmp.create_goto (Direct dst);
+          jmp';
+        ]
+      }
     | jmps -> {x with jmps = goto ~tid dst :: jmps}
 
   let appgraphs fst snd =
