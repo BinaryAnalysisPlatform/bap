@@ -308,7 +308,7 @@ module IR = struct
   let is_unconditional jmp = match Jmp.cond jmp with
     | Int w when Word.(w = b1) -> true
     | _ -> false
-  
+
   let fall ~tid x dst = match x.jmps with
     | [jmp] when is_call jmp ->
       let jmp' = Jmp.with_dst jmp @@ Some (Jmp.resolved dst) in
