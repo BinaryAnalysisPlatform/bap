@@ -509,6 +509,7 @@ module Encodings = struct
     KB.Domain.mapping (module Bitvec_order) "encodings"
       ~equal:CT.Language.equal
 
+
   let set_encoding label x y =
     let* addr = x.?[Sigma.static] in
     let* code = y.?[Sigma.symbol] in
@@ -519,8 +520,10 @@ module Encodings = struct
       | other ->
         Sigma.failp "unknown encoding %s, expects :T32 or :A32" other in
     let* encodings = unit-->slot in
-    KB.provide slot unit @@ Map.set encodings addr lang >>| fun () ->
-    Sigma.Effect.pure Sigma.Value.nil
+    let res = Map.set encodings addr lang in
+    KB.catch (KB.provide slot unit res) (fun _ -> KB.return ()) >>|
+    fun () -> Sigma.Effect.pure Sigma.Value.nil
+
 
   let provide_primitive () =
     let types = Lambda.Type.Spec.(tuple [int; sym] @-> sym) in
