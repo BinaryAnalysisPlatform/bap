@@ -242,6 +242,10 @@ module State = struct
     {self with disassembly}
 
   let partition self =
+    let self = {
+      self with
+      disassembly = Dis.forget_debt self.disassembly
+    } in
     Sub.update self.subroutines self.disassembly >>| fun subroutines ->
     {self with subroutines}
 
