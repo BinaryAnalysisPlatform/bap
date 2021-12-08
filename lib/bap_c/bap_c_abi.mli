@@ -225,8 +225,9 @@ end
                arg iargs fargs t));
 
         let () = List.iter ~f:define Bap_risv_target.[riscv32; riscv64]
-
     ]}
+
+    @since 2.3.0
 *)
 module Arg : sig
   type 'a t

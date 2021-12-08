@@ -1,5 +1,76 @@
+2.4.0
+=====
+
+### Features
+
+- #1325 adds armeb abi
+- #1326 adds experimental Ghidra disassembler and lifting backend
+- #1332 adds the flatten pass
+- #1341 adds context variables to the knowledge base
+- #1343 adds register aliases to the Core Theory
+- #1358 adds LLVM 12 support
+- #1360 extends the knowledge monad interface
+- #1363 adds forward-chaining rules and Primus Lisp methods
+- #1364 adds a generic byte pattern matcher based on Ghidra
+- #1365 adds support for the Thumb IT blocks
+- #1369 adds some missing `t2LDR.-i12` instructions to the Thumb lifter
+
+### Improvements
+
+- #1336 improves the `main` function discovery heuristics
+- #1337 adds more Primus Lisp stubs and fixes some existing
+- #1342 uses context variables to store the current theory
+- #1344 uses the context variables to store the Primus Lisp state
+- #1355 tweaks symbolization and function start identification facilities
+- #1353 improves arm-family support
+- #1356 stops proposing aliases as potential subroutine names
+- #1361 rewrites knowledge and primus monads
+- #1370 tweaks Primus Lisp' method resolution to keep super methods
+- #1375 error handling and performance tweaks
+- #1378 improves reification of calls in the IR theory (part I)
+- #1379 improves semantics of some ITT instructions
+- #1380 Fixes handling of fallthroughs in IR theory
+
+
+### Bug Fixes
+
+- #1328 fixes C.ABI.Args `popn` and `align_even` operators
+- #1329 fixes frame layout calculation in the Primus loader
+- #1330 fixes the address size computation in the llvm backend
+- #1333 fixes and improves label handling in the IR theor
+- #1338 fixes core:eff theory
+- #1340 fixes the Node.update for graphs with unlabeled nodes
+- #1347 fixes a knowledge base race condition in the run plugin
+- #1348 fixes endianness in the raw loader
+- #1349 short-circuits evaluation of terms in Bap_main.init
+- #1350 fixes variable rewriter and some Primus Lisp symbolic functions
+- #1351 fixes and improves aarch64 lifter
+- #1352 fixes several Primus Lisp stubs
+- #1357 fixes some T32 instructions that are accessing to PC
+- #1359 fixes handling of let-bound variables in flatten pass
+- #1366 fixes a bug in the `cmp` semantics
+- #1374 fixes handling modified immediate constants in ARM T32 encoding
+- #1376 fixes fresh variable generation
+- #1377 fixes the IR theory implementation
+
+
+### Tooling
+
+- #1319 fixes the shared folder in deb packages
+- #1320 removes sudo from postinst and postrm actions in the deb packages
+- #1321 enables push flag in the publish-docker-image action
+- #1323 fixes the ppx_bap version in the dev-repo opam file
+- #1331 fixes the docker publisher, also enables manual triggering
+- #1327 fixes a typo in the ubuntu dockerfiles
+- #1345 fixes bapdoc
+- #1346 nightly tests are failing due to a bug upstream
+
+
+
 2.3.0
 =====
+
+### Features
 
 - #1263 fixes PE/COFF sections decoding
 - #1265 introduces BIL special encodings and publishes BIL CT parser
