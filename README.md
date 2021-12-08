@@ -2,7 +2,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/BinaryAnalysisPlatform/bap/blob/master/LICENSE)
 [![Join the chat at https://gitter.im/BinaryAnalysisPlatform/bap](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/BinaryAnalysisPlatform/bap?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![docs](https://img.shields.io/badge/doc-master-green.svg)][docs]
-[![docs](https://img.shields.io/badge/doc-2.3.0-green.svg)][docs]
+[![docs](https://img.shields.io/badge/doc-2.4.0-green.svg)][docs]
 
 ## Table of contents
 *   [Overview](#overview)
@@ -28,8 +28,8 @@ BAP is developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by
 We provide binary packages packed for Debian and Red Hat derivatives. For other distributions we provide tgz archives. To install bap on a Debian derivative:
 
 ```bash
-wget https://github.com/BinaryAnalysisPlatform/bap/releases/download/v2.3.0/{bap,libbap,libbap-dev}_2.3.0.deb
-sudo dpkg -i {bap,libbap,libbap-dev}_2.3.0.deb
+wget https://github.com/BinaryAnalysisPlatform/bap/releases/download/v2.4.0/{bap,libbap,libbap-dev}_2.4.0.deb
+sudo dpkg -i {bap,libbap,libbap-dev}_2.4.0.deb
 ```
 
 ### From sources
@@ -37,7 +37,7 @@ sudo dpkg -i {bap,libbap,libbap-dev}_2.3.0.deb
 Our binary packages do not include the OCaml development environment. If you are going to write an analysis in OCaml you need to install BAP from the source code using either [opam][opam-install] or by cloning and building this repository directly. The opam method is the recommended one. Once it is installed the following three commands should install the platform in a newly created switch.
 
 ```bash
-opam init --comp=4.09.0   # inits opam and install the OCaml compiler
+opam init --comp=4.12.1   # inits opam and install the OCaml compiler
 eval `opam config env`    # activates opam environment
 opam depext --install bap # installs bap and its dependencies
 ```
