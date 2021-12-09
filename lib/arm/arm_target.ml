@@ -54,31 +54,31 @@ let status_regs = Theory.Role.Register.[
   ]
 
 (* AACPS, §5.1.1 Core registers:
-   
+
    - The first four registers r0-r3 (a1-a4) are used to pass
-   argument values into a subroutine and to return a result
-   value from a function. They may also be used to hold intermediate
-   values within a routine (but, in general, only between subroutine
-   calls).
+     argument values into a subroutine and to return a result
+     value from a function. They may also be used to hold intermediate
+     values within a routine (but, in general, only between subroutine
+     calls).
 
    - Register r12 (IP) may be used by a linker as a scratch register
-   between a routine and any subroutine it calls (for details,
-   see §5.3.1.1, Use of IP by the linker). It can also be used within
-   a routine to hold intermediate values between subroutine calls.
+     between a routine and any subroutine it calls (for details,
+     see §5.3.1.1, Use of IP by the linker). It can also be used within
+     a routine to hold intermediate values between subroutine calls.
 
    - The role of register r9 is platform specific. A virtual platform
-   may assign any role to this register and must document this usage.
-   For example, it may designate it as the static base (SB) in a
-   position-independent data model, or it may designate it as the thread
-   register (TR) in an environment with thread-local storage. The usage
-   of this register may require that the value held is persistent across
-   all calls. A virtual platform that has no need for such a special
-   register may designate r9 as an additional callee-saved variable
-   register, v6.
+     may assign any role to this register and must document this usage.
+     For example, it may designate it as the static base (SB) in a
+     position-independent data model, or it may designate it as the thread
+     register (TR) in an environment with thread-local storage. The usage
+     of this register may require that the value held is persistent across
+     all calls. A virtual platform that has no need for such a special
+     register may designate r9 as an additional callee-saved variable
+     register, v6.
 
    - A subroutine must preserve the contents of the registers
-   r4-r8, r10, r11 and SP (and r9 in PCS variants that designate
-   r9 as v6).
+     r4-r8, r10, r11 and SP (and r9 in PCS variants that designate
+     r9 as v6).
 *)
 let regs32 = Theory.Role.Register.[
     [general; integer], regs Arm_env.[
