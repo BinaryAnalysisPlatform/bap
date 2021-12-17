@@ -20,6 +20,10 @@ let word = Knowledge.Domain.optional "word"
     ~equal:Bitvec.equal
     ~inspect:Bitvec_sexp.sexp_of_t
 
+let bytes = Knowledge.Domain.optional "bytes"
+    ~equal:String.equal
+    ~inspect:sexp_of_string
+
 let name = Knowledge.Domain.optional "name"
     ~equal:String.equal
     ~inspect:sexp_of_string
@@ -221,6 +225,14 @@ module Label = struct
       ~public:true
       ~desc:"the program virtual address"
 
+  let bytes = Knowledge.Class.property ~package cls "label-bytes" bytes
+      ~persistent:(Knowledge.Persistent.of_binable (module struct
+                     type t = string option
+                     [@@deriving bin_io]
+                   end))
+      ~public:true
+      ~desc:"the program memory contents"
+  
   let name = string_property cls "label-name"
       ~desc:"the program linkage name"
 

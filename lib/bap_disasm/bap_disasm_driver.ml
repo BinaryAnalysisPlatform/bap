@@ -359,6 +359,7 @@ let label_for_mem mem =
 let new_insn mem insn =
   label_for_mem mem >>= fun code ->
   KB.provide Memory.slot code (Some mem) >>= fun () ->
+  KB.collect Theory.Label.bytes code >>= fun _ ->
   KB.provide Dis.Insn.slot code (Some insn) >>| fun () ->
   code
 

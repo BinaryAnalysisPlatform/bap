@@ -79,6 +79,7 @@ module Label : sig
   type t = program obj
   val unit : (program, Unit.t option) slot
   val addr : (program, Bitvec.t option) slot
+  val bytes : (program, string option) slot
   val name : (program, string option) slot
   val ivec : (program, Int.t option) slot
   val encoding : (program, language) slot

@@ -1798,6 +1798,8 @@ module Theory : sig
     (** the address of the label.  *)
     val addr : (program, Bitvec.t option) KB.slot
 
+    (** the memory contents of the label. *)
+    val bytes : (program, string option) KB.slot
 
     (** the linkage name of the label  *)
     val name : (program, string option) KB.slot
