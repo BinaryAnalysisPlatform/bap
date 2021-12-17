@@ -22,7 +22,11 @@ let word = Knowledge.Domain.optional "word"
 
 let bytes = Knowledge.Domain.optional "bytes"
     ~equal:String.equal
-    ~inspect:sexp_of_string
+    ~inspect:(fun s ->
+        Sexp.Atom (
+          String.to_list s |> List.map ~f:(fun c ->
+              Format.sprintf "%02X" @@ Char.to_int c) |>
+          String.concat ~sep:" "))
 
 let name = Knowledge.Domain.optional "name"
     ~equal:String.equal
