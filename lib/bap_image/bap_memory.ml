@@ -469,7 +469,7 @@ let () =
   KB.promise Theory.Label.bytes @@ fun label ->
   KB.collect slot label >>|? fun {data; off; size} ->
   Some (Bigstring.to_string ~pos:off ~len:size data)
-  
+
 let () =
   let open KB.Rule in
   declare ~package:"bap" "addr-of-mem" |>

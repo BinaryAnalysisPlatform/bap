@@ -232,7 +232,7 @@ module Label = struct
                    end))
       ~public:true
       ~desc:"the program memory contents"
-  
+
   let name = string_property cls "label-name"
       ~desc:"the program linkage name"
 
