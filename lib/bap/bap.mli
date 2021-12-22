@@ -8502,6 +8502,12 @@ module Std : sig
     *)
     val compute_liveness : t -> (tid, Var.Set.t) Solution.t
 
+
+    (** [flatten sub] returns [sub] in flattened form in which
+        Let expressions and compound expressions are flattened
+        into sequences of simple definitions. *)
+    val flatten : t -> t
+
     (** other names for the given subroutine.*)
     val aliases : string list tag
 
@@ -9065,6 +9071,11 @@ module Std : sig
     (** [occurs blk after:x def] if [def] is occurs after definition
         [def] in [blk].  *)
     val occurs : t -> after:tid -> tid -> bool
+
+    (** [flatten blk] returns [blk] in flattened form in which
+        let expressions and compound expressions are flattened
+        into sequences of simple definitions. *)
+    val flatten : t -> t
 
     (** Builder interface.  *)
     module Builder : sig
