@@ -2,9 +2,7 @@ open Core_kernel
 open Bap_types.Std
 open Bap_ir
 
-module Blk = Ir_blk
-module Def = Ir_def
-module Jmp = Ir_jmp
+
 let get_direct_typ (e : exp) : Type.t = match e with
   | Bil.Var v -> Var.typ v
   | Bil.Unknown (_,t) -> t
@@ -115,12 +113,12 @@ let flatten_exp (exp : exp) (blk : blk term) (before : tid) : exp * blk term =
   aux exp blk
 
 let flatten_blk original_blk =
-  let rec flatten_elts (elts : Blk.elt seq) (blk : blk term) =
-    let rec flatten_jmp (jmp : Jmp.t) (expseq : exp seq) (blk : blk term) =
+  let rec flatten_elts (elts : Ir_blk.elt seq) (blk : blk term) =
+    let rec flatten_jmp (jmp : Ir_jmp.t) (expseq : exp seq) (blk : blk term) =
       match Seq.next expseq with
       | Some(hd, tl) ->
         let exp, blk = flatten_exp hd blk (Term.tid jmp) in
-        Jmp.substitute jmp hd exp |> Term.update jmp_t blk |>
+        Ir_jmp.substitute jmp hd exp |> Term.update jmp_t blk |>
         flatten_jmp jmp tl
       | None -> blk in
 
@@ -130,11 +128,11 @@ let flatten_blk original_blk =
           let exp, blk = flatten_exp (Ir_def.rhs def) blk (Term.tid def) in
           Ir_def.with_rhs def exp |> Term.update def_t blk |>
           flatten_elts tl
-        | `Jmp jmp -> flatten_jmp jmp (Jmp.exps jmp) blk
+        | `Jmp jmp -> flatten_jmp jmp (Ir_jmp.exps jmp) blk
         | `Phi phi -> flatten_elts tl blk)
     | None -> blk in
 
-  flatten_elts (Blk.elts original_blk) original_blk
+  flatten_elts (Ir_blk.elts original_blk) original_blk
 
 let flatten_sub =
   Term.map blk_t ~f:flatten_blk
