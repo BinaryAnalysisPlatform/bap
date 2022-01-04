@@ -227,8 +227,8 @@ let lift_move ~encoding mem ops (insn : move_insn) : stmt list =
 
   | `MOVTi16, [|`Reg dest; _; src; cond; _wflag|] ->
     let dest = Env.of_reg dest in
-    let src16 = Bil.(cast unsigned 32 (cast low 16 (var dest))) in
-    [Bil.move dest Bil.(src16 lor exp_of_op src lsl int32 16)] |>
+    let dest = Env.of_reg dest and src = exp_of_op src in
+    Bil.[dest := var dest land int32 0xFFFF lor src lsl int32 16] |>
     fun ins -> exec ins cond
   | insn,ops ->
     fail [%here] "ops %s doesn't match move insn %s"
