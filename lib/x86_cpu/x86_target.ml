@@ -27,6 +27,11 @@ let (@<) xs ys = untyped xs @ untyped ys
 let array ?(index=string_of_int) t pref size =
   List.init size ~f:(fun i -> reg t (pref ^ index i))
 
+let lower xs _ ys =
+  List.map2_exn xs ys ~f:Theory.Alias.(fun x y -> def x [unk; reg y])
+
+let are f x y = f x y
+
 module Role = struct
   let index = Theory.Role.declare ~package:"x86" "index"
   let segment = Theory.Role.declare ~package:"x86" "segment"
@@ -128,12 +133,15 @@ module M32 = struct
   let i586 = i486 @< mmx
   let i686 = i586 @< xmmx
 
+  let aliases = M16.main @< M16.index
+
   let i386regs = Theory.Role.Register.[
       [general; integer], main @< index @< segment;
       [stack_pointer], untyped [reg r32 "ESP"];
       [frame_pointer], untyped [reg r32 "EBP"];
       [Role.index], untyped index;
       [Role.segment], untyped segment;
+      [alias], aliases;
     ] @ M16.status_regs
 
   let i486regs = i386regs @ Theory.Role.Register.[
@@ -147,6 +155,10 @@ module M32 = struct
   let i686regs = i586regs @ Theory.Role.Register.[
       [general; floating], untyped xmmx;
     ]
+
+  let aliasing =
+    lower main are M16.main
+    @ lower index are M16.index
 end
 
 module M64 = struct
@@ -176,11 +188,14 @@ module M64 = struct
 
   let stx = M32.stx
   let mmx = M32.mmx
+  let xmmx = array r128 "XMM" 16
   let ymmx = array r256 "YMM" 16
 
   let flags = M32.flags
   let mems = Theory.Mem.define r64 r8
   let data = Theory.Var.define mems "mem"
+
+  let aliases = M32.aliases @< M32.main @< M32.index @< xmmx
 
   let vars = main @< index @< segment @< rx @< stx @< mmx @< ymmx @<
              flags @< [data]
@@ -192,7 +207,14 @@ module M64 = struct
       [frame_pointer], untyped [reg r64 "RBP"];
       [Role.index], untyped index;
       [Role.segment], untyped segment;
+      [alias], aliases;
     ] @ M16.status_regs
+
+  let aliasing =
+    M32.aliasing
+    @ lower main are M32.main
+    @ lower index are M32.index
+    @ lower ymmx are xmmx
 end
 
 let parent = Theory.Target.declare ~package "x86"
@@ -224,24 +246,28 @@ let i386 = Theory.Target.declare ~package "i386"
     ~code:M32.data
     ~vars:M32.i386
     ~regs:M32.i386regs
+    ~aliasing:M32.aliasing
 
 let i486 = Theory.Target.declare ~package "i486"
     ~parent:i386
     ~nicknames:["486"; "80486"]
     ~vars:M32.i486
     ~regs:M32.i486regs
+    ~aliasing:M32.aliasing
 
 let i586 = Theory.Target.declare ~package "i586"
     ~parent:i486
     ~nicknames:["586"; "80586"; "p5"]
     ~vars:M32.i586
     ~regs:M32.i586regs
+    ~aliasing:M32.aliasing
 
 let i686 = Theory.Target.declare ~package "i686"
     ~parent:i586
     ~nicknames:["686"; "80686"; "p6"]
     ~vars:M32.i686
     ~regs:M32.i686regs
+    ~aliasing:M32.aliasing
 
 let amd64 = Theory.Target.declare ~package "amd64"
     ~parent:i686
@@ -251,6 +277,7 @@ let amd64 = Theory.Target.declare ~package "amd64"
     ~code:M64.data
     ~vars:M64.vars
     ~regs:M64.regs
+    ~aliasing:M64.aliasing
 
 
 let family = [amd64; i686; i586; i486; i386; i86]
