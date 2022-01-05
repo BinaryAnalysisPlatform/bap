@@ -465,6 +465,14 @@ let () =
   Some (Addr.to_bitvec (min_addr mem))
 
 let () =
+  let open KB.Syntax in
+  KB.promise Theory.Semantics.slot @@ fun label ->
+  let+ {data; off; size} = label-->?slot in
+  let empty = KB.Value.empty Theory.Semantics.cls in
+  KB.Value.put Theory.Semantics.code empty @@
+  Some (Bigstring.to_string ~pos:off ~len:size data)
+
+let () =
   let open KB.Rule in
   declare ~package:"bap" "addr-of-mem" |>
   require slot |>

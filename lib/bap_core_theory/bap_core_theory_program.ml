@@ -20,6 +20,12 @@ let word = Knowledge.Domain.optional "word"
     ~equal:Bitvec.equal
     ~inspect:Bitvec_sexp.sexp_of_t
 
+let hexcode = Knowledge.Domain.optional "hexcode"
+    ~equal:String.equal
+    ~inspect:(Fn.compose sexp_of_string @@
+              String.concat_map ~sep:" " ~f:(fun c ->
+                  Format.sprintf "%02x" @@ Char.to_int c))
+
 let name = Knowledge.Domain.optional "name"
     ~equal:String.equal
     ~inspect:sexp_of_string
@@ -296,6 +302,13 @@ module Semantics = struct
       ~persistent:(Knowledge.Persistent.of_binable (module Value.Top))
       ~public:true
       ~desc:"the program semantics"
+  let code = Knowledge.Class.property ~package cls "insn-code" hexcode
+      ~persistent:(Knowledge.Persistent.of_binable (module struct
+                     type t = string option
+                     [@@deriving bin_io]
+                   end))
+      ~public:true
+      ~desc:"the program memory contents"
 
   include Self
 end
