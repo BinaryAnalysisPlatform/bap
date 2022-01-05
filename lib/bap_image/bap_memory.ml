@@ -466,8 +466,10 @@ let () =
 
 let () =
   let open KB.Syntax in
-  KB.promise Theory.Label.bytes @@ fun label ->
-  KB.collect slot label >>|? fun {data; off; size} ->
+  KB.promise Theory.Semantics.slot @@ fun label ->
+  let+ {data; off; size} = label-->?slot in
+  let empty = KB.Value.empty Theory.Semantics.cls in
+  KB.Value.put Theory.Semantics.code empty @@
   Some (Bigstring.to_string ~pos:off ~len:size data)
 
 let () =

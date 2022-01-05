@@ -1303,6 +1303,9 @@ module Theory : sig
         @since 2.3.0 *)
     val value : (cls, unit Value.t) Knowledge.slot
 
+    (** the memory contents of the program. *)
+    val code : (cls, string option) Knowledge.slot
+
     include Knowledge.Value.S with type t := t
   end
 
@@ -1797,9 +1800,6 @@ module Theory : sig
 
     (** the address of the label.  *)
     val addr : (program, Bitvec.t option) KB.slot
-
-    (** the memory contents of the label. *)
-    val bytes : (program, string option) KB.slot
 
     (** the linkage name of the label  *)
     val name : (program, string option) KB.slot

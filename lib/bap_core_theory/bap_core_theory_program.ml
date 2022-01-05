@@ -20,13 +20,11 @@ let word = Knowledge.Domain.optional "word"
     ~equal:Bitvec.equal
     ~inspect:Bitvec_sexp.sexp_of_t
 
-let bytes = Knowledge.Domain.optional "bytes"
+let hexcode = Knowledge.Domain.optional "hexcode"
     ~equal:String.equal
-    ~inspect:(fun s ->
-        Sexp.Atom (
-          String.to_list s |> List.map ~f:(fun c ->
-              Format.sprintf "%02X" @@ Char.to_int c) |>
-          String.concat ~sep:" "))
+    ~inspect:(Fn.compose sexp_of_string @@
+              String.concat_map ~sep:" " ~f:(fun c ->
+                  Format.sprintf "%02x" @@ Char.to_int c))
 
 let name = Knowledge.Domain.optional "name"
     ~equal:String.equal
@@ -229,14 +227,6 @@ module Label = struct
       ~public:true
       ~desc:"the program virtual address"
 
-  let bytes = Knowledge.Class.property ~package cls "label-bytes" bytes
-      ~persistent:(Knowledge.Persistent.of_binable (module struct
-                     type t = string option
-                     [@@deriving bin_io]
-                   end))
-      ~public:true
-      ~desc:"the program memory contents"
-
   let name = string_property cls "label-name"
       ~desc:"the program linkage name"
 
@@ -312,6 +302,13 @@ module Semantics = struct
       ~persistent:(Knowledge.Persistent.of_binable (module Value.Top))
       ~public:true
       ~desc:"the program semantics"
+  let code = Knowledge.Class.property ~package cls "insn-code" hexcode
+      ~persistent:(Knowledge.Persistent.of_binable (module struct
+                     type t = string option
+                     [@@deriving bin_io]
+                   end))
+      ~public:true
+      ~desc:"the program memory contents"
 
   include Self
 end
