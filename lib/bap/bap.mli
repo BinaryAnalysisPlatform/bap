@@ -5506,10 +5506,20 @@ module Std : sig
     type result = (t * Error.t list) Or_error.t
 
     (** [create ?backend filename] creates an image of the file specified
-        specified by the [filename]. If [backend] is equal to "auto", then
-        all backends are tried in order. If only one backend can read this
-        file (i.e., there is no ambiguity), then image is returned. If
-        [backend] is not specified, then the LLVM backend is used. *)
+        by the [filename]. If [backend] is not specified, then
+        all availabe backends are used and their information is
+        merged. If the information provided by all backends agree (i.e.,
+        there's no conflicting information), then image is returned.
+        If [backend] is an explicit file path, then it is read as an
+        OGRE file and used for loading. Otherwise, [backend] should be
+        a name of one of the backends registered either with
+        [register_backend] or [register_loader]. See
+        [available_backends] for the list of available backends.
+
+        @since 2.5.0 accepts backend accepts an explicit file path,
+        note a file path is explicit if it exists and
+        [Fn.non Filename.is_implicit].
+    *)
     val create : ?backend:string -> path -> result
 
     (** [of_string ?backend ~data] creates an image from the specified
@@ -9084,7 +9094,7 @@ module Std : sig
         is translated to,
         {v
            #11 := #9 + 13
-           #12 := 11 * #11 
+           #12 := 11 * #11
            #10 := #12 - 17
         v}
         @since 2.5.0 *)
