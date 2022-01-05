@@ -8502,6 +8502,14 @@ module Std : sig
     *)
     val compute_liveness : t -> (tid, Var.Set.t) Solution.t
 
+
+    (** [flatten sub] returns [sub] in flattened form in which all
+        operands are trivial.
+        @see Blk.flatten for more information about flattening.
+
+        @since 2.5.0 *)
+    val flatten : t -> t
+
     (** other names for the given subroutine.*)
     val aliases : string list tag
 
@@ -9065,6 +9073,22 @@ module Std : sig
     (** [occurs blk after:x def] if [def] is occurs after definition
         [def] in [blk].  *)
     val occurs : t -> after:tid -> tid -> bool
+
+    (** [flatten blk] translates [blk] into the flattened form.
+        In the flattened form, all operations are applied to variables,
+        constants, or unknowns, i.e., the operands could not be compound
+        expressions. E.g.,
+        {v
+           #10 := 11 * (#9 + 13) - 17
+        v}
+        is translated to,
+        {v
+           #11 := #9 + 13
+           #12 := 11 * #11 
+           #10 := #12 - 17
+        v}
+        @since 2.5.0 *)
+    val flatten : t -> t
 
     (** Builder interface.  *)
     module Builder : sig
