@@ -19,6 +19,7 @@ module Semantics : sig
   val cls : (cls, unit Effect.sort) Knowledge.cls
   val slot : (program, t) Knowledge.slot
   val value : (cls, unit Value.t) Knowledge.slot
+  val code : (cls, string option) Knowledge.slot
   include Knowledge.Value.S with type t := t
 end
 
