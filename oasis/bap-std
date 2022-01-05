@@ -203,5 +203,6 @@ Library sema
                  Bap_sema,
                  Bap_sema_lift,
                  Bap_sema_ssa,
+                 Bap_sema_flatten,
                  Bap_sema_taint,
                  Bap_sema_free_vars

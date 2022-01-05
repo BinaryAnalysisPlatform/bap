@@ -3,6 +3,7 @@ open Graphlib.Std
 open Bap_disasm_std
 
 module Ssa = Bap_sema_ssa
+module Flatten = Bap_sema_flatten
 module Ir_lift = Bap_sema_lift
 module Ir_graph = Bap_ir_graph
 module FV = Bap_sema_free_vars
@@ -25,6 +26,7 @@ module Std = struct
     let lift = Ir_lift.blk
     let from_insn = Ir_lift.insn
     let from_insns = Ir_lift.insns
+    let flatten = Flatten.flatten_blk
   end
   module Sub = struct
     include Ir_sub
@@ -36,6 +38,7 @@ module Std = struct
     let is_ssa = Ssa.is_transformed
     let free_vars = FV.free_vars_of_sub
     let compute_liveness = FV.compute_liveness
+    let flatten = Flatten.flatten_sub
   end
 
   module Taint = Bap_sema_taint
