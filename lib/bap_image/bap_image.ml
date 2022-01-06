@@ -664,15 +664,24 @@ let merge_loaders () : loader =
 
 let get_loader = function
   | None -> merge_loaders ()
+  | Some name when Sys.file_exists name &&
+                   Fn.non Filename.is_implicit name ->
+    let local _ = match Ogre.Doc.from_file name with
+      | Error err -> Error err
+      | Ok doc -> Ok (Some doc) in
+    (module struct
+      let from_file = local
+      let from_data = local
+    end)
   | Some name -> match Hashtbl.find backends name with
     | Some loader -> loader
     | None ->
-      let module Failure = struct
-        let fail _ = Result.failf "Unknown image loader %s" name ()
+      let fail _ = Result.failf "Unknown image loader %s" name () in
+      (module struct
         let from_file = fail
         let from_data = fail
-      end in
-      (module Failure)
+      end)
+
 
 let invoke load data arg = match load arg with
   | Ok (Some doc) -> from_spec (data arg) doc
