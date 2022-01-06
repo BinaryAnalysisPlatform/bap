@@ -243,7 +243,18 @@ let input = Extension.Command.argument
 let loader =
   Extension.Command.parameter
     ~doc:"Use the specified loader.
-          Use the loader `raw' to load unstructured files"
+          The loader could be either an identifier or a filename. \
+          The filename has to be explicit, i.e., to start with an \
+          explicit reference to the root directory or to the current \
+          directory (e.g., $(b,./), or $(b,../), or $(b,/) in Unix). \
+          The contents of the file should be a well-formed OGRE \
+          document that contains the necessary meta-information \
+          about the binary. \
+          The default loader is named $(b,llvm) and uses LLVM loaders \
+          to parse the input binary and supports ELF, MachO, and COFF \
+          (including Windows PE), formats. \
+          To load unstructured files use the $(b,raw) loader and \
+          specify the loader parameters via the $(b,raw) plugin."
     Extension.Type.(string =? "llvm")
     "loader"
 
@@ -362,13 +373,14 @@ let save_knowledge ~had_knowledge ~update digest = function
   | Some _ -> ()
 
 
-
 let create_and_process input outputs passes loader target update kb ctxt =
+  let uses_file_loader = Sys.file_exists loader &&
+                         Fn.non Filename.is_implicit loader in
   let package = input in
   let digest = make_digest [
       Extension.Configuration.digest ctxt;
       Caml.Digest.file input;
-      loader;
+      if uses_file_loader then Caml.Digest.file loader else loader;
     ] in
   let had_knowledge = load_knowledge digest kb in
   let input = Project.Input.load ~target ~loader input in
