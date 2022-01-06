@@ -1,3 +1,3 @@
 open Bap_primus.Std
 
-val print : string -> Primus.Lisp.Doc.index -> unit
+val print : string option -> Primus.Lisp.Doc.index -> unit

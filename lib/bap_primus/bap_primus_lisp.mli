@@ -23,7 +23,12 @@ module Doc : sig
 
   module Category : Element
   module Name     = KB.Name
-  module Descr    : Element
+  module Descr    : sig
+    include Element
+    val has_source : t -> bool
+    val pp_location : formatter -> t -> unit
+    val pp_source : formatter -> t -> unit
+  end
   type index = (Category.t * (Name.t * Descr.t) list) list
 
   module Make(Machine : Machine) : sig
