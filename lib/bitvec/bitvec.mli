@@ -21,6 +21,9 @@ val m1  : modulus
 (** [m8 = modulus 8] = $255$ is the modulus of bitvectors with size [8]  *)
 val m8  : modulus
 
+(** [m16 = modulus 16] = $65535$ is the modulus of bitvectors with size [16]  *)
+val m16  : modulus
+
 (** [m32 = modulus 32] = $2^32-1$ is the modulus of bitvectors with size [32]  *)
 val m32 : modulus
 
@@ -566,6 +569,7 @@ module Make(M : Modulus) : sig
   include S with type 'a m = 'a
 end
 
+module type D = S with type 'a m = 'a
 
 (** [M1] specializes [Make(struct let modulus = m1 end)]
 
@@ -573,7 +577,7 @@ end
     and on an efficient implementation of the modulo operation
     as the [even x] aka [lsb x] operation.
 *)
-module M1  : S with type 'a m = 'a
+module M1 : D
 
 (** [M8] specializes [Make(struct let modulus = m8 end)]
 
@@ -582,7 +586,17 @@ module M1  : S with type 'a m = 'a
     calls to the underlying arbitrary precision arithmetic
     library.
 *)
-module M8  : S with type 'a m = 'a
+module M8 : D
+
+
+(** [M16] specializes [Make(struct let modulus = m16 end)]
+
+    This specialization relies on a fact, that 8 bitvectors
+    always fit into OCaml integer representation, so it avoids
+    calls to the underlying arbitrary precision arithmetic
+    library.
+*)
+module M16 : D
 
 
 (** [M32] specializes [Make(struct let modulus = m32 end)]
@@ -592,7 +606,7 @@ module M8  : S with type 'a m = 'a
     calls to the underlying arbitrary precision arithmetic
     library.
 *)
-module M32 : S with type 'a m = 'a
+module M32 : D
 
 
 (** [M64] specializes [Make(struct let modulus = m64 end)]
@@ -602,4 +616,8 @@ module M32 : S with type 'a m = 'a
     will not overflow the OCaml int representation.
 
 *)
-module M64 : S with type 'a m = 'a
+module M64 : D
+
+(** [modular n] returns a module [M] which implements
+    all operations in [S] modulo the bitwitdh [n].  *)
+val modular : int -> (module D)
