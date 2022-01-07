@@ -21,7 +21,8 @@ val m1  : modulus
 (** [m8 = modulus 8] = $255$ is the modulus of bitvectors with size [8]  *)
 val m8  : modulus
 
-(** [m16 = modulus 16] = $65535$ is the modulus of bitvectors with size [16]  *)
+(** [m16 = modulus 16] = $65535$ is the modulus of bitvectors with size [16] 
+    @since 2.5.0 *)
 val m16  : modulus
 
 (** [m32 = modulus 32] = $2^32-1$ is the modulus of bitvectors with size [32]  *)
@@ -595,6 +596,7 @@ module M8 : D
     always fit into OCaml integer representation, so it avoids
     calls to the underlying arbitrary precision arithmetic
     library.
+    @since 2.5.0
 *)
 module M16 : D
 
@@ -618,6 +620,7 @@ module M32 : D
 *)
 module M64 : D
 
-(** [modular n] returns a module [M] which implements
-    all operations in [S] modulo the bitwitdh [n].  *)
+(** [modular n] returns a module [M], which implements
+    all operations in [S] modulo the bitwidth [n]. 
+    @since 2.5.0 *)
 val modular : int -> (module D)
