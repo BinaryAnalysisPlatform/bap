@@ -591,7 +591,7 @@ module M8 : D
 
 (** [M16] specializes [Make(struct let modulus = m16 end)]
 
-    This specialization relies on a fact, that 8 bitvectors
+    This specialization relies on a fact, that 16 bitvectors
     always fit into OCaml integer representation, so it avoids
     calls to the underlying arbitrary precision arithmetic
     library.
