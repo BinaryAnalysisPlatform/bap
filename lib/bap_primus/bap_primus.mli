@@ -3672,9 +3672,22 @@ text ::= ?any atom that is not recognized as a <word>?
 
         module Category : Element
         module Name     = Knowledge.Name
-        module Descr    : Element
+        module Descr    : sig
+          include Element
+
+          (** [has_source desc] if the source code is available.
+              @since 2.5.0 *)
+          val has_source : t -> bool
+
+          (** prints the location if [has_source], otherwise does nothing.
+              @since 2.5.0  *)
+          val pp_location : Format.formatter -> t -> unit
 
 
+          (** prints source code if it is available, otherwise does nothing.
+              @since 2.5.0 *)
+          val pp_source : Format.formatter -> t -> unit
+        end
 
         (** Documentation index.
 
