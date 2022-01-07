@@ -9,3 +9,4 @@ val name : t -> Knowledge.Name.t
 val desc : t -> string
 val long : t -> string
 val pp : Format.formatter -> t -> unit
+val normalize_text : string -> string

@@ -44,7 +44,7 @@ module Documentation = struct
     let module Main = Primus.Machine.Main(Machine) in
     let print =
       Doc.generate_index >>|
-      Primus_lisp_documentation.print "user" in
+      Primus_lisp_documentation.print None in
     match Main.run proj print with
     | Normal, _ -> ()
     | Exn e, _ ->

@@ -240,14 +240,14 @@ let install_handwritten_manpages () =
 (* by default, title is the buffer/file name with no extension,
    that's why we need override it with an empty title *)
 let html_of_org file =
-  run "echo \"#+TITLE:\n\" >> %s" file;
+  run "echo \"#+TITLE: Primus Lisp Documentation\n\" >> %s" file;
   run "emacs %s --batch --eval '(org-html-export-to-html)'" file;
   Sys.remove file
 
-let install_lisp_documentation () =
-  let file = "lisp/index.org" in
-  mkdir "lisp";
-  run "bap /bin/true --primus-lisp-documentation > %s" file;
+let install_lisp_documentation ?(option="") target =
+  let file = Filename.concat target "index.org" in
+  mkdir target;
+  run "bap primus-lisp-documentation %s > %s" option file;
   html_of_org file
 
 let install_primus_api () =
@@ -276,6 +276,7 @@ let () =
   check ();
   generate_manual ();
   install_handwritten_manpages ();
-  install_lisp_documentation ();
+  install_lisp_documentation "lisp";
+  install_lisp_documentation ~option:"--semantics" "semantics";
   install_primus_api ();
   generate ()

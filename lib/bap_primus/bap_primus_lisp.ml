@@ -12,8 +12,10 @@ module Lisp = struct
   module Attributes = Bap_primus_lisp_attributes
   module Def = Bap_primus_lisp_def
   module Var = Bap_primus_lisp_var
+  module Loc = Bap_primus_lisp_loc
   module Resolve = Bap_primus_lisp_resolve
   module State = Bap_primus_state
+  module Source = Bap_primus_lisp_source
   module Check = Bap_primus_lisp_type.Check
   module Context = Bap_primus_lisp_context
   module Program = Bap_primus_lisp_program
@@ -841,32 +843,66 @@ module Doc = struct
 
   module Category = String
   module Name = Knowledge.Name
-  module Descr = String
+  module Descr = struct
+    type t = {
+      desc : string;
+      code : string option;
+      loc : Lisp.Loc.t option;
+    }
 
-  type index = (string * (Name.t * string) list) list
+    let normalize_location : loc -> loc = fun loc -> {
+        loc with file = Filename.basename loc.file;
+      }
+
+    let create prog def =
+      let src = Lisp.Program.sources prog in
+      let desc = Info.normalize_text (Lisp.Def.docs def) in
+      let loc = Lisp.Source.loc src def.id in
+      if Lisp.Source.has_loc src def.id then {
+        desc;
+        code = Some (Format.asprintf "%a" (Lisp.Source.pp src) loc);
+        loc = Some (normalize_location loc);
+      } else {desc; code = None; loc = None}
+
+    let merge_desc x y = match x,y with
+      | "", y -> y
+      | x, "" -> x
+      | x,y when String.equal x y -> x
+      | x,y -> sprintf "%s\nOR\n%s" x y
+
+    let merge x y = {
+      desc = merge_desc x.desc y.desc;
+      code = Option.first_some x.code y.code;
+      loc = Option.first_some x.loc y.loc;
+    }
+
+    let has_source {code} = Option.is_some code
+
+    let pp_location ppf {loc} = match loc with
+      | None -> ()
+      | Some loc -> Lisp.Loc.pp ppf loc
+
+    let pp_source ppf {code} = match code with
+      | None -> ()
+      | Some code -> Format.fprintf ppf "%s" code
+
+    let pp ppf {desc} = Format.fprintf ppf "%s" desc
+  end
+
+  type index = (string * (Name.t * Descr.t) list) list
 
   let normalize xs =
-    Map.of_alist_reduce (module Name) xs ~f:(fun x y -> match x,y with
-        | "", y -> y
-        | x, "" -> x
-        | x,y when String.equal x y -> x
-        | x,y -> sprintf "%s\nOR\n%s" x y) |>
+    Map.of_alist_reduce (module Name) xs ~f:Descr.merge |>
     Map.to_alist
 
   let describe prog item =
     Lisp.Program.fold prog item ~init:[] ~f:(fun ~package def defs ->
         let name = Name.create ~package (Lisp.Def.name def) in
-        let info = Info.create ~desc:(Lisp.Def.docs def) name in
-        (name,Info.desc info) :: defs) |> normalize
-
-  let describe_packages prog =
-    Lisp.Program.packages prog |>
-    List.map ~f:(fun (n,d) -> KB.Name.create n, d)
+        (name,Descr.create prog def) :: defs) |> normalize
 
   let remove_empty = List.filter ~f:(function (_,[]) -> false | _ -> true)
 
   let create_index p = remove_empty@@Lisp.Program.Items.[
-      "Packages", describe_packages p;
       "Macros", describe p macro;
       "Substitutions", describe p subst;
       "Constants", describe p const;
