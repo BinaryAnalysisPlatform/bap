@@ -237,7 +237,7 @@ module Plugins = struct
     | Error (name,_) -> name
 
   let collect ?env ?provides ?(library=[]) () =
-    let (/) = Filename.concat in
+    let (/) x y = x ^ "/" ^ y in
     let strset = Set.of_list (module String) in
     let provides = Option.map provides ~f:strset in
     let env = strset (Option.value env ~default:[]) in
