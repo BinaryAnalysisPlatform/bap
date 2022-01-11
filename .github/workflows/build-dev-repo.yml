@@ -35,7 +35,7 @@ jobs:
           dune-cache: ${{  matrix.os != 'macos-latest' }}
 
       - name: Add the testing Repository
-        run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
+        run: opam repo add bap git+https://github.com/BinaryAnalysisPlatform/opam-repository#testing
 
       - name: Pin BAP
         run: opam pin add bap . --no-action
