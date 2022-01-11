@@ -82,6 +82,10 @@ end
 type t = Theory.Semantics.t
 type op = Op.t [@@deriving bin_io, compare, sexp]
 
+let normalize_asm asm =
+  String.substr_replace_all asm ~pattern:"\t"
+    ~with_:" " |> String.strip
+
 
 module Slot = struct
   type 'a t = (Theory.Effect.cls, 'a) KB.slot
@@ -106,6 +110,19 @@ module Slot = struct
       ~persistent:KB.Persistent.string
       ~public:true
       ~desc:"an assembly string"
+
+  let provide_asm : unit =
+    KB.Rule.(begin
+        declare ~package:"bap" "asm-of-basic" |>
+        require Insn.slot |>
+        provide asm |>
+        comment "provides the assembly string";
+      end);
+    let open KB.Syntax in
+    KB.promise Theory.Semantics.slot @@ fun label ->
+    let+ insn = label-->?Insn.slot in
+    KB.Value.put asm Theory.Semantics.empty @@
+    normalize_asm @@ Insn.asm insn
 
   let sexp_of_op = function
     | Op.Reg r -> Sexp.Atom (Reg.name r)
@@ -213,9 +230,6 @@ module Slot = struct
       domain
 end
 
-let normalize_asm asm =
-  String.substr_replace_all asm ~pattern:"\t"
-    ~with_:" " |> String.strip
 
 type vis = {
   jump : bool;
@@ -399,7 +413,7 @@ include Regular.Make(struct
   end)
 
 let pp_asm ppf insn =
-  Format.fprintf ppf "%s" (normalize_asm (asm insn))
+  Format.fprintf ppf "%s" (asm insn)
 
 
 module Seqnum = struct

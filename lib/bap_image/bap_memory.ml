@@ -465,6 +465,12 @@ let () =
   Some (Addr.to_bitvec (min_addr mem))
 
 let () =
+  KB.Rule.(begin
+      declare ~package:"bap" "code-of-mem" |>
+      require slot |>
+      provide Theory.Semantics.code |>
+      comment "extracts the memory contents"
+    end);
   let open KB.Syntax in
   KB.promise Theory.Semantics.slot @@ fun label ->
   let+ {data; off; size} = label-->?slot in
