@@ -30,7 +30,7 @@ jobs:
           sudo apt-get install libghidra-data -y
 
       - name: Add the testing Repository
-        run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
+        run: opam repo add bap git+https://github.com/BinaryAnalysisPlatform/opam-repository#testing
 
       - name: Install system dependencies
         run: opam depext -u bap-extra

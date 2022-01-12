@@ -23,7 +23,7 @@ jobs:
           dune-cache: true
 
       - name: Add the testing Repository
-        run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
+        run: opam repo add bap git+https://github.com/BinaryAnalysisPlatform/opam-repository#testing
 
       - name: Pin OASIS
         run: opam pin add oasis https://github.com/BinaryAnalysisPlatform/oasis.git

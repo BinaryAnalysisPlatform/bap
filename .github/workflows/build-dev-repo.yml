@@ -35,7 +35,7 @@ jobs:
           dune-cache: ${{  matrix.os != 'macos-latest' }}
 
       - name: Add the testing Repository
-        run: opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
+        run: opam repo add bap git+https://github.com/BinaryAnalysisPlatform/opam-repository#testing
 
       - name: Pin BAP
         run: opam pin add bap . --no-action
@@ -44,6 +44,7 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: |
           rm -rf /usr/local/bin/2to3
+          rm -f $(opam var lib)/ocaml/version
           brew unlink gcc@9
           brew update
           brew upgrade

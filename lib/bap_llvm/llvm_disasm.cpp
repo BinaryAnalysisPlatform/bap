@@ -5,13 +5,18 @@
 #include <llvm/MC/MCRegisterInfo.h>
 #include <llvm/Support/DataTypes.h>
 #include <llvm/Support/FormattedStream.h>
-#include <llvm/Support/TargetRegistry.h>
 #include <llvm/Support/CommandLine.h>
 #if LLVM_VERSION_MAJOR >= 12
 #include <llvm/Support/Process.h>
 #include <llvm/Support/StringSaver.h>
 #endif
 #include <llvm-c/Target.h>
+
+#if LLVM_VERSION_MAJOR >= 14
+#include <llvm/MC/TargetRegistry.h>
+#else
+#include <llvm/Support/TargetRegistry.h>
+#endif
 
 #if LLVM_VERSION_MAJOR >= 10
 #include "llvm/MC/MCTargetOptions.h"
@@ -258,8 +263,11 @@ public:
         }
 
         shared_ptr<llvm::MCContext> ctx
+#if LLVM_VERSION_MAJOR >= 13
+            (new llvm::MCContext(t, &*asm_info, &*reg_info, 0));
+#else
             (new llvm::MCContext(&*asm_info, &*reg_info, 0));
-
+#endif
         if (!ctx) {
             if (debug_level > 0)
                 output_error(triple, cpu, "failed to create disassembly context");
@@ -522,11 +530,19 @@ private:
             op.imm_val = mcop.getImm();
             return op;
         }
+#if LLVM_VERSION_MAJOR >= 13
+        if (mcop.isDFPImm()) {
+            op.type = bap_disasm_op_fmm;
+            op.fmm_val = bit_cast<double>(mcop.getDFPImm());
+            return op;
+        } 
+#else
         if (mcop.isFPImm()) {
             op.type = bap_disasm_op_fmm;
             op.fmm_val = mcop.getFPImm();
             return op;
         }
+#endif
         if (mcop.isInst()) {
             std::cerr << "got subinst\n";
             abort();

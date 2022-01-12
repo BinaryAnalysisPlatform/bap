@@ -82,6 +82,10 @@ end
 type t = Theory.Semantics.t
 type op = Op.t [@@deriving bin_io, compare, sexp]
 
+let normalize_asm asm =
+  String.substr_replace_all asm ~pattern:"\t"
+    ~with_:" " |> String.strip
+
 
 module Slot = struct
   type 'a t = (Theory.Effect.cls, 'a) KB.slot
@@ -106,6 +110,19 @@ module Slot = struct
       ~persistent:KB.Persistent.string
       ~public:true
       ~desc:"an assembly string"
+
+  let provide_asm : unit =
+    KB.Rule.(begin
+        declare ~package:"bap" "asm-of-basic" |>
+        require Insn.slot |>
+        provide asm |>
+        comment "provides the assembly string";
+      end);
+    let open KB.Syntax in
+    KB.promise Theory.Semantics.slot @@ fun label ->
+    let+ insn = label-->?Insn.slot in
+    KB.Value.put asm Theory.Semantics.empty @@
+    normalize_asm @@ Insn.asm insn
 
   let sexp_of_op = function
     | Op.Reg r -> Sexp.Atom (Reg.name r)
@@ -213,61 +230,55 @@ module Slot = struct
       domain
 end
 
-let normalize_asm asm =
-  String.substr_replace_all asm ~pattern:"\t"
-    ~with_:" " |> String.strip
+module Analyzer = struct
+  module Effects = Set.Make(struct
+      type t = Kind.t [@@deriving compare, sexp]
+    end)
+  type vis = {
+    jump : bool;
+    cond : bool;
+    indirect : bool;
+  }
 
-type vis = {
-  jump : bool;
-  cond : bool;
-  indirect : bool;
-}
+  let no_jumps = {jump=false;cond=false;indirect=false}
 
-let lookup_jumps bil =
-  let jump ?(cond=false) v = { v with jump = true; cond } in
-  let conditional v = jump ~cond:true v in
-  let indirect f v = f { v with indirect=true } in
-  let cons check x xs = if check then x :: xs else xs in
-  (object
-    inherit [vis] Stmt.visitor
-    method! enter_jmp ex vis = match ex with
-      | Bil.Int _ when under_condition -> conditional vis
-      | Bil.Int _ -> jump vis
-      | _ when under_condition -> indirect conditional vis
-      | _ -> indirect jump vis
-  end)#run bil {jump=false;cond=false;indirect=false} |> fun v ->
-  if not v.jump then []
-  else
-    cons (not v.cond) `Unconditional_branch [] |>
-    cons v.cond `Conditional_branch |>
-    cons v.indirect `Indirect_branch
+  let analyzer =
+    let jump ?(cond=false) v = { v with jump = true; cond } in
+    let conditional v = jump ~cond:true v in
+    let indirect f v = f { v with indirect=true } in
+    object
+      inherit [Effects.t * vis] Stmt.visitor
+      method! enter_store ~mem:_ ~addr:_ ~exp:_ _ _ (effs,jumps) =
+        Set.add effs `May_store,jumps
+      method! enter_load ~mem:_ ~addr:_ _ _ (effs,jumps) =
+        Set.add effs `May_load,jumps
+      method! enter_jmp ex (effs,jumps) = effs,match ex with
+        | Bil.Int _ when under_condition -> conditional jumps
+        | Bil.Int _ -> jump jumps
+        | _ when under_condition -> indirect conditional jumps
+        | _ -> indirect jump jumps
+    end
 
-let lookup_side_effects bil = (object
-  inherit [kind list] Stmt.visitor
-  method! enter_store ~mem:_ ~addr:_ ~exp:_ _ _ acc =
-    `May_store :: acc
-  method! enter_load ~mem:_ ~addr:_ _ _ acc =
-    `May_load :: acc
-end)#run bil []
-
-let (<--) slot value insn = KB.Value.put slot insn value
-
-let write init ops =
-  List.fold ~init ops ~f:(fun init f -> f init)
+  let run bil =
+    let cons c = Fn.flip @@ if c then Effects.add else Fn.const in
+    let effs,jump = analyzer#run bil (Effects.empty,no_jumps) in
+    if not jump.jump then effs
+    else
+      cons (not jump.cond) `Unconditional_branch effs |>
+      cons jump.cond `Conditional_branch |>
+      cons jump.indirect `Indirect_branch
+end
 
 let derive_props ?bil insn =
-  let bil_kinds = match bil with
-    | Some bil -> lookup_jumps bil @ lookup_side_effects bil
-    | None -> [] in
+  let bil_effects = match bil with
+    | Some bil -> Analyzer.run bil
+    | None -> Analyzer.Effects.empty in
   let is = Insn.is insn in
-  let is_bil kind =
-    if Option.is_some bil
-    then List.mem ~equal:[%compare.equal : kind] bil_kinds kind
-    else is kind in
+  let is_bil = if Option.is_some bil
+    then Analyzer.Effects.mem bil_effects else is in
   (* those two are the only which we can't get from the BIL semantics *)
   let is_return = is `Return in
   let is_call = is `Call in
-
   let is_conditional_jump = is_bil `Conditional_branch in
   let is_jump = is_conditional_jump || is_bil `Unconditional_branch in
   let is_indirect_jump = is_bil `Indirect_branch in
@@ -287,6 +298,11 @@ let derive_props ?bil insn =
   Props.set_if may_affect_control_flow affect_control_flow |>
   Props.set_if may_load load                               |>
   Props.set_if may_store store
+
+let (<--) slot value insn = KB.Value.put slot insn value
+
+let write init ops =
+  List.fold ~init ops ~f:(fun init f -> f init)
 
 let set_basic effect insn : t =
   write effect Slot.[
@@ -399,7 +415,7 @@ include Regular.Make(struct
   end)
 
 let pp_asm ppf insn =
-  Format.fprintf ppf "%s" (normalize_asm (asm insn))
+  Format.fprintf ppf "%s" (asm insn)
 
 
 module Seqnum = struct
