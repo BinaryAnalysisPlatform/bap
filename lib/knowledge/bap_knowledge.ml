@@ -1108,6 +1108,30 @@ module Dict = struct
 
     let (<) x y = uid x < uid y [@@inline]
     let (>) x y = uid x > uid y [@@inline]
+    let (=) x y = uid x = uid y [@@inline]
+    let (<>) x y = uid x <> uid y [@@inline]
+
+
+    (* the order between intervals
+       The first interval is denoted with a series of [-],
+       the second interval is denoted with a series of [|],
+       their intersection is [+] and non-intersection is [.]
+    *)
+    type interval_order =
+      | ILT                     (* ---.||| *)
+      | IGT                     (* |||.--- *)
+      | ILE                     (* --+||   *)
+      | IGE                     (* ||+--   *)
+      | INC                     (* anything else *)
+
+    let compare_interval l1 u1 l2 u2 =
+      match compare u1 l2, compare u2 l1 with
+      | 0,_ -> ILE
+      | _,0 -> IGE
+      | -1,_ -> ILT
+      | _,-1 -> IGT
+      | _ -> INC
+
   end
   type 'a key = 'a Key.t
 
@@ -1668,13 +1692,77 @@ module Dict = struct
   let find k x = try Some (get k x) with
     | Field_not_found -> None
 
-  let merge (type a) m x y =
+  let fold_merge (type a) m x y =
     foreach y ~init:x {
       visit = fun (type b c) (ka : b key) (a : b) x ->
         upsert ka a x
           ~insert:(fun x -> x)
           ~update:(fun k -> k m)
     }
+
+  let merge m x y =
+    if phys_equal x y then Ok x
+    else match x,y with
+      | T0,x | x, T0 -> Ok x
+      | T1 (ka, a), T1 (kb, b) ->
+        begin match Key.compare ka kb with
+          | 0 -> Ok (make1 ka (app m ka kb b a))
+          | 1 -> Ok (make2 kb b ka a)
+          | _ -> Ok (make2 ka a kb b)
+        end
+      | T1 (ka, a), T2 (kb, b, kc, c) ->
+        begin match Key.compare_interval ka ka kb kc with
+          | ILT -> Ok (make3 ka a kb b kc c)
+          | IGT -> Ok (make3 kb b kc c ka a)
+          | ILE -> Ok (make2 ka (app m ka kb b a) kc c)
+          | IGE -> Ok (make2 kb b ka (app m ka kb b a))
+          | INC -> Ok (make3 kb b ka a kc c)
+        end
+      | T2 (ka, a, kb, b), T1 (kc, c) ->
+        begin match Key.compare_interval ka kb kc kc with
+          | ILT -> Ok (make3 ka a kb b kc c)
+          | IGT -> Ok (make3 kc c ka a kb b)
+          | ILE -> Ok (make2 ka a kb (app m kb kc c b))
+          | IGE -> Ok (make2 ka (app m ka kc c a) kb b)
+          | INC -> Ok (make3 ka a kc c kb b)
+        end
+      | T1 (ka, a), T3 (kb, b, kc, c, kd, d) ->
+        begin match Key.compare_interval ka ka kc kd with
+          | ILT -> Ok (make4 ka a kb b kc c kd d)
+          | IGT -> Ok (make4 kb b kc c kd d ka a)
+          | ILE -> Ok (make3 ka (app m ka kb b a) kc c kd d)
+          | IGE -> Ok (make3 kb b kc c ka (app m ka kd d a))
+          | INC -> match Key.compare ka kc with
+            | 0 -> Ok (make3 kb b kc (app m kc kd d c) kd d)
+            | 1 -> Ok (make4 kb b kc c ka a kd d)
+            | _ -> Ok (make4 kb b ka a kc c kd d)
+        end
+      | T2 (ka, a, kb, b), T2 (kc, c, kd, d) ->
+        begin match Key.compare_interval ka kb kc kd with
+          | ILT -> Ok (make4 ka a kb b kc c kd d)
+          | IGT -> Ok (make4 kc c kd d ka a kb b)
+          | ILE -> Ok (make3 ka a kb (app m kb kc c b) kd d)
+          | IGE -> Ok (make3 kc c kd (app m kd ka a d) kb b)
+          | INC -> match Key.compare ka kc, Key.compare kb kd with
+            | 0,1 -> Ok (make3 ka (app m ka kc c a) kd d kb b)
+            | 0,_ -> Ok (make3 ka (app m ka kc c a) kb b kd d)
+            | 1,0 -> Ok (make3 kc c ka a kb (app m kb kd d b))
+            | _,0 -> Ok (make3 ka a kc c kb (app m kb kd d b))
+            | 1,_ -> Ok (make4 kc c ka a kb b kd d)
+            | _,_ -> Ok (make4 ka a kc c kd d kb b)
+        end
+      | T3 (ka, a, kb, b, kc, c), T1 (kd,d) ->
+        begin match Key.compare_interval ka kc kd kd with
+          | ILT -> Ok (make4 ka a kb b kc c kd d)
+          | IGT -> Ok (make4 kd d ka a kb b kc c)
+          | ILE -> Ok (make3 ka a kb b kc (app m kc kd d c))
+          | IGE -> Ok (make3 kd (app m kd ka a d) kb b kc c)
+          | INC -> match Key.compare kd kb with
+            | 0 -> Ok (make3 ka a kb (app m kb kd d b) kc c)
+            | 1 -> Ok (make4 ka a kb b kd d kc c)
+            | _ -> Ok (make4 ka a kd d kb b kc c)
+        end
+      | _ -> Ok (fold_merge m x y)
 
 
   let sexp_of_t dict = Sexp.List (foreach ~init:[] dict {
@@ -1775,7 +1863,6 @@ module Record = struct
         | `fail -> raise (Merge_conflict err)
   }
 
-
   let commit (type p) _ (key : p Key.t) v x =
     match v with
     | Dict.T0 -> Ok (Dict.make1 key x)
@@ -1793,59 +1880,16 @@ module Record = struct
     | None -> empty
     | Some x -> x
 
-  let non_intersecting_merge x y =
-    match x,y with
-    | Dict.T0,x | x, Dict.T0 -> Some  x
-    | T1 (ka, a), T1 (kb, b)
-      when Key.(ka < kb) ->
-      Some (Dict.make2 ka a kb b)
-    | T1 (ka, a), T2 (kb, b, kc, c)
-      when Key.(ka < kb) ->
-      Some  (Dict.make3 ka a kb b kc c)
-    | T1 (ka, a), T3 (kb, b, kc, c, kd, d)
-      when Key.(ka < kb) ->
-      Some (Dict.make4 ka a kb b kc c kd d)
-    | T1 (ka, a), T4 (kb, b, kc, c, kd, d, ke, e)
-      when Key.(ka < kb) ->
-      Some (Dict.make5 ka a kb b kc c kd d ke e)
-    | T2 (ka, a, kb, b), T2 (kc, c, kd, d)
-      when Key.(kb < kc) ->
-      Some (Dict.make4 ka a kb b kc c kd d)
-    | T2 (ka, a, kb, b), T3 (kc, c, kd, d, ke, e)
-      when Key.(kb < kc) ->
-      Some (Dict.make5 ka a kb b kc c kd d ke e)
-    | T2 (ka, a, kb, b), T4 (kc, c, kd, d, ke, e, kf, f)
-      when Key.(kb < kc) ->
-      Some (Dict.make6 ka a kb b kc c kd d ke e kf f)
-    | T3 (ka, a, kb, b, kc, c), T3 (kd, d, ke, e, kf, f)
-      when Key.(kc < kd) ->
-      Some (Dict.make6 ka a kb b kc c kd d ke e kf f)
-    | T3 (ka, a, kb, b, kc, c), T4 (kd, d, ke, e, kf, f, kg, g)
-      when Key.(kc < kd) ->
-      Some (Dict.make7 ka a kb b kc c kd d ke e kf f kg g)
-    | T4 (ka, a, kb, b, kc, c, kd, d), T4 (ke, e, kf, f, kg, g, kh, h)
-      when Key.(kd < ke) ->
-      Some (Dict.make8 ka a kb b kc c kd d ke e kf f kg g kh h)
-    | _ -> None
+  let splice = Dict.app
 
-  let make_merge m old our =
-    if phys_equal old our
-    then Ok our
-    else match non_intersecting_merge old our with
-      | Some r -> Ok r
-      | None -> match non_intersecting_merge our old with
-        | Some r -> Ok r
-        | None ->
-          try Result.return@@Dict.foreach our ~init:old {
-              visit = fun kb b out ->
-                Dict.upsert kb b out
-                  ~update:(fun k -> k m)
-                  ~insert:(fun x -> x)
-            }
-          with Merge_conflict err -> Error err
 
-  let join = make_merge domain_merge
-  let try_merge ~on_conflict = make_merge (resolving_merge on_conflict)
+  let join x y =
+    try Dict.merge domain_merge x y
+    with Merge_conflict err -> Error err
+
+  let try_merge ~on_conflict x y =
+    try Dict.merge (resolving_merge on_conflict) x y
+    with Merge_conflict err -> Error err
 
   let eq = Dict.Key.same
 
