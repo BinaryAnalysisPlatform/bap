@@ -319,7 +319,7 @@ module Insn = struct
     encoding : string;
     code : int;
     name : string;
-    asm  : bytes;
+    asm  : string;
     kinds: kind list;
     opers: Op.t array;
     subs : ins_info array;
@@ -342,13 +342,17 @@ module Insn = struct
 
   let name {name = x} = x
   let code op = op.code
-  let asm  x = Bytes.to_string x.asm
+  let asm  x = x.asm
   let ops  x = x.opers
   let kinds x = x.kinds
   let subs x = x.subs
   let is op x =
     let equal x y = Kind.compare x y = 0 in
     List.mem ~equal op.kinds x
+
+  let normalize_asm asm =
+    String.substr_replace_all asm ~pattern:"\t"
+      ~with_:" " |> String.strip
 
   let rec create ?parent ~asm ~kinds dis ~insn =
     let subs = Hashtbl.create (module Int) in
@@ -379,8 +383,8 @@ module Insn = struct
       if asm then
         let data = Bytes.create (C.insn_asm_size !!dis ~insn) in
         C.insn_asm_copy !!dis ~insn data;
-        data
-      else Bytes.empty in
+        normalize_asm @@ Bytes.to_string data
+      else "" in
     let kinds =
       if kinds then
         List.fold Kind.all ~init:[] ~f:(fun ks k ->
@@ -416,7 +420,7 @@ let sexp_of_full_insn = sexp_of_insn
 let compare_full_insn i1 i2 =
   let open Insn in
   let r1 = Int.compare i1.code i2.code in
-  if r1 <> 0 then Bytes.compare i1.asm i2.asm
+  if r1 <> 0 then String.compare i1.asm i2.asm
   else r1
 
 

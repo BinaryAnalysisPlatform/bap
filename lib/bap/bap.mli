@@ -6773,6 +6773,14 @@ module Std : sig
         (** [ops insn] gives an access to [insn]'s operands.   *)
         val ops  : ('a,'k) t -> op array
 
+        (** [subs insn] an array of subinstructions.
+
+            An instruction can contain subinstructions, which could be
+            accessed with this function. Returns an empty array if
+            there are no subinstructions.
+
+            @since 2.5.0 *)
+        val subs : ('a,'k) t -> ('a,'k) t array
       end
 
       (** Trie maps over instructions  *)
@@ -7029,6 +7037,12 @@ module Std : sig
 
       (** [slot] for accessing the sequence number of a subinstruction.  *)
       val slot : (Theory.program, t option) KB.slot
+
+
+      (** [fresh] evaluates to a freshly generated sequence number.
+
+          @since 2.5.0  *)
+      val fresh : tid knowledge
     end
 
 

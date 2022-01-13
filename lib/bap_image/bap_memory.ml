@@ -446,7 +446,6 @@ include Printable.Make(struct
 
 let hexdump t = Format.asprintf "%a" pp_hex t
 
-
 let domain = KB.Domain.optional "mem"
     ~equal:(fun x y ->
         Addr.equal x.addr y.addr &&
@@ -457,30 +456,3 @@ let slot = KB.Class.property ~package:"bap"
     Theory.Program.cls "mem" domain
     ~public:true
     ~desc:"a memory region occupied by the program"
-
-let () =
-  let open KB.Syntax in
-  KB.promise Theory.Label.addr @@ fun label ->
-  KB.collect slot label >>|? fun mem ->
-  Some (Addr.to_bitvec (min_addr mem))
-
-let () =
-  KB.Rule.(begin
-      declare ~package:"bap" "code-of-mem" |>
-      require slot |>
-      provide Theory.Semantics.code |>
-      comment "extracts the memory contents"
-    end);
-  let open KB.Syntax in
-  KB.promise Theory.Semantics.slot @@ fun label ->
-  let+ {data; off; size} = label-->?slot in
-  let empty = KB.Value.empty Theory.Semantics.cls in
-  KB.Value.put Theory.Semantics.code empty @@
-  Some (Bigstring.to_string ~pos:off ~len:size data)
-
-let () =
-  let open KB.Rule in
-  declare ~package:"bap" "addr-of-mem" |>
-  require slot |>
-  provide Theory.Label.addr |>
-  comment "addr of the first byte"
