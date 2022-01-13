@@ -430,7 +430,6 @@ let () =
       Channels.init !!redirects;
       Primitives.init ();
       Semantics_primitives.provide ();
-      Semantics_primitives.enable_extraction ();
       Semantics.load_lisp_unit ~paths ~features;
       let stdout = Option.map !!semantics_stdout ~f:(fun file ->
           let ch = Out_channel.create file in

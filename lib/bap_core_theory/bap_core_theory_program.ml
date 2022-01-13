@@ -279,14 +279,6 @@ module Label = struct
     | None -> Knowledge.return Target.unknown
     | Some unit -> Knowledge.collect Unit.target unit
 
-  let _decide_name_from_possible_name : unit =
-    Knowledge.Rule.(declare ~package "name-of-possible-names" |>
-                    require possible_name |>
-                    provide name |>
-                    comment "resolves possible name");
-    Knowledge.promise name @@
-    Knowledge.resolve possible_name
-
   include (val Knowledge.Object.derive cls)
 end
 

@@ -24,3 +24,13 @@ Library bap_core_theory
         Bap_core_theory_target,
         Bap_core_theory_value,
         Bap_core_theory_var
+
+Library core_theory_plugin
+  Build$:           flag(everything) || flag(core_theory)
+  Path:             plugins/core_theory
+  FindlibName:      bap-plugin-core_theory
+  BuildDepends:     bap-knowledge, bap-core-theory, bap-main,
+                    bitvec, core_kernel, monads, ppx_bap
+  InternalModules:  Core_theory_main
+  XMETADescription: provides core theory rules
+  XMETAExtraLines:  tags="core-theory, semantics"
