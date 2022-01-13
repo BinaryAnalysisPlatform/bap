@@ -84,17 +84,6 @@ module T = struct
       Theory.Unit.cls "unit-arch" domain
       ~persistent
 
-  let _arch_of_unit_ : unit =
-    KB.Rule.(declare ~package:"bap" "arch-of-unit" |>
-             require Theory.Label.unit |>
-             require unit_slot |>
-             provide slot |>
-             comment "propagates arch from the unit");
-    let open KB.Syntax in
-    KB.promise slot @@ fun obj ->
-    KB.collect Theory.Label.unit obj >>= function
-    | None -> KB.return `unknown
-    | Some unit -> KB.collect unit_slot unit
 end
 
 include T

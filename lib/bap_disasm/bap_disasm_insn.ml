@@ -82,11 +82,6 @@ end
 type t = Theory.Semantics.t
 type op = Op.t [@@deriving bin_io, compare, sexp]
 
-let normalize_asm asm =
-  String.substr_replace_all asm ~pattern:"\t"
-    ~with_:" " |> String.strip
-
-
 module Slot = struct
   type 'a t = (Theory.Effect.cls, 'a) KB.slot
   let empty = "#undefined"
@@ -110,19 +105,6 @@ module Slot = struct
       ~persistent:KB.Persistent.string
       ~public:true
       ~desc:"an assembly string"
-
-  let provide_asm : unit =
-    KB.Rule.(begin
-        declare ~package:"bap" "asm-of-basic" |>
-        require Insn.slot |>
-        provide asm |>
-        comment "provides the assembly string";
-      end);
-    let open KB.Syntax in
-    KB.promise Theory.Semantics.slot @@ fun label ->
-    let+ insn = label-->?Insn.slot in
-    KB.Value.put asm Theory.Semantics.empty @@
-    normalize_asm @@ Insn.asm insn
 
   let sexp_of_op = function
     | Op.Reg r -> Sexp.Atom (Reg.name r)
@@ -307,7 +289,7 @@ let write init ops =
 let set_basic effect insn : t =
   write effect Slot.[
       name <-- Insn.name insn;
-      asm <-- normalize_asm (Insn.asm insn);
+      asm <-- Insn.asm insn;
       ops <-- Some (Insn.ops insn);
     ]
 
@@ -337,7 +319,7 @@ let should = must
 let shouldn't = mustn't
 
 let name = KB.Value.get Slot.name
-let asm = KB.Value.get Slot.asm
+let asm  = KB.Value.get Slot.asm
 let bil insn = KB.Value.get Bil.slot insn
 let ops s = match KB.Value.get Slot.ops s with
   | None -> [||]
@@ -446,41 +428,6 @@ module Seqnum = struct
 
   let fresh = KB.Syntax.(freshnum >>= label)
 end
-
-
-
-let provide_sequence_semantics () =
-  let open KB.Syntax in
-  KB.promise Theory.Semantics.slot @@ fun obj ->
-  KB.collect Insn.slot obj >>= function
-  | None -> !!Theory.Semantics.empty
-  | Some insn when not (String.equal (Insn.name insn) "seq") ->
-    !!Theory.Semantics.empty
-  | Some insn -> match Insn.subs insn with
-    | [||] -> !!Theory.Semantics.empty
-    | subs ->
-      Theory.instance () >>= Theory.require >>= fun (module CT) ->
-      let subs = Array.to_list subs |>
-                 List.map ~f:(fun sub ->
-                     Seqnum.fresh >>| fun lbl ->
-                     lbl,sub) in
-      KB.all subs >>=
-      KB.List.map ~f:(fun (obj,sub) ->
-          KB.provide Insn.slot obj (Some sub) >>= fun () ->
-          KB.collect Theory.Semantics.slot obj >>= fun sema ->
-          let nil = Theory.Effect.empty Theory.Effect.Sort.bot in
-          CT.seq (CT.blk obj !!nil !!nil) !!sema) >>=
-      KB.List.reduce ~f:(fun s1 s2 -> CT.seq !!s1 !!s2) >>| function
-      | None -> empty
-      | Some sema -> with_basic sema insn
-
-let () =
-  let open KB.Rule in
-  declare "sequential-instruction" |>
-  require Insn.slot |>
-  provide Theory.Semantics.slot |>
-  comment "computes sequential instructions semantics";
-  provide_sequence_semantics ()
 
 let () =
   Data.Write.create ~pp:Adt.pp () |>
