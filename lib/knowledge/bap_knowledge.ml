@@ -2038,9 +2038,18 @@ module Knowledge = struct
 
     type work = Done | Work of workers
 
+    type worker = {
+      obj : Oid.t;
+      uid : Name.t;
+    } [@@deriving compare, sexp]
+
+    module Workers = Map.Make(struct
+        type t = worker [@@deriving compare, sexp]
+      end)
+
     type objects = {
       vals : Record.t Oid.Map.t;
-      comp : work Map.M(Name).t Oid.Map.t;
+      comp : work Workers.t;
       syms : fullname Oid.Map.t;
       heap : cell Oid.Map.t;
       data : Oid.t Cell.Map.t;
@@ -2050,7 +2059,7 @@ module Knowledge = struct
 
     let empty_class = {
       vals = Map.empty (module Oid);
-      comp = Map.empty (module Oid);
+      comp = Workers.empty;
       objs = Map.empty (module String);
       syms = Map.empty (module Oid);
       pubs = Map.empty (module String);
@@ -2341,7 +2350,8 @@ module Knowledge = struct
               | Some objs -> Some {
                   objs with
                   vals = Map.remove objs.vals obj;
-                  comp = Map.remove objs.comp obj;
+                  comp = Map.filter_keys objs.comp ~f:(fun key ->
+                      Oid.(key.Env.obj <> obj))
                 })
         }
 
@@ -2596,22 +2606,16 @@ module Knowledge = struct
     : ('a,_) slot -> 'a obj -> slot_status knowledge =
     fun slot obj ->
     objects slot.cls >>| fun {comp; vals} ->
-    match Map.find comp obj with
-    | None -> Sleep
-    | Some slots -> match Map.find slots (uid slot) with
-      | None -> if is_empty slot vals obj then Sleep else Ready
-      | Some Work _ -> Awoke
-      | Some Done -> Ready
+    match Map.find comp {uid = uid slot; obj} with
+    | None -> if is_empty slot vals obj then Sleep else Ready
+    | Some Work _ -> Awoke
+    | Some Done -> Ready
 
   let update_slot
     : ('a,_) slot -> 'a obj -> _ -> unit knowledge =
     fun slot obj f ->
     objects slot.cls >>= fun ({comp} as objs) ->
-    let comp = Map.update comp obj ~f:(fun slots ->
-        let slots = match slots with
-          | None -> Map.empty (module Name)
-          | Some slots -> slots in
-        Map.update slots (uid slot) ~f) in
+    let comp = Map.update comp {uid=uid slot; obj} ~f:f in
     get () >>= fun s ->
     let classes = Map.set s.classes slot.cls.name {objs with comp} in
     put {s with classes}
@@ -2649,7 +2653,7 @@ module Knowledge = struct
   let collect_waiting
     : ('a,'p) slot -> 'a obj -> _ Knowledge.t = fun s x ->
     objects s.cls >>| fun {comp} ->
-    Map.find_exn (Map.find_exn comp x) (uid s)  |> function
+    Map.find_exn comp {uid = uid s; obj=x}   |> function
     | Env.Done -> assert false
     | Env.Work {waiting} ->
       Set.fold waiting ~init:[] ~f:(fun ps p ->
@@ -3075,11 +3079,11 @@ module Knowledge = struct
           | Some {Record.reader=read} ->
             read data record)
 
-    let expand_comp comp =
-      List.fold comp
-        ~init:(Map.empty (module Name))
-        ~f:(fun works slot ->
-            Map.add_exn works slot Env.Done)
+    let expand_comp init obj names =
+      List.fold names
+        ~init
+        ~f:(fun comps uid ->
+            Map.add_exn comps {Env.obj; uid} Env.Done)
 
     let add_object
         ({Env.vals; syms; objs} as self)
@@ -3090,7 +3094,7 @@ module Knowledge = struct
       | None -> self
       | Some s -> {
           self with
-          comp = Map.set self.comp key (expand_comp comp);
+          comp = expand_comp self.comp key comp;
           syms = Map.add_exn syms key s;
           objs = Map.update objs s.package ~f:(function
               | None -> Map.singleton (module String) s.name key
@@ -3125,10 +3129,8 @@ module Knowledge = struct
       result
 
     let collect_comps comp oid =
-      match Map.find comp oid with
-      | None -> []
-      | Some works -> Map.keys works
-
+      Map.fold comp ~init:[] ~f:(fun ~key:{Env.obj; uid} ~data:_ works ->
+          if Oid.equal obj oid then uid :: works else works)
 
     let to_canonical {Env.classes} =
       let payload =
