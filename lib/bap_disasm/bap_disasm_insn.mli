@@ -46,6 +46,7 @@ module Seqnum : sig
   type t = int
   val label : ?package:string -> t -> Theory.Label.t KB.t
   val slot : (Theory.program, t option) KB.slot
+  val fresh : tid KB.t
 end
 
 module Slot : sig
