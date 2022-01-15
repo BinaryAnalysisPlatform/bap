@@ -21,7 +21,7 @@ val m1  : modulus
 (** [m8 = modulus 8] = $255$ is the modulus of bitvectors with size [8]  *)
 val m8  : modulus
 
-(** [m16 = modulus 16] = $65535$ is the modulus of bitvectors with size [16] 
+(** [m16 = modulus 16] = $65535$ is the modulus of bitvectors with size [16]
     @since 2.5.0 *)
 val m16  : modulus
 
@@ -398,6 +398,16 @@ val to_string : t -> string
 val of_string : string -> t
 
 
+
+(** [bigint_unsafe x] directly interprets a zarith value as bitvector.
+
+    The function is safe only if [x] is the result of [to_bigint],
+    otherwise the resulting value is unpredictable.
+
+    @since 2.5.0
+*)
+val bigint_unsafe : Z.t -> t
+
 (** [of_substring ~pos ~len s] is a bitvector that corresponds to a
     substring of [s] designated by the start position [pos] and length
     [len].
@@ -621,6 +631,6 @@ module M32 : D
 module M64 : D
 
 (** [modular n] returns a module [M], which implements
-    all operations in [S] modulo the bitwidth [n]. 
+    all operations in [S] modulo the bitwidth [n].
     @since 2.5.0 *)
 val modular : int -> (module D)

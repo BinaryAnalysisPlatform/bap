@@ -90,6 +90,7 @@ let int x m = norm m @@ Z.of_int x [@@inline]
 let int32 x m = norm m @@ Z.of_int32 x [@@inline]
 let int64 x m = norm m @@ Z.of_int64 x [@@inline]
 let bigint x m  = norm m @@ x [@@inline]
+let bigint_unsafe x = x
 
 let append w1 w2 x y =
   let w = w1 + w2 in
