@@ -658,7 +658,6 @@ end
 
 module Pattern : sig
   type t
-  type field
 
   val create : string -> t
   val empty : t
@@ -666,9 +665,6 @@ module Pattern : sig
   val concat : t -> t -> t
   val length : t -> int
   val weight : t -> int
-  val nth : field -> t -> int -> int
-  val bits : field
-  val mask : field
   val matches : t -> pos:int -> int -> bool
   val pp : Format.formatter -> t -> unit
 end = struct
@@ -744,22 +740,30 @@ end = struct
 
   type t = {
     repr : string;
-    bits : Z.t;
-    mask : Z.t;
+    bits : int array;
+    mask : int array;
     pops : int;
     size : int;
   } [@@deriving equal]
 
   type field = t -> Z.t
 
+  let nth_byte size x n =
+    let off = (size / 8 - n - 1) * 8 in
+    Z.to_int @@
+    Z.(x asr off land of_int 0xff)
+
   let create repr =
     let {Parser.size; bits; mask} = Parser.run repr in
-    {bits; mask; size; pops = Z.popcount mask; repr}
+    let pops = Z.popcount mask in
+    let bits = Array.init (size/8) ~f:(nth_byte size bits) in
+    let mask = Array.init (size/8) ~f:(nth_byte size mask) in
+    {bits; mask; size; pops; repr}
 
   let empty = {
     repr = "";
-    bits = Z.zero;
-    mask = Z.zero;
+    bits = [||];
+    mask = [||];
     pops = 0;
     size = 0;
   }
@@ -772,21 +776,15 @@ end = struct
 
   let concat x y = {
     repr = x.repr ^ y.repr;
-    bits = Z.(x.bits lsl y.size lor y.bits);
-    mask = Z.(x.mask lsl y.size lor y.mask);
+    bits = Array.append x.bits y.bits;
+    mask = Array.append x.mask y.mask;
     pops = x.pops + y.pops;
     size = x.size + y.size;
   }
 
-  let nth what x n =
-    let off = (x.size / 8 - n - 1) * 8 in
-    Z.to_int @@
-    Z.(what x asr off land of_int 0xff)
 
-  let matches x ~pos:n data =
-    let mask = nth mask x n
-    and bits = nth bits x n in
-    data land mask = bits
+  let matches {mask; bits} ~pos:n data =
+    data land mask.(n) = bits.(n)
 
   let pp ppf {repr} =
     Format.fprintf ppf "%s" repr
