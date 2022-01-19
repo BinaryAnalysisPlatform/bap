@@ -98,8 +98,8 @@ let enable_loader () =
   request_info >>| function
   | Some "mips", None -> mips32bi
   | Some "mips64",None -> mips64bi
-  | Some "mips",Some true -> mips32le
-  | Some "mips64",Some true -> mips64le
+  | Some ("mips"|"mipsel"),Some true -> mips32le
+  | Some ("mips64"|"mips64el"),Some true -> mips64le
   | Some "mips",Some false -> mips32eb
   | Some "mips64",Some false -> mips64eb
   | _ -> Theory.Target.unknown
