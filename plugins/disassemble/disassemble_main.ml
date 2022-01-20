@@ -128,6 +128,107 @@ open Err.Syntax
 let pass_error = Result.map_error ~f:(fun err -> Fail (Pass err))
 let proj_error = Result.map_error ~f:(fun err -> Fail (Project err))
 
+module Missing : sig
+  val enable : unit -> unit
+  val print : unit -> unit
+end = struct
+  open KB.Syntax
+  module Basic = Disasm_expert.Basic.Insn
+
+  let bool = KB.Domain.flat ~equal:Bool.equal "flat-bool"
+      ~inspect:sexp_of_bool ~empty:false
+  let has_semantics = KB.Class.property ~public:true ~package:"bap"
+      Theory.Semantics.cls "has-semantics" bool
+
+  let present eff =
+    eff >>| fun x -> KB.Value.put has_semantics x true
+
+  module Present : Theory.Core = struct
+    include Theory.Empty
+    let blk lbl data ctrl = present @@ blk lbl data ctrl
+    let perform s = present @@ perform s
+    let seq x y = present @@ seq x y
+    let branch cnd yes nay = present @@ branch cnd yes nay
+  end
+
+  let pp_code ppf code =
+    let dom = KB.Slot.domain Theory.Semantics.code in
+    match KB.Domain.inspect dom code with
+    | Sexp.List [Atom s] -> Format.fprintf ppf "%s" s
+    | _ -> Format.fprintf ppf "not disassembled"
+
+  let pp_ops ppf ops =
+    if Array.is_empty ops then Format.fprintf ppf ""
+    else Format.fprintf ppf " %s"
+        (String.concat_array ~sep:" " @@
+         Array.map ~f:Op.to_string ops)
+
+  let pp_basic ppf insn =
+    Format.fprintf ppf "(%s:%s%a)"
+      (Basic.encoding insn)
+      (Basic.name insn)
+      pp_ops (Basic.ops insn)
+
+  let update_missing insn histo =
+    Map.update histo (Basic.name insn) ~f:(function
+        | None -> 1
+        | Some c -> c + 1)
+
+  let build_histo =
+    Map.fold ~init:Int.Map.empty ~f:(fun ~key ~data ->
+        Map.add_multi ~key:data ~data:key)
+
+  let pp_histo ppf stats =
+    build_histo stats |>
+    Map.to_sequence ~order:`Increasing_key |>
+    Seq.iter ~f:(fun (count,codes) ->
+        List.iter codes ~f:(Format.fprintf ppf "%-4d %s@\n" count))
+
+  let print_missing () =
+    let lifted = ref 0 and missed = ref 0 and failed = ref 0 in
+    KB.objects Theory.Program.cls >>=
+    KB.Seq.fold ~init:String.Map.empty ~f:(fun stats insn ->
+        let* sema = KB.collect Theory.Semantics.slot insn in
+        let code = KB.Value.get Theory.Semantics.code sema in
+        if Option.is_none code then KB.return stats
+        else KB.collect Theory.Label.addr insn >>= function
+          | None -> KB.return stats
+          | Some addr ->
+            KB.collect Basic.slot insn >>| function
+            | None ->
+              Format.printf "%a: %a ; not disassembled@\n" Bitvec.pp
+                addr pp_code code;
+              incr failed;
+              stats
+            | Some _ when KB.Value.get has_semantics sema ->
+              incr lifted;
+              stats
+            | Some basic ->
+              incr missed;
+              Format.printf "%a: %a ; %a ; %a@\n" Bitvec.pp addr
+                pp_code code Insn.pp sema
+                pp_basic basic;
+              update_missing basic stats) >>| fun stats ->
+    Format.printf "@\nHistogram:@\n%a@\n\
+                   %-8s %d@\n\
+                   %-8s %d@\n\
+                   %-8s %d@\n"
+      pp_histo stats "Lifted:" !lifted "Failed:" !failed "Missed:" !missed
+
+  let print () =
+    Toplevel.exec @@ print_missing ()
+
+  let declare_theory () =
+    Theory.declare
+      ~package:"bap"
+      ~name:"present"
+      ~desc:"tracks the presence of semantics"
+      (KB.return (module Present : Theory.Core))
+
+  let enable () =
+    declare_theory ()
+end
+
 let run_passes base proj =
   Err.List.fold ~init:(0,proj) ~f:(fun (step,proj) pass ->
       report_progress
@@ -236,6 +337,17 @@ let knowledge =
           exist and it will be created"
     ~aliases:["k"; "knowledge-base";]
     (Extension.Type.some rw_file) "project"
+
+let print_missing =
+  Extension.Command.flag
+    ~doc:"Print missing instructions. \
+          This option disables cache and redisassembles the binary \
+          from scratch. It then prints the list of all instructions \
+          that do not have a representable semantics, followed by \
+          the histogram of all missed opcodes, and finally prints \
+          the number of lifted opcodes, the number of addresses \
+          that wasn't disassembled at all, and the number of opcodes \
+          that do not have semantics." "print-missing"
 
 let input = Extension.Command.argument
     ~doc:"The input file" Extension.Type.("FILE" %: string =? "a.out" )
@@ -355,7 +467,8 @@ let setup_gc_unless_overriden () =
   then setup_gc ()
   else info "GC parameters are overriden by a user"
 
-let load_knowledge digest = function
+let load_knowledge disable digest = function
+  | _ when disable -> false
   | None -> import_knowledge_from_cache digest
   | Some path when not (Sys.file_exists path) ->
     import_knowledge_from_cache digest
@@ -372,8 +485,8 @@ let save_knowledge ~had_knowledge ~update digest = function
     Knowledge.save (Toplevel.current ()) path
   | Some _ -> ()
 
-
-let create_and_process input outputs passes loader target update kb ctxt =
+let create_and_process input outputs passes loader target update
+    kb print_missing ctxt =
   let uses_file_loader = Sys.file_exists loader &&
                          Fn.non Filename.is_implicit loader in
   let package = input in
@@ -382,11 +495,13 @@ let create_and_process input outputs passes loader target update kb ctxt =
       Caml.Digest.file input;
       if uses_file_loader then Caml.Digest.file loader else loader;
     ] in
-  let had_knowledge = load_knowledge digest kb in
+  let had_knowledge = load_knowledge print_missing digest kb in
   let input = Project.Input.load ~target ~loader input in
+  if print_missing then Missing.enable ();
   Project.create ~package
     input |> proj_error >>= fun proj ->
   process passes outputs proj >>| fun proj ->
+  if print_missing then Missing.print ();
   save_knowledge ~had_knowledge ~update digest kb;
   proj
 
@@ -394,17 +509,19 @@ let _disassemble_command_registered : unit =
   let args =
     let open Extension.Command in
     args $input $outputs $old_style_passes $passes $loader $target
-    $update $knowledge in
+    $update $knowledge $print_missing in
   Extension.Command.declare ~doc:man "disassemble"
     ~requires:features_used args @@
-  fun input outputs old_style_passes passes loader target update kb ctxt ->
+  fun input outputs old_style_passes passes loader target update
+    kb print_missing ctxt ->
   setup_gc_unless_overriden ();
   validate_knowledge update kb >>= fun () ->
   validate_input input >>= fun () ->
   validate_passes_style old_style_passes (List.concat passes) >>=
   validate_passes >>= fun passes ->
   Dump_formats.parse outputs >>= fun outputs ->
-  create_and_process input outputs passes loader target update kb ctxt >>= fun _ ->
+  create_and_process input outputs passes loader target update kb
+    print_missing ctxt >>= fun _ ->
   Ok ()
 
 let _compare_command_registered : unit =
@@ -460,7 +577,7 @@ let _compare_command_registered : unit =
     let projs =
       Seq.map (Seq.of_list (input::inputs)) ~f:(fun input ->
           create_and_process input outputs passes loader target
-            update kb ctxt) in
+            update kb false ctxt) in
     let exception Escape of Extension.Error.t in
     try
       let projs = Seq.map projs ~f:(function
