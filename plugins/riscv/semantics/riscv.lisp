@@ -214,3 +214,10 @@
 
 (defun C_BNEZ (rs1 off)
   (conditional-jump (not (is-zero rs1)) off))
+
+
+(defun C_NOP ()
+  (empty))
+
+(defun NOP ()
+  (empty))

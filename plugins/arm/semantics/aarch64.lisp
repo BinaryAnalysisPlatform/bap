@@ -250,3 +250,10 @@
 (defun Bcc (cnd off)
   (when (condition-holds cnd)
     (relative-jump off)))
+
+(defun HINT (_)
+  (empty))
+
+
+(defun UDF (exn)
+  (special :undefined-instruction))
