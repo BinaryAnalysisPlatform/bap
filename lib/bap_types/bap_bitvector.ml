@@ -46,6 +46,7 @@ module Packed : sig
   val payload : t -> Bitvec.t
 
   val hash : t -> int
+  val compare : t -> t -> int
 
   val lift1 : t -> (Bitvec.t -> Bitvec.t Bitvec.m) -> t
   val lift2 : t -> t -> (Bitvec.t -> Bitvec.t -> Bitvec.t Bitvec.m) -> t
@@ -73,12 +74,12 @@ end = struct
     let {data} = data x in
     Z.hash data
   let payload x =
-    let m = modulus x in
-    let z = data x in
-    Bitvec.(bigint z.data mod m)
+    let {data} = data x in
+    Bitvec.bigint_unsafe data
   [@@inline]
 
   let is_signed {packed=x} = Z.(is_odd x) [@@inline]
+  let compare {packed=x} {packed=y} = Z.compare x y [@@inline]
 
   let unsigned ({packed} as x) =
     if is_signed x
@@ -261,14 +262,20 @@ type packed = Packed.t [@@deriving bin_io]
 let sexp_of_packed = Sexp_hum.sexp_of_t
 let packed_of_sexp = Sexp_hum.t_of_sexp
 
-let compare_mono x y =
-  if is_signed x || is_signed y then
-    let x_is_neg = msb x and y_is_neg = msb y in
-    match x_is_neg, y_is_neg with
-    | true,false -> -1
-    | false,true -> 1
-    | _ -> Bitvec.compare (payload x) (payload y)
-  else Bitvec.compare (payload x) (payload y)
+let compare_signed x y =
+  if phys_equal x y then 0
+  else match Packed.compare x y with
+    | 0 -> 0
+    | r ->
+      if is_signed x || is_signed y then
+        let x_is_neg = msb x and y_is_neg = msb y in
+        match x_is_neg, y_is_neg with
+        | true,false -> -1
+        | false,true -> 1
+        | _ -> Bitvec.compare (payload x) (payload y)
+      else r
+
+
 
 let with_validation t ~f = Or_error.map ~f (Validate.result t)
 
@@ -562,11 +569,10 @@ let enum_bits bv endian =
 
 module Mono = Comparable.Make(struct
     type t = packed [@@deriving sexp]
-    let compare x y =
-      if phys_equal x y then 0
-      else match Int.compare (bitwidth x) (bitwidth y) with
-        | 0 -> compare_mono x y
-        | _ -> failwith "Non monomorphic comparison"
+    let compare x y = match compare_signed x y with
+      | 0 -> 0
+      | r when Int.equal (bitwidth x) (bitwidth y) -> r
+      | _ -> failwith "Non monomorphic comparison"
   end)
 
 
@@ -616,12 +622,7 @@ end
 include Or_error.Monad_infix
 include Regular.Make(struct
     type t = packed [@@deriving bin_io, sexp]
-    let compare x y =
-      if phys_equal x y then 0
-      else match Int.compare (bitwidth x) (bitwidth y) with
-        | 0 -> compare_mono x y
-        | r -> r
-    [@@inline]
+    let compare = compare_signed
     let version = "2.0.0"
     let module_name = Some "Bap.Std.Word"
     let pp ppf = pp_generic ppf
@@ -656,7 +657,7 @@ end
 module Stable = struct
   module V1 = struct
     type t = Packed.t
-    let compare = compare
+    let compare = compare_signed
 
     let of_legacy {V1.z; w; signed=s} =
       let x = pack z w in
@@ -683,7 +684,7 @@ module Stable = struct
 
   module V2 = struct
     type t = Packed.t [@@deriving bin_io, sexp]
-    let compare = compare
+    let compare = compare_signed
   end
 end
 
