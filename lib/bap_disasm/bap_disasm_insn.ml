@@ -229,7 +229,7 @@ module Analyzer = struct
     let conditional v = jump ~cond:true v in
     let indirect f v = f { v with indirect=true } in
     object
-      inherit [Effects.t * vis] Stmt.visitor
+      inherit [Effects.t * vis] Stmt.visitor as super
       method! enter_store ~mem:_ ~addr:_ ~exp:_ _ _ (effs,jumps) =
         Set.add effs `May_store,jumps
       method! enter_load ~mem:_ ~addr:_ _ _ (effs,jumps) =
@@ -239,6 +239,9 @@ module Analyzer = struct
         | Bil.Int _ -> jump jumps
         | _ when under_condition -> indirect conditional jumps
         | _ -> indirect jump jumps
+      method! enter_stmt s (effs,jumps) = match Bil.(decode call s) with
+        | None -> super#enter_stmt s (effs,jumps)
+        | Some _ -> Effects.add effs `Call, jumps
     end
 
   let run bil =
@@ -258,9 +261,8 @@ let derive_props ?bil insn =
   let is = Insn.is insn in
   let is_bil = if Option.is_some bil
     then Analyzer.Effects.mem bil_effects else is in
-  (* those two are the only which we can't get from the BIL semantics *)
   let is_return = is `Return in
-  let is_call = is `Call in
+  let is_call = is_bil `Call || is `Call in
   let is_conditional_jump = is_bil `Conditional_branch in
   let is_jump = is_conditional_jump || is_bil `Unconditional_branch in
   let is_indirect_jump = is_bil `Indirect_branch in
