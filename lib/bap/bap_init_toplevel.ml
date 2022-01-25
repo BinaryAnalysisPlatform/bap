@@ -3,6 +3,7 @@ open Bap_plugins.Std
 let install_printer printer =
   Topdirs.dir_install_printer Format.err_formatter
     (Longident.parse printer)
+[@@warning "-D"]
 
 let install_printers () =
   Core_kernel.Pretty_printer.all () |>

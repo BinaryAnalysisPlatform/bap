@@ -33,6 +33,7 @@ OCAMLFLAGS += -bin-annot               # (create .cmt/.cmti files)
 OCAMLFLAGS_ANNOT = -annot -bin-annot
 OCAMLFLAGS += $(OCAMLFLAGS_ANNOT)
 OCAMLFLAGS += -opaque
+OCAMLFLAGS += -w -6-16-58
 OCAMLOPTFLAGS += -O3
 
 # Until this point we allow to override variables via the command-line.
