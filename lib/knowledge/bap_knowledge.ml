@@ -2039,23 +2039,21 @@ module Knowledge = struct
     type work = Done | Work of workers
 
     type objects = {
+      last : Oid.t;
       vals : Record.t Oid.Map.t;
       comp : work Map.M(Name).t Oid.Map.t;
       syms : fullname Oid.Map.t;
-      heap : cell Oid.Map.t;
-      data : Oid.t Cell.Map.t;
       objs : Oid.t String.Map.t String.Map.t;
       pubs : Oid.Set.t String.Map.t;
     }
 
     let empty_class = {
+      last = Oid.first_atom;
       vals = Map.empty (module Oid);
       comp = Map.empty (module Oid);
       objs = Map.empty (module String);
       syms = Map.empty (module Oid);
       pubs = Map.empty (module String);
-      heap = Map.empty (module Oid);
-      data = Map.empty (module Cell);
     }
 
     type t = {
@@ -2303,17 +2301,9 @@ module Knowledge = struct
     type +'a t = 'a obj
     type 'a ord = Oid.comparator_witness
 
-    let with_new_object objs f = match Map.max_elt objs.Env.vals with
-      | None -> f Oid.first_atom {
-          objs
-          with vals = Map.singleton (module Oid) Oid.first_atom Record.empty
-        }
-      | Some (key,_) ->
-        let key = Oid.next key in
-        f key {
-          objs
-          with vals = Map.add_exn objs.vals ~key ~data:Record.empty
-        }
+    let with_new_object objs f =
+      let next = Oid.next objs.Env.last in
+      f next {objs with Env.last = next}
 
     let create : ('a,_) cls -> 'a obj Knowledge.t = fun cls ->
       objects cls >>= fun objs ->
@@ -2854,72 +2844,6 @@ module Knowledge = struct
     let set_package name = update @@ fun s -> {s with package = name}
   end
 
-
-  module Data : sig
-    type +'a t
-    type 'a ord
-
-    val atom : ('a,_) cls -> 'a obj -> 'a t knowledge
-    val cons : ('a,_) cls -> 'a t -> 'a t -> 'a t knowledge
-
-    val case : ('a,_) cls -> 'a t ->
-      null:'r knowledge ->
-      atom:('a obj -> 'r knowledge) ->
-      cons:('a t -> 'a t -> 'r knowledge) -> 'r knowledge
-
-
-    val id : 'a obj -> Int63.t
-
-
-    module type S = sig
-      type t [@@deriving sexp]
-      include Base.Comparable.S with type t := t
-      include Binable.S with type t := t
-    end
-
-    val derive : ('a,_) cls -> (module S
-                                 with type t = 'a t
-                                  and type comparator_witness = 'a ord)
-  end = struct
-    type +'a t = 'a obj
-    type 'a ord = Oid.comparator_witness
-
-    let atom _ x = Knowledge.return x
-
-    let add_cell {Class.name} objects oid cell =
-      let {Env.data; heap} = objects in
-      let data = Map.add_exn data ~key:cell ~data:oid in
-      let heap = Map.add_exn heap ~key:oid ~data:cell in
-      update (fun s -> {
-            s with classes = Map.set s.classes name {
-          objects with data; heap
-        }}) >>| fun () ->
-      oid
-
-    let cons cls car cdr =
-      let cell = {car; cdr} in
-      objects cls >>= function {data; heap} as s ->
-      match Map.find data cell with
-      | Some id -> Knowledge.return id
-      | None -> match Map.max_elt heap with
-        | None ->
-          add_cell cls s Oid.first_cell cell
-        | Some (id,_) ->
-          add_cell cls s (Oid.next id) cell
-
-    let case cls x ~null ~atom ~cons =
-      if Oid.is_null x then null else
-      if Oid.is_atom x || Oid.is_number x then atom x
-      else objects cls >>= fun {Env.heap} ->
-        let cell = Map.find_exn heap x in
-        cons cell.car cell.cdr
-
-    let id = Object.id
-
-    module type S = Object.S
-    let derive = Object.derive
-  end
-
   module Syntax = struct
     include Knowledge.Syntax
     include Knowledge.Let
@@ -3040,7 +2964,7 @@ module Knowledge = struct
     Format.fprintf ppf "@]";
 
   module Io = struct
-    type version = V1 [@@deriving bin_io]
+    type version = V1 | V2 [@@deriving bin_io]
 
     module List = Base.List
 
@@ -3051,12 +2975,14 @@ module Knowledge = struct
       comp : Name.t list;
     } [@@deriving bin_io]
 
-    type objects = data list [@@deriving bin_io]
-    type payload = (Name.t * objects) list [@@deriving bin_io]
+    type v1 = data list [@@deriving bin_io]
+    type v2 = Oid.t * v1 [@@deriving bin_io]
+    type 'a objects = 'a [@@deriving bin_io]
+    type 'a payload = (Name.t * 'a) list [@@deriving bin_io]
 
-    type canonical = {
+    type 'a canonical = {
       version : version;
-      payload : payload;
+      payload : 'a payload;
     } [@@deriving bin_io]
 
     let magic = "CMU:KB"
@@ -3129,37 +3055,66 @@ module Knowledge = struct
       | None -> []
       | Some works -> Map.keys works
 
-
-    let to_canonical {Env.classes} =
+    let to_canonical {Env.classes} : v2 canonical =
       let payload =
         Map.to_alist classes |>
-        List.map ~f:(fun (cid, {Env.vals; syms; comp}) ->
-            cid,
-            Map.to_alist vals |> List.filter_map ~f:(fun (oid,value) ->
+        List.map ~f:(fun (cid, {Env.vals; syms; comp; last}) ->
+            let data = Map.to_alist vals |> List.filter_map ~f:(fun (oid,value) ->
                 let data = serialize_record value in
                 let sym = Map.find syms oid in
                 let comp = collect_comps comp oid in
                 if Array.is_empty data && Option.is_none sym
                 then None
-                else Some {key=oid; sym; data; comp})) in {
+                else Some {key=oid; sym; data; comp}) in
+            cid,(last,data)) in {
         version = V1;
         payload;
       }
 
-    let of_canonical {payload} =
+    let init_last : state -> state = fun state -> {
+        state with
+        classes = Map.map state.classes ~f:(fun cls -> {
+              cls with
+              last = match Map.max_elt cls.vals with
+                | None -> cls.last
+                | Some (k,_) -> Oid.next k
+            })
+      }
+
+    let of_canonical_v1 {payload} =
       let init = Map.empty (module Name) in
       let classes =
         List.fold payload ~init ~f:(fun state (cid,objs) ->
             Map.add_exn state ~key:cid
               ~data:(List.fold objs ~f:add_object
                        ~init:Env.empty_class)) in
+      init_last {empty with classes}
+
+    let of_canonical_v2 {payload} =
+      let init = Map.empty (module Name) in
+      let classes =
+        List.fold payload ~init ~f:(fun state (cid,(last,objs)) ->
+            let init = {
+              Env.empty_class with last
+            } in
+            Map.add_exn state ~key:cid
+              ~data:(List.fold objs ~f:add_object
+                       ~init)) in
       {empty with classes}
+
 
     let of_bigstring data =
       let pos_ref = ref (check_magic data) in
-      let V1 = bin_read_version data ~pos_ref in
-      let payload = bin_read_payload data ~pos_ref in
-      of_canonical {version=V1; payload}
+      let version = bin_read_version data ~pos_ref in
+      match version with
+      | V1 -> of_canonical_v1 {
+          version;
+          payload = bin_read_payload bin_read_v1 data ~pos_ref
+        }
+      | V2 -> of_canonical_v2 {
+          version;
+          payload = bin_read_payload bin_read_v2 data ~pos_ref
+        }
 
     let load path =
       let fd = Unix.openfile path Unix.[O_RDONLY] 0o400 in
@@ -3177,13 +3132,13 @@ module Knowledge = struct
     let blit_canonical_to_bigstring repr buf =
       Bigstring.From_string.blito ~src:magic ~dst:buf ();
       let pos = String.length magic in
-      let _p = bin_write_canonical ~pos buf repr in
+      let _p = bin_write_canonical bin_write_v2 ~pos buf repr in
       ()
 
     let to_bigstring state =
       let repr = to_canonical state in
       let size = String.length magic +
-                 bin_size_canonical repr in
+                 bin_size_canonical bin_size_v2 repr in
       let data = Bigstring.create size in
       blit_canonical_to_bigstring repr data;
       data
@@ -3191,7 +3146,7 @@ module Knowledge = struct
     let save state path =
       let repr = to_canonical state in
       let size = String.length magic +
-                 bin_size_canonical repr in
+                 bin_size_canonical bin_size_v2 repr in
       let fd = Unix.openfile path Unix.[O_RDWR; O_CREAT; O_TRUNC] 0o660 in
       try
         let dim = [|size |]in
