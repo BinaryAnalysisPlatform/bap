@@ -40,6 +40,7 @@ Library powerpc_plugin
                     Powerpc_shift,
                     Powerpc_store,
                     Powerpc_sub
+  DataFiles:        semantics/*.lisp ($datadir/bap/primus/semantics)
   XMETAExtraLines:  tags="powerpc, lifter"
 
 Library powerpc_test

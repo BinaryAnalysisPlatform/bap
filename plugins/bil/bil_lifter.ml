@@ -163,8 +163,7 @@ module Brancher = struct
   let goto dst = ret Theory.Effect.Sort.jump dst
 
   let jmp _ =
-    KB.Object.create Theory.Program.cls >>= fun dst ->
-    ret Theory.Effect.Sort.jump dst
+    ret Theory.Effect.Sort.jump Theory.Label.null
 
   let seq x y =
     x >>= fun x ->

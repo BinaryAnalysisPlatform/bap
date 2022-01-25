@@ -144,7 +144,10 @@ let export = Primus.Lisp.Type.Spec.[
      machine word.";
 
     "exec-addr", one int @-> any,
-    "(exec-addr ADDR) transfers control flow to ADDR.";
+    "(exec-addr ADDR) transfers control to ADDR.";
+
+    "invoke-subroutine", one sym @-> any,
+    "(invoke-subroutine NAME) passes control to the subroutine NAME.";
 
     "goto-subinstruction", one int @-> any,
     "(goto-subinstruction N) transfers control flow to a
@@ -188,7 +191,7 @@ let export = Primus.Lisp.Type.Spec.[
     "get-current-program-counter", unit @-> int,
     "(get-current-program-counter) is an alias to (get-program-counter)";
 
-    "set-symbol-value", tuple [int; a] @-> a,
+    "set-symbol-value", tuple [any; a] @-> a,
     "(set-symbol-value S X) sets the value of the symbol S to X.
          Returns X";
 
@@ -229,6 +232,11 @@ let export = Primus.Lisp.Type.Spec.[
     "nth", (one any @-> bool),
     "(nth N X) returns the Nth bit of X. N must be static. \
      The function is equivalent to (select N X)";
+    "empty", (unit @-> any),
+    "(empty) denotes an instruction that does nothing, i.e., a nop.";
+    "special", (one sym @-> any),
+    "(special :NAME) produces a special effect denoted by the keyword :NAME.
+    The effect will be reified into the to the special:name subroutine. ";
   ]
 
 type KB.conflict += Illformed of string
@@ -433,6 +441,9 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
   let memory eff res =
     full CT.(blk null (perform eff) skip) res
 
+  let nop () =
+    CT.perform Theory.Effect.Sort.bot
+
   let loads = memory Theory.Effect.Sort.rmem
   let stores = memory Theory.Effect.Sort.wmem
   let loads = pure
@@ -620,6 +631,20 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | Some _ -> true_
     | _ -> false_
 
+  let is_keyword = String.is_prefix ~prefix:":"
+
+  let special dst =
+    require_symbol dst @@ fun dst ->
+    if is_keyword dst then
+      let* dst = Theory.Label.for_name ("special"^dst) in
+      CT.goto dst
+    else illformed "special requires a keyword as the tag, e.g., :hlt"
+
+  let invoke_subroutine dst =
+    require_symbol dst @@ fun dst ->
+    let* dst = Theory.Label.for_name dst in
+    CT.goto dst
+
   let mk_cast t cast xs =
     binary xs @@ fun sz x ->
     to_sort sz >>= fun s ->
@@ -784,11 +809,11 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | "extract",xs -> pure@@extract xs
     | "concat", xs -> pure@@concat xs
     | ("select"|"nth"),xs -> pure@@select s xs
+    | "empty",[] -> nop ()
+    | "special",[dst] -> ctrl@@special dst
+    | "invoke-subroutine",[dst] -> ctrl@@invoke_subroutine dst
     | _ -> !!nothing
 end
-
-
-
 
 module Lisp = Primus.Lisp.Semantics
 
