@@ -101,7 +101,7 @@ let () =
       Hashtbl.find_and_call Std.delayed_opcodes name
         ~if_found:(fun delay ->
             KB.Value.put Insn.Slot.delay insn (Some delay))
-        ~if_not_found:(fun _ -> insn)
+        ~if_not_found:(fun _ -> Insn.empty)
     else !!Insn.empty in
   Bap_main.Extension.declare @@ fun _ctxt ->
   KB.Rule.(declare ~package:"mips" "delay-slot" |>
