@@ -164,11 +164,6 @@ module Pid : Sid = Int63
 let user_package = "user"
 let keyword_package = "keyword"
 
-type slot_status =
-  | Sleep
-  | Awoke
-  | Ready
-
 type fullname = {
   package : string;
   name : string;
@@ -2297,6 +2292,23 @@ module Knowledge = struct
     | None -> Env.empty_class
     | Some objs -> objs
 
+  let update_objects {Class.name} f =
+    get () >>= fun state ->
+    let objs = f @@ match Map.find state.classes name with
+      | None -> Env.empty_class
+      | Some objs -> objs in
+    put {state with classes = Map.set state.classes name objs}
+
+  let map_update_objects {Class.name} f =
+    get () >>= fun state ->
+    let objs = match Map.find state.classes name with
+      | None -> Env.empty_class
+      | Some objs -> objs in
+    f objs @@ fun objs res ->
+    put {state with classes = Map.set state.classes name objs} >>| fun () ->
+    res
+
+
   module Object = struct
     type +'a t = 'a obj
     type 'a ord = Oid.comparator_witness
@@ -2575,12 +2587,15 @@ module Knowledge = struct
 
   let uid {Slot.name} = name
 
-  let is_empty
-    : _ slot -> _ -> _ obj -> bool =
-    fun slot vals obj -> match Map.find vals obj with
-      | None -> true
-      | Some v ->
-        Domain.is_empty slot.dom (Record.get slot.key slot.dom v)
+
+  type slot_status =
+    | Sleep
+    | Awoke
+    | Ready of Dict.record
+
+  let is_empty {Slot.dom; key} v =
+    Domain.is_empty dom (Record.get key dom v)
+  [@@inline]
 
   let status
     : ('a,_) slot -> 'a obj -> slot_status knowledge =
@@ -2589,22 +2604,24 @@ module Knowledge = struct
     match Map.find comp obj with
     | None -> Sleep
     | Some slots -> match Map.find slots (uid slot) with
-      | None -> if is_empty slot vals obj then Sleep else Ready
       | Some Work _ -> Awoke
-      | Some Done -> Ready
+      | other -> match other,Map.find vals obj with
+        | Some Work _,_ -> assert false
+        | None,None -> Sleep
+        | Some Done,None -> Ready Record.empty
+        | Some Done,Some v -> Ready v
+        | None,Some v -> if is_empty slot v then Sleep else Ready v
 
   let update_slot
     : ('a,_) slot -> 'a obj -> _ -> unit knowledge =
     fun slot obj f ->
-    objects slot.cls >>= fun ({comp} as objs) ->
+    update_objects slot.cls @@ fun ({comp} as objs) ->
     let comp = Map.update comp obj ~f:(fun slots ->
         let slots = match slots with
           | None -> Map.empty (module Name)
           | Some slots -> slots in
         Map.update slots (uid slot) ~f) in
-    get () >>= fun s ->
-    let classes = Map.set s.classes slot.cls.name {objs with comp} in
-    put {s with classes}
+    {objs with comp}
 
   let enter_slot : ('a,_) slot -> 'a obj -> unit knowledge = fun s x ->
     update_slot s x @@ function
@@ -2636,20 +2653,23 @@ module Knowledge = struct
     update_work s x @@ fun {waiting; current} ->
     Work {waiting = Set.union current waiting; current}
 
-  let collect_waiting
-    : ('a,'p) slot -> 'a obj -> _ Knowledge.t = fun s x ->
-    objects s.cls >>| fun {comp} ->
-    Map.find_exn (Map.find_exn comp x) (uid s)  |> function
-    | Env.Done -> assert false
-    | Env.Work {waiting} ->
-      Set.fold waiting ~init:[] ~f:(fun ps p ->
-          Hashtbl.find_exn s.Slot.promises p :: ps)
-
-  let dequeue_waiting s x = update_work s x @@ fun _ ->
-    Work {
+  let no_work = Env.Work {
       waiting = Set.empty (module Pid);
       current = Set.empty (module Pid)
     }
+
+  let dequeue_waiting
+    : ('a,'p) slot -> 'a obj -> _ Knowledge.t = fun s x ->
+    map_update_objects s.cls @@ fun ({comp} as objs) k ->
+    let works = Map.find_exn comp x in
+    Map.find_exn works (uid s) |> function
+    | Env.Done -> assert false
+    | Env.Work {waiting} ->
+      let waiting = Set.fold waiting ~init:[] ~f:(fun ps p ->
+          Hashtbl.find_exn s.Slot.promises p :: ps) in
+      let works = Map.set works (uid s) no_work in
+      let objs = {objs with comp = Map.set comp x works} in
+      k objs waiting
 
   let initial_promises {Slot.promises} = Hashtbl.data promises
 
@@ -2668,8 +2688,7 @@ module Knowledge = struct
         enter_promise slot obj pid >>= fun () ->
         run obj >>= fun () ->
         leave_promise slot obj pid) >>= fun () ->
-    collect_waiting slot obj >>= fun waiting ->
-    dequeue_waiting slot obj >>= fun () ->
+    dequeue_waiting slot obj >>= fun waiting ->
     match waiting with
     | [] -> Knowledge.return ()
     | promises ->
@@ -2678,15 +2697,13 @@ module Knowledge = struct
       | EQ | LT -> Knowledge.return ()
       | GT | NC -> collect_inner slot obj promises
 
-
-
   let collect : type a p. (a,p) slot -> a obj -> p Knowledge.t =
     fun slot id ->
     if Object.is_null id
     then !!(Domain.empty slot.dom)
     else status slot id >>= function
-      | Ready ->
-        current slot id
+      | Ready v ->
+        Knowledge.return @@ Record.get slot.key slot.dom v
       | Awoke ->
         enqueue_promises slot id >>= fun () ->
         current slot id
@@ -3067,7 +3084,7 @@ module Knowledge = struct
                 then None
                 else Some {key=oid; sym; data; comp}) in
             cid,(last,data)) in {
-        version = V1;
+        version = V2;
         payload;
       }
 
