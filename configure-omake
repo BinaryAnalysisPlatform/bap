@@ -1,5 +1,7 @@
 #!/bin/sh
 
+export OPAMCLI=2.0
+
 rm -f _oasis setup.log.om setup.data _oasis_setup.om
 mv oasis/benchmarks oasis/benchmarks.backup
 mv oasis/piqi-printers oasis/piqi-printers.backup
@@ -9,7 +11,7 @@ SECTIONS=`ocaml tools/oasis_sections.ml --sections --enable-everything`
 SETUPS=`ocaml tools/collect.ml setup.ml $SECTIONS`
 AB=`ocaml tools/collect.ml files.ab $SECTIONS`
 ocaml tools/cat.ml '"\n# $name\n"' -- $SECTIONS $AB _oasis
-ocaml tools/cat.ml '"\n#1 \"$name\"\n"' -- $SETUPS setup.ml.in setup.ml
+ocaml tools/cat.ml '"\n#1 \"$name\"\n"' -- setup.ml.pre.in $SETUPS setup.ml.in setup.ml
 cp oasis/common.backup oasis/common
 cp oasis/benchmarks.backup oasis/benchmarks
 cp oasis/piqi-printers.backup oasis/piqi-printers
