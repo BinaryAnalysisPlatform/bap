@@ -34,6 +34,9 @@ jobs:
       - name: Pin BAP
         run: opam pin add bap . --no-action
 
+      - name: Install rest of the system dependencies
+        run: opam depext -u bap
+
       - name: Install Ghidra
         run: |
           sudo add-apt-repository ppa:ivg/ghidra -y
