@@ -28,11 +28,14 @@ jobs:
       - name: Pin OASIS
         run: opam pin add oasis https://github.com/BinaryAnalysisPlatform/oasis.git
 
+      - name: Install system dependencies
+        run: opam depext -u bap-extra
+
       - name: Pin BAP
         run: opam pin add bap . --no-action
 
-      - name: Install system dependencies
-        run: opam depext -u bap-extra
+      - name: Install rest of the system dependencies
+        run: opam depext -u bap
 
       - name: Install Ghidra
         run: |
