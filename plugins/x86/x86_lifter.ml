@@ -189,7 +189,7 @@ module ToIR = struct
     else
       Bil.Move (v, Bil.(Var v + (df_to_offset mode df_e * i (bytes_of_width t))))
 
-  let rep_wrap ?check_zf ~mode ~addr ~next stmts =
+  let rep_wrap ?check_zf ~mode ~addr:_ ~next:_ stmts =
     let extend = big_int_of_mode mode in
     let zero = extend Word.b0 and one = extend Word.b1 in
     let rcx = match mode with
@@ -272,6 +272,161 @@ module ToIR = struct
   let set_flags_sub t s1 s2 r =
     Bil.Move (cf, Bil.(s2 > s1))
     ::set_aopszf_sub t s1 s2 r
+
+  let bsr_step n x y sh ~width =
+    let c = tmp bool_t in
+    let zero = Word.zero width in
+    let sh = Word.of_int ~width sh in
+    Bil.[
+      y := var x lsr int sh;
+      c := var y <> int zero;
+      n := ite ~if_:(var c) ~then_:(var n + int sh) ~else_:(var n);
+      x := ite ~if_:(var c) ~then_:(var y) ~else_:(var x);
+    ]
+
+  let bsf_step n x y sh ~width =
+    let c = tmp bool_t in
+    let zero = Word.zero width in
+    let sh = Word.of_int ~width sh in
+    Bil.[
+      y := var x lsl int sh;
+      c := var y <> int zero;
+      n := ite ~if_:(var c) ~then_:(var n - int sh) ~else_:(var n);
+      x := ite ~if_:(var c) ~then_:(var y) ~else_:(var x);
+    ]
+
+  let bsr_step_final n x y ~width =
+    let c = tmp bool_t in
+    let zero = Word.zero width in
+    let sh = Word.one width in
+    Bil.[
+      y := var x lsr int sh;
+      c := var y <> int zero;
+      n := ite ~if_:(var c) ~then_:(var n + int sh) ~else_:(var n);
+    ]
+
+  let bsf_step_final n x y ~width =
+    let c = tmp bool_t in
+    let zero = Word.zero width in
+    let sh = Word.one width in
+    Bil.[
+      y := var x lsl int sh;
+      c := var y <> int zero;
+      n := ite ~if_:(var c) ~then_:(var n - int sh) ~else_:(var n);
+    ]
+
+  let bitscan_flags = Bil.[
+      cf := unknown "bits" bool_t;
+      oF := unknown "bits" bool_t;
+      sf := unknown "bits" bool_t;
+      af := unknown "bits" bool_t;
+      pf := unknown "bits" bool_t;
+    ]
+
+  let bsr_16 src =
+    let n = tmp @@ Imm 16 in
+    let x = tmp @@ Imm 16 in
+    let y = tmp @@ Imm 16 in
+    let zero = Word.zero 16 in
+    let step = bsr_step n x y ~width:16 in
+    let n1 = Word.of_int ~width:16 15 in
+    let bil =
+      Bil.[n := int zero; x := src] @
+      step 8 @
+      step 4 @
+      step 2 @
+      bsr_step_final n x y ~width:16 @
+      Bil.[zf := int Word.b0] in
+    let res = Bil.(int n1 lxor var n) in
+    bil, res
+
+  let bsf_16 src =
+    let n = tmp @@ Imm 16 in
+    let x = tmp @@ Imm 16 in
+    let y = tmp @@ Imm 16 in
+    let step = bsf_step n x y ~width:16 in
+    let c = Word.of_int ~width:16 16 in
+    let bil =
+      Bil.[n := int c; x := src] @
+      step 8 @
+      step 4 @
+      step 2 @
+      bsf_step_final n x y ~width:16 @
+      Bil.[zf := int Word.b0] in
+    let res = Bil.(var n) in
+    bil, res
+
+  let bsr_32 src =
+    let n = tmp @@ Imm 32 in
+    let x = tmp @@ Imm 32 in
+    let y = tmp @@ Imm 32 in
+    let zero = Word.zero 32 in
+    let step = bsr_step n x y ~width:32 in
+    let n1 = Word.of_int ~width:32 31 in
+    let bil =
+      Bil.[n := int zero; x := src] @
+      step 16 @
+      step 8 @
+      step 4 @
+      step 2 @
+      bsr_step_final n x y ~width:32 @
+      Bil.[zf := int Word.b0] in
+    let res = Bil.(int n1 lxor var n) in
+    bil, res
+
+  let bsf_32 src =
+    let n = tmp @@ Imm 32 in
+    let x = tmp @@ Imm 32 in
+    let y = tmp @@ Imm 32 in
+    let step = bsf_step n x y ~width:32 in
+    let c = Word.of_int ~width:32 32 in
+    let bil =
+      Bil.[n := int c; x := src] @
+      step 16 @
+      step 8 @
+      step 4 @
+      step 2 @
+      bsf_step_final n x y ~width:32 @
+      Bil.[zf := int Word.b0] in
+    let res = Bil.(var n) in
+    bil, res
+
+  let bsr_64 src =
+    let n = tmp @@ Imm 64 in
+    let x = tmp @@ Imm 64 in
+    let y = tmp @@ Imm 64 in
+    let zero = Word.zero 64 in
+    let step = bsr_step n x y ~width:64 in
+    let n1 = Word.of_int ~width:64 63 in
+    let bil =
+      Bil.[n := int zero; x := src] @
+      step 32 @
+      step 16 @
+      step 8 @
+      step 4 @
+      step 2 @
+      bsr_step_final n x y ~width:64 @
+      Bil.[zf := int Word.b0] in
+    let res = Bil.(int n1 lxor var n) in
+    bil, res
+
+  let bsf_64 src =
+    let n = tmp @@ Imm 64 in
+    let x = tmp @@ Imm 64 in
+    let y = tmp @@ Imm 64 in
+    let step = bsf_step n x y ~width:64 in
+    let c = Word.of_int ~width:64 64 in
+    let bil =
+      Bil.[n := int c; x := src] @
+      step 32 @
+      step 16 @
+      step 8 @
+      step 4 @
+      step 2 @
+      bsf_step_final n x y ~width:64 @
+      Bil.[zf := int Word.b0] in
+    let res = Bil.(var n) in
+    bil, res
 
   let rec to_ir mode addr next ss pref has_rex has_vex =
     let module R = (val (vars_of_mode mode)) in
@@ -1070,31 +1225,31 @@ module ToIR = struct
         Bil.Move (pf, Bil.Unknown ("PF undefined after bt", bool_t))
       ]
     | Bs(t, dst, src, dir) ->
-      let t' = !!t in
-      let source_is_zero = tmp bool_t in
-      let source_is_zero_v = Bil.Var source_is_zero in
+      let width = !!t in
       let src_e = op2e t src in
-      let bits = !!t in
-      let check_bit bitindex next_value =
-        Bil.(Ite (Extract (bitindex,bitindex,src_e) = int_exp 1 1, int_exp bitindex t', next_value))
-      in
-      let bitlist = List.init ~f:(fun x -> x) bits in
-      (* We are folding from right to left *)
-      let bitlist = match dir with
-        | Forward -> (* least significant first *) bitlist
-        | Backward -> (* most significant *) List.rev bitlist
-      in
-      let first_one = List.fold_right ~f:check_bit bitlist
-          ~init:(Bil.Unknown("bs: destination undefined when source is zero", t)) in
-      [
-        Bil.Move (source_is_zero, Bil.(src_e = int_exp 0 t'));
-        assn t dst first_one;
-        Bil.Move (zf, Bil.Ite (source_is_zero_v, int_exp 1 1, int_exp 0 1));
-      ]
-      @
-      let undef r =
-        Bil.Move (r, Bil.Unknown (Var.name r ^ " undefined after bsf", Var.typ r)) in
-      List.map ~f:undef [cf; oF; sf; af; pf]
+      let scan_bil, scan_res = match dir with
+        | Backward -> begin
+            match width with
+            | 16 -> bsr_16 src_e
+            | 32 -> bsr_32 src_e
+            | 64 -> bsr_64 src_e
+            | _ -> disfailwith "Invalid bitscan width"
+          end
+        | Forward -> begin
+            match width with
+            | 16 -> bsf_16 src_e
+            | 32 -> bsf_32 src_e
+            | 64 -> bsf_64 src_e
+            | _ -> disfailwith "Invalid bitscan width"
+          end in
+      let scan_bil = scan_bil @ [assn t dst scan_res] in
+      let bil = Bil.[
+          if_ (src_e = int (Word.zero width)) [
+            zf := int Word.b1;
+            assn t dst @@ unknown "bits" t;
+          ] scan_bil;
+        ] in
+      bil @ bitscan_flags
     | Hlt -> [] (* x86 Hlt is essentially a NOP *)
     | Rdtsc ->
       let undef reg = assn reg32_t reg (Bil.Unknown ("rdtsc", reg32_t)) in
