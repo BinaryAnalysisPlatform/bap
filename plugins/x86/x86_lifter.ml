@@ -1180,7 +1180,7 @@ module ToIR = struct
           | _ -> disfailwith "Invalid bitscan width" in
       let assn_result = 
         let n1 = width - 1 in
-        assn t dst @@ if is_zero_count then Bil.var res
+        assn t dst @@ if is_zero_count || is_fwd then Bil.var res
         else Bil.(var res lxor int Word.(of_int n1 ~width)) in
       let bil = assn_res :: scan_bil in
       let bil =
