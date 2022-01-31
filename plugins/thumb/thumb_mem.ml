@@ -49,7 +49,7 @@ module Make(CT : Theory.Core) = struct
     rd <-? signed @@ load s16 (var rn + var rm)
 
   let ldrpci rd pc off =
-    rd <-? load s32 @@ bitv pc + const off
+    rd <-? load s32 @@ bitv W32.(pc land ~~(int 3)) + const off
 
   let ldm b regs cnd =
     branch cnd [
