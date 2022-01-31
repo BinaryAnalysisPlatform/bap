@@ -1230,7 +1230,8 @@ module ToIR = struct
         Bil.Move (af, Bil.Unknown ("AF undefined after bt", bool_t));
         Bil.Move (pf, Bil.Unknown ("PF undefined after bt", bool_t))
       ]
-    | Bs(t, dst, src, dir, is_zero_count) ->
+    | Bs(t, dst, src, dir) ->
+      let is_zero_count = List.rev pref |> List.exists ~f:Int.((=) 0xf3) in
       let width = !!t in
       let src_e = op2e t src in
       let is_fwd = match dir with

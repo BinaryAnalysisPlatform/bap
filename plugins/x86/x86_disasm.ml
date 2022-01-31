@@ -1088,8 +1088,7 @@ let parse_instr mode mem addr =
         | 0xbc | 0xbd ->
           let dir = match b2 with | 0xbc -> Forward | 0xbd -> Backward | _ -> failwith "impossible" in
           let r, rm, na = parse_modrm_addr None na in
-          (* REP prefix means tzcnt/lzcnt *)
-          (Bs (prefix.opsize, r, rm, dir, prefix.repeat), na)
+          (Bs (prefix.opsize, r, rm, dir), na)
         | 0xbe
         | 0xbf -> let st = if b2 = 0xbe then reg8_t else reg16_t in
           let r, rm, na = parse_modrm_addr None na in
