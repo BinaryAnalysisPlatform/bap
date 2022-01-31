@@ -1193,7 +1193,7 @@ module ToIR = struct
             if_ (src_e = int (Word.zero width)) [
               zf := int Word.b1;
               assn t dst @@ unknown "bits" t;
-            ] (scan_bil @ Bil.[assn_result; zf := int Word.b0]);
+            ] (bil @ Bil.[assn_result; zf := int Word.b0]);
           ] in
       bil @ bitscan_flags is_zero_count
     | Hlt -> [] (* x86 Hlt is essentially a NOP *)
