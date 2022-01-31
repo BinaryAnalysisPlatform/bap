@@ -111,7 +111,7 @@ type opcode =
   | Shiftd of binop * typ * operand * operand * operand
   | Rotate of binop * typ * operand * operand * bool (** left or right, type, src/dest op, shift op, use carry flag *)
   | Bt of typ * operand * operand
-  | Bs of typ * operand * operand * direction
+  | Bs of typ * operand * operand * direction * bool
   | Jump of jumptarget
   | Jcc of jumptarget * Exp.t
   | Setcc of typ * operand * Exp.t
