@@ -111,9 +111,10 @@ module Thumb(CT : Theory.Core) = struct
       !!Insn.empty
 
 
-  let lift_mem pc opcode insn =
+  let lift_mem addr opcode insn =
     let module Mem = Thumb_mem.Make(CT) in
     let open Mem in
+    let pc = W32.(addr + int 4) in
     match opcode, (MC.Insn.ops insn : Op.t array) with
     | `tLDRi,   [|Reg rd; Reg rm; Imm i; Imm c; _|]
     | `tLDRspi, [|Reg rd; Reg rm; Imm i; Imm c; _|] ->
@@ -121,9 +122,9 @@ module Thumb(CT : Theory.Core) = struct
     | `tLDRr, [|Reg rd; Reg rm; Reg rn; Imm c; _|] ->
       ldrr (reg rd) (reg rm) (reg rn) (cnd c)
     | `tLDRpci, [|Reg rd; Imm i; Imm c; _|] ->
-      ldrpci (reg rd) W32.(pc + int 2) (imm i) (cnd c)
+      ldrpci (reg rd) pc (imm i) (cnd c)
     | `t2LDRpci, [|Reg rd; Imm i; Imm c; _|] ->
-      ldrpci (reg rd) W32.(pc + int 4) (imm i) (cnd c)
+      ldrpci (reg rd) pc (imm i) (cnd c)
     | `tLDRBi, [|Reg rd; Reg rm; Imm i; Imm c; _|] ->
       ldrbi (reg rd) (reg rm) (imm i) (cnd c)
     | `tLDRBr, [|Reg rd; Reg rm; Reg rn; Imm c; _|] ->
