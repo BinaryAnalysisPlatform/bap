@@ -88,19 +88,9 @@ end
 
     let (lsr) = shift_right_logical
 
-    let clz v =
-      let n = ref@@of_int 64 and x = ref v and y = ref zero in
-      y := !x lsr 32; if !y <> zero then (n := !n - of_int 32; x := !y);
-      y := !x lsr 16; if !y <> zero then (n := !n - of_int 16; x := !y);
-      y := !x lsr  8; if !y <> zero then (n := !n - of_int  8; x := !y);
-      y := !x lsr  4; if !y <> zero then (n := !n - of_int  4; x := !y);
-      y := !x lsr  2; if !y <> zero then (n := !n - of_int  2; x := !y);
-      y := !x lsr  1; if !y <> zero then !n - of_int 2
-      else !n - !x
-    [@@inline]
+    let clz v = of_int (clz v) [@@inline]
 
-    let numbits v = of_int 64 - clz v [@@inline]
-
+    let numbits v = of_int 63 - clz v [@@inline]
 
     let highest_bit x = numbits x - one
     let is_zero ~bit x = x land (one lsl to_int bit) = zero

@@ -39,6 +39,18 @@ let pp_encoding ppf {coding} =
 let order_encoding = KB.Domain.order Theory.Language.domain
 
 module Machine : sig
+
+  (*
+     - Dest {dst; parent} - [dst] is either a destination of
+       a [Jump t], when parent is [Some (Jump t)], or an initial
+       root (function start), when parent is [None].
+
+     - Fall {dst; parent} - is a fallthrough task either from
+       [parent];
+
+     - Jump {src; dsts} - is a jump from src to the set of dests,
+       potentially delayed and waiting until its age is 0.
+  *)
   type task = private
     | Dest of {dst : addr; parent : task option; encoding : encoding}
     | Fall of {dst : addr; parent : task; delay : slot; encoding : encoding}
@@ -148,44 +160,39 @@ end = struct
 
   let sexp_of_task t = Sexp.Atom (Format.asprintf "%a" pp_task t)
 
-  let rec cancel task s =
-    match task with
+
+  (** [revert t s] reverts the chain that produced the task [t].*)
+  let rec revert task s = match task with
     | Dest {parent=None} -> s
     | Dest {parent=Some parent} | Fall {parent} | Jump {parent} ->
       match parent with
-      | Dest _ | Fall _ -> cancel_parent parent s
-      | Jump {dsts} -> match task with
+      | Fall _ | Dest _ -> cancel parent s
+      | Jump _ -> match task with
         | Fall {delay=(Ready (Some _) | Delay)} ->
-          cancel_parent parent s
-        | Fall _ when has_valid s dsts -> s
-        | Fall _ | Dest _ -> cancel_parent parent s
-        | Jump _ -> assert false
-  and cancel_parent task s =
-    cancel task (cancel_task task s)
-  and cancel_task task s =
-    match task with
-    | Dest {dst} | Fall {dst} -> mark_data s dst
+          cancel parent s
+        | _ -> s
+
+  (** [cancel t s] marks the address of [t] as data and reverts [t]  *)
+  and cancel task s = revert task @@ match task with
+    | Dest {dst} | Fall {dst} -> delete s dst
     | Jump {dsts} when has_valid s dsts -> s
-    | Jump {src} -> mark_data s src
-  and cancel_beg s addr = match Map.find s.begs addr with
+    | Jump {src} -> delete s src
+
+  and revert_incoming s addr = match Map.find s.begs addr with
     | None -> s
     | Some tasks ->
-      List.fold_right tasks ~f:cancel ~init:{
+      List.fold_right tasks ~f:revert ~init:{
         s with begs = Map.remove s.begs addr;
       }
-  and mark_data s addr =
-    cancel_beg {
-      s with
-      data = Set.add s.data addr;
-      begs = Map.remove s.begs addr;
-      usat = Set.remove s.usat addr;
-      code = Map.remove s.code addr;
-      jmps = Map.filter_map (Map.remove s.jmps addr) ~f:(fun dsts ->
-          let resolved = Set.remove dsts.resolved addr in
-          if Set.is_empty resolved && not dsts.indirect
-          then None
-          else Some {dsts with resolved});
-    } addr
+
+  and delete s addr = {
+    (revert_incoming s addr) with
+    data = Set.add s.data addr;
+    begs = Map.remove s.begs addr;
+    usat = Set.remove s.usat addr;
+    code = Map.remove s.code addr;
+    jmps = Map.remove s.jmps addr;
+  }
 
   let is_slot s addr = Set.mem s.dels addr
 
@@ -197,10 +204,10 @@ end = struct
     | [] -> restart s
     | Dest {dst=next; encoding} as curr :: work
       when wrong_encoding s next encoding ->
-      step @@ cancel curr {s with work}
+      step @@ revert curr {s with work}
     | Dest {dst=next} as curr :: work
       when is_data s next || is_slot s next ->
-      step @@ cancel curr {s with work}
+      step @@ revert curr {s with work}
     | Dest {dst=next} as curr :: work ->
       let s = {s with begs = Map.add_multi s.begs next curr} in
       if is_visited s next
@@ -210,20 +217,20 @@ end = struct
       if is_code s next
       then
         if is_slot s next
-        then step @@ cancel curr {s with work}
+        then step @@ revert curr {s with work}
         else if wrong_encoding s next encoding
-        then step @@ cancel curr {s with work}
+        then step @@ revert curr {s with work}
         else step {s with begs = Map.add_multi s.begs next curr; work}
-      else if is_data s next then step @@ cancel curr {s with work}
+      else if is_data s next then step @@ revert curr {s with work}
       else {s with work; addr=next; curr}
     | (Jump {src; dsts} as jump) :: ([] as work)
     | (Jump {src; dsts; age=0} as jump) :: work ->
       if Set.mem s.data src
-      then step @@ cancel jump {s with work}
+      then step @@ revert jump {s with work}
       else
         let resolved = Set.diff dsts.resolved s.data in
         if Set.is_empty resolved && not dsts.indirect
-        then step@@cancel jump {s with work}
+        then step@@revert jump {s with work}
         else
           let dsts = {dsts with resolved} in
           let init = {s with jmps = Map.add_exn s.jmps src dsts; work} in
@@ -234,7 +241,7 @@ end = struct
                     dst=next; parent = Some jump; encoding = dsts.encoding;
                   } :: s.work})
     | Jump jmp as self :: Fall ({dst=next} as slot) :: work ->
-      let s = cancel_beg s next in
+      let s = revert_incoming s next in
       let delay = if jmp.age = 1 then Ready (Some self) else Delay in
       let jump = Jump {
           jmp with age = jmp.age-1; src = next;
@@ -267,11 +274,11 @@ end = struct
     let parent = s.curr in
     let src = Memory.min_addr mem in
     let jump = Jump {src; age=delay; dsts; parent; encoding} in
-    let next = Addr.succ (Memory.max_addr mem) in
+    let dst = Addr.succ (Memory.max_addr mem) in
     let next =
       if dsts.barrier && delay = 0
-      then Dest {dst=next; parent=None; encoding=unknown}
-      else Fall {dst=next; parent=jump; delay = Ready None; encoding} in
+      then Dest {dst; parent=None; encoding=unknown}
+      else Fall {dst; parent=jump; delay = Ready None; encoding} in
     step {s with work = jump :: next :: s.work }
 
   let insert_delayed t = function
@@ -300,14 +307,14 @@ end = struct
       | _ -> next :: s.work in
     step @@ decoded {s with work} mem encoding
 
-  let failed s _encoding addr =
-    step @@ cancel s.curr @@ mark_data s addr
+  let failed s _ _ = step @@ cancel s.curr s
 
   let skipped s addr =
     step {s with usat = Set.remove s.usat addr }
 
-  let stopped s _encoding =
-    step @@ cancel s.curr @@ mark_data s s.addr
+
+  let stopped s _ =
+    step @@ cancel s.curr s
 
   let with_encoding encoding = function
     | Fall s -> Fall {s with encoding}
@@ -327,7 +334,7 @@ end = struct
       | Ok mem -> ready s (task_encoding s.curr) mem
       | Error _ ->
         let s = match s.curr with
-          | Fall _ | Jump _ as task -> cancel task s
+          | Fall _ | Jump _ as task -> revert task s
           | t -> {s with debt = t :: s.debt} in
         match s.work with
         | [] -> empty (step s)
@@ -502,13 +509,11 @@ let disassemble ~code ~data ~funs debt base : Machine.state KB.t =
                   let encoding = Machine.encoding s in
                   KB.provide Theory.Label.encoding label encoding.coding >>= fun () ->
                   collect_dests encoding label >>= fun dests ->
-                  if Set.is_empty dests.resolved &&
-                     not dests.indirect then
-                    step d @@ Machine.moved s encoding mem
+                  if Set.is_empty dests.resolved && not dests.indirect
+                  then step d @@ Machine.moved s encoding mem
                   else
                     delay label >>= fun delay ->
-                    step d @@ Machine.jumped s encoding mem dests
-                      delay
+                    step d @@ Machine.jumped s encoding mem dests delay
                 end @@ fun problem ->
                 warning "rejecting %a due to a conflict %a"
                   Memory.pp mem KB.Conflict.pp problem;
@@ -599,6 +604,11 @@ let scan_step ?(code=empty) ?(data=empty) ?(funs=empty) s mem =
   let begs = Set.of_map_keys begs - data in
   let funs = Set.union s.funs funs - data in
   let begs = Set.union s.begs begs - dels in
+  let jmps = Map.filter_map jmps ~f:(fun dsts ->
+      let resolved = dsts.resolved - data in
+      if Set.is_empty resolved && not dsts.indirect
+      then None
+      else Some {dsts with resolved}) in
   let s = {funs; begs; data; jmps; mems = s.mems; debt} in
   commit_calls s.jmps >>| fun funs ->
   {s with funs = Set.union s.funs funs - dels}
@@ -689,7 +699,9 @@ let explore
                   let last = Memory.max_addr mem in
                   let next = Addr.succ last in
                   let is_terminator =
-                    Set.mem begs next || Map.mem jmps curr in
+                    Set.mem begs next ||
+                    Map.mem jmps curr ||
+                    Set.mem data next in
                   if is_terminator
                   then KB.return (curr, len, insn::insns)
                   else Dis.jump s (view next base)
