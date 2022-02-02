@@ -10,7 +10,13 @@ module Plugin_rules = struct
 
   let (/) = Pathname.concat
 
-  let default_packages = ["bap"; "core_kernel"; "ppx_bap"]
+  let is_installed pkg =
+    try ignore (Fl.package_directory pkg); true
+    with Fl.No_such_package _ -> false
+
+  let default_packages = List.filter ~f:is_installed [
+      "bap"; "core_kernel"; "ppx_bap"
+    ]
   let default_predicates = [
   ]
 
