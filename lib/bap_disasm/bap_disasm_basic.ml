@@ -618,7 +618,9 @@ let lookup target encoding =
     | Some create -> create target
 
 let create ?(debug_level=0) ?(cpu="") ?(attrs="") ?(backend="llvm") triple =
-  let name = String.concat ~sep:"-" [backend; triple; cpu] ^ attrs in
+  let parts = [backend; triple; cpu] |>
+              List.filter ~f:(Fn.non String.is_empty) in
+  let name = String.concat ~sep:"-" parts ^ attrs in
   match Hashtbl.find disassemblers name with
   | Some d ->
     d.users <- d.users + 1;
