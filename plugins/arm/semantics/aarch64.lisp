@@ -79,19 +79,27 @@
 (defun ORNWrs (rd rn rm is) (ORN*rs setw rd rn rm is))
 (defun ORNXrs (rd rn rm is) (ORN*rs set$ rd rn rm is))
 
-(defmacro log*?rs (set op rd rn rm is)
+(defmacro log*rs (set op rd rn rm is)
   (set rd (op rn (shifted rm is))))
 
-(defun ORRWrs (rd rn rm is) (log*?rs setw logor  rd rn rm is))
-(defun EORWrs (rd rn rm is) (log*?rs setw logxor rd rn rm is))
-(defun ANDWrs (rd rn rm is) (log*?rs setw logand rd rn rm is))
-(defun ORRXrs (rd rn rm is) (log*?rs set$ logor  rd rn rm is))
-(defun EORXrs (rd rn rm is) (log*?rs set$ logxor rd rn rm is))
-(defun ANDXrs (rd rn rm is) (log*?rs set$ logand rd rn rm is))
+(defun ORRWrs (rd rn rm is) (log*rs setw logor  rd rn rm is))
+(defun EORWrs (rd rn rm is) (log*rs setw logxor rd rn rm is))
+(defun ANDWrs (rd rn rm is) (log*rs setw logand rd rn rm is))
+(defun ORRXrs (rd rn rm is) (log*rs set$ logor  rd rn rm is))
+(defun EORXrs (rd rn rm is) (log*rs set$ logxor rd rn rm is))
+(defun ANDXrs (rd rn rm is) (log*rs set$ logand rd rn rm is))
 
+(defmacro log*ri (set op rd rn imm)
+  "(log*ri set op rd rn imm) implements the logical operation instruction
+   accepting either a W or X register. op is the binary logical operation."
+  (set rd (op rn (immediate-from-bitmask imm))))
 
-(defun ANDWri (dst rn imm)
-  (setw dst (logand rn imm)))
+(defun ANDWri (rd rn imm) (log*ri setw logand rd rn imm))
+(defun ANDXri (rd rn imm) (log*ri set$ logand rd rn imm))
+(defun EORWri (rd rn imm) (log*ri setw logxor rd rn imm))
+(defun EORXri (rd rn imm) (log*ri set$ logxor rd rn imm))
+(defun ORRWri (rd rn imm) (log*ri setw logor rd rn imm))
+(defun ORRXri (rd rn imm) (log*ri set$ logor rd rn imm))
 
 
 (defun ADRP (dst imm)
