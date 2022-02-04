@@ -2444,20 +2444,27 @@ module Std : sig
     *)
     module Apply : sig
 
-      (** [binop op x y] applies the binary operation [op] to [x] and
-          [y].
-          precondition: the expression [BinOp(op,Int x,Int y)] shall be well-typed.*)
+      (** [binop op x y] applies [op] to [x] and [y].
+
+          @before 2.5.0 precondition: the expression [BinOp(op,Intx,Int y)]
+          shall be well-typed.
+
+          @after 2.5.0 if [x] and [y] have different widths then they
+          are extended to the same width, which is the width of the
+          largest operand. If an operator is signed, then it will be
+          correctly sign-extended.
+      *)
       val binop : binop -> word -> word -> word
 
-      (** [unop op x] applies the unary operation [op] to [x].
-          precondition: the expression [Unop(op,Int x)] shall be
-          well-typed.     *)
+      (** [unop op x] applies the unary operation [op] to [x]. *)
       val unop : unop -> word -> word
 
       (** [cast t s x] casts [x] using the cast type [t] to the given
           size [s].
+
           precondition: the expression [Cast(t,s,Int x)] shall be
-          well-typed.  *)
+          well-typed.
+      *)
       val cast : cast -> int -> word -> word
     end
 
