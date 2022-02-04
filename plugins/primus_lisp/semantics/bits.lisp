@@ -50,12 +50,14 @@
     (replicate bitv (/ n bitv-length))))
 
 (defun zeros (n)
-  "(zeros n) returns an empty bitvector of length n."
-  0:n)
+  "(zeros n) returns an empty bitvector of length n.
+   Modified from ARMv8 ISA pseudocode."
+  (replicate 0:1 n))
 
 (defun ones (n)
-  "(ones n) returns a bitvector of length n with all bits set."
-  (lnot (zeros n)))
+  "(ones n) returns a bitvector of length n with all bits set.
+   Modified from ARMv8 ISA pseudocode."
+  (replicate 1:1 n))
 
 (defun zero-extend (bitv result-length)
   "(zero-extend bitv result-length) returns a bitvector of
