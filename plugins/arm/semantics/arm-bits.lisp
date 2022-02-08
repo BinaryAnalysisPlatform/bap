@@ -70,22 +70,22 @@
     (set$ reg res)))
 
 (defun shifted (rm off)
-  (declare (visibility :private))
   (let ((typ (extract 7 6 off))
         (off (extract 5 0 off)))
     (case typ
       0b00 (lshift rm off)
       0b01 (rshift rm off)
-      0b10 (arshift rm off))))
+      0b10 (arshift rm off)
+      ;; TODO: 0b11 ror?
+      )))
 
 (defun unsigned-extend (n rm)
-  (cast-unsigned (word) (cast-low n rm)))
+  (cast-unsigned (word-width) (cast-low n rm)))
 
 (defun signed-extend (n rm)
-  (cast-signed (word) (cast-low n rm)))
+  (cast-signed (word-width) (cast-low n rm)))
 
 (defun extended (rm bits)
-  (declare (visibility :private))
   (let ((typ (extract 5 3 bits))
         (off (extract 2 0 bits)))
     (lshift (case typ
