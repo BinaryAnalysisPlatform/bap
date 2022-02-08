@@ -102,11 +102,6 @@
 
 ;; Logical
 
-(defun ADRP (dst imm)
-  (set$ dst (+
-             (logand (get-program-counter) (lshift -1 12))
-             (cast-signed (word) (lshift imm 12)))))
-
 (defmacro ORN*rs (set rd rn rm is)
   (set rd (logor rn (lnot (lshift rm is)))))
 
@@ -177,6 +172,11 @@
 
 (defun ADDXrs (rd rn rm off)
   (set$ rd (+ rn (shifted rm off))))
+
+(defun ADRP (dst imm)
+  (set$ dst (+
+             (logand (get-program-counter) (lshift -1 12))
+             (cast-signed (word) (lshift imm 12)))))
 
 (defun SUBWrs (dst r1 v s)
   (setw dst (- r1 (lshift v s))))
