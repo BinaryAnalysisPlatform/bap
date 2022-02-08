@@ -45,9 +45,9 @@ let lift ?(encoding=Theory.Language.unknown)
     | None     -> tmp reg32_t
     | Some (`Reg reg) -> Env.of_reg reg
     | Some (`Imm _) -> fail [%here] "dest is not a reg" in
-  let s1 : exp = exp_of_op src1 in
+  let s1 : exp = MIC.decode encoding @@ exp_of_op src1 in
   let s2 : exp = match src2 with
-    | Some src -> exp_of_op src
+    | Some src -> MIC.decode encoding @@ exp_of_op src
     | None     -> zero reg32_t in
 
   let unshifted = tmp reg32_t in
@@ -75,7 +75,7 @@ let lift ?(encoding=Theory.Language.unknown)
       let shifted, carry = Shift.lift_i
           ~src:Bil.(var unshifted) simm reg32_t in
       s1, shifted, [Bil.move unshifted s2], carry
-    | _ -> s1, (MIC.decode encoding s2), [], Bil.var Env.cf in
+    | _ -> s1, s2, [], Bil.var Env.cf in
 
   let stmts, flags = match itype, src1, src2 with
     | `MOV, `Imm i64, _

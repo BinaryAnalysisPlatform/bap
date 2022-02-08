@@ -5,7 +5,7 @@ open Bap_trace_event_types
 
 let pp_bytes fmt s =
   let pp fmt s =
-    String.iter ~f:(fun c -> Format.fprintf fmt "%X@ " (Char.to_int c)) s in
+    String.iter ~f:(fun c -> Format.fprintf fmt "%02X@ " (Char.to_int c)) s in
   Format.fprintf fmt "@[<hv>%a@]" pp s
 
 let pp_array pp fmt ar =
