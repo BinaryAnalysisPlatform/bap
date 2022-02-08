@@ -69,6 +69,36 @@
     (clear-base reg)
     (set$ reg res)))
 
+(defun shifted (rm off)
+  (declare (visibility :private))
+  (let ((typ (extract 7 6 off))
+        (off (extract 5 0 off)))
+    (case typ
+      0b00 (lshift rm off)
+      0b01 (rshift rm off)
+      0b10 (arshift rm off))))
+
+(defun unsigned-extend (n rm)
+  (cast-unsigned (word) (cast-low n rm)))
+
+(defun signed-extend (n rm)
+  (cast-signed (word) (cast-low n rm)))
+
+(defun extended (rm bits)
+  (declare (visibility :private))
+  (let ((typ (extract 5 3 bits))
+        (off (extract 2 0 bits)))
+    (lshift (case typ
+              0b000 (unsigned-extend 8 rm)
+              0b001 (unsigned-extend 16 rm)
+              0b010 (unsigned-extend 32 rm)
+              0b011 rm
+              0b100 (signed-extend 8 rm)
+              0b101 (signed-extend 16 rm)
+              0b110 (signed-extend 32 rm)
+              0b111 rm)
+            off)))
+
 (defun decode-bit-masks (immN imms immr immediate)
   "(decode-bit-masks immN imms immr immediate) returns the immediate value
    corresponding to the immN:immr:imms bit pattern within opcodes of
