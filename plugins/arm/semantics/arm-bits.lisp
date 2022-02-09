@@ -44,7 +44,7 @@
     0b0000 ZF
     0b0001 (lnot ZF)
     0b0010 CF
-    0b0010 (lnot CF)
+    0b0011 (lnot CF)
     0b0100 NF
     0b0101 (lnot NF)
     0b0110 VF

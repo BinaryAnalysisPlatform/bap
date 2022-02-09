@@ -100,6 +100,17 @@
 (defun STRXroX (rt rn rm _ shift)
   (store-word (+ rn (lshift rm (* shift 3))) rt))
 
+(defmacro STUR*i (src base off size)
+  "Takes `size` bits from src and stores at base + off"
+  (store-word (+ base off) (cast-low size src)))
+
+(defun STURXi  (src base off) (STUR*i src base off 64))
+
+(defun STURWi  (src base off) (STUR*i src base off 32))
+
+(defun STURHHi  (src base off) (STUR*i src base off 16))
+
+(defun STURBBi (src base off) (STUR*i src base off 8))
 
 ;;; LOGICAL/BITFIELD OPERATIONS
 
