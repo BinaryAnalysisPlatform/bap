@@ -264,7 +264,7 @@
   (exec-addr reg))
 
 (defmacro CB** (comparison reg off)
-  "(CB** cnd reg off) implements CBZ and CBNZ by specifying
+  "(CB** comparison reg off) implements CBZ and CBNZ by specifying
    the comparison (is-zero or non-zero)."
   (when (comparison reg)
     (relative-jump off)))
@@ -276,6 +276,18 @@
 
 (defun RET (dst)
   (exec-addr dst))
+
+(defmacro TB** (comparison reg pos off)
+  "(TB** comparison reg pos off) implements TBZ and TBNZ
+   by specifying the comparison (is-zero or non-zero)."
+  (when (comparison (select pos reg))
+    (relative-jump off)))
+
+(defun TBZW  (reg pos off) (TB** is-zero  reg pos off))
+(defun TBZX  (reg pos off) (TB** is-zero  reg pos off))
+(defun TBNZW (reg pos off) (TB** non-zero reg pos off))
+(defun TBNZX (reg pos off) (TB** non-zero reg pos off))
+
 
 ;;; OTHER ATOMIC OPERATIONS
 
