@@ -54,14 +54,17 @@
 
 ;; MOV...
 
-(defun MOVZXi (dst imm pos)
-  (set$ dst (lshift imm pos)))
+(defmacro MOVZ*i (set dst imm off)
+  (set dst (lshift imm off)))
 
-(defun MOVZWi (dst imm pos)
-  (setw dst (lshift imm pos)))
+(defun MOVZWi (dst imm off) (MOVZ*i setw dst imm off))
+(defun MOVZXi (dst imm off) (MOVZ*i set$ dst imm off))
 
-(defun MOVNWi (dst imm off)
-  (setw dst (lnot (lshift imm off))))
+(defmacro MOVN*i (set dst imm off)
+  (set dst (lnot (lshift imm off))))
+
+(defun MOVNWi (dst imm off) (MOVN*i setw dst imm off))
+(defun MOVNXi (dst imm off) (MOVN*i set$ dst imm off))
 
 (defmacro MOVK*i (dst reg imm off)
   (let ((mask (lnot (lshift (- (lshift 1 16) 1) off))))
@@ -161,42 +164,38 @@
 
 ;;; INTEGER ARITHMETIC
 
-(defun ADDWri (dst r1 imm s)
-  (setw dst (+ r1 (lshift imm s))))
+(defmacro ADD*r* (set shift-function rd rn imm-or-rm off)
+  "Implements ADD*ri and ADD*rs by specifying the shift function."
+  (set rd (+ rn (shift-function imm-or-rm off))))
 
-(defun ADDXri (dst src imm off)
-  (set$ dst (+ src (lshift imm off))))
-
-(defun ADDWrs (dst r1 v s)
-  (setw dst (+ r1 (lshift v s))))
-
-(defun ADDXrs (rd rn rm off)
-  (set$ rd (+ rn (shifted rm off))))
+;; ADD*ri only uses lshift since the shift arg only zero-extends
+;; and doesn't actually change from lshift
+(defun ADDWri (rd rn imm off) (ADD*r* setw lshift rd rn imm off))
+(defun ADDXri (rd rn imm off) (ADD*r* set$ lshift rd rn imm off))
+;; shifted decodes the shift type and shifts
+(defun ADDWrs (rd rn rm off) (ADD*r* setw shifted rd rn rm off))
+(defun ADDXrs (rd rn rm off) (ADD*r* set$ shifted rd rn rm off))
 
 (defun ADRP (dst imm)
   (set$ dst (+
              (logand (get-program-counter) (lshift -1 12))
              (cast-signed (word) (lshift imm 12)))))
 
-(defun SUBWrs (dst r1 v s)
-  (setw dst (- r1 (lshift v s))))
+(defmacro SUB*r* (set shift-function rd rn imm-or-rm off)
+  "Implements SUB*ri and SUB*rs by specifying the shift function."
+  (set rd (- rn (shift-function imm-or-rm off))))
 
-(defun SUBXrs (rd rn rm off)
-  (set$ rd (- rn (shifted rm off))))
-
-(defun SUBWri (rd rn imm off)
-  (setw rd (- rn (lshift imm off))))
-
-(defun SUBXri (rd rn imm off)
-  (set$ rd (- rn (lshift imm off))))
+;; see ADD*ri vs ADD*rs
+(defun SUBWri (rd rn rm off) (SUB*r* setw lshift rd rn rm off))
+(defun SUBXri (rd rn rm off) (SUB*r* set$ lshift rd rn rm off))
+(defun SUBWrs (rd rn rm off) (SUB*r* setw shifted rd rn rm off))
+(defun SUBXrs (rd rn rm off) (SUB*r* set$ shifted rd rn rm off))
 
 (defun SUBXrx64 (rd rn rm off)
   (set$ rd (- rn (extended rm off))))
 
 (defun SUBSWrs (rd rn rm off)
-  (add-with-carry/clear-base
-   rd
-   rn (lnot (shifted rm off)) 1))
+  (add-with-carry/clear-base rd rn (lnot (shifted rm off)) 1))
 
 (defun SUBSXrs (rd rn rm off)
   (add-with-carry rd rn (lnot (shifted rm off)) 1))
@@ -235,43 +234,37 @@
 (defun relative-jump (off)
   (exec-addr (+ (get-program-counter) (lshift off 2))))
 
-(defun BL (off)
-  (set LR (+ (get-program-counter) 4))
-  (relative-jump off))
-
-(defun BR (reg)
-  (exec-addr reg))
-
-(defun BLR (reg)
-  (set LR (+ (get-program-counter) 4))
-  (exec-addr reg))
-
 (defun B (off)
   (relative-jump off))
-
-(defun RET (dst)
-  (exec-addr dst))
-
-(defun CBZX (reg off)
-  (when (is-zero reg)
-    (relative-jump off)))
-
-(defun CBZW (reg off)
-  (when (is-zero reg)
-    (relative-jump off)))
-
-(defun CBNZX (reg off)
-  (when (/= reg 0)
-    (relative-jump off)))
-
-(defun CBNZW (reg off)
-  (when (/= reg 0)
-    (relative-jump off)))
 
 (defun Bcc (cnd off)
   (when (condition-holds cnd)
     (relative-jump off)))
 
+(defun BL (off)
+  (set LR (+ (get-program-counter) 4))
+  (relative-jump off))
+
+(defun BLR (reg)
+  (set LR (+ (get-program-counter) 4))
+  (exec-addr reg))
+
+(defun BR (reg)
+  (exec-addr reg))
+
+(defmacro CB** (comparison reg off)
+  "(CB** cnd reg off) implements CBZ and CBNZ by specifying
+   the comparison (is-zero or non-zero)."
+  (when (comparison reg)
+    (relative-jump off)))
+
+(defun CBZW  (reg off) (CB** is-zero  reg off))
+(defun CBZX  (reg off) (CB** is-zero  reg off))
+(defun CBNZW (reg off) (CB** non-zero reg off))
+(defun CBNZX (reg off) (CB** non-zero reg off))
+
+(defun RET (dst)
+  (exec-addr dst))
 
 ;;; OTHER ATOMIC OPERATIONS
 
