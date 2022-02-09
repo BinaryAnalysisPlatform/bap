@@ -1,6 +1,6 @@
-(in-package aarch64)
+(declare (context (target arm armv8-a+le)))
 
-(require arm-bits)
+(in-package aarch64)
 
 ;;; ATOMIC OPERATIONS
 

@@ -1,7 +1,6 @@
-(in-package aarch64)
+(declare (context (target arm armv8-a+le)))
 
-(require bits)
-(require arm-bits)
+(in-package aarch64)
 
 ;;; LOADS, MOVES, STORES
 

@@ -1,10 +1,8 @@
+(declare (context (target arm armv8-a+le)))
+
 (in-package aarch64)
 
-(require arm-bits)
-
-;;; ARITHMETIC OPERATIONS
-
-;; Addition
+;;; INTEGER ARITHMETIC OPERATIONS
 
 (defmacro ADD*r* (set shift-function rd rn imm-or-rm off)
   "Implements ADD*ri and ADD*rs by specifying the shift function."
