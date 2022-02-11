@@ -1458,7 +1458,7 @@ module Theory : sig
 
     (** [read ?package name] is a synonym for [get ?package name].
 
-        Introduces for the consistency with the [Enum.S] interface.
+        Introduced for the consistency with the [Enum.S] interface.
     *)
     val read : ?package:string -> string -> t
 
@@ -1480,10 +1480,30 @@ module Theory : sig
     (** [name target] is the unique name of the target.  *)
     val name : t -> KB.Name.t
 
-    (** [matches target name] is true if [name] matches either
-        the unqualified name of the target itsef or one of its
-        ancestors; or if the name matches one of the target
-        nicknames. E.g., [matches target "mips"].
+
+    (** [matching t name] the target that matches [name].
+
+        [matching t name] is [Some r] where [r] is [t] or the closest
+        ancestor of [t] such that [r]'s name is equal to [name] or one
+        of name is [r]'s nicknames.
+
+        @since 2.5.0
+    *)
+    val matching : t -> string -> t option
+
+
+    (** [matches t name] when {!matching t name} is not [None].
+
+        [matching t name] is true when [name] matches either the
+        unqualified name of the target itsef or one of its ancestors;
+        or if the name matches one of the target nicknames or the
+        target parents nicknames.
+
+        E.g., [matches target "mips"].
+
+        @before 2.5.0 the nicknames of the ancestors weren't taken
+        into account
+        @after 2.5.0 uses the ancestors nicknames for matching
     *)
     val matches : t -> string -> bool
 
@@ -1515,7 +1535,7 @@ module Theory : sig
     *)
     val parents : t -> t list
 
-    (** [family p] returns an ordered list of targets that {!belongs} [p].
+    (** [family p] an ordered list of targets s.t. each {!belongs} to [p].
 
         The family members are ordered according to their hierarchy
         with [p] comming first.
@@ -2341,6 +2361,12 @@ module Theory : sig
       ?version:string list ->
       ?options:string list ->
       string -> compiler
+
+
+    (** [name compiler] returns the compiler name.
+
+        @since 2.5.0  *)
+    val name : compiler -> string
 
     (** [version] the compiler version.
 

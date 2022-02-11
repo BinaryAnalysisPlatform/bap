@@ -69,6 +69,7 @@ module Compiler : sig
     ?version:string list ->
     ?options:string list ->
     string -> compiler
+  val name : compiler -> string
   val version : compiler -> string list
   val options : compiler -> string list
   val specs : compiler -> string Map.M(String).t
