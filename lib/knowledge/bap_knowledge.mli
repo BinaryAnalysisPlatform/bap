@@ -218,7 +218,7 @@ module Knowledge : sig
       @since 2.4.0 if [require] is called in the scope of the promise
       and fails, the the whole promise immediately returns the empty
       value of the property domain, i.e., [f] is wrapped into
-      [with_missing].
+      [with_empty].
   *)
   val promise : ('a,'p) slot -> ('a obj -> 'p t) -> unit
 
@@ -234,7 +234,7 @@ module Knowledge : sig
       @since 2.4.0 if [require] is called in the scope of the promise
       and fails, the the whole promise immediately returns the empty
       value of the property domain, i.e., [promise] (not [f]) wrapped
-      into [with_missing].
+      into [with_empty].
   *)
   val promising : ('a,'p) slot -> promise:('a obj -> 'p t) ->
     (unit -> 's t) -> 's t
@@ -247,7 +247,7 @@ module Knowledge : sig
       @since 2.4.0 if [require] is called in the scope of the promise
       and fails, the the whole promise immediately returns the empty
       value of the property domain, i.e., [f] is wrapped into
-      [with_missing].
+      [with_empty].
 
   *)
   val propose : agent -> ('a, 'p opinions) slot -> ('a obj -> 'p t) -> unit
@@ -263,7 +263,7 @@ module Knowledge : sig
       @since 2.4.0 if [require] are called in the scope of the proposal
       and fails, the the whole proposal immediately returns the empty
       value of the property domain, i.e., [propose] (not [f]) wrapped
-      into [with_missing].
+      into [with_empty].
 
   *)
   val proposing : agent -> ('a, 'p opinions) slot ->
@@ -296,9 +296,58 @@ module Knowledge : sig
   (** [with_empty ~missing f x] evaluates [f ()] and if it fails on an empty
       immediately evaluates to [return missing].
 
+      Inside of [with_empty] it is possible to use the choice monad
+      operations, like [reject], [guard], [on], and [unless], in
+      addition to the knowledge specialized choice operators, such
+      as [require] and various [*?] operators.
+
+      Note, that promised computations are invoked in the [with_empty]
+      scope.
+
       @since 2.4.0
   *)
   val with_empty : missing:'r -> (unit -> 'r knowledge) -> 'r knowledge
+
+
+  (** [reject ()] rejects a promised computation.
+
+      When in the scope of the [with_empty] function, e.g., in a
+      promise or proposal, aborts the computation of the promise
+      and immediately returns an empty value.
+
+      @since 2.5.0 *)
+  val reject : unit -> 'a t
+
+  (** [guard cnd] rejects the rest of compuation if [cnd] is [false].
+
+      When in the scope of the [with_empty] function, e.g., in a
+      promise or proposal, aborts the computation of the promise
+      and immediately returns an empty value.
+
+      @since 2.5.0
+  *)
+  val guard : bool -> unit t
+
+
+  (** [on cnd x] evaluates to [x] if [cnd], otherwise rejects.
+
+      When in the scope of the [with_empty] function, e.g., in a
+      promise or proposal, aborts the computation of the promise
+      and immediately returns an empty value if [cnd] is [false].
+      If it is not, then evaluates to [x].
+
+      @since 2.5.0  *)
+  val on : bool -> unit t -> unit t
+
+  (** [unless cnd x] evaluates to [x] if [not cnd], otherwise rejects.
+
+      When in the scope of the [with_empty] function, e.g., in a
+      promise or proposal, aborts the computation of the promise
+      and immediately returns an empty value if [cnd] is [true].
+      If it is [false], then evaluates to [x].
+
+      @since 2.5.0  *)
+  val unless : bool -> unit t -> unit t
 
 
   (** state with no knowledge  *)
