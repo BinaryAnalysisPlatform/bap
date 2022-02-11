@@ -155,6 +155,8 @@ module Bytes : sig
                 and type corpus = mem
                 and type token := word
 
+  val t : t Bap_byteweight_signatures.data
+
 
   (** [find mem ~length ~threshold corpus] extract addresses of all
       memory chunks of the specified [length], that were classified
