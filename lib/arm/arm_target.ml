@@ -7,6 +7,7 @@ open KB.Syntax
 open Poly
 
 module CT = Theory
+module Mode = Bap_trace_event_types.Mode
 
 type r128 and r80 and r64 and r32 and r16 and r8
 
@@ -581,6 +582,11 @@ module Encodings = struct
     provide_primitive ()
 end
 
+module Modes = struct
+  let a32 = Mode.declare ~package:"arm" "a32"
+  let t32 = Mode.declare ~package:"arm" "t32"
+end
+
 let has_t32 label =
   KB.collect CT.Label.unit label >>= function
   | None -> !!false
@@ -639,15 +645,22 @@ let enable_pcode () =
   if is_arm t then pcode
   else Theory.Language.unknown
 
-let guess_encoding interworking label target =
+let guess_encoding interworking label target mode =
   if is_arm target then
     if is_64bit target then !!llvm_a64 else
     if is_thumb_only target
     then !!llvm_t32
-    else match interworking with
-      | Some true -> compute_encoding_from_symbol_table label
+    else
+      let from_mode_or fallback =
+        if Mode.equal mode Modes.t32 then !!llvm_t32
+        else if Mode.equal mode Modes.a32 then !!llvm_a32
+        else fallback () in
+      match interworking with
+      | Some true -> from_mode_or @@ fun () ->
+        compute_encoding_from_symbol_table label
       | Some false -> !!llvm_a32
-      | None -> has_t32 label >>= function
+      | None -> from_mode_or @@ fun () ->
+        has_t32 label >>= function
         | true -> compute_encoding_from_symbol_table label
         | false -> !!llvm_a32
   else !!CT.Language.unknown
@@ -658,8 +671,9 @@ let enable_llvm ?interworking () =
   register llvm_t32 "thumbv7" ~attrs:"+thumb2";
   register llvm_a64 "aarch64";
   KB.promise CT.Label.encoding @@ fun label ->
-  CT.Label.target label >>= guess_encoding interworking label
-
+  let* target = CT.Label.target label in
+  let* mode = KB.collect Mode.slot label in
+  guess_encoding interworking label target mode
 
 let load ?interworking ?(backend="llvm") () =
   enable_loader ();
