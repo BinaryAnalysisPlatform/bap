@@ -2663,10 +2663,22 @@ module Knowledge = struct
   let pids = ref Pid.zero
 
   type conflict += Empty : ('a,'b) slot -> conflict
+                | Reject : conflict
+
+  let reject () = Knowledge.fail Reject
+  let guard cnd = if not cnd
+    then reject ()
+    else Knowledge.return ()
+  let on cnd yes = if cnd
+    then yes
+    else reject ()
+  let unless cnd no = if cnd
+    then reject ()
+    else no
 
   let with_empty ~missing scope =
     Knowledge.catch (scope ())
-      (function Empty _ -> Knowledge.return missing
+      (function Empty _ | Reject -> Knowledge.return missing
               | other -> Knowledge.fail other)
 
   let register_watcher (type a b)(s : (a,b) slot) run =

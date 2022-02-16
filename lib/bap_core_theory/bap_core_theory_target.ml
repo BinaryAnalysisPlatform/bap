@@ -547,14 +547,6 @@ let is_known c = not@@is_unknown c
 let rec belongs p c =
   Self.equal p c || is_known c && belongs p (parent c)
 
-let rec matches_name t name =
-  String.Caseless.equal (Name.unqualified (Self.name t)) name ||
-  is_known t && matches_name (parent t) name
-
-let rec matches t name =
-  let nicks = (info t).names in
-  Set.mem nicks name || matches_name t name
-
 let order t1 t2 : KB.Order.partial =
   if Self.equal t1 t2 then EQ
   else if belongs t1 t2 then LT
@@ -597,6 +589,20 @@ let partition xs =
 
 let families () = partition@@declared ()
 
+let matches_name t name =
+  String.Caseless.equal (Name.unqualified (Self.name t)) name
+
+let rec matching t name =
+  if matches_name t name || Set.mem (info t).names name
+  then Some t
+  else if is_known t then matching (parent t) name
+  else None
+
+
+let matches t name =
+  Option.is_some (matching t name)
+
+let nicknames t = (info t).names
 
 type alias = Alias.t
 
