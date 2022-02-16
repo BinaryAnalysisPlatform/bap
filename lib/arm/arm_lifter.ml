@@ -957,7 +957,8 @@ let lift_branch mem ops insn =
   | `BL, [|offset; cond; _|]
   | `BL_pred, [|offset; cond; _|] ->
     Branch.lift offset ~cond ~link:true addr
-
+  | `BL, [|offset|] ->
+    Branch.lift offset ~link:true addr
   | `BX_RET, [|cond; _|] ->
     Branch.lift (`Reg `LR) ~cond ~x:true addr
 
