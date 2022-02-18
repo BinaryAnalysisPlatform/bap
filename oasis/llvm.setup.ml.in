@@ -1,3 +1,24 @@
+let default_llvm_components = [
+  "all-targets";
+  "binaryformat";
+  "core";
+  "mc";
+  "debuginfodwarf";
+  "debuginfomsf";
+  "debuginfopdb";
+]
+
+
+let llvm_components () : unit =
+  BaseEnv.var_define
+    ~hide:false
+    ~dump:true
+    ~cli:BaseEnv.CLIWith
+    ~short_desc:(fun () ->
+        "the comma-separated list of required LLVM components")
+    ("llvm_components")
+    (fun () -> String.concat "," default_llvm_components) |>
+  definition_end
 
 let strip_patch ver =
   match String.index_opt ver '.' with
@@ -6,13 +27,15 @@ let strip_patch ver =
 
 let extract config link_static v =
   let link_mode = if link_static then "--link-static" else "" in
-  OASISExec.run_read_one_line ~ctxt config [link_mode; "--"^v]
+  let components = if v = "libs"
+    then String.split_on_char ',' @@ BaseEnv.var_get "llvm_components"
+    else [] in
+  OASISExec.run_read_one_line ~ctxt config @@
+  link_mode :: ("--"^v) :: components
 
-let extract_ldflags config link_static = function
-  | "3.4" -> extract config link_static "ldflags"
-  | _ ->
-    extract config link_static "ldflags" ^
-    " " ^ extract config link_static "system-libs"
+let extract_ldflags config link_static =
+  extract config link_static "ldflags" ^ " " ^
+  extract config link_static "system-libs"
 
 let llvm var () : unit =
   BaseEnv.var_define
@@ -22,12 +45,9 @@ let llvm var () : unit =
     ("llvm_"^var)
     (fun () ->
        let config = BaseEnv.var_get "llvm_config" in
-       let version = strip_patch @@ BaseEnv.var_get "llvm_version" in
-       let link_static = match version with
-         | "3.4" | "3.8" -> false
-         | _ -> BaseEnv.var_get "llvm_static" = "true" in
+       let link_static = BaseEnv.var_get "llvm_static" = "true" in
        if var = "ldflags"
-       then extract_ldflags config link_static version
+       then extract_ldflags config link_static
        else extract config link_static var) |>
   definition_end
 
@@ -36,13 +56,13 @@ let llvm_version () : unit =
     ~hide:false
     ~dump:true
     ~cli:BaseEnv.CLIWith
-    ~short_desc:(fun () -> "llvm version (e.g., 3.4)")
+    ~short_desc:(fun () -> "llvm version (e.g., 10)")
     "llvm_version"
     (fun () ->
        try
          ignore @@ OASISFileUtil.which ~ctxt "llvm-config";
          OASISExec.run_read_one_line ~ctxt "llvm-config" ["--version"]
-       with Not_found -> "3.4") |>
+       with Not_found -> "10") |>
   definition_end
 
 let llvm_config () : unit =
@@ -92,6 +112,7 @@ let llvm_lib () : unit =
 
 let () =
   define [
+    llvm_components;
     llvm_version;
     llvm_config;
     llvm_mainlib;
