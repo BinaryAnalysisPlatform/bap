@@ -53,7 +53,7 @@ module Repository = struct
     | None -> invalid_argf "Unknown system %s" (Name.show name) ()
 
   let get ?package name =
-    require @@ Name.create ?package name
+    require @@ Name.read ?package name
 
   let find = Hashtbl.find self
 
