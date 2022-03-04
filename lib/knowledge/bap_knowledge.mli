@@ -329,6 +329,16 @@ module Knowledge : sig
   val guard : bool -> unit t
 
 
+  (** [proceed ~unless:cnd] rejects the computation unless [cnd] holds.
+
+      Dual to {!guard}, this operator rejects a promise (or any other
+      computation in the scope of the {!with_empty} operator) unless
+      the [cnd] holds, i.e., it is the same as [guard (not cnd)].
+
+      @since 2.5.0 *)
+  val proceed : unless:bool -> unit t
+
+
   (** [on cnd x] evaluates to [x] if [cnd], otherwise rejects.
 
       When in the scope of the [with_empty] function, e.g., in a
@@ -886,6 +896,13 @@ module Knowledge : sig
     val empty : ('a,'b) cls -> ('a,'b) cls value
 
 
+    (** [is_empty x] iff all properties of [x] are empty.
+
+        @since 2.5.0
+    *)
+    val is_empty : _ value -> bool
+
+
     (** [order x y] orders [x] and [y] by their information content.  *)
     val order : 'a value -> 'a value -> Order.partial
 
@@ -940,6 +957,12 @@ module Knowledge : sig
 
     (** [put p v x] sets a value of the property [p].  *)
     val put : ('k,'p) slot -> ('k,'s) cls value -> 'p -> ('k,'s) cls value
+
+    (** [has p x] if property [p] of [x] is not empty.
+
+        @since 2.5.0
+    *)
+    val has : ('k,'p) slot -> ('k,'s) cls value -> bool
 
     (** [refine v s] refines the sort of [v] to [s].
 
