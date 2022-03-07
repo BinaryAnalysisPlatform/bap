@@ -90,19 +90,17 @@ module Std = struct
   include Model
 end
 
-let () =
+let promise_delay_slots () =
   let provide_delay obj =
     let open KB.Syntax in
     Theory.Label.target obj >>= fun target ->
-    if Theory.Target.belongs Bap_mips_target.parent target
-    then
-      KB.collect Theory.Semantics.slot obj >>| fun insn ->
-      let name = KB.Value.get Insn.Slot.name insn in
-      Hashtbl.find_and_call Std.delayed_opcodes name
-        ~if_found:(fun delay ->
-            KB.Value.put Insn.Slot.delay insn (Some delay))
-        ~if_not_found:(fun _ -> Insn.empty)
-    else !!Insn.empty in
+    KB.guard (Theory.Target.belongs Bap_mips_target.parent target) >>= fun () ->
+    KB.collect Theory.Semantics.slot obj >>| fun insn ->
+    let name = KB.Value.get Insn.Slot.name insn in
+    Hashtbl.find_and_call Std.delayed_opcodes name
+      ~if_found:(fun delay ->
+          KB.Value.put Insn.Slot.delay insn (Some delay))
+      ~if_not_found:(fun _ -> Insn.empty) in
   Bap_main.Extension.declare @@ fun _ctxt ->
   KB.Rule.(declare ~package:"mips" "delay-slot" |>
            require Insn.Slot.name |>

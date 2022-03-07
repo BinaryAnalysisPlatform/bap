@@ -2884,14 +2884,22 @@ module Knowledge = struct
     current slot obj >>= fun opinions ->
     provide slot obj (Opinions.add agent x opinions)
 
+  let wrap_opinion get obj =
+    with_empty ~missing:None @@ fun () ->
+    get obj >>| Option.some
+
   let propose agent s get =
     ignore @@
     register_promise s @@ fun obj ->
-    get obj >>= suggest agent s obj
+    wrap_opinion get obj >>= function
+    | None -> Knowledge.return ()
+    | Some opinions -> suggest agent s obj opinions
 
   let proposing agent s ~propose:get scoped =
     let pid = register_promise s @@ fun obj ->
-      get obj >>= suggest agent s obj in
+      wrap_opinion get obj >>= function
+      | None -> Knowledge.return ()
+      | Some opinions -> suggest agent s obj opinions in
     scoped () >>= fun r ->
     remove_promise s pid;
     Knowledge.return r
