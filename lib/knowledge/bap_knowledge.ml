@@ -1835,7 +1835,7 @@ module Dict = struct
           | ILT -> Ok (make3 ka a kb b kc c)
           | IGT -> Ok (make3 kb b kc c ka a)
           | ILE -> Ok (make2 ka (app m ka kb b a) kc c)
-          | IGE -> Ok (make2 kb b ka (app m ka kb b a))
+          | IGE -> Ok (make2 kb b ka (app m ka kc c a))
           | INC -> Ok (make3 kb b ka a kc c)
         end
       | T2 (ka, a, kb, b), T1 (kc, c) ->
@@ -1853,7 +1853,7 @@ module Dict = struct
           | ILE -> Ok (make3 ka (app m ka kb b a) kc c kd d)
           | IGE -> Ok (make3 kb b kc c ka (app m ka kd d a))
           | INC -> match Key.compare ka kc with
-            | 0 -> Ok (make3 kb b kc (app m kc kd d c) kd d)
+            | 0 -> Ok (make3 kb b kc (app m kc ka a c) kd d)
             | 1 -> Ok (make4 kb b kc c ka a kd d)
             | _ -> Ok (make4 kb b ka a kc c kd d)
         end
@@ -1934,6 +1934,7 @@ module Record = struct
     Hashtbl.create (module Uid)
 
   let empty = Dict.empty
+  let is_empty = Dict.is_empty
 
   let uid = Key.uid
   let domain k = Hashtbl.find_exn vtables (uid k)
@@ -2294,6 +2295,8 @@ module Knowledge = struct
     let empty cls =
       {cls; data=Record.empty; time = next_second ()}
 
+    let is_empty {data} = Record.is_empty data
+
     let order {data=x} {data=y} = Record.order x y
 
     let refine {data; cls; time} s=
@@ -2301,11 +2304,16 @@ module Knowledge = struct
 
     let cls {cls} = cls
     let create cls data = {cls; data; time = next_second ()}
-    let put {Slot.key} v x = {
-      v with data = Record.put key v.data x;
-             time = next_second ()
-    }
+    let put {Slot.key; dom} v x =
+      if Domain.is_empty dom x then v
+      else {
+        v with data = Record.put key v.data x;
+               time = next_second ()
+      }
     let get {Slot.key; dom} {data} = Record.get key dom data
+    let has {Slot.key; dom} {data} =
+      not @@ Domain.is_empty dom @@ Record.get key dom data
+
     let strip
       : type a b. (a value, b value) Type_equal.t -> (a,b) Type_equal.t =
       fun T -> T
@@ -2669,6 +2677,7 @@ module Knowledge = struct
   let guard cnd = if not cnd
     then reject ()
     else Knowledge.return ()
+  let proceed ~unless:cnd = guard (not cnd)
   let on cnd yes = if cnd
     then yes
     else reject ()
