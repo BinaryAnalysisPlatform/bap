@@ -13,6 +13,7 @@ include Self()
 type blk = {
   name : Theory.Label.t;
   keep : bool;
+  weak : bool;
   defs : def term list;
   jmps : jmp term list;
 } [@@deriving bin_io]
@@ -54,13 +55,70 @@ module BIR = struct
     Blk.Builder.result b :: blks |>
     List.rev
 
+  let resolve jmp = Option.(Jmp.(dst jmp >>| resolve))
+
+  let references blks =
+    List.fold ~init:Tid.Map.empty ~f:(fun refs {jmps} ->
+        List.fold jmps ~init:refs ~f:(fun refs jmp ->
+            match resolve jmp with
+            | Some (First tid) when Set.mem blks tid ->
+              Map.update refs tid ~f:(function
+                  | None -> 1
+                  | Some refs -> refs+1)
+            | _ -> refs))
+
+  let names =
+    List.fold ~init:Tid.Set.empty ~f:(fun blks {name} ->
+        Set.add blks name)
+
+  let single_dst = function
+    | [] | _ :: _ :: _ -> None
+    | [x] -> match resolve x with
+      | Some First tid -> Some tid
+      | _ -> None
+
+  let can_contract refs b1 b2 =
+    b1.weak && b2.weak && match single_dst b1.jmps with
+    | None -> false
+    | Some dst ->
+      Tid.equal dst b2.name &&
+      match Map.find refs dst with
+      | Some 1 -> true
+      | _ -> false
+
+  (* pre: can_contract b1 b2 /\
+          can_contract b2 b3 .. *)
+  let contract blks = match List.hd blks, List.last blks with
+    | Some first,Some last -> {
+        first with
+        defs = List.(rev@@concat_map blks ~f:(fun {defs} -> List.rev defs));
+        jmps = last.jmps;
+      }
+    | _ -> assert false
+
+  let normalize blks =
+    let names = names blks in
+    let refs = references names blks in
+    List.sort blks ~compare:(fun b1 b2 ->
+        Tid.compare b1.name b2.name) |>
+    List.group ~break:(fun b1 b2 ->
+        not @@ can_contract refs b1 b2) |>
+    List.map ~f:contract
+
+  let has_weak_blocks = List.exists ~f:(fun {weak} -> weak)
+
+  let normalize = function
+    | [] | [_] as xs -> xs
+    | xs -> if has_weak_blocks xs then normalize xs else xs
+
   (* postconditions:
      - the first block is the entry block
      - the last block is the exit block
   *)
   let reify {entry; blks} =
     if is_null entry then [] else
-      List.fold blks ~init:(None,[]) ~f:(fun (s,blks) b ->
+      normalize blks |>
+      List.fold ~init:(None,[]) ~f:(fun (s,blks) b ->
           match make_blk b with
           | [] -> assert false
           | blk::blks' ->
@@ -108,7 +166,8 @@ let slot = graph
 module IR = struct
   include Theory.Empty
   let ret = Knowledge.return
-  let blk ?(keep=true) tid = {name=tid; defs=[]; jmps=[]; keep}
+  let blk ?(keep=true) tid =
+    {name=tid; defs=[]; jmps=[]; keep; weak=false}
 
   let def = (fun x -> x.defs), (fun x d -> {x with defs = d})
   let jmp = (fun x -> x.jmps), (fun x d -> match x.jmps with
@@ -148,15 +207,21 @@ module IR = struct
     then Jmp.reify ?cnd ~tid ~alt:(Jmp.resolved dst) ()
     else Jmp.reify ?cnd ~tid ~dst:(Jmp.resolved dst) ()
 
+  let is_subinstruction label =
+    KB.collect Insn.Seqnum.slot label >>| function
+    | None -> false
+    | Some _ -> true
+
   let relink label {entry; blks} =
     if is_null entry then KB.return {
         entry = label;
-        blks = [{name=label; keep=true; defs=[]; jmps=[]}]
+        blks = [{name=label; keep=true; weak=true; defs=[]; jmps=[]}]
       } else
+      let* weak = is_subinstruction label in
       let+ blks = List.fold_map blks ~init:`Unbound ~f:(fun r blk ->
           if Theory.Label.equal blk.name entry
           then if blk.keep then `Relink blk.name, blk
-            else `Relinked, {blk with name = label; keep=true}
+            else `Relinked, {blk with name = label; keep=true; weak}
           else r,blk) |> function
                   | `Relinked,blks -> KB.return blks
                   | `Relink dst, blks ->
@@ -175,6 +240,7 @@ module IR = struct
       blks = [{
           name=entry;
           keep=false;
+          weak=true;
           jmps=[];
           defs=[Def.reify ~tid v x]
         }]
@@ -211,6 +277,7 @@ module IR = struct
         blks = [{
             name = head;
             keep = true;
+            weak = false;
             defs = [];
             jmps = [goto ~cnd ~tid head]}]}
     | {entry=loop; blks=b::blks} ->
