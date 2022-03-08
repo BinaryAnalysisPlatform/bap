@@ -32,8 +32,9 @@
   (set# td dst (load-bits td ptr)))
 
 (defun branch (typ dst)
-  (if (is-symbol typ) (exec-addr dst)
-      (goto-subinstruction dst)))
+  (if (is-symbol typ)
+      (exec-addr dst)
+    (goto-subinstruction dst)))
 
 (defun BRANCH (typ dst)
   (branch typ dst))
