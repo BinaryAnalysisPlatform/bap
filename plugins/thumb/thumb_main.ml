@@ -222,25 +222,24 @@ module Main = struct
   let load () =
     KB.promise Theory.Semantics.slot @@ fun label ->
     KB.collect Theory.Label.encoding label >>= fun encoding ->
-    if Theory.Language.equal Target.llvm_t32 encoding then
-      KB.collect MC.Insn.slot label >>=? fun insn ->
-      KB.collect Memory.slot label >>=? fun mem ->
-      Theory.instance () >>= Theory.require >>= fun (module Core) ->
-      let module Thumb = Thumb(Core) in
-      let addr = Word.to_bitvec@@Memory.min_addr mem in
-      match decode_opcode (MC.Insn.name insn) with
-      | None -> !!Insn.empty
-      | Some opcode ->
-        try
-          Thumb.lift_insn addr opcode insn >>| fun sema ->
-          Insn.with_basic sema insn
-        with uncaught ->
-          warning "failed to decode a thumb instruction: \
-                   uncaught exception %s\nBacktrace:\n %s\n"
-            (Exn.to_string uncaught)
-            (Caml.Printexc.get_backtrace ());
-          KB.return Insn.empty
-    else KB.return Insn.empty
+    KB.guard (Theory.Language.equal Target.llvm_t32 encoding) >>= fun () ->
+    KB.collect MC.Insn.slot label >>=? fun insn ->
+    KB.collect Memory.slot label >>=? fun mem ->
+    Theory.instance () >>= Theory.require >>= fun (module Core) ->
+    let module Thumb = Thumb(Core) in
+    let addr = Word.to_bitvec@@Memory.min_addr mem in
+    match decode_opcode (MC.Insn.name insn) with
+    | None -> !!Insn.empty
+    | Some opcode ->
+      try
+        Thumb.lift_insn addr opcode insn >>| fun sema ->
+        Insn.with_basic sema insn
+      with uncaught ->
+        warning "failed to decode a thumb instruction: \
+                 uncaught exception %s\nBacktrace:\n %s\n"
+          (Exn.to_string uncaught)
+          (Caml.Printexc.get_backtrace ());
+        KB.return Insn.empty
 end
 
 let () = Bap_main.Extension.declare @@ fun _ctxt ->

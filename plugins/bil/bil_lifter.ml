@@ -15,7 +15,6 @@ let package = "bap"
 module Optimizer = Theory.Parser.Make(Theory.Pass.Desugar(Bil_semantics.Core))
 [@@inlined]
 
-
 let provide_bir () =
   KB.Rule.(declare ~package "reify-ir" |>
            require Theory.Semantics.slot |>
@@ -23,7 +22,9 @@ let provide_bir () =
            provide Theory.Semantics.slot |>
            comment "reifies IR");
   KB.promise Theory.Semantics.slot @@ fun obj ->
-  KB.collect Theory.Semantics.slot obj >>| fun sema ->
+  KB.collect Theory.Semantics.slot obj >>= fun sema ->
+  KB.proceed ~unless:(KB.Value.has Term.slot sema) >>= fun () ->
+  KB.return @@
   match Bil_ir.reify @@ KB.Value.get Bil_ir.slot sema with
   | [] -> Insn.empty
   | bir -> KB.Value.put Term.slot sema bir
