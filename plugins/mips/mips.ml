@@ -90,22 +90,18 @@ module Std = struct
   include Model
 end
 
-let () =
-  let provide_delay obj =
-    let open KB.Syntax in
-    Theory.Label.target obj >>= fun target ->
-    if Theory.Target.belongs Bap_mips_target.parent target
-    then
-      KB.collect Theory.Semantics.slot obj >>| fun insn ->
-      let name = KB.Value.get Insn.Slot.name insn in
-      Hashtbl.find_and_call Std.delayed_opcodes name
-        ~if_found:(fun delay ->
-            KB.Value.put Insn.Slot.delay insn (Some delay))
-        ~if_not_found:(fun _ -> Insn.empty)
-    else !!Insn.empty in
-  Bap_main.Extension.declare @@ fun _ctxt ->
+let promise_delay_slots () =
   KB.Rule.(declare ~package:"mips" "delay-slot" |>
            require Insn.Slot.name |>
            provide Insn.Slot.delay |>
            comment "provides the delay slot length for branches");
-  Ok (KB.promise Theory.Semantics.slot provide_delay)
+  KB.promise Theory.Semantics.slot @@ fun obj ->
+  let open KB.Syntax in
+  Theory.Label.target obj >>= fun target ->
+  KB.guard (Theory.Target.belongs Bap_mips_target.parent target) >>= fun () ->
+  KB.collect Theory.Semantics.slot obj >>| fun insn ->
+  let name = KB.Value.get Insn.Slot.name insn in
+  Hashtbl.find_and_call Std.delayed_opcodes name
+    ~if_found:(fun delay ->
+        KB.Value.put Insn.Slot.delay insn (Some delay))
+    ~if_not_found:(fun _ -> Insn.empty)
