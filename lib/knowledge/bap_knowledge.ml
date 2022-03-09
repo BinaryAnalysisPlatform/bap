@@ -1232,26 +1232,93 @@ module Dict = struct
     let (<>) x y = uid x <> uid y [@@inline]
 
 
-    (* the order between intervals
-       The first interval is denoted with a series of [-],
-       the second interval is denoted with a series of [|],
-       their intersection is [+] and non-intersection is [.]
+    (** Allen's Interval Algebra
+
+        The Allen's Interval Algebra [1,2] describes 13 possible
+        relations between two intervals. See also [3] for the nice
+        visualizations and an available description.
+
+        [1]: https://doi.org/10.1145/182.358434
+        [2]: https://doi.org/10.1111/j.1467-8640.1989.tb00329.x
+        [3]: https://www.thomasalspaugh.org/pub/fnd/allen.html
     *)
-    type interval_order =
-      | ILT                     (* ---.||| *)
-      | IGT                     (* |||.--- *)
-      | ILE                     (* --+||   *)
-      | IGE                     (* ||+--   *)
-      | INC                     (* anything else *)
+    module Interval = struct
+      type order =
+        | Before
+        | Meets
+        | Overlaps
+        | Finished
+        | Contains
+        | Starts
+        | Equals
+        | Started
+        | During
+        | Finishes
+        | Overlapped
+        | Met
+        | After
 
-    let compare_interval l1 u1 l2 u2 =
-      match compare u1 l2, compare u2 l1 with
-      | 0,_ -> ILE
-      | _,0 -> IGE
-      | -1,_ -> ILT
-      | _,-1 -> IGT
-      | _ -> INC
+      let invert f a b c d = f c d a b [@@inline]
 
+      let meets _ b c _ = b = c [@@inline]
+      let met a b c d = invert meets a b c d [@@inline] [@@specialize]
+      let before _ b c _ = b < c [@@inline]
+      let after a b c d = invert before a b c d [@@inline] [@@specialize]
+      let overlaps a b c d = a < c && b < d && b > c [@@inline]
+      let overlapped a b c d = invert overlaps a b c d [@@inline] [@@specialize]
+      let starts a b c d = a = c && b < d [@@inline]
+      let started a b c d = invert starts a b c d [@@inline] [@@specialize]
+      let finishes a b c d = a > c && b = d [@@inline]
+      let finished a b c d = invert finishes a b c d [@@inline] [@@specialize]
+      let during a b c d = a > c && b < d [@@inline]
+      let contains a b c d = invert during a b c d [@@inline] [@@specialize]
+      let equals a b c d = a = c && b = d [@@inline]
+
+      let relate a b c d = match () with
+        | () when meets a b c d -> Meets
+        | () when met a b c d -> Met
+        | () when before a b c d -> Before
+        | () when after a b c d -> After
+        | () when overlaps a b c d -> Overlaps
+        | () when overlapped a b c d -> Overlapped
+        | () when starts a b c d -> Starts
+        | () when started a b c d -> Started
+        | () when finishes a b c d -> Finishes
+        | () when finished a b c d -> Finished
+        | () when during a b c d -> During
+        | () when contains a b c d -> Contains
+        | () when equals a b c d -> Equals
+        | () -> assert false
+      [@@inline]
+    end
+
+    (** Extension of the Allen's Algebra over points.
+
+        A point can have only five relations to an interval.
+
+    *)
+    module Point = struct
+      type order =
+        | Before                (* preceeds the interval *)
+        | Starts                (* equal to the start *)
+        | During                (* inside of the interval *)
+        | Finishes              (* equal to the end *)
+        | After                 (* follows the interval *)
+
+      let before p a _ = p < a [@@inline]
+      let starts p a _ = p = a [@@inline]
+      let during p a b = p > a && p < b [@@inline]
+      let finishes p _ b = p = b [@@inline]
+      let after p _ b = p > b [@@inline]
+      let relate p a b = match () with
+        | () when before p a b -> Before
+        | () when starts p a b -> Starts
+        | () when during p a b -> During
+        | () when finishes p a b -> Finishes
+        | () when after p a b -> After
+        | () -> assert false
+      [@@inline]
+    end
   end
   type 'a key = 'a Key.t
 
@@ -1820,70 +1887,68 @@ module Dict = struct
           ~update:(fun k -> k m)
     }
 
-  let merge m x y =
-    if phys_equal x y then Ok x
-    else match x,y with
-      | T0,x | x, T0 -> Ok x
-      | T1 (ka, a), T1 (kb, b) ->
-        begin match Key.compare ka kb with
-          | 0 -> Ok (make1 ka (app m ka kb b a))
-          | 1 -> Ok (make2 kb b ka a)
-          | _ -> Ok (make2 ka a kb b)
-        end
-      | T1 (ka, a), T2 (kb, b, kc, c) ->
-        begin match Key.compare_interval ka ka kb kc with
-          | ILT -> Ok (make3 ka a kb b kc c)
-          | IGT -> Ok (make3 kb b kc c ka a)
-          | ILE -> Ok (make2 ka (app m ka kb b a) kc c)
-          | IGE -> Ok (make2 kb b ka (app m ka kc c a))
-          | INC -> Ok (make3 kb b ka a kc c)
-        end
-      | T2 (ka, a, kb, b), T1 (kc, c) ->
-        begin match Key.compare_interval ka kb kc kc with
-          | ILT -> Ok (make3 ka a kb b kc c)
-          | IGT -> Ok (make3 kc c ka a kb b)
-          | ILE -> Ok (make2 ka a kb (app m kb kc c b))
-          | IGE -> Ok (make2 ka (app m ka kc c a) kb b)
-          | INC -> Ok (make3 ka a kc c kb b)
-        end
-      | T1 (ka, a), T3 (kb, b, kc, c, kd, d) ->
-        begin match Key.compare_interval ka ka kc kd with
-          | ILT -> Ok (make4 ka a kb b kc c kd d)
-          | IGT -> Ok (make4 kb b kc c kd d ka a)
-          | ILE -> Ok (make3 ka (app m ka kb b a) kc c kd d)
-          | IGE -> Ok (make3 kb b kc c ka (app m ka kd d a))
-          | INC -> match Key.compare ka kc with
-            | 0 -> Ok (make3 kb b kc (app m kc ka a c) kd d)
-            | 1 -> Ok (make4 kb b kc c ka a kd d)
-            | _ -> Ok (make4 kb b ka a kc c kd d)
-        end
-      | T2 (ka, a, kb, b), T2 (kc, c, kd, d) ->
-        begin match Key.compare_interval ka kb kc kd with
-          | ILT -> Ok (make4 ka a kb b kc c kd d)
-          | IGT -> Ok (make4 kc c kd d ka a kb b)
-          | ILE -> Ok (make3 ka a kb (app m kb kc c b) kd d)
-          | IGE -> Ok (make3 kc c kd (app m kd ka a d) kb b)
-          | INC -> match Key.compare ka kc, Key.compare kb kd with
-            | 0,1 -> Ok (make3 ka (app m ka kc c a) kd d kb b)
-            | 0,_ -> Ok (make3 ka (app m ka kc c a) kb b kd d)
-            | 1,0 -> Ok (make3 kc c ka a kb (app m kb kd d b))
-            | _,0 -> Ok (make3 ka a kc c kb (app m kb kd d b))
-            | 1,_ -> Ok (make4 kc c ka a kb b kd d)
-            | _,_ -> Ok (make4 ka a kc c kd d kb b)
-        end
-      | T3 (ka, a, kb, b, kc, c), T1 (kd,d) ->
-        begin match Key.compare_interval ka kc kd kd with
-          | ILT -> Ok (make4 ka a kb b kc c kd d)
-          | IGT -> Ok (make4 kd d ka a kb b kc c)
-          | ILE -> Ok (make3 ka a kb b kc (app m kc kd d c))
-          | IGE -> Ok (make3 kd (app m kd ka a d) kb b kc c)
-          | INC -> match Key.compare kd kb with
-            | 0 -> Ok (make3 ka a kb (app m kb kd d b) kc c)
-            | 1 -> Ok (make4 ka a kb b kd d kc c)
-            | _ -> Ok (make4 ka a kd d kb b kc c)
-        end
-      | _ -> Ok (fold_merge m x y)
+  let merge_11 m ka a kb b = match Key.compare ka kb with
+    | 0 -> make1 ka (app m ka kb b a)
+    | 1 -> make2 kb b ka a
+    | _ -> make2 ka a kb b
+  [@@inline]
 
+  let merge_12 m ka a kb b kc c =
+    match Key.Point.relate ka kb kc with
+    | Before   -> make3 ka a kb b kc c
+    | Starts   -> make2 ka (app m ka kb b a) kc c
+    | During   -> make3 kb b ka a kc c
+    | Finishes -> make2 kb b ka (app m ka kc c a)
+    | After    -> make3 kb b kc c ka a
+  [@@inline]
+
+  let merge_13 m ka a kb b kc c kd d =
+    match Key.Point.relate ka kb kd with
+    | Before   -> make4 ka a kb b kc c kd d
+    | Starts   -> make3 ka (app m ka kb b a) kc c kd d
+    | Finishes -> make3 kb b kc c kd (app m kd ka a d)
+    | After    -> make4 kb b kc c kd d ka a
+    | During   -> match Key.compare ka kc with
+      | 0      -> make3 kb b kc (app m kc ka a c) kd d
+      | 1      -> make4 kb b kc c ka a kd d
+      | _      -> make4 kb b ka a kc c kd d
+  [@@inline]
+
+  let merge_22 m ka a kb b kc c kd d =
+    match Key.Interval.relate ka kb kc kd with
+    | Meets      -> make3 ka a kb (app m kb kc c b) kd d
+    | Met        -> make3 kc c kd (app m kd ka a d) kb b
+    | Before     -> make4 ka a kb b kc c kd d
+    | After      -> make4 kc c kd d ka a kb b
+    | Overlaps   -> make4 ka a kc c kb b kd d
+    | Overlapped -> make4 kc c ka a kd d kb b
+    | Starts     -> make3 ka (app m ka kc c a) kb b kd d
+    | Started    -> make3 ka (app m ka kc c a) kd d kb b
+    | Finishes   -> make3 kc c ka a kb (app m kb kd d b)
+    | Finished   -> make3 ka a kc c kb (app m kb kd d b)
+    | During     -> make4 kc c ka a kb b kd d
+    | Contains   -> make4 ka a kc c kd d kb b
+    | Equals     -> make2 ka (app m ka kc c a) kb (app m kb kd d b)
+  [@@inline]
+
+  let merge m x y =
+    if phys_equal x y then x
+    else match x,y with
+      | T0,x | x, T0 -> x
+      | T1 (ka, a), T1 (kb, b) ->
+        merge_11 m ka a kb b
+      | T1 (ka, a), T2 (kb, b, kc, c) ->
+        merge_12 m ka a kb b kc c
+      | T2 (kb, b, kc, c), T1 (ka, a) ->
+        merge_12 m ka a kb b kc c
+      | T1 (ka, a), T3 (kb, b, kc, c, kd, d) ->
+        merge_13 m ka a kb b kc c kd d
+      | T3 (kb, b, kc, c, kd, d), T1 (ka, a) ->
+        merge_13 m ka a kb b kc c kd d
+      | T2 (ka, a, kb, b), T2 (kc, c, kd, d) ->
+        merge_22 m ka a kb b kc c kd d
+      | _ -> fold_merge m x y
+  [@@inline]
 
   let sexp_of_t dict = Sexp.List (foreach ~init:[] dict {
       visit = fun k x xs ->
@@ -2005,11 +2070,11 @@ module Record = struct
 
 
   let join x y =
-    try Dict.merge domain_merge x y
+    try Ok (Dict.merge domain_merge x y)
     with Merge_conflict err -> Error err
 
   let try_merge ~on_conflict x y =
-    try Dict.merge (resolving_merge on_conflict) x y
+    try Ok (Dict.merge (resolving_merge on_conflict) x y)
     with Merge_conflict err -> Error err
 
   let eq = Dict.Key.same
