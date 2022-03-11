@@ -8529,7 +8529,20 @@ module Std : sig
         whole subroutine is the set of variables that are live at the
         [Graphs.Tid.start] node.
 
+        When the subroutine is in the SSA form then the phi-nodes have
+        the following semantics. For a phi-node at block [b0],
+        [x0 := phi([b1,x1; b2,x2;...;bN,xN])], the defined variable
+        [x0] is considered to be at the entry of [b0], i.e., [x0] is
+        live-in of [b0], and the variable [xi] is live-out of basic
+        block [bi], for [i > 0].
+
+        Informally, a phi-node defines the values on the corresponding
+        edges of the predecessors.
+
+
         @since 2.1
+        @since 2.5.0 supports SSA
+        @before 2.5.0 the subroutine must not be in the SSA form
     *)
     val compute_liveness : t -> (tid, Var.Set.t) Solution.t
 
