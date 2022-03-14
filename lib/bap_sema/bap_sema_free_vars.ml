@@ -30,13 +30,26 @@ let blk_defs blk =
   Seq.fold ~init:Var.Set.empty  ~f:(fun defs def ->
       Set.add defs (Ir_def.lhs def))
 
+let update blk defs uses trans = Map.update trans blk ~f:(function
+    | None -> {defs; uses}
+    | Some had -> {
+        defs = Set.union had.defs defs;
+        uses = Set.union had.uses uses
+      })
+
 let block_transitions sub =
   Term.enum blk_t sub |>
   Seq.fold ~init:Tid.Map.empty ~f:(fun fs blk ->
-      Map.add_exn fs (Term.tid blk) {
-        defs = blk_defs blk;
-        uses = Ir_blk.free_vars blk;
-      })
+      let init = update
+          (Term.tid blk)
+          (blk_defs blk)
+          (Ir_blk.free_vars blk) fs in
+      Term.enum phi_t blk |>
+      Seq.fold ~init ~f:(fun init phi ->
+          let defs = Var.Set.singleton @@ Ir_phi.lhs phi in
+          Ir_phi.values phi |>
+          Seq.fold ~init ~f:(fun fs (src,exp) ->
+              update src defs (Exp.free_vars exp) fs)))
 
 let compute_liveness sub =
   let g = G.create sub in
