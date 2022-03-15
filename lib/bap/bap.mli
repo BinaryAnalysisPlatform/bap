@@ -8054,8 +8054,8 @@ module Std : sig
       A variable is {i live-in} at a basic block [x] if it is live at the
       begining of the block [x].
 
-      A variable is {i live-out} at a basic block [x] if is live on
-      all outcomming edges of the block [x].
+      A variable is {i live-out} at a basic block [x] if it is live on
+      any of the outcoming edges of [x].
 
       A variable is {i live-through} at a basic block [x] if it is
       both live-in and live-out at it.
