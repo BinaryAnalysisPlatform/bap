@@ -107,7 +107,7 @@ let def_order = assert_vars Term.to_sequence
 let seq f ?rev def =
   assert_vars (fun t blk -> Term.(f t ?rev blk (tid def)))
 
-let look which z id blk ctxt =
+let look which z id _ ctxt =
   match z, which def_t xyz id with
   | Some z, Some x -> equal_var ctxt z (Def.lhs x)
   | None, Some _ -> assert_string "unexpected neighbour"
@@ -142,7 +142,7 @@ let before_def def blk = Blk.split_before blk def
 let top = Blk.split_top
 let bot = Blk.split_bot
 
-let lookup cls hay ctxt =
+let lookup cls hay _ =
   match Program.lookup cls program (Term.tid hay) with
   | Some t -> assert_bool "Found wrong" (Term.same hay t)
   | None -> assert_string "Not_found"
@@ -239,7 +239,7 @@ module Example = struct
     ]
 
 
-  let phi_node sub var var_ver blk blk_ver ctxt =
+  let phi_node sub var var_ver blk blk_ver _ =
     Term.enum blk_t sub |> Seq.find_map ~f:(fun blk ->
         Term.enum phi_t blk |> Seq.find ~f:(fun phi ->
             let v = Phi.lhs phi in
@@ -252,7 +252,30 @@ module Example = struct
                   | None -> assert_string "wrong phi-node"
                   | Some _ -> ()
 
-  let phi_node = phi_node (Sub.ssa sub)
+
+  let ssub = Sub.ssa sub
+  let phi_node = phi_node ssub
+  let live = Live.compute ssub
+
+  let live_vars_ssa vars blk _ctxt =
+    let b = Term.tid blk in
+    List.iter vars ~f:(fun (v,i) ->
+        let v = Var.with_index v i in
+        let msg = Format.asprintf "%a must be live at %a"
+            Var.pp v Tid.pp b in
+        assert_bool msg (Set.mem (Live.ins live b) v))
+
+  let check_live_vars = "live_vars" >::: [
+      "entry" >:: live_vars_ssa [] entry;
+      "b1"    >:: live_vars_ssa [] b1;
+      "b2"    >:: live_vars_ssa [i,2; j,2; k,2] b2;
+      "b3"    >:: live_vars_ssa [i,2; j,2] b3;
+      "b4"    >:: live_vars_ssa [i,2; j,2; k,2] b4;
+      "b5"    >:: live_vars_ssa [i,2; j,2] b5;
+      "b6"    >:: live_vars_ssa [i,2] b6;
+      "exit"  >:: live_vars_ssa [] exit;
+    ]
+
 
   let check_phi_nodes = "phi nodes" >::: [
       "i.2=i.1" >:: phi_node i 2 b1 1;
@@ -267,7 +290,9 @@ module Example = struct
 
   let tests = [
     check_free_vars;
+    check_live_vars;
     check_phi_nodes;
+
   ]
 end
 

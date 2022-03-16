@@ -843,7 +843,7 @@ module Ir_phi = struct
         Set.union vars (Exp.free_vars e))
 
   let pp_self ppf {Phi.var; map} =
-    Format.fprintf ppf "%s@ :=@ phi(%s)"
+    Format.fprintf ppf "%s@ <-@ phi(%s)"
       (Theory.Var.name var)
       (String.concat ~sep:", " @@
        List.map ~f:(fun (id,exp) ->
@@ -852,7 +852,7 @@ module Ir_phi = struct
          (Map.to_alist map))
 
   let pp_self_slots ds ppf {Phi.var; map} =
-    Format.fprintf ppf "%s@ :=@ phi(%s)"
+    Format.fprintf ppf "%s@ <-@ phi(%s)"
       (Theory.Var.name var)
       (String.concat ~sep:", " @@
        List.map ~f:(fun (id,exp) ->
@@ -1662,7 +1662,7 @@ module Ir_blk = struct
     let (++) = Set.union and (--) = Set.diff in
     let init = Bap_var.Set.empty,Bap_var.Set.empty in
     fst @@ Seq.fold (elts blk) ~init ~f:(fun (vars,kill) -> function
-        | `Phi phi -> vars, Set.add kill (Ir_phi.lhs phi)
+        | `Phi phi -> vars, kill
         | `Def def ->
           Ir_def.free_vars def -- kill ++ vars,
           Set.add kill (Ir_def.lhs def)
@@ -1685,25 +1685,28 @@ module Ir_blk = struct
     Tid.(dominator = id) ||
     Term.(after def_t b dominator |> Seq.exists ~f:(fun x -> Tid.(x.tid = id)))
 
-  let pp_sep xs ys ppf =
+  let pp_sep xs ys zs ppf =
     if Array.length xs <> 0 &&
-       Array.length ys <> 0
+       Array.length ys <> 0 ||
+       Array.length xs <> 0 &&
+       Array.length ys = 0 &&
+       Array.length zs <> 0
     then Format.pp_print_cut ppf ()
 
   let pp_self ppf self =
     Format.fprintf ppf "%a%t%a%t%a"
       (Array.pp Ir_phi.pp) self.phis
-      (pp_sep self.phis self.defs)
+      (pp_sep self.phis self.defs self.jmps)
       (Array.pp Ir_def.pp) self.defs
-      (pp_sep self.defs self.jmps)
+      (pp_sep self.defs self.jmps [||])
       (Array.pp Ir_jmp.pp) self.jmps
 
   let pp_self_slots ds ppf self =
     Format.fprintf ppf "%a%t%a%t%a"
       (Array.pp (Ir_phi.pp_slots ds)) self.phis
-      (pp_sep self.phis self.defs)
+      (pp_sep self.phis self.defs self.jmps)
       (Array.pp (Ir_def.pp_slots ds)) self.defs
-      (pp_sep self.defs self.jmps)
+      (pp_sep self.defs self.jmps [||])
       (Array.pp (Ir_jmp.pp_slots ds)) self.jmps
 
   let box ppf = Format.pp_open_vbox ppf 0
