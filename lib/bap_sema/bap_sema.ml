@@ -41,6 +41,7 @@ module Std = struct
     let flatten = Flatten.flatten_sub
   end
 
+  module Live = FV.Live
   module Taint = Bap_sema_taint
 
   module Graphs = struct
