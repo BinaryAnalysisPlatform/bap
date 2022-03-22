@@ -1,5 +1,9 @@
 open Bap.Std
 open Core_kernel
+open Bap_knowledge
+open Bap_core_theory
+
+module KB = Knowledge
 
 module Move = struct
   type 'a t = {
@@ -62,6 +66,11 @@ module Modload = struct
   } [@@deriving bin_io, compare, fields, sexp]
 end
 
+module Mode = struct
+  include KB.Enum.Make()
+  let slot = KB.Class.property ~package:"bap" Theory.Program.cls "mode" domain
+end
+
 type 'a move = 'a Move.t [@@deriving bin_io, compare, sexp]
 type chunk = Chunk.t [@@deriving bin_io, compare, sexp]
 type syscall = Syscall.t [@@deriving bin_io, compare, sexp]
@@ -69,3 +78,4 @@ type exn = Exn.t [@@deriving bin_io, compare, sexp]
 type call = Call.t [@@deriving bin_io, compare, sexp]
 type return = Return.t [@@deriving bin_io, compare, sexp]
 type modload = Modload.t [@@deriving bin_io, compare, sexp]
+type mode = Mode.t [@@deriving bin_io, compare, sexp]
