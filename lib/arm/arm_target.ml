@@ -5,9 +5,9 @@ open Bap_core_theory
 open Bap.Std
 open KB.Syntax
 open Poly
+open Bap_traces.Std
 
 module CT = Theory
-module Mode = Bap_trace_event_types.Mode
 
 type r128 and r80 and r64 and r32 and r16 and r8
 
