@@ -99,7 +99,9 @@ module Make(CT : Theory.Core) = struct
         sp += const Int.(List.length regs * 4);
       ] in
     let ctrl = CT.jmp (load s32 (var sp)) in
-    CT.branch ~?cnd (CT.blk null data ctrl) (seq [])
+    match cnd with
+    | `AL -> CT.blk null data ctrl
+    | _ -> CT.branch ~?cnd (CT.blk null data ctrl) (seq [])
 
 
   let push regs cnd = branch cnd [
