@@ -388,6 +388,7 @@ module IR = struct
           jmp';
         ]
       }
+    | [jmp] when is_unconditional jmp -> x
     | jmps -> {x with jmps = goto ~tid dst :: jmps}
 
   let appgraphs fst snd =
