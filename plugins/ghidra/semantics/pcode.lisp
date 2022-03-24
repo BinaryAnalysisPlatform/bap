@@ -158,3 +158,119 @@
 
 (defun BOOL_XOR (tr r tx x ty y)
   (set# tr r (get# logxor tx x ty y)))
+
+(defparameter fp-rmode 'rne
+  "the floating-point operations rounding mode")
+
+(defparameter fp-format 'ieee754_binary
+  "the floating-point representation")
+
+
+(defmacro fp-binary (name tr r tx x ty y)
+  (set# tr r
+        (intrinsic
+         (symbol-concat name fp-rmode fp-format :sep '_)
+         (get# tx x)
+         (get# ty y)
+         :result tr)))
+
+(defmacro fp-unary (name tr r tx x)
+  (set# tr r
+        (intrinsic
+         (symbol-concat name fp-format :sep '_)
+         (get# tx x)
+         :result tr)))
+
+(defmacro fp-unary/rmode (name tr r tx x)
+  (set# tr r
+        (intrinsic
+         (symbol-concat name fp-rmode fp-format :sep '_)
+         (get# tx x)
+         :result tr)))
+
+(defmacro fp-predicate (name tr r tx x)
+  (set# tr r
+        (intrinsic
+         (symbol-concat 'is name fp-format :sep '_)
+         (get# tx x)
+         :result tr)))
+
+(defun fp-order (tx x ty y)
+  (intrinsic 'forder_ieee754_binary
+             (get# tx x)
+             (get# ty y)
+             :result 8))
+
+(defun fp-round (tr tx x)
+  (intrinsic
+   (symbol-concat 'fround fp-rmode fp-format :sep '_)
+   (get# tx x)
+   :result tr))
+
+(defun INT2FLOAT (tr r tx x)
+  (set# tr r
+        (intrinsic
+         (symbol-concat 'cast_sfloat fp-rmode fp-format :sep '_)
+         (get# tx x)
+         :result tr)))
+
+(defun TRUNC (tr r tx x)
+  (set# tr r
+        (intrinsic
+         (symbol-concat 'cast_sint 'rtz fp-format :sep '_)
+         (get# tx x)
+         :result tr)))
+
+(defun FLOAT2FLOAT (tr r tx x)
+  (set# tr r
+        (intrinsic
+         (symbol-concat 'fconvert fp-rmode fp-format)
+         (get# tx x)
+         :result tr)))
+
+(defun FLOAT_ADD (tr r tx x ty y)
+  (fp-binary 'fadd tr r tx x ty y))
+
+(defun FLOAT_SUB (tr r tx x ty y)
+  (fp-binary 'fsub tr r tx x ty y))
+
+(defun FLOAT_DIV (tr r tx x ty y)
+  (fp-binary 'fdiv tr r tx x ty y))
+
+(defun FLOAT_MULT (tr r tx x ty y)
+  (fp-binary 'fmul tr r tx x ty y))
+
+(defun FLOAT_NEG (tr r tx x)
+  (fp-unary 'fneg tr r tx x))
+
+(defun FLOAT_ABS (tr r tx x)
+  (fp-unary 'fabs tr r tx x))
+
+(defun FLOAT_SQRT (tr r tx x)
+  (fp-unary/rmode 'fsqrt tr r tx x))
+
+(defun FLOAT_NAN (tr r tx x)
+  (fp-predicate 'fnan tr r tx x))
+
+(defun FLOAT_EQUAL (tr r tx x ty y)
+  (set# tr r (is-zero (fp-order tx x ty y))))
+
+(defun FLOAT_NOTEQUAL (tr r tx x ty y)
+  (set# tr r (not (is-zero (fp-order tx x ty y)))))
+
+(defun FLOAT_LESS (tr r tx x ty y)
+  (set# tr r (is-negative (fp-order tx x ty y))))
+
+(defun FLOAT_LESSEQUAL (tr r tx x ty y)
+  (set# tr r (not (is-positive tx x ty y))))
+
+(defun FLOAT_ROUND (tr r tx x)
+  (set# tr r (fp-round tr tx x)))
+
+(defun FLOAT_CEIL (tr r tx x)
+  (let ((fp-rmode 'rtp))
+    (set# tr r (fp-round tr tx x))))
+
+(defun FLOAT_FLOOR (tr r tx x)
+  (let ((fp-rmode 'rtn))
+    (set# tr r (fp-round tr tx x))))

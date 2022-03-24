@@ -3,7 +3,6 @@ open Bap_core_theory
 open Bap.Std
 
 open Bap_primus_lisp_types
-
 module Name = KB.Name
 
 type cls
@@ -14,7 +13,7 @@ let cls : (cls,unit) KB.cls = KB.Class.declare  "attributes" ()
 type attrs = (cls,unit) KB.cls KB.Value.t
 type set = attrs
 
-type error = ..
+type error = exn = ..
 
 exception Unknown_attr of string * tree
 exception Failure of error * tree list
@@ -37,8 +36,6 @@ module Parse = struct
   type nonrec error = error = ..
 
   type error += Expect_atom | Expect_list
-
-
 
   let atom = function
     | {data=Atom s} -> Some s
@@ -101,3 +98,11 @@ module Set = struct
 
   include Self
 end
+
+
+let () = Caml.Printexc.register_printer (function
+    | Failure (error,_) ->
+      let msg = Format.asprintf "Attribute parse error: %s"
+          (Caml.Printexc.to_string error) in
+      Some msg
+    | _ -> None)
