@@ -104,6 +104,11 @@ module Pc_update = struct
   let pp = ppv "pc-update" Word.pp
 end
 
+module Mode = struct
+  include Mode
+  let pp = ppv "mode" pp
+end
+
 let memory_load =
   Value.Tag.register (module Load)
     ~name:"memory-load"
@@ -168,3 +173,8 @@ let modload =
   Value.Tag.register (module Modload)
     ~name:"modload"
     ~uuid:"7f842d03-6c9f-4745-af39-002f468f7fc8"
+
+let mode =
+  Value.Tag.register (module Mode)
+    ~name:"mode"
+    ~uuid:"f7ba0979-c3a9-4509-ba14-01faf577d478"
