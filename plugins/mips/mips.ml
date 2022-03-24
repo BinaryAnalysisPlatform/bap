@@ -64,7 +64,7 @@ module Std = struct
             insn_name n in
         Error (Error.of_string str) in
     match String.Table.find lifters (Insn.name insn) with
-    | None -> Or_error.errorf "unknown instruction %s" insn_name
+    | None -> Ok []
     | Some lifter -> lift lifter
 
   module M32BE = struct
