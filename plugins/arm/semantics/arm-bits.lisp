@@ -9,6 +9,12 @@
   (set ZF (is-zero r))
   (set CF (carry r x y)))
 
+(defun set-nzcv (nzcv)
+  (set NF (select 3 nzcv))
+  (set ZF (select 2 nzcv))
+  (set CF (select 1 nzcv))
+  (set VF (select 0 nzcv)))
+
 (defun add-with-carry (rd x y c)
   (let ((r (+ c y x)))
     (set-flags r x y)
