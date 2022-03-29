@@ -17,8 +17,7 @@
 (defun add-with-carry/clear-base (rd x y c)
   (let ((r (+ c y x)))
     (set-flags r y x)
-    (clear-base rd)
-    (set$ rd r)))
+    (setw rd r)))
 
 (defun add-with-carry/it-block (rd x y c cnd)
   (when (condition-holds cnd)
@@ -60,11 +59,6 @@
 (defun is-unconditional (cnd)
   (= cnd 0b1110))
 
-(defun clear-base (reg)
-  (set$ (alias-base-register reg) 0))
-
 (defmacro setw (reg val)
   "(set Wx V) sets a Wx register clearing the upper 32 bits."
-  (let ((res val))
-    (clear-base reg)
-    (set$ reg res)))
+  (set$ (alias-base-register reg) val))
