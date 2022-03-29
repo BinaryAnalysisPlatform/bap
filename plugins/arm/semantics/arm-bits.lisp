@@ -26,9 +26,6 @@
         (set-flags r x y))
       (set$ rd r))))
 
-(defun logandnot (rd rn)
-  (logand rd (lnot rn)))
-
 (defmacro shift-with-carry (shift rd rn rm cnd)
   (when (condition-holds cnd)
     (let ((r (cast-signed (word-width) rn)))
@@ -61,4 +58,5 @@
 
 (defmacro setw (reg val)
   "(set Wx V) sets a Wx register clearing the upper 32 bits."
-  (set$ (alias-base-register reg) val))
+  (set$ (alias-base-register reg)
+        (cast-unsigned (word-width) val)))
