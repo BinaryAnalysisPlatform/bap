@@ -94,6 +94,24 @@
   (when (condition-holds pre)
     (exec-addr (+ (t2pc) off))))
 
+(defun t2Bcc (off pre _)
+  "bcc.w imm"
+  (when (condition-holds pre)
+    (exec-addr (+ (t2pc) off))))
+
+(defun t2TBB (rn rm _ _)
+  "tbb [rn, rm]"
+  (exec-addr (+ (t2pc)
+                (cast-unsigned 32
+                               (load-bits 8 (+ (t2reg rn) rm))))))
+
+(defun t2TBH (rn rm _ _)
+  "tbh [rn, rm, lsl #1]"
+  (exec-addr (+ (t2pc)
+                (cast-unsigned 32
+                               (load-bits 16 (+ (t2reg rn)
+                                                (lshift rm 1)))))))
+
 (defun t2LDRs (rt rn rm imm pre _)
   (when (condition-holds pre)
     (t2set rt (load-word (+ rn (lshift rm imm))))))
