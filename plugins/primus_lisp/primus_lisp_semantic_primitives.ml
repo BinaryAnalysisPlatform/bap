@@ -704,6 +704,15 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
       | None -> []
       | Some args -> args
 
+    let get kw =
+      List.filter_map ~f:(fun (k,v) ->
+          Option.some_if (equal_param k kw) v)
+
+    let result x = get result x
+    let writes x = get writes x
+    let stores x = get stores x
+    let inputs x = List.concat@@get inputs x
+
     let mk_var d i s =
       Theory.Var.define s (sprintf "intrinsic:%c%d" d i)
 
@@ -711,7 +720,7 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     let ovar = mk_var 'y'
 
     let assign_inputs args =
-      seq@@List.mapi (get inputs args) ~f:(fun i x ->
+      seq@@List.mapi (inputs args) ~f:(fun i x ->
           let s = Theory.Value.sort x in
           CT.set (ivar i s) !!x)
 
@@ -721,29 +730,20 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
       KB.provide Theory.Label.is_subroutine dst (Some true) >>= fun () ->
       CT.goto dst
 
-    (* starts a new group on each symbol *)
-    let group_by_symbols =
-      List.group ~break:(fun _ v -> Option.is_some (symbol v))
-
     let write_single t i v =
       require_symbol v @@ fun v ->
       match Theory.Target.var t v with
       | None -> illformed ":writes argument is not a register"
       | Some v ->
         let s = Theory.Var.sort v in
-        CT.set (ovar i s) (CT.var v)
+        CT.set v @@ CT.var (ovar i s)
 
     let write_typed t i v =
       require_symbol v @@ fun v ->
       let* t = static t in
       let s = Theory.Value.Sort.forget@@Theory.Bitv.define t in
       let v = Theory.Var.define s v in
-      CT.set (ovar i s) (CT.var v)
-
-    let group what args = group_by_symbols@@get what args
-    let result = get result
-    let writes = group writes
-    let stores = group stores
+      CT.set v @@ CT.var (ovar i s)
 
     let assign_writes t xs =
       let base = List.length (result xs) in
@@ -788,7 +788,7 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
         ] in
       match result args with
       | [] -> eff
-      | [t] -> full eff (make_result t)
+      | [[t]] -> full eff (make_result t)
       | _ -> illformed ":result may occur once and with a single argument"
   end
 
