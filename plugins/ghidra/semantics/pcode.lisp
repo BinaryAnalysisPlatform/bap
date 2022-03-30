@@ -4,8 +4,6 @@
 (in-package pcode)
 
 (defmacro cast-word (x) (cast word-width x))
-(defmacro coerce (type x)
-  (if (/= (word-width x) type) (extract (-1 type) 0 x) x))
 
 (defmacro set# (typ dst src)
   (if (is-symbol typ)
