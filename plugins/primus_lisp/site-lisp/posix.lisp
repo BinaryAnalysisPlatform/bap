@@ -8,3 +8,4 @@
 (require unistd)
 (require setjmp)
 (require getopt)
+(require ieee754)
