@@ -10,7 +10,10 @@
 (defmacro set# (typ dst src)
   (if (is-symbol typ)
     (store-word (cast-word dst) src)
-    (set$ dst src)))
+    (let ((typ (coerce (word-width dst) typ)))
+      (set$ dst (logor
+                 (logandnot dst (- (lshift 1 typ) 1))
+                 (cast-unsigned (word-width dst) src))))))
 
 (defmacro get# (typ src)
   (if (is-symbol typ) (load-word (cast-word src))

@@ -1,5 +1,9 @@
 (in-package core)
 
+(defun logandnot (rd rn)
+  "(logandnot X Y) is X & ~Y, i.e., X and complement of Y"
+  (logand rd (lnot rn)))
+
 (defun msb (x)
   "(msb X) is the most significant bit of X."
   (select (- (word-width x) 1) x))
