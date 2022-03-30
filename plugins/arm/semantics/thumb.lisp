@@ -101,16 +101,15 @@
 
 (defun t2TBB (rn rm _ _)
   "tbb [rn, rm]"
-  (exec-addr (+ (t2pc)
-                (cast-unsigned 32
-                               (load-bits 8 (+ (t2reg rn) rm))))))
+  (let ((addr (+ (t2reg rn) (t2reg rm)))
+        (halfwords (cast-unsigned 32 (load-bits 8 addr))))
+    (exec-addr (+ (t2pc) (* halfwords 2)))))
 
 (defun t2TBH (rn rm _ _)
   "tbh [rn, rm, lsl #1]"
-  (exec-addr (+ (t2pc)
-                (cast-unsigned 32
-                               (load-bits 16 (+ (t2reg rn)
-                                                (lshift rm 1)))))))
+  (let ((addr (+ (t2reg rn) (lshift rm 1)))
+        (halfwords (cast-unsigned 32 (load-hword addr))))
+    (exec-addr (+ (t2pc) (* halfwords 2)))))
 
 (defun t2LDRs (rt rn rm imm pre _)
   (when (condition-holds pre)
