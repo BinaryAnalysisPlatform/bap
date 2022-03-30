@@ -190,6 +190,7 @@ module M64 = struct
   let mmx = M32.mmx
   let xmmx = array r128 "XMM" 16
   let ymmx = array r256 "YMM" 16
+  let mxsr = reg r32 "MXCSR"
 
   let flags = M32.flags
   let mems = Theory.Mem.define r64 r8
@@ -198,7 +199,7 @@ module M64 = struct
   let aliases = M32.aliases @< M32.main @< M32.index @< xmmx
 
   let vars = main @< index @< segment @< rx @< stx @< mmx @< ymmx @<
-             flags @< [data]
+             flags @< [data] @< [mxsr]
 
   let regs =  Theory.Role.Register.[
       [general; integer], main @< index @< segment @< rx;
@@ -207,6 +208,7 @@ module M64 = struct
       [frame_pointer], untyped [reg r64 "RBP"];
       [Role.index], untyped index;
       [Role.segment], untyped segment;
+      [status], untyped [mxsr];
       [alias], aliases;
     ] @ M16.status_regs
 
