@@ -9,8 +9,11 @@ let is_thumb2 = String.is_prefix ~prefix:"t2"
 let recode_as_arm = String.chop_prefix_exn ~prefix:"t2"
 
 let of_name name =
-  let name = if is_thumb2 name then recode_as_arm name else name in
-  sexpable_of_string t_of_sexp name
+  let is_t2 = is_thumb2 name in
+  let name = if is_t2 then recode_as_arm name else name in
+  match sexpable_of_string t_of_sexp name with
+  | Some #Arm_types.branch_insn when is_t2 -> None
+  | t -> t
 
 let of_basic insn = of_name (Disasm_expert.Basic.Insn.name insn)
 let create insn = of_name (Insn.name insn)
