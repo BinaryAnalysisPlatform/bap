@@ -1846,6 +1846,13 @@ module Ir_sub = struct
       ~name:"entry-point"
       ~uuid:"d1eaff96-4ed4-4405-9305-63508440ccc1"
 
+  let intrinsic = Bap_value.Tag.register (module Unit)
+      ~package
+      ~public:true
+      ~desc:"the subroutine is an intrinsic or special instruction"
+      ~name:"intrinsic"
+      ~uuid:"68be4fa5-f8f4-4219-b89c-42718c59f09b"
+
   module Builder = struct
     type t =
       tid option * arg term vector * blk term vector * string option

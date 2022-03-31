@@ -331,6 +331,19 @@ let link_call symtab addr sub_of_blk jmp =
           jmp ~dst ~alt:(Some alt))
       | None -> jmp
 
+let is_intrinsic sub =
+  match KB.Name.package @@ KB.Name.read (Ir_sub.name sub) with
+  | "intrinsic" | "special" -> true
+  | _ -> false
+
+let create_synthetic tid =
+  let sub = Ir_sub.create ~tid () in
+  let tags = List.filter_opt [
+      Some Term.synthetic;
+      Option.some_if (is_intrinsic sub) Ir_sub.intrinsic;
+    ] in
+  List.fold tags ~init:sub ~f:(fun sub tag ->
+      Term.set_attr sub tag ())
 
 let insert_synthetic prog =
   Term.enum sub_t prog |>
@@ -348,7 +361,7 @@ let insert_synthetic prog =
                   then prog
                   else
                     Term.append sub_t prog @@
-                    Ir_sub.create ~tid:dst ())))
+                    create_synthetic dst)))
 
 
 let program symtab =
