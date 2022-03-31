@@ -75,10 +75,10 @@ module BIR = struct
                   | Some refs -> refs+1)
             | _ -> refs))
 
-  let graph = List.fold
-      ~init:(Theory.Label.null,Tid.Map.empty)
-      ~f:(fun (_,blks) blk ->
-          blk.name, Map.add_exn blks blk.name blk)
+  let build_graph = List.fold
+      ~init:Tid.Map.empty
+      ~f:(fun blks blk ->
+          Map.add_exn blks blk.name blk)
 
   let single_dst = function
     | [] | _ :: _ :: _ -> None
@@ -111,7 +111,7 @@ module BIR = struct
 
   let has_name name blk = Tid.equal name blk.name
 
-  let removed exit parent dst =
+  let contracted exit parent dst =
     if has_name exit dst then parent.name else exit
 
   let contract refs graph ~entry ~exit =
@@ -119,7 +119,7 @@ module BIR = struct
       match Option.(single_dst node.jmps >>= Map.find graph) with
       | Some dst when can_contract refs node dst ->
         let node = join node dst in
-        contract output (graph//dst) (removed exit node dst) node
+        contract output (graph//dst) (contracted exit node dst) node
       | _ -> follow output graph exit node
     and follow output graph exit node = List.fold (dsts node)
         ~init:(node::output,graph//node,exit)
@@ -130,7 +130,8 @@ module BIR = struct
     contract [] graph exit (Map.find_exn graph entry)
 
   let normalize entry blks =
-    let exit,graph = graph blks in
+    let {name=exit} = List.hd_exn blks in
+    let graph = build_graph blks in
     let refs = references graph blks in
     let blks,leftovers,exit = contract refs graph ~entry ~exit in
     assert (Map.is_empty leftovers);
@@ -140,11 +141,9 @@ module BIR = struct
       List.find_exn blks ~f:(has_name exit) ::
       List.filter blks ~f:(Fn.non (has_name exit))
 
-  let has_subs = List.exists ~f:is_sub
-
   let normalize entry = function
     | [] | [_] as xs -> xs
-    | xs -> if has_subs xs then normalize entry xs else xs
+    | xs -> normalize entry xs
 
   (* postconditions:
      - the first block is the entry block
