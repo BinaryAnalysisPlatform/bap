@@ -64,7 +64,6 @@ module BIR = struct
   let dsts blk =
     List.filter_map blk.jmps ~f:dst
 
-
   let references blks =
     List.fold ~init:Tid.Map.empty ~f:(fun refs {jmps} ->
         List.fold jmps ~init:refs ~f:(fun refs jmp ->
@@ -91,7 +90,7 @@ module BIR = struct
 
   let can_contract refs b1 b2 =
     not (Tid.equal b1.name b2.name) &&
-    b2.weak && match single_dst b1.jmps with
+    (not b2.keep || b2.weak) && match single_dst b1.jmps with
     | None -> false
     | Some dst ->
       Tid.equal dst b2.name &&
