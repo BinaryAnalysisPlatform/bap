@@ -5,12 +5,13 @@
 
 (defmacro cast-word (x) (cast word-width x))
 
-(defmacro set# (typ dst src)
+(defun set# (typ dst src)
   (if (is-symbol typ)
-    (store-word (cast-word dst) src)
-    (let ((typ (coerce (word-width dst) typ)))
+      (store-word (cast-word dst) src)
+    (let ((dtyp (max typ (word-width dst)))
+          (mask (coerce dtyp (- (lshift 1 typ) 1))))
       (set$ dst (logor
-                 (logandnot dst (- (lshift 1 typ) 1))
+                 (logandnot dst mask)
                  (cast-unsigned (word-width dst) src))))))
 
 (defmacro get# (typ src)
@@ -190,17 +191,17 @@
          :result tr)))
 
 (defmacro fp-predicate (name tr r tx x)
-  (set# tr r
+  (set$ r
         (intrinsic
          (symbol-concat 'is name fp-format :sep '_)
          (get# tx x)
-         :result tr)))
+         :result 8)))
 
-(defun fp-order (tx x ty y)
+(defun fp-order (tr tx x ty y)
   (intrinsic 'forder_ieee754_binary
              (get# tx x)
              (get# ty y)
-             :result 8))
+             :result tr))
 
 (defun fp-round (tr tx x)
   (intrinsic
@@ -251,19 +252,22 @@
   (fp-unary/rmode 'fsqrt tr r tx x))
 
 (defun FLOAT_NAN (tr r tx x)
-  (fp-predicate 'fnan tr r tx x))
+  (fp-predicate 'nan tr r tx x))
 
 (defun FLOAT_EQUAL (tr r tx x ty y)
-  (set# tr r (is-zero (fp-order tx x ty y))))
+  (set$ r (not
+           (fp-order tr tx x ty y)
+           (fp-order tr ty y tx x))))
 
 (defun FLOAT_NOTEQUAL (tr r tx x ty y)
-  (set# tr r (not (is-zero (fp-order tx x ty y)))))
+  (set$ r (or (fp-order tr tx x ty y)
+              (fp-order tr ty y tx x))))
 
 (defun FLOAT_LESS (tr r tx x ty y)
-  (set# tr r (is-negative (fp-order tx x ty y))))
+  (set$ r (fp-order tr tx x ty y)))
 
 (defun FLOAT_LESSEQUAL (tr r tx x ty y)
-  (set# tr r (not (is-positive tx x ty y))))
+  (set$ r (not (fp-order tr ty y tx x))))
 
 (defun FLOAT_ROUND (tr r tx x)
   (set# tr r (fp-round tr tx x)))
