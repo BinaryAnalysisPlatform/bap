@@ -1456,20 +1456,25 @@ module Knowledge : sig
 
         The upper bound of two mapping is the point-wise union of
         them, unless there is a key, which is present in both mapping
-        with different values (combined with [join], by default it will 
-        use [equal]). In the latter case, the upper bound is the [conflict].
+        with different values (combined with [equal] by default). In
+        the latter case, the upper bound is the [conflict].
 
         The partial order between [x] and [y] is defined as follows:
         - [EQ] iff mappings are structurally equal;
         - [LT] iff [y] contains all bindings of [x] and [x <> y];
         - [GT] iff [x] contains all bindings of [y] and [x <> y];
         - [NC] iff neither of the above rules applicable.
+
+        @since 2.5.0, the optional [join] parameter is made available.
+        By default, it returns [Ok y] when two elements [x] and [y]
+        which share the same key are [equal]. Otherwise, it shall
+        return the least upper bound of [x] and [y], if it exists.
     *)
     val mapping :
       ('a,'e) Map.comparator ->
       ?inspect:('d -> Base.Sexp.t) ->
+      ?join:('d -> 'd -> ('d, conflict) result) ->
       equal:('d -> 'd -> bool) ->
-      ?join:('d -> 'd -> 'd option) ->
       string ->
       ('a,'d,'e) Map.t domain
 
