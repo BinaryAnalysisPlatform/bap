@@ -1446,7 +1446,7 @@ module Knowledge : sig
       string -> 'a option domain
 
 
-    (** [mapping total_order data_equal name] a point-wise mapping domain.
+    (** [mapping total_order ~equal ?join name] a point-wise mapping domain.
 
         Finite mapping naturally form domains, if every key in the
         mapping is considered an independent kind of information, and
@@ -1456,8 +1456,8 @@ module Knowledge : sig
 
         The upper bound of two mapping is the point-wise union of
         them, unless there is a key, which is present in both mapping
-        with different values (compared with [data_equal]). In the
-        latter case, the upper bound is the [conflict].
+        with different values (combined with [join], by default it will 
+        use [equal]). In the latter case, the upper bound is the [conflict].
 
         The partial order between [x] and [y] is defined as follows:
         - [EQ] iff mappings are structurally equal;
@@ -1469,6 +1469,7 @@ module Knowledge : sig
       ('a,'e) Map.comparator ->
       ?inspect:('d -> Base.Sexp.t) ->
       equal:('d -> 'd -> bool) ->
+      ?join:('d -> 'd -> 'd option) ->
       string ->
       ('a,'d,'e) Map.t domain
 
