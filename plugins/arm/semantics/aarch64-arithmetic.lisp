@@ -12,9 +12,9 @@
 ;; and doesn't actually change from lshift
 (defun ADDWri (rd rn imm off) (ADD*r* setw lshift rd rn imm off))
 (defun ADDXri (rd rn imm off) (ADD*r* set$ lshift rd rn imm off))
-;; shifted decodes the shift type and shifts
-(defun ADDWrs (rd rn rm off) (ADD*r* setw shifted rd rn rm off))
-(defun ADDXrs (rd rn rm off) (ADD*r* set$ shifted rd rn rm off))
+;; shift-encoded decodes the shift type and shifts
+(defun ADDWrs (rd rn rm off) (ADD*r* setw shift-encoded rd rn rm off))
+(defun ADDXrs (rd rn rm off) (ADD*r* set$ shift-encoded rd rn rm off))
 
 (defun ADRP (dst imm)
   (set$ dst (+
@@ -28,17 +28,17 @@
 ;; see ADD*ri vs ADD*rs
 (defun SUBWri (rd rn rm off) (SUB*r* setw lshift rd rn rm off))
 (defun SUBXri (rd rn rm off) (SUB*r* set$ lshift rd rn rm off))
-(defun SUBWrs (rd rn rm off) (SUB*r* setw shifted rd rn rm off))
-(defun SUBXrs (rd rn rm off) (SUB*r* set$ shifted rd rn rm off))
+(defun SUBWrs (rd rn rm off) (SUB*r* setw shift-encoded rd rn rm off))
+(defun SUBXrs (rd rn rm off) (SUB*r* set$ shift-encoded rd rn rm off))
 
 (defun SUBXrx64 (rd rn rm off)
   (set$ rd (- rn (extended rm off))))
 
 (defun SUBSWrs (rd rn rm off)
-  (add-with-carry/clear-base rd rn (lnot (shifted rm off)) 1))
+  (add-with-carry/clear-base rd rn (lnot (shift-encoded rm off)) 1))
 
 (defun SUBSXrs (rd rn rm off)
-  (add-with-carry rd rn (lnot (shifted rm off)) 1))
+  (add-with-carry rd rn (lnot (shift-encoded rm off)) 1))
 
 (defun SUBSWri (rd rn imm off)
   (add-with-carry/clear-base rd rn (lnot (lshift imm off)) 1))

@@ -9,7 +9,7 @@
    or CCMN*r. The semantics are the same at the lisp level;
    an immediate or register value is given as second argument."
   (if (condition-holds cnd)
-    (set-flags (+ rn rm-or-imm) rn rm-or-imm)
+    (set-nzcv-from-registers (+ rn rm-or-imm) rn rm-or-imm)
     (set-nzcv nzcv)))
 
 (defun CCMNWi (rn imm nzcv cnd) (CCMN** rn imm nzcv cnd))
@@ -23,7 +23,7 @@
    an immediate or register value is given as second argument."
   (if (condition-holds cnd)
     (let ((rm-or-imm (lnot rm-or-imm)))
-      (set-flags (+ rn rm-or-imm 1) rn rm-or-imm))
+      (set-nzcv-from-registers (+ rn rm-or-imm 1) rn rm-or-imm))
     (set-nzcv nzcv)))
 
 (defun CCMPWi (rn imm nzcv cnd) (CCMP** rn imm nzcv cnd))
