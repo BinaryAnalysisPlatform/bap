@@ -39,12 +39,6 @@
               0b111 rm)
             off)))
 
-(defun test ()
-  (assert (= 0 0)))
-
-(defun beans ()
-  (assert-msg (= 0 0) "meow"))
-
 (defun decode-bit-masks (immN imms immr immediate)
   "(decode-bit-masks immN imms immr immediate) returns the immediate value
    corresponding to the immN:immr:imms bit pattern within opcodes of

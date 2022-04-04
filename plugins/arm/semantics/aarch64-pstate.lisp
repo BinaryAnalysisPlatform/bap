@@ -60,10 +60,10 @@
 ;; See comment in RMIF function. Again, just guessing the LLVM opcode here.
 (defun SETF8W (rn)
   (set NF (select 7 rn))
-  (set ZF (is_zero (extract 7 0 rn)))
+  (set ZF (is-zero (extract 7 0 rn)))
   (set VF (logxor (select (+ 7 1) rn) (select 7 rn))))
 
 (defun SETF16W (rn)
   (set NF (select 15 rn))
-  (set ZF (is_zero (extract 15 0 rn)))
+  (set ZF (is-zero (extract 15 0 rn)))
   (set VF (logxor (select (+ 15 1) rn) (select 15 rn))))
