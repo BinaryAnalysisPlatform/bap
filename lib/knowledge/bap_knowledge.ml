@@ -772,7 +772,7 @@ module Domain = struct
     let inspect = Opinions.inspect inspect in
     define ~inspect ~empty ~order name
 
-  let rec mapping (type k o d)
+  let mapping (type k o d)
       (module K : Comparator.S with type t = k
                                 and type comparator_witness = o)
       ?(inspect=sexp_of_opaque)
