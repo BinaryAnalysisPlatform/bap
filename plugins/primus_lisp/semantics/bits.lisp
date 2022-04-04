@@ -84,6 +84,14 @@
           (lshift bitv (- bitv-length m)))))))
 
 (defun rotate-left (bitv n)
-  "TODO: implement rotate-left"
-  bitv
-  )
+  "(rotate-right bitv n) rotates bitv to the right by n positions.
+    Carry-out is ignored.
+    Adapted from rotate-right code in ARMv8 ISA pseudocode."
+  (if (= n 0)
+    bitv
+    (let ((bitv-length (word-width bitv))
+          (m (mod n bitv-length)))
+      (extract (- bitv-length 1) 0
+        (logor 
+          (lshift bitv m)
+          (rshift bitv (- bitv-length m)))))))
