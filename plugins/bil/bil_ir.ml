@@ -142,7 +142,11 @@ module BIR = struct
 
   let normalize entry = function
     | [] | [_] as xs -> xs
-    | xs -> normalize entry xs
+    | xs ->
+      try normalize entry xs
+      with _ ->
+        warning "can't normalize invalid IR: %a" Tid.pp entry;
+        xs
 
   (* postconditions:
      - the first block is the entry block
