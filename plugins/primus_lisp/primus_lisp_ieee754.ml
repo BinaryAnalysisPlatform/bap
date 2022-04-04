@@ -21,11 +21,13 @@ module Primitives(Machine : Primus.Machine.S) = struct
     | Pre : (float -> float) op
     | Cti : (float -> int64) op
     | Ord : (float -> float -> bool) op
+    | Cnd : (float -> bool) op
 
   let inf = Inf
   let pre = Pre
   let cti = Cti
   let ord = Ord
+  let cnd = Cnd
 
   let type_of_op (type a) (op : a op) =
     let open Primus.Lisp.Type.Spec in
@@ -34,6 +36,7 @@ module Primitives(Machine : Primus.Machine.S) = struct
     | Pre -> tuple [int; a; a] @-> a
     | Cti -> tuple [int; a] @-> b
     | Ord -> tuple [int; a; a] @-> bool
+    | Cnd -> tuple [int; a] @-> bool
 
   let desc_of_op (type a) (op : a op) name =
     match op with
@@ -42,7 +45,7 @@ module Primitives(Machine : Primus.Machine.S) = struct
     | Cti -> sprintf "truncates to the nearest integer"
     | Ord -> sprintf "returns true if all operands are ordered \
                       with the %s order" name
-
+    | Cnd -> sprintf "checks if %s holds" name
 
   let define (type f) (k : f op) name (f : f) =
     let module Op(Machine : Primus.Machine.S) = struct
@@ -64,7 +67,7 @@ module Primitives(Machine : Primus.Machine.S) = struct
       let value_of_word x = float_of_word (Value.to_word x)
 
       let run = function
-        | [] | [_] | [_;_] ->
+        | [] | [_] ->
           Lisp.failf "%s: type error - expects 2 or more arguments" name ()
         | sz :: op :: ops -> match Word.to_int (Value.to_word sz) with
           | Error _ ->
@@ -91,11 +94,15 @@ module Primitives(Machine : Primus.Machine.S) = struct
               Value.of_word @@
               Word.of_bool @@
               ordered f (op::List.map ~f:value_of_word ops)
+            | Cnd -> Value.of_word @@ Word.of_bool @@ f op
 
     end in
     Lisp.define ("ieee754-" ^ name) (module Op)
       ~docs:(desc_of_op k name)
       ~types:(type_of_op k)
+
+  let is_nan x =
+    Float.Class.(compare Nan (Float.classify x) = 0)
 
   let init () = Machine.sequence Caml.[
       define inf "add" ( +. );
@@ -133,6 +140,7 @@ module Primitives(Machine : Primus.Machine.S) = struct
       define ord "ne" Float.((<>));
       define ord "gt" Float.((>));
       define ord "ge" Float.((>=));
+      define cnd "is-nan" is_nan;
     ]
 end
 

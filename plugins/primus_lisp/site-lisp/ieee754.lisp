@@ -15,7 +15,7 @@
 
 (defun is-nan ()
   (declare (external "intrinsic:is_nan_ieee754_binary"))
-  (set y0 0))
+  (set y0 (cast word-width (ieee754-is-nan 64 x0))))
 
 (defun forder ()
   (declare (external "intrinsic:forder_ieee754_binary"))
