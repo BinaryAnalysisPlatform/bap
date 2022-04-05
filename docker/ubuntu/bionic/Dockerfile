@@ -10,7 +10,7 @@ RUN sudo apt-get update  \
  && opam switch 4.09 \
  && eval "$(opam env)" \
  && opam remote set-url default https://opam.ocaml.org \
- && opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository --all \
+ && opam repo add bap git+https://github.com/BinaryAnalysisPlatform/opam-repository --all \
  && opam update \
  && opam depext --install bap-extra --yes -j 1 \
  && opam clean -acrs \

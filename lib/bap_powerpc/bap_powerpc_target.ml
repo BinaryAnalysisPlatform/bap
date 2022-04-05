@@ -43,7 +43,7 @@ let flags = List.map ~f:(reg bool) [
     "C"; "FL"; "FE"; "FG"; "FU"
   ] @ crflags
 
-let define ?(parent=parent) bits endianness =
+let define ?(parent=parent) ?nicknames bits endianness =
   let size = Theory.Bitv.size bits in
   let mems = Theory.Mem.define bits r8 in
   let data = Theory.Var.define mems "mem" in
@@ -55,6 +55,7 @@ let define ?(parent=parent) bits endianness =
              [data] in
   Theory.Target.declare ~package (name size endianness)
     ~parent
+    ?nicknames
     ~bits:size
     ~endianness
     ~vars
@@ -76,12 +77,36 @@ let define ?(parent=parent) bits endianness =
       ]
 
 let powerpc32bi = define r32 Theory.Endianness.bi
-let powerpc32eb = define r32 Theory.Endianness.eb ~parent:powerpc32bi
-let powerpc32le = define r32 Theory.Endianness.le ~parent:powerpc32bi
+    ~nicknames:["powerpc32bi"; "ppc32bi"]
+
+let powerpc32eb = define r32 Theory.Endianness.eb
+    ~nicknames:[
+      "powerpc"; "ppc"; "powerpc32"; "ppc32";
+      "powerpc32eb"; "powerpc32be"; "ppc32eb"; "ppc32be";
+      "power"; "power32";
+    ]
+let powerpc32le = define r32 Theory.Endianness.le
+    ~nicknames:[
+      "powerpcle"; "ppcle"; "ppcel";
+      "powerpc32le"; "powerpc32el";
+      "ppc32le"; "ppc32el"
+    ]
 
 let powerpc64bi = define r64 Theory.Endianness.bi
-let powerpc64le = define r64 Theory.Endianness.le ~parent:powerpc64bi
-let powerpc64eb = define r64 Theory.Endianness.eb ~parent:powerpc64bi
+    ~nicknames:["powerpc64bi"; "power64bi"]
+let powerpc64eb = define r64 Theory.Endianness.eb
+    ~nicknames:[
+      "powerpc64"; "ppc64"; "power64";
+      "powerpc64eb"; "powerpc64be";
+      "ppc64eb"; "ppc64be";
+      "power64eb"; "power64be"
+    ]
+let powerpc64le = define r64 Theory.Endianness.le
+    ~nicknames:[
+      "powerpc64el"; "powerpc64le";
+      "ppc64el"; "ppc64le";
+      "power64el"; "power64le"
+    ]
 
 let enable_loader () =
   let open KB.Syntax in

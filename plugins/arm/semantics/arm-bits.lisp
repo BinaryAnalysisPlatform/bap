@@ -36,8 +36,7 @@
    with carry bit c after clearing the base register rd, and sets processor flags."
   (let ((r (+ c y x)))
     (set-nzcv-from-registers r y x)
-    (clear-base rd)
-    (set$ rd r)))
+    (setw rd r)))
 
 (defun add-with-carry/it-block (rd x y c cnd)
   "(add-with-carry/it-block rd x y c cnd) sets rd to the result of adding x and y
@@ -47,9 +46,6 @@
       (when (is-unconditional cnd)
         (set-nzcv-from-registers r x y))
       (set$ rd r))))
-
-(defun logandnot (rd rn)
-  (logand rd (lnot rn)))
 
 (defmacro shift-with-carry (shift rd rn rm cnd)
   "(shift-with-carry shift rd rn rm cnd) sets rd to the shifted
@@ -87,12 +83,7 @@
   "(is-unconditional cnd) checks whether cnd is unconditional, i.e. 0b1110."
   (= cnd 0b1110))
 
-(defun clear-base (reg)
-  "(clear-base reg) clears all of the register reg."
-  (set$ (alias-base-register reg) 0))
-
 (defmacro setw (reg val)
   "(set Wx V) sets a Wx register clearing the upper 32 bits."
-  (let ((res val))
-    (clear-base reg)
-    (set$ reg res)))
+  (set$ (alias-base-register reg)
+        (cast-unsigned (word-width) val)))

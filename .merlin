@@ -64,6 +64,7 @@ B lib/bap_sema
 B lib/bap_strings
 B lib/bap_types
 B lib/bap_core_theory
+B lib/bap_traces
 B lib/graphlib
 B lib/monads
 B lib/ogre

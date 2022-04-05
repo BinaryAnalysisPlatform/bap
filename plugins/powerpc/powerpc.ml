@@ -53,7 +53,6 @@ module Std = struct
 
   let lift addr_size endian mem insn =
     let insn = Insn.of_basic insn in
-    let insn_name = Insn.name insn in
     let cpu = make_cpu addr_size endian mem  in
     let lift lifter =
       try
@@ -63,7 +62,7 @@ module Std = struct
       with
       | Failure str -> Error (Error.of_string str) in
     match Hashtbl.find lifters (Insn.name insn) with
-    | None -> Or_error.errorf "unknown instruction %s" insn_name
+    | None -> Ok []
     | Some lifter -> lift lifter
 
   module T32 = struct

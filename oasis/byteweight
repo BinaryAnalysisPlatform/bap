@@ -8,14 +8,17 @@ Library bap_byteweight
   Build$:          flag(everything) || flag(byteweight)
   CompiledObject:  best
   Modules:         Bap_byteweight, Bap_byteweight_signatures
-  BuildDepends:    bap, bap-main, core_kernel, uri, regular, camlzip, ppx_bap
+  BuildDepends:    bap, bap-main, bap-core-theory, bap-knowledge,
+                   core_kernel, uri, camlzip, ppx_bap
 
 Library byteweight_plugin
   Path:             plugins/byteweight
   FindlibName:      bap-plugin-byteweight
   Build$:           flag(everything) || flag(byteweight)
   CompiledObject:   best
-  BuildDepends:     bap, bap-byteweight, core_kernel, regular, ppx_bap, bap-future
+  BuildDepends:     bap, bap-byteweight, core_kernel, ppx_bap,
+                    bitvec, bitvec-order,
+                    bap-knowledge, bap-core-theory, bap-main
   InternalModules:  Byteweight_main
   XMETADescription: find function starts using Byteweight algorithm
   XMETAExtraLines:  tags="pass, rooter"
