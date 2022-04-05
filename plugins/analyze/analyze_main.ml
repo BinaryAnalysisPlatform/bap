@@ -50,6 +50,7 @@ open Core_kernel
 open Bap_main
 open Bap_knowledge
 open Bap.Std
+module Sys = Caml.Sys
 
 include Loggers()
 

@@ -5,6 +5,7 @@ open Bap_bundle.Std
 open Format
 
 module Buffer = Caml.Buffer
+module Sys = Caml.Sys
 
 (* we're reusing [exn] type only because we want to use
    Printexc magic printer. It is not visible from outside,

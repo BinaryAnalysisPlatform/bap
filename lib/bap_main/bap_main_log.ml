@@ -5,6 +5,7 @@ open Format
 
 module Event = Bap_main_event
 module Filename = Caml.Filename
+module Sys = Caml.Sys
 module Unix = Caml_unix
 
 let perm = 0o770
