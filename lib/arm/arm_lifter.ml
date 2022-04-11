@@ -335,18 +335,6 @@ let lift_bits mem ops (insn : bits_insn ) =
                    extract 7 0 s ^
                    extract 15 8 s) in
     exec [assn (Env.of_reg dest) rev] cond
-  | `CLZ, [|`Reg dest; src; cond; _|] ->
-    let shift = tmp ~name:"shift" reg32_t in
-    let accum = tmp ~name:"accum" reg32_t in
-    Bil.(exec [
-        shift := exp_of_op src;
-        accum := int32 32;
-        while_ (var shift <> int32 0) [
-          shift := var shift lsr int32 1;
-          accum := var accum - int32 1;
-        ];
-        Env.of_reg dest := var accum;
-      ]) cond
   | insn,ops ->
     fail [%here] "ops %s doesn't match bits insn %s"
       (string_of_ops ops) (Arm_insn.to_string (insn :> insn))
@@ -969,7 +957,8 @@ let lift_branch mem ops insn =
   | `BL, [|offset; cond; _|]
   | `BL_pred, [|offset; cond; _|] ->
     Branch.lift offset ~cond ~link:true addr
-
+  | `BL, [|offset|] ->
+    Branch.lift offset ~link:true addr
   | `BX_RET, [|cond; _|] ->
     Branch.lift (`Reg `LR) ~cond ~x:true addr
 

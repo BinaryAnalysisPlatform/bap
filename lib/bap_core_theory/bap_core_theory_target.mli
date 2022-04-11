@@ -46,6 +46,7 @@ val unknown : t
 val is_unknown : t -> bool
 val name : t -> KB.Name.t
 val matches : t -> string -> bool
+val matching : t -> string -> t option
 val order : t -> t -> KB.Order.partial
 val belongs : t -> t -> bool
 val parent : t -> t

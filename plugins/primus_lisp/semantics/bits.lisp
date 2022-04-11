@@ -1,5 +1,9 @@
 (in-package core)
 
+(defun logandnot (rd rn)
+  "(logandnot X Y) is X & ~Y, i.e., X and complement of Y"
+  (logand rd (lnot rn)))
+
 (defun msb (x)
   "(msb X) is the most significant bit of X."
   (select (- (word-width x) 1) x))
@@ -95,3 +99,61 @@
         (logor 
           (lshift bitv m)
           (rshift bitv (- bitv-length m)))))))
+
+(defmacro popcount/helper (x sh m1 m2 m4 h01)
+  (prog
+     (set x (- x (logand (rshift x 1) m1)))
+     (set x (+ (logand x m2) (logand (rshift x 2) m2)))
+     (set x (logand (+ x (rshift x 4)) m4))
+     (rshift (* x h01) sh)))
+
+(defmacro popcount16 (x)
+  (popcount/helper x 8
+                   0x5555
+                   0x3333
+                   0x0f0f
+                   0x0101))
+
+(defmacro popcount32 (x)
+  (popcount/helper x 24
+                   0x55555555
+                   0x33333333
+                   0x0f0f0f0f
+                   0x01010101))
+
+(defmacro popcount64 (x)
+  (popcount/helper x 56
+                   0x5555555555555555
+                   0x3333333333333333
+                   0x0f0f0f0f0f0f0f0f
+                   0x0101010101010101))
+
+(defun clz16 (r)
+  (let ((x r))
+    (set x (logor x (rshift x 1)))
+    (set x (logor x (rshift x 2)))
+    (set x (logor x (rshift x 4)))
+    (set x (logor x (rshift x 8)))
+    (set x (lnot x))
+    (popcount16 x)))
+
+(defun clz32 (x)
+  (let ((x x))
+    (set x (logor x (rshift x 1)))
+    (set x (logor x (rshift x 2)))
+    (set x (logor x (rshift x 4)))
+    (set x (logor x (rshift x 8)))
+    (set x (logor x (rshift x 16)))
+    (set x (lnot x))
+    (popcount32 x)))
+
+(defun clz64 (x)
+  (let ((x x))
+    (set x (logor x (rshift x 1)))
+    (set x (logor x (rshift x 2)))
+    (set x (logor x (rshift x 4)))
+    (set x (logor x (rshift x 8)))
+    (set x (logor x (rshift x 16)))
+    (set x (logor x (rshift x 32)))
+    (set x (lnot x))
+    (popcount64 x)))

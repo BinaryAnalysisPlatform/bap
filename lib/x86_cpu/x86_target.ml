@@ -218,12 +218,12 @@ module M64 = struct
 end
 
 let parent = Theory.Target.declare ~package "x86"
+    ~bits:16
+    ~byte:8
 
 let i86 = Theory.Target.declare ~package "i86"
     ~parent
     ~nicknames:["8086"]
-    ~bits:16
-    ~byte:8
     ~data:M16.data
     ~code:M16.data
     ~vars:M16.vars

@@ -101,7 +101,7 @@ module Make2
 end
 
 module Bytes = struct
-  include Make2(struct
+  module Self = Make2(struct
       type t = mem
       type key = mem
 
@@ -113,6 +113,16 @@ module Bytes = struct
         | Ok mem -> Some mem
         | _ -> None
     end)(Memory.Trie.Stable.V1.R8)
+
+  let t = Bap_byteweight_signatures.Data.declare "bytes"
+      ~load:(fun bytes ->
+          Binable.of_string (module Self)
+            (Caml.Bytes.unsafe_to_string bytes))
+      ~save:(fun data ->
+          Caml.Bytes.unsafe_of_string @@
+          Binable.to_string (module Self) data)
+
+  include Self
 
 
   let find bw ~length ~threshold mem =

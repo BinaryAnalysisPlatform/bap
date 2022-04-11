@@ -18,7 +18,7 @@ Library traces
                    Bap_trace_std,
                    Bap_trace_traces,
                    Bap_trace
-  BuildDepends:    bap, core_kernel, uri, uuidm, regular, ppx_bap, core_kernel.caml_unix
+  BuildDepends:    bap, core_kernel, bap-core-theory, bap-knowledge, uri, uuidm, regular, ppx_bap, core_kernel.caml_unix
 
 Library traces_test
   Path:            lib_test/bap_traces

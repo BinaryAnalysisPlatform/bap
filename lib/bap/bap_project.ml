@@ -123,12 +123,17 @@ module State = struct
     KB.Domain.flat ~empty ~equal "disassembly" ~inspect
 
   module Toplevel = struct
-    let compute_target spec =
-      Toplevel.eval Theory.Unit.target @@begin
-        KB.Object.create Theory.Unit.cls >>= fun unit ->
-        KB.provide Image.Spec.slot unit spec >>| fun () ->
-        unit
-      end
+    let compute_target ?file spec : Theory.target =
+      let result = Toplevel.var "target" in
+      let create_unit = match file with
+        | None | Some "" -> KB.Object.create Theory.Unit.cls
+        | Some file -> Theory.Unit.for_file file in
+      Toplevel.put result begin
+        let* unit = create_unit in
+        KB.provide Image.Spec.slot unit spec >>= fun () ->
+        KB.collect Theory.Unit.target unit
+      end;
+      Toplevel.get result
 
     let run spec target ~code ~memory file k =
       let result = Toplevel.var "disassembly-result" in
@@ -204,7 +209,7 @@ module Input = struct
       | #Arch.unknown -> Ogre.Doc.empty
       | arch -> Image.Spec.from_arch arch in {
       arch; file; code; data; finish;
-      target = State.Toplevel.compute_target spec;
+      target = State.Toplevel.compute_target ~file spec;
       memory = union_memory code data;
       spec;
     }
@@ -222,8 +227,8 @@ module Input = struct
     | None -> false
     | Some s -> not (Image.Segment.is_executable s)
 
-  let compute_target ?(target=Theory.Target.unknown) spec =
-    let target' = State.Toplevel.compute_target spec in
+  let compute_target ?file ?(target=Theory.Target.unknown) spec =
+    let target' = State.Toplevel.compute_target ?file spec in
     match (Theory.Target.order target target' : KB.Order.partial) with
     | LT | EQ -> target'
     | GT -> target
@@ -240,7 +245,7 @@ module Input = struct
     file;
     finish;
     spec = Image.spec img;
-    target = compute_target ?target (Image.spec img);
+    target = compute_target ~file ?target (Image.spec img);
   }
 
   let of_image ?target ?loader filename =

@@ -13,6 +13,7 @@ include Self()
 type blk = {
   name : Theory.Label.t;
   keep : bool;
+  weak : bool;
   defs : def term list;
   jmps : jmp term list;
 } [@@deriving bin_io]
@@ -26,6 +27,7 @@ type t = cfg
 
 let null = KB.Object.null Theory.Program.cls
 let is_null x = KB.Object.is_null x
+let is_call jmp = Option.is_some (Jmp.alt jmp)
 let is_empty = function
   | {entry; blks=[]} -> is_null entry
   | _ -> false
@@ -54,13 +56,104 @@ module BIR = struct
     Blk.Builder.result b :: blks |>
     List.rev
 
+  let dst jmp =
+    match Option.(Jmp.(dst jmp >>| resolve)) with
+    | Some First tid -> Some tid
+    | _ -> None
+
+  let dsts blk =
+    List.filter_map blk.jmps ~f:dst
+
+
+  let references blks =
+    List.fold ~init:Tid.Map.empty ~f:(fun refs {jmps} ->
+        List.fold jmps ~init:refs ~f:(fun refs jmp ->
+            match dst jmp with
+            | Some tid when Map.mem blks tid ->
+              Map.update refs tid ~f:(function
+                  | None -> 1
+                  | Some refs -> refs+1)
+            | _ -> refs))
+
+  let graph = List.fold
+      ~init:(Theory.Label.null,Tid.Map.empty)
+      ~f:(fun (_,blks) blk ->
+          blk.name, Map.add_exn blks blk.name blk)
+
+  let single_dst = function
+    | [] | _ :: _ :: _ -> None
+    | [x] -> match dst x with
+      | Some tid when not (is_call x) -> Some tid
+      | _ -> None
+
+
+  let is_sub {weak; keep} = keep && weak
+
+  let can_contract refs b1 b2 =
+    not (Tid.equal b1.name b2.name) &&
+    b2.weak && match single_dst b1.jmps with
+    | None -> false
+    | Some dst ->
+      Tid.equal dst b2.name &&
+      match Map.find refs dst with
+      | Some 1 -> true
+      | _ -> false
+
+  (* pre: can_contract b1 b2 *)
+  let join x y = {
+    x with
+    defs = y.defs @ x.defs;
+    jmps = y.jmps
+  }
+
+  let (//) graph node =
+    Map.remove graph node.name
+
+  let has_name name blk = Tid.equal name blk.name
+
+  let removed exit parent dst =
+    if has_name exit dst then parent.name else exit
+
+  let contract refs graph ~entry ~exit =
+    let rec contract output graph exit node =
+      match Option.(single_dst node.jmps >>= Map.find graph) with
+      | Some dst when can_contract refs node dst ->
+        let node = join node dst in
+        contract output (graph//dst) (removed exit node dst) node
+      | _ -> follow output graph exit node
+    and follow output graph exit node = List.fold (dsts node)
+        ~init:(node::output,graph//node,exit)
+        ~f:(fun (output,graph,exit) name ->
+            match Map.find graph name with
+            | None -> output,graph,exit
+            | Some node -> contract output graph exit node) in
+    contract [] graph exit (Map.find_exn graph entry)
+
+  let normalize entry blks =
+    let exit,graph = graph blks in
+    let refs = references graph blks in
+    let blks,leftovers,exit = contract refs graph ~entry ~exit in
+    assert (Map.is_empty leftovers);
+    match blks with
+    | blk::_ as blks when has_name exit blk -> blks
+    | blks ->
+      List.find_exn blks ~f:(has_name exit) ::
+      List.filter blks ~f:(Fn.non (has_name exit))
+
+  let has_subs = List.exists ~f:is_sub
+
+  let normalize entry = function
+    | [] | [_] as xs -> xs
+    | xs -> if has_subs xs then normalize entry xs else xs
+
   (* postconditions:
      - the first block is the entry block
      - the last block is the exit block
   *)
   let reify {entry; blks} =
     if is_null entry then [] else
-      List.fold blks ~init:(None,[]) ~f:(fun (s,blks) b ->
+      normalize entry blks |>
+      List.fold ~init:(None,[]) ~f:(fun (s,blks) b ->
           match make_blk b with
           | [] -> assert false
           | blk::blks' ->
@@ -108,7 +201,8 @@ let slot = graph
 module IR = struct
   include Theory.Empty
   let ret = Knowledge.return
-  let blk ?(keep=true) tid = {name=tid; defs=[]; jmps=[]; keep}
+  let blk ?(keep=false) ?(weak=false) tid =
+    {name=tid; defs=[]; jmps=[]; keep; weak}
 
   let def = (fun x -> x.defs), (fun x d -> {x with defs = d})
   let jmp = (fun x -> x.jmps), (fun x d -> match x.jmps with
@@ -148,20 +242,25 @@ module IR = struct
     then Jmp.reify ?cnd ~tid ~alt:(Jmp.resolved dst) ()
     else Jmp.reify ?cnd ~tid ~dst:(Jmp.resolved dst) ()
 
+  let is_subinstruction label =
+    KB.collect Insn.Seqnum.slot label >>|
+    Option.is_some
+
   let relink label {entry; blks} =
+    let* weak = is_subinstruction label in
     if is_null entry then KB.return {
         entry = label;
-        blks = [{name=label; keep=true; defs=[]; jmps=[]}]
+        blks = [{name=label; keep=true; weak; defs=[]; jmps=[]}]
       } else
       let+ blks = List.fold_map blks ~init:`Unbound ~f:(fun r blk ->
           if Theory.Label.equal blk.name entry
           then if blk.keep then `Relink blk.name, blk
-            else `Relinked, {blk with name = label; keep=true}
+            else `Relinked, {blk with name = label; keep=true; weak}
           else r,blk) |> function
                   | `Relinked,blks -> KB.return blks
                   | `Relink dst, blks ->
                     let+ tid = fresh in
-                    blks @ [blk label ++ goto ~tid dst]
+                    blks @ [blk ~weak label ++ goto ~tid dst]
                   | `Unbound,[] -> assert false
                   | `Unbound,_ -> assert false      in
       {entry = label; blks}
@@ -175,6 +274,7 @@ module IR = struct
       blks = [{
           name=entry;
           keep=false;
+          weak=true;
           jmps=[];
           defs=[Def.reify ~tid v x]
         }]
@@ -201,6 +301,7 @@ module IR = struct
       if <body> is empty.
   *)
   let repeat cnd body =
+    let keep = true in
     cnd >>= fun cnd ->
     body >>| reify >>= function
     | {blks=[]} ->               (* empty denotation *)
@@ -210,7 +311,8 @@ module IR = struct
         entry = head;
         blks = [{
             name = head;
-            keep = true;
+            keep;
+            weak = false;
             defs = [];
             jmps = [goto ~cnd ~tid head]}]}
     | {entry=loop; blks=b::blks} ->
@@ -221,13 +323,14 @@ module IR = struct
       fresh >>= fun jmp3 ->
       data {
         entry = head;
-        blks = blk tail ++ goto ~tid:jmp1 ~cnd loop ::
-               blk head ++ goto ~tid:jmp2 tail ::
+        blks = blk ~keep tail ++ goto ~tid:jmp1 ~cnd loop ::
+               blk ~keep head ++ goto ~tid:jmp2 tail ::
                b ++ goto ~tid:jmp3 tail ::
                blks
       }
 
   let branch cnd yes nay =
+    let keep = true in
     fresh >>= fun head ->
     fresh >>= fun tail ->
     cnd >>= fun cnd ->
@@ -246,8 +349,8 @@ module IR = struct
       ret {
         entry = head;
         blks =
-          blk tail ::
-          blk head ++
+          blk ~keep tail ::
+          blk ~keep head ++
           jump ~tid:jmp1 lhs ++
           goto ~tid:jmp2 tail ::
           b ++ goto ~tid:jmp3 tail ::
@@ -260,8 +363,8 @@ module IR = struct
       ret {
         entry = head;
         blks =
-          blk tail ::
-          blk head ++
+          blk ~keep tail ::
+          blk ~keep head ++
           jump ~tid:jmp1 tail ++
           goto ~tid:jmp2 rhs ::
           b ++ goto ~tid:jmp3 tail ::
@@ -275,8 +378,8 @@ module IR = struct
       ret {
         entry = head;
         blks =
-          blk tail ::
-          blk head ++
+          blk ~keep tail ::
+          blk ~keep head ++
           jump ~tid:jmp1 lhs ++
           goto ~tid:jmp2 rhs ::
           yes ++ goto ~tid:jmp3 tail ::
@@ -289,8 +392,8 @@ module IR = struct
       ret {
         entry = head;
         blks = [
-          blk tail;
-          blk head ++ jump ~tid:jmp1 tail ++ goto ~tid:jmp2 tail
+          blk ~keep tail;
+          blk ~keep head ++ jump ~tid:jmp1 tail ++ goto ~tid:jmp2 tail
         ]
       }
 
@@ -300,10 +403,8 @@ module IR = struct
     fresh >>= fun tid ->
     ctrl {
       entry;
-      blks = [blk ~keep:false entry ++ Jmp.reify ~tid ~dst:(Jmp.indirect dst) ()]
+      blks = [blk entry ++ Jmp.reify ~tid ~dst:(Jmp.indirect dst) ()]
     }
-
-  let is_call jmp = Option.is_some (Jmp.alt jmp)
 
   let is_unconditional jmp = match Jmp.cond jmp with
     | Int w when Word.(w = b1) -> true
@@ -320,6 +421,7 @@ module IR = struct
           jmp';
         ]
       }
+    | [jmp] when is_unconditional jmp -> x
     | jmps -> {x with jmps = goto ~tid dst :: jmps}
 
   let appgraphs fst snd =

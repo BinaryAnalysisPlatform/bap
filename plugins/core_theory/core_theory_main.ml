@@ -10,7 +10,10 @@ let herbrand_provides = [
   "lisp";
   "debug";
   "core:eff";
-  "core:val"
+  "core:val";
+  "lifter";
+  "semantics";
+  "symbolizer";
 ]
 
 let decide_name_from_possible_name () : unit =

@@ -10,6 +10,7 @@ B ../../lib/bap_c
 B ../../lib/arm
 B ../../lib/bap_api
 B ../../lib/bap_abi
+B ../../lib/bap_traces
 
 S ../../lib/bap_c
 S ../../lib/arm

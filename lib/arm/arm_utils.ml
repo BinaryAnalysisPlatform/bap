@@ -54,7 +54,7 @@ let exec
     | Some f, Some (`Reg `CPSR) -> stmts @ f
     | _ -> stmts in
   (* generates an expression for the given McCond *)
-  let set_cond mccond =
+  let set_cond cond =
     let z = Bil.var Env.zf in
     let c = Bil.var Env.cf in
     let v = Bil.var Env.vf in
@@ -81,8 +81,9 @@ let exec
   match cond with
   | `AL -> stmts
   | _ when List.for_all stmts ~f:is_move ->
-    let cond = set_cond cond in
-    List.map stmts ~f:(function
+    let cval = set_cond cond and cvar = tmp bool_t in
+    let cond = Bil.var cvar in
+    Bil.(cvar := cval) :: List.map stmts ~f:(function
         | Bil.Move (v,_) as s when Var.is_virtual v -> s
         | Bil.Move (v,x) ->
           Bil.(v := ite ~if_:cond ~then_:x ~else_:(var v))

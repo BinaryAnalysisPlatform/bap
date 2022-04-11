@@ -47,9 +47,6 @@
         (set-nzcv-from-registers r x y))
       (set$ rd r))))
 
-(defun logandnot (rd rn)
-  (logand rd (lnot rn)))
-
 (defmacro shift-with-carry (shift rd rn rm cnd)
   "(shift-with-carry shift rd rn rm cnd) sets rd to the shifted
    value of rn and rm, and relevant processor flags, when cnd holds.

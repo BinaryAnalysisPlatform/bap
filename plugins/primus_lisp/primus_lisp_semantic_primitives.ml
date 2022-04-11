@@ -201,6 +201,12 @@ let export = Primus.Lisp.Type.Spec.[
     "is-symbol", one any @-> bool,
     "(is-symbol X) is true if X has a symbolic value.";
 
+    "symbol-concat", all sym @-> sym,
+    "(symbol-concat S1 S2 .. SN OPT?) concatenates symbols
+    S1 till S2. An optional separator keyworded argument
+    takes form :sep SEP, where SEP is the separator that is
+    used to concatenate symbols";
+
     "alias-base-register", one int @-> int,
     "(alias-base-register x) if X has a symbolic value that is an
      aliased register returns the base register";
@@ -237,7 +243,24 @@ let export = Primus.Lisp.Type.Spec.[
     "special", (one sym @-> any),
     "(special :NAME) produces a special effect denoted by the keyword :NAME.
     The effect will be reified into the to the special:name subroutine. ";
-  ]
+    "intrinsic", tuple [sym] // all any @-> any,
+    "(intrinsic 'NAME ARG1 ARG2 ... ARGN PARAMS..) produces a call to
+     an intrinsic function with the given NAME. Arguments could be
+     regular semantic values. They are passed to the intrinsic
+     function in order, with the first argument passed via the
+     intrinsic:x0 ... intrinsic:xN variables. The keyworded parameters
+     are optional. And could be either :return SIZE, which indicates
+     that the call evaluates to a bitvector value of the given SIZE;
+     :writes REG SIZE? denotes that writes the result to a variable
+     REG (the size is optional if REG is a known target register);
+     :stores PTR SIZE? denotes that the intrinsic is storing output of
+     the given SIZE in bits at the memory location pointer by PTR.
+     When SIZE is omitted, it defaults to the data address size of the
+     target. The :result parameter may occur at most once. All other
+     parameters can be repeated. The intrinisic output is passed via
+     the intrinisic:y0,...,intrinisic:yM vector, with the first
+     element assigned to the :result, then to all :writes registers,
+     and after that to all :stores addresses." ]
 
 type KB.conflict += Illformed of string
                  | Failed_primitive of KB.Name.t * unit Theory.value list * string
@@ -305,6 +328,8 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
   let set_const v x =
     KB.Value.put Primus.Lisp.Semantics.static v (Some x)
   let const_int s x = CT.int s x >>| fun v -> set_const v x
+  let set_sym n v =
+    KB.Value.put Primus.Lisp.Semantics.symbol v (Some n)
   let int s x = const_int s @@ Bitvec.(int x mod modulus (size s))
   let true_ = CT.b1 >>| fun v -> set_const v Bitvec.one
   let false_ = CT.b0 >>| fun v -> set_const v Bitvec.zero
@@ -619,12 +644,160 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
         CT.var reg >>| fun v ->
         KB.Value.put Primus.Lisp.Semantics.symbol v (Some name)
 
+  module Intrinsic = struct
+    type param =
+      | Inputs
+      | Result
+      | Writes
+      | Stores
+      | Aborts
+    [@@deriving equal, compare, sexp, variants]
+
+    type arg = unit Theory.value
+
+    let sexp_of_arg v =
+      Sexp.Atom (Format.asprintf "%a" KB.Value.pp v)
+
+    type args = (param * arg list) list [@@deriving sexp_of]
+
+    let params = [
+      (* skip inputs as they are passed directly *)
+      ":result", result;
+      ":writes", writes;
+      ":stores", stores;
+      ":aborts", aborts;
+    ]
+
+
+    let parse_param input =
+      Option.(symbol input >>=
+              List.Assoc.find ~equal:String.equal params)
+
+    let parse_args args =
+      List.fold args ~init:([],[],Inputs) ~f:(fun (parsed,current,state) v ->
+          match parse_param v with
+          | Some state' ->
+            let parsed = (state,List.rev current) :: parsed in
+            (parsed,[],state')
+          | None -> (parsed,v::current,state))
+      |> fun (parsed,last,state) ->
+      List.rev ((state, List.rev last) :: parsed)
+
+    let get kw args =
+      List.Assoc.find ~equal:equal_param args kw |> function
+      | None -> []
+      | Some args -> args
+
+    let mk_var d i s =
+      Theory.Var.define s (sprintf "intrinsic:%c%d" d i)
+
+    let ivar = mk_var 'x'
+    let ovar = mk_var 'y'
+
+    let assign_inputs args =
+      seq@@List.mapi (get inputs args) ~f:(fun i x ->
+          let s = Theory.Value.sort x in
+          CT.set (ivar i s) !!x)
+
+    let invoke_symbol name =
+      let name = KB.Name.(unqualified@@read name) in
+      let* dst = Theory.Label.for_name (sprintf "intrinsic:%s" name) in
+      KB.provide Theory.Label.is_subroutine dst (Some true) >>= fun () ->
+      CT.goto dst
+
+    (* starts a new group on each symbol *)
+    let group_by_symbols =
+      List.group ~break:(fun _ v -> Option.is_some (symbol v))
+
+    let write_single t i v =
+      require_symbol v @@ fun v ->
+      match Theory.Target.var t v with
+      | None -> illformed ":writes argument is not a register"
+      | Some v ->
+        let s = Theory.Var.sort v in
+        CT.set (ovar i s) (CT.var v)
+
+    let write_typed t i v =
+      require_symbol v @@ fun v ->
+      let* t = static t in
+      let s = Theory.Value.Sort.forget@@Theory.Bitv.define t in
+      let v = Theory.Var.define s v in
+      CT.set (ovar i s) (CT.var v)
+
+    let group what args = group_by_symbols@@get what args
+    let result = get result
+    let writes = group writes
+    let stores = group stores
+
+    let assign_writes t xs =
+      let base = List.length (result xs) in
+      seq@@List.mapi (writes xs) ~f:(fun i -> function
+          | [reg] -> write_single t (base+i) reg
+          | [reg; typ] -> write_typed typ (base+i) reg
+          | _ -> illformed "incorrect :writes parameters")
+
+    let mk_store size t i ptr =
+      let s = Theory.Value.Sort.forget@@Theory.Bitv.define size in
+      let* v = CT.var (ovar i s) in
+      store_word t [ptr; v]
+
+    let store_word t =
+      mk_store (Theory.Target.data_addr_size t) t
+
+    let store t i ptr typ =
+      let* typ = static typ in
+      mk_store typ t i ptr
+
+    let assign_stores t xs =
+      let base = List.length (result xs) + List.length (writes xs) in
+      seq@@List.mapi (stores xs) ~f:(fun i -> function
+          | [ptr] -> store_word t (base+i) ptr
+          | [ptr; typ] -> store t (base+i) ptr typ
+          | _ -> illformed "incorrect :stores parameters")
+
+    let make_result size =
+      let* size = static size in
+      let s = Theory.Value.Sort.forget@@Theory.Bitv.define size in
+      CT.var@@ovar 0 s
+
+
+    let call t name args =
+      require_symbol name @@ fun name ->
+      let args = parse_args args in
+      let eff = seq [
+          data@@assign_inputs args;
+          ctrl@@invoke_symbol name;
+          data@@assign_writes t args;
+          data@@assign_stores t args;
+        ] in
+      match result args with
+      | [] -> eff
+      | [t] -> full eff (make_result t)
+      | _ -> illformed ":result may occur once and with a single argument"
+  end
+
+
+  let make_symbol s name =
+    intern name >>= const_int s >>| set_sym name |> forget
+
+  let symbol_concat s syms =
+    List.map syms ~f:symbol |> Option.all |> function
+    | None -> illformed "require all symbols"
+    | Some syms ->
+      let syms,sep =
+        List.split_while syms ~f:(Fn.non@@String.equal ":sep") in
+      let* sep = match sep with
+        | [] -> KB.return ""
+        | [_; sep] -> KB.return sep
+        | _ -> illformed ":sep must be last and followed by an argument" in
+      make_symbol s (String.concat ~sep syms)
+
   let symbol s v =
-    match KB.Value.get Primus.Lisp.Semantics.symbol v with
-    | Some name ->
-      intern name >>= const_int s |> forget
+    match symbol v with
+    | Some name -> make_symbol s name
     | None ->
       illformed "symbol requires a symbolic value"
+
 
   let is_symbol v =
     forget@@match KB.Value.get Primus.Lisp.Semantics.symbol v with
@@ -799,6 +972,7 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | "get-program-counter",[]
     | "get-current-program-counter",[] -> pure@@get_pc s lbl
     | "set-symbol-value",[sym;x] -> data@@set_symbol t sym x
+    | "symbol-concat",syms -> pure@@symbol_concat s syms
     | "symbol",[x] ->  pure@@symbol s x
     | "is-symbol", [x] -> pure@@is_symbol x
     | "alias-base-register", [x] -> pure@@alias_base_register t x
@@ -810,6 +984,7 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | "concat", xs -> pure@@concat xs
     | ("select"|"nth"),xs -> pure@@select s xs
     | "empty",[] -> nop ()
+    | "intrinsic",(dst::args) -> Intrinsic.call t dst args
     | "special",[dst] -> ctrl@@special dst
     | "invoke-subroutine",[dst] -> ctrl@@invoke_subroutine dst
     | _ -> !!nothing
