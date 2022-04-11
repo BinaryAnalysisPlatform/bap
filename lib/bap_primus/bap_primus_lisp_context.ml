@@ -60,7 +60,7 @@ let of_project proj =
     features [sprintf "%d" (Theory.Target.data_addr_size t)];
     "code-addr-size",
     features [sprintf "%d" (Theory.Target.code_addr_size t)];
-    "system", features [
+    "target-system", features [
       Theory.System.to_string @@ Theory.Target.system t
     ];
 
