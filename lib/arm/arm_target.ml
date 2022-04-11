@@ -665,11 +665,16 @@ let guess_encoding interworking label target mode =
         | false -> !!llvm_a32
   else !!CT.Language.unknown
 
+let v8aversions =
+  List.init 6 ~f:(fun i ->
+      sprintf "+v8.%da" (i+1)) |>
+  String.concat ~sep:","
+
 let enable_llvm ?interworking () =
   let open KB.Syntax in
   register llvm_a32 "armv7";
   register llvm_t32 "thumbv7" ~attrs:"+thumb2";
-  register llvm_a64 "aarch64";
+  register llvm_a64 "aarch64" ~attrs:v8aversions;
   KB.promise CT.Label.encoding @@ fun label ->
   let* target = CT.Label.target label in
   let* mode = KB.collect Mode.slot label in
