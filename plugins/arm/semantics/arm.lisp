@@ -6,4 +6,4 @@
 
 (defun CLZ (rd rn pre _)
   (when (condition-holds pre)
-    (set$ rd (clz32 rn))))
+    (set$ rd (clz rn))))
