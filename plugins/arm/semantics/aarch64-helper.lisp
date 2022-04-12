@@ -9,23 +9,31 @@
 
 (defun word () (word-width))
 
-(defun shifted (rm off)
+(defun shift-encoded (rm off)
+  "(shift-encoded rm off) decodes the 8-bit shift value
+   into its type and offset, and shifts rm accordingly."
   (let ((typ (extract 7 6 off))
         (off (extract 5 0 off)))
     (case typ
       0b00 (lshift rm off)
       0b01 (rshift rm off)
       0b10 (arshift rm off)
-      ;; TODO: 0b11 ror?
+      0b11 (rotate-right rm off)
       )))
 
 (defun unsigned-extend (n rm)
+  "(unsigned-extend n rm) returns the unsigned extension (prepend with zeros)
+   of the lowest n bits of rm."
   (cast-unsigned (word-width) (cast-low n rm)))
 
 (defun signed-extend (n rm)
+  "(signed-extend n rm) returns the signed extension (prepend with rm[n-1])
+   of the lowest n bits of rm."
   (cast-signed (word-width) (cast-low n rm)))
 
 (defun extended (rm bits)
+  "(extended rm bits) decodes the extension type and amount from bits,
+   and returns the value of the extension on rm."
   (let ((typ (extract 5 3 bits))
         (off (extract 2 0 bits)))
     (lshift (case typ
@@ -75,6 +83,10 @@
     (decode-bit-masks N imms immr true)))
 
 (defun barrier-option-to-symbol (barrier-type option)
+  "(barrier-option-to-symbol barrier-type option) converts the
+   barrier type (:dmb, :dsb, :isb) and 4-bit optional value
+   to a symbol.
+   This is to be used with the (special) primitive."
   (case barrier-type
     :dmb
       (case option

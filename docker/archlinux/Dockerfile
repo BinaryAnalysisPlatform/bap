@@ -15,7 +15,7 @@ RUN sudo pacman -S --noconfirm m4 git unzip make curl wget \
   && echo "" | sudo sh install.sh \
   && opam init --comp=4.09.1 --disable-sandboxing --yes \
   && eval "$(opam env)" \
-  && opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing --all \
+  && opam repo add bap git+https://github.com/BinaryAnalysisPlatform/opam-repository#testing --all \
   && opam update \
   && opam install bap --yes -j 1 \
   && opam clean -acrs \

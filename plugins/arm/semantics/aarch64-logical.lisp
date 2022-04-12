@@ -7,6 +7,8 @@
 ;; Logical
 
 (defmacro ORN*rs (set rd rn rm is)
+  "(ORN*rs set rd rn rm is) implements the OR NOT instruction
+   accepting either a W or X register."
   (set rd (logor rn (lnot (lshift rm is)))))
 
 (defun ORNWrs (rd rn rm is) (ORN*rs setw rd rn rm is))
@@ -15,7 +17,7 @@
 (defmacro log*rs (set op rd rn rm is)
   "(log*rs set op rd rn is) implements the logical operation (shift) instruction
    accepting either a W or X register. op is the binary logical operation."
-  (set rd (op rn (shifted rm is))))
+  (set rd (op rn (shift-encoded rm is))))
 
 (defun ORRWrs (rd rn rm is) (log*rs setw logor  rd rn rm is))
 (defun EORWrs (rd rn rm is) (log*rs setw logxor rd rn rm is))
@@ -88,6 +90,8 @@
 ;; (bitfield moves)
 
 (defmacro make-BFM (set cast xd xr ir is)
+  "(make-BFM set cast xd xr ir is) implements bitfield move instructions
+   accepting either a W or X register, with cast being an unsigned or signed cast."
   (let ((rs (word)))
     (if (< is ir)
         (if (and (/= is (- rs 1)) (= (+ is 1) ir))

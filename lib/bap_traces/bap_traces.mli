@@ -1,7 +1,11 @@
 open Core_kernel
 open Regular.Std
 open Bap.Std
+open Bap_knowledge
+open Bap_core_theory
+
 module Unix = Caml_unix
+module KB = Knowledge
 
 (** Traces of execution. *)
 module Std : sig
@@ -357,6 +361,14 @@ module Std : sig
     } [@@deriving bin_io, compare, fields, sexp]
   end
 
+
+  (** change of CPU mode (e.g. switch to thumb)  *)
+  module Mode : sig
+    include KB.Enum.S
+    val slot: (Theory.program, t) KB.slot
+  end
+
+
   type 'a move = 'a Move.t [@@deriving bin_io, compare, sexp]
   type chunk = Chunk.t [@@deriving bin_io, compare, sexp]
   type syscall = Syscall.t [@@deriving bin_io, compare, sexp]
@@ -364,6 +376,7 @@ module Std : sig
   type call = Call.t [@@deriving bin_io, compare, sexp]
   type return = Return.t [@@deriving bin_io, compare, sexp]
   type modload = Modload.t [@@deriving bin_io, compare, sexp]
+  type mode = Mode.t [@@deriving bin_io, compare, sexp]
 
   (** Types of events.  *)
   module Event : sig
@@ -409,6 +422,9 @@ module Std : sig
 
     (** a module (shared library) is dynamically linked into a host program. *)
     val modload : modload tag
+
+    (** the CPU mode used for future instructions has changed  *)
+    val mode : mode tag
   end
 
 

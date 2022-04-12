@@ -3,6 +3,7 @@
   :components (bap:load-binary
                bap:program-loader
                bap:x86-registers-initializer
+               bap:x86-setup-plt
                bap:powerpc-init
                bap:observation-printer))
 

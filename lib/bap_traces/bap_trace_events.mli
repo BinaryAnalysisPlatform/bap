@@ -65,3 +65,6 @@ val return : return tag
 
 (** represent an executable module being loaded *)
 val modload : modload tag
+
+(** the CPU mode used for future instructions has changed  *)
+val mode : mode tag

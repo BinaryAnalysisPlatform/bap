@@ -3,5 +3,8 @@ PKG cmdliner
 PKG curl
 PKG parsexp
 PKG uuidm
+PKG re
 B ../_build/src
 B ../_build/lib/bap_byteweight
+B ../src
+B ../lib/bap_byteweight

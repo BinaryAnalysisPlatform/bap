@@ -46,7 +46,7 @@ let parent = Theory.Target.declare ~package "mips"
 let array bits pref n =
   List.init n ~f:(fun i -> reg bits (sprintf "%s%d" pref i))
 
-let define ?(parent=parent) bits endianness =
+let define ?(parent=parent) ?nicknames bits endianness =
   let size = Theory.Bitv.size bits in
   let gprs = List.map gpr_names ~f:(reg bits) in
   let fprs = array bits "R" 32 in
@@ -56,6 +56,7 @@ let define ?(parent=parent) bits endianness =
   let regs = List.map ~f:(fun name -> Theory.Var.forget (reg bits name)) in
   Theory.Target.declare ~package (name size endianness)
     ~parent
+    ?nicknames
     ~bits:size
     ~endianness
     ~code:data
@@ -71,12 +72,18 @@ let define ?(parent=parent) bits endianness =
       ]
 
 let mips32bi = define r32 Theory.Endianness.bi
-let mips32eb = define r32 Theory.Endianness.eb ~parent:mips32bi
-let mips32le = define r32 Theory.Endianness.le ~parent:mips32bi
+    ~nicknames:["mipsbi"; "mips32bi"]
+let mips32eb = define r32 Theory.Endianness.eb
+    ~nicknames:["mipseb"; "mips32eb"; "mipsbe"; "mips32be"]
+let mips32le = define r32 Theory.Endianness.le
+    ~nicknames:["mipsle"; "mipsel"; "mips32le"; "mips32el"]
 
 let mips64bi = define r64 Theory.Endianness.bi
-let mips64le = define r64 Theory.Endianness.le ~parent:mips64bi
-let mips64eb = define r64 Theory.Endianness.eb ~parent:mips64bi
+    ~nicknames:["mips64bi"]
+let mips64le = define r64 Theory.Endianness.le
+    ~nicknames:["misp64le"; "mips64el"]
+let mips64eb = define r64 Theory.Endianness.eb
+    ~nicknames:["mips64"; "mips64eb"; "mips64be"]
 
 let enable_loader () =
   KB.Rule.(declare ~package "mips-target" |>
