@@ -5,7 +5,7 @@
 ;;; ATOMIC OPERATIONS
 
 (defmacro CASordX (rs rt rn acquire-ordering release-ordering)
-  "(CASord*r set load store rs rt rn acquire-ordering release-ordering)
+  "(CASordX rs rt rn acquire-ordering release-ordering)
    implements a generic compare-and-swap instruction on a X register.
    acquire-ordering and release-ordering are booleans indicating whether
    load-acquire and store-release ordering is to be enforced."
@@ -16,10 +16,14 @@
       (store-word rn rt))
     (set$ rs data)))
 
-(defun CASX   (rs rt rn) (CASordX rs rt rn false false))
-(defun CASAX  (rs rt rn) (CASordX rs rt rn true  false))
-(defun CASLX  (rs rt rn) (CASordX rs rt rn false true))
-(defun CASALX (rs rt rn) (CASordX rs rt rn true  true))
+;; not sure why llvm returns 4 arguments.
+;; when i've tested it, the first and second arguments are always the same value
+;; so i'm just assuming they're the same and ignoring the second.
+(defun CASX   (rs _ rt rn) (CASordX rs rt rn false false))
+(defun CASAX  (rs _ rt rn) (CASordX rs rt rn true false))
+(defun CASLX  (rs _ rt rn) (CASordX rs rt rn false true))
+(defun CASALX (rs _ rt rn) (CASordX rs rt rn true  true))
+
 
 (defmacro CSop*r (set op rd rn rm cnd)
   "(CSop*r set op rd rn rm cnd) implements the conditional select
