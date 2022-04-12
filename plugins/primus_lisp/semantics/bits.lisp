@@ -25,16 +25,6 @@
   (logor (logand (msb rn) (msb rm) (lnot (msb rd)))
          (logand (lnot (msb rn)) (lnot (msb rm)) (msb rd))))
 
-(defun highest-set-bit (bitv)
-  "(highest-set-bit bitv) returns the greatest index whose bit is set in bitv.
-   It requires bitv to be non-zero.
-   Translated from ARMv8 ISA pseudocode."
-  (assert-msg (not (is-zero bitv)) "highest-set-bit bitv is zero")  ; at least 1 bit must be set
-  (let ((i (- (word-width bitv) 1)))
-    (while (and (> i 0) (= (select i bitv) 0))
-      (decr i))
-    i))
-
 (defun replicate (bitv n)
   "(replicate bitv n) returns a bitvector with bitv repeated n times.
    Translated from ARMv8 ISA pseudocode."

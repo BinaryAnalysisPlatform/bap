@@ -55,7 +55,7 @@
    called with true.
    Modified from ARMv8 ISA pseudocode."
   (let ((memory-width 64) ; change to 32 if 32-bit system
-        (len (highest-set-bit (concat immN (lnot imms))))
+        (len (- 64 (clz64 (concat immN (lnot imms))) 1))
         (levels (zero-extend (ones len) 6))
         (S (logand imms levels))
         (R (logand immr levels))
@@ -71,7 +71,6 @@
       ; it seems like wmask is for logical immediates, and tmask is not used
       ; anywhere in the ISA except for the BFM instruction and its aliases.
       ; we're just returning wmask here.
-      ; TODO: can we return tuples in Primus Lisp?
       wmask)))
 
 (defun immediate-from-bitmask (mask)
