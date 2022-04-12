@@ -824,8 +824,8 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     bitv x >>= fun x -> match const x with
     | None -> forget@@cast s !!x
     | Some v ->
-      let r = Theory.Bitv.size s in
-      let w = Theory.Bitv.size @@ Theory.Value.sort x in
+      let r = size s in
+      let w = size @@ Theory.Value.sort x in
       forget@@const_int s@@match t with
       | `hi -> Bitvec.extract ~hi:(w-1) ~lo:(w-r) v
       | `lo -> Bitvec.extract ~hi:r ~lo:0 v
@@ -835,7 +835,7 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
           let open Bitvec.Make(struct
               let modulus = Bitvec.modulus r
             end) in
-          (ones lsl int Int.(r - w)) lor v
+          (ones lsl int w) lor v
         else Bitvec.extract ~hi:r ~lo:0 v
 
   let signed = mk_cast `se CT.signed
