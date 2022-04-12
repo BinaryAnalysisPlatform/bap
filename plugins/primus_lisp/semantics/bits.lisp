@@ -19,12 +19,52 @@
          (logand (msb rm) (lnot (msb rd)))
          (logand (msb rn) (lnot (msb rd)))))
 
-
 (defun overflow (rd rn rm)
   "(overflow RD RN RM) is true if the sum RD = RN + RM results
    in two's complement overflow."
   (logor (logand (msb rn) (msb rm) (lnot (msb rd)))
          (logand (lnot (msb rn)) (lnot (msb rm)) (msb rd))))
+
+(defun replicate (bitv n)
+  "(replicate bitv n) returns a bitvector with bitv repeated n times."
+  (let ((output bitv))
+    (while (> n 1)
+      (decr n)
+      (set output (concat output bitv)))
+    output))
+
+(defun zeros (n)
+  "(zeros n) returns an empty bitvector of length n."
+  (cast-unsigned n 0:1))
+
+(defun ones (n)
+  "(ones n) returns a bitvector of length n with all bits set."
+  (lnot (zeros n)))
+  
+(defun rotate-right (bitv n)
+  "(rotate-right bitv n) rotates bitv to the right by n positions.
+    Carry-out is ignored."
+  (if (= n 0)
+    bitv
+    (let ((bitv-length (word-width bitv))
+          (m (mod n bitv-length)))
+      ; need to trim the result of logor.
+      (extract (- bitv-length 1) 0
+        (logor 
+          (rshift bitv m)
+          (lshift bitv (- bitv-length m)))))))
+
+(defun rotate-left (bitv n)
+  "(rotate-right bitv n) rotates bitv to the right by n positions.
+    Carry-out is ignored."
+  (if (= n 0)
+    bitv
+    (let ((bitv-length (word-width bitv))
+          (m (mod n bitv-length)))
+      (extract (- bitv-length 1) 0
+        (logor 
+          (lshift bitv m)
+          (rshift bitv (- bitv-length m)))))))
 
 (defmacro popcount/helper (x sh m1 m2 m4 h01)
   (prog

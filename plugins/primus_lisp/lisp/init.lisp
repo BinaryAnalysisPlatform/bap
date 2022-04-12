@@ -139,6 +139,12 @@
     (msg "Assertion (assert $0) failed" c)
     (error "Assert_failure")))
 
+(defmacro assert-msg (c s)
+  "(assert-msg c s) allows you to assert a condition and print a message on failure"
+  (when (not c)
+    (msg s)
+    (error "Assert_failure")))
+
 (defmacro is-in (x y)
   "(is-in X A B C ...) returns true if X is equal A or B or C or ..."
   (= x y))
