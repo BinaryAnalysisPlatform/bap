@@ -55,7 +55,7 @@
    called with true.
    Modified from ARMv8 ISA pseudocode."
   (let ((memory-width 64) ; change to 32 if 32-bit system
-        (len (- 64 (clz64 (concat immN (lnot imms))) 1))
+        (len (- 64 (clz (cast-unsigned 64 (concat immN (lnot imms)))) 1))
         (levels (cast-unsigned 6 (ones len)))
         (S (logand imms levels))
         (R (logand immr levels))
