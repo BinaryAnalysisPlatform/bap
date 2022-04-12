@@ -81,41 +81,21 @@
         (imms (extract 5 0 mask)))
     (decode-bit-masks N imms immr true)))
 
-(defun barrier-option-to-symbol (barrier-type option)
-  "(barrier-option-to-symbol barrier-type option) converts the
-   barrier type (:dmb, :dsb, :isb) and 4-bit optional value
-   to a symbol.
+(defun barrier-option-to-symbol (option)
+  "(barrier-option-to-symbol option) converts the
+   4-bit optional value to a symbol.
    This is to be used with the (special) primitive."
-  (case barrier-type
-    :dmb
-      (case option
-        0b1111 :barrier-dmb-sy
-        0b1110 :barrier-dmb-st
-        0b1101 :barrier-dmb-ld
-        0b1011 :barrier-dmb-ish
-        0b1010 :barrier-dmb-ishst
-        0b1001 :barrier-dmb-ishld
-        0b0111 :barrier-dmb-nsh
-        0b0110 :barrier-dmb-nshst
-        0b0101 :barrier-dmb-nshld
-        0b0011 :barrier-dmb-osh
-        0b0010 :barrier-dmb-oshst
-        0b0001 :barrier-dmb-oshld
-        :barrier-dmb-unknown)
-    :dsb
-      (case option
-        0b1111 :barrier-dsb-sy
-        0b1110 :barrier-dsb-st
-        0b1101 :barrier-dsb-ld
-        0b1011 :barrier-dsb-ish
-        0b1010 :barrier-dsb-ishst
-        0b1001 :barrier-dsb-ishld
-        0b0111 :barrier-dsb-nsh
-        0b0110 :barrier-dsb-nshst
-        0b0101 :barrier-dsb-nshld
-        0b0011 :barrier-dsb-osh
-        0b0010 :barrier-dsb-oshst
-        0b0001 :barrier-dsb-oshld
-        :barrier-dsb-unknown)
-    :isb
-      :barrier-isb-sy))
+  (case option
+    0b1111 :sy
+    0b1110 :st
+    0b1101 :ld
+    0b1011 :ish
+    0b1010 :ishst
+    0b1001 :ishld
+    0b0111 :nsh
+    0b0110 :nshst
+    0b0101 :nshld
+    0b0011 :osh
+    0b0010 :oshst
+    0b0001 :oshld
+    :unknown))
