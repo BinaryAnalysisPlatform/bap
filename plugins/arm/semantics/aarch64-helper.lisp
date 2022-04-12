@@ -56,7 +56,7 @@
    Modified from ARMv8 ISA pseudocode."
   (let ((memory-width 64) ; change to 32 if 32-bit system
         (len (- 64 (clz64 (concat immN (lnot imms))) 1))
-        (levels (zero-extend (ones len) 6))
+        (levels (cast-unsigned 6 (ones len)))
         (S (logand imms levels))
         (R (logand immr levels))
         (diff (- S R))) ; assuming "6-bit subtract with borrow" is regular 2'c subtraction
@@ -64,8 +64,8 @@
     (assert-msg (not (and immediate (= levels (logand imms levels)))) "decode-bit-masks long condition")
     (let ((esize (lshift 1 len))
           (d (extract (- len 1) 0 diff))
-          (welem (zero-extend (ones (+ S 1)) esize))
-          (telem (zero-extend (ones (+ d 1)) esize))
+          (welem (cast-unsigned esize (ones (+ S 1))))
+          (telem (cast-unsigned esize (ones (+ d 1))))
           (wmask (replicate-to-fill (rotate-right welem R) memory-width))
           (tmask (replicate-to-fill telem memory-width)))
       ; it seems like wmask is for logical immediates, and tmask is not used

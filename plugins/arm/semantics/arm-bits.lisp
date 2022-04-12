@@ -86,3 +86,12 @@
 (defmacro setw (reg val)
   "(set Wx V) sets a Wx register clearing the upper 32 bits."
   (set$ (alias-base-register reg) val))
+
+(defun replicate-to-fill (bitv n)
+  "(replicate-to-fill bitv n) returns the result of repeating bitv
+   to a total of n bits. Requires that n is a multiple of bitv's length.
+   Modified from the bits(N) Replicate(bits(M) x) function from
+   ARMv8 ISA pseudocode."
+  (let ((bitv-length (word-width bitv)))
+    (assert-msg (= 0 (mod n bitv-length)) "replicate-to-fill n not multiple of len(bitv)")
+    (replicate bitv (/ n bitv-length))))
