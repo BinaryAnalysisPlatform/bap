@@ -776,17 +776,21 @@ module Domain = struct
       (module K : Comparator.S with type t = k
                                 and type comparator_witness = o)
       ?(inspect=sexp_of_opaque)
-      ~equal name =
+      ?join
+      ~equal
+      name =
     let empty = Map.empty (module K) in
+    let join = match join with
+      | Some join -> join
+      | None -> fun x y ->
+        if equal x y then Ok y else Error (Join (name, inspect, x, y)) in
     let join x y =
       let module Join = struct exception Conflict of conflict end in
       try Result.return @@ Map.merge x y ~f:(fun ~key:_ -> function
           | `Left v | `Right v -> Some v
-          | `Both (x,y) ->
-            if equal x y then Some y
-            else
-              let failed = Join (name,inspect,x,y) in
-              raise (Join.Conflict failed))
+          | `Both (x,y) -> match join x y with
+            | Error conflict -> raise @@ Join.Conflict conflict
+            | Ok z -> Some z)
       with Join.Conflict err -> Error err in
     let inspect xs =
       Sexp.List (Map.keys xs |> List.map ~f:K.comparator.sexp_of_t) in
