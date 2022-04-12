@@ -36,6 +36,54 @@
 (defun ORRWri (rd rn imm) (log*ri setw logor rd rn imm))
 (defun ORRXri (rd rn imm) (log*ri set$ logor rd rn imm))
 
+;; Logical ANDS (flags set)
+
+(defmacro ANDS*r* (setf rd rn immOp)
+  "(ANDS*r* set rd rn immOp) implements the logical AND operation on either an X or W register with immediate/shifted immediate and sets the N, V, Z, C flags based on the result."
+  (let ((result (logand rn immOp)))
+    (set NF (msb result))
+    (set VF 0)
+    (set ZF (is-zero result))
+    (set CF 0)
+  (setf rd result)))
+
+(defmacro ANDS*ri (setf rd rn imm)
+  "(ANDS*ri set rd rn imm) implements the logical AND operation on either an X or W register with immediate and sets the N, V, Z, C flags based on the result."
+  (let ((immOp (immediate-from-bitmask imm)))
+    (ANDS*r* setf rd rn immOp)))
+
+(defun ANDSWri (rd rn imm) (ANDS*ri setw rd rn imm))
+(defun ANDSXri (rd rn imm) (ANDS*ri set$ rd rn imm))
+
+(defmacro ANDS*rs (setf rd rn rm is)
+  "(ANDS*rs set rd rn imm) implements the logical AND operation on either an X or W register with shifted immediate and sets the N, V, Z, C flags based on the result."
+  (let ((immOp (shifted rm is)))
+    (ANDS*r* setf rd rn immOp)))
+
+(defun ANDSWrs (rd rn rm is) (ANDS*rs setw rd rn rm is))
+(defun ANDSXrs (rd rn rm is) (ANDS*rs set$ rd rn rm is))
+
+;; ASRV
+;; (bitfield moves)
+
+(defmacro ASRV*r (setr datasize rd rn rm)
+  (let ((shift (mod rm datasize)))
+    (setr rd (arshift rn shift))))
+
+(defun ASRVWr (rd rn rm) (ASRV*r setw 32 rd rn rm))
+(defun ASRVXr (rd rn rm) (ASRV*r set$ 64 rd rn rm))
+
+;; BIC
+
+;; assumes immediate always provided... must fix...
+(defmacro BIC*r (setr rd rn rm is)
+  (let* ((shift (shifted rm is))
+	 (comp (lnot shift)))
+    (setr rd (logand rn comp))))
+
+(defun BICWr (rd rn rm is) (BIC*r setw rd rn rm is))
+(defun BICXr (rd rn rm is) (BIC*r set$ rd rn rm is))
+
 ;; UBFM and SBFM
 ;; (bitfield moves)
 
