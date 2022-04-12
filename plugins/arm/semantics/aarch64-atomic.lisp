@@ -10,16 +10,16 @@
    acquire-ordering and release-ordering are booleans indicating whether
    load-acquire and store-release ordering is to be enforced."
    (let ((data (load-word rn)))
-    (when (acquire-ordering) (special :load-acquire))
+    (when acquire-ordering (special :load-acquire))
     (when (= data rs)
-      (when (release-odering) (special :store-release))
+      (when release-ordering (special :store-release))
       (store-word rn rt))
     (set$ rs data)))
 
-(defun CASX   (rs rt rn) (CASordXr rs rt rn false false))
-(defun CASAX  (rs rt rn) (CASordXr rs rt rn true  false))
-(defun CASLX  (rs rt rn) (CASordXr rs rt rn false true))
-(defun CASALX (rs rt rn) (CASordXr rs rt rn true  true))
+(defun CASX   (rs rt rn) (CASordX rs rt rn false false))
+(defun CASAX  (rs rt rn) (CASordX rs rt rn true  false))
+(defun CASLX  (rs rt rn) (CASordX rs rt rn false true))
+(defun CASALX (rs rt rn) (CASordX rs rt rn true  true))
 
 (defmacro CSop*r (set op rd rn rm cnd)
   "(CSop*r set op rd rn rm cnd) implements the conditional select
