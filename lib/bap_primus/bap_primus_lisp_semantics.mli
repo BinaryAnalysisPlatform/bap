@@ -1,3 +1,4 @@
+open Core_kernel
 open Bap_core_theory
 open Bap.Std
 open Bap_primus_lisp_types
@@ -9,6 +10,7 @@ type KB.conflict += Illtyped_program of Type.error list
 type KB.conflict += Failed_primitive of KB.Name.t * string
 
 val program : (Theory.Source.cls, program) KB.slot
+val context : (Theory.Unit.cls, Bap_primus_lisp_context.t) KB.slot
 val definition : (Theory.program, Theory.Label.t option) KB.slot
 val name : (Theory.program, KB.Name.t option) KB.slot
 val args : (Theory.program, unit Theory.Value.t list option) KB.slot
