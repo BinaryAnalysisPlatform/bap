@@ -55,6 +55,10 @@ let () =
       ~doc:"Enables the legacy floating-point lifter and \
             disables the intrinsic semantics of floating-point \
             operations" in
+  let disable_intrinsics =
+    Config.flag "disable-floating-point-intrinsics"
+      ~doc:"Disables translation of floating-point instructions \
+            into calls to intrinsic functions." in
   let backend = Config.param Config.(some string) "backend"
       ~synonyms:["64-backend"] in
   let kind =
@@ -87,7 +91,8 @@ let () =
              --x86-with-legacy-floating-points option instead.@\n%!";
         X86_legacy_bil_lifter.init ();
         X86_legacy_bil_semantics.init ();
-      end else
+      end else if not !!disable_intrinsics
+      then
         KB.promise Primus.Lisp.Semantics.context @@ fun _ ->
         KB.return @@
         Primus.Lisp.Context.create [
