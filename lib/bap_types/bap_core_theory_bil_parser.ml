@@ -170,7 +170,7 @@ let stmt : type t r. (t,exp,r,stmt) stmt_parser =
   fun s -> match Stmt.(decode call s) with
     | Some dst -> S.call dst
     | None -> match Stmt.(decode intrinsic s) with
-      | Some data -> S.call data
+      | Some data -> S.call ("intrinsic:"^data)
       | None -> match s with
         | Move (v,x) -> set v x
         | Jmp (Int x) -> S.goto (Word.to_bitvec x)
