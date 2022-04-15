@@ -7845,6 +7845,13 @@ module Std : sig
     (** [span fn] returns a memory map of a region occupied by a
         function [fn] *)
     val span : fn -> unit memmap
+
+    (** [explicit_callee symtab address] returns a callee which is
+        called from a  block with the given [address].
+
+        @since 2.5.0
+    *)
+    val callee : t -> addr -> string option
   end
 
   type lifter = mem -> Disasm_expert.Basic.full_insn -> bil Or_error.t

@@ -369,7 +369,6 @@ let section_name memory start =
   function Some name -> name
          | None -> Format.asprintf ".section@%a" Addr.pp start
 
-
 let print_disasm pp_insn patterns ppf proj =
   let memory = Project.memory proj in
   let syms = Project.symbols proj in
@@ -389,19 +388,40 @@ let print_disasm pp_insn patterns ppf proj =
             sorted_blocks (Graphs.Cfg.nodes cfg) |> Seq.iter ~f:(fun blk ->
                 let mem = Block.memory blk in
                 fprintf ppf "%a:@\n" pp_addr (Memory.min_addr mem);
-                Block.insns blk |> List.iter ~f:(pp_insn ppf))));
+                Block.insns blk |> List.iter ~f:(pp_insn syms blk ppf))));
   pp_close_tbox ppf ()
 
-let pp_bil fmt ppf (mem,insn) =
+let pp_bil fmt _ _ ppf (mem,insn) =
   let pp_bil ppf = Bil.Io.print ~fmt ppf in
   let addr = Memory.min_addr mem in
   fprintf ppf "%a: %s@\n%a@\n" pp_addr addr (Insn.asm insn)
     pp_bil (Insn.bil insn)
 
-let pp_insn fmt ppf (mem,insn) =
+
+let jmp_dst insn =
+  let rec find = List.find_map ~f:(function
+      | Bil.Jmp (Int dst) ->  Some dst
+      | Bil.If (_,yay,nay) ->
+        Option.first_some (find yay) (find nay)
+      | _ -> None) in
+  find (Insn.bil insn)
+
+let print_jmp_dst tab blk ppf insn =
+  match jmp_dst insn, Symtab.callee tab (Block.addr blk) with
+  | Some dst, Some name ->
+    Format.fprintf ppf " # %s <%s>" (Addr.string_of_value dst) name
+  | Some dst, None ->
+    Format.fprintf ppf " # %s" (Addr.string_of_value dst)
+  | None, Some name ->
+    Format.fprintf ppf " # <%s>" name
+  | None, None -> ()
+
+let pp_insn fmt tab blk ppf (mem,insn) =
   Memory.pp ppf mem;
   pp_print_tab ppf ()  [@ocaml.warning "-3"];
   Insn.Io.print ~fmt ppf insn;
+  if phys_equal insn (Block.terminator blk)
+  then print_jmp_dst tab blk ppf insn;
   fprintf ppf "@\n"
 
 let pp_knowledge ppf _ =
