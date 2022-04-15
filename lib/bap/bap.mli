@@ -8741,6 +8741,12 @@ module Std : sig
     (** a subroutine is the binary entry point *)
     val entry_point : unit tag
 
+    (** a subroutine is an intrinisic or special instruction
+        not a real subroutine.
+
+        @since 2.5.0 *)
+    val intrinsic : unit tag
+
     (** Subroutine builder *)
     module Builder : sig
       type t

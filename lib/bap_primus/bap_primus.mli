@@ -3298,7 +3298,7 @@ module Std : sig
         syntactic level, the syntax of Primus Lisp itself is
         context-dependent.
 
-        {3 Context}
+        {3:context Context}
 
         A context (from the perspective of the type system) is a set
         of type class instances. The context is fixed when a program
@@ -3622,6 +3622,14 @@ text ::= ?any atom that is not recognized as a <word>?
       (** an abstract type representing a lisp program  *)
       type program
 
+      (** the set of type classes that constrain the context of
+          applicability of Primus Lisp definitions.
+
+          @see {{!context}the context section for more information}.
+          @since 2.5.0
+      *)
+      type context
+
 
       (** an abstract type that represents messages send with the
           [msg] form. *)
@@ -3656,6 +3664,29 @@ text ::= ?any atom that is not recognized as a <word>?
 
         (** [pp_program ppf program] dumps program definitions into the formatter [ppf]   *)
         val pp_program : Format.formatter -> program -> unit
+      end
+
+
+      (** The set of constraints.
+
+          See {{!context} the context section for more information}.
+
+          Note, the context is automatically generated from the
+          project, when a Primus Lisp program is loaded. But it is
+          also possible to refine it using the unit's
+          {!Lisp.Semantics.context} slot.
+
+          @since 2.5.0
+      *)
+      module Context : sig
+        type t = context
+
+
+        (** [create [c1, f1;...; cN, fN]] creates the context.
+
+            The created context will have classes [c1,...,cN] defined
+            with feature sets [f1,...,fN] correspondingly. *)
+        val create : (string * string list) list -> context
       end
 
       module Doc : sig
@@ -3911,6 +3942,20 @@ text ::= ?any atom that is not recognized as a <word>?
             lookup for the definitions.
         *)
         val program : (Theory.Source.cls, program) KB.slot
+
+
+        (** Primus Lisp definitions constraints.
+
+            The set of type classes that describe the unit constraints
+            and limits applicability of Primus Lisp definitions to the
+            selected compilation unit.
+
+            Each Primus Lisp definition has a {!context} class of its
+            applicability. The definition will only be used if its
+            context is a subtype of the unit context.
+
+            @since 2.5.0  *)
+        val context : (Theory.Unit.cls, context) KB.slot
 
 
         (** The Primus Lisp definition to which the program belongs.

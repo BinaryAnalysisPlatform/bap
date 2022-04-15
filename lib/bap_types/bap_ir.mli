@@ -231,6 +231,7 @@ module Ir_sub : sig
   val returns_twice : unit tag
   val nothrow : unit tag
   val entry_point : unit tag
+  val intrinsic : unit tag
   val pp_slots : string list -> Format.formatter -> t -> unit
   include Regular.S with type t := t
 end

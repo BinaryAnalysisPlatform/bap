@@ -109,6 +109,7 @@ let registry = Hashtbl.create (module String)
 let register name abi = Hashtbl.set registry ~key:name ~data:abi
 let get_processor name = Hashtbl.find registry name
 
+
 let get_prototype gamma name = match gamma name with
   | Some (`Function proto) -> proto
   | _ ->
@@ -141,12 +142,15 @@ let create_api_processor size abi : Bap_api.t =
       else self#apply_proto sub
 
     method private apply_proto sub =
-      let name = Sub.name sub in
-      let {Bap_c_type.Spec.t; attrs} = get_prototype gamma name in
-      let sub = self#apply_args sub attrs t in
-      let sub = Term.set_attr sub Attrs.proto t in
-      let sub = List.fold_right ~init:sub attrs ~f:Bap_c_attr.apply in
-      abi.apply_attrs attrs sub
+      if Term.has_attr sub Sub.intrinsic
+      then sub
+      else
+        let name = Sub.name sub in
+        let {Bap_c_type.Spec.t; attrs} = get_prototype gamma name in
+        let sub = self#apply_args sub attrs t in
+        let sub = Term.set_attr sub Attrs.proto t in
+        let sub = List.fold_right ~init:sub attrs ~f:Bap_c_attr.apply in
+        abi.apply_attrs attrs sub
 
 
     method private apply_args sub attrs t =

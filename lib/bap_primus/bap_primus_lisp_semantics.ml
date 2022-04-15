@@ -8,6 +8,7 @@ open Bap_primus_lisp_attributes
 
 module Attribute = Bap_primus_lisp_attribute
 module Program = Bap_primus_lisp_program
+module Context = Bap_primus_lisp_context
 module Source = Bap_primus_lisp_source
 module Resolve = Bap_primus_lisp_resolve
 module Def = Bap_primus_lisp_def
@@ -58,6 +59,8 @@ let program =
     ~empty:Program.empty
     ~equal:Program.equal
     ~join:(fun x y -> Ok (Program.merge x y))
+
+let context = Context.slot
 
 
 type kind = Prim | Defn | Meth | Data [@@deriving sexp]
@@ -728,8 +731,11 @@ let link_library target prog =
 
 let collect_names kind key prog =
   Program.fold prog key ~f:(fun ~package def names ->
-      let name = Def.name def in
-      Map.set names (KB.Name.create ~package name) kind)
+      if Program.is_applicable prog def
+      then
+        let name = Def.name def in
+        Map.set names (KB.Name.create ~package name) kind
+      else names)
     ~init:(Map.empty (module KB.Name))
 
 let merge_names names =
@@ -747,9 +753,13 @@ let obtain_typed_program unit =
   match KB.Value.get typed src with
   | Some prog -> !!prog
   | None ->
+    let* context = unit-->context in
+    let input =
+      let init = KB.Value.get program src in
+      Program.with_context init @@
+      Context.merge (Program.context init) context in
     let* prog =
-      link_library target @@
-      Program.with_places (KB.Value.get program src) target in
+      link_library target @@ Program.with_places input target in
     let tprog = Program.Type.infer prog in
     let prog = Program.Type.program tprog in
     let places = Program.fold prog Key.place

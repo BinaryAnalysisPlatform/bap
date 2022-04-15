@@ -9,7 +9,7 @@ module Attribute = Bap_primus_lisp_attribute
 module Feature = String
 module Name = String
 
-type t = Feature.Set.t Name.Map.t [@@deriving compare, equal, sexp]
+type t = Feature.Set.t Name.Map.t [@@deriving bin_io, compare, equal, sexp]
 let empty = Name.Map.empty
 
 type Attribute.error += Unterminated_quote
@@ -60,7 +60,7 @@ let of_project proj =
     features [sprintf "%d" (Theory.Target.data_addr_size t)];
     "code-addr-size",
     features [sprintf "%d" (Theory.Target.code_addr_size t)];
-    "system", features [
+    "target-system", features [
       Theory.System.to_string @@ Theory.Target.system t
     ];
 
@@ -169,8 +169,17 @@ let join xs ys = Ok (merge xs ys)
 
 let domain = KB.Domain.define "context"
     ~empty ~order ~join
+    ~inspect:sexp_of
 
 let t = Attribute.declare "context"
     ~package:"core"
     ~domain
     ~parse
+
+let slot =
+  KB.Class.property Theory.Unit.cls "primus-lisp-context"
+    ~public:true
+    ~persistent:(KB.Persistent.of_binable (module struct
+                   type nonrec t = t [@@deriving bin_io]
+                 end))
+    ~package:"bap" domain
