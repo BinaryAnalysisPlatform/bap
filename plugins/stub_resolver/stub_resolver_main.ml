@@ -43,6 +43,7 @@ open Bap_core_theory
 open Bap_knowledge
 open Bap_main
 open KB.Syntax
+module Sys = Caml.Sys
 
 include Loggers()
 

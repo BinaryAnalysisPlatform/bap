@@ -3,6 +3,7 @@ open Bap.Std
 open Monads.Std
 open Or_error
 
+module Sys = Caml.Sys
 module Unix = Caml_unix
 
 module Primitive = struct

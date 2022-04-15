@@ -80,6 +80,7 @@ include Self ()
 
 module Cache = Bap_cache
 module CDF = Int.Map
+module Sys = Caml.Sys
 module Unix = Caml_unix
 
 type entry = {

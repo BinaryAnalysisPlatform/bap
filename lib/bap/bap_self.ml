@@ -7,6 +7,7 @@ open Cmdliner
 
 module Event = Bap_main_event
 module Buffer = Caml.Buffer
+module Sys = Caml.Sys
 
 module Create() = struct
   let bundle = main_bundle ()

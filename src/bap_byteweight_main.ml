@@ -73,6 +73,7 @@ module BW = Bap_byteweight.Bytes
 module Sigs = Bap_byteweight_signatures
 module Digest = Caml.Digest
 module Config = Extension.Configuration
+module Sys = Caml.Sys
 
 (* we still have to update this tool to support modern bap *)
 let sigs_load = Sigs.load[@warning "-D"]

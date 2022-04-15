@@ -45,6 +45,7 @@ open Core_kernel
 open Bap_main
 open Bap_primus.Std
 open Format
+module Sys = Caml.Sys
 
 let command what =
   sprintf "

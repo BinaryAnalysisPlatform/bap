@@ -5,6 +5,7 @@ open Bap_types.Std
 open Monads.Std
 open Format
 open Image_internal_std
+module Sys = Caml.Sys
 
 module Fact = Ogre.Make(Monad.Ident)
 module Result = Monad.Result.Error

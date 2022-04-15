@@ -1,8 +1,7 @@
-
 open Core_kernel
 open Regular.Std
 open Bap.Std
-open Result
+open Result.Monad_infix
 open Bin_prot
 
 module Trace = Bap_trace

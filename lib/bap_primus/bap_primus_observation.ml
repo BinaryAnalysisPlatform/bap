@@ -64,6 +64,7 @@ let of_statement = ident
 module Key = struct
   type 'a t = 'a Type_equal.Id.t [@@deriving sexp_of]
   let to_type_id = ident
+  let type_id = ident
 end
 
 module Map = Univ_map.Make1(Key)(struct

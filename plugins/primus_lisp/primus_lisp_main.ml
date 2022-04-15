@@ -4,6 +4,7 @@ open Bap.Std
 open Monads.Std
 open Bap_primus.Std
 open Format
+module Sys = Caml.Sys
 include Self()
 
 module Primitives = Primus_lisp_primitives

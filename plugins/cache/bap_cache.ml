@@ -7,6 +7,7 @@ include Self ()
 
 module Filename = Caml.Filename
 module Random = Caml.Random
+module Sys = Caml.Sys
 module Unix = Caml_unix
 module Utils = Bap_cache_utils
 
