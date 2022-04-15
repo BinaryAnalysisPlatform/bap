@@ -61,3 +61,5 @@ val explicit_callee : t -> addr -> string option
 (** [implicit_callee symtab address] returns a callee which is
     implicitly called from a block with the given [address]. *)
 val implicit_callee : t -> addr -> string option
+
+val callee : t -> addr -> string option
