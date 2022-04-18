@@ -468,6 +468,7 @@ module type Primitives = Lisp.Def.Primitives
 module Primitive = Lisp.Def.Primitive
 type closure = Lisp.Def.closure
 type program = Lisp.Program.t
+type context = Lisp.Context.t
 module Load = Bap_primus_lisp_parse
 module Type = struct
   include Lisp.Program.Type
@@ -931,3 +932,4 @@ end
 
 module Unit = Semantics.Unit
 module Attribute = Lisp.Attribute
+module Context = Lisp.Context

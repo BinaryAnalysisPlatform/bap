@@ -1,5 +1,6 @@
 open Core_kernel
 
+module Sys = Caml.Sys
 module Unix = Caml_unix
 
 exception Target_directory_is_a_file

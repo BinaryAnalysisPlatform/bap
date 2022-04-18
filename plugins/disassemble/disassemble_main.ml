@@ -91,6 +91,8 @@ open Monads.Std
 open Format
 open Bap_plugins.Std
 
+module Sys = Caml.Sys
+
 include Self()
 open Bap_main
 

@@ -3,6 +3,8 @@ open Bap.Std
 open Format
 open Bap_core_theory
 
+module Sys = Caml.Sys
+
 open Bap_primus_lisp_types
 
 module Attribute = Bap_primus_lisp_attribute

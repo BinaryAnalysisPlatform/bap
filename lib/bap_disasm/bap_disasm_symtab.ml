@@ -120,6 +120,10 @@ let insert_call ?(implicit=false) symtab block data =
 
 let explicit_callee {ecalls} = Map.find ecalls
 let implicit_callee {icalls} = Map.find icalls
+let callee tab src = match explicit_callee tab src with
+  | Some dst -> Some dst
+  | None -> implicit_callee tab src
+
 
 
 let (<--) = fun g f -> match g with

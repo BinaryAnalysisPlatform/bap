@@ -2,6 +2,8 @@ open Core_kernel
 open Bap_bundle.Std
 open Format
 
+module Sys = Caml.Sys
+
 open Manifest.Fields
 
 exception Provides_field_syntax_error

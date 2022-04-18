@@ -2,6 +2,7 @@ open Core_kernel
 open Regular.Std
 
 module Filename = Caml.Filename
+module Sys = Caml.Sys
 module Unix = Caml_unix
 
 let ( / ) = Filename.concat

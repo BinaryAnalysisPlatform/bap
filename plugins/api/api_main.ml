@@ -1,11 +1,12 @@
 open Core_kernel
-open Result
+open Result.Monad_infix
 open Bap.Std
+module Sys = Caml.Sys
 include Self()
 
 module Configuration = Bap_main.Extension.Configuration
 
-let try_with f = match try_with f with
+let try_with f = match Result.try_with f with
   | Ok r -> Ok r
   | Error exn -> Error (`Fail exn)
 
@@ -116,7 +117,7 @@ module Api = struct
       Some {desc = {lang; name}; path;}
     else None
 
-  let ok_if_true2 f x ~error = f x >>= fun r -> ok_if_true r ~error
+  let ok_if_true2 f x ~error = f x >>= fun r -> Result.ok_if_true r ~error
 
   let cp api dest =
     ok_if_true2 Api_path.exists dest ~error:`No_dst >>= fun () ->

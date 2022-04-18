@@ -96,9 +96,10 @@ module Closure(Machine : Primus.Machine.S) = struct
 
   let word_width args =
     addr_width >>= fun width ->
-    match args with
-    | [] -> Value.of_int ~width width
-    | x :: _ -> Value.of_int ~width (Value.bitwidth x)
+    List.map args ~f:Value.bitwidth |>
+    List.max_elt ~compare:Int.compare |> function
+    | None -> Value.of_int ~width width
+    | Some x -> Value.of_int ~width x
 
   let exit_with _ =
     Eval.halt >>|
@@ -328,7 +329,7 @@ module Primitives(Machine : Primus.Machine.S) = struct
         "(is-positive X Y ...) returns true if all arguments are positive";
       def "is-negative" (all any @-> bool)
         "(is-negative X Y ...) returns true if all arguments are negative";
-      def "word-width" (unit @-> int)
+      def "word-width" (all int @-> int)
         "(word-width) returns machine word width in bits";
       def "exit-with" (one int @-> any)
         "(exit-with N) terminates program with the exit codeN";

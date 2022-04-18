@@ -28,6 +28,8 @@ open Core_kernel
 open Regular.Std
 open Bap_main.Extension
 
+module Sys = Caml.Sys
+
 module type unit = sig end
 
 

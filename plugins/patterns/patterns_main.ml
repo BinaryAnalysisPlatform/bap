@@ -113,6 +113,7 @@ open Bap_core_theory
 open Bap.Std
 open Bap_main
 open Bap_primus.Std
+module Sys = Caml.Sys
 
 module Sigma = Primus.Lisp.Semantics
 module Lambda = Theory.Label

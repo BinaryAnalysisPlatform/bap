@@ -101,6 +101,7 @@ module Class = struct
 
   module Key = struct
     type 'a t = 'a key
+    let type_id {key} = key
     let to_type_id {key} = key
     let sexp_of_t _ {key} = Sexp.Atom (Type_equal.Id.name key)
   end

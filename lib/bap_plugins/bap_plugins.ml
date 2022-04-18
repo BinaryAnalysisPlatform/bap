@@ -5,6 +5,7 @@ open Or_error.Monad_infix
 
 module Units = Bap_plugins_units
 module Filename = Caml.Filename
+module Sys = Caml.Sys
 
 module Plugin = struct
 
