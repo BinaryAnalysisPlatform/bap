@@ -7846,8 +7846,8 @@ module Std : sig
         function [fn] *)
     val span : fn -> unit memmap
 
-    (** [explicit_callee symtab address] returns a callee which is
-        called from a  block with the given [address].
+    (** [callee symtab address] returns a callee which is
+        called from a block with the given [address].
 
         @since 2.5.0
     *)

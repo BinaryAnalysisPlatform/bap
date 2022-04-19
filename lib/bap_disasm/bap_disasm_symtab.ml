@@ -174,6 +174,7 @@ let create_intra disasm calls =
 let create_inter disasm calls init =
   Disasm.explore disasm
     ~init
+    ~entries:(Set.to_sequence@@Disasm.subroutines disasm)
     ~block:(fun mem _ -> KB.return mem)
     ~node:(fun _ s -> KB.return s)
     ~edge:(fun src dst s ->
