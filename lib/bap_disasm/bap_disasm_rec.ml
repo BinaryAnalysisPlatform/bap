@@ -77,7 +77,6 @@ let has_conditional_jump blk =
 let global_cfg disasm =
   Driver.explore disasm
     ~init:Cfg.empty
-    ~entries:(Set.to_sequence@@Driver.subroutines disasm)
     ~block:(fun mem insns ->
         Driver.execution_order insns >>=
         KB.List.filter_map ~f:(fun label ->
