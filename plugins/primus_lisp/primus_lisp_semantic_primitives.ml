@@ -3,6 +3,7 @@ open Bap_core_theory
 open Bap_primus.Std
 open KB.Syntax
 open KB.Let
+module Z = Bitvec
 
 let export = Primus.Lisp.Type.Spec.[
     "+", all any @-> any,
@@ -377,18 +378,22 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
 
   let nbitv = KB.List.map ~f:bitv
 
-  let join_types s xs =
+  let join s xs =
     List.max_elt xs ~compare:(fun x y ->
         let xs = sort x and ys = sort y in
         Theory.Bitv.(compare_int (size xs) (size ys))) |> function
     | None -> s
     | Some v -> sort v
 
-  let with_nbitv s xs f = match xs with
+  let first s = function
+    | [] -> s
+    | x::_ -> sort x
+
+  let with_nbitv s cast xs f = match xs with
     | [] -> f s []
     | xs ->
       nbitv xs >>= fun xs ->
-      f (join_types s xs) xs
+      f (cast s xs) xs
 
   type 'a bitv = 'a Theory.Bitv.t Theory.Value.sort
 
@@ -398,15 +403,17 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
       | Some x -> const_int s x
       | None -> CT.signed s !!x
 
-  let monoid s sf df init xs =
-    with_nbitv s xs @@ fun s xs -> match xs with
-    | [] -> forget@@const_int s init
+  let monoid s cast sf df init xs =
+    with_nbitv s cast xs @@ fun s xs ->
+    let m = Z.modulus (size s) in
+    match xs with
+    | [] -> forget@@const_int s Z.(init mod m)
     | x :: xs ->
       let* init = coerce s x in
       KB.List.fold ~init xs ~f:(fun res x ->
           match const res, const x with
           | Some res, Some x ->
-            const_int s@@sf res x
+            const_int s Z.(sf res x mod m)
           | _ ->
             let* x = coerce s x in
             df !!res !!x) |>
@@ -438,12 +445,13 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
 
   let order sf df xs = forget@@is_ordered sf df xs
 
-  let all sf df xs =
+  let all s cast sf df xs =
     true_ >>= fun init ->
+    with_nbitv s cast xs @@ fun s xs ->
+    let m = Z.modulus (size s) in
     KB.List.fold ~init xs ~f:(fun r x ->
-        bitv x >>= fun x ->
         let r' = match const x with
-          | Some x -> const_bool (sf x)
+          | Some x -> const_bool Z.(sf x m)
           | None -> df !!x in
         r' >>= fun r' ->
         r &&& r') |>
@@ -473,9 +481,16 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
   let stores = memory Theory.Effect.Sort.wmem
   let loads = pure
 
-  let is_negative x = CT.msb x
-  let is_positive x =
-    CT.(and_ (non_zero x) (inv (is_negative x)))
+
+  let d_is_negative x = CT.msb x
+  let d_is_positive x =
+    CT.(and_ (non_zero x) (inv (d_is_negative x)))
+
+  let s_is_negative x m = Z.(msb x mod m)
+  let s_is_positive x m =
+    not (Z.(s_is_negative x m) && Z.equal x Z.zero)
+  let s_is_zero x _ =
+    Z.equal x Z.zero
 
   let word_width s xs =
     nbitv xs >>= fun xs ->
@@ -588,13 +603,14 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | Some v -> forget@@const_int (sort x) v
 
   let apply_static s x =
-    let m = Bitvec.modulus (Theory.Bitv.size s) in
+    let m = Bitvec.modulus (size s) in
     forget@@const_int s Bitvec.(x mod m)
 
   let lnot x =
     bitv x >>= fun x -> match const x with
     | None -> forget@@CT.not !!x
-    | Some v -> apply_static (sort x) (Bitvec.lnot v)
+    | Some v ->
+      apply_static (sort x) (Bitvec.lnot v)
 
   let one_op_x sop dop x =
     bitv x >>= fun x -> match const x with
@@ -824,8 +840,8 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     bitv x >>= fun x -> match const x with
     | None -> forget@@cast s !!x
     | Some v ->
-      let r = Theory.Bitv.size s in
-      let w = Theory.Bitv.size @@ Theory.Value.sort x in
+      let r = size s in
+      let w = size @@ Theory.Value.sort x in
       forget@@const_int s@@match t with
       | `hi -> Bitvec.extract ~hi:(w-1) ~lo:(w-r) v
       | `lo -> Bitvec.extract ~hi:r ~lo:0 v
@@ -835,7 +851,7 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
           let open Bitvec.Make(struct
               let modulus = Bitvec.modulus r
             end) in
-          (ones lsl int Int.(r - w)) lor v
+          (ones lsl int w) lor v
         else Bitvec.extract ~hi:r ~lo:0 v
 
   let signed = mk_cast `se CT.signed
@@ -895,15 +911,6 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
                 (CT.extract b1 (int s b) (int s b) !!x))
 
   let bits = Theory.Target.bits target
-  module Z = struct
-    include Bitvec.Make(struct
-        let modulus = Bitvec.modulus bits
-      end)
-    let is_zero = Bitvec.equal zero
-    let is_negative = msb
-    let is_positive x =
-      not (is_negative x) && not (is_zero x)
-  end
 
   let s = Theory.Bitv.define bits
 
@@ -928,23 +935,23 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
   let dispatch lbl name args =
     let t = target in
     match name,args with
-    | "+",_-> pure@@monoid s Z.add CT.add Z.zero args
+    | "+",_-> pure@@monoid s join Z.add CT.add (Z.int 0) args
     | "-",[x]|"neg",[x] -> pure@@neg x
-    | "-",_-> pure@@monoid s Z.sub CT.sub Z.zero args
-    | "*",_-> pure@@monoid s Z.mul CT.mul Z.one args
+    | "-",_-> pure@@monoid s join Z.sub CT.sub (Z.int 0) args
+    | "*",_-> pure@@monoid s join Z.mul CT.mul (Z.int 1) args
     | "/",[x]-> pure@@reciprocal x
-    | "/",_-> pure@@monoid s Z.div CT.div Z.one args
+    | "/",_-> pure@@monoid s join Z.div CT.div (Z.int 1) args
     | "s/",[x]-> pure@@sreciprocal x
-    | "s/",_-> pure@@monoid s Z.sdiv CT.sdiv Z.one args
-    | "mod",_-> pure@@monoid s Z.rem CT.modulo Z.one args
+    | "s/",_-> pure@@monoid s join Z.sdiv CT.sdiv (Z.int 1) args
+    | "mod",_-> pure@@monoid s join Z.rem CT.modulo (Z.int 1) args
     | "lnot",[x] -> pure@@lnot x
-    | "signed-mod",_-> pure@@monoid s Z.srem CT.smodulo Z.one args
-    | "lshift",_-> pure@@monoid s Z.lshift CT.lshift Z.one args
-    | "rshift",_-> pure@@monoid s Z.rshift CT.rshift Z.one args
-    | "arshift",_-> pure@@monoid s Z.arshift CT.arshift Z.one args
-    | "logand",_-> pure@@monoid s Z.logand CT.logand Z.ones args
-    | "logor",_-> pure@@monoid s Z.logor CT.logor Z.zero args
-    | "logxor",_-> pure@@monoid s Z.logxor CT.logxor Z.zero args
+    | "signed-mod",_-> pure@@monoid s join Z.srem CT.smodulo (Z.int 1) args
+    | "lshift",_-> pure@@monoid s first Z.lshift CT.lshift (Z.int 1) args
+    | "rshift",_-> pure@@monoid s first Z.rshift CT.rshift (Z.int 1) args
+    | "arshift",_-> pure@@monoid s first Z.arshift CT.arshift (Z.int 1) args
+    | "logand",_-> pure@@monoid s join Z.logand CT.logand (Z.int 1) args
+    | "logor",_-> pure@@monoid s join Z.logor CT.logor (Z.int 0) args
+    | "logxor",_-> pure@@monoid s join Z.logxor CT.logxor (Z.int 0) args
     | "=",_-> pure@@order Bitvec.(=) CT.eq args
     | "<",_-> pure@@order Bitvec.(<) CT.ult args
     | "s<",_ -> pure@@order SBitvec.(<) CT.slt args
@@ -955,9 +962,9 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | "s<=",_-> pure@@order SBitvec.(<=) CT.ule args
     | "s>=",_-> pure@@order SBitvec.(>=) CT.uge args
     | "/=",_| "distinct",_-> pure@@forget@@distinct args
-    | "is-zero",_| "not",_-> pure@@all Bitvec.(equal zero) CT.is_zero args
-    | "is-positive",_-> pure@@all Z.is_positive is_positive args
-    | "is-negative",_-> pure@@all Z.is_negative is_negative args
+    | "is-zero",_| "not",_-> pure@@all s join s_is_zero CT.is_zero args
+    | "is-positive",_-> pure@@all s join s_is_positive d_is_positive args
+    | "is-negative",_-> pure@@all s join s_is_negative d_is_negative args
     | "word-width",_-> pure@@word_width s args
     | "exec-addr",_-> ctrl@@exec_addr args
     | "goto-subinstruction",_ -> ctrl@@goto_subinstruction lbl args
