@@ -47,15 +47,15 @@
               0b111 rm)
             off)))
 
-(defun decode-bit-masks (immN imms immr immediate)
-  "(decode-bit-masks immN imms immr immediate) returns the immediate value
+(defun decode-bit-masks (immN imms immr immediate register-width)
+  "(decode-bit-masks immN imms immr immediate register-width) returns the immediate value
    corresponding to the immN:immr:imms bit pattern within opcodes of
    ARMv8 logical operation instructions like AND, ORR etc.
+   register-width denotes the width of the registers to be acted on (32 or 64).
    I'm not sure what the immediate parameter does, but it's nearly always
    called with true.
    Modified from ARMv8 ISA pseudocode."
-  (let ((memory-width 64) ; change to 32 if 32-bit system
-        (len (- 64 (clz (cast-unsigned 64 (concat immN (lnot imms)))) 1))
+  (let ((len (- 64 (clz (cast-unsigned 64 (concat immN (lnot imms)))) 1))
         (levels (cast-unsigned 6 (ones len)))
         (S (logand imms levels))
         (R (logand immr levels))
@@ -66,20 +66,21 @@
           (d (extract (- len 1) 0 diff))
           (welem (cast-unsigned esize (ones (+ S 1))))
           (telem (cast-unsigned esize (ones (+ d 1))))
-          (wmask (replicate-to-fill (rotate-right welem R) memory-width))
-          (tmask (replicate-to-fill telem memory-width)))
+          (wmask (replicate-to-fill (rotate-right welem R) register-width))
+          (tmask (replicate-to-fill telem register-width)))
       ; it seems like wmask is for logical immediates, and tmask is not used
       ; anywhere in the ISA except for the BFM instruction and its aliases.
       ; we're just returning wmask here.
       wmask)))
 
-(defun immediate-from-bitmask (mask)
-  "(immediate-from-bitmask mask) returns the immediate value corresponding to
-   the given 13-bit mask in the form of N:immr:imms."
+(defun immediate-from-bitmask (mask register-width)
+  "(immediate-from-bitmask mask register-width) returns the immediate value corresponding to
+   the given 13-bit mask in the form of N:immr:imms.
+   register-width denotes the width of the registers to be acted on (32 or 64)."
   (let ((N (select 12 mask))
         (immr (extract 11 6 mask))
         (imms (extract 5 0 mask)))
-    (decode-bit-masks N imms immr true)))
+    (decode-bit-masks N imms immr true register-width)))
 
 (defun barrier-option-to-symbol (option)
   "(barrier-option-to-symbol option) converts the

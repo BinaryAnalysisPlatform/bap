@@ -26,17 +26,18 @@
 (defun EORXrs (rd rn rm is) (log*rs set$ logxor rd rn rm is))
 (defun ANDXrs (rd rn rm is) (log*rs set$ logand rd rn rm is))
 
-(defmacro log*ri (set op rd rn imm)
-  "(log*ri set op rd rn imm) implements the logical operation (immediate) instruction
-   accepting either a W or X register. op is the binary logical operation."
-  (set rd (op rn (immediate-from-bitmask imm))))
+(defmacro log*ri (set op rd rn imm register-width)
+  "(log*ri set op rd rn imm register-width) implements the logical operation (immediate) instruction
+   accepting either a W or X register. op is the binary logical operation, and register-width
+   is the width of the given registers."
+  (set rd (op rn (immediate-from-bitmask imm register-width))))
 
-(defun ANDWri (rd rn imm) (log*ri setw logand rd rn imm))
-(defun ANDXri (rd rn imm) (log*ri set$ logand rd rn imm))
-(defun EORWri (rd rn imm) (log*ri setw logxor rd rn imm))
-(defun EORXri (rd rn imm) (log*ri set$ logxor rd rn imm))
-(defun ORRWri (rd rn imm) (log*ri setw logor rd rn imm))
-(defun ORRXri (rd rn imm) (log*ri set$ logor rd rn imm))
+(defun ANDWri (rd rn imm) (log*ri setw logand rd rn imm 32))
+(defun ANDXri (rd rn imm) (log*ri set$ logand rd rn imm 64))
+(defun EORWri (rd rn imm) (log*ri setw logxor rd rn imm 32))
+(defun EORXri (rd rn imm) (log*ri set$ logxor rd rn imm 64))
+(defun ORRWri (rd rn imm) (log*ri setw logor  rd rn imm 32))
+(defun ORRXri (rd rn imm) (log*ri set$ logor  rd rn imm 64))
 
 ;; UBFM and SBFM
 ;; (bitfield moves)
