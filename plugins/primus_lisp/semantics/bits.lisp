@@ -39,7 +39,7 @@
 
 (defun ones (n)
   "(ones n) returns a bitvector of length n with all bits set."
-  (lnot (zeros n)))
+  (cast-signed n 1:1))
 
 (defun rotate-right (bitv n)
   "(rotate-right bitv n) rotates bitv to the right by n positions.
