@@ -120,11 +120,17 @@ val llvm_a64 : Theory.language
     This includes parsing the loader output and enabling backward
     compatibility with the old [Arch.t] representation.
 
-    @param [interworking] if set disables/enables the interworking
+    @param interworking if set disables/enables the interworking
     mode (switching between arm and thumb modes). If not set, then
     the presence of interworking is detected using heurisitics. Right
     now if the heuristic looks into the symbol table and if there is
     a symbol there with an odd address (which is used to indicate
     thumb encoding) then interworking is enabled.
+
+    @param features is the backend-specific list of features. The
+    syntax is vastly dependent on the backend. For llvm, in
+    particular, the features are translated to the disassembler
+    attributes. If the feature doesn't start with [+] or [-] then it
+    is assumed that the feature is enabled and [+] is prepended.
 *)
-val load : ?interworking:bool -> ?backend:string -> unit -> unit
+val load : ?features:string list -> ?interworking:bool -> ?backend:string -> unit -> unit
