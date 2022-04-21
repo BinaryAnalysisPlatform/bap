@@ -658,10 +658,7 @@ let with_disasm ?debug_level ?cpu ?backend triple ~f =
   create ?debug_level ?cpu ?backend triple >>= fun dis ->
   f dis >>| fun res -> close dis; res
 
-let switch : ('a,'k,'s,'r) state -> ('a,'k) t -> ('a,'k,'s,'r) state = fun s dis ->
-  let s = {s with dis} in
-  reset_predicates s s.current.preds;
-  s
+let switch s dis = {s with dis}
 
 let run ?backlog ?(stop_on=[]) ?invalid ?stopped ?hit dis ~return ~init mem =
   let state =
