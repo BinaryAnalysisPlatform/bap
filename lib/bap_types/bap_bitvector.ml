@@ -47,6 +47,7 @@ module Packed : sig
 
   val hash : t -> int
   val compare : t -> t -> int
+  val nsucc : t -> int -> t
 
   val lift1 : t -> (Bitvec.t -> Bitvec.t Bitvec.m) -> t
   val lift2 : t -> t -> (Bitvec.t -> Bitvec.t -> Bitvec.t Bitvec.m) -> t
@@ -95,6 +96,11 @@ end = struct
     {packed=Z.(x lsl metasize lor meta)}
   [@@inline]
 
+  let nsucc x n =
+    let w = bitwidth x in
+    let x = payload x in
+    pack Bitvec.(to_bigint (nsucc x n mod modulus w)) w
+
   let create ?(signed=false) x w =
     let m = Bitvec.modulus w in
     let x = Bitvec.(bigint x mod m) in
@@ -107,18 +113,21 @@ end = struct
     let x = payload x in
     pack Bitvec.(to_bigint (f x mod modulus w)) w
   [@@inline]
+  [@@specialize]
 
   let lift2 x y f =
     let w = bitwidth x in
     let x = payload x and y = payload y in
     pack Bitvec.(to_bigint (f x y mod modulus w)) w
   [@@inline]
+  [@@specialize]
 
   let lift3 x y z f =
     let w = bitwidth x in
     let x = payload x and y = payload y and z = payload z in
     pack Bitvec.(to_bigint (f x y z mod modulus w)) w
   [@@inline]
+  [@@specialize]
 
   module Stringable = struct
     type t = packed
