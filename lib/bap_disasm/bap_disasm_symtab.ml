@@ -39,6 +39,7 @@ type t = {
   memory : fn Memmap.t;
   ecalls : string Addr.Map.t;
   icalls : string Addr.Map.t;
+  extern : Insn.t Map.M(Theory.Label).t;
 } [@@deriving sexp_of]
 
 
@@ -57,6 +58,7 @@ let empty = {
   memory = Memmap.empty;
   ecalls = Map.empty (module Addr);
   icalls = Map.empty (module Addr);
+  extern = Map.empty (module Theory.Label);
 }
 
 let merge m1 m2 =
@@ -75,6 +77,7 @@ let filter_calls name cfg calls =
 
 let remove t (name,entry,cfg) : t =
   if Map.mem t.addrs (Block.addr entry) then {
+    t with
     names = Map.remove t.names name;
     addrs = Map.remove t.addrs (Block.addr entry);
     memory = filter_mem t.memory name entry;
@@ -103,6 +106,7 @@ let dominators t mem = Memmap.dominators t.memory mem |> fns_of_seq
 let intersecting t mem = Memmap.intersections t.memory mem |> fns_of_seq
 let to_sequence t =
   Map.to_sequence t.addrs |> fns_of_seq |> Seq.of_list
+let externals t = Map.to_sequence t.extern
 let name_of_fn = fst
 let entry_of_fn = snd
 let span fn = span fn |> Memmap.map ~f:(fun _ -> ())
@@ -169,8 +173,17 @@ let collect_graphs disasm calls =
           then {tab with icalls = Map.set tab.icalls from name},graphs
           else {tab with ecalls = Map.set tab.ecalls from name},graphs)
 
+let collect_externals disasm =
+  Disasm.externals disasm |>
+  Set.to_sequence |>
+  KB.Seq.fold ~init:(Map.empty (module Theory.Label)) ~f:(fun extern label ->
+      let+ insn = label-->Theory.Semantics.slot in
+      Map.set extern label insn)
+
 let create disasm calls =
   let* (init,graphs) = collect_graphs disasm calls in
+  let* extern = collect_externals disasm in
+  let init = {init with extern} in
   Map.to_sequence graphs |>
   KB.Seq.fold ~init ~f:(fun tab (addr,(entry,cfg)) ->
       let+ name = Symbolizer.get_name addr in

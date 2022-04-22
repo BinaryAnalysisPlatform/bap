@@ -31,7 +31,8 @@ type jump = {
   barrier : bool;
   indirect : bool;
   resolved : Addr.Set.t;
-} [@@deriving bin_io, equal]
+  unresolved : Set.M(Theory.Label).t;
+} [@@deriving bin_io, equal, fields]
 
 let pp_encoding ppf {coding} =
   Format.fprintf ppf "%a" Theory.Language.pp coding
@@ -387,7 +388,8 @@ let collect_dests source code =
     call = Insn.(is call insn);
     barrier = Insn.(is barrier insn);
     indirect = false;
-    resolved = Set.empty (module Addr)
+    resolved = Set.empty (module Addr);
+    unresolved = Set.empty (module Theory.Label);
   } in
   KB.Value.get Insn.Slot.dests insn |> function
   | None -> KB.return init
@@ -396,15 +398,23 @@ let collect_dests source code =
     KB.Seq.fold ~init ~f:(fun dest label ->
         get_encoding label >>=
         merge_encodings dest.encoding >>= fun encoding ->
+        KB.collect Theory.Label.is_subroutine label >>= fun is_call ->
         KB.collect Theory.Label.addr label >>| function
         | Some d -> {
             dest with
             encoding;
+            call = dest.call ||
+                   Option.value is_call ~default:false;
             resolved =
               Set.add dest.resolved @@
-              Word.code_addr encoding.target d
+              Word.code_addr encoding.target d;
           }
-        | None -> {dest with indirect=true; encoding})
+        | None -> {
+            dest with
+            indirect=true;
+            unresolved = Set.add dest.unresolved label;
+            encoding;
+          })
 
 let pp_addr_opt ppf = function
   | None -> Format.fprintf ppf "Unk"
@@ -533,6 +543,7 @@ type state = {
   data : Addr.Set.t;
   mems : mem list;
   debt : Machine.task list;
+  exts : Set.M(Theory.Label).t;
 } [@@deriving bin_io]
 
 let init = {
@@ -542,6 +553,7 @@ let init = {
   data = Set.empty (module Addr);
   mems = [];
   debt = [];
+  exts = Set.empty (module Theory.Label);
 }
 
 let forget_debt s = {s with debt=[]}
@@ -552,6 +564,7 @@ let equal x y =
   Map.equal equal_jump x.jmps y.jmps
 
 let subroutines x = x.funs
+let externals x = x.exts
 let blocks x = x.begs
 let jump {jmps} = Map.find jmps
 
@@ -565,18 +578,31 @@ let is_call dsts = dsts.call
 let is_barrier dsts = dsts.barrier
 
 
-let commit_calls jmps =
+let fold_calls field ~f ~init jmps  =
   Map.to_sequence jmps |>
-  KB.Seq.fold ~init:Addr.Set.empty ~f:(fun calls (_,dsts) ->
+  KB.Seq.fold ~init ~f:(fun init (_,dsts) ->
       if dsts.call then
-        Set.to_sequence dsts.resolved |>
-        KB.Seq.fold ~init:calls ~f:(fun calls addr ->
-            Theory.Label.for_addr (Word.to_bitvec addr) >>= fun dst ->
-            KB.provide Theory.Label.is_valid dst (Some true) >>= fun () ->
-            KB.provide Theory.Label.is_subroutine dst (Some true) >>| fun () ->
-            Set.add calls addr)
-      else KB.return calls)
+        Set.to_sequence (field dsts) |>
+        KB.Seq.fold ~init ~f:(fun calls addr ->
+            f calls addr)
+      else KB.return init)
 
+
+let commit_calls = fold_calls resolved
+    ~init:Addr.Set.empty
+    ~f:(fun calls addr ->
+        Theory.Label.for_addr (Word.to_bitvec addr) >>= fun dst ->
+        KB.provide Theory.Label.is_valid dst (Some true) >>= fun () ->
+        KB.provide Theory.Label.is_subroutine dst (Some true) >>| fun () ->
+        Set.add calls addr)
+
+let commit_externals = fold_calls unresolved
+    ~init:(Set.empty (module Theory.Label))
+    ~f:(fun exts dst ->
+        KB.return @@
+        if KB.Object.is_null dst
+        then exts
+        else Set.add exts dst)
 
 let owns mem s =
   List.exists s.debt ~f:(function
@@ -591,6 +617,7 @@ let merge_dests d1 d2 = {
   barrier = d1.barrier || d2.barrier;
   indirect = d1.indirect || d2.indirect;
   resolved = Set.union d1.resolved d2.resolved;
+  unresolved = Set.union d1.unresolved d2.unresolved;
 }
 
 let scan_step ?(code=empty) ?(data=empty) ?(funs=empty) s mem =
@@ -606,10 +633,12 @@ let scan_step ?(code=empty) ?(data=empty) ?(funs=empty) s mem =
   let begs = Set.union s.begs begs - dels in
   let jmps = Map.filter_map jmps ~f:(fun dsts ->
       let resolved = dsts.resolved - data in
-      if Set.is_empty resolved && not dsts.indirect
+      if Set.is_empty resolved &&
+         not dsts.indirect
       then None
       else Some {dsts with resolved}) in
-  let s = {funs; begs; data; jmps; mems = s.mems; debt} in
+  commit_externals jmps >>= fun exts ->
+  let s = {funs; begs; data; jmps; mems = s.mems; debt; exts} in
   commit_calls s.jmps >>| fun funs ->
   {s with funs = Set.union s.funs funs - dels}
 
@@ -634,6 +663,7 @@ let scan mem s =
 
 let merge t1 t2 = {
   funs = Set.union t1.funs t2.funs;
+  exts = Set.union t1.exts t2.exts;
   begs = Set.union t1.begs t2.begs;
   data = Set.union t1.data t2.data;
   mems = List.rev_append t2.mems t1.mems;
