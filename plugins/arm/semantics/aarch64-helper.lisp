@@ -47,16 +47,16 @@
               0b111 rm)
             off)))
 
-(defun decode-bit-masks (immN imms immr immediate)
-  "(decode-bit-masks immN imms immr immediate) returns the immediate value
+(defun decode-bit-masks (immN imms immr immediate register-width)
+  "(decode-bit-masks immN imms immr immediate register-width) returns the immediate value
    corresponding to the immN:immr:imms bit pattern within opcodes of
    ARMv8 logical operation instructions like AND, ORR etc.
+   register-width denotes the width of the registers to be acted on (32 or 64).
    I'm not sure what the immediate parameter does, but it's nearly always
    called with true.
    Modified from ARMv8 ISA pseudocode."
-  (let ((memory-width 64) ; change to 32 if 32-bit system
-        (len (highest-set-bit (concat immN (lnot imms))))
-        (levels (zero-extend (ones len) 6))
+  (let ((len (- 64 (clz (cast-unsigned 64 (concat immN (lnot imms)))) 1))
+        (levels (cast-unsigned 6 (ones len)))
         (S (logand imms levels))
         (R (logand immr levels))
         (diff (- S R))) ; assuming "6-bit subtract with borrow" is regular 2'c subtraction
@@ -64,59 +64,39 @@
     (assert-msg (not (and immediate (= levels (logand imms levels)))) "decode-bit-masks long condition")
     (let ((esize (lshift 1 len))
           (d (extract (- len 1) 0 diff))
-          (welem (zero-extend (ones (+ S 1)) esize))
-          (telem (zero-extend (ones (+ d 1)) esize))
-          (wmask (replicate-to-fill (rotate-right welem R) memory-width))
-          (tmask (replicate-to-fill telem memory-width)))
+          (welem (cast-unsigned esize (ones (+ S 1))))
+          (telem (cast-unsigned esize (ones (+ d 1))))
+          (wmask (replicate-to-fill (rotate-right welem R) register-width))
+          (tmask (replicate-to-fill telem register-width)))
       ; it seems like wmask is for logical immediates, and tmask is not used
       ; anywhere in the ISA except for the BFM instruction and its aliases.
       ; we're just returning wmask here.
-      ; TODO: can we return tuples in Primus Lisp?
       wmask)))
 
-(defun immediate-from-bitmask (mask)
-  "(immediate-from-bitmask mask) returns the immediate value corresponding to
-   the given 13-bit mask in the form of N:immr:imms."
+(defun immediate-from-bitmask (mask register-width)
+  "(immediate-from-bitmask mask register-width) returns the immediate value corresponding to
+   the given 13-bit mask in the form of N:immr:imms.
+   register-width denotes the width of the registers to be acted on (32 or 64)."
   (let ((N (select 12 mask))
         (immr (extract 11 6 mask))
         (imms (extract 5 0 mask)))
-    (decode-bit-masks N imms immr true)))
+    (decode-bit-masks N imms immr true register-width)))
 
-(defun barrier-option-to-symbol (barrier-type option)
-  "(barrier-option-to-symbol barrier-type option) converts the
-   barrier type (:dmb, :dsb, :isb) and 4-bit optional value
-   to a symbol.
+(defun barrier-option-to-symbol (option)
+  "(barrier-option-to-symbol option) converts the
+   4-bit optional value to a symbol.
    This is to be used with the (special) primitive."
-  (case barrier-type
-    :dmb
-      (case option
-        0b1111 :barrier-dmb-sy
-        0b1110 :barrier-dmb-st
-        0b1101 :barrier-dmb-ld
-        0b1011 :barrier-dmb-ish
-        0b1010 :barrier-dmb-ishst
-        0b1001 :barrier-dmb-ishld
-        0b0111 :barrier-dmb-nsh
-        0b0110 :barrier-dmb-nshst
-        0b0101 :barrier-dmb-nshld
-        0b0011 :barrier-dmb-osh
-        0b0010 :barrier-dmb-oshst
-        0b0001 :barrier-dmb-oshld
-        :barrier-dmb-unknown)
-    :dsb
-      (case option
-        0b1111 :barrier-dsb-sy
-        0b1110 :barrier-dsb-st
-        0b1101 :barrier-dsb-ld
-        0b1011 :barrier-dsb-ish
-        0b1010 :barrier-dsb-ishst
-        0b1001 :barrier-dsb-ishld
-        0b0111 :barrier-dsb-nsh
-        0b0110 :barrier-dsb-nshst
-        0b0101 :barrier-dsb-nshld
-        0b0011 :barrier-dsb-osh
-        0b0010 :barrier-dsb-oshst
-        0b0001 :barrier-dsb-oshld
-        :barrier-dsb-unknown)
-    :isb
-      :barrier-isb-sy))
+  (case option
+    0b1111 :sy
+    0b1110 :st
+    0b1101 :ld
+    0b1011 :ish
+    0b1010 :ishst
+    0b1001 :ishld
+    0b0111 :nsh
+    0b0110 :nshst
+    0b0101 :nshld
+    0b0011 :osh
+    0b0010 :oshst
+    0b0001 :oshld
+    :unknown))
