@@ -125,8 +125,10 @@ module Tid = struct
   let pp ppf tid = Format.fprintf ppf "%s" (to_string tid)
 
   let name t = match get_name t with
-    | None -> to_string t
     | Some name -> sprintf "@%s" name
+    | None -> match get_ivec t with
+      | None -> to_string t
+      | Some ivec -> sprintf "@interrupt:#%d" ivec
 
   let from_string_exn = of_string
   let from_string x = Ok (from_string_exn x)
@@ -1735,8 +1737,11 @@ module Ir_sub = struct
     match name with
     | Some name -> name
     | None -> match Tid.get_name tid with
-      | None -> Tid.to_string tid
       | Some name -> name
+      | None -> match Tid.get_ivec tid with
+        | None -> Tid.to_string tid
+        | Some ivec ->
+          Format.asprintf "interrupt:#%d" ivec
 
   let new_empty ?(tid=Tid.create ()) ?name () : t =
     make_term tid {
