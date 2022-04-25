@@ -241,9 +241,6 @@ let export = Primus.Lisp.Type.Spec.[
      The function is equivalent to (select N X)";
     "empty", (unit @-> any),
     "(empty) denotes an instruction that does nothing, i.e., a nop.";
-    "special", (one sym @-> any),
-    "(special :NAME) produces a special effect denoted by the keyword :NAME.
-    The effect will be reified into the to the special:name subroutine. ";
     "intrinsic", tuple [sym] // all any @-> any,
     "(intrinsic 'NAME ARG1 ARG2 ... ARGN PARAMS..) produces a call to
      an intrinsic function with the given NAME. Arguments could be
@@ -820,15 +817,6 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | Some _ -> true_
     | _ -> false_
 
-  let is_keyword = String.is_prefix ~prefix:":"
-
-  let special dst =
-    require_symbol dst @@ fun dst ->
-    if is_keyword dst then
-      let* dst = Theory.Label.for_name ("special"^dst) in
-      CT.goto dst
-    else illformed "special requires a keyword as the tag, e.g., :hlt"
-
   let invoke_subroutine dst =
     require_symbol dst @@ fun dst ->
     let* dst = Theory.Label.for_name dst in
@@ -992,7 +980,6 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | ("select"|"nth"),xs -> pure@@select s xs
     | "empty",[] -> nop ()
     | "intrinsic",(dst::args) -> Intrinsic.call t dst args
-    | "special",[dst] -> ctrl@@special dst
     | "invoke-subroutine",[dst] -> ctrl@@invoke_subroutine dst
     | _ -> !!nothing
 end

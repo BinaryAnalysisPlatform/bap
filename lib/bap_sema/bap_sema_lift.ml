@@ -333,7 +333,7 @@ let link_call symtab addr sub_of_blk jmp =
 
 let is_intrinsic sub =
   match KB.Name.package @@ KB.Name.read (Ir_sub.name sub) with
-  | "intrinsic" | "special" -> true
+  | "intrinsic" -> true
   | _ -> false
 
 let create_synthetic tid =

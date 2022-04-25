@@ -163,11 +163,8 @@ let plt_size label =
   List.find_map plt_sizes ~f:(fun (p,s) ->
       Option.some_if (Theory.Target.belongs p t) s)
 
-let is_intrinsic name =
-  List.exists ~f:(fun prefix -> String.is_prefix ~prefix name) [
-    "intrinsic:";
-    "special:";
-  ]
+let is_intrinsic =
+  String.is_prefix ~prefix:"intrinsic:"
 
 let demangle s = match String.chop_suffix ~suffix:":external" s with
   | None -> s

@@ -9,7 +9,7 @@
 (in-package x86-common)
 
 (defun HLT ()
-  (special :hlt))
+  (intrinsic 'hlt))
 
 (defun NOOP ()
   (empty))
