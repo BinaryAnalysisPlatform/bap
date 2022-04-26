@@ -336,14 +336,17 @@ let is_intrinsic sub =
   | "intrinsic" -> true
   | _ -> false
 
-let create_synthetic tid =
-  let sub = Ir_sub.create ~tid () in
+let create_synthetic ?blks ?name tid =
+  let sub = Ir_sub.create ?blks ?name ~tid () in
   let tags = List.filter_opt [
       Some Term.synthetic;
       Option.some_if (is_intrinsic sub) Ir_sub.intrinsic;
     ] in
   List.fold tags ~init:sub ~f:(fun sub tag ->
       Term.set_attr sub tag ())
+
+let has_sub prog tid =
+  Option.is_some (Term.find sub_t prog tid)
 
 let insert_synthetic prog =
   Term.enum sub_t prog |>
@@ -357,12 +360,26 @@ let insert_synthetic prog =
               | Some dst -> match Ir_jmp.resolve dst with
                 | Second _ -> prog
                 | First dst ->
-                  if Option.is_some (Term.find sub_t prog dst)
+                  if has_sub prog dst
                   then prog
                   else
                     Term.append sub_t prog @@
                     create_synthetic dst)))
 
+let lift_insn ?addr insn =
+  let tid = Option.map addr ~f:Tid.for_addr in
+  List.rev @@ IrBuilder.lift_insn ?addr insn [Ir_blk.create ?tid ()]
+
+let reify_externals symtab prog =
+  Symtab.externals symtab |>
+  Seq.fold ~init:prog ~f:(fun prog (tid,insn) ->
+      if has_sub prog tid then prog
+      else
+        let blks = if KB.Value.is_empty insn
+          then None
+          else Some (lift_insn insn) in
+        let sub = create_synthetic ?blks tid in
+        Term.append sub_t prog sub)
 
 let program symtab =
   let b = Ir_program.Builder.create () in
@@ -393,12 +410,11 @@ let program symtab =
               jmp |>
               alternate_nonlocal sub |>
               link_call symtab addr sub_of_blk))) |>
+  reify_externals symtab |>
   insert_synthetic
 
 let sub blk cfg = lift_sub blk cfg
 
-let insn ?addr insn =
-  let tid = Option.map addr ~f:Tid.for_addr in
-  List.rev @@ IrBuilder.lift_insn ?addr insn [Ir_blk.create ?tid ()]
 
+let insn = lift_insn
 let insns = IrBuilder.insns

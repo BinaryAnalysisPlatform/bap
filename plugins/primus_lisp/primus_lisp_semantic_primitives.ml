@@ -722,8 +722,11 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
           CT.set (ivar i s) !!x)
 
     let invoke_symbol name =
-      let name = KB.Name.(unqualified@@read name) in
-      let* dst = Theory.Label.for_name (sprintf "intrinsic:%s" name) in
+      let name = KB.Name.create
+          ~package:"intrinsic"
+          KB.Name.(unqualified@@read name) in
+      let* dst = Theory.Label.for_name (KB.Name.show name) in
+      KB.provide Primus.Lisp.Semantics.name dst (Some name) >>= fun () ->
       KB.provide Theory.Label.is_subroutine dst (Some true) >>= fun () ->
       CT.goto dst
 

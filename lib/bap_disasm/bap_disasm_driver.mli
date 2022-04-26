@@ -4,6 +4,8 @@ open Bap_image_std
 open Bap_knowledge
 open Bap_core_theory
 
+module Insn = Bap_disasm_insn
+
 type state [@@deriving bin_io]
 type insns
 type jump
@@ -14,6 +16,7 @@ val scan : mem -> state -> state knowledge
 val merge : state -> state -> state
 
 val subroutines : state -> Set.M(Addr).t
+val externals : state -> Set.M(Theory.Label).t
 val blocks : state -> Set.M(Addr).t
 val jump : state -> addr -> jump option
 
