@@ -11,10 +11,19 @@ let export = Primus.Lisp.Type.Spec.[
      type conversions in the process. If no numbers are supplied, 0 is \
      returned.";
 
+    "+.", tuple [sym] // all any @-> any,
+    "(+. MODE X Y ... Z) evaluates to a sum of floating-point numbers \
+     X,Y,..,Z using the rounding mode MODE. (+. MODE) evaluates to 0.0.";
+
     "-", all any @-> any,
     "(- X Y ... Z) returns X - Y - ... - Z, performing any necessary \
      type conversions in the process. If no numbers are supplied \
      returns 0. If one number is supplied returns its negation.";
+
+    "-.", tuple [sym] // all any @-> any,
+    "(-. MODE X Y ... Z) performs floating-point subtraction, \
+     X - Y - ... - Z, using the rounding mode MODE. \
+     (-. MODE) evaluates to 0.0.";
 
     "neg", one any @-> any,
     "(neg X) returns the negation (2-complement) of X. Same as (- X).";
@@ -27,11 +36,20 @@ let export = Primus.Lisp.Type.Spec.[
      type conversions in the process. If no numbers are supplied, 1 is \
      returned.";
 
+    "*.", tuple [sym] // all any @-> any,
+    "(-. MODE X Y ... Z) performs floating-point multiplication, \
+     X * Y * ... * Z, using the rounding mode MODE. \
+     (*. MODE) evaluates to 1.0.";
+
     "/", all any @-> any,
     "(/  X Y ... Z) returns X / Y / ... / Z, performing any necessary \
      type conversions in the process. If no numbers are supplied, 1 is \
      returned. If one number is provided returns its reciprocal.";
 
+    "/.", tuple [sym] // all any @-> any,
+    "(-. MODE X Y ... Z) performs floating-point division, \
+     X / Y / ... / Z, using the rounding mode MODE. \
+     (/. MODE) evaluates to 1.0.";
 
     "s/", all any @-> any,
     "(s/ X Y ... Z) returns signed X / Y / ... / Z, performing any \
@@ -88,56 +106,86 @@ let export = Primus.Lisp.Type.Spec.[
      are supplied, 1 is returned. If one number is provided returns \
      that number";
 
+    "<.", all any @-> any,
+    "(< X Y ... Z) is true iff all floating-point numbers are in \
+     the strictly increasing order. Synonym to FORDER.";
+
+    "forder", all any @-> any,
+    "(forder X Y ... Z) is true iff all floating-point numbers are in \
+     the strictly increasing order.";
+
+    "=.", all any @-> any,
+    "(=. X Y ... Z) is true iff all floating-point numbers are \
+     equal in value.";
+
+    ">.", all any @-> any,
+    "(>. X Y ... Z) is true iff all floating-point numbers are \
+     in the strictly decreasing order.";
+
+    "<=.", all any @-> any,
+    "(<= X Y ... Z) is true iff all floating-point numbers are \
+     in the increasing (non-decreasing) order.";
+
+    ">=.", all any @-> any,
+    "(>=. X Y ... Z) returns true if all floating-point numbers are in \
+     the decreasing (non-increasing) order.";
+
+    "is-fzero", all any @-> any,
+    "(is-zero X Y ... Z) is true iff all floating-point numbers are zero.";
+
+    "is-nan", all any @-> any,
+    "(is-nan X Y ... Z) is true iff all values represent NaN.";
+
     "=", all any @-> any,
-    "(= X Y ... Z) returns one if all numbers are equal in value.";
+    "(= X Y ... Z) is true iff all numbers are equal in value.";
 
     "/=", all any @-> any,
-    "(/= X Y ... Z) returns one if all numbers are distinct.";
+    "(/= X Y ... Z) is true iff all numbers are distinct.";
 
     "<", all any @-> any,
-    "(< X Y ... Z) returns one if all numbers are in monotonically \
+    "(< X Y ... Z) is true iff all numbers are in the strictly \
      increasing order.";
 
     ">", all any @-> any,
-    "(> X Y ... Z) returns one if all numbers are in monotonically \
+    "(> X Y ... Z) is true iff all numbers are in the strictly \
      decreasing order.";
 
     "<=", all any @-> any,
-    "(<= X Y ... Z) returns one if all numbers are in monotonically \
-     nondecreasing order.";
+    "(<= X Y ... Z) is true iff all numbers are in the increasing  \
+     (non-decreasing) order.";
 
     ">=", all any @-> any,
-    "(> X Y ... Z) returns one if all numbers are in monotonically \
-     nonincreasing order.";
+    "(>= X Y ... Z) is true iff all numbers are in the decreasing \
+     (non-increasing) order.";
 
     "s<", all any @-> any,
-    "(s< X Y ... Z) returns one if all numbers are in monotonically \
+    "(s< X Y ... Z) is true iff all numbers are in the strictly \
      increasing signed order.";
 
     "s>", all any @-> any,
-    "(s> X Y ... Z) returns one if all numbers are in monotonically \
+    "(s> X Y ... Z) is true iff all numbers are in the strictly \
      decreasing signed order.";
 
     "s<=", all any @-> any,
-    "(s<= X Y ... Z) returns one if all numbers are in monotonically \
-     nondecreasing signed order.";
+    "(s<= X Y ... Z) is true iff all numbers are in the increasing \
+     (non-decreasing) signed order.";
 
     "s>=", all any @-> any,
-    "(> X Y ... Z) returns one if all numbers are in monotonically \
-     nonincreasing signed order.";
+    "(> X Y ... Z) is true iff all numbers are in the decreasing \
+     (non-increasing) signed order.";
 
     "is-zero", all any @-> any,
-    "(is-zero X Y ... Z) returns one if all numbers are zero.";
+    "(is-zero X Y ... Z) is true iff all numbers are zero.";
 
     "not", all any @-> any,
-    "(not X Y ... Z) returns one if all numbers are not \
+    "(not X Y ... Z) is true iff all numbers are not \
      true. Equivalent to (is-zero X Y Z)";
 
     "is-positive", all any @-> any,
-    "(is-positive X Y ... Z) returns one if all numbers are positive.";
+    "(is-positive X Y ... Z) is true iff all numbers are positive.";
 
     "is-negative", all any @-> any,
-    "(is-negative X Y ... Z) returns one if all numbers are negative.";
+    "(is-negative X Y ... Z) is true iff all numbers are negative.";
 
     "word-width", all any @-> any,
     "(word-width X Y ... Z) returns the maximum width of its \
@@ -923,6 +971,139 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     let (>=) x y = compare x y >= 0
   end
 
+
+  module IEEE754 = struct
+    module Host = struct
+      let inj = Fn.compose Int64.float_of_bits Z.to_int64
+      and prj = Fn.compose Z.int64 Int64.bits_of_float
+
+      let bop op x y = prj (op (inj x) (inj y))
+      let uop op x = prj (op (inj x))
+
+      let add = bop ( +. )
+      let sub = bop ( -. )
+      let mul = bop ( *. )
+      let div = bop ( /. )
+      let neg = uop (~-.)
+      let asb = uop Float.abs
+
+      let zero = prj 0.0
+      let one = prj 1.0
+
+      let lt x y = Float.(inj x < inj y)
+      let le x y = Float.(inj x <= inj y)
+      let gt x y = Float.(inj x > inj y)
+      let ge x y = Float.(inj x >= inj y)
+      let eq x y = Float.(inj x = inj y)
+
+      let is cls x _ =
+        Float.Class.compare cls (Float.classify (inj x)) = 0
+
+      let is_nan = is Float.Class.Nan
+      let is_zero = is Float.Class.Zero
+      let is_inf = is Float.Class.Infinite
+      let is_finite x s = not (is_nan x s) && not (is_inf x s)
+
+    end
+
+    let inj fs x = CT.float fs x
+    and prj = CT.fbits
+
+    let uop op fs x =
+      let* x = inj fs x in
+      let* r = op !!x in
+      prj !!r
+
+    let bop op fs rm x y =
+      let* x = inj fs x
+      and* y = inj fs y in
+      let* r = op rm !!x !!y in
+      prj !!r
+
+    let add s = bop CT.fadd s
+    let sub s = bop CT.fsub s
+    let mul s = bop CT.fmul s
+    let div s = bop CT.fdiv s
+    let neg s = uop CT.fneg s
+    let abs s = uop CT.fabs s
+
+    let const x fs s rmode =
+      forget@@CT.fbits (CT.cast_float fs rmode (const_int s x))
+
+    let zero = Host.zero,const Z.zero
+    let one = Host.one, const Z.one
+
+
+    let dynamic s cast df init xs =
+      with_nbitv s cast xs @@ fun s xs ->
+      match xs with
+      | [] -> forget@@init
+      | x :: xs ->
+        let* init = coerce s x in
+        KB.List.fold ~init xs ~f:(fun res x ->
+            let* x = coerce s x in
+            df !!res !!x) |>
+        forget
+
+    let fsort size =
+      match Theory.IEEE754.binary size with
+      | None ->
+        illformed "unsupported floating-point IEEE754 format: \
+                   binary%d" size
+      | Some ps -> KB.return @@ Theory.IEEE754.Sort.define ps
+
+    let mode_of_key = function
+      | ":rne" -> KB.return CT.rne
+      | ":rna" -> KB.return CT.rna
+      | ":rtp" -> KB.return CT.rtp
+      | ":rtn" -> KB.return CT.rtn
+      | ":rtz" -> KB.return CT.rtz
+      | unk -> illformed "unrecognized rounding mode: %s" unk
+
+    let monoid_rm s cast sf df (si,di) = function
+      | [] ->
+        illformed "requires the floating-point rounding mode"
+      | x::xs ->
+        require_symbol x @@ fun key ->
+        with_nbitv s cast xs @@ fun s _ ->
+        let* rm = mode_of_key key in
+        let size = size s in
+        let* fs = fsort size in
+        if size = 64
+        then monoid s cast sf (df fs rm) si xs
+        else dynamic s cast (df fs rm) (di fs s rm) xs
+
+    let lt x y =
+      let* s = x>>|sort>>|size>>=fsort in
+      let* x = inj s x
+      and* y = inj s y in
+      CT.forder !!x !!y
+
+    let le x y = CT.inv (lt y x)
+    let gt x y = lt y x
+    let ge x y = CT.inv (lt x y)
+
+    (* right now we support only IEEE754 binary format encodings,
+       which are canonical, i.e., each floating-point number or NaN
+       is represented with exactly one encoding, therefore, equal
+       encodings imply equal numbers. We could use a more generic
+       [and_ (CT.inv (lt x y)) (CT.inv (lt y x))] but it will generate
+       much more code (rough 60 expressions) and will definitely be
+       less readable. *)
+    let eq x y = CT.eq x y
+
+    let case f x =
+      let* s = x>>|sort>>|size>>=fsort in
+      f (inj s x)
+
+    let is_zero = case CT.is_fzero
+    let is_nan = case CT.is_nan
+
+    module Z = Host
+  end
+
+  module F = IEEE754
+
   let dispatch lbl name args =
     let t = target in
     match name,args with
@@ -943,6 +1124,15 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | "logand",_-> pure@@monoid s join Z.logand CT.logand (Z.int 1) args
     | "logor",_-> pure@@monoid s join Z.logor CT.logor (Z.int 0) args
     | "logxor",_-> pure@@monoid s join Z.logxor CT.logxor (Z.int 0) args
+    | "+.",_ -> pure@@F.monoid_rm s join F.Z.add F.add F.zero args
+    | "-.",_ -> pure@@F.monoid_rm s join F.Z.sub F.sub F.zero args
+    | "*.",_ -> pure@@F.monoid_rm s join F.Z.mul F.mul F.one args
+    | "/.",_ -> pure@@F.monoid_rm s join F.Z.div F.div F.one args
+    | "<.",_|"forder",_ -> pure@@order F.Z.lt F.lt args
+    | "<=.",_ -> pure@@order F.Z.le F.le args
+    | ">.",_ -> pure@@order F.Z.gt F.gt args
+    | ">=.",_ -> pure@@order F.Z.ge F.ge args
+    | "=.",_ -> pure@@order F.Z.eq F.eq args
     | "=",_-> pure@@order Bitvec.(=) CT.eq args
     | "<",_-> pure@@order Bitvec.(<) CT.ult args
     | "s<",_ -> pure@@order SBitvec.(<) CT.slt args
@@ -954,6 +1144,8 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | "s>=",_-> pure@@order SBitvec.(>=) CT.uge args
     | "/=",_| "distinct",_-> pure@@forget@@distinct args
     | "is-zero",_| "not",_-> pure@@all s join s_is_zero CT.is_zero args
+    | "is-fzero",_ -> pure@@all s join F.Z.is_zero F.is_zero args
+    | "is-nan",_ -> pure@@all s join F.Z.is_nan F.is_nan args
     | "is-positive",_-> pure@@all s join s_is_positive d_is_positive args
     | "is-negative",_-> pure@@all s join s_is_negative d_is_negative args
     | "word-width",_-> pure@@word_width s args

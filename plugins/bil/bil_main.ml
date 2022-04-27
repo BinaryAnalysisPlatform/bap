@@ -174,7 +174,6 @@ let () =
         ~package:"bap" ~name:"bil-fp-emu"
         ~extends:["bap:bil"]
         ~desc: "semantics in BIL, including FP emulation"
-        ~context:["floating-point"]
         ~provides:[
           "bil";
           "floating-point";
