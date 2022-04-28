@@ -100,7 +100,7 @@ let next level cls t  =
         | Sub up | Arg {up} | Jmp {up={up}}  -> accept arg {me;up}
         | _ -> reject `arg)
     ~blk:(fun me -> match level with
-        | Jmp {up={up}} | Sub up | Arg {up} -> accept blk {me;up}
+        | Def {up={up}} | Jmp {up={up}} | Sub up | Arg {up} -> accept blk {me;up}
         | Top ({me=prog} as top) -> accept blk {me; up={me=parent prog me; up=top} }
         | _ -> reject `blk)
     ~phi:(fun me -> match level with
