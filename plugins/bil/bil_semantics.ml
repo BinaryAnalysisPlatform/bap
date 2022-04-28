@@ -535,6 +535,12 @@ module FPEmulator = struct
     x >>| fun x -> resort s x
 
 
+  let with_fsort ~unk_s s f =
+    match ieee754_of_sort s with
+    | None -> Core.unk unk_s
+    | Some ({Theory.IEEE754.k} as p) ->
+      f (bits k) (Theory.IEEE754.Sort.define p)
+
   let fop : type f.
     (_ -> _ -> _ Theory.bitv -> _ Theory.bitv -> _ Theory.bitv) ->
     _ -> f Theory.float -> f Theory.float -> f Theory.float =
@@ -542,13 +548,9 @@ module FPEmulator = struct
     x >>= fun x ->
     y >>= fun y ->
     let xs = sort x in
-    match ieee754_of_sort xs with
-    | None -> Core.unk xs
-    | Some ({Theory.IEEE754.k} as p) ->
-      let bs = bits k in
-      let x = resort bs x and y = resort bs y in
-      let s = Theory.IEEE754.Sort.define p in
-      float xs (op s rm !!x !!y)
+    with_fsort xs ~unk_s:xs @@ fun bs s ->
+    let x = resort bs x and y = resort bs y in
+    float xs (op s rm !!x !!y)
 
   let fadd rm = fop FBil.fadd rm
   let fsub rm = fop FBil.fsub rm
@@ -561,13 +563,9 @@ module FPEmulator = struct
     fun op rm x ->
     x >>= fun x ->
     let xs = sort x in
-    match ieee754_of_sort xs with
-    | None -> Core.unk xs
-    | Some ({Theory.IEEE754.k} as p) ->
-      let bs = bits k in
-      let x = resort bs x in
-      let s = Theory.IEEE754.Sort.define p in
-      float xs (op s rm !!x)
+    with_fsort ~unk_s:xs xs @@ fun bs s ->
+    let x = resort bs x in
+    float xs (op s rm !!x)
 
   let fsqrt rm x = fuop FBil.fsqrt rm x
 
@@ -606,6 +604,13 @@ module FPEmulator = struct
 
   let cast_float s m v = make_cast_float FBil.cast_float s m v
   let cast_sfloat s m v = make_cast_float FBil.cast_float_signed s m v
+
+  let case f x =
+    x >>= fun x ->
+    with_fsort (sort x) ~unk_s:bool @@ fun bs fs ->
+    f fs !!(resort bs x)
+
+  let is_nan x = case FBil.is_nan x
 
   let forder x y =
     x >>= fun x ->
