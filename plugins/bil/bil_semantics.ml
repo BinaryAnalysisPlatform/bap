@@ -628,6 +628,13 @@ module Emulator = struct
   let cast_float s m v = make_cast_float Float.cast_float s m v
   let cast_sfloat s m v = make_cast_float Float.cast_float_signed s m v
 
+  let cast_int ts _ v =
+    v >>= fun v ->
+    with_fsort ~unk_s:ts (sort v) @@ fun bs s ->
+    Float.cast_int s ts !!(resort bs v)
+
+  let cast_sint = cast_int
+
   let case f x =
     x >>= fun x ->
     with_fsort (sort x) ~unk_s:bool @@ fun bs fs ->
