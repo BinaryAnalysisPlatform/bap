@@ -130,11 +130,27 @@ let export = Primus.Lisp.Type.Spec.[
     "(>=. X Y ... Z) returns true if all floating-point numbers are in \
      the decreasing (non-increasing) order.";
 
-    "is-fzero", all any @-> any,
-    "(is-zero X Y ... Z) is true iff all floating-point numbers are zero.";
+    "is-finite", all any @-> any,
+    "(is-finite X Y ... Z) is true iff all values represent finite \
+     floating-point numbers";
 
     "is-nan", all any @-> any,
     "(is-nan X Y ... Z) is true iff all values represent NaN.";
+
+    "is-inf", all any @-> any,
+    "(is-inf X Y ... Z) is true iff all values represent positive \
+     or negative infinities.";
+
+    "is-fzero", all any @-> any,
+    "(is-zero X Y ... Z) is true iff all floating-point numbers are zero.";
+
+    "is-fpos", all any @-> any,
+    "(is-fpos X Y ... Z) is true iff all values represent positive \
+     floating-point numbers.";
+
+    "is-fneg", all any @-> any,
+    "(is-fneg X Y ... Z) is true iff all values represent negative \
+     floating-point numbers.";
 
     "=", all any @-> any,
     "(= X Y ... Z) is true iff all numbers are equal in value.";
@@ -1003,7 +1019,8 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
       let is_zero = is Float.Class.Zero
       let is_inf = is Float.Class.Infinite
       let is_finite x s = not (is_nan x s) && not (is_inf x s)
-
+      let is_pos x _ = Float.(inj x >= 0.0)
+      let is_neg x _ = Float.(inj x <= 0.0)
     end
 
     let inj fs x = CT.float fs x
@@ -1098,6 +1115,10 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
 
     let is_zero = case CT.is_fzero
     let is_nan = case CT.is_nan
+    let is_inf = case CT.is_inf
+    let is_pos = case CT.is_fpos
+    let is_neg = case CT.is_fneg
+    let is_finite = case CT.is_finite
 
     module Z = Host
   end
@@ -1144,8 +1165,12 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | "s>=",_-> pure@@order SBitvec.(>=) CT.uge args
     | "/=",_| "distinct",_-> pure@@forget@@distinct args
     | "is-zero",_| "not",_-> pure@@all s join s_is_zero CT.is_zero args
-    | "is-fzero",_ -> pure@@all s join F.Z.is_zero F.is_zero args
+    | "is-finite",_ -> pure@@all s join F.Z.is_finite F.is_finite args
     | "is-nan",_ -> pure@@all s join F.Z.is_nan F.is_nan args
+    | "is-inf",_ -> pure@@all s join F.Z.is_inf F.is_inf args
+    | "is-fzero",_ -> pure@@all s join F.Z.is_zero F.is_zero args
+    | "is-fpos",_ -> pure@@all s join F.Z.is_pos F.is_pos args
+    | "is-fneg",_ -> pure@@all s join F.Z.is_neg F.is_neg args
     | "is-positive",_-> pure@@all s join s_is_positive d_is_positive args
     | "is-negative",_-> pure@@all s join s_is_negative d_is_negative args
     | "word-width",_-> pure@@word_width s args
