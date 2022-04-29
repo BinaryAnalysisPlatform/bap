@@ -610,7 +610,12 @@ module FPEmulator = struct
     with_fsort (sort x) ~unk_s:bool @@ fun bs fs ->
     f fs !!(resort bs x)
 
+  let is_finite x = case FBil.is_finite x
   let is_nan x = case FBil.is_nan x
+  let is_inf x = case FBil.is_inf x
+  let is_fzero x = case (fun _ -> FBil.is_zero) x
+  let is_fpos x = case (fun _ -> FBil.is_fpos) x
+  let is_fneg x = case (fun _ -> FBil.is_fneg) x
 
   let forder x y =
     x >>= fun x ->

@@ -283,6 +283,10 @@ module Make(B : Theory.Core) = struct
   let is_subnormal fsort x =
     unpack_raw fsort x @@ fun _ e _ -> B.is_zero e
 
+
+  let is_fpos = B.is_positive
+  let is_fneg = B.is_negative
+
   let is_zero x =
     let open B in
     x >>-> fun s x ->
