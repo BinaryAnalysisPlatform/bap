@@ -14,6 +14,9 @@ let bool = Theory.Bool.t
 let bits = Theory.Bitv.define
 let size = Theory.Bitv.size
 let sort = Theory.Value.sort
+let resort s x = KB.Value.refine x s
+
+
 (* we need to recurse intelligently, only if optimization
    occured, that might open a new optimization opportunity,
    and continue recursion only if we have progress.
@@ -503,9 +506,31 @@ module Basic : Theory.Basic = struct
     unk @@ Theory.Float.bits (sort x)
 end
 
+module Rmode = struct
+  open KB.Syntax
+  let s = bits 8
+
+  let rmode n =
+    let+ n = Basic.int s (Bitvec.M8.int n) in
+    resort Theory.Rmode.t n
+
+  let rne = rmode 0
+  let rna = rmode 1
+  let rtp = rmode 2
+  let rtn = rmode 3
+  let rtz = rmode 4
+
+  let requal x y =
+    let* x = x >>| resort s in
+    let* y = y >>| resort s in
+    Basic.eq !!x !!y
+
+end
+
 module Core : Theory.Core = struct
   include Theory.Empty
   include Basic
+  include Rmode
 end
 
 module FBil = Bil_float.Make(Core)
@@ -525,8 +550,6 @@ module FPEmulator = struct
   let ieee754_of_sort s =
     List.find supported ~f:(fun p ->
         Theory.Value.Sort.same s (Theory.IEEE754.Sort.define p))
-
-  let resort s x = KB.Value.refine x s
 
   let fbits x =
     x >>| fun x -> resort (Theory.Float.bits (sort x)) x

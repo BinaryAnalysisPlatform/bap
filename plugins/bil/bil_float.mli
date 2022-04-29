@@ -6,7 +6,13 @@
    is hardcoded to be the BIL theory and using this transformation
    will not affect any other theories. To be able to remove this
    transformation from the BIL plugin we need to finish the Core
-   Theory passes framework. Until then, we will keep it here. *)
+   Theory passes framework. Until then, we will keep it here.
+
+   Otherwise, the trasnformation (this module) is totally generic and
+   is independent of BIL and could be put into a library if
+   necessary.
+
+*)
 
 open Bap_knowledge
 open Bap_core_theory
