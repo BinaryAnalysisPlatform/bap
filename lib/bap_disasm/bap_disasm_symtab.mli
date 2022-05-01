@@ -6,6 +6,7 @@ open Image_internal_std
 
 module Disasm = Bap_disasm_driver
 module Callgraph = Bap_disasm_calls
+module Insn = Bap_disasm_insn
 
 type block = Bap_disasm_block.t
 type edge =  Bap_disasm_block.edge
@@ -31,6 +32,7 @@ val owners : t -> addr -> fn list
 val dominators : t -> mem -> fn list
 val intersecting : t -> mem -> fn list
 val to_sequence : t -> fn seq
+val externals : t -> (Theory.Label.t * Insn.t) seq
 val span : fn -> unit memmap
 
 

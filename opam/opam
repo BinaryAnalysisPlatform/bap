@@ -325,7 +325,7 @@ depexts: [
   ["gmp" "llvm@9" "graphviz" "curl" "libzip" "dejagnu"]
     {os = "macos" & os-distribution = "homebrew"}
 ]
-dev-repo: "git://github.com/BinaryAnalysisPlatform/bap/"
+dev-repo: "git+https://github.com/BinaryAnalysisPlatform/bap/"
 
 synopsis: "Binary Analysis Platform"
 description: "Binary Analysis Platform"

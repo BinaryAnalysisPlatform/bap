@@ -12,9 +12,9 @@
    acquire and release are booleans indicating whether load-acquire and
    store-release ordering is to be enforced."
    (let ((data (load rn)))
-    (when acquire (special :load-acquire))
+    (when acquire (intrinsic 'load-acquire))
     (when (= data rs)
-      (when release (special :store-release))
+      (when release (intrinsic 'store-release))
       (store rn rt))
     (set rs data)))
 

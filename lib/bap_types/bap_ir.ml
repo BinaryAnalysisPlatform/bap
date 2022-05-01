@@ -125,8 +125,10 @@ module Tid = struct
   let pp ppf tid = Format.fprintf ppf "%s" (to_string tid)
 
   let name t = match get_name t with
-    | None -> to_string t
     | Some name -> sprintf "@%s" name
+    | None -> match get_ivec t with
+      | None -> to_string t
+      | Some ivec -> sprintf "@interrupt:#%d" ivec
 
   let from_string_exn = of_string
   let from_string x = Ok (from_string_exn x)
@@ -1662,7 +1664,7 @@ module Ir_blk = struct
     let (++) = Set.union and (--) = Set.diff in
     let init = Bap_var.Set.empty,Bap_var.Set.empty in
     fst @@ Seq.fold (elts blk) ~init ~f:(fun (vars,kill) -> function
-        | `Phi phi -> vars, kill
+        | `Phi _ -> vars, kill
         | `Def def ->
           Ir_def.free_vars def -- kill ++ vars,
           Set.add kill (Ir_def.lhs def)
@@ -1731,14 +1733,19 @@ end
 module Ir_sub = struct
   type t = sub term
 
-  let new_empty ?(tid=Tid.create ()) ?name () : t =
-    let name = match name with
+  let make_name ?name tid =
+    match name with
+    | Some name -> name
+    | None -> match Tid.get_name tid with
       | Some name -> name
-      | None -> match Tid.get_name tid with
+      | None -> match Tid.get_ivec tid with
         | None -> Tid.to_string tid
-        | Some name -> name in
+        | Some ivec ->
+          Format.asprintf "interrupt:#%d" ivec
+
+  let new_empty ?(tid=Tid.create ()) ?name () : t =
     make_term tid {
-      name;
+      name = make_name ?name tid;
       args = [| |] ;
       blks = [| |] ;
     }
@@ -1872,9 +1879,7 @@ module Ir_sub = struct
         | None -> Tid.create () in
       let args = Vec.to_array args in
       let blks = Vec.to_array blks in
-      let name = match name with
-        | Some name -> name
-        | None -> Format.asprintf "sub_%a" Tid.pp tid in
+      let name = make_name ?name tid in
       make_term tid {name; args; blks}
   end
 

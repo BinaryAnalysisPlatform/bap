@@ -241,9 +241,6 @@ let export = Primus.Lisp.Type.Spec.[
      The function is equivalent to (select N X)";
     "empty", (unit @-> any),
     "(empty) denotes an instruction that does nothing, i.e., a nop.";
-    "special", (one sym @-> any),
-    "(special :NAME) produces a special effect denoted by the keyword :NAME.
-    The effect will be reified into the to the special:name subroutine. ";
     "intrinsic", tuple [sym] // all any @-> any,
     "(intrinsic 'NAME ARG1 ARG2 ... ARGN PARAMS..) produces a call to
      an intrinsic function with the given NAME. Arguments could be
@@ -725,8 +722,11 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
           CT.set (ivar i s) !!x)
 
     let invoke_symbol name =
-      let name = KB.Name.(unqualified@@read name) in
-      let* dst = Theory.Label.for_name (sprintf "intrinsic:%s" name) in
+      let name = KB.Name.create
+          ~package:"intrinsic"
+          KB.Name.(unqualified@@read name) in
+      let* dst = Theory.Label.for_name (KB.Name.show name) in
+      KB.provide Primus.Lisp.Semantics.name dst (Some name) >>= fun () ->
       KB.provide Theory.Label.is_subroutine dst (Some true) >>= fun () ->
       CT.goto dst
 
@@ -819,15 +819,6 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     forget@@match KB.Value.get Primus.Lisp.Semantics.symbol v with
     | Some _ -> true_
     | _ -> false_
-
-  let is_keyword = String.is_prefix ~prefix:":"
-
-  let special dst =
-    require_symbol dst @@ fun dst ->
-    if is_keyword dst then
-      let* dst = Theory.Label.for_name ("special"^dst) in
-      CT.goto dst
-    else illformed "special requires a keyword as the tag, e.g., :hlt"
 
   let invoke_subroutine dst =
     require_symbol dst @@ fun dst ->
@@ -992,7 +983,6 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | ("select"|"nth"),xs -> pure@@select s xs
     | "empty",[] -> nop ()
     | "intrinsic",(dst::args) -> Intrinsic.call t dst args
-    | "special",[dst] -> ctrl@@special dst
     | "invoke-subroutine",[dst] -> ctrl@@invoke_subroutine dst
     | _ -> !!nothing
 end

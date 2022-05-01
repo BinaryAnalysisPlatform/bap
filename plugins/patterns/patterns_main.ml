@@ -1298,11 +1298,18 @@ end = struct
     Option.some_if (Set.mem roots addr) true
 
 
+  let setup_context () =
+    KB.promise Primus.Lisp.Semantics.context @@ fun _ ->
+    KB.return @@
+    Primus.Lisp.Context.create [
+      "patterns", ["enabled"]
+    ]
 
   let enable () =
     promise_outcome ();
     promise_roots ();
-    declare_promise_root ()
+    declare_promise_root ();
+    setup_context ()
 
 end
 
