@@ -191,6 +191,7 @@
   (if (is-symbol *sse-rmode*)
       (intrinsic
        (symbol-concat name *sse-rmode* *sse-format* :sep '_)
+       rt
        (coerce rs rn)
        :result rt)
     (case *sse-rmode*
