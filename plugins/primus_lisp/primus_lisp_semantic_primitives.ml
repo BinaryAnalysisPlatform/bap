@@ -322,7 +322,20 @@ let export = Primus.Lisp.Type.Spec.[
      parameters can be repeated. The intrinisic output is passed via
      the intrinisic:y0,...,intrinisic:yM vector, with the first
      element assigned to the :result, then to all :writes registers,
-     and after that to all :stores addresses." ]
+     and after that to all :stores addresses.";
+
+    "fabs", tuple [any] @-> any,
+    "(fabs X) is the absolute value of the floating-point number X" ;
+
+    "fsqrt", tuple [sym; any] @-> any,
+    "(fsqrt M X) is the floating-point number closest to R s.t. R*R=X,
+    The rounding mode M defines which representable floating-number is
+    closest to R.";
+
+    "fround", tuple [sym; any] @-> any,
+    "(fround M X) rounds X to the closest integral floating-point
+    number, using the rounding mode M";
+  ]
 
 type KB.conflict += Illformed of string
                  | Failed_primitive of KB.Name.t * unit Theory.value list * string
@@ -992,16 +1005,28 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     module Host = struct
       let inj = Fn.compose Int64.float_of_bits Z.to_int64
       and prj = Fn.compose Z.int64 Int64.bits_of_float
+      and prj64 = Fn.compose Z.M64.int64 Int64.bits_of_float
 
       let bop op x y = prj (op (inj x) (inj y))
       let uop op x = prj (op (inj x))
+      let sop op x = prj64 (op (inj x))
 
       let add = bop ( +. )
       let sub = bop ( -. )
       let mul = bop ( *. )
       let div = bop ( /. )
       let neg = uop (~-.)
-      let asb = uop Float.abs
+      let abs = sop Float.abs
+      let sqrt _ = sop Float.sqrt
+
+      let mode_of_key = function
+        | ":rtn" -> `Down
+        | ":rtp" -> `Up
+        | ":rtz" -> `Zero
+        | _ -> `Nearest
+
+      let round dir x =
+        prj64 (Float.round ~dir (inj x))
 
       let zero = prj 0.0
       let one = prj 1.0
@@ -1031,6 +1056,11 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
       let* r = op !!x in
       prj !!r
 
+    let sop op fs rm x =
+      let* x = inj fs x in
+      let* r = op rm !!x in
+      prj !!r
+
     let bop op fs rm x y =
       let* x = inj fs x
       and* y = inj fs y in
@@ -1043,13 +1073,64 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     let div s = bop CT.fdiv s
     let neg s = uop CT.fneg s
     let abs s = uop CT.fabs s
+    let sqrt s = sop CT.fsqrt s
+    let round s = sop CT.fround s
+
+    let mode_of_key = function
+      | ":rne" -> KB.return CT.rne
+      | ":rna" -> KB.return CT.rna
+      | ":rtp" -> KB.return CT.rtp
+      | ":rtn" -> KB.return CT.rtn
+      | ":rtz" -> KB.return CT.rtz
+      | unk -> illformed "unrecognized rounding mode: %s" unk
+
+    let with_rmode args k = match args with
+      | [] ->
+        illformed "requires the floating-point rounding mode"
+      | x::xs ->
+        require_symbol x @@ fun key ->
+        let* rm = mode_of_key key in
+        k (Host.mode_of_key key) rm xs
+
+    let with_1bitv xs k = match xs with
+      | [x] ->
+        let* x = bitv x in
+        k (sort x) x
+      | _ ->
+        illformed "floating-point operators require mode and a \
+                   single operand"
+    let fsort size =
+      match Theory.IEEE754.binary size with
+      | None ->
+        illformed "unsupported floating-point IEEE754 format: \
+                   binary%d" size
+      | Some ps -> KB.return @@ Theory.IEEE754.Sort.define ps
+
+    let operator_rm sf df xs =
+      with_rmode xs @@ fun sm rm xs ->
+      with_1bitv xs @@ fun s x ->
+      match const x with
+      | Some x when size s = 64 ->
+        forget@@const_int s (sf sm x)
+      | _ ->
+        let* fs = fsort (size s) in
+        forget@@df fs rm !!x
+
+    let operator sf df x =
+      let* x = bitv x in
+      let s = sort x in
+      match const x with
+      | Some x when size s = 64 ->
+        forget@@const_int s (sf x)
+      | _ ->
+        let* fs = fsort (size s) in
+        forget@@df fs !!x
 
     let const x fs s rmode =
       forget@@CT.fbits (CT.cast_float fs rmode (const_int s x))
 
     let zero = Host.zero,const Z.zero
     let one = Host.one, const Z.one
-
 
     let dynamic s cast df init xs =
       with_nbitv s cast xs @@ fun s xs ->
@@ -1062,33 +1143,14 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
             df !!res !!x) |>
         forget
 
-    let fsort size =
-      match Theory.IEEE754.binary size with
-      | None ->
-        illformed "unsupported floating-point IEEE754 format: \
-                   binary%d" size
-      | Some ps -> KB.return @@ Theory.IEEE754.Sort.define ps
-
-    let mode_of_key = function
-      | ":rne" -> KB.return CT.rne
-      | ":rna" -> KB.return CT.rna
-      | ":rtp" -> KB.return CT.rtp
-      | ":rtn" -> KB.return CT.rtn
-      | ":rtz" -> KB.return CT.rtz
-      | unk -> illformed "unrecognized rounding mode: %s" unk
-
-    let monoid_rm s cast sf df (si,di) = function
-      | [] ->
-        illformed "requires the floating-point rounding mode"
-      | x::xs ->
-        require_symbol x @@ fun key ->
-        with_nbitv s cast xs @@ fun s _ ->
-        let* rm = mode_of_key key in
-        let size = size s in
-        let* fs = fsort size in
-        if size = 64
-        then monoid s cast sf (df fs rm) si xs
-        else dynamic s cast (df fs rm) (di fs s rm) xs
+    let monoid_rm s cast sf df (si,di) args =
+      with_rmode args @@ fun _ rm xs ->
+      with_nbitv s cast xs @@ fun s _ ->
+      let size = size s in
+      let* fs = fsort size in
+      if size = 64
+      then monoid s cast sf (df fs rm) si xs
+      else dynamic s cast (df fs rm) (di fs s rm) xs
 
     let lt x y =
       let* s = x>>|sort>>|size>>=fsort in
@@ -1149,6 +1211,9 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | "-.",_ -> pure@@F.monoid_rm s join F.Z.sub F.sub F.zero args
     | "*.",_ -> pure@@F.monoid_rm s join F.Z.mul F.mul F.one args
     | "/.",_ -> pure@@F.monoid_rm s join F.Z.div F.div F.one args
+    | "fabs",[x] -> pure@@F.operator F.Z.abs F.abs x
+    | "fsqrt",_ -> pure@@F.operator_rm F.Z.sqrt F.sqrt args
+    | "fround",_ -> pure@@F.operator_rm F.Z.round F.round args
     | "<.",_|"forder",_ -> pure@@order F.Z.lt F.lt args
     | "<=.",_ -> pure@@order F.Z.le F.le args
     | ">.",_ -> pure@@order F.Z.gt F.gt args
