@@ -100,3 +100,17 @@
     0b0010 :oshst
     0b0001 :oshld
     :unknown))
+
+(defun reverse-byte-order (size rn)
+  "(reverse-byte-order) helper function to reverse the byte order of the contents of register rn of size size"
+  (let ((byte_size 8)
+	(elements (/ size byte_size))
+	(index 0)
+	(rev_index (+ index (* 8 (- elements 1))))
+	(result (extract (+ index 7) index rn)))
+    (while (< index size)
+	   (set index (+ index 8))
+	   (set rev_index (- rev_index 8))
+	   (set result (concat (extract (+ index 7) index rn) result)))
+    result))
+

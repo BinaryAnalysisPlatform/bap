@@ -99,19 +99,8 @@
 
 ;; REV...
 
-(defun reverse-byte-order (size rn)
-  (let ((byte_size 8)
-	(elements (/ size byte_size))
-	(index 0)
-	(rev_index (+ index (* 8 (- elements 1))))
-	(result (extract (+ index 7) index rn)))
-    (while (< index size)
-	   (set index (+ index 8))
-	   (set rev_index (- rev_index 8))
-	   (set result (concat (extract (+ index 7) index rn) result)))
-    result))
-
 (defmacro REV*r (setr size rd rn)
+  "(REV*r setr size rd rn) reverses byte order of rn nd stores result in rd"
   (setr rd (reverse-byte-order size rn)))
 
 (defun REVWr (rd rn) (REV*r setw 32 rd rn))
