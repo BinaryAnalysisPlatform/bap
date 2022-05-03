@@ -22,5 +22,14 @@
 (defun is_nan_ieee754_binary ()
   (set y0 (is-nan x0)))
 
-(defun cast_sfloat_rne_binary ()
-  (set y0 (cast-sfloat :rne x0 x1)))
+(defun cast_sfloat_rne_ieee754_binary_64 ()
+  (set y0 (cast-sfloat :rne 64 x0)))
+
+(defun cast_float_rne_ieee754_binary_64 ()
+  (set y0 (cast-float :rne 64 x0)))
+
+(defun cast_sint_rne_ieee754_binary_64 ()
+  (set y0 (cast-sfloat :rne 64 x0)))
+
+(defun cast_int_rne_ieee754_binary_64 ()
+  (set y0 (cast-float :rne 64 x0)))

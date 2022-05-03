@@ -345,6 +345,14 @@ let export = Primus.Lisp.Type.Spec.[
     "(cast-sfloat M S X) converts a signed integer X to the nearest
     representable floating-point number with size S using the rounding
     mode M";
+
+    "cast-int", tuple [sym; int; any] @-> any,
+    "(cast-float M S X) converts a floating-point number X to the nearest
+    unsigned integer with the size S using the rounding mode M ";
+
+    "cast-sint", tuple [sym; int; any] @-> any,
+    "(cast-float M S X) converts a floating-point number X to the nearest
+    signed integer with the size S using the rounding mode M ";
   ]
 
 type KB.conflict += Illformed of string
@@ -1041,6 +1049,9 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
       let cast_float _ x =
         prj64 (Float.of_int64 (Z.to_int64 x))
 
+      let cast_int _ x =
+        Z.M64.int64 (Float.to_int64 (inj x))
+
       let zero = prj 0.0
       let one = prj 1.0
 
@@ -1163,6 +1174,18 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
         let* fs = fsort ds in
         forget@@df fs rm !!x
 
+    let cast_int sf df xs =
+      with_rmode xs @@ fun sm rm xs ->
+      with_cast_ops xs @@ fun ds x ->
+      let sx = sort x in
+      let* fs = fsort (size sx) in
+      let is = Theory.Bitv.define ds in
+      match const x with
+      | Some x when ds = 64 && size sx = 64 ->
+        forget@@const_int s (sf sm x)
+      | _ ->
+        forget@@df is rm (inj fs !!x)
+
     let const x fs s rmode =
       forget@@CT.fbits (CT.cast_float fs rmode (const_int s x))
 
@@ -1253,6 +1276,8 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | "fround",_ -> pure@@F.operator_rm F.Z.round F.round args
     | "cast-float",_ -> pure@@F.cast_float F.Z.cast_float CT.cast_float args
     | "cast-sfloat",_ -> pure@@F.cast_float F.Z.cast_float CT.cast_sfloat args
+    | "cast-int",_ -> pure@@F.cast_int F.Z.cast_int CT.cast_int args
+    | "cast-sint",_ -> pure@@F.cast_int F.Z.cast_int CT.cast_sint args
     | "<.",_|"forder",_ -> pure@@order F.Z.lt F.lt args
     | "<=.",_ -> pure@@order F.Z.le F.le args
     | ">.",_ -> pure@@order F.Z.gt F.gt args

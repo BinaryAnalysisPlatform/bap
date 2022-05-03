@@ -187,11 +187,24 @@
    (coerce rs rn)
    :result rt))
 
+(defun symbol-of-size (sz)
+  (case sz
+    16  '16
+    32  '32
+    64  '64
+    80  '80
+    128 '128
+    256 '256
+    'unknown))
+
 (defun sse-convert (name rt rs rn)
   (if (is-symbol *sse-rmode*)
       (intrinsic
-       (symbol-concat name *sse-rmode* *sse-format* :sep '_)
-       rt
+       (symbol-concat
+        name
+        *sse-rmode* *sse-format*
+        (symbol-of-size rt)
+        :sep '_)
        (coerce rs rn)
        :result rt)
     (case *sse-rmode*
