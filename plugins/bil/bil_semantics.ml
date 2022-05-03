@@ -14,6 +14,9 @@ let bool = Theory.Bool.t
 let bits = Theory.Bitv.define
 let size = Theory.Bitv.size
 let sort = Theory.Value.sort
+let resort s x = KB.Value.refine x s
+
+
 (* we need to recurse intelligently, only if optimization
    occured, that might open a new optimization opportunity,
    and continue recursion only if we have progress.
@@ -503,14 +506,36 @@ module Basic : Theory.Basic = struct
     unk @@ Theory.Float.bits (sort x)
 end
 
-module Core : Theory.Core = struct
-  include Theory.Empty
-  include Basic
+module Rmode = struct
+  open KB.Syntax
+  let s = bits 8
+
+  let rmode n =
+    let+ n = Basic.int s (Bitvec.M8.int n) in
+    resort Theory.Rmode.t n
+
+  let rne = rmode 0
+  let rna = rmode 1
+  let rtp = rmode 2
+  let rtn = rmode 3
+  let rtz = rmode 4
+
+  let requal x y =
+    let* x = x >>| resort s in
+    let* y = y >>| resort s in
+    Basic.eq !!x !!y
+
 end
 
-module FBil = Bil_float.Make(Core)
+module CT : Theory.Core = struct
+  include Theory.Empty
+  include Basic
+  include Rmode
+end
 
-module FPEmulator = struct
+module Float = Bil_float.Make(CT)
+
+module Emulator = struct
   open Knowledge.Syntax
   type 'a t = 'a knowledge
 
@@ -526,14 +551,18 @@ module FPEmulator = struct
     List.find supported ~f:(fun p ->
         Theory.Value.Sort.same s (Theory.IEEE754.Sort.define p))
 
-  let resort s x = KB.Value.refine x s
-
   let fbits x =
     x >>| fun x -> resort (Theory.Float.bits (sort x)) x
 
   let float s x =
     x >>| fun x -> resort s x
 
+
+  let with_fsort ~unk_s s f =
+    match ieee754_of_sort s with
+    | None -> CT.unk unk_s
+    | Some ({Theory.IEEE754.k} as p) ->
+      f (bits k) (Theory.IEEE754.Sort.define p)
 
   let fop : type f.
     (_ -> _ -> _ Theory.bitv -> _ Theory.bitv -> _ Theory.bitv) ->
@@ -542,18 +571,14 @@ module FPEmulator = struct
     x >>= fun x ->
     y >>= fun y ->
     let xs = sort x in
-    match ieee754_of_sort xs with
-    | None -> Core.unk xs
-    | Some ({Theory.IEEE754.k} as p) ->
-      let bs = bits k in
-      let x = resort bs x and y = resort bs y in
-      let s = Theory.IEEE754.Sort.define p in
-      float xs (op s rm !!x !!y)
+    with_fsort xs ~unk_s:xs @@ fun bs s ->
+    let x = resort bs x and y = resort bs y in
+    float xs (op s rm !!x !!y)
 
-  let fadd rm = fop FBil.fadd rm
-  let fsub rm = fop FBil.fsub rm
-  let fmul rm = fop FBil.fmul rm
-  let fdiv rm = fop FBil.fdiv rm
+  let fadd rm = fop Float.fadd rm
+  let fsub rm = fop Float.fsub rm
+  let fmul rm = fop Float.fmul rm
+  let fdiv rm = fop Float.fdiv rm
 
   let fuop : type f.
     _ ->
@@ -561,17 +586,13 @@ module FPEmulator = struct
     fun op rm x ->
     x >>= fun x ->
     let xs = sort x in
-    match ieee754_of_sort xs with
-    | None -> Core.unk xs
-    | Some ({Theory.IEEE754.k} as p) ->
-      let bs = bits k in
-      let x = resort bs x in
-      let s = Theory.IEEE754.Sort.define p in
-      float xs (op s rm !!x)
+    with_fsort ~unk_s:xs xs @@ fun bs s ->
+    let x = resort bs x in
+    float xs (op s rm !!x)
 
-  let fsqrt rm x = fuop FBil.fsqrt rm x
+  let fsqrt rm x = fuop Float.fsqrt rm x
 
-  open Core
+  open CT
 
   let small s x =
     let m = Bitvec.modulus (size s) in
@@ -600,19 +621,38 @@ module FPEmulator = struct
 
   let make_cast_float cast s m v =
     match ieee754_of_sort s with
-    | None -> Core.unk s
+    | None -> CT.unk s
     | Some p ->
       cast (Theory.IEEE754.Sort.define p) m v >>| resort s
 
-  let cast_float s m v = make_cast_float FBil.cast_float s m v
-  let cast_sfloat s m v = make_cast_float FBil.cast_float_signed s m v
+  let cast_float s m v = make_cast_float Float.cast_float s m v
+  let cast_sfloat s m v = make_cast_float Float.cast_float_signed s m v
+
+  let cast_int ts _ v =
+    v >>= fun v ->
+    with_fsort ~unk_s:ts (sort v) @@ fun bs s ->
+    Float.cast_int s ts !!(resort bs v)
+
+  let cast_sint = cast_int
+
+  let case f x =
+    x >>= fun x ->
+    with_fsort (sort x) ~unk_s:bool @@ fun bs fs ->
+    f fs !!(resort bs x)
+
+  let is_finite x = case Float.is_finite x
+  let is_nan x = case Float.is_nan x
+  let is_inf x = case Float.is_inf x
+  let is_fzero x = case (fun _ -> Float.is_zero) x
+  let is_fpos x = case (fun _ -> Float.is_fpos) x
+  let is_fneg x = case (fun _ -> Float.is_fneg) x
 
   let forder x y =
     x >>= fun x ->
     y >>= fun y ->
     let xs = sort x in
     match ieee754_of_sort xs with
-    | None -> Core.unk bool
+    | None -> CT.unk bool
     | Some ({Theory.IEEE754.k; w; t}) ->
       let bs = bits k and ms = bits (k-1)in
       let x = resort bs x and y = resort bs y in
@@ -639,7 +679,8 @@ module FPEmulator = struct
       ]
 end
 
+module Core = CT
 module Core_with_fp_emulation = struct
   include Core
-  include FPEmulator
+  include Emulator
 end
