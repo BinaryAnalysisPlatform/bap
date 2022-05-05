@@ -127,29 +127,32 @@ module Apply = struct
 
   let binop op u v =
     let open Word in
-    let hi = Int.(max (bitwidth u) (bitwidth v) - 1)  in
-    let u = extract_exn ~hi u
-    and v = extract_exn ~hi v in
     match op with
-    | PLUS -> u + v
-    | MINUS -> u - v
-    | TIMES -> u * v
-    | DIVIDE -> u / v
-    | SDIVIDE -> signed u / signed v
-    | MOD -> u mod v
-    | SMOD -> signed u mod signed v
     | LSHIFT -> u lsl v
     | RSHIFT -> u lsr v
     | ARSHIFT -> u asr v
-    | AND -> u land v
-    | OR -> u lor v
-    | XOR -> u lxor v
-    | EQ -> Bitvector.(of_bool (u = v))
-    | NEQ -> Bitvector.(of_bool (u <> v))
-    | LT -> Bitvector.(of_bool (u < v))
-    | LE -> Bitvector.(of_bool (u <= v))
-    | SLT -> Bitvector.(of_bool (signed u < signed v))
-    | SLE  -> Bitvector.(of_bool (signed u <= signed v))
+    | _ ->
+      let hi = Int.(max (bitwidth u) (bitwidth v) - 1)  in
+      let u = extract_exn ~hi u
+      and v = extract_exn ~hi v in
+      match op with
+      | PLUS -> u + v
+      | MINUS -> u - v
+      | TIMES -> u * v
+      | DIVIDE -> u / v
+      | SDIVIDE -> signed u / signed v
+      | MOD -> u mod v
+      | SMOD -> signed u mod signed v
+      | AND -> u land v
+      | OR -> u lor v
+      | XOR -> u lxor v
+      | EQ -> Bitvector.(of_bool (u = v))
+      | NEQ -> Bitvector.(of_bool (u <> v))
+      | LT -> Bitvector.(of_bool (u < v))
+      | LE -> Bitvector.(of_bool (u <= v))
+      | SLT -> Bitvector.(of_bool (signed u < signed v))
+      | SLE  -> Bitvector.(of_bool (signed u <= signed v))
+      | (LSHIFT|RSHIFT|ARSHIFT) -> assert false
 
   let cast ct sz u =
     let ext = Bitvector.extract_exn in
