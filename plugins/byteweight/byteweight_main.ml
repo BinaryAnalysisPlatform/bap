@@ -121,7 +121,7 @@ let provide_roots () =
   let+ roots = unit-->roots in
   Option.some_if (Set.mem roots addr) true
 
-let main path min_length max_length threshold comp =
+let enable path min_length max_length threshold comp =
   compute_root_table path min_length max_length threshold comp;
   provide_roots ()
 
@@ -147,7 +147,10 @@ let () =
       ~doc:"Path to the signature file" in
   let compiler = parameter (some string) "compiler"
       ~doc:"Assume the input file is compiled by $(docv)" in
+  let enabled = parameter bool ~as_flag:true "enabled"
+      ~doc:"Enable/disable byteweight (off by default)" in
   Extension.declare ~doc ~provides:["roots"] @@ fun ctxt ->
   let (!) p = get ctxt p in
-  main !sigsfile !min_length !max_length !threshold !compiler;
+  if !enabled
+  then enable !sigsfile !min_length !max_length !threshold !compiler;
   Ok ()
