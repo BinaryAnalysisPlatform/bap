@@ -100,7 +100,7 @@
 ;; REV...
 
 (defmacro REV*r (setr size rd rn)
-  "(REV*r setr size rd rn) reverses byte order of rn nd stores result in rd"
+  "(REV*r setr size rd rn) reverses byte order of rn nd stores result in rd. THIS MAY HAVE ISSUES, see documentation in aarch64-helper.lisp reverse-byte-order, the BIL output looks a bit funky"
   (setr rd (reverse-byte-order size rn)))
 
 (defun REVWr (rd rn) (REV*r setw 32 rd rn))

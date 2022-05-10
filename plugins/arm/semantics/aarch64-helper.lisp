@@ -102,7 +102,7 @@
     :unknown))
 
 (defun reverse-byte-order (size rn)
-  "(reverse-byte-order) helper function to reverse the byte order of the contents of register rn of size size"
+  "(reverse-byte-order) helper function to reverse the byte order of the contents of register rn of size size. THIS MAY HAVE ISSUES, it's only called by REV in aarch64-logical.lisp, and BIL output looks a bit funky"
   (let ((byte_size 8)
 	(elements (/ size byte_size))
 	(index 0)
