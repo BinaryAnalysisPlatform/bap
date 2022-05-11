@@ -331,6 +331,7 @@ module Name : sig
     val short : t -> string
     val package : t -> string
     val to_string : t -> string
+    include Base.Comparable.S with type t := t
   end
 
   val normalize_name : [`Literal | `Reading] -> package:string ->
@@ -442,6 +443,10 @@ end = struct
         let name = normalize_name `Reading ~package @@
           String.subo s ~pos:(len+1) in
         {package; name}
+
+    include Base.Comparable.Make(struct
+        type t = fullname [@@deriving compare, sexp]
+      end)
   end
 
   module Id : sig
@@ -2253,14 +2258,14 @@ module Knowledge = struct
     type objects = {
       last : Oid.t;
       vals : info Oid.Tree.t;
-      objs : Oid.t String.Map.t String.Map.t;
-      pubs : Oid.Set.t String.Map.t;
+      objs : Oid.t Map.M(Name.Full).t;
+      pubs : Oid.Set.t Map.M(String).t;
     }
 
     let empty_class = {
       last = Oid.first;
       vals = Oid.Tree.empty;
-      objs = Map.empty (module String);
+      objs = Map.empty (module Name.Full);
       pubs = Map.empty (module String);
     }
 
@@ -2586,47 +2591,43 @@ module Knowledge = struct
       r
 
     let do_intern =
-      let is_public ~package name {Env.pubs} =
+      let is_public {package} obj {Env.pubs} =
         match Map.find pubs package with
         | None -> false
-        | Some pubs -> Set.mem pubs name in
+        | Some pubs -> Set.mem pubs obj in
       let unchanged id = Knowledge.return id in
-      let publicize ~package obj: Env.objects -> Env.objects =
+      let publicize {package} obj: Env.objects -> Env.objects =
         fun objects -> {
             objects with pubs = Map.update objects.pubs package ~f:(function
             | None -> Set.singleton (module Oid) obj
             | Some pubs -> Set.add pubs obj)
           } in
-      let createsym ~public ~package name classes clsid objects s =
+      let createsym ~public name classes clsid objects s =
         with_new_object objects @@ fun obj objects ->
         let vals = Oid.Tree.update_with objects.vals obj
-            ~has:(fun info -> {info with name = Some {package; name}})
-            ~nil:(fun () -> {noinfo with name = Some {package; name}}) in
-        let objs = Map.update objects.objs package ~f:(function
-            | None -> Map.singleton (module String) name obj
-            | Some names -> Map.set names name obj) in
+            ~has:(fun info -> {info with name = Some name})
+            ~nil:(fun () -> {noinfo with name = Some name}) in
+        let objs = Map.add_exn objects.objs name obj in
         let objects = {objects with objs; vals} in
         let objects = if public
-          then publicize ~package obj objects else objects in
+          then publicize name obj objects else objects in
         put {s with classes = Map.set classes clsid objects} >>| fun () ->
         obj in
 
-      fun ?(public=false) ?desc:_ {package; name} {Class.name=id} ->
+      fun ?(public=false) ?desc:_ name {Class.name=id} ->
         get () >>= fun ({classes} as s) ->
         let objects = match Map.find classes id with
           | None -> Env.empty_class
           | Some objs -> objs in
-        match Map.find objects.objs package with
-        | None -> createsym ~public ~package name classes id objects s
-        | Some names -> match Map.find names name with
-          | None -> createsym ~public ~package name classes id objects s
-          | Some obj when not public -> unchanged obj
-          | Some obj ->
-            if is_public ~package obj objects then unchanged obj
-            else
-              let objects = publicize ~package obj objects in
-              put {s with classes = Map.set classes id objects} >>| fun () ->
-              obj
+        match Map.find objects.objs name with
+        | None -> createsym ~public name classes id objects s
+        | Some obj when not public -> unchanged obj
+        | Some obj ->
+          if is_public name obj objects then unchanged obj
+          else
+            let objects = publicize name obj objects in
+            put {s with classes = Map.set classes id objects} >>| fun () ->
+            obj
 
     (* any [:] in names here are never treated as separators,
        contrary to [read], where they are, and [do_intern] where
@@ -3039,13 +3040,11 @@ module Knowledge = struct
 
     exception Import of fullname * fullname [@@deriving sexp_of]
 
-    let intern_symbol ~package name obj cls =
+    let intern_symbol name obj cls =
       Knowledge.return Env.{
           cls
-          with objs = Map.update cls.objs package ~f:(function
-              | None -> Map.singleton (module String) name obj
-              | Some names -> Map.set names name obj)}
-
+          with objs = Map.add_exn cls.objs name obj
+        }
 
 
     (* imports names inside a class.
@@ -3067,34 +3066,31 @@ module Knowledge = struct
               if not (needs_import cls sym obj)
               then Knowledge.return cls
               else
-                let obj' = match Map.find cls.objs package with
+                let obj' =
+                  match Map.find cls.objs {package; name=sym.name} with
                   | None -> Oid.zero
-                  | Some names -> match Map.find names sym.name with
-                    | None -> Oid.zero
-                    | Some obj' -> obj' in
+                  | Some obj' -> obj' in
                 if not strict || Oid.(obj' = zero || obj' = obj)
-                then intern_symbol ~package sym.name obj cls
+                then intern_symbol sym obj cls
                 else
                   let info = Oid.Tree.find_exn cls.vals obj' in
                   let sym' = Option.value_exn info.name in
                   Knowledge.fail (Import (sym,sym')))
 
     let package_exists package = Map.exists ~f:(fun {Env.objs} ->
-        Map.mem objs package)
+        Map.existsi objs ~f:(fun ~key:name ~data:_ ->
+            String.equal package name.package))
 
-    let name_exists {package; name} = Map.exists ~f:(fun {Env.objs} ->
-        match Map.find objs package with
-        | None -> false
-        | Some names -> Map.mem names name)
-
+    let name_exists name = Map.exists ~f:(fun {Env.objs} ->
+        Map.mem objs name)
 
     exception Not_a_package of string [@@deriving sexp_of]
     exception Not_a_symbol of fullname [@@deriving sexp_of]
 
     let check_name classes = function
-      | `Pkg name -> if package_exists name classes
+      | `Pkg pkg -> if package_exists pkg classes
         then Knowledge.return ()
-        else Knowledge.fail (Not_a_package name)
+        else Knowledge.fail (Not_a_package pkg)
       | `Sym sym -> if name_exists sym classes
         then Knowledge.return ()
         else Knowledge.fail (Not_a_symbol sym)
@@ -3309,9 +3305,7 @@ module Knowledge = struct
       | None -> self
       | Some s -> {
           self with
-          objs = Map.update objs s.package ~f:(function
-              | None -> Map.singleton (module String) s.name key
-              | Some objs -> Map.add_exn objs s.name key)
+          objs = Map.add_exn objs s key;
         }
 
     let names_in_syms = Oid.Tree.fold
