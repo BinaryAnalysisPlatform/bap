@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel [@@warning "-D"]
 open Monads.Std
 
 module Unix = Caml_unix [@@warning "-49"]
@@ -58,6 +58,7 @@ module Oid : sig
     val set : 'a t -> key -> 'a -> 'a t
     val remove : 'a t -> key -> 'a t
     val update : 'a t -> key -> f:('a option -> 'a) -> 'a t
+    val update_with : 'a t -> key -> has:('a -> 'a) -> nil:(unit -> 'a) -> 'a t
     val merge : 'a t -> 'a t -> f:(key -> 'a -> 'a -> 'a) -> 'a t
     val iter : 'a t -> f:(key -> 'a -> unit) -> unit
     val fold : 'a t -> init:'b -> f:(key -> 'a -> 'b -> 'b) -> 'b
@@ -191,6 +192,18 @@ end
 
     let singleton k v = Tip (k, v)
 
+    let rec update_with t k ~has ~nil = match t with
+      | Nil -> Tip (k, nil ())
+      | Tip (k', v') ->
+        if k = k'
+        then Tip (k, has v')
+        else join t k' (Tip (k, nil ())) k
+      | Bin (k', l, r) -> match Key.compare k' k with
+        | NA -> join (Tip (k,nil ())) k t (Key.payload k')
+        | LB -> Bin (k', update_with l k ~has ~nil, r)
+        | RB -> Bin (k', l, update_with r k ~has ~nil)
+    [@@specialise]
+
     let rec update t k ~f = match t with
       | Nil -> Tip (k, f None)
       | Tip (k', v') ->
@@ -201,6 +214,7 @@ end
         | NA -> join (Tip (k,f None)) k t (Key.payload k')
         | LB -> Bin (k', update l k f, r)
         | RB -> Bin (k', l, update r k f)
+    [@@specialise]
 
     let rec set t k v = match t with
       | Nil -> Tip (k, v)
@@ -241,17 +255,20 @@ end
           | LB -> if is_zero ~bit:b2 k1
             then Bin (p2,merge t1 l2 ~f,r2)
             else Bin (p2,l2,merge t1 r2 ~f)
+    [@@specialise]
 
     let rec iter t ~f = match t with
       | Nil -> ()
       | Tip (k, v) -> f k v
       | Bin (_, l, r) -> iter l ~f; iter r ~f
+    [@@specialise]
 
     let rec fold t ~init ~f = match t with
       | Nil -> init
       | Tip (k, v) -> f k v init
       | Bin (_, l, r) ->
         fold r ~f ~init:(fold l ~init ~f)
+    [@@specialise]
 
     let rec max_elt = function
       | Nil -> None
@@ -1265,17 +1282,17 @@ module Dict = struct
       let invert f a b c d = f c d a b [@@inline]
 
       let meets _ b c _ = b = c [@@inline]
-      let met a b c d = invert meets a b c d [@@inline] [@@specialize]
+      let met a b c d = invert meets a b c d [@@inline] [@@specialise]
       let before _ b c _ = b < c [@@inline]
-      let after a b c d = invert before a b c d [@@inline] [@@specialize]
+      let after a b c d = invert before a b c d [@@inline] [@@specialise]
       let overlaps a b c d = a < c && b < d && b > c [@@inline]
-      let overlapped a b c d = invert overlaps a b c d [@@inline] [@@specialize]
+      let overlapped a b c d = invert overlaps a b c d [@@inline] [@@specialise]
       let starts a b c d = a = c && b < d [@@inline]
-      let started a b c d = invert starts a b c d [@@inline] [@@specialize]
+      let started a b c d = invert starts a b c d [@@inline] [@@specialise]
       let finishes a b c d = a > c && b = d [@@inline]
-      let finished a b c d = invert finishes a b c d [@@inline] [@@specialize]
+      let finished a b c d = invert finishes a b c d [@@inline] [@@specialise]
       let during a b c d = a > c && b < d [@@inline]
-      let contains a b c d = invert during a b c d [@@inline] [@@specialize]
+      let contains a b c d = invert during a b c d [@@inline] [@@specialise]
       let equals a b c d = a = c && b = d [@@inline]
 
       let relate a b c d = match () with
@@ -1733,9 +1750,6 @@ module Dict = struct
   type merge = {
     merge : 'a. 'a key -> 'a -> 'a -> 'a
   }
-  (* we could use a GADT, but it couldn't be unboxed,
-     an since we could create merge functions a lot,
-     it is better not to allocate them.*)
 
   let merge
     : type a b. merge -> a key -> b key -> b -> a -> a =
@@ -1807,6 +1821,7 @@ module Dict = struct
                  ~update:(fun k -> ret@@fun f -> LR (k f,kb,b,y))
                  ~insert:(fun x -> add (x =+ t))
       end
+  [@@specialise]
 
   let monomorphic_merge
     : type t. t key -> (t -> t -> t) -> merge =
@@ -1816,12 +1831,14 @@ module Dict = struct
           let T = Key.same k kb in
           f b a
       }
+  [@@specialise]
 
   let update f ka a x =
     let f = monomorphic_merge ka f in
     upsert ka a x
       ~update:(fun k -> k f)
       ~insert:(fun x -> x)
+  [@@specialise]
 
   let set ka a x =
     let f = monomorphic_merge ka (fun _ x -> x) in
@@ -2278,30 +2295,31 @@ module Knowledge = struct
     type 'a t = 'a knowledge
     type _ error = conflict
     let fail p : 'a t = {run = fun ~reject ~accept:_ _ -> reject p}
+    [@@inline]
     let catch x err = {
       run = fun ~reject ~accept s -> x.run s
           ~accept
           ~reject:(fun p -> (err p).run ~reject ~accept s)
-    }
+    } [@@inline]
 
     include Monad.Make(struct
         type 'a t = 'a knowledge
         let return x : 'a t = {
           run = fun ~reject:_ ~accept s -> accept x s
-        }
+        } [@@inline]
 
         let bind : 'a t -> ('a -> 'b t) -> 'b t = fun x f -> {
             run = fun ~reject ~accept s -> x.run s
                 ~reject
                 ~accept:(fun x s ->
                     (f x).run ~reject ~accept s)
-          }
+          } [@@inline]
 
         let map : 'a t -> f:('a -> 'b) -> 'b t = fun x ~f -> {
             run = fun ~reject ~accept s -> x.run s
                 ~reject
                 ~accept:(fun x s -> accept (f x) s)
-          }
+          } [@@inline]
         let map = `Custom map
       end)
 
@@ -2491,23 +2509,27 @@ module Knowledge = struct
   let gets f = {
     run = fun ~reject:_ ~accept s -> accept (f s) s
   } [@@inline]
+  [@@specialise]
 
   let update f = {
     run = fun ~reject:_ ~accept s -> accept () (f s)
   } [@@inline]
+  [@@specialise]
 
   let objects {Class.name} =
     get () >>| fun {classes} ->
     match Map.find classes name with
     | None -> Env.empty_class
     | Some objs -> objs
+  [@@inline]
 
   let update_objects {Class.name} f =
-    get () >>= fun state ->
+    update @@ fun state ->
     let objs = f @@ match Map.find state.classes name with
       | None -> Env.empty_class
       | Some objs -> objs in
-    put {state with classes = Map.set state.classes name objs}
+    {state with classes = Map.set state.classes name objs}
+  [@@specialise]
 
   let map_update_objects {Class.name} f =
     get () >>= fun state ->
@@ -2517,6 +2539,7 @@ module Knowledge = struct
     f objs @@ fun objs res ->
     put {state with classes = Map.set state.classes name objs} >>| fun () ->
     res
+  [@@specialise]
 
 
   module Object = struct
@@ -2576,10 +2599,9 @@ module Knowledge = struct
           } in
       let createsym ~public ~package name classes clsid objects s =
         with_new_object objects @@ fun obj objects ->
-        let full = {package; name} in
-        let vals = Oid.Tree.update objects.vals obj ~f:(function
-            | None -> {noinfo with name = Some full}
-            | Some info -> {info with name = Some full}) in
+        let vals = Oid.Tree.update_with objects.vals obj
+            ~has:(fun info -> {info with name = Some {package; name}})
+            ~nil:(fun () -> {noinfo with name = Some {package; name}}) in
         let objs = Map.update objects.objs package ~f:(function
             | None -> Map.singleton (module String) name obj
             | Some names -> Map.set names name obj) in
@@ -2723,12 +2745,13 @@ module Knowledge = struct
         | Some objs -> objs in
       try put {
           s with classes = Map.set classes ~key:slot.cls.name ~data:{
-          objs with vals = Oid.Tree.update vals obj ~f:(function
-          | None -> {noinfo with data = Record.(put slot.key empty x)}
-          | Some info ->
-            match Record.commit slot.dom slot.key info.data x with
-            | Ok data -> {info with data}
-            | Error err -> raise (Record.Merge_conflict err))}}
+          objs with
+          vals = Oid.Tree.update_with vals obj
+              ~nil:(fun () -> {noinfo with data = Record.(put slot.key empty x)} )
+              ~has:(fun info ->
+                  match Record.commit slot.dom slot.key info.data x with
+                  | Ok data -> {info with data}
+                  | Error err -> raise (Record.Merge_conflict err))}}
       with Record.Merge_conflict err ->
         non_monotonic slot obj err @@
         Caml.Printexc.get_raw_backtrace ()
@@ -2842,17 +2865,16 @@ module Knowledge = struct
     : ('a,_) slot -> 'a obj -> _ -> unit knowledge =
     fun slot obj f ->
     update_objects slot.cls @@ fun ({vals} as objs) ->
-    let vals = Oid.Tree.update vals obj ~f:(fun info ->
-        match info with
-        | None -> {
-            noinfo
-            with comp = Map.singleton (module Name) (uid slot)
-                     (f None)
-          }
-        | Some info -> {
-            info with
-            comp = Map.update info.comp (uid slot) ~f
-          }) in
+    let vals = Oid.Tree.update_with vals obj
+        ~nil:(fun () -> {
+              noinfo
+              with comp = Map.singleton (module Name) (uid slot)
+                       (f None)
+            })
+        ~has:(fun info -> {
+              info with
+              comp = Map.update info.comp (uid slot) ~f
+            }) in
     {objs with vals}
 
   let enter_slot : ('a,_) slot -> 'a obj -> unit knowledge = fun s x ->
@@ -3129,6 +3151,7 @@ module Knowledge = struct
               | Some x ->
                 (f x).run ~accept ~reject s)
     } [@@inline]
+    [@@specialise]
 
     let (>>|?) x f = {
       run = fun ~reject ~accept s ->
@@ -3138,6 +3161,7 @@ module Knowledge = struct
               | None -> accept None s
               | Some x -> accept (f x) s)
     } [@@inline]
+    [@@specialise]
 
     let (let*?) = (>>=?)
     let (let+?) = (>>|?)
@@ -3152,6 +3176,7 @@ module Knowledge = struct
                 ~accept:(fun y s ->
                     accept (x,y) s))
     } [@@inline]
+    [@@specialise]
 
     let (and*) = (and+)
 
