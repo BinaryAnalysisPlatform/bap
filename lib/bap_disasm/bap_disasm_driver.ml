@@ -70,7 +70,7 @@ module Machine : sig
     dels : Set.M(Addr).t;                 (* delay slots *)
     begs : task list Map.M(Addr).t;       (* beginings of basic blocks *)
     jmps : jump Map.M(Addr).t;            (* jumps  *)
-    code : encoding Map.M(Addr).t;        (* all valid instructions *)
+    code : Theory.language Map.M(Addr).t;      (* all valid instructions *)
     data : Set.M(Addr).t;                 (* all non-instructions *)
     usat : Set.M(Addr).t;                 (* unsatisfied constraints *)
   }
@@ -125,7 +125,7 @@ end = struct
     dels : Set.M(Addr).t;
     begs : task list Map.M(Addr).t;
     jmps : jump Map.M(Addr).t;
-    code : encoding Map.M(Addr).t;
+    code : Theory.language Map.M(Addr).t;
     data : Set.M(Addr).t;
     usat : Set.M(Addr).t;
   }
@@ -137,7 +137,7 @@ end = struct
   let wrong_encoding s addr {coding} =
     match Map.find s.code addr with
     | None -> false
-    | Some {coding=other} ->
+    | Some other ->
       Result.is_error @@
       KB.Domain.join Theory.Language.domain
         other coding
@@ -201,7 +201,10 @@ end = struct
     | Fall {encoding} | Dest {encoding} | Jump {encoding} -> encoding
 
   let rec step s = match s.work with
-    | [] when Set.is_empty s.usat -> {s with stop = true}
+    | [] when Set.is_empty s.usat -> {
+        s with stop = true;
+               code = Map.empty (module Addr);
+      }
     | [] -> restart s
     | Dest {dst=next; encoding} as curr :: work
       when wrong_encoding s next encoding ->
@@ -266,9 +269,9 @@ end = struct
 
   let decoded s mem encoding =
     let addr = Memory.min_addr mem in {
-      s with code = Map.add_exn s.code addr encoding;
+      s with code = Map.add_exn s.code addr encoding.coding;
              usat = Set.remove s.usat addr
-    }
+    } [@@inlined]
 
   let jumped s encoding mem dsts delay =
     let s = decoded s mem encoding in
@@ -620,27 +623,30 @@ let merge_dests d1 d2 = {
   unresolved = Set.union d1.unresolved d2.unresolved;
 }
 
+let (--) = Set.diff
+let (++) = Set.union
+
+let valid_dsts data dsts =
+  let resolved = dsts.resolved -- data in
+  if Set.is_empty resolved && not dsts.indirect
+  then None
+  else Some {dsts with resolved}
+
 let scan_step ?(code=empty) ?(data=empty) ?(funs=empty) s mem =
   disassemble ~code ~data ~funs s.debt mem >>=
   fun {Machine.begs; jmps; data; debt; dels} ->
-  let jmps = Map.merge s.jmps jmps ~f:(fun ~key:_ -> function
-      | `Left dsts | `Right dsts -> Some dsts
-      | `Both (d1,d2) -> Some (merge_dests d1 d2)) in
-  let (-) = Set.diff in
   let data = Set.union s.data data in
-  let begs = Set.of_map_keys begs - data in
-  let funs = Set.union s.funs funs - data in
-  let begs = Set.union s.begs begs - dels in
-  let jmps = Map.filter_map jmps ~f:(fun dsts ->
-      let resolved = dsts.resolved - data in
-      if Set.is_empty resolved &&
-         not dsts.indirect
-      then None
-      else Some {dsts with resolved}) in
+  let jmps = Map.filter_map jmps ~f:(valid_dsts data) in
   commit_externals jmps >>= fun exts ->
-  let s = {funs; begs; data; jmps; mems = s.mems; debt; exts} in
-  commit_calls s.jmps >>| fun funs ->
-  {s with funs = Set.union s.funs funs - dels}
+  commit_calls jmps >>| fun funs' ->
+  let jmps = Map.merge s.jmps jmps ~f:(fun ~key:_ -> function
+      | `Left dsts -> valid_dsts data dsts
+      | `Right dsts -> Some dsts
+      | `Both (d1,d2) -> valid_dsts data (merge_dests d1 d2)) in
+  let begs = Set.of_map_keys begs -- data in
+  let funs = s.funs ++ funs ++ funs' -- data -- dels in
+  let begs = Set.union s.begs begs -- dels in
+  {funs; begs; data; jmps; mems = s.mems; debt; exts = s.exts ++ exts}
 
 let already_scanned mem s =
   let start = Memory.min_addr mem in
