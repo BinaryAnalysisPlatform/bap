@@ -2,6 +2,9 @@ open Core_kernel
 open Bap.Std
 include Self()
 
+module Sys = Caml.Sys
+
+
 type version = Vold | Vnew [@@deriving sexp, equal]
 type old_kind = [ `idal | `idal64 | `idaq | `idaq64 ] [@@deriving sexp, enumerate, equal]
 type new_kind = [ `idat | `idat64 | `ida  | `ida64  ] [@@deriving sexp, enumerate, equal]
