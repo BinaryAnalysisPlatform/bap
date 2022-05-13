@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Bap_c.Std
 
@@ -103,7 +103,7 @@ let set_abi proj m =
   let module A = (val m : abi) in
   let abi = C.Abi.{
       insert_args = dispatch m (Project.arch proj);
-      apply_attrs = fun _ -> ident
+      apply_attrs = fun _ -> Fn.id
     } in
   C.Abi.register A.name abi;
   let api = C.Abi.create_api_processor A.size abi in

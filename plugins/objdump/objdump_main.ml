@@ -26,7 +26,7 @@ $(b,bap-plugin-ida)(1)
 
 
 open Bap_core_theory
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Objdump_config
 open Bap_main
 
@@ -96,7 +96,7 @@ let with_objdump_output demangler ~file ~f ~init =
   List.fold_until ~init ~f:(fun data objdump ->
       let cmd = sprintf "%s %S" objdump file in
       run cmd ~f ~init:data)
-    ~finish:ident
+    ~finish:Fn.id
 
 let agent =
   KB.Agent.register ~package:"bap" "objdump-symbolizer"
@@ -160,12 +160,12 @@ end = struct
       names
 
   let to_real size = function
-    | None -> ident
+    | None -> Fn.id
     | Some bias -> fun addr ->
       Bitvec.((addr - bias) mod modulus size)
 
   let of_real size = function
-    | None -> ident
+    | None -> Fn.id
     | Some bias -> fun addr ->
       Bitvec.((addr + bias) mod modulus size)
 
@@ -200,7 +200,7 @@ let provide_function_starts_and_names ctxt : unit =
   declare "subroutines"  addr is_subroutine;
   declare "names" addr possible_name;
   property KB.promise is_subroutine addr is_known;
-  property (KB.propose agent) possible_name addr ident
+  property (KB.propose agent) possible_name addr Fn.id
 
 let main ctxt =
   provide_function_starts_and_names ctxt;

@@ -41,7 +41,7 @@ corresponding command help pages for more information.
 ```
 |}
 open Bap_knowledge
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_main
 open Bap_primus.Std
 open Format

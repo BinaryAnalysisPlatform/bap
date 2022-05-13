@@ -1,6 +1,6 @@
 (* Copyright (C) 2017 ForAllSecure, Inc. - All Rights Reserved. *)
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 
 (* Operands module is used for compatibility with BAP and avoiding

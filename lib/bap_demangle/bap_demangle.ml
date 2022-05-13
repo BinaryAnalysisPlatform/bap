@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 let maybe_mangled name =
   String.length name > 2 &&
@@ -42,7 +42,7 @@ let demangle_internal name =
   else None
 
 let run_internal name =
-  Option.value_map ~default:name ~f:ident (demangle_internal name)
+  Option.value_map ~default:name ~f:Fn.id (demangle_internal name)
 
 module Std = struct
   type demangler = {

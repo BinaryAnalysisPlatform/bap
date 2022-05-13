@@ -1,5 +1,5 @@
 open OUnit2
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Bap.Std
 
@@ -15,7 +15,7 @@ let normalized ~n ~add ~width ctxt =
     (Word.of_int (n + add) ~width)
 
 let to_string ~str v ctxt =
-  assert_equal ~ctxt ~printer:ident str (Word.to_string v)
+  assert_equal ~ctxt ~printer:Fn.id str (Word.to_string v)
 
 let of_string ~str v ctxt =
   assert_equal ~ctxt ~printer:Word.to_string

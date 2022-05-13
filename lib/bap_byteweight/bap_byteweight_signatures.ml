@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap.Std
 module Sys = Caml.Sys

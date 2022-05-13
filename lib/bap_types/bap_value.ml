@@ -1,5 +1,5 @@
 open Bap_core_theory
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Format
 
@@ -115,7 +115,7 @@ let typeid (Value.T (k,_)) = key_typeid k
 
 let info typeid =
   Hashtbl.find_and_call types typeid
-    ~if_found:ident
+    ~if_found:Fn.id
     ~if_not_found:(fun typeid ->
         invalid_argf "Can't deserialize type %s, \
                       as it is no longer known to the system"

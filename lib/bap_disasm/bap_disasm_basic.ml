@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Bap_types.Std
 open Bap_core_theory
@@ -213,7 +213,7 @@ module Imm = struct
     let hash {data = n} =
       if fits n.imm_small
       then n.imm_small
-      else Int64.hash (uw n.imm_large)
+      else Int64.hash (Option.value_exn n.imm_large)
 
   end
   include T

@@ -78,6 +78,7 @@ std::string get_extra_opname(ExtraOpCode op) {
     switch (op) {
     case CORE_SEQ: return "core:seq";
     }
+    return ":unk";
 }
 
 class OpcodesTable {

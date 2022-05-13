@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Monads.Std
 open Bap_common
 open Bap_bil
@@ -1107,7 +1107,7 @@ module Normalize = struct
     end) bil
 
   let bil ?normalize_exp:(ne=false) xs =
-    let normalize_exp = if ne then normalize_exp else ident in
+    let normalize_exp = if ne then normalize_exp else Fn.id in
     let rec run xs =
       List.concat_map ~f:hoist_non_generative_expressions xs |>
       normalize_conditionals |>

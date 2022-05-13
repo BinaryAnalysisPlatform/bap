@@ -60,7 +60,7 @@
     to Ogre's field.
 *)
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Monads.Std
 open Format
 
@@ -662,7 +662,7 @@ module type S = sig
       the query EDSL.*)
   val foreach : ('a -> 'b) query -> f:'a -> 'b seq t
 
-  (** [collect query] is the same as [foreach query ~f:ident] *)
+  (** [collect query] is the same as [foreach query ~f:Fn.id] *)
   val collect : (('a -> 'a) -> 'b) query -> 'b seq t
 
   (** [provide attr v1 v2 ... vm] stores the constituents of an

@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 
 val r : f:(mem -> reg -> bil Or_error.t) -> lifter

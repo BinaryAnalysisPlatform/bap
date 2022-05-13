@@ -74,7 +74,7 @@ raw code (i.e., no meta information), then use the $(b,raw) loader.
 ```
 |}
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Format
 open Regular.Std
 open Bap.Std
@@ -256,7 +256,7 @@ let prepend_slash_x x = "\\x" ^ x
 (** [to_binary ?escape s] make a binary string from ascii
     representation, (e.g., "\x01\x02..."). Apply optional
     escape function for each byte *)
-let to_binary ?(map=ident) s =
+let to_binary ?(map=Fn.id) s =
   let seps = [' '; ','; ';'] in
   let separated = List.exists seps ~f:(String.mem s) in
   let bytes = if separated

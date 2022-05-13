@@ -1,4 +1,6 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
+
+let ident = Fn.id
 
 module Monoid = Monads_monoid
 module Types = Monads_types

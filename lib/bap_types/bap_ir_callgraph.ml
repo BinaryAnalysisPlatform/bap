@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Graphlib.Std
 open Bap_ir

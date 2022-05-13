@@ -1,6 +1,6 @@
 (** BAP Standard Library  *)
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Monads.Std
 open Regular.Std
 open Graphlib.Std
@@ -459,7 +459,7 @@ module Std : sig
       The following plugin prints all sections in a file:
 
       {[
-        open Core_kernel
+        open Core_kernel[@@warning "-D"]
         open Bap.Std
         open Format
 
@@ -628,7 +628,7 @@ module Std : sig
    **)
   module Legacy : sig
     module Monad : sig
-      open Core_kernel
+      open Core_kernel[@@warning "-D"]
       module type Basic = Monad.Basic
       module type Basic2 = Monad.Basic2
       module type Infix = Monad.Infix
@@ -6636,7 +6636,7 @@ module Std : sig
 
           @param return a function that lifts user data type ['s] to type
           ['r]. It is useful when you need to perform disassembly in some
-          monad, like [Or_error], or [Lwt]. Otherwise, just use [ident]
+          monad, like [Or_error], or [Lwt]. Otherwise, just use [Fn.id]
           function and assume that ['s == 'r].
 
           The disassembler will invoke user provided callbacks. To each
@@ -10560,7 +10560,7 @@ module Std : sig
           the file, and [data] spans the data. An optional [finish]
           function can be used to propagate to the project any
           additional information that is available to the loader. It
-          defaults to [ident].
+          defaults to [Fn.id].
           @deprecated use either [Input.custom] or [Input.from_string]
           and [Input.from_bigstring].
       *)

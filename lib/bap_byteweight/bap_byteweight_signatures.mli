@@ -10,7 +10,7 @@
     those data types, e.g., [Bap_byteweight.Bytes].
 *)
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap.Std
 

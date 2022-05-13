@@ -36,7 +36,7 @@ bap show foo --primus-lisp-load=demo -tarmv5+le -obap:bil
 
 "
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap_main
 open Bap.Std

@@ -1,5 +1,5 @@
 open Bap.Std
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Format
 open Bap_primus_lisp_types
@@ -163,7 +163,7 @@ let run choose overload prog item name =
   Program.in_package (KB.Name.package name) prog @@ fun prog ->
   let stage3,stage4 = if is_unique choose
     then stage3,stage4
-    else ident,ident in
+    else Fn.id,Fn.id in
   let name = KB.Name.unqualified name in
   let ctxts = Program.context prog in
   let defs = Program.get ~name prog item in

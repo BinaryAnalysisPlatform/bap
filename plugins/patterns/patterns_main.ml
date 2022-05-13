@@ -108,7 +108,7 @@ let doc = "
 
 "
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap.Std
 open Bap_main
@@ -831,9 +831,9 @@ module Target = struct
       | _ -> fail Wrong_endianness in
     let variant = match List.hd rest with
       | None -> None
-      | Some var -> with_default var ident in
+      | Some var -> with_default var Fn.id in
     let compiler = match rest with
-      | [_;comp] -> with_default comp ident
+      | [_;comp] -> with_default comp Fn.id
       | _ -> None in
     Spec {arch; bits; order; variant; compiler}
 

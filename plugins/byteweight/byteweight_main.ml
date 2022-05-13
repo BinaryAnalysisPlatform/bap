@@ -41,7 +41,7 @@ Security 14). 2014.
 $(b,bap-byteweight)(1), $(b,bap-plugin-ida)(1), $(b,bap-plugin-read-symbols)(1)
 |}
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_main
 open Bap_core_theory
 open Bap.Std

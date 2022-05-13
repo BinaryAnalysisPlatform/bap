@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Monads.Std
 
 module Std = struct
@@ -555,7 +555,7 @@ module Std = struct
       link xs s' (fun x -> push' (snd (f x)));
       s,s'
 
-    let unzip xs = split xs ~f:ident
+    let unzip xs = split xs ~f:Fn.id
 
     let frame ~clk dat ~init ~f =
       let s = sync ~clk dat in

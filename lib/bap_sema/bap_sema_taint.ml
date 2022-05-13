@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Monads.Std
 open Bap_types.Std
 open Regular.Std
@@ -67,7 +67,7 @@ let ptrs : map tag = Value.Tag.register
     ~uuid:"ecf96df5-f706-4f95-a421-3fa9b91ad8bd"
     (module Taint_map)
 
-let create = ident
+let create = Fn.id
 
 let get_taints from key = match Map.find from key with
   | None -> Taints.empty

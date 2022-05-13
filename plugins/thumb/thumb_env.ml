@@ -1,7 +1,7 @@
 (* This module is left temporary for backward compatibility,
    we will remove it later.
 *)
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open KB.Syntax
 

@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap.Std
 open Bap_c.Std
@@ -20,7 +20,7 @@ open Primus
 
 module Time = struct
   include Int
-  let clocks = ident
+  let clocks = Fn.id
   let of_clocks = of_int
 end
 
@@ -862,7 +862,7 @@ module LinkBinaryProgram(Machine : Machine) = struct
   let is_linked name t = [
     Linker.is_linked (`tid (Term.tid t));
     Linker.is_linked (`symbol (name t));
-  ] |> Machine.List.all >>| List.exists ~f:ident >>= function
+  ] |> Machine.List.all >>| List.exists ~f:Fn.id >>= function
     | true -> Machine.return true
     | false -> match Term.get_attr t address with
       | None -> Machine.return false

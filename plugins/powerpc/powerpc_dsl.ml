@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Regular.Std
 
@@ -17,7 +17,7 @@ let doubleword = 64
 let quadword = 128
 let bitwidth x = x
 
-let int_of_bitwidth = ident
+let int_of_bitwidth = Fn.id
 
 let width_of_size = Size.in_bits
 

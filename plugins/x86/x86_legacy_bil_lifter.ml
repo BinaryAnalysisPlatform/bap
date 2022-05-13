@@ -1,6 +1,6 @@
 [@@@warning "-40"]
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_knowledge
 open Bap_core_theory
 module Bil = X86_legacy_bil

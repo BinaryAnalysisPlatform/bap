@@ -63,7 +63,7 @@ following interpretations:
 ```
 |}
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Result.Monad_infix
 open Format

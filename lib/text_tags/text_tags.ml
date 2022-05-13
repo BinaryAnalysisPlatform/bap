@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Format
 
 module Unix = Caml_unix
@@ -116,8 +116,8 @@ module Attr = struct
      and use this ugly reference  *)
   let clean = ref true
 
-  let foreground tag = sscanf tag " .foreground %s@\n" ident
-  let background tag = sscanf tag " .background %s@\n" ident
+  let foreground tag = sscanf tag " .foreground %s@\n" Fn.id
+  let background tag = sscanf tag " .background %s@\n" Fn.id
 
   let name_of_attr tag = sscanf tag " .%s %s@\n" (fun s _ -> s)
 

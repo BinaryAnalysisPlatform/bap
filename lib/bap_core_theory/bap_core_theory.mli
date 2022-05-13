@@ -363,7 +363,7 @@
     designed for such use-cases.
 *)
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Caml.Format
 open Bap_knowledge
 

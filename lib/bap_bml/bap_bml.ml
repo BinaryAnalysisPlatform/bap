@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 
 [@@@warning "-D"]
@@ -74,7 +74,7 @@ let (-) pref tag = pref ^ "-" ^ Value.Tag.name tag
 let (+) pref suf = if String.is_empty suf then pref else pref^"-"^suf
 
 let unit suf set is tag =
-  Mappers.Nullary.register (set-tag+suf) (marker ident tag ());
+  Mappers.Nullary.register (set-tag+suf) (marker Fn.id tag ());
   Predicates.Nullary.register (is-tag+suf) (has tag)
 
 module Markers = struct
@@ -173,13 +173,13 @@ end
 module Comment = struct
   let () =
     Mappers.Unary.register "comment" @@
-    marker ident comment;
+    marker Fn.id comment;
 end
 
 module Python = struct
   let () =
     Mappers.Unary.register "python" @@
-    marker ident python;
+    marker Fn.id python;
 end
 
 module Taint = struct

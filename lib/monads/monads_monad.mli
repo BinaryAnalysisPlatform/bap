@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 module Types = Monads_types
 module Monoid = Monads_monoid

@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 let int_of_int64 n = match Int64.to_int n with
   | Some v -> Ok v

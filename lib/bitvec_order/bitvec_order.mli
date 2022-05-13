@@ -5,7 +5,7 @@
     equality between two comparison functions.
 
     Comparators are extensively used in the Janestreet's suite of
-    libraries, e.g., Base, Core_kernel, Core, etc. Comparators are
+    libraries, e.g., Base, Core_kernel[@@warning "-D"], Core, etc. Comparators are
     used to create sets, maps, hashtables, to instantiate interfaces,
     and algorithms that require comparison.
 

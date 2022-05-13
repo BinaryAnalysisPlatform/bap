@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap_knowledge
 open Regular.Std
@@ -27,24 +27,24 @@ end
 
 module Special = struct
   let call = Attribute.declare "call"
-      ~encode:ident
-      ~decode:ident
+      ~encode:Fn.id
+      ~decode:Fn.id
       ~package:"bap"
 
   let intrinsic = Attribute.declare "intrinsic"
-      ~encode:ident
-      ~decode:ident
+      ~encode:Fn.id
+      ~decode:Fn.id
       ~package:"bap"
 
   let label = Attribute.declare "label"
       ~package:"bap"
-      ~encode:ident
-      ~decode:ident
+      ~encode:Fn.id
+      ~decode:Fn.id
 
   let goto = Attribute.declare "goto"
       ~package:"bap"
-      ~encode:ident
-      ~decode:ident
+      ~encode:Fn.id
+      ~decode:Fn.id
 
   let prefix = "@attribute:"
 

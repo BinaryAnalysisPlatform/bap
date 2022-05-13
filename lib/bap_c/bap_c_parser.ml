@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 type decls = (string * Bap_c_type.t) list
 type parser = Bap_c_size.base -> string -> decls Or_error.t

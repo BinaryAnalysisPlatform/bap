@@ -84,7 +84,7 @@ bap \\$binary --read-symbols-from=mv.scm --read-symbols-when-matches
 
 "
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_main
 open Bap_core_theory
 open KB.Syntax

@@ -1,6 +1,6 @@
 let package = "bap"
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Regular.Std
 open Bap_common
@@ -545,7 +545,7 @@ module Label = struct
   let direct x = Direct x
   let indirect x = Indirect x
   let create () = direct (Tid.create ())
-  let change ?(direct=ident) ?(indirect=ident) label =
+  let change ?(direct=Fn.id) ?(indirect=Fn.id) label =
     match label with
     | Direct x -> Direct (direct x)
     | Indirect x -> Indirect (indirect x)
@@ -1328,13 +1328,13 @@ module Term = struct
   type 'a map = 'a term -> 'a term
 
   let map_term (type t) (cls : (_,t) cls)
-      ?(program : program map = ident)
-      ?(sub : sub map = ident)
-      ?(arg : arg map = ident)
-      ?(blk : blk map = ident)
-      ?(phi : phi map = ident)
-      ?(def : def map = ident)
-      ?(jmp : jmp map = ident)
+      ?(program : program map = Fn.id)
+      ?(sub : sub map = Fn.id)
+      ?(arg : arg map = Fn.id)
+      ?(blk : blk map = Fn.id)
+      ?(phi : phi map = Fn.id)
+      ?(def : def map = Fn.id)
+      ?(jmp : jmp map = Fn.id)
       (t : t term) : t term = match cls.typ with
     | Nil -> assert false
     | Top -> program t
