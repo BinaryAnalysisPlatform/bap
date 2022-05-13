@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 type cmps = [
   | `CMPS8
@@ -6,4 +6,3 @@ type cmps = [
   | `CMPS32
   | `CMPS64
 ] [@@deriving bin_io, sexp, compare, enumerate]
-

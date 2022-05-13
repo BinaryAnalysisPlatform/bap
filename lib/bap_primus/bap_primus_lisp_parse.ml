@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Format
 open Bap_core_theory
@@ -126,7 +126,7 @@ module Parse = struct
         fail (Illegal_escape c) off in
     let nil = `Lit [] in
     let str cs = String.of_char_list (List.rev cs) in
-    let push_nothing = ident in
+    let push_nothing = Fn.id in
     let push s xs = s :: xs in
     let push_lit s = push (Lit s) in
     let push_pos x = push (Pos (Int.of_string (Char.to_string x))) in
@@ -291,7 +291,7 @@ module Parse = struct
     loop xs []
 
   let reader = function
-    | None -> ident
+    | None -> Fn.id
     | Some {data=Atom ":ascii"} -> ascii
     | Some {data=Atom ":hex"} -> hex
     | Some here -> fail Unknown_subst_syntax here

@@ -15,7 +15,7 @@ $(b,bap-plugin-llvm)(1)
 
 open Bap_main
 open Bap_knowledge
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Bap_core_theory
 

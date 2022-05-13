@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Monads.Std
 
 (** Future library.
@@ -603,7 +603,7 @@ module Std : sig
 
     (** [unzip xs] creates a pair of streams, where the first stream contains
         [fst x] for each [x] in [xs] and the second stream contains [snd x] for
-        each [x] in [xs]. Essentially, the same as [split ~f:ident] *)
+        each [x] in [xs]. Essentially, the same as [split ~f:Fn.id] *)
     val unzip : ('a * 'b) t -> 'a t * 'b t
 
     (** [once xs] creates a stream that will at most contain the next value

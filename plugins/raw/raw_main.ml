@@ -9,7 +9,7 @@ form the outside.
 
 open Bap.Std
 open Bap_main
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Extension.Syntax
 
 module Buffer = Caml.Buffer

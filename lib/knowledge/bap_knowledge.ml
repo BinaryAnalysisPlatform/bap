@@ -1,4 +1,4 @@
-open Core_kernel [@@warning "-D"]
+open Core_kernel[@@warning "-D"] [@@warning "-D"]
 open Monads.Std
 
 module Unix = Caml_unix [@@warning "-49"]
@@ -2702,8 +2702,8 @@ module Knowledge = struct
         include Comparator
         include Binable.Of_binable(Oid)(struct
             type t = a obj
-            let to_binable = ident
-            let of_binable = ident
+            let to_binable = Fn.id
+            let of_binable = Fn.id
           end) [@@warning "-D"]
         include Base.Comparable.Make_using_comparator(Comparator)
       end in

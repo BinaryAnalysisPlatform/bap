@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_knowledge
 
 module Value  = Bap_core_theory_value

@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Bap_core_theory
 open Graphlib.Std
@@ -193,7 +193,7 @@ module Input = struct
 
 
   let custom
-      ?(finish=ident)
+      ?(finish=Fn.id)
       ?(filename="")
       ?(code=Memmap.empty)
       ?(data=Memmap.empty) target () = {
@@ -204,7 +204,7 @@ module Input = struct
   }
 
   let create
-      ?(finish=ident) arch file ~code ~data () =
+      ?(finish=Fn.id) arch file ~code ~data () =
     let spec = match arch with
       | #Arch.unknown -> Ogre.Doc.empty
       | arch -> Image.Spec.from_arch arch in {
@@ -295,7 +295,7 @@ module Input = struct
       arch;
       code;
       data;
-      file = filename; finish = ident; spec;
+      file = filename; finish = Fn.id; spec;
       target;
       memory = code
     }

@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 
 open Bap_primus_types
@@ -96,7 +96,7 @@ let unfold (type gen)
 
 let static ?(width=8) value =
   let value = Bitvec.(int value mod modulus width) in
-  of_iterator ~width ~to_bitvec:ident (module struct
+  of_iterator ~width ~to_bitvec:Fn.id (module struct
     type t = Bitvec.t
     type dom = Bitvec.t
     let min = value
@@ -111,7 +111,7 @@ module Random = struct
   let create_lcg ?(width=8) ?min ?max start =
     let module Gen = (val MCG.create_small ?min ?max width) in
     let seed s = Gen.create (s + start) in
-    of_iterator ~width ~to_bitvec:ident ~seed
+    of_iterator ~width ~to_bitvec:Fn.id ~seed
       (module Gen) (Gen.create start)
 
   let lcg = create_lcg

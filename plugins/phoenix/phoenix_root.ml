@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 module Sys = Caml.Sys
 module Unix = Caml_unix

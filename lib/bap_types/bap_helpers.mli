@@ -1,5 +1,5 @@
 (** BIL high level functions.   *)
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_common
 open Bap_bil
 open Bap_visitor

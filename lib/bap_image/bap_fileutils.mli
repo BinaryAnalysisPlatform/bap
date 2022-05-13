@@ -1,6 +1,6 @@
 (**Helper IO functions. *)
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_types.Std
 
 val readfile : string -> Bigstring.t

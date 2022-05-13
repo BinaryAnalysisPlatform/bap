@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 val to_list : unit -> Bap_trace.t list
 val enum : unit -> Bap_trace.t Sequence.t
 val add : Bap_trace.t -> unit

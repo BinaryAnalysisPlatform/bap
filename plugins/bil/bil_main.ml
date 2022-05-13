@@ -38,7 +38,7 @@ argument.
 |}
 
 open Bap_core_theory
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Bap_main.Extension
 

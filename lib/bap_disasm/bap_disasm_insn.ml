@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Regular.Std
 open Bap_types.Std
@@ -47,7 +47,7 @@ module Props = struct
   let has flags (flag,_) =
     [%compare.equal : t] (Z.logand flags flag) flag
   let set_if cond flag =
-    if cond then fun flags -> flags + flag else ident
+    if cond then fun flags -> flags + flag else Fn.id
 
   module T = struct
     type t = Z.t

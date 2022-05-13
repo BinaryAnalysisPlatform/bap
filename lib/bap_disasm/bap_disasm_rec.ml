@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Bap_types.Std
 open Graphlib.Std
@@ -135,6 +135,6 @@ let run ?backend:_ ?(brancher=Brancher.empty) ?(rooter=Rooter.empty) arch mem =
   with_unit arch mem @@ fun () ->
   Driver.scan mem Driver.init >>= global_cfg
 
-let cfg = ident
+let cfg = Fn.id
 let errors _ = []
 let create = KB.return

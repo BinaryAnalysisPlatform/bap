@@ -1,6 +1,6 @@
 (** Native lifter of x86 instructions to the BAP IL *)
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Format
 open Bil.Types
@@ -1178,7 +1178,7 @@ module ToIR = struct
           | 32 -> clz32 res
           | 64 -> clz64 res
           | _ -> disfailwith "Invalid bitscan width" in
-      let assn_result = 
+      let assn_result =
         let n1 = width - 1 in
         assn t dst @@ if is_zero_count || is_fwd then Bil.var res
         else Bil.(var res lxor int Word.(of_int n1 ~width)) in

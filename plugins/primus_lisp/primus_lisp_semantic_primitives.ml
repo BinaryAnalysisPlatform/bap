@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap_primus.Std
 open KB.Syntax
@@ -635,7 +635,7 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     unary xs >>= bitv >>= fun addr ->
     forget@@CT.(loadw s b mem !!addr)
 
-  let load_word = word_loader ident
+  let load_word = word_loader Fn.id
   let load_half = word_loader (fun s -> s / 2)
   let load_double = word_loader @@ ( * ) 2
   let load_quad = word_loader @@ ( * ) 4

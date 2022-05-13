@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_knowledge
 
 open Bap_core_theory_definition
@@ -334,7 +334,7 @@ let theories () =
 
 
 let str_ctxt () ctxt =
-  List.to_string (Set.to_list ctxt) ~f:ident
+  List.to_string (Set.to_list ctxt) ~f:Fn.id
 
 
 let is_applicable ~provided ~requires =

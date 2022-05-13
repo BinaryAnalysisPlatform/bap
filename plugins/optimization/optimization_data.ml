@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Regular.Std
 open Graphlib.Std
@@ -108,7 +108,7 @@ let update sub {updates} =
       Term.map def_t b ~f:(update_def updates) |>
       Term.map jmp_t ~f:(update_jmp updates))
 
-let filter_map_alive deads cls ?(f=ident) x =
+let filter_map_alive deads cls ?(f=Fn.id) x =
   Term.filter_map cls x ~f:(fun t ->
       if Set.mem deads (Term.tid t) then None
       else Some (f t))

@@ -5,7 +5,7 @@
 *)
 
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Bap_common
 open Bap_knowledge

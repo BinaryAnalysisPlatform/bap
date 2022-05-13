@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_types.Std
 
 module Dis = Bap_disasm_basic

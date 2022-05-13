@@ -44,7 +44,7 @@ let man = {|
   with the following contents:
 
   ```
-  open Core_kernel
+  open Core_kernel[@@warning "-D"]
   open Bap_main
   open Bap.Std
 
@@ -83,7 +83,7 @@ let man = {|
 |}
 
 open Bap_knowledge
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Bap_core_theory
 open Regular.Std
@@ -302,7 +302,7 @@ let old_style_passes =
   Extension.Command.switches
     ~doc:(sprintf "Enables the pass %s in the old style (DEPRECATED)")
     (Plugins.list () |> List.map ~f:Plugin.name)
-    ident
+    Fn.id
 
 let passes =
   Extension.Command.parameters
@@ -320,7 +320,7 @@ let outputs =
     "dump"
 
 let rw_file = Extension.Type.define
-    ~name:"<FILE>" ~print:ident ~parse:ident
+    ~name:"<FILE>" ~print:Fn.id ~parse:Fn.id
     ~digest:(fun path ->
         if Sys.file_exists path
         then Caml.Digest.file path

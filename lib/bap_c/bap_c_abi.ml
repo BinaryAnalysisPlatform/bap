@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Bap_c_type
 open Monads.Std
@@ -194,7 +194,7 @@ let create_api_processor size abi : Bap_api.t =
 
     let parse get ifs = Or_error.try_with (fun () -> parse_exn get ifs)
 
-    let mapper = ident
+    let mapper = Fn.id
   end in
   (module Api)
 
@@ -217,7 +217,7 @@ end
 
 
 module Arg = struct
-  open Core_kernel
+  open Core_kernel[@@warning "-D"]
   open Bap_core_theory
   open Bap.Std
   open Monads.Std

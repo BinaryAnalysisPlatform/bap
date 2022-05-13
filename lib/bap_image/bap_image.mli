@@ -1,7 +1,7 @@
 (** A loadable memory image of an executable.  *)
 
 open Bap_core_theory
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Bap_types.Std
 

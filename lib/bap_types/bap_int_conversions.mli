@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 val int_of_int32     : int32 -> int Or_error.t
 val int_of_int64     : int64 -> int Or_error.t

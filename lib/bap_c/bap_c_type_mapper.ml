@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Monads.Std
 open Bap_c_type
@@ -286,7 +286,7 @@ module Ident2 : Monad.S2 with type ('a,'e) t = 'a = struct
   type ('a,'e) t = 'a
   include Monad.Make2(struct
       type nonrec ('a,'e) t = ('a,'e) t
-      let return = ident
+      let return = Fn.id
       let bind x f = f x
       let map = `Define_using_bind
     end)

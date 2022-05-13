@@ -1,6 +1,6 @@
 open Bap_core_theory
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_future.Std
 open OUnit2
 open Format
@@ -39,7 +39,7 @@ let normalize = String.filter ~f:(function
     | _ -> true)
 
 let assert_normalized ~expect got ctxt : unit =
-  assert_equal ~ctxt (normalize expect) (normalize got) ~printer:ident
+  assert_equal ~ctxt (normalize expect) (normalize got) ~printer:Fn.id
 
 let tag = Value.Tag.register (module String)
     ~name:"test"
@@ -81,7 +81,7 @@ let test_substitute case =
   let has_filename = "filename-is-provided" >:: fun ctxt ->
       match Project.get p filename with
       | None -> assert_failure "filename is not set"
-      | Some file' -> assert_equal ~ctxt ~printer:ident file file' in
+      | Some file' -> assert_equal ~ctxt ~printer:Fn.id file file' in
   [
     test case.asm "$asm";
     test case.bil "$bil";

@@ -1,16 +1,16 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 
-module type Key = sig 
+module type Key = sig
   type t
   val compare : t -> t -> int
-  val null : t 
+  val null : t
   val succ : t -> t
 end
 
-module Persistent = struct 
+module Persistent = struct
   module type S = sig
-    type t 
+    type t
     type key
     val empty : t
     val string : t -> key -> string
@@ -18,8 +18,8 @@ module Persistent = struct
     val register : t -> string -> t
     val registered : t -> string -> bool
   end
-  module Make(Key : Key) = struct 
-    module Index = Map.Make(struct 
+  module Make(Key : Key) = struct
+    module Index = Map.Make(struct
         include Key
         let sexp_of_t = sexp_of_opaque
         let t_of_sexp = opaque_of_sexp
@@ -47,18 +47,17 @@ module Persistent = struct
       | Some x -> x
       | None -> Key.null
 
-    let register idx str = 
+    let register idx str =
       if Map.mem idx.keys str then idx
-      else 
+      else
         let key = Key.succ @@ match Map.max_elt idx.strings with
-          | None -> Key.null 
+          | None -> Key.null
           | Some (k,_) -> k in
         {
           strings = Map.set idx.strings ~key ~data:str;
           keys = Map.set idx.keys ~key:str ~data:key
-        } 
+        }
 
     let registered {keys} str = Map.mem keys str
   end
 end
-

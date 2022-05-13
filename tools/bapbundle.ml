@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_bundle.Std
 open Format
 
@@ -180,7 +180,7 @@ module Show = struct
 
   let show_files k m b =
     let choose = match k with
-      | `libraries when libraries.contents -> ident
+      | `libraries when libraries.contents -> Fn.id
       | `resources when resources.contents -> not
       | _ -> fun _ -> false in
     let is_library name =
@@ -228,7 +228,7 @@ end
 let args = ref []
 
 let parse = ref ignore
-let main = ref ident
+let main = ref Fn.id
 
 module type Command = sig
   val args : (string * Arg.spec * string) list

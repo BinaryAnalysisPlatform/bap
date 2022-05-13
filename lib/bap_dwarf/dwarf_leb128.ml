@@ -1,5 +1,5 @@
 (** The implementation can work with numbers of arbitrary length. *)
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 module Bits = struct
   open Binary_packing
