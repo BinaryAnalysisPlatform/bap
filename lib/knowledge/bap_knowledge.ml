@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel [@@warning "-D"]
 open Monads.Std
 
 module Unix = Caml_unix [@@warning "-49"]
@@ -58,6 +58,7 @@ module Oid : sig
     val set : 'a t -> key -> 'a -> 'a t
     val remove : 'a t -> key -> 'a t
     val update : 'a t -> key -> f:('a option -> 'a) -> 'a t
+    val update_with : 'a t -> key -> has:('a -> 'a) -> nil:(unit -> 'a) -> 'a t
     val merge : 'a t -> 'a t -> f:(key -> 'a -> 'a -> 'a) -> 'a t
     val iter : 'a t -> f:(key -> 'a -> unit) -> unit
     val fold : 'a t -> init:'b -> f:(key -> 'a -> 'b -> 'b) -> 'b
@@ -191,6 +192,18 @@ end
 
     let singleton k v = Tip (k, v)
 
+    let rec update_with t k ~has ~nil = match t with
+      | Nil -> Tip (k, nil ())
+      | Tip (k', v') ->
+        if k = k'
+        then Tip (k, has v')
+        else join t k' (Tip (k, nil ())) k
+      | Bin (k', l, r) -> match Key.compare k' k with
+        | NA -> join (Tip (k,nil ())) k t (Key.payload k')
+        | LB -> Bin (k', update_with l k ~has ~nil, r)
+        | RB -> Bin (k', l, update_with r k ~has ~nil)
+    [@@specialise]
+
     let rec update t k ~f = match t with
       | Nil -> Tip (k, f None)
       | Tip (k', v') ->
@@ -201,6 +214,7 @@ end
         | NA -> join (Tip (k,f None)) k t (Key.payload k')
         | LB -> Bin (k', update l k f, r)
         | RB -> Bin (k', l, update r k f)
+    [@@specialise]
 
     let rec set t k v = match t with
       | Nil -> Tip (k, v)
@@ -241,17 +255,20 @@ end
           | LB -> if is_zero ~bit:b2 k1
             then Bin (p2,merge t1 l2 ~f,r2)
             else Bin (p2,l2,merge t1 r2 ~f)
+    [@@specialise]
 
     let rec iter t ~f = match t with
       | Nil -> ()
       | Tip (k, v) -> f k v
       | Bin (_, l, r) -> iter l ~f; iter r ~f
+    [@@specialise]
 
     let rec fold t ~init ~f = match t with
       | Nil -> init
       | Tip (k, v) -> f k v init
       | Bin (_, l, r) ->
         fold r ~f ~init:(fold l ~init ~f)
+    [@@specialise]
 
     let rec max_elt = function
       | Nil -> None
@@ -314,6 +331,7 @@ module Name : sig
     val short : t -> string
     val package : t -> string
     val to_string : t -> string
+    include Base.Comparable.S with type t := t
   end
 
   val normalize_name : [`Literal | `Reading] -> package:string ->
@@ -425,6 +443,10 @@ end = struct
         let name = normalize_name `Reading ~package @@
           String.subo s ~pos:(len+1) in
         {package; name}
+
+    include Base.Comparable.Make(struct
+        type t = fullname [@@deriving compare, sexp]
+      end)
   end
 
   module Id : sig
@@ -1265,17 +1287,17 @@ module Dict = struct
       let invert f a b c d = f c d a b [@@inline]
 
       let meets _ b c _ = b = c [@@inline]
-      let met a b c d = invert meets a b c d [@@inline] [@@specialize]
+      let met a b c d = invert meets a b c d [@@inline] [@@specialise]
       let before _ b c _ = b < c [@@inline]
-      let after a b c d = invert before a b c d [@@inline] [@@specialize]
+      let after a b c d = invert before a b c d [@@inline] [@@specialise]
       let overlaps a b c d = a < c && b < d && b > c [@@inline]
-      let overlapped a b c d = invert overlaps a b c d [@@inline] [@@specialize]
+      let overlapped a b c d = invert overlaps a b c d [@@inline] [@@specialise]
       let starts a b c d = a = c && b < d [@@inline]
-      let started a b c d = invert starts a b c d [@@inline] [@@specialize]
+      let started a b c d = invert starts a b c d [@@inline] [@@specialise]
       let finishes a b c d = a > c && b = d [@@inline]
-      let finished a b c d = invert finishes a b c d [@@inline] [@@specialize]
+      let finished a b c d = invert finishes a b c d [@@inline] [@@specialise]
       let during a b c d = a > c && b < d [@@inline]
-      let contains a b c d = invert during a b c d [@@inline] [@@specialize]
+      let contains a b c d = invert during a b c d [@@inline] [@@specialise]
       let equals a b c d = a = c && b = d [@@inline]
 
       let relate a b c d = match () with
@@ -1733,9 +1755,6 @@ module Dict = struct
   type merge = {
     merge : 'a. 'a key -> 'a -> 'a -> 'a
   }
-  (* we could use a GADT, but it couldn't be unboxed,
-     an since we could create merge functions a lot,
-     it is better not to allocate them.*)
 
   let merge
     : type a b. merge -> a key -> b key -> b -> a -> a =
@@ -1807,6 +1826,7 @@ module Dict = struct
                  ~update:(fun k -> ret@@fun f -> LR (k f,kb,b,y))
                  ~insert:(fun x -> add (x =+ t))
       end
+  [@@specialise]
 
   let monomorphic_merge
     : type t. t key -> (t -> t -> t) -> merge =
@@ -1816,12 +1836,14 @@ module Dict = struct
           let T = Key.same k kb in
           f b a
       }
+  [@@specialise]
 
   let update f ka a x =
     let f = monomorphic_merge ka f in
     upsert ka a x
       ~update:(fun k -> k f)
       ~insert:(fun x -> x)
+  [@@specialise]
 
   let set ka a x =
     let f = monomorphic_merge ka (fun _ x -> x) in
@@ -2058,7 +2080,7 @@ module Record = struct
     | Dict.T0 -> Ok (Dict.make1 key x)
     | _ ->
       try Result.return@@Dict.upsert key x v
-          ~insert:ident
+          ~insert:Fn.id
           ~update:(fun k -> k domain_merge)
       with Merge_conflict err -> Error err
 
@@ -2227,22 +2249,23 @@ module Knowledge = struct
     }
 
     type work = Done | Work of workers
+    type info = {
+      data : Record.t;
+      comp : work Map.M(Name).t;
+      name : fullname option;
+    }
 
     type objects = {
       last : Oid.t;
-      vals : Record.t Oid.Tree.t;
-      comp : work Map.M(Name).t Oid.Tree.t;
-      syms : fullname Oid.Tree.t;
-      objs : Oid.t String.Map.t String.Map.t;
-      pubs : Oid.Set.t String.Map.t;
+      vals : info Oid.Tree.t;
+      objs : Oid.t Map.M(Name.Full).t;
+      pubs : Oid.Set.t Map.M(String).t;
     }
 
     let empty_class = {
       last = Oid.first;
       vals = Oid.Tree.empty;
-      comp = Oid.Tree.empty;
-      objs = Map.empty (module String);
-      syms = Oid.Tree.empty;
+      objs = Map.empty (module Name.Full);
       pubs = Map.empty (module String);
     }
 
@@ -2262,6 +2285,12 @@ module Knowledge = struct
     context = Dict.empty;
   }
 
+  let noinfo : Env.info = {
+    data = Record.empty;
+    comp = Map.empty (module Name);
+    name = None;
+  }
+
 
   type 'a knowledge = {
     run : 'r. reject:(conflict -> 'r) -> accept:('a -> state -> 'r) -> state -> 'r
@@ -2271,30 +2300,31 @@ module Knowledge = struct
     type 'a t = 'a knowledge
     type _ error = conflict
     let fail p : 'a t = {run = fun ~reject ~accept:_ _ -> reject p}
+    [@@inline]
     let catch x err = {
       run = fun ~reject ~accept s -> x.run s
           ~accept
           ~reject:(fun p -> (err p).run ~reject ~accept s)
-    }
+    } [@@inline]
 
     include Monad.Make(struct
         type 'a t = 'a knowledge
         let return x : 'a t = {
           run = fun ~reject:_ ~accept s -> accept x s
-        }
+        } [@@inline]
 
         let bind : 'a t -> ('a -> 'b t) -> 'b t = fun x f -> {
             run = fun ~reject ~accept s -> x.run s
                 ~reject
                 ~accept:(fun x s ->
                     (f x).run ~reject ~accept s)
-          }
+          } [@@inline]
 
         let map : 'a t -> f:('a -> 'b) -> 'b t = fun x ~f -> {
             run = fun ~reject ~accept s -> x.run s
                 ~reject
                 ~accept:(fun x s -> accept (f x) s)
-          }
+          } [@@inline]
         let map = `Custom map
       end)
 
@@ -2484,23 +2514,27 @@ module Knowledge = struct
   let gets f = {
     run = fun ~reject:_ ~accept s -> accept (f s) s
   } [@@inline]
+  [@@specialise]
 
   let update f = {
     run = fun ~reject:_ ~accept s -> accept () (f s)
   } [@@inline]
+  [@@specialise]
 
   let objects {Class.name} =
     get () >>| fun {classes} ->
     match Map.find classes name with
     | None -> Env.empty_class
     | Some objs -> objs
+  [@@inline]
 
   let update_objects {Class.name} f =
-    get () >>= fun state ->
+    update @@ fun state ->
     let objs = f @@ match Map.find state.classes name with
       | None -> Env.empty_class
       | Some objs -> objs in
-    put {state with classes = Map.set state.classes name objs}
+    {state with classes = Map.set state.classes name objs}
+  [@@specialise]
 
   let map_update_objects {Class.name} f =
     get () >>= fun state ->
@@ -2510,6 +2544,7 @@ module Knowledge = struct
     f objs @@ fun objs res ->
     put {state with classes = Map.set state.classes name objs} >>| fun () ->
     res
+  [@@specialise]
 
 
   module Object = struct
@@ -2546,7 +2581,6 @@ module Knowledge = struct
               | Some objs -> Some {
                   objs with
                   vals = Oid.Tree.remove objs.vals obj;
-                  comp = Oid.Tree.remove objs.comp obj;
                 })
         }
 
@@ -2557,45 +2591,43 @@ module Knowledge = struct
       r
 
     let do_intern =
-      let is_public ~package name {Env.pubs} =
+      let is_public {package} obj {Env.pubs} =
         match Map.find pubs package with
         | None -> false
-        | Some pubs -> Set.mem pubs name in
+        | Some pubs -> Set.mem pubs obj in
       let unchanged id = Knowledge.return id in
-      let publicize ~package obj: Env.objects -> Env.objects =
+      let publicize {package} obj: Env.objects -> Env.objects =
         fun objects -> {
             objects with pubs = Map.update objects.pubs package ~f:(function
             | None -> Set.singleton (module Oid) obj
             | Some pubs -> Set.add pubs obj)
           } in
-      let createsym ~public ~package name classes clsid objects s =
+      let createsym ~public name classes clsid objects s =
         with_new_object objects @@ fun obj objects ->
-        let syms = Oid.Tree.set objects.syms obj {package; name} in
-        let objs = Map.update objects.objs package ~f:(function
-            | None -> Map.singleton (module String) name obj
-            | Some names -> Map.set names name obj) in
-        let objects = {objects with objs; syms} in
+        let vals = Oid.Tree.update_with objects.vals obj
+            ~has:(fun info -> {info with name = Some name})
+            ~nil:(fun () -> {noinfo with name = Some name}) in
+        let objs = Map.add_exn objects.objs name obj in
+        let objects = {objects with objs; vals} in
         let objects = if public
-          then publicize ~package obj objects else objects in
+          then publicize name obj objects else objects in
         put {s with classes = Map.set classes clsid objects} >>| fun () ->
         obj in
 
-      fun ?(public=false) ?desc:_ {package; name} {Class.name=id} ->
+      fun ?(public=false) ?desc:_ name {Class.name=id} ->
         get () >>= fun ({classes} as s) ->
         let objects = match Map.find classes id with
           | None -> Env.empty_class
           | Some objs -> objs in
-        match Map.find objects.objs package with
-        | None -> createsym ~public ~package name classes id objects s
-        | Some names -> match Map.find names name with
-          | None -> createsym ~public ~package name classes id objects s
-          | Some obj when not public -> unchanged obj
-          | Some obj ->
-            if is_public ~package obj objects then unchanged obj
-            else
-              let objects = publicize ~package obj objects in
-              put {s with classes = Map.set classes id objects} >>| fun () ->
-              obj
+        match Map.find objects.objs name with
+        | None -> createsym ~public name classes id objects s
+        | Some obj when not public -> unchanged obj
+        | Some obj ->
+          if is_public name obj objects then unchanged obj
+          else
+            let objects = publicize name obj objects in
+            put {s with classes = Map.set classes id objects} >>| fun () ->
+            obj
 
     (* any [:] in names here are never treated as separators,
        contrary to [read], where they are, and [do_intern] where
@@ -2622,11 +2654,11 @@ module Knowledge = struct
         else Name.to_string cls in
       match Map.find classes cname with
       | None -> uninterned_repr cls obj
-      | Some {Env.syms} -> match Oid.Tree.find syms obj with
-        | Some fname -> if String.equal fname.package package
+      | Some {Env.vals} -> match Oid.Tree.find vals obj with
+        | Some {name = Some fname} -> if String.equal fname.package package
           then fname.name
           else Name.Full.to_string fname
-        | None -> uninterned_repr cls obj
+        | _  -> uninterned_repr cls obj
 
     let repr cls obj =
       if is_null obj then !!"nil"
@@ -2714,11 +2746,13 @@ module Knowledge = struct
         | Some objs -> objs in
       try put {
           s with classes = Map.set classes ~key:slot.cls.name ~data:{
-          objs with vals = Oid.Tree.update vals obj ~f:(function
-          | None -> Record.(put slot.key empty x)
-          | Some v -> match Record.commit slot.dom slot.key v x with
-            | Ok r -> r
-            | Error err -> raise (Record.Merge_conflict err))}}
+          objs with
+          vals = Oid.Tree.update_with vals obj
+              ~nil:(fun () -> {noinfo with data = Record.(put slot.key empty x)} )
+              ~has:(fun info ->
+                  match Record.commit slot.dom slot.key info.data x with
+                  | Ok data -> {info with data}
+                  | Error err -> raise (Record.Merge_conflict err))}}
       with Record.Merge_conflict err ->
         non_monotonic slot obj err @@
         Caml.Printexc.get_raw_backtrace ()
@@ -2816,28 +2850,33 @@ module Knowledge = struct
   let status
     : ('a,_) slot -> 'a obj -> slot_status knowledge =
     fun slot obj ->
-    objects slot.cls >>| fun {comp; vals} ->
-    match Oid.Tree.find_exn comp obj with
+    objects slot.cls >>| fun {vals} ->
+    match Oid.Tree.find_exn vals obj with
     | exception Caml.Not_found -> Sleep
-    | slots -> match Map.find slots (uid slot) with
+    | {data; comp=slots} -> match Map.find slots (uid slot) with
       | Some Work _ -> Awoke
-      | other -> match other,Oid.Tree.find vals obj with
+      | other -> match other,Record.is_empty data with
         | Some Work _,_ -> assert false
-        | None,None -> Sleep
-        | Some Done,None -> Ready Record.empty
-        | Some Done,Some v -> Ready v
-        | None,Some v -> if is_empty slot v then Sleep else Ready v
+        | None,true -> Sleep
+        | Some Done,true -> Ready Record.empty
+        | Some Done,false -> Ready data
+        | None,false -> if is_empty slot data then Sleep else Ready data
 
   let update_slot
     : ('a,_) slot -> 'a obj -> _ -> unit knowledge =
     fun slot obj f ->
-    update_objects slot.cls @@ fun ({comp} as objs) ->
-    let comp = Oid.Tree.update comp obj ~f:(fun slots ->
-        let slots = match slots with
-          | None -> Map.empty (module Name)
-          | Some slots -> slots in
-        Map.update slots (uid slot) ~f) in
-    {objs with comp}
+    update_objects slot.cls @@ fun ({vals} as objs) ->
+    let vals = Oid.Tree.update_with vals obj
+        ~nil:(fun () -> {
+              noinfo
+              with comp = Map.singleton (module Name) (uid slot)
+                       (f None)
+            })
+        ~has:(fun info -> {
+              info with
+              comp = Map.update info.comp (uid slot) ~f
+            }) in
+    {objs with vals}
 
   let enter_slot : ('a,_) slot -> 'a obj -> unit knowledge = fun s x ->
     update_slot s x @@ function
@@ -2877,15 +2916,15 @@ module Knowledge = struct
 
   let dequeue_waiting
     : ('a,'p) slot -> 'a obj -> _ Knowledge.t = fun s x ->
-    map_update_objects s.cls @@ fun ({comp} as objs) k ->
-    let works = Oid.Tree.find_exn comp x in
+    map_update_objects s.cls @@ fun ({vals} as objs) k ->
+    let {Env.comp=works} as info = Oid.Tree.find_exn vals x in
     Map.find_exn works (uid s) |> function
     | Env.Done -> assert false
     | Env.Work {waiting} ->
       let waiting = Pid.Tree.fold waiting ~init:[] ~f:(fun p () ps ->
           Hashtbl.find_exn s.Slot.promises p :: ps) in
-      let works = Map.set works (uid s) no_work in
-      let objs = {objs with comp = Oid.Tree.set comp x works} in
+      let info = {info with comp=Map.set works (uid s) no_work} in
+      let objs = {objs with vals = Oid.Tree.set vals x info} in
       k objs waiting
 
   let initial_promises {Slot.promises} = Hashtbl.data promises
@@ -2895,7 +2934,7 @@ module Knowledge = struct
     objects slot.cls >>| fun {Env.vals} ->
     match Oid.Tree.find_exn vals id with
     | exception Caml.Not_found -> slot.dom.empty
-    | v -> Record.get slot.key slot.dom v
+    | {data} -> Record.get slot.key slot.dom data
 
   let rec collect_inner
     : ('a,'p) slot -> 'a obj -> _ -> _ =
@@ -3001,13 +3040,11 @@ module Knowledge = struct
 
     exception Import of fullname * fullname [@@deriving sexp_of]
 
-    let intern_symbol ~package name obj cls =
+    let intern_symbol name obj cls =
       Knowledge.return Env.{
           cls
-          with objs = Map.update cls.objs package ~f:(function
-              | None -> Map.singleton (module String) name obj
-              | Some names -> Map.set names name obj)}
-
+          with objs = Map.add_exn cls.objs name obj
+        }
 
 
     (* imports names inside a class.
@@ -3021,38 +3058,39 @@ module Knowledge = struct
     let import_class ~strict ~package ~needs_import
       : Env.objects -> Env.objects knowledge
       = fun cls ->
-        Oid.Tree.to_sequence cls.syms |>
-        Knowledge.Seq.fold ~init:cls ~f:(fun cls (obj,sym) ->
-            if not (needs_import cls sym obj)
-            then Knowledge.return cls
-            else
-              let obj' = match Map.find cls.objs package with
-                | None -> Oid.zero
-                | Some names -> match Map.find names sym.name with
+        Oid.Tree.to_sequence cls.vals |>
+        Knowledge.Seq.fold ~init:cls ~f:(fun cls (obj,(info : Env.info)) ->
+            match info.name with
+            | None -> Knowledge.return cls
+            | Some sym ->
+              if not (needs_import cls sym obj)
+              then Knowledge.return cls
+              else
+                let obj' =
+                  match Map.find cls.objs {package; name=sym.name} with
                   | None -> Oid.zero
                   | Some obj' -> obj' in
-              if not strict || Oid.(obj' = zero || obj' = obj)
-              then intern_symbol ~package sym.name obj cls
-              else
-                let sym' = Oid.Tree.find_exn cls.syms obj' in
-                Knowledge.fail (Import (sym,sym')))
+                if not strict || Oid.(obj' = zero || obj' = obj)
+                then intern_symbol sym obj cls
+                else
+                  let info = Oid.Tree.find_exn cls.vals obj' in
+                  let sym' = Option.value_exn info.name in
+                  Knowledge.fail (Import (sym,sym')))
 
     let package_exists package = Map.exists ~f:(fun {Env.objs} ->
-        Map.mem objs package)
+        Map.existsi objs ~f:(fun ~key:name ~data:_ ->
+            String.equal package name.package))
 
-    let name_exists {package; name} = Map.exists ~f:(fun {Env.objs} ->
-        match Map.find objs package with
-        | None -> false
-        | Some names -> Map.mem names name)
-
+    let name_exists name = Map.exists ~f:(fun {Env.objs} ->
+        Map.mem objs name)
 
     exception Not_a_package of string [@@deriving sexp_of]
     exception Not_a_symbol of fullname [@@deriving sexp_of]
 
     let check_name classes = function
-      | `Pkg name -> if package_exists name classes
+      | `Pkg pkg -> if package_exists pkg classes
         then Knowledge.return ()
-        else Knowledge.fail (Not_a_package name)
+        else Knowledge.fail (Not_a_package pkg)
       | `Sym sym -> if name_exists sym classes
         then Knowledge.return ()
         else Knowledge.fail (Not_a_symbol sym)
@@ -3109,6 +3147,7 @@ module Knowledge = struct
               | Some x ->
                 (f x).run ~accept ~reject s)
     } [@@inline]
+    [@@specialise]
 
     let (>>|?) x f = {
       run = fun ~reject ~accept s ->
@@ -3118,6 +3157,7 @@ module Knowledge = struct
               | None -> accept None s
               | Some x -> accept (f x) s)
     } [@@inline]
+    [@@specialise]
 
     let (let*?) = (>>=?)
     let (let+?) = (>>|?)
@@ -3132,6 +3172,7 @@ module Knowledge = struct
                 ~accept:(fun y s ->
                     accept (x,y) s))
     } [@@inline]
+    [@@specialise]
 
     let (and*) = (and+)
 
@@ -3173,7 +3214,7 @@ module Knowledge = struct
     objects cls >>| fun {Env.vals} ->
     match Oid.Tree.find_exn vals obj with
     | exception Caml.Not_found -> Value.empty cls
-    | x -> Value.create cls x
+    | {data=x} -> Value.create cls x
 
   let run cls obj s = (obj >>= get_value cls).run s
       ~reject:(fun err -> Error err)
@@ -3186,14 +3227,14 @@ module Knowledge = struct
 
   let pp_state ppf {Env.classes; package} =
     Format.fprintf ppf "@[<v0>(in-package %s)@;" package;
-    Map.iteri classes ~f:(fun ~key:name ~data:{vals;syms} ->
+    Map.iteri classes ~f:(fun ~key:name ~data:{vals} ->
         if not (Oid.Tree.is_empty vals) then begin
           Format.fprintf ppf "(in-class %a)@;"
             (pp_fullname ~package) (Name.full name);
           Format.fprintf ppf "@[<v>";
-          Oid.Tree.iter vals ~f:(fun oid data ->
+          Oid.Tree.iter vals ~f:(fun oid {data; name} ->
               if not (Dict.is_empty data) then
-                let () = match Oid.Tree.find syms oid with
+                let () = match name with
                   | None ->
                     Format.fprintf ppf "@[<hv2>(%a@ " Oid.pp oid
                   | Some name ->
@@ -3251,19 +3292,20 @@ module Knowledge = struct
             Map.add_exn works slot Env.Done)
 
     let add_object
-        ({Env.vals; syms; objs} as self)
+        ({Env.vals; objs} as self)
         {key; sym; data; comp} =
-      let value = make_value data in
-      let self = {self with vals = Oid.Tree.set vals key value} in
+      let self = {
+        self with vals = Oid.Tree.set vals key {
+          data = make_value data;
+          comp = expand_comp comp;
+          name = sym;
+        }
+      } in
       match sym with
       | None -> self
       | Some s -> {
           self with
-          comp = Oid.Tree.set self.comp key (expand_comp comp);
-          syms = Oid.Tree.set syms key s;
-          objs = Map.update objs s.package ~f:(function
-              | None -> Map.singleton (module String) s.name key
-              | Some objs -> Map.add_exn objs s.name key)
+          objs = Map.add_exn objs s key;
         }
 
     let names_in_syms = Oid.Tree.fold
@@ -3272,11 +3314,11 @@ module Knowledge = struct
             Set.add (Set.add names package) name)
 
 
-    let names = Map.fold
-        ~init:(Set.empty (module String))
-        ~f:(fun ~key:_ ~data:{Env.syms} names ->
-            Set.union names @@
-            names_in_syms syms)
+    (* let names = Map.fold
+     *     ~init:(Set.empty (module String))
+     *     ~f:(fun ~key:_ ~data:{Env.syms} names ->
+     *         Set.union names @@
+     *         names_in_syms syms) *)
 
     let serialize_record record =
       let fields = Dict.foreach record ~init:[] {
@@ -3301,16 +3343,15 @@ module Knowledge = struct
     let to_canonical {Env.classes} : v2 canonical =
       let payload =
         Map.to_alist classes |>
-        List.map ~f:(fun (cid, {Env.vals; syms; comp; last}) ->
+        List.map ~f:(fun (cid, {Env.vals; last}) ->
             let data =
               Oid.Tree.to_list vals |>
-              List.filter_map ~f:(fun (oid,value) ->
-                  let data = serialize_record value in
-                  let sym = Oid.Tree.find syms oid in
-                  let comp = collect_comps comp oid in
-                  if Array.is_empty data && Option.is_none sym
+              List.filter_map ~f:(fun (oid,{Env.data; name; comp}) ->
+                  let data = serialize_record data in
+                  let comp = Map.keys comp in
+                  if Array.is_empty data && Option.is_none name
                   then None
-                  else Some {key=oid; sym; data; comp}) in
+                  else Some {key=oid; sym=name; data; comp}) in
             cid,(last,data)) in {
         version = V2;
         payload;

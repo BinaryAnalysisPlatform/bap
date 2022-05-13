@@ -1004,7 +1004,7 @@ module State = struct
     s : 'b;
   }
 
-  type ('a,'e) state = State of ('e -> 'a) [@@unboxed]
+  type ('a,'e) state = State of ('e -> 'a)
 
 
   module Tp(T : T1)(M : Monad.S) = struct

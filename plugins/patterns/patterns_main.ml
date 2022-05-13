@@ -1267,7 +1267,7 @@ end = struct
     KB.Seq.iter ~f:(fun (addr,actions) ->
         Set.to_sequence actions |>
         KB.Seq.iter ~f:(fun action ->
-            let* lbl = KB.Object.create Theory.Program.cls in
+            KB.Object.scoped Theory.Program.cls @@ fun lbl ->
             KB.sequence [
               KB.provide Lambda.unit lbl (Some unit);
               KB.provide Lambda.addr lbl (Some addr);

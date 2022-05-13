@@ -455,10 +455,8 @@ let setup_gc () =
   info "Setting GC parameters";
   Caml.Gc.set {
     opts with
-    window_size = 20;
-    minor_heap_size = 1024 * 1024;
+    minor_heap_size = 2 * 1024 * 1024;
     major_heap_increment = 64 * 1024 * 1024;
-    space_overhead = 200;
   }
 
 let has_env var = match Sys.getenv var with

@@ -113,21 +113,21 @@ end = struct
     let x = payload x in
     pack Bitvec.(to_bigint (f x mod modulus w)) w
   [@@inline]
-  [@@specialize]
+  [@@specialise]
 
   let lift2 x y f =
     let w = bitwidth x in
     let x = payload x and y = payload y in
     pack Bitvec.(to_bigint (f x y mod modulus w)) w
   [@@inline]
-  [@@specialize]
+  [@@specialise]
 
   let lift3 x y z f =
     let w = bitwidth x in
     let x = payload x and y = payload y and z = payload z in
     pack Bitvec.(to_bigint (f x y z mod modulus w)) w
   [@@inline]
-  [@@specialize]
+  [@@specialise]
 
   module Stringable = struct
     type t = packed
