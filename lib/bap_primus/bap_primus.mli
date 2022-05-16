@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_knowledge
 open Regular.Std
 open Bap.Std

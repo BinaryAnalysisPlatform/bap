@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Graphlib_intf
 open Format
@@ -139,7 +139,7 @@ end
 
 module Equiv = struct
   type t = int [@@deriving bin_io, compare, sexp]
-  let to_int = ident
+  let to_int = Fn.id
   include Regular.Make(struct
       include Int
       let module_name = Some "Graphlib.Std.Equiv"
@@ -698,10 +698,10 @@ let depth_first_search
   let init = match start with
     | None -> ord,init
     | Some s -> if G.Node.mem s g
-      then visit ord s (start_tree s init) ident else ord,init in
+      then visit ord s (start_tree s init) Fn.id else ord,init in
   G.nodes g |> Seq.fold ~init ~f:(fun (ord,state) u ->
       match Order.number ord u with
-      | None -> visit ord u (start_tree u state) ident
+      | None -> visit ord u (start_tree u state) Fn.id
       | _ -> ord,state) |> snd
 
 let depth_first_visit graph ?rev ?start g ~init vis  =
@@ -833,7 +833,7 @@ let idom (type t) (type n) (type e)
   let doms = Array.create ~len ~-1 in
   let pnum =
     Hashtbl.find_and_call pnums
-      ~if_found:ident
+      ~if_found:Fn.id
       ~if_not_found:(fun _ -> raise Unreachable) in
   if len > 0 then doms.(len - 1) <- len - 1;
   with_return (fun {return} ->
@@ -1409,7 +1409,7 @@ module Fixpoint = struct
         | Done approx -> make_solution iters approx
         | Step (visits,works,approx) -> loop visits (iters+1) works approx
       else make_solution iters approx in
-    let works = List.init (Array.length nodes) ident in
+    let works = List.init (Array.length nodes) Fn.id in
     let approx = Map.fold init ~init:Int.Map.empty
         ~f:(fun ~key:node ~data approx ->
             match Map.find rnodes node with

@@ -1,5 +1,5 @@
 open Bap.Std
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 include Self()
 
@@ -11,11 +11,11 @@ Config.manpage [
   `P "Flatten all AST in the program.";
   `S "EXAMPLE";
   `Pre {|
-  ;; input 
+  ;; input
   #10 := 11 * (#9 + 13) - 17
   ;; output
   #11 := #9 + 13
-  #12 := 11 * #11 
+  #12 := 11 * #11
   #10 := #12 - 17
   |}
 

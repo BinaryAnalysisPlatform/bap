@@ -54,7 +54,7 @@ bap dependency /bin/ls --root=/mnt/image --ldconfig='cat ld.so.cache'
 ```
 "
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Regular.Std
 open Bap_main

@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 (* a region in a file *)
 type range = Parsexp.Positions.range [@@deriving sexp_of]

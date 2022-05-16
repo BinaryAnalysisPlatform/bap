@@ -1,10 +1,10 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 
 type opcode = string
 
 module type S = sig
-  val register : opcode -> lifter -> unit  
+  val register : opcode -> lifter -> unit
   module Make (T : Target) : Target
 end
 

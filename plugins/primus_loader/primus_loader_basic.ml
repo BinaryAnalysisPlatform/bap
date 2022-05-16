@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap.Std
 open Bap_primus.Std
@@ -76,7 +76,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     Ogre.foreach Ogre.Query.(begin
         select (from segment)
       end)
-      ~f:ident
+      ~f:Fn.id
 
   let get_segmentations proj =
     match Project.get proj Image.specification with

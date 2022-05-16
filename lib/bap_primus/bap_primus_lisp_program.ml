@@ -1,6 +1,6 @@
 open Bap.Std
 open Bap_core_theory
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Graphlib.Std
 open Regular.Std
 open Monads.Std
@@ -437,13 +437,13 @@ module Callgraph = struct
                     G.Edge.insert (edge def.id id) g))))
 
   let connect_with_entry = function
-    | Entry -> ident
+    | Entry -> Fn.id
     | n ->
       G.Edge.insert @@
       G.Edge.create Entry n ()
 
   let connect_with_exit = function
-    | Exit -> ident
+    | Exit -> Fn.id
     | n ->
       G.Edge.insert @@
       G.Edge.create n Exit ()
@@ -1354,7 +1354,7 @@ module Typing = struct
         apply glob id name xs ++
         reduce vs xs
       | {data=Seq []} ->
-        ident
+        Fn.id
       | {data=Seq xs; id} ->
         Gamma.unify (last xs) id ++
         reduce vs xs
@@ -1370,10 +1370,10 @@ module Typing = struct
       | {data=Msg (_,xs); id} ->
         Gamma.constr id (Type 1) ++
         reduce vs xs
-      | {data=Err _} -> ident
-      | {data=App (Static _,_)} -> ident
+      | {data=Err _} -> Fn.id
+      | {data=App (Static _,_)} -> Fn.id
     and reduce vs = function
-      | [] -> ident
+      | [] -> Fn.id
       | x :: xs -> infer vs x ++ reduce vs xs in
     infer bindings ast
 

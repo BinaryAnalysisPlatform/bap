@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 
 (**
@@ -699,7 +699,7 @@ module Std : sig
         interface and has unlabeled nodes of type [Node.t] and edges
         labeled with [Edge.t]
 
-        In [Core_kernel] basically any type that is reasonable to be
+        In [Core_kernel[@@warning "-D"]] basically any type that is reasonable to be
         used as a graph node, satisfies the {!Opaque.S} interface. So,
         a new graph structure can be implemented directly, e.g.,
         {[module G = Graphlib.Make(Int64)(Unit)]}

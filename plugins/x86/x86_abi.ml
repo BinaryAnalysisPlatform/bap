@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Bap_c.Std
 open Bap_future.Std
@@ -57,7 +57,7 @@ module SysV = struct
   let size = object
     inherit C.Size.base `LP64
   end
-  let demangle = ident
+  let demangle = Fn.id
   let autodetect _ = false
 end
 
@@ -76,7 +76,7 @@ module CDECL = struct
     inherit C.Size.base `ILP32
   end
 
-  let demangle = ident
+  let demangle = Fn.id
   let autodetect _ = false
 end
 
@@ -256,7 +256,7 @@ let setup ?(abi=fun _ -> None) () =
       info "using %s ABI" Abi.name;
       let abi = C.Abi.{
           insert_args = dispatch abi;
-          apply_attrs = fun _ -> ident
+          apply_attrs = fun _ -> Fn.id
         } in
       C.Abi.register Abi.name abi;
       let api = C.Abi.create_api_processor Abi.size abi in

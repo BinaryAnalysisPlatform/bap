@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Graphlib.Std
 open Option.Monad_infix
@@ -119,9 +119,9 @@ module Node = struct
   type t = node
   type nonrec edge = edge
 
-  let create = ident
+  let create = Fn.id
 
-  let label = ident
+  let label = Fn.id
 
   let mem blk t = Map.mem t.preds (Term.tid blk)
 

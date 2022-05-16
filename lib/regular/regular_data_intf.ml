@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular_data_types
 
 type bytes = Regular_bytes.t [@@deriving bin_io, compare, sexp]

@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Result.Monad_infix
 open Bap.Std
 module Sys = Caml.Sys
@@ -40,7 +40,7 @@ module Api_path = struct
   let to_string = Path.string_of_filename
 
   let expand_home path =
-    Option.(value_map ~default:path ~f:ident
+    Option.(value_map ~default:path ~f:Fn.id
               (String.chop_prefix ~prefix:"~" (to_string path) >>= fun p ->
                getenv "HOME" >>= fun h ->
                Some Path.(filename_of_string h / filename_of_string p)))

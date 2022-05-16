@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap_knowledge
 
@@ -121,7 +121,7 @@ module Semantics = struct
 
   module Base = struct
     module KB = Knowledge
-    let simpl = ident
+    let simpl = Fn.id
     let ret = Knowledge.return
     let bool = Theory.Bool.t
     let bool_t = Type.Reg 1

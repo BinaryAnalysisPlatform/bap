@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Bap.Std
 
@@ -70,7 +70,7 @@ let lift_r  ~(dst1 : Var.t) ?(dst2 : Var.t option) ~(base : Var.t)
       let mem = Bil.var (Env.mem) in
       if [%compare.equal: size] size D then [
         Bil.move dst1 (load mem address);
-        Bil.move (uw dst2) (load mem Bil.(address + four));
+        Bil.move (Option.value_exn dst2) (load mem Bil.(address + four));
       ] else [
         assn temp (load mem address);
       ] in
@@ -94,7 +94,7 @@ let lift_r  ~(dst1 : Var.t) ?(dst2 : Var.t option) ~(base : Var.t)
       | D -> [
           Bil.move m (store v address Bil.(var dst1));
           Bil.move m (store v
-                        Bil.(address + four) Bil.(var (uw dst2)));
+                        Bil.(address + four) Bil.(var (Option.value_exn dst2)));
         ]
       | B | H | W -> [
           Bil.move m (store v address Bil.(var temp));

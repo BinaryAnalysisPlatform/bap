@@ -1,6 +1,6 @@
 open Bap_core_theory
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Bap_types.Std
 open Image_internal_std

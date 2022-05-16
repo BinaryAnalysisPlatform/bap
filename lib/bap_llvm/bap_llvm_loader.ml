@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Monads.Std
 open Or_error
@@ -37,10 +37,10 @@ module LLVM = struct
 
   (** entry point  *)
   let entry_point () =
-    Ogre.declare ~name:"llvm:entry-point" (scheme addr) ident
+    Ogre.declare ~name:"llvm:entry-point" (scheme addr) Fn.id
 
   let base_address () =
-    Ogre.declare ~name:"llvm:base-address" (scheme addr) ident
+    Ogre.declare ~name:"llvm:base-address" (scheme addr) Fn.id
 
   (** (llvm:relocation from to). *)
   let relocation () =

@@ -1,5 +1,5 @@
 open Bap_core_theory
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Graphlib.Std
 open Bap.Std
@@ -22,13 +22,13 @@ let find_in_memory extract element proj addr =
 
 let properties = [
   "symbol", {
-    extract = find_in_memory ident Image.symbol;
+    extract = find_in_memory Fn.id Image.symbol;
     explain = "name of the enclosing symbol, where the symbol is \
                looked up in the file symbol table or debuging \
                information, if any";
   };
   "section", {
-    extract = find_in_memory ident Image.section;
+    extract = find_in_memory Fn.id Image.section;
     explain = "name of the enclosing section of the file";
   };
   "segment", {
@@ -66,7 +66,7 @@ let print_spec ppf proj =
   | Some spec ->  Format.fprintf ppf "%a" Ogre.Doc.pp spec
 
 let create_demangler = function
-  | None -> ident
+  | None -> Fn.id
   | Some name ->
     Demanglers.available () |>
     List.find ~f:(fun d -> String.equal (Demangler.name d) name) |> function

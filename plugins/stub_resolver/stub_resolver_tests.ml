@@ -18,7 +18,7 @@
 *)
 
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap_knowledge
 open Bap.Std

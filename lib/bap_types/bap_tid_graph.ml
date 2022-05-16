@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Graphlib.Std
 open Bap_ir
@@ -22,11 +22,11 @@ let start = Tid.for_name ~package:"bap" "start-pseudo-node"
 let exit = Tid.for_name ~package:"bap" "exit-pseudo-node"
 
 let connect_with_exit n =
-  if Tid.equal n exit then ident
+  if Tid.equal n exit then Fn.id
   else G.Edge.insert (G.Edge.create n exit exit)
 
 let connect_with_start n =
-  if Tid.equal n start then ident
+  if Tid.equal n start then Fn.id
   else
     G.Edge.insert @@
     G.Edge.create start n start
@@ -34,7 +34,7 @@ let connect_with_start n =
 let if_unreachable ~from connect g n =
   if G.Node.degree ~dir:from n g = 0
   then connect n
-  else ident
+  else Fn.id
 
 let create sub =
   let g = of_sub sub in

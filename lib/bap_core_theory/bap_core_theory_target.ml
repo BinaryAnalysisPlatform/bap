@@ -1,6 +1,6 @@
 let package = "core"
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_knowledge
 
 module KB = Knowledge

@@ -24,7 +24,7 @@ Report bugs to
 $(b,bapbundle)(1), $(b,bapbuild)(1), $(b,bap)(3)
 |}
 open Bap.Std
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Bap_main.Extension
 

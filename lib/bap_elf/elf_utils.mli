@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Elf_types
 
 (** [section_name data elf section] extracts section name from data  *)

@@ -73,7 +73,7 @@
    select as many files as we need to remove requested size.
 *)
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 
 include Self ()

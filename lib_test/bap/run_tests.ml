@@ -1,7 +1,9 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_plugins.Std
 
 open OUnit2
+
+module Sys = Caml.Sys
 
 let suite () =
   "BAP" >::: [

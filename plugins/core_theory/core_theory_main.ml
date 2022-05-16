@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap_main
 open KB.Syntax
@@ -27,7 +27,7 @@ let decide_name_from_possible_name () : unit =
 
 let domain = KB.Domain.optional "cst"
     ~equal:Sexp.equal
-    ~inspect:ident
+    ~inspect:Fn.id
 
 let eslot = KB.Class.property Theory.Semantics.cls "eff"
     ~package:"core"
@@ -196,7 +196,7 @@ module Herbrand : Theory.Core = struct
       | _ -> empty s
 
     let concat s xs =
-      List.map xs ~f:(fun x -> x >>|> fun _ -> ident) |>
+      List.map xs ~f:(fun x -> x >>|> fun _ -> Fn.id) |>
       KB.List.all >>| Option.all >>| function
       | None -> empty s
       | Some xs -> pure s @@ app "concat" xs

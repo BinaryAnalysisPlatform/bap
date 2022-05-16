@@ -18,7 +18,7 @@ and
 means that in the base there is no call from src to dst.
 |}
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Graphlib.Std
 open Format

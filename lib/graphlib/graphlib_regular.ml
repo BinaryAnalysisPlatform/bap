@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Graphlib_intf
 open Graphlib_regular_intf
@@ -38,8 +38,8 @@ module Make(Node : Opaque.S)(Label : T) = struct
     type label = Node.t
     type nonrec graph = graph
 
-    let create = ident
-    let label = ident
+    let create = Fn.id
+    let label = Fn.id
     let mem n g = Map.mem g n
     let adj dir n g  = Map.find g n |> function
       | None -> Seq.empty

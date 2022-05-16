@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Bap.Std
 
@@ -33,7 +33,7 @@ include Regular.Make(struct
     let module_name = None
     let version = "1.0.0"
 
-    let pp ppf t = Uuidm.print ppf t
+    let pp ppf t = Uuidm.print ppf t[@@warning "-D"]
   end)
 
 let of_string = Stringable.of_string

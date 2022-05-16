@@ -10,7 +10,7 @@
     to attach attributes of the form [attr(args)] to C type
     declarations.
 *)
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 type char =
   [ `schar | `char | `uchar]

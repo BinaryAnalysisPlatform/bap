@@ -46,7 +46,7 @@ $(b,:) instead of $(b,-) or $(b,--), e.g.,
 |}
 
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_main
 open Bap_knowledge
 open Bap.Std

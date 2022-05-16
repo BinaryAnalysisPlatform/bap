@@ -3,7 +3,7 @@ Enables ad-hoc support for glibc runtime code. In particular it
 detects the locations of $(b,main) and $(b,__libc_start_main)
 functions (and adds the latter if it is absent).
 "
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_main
 open Bap_core_theory
 open Bap.Std
@@ -96,7 +96,7 @@ let detect_main_address prog =
   | _ -> None
 
 
-let reinsert_args_for_new_name ?(abi=ident) sub name =
+let reinsert_args_for_new_name ?(abi=Fn.id) sub name =
   List.fold ~init:sub ~f:(|>) [
     Term.filter arg_t ~f:(fun _ -> false);
     (fun sub -> Term.del_attr sub C.proto);

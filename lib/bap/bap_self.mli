@@ -1,5 +1,5 @@
 open Format
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_future.Std
 open Bap_main.Extension
 
