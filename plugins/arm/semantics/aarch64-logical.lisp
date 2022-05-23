@@ -99,12 +99,16 @@
 
 ;; REV...
 
-(defmacro REV*r (setr size rd rn)
-  "(REV*r setr size rd rn) reverses byte order of rn nd stores result in rd. THIS MAY HAVE ISSUES, see documentation in aarch64-helper.lisp reverse-byte-order, the BIL output looks a bit funky"
-  (setr rd (reverse-byte-order size rn)))
+(defmacro REVn*r (setr container-size rd rn)
+  "(REVn*r setr container-size rd rn) implements the non-vector REV#
+   instructions with the given container-size."
+  (setr rd (reverse-elems-in-all-containers container-size 8 rn)))
 
-(defun REVWr (rd rn) (REV*r setw 32 rd rn))
-(defun REVXr (rd rn) (REV*r set$ 64 rd rn))
+(defun REVWr   (rd rn) (REVn*r setw 32 rd rn))
+(defun REVXr   (rd rn) (REVn*r set$ 64 rd rn))
+(defun REV16Xr (rd rn) (REVn*r setw 16 rd rn))
+(defun REV16Wr (rd rn) (REVn*r set$ 16 rd rn))
+(defun REV32Xr (rd rn) (REVn*r setw 32 rd rn))
 
 ;; UBFM and SBFM
 ;; (bitfield moves)

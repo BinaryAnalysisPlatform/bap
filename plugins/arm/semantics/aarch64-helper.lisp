@@ -101,16 +101,35 @@
     0b0001 :oshld
     :unknown))
 
-(defun reverse-byte-order (size rn)
-  "(reverse-byte-order) helper function to reverse the byte order of the contents of register rn of size size. THIS MAY HAVE ISSUES, it's only called by REV in aarch64-logical.lisp, and BIL output looks a bit funky"
-  (let ((byte_size 8)
-	(elements (/ size byte_size))
-	(index 0)
-	(rev_index (+ index (* 8 (- elements 1))))
-	(result (extract (+ index 7) index rn)))
-    (while (< index size)
-	   (set index (+ index 8))
-	   (set rev_index (- rev_index 8))
-	   (set result (concat (extract (+ index 7) index rn) result)))
+(defun replace-bit-range (reg hi lo val)
+  "(replace-bit-range reg hi lo val) returns reg with bits
+   hi to lo inclusive set to the value stored in val."
+  (let ((mask (lshift (cast-unsigned (word-width reg) (ones (+ (- hi lo) 1))) lo))
+        (cleared (logand reg (lnot mask)))
+        (result (logor cleared (logand mask (lshift (cast-unsigned (word-width reg) val) lo)))))
     result))
 
+(defun reverse-elems-in-one-container (elem-size c)
+  "(reverse-elems-in-one-container elem-size c) reverses the order
+   of each group of elem-size bits in c.
+   For non-vector instructions, elem-size = 8.
+   If c's width is not a multiple of elem-size, the remaining bits
+   get appended at the end."
+  (if (<= (word-width c) elem-size) c
+    (concat
+      (cast-low elem-size c)
+      (reverse-elems-in-one-container elem-size
+        (cast-high (- (word-width c) elem-size) c)))))
+
+(defun reverse-elems-in-all-containers (container-size elem-size x)
+  "(reverse-elems-in-all-containers container-size elem-size x) applies
+   reverse-elems-in-one-container to each group of container-size bits in x.
+   In other words, it reverses the order of groups of elem-size bits within
+   each group of container-size bits.
+   If x's width is not a multiple of container-size, the remaining bits
+   get appended at the end."
+  (if (< (word-width x) container-size) x
+    (concat
+      (reverse-elems-in-one-container elem-size (cast-high container-size x))
+      (reverse-elems-in-all-containers container-size elem-size
+        (cast-low (- (word-width x) container-size) x)))))
