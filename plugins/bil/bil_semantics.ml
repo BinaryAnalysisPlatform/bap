@@ -31,19 +31,41 @@ module Simpl = struct
   let ones width = Bil.Int (Word.ones width)
   let app2 = Bil.Apply.binop
 
+  let infer x = match Type.infer_exn x with
+    | Bil.Imm n -> n
+    | _ -> 0
+
+  let equal_cast = [%compare.equal: cast]
+
   let exp width =
     let concat x y = match x, y with
       | Int x, Int y -> Int (Word.concat x y)
+      | Cast (HIGH,s,(Var x as v)), Extract(p,q,Var x')
+        when Var.equal x x' && infer v - s - 1 = p ->
+        Cast (HIGH,s + p - q + 1,v)
+      | Cast (HIGH,s,(Var x as v)), Concat ((Extract(p,q,Var x')),z)
+        when Var.equal x x' && infer v - s - 1 = p ->
+        Concat (Cast (HIGH,s + p - q + 1,v),z)
       | x,y -> Concat (x,y)
 
     and cast t s x = match x with
       | Cast (_,s',_) as x when s = s' -> x
-      | Cast (t',s',x) when [%compare.equal: cast] t t' && s' > s -> Cast (t,s,x)
+      | Cast (t',s',x) when equal_cast t t' && s' >= s ->
+        Cast (t,s,x)
+      | Cast (UNSIGNED as t',s',x)
+      | Cast (SIGNED as t',s',x) when equal_cast t t' && s' <= s ->
+        Cast (t,s,x)
+      | Extract(p,_,x) when equal_cast t HIGH ->
+        Extract(p,p-s+1,x)
       | Int w -> Int (Bil.Apply.cast t s w)
+      | x when infer x = s -> x
       | _ -> Cast (t,s,x)
 
     and extract hi lo x = match x with
       | Int w -> Int (Word.extract_exn ~hi ~lo w)
+      | Extract (p,q,x) when hi <= p && lo >= q ->
+        Extract (hi,lo,x)
+      | x when lo = 0 && infer x = hi + 1 -> x
       | x -> Extract (hi,lo,x)
 
     and unop op x = match op,x with

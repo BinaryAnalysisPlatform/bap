@@ -88,24 +88,25 @@ module Desugar(CT : Core) : Core = struct
 
     let pass = Effect.empty Effect.Sort.bot
 
+
+    let take what bits x =
+      what (Val.Bitv.define bits) (CT.var x)
+
     let assign_sub dst src off =
       src >>= fun src ->
       let s = Var.sort dst in
       let dst_len = Val.Bitv.size s
       and src_len = Val.Bitv.size @@ Val.sort src in
-      let src = CT.unsigned s !!src in
-      let open Bitvec.Make(struct
-          let modulus = Bitvec.modulus dst_len
-        end) in
-      let mask =
-        lnot ((one lsl int src_len - one) lsl int off) in
-      let x = CT.(logand (var dst) (int s mask)) in
-      let off = int off in
-      let y = if Bitvec.equal off zero
-        then src
-        else CT.(lshift src (int s off)) in
-      CT.(set dst (logor x y))
-
+      let ulen = dst_len - src_len - off in
+      CT.set dst @@ match ulen,off with
+      | 0,0 -> !!src
+      | _,0 -> CT.append s (take CT.high ulen dst) !!src
+      | 0,_ -> CT.append s !!src (take CT.low off dst)
+      | _,_ -> CT.concat s [
+          take CT.high ulen dst;
+          !!src;
+          take CT.low off dst
+        ]
 
     let pos x =
       let module Pos = Bitvec.M32 in

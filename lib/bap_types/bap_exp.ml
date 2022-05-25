@@ -104,7 +104,7 @@ module PP = struct
     | Ite (ce, te, fe) ->
       pr "@[if %a@;then %a@;else %a@]" pp ce pp te pp fe
     | Extract (hi, lo, exp) ->
-      pr "extract:%d:%d[%a]" hi lo pp exp
+      pr "%d:%d[%a]" hi lo pp exp
     | Concat (le, re) as p ->
       pr (pfmt p le ^^ "." ^^ pfmt p re) pp le pp re
     | BinOp (EQ,e, Int x) when is_b1 x -> pr ("%a") pp e
