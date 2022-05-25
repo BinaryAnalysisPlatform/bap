@@ -10,6 +10,9 @@
 (defun TRAP ()
   (intrinsic '__ud2 :aborts))
 
+(defun POP64rmm (ptr _ _ _ _)
+  (store-word ptr (load-word RSP))
+  (+= RSP 8))
 
 (defun is-rip (reg)
   (= (symbol reg) 'RIP))
