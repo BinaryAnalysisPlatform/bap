@@ -66,7 +66,7 @@ type basic = [integer | floating]
 type cv = unit [@@deriving bin_io,compare,sexp]
 type cvr = Bool.t [@@deriving bin_io,compare,sexp]
 
-module Qualifier = struct
+module Qualifier : sig
   type 'a t = {
     const : Bool.t;
     volatile : Bool.t;
@@ -76,7 +76,7 @@ end
 
 type 'a qualifier = 'a Qualifier.t [@@deriving bin_io, compare, sexp]
 
-module Attr = struct
+module Attr : sig
   type t = {
     name : string;
     args : string list [@sexp.list];
@@ -86,7 +86,7 @@ end
 type attr = Attr.t
 [@@deriving bin_io, compare, sexp]
 
-module Spec = struct
+module Spec : sig
   type ('a,'b) t = {
     qualifier : 'a;
     t : 'b;
@@ -101,7 +101,7 @@ type ('a,'b) spec = ('a,'b) Spec.t
 type no_qualifier = [`no_qualifier]
 [@@deriving bin_io, compare, sexp]
 
-module Proto = struct
+module Proto : sig
   type 'a t = {
     return : 'a;
     args   : (string * 'a) list;
@@ -109,14 +109,14 @@ module Proto = struct
   } [@@deriving bin_io, compare, sexp]
 end
 
-module Compound = struct
+module Compound : sig
   type 'a t = {
     name : string;
     fields : (string * 'a) list;
   } [@@deriving bin_io, compare, sexp]
 end
 
-module Array = struct
+module Array : sig
   type 'a t = {
     element : 'a;
     size : Int.t option
@@ -147,118 +147,87 @@ type aggregate = [
   | `Structure of (no_qualifier, t list) spec
 ] [@@deriving bin_io, compare, sexp]
 
-let attrs : t -> attr list = function
-  | `Void -> []
-  | `Basic {attrs}
-  | `Pointer {attrs}
-  | `Array {attrs}
-  | `Structure {attrs}
-  | `Union {attrs}
-  | `Function {attrs} -> attrs
 
-let is_const : t -> Bool.t = function
-  | `Void | `Union _ | `Structure _ | `Function _ -> false
-  | `Basic {qualifier={const}}
-  | `Array {qualifier={const}}
-  | `Pointer {qualifier={const}} -> const
+(** [attrs t] the list of attributes associated with the type [t].  *)
+val attrs : t -> attr list
 
-let is_volatile : t -> Bool.t = function
-  | `Void | `Union _ | `Structure _ | `Function _ -> false
-  | `Basic {qualifier={volatile}}
-  | `Array {qualifier={volatile}}
-  | `Pointer {qualifier={volatile}} -> volatile
+(** [is_const t] is [true] if type is const-qualified.*)
+val is_const : t -> Bool.t
 
-let is_restrict : t -> Bool.t = function
-  | `Void | `Union _ | `Structure _ | `Function _ | `Basic _ -> false
-  | `Array {qualifier={restrict}}
-  | `Pointer {qualifier={restrict}} -> restrict
+(** [is_volatile t] is [true] if type is volatile-qualified.*)
+val is_volatile : t -> Bool.t
+
+(** [is_restrict t] is [true] if type is restrict-qualified.*)
+val is_restrict : t -> Bool.t
 
 
-let qualifier ?(const=false) ?(volatile=false) restrict =
-  Qualifier.{const; volatile; restrict}
+(** {2 Basic Types} *)
 
-let basic ?(attrs=[]) ?const ?volatile t : t =
-  `Basic {
-    t;
-    attrs;
-    qualifier = qualifier ?const ?volatile ();
-  }
+(** [basic x] constructs a basic type.
 
-let is_basic : t -> Bool.t =
-  function `Basic _ -> true |  _ -> false
+    Example, [basic `char].
+    All parameters default to false or empty.
 
-let is_char : t -> Bool.t =
-  function `Basic {t=#char} -> true | _ -> false
+    @since 2.5.0 *)
+val basic : ?attrs:attr list -> ?const:Bool.t -> ?volatile:Bool.t -> basic -> t
 
-let is_short : t -> Bool.t =
-  function `Basic {t=#short} -> true | _ -> false
-
-let is_cint : t -> Bool.t =
-  function `Basic {t=#cint} -> true | _ -> false
-
-let is_signed : t -> Bool.t =
-  function `Basic {t=#signed} -> true | _ -> false
-
-let is_unsigned : t -> Bool.t =
-  function `Basic {t=#unsigned} -> true | _ -> false
-
-let is_enum : t -> Bool.t =
-  function `Basic {t=#enum} -> true | _ -> false
-
-let is_integer : t -> Bool.t =
-  function `Basic {t=#integer} -> true | _ -> false
-
-let is_real : t -> Bool.t =
-  function `Basic {t=#real} -> true | _ -> false
-
-let is_complex : t -> Bool.t =
-  function `Basic {t=#complex} -> true | _ -> false
-
-let is_floating : t -> Bool.t =
-  function `Basic {t=#floating} -> true | _ -> false
-
-let pointer ?(attrs=[]) ?const ?volatile ?(restrict=false) t : t =
-  `Pointer {
-    t;
-    attrs;
-    qualifier = qualifier ?const ?volatile restrict;
-  }
-
-let is_pointer : t -> Bool.t = function `Pointer _ -> true | _ -> false
-
-let array ?(attrs=[]) ?const ?volatile ?(restrict=false) ?size t : t =
-  `Array {
-    t = Array.{element=t; size};
-    attrs;
-    qualifier = qualifier ?const ?volatile restrict;
-  }
-
-let is_array : t -> Bool.t = function `Array _ -> true | _ -> false
-
-let structure ?(attrs=[]) name fields : t =
-  `Structure {
-    t = Compound.{name; fields};
-    attrs;
-    qualifier = `no_qualifier;
-  }
-
-let is_structure : t -> Bool.t = function `Structure _ -> true | _ -> false
+val is_basic : t -> Bool.t
+val is_char : t -> Bool.t
+val is_short : t -> Bool.t
+val is_cint : t -> Bool.t
+val is_signed : t -> Bool.t
+val is_unsigned : t -> Bool.t
+val is_enum : t -> Bool.t
+val is_integer : t -> Bool.t
+val is_real : t -> Bool.t
+val is_complex : t -> Bool.t
+val is_floating : t -> Bool.t
 
 
-let union ?(attrs=[]) name fields : t =
-  `Union {
-    t = Compound.{name; fields};
-    attrs;
-    qualifier = `no_qualifier;
-  }
+(** {2 Pointers and Arrays} *)
 
-let is_union : t -> Bool.t = function `Union _ -> true | _ -> false
 
-let function_ ?(attrs=[]) ?(variadic=false) ?(return=`Void) args : t =
-  `Function {
-    t = Proto.{return; args; variadic};
-    attrs;
-    qualifier = `no_qualifier;
-  }
+(** [pointer t] constructs a pointer to the type [t].  *)
+val pointer :
+  ?attrs:attr list ->
+  ?const:Bool.t ->
+  ?volatile:Bool.t ->
+  ?restrict:Bool.t -> t -> t
 
-let is_function : t -> Bool.t = function `Function _ -> true | _ -> false
+(** [array t] constructs an array of type [t] elements.
+
+    The [size] is the optional size (the number of elements) of the array.
+*)
+val array :
+  ?attrs:attr list ->
+  ?const:Bool.t ->
+  ?volatile:Bool.t ->
+  ?restrict:Bool.t ->
+  ?size:Int.t ->
+  t -> t
+
+val is_array : t -> Bool.t
+
+val is_pointer : t -> Bool.t
+
+(** {2 Compounds }  *)
+
+(** [structure name fields] constructure a structure type.  *)
+val structure : ?attrs:attr list -> string -> (string * t) list -> t
+
+val is_structure : t -> Bool.t
+
+(** [union name fields] conunion a union type.  *)
+val union : ?attrs:attr list -> string -> (string * t) list -> t
+
+val is_union : t -> Bool.t
+
+
+(** [function args] constructs a function type.
+
+    @param return defaults to [`Void].
+*)
+val function_ : ?attrs:attr list -> ?variadic:Bool.t -> ?return:t ->
+  (string * t) list -> t
+
+val is_function : t -> Bool.t
