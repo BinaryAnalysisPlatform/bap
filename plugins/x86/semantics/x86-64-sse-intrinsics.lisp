@@ -77,109 +77,109 @@
   (fp-compare 32 rn rm))
 
 (defun CVTSI642SDrr_Int (dst _ src)
-  (set$ dst (sse-convert 'cast_sfloat 64 64 src)))
+  (set-sse dst (sse-convert 'cast_sfloat 64 64 src)))
 
 (defun CVTSI642SDrm_Int (dst _ ptr _ _ off _)
-  (set$ dst (sse-convert 'cast_sfloat 64 64 (load-mem ptr off))))
+  (set-sse dst (sse-convert 'cast_sfloat 64 64 (load-mem ptr off))))
 
 (defun CVTSI642SSrr_Int (dst _ src)
-  (set$ dst (sse-convert 'cast_sfloat 64 32 src)))
+  (set-sse dst (sse-convert 'cast_sfloat 64 32 src)))
 
 (defun CVTSI642SSrm_Int (dst _ ptr _ _ off _)
-  (set$ dst (sse-convert 'cast_sfloat 64 32 (load-mem ptr off))))
+  (set-sse dst (sse-convert 'cast_sfloat 64 32 (load-mem ptr off))))
 
 (defun CVTTSS2SI64rr_Int (dst src)
-  (set$ dst (sse-convert 'cast_sint 64 32 src)))
+  (set-sse dst (sse-convert 'cast_sint 64 32 src)))
 
 (defun CVTTSS2SI64rm_Int (dst _ ptr _ _ off _)
-  (set$ dst (sse-convert 'cast_sint 64 32 (load-mem ptr off))))
+  (set-sse dst (sse-convert 'cast_sint 64 32 (load-mem ptr off))))
 
 (defun CVTTSS2SIrr_Int (dst src)
-  (set$ dst (sse-convert 'cast_sint 32 32 src)))
+  (set-sse dst (sse-convert 'cast_sint 32 32 src)))
 
 (defun CVTTSS2SIrm_Int (dst _ ptr _ _ off _)
-  (set$ dst (sse-convert 'cast_sint 32 32 (load-mem ptr off))))
+  (set-sse dst (sse-convert 'cast_sint 32 32 (load-mem ptr off))))
 
 (defun CVTSS2SI64rr_Int (dst src)
-  (set$ dst (sse-convert 'cast_sint 64 32 src)))
+  (set-sse dst (sse-convert 'cast_sint 64 32 src)))
 
 (defun CVTSS2SI64rm_Int (dst _ ptr _ _ off _)
-  (set$ dst (sse-convert 'cast_sint 64 32 (load-mem ptr off))))
+  (set-sse dst (sse-convert 'cast_sint 64 32 (load-mem ptr off))))
 
 (defun CVTSS2SIrr_Int (dst src)
-  (set$ dst (sse-convert 'cast_sint 32 32 src)))
+  (set-sse dst (sse-convert 'cast_sint 32 32 src)))
 
 (defun CVTSS2SIrm_Int (dst _ ptr _ _ off _)
-  (set$ dst (sse-convert 'cast_sint 32 32 (load-mem ptr off))))
+  (set-sse dst (sse-convert 'cast_sint 32 32 (load-mem ptr off))))
 
 (defun CVTTSD2SI64rr_Int (dst src)
-  (set$ dst (sse-convert 'cast_sint 64 64 src)))
+  (set-sse dst (sse-convert 'cast_sint 64 64 src)))
 
 (defun CVTTSD2SI64rm_Int (dst _ ptr _ _ off _)
-  (set$ dst (sse-convert 'cast_sint 64 64 (load-mem ptr off))))
+  (set-sse dst (sse-convert 'cast_sint 64 64 (load-mem ptr off))))
 
 (defun CVTTSD2SIrr_Int (dst src)
-  (set$ dst (sse-convert 'cast_sint 32 64 src)))
+  (set-sse dst (sse-convert 'cast_sint 32 64 src)))
 
 (defun CVTTSD2SIrm_Int (dst _ ptr _ _ off _)
-  (set$ dst (sse-convert 'cast_sint 32 64 (load-mem ptr off))))
+  (set-sse dst (sse-convert 'cast_sint 32 64 (load-mem ptr off))))
 
 (defun CVTSD2SI64rr_Int (dst src)
-  (set$ dst (sse-convert 'cast_sint 64 64 src)))
+  (set-sse dst (sse-convert 'cast_sint 64 64 src)))
 
 (defun CVTSD2SI64rm_Int (dst _ ptr _ _ off _)
-  (set$ dst (sse-convert 'cast_sint 64 64 (load-mem ptr off))))
+  (set-sse dst (sse-convert 'cast_sint 64 64 (load-mem ptr off))))
 
 (defun CVTSD2SIrr_Int (dst src)
-  (set$ dst (sse-convert 'cast_sint 32 64 src)))
+  (set-sse dst (sse-convert 'cast_sint 32 64 src)))
 
 (defun CVTSD2SIrm_Int (dst _ ptr _ _ off _)
-  (set$ dst (sse-convert 'cast_sint 32 64 (load-mem ptr off))))
+  (set-sse dst (sse-convert 'cast_sint 32 64 (load-mem ptr off))))
 
 (defun CVTPS2PDrr (dst src)
   (let ((lo (sse-convert 'fconvert 64 32 (extract 31  0 src)))
         (hi (sse-convert 'fconvert 64 32 (extract 63 32 src))))
-    (set$ dst (concat hi lo))))
+    (set-sse dst (concat hi lo))))
 
 (defun CVTSI2SSrm_Int (dst _ ptr _ _ off _)
-  (set$ dst (sse-convert 'cast_sfloat 32 64 (load-mem ptr off))))
+  (set-sse dst (sse-convert 'cast_sfloat 32 64 (load-mem ptr off))))
 
 (defun CVTSI2SDrm_Int (dst _ ptr _ _ off _)
-  (set$ dst (sse-convert 'cast_sfloat 64 64 (load-mem ptr off))))
+  (set-sse dst (sse-convert 'cast_sfloat 64 64 (load-mem ptr off))))
 
 (defun CVTSI2SSrr_Int (dst _ ptr _ _ off _)
-  (set$ dst (sse-convert 'cast_sfloat 32 64 (load-mem ptr off))))
+  (set-sse dst (sse-convert 'cast_sfloat 32 64 (load-mem ptr off))))
 
 (defun CVTSI2SSrr_Int (dst _ src)
-  (set$ dst (sse-convert 'cast_sfloat 32 64 src)))
+  (set-sse dst (sse-convert 'cast_sfloat 32 64 src)))
 
 
 (defun CVTSI2SDrr_Int (dst _ src)
-  (set$ dst (sse-convert 'cast_sfloat 64 64 src)))
+  (set-sse dst (sse-convert 'cast_sfloat 64 64 src)))
 
 (defun CVTSD2SSrr_Int (dst _ src)
-  (set$ dst (sse-convert 'fconvert 64 32 src)))
+  (set-sse dst (sse-convert 'fconvert 64 32 src)))
 
 (defun CVTSS2SDrr_Int (dst _ src)
-  (set$ dst (sse-convert 'fconvert 32 64 src)))
+  (set-sse dst (sse-convert 'fconvert 32 64 src)))
 
 (defun CVTSS2SDrm_Int (dst _ ptr _ _ off _)
-  (set$ dst (sse-convert 'fconvert 32 64 (load-mem ptr off))))
+  (set-sse dst (sse-convert 'fconvert 32 64 (load-mem ptr off))))
 
 (defun MINSDrr_Int (rd rm rn)
-  (set$ rd (if (ieee754-forder 64 rm rn) rn rm)))
+  (set-sse rd (if (ieee754-forder 64 rm rn) rn rm)))
 
 (defun MAXSDrr_Int (rd rm rn)
-  (set$ rd (if (ieee754-forder 64 rm rn) rm rn)))
+  (set-sse rd (if (ieee754-forder 64 rm rn) rm rn)))
 
 (defun MFENCE ()
   (intrinsic 'mfence))
 
 (defun ANDPDrr (rd rn rm)
-  (set$ rd (logand rn rm)))
+  (set-sse rd (logand rn rm)))
 
 (defun ANDPDrm (rd rn ptr _ _ off _)
-  (set$ rd (logand rn (load-mem ptr off))))
+  (set-sse rd (logand rn (load-mem ptr off))))
 
 (defun sse-truncate (name rt rs rn)
   (intrinsic
@@ -226,11 +226,17 @@
       +rtp+ (with-rmode 'rtp (sse-binary name rt rn rm))
       +rtz+ (with-rmode 'rtz (sse-binary name rt rn rm)))))
 
+(defmacro set-sse (rd x)
+  (let ((wd (word-width rd))
+        (wx (word-width x)))
+    (set$ rd (concat (cast-high (- wd wx) rd)
+                     (cast-low wx x)))))
+
 (defmacro fp-binary (op rt rd rn ptr off)
-  (set$ rd (sse-binary op rt rn (load-mem ptr off))))
+  (set-sse rd (sse-binary op rt rn (load-mem ptr off))))
 
 (defmacro fp-binary (op rt rd rn rm)
-  (set$ rd (sse-binary op rt rn rm)))
+  (set-sse rd (sse-binary op rt rn rm)))
 
 (defmacro fp-compare (rt rn ptr off)
   (let ((rm (load-mem ptr off)))
@@ -272,10 +278,12 @@
 
 (defun compare-floats (rt rn rm)
   (let ((is-nan-rn (ieee754-is-nan rt rn))
-        (is-nan-rm (ieee754-is-nan rt rm)))
+        (is-nan-rm (ieee754-is-nan rt rm))
+        (n<m (ieee754-forder rt rn rm))
+        (m<n (ieee754-forder rt rm rn)))
     (set PF (logor is-nan-rn is-nan-rm))
-  (set CF (logor PF (ieee754-forder rt rn rm)))
-  (set ZF (logor PF (not (ieee754-forder rt rm rn))))))
+    (set CF (logor PF n<m))
+    (set ZF (logor PF (not n<m m<n)))))
 
 (defun read-rounding-mode-from-mxcsr ()
   (rshift (logand MXCSR 0x6000) 13))

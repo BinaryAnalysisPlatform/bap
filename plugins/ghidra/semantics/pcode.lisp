@@ -255,13 +255,14 @@
   (fp-predicate 'nan tr r tx x))
 
 (defun FLOAT_EQUAL (tr r tx x ty y)
-  (set$ r (not
-           (fp-order tr tx x ty y)
-           (fp-order tr ty y tx x))))
+  (let ((x<y (fp-order tr tx x ty y))
+        (y<x (fp-order tr ty y tx x)))
+    (set$ r (not x<y y<x))))
 
 (defun FLOAT_NOTEQUAL (tr r tx x ty y)
-  (set$ r (or (fp-order tr tx x ty y)
-              (fp-order tr ty y tx x))))
+  (let ((x<y (fp-order tr tx x ty y))
+        (y<x (fp-order tr ty y tx x)))
+    (set$ r (or x<y y<x))))
 
 (defun FLOAT_LESS (tr r tx x ty y)
   (set$ r (fp-order tr tx x ty y)))
