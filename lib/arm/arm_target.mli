@@ -21,7 +21,18 @@ val thumb : Theory.role
     Each version is the parent to the following version, with [parent]
     being the the earliest version.*)
 module LE : sig
-  val parent : Theory.Target.t (** currently the same as [v4]  *)
+  val parent : Theory.Target.t
+
+  (** a generic 32-bit target that accomodates all 32-bit targets.
+
+      @since 2.5.0  *)
+  val aarch32 : Theory.Target.t
+
+  (** a generic 64-bit target that accomodates all 64-bit targets.
+
+      @since 2.5.0 *)
+  val aarch64 : Theory.Target.t
+
   val v4 : Theory.Target.t
   val v4t : Theory.Target.t
   val v5 : Theory.Target.t
@@ -33,7 +44,6 @@ module LE : sig
   val v6z : Theory.Target.t
   val v6k : Theory.Target.t
   val v6m : Theory.Target.t
-  val v7 : Theory.Target.t
   val v7fp : Theory.Target.t
   val v7a : Theory.Target.t
   val v7afp : Theory.Target.t

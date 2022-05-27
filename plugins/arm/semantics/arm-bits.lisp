@@ -1,5 +1,5 @@
 (defpackage arm (:use core target))
-(declare  (context (target arm)))
+(declare (context (target arm-family)))
 
 (in-package arm)
 
