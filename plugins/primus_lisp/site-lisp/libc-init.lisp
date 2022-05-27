@@ -44,7 +44,8 @@
 (defun init (main argc argv auxv)
   "GNU libc initialization stub"
   (declare (external "__libc_start_main")
-           (context (abi "sysv")))
+           (context (target "amd64")
+                    (abi "sysv")))
   (setup-thread-local-storage)
   (exit-with (invoke-subroutine main argc argv)))
 

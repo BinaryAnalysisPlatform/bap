@@ -216,10 +216,6 @@ let resolve_stubs () =
           | Some (Name s) -> Some s
           | _ -> None)
 
-let label_for_ref = function
-  | Name s -> Theory.Label.for_name s
-  | Addr x -> Theory.Label.for_addr x
-
 let mark_mips_stubs_as_functions () : unit =
   KB.promise Theory.Label.is_subroutine @@ fun label ->
   let* unit = label-->?Theory.Label.unit in

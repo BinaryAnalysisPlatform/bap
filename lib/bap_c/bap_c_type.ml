@@ -174,6 +174,8 @@ let is_restrict : t -> Bool.t = function
   | `Pointer {qualifier={restrict}} -> restrict
 
 
+let is_void = function `Void -> true | _ -> false
+
 let qualifier ?(const=false) ?(volatile=false) restrict =
   Qualifier.{const; volatile; restrict}
 
