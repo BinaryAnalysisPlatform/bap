@@ -321,7 +321,7 @@ module Arg = struct
 
   module File = struct
     type t = {
-      args : Var.t Map.M(Int).t;
+      args : exp Map.M(Int).t;
       bits : int;
     }
 
@@ -359,14 +359,16 @@ module Arg = struct
         ~init:Int.Map.empty
 
 
-    let create args = {
+    let of_exps args = {
       args = of_list args;
       bits = match args with
         | [] -> -1
-        | r::_ -> match Var.typ r with
+        | r::_ -> match Type.infer_exn r with
           | Imm x -> x
           | _ -> -1
     }
+
+    let create regs = of_exps @@ List.map ~f:Bil.var regs
 
     let of_roles roles t  =
       let regs =
@@ -422,6 +424,7 @@ module Arg = struct
       fst (Map.max_elt_exn s.files)
 
     let create regs = add (File.create (List.map ~f:Var.reify regs))
+    let of_exps xs = add (File.of_exps xs)
     let of_roles roles t = add (File.of_roles roles t)
 
     let iargs = of_roles Theory.Role.Register.[
@@ -458,7 +461,9 @@ module Arg = struct
     let deplet s n = update s n @@ fun s -> Some (File.deplet s,())
   end
 
-  let size s t = match s.ruler#bits t with
+  let size t =
+    let* s = Arg.get () in
+    match s.ruler#bits t with
     | None -> Arg.reject ()
     | Some x -> Arg.return x
 
@@ -478,36 +483,46 @@ module Arg = struct
 
   let register file t =
     let* s = Arg.get () in
-    let* bits = size s t in
+    let* bits = size t in
     let regs = Arena.get s file in
     require (File.bits regs >= bits) >>= fun () ->
     let* arg = Arena.pop s file in
-    push_arg t (Bil.var arg)
+    push_arg t arg
 
-  let drop file =
-    Arg.get () >>= fun s -> Arena.pop s file >>| fun _ -> ()
+  let discard ?(n=1) file =
+    Arg.get () >>= fun s -> Arena.popn n s file >>| fun _ -> ()
 
-  let count file t =
+  let registers_for_bits file bits =
     let+ s = Arg.get () in
     let regs = Arena.get s file in
     let abits = File.bits regs in
+    if abits > 0
+    then Some ((bits - 1) / abits + 1)
+    else None
+
+  let count file t =
+    let* s = Arg.get () in
     match s.ruler#bits t with
-    | Some bits when abits > 0 -> Some ((bits - 1) / abits + 1)
-    | _ -> None
+    | None -> Arg.return None
+    | Some bits -> registers_for_bits file bits
 
   let needs_some f = f >>= function
     | None -> Arg.reject ()
     | Some x -> Arg.return x
 
+  let registers_needed file bits =
+    needs_some @@ registers_for_bits file bits
+
+  let concat = List.reduce_exn ~f:Bil.concat
+
   let registers ?limit file t =
     let* s = Arg.get () in
-    let* regs_needed = needs_some @@ count file t in
+    let* bits = size t in
+    let* regs_needed = registers_needed file bits in
     let limit = Option.value limit ~default:regs_needed in
     require (regs_needed <= limit) >>= fun () ->
     let* args = Arena.popn ~n:regs_needed s file in
-    let exps = List.map args ~f:Bil.var |>
-               List.reduce_exn ~f:Bil.concat in
-    push_arg t exps
+    push_arg t @@ concat args
 
   let align_even file =
     let* s = Arg.get () in
@@ -548,12 +563,12 @@ module Arg = struct
 
   let push t =
     let* s = Arg.get () in
-    let* bits = size s t in
+    let* bits = size t in
     update_stack @@ Stack.add t (data s.ruler t) bits
 
   let memory t =
     let* s = Arg.get () in
-    let* bits = size s t in
+    let* bits = size t in
     update_stack @@ Stack.add t (data s.ruler t) bits
 
   let skip_memory bits = update_stack @@ Stack.skip bits
@@ -576,7 +591,7 @@ module Arg = struct
         let bytes = match endianness with
           | LittleEndian -> bytes
           | BigEndian -> List.rev bytes in
-        Bil.(cast low) bits (List.reduce_exn bytes ~f:Bil.concat) in
+        Bil.(cast low) bits (concat bytes) in
     match Size.of_int_opt bits with
     | Some r -> Bil.(load ~mem:(var mem) ~addr:(addr base) endianness r)
     | None -> load_bytes [] 0 base
@@ -591,7 +606,7 @@ module Arg = struct
 
   let split_with_memory file typ =
     let* s = Arg.get () in
-    let* bits = size s typ in
+    let* bits = size typ in
     let* reg = Arena.pop s file in
     let* t = target in
     let* stack = stack in
@@ -600,7 +615,21 @@ module Arg = struct
     require (Stack.is_empty stack && bits > File.bits regs) >>= fun () ->
     let mbits = bits - File.bits regs in
     skip_memory mbits >>= fun () ->
-    push_arg typ @@ Bil.concat (Bil.var reg) (load t mbits base 0)
+    push_arg typ @@ Bil.concat reg (load t mbits base 0)
+
+  let popn_bits arena bits =
+    let* s = Arg.get () in
+    let* n = registers_needed arena bits in
+    Arena.popn ~n s arena
+
+  let is_even x = x land 1 = 0
+
+  let split f1 f2 typ =
+    let* bits = size typ in
+    let* regs1 = popn_bits f1 (bits/2) in
+    let* regs2 = popn_bits f2 (bits/2) in
+    require (is_even bits) >>= fun () ->
+    push_arg typ @@ concat (regs1@regs2)
 
   let either op1 op2 = Arg.catch op1 (fun _ -> op2)
 
