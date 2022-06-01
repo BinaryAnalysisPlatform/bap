@@ -1943,8 +1943,9 @@ module Std : sig
         (** [pos m] current program position.  *)
         val pos : pos m
 
-        (** [sub x] computes the subroutine [x].  *)
+        (** [sub x] evaluates the subroutine [x].  *)
         val sub : sub term -> unit m
+
 
         (** [blk x] interprets the block [x].  *)
         val blk : blk term -> unit m
@@ -1957,6 +1958,27 @@ module Std : sig
 
         (** [set var x] sets [var] to [x]  *)
         val set : var -> value -> unit m
+
+        (** [assign lhs rhs] assigns [rhs] to an lvalue [lhs], fails
+            if [lhs] is not an lvalue.
+
+            An lvalue is an expression that denotes a program
+            location. An expression is an lvalue, if it is a variable;
+            a load; a conditional expersion with lvalues on both branches,
+            or a cast, extract, concat, from an lvalue.
+
+            {v
+               lvalue ::= Var _
+                        | Load (_,_,_,_)
+                        | Ite (_,<lvalue>,<lvalue>)
+                        | Cast (_,_,<lvalue>)
+                        | Extract (_,_,<lvalue>)
+                        | Concat (_,_,<lvalue>)
+            v}
+
+            @since 2.5.0  *)
+        val assign : exp -> value -> unit m
+
 
         (** [binop op x y] computes a binary operation [op] on [x] and [y].
 
@@ -2012,7 +2034,6 @@ module Std : sig
         (** [branch cnd yes no] if [cnd] evaluates to [zero] then
             [yes] else [no]. *)
         val branch : value -> 'a m -> 'a m -> 'a m
-
 
         (** [repeat cnd body] evaluates [body] until [cnd] evaluates
             to [zero]. Returns the value of [cnd].  *)

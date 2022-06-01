@@ -326,8 +326,8 @@ let cfi_violation_handler = "__primus_cfi_violation_handler"
 
 module Make (Machine : Machine) = struct
   open Machine.Syntax
+  open Machine.Let
 
-  module Eval = Eval.Make(Machine)
   module Memory = Primus.Memory.Make(Machine)
   module Env = Primus.Env.Make(Machine)
   module Code = Linker.Make(Machine)
@@ -614,6 +614,57 @@ module Make (Machine : Machine) = struct
     match e with
     | LittleEndian -> do_store a x s LOW HIGH
     | BigEndian    -> do_store a x s HIGH LOW
+
+
+  let infer x = match Type.infer x with
+    | Ok Imm m -> Machine.return m
+    | _ ->
+      failf "ill-typed expression, expected a bitvector: %a"
+        Exp.pps x ()
+
+
+  let rec assign rhs x = match (rhs : exp) with
+    | Var v -> set v x
+    | Ite (c,yes,nay) ->
+      let* c = exp c in
+      if Value.is_one c then assign yes x else assign nay x
+    | Cast (LOW,part,v) ->
+      let* width = infer v in
+      let* y = exp v in
+      let* hi = cast HIGH (width-part) y in
+      let* x = concat hi x in
+      assign v x
+    | Cast (HIGH,part,v) ->
+      let* width = infer v in
+      let* y = exp v in
+      let* lo = cast LOW (width-part) y in
+      let* x = concat x lo in
+      assign v x
+    | Cast (_widen,_,v) ->
+      let* part = infer v in
+      let* x = cast LOW part x in
+      assign v x
+    | Extract (hi,lo,v) ->
+      let* size = infer v in
+      let* y = exp v in
+      let* hi = cast HIGH (size-hi-1) y in
+      let* lo = cast LOW lo y in
+      let* x = concat hi x in
+      let* x = concat x lo in
+      assign v x
+    | Load (mem,addr,endian,size) ->
+      exp mem >>= fun _ ->
+      exp addr >>= fun addr ->
+      store addr x endian size
+    | Concat (high,rest) ->
+      let* size = infer high in
+      let* hix = cast HIGH size x in
+      let* lox = cast LOW (Value.bitwidth x - size) x in
+      Machine.sequence [
+        assign high hix;
+        assign rest lox;
+      ]
+    | exp -> failf "not an lvalue: %a" Exp.pps exp ()
 
   let update_pc t =
     match Term.get_attr t address with
