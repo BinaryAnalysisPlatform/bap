@@ -3,6 +3,8 @@ open Bap.Std
 open Bap_c_type
 open Monads.Std
 
+include Self()
+
 module Attrs = Bap_c_term_attributes
 
 type ctype = t
@@ -94,13 +96,23 @@ let decay_arrays : proto -> proto = fun proto -> {
     args = List.Assoc.map ~f:array_to_pointer proto.args;
   }
 
-let create_arg i addr_size intent name t (data,exp) sub =
-  let typ = match data with
-    | Bap_c_data.Imm (sz,_) -> Type.Imm (Size.in_bits sz)
-    | _ -> Type.Imm (Size.in_bits addr_size) in
+let coerce ltyp rtyp exp = match ltyp,rtyp with
+  | Type.Mem _,_| _,Type.Mem _
+  | Type.Unk,_ | _, Type.Unk -> exp
+  | Imm m, Imm n -> match Int.compare m n with
+    | 0 -> exp
+    | 1 -> Bil.(cast unsigned m exp)
+    | _ -> Bil.(cast low m exp)
+
+
+let create_arg size i intent name t (data,exp) sub =
+  let ltyp = match size#bits t with
+    | None -> Type.imm (Size.in_bits size#pointer)
+    | Some m -> Type.imm m in
+  let rtyp = Type.infer_exn exp in
   let name = if String.is_empty name then sprintf "arg%d" (i+1) else name in
-  let var = Var.create (Sub.name sub ^ "_" ^ name) typ in
-  let arg = Arg.create ~intent var exp in
+  let var = Var.create (Sub.name sub ^ "_" ^ name) ltyp in
+  let arg = Arg.create ~intent var @@ coerce ltyp rtyp exp in
   let arg = Term.set_attr arg Attrs.data data in
   let arg = Term.set_attr arg Attrs.t t in
   arg
@@ -133,8 +145,6 @@ let get_prototype gamma name = match gamma name with
     }
 
 let create_api_processor size abi : Bap_api.t =
-  let addr_size = size#pointer in
-
   let stage1 gamma = object(self)
     inherit Term.mapper as super
     method! map_sub sub =
@@ -161,18 +171,24 @@ let create_api_processor size abi : Bap_api.t =
       | Some {return; hidden; params} ->
         let params = List.mapi params ~f:(fun i a -> i,a) in
         List.map2 params t.Bap_c_type.Proto.args ~f:(fun (i,a) (n,t) ->
-            create_arg i addr_size (arg_intent t) n t a sub) |>
+            create_arg size i (arg_intent t) n t a sub) |>
         function
-        | Unequal_lengths -> super#map_sub sub
+        | Unequal_lengths ->
+          error "The ABI processor generated an incorrect number of \
+                 argument terms for the subroutine %s: %d <> %d"
+            (Sub.name sub)
+            (List.length params)
+            (List.length t.args);
+          sub
         | Ok args ->
           let ret = match return with
             | None -> []
             | Some ret ->
               let t = t.Bap_c_type.Proto.return in
-              [create_arg 0 addr_size Out "result" t ret sub] in
+              [create_arg size 0 Out "result" t ret sub] in
           let hid = List.mapi hidden ~f:(fun i (t,a) ->
               let n = "hidden" ^ if i = 0 then "" else Int.to_string i in
-              create_arg 0 addr_size Both n t a sub) in
+              create_arg size 0 Both n t a sub) in
           List.fold (args@hid@ret) ~init:sub ~f:(Term.append arg_t)
 
   end in
@@ -228,10 +244,6 @@ module Arg = struct
     module Data = Bap_c_data
   end
 
-  let next_multitude_of ~n x = (x + (n-1)) land (lnot (n-1))
-
-
-
   module Stack : sig
     type t
 
@@ -277,10 +289,10 @@ module Arg = struct
           (Theory.Target.data_addr_size target / 8) in
       let align = function
         | None ->
-          next_multitude_of ~n:min_alignment
+          C.Size.next_multitude_of ~n:min_alignment
         | Some {ctype} ->
           let m = Size.in_bytes (ruler#alignment ctype) in
-          next_multitude_of ~n:(max min_alignment m) in
+          C.Size.next_multitude_of ~n:(max min_alignment m) in
       match Theory.Target.reg target Theory.Role.Register.stack_pointer with
       | None -> None
       | Some sp -> Some {
@@ -344,7 +356,7 @@ module Arg = struct
     let align n self = match Map.min_elt self.args with
       | None -> None
       | Some (k,_) ->
-        let k' = next_multitude_of ~n k in
+        let k' = C.Size.next_multitude_of ~n k in
         if k = k' then Some (self,())
         else match Map.split self.args k' with
           | _,None,_ -> None
