@@ -336,10 +336,10 @@ module Arg = struct
 
     let popn n self = match Map.min_elt self.args with
       | None -> None
-      | Some (k,_) -> match Map.split self.args (k+n) with
+      | Some (k,_) -> match Map.split self.args (k+n-1) with
         | _,None,_ -> None
-        | lt,Some (k,x),rt ->
-          Some ({self with args = Map.add_exn rt k x}, Map.data lt)
+        | lt,Some (_,x),rt ->
+          Some ({self with args = rt}, Map.data lt @ [x])
 
     let align n self = match Map.min_elt self.args with
       | None -> None
