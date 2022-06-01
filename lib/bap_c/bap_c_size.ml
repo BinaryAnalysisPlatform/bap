@@ -8,6 +8,14 @@ type 'a unqualified = (no_qualifier, 'a) spec
 
 type bits = Int.t
 
+let next_multitude_of ~n x = (x + (n-1)) land (lnot (n-1))
+
+
+let padding alignment offset =
+  let align = Size.in_bits alignment in
+  (align - offset mod align) mod align
+
+
 
 class base (m : model) = object(self)
   method integer (t : integer) : size =
@@ -56,12 +64,9 @@ class base (m : model) = object(self)
     | `Pointer _ -> (self#pointer :> size)
 
   method padding t offset : size option =
-    let align = Size.in_bits (self#alignment t) in
-    match (align - offset mod align) mod align with
-    | 0 -> None
-    | n -> match Size.of_int n with
-      | Error _ -> None
-      | Ok s -> Some s
+    match Size.of_int @@ padding (self#alignment t) offset with
+    | Error _ -> None
+    | Ok s -> Some s
 
   method alignment (t : Bap_c_type.t) : size =
     let byte = `r8 in
@@ -75,14 +80,17 @@ class base (m : model) = object(self)
     | `Function _ -> (self#pointer :> size)
     | #scalar as t -> self#scalar t
 
-
-  method bits : t -> Int.t option = fun t -> match t with
-    | `Void -> None
-    | #scalar as t -> Some (Size.in_bits (self#scalar t))
-    | `Function _ -> None
-    | `Union s -> self#union s
-    | `Array s -> self#array s
-    | `Structure s -> self#structure s
+  method bits : t -> Int.t option = fun t ->
+    let size = match t with
+      | `Void -> None
+      | #scalar as t -> Some (Size.in_bits (self#scalar t))
+      | `Function _ -> None
+      | `Union s -> self#union s
+      | `Array s -> self#array s
+      | `Structure s -> self#structure s in
+    Option.map size ~f:(fun size ->
+        let alignment = self#alignment t in
+        next_multitude_of ~n:(Size.in_bits alignment) size)
 
   method array : _  -> Int.t option =
     fun {Spec.t={Array.element=t; size}} -> match size with
@@ -101,12 +109,10 @@ class base (m : model) = object(self)
 
   method structure : compound unqualified -> Int.t option =
     fun {Spec.t={Compound.fields}} ->
-    let padding t offset =
-      let align = Size.in_bits (self#alignment t) in
-      (align - offset mod align) mod align in
     List.fold fields ~init:(Some 0) ~f:(fun sz (_,field) -> match sz with
         | None -> None
         | Some sz -> match self#bits field with
           | None -> None
-          | Some sz' -> Some (sz + sz' + padding field sz))
+          | Some sz' ->
+            Some (sz + sz' + padding (self#alignment field) sz))
 end
