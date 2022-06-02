@@ -682,15 +682,7 @@ module Make(Machine : Machine) = struct
 
         let eval_ret r = match ret with
           | None -> Machine.return ()
-          | Some v -> match Arg.rhs v with
-            | Bil.Var reg -> Eval.set reg r
-            | Bil.(Cast (LOW, rsize, Var reg)) ->
-              let vsize = size_of_reg reg in
-              Eval.get reg >>= fun lhs ->
-              Eval.extract ~hi:(vsize-1) ~lo:rsize lhs >>= fun high ->
-              Eval.concat high r >>= fun r ->
-              Eval.set reg r
-            | e -> failf "an unsupported return semantics: %a" Exp.pps e ()
+          | Some v -> Eval.assign (Arg.rhs v) r
 
         let exec =
           eval_args >>= fun bs ->

@@ -25,6 +25,7 @@ module Closure(Machine : Primus.Machine.S) = struct
   type 'a m = 'a Machine.t
 
   open Machine.Syntax
+  open Machine.Let
 
   let failf = Lisp.failf
 
@@ -220,7 +221,6 @@ module Closure(Machine : Primus.Machine.S) = struct
     | Some Out -> true
     | _ -> false
 
-
   let eval_sub : value list -> 'x = function
     | [] -> failf "invoke-subroutine: requires at least one argument" ()
     | sub_addr :: sub_args ->
@@ -239,17 +239,7 @@ module Closure(Machine : Primus.Machine.S) = struct
         Machine.Seq.iter ~f:(fun (arg,x) ->
             let open Bil.Types in
             if not (is_out_intent arg)
-            then match Arg.rhs arg with
-              | Var v -> Eval.set v x
-              | Load (_,BinOp (op, Var sp, Int off),endian,size) ->
-                Eval.get sp  >>= fun sp ->
-                Eval.const off >>= fun off ->
-                Eval.binop op sp off >>= fun addr ->
-                Eval.store addr x endian size
-              | exp ->
-                failf "%s: can't pass argument %s - %s %a"
-                  "invoke-subroutine" (Arg.lhs arg |> Var.name)
-                  "unsupported ABI" Exp.pps exp ()
+            then Eval.assign (Arg.rhs arg) x
             else Machine.return ()) >>= fun () ->
         Linker.exec (`addr (Value.to_word sub_addr)) >>= fun () ->
         Machine.Seq.find_map args ~f:(fun arg ->
