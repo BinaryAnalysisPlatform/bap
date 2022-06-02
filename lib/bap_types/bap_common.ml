@@ -33,27 +33,27 @@ module Size = struct
     | `r64
     | `r128
     | `r256
-  ] [@@deriving bin_io, compare, sexp, variants]
+  ] [@@deriving bin_io, compare, sexp, equal, variants]
 
   type 'a p = 'a constraint 'a = [< all]
-  [@@deriving bin_io, compare, sexp]
+  [@@deriving bin_io, compare, equal, sexp]
 
   type t = all p
-  [@@deriving bin_io, compare, sexp]
+  [@@deriving bin_io, compare, equal, sexp]
 
 
 end
 
 (** size of operand  *)
 type size = Size.t
-[@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, equal, sexp]
 
 (** size of address  *)
 type addr_size = [ `r32 | `r64 ] Size.p
-[@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, equal, sexp]
 
 type nat1 = int
-[@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, equal, sexp]
 
 (** The IR type of a BIL expression *)
 module Type = struct
@@ -63,11 +63,11 @@ module Type = struct
     (** [Mem (a,t)]memory with a specified addr_size *)
     | Mem of addr_size * size
     | Unk
-  [@@deriving bin_io, compare, sexp, variants]
+  [@@deriving bin_io, compare, equal, sexp, variants]
 end
 
 type typ = Type.t
-[@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, equal, sexp]
 
 
 (** Supported architectures  *)

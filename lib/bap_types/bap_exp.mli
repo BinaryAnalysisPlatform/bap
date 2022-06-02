@@ -53,7 +53,9 @@ end
 
 module Exp : sig
   val load : mem:exp -> addr:exp -> endian -> size -> exp
+  val load_byte : mem:exp -> addr:exp -> exp
   val store : mem:exp -> addr:exp -> exp -> endian -> size -> exp
+  val store_byte : mem:exp -> addr:exp -> exp -> exp
   val binop : binop -> exp -> exp -> exp
   val unop : unop -> exp -> exp
   val var : var -> exp
@@ -101,5 +103,18 @@ module Infix : sig
   (** [a ^ b] contatenate [a] and [b]  *)
   val ( ^ )   : exp -> exp -> exp
 end
+
+module Apply : sig
+  val binop : binop -> word -> word -> word
+  val unop : unop -> word -> word
+  val cast : cast -> int -> word -> word
+  val extract : int -> int -> word -> word
+end
+
+module Type : sig
+  val infer : exp -> (typ, Bap_type_error.t) Result.t
+  val infer_exn : exp -> typ
+end
+
 
 val slot : (Theory.Value.cls, exp) Knowledge.slot
