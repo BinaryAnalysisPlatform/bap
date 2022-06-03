@@ -1235,8 +1235,32 @@ module Std : sig
         expected from integral values.  *)
     include Integer.S with type t := t
 
-    (** A comparable interface with size-monomorphic comparison. *)
+    (** The comparable interface with size-monomorphic comparison. *)
     module Mono : Comparable with type t := t
+
+
+    (** The comparable interface using the unsigned order.
+
+        @since 2.5.0  *)
+    module Unsigned : sig
+      include Binable.S with type t = t
+      include Comparable.S_binable with type t := t
+      include Hashable.S_binable with type t := t
+    end
+
+    (** The comparable interface using the literal order.
+
+        In this order the bitvectors are compared literally, so that
+        bitvectors of different sizes but with equal values will be
+        different. This is the fastest order.
+
+        @since 2.5.0 *)
+    module Literal : sig
+      include Binable.S with type t = t
+      include Comparable.S_binable with type t := t
+      include Hashable.S_binable with type t := t
+    end
+
 
     (** Specifies the order of bytes in a word. *)
     type endian =

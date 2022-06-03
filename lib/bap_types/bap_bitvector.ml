@@ -157,7 +157,7 @@ let data_word t x = create x (Theory.Target.bits t) [@@inline]
 let to_bitvec x = Packed.payload x [@@inline]
 let unsigned x = x [@@inline]
 let signed x = Packed.signed x [@@inline]
-let hash x = Packed.hash x [@@inline]
+let hash x = Bitvec.hash (Packed.payload x) [@@inline]
 let bits_of_z x = Bitvec.to_binary (Packed.payload x)
 let unop op t = Packed.lift1 t op [@@inline]
 let binop op t1 t2 = Packed.lift2 t1 t2 op [@@inline]
@@ -271,20 +271,26 @@ type packed = Packed.t [@@deriving bin_io]
 let sexp_of_packed = Sexp_hum.sexp_of_t
 let packed_of_sexp = Sexp_hum.t_of_sexp
 
+
+let compare_literal = Packed.compare
+
+let compare_unsigned x y =
+  Bitvec.compare (payload x) (payload y)
+[@@inline]
+
 let compare_signed x y =
   if phys_equal x y then 0
-  else match Packed.compare x y with
+  else
+    match compare_literal x y with
     | 0 -> 0
-    | r ->
+    | _ ->
       if is_signed x || is_signed y then
         let x_is_neg = msb x and y_is_neg = msb y in
         match x_is_neg, y_is_neg with
         | true,false -> -1
         | false,true -> 1
-        | _ -> Bitvec.compare (payload x) (payload y)
-      else r
-
-
+        | _ -> compare_unsigned x y
+      else compare_unsigned x y
 
 let with_validation t ~f = Or_error.map ~f (Validate.result t)
 
@@ -628,6 +634,23 @@ module Trie = struct
   end
 end
 
+module Literal = struct
+  type t = packed [@@deriving bin_io, sexp]
+  include Comparable.Make_binable(Packed)
+  include Hashable.Make_binable_and_derive_hash_fold_t(Packed)
+end
+
+module Unsigned = struct
+  module Order = struct
+    type t = packed [@@deriving bin_io,sexp]
+    let compare = compare_unsigned
+    let hash = hash
+  end
+  include Comparable.Make_binable(Order)
+  include Hashable.Make_binable_and_derive_hash_fold_t(Order)
+  include Order
+end
+
 include Or_error.Monad_infix
 include Regular.Make(struct
     type t = packed [@@deriving bin_io, sexp]
@@ -696,6 +719,7 @@ module Stable = struct
     let compare = compare_signed
   end
 end
+
 
 
 let to_string = string_of_word
