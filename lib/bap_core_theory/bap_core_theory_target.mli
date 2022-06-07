@@ -166,6 +166,7 @@ include Binable.S with type t := t
 include Stringable.S with type t := t
 include Pretty_printer.S with type t := t
 val name : t -> KB.Name.t
+val hash : t -> int
 val unknown : t
 val domain : t KB.domain
 val persistent : t KB.persistent

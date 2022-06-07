@@ -1383,7 +1383,7 @@ module Theory : sig
         This type is a unique identifier of the target,
         represented as [KB.Name.t] underneath the hood.
     *)
-    type t = target
+    type t = target [@@deriving bin_io, compare, sexp]
     include Base.Comparable.S with type t := t
     include Binable.S with type t := t
     include Stringable.S with type t := t
@@ -1698,6 +1698,12 @@ module Theory : sig
 
     (** the persistence type class, derived from [KB.Name.persistent] *)
     val persistent : t KB.persistent
+
+
+    (** [hash t] returns the target's hash.
+
+        @since 2.5.0 *)
+    val hash : t -> int
 
     (** An extensible set of the target options.
 
