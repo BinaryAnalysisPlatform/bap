@@ -231,3 +231,6 @@ val function_ : ?attrs:attr list -> ?variadic:Bool.t -> ?return:t ->
   (string * t) list -> t
 
 val is_function : t -> Bool.t
+
+val pp : Format.formatter -> t -> unit
+val pp_proto : Format.formatter -> proto -> unit

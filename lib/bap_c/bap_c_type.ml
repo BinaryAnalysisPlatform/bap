@@ -262,3 +262,120 @@ let function_ ?(attrs=[]) ?(variadic=false) ?(return=`Void) args : t =
   }
 
 let is_function : t -> Bool.t = function `Function _ -> true | _ -> false
+
+
+let pp_comma ppf () = Format.fprintf ppf ", "
+
+let pp_attr ppf = function
+  | {Attr.name; args=[]} -> Format.fprintf ppf "%s" name
+  | {Attr.name; args} ->
+    Format.fprintf ppf "%s(%a)" name
+      (Format.pp_print_list ~pp_sep:pp_comma
+         Format.pp_print_string)  args
+
+let pp_attr_list ppf xs =
+  Format.pp_print_list ~pp_sep:pp_comma pp_attr ppf xs
+
+let pp_attrs ppf = function
+  | [] -> ()
+  | attrs ->
+    Format.fprintf ppf " __attribute__((%a)) "
+      pp_attr_list attrs
+
+let pp_qualifier name ppf = function
+  | false -> ()
+  | true -> Format.fprintf ppf " %s " name
+
+let pp_cv ppf {Qualifier.const;volatile} =
+  Format.fprintf ppf "%a%a"
+    (pp_qualifier "const") const
+    (pp_qualifier "volatile") volatile
+
+let pp_cvr ppf {Qualifier.const;volatile;restrict} =
+  Format.fprintf ppf "%a%a%a"
+    (pp_qualifier "const") const
+    (pp_qualifier "volatile") volatile
+    (pp_qualifier "restrict") restrict
+
+let pp_size ppf = function
+  | None -> ()
+  | Some size -> Format.fprintf ppf "%d" size
+
+let pp_enum_value ppf = function
+  | None -> Format.fprintf ppf ","
+  | Some v -> Format.fprintf ppf "= %Ld," v
+
+let pp_enum_field ppf (name,value) =
+  Format.fprintf ppf "@,%s%a," name pp_enum_value value
+
+let rec pp_enum_fields ppf =
+  List.iter ~f:(pp_enum_field ppf)
+
+let string_of_basic t = match (t : basic) with
+  | `schar -> "signed char"
+  | `cdouble -> "double complex"
+  | `long_double  -> "long double"
+  | `cfloat -> "float complex"
+  | `float  -> "float"
+  | `clong_double -> "long double complex"
+  | `ulong_long -> "unsigned long long"
+  | `uint -> "unsigned"
+  | `slong -> "signed long"
+  | `bool -> "_Bool"
+  | `double -> "double"
+  | `slong_long -> "signed long long"
+  | `sshort -> "signed short"
+  | `ushort -> "unsigned short"
+  | `char -> "char"
+  | `sint -> "signed"
+  | `ulong -> "unsigned long"
+  | `uchar -> "unsigned char"
+  | `enum fields ->
+    Format.asprintf "@[<v>@[<v4>enum {%a@]@,}@;" pp_enum_fields fields
+
+let pp_variadic ppf = function
+  | true -> Format.fprintf ppf ", ..."
+  | false -> ()
+
+let pp_basic ppf t =
+  Format.pp_print_string ppf (string_of_basic t)
+
+let rec pp ppf t = match (t : t) with
+  | `Void ->
+    Format.fprintf ppf "void"
+  | `Array { qualifier; t={ element; size }; attrs } ->
+    Format.fprintf ppf "@[<h>%a%a%a[%a]@]"
+      pp_attrs attrs pp_cvr qualifier pp_incomplete element pp_size size
+  |`Basic { qualifier; t; attrs } ->
+    Format.fprintf ppf "@[<h>%a%a%a@]"
+      pp_attrs attrs pp_cv qualifier pp_basic t
+  | `Function { t=proto; attrs } ->
+    Format.fprintf ppf "@[<h>%a%a;@]"
+      pp_proto proto pp_attrs attrs
+  | `Pointer { qualifier; t; attrs } ->
+    Format.fprintf ppf "@[<h>%a%a%a*@]"
+      pp_attrs attrs pp_incomplete t pp_cvr qualifier
+  | `Union { t={name;fields}; attrs }
+  | `Structure { t={name;fields}; attrs } as t ->
+    let kind = if is_structure t then "struct" else "union" in
+    Format.fprintf ppf "@[<v>@[<v4>%s %s {@,%a@]@,}@]%a;"
+      kind name pp_fields fields pp_attrs attrs
+and pp_proto ppf { return; args; variadic } =
+  Format.fprintf ppf "%a (*)(%a%a)"
+    pp_incomplete return pp_args args pp_variadic variadic
+and pp_args ppf = function
+  | [] -> Format.fprintf ppf "void"
+  | args ->
+    Format.pp_print_list ~pp_sep:pp_comma pp_arg ppf args
+and pp_arg ppf (name,t) =
+  Format.fprintf ppf "%a %s" pp_incomplete t name
+and pp_fields ppf fields =
+  Format.pp_print_list pp_field ppf fields
+and pp_field ppf (name,t) =
+  Format.fprintf ppf "%a %s;" pp_incomplete t name
+and pp_incomplete ppf t = match (t : t) with
+  | `Union { t={name} }
+  | `Structure { t={name} } as t ->
+    let kind = if is_structure t then "struct" else "union" in
+    Format.fprintf ppf "%s %s" kind name
+  | t -> pp ppf t
