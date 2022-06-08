@@ -743,13 +743,16 @@ let register_sleigh_disassembler () =
     else "x86:LE:32:default" in
   Disasm_expert.Basic.create ~backend:"ghidra" target
 
-let enable_decoder backend =
+let unit_encoding =
+  KB.Class.property
+    ~persistent:Theory.Language.persistent
+    ~package:"bap"
+    Theory.Unit.cls "unit-encoding" Theory.Language.domain
+
+let compute_unit_encoding backend =
   let open KB.Syntax in
-  register_x86_llvm_disassembler ();
-  register_x86_64_llvm_disassembler ();
-  register_sleigh_disassembler ();
-  KB.promise Theory.Label.encoding @@ fun label ->
-  Theory.Label.target label >>| fun t ->
+  KB.promise unit_encoding @@ fun unit ->
+  let+ t = KB.collect Theory.Unit.target unit in
   if Theory.Target.belongs parent t
   then
     if String.equal backend "llvm" then
@@ -760,6 +763,16 @@ let enable_decoder backend =
       else Theory.Language.unknown
     else pcode
   else Theory.Language.unknown
+
+let enable_decoder backend =
+  let open KB.Syntax in
+  register_x86_llvm_disassembler ();
+  register_x86_64_llvm_disassembler ();
+  register_sleigh_disassembler ();
+  compute_unit_encoding backend;
+  KB.promise Theory.Label.encoding @@ fun label ->
+  let* unit = label-->?Theory.Label.unit in
+  KB.collect unit_encoding unit
 
 let load ?(abi=Theory.Abi.unknown) ?(backend="llvm") () =
   Abi.install_calling_conventions ();
