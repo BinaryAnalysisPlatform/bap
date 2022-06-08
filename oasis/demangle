@@ -7,7 +7,7 @@ Library "bap-demangle"
   Build$: flag(everything) || flag(demangle)
   FindlibName: bap-demangle
   CompiledObject: best
-  BuildDepends: core_kernel
+  BuildDepends: core_kernel, bap-core-theory, bap-knowledge
   Modules: Bap_demangle
 
 Library "demangle_plugin"
@@ -15,7 +15,7 @@ Library "demangle_plugin"
   Build$: flag(everything) || flag(demangle)
   FindlibName: bap-plugin-demangle
   CompiledObject: best
-  BuildDepends: core_kernel, bap-demangle, bap, bap-future, bap-plugins
+  BuildDepends: core_kernel, bap-demangle, bap-main, bap-core-theory, bap-knowledge
   InternalModules: Demangle_main
   XMETADescription: demangle subroutine names
   XMETAExtraLines:  tags="demangler"

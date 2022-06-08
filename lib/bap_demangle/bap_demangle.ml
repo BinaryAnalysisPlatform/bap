@@ -1,72 +1,80 @@
 open Core_kernel[@@warning "-D"]
-
-let maybe_mangled name =
-  String.length name > 2 &&
-  Char.(name.[0] = '_') &&
-  Char.is_uppercase name.[1] &&
-  Char.is_alpha name.[1]
-
-let demangle_internal str =
-  let open String in
-  let open Option.Monad_infix in
-  let extract_number pos_ref =
-    lfindi str ~pos:!pos_ref ~f:(fun _ c -> Char.is_digit c)
-    >>= fun s1_p0 ->
-    lfindi str ~pos:s1_p0 ~f:(fun _ c -> not (Char.is_digit c))
-    >>= fun s1_p1 ->
-    let len = (s1_p1 - s1_p0) in
-    let str = Bytes.of_string str in
-    let n = Substring.create ~pos:s1_p0 ~len str |>
-            Substring.to_string |> Int.of_string in
-    pos_ref := s1_p0 + len;
-    Some n in
-  let extract_name pos_ref =
-    let str = Bytes.of_string str in
-    extract_number pos_ref >>= fun len ->
-    let name = Substring.create ~pos:!pos_ref ~len str |>
-               Substring.to_string in
-    pos_ref := !pos_ref + len;
-    Some name in
-  let pos = ref 0 in
-  let rec extract_names acc =
-    match extract_name pos with
-    | None | Some "" -> List.rev acc
-    | Some name -> extract_names (name::acc) in
-  match extract_names [] |> String.concat ~sep:"::" with
-  | "" -> str
-  | s  -> s
-
-let demangle_internal name =
-  if maybe_mangled name then
-    Option.try_with (fun () -> demangle_internal name)
-  else None
-
-let run_internal name =
-  Option.value_map ~default:name ~f:Fn.id (demangle_internal name)
+open Bap_core_theory
 
 module Std = struct
   type demangler = {
-    name : string;
+    name : KB.Name.t;
     run : string -> string
   }
 
+  let registry = Hashtbl.create (module KB.Name)
+  let selected = Hashtbl.create (module Theory.Target)
+
   module Demangler = struct
     type t = demangler
-    let create name run = {name; run}
+    let create ?package name run =
+      let name = KB.Name.create ?package name in
+      if Hashtbl.mem registry name
+      then failwithf "The demangler %s is already registered, \
+                      please pick a unique name" (KB.Name.show name) ();
+      Hashtbl.add_exn registry name run;
+      {name; run}
+
+    let declare ?package name run = ignore (create ?package name run)
+
     let run d = d.run
-    let name d = d.name
+    let fullname d = d.name
+    let name d = KB.Name.unqualified d.name
+
+    let id = create ~package:"bap" "id" Fn.id
+    let strip_leading_underscore =
+      create ~package:"bap" "strip-leading-underscore" @@ fun s ->
+      match String.chop_prefix s ~prefix:"_" with
+      | None -> s
+      | Some s -> s
   end
 
   module Demanglers = struct
-    let demanglers = ref []
-    let register d = demanglers := d :: !demanglers
-    let available () = !demanglers
+    let register = ignore
+    let available () =
+      Hashtbl.to_alist registry |>
+      List.map ~f:(fun (name,run) -> {name; run})
+
+    let install target demangler =
+      match Hashtbl.add selected target demangler with
+      | `Ok -> ()
+      | `Duplicate ->
+        let used = Hashtbl.find_exn selected target in
+        failwithf "Failed to install demangler %s to the \
+                   target %s, which already has the demangler %s."
+          (KB.Name.show used.name)
+          (KB.Name.show (Theory.Target.name target))
+          (KB.Name.show demangler.name)
+          ()
+
+    let bad_name name =
+      let names =
+        available () |>
+        List.map ~f:(fun d -> KB.Name.show (Demangler.fullname d)) |>
+        String.concat ~sep:", " in
+      invalid_argf "Failed to find a demangler named %s, \
+                    the list of available demanglers: %s"
+        (KB.Name.show name) names ()
+
+
+    let get ?package name =
+      let name = KB.Name.create ?package name in
+      match Hashtbl.find registry name with
+      | Some run -> {name; run}
+      | None -> bad_name name
+
+    let select target = match Hashtbl.find selected target with
+      | None -> Demangler.id
+      | Some d -> d
+
+    let lookup ?package name =
+      try Some (get ?package name) with _ -> None
   end
 
-  let internal = {
-    name = "internal";
-    run = run_internal;
-  }
 
-  let () = Demanglers.register internal
 end

@@ -604,6 +604,8 @@ let matches t name =
 
 let nicknames t = (info t).names
 
+let hash = Self.hash
+
 type alias = Alias.t
 
 include (Self : Base.Comparable.S with type t := t)
