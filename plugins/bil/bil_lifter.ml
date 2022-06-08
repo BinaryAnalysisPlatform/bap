@@ -1,6 +1,5 @@
 open Core_kernel[@@warning "-D"]
 open Bap.Std
-open Bap_future.Std
 open Bap_knowledge
 open Bap_core_theory
 open Monads.Std
@@ -139,9 +138,26 @@ module Relocations = struct
           override_external is_stub name bil
         | None -> bil
 
+  let fixup_agent =
+    KB.Agent.register ~package "bil-fixup-relocator"
+
+  let resolve_external (k,n) =
+    KB.Object.scoped Theory.Program.cls @@ fun lbl ->
+    KB.suggest fixup_agent Theory.Label.possible_name lbl (Some n) >>= fun () ->
+    KB.collect Theory.Label.name lbl >>| function
+    | None -> (k,n)
+    | Some n -> (k,n)
+
+  let resolve_externals exts =
+    Map.to_alist exts |>
+    KB.List.map ~f:resolve_external >>|
+    Map.of_alist_exn (module Int64)
+
   let prepare () =
     KB.promise relocations_slot @@ fun unit ->
-    KB.collect Image.Spec.slot unit >>| of_spec
+    let* rels = KB.collect Image.Spec.slot unit >>| of_spec in
+    let+ exts = resolve_externals rels.exts in
+    {rels with exts}
 end
 
 module Brancher = struct

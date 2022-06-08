@@ -30,5 +30,4 @@ let run name =
 
 let () =
   Config.when_ready @@ fun _ ->
-  let demangler = Demangler.create "c++filt" run in
-  Demanglers.register demangler
+  Demangler.declare ~package:"bap" "c++filt" run

@@ -161,6 +161,10 @@ val is_volatile : t -> Bool.t
 val is_restrict : t -> Bool.t
 
 
+(** [is_void t] true iff [t] is [`Void]  *)
+val is_void : t -> Bool.t
+
+
 (** {2 Basic Types} *)
 
 (** [basic x] constructs a basic type.

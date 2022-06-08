@@ -270,8 +270,13 @@ module Arg : sig
       Rejects the computation if [arena] doesn't have the necessary
       number of registers; the number of required registers is greater
       than [limit]; or if the size of [t] is unknown.
+
+      If [rev] is true, then the allocated registers will be used in
+      the reversed order.
+
+      @since 2.5.0 accepts the optional [rev] parameter.
   *)
-  val registers : ?limit:int -> arena -> ctype -> unit t
+  val registers : ?rev:bool -> ?limit:int -> arena -> ctype -> unit t
 
 
   (** [align_even arena] ensures that the first available register in
@@ -312,6 +317,15 @@ module Arg : sig
       pointer role. The size of [t] is not required. *)
   val reference : arena -> ctype -> unit t
 
+
+  (** [hidden t] passes the argument of type [t] as a pointer
+      to [t] via the first available stack slot.
+
+      The computation is rejected if the target doesn't have a stack.
+
+      @since 2.5.0  *)
+  val hidden : ctype -> unit t
+
   (** [memory t] passes the argument of type [t] in the next
       available stack slot.
 
@@ -333,6 +347,11 @@ module Arg : sig
   *)
   val memory : ctype -> unit t
 
+  (** [rebase off] rebases the stack position by [n] words.
+
+      @since 2.5.0
+  *)
+  val rebase : int -> unit t
 
   (** [split a1 a2 t] passes the lower half of the value
       via registers in the arena [a1] and the higher via the registers
@@ -387,11 +406,11 @@ module Arg : sig
 
   (** [size t] is the size in bits of an object of type [t].
 
-      The computation is rejected if the size is unknown.
+      The computation is rejected if the size is unknown, i.e., the
+      type is incomplete.
 
       @since 2.5.0 *)
   val size : ctype -> int t
-
 
   (** [require cnd] rejects the computation if [cnd] doesn't hold.
 

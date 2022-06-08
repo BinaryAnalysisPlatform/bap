@@ -1,4 +1,5 @@
 open Core_kernel[@@warning "-D"]
+open Bap_core_theory
 open Poly
 open Bap.Std
 open X86_targets
@@ -6,18 +7,16 @@ include Self()
 
 type kind = Legacy | Modern | Merge [@@deriving equal]
 
-let main backend kind x32 x64 =
-  X86_target.load ?backend ();
+let main backend kind abi =
+  let abi = Option.map ~f:(Theory.Abi.read ~package:"bap") abi in
+  X86_target.load ?abi ?backend ();
   let kind = if backend = Some "ghidra" then Modern else kind in
   let ia32, amd64 = match kind with
     | Legacy -> (module IA32L : Target), (module AMD64L : Target)
     | Modern -> (module IA32 : Target), (module AMD64 : Target)
     | Merge -> (module IA32M : Target), (module AMD64M : Target) in
   register_target `x86 ia32;
-  register_target `x86_64 amd64;
-  X86_abi.setup ~abi:(function
-      | `x86 -> x32
-      | `x86_64 -> x64) ()
+  register_target `x86_64 amd64
 
 let () =
   let () = Config.manpage [
@@ -39,16 +38,9 @@ let () =
       `S "SEE ALSO";
       `P "$(b,bap-x86-cpu)(3), $(b,bap-plugin-abi)(1), $(b,bap-plugin-arm)(1)"
     ] in
-  let abi arch name =
-    let abis = X86_abi.supported () |> List.filter_map ~f:(fun abi ->
-        if Arch.equal (X86_abi.arch abi :> arch) arch
-        then Some (X86_abi.name abi, abi)
-        else None) in
-    let doc = sprintf "Use specified $(docv) as a default one. The $(docv)
-    must be %s" @@ Config.doc_enum abis in
-    Config.(param (some (enum abis)) name ~doc) in
-  let x32 = abi `x86 "abi" in
-  let x64 = abi `x86_64 "64-abi" in
+  let abi =
+    let doc = "Override the ABI detection and use the selected ABI." in
+    Config.(param (some string) "abi" ~synonyms:["64-abi"] ~doc) in
   let fp_lifter = Config.flag "with-floating-points"
       ~doc:"DEPRECATED" in
   let legacy_lifter = Config.flag "with-legacy-floating-points"
@@ -77,7 +69,7 @@ let () =
       let open Bap_core_theory in
       let open Bap_primus.Std in
 
-      main !!backend !!kind !!x32 !!x64;
+      main !!backend !!kind !!abi;
       if !!fp_lifter || !!legacy_lifter then begin
         let open Bap_core_theory in
         let open Bap_primus.Std in
