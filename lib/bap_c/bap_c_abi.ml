@@ -101,7 +101,7 @@ let coerce ltyp rtyp exp = match ltyp,rtyp with
   | Type.Unk,_ | _, Type.Unk -> exp
   | Imm m, Imm n -> match Int.compare m n with
     | 0 -> exp
-    | 1 -> Bil.(cast unsigned m exp)
+    | 1 -> Bil.(cast signed m exp)
     | _ -> Bil.(cast low m exp)
 
 
