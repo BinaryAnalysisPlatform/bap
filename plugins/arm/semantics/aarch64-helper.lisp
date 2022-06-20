@@ -133,3 +133,20 @@
       (reverse-elems-in-one-container elem-size (cast-high container-size x))
       (reverse-elems-in-all-containers container-size elem-size
         (cast-low (- (word-width x) container-size) x)))))
+
+(defun get-vector-size (width)
+  (case width
+    0x8	 0x0
+    0x10 0x1
+    0x20 0x2
+    0x40 0x3
+    0x4))
+
+(defun get-vector-element (index vn)
+  (case index
+    0x0 (extract 31 0 vn)
+    0x1 (extract 63 32 vn)
+    0x2 (extract 95 64 vn)
+    0x3 (extract 127 96 vn)
+    0x0))
+
