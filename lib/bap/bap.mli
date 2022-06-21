@@ -1143,39 +1143,13 @@ module Std : sig
       suggested to use them, if you know what kind of operands you're
       expecting.
 
-      {2 Clarification on size-morphism }
+      {2:bv_signs Clarification on signs}
 
-      Size-monomorphic operations (as opposed to size-polymorphic
-      comparison) doesn't allow to compare two operands with different
-      sizes, and either raise an exception or return [Error]. If we would
-      have a type safe interface, with type [t] defined as [type 'a t],
-      where ['a] stands for size, then size-monomorphic operations will
-      have type ['a t -> 'a t -> _], and size-polymorphic ['a t -> 'b t -> _].
-
-      By default, size-polymorphic comparison is used. To understand
-      the ordering relation one can think that a lexical ordering is
-      specified on a tuple [(x,n)], where [x] is the number and [n] is
-      the size. For example, the following sequence is in an ascending
-      order:
-
-      {[ 0x0:1, 0x0:32, 0x0:64, 0x1:1, 0x1:32, 0xD:4, 0xDEADBEEF:32]}.
-
-      A size-monomorphic interfaced is exposed in a [Mono] submodule. So
-      if you want a monomorphic map, then just use [Mono.Map] module.
-      Note, [Mono] submodule doesn't provide [Table], since we cannot
-      guarantee that all keys in a hash-table have equal size.
-
-      {2 Clarification on signs}
-
-      By default all numbers represented by a bitvector are considered
-      unsigned. This includes comparisons, e.g., [of_int (-1)
-      ~width:32] is greater than zero. If you need to perform a signed
-      operation, you can use the [signed] operator to temporary cast
-      your value to the signed kind.  We use word "temporary" to
-      emphasize that, the signedness property won't propagate to the
-      result of the operation, e.g. result of the following
-      expression: [Int_exn.(signed x / y)] will not be signed. In other
-      words each new value is created unsigned.
+      By default, all are numbers represented with bitvectors are
+      considered unsigned. This includes the ordering, e.g., [of_int
+      (-1) ~width:32] is greater than [of_int 0 ~width:32]. If you
+      need to perform a signed operation, you can use the [signed]
+      operator create a signed word with the same value.
 
       If any operand of a binary operation is signed, then a signed
       version of an operation is used, i.e., the other operand is
@@ -1191,6 +1165,62 @@ module Std : sig
         let p = x < zero          (* p = false *)
         let q = signed x < zero   (* p = true *)
       ]}
+
+      {2:bv_sizes Clarification on size-morphism }
+
+      Size-monomorphic operations (as opposed to size-polymorphic)
+      expect operands of the same size. When applied to operands of
+      different sizes they either raise exceptions or return
+      an [Error] variant as the result. All arithmetic operations are
+      size-monomorphic and we provide interface that use either
+      exceptions or [Result.t] to indicate the outcome.
+
+      The comparison operation is size-polymorphic by default and
+      takes the size of the bitvector into account. Bitvectors
+      with equal values but different sizes are unequal. The precise
+      order matches with the order of pairs, where the first
+      constituent is the bitvector value, and the second is its size,
+      for example, the following sequence is in an ascending order:
+
+      {[ 0x0:1, 0x0:32, 0x0:64, 0x1:1, 0x1:32, 0xD:4, 0xDEADBEEF:32]}.
+
+      A size-monomorphic interfaced is exposed in a [Mono] submodule. So
+      if you want a monomorphic map, then just use [Mono.Map] module.
+      Note, [Mono] submodule doesn't provide [Table], since we cannot
+      guarantee that all keys in a hash-table have equal size. The
+      order functions provided by the Mono module will raise an
+      exception when applied to bitvectors with different sizes.
+
+      In the default and [Mono] orders, if either of two values is
+      signed (see {!bv_signs}) then the values will be ordered as
+      2-complement signed integers.
+
+      Another alternative orders are [Signed_value_order],
+      [Unsigned_value_order], and [Literal_order]. They will be
+      briefly described below.
+
+      [Signed_value_order] is size-polymoprhic and it simply
+      ignores the sizes of bitvectors and orders them by values, e.g.,
+      the following bitvectors are ordered in the [Value.Signed]
+      order, [FF:8; 0:1; 0F:8; FF:32], and [0:1] is equal to
+      [0:32]. See {!bv_sizes} for more details on the signedness of
+      operations. Note, that the size of a word still affects the
+      order since it defines the position of the most significant bit.
+
+      [Unsigned_value_order] ignores the sign and the size of
+      words and compares them by the unsigned order of their values.
+      he following numbers are ordered with the [Unsigned_value_order]
+      order, [0:1, 1:32, 0F:8 FF:8], and [FF:32] is equal to [FF:8].
+      [Unsigned_value_order] is faster than then any previously
+      described order and is useful when the size of the words should
+      be ignored (or is known to be equal and therefore could be
+      ignored).
+
+      [Literal_order] is the fastest order that takes into account
+      all constituents of bitvectors, like if we will treat a
+      bitvector as triple of its value, size, and sign and order
+      bitvectors using the lexicographical order.
+
 
       {2:bv_string Clarification on string representation }
 
@@ -1238,24 +1268,32 @@ module Std : sig
     (** The comparable interface with size-monomorphic comparison. *)
     module Mono : Comparable with type t := t
 
+    (** Compare by value, ignore size, but take into account the sign.
 
-    (** The comparable interface using the unsigned order.
-
-        @since 2.5.0  *)
-    module Unsigned : sig
+        See {!bv_sizes} for more information.
+        @since 2.5.0
+    *)
+    module Signed_value_order : sig
       include Binable.S with type t = t
       include Comparable.S_binable with type t := t
       include Hashable.S_binable with type t := t
     end
 
-    (** The comparable interface using the literal order.
+    (** Compare by value, ignore both the size and the sign.
 
-        In this order the bitvectors are compared literally, so that
-        bitvectors of different sizes but with equal values will be
-        different. This is the fastest order.
-
+        See {!bv_sizes} for more information.
         @since 2.5.0 *)
-    module Literal : sig
+    module Unsigned_value_order : sig
+      include Binable.S with type t = t
+      include Comparable.S_binable with type t := t
+      include Hashable.S_binable with type t := t
+    end
+
+    (** The lexicographical order of (value,size,sign) triples.
+
+        See {!bv_sizes} for more information.
+        @since 2.5.0 *)
+    module Literal_order : sig
       include Binable.S with type t = t
       include Comparable.S_binable with type t := t
       include Hashable.S_binable with type t := t

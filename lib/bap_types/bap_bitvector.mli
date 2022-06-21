@@ -13,12 +13,17 @@ type endian =
 include Regular.S with type t := t
 include Bap_integer.S with type t := t
 module Mono : Comparable.S with type t := t
-module Unsigned : sig
+module Signed_value_order : sig
   include Binable.S with type t = t
   include Comparable.S_binable with type t := t
   include Hashable.S_binable with type t := t
 end
-module Literal : sig
+module Unsigned_value_order : sig
+  include Binable.S with type t = t
+  include Comparable.S_binable with type t := t
+  include Hashable.S_binable with type t := t
+end
+module Literal_order : sig
   include Binable.S with type t = t
   include Comparable.S_binable with type t := t
   include Hashable.S_binable with type t := t
