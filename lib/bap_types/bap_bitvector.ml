@@ -634,13 +634,13 @@ module Trie = struct
   end
 end
 
-module Literal = struct
+module Literal_order = struct
   type t = packed [@@deriving bin_io, sexp]
   include Comparable.Make_binable(Packed)
   include Hashable.Make_binable_and_derive_hash_fold_t(Packed)
 end
 
-module Unsigned = struct
+module Unsigned_value_order = struct
   module Order = struct
     type t = packed [@@deriving bin_io,sexp]
     let compare = compare_unsigned
@@ -651,14 +651,30 @@ module Unsigned = struct
   include Order
 end
 
+module Signed_value_order = struct
+  module Order = struct
+    type t = packed [@@deriving bin_io,sexp]
+    let compare = compare_signed
+    let hash = hash
+  end
+  include Comparable.Make_binable(Order)
+  include Hashable.Make_binable_and_derive_hash_fold_t(Order)
+  include Order
+end
+
 include Or_error.Monad_infix
 include Regular.Make(struct
     type t = packed [@@deriving bin_io, sexp]
-    let compare = compare_signed
+    let compare x y =
+      if phys_equal x y then 0
+      else match Int.compare (bitwidth x) (bitwidth y) with
+        | 0 -> compare_signed x y
+        | r -> r
+    [@@inline]
     let version = "2.0.0"
     let module_name = Some "Bap.Std.Word"
     let pp ppf = pp_generic ppf
-    let hash = Packed.hash
+    let hash x = Int.hash (bitwidth x) lxor hash x
   end)
 module Int_err = Safe
 include (Unsafe : Bap_integer.S with type t := t)
