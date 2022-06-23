@@ -230,6 +230,27 @@ open Core_kernel[@@warning "-D"]
     Each monad transformer creates a module that has functions [lift]
     and [run]. The [lift] function lifts original computation into the
     transformed one, and [run] will run the computation.
+
+    In order to use the monad transformers to build up a monad
+    transformer stack, the inner module needs both the monad types and
+    monad functions, so that it satisfies the [Monad.S] signature.
+    Therefore, it needs to include both [T] and [Make] (or [T2] and
+    [Make2]), in order to use the [Make] functor of the outer monad.
+    For example, to create a state monad nested inside a writer monad,
+    you can do the following.
+
+    {[
+      module St = struct
+        module Env = struct
+          type t = int
+        end
+
+        include Monad.State.T1(Env)(Monad.Ident)      (* adds types *)
+        include Monad.State.Make(Env)(Monad.Ident)    (* adds functions and modules *)
+      end
+
+      module W = Monad.Writer.Make(Monoid.String)(St)
+    ]}
 *)
 module Std : sig
 
