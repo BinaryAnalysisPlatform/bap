@@ -20,7 +20,8 @@
 (defun tADR (rd lbl cnd _)
   "adr rd, lbl"
   (when (condition-holds cnd)
-    (set$ rd (+ (thumb:t2pc) (lshift lbl 2)))))
+    (let ((pc (* 4 (/ (t2pc) 4))))
+      (set$ rd (+ pc (lshift lbl 2))))))
 
 (defmacro tLOGs (op rd rn rm cnd)
   (prog (set$ rd (op rn rm))
