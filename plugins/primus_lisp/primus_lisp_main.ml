@@ -29,7 +29,11 @@ let dump_program prog =
 
 let load_program paths features project =
   match Primus.Lisp.Load.program ~paths project features with
-  | Ok prog -> prog
+  | Ok prog ->
+    let context = Primus.Lisp.Context.of_program prog in
+    info "Loaded program in context:@\n@[<2>%a@]"
+      Primus.Lisp.Context.pp context;
+    prog
   | Error err ->
     let err = asprintf "%a" Primus.Lisp.Load.pp_error err in
     invalid_arg err
