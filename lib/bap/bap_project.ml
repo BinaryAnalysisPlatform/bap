@@ -227,15 +227,10 @@ module Input = struct
     | None -> false
     | Some s -> not (Image.Segment.is_executable s)
 
-  let compute_target ?file ?(target=Theory.Target.unknown) spec =
-    let target' = State.Toplevel.compute_target ?file spec in
-    match (Theory.Target.order target target' : KB.Order.partial) with
-    | LT | EQ -> target'
-    | GT -> target
-    | NC -> invalid_argf "the derived target %s is incompatible \
-                          with the user-specified target %s."
-              (Theory.Target.to_string target')
-              (Theory.Target.to_string target) ()
+  let compute_target ?file ?target spec =
+    match target with
+    | Some t when not (Theory.Target.is_unknown t) -> t
+    | _ -> State.Toplevel.compute_target ?file spec
 
   let result_of_image ?target finish file img = {
     arch = Image.arch img;
