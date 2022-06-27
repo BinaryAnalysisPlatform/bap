@@ -8,7 +8,7 @@
 
  *)
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Graphlib.Std
 open Bap.Std
 open OUnit2
@@ -523,7 +523,7 @@ module Test_IR = struct
 
   let (++) g x = G.Node.(insert (create x) g)
   let (--) g x = G.Node.(remove (create x) g)
-  let has = ident
+  let has = Fn.id
   let hasn't = not
   let nil = G.empty
 

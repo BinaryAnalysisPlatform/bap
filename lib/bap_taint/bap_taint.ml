@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Bap_primus.Std
 open Monads.Std
@@ -149,7 +149,7 @@ let vid = Primus.Value.id
 
 let indirect = Rel {
     field = Fields_of_tainter.indirect;
-    key = ident;
+    key = Fn.id;
     kind = Indirect;
   }
 let direct = Rel {

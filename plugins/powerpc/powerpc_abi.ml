@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Bap_c.Std
 
@@ -78,7 +78,7 @@ let main proj = match Project.arch proj with
     info "using powerpc ABI";
     let abi = C.Abi.{
         insert_args = dispatch (module Abi32);
-        apply_attrs = fun _ -> ident
+        apply_attrs = fun _ -> Fn.id
       } in
     C.Abi.register Abi32.name abi;
     let api = C.Abi.create_api_processor Abi32.size abi in

@@ -1,10 +1,11 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Regular.Std
 open Bap_types.Std
 open Monads.Std
 open Format
 open Image_internal_std
+module Sys = Caml.Sys
 
 module Fact = Ogre.Make(Monad.Ident)
 module Result = Monad.Result.Error
@@ -118,20 +119,20 @@ module Scheme = struct
   let location () = scheme addr $ size
   let declare name scheme f = Ogre.declare ~name scheme f
   let named n scheme f = declare n (scheme $ name) f
-  let arch    () = declare "arch" (scheme name) ident
-  let subarch    () = declare "subarch" (scheme name) ident
-  let vendor    () = declare "vendor" (scheme name) ident
-  let system    () = declare "system" (scheme name) ident
-  let format    () = declare "format" (scheme name) ident
-  let require   () = declare "require" (scheme name) ident
-  let abi    () = declare "abi" (scheme name) ident
-  let bits    () = declare "bits" (scheme size) ident
-  let is_little_endian () = declare "is-little-endian" (scheme flag) ident
-  let is_executable () = declare "is-executable" (scheme flag) ident
-  let bias    () = declare "bias" (scheme off) ident
+  let arch    () = declare "arch" (scheme name) Fn.id
+  let subarch    () = declare "subarch" (scheme name) Fn.id
+  let vendor    () = declare "vendor" (scheme name) Fn.id
+  let system    () = declare "system" (scheme name) Fn.id
+  let format    () = declare "format" (scheme name) Fn.id
+  let require   () = declare "require" (scheme name) Fn.id
+  let abi    () = declare "abi" (scheme name) Fn.id
+  let bits    () = declare "bits" (scheme size) Fn.id
+  let is_little_endian () = declare "is-little-endian" (scheme flag) Fn.id
+  let is_executable () = declare "is-executable" (scheme flag) Fn.id
+  let bias    () = declare "bias" (scheme off) Fn.id
   let section () = declare "section" (location ()) void_region
-  let code_start   () = declare "code-start" (scheme addr) ident
-  let entry_point  () = declare "entry-point" (scheme addr) ident
+  let code_start   () = declare "code-start" (scheme addr) Fn.id
+  let entry_point  () = declare "entry-point" (scheme addr) Fn.id
   let symbol_chunk () = declare "symbol-chunk" (location () $ root) region
   let named_region () = named "named-region" (location ()) region
   let named_symbol () = named "named-symbol" (scheme addr) (fun x y -> x,y)
@@ -148,7 +149,7 @@ module Scheme = struct
     declare "relocation" (scheme fixup $ addr) Tuple.T2.create
   let external_reference () =
     declare "external-reference" (scheme addr $ name) Tuple.T2.create
-  let base_address () = declare "base-address" (scheme addr) ident
+  let base_address () = declare "base-address" (scheme addr) Fn.id
 
   let symbol_value () =
     declare "symbol-value" (scheme addr $ value) Tuple.T2.create
@@ -700,8 +701,8 @@ let create ?backend path =
 
 let of_bigstring ?backend data =
   let (module Load) = get_loader backend in
-  invoke Load.from_data ident data
+  invoke Load.from_data Fn.id data
 
 let of_string ?backend data =
   let (module Load) = get_loader backend in
-  invoke Load.from_data ident (Bigstring.of_string data)
+  invoke Load.from_data Fn.id (Bigstring.of_string data)

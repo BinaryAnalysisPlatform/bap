@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular_data_types
 
 type bytes = Regular_bytes.t
@@ -86,7 +86,10 @@ let create
     | None -> fun x -> Bigstring.of_bytes (to_bytes x) in
   let dump = match dump with
     | Some f -> f
-    | None -> fun c x -> Out_channel.output_bytes c (to_bytes x) in
+    | None -> fun c x ->
+      let ppf = Format.formatter_of_out_channel c in
+      pp ppf x;
+      Format.pp_print_flush ppf () in
   {size; copy; blit; dump; pp; to_bytes; to_bigstring}
 
 

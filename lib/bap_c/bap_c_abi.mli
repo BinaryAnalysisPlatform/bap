@@ -4,7 +4,7 @@
     modules for C language.
 *)
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap.Std
 open Monads.Std
@@ -270,8 +270,13 @@ module Arg : sig
       Rejects the computation if [arena] doesn't have the necessary
       number of registers; the number of required registers is greater
       than [limit]; or if the size of [t] is unknown.
+
+      If [rev] is true, then the allocated registers will be used in
+      the reversed order.
+
+      @since 2.5.0 accepts the optional [rev] parameter.
   *)
-  val registers : ?limit:int -> arena -> ctype -> unit t
+  val registers : ?rev:bool -> ?limit:int -> arena -> ctype -> unit t
 
 
   (** [align_even arena] ensures that the first available register in
@@ -293,6 +298,17 @@ module Arg : sig
   *)
   val deplet : arena -> unit t
 
+
+  (** [discard arena] discards one location from [arena].
+
+      @param n if specified discards [n] registers instead of one.
+
+      The computation is never rejected, if the arena is empty nothing
+      is changed.
+
+      @since 2.5.0  *)
+  val discard : ?n:int -> arena -> unit t
+
   (** [reference arena t] passes the argument of type [t] as a pointer
       to [t] via the first available register in [arena].
 
@@ -300,6 +316,15 @@ module Arg : sig
       [arena] or if the target doesn't have a register with the stack
       pointer role. The size of [t] is not required. *)
   val reference : arena -> ctype -> unit t
+
+
+  (** [hidden t] passes the argument of type [t] as a pointer
+      to [t] via the first available stack slot.
+
+      The computation is rejected if the target doesn't have a stack.
+
+      @since 2.5.0  *)
+  val hidden : ctype -> unit t
 
   (** [memory t] passes the argument of type [t] in the next
       available stack slot.
@@ -321,6 +346,22 @@ module Arg : sig
 
   *)
   val memory : ctype -> unit t
+
+  (** [rebase off] rebases the stack position by [n] words.
+
+      @since 2.5.0
+  *)
+  val rebase : int -> unit t
+
+  (** [split a1 a2 t] passes the lower half of the value
+      via registers in the arena [a1] and the higher via the registers
+      in the arena [a2].
+
+      The compuation is rejected if either arean doesn't have enough
+      registers to pass its half, or if the size of [t] is odd or unknown.
+
+      @since 2.5.0 *)
+  val split : arena -> arena -> ctype -> unit t
 
 
   (** [split_with_memory arena t] passes the low order part of the
@@ -362,6 +403,20 @@ module Arg : sig
   *)
   val count : arena -> ctype -> int option t
 
+
+  (** [size t] is the size in bits of an object of type [t].
+
+      The computation is rejected if the size is unknown, i.e., the
+      type is incomplete.
+
+      @since 2.5.0 *)
+  val size : ctype -> int t
+
+  (** [require cnd] rejects the computation if [cnd] doesn't hold.
+
+      @since 2.5.0  *)
+  val require : bool -> unit t
+
   (** [either option1 option2] tries to pass using [option1] and
       if it is rejected uses [option2].
 
@@ -391,23 +446,23 @@ module Arg : sig
   include Monad.Choice.S with type 'a t := 'a t
 
 
-  (** An ordered collection of registers.
+  (** An ordered collection of locations.
 
-      Arena is an expendable collection of registers that is used to
-      pass arguments. Passing an argument via the register consumes
-      it so it is no longer available in the same computation.
+      Arena is an expendable collection of data locations (usually
+      registers) that are used to pass arguments. Passing an argument
+      via an arena location consumes it so it is no longer available in the
+      same computation.
 
-      If a computation that used a register is later rejected then the
+      If a computation that used an arena location is later rejected then the
       register is available again (the same as with any other
       side-effects of a rejected compuation).
 
-      The order of registers in arena, as well as their numbering
+      The order of locations in arena, as well as their numbering
       according to that order, usually matters. Many targets have
-      registers with the alphabetic orders of registers matching
-      their arena orders (with notable exception of x86) that enables
-      the direct usage of the [Theory.Target.regs] function to create
-      arenas.
-  *)
+      registers with the alphabetic orders of registers matching their
+      arena orders (with notable exception of x86) that enables the
+      direct usage of the [Theory.Target.regs] function to create
+      arenas.  *)
   module Arena : sig
 
     (** [create regs] creates an arena from the ordered list of registers.
@@ -416,6 +471,15 @@ module Arg : sig
         empty. The registers will be used in the order of their
         appereance in the [regs] list. *)
     val create : _ Theory.Var.t list -> arena t
+
+    (** [of_exps xs] creates an arena from the ordered list of expressions.
+
+        The expressions must have the same type and the list could be
+        empty. The locations will be used in the order in which they
+        were specified.
+
+        @since 2.5.0 *)
+    val of_exps : exp list -> arena t
 
     (** [of_roles t roles] creates an arena from registers of the
         specified roles.

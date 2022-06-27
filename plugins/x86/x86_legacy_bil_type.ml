@@ -4,15 +4,15 @@
     @author Ivan Jager
 *)
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 (** Addresses are big_ints *)
 type addr = Big_int_Z.big_int
 (** Support for s-expressions *)
 let addr_of_sexp sexp =
-  Core_kernel.String.t_of_sexp sexp |> Big_int_Z.big_int_of_string
+  String.t_of_sexp sexp |> Big_int_Z.big_int_of_string
 let sexp_of_addr bi =
-  Big_int_Z.string_of_big_int bi |> Core_kernel.String.sexp_of_t
+  Big_int_Z.string_of_big_int bi |> String.sexp_of_t
 let compare_addr = Big_int_Z.compare_big_int
 
 type bv_size = int

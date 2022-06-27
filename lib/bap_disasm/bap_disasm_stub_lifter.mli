@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_types.Std
 open Bap_image_std
 open Bap_disasm_types

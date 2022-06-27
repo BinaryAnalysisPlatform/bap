@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open OUnit2
 open Bap.Std
 
@@ -20,7 +20,7 @@ let mask64 start stop =
     else None in
   let (^) = Word.concat in
   let concat x y z =
-    match List.filter_map ~f:ident [x;y;z;] with
+    match List.filter_map ~f:Fn.id [x;y;z;] with
     | [x] -> x
     | [x;y] -> x ^ y
     | [x;y;z;] -> x ^ y ^ z

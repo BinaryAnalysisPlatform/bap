@@ -24,7 +24,7 @@
     subset of the language which is relevant to their tasks without
     getting bogged down by the irrelevant architectural details.
 
-    The language can express the semantics of the floating point
+    The language can express the semantics of the floating-point
     operations including operations, but not limiting to, specified in
     the IEEE754 standard.
 
@@ -61,7 +61,7 @@
 
     The Core language subsumes all other sub-languages and includes
     modular arithmetic and other operations on bitvectos, operations
-    with memories, registers, floating points including
+    with memories, registers, floating-points including
     transcendental functions.
 
     The reason to have so many languages is purely pragmatic: to
@@ -363,7 +363,7 @@
     designed for such use-cases.
 *)
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Caml.Format
 open Bap_knowledge
 
@@ -394,7 +394,7 @@ module Theory : sig
       to a value, aka expressions. Values are sorted and value sorts
       hold static information about the value representation, like the
       number of bits in a bitvector or the representation format in a
-      floating point value.
+      floating-point value.
 
       All values belong to the same Knowledge class and thus share the
       same set of properties, with each property being a specific
@@ -562,7 +562,7 @@ module Theory : sig
         A concrete and extensible representation of a value sort. The
         sort usually holds the static information about the value
         representation, like the width of a bitvector, the
-        representation format of a floating point number, and so on.
+        representation format of a floating-point number, and so on.
 
         This module is mostly needed when a new sort is defined. The
         Core Theory provides a predefined collection of sorts, here is
@@ -570,7 +570,7 @@ module Theory : sig
 
         - {!Bitv} - bitvectors, e.g., [BitVec(i)]
         - {!Mem} - memories, e.g., [Mem(BitVec(i), BitVec(j)]
-        - {!Float} - floating points, e.g., [Float(IEEE754(2, 8, 23), BitVec(32)];
+        - {!Float} - floating-points, e.g., [Float(IEEE754(2, 8, 23), BitVec(32)];
         - {!Rmode} - rounding mode, e.g., [Rmode].
 
         This module defines a simple DSL for specifying sorts, the DSL
@@ -1012,11 +1012,11 @@ module Theory : sig
   end
 
 
-  (** Sorts for floating point numbers.  *)
+  (** Sorts for floating-point numbers.  *)
   module Float : sig
 
 
-    (** Sort describing the representation format of a floating point number.  *)
+    (** Sort describing the representation format of a floating-point number.  *)
     module Format : sig
       type ('r,'s) t
 
@@ -1026,12 +1026,12 @@ module Theory : sig
 
 
       (** [bits s] returns the sort of bitvectors that are used by
-          floating point numbers of sort [s].  *)
+          floating-point numbers of sort [s].  *)
       val bits : ('r,'s) t Value.sort -> 's Bitv.t Value.sort
 
 
       (** [exp s] returns an expression that describes the
-          interpretation of the bits of the floating point numbers
+          interpretation of the bits of the floating-point numbers
           represented by the sort [s].  *)
       val exp : ('r,'s) t Value.sort -> 'r Value.sort
     end
@@ -1040,22 +1040,22 @@ module Theory : sig
     type 'f t
 
 
-    (** [define r s] defines a floating point sort, indexed by the
-        floating point format [r] that gives the interpretation to
+    (** [define r s] defines a floating-point sort, indexed by the
+        floating-point format [r] that gives the interpretation to
         the bits of bitvectors of sort [s]. *)
     val define : ('r,'s) format Value.sort -> ('r,'s) format t Value.sort
 
 
-    (** [refine s] if [s] is a floating point sort then restores its type.  *)
+    (** [refine s] if [s] is a floating-point sort then restores its type.  *)
     val refine : unit Value.sort -> ('r,'s) format t Value.sort option
 
 
-    (** [format s] returns the format of floating points of sort [s].   *)
+    (** [format s] returns the format of floating-points of sort [s].   *)
     val format : ('r,'s) format t Value.sort -> ('r,'s) format Value.sort
 
 
     (** [bits s] returns the sort of bitvectors that are used to
-        represent floating point numbers of sort [s].   *)
+        represent floating-point numbers of sort [s].   *)
     val bits : ('r,'s) format t Value.sort -> 's Bitv.t Value.sort
   end
 
@@ -1383,7 +1383,7 @@ module Theory : sig
         This type is a unique identifier of the target,
         represented as [KB.Name.t] underneath the hood.
     *)
-    type t = target
+    type t = target [@@deriving bin_io, compare, sexp]
     include Base.Comparable.S with type t := t
     include Binable.S with type t := t
     include Stringable.S with type t := t
@@ -1698,6 +1698,12 @@ module Theory : sig
 
     (** the persistence type class, derived from [KB.Name.persistent] *)
     val persistent : t KB.persistent
+
+
+    (** [hash t] returns the target's hash.
+
+        @since 2.5.0 *)
+    val hash : t -> int
 
     (** An extensible set of the target options.
 
@@ -2411,7 +2417,7 @@ module Theory : sig
   type ('a,'b) mem = ('a,'b) Mem.t pure
 
 
-  (** a floating point term  *)
+  (** a floating-point term  *)
   type 'f float = 'f Float.t pure
 
 
@@ -2803,47 +2809,47 @@ module Theory : sig
   end
 
 
-  (** The Basic Theory of Floating Points.
+  (** The Basic Theory of Floating-Points.
 
-      Floating point numbers represent a finite subset of the set of
+      floating-point numbers represent a finite subset of the set of
       real numbers. Some formats also extend this set with special
       values to represent infinities or error conditions. This, in
-      general, exceeds the scope of the floating point theory, however
+      general, exceeds the scope of the floating-point theory, however
       the theory includes predicates with domains that potentially may
-      include this special numbers, e.g., [is_nan]. For floating point
+      include this special numbers, e.g., [is_nan]. For floating-point
       formats that do not support special values, such predicates will
       become constant functions.
 
-      All operations in the Floating Point theory are defined in terms
-      of operations on real numbers. Since floating point numbers
+      All operations in the Floating-Point theory are defined in terms
+      of operations on real numbers. Since floating-point numbers
       represent only a subset of the real set,
       denotations select a number from the set of numbers of the
-      floating point sort using concrete rules expressed in terms of
+      floating-point sort using concrete rules expressed in terms of
       rounding modes. The rounding mode is a parameter of many
       operations, denoted with a term of sort [rmode].
 
   *)
   module type Fbasic = sig
 
-    (** [float s x] interprets [x] as a floating point number.  *)
+    (** [float s x] interprets [x] as a floating-point number.  *)
     val float : ('r,'s) format Float.t Value.sort -> 's bitv -> ('r,'s) format float
 
-    (** [fbits x] is a bitvector representation of the floating point number [x].  *)
+    (** [fbits x] is a bitvector representation of the floating-point number [x].  *)
     val fbits : ('r,'s) format float -> 's bitv
 
     (** [is_finite x] holds if [x] represents a finite number.
 
-        A floating point number is finite if it represents a
+        A floating-point number is finite if it represents a
         number from the set of real numbers [R].
 
         The predicate always holds for formats in which only finite
-        floating point numbers are representable.
+        floating-point numbers are representable.
     *)
     val is_finite : 'f float -> bool
 
     (** [is_nan x] holds if [x] represents a not-a-number.
 
-        A floating point value is not-a-number if it is neither finite
+        A floating-point value is not-a-number if it is neither finite
         nor infinite number.
 
         The predicated never holds for formats that represent only
@@ -2875,11 +2881,11 @@ module Theory : sig
 
     (** {3 Rounding modes}
 
-        Many operations in the Theory of Floating Point numbers are
+        Many operations in the Theory of Floating-Point numbers are
         defined using the rounding mode parameter.
 
         The rounding mode gives a precise meaning to the phrase
-        "the closest floating point number to [x]", where [x] is a
+        "the closest floating-point number to [x]", where [x] is a
         real number. When [x] is not representable by the given
         format, some other number [x'] is selected based on
         rules of the rounding mode.
@@ -2887,7 +2893,7 @@ module Theory : sig
 
     (** rounding to nearest, ties to even.
 
-        The denotation is the floating point number nearest to the
+        The denotation is the floating-point number nearest to the
         denoted real number. If the two nearest numbers are equally
         close, then the one with an even least significant digit shall
         be selected. The denotation is not defined, if both numbers
@@ -2897,7 +2903,7 @@ module Theory : sig
 
     (** rounding to nearest, ties away.
 
-        The denotation is the floating point number nearest to the
+        The denotation is the floating-point number nearest to the
         denoted real number. If the two nearest numbers are equally
         close, then the one with larger magnitude shall be selected.
     *)
@@ -2905,21 +2911,21 @@ module Theory : sig
 
     (** rounding towards positive.
 
-        The denotation is the floating point number that is nearest
+        The denotation is the floating-point number that is nearest
         but no less than the denoted real number.
     *)
     val rtp : rmode
 
     (** rounding towards negative.
 
-        The denotation is the floating point number that is nearest
+        The denotation is the floating-point number that is nearest
         but not greater than the denoted real number.
     *)
     val rtn : rmode
 
     (** rounding towards zero.
 
-        The denotation is the floating point number that is nearest
+        The denotation is the floating-point number that is nearest
         but not greater in magnitude than the denoted real number.
     *)
     val rtz : rmode
@@ -2935,7 +2941,7 @@ module Theory : sig
     val cast_float  : 'f Float.t Value.sort  -> rmode -> 'a bitv -> 'f float
 
 
-    (** [cast_sfloat s rm x] is the closest to [x] floating point number of sort [x].
+    (** [cast_sfloat s rm x] is the closest to [x] floating-point number of sort [x].
 
         The bitvector [x] is interpreted as a signed integer in the
         two-complement form.
@@ -2963,57 +2969,59 @@ module Theory : sig
     (** [fabs x] the absolute value of [x].  *)
     val fabs    : 'f float -> 'f float
 
-    (** [fadd m x y] is the floating point number closest to [x+y].  *)
+    (** [fadd m x y] is the floating-point number closest to [x+y].  *)
     val fadd    : rmode -> 'f float -> 'f float -> 'f float
 
-    (** [fsub m x y] is the floating point number closest to [x-y].  *)
+    (** [fsub m x y] is the floating-point number closest to [x-y].  *)
     val fsub    : rmode -> 'f float -> 'f float -> 'f float
 
-    (** [fmul m x y] is the floating point number closest to [x*y].  *)
+    (** [fmul m x y] is the floating-point number closest to [x*y].  *)
     val fmul    : rmode -> 'f float -> 'f float -> 'f float
 
-    (** [fdiv m x y] is the floating point number closest to [x/y].  *)
+    (** [fdiv m x y] is the floating-point number closest to [x/y].  *)
     val fdiv    : rmode -> 'f float -> 'f float -> 'f float
 
-    (** [fsqrt m x] is the floating point number closest to [sqrt x].
+    (** [fsqrt m x] returns the closest floating-point number to [r],
+        where [r] is such number that [r*r] is equal to [x].
 
-        The denotation is not defined if
-    *)
+        If [x] is a negative finite non-zero number, or is [nan],
+        or is the negative infinity, then [sqrt x] is [nan]. If [x] is
+        the positive infinity then [fsqrt x] is the positive infinity. *)
     val fsqrt   : rmode -> 'f float -> 'f float
 
-    (** [fdiv m x y] is the floating point number closest to the
+    (** [fdiv m x y] is the floating-point number closest to the
         remainder of [x/y].  *)
     val fmodulo : rmode -> 'f float -> 'f float -> 'f float
 
-    (** [fmad m x y z] is the floating point number closest to [x * y + z].  *)
+    (** [fmad m x y z] is the floating-point number closest to [x * y + z].  *)
     val fmad    : rmode -> 'f float -> 'f float -> 'f float -> 'f float
 
 
-    (** [fround m x] is the floating point number closest to [x]
+    (** [fround m x] is the floating-point number closest to [x]
         rounded to an integral, using the rounding mode [m].   *)
     val fround   : rmode -> 'f float -> 'f float
 
     (** [fconvert f r x] is the closest to [x] floating number in format [f].  *)
     val fconvert : 'f Float.t Value.sort ->  rmode -> _ float -> 'f float
 
-    (** [fsucc m x] is the least floating point number representable
+    (** [fsucc m x] is the least floating-point number representable
         in (sort x) that is greater than [x].  *)
     val fsucc  : 'f float -> 'f float
 
-    (** [fsucc m x] is the greatest floating point number representable
+    (** [fsucc m x] is the greatest floating-point number representable
         in (sort x) that is less than [x].  *)
     val fpred  : 'f float -> 'f float
 
-    (** [forder x y] holds if floating point number [x] is less than [y].
+    (** [forder x y] holds if floating-point number [x] is less than [y].
 
         The denotation is not defined if either of arguments do not
-        represent a floating point number.
+        represent a floating-point number.
     *)
     val forder : 'f float -> 'f float -> bool
   end
 
 
-  (** The theory of floating point numbers modulo transcendental functions.
+  (** The theory of floating-point numbers modulo transcendental functions.
 
       This signature includes several functions that can be expressed
       in terms of a finite sequence of the operations of addition,
@@ -3037,7 +3045,7 @@ module Theory : sig
     include Fbasic
 
 
-    (** [pow m b a] is a floating point number closest to [b^a].
+    (** [pow m b a] is a floating-point number closest to [b^a].
 
         Where [b^a] is [b] raised to the power of [a].
 
@@ -3048,52 +3056,52 @@ module Theory : sig
     val pow : rmode -> 'f float -> 'f float -> 'f float
 
 
-    (** [compound m x n] is the floating point number closest to [(1+x)^n].
+    (** [compound m x n] is the floating-point number closest to [(1+x)^n].
 
         Where [b^a] is [b] raised to the power of [a].
 
         The denotation is not defined if [x] is less than [-1], or if
         [x] is [n] represent zeros, or if [x] doesn't represent a
-        finite floating point number.
+        finite floating-point number.
     *)
     val compound : rmode -> 'f float -> 'a bitv -> 'f float
 
 
-    (** [rootn m x n] is the floating point number closest to [x^(1/n)].
+    (** [rootn m x n] is the floating-point number closest to [x^(1/n)].
 
         Where [b^a] is [b] raised to the power of [a].
 
         The denotation is not defined if:
         - [n] is zero;
         - [x] is zero and n is less than zero;
-        - [x] is not a finite floating point number;
+        - [x] is not a finite floating-point number;
     *)
     val rootn    : rmode -> 'f float -> 'a bitv -> 'f float
 
 
-    (** [pown m x n] is the floating point number closest to [x^n].
+    (** [pown m x n] is the floating-point number closest to [x^n].
 
         Where [b^a] is [b] raised to the power of [a].
 
         The denotation is not defined if [x] and [n] both represent
-        zero or if [x] doesn't represent a finite floating point
+        zero or if [x] doesn't represent a finite floating-point
         number.
     *)
     val pown    : rmode -> 'f float -> 'a bitv -> 'f float
 
 
-    (** [rsqrt m x] is the closest floating point number to [1 / sqrt x].
+    (** [rsqrt m x] is the closest floating-point number to [1 / sqrt x].
 
         The denotation is not defined if [x] is less than or equal to
-        zero or doesn't represent a finite floating point number.
+        zero or doesn't represent a finite floating-point number.
     *)
     val rsqrt    : rmode -> 'f float -> 'f float
 
 
-    (** [hypot m x y] is the closest floating point number to [sqrt(x^2 + y^2)].
+    (** [hypot m x y] is the closest floating-point number to [sqrt(x^2 + y^2)].
 
         The denotation is not defined if [x] or [y] do not represent
-        finite floating point numbers. *)
+        finite floating-point numbers. *)
     val hypot    : rmode -> 'f float -> 'f float -> 'f float
   end
 
@@ -3102,113 +3110,113 @@ module Theory : sig
   module type Trans = sig
 
 
-    (** [exp m x] is the floating point number closes to [e^x],
+    (** [exp m x] is the floating-point number closest to [e^x],
 
         where [b^a] is [b] raised to the power of [a] and [e] is the
         base of natural logarithm.
     *)
     val exp      : rmode -> 'f float -> 'f float
 
-    (** [expm1 m x] is the floating point number closes to [e^x - 1],
+    (** [expm1 m x] is the floating-point number closest to [e^x - 1],
 
         where [b^a] is [b] raised to the power of [a] and [e] is the
         base of natural logarithm.
     *)
     val expm1    : rmode -> 'f float -> 'f float
 
-    (** [exp2 m x] is the floating point number closes to [2^x],
+    (** [exp2 m x] is the floating-point number closest to [2^x],
 
         where [b^a] is [b] raised to the power of [a].
     *)
     val exp2     : rmode -> 'f float -> 'f float
 
-    (** [exp2 m x] is the floating point number closes to [2^x - 1],
+    (** [exp2 m x] is the floating-point number closest to [2^x - 1],
 
         where [b^a] is [b] raised to the power of [a].
     *)
     val exp2m1   : rmode -> 'f float -> 'f float
 
-    (** [exp10 m x] is the floating point number closes to [10^x],
+    (** [exp10 m x] is the floating-point number closest to [10^x],
 
         where [b^a] is [b] raised to the power of [a].
     *)
     val exp10    : rmode -> 'f float -> 'f float
 
 
-    (** [exp10m1 m x] is the floating point number closes to [10^x - 1],
+    (** [exp10m1 m x] is the floating-point number closest to [10^x - 1],
 
         where [b^a] is [b] raised to the power of [a].
     *)
     val exp10m1  : rmode -> 'f float -> 'f float
 
 
-    (** [log m x] is the floating point number closest to [log x].  *)
+    (** [log m x] is the floating-point number closest to [log x].  *)
     val log      : rmode -> 'f float -> 'f float
 
-    (** [log2 m x] is the floating point number closest to [log x / log 2].  *)
+    (** [log2 m x] is the floating-point number closest to [log x / log 2].  *)
     val log2     : rmode -> 'f float -> 'f float
 
-    (** [log10 m x] is the floating point number closest to [log x / log 10].  *)
+    (** [log10 m x] is the floating-point number closest to [log x / log 10].  *)
     val log10    : rmode -> 'f float -> 'f float
 
-    (** [logp1 m x] is the floating point number closest to [log (1+x)].  *)
+    (** [logp1 m x] is the floating-point number closest to [log (1+x)].  *)
     val logp1    : rmode -> 'f float -> 'f float
 
-    (** [logp1 m x] is the floating point number closest to [log (1+x) / log 2].  *)
+    (** [logp1 m x] is the floating-point number closest to [log (1+x) / log 2].  *)
     val log2p1   : rmode -> 'f float -> 'f float
 
-    (** [logp1 m x] is the floating point number closest to [log (1+x) / log 10].  *)
+    (** [logp1 m x] is the floating-point number closest to [log (1+x) / log 10].  *)
     val log10p1  : rmode -> 'f float -> 'f float
 
-    (** [sin m x] is the floating point number closest to [sin x].  *)
+    (** [sin m x] is the floating-point number closest to [sin x].  *)
     val sin      : rmode -> 'f float -> 'f float
 
-    (** [cos m x] is the floating point number closest to [cos x].  *)
+    (** [cos m x] is the floating-point number closest to [cos x].  *)
     val cos      : rmode -> 'f float -> 'f float
 
-    (** [tan m x] is the floating point number closest to [tan x].  *)
+    (** [tan m x] is the floating-point number closest to [tan x].  *)
     val tan      : rmode -> 'f float -> 'f float
 
-    (** [sinpi m x] is the floating point number closest to [sin (pi*x)].  *)
+    (** [sinpi m x] is the floating-point number closest to [sin (pi*x)].  *)
     val sinpi    : rmode -> 'f float -> 'f float
 
-    (** [cospi m x] is the floating point number closest to [cos (pi*x)].  *)
+    (** [cospi m x] is the floating-point number closest to [cos (pi*x)].  *)
     val cospi    : rmode -> 'f float -> 'f float
 
-    (** [atanpi m y x] is the floating point number closest to [atan(y/x) / pi].  *)
+    (** [atanpi m y x] is the floating-point number closest to [atan(y/x) / pi].  *)
     val atanpi   : rmode -> 'f float -> 'f float
 
-    (** [atanpi m y x] is the floating point number closest to [atan(y/x) / (2*pi)].  *)
+    (** [atanpi m y x] is the floating-point number closest to [atan(y/x) / (2*pi)].  *)
     val atan2pi  : rmode -> 'f float -> 'f float -> 'f float
 
-    (** [asin m x] is the floating point number closest to [asin x].  *)
+    (** [asin m x] is the floating-point number closest to [asin x].  *)
     val asin     : rmode -> 'f float -> 'f float
 
-    (** [acos m x] is the floating point number closest to [acos x].  *)
+    (** [acos m x] is the floating-point number closest to [acos x].  *)
     val acos     : rmode -> 'f float -> 'f float
 
-    (** [atan m x] is the floating point number closest to [atan x].  *)
+    (** [atan m x] is the floating-point number closest to [atan x].  *)
     val atan     : rmode -> 'f float -> 'f float
 
-    (** [atan2 m y x] is the floating point number closest to [atan (y/x)].  *)
+    (** [atan2 m y x] is the floating-point number closest to [atan (y/x)].  *)
     val atan2    : rmode -> 'f float -> 'f float -> 'f float
 
-    (** [sinh m x] is the floating point number closest to [sinh x].  *)
+    (** [sinh m x] is the floating-point number closest to [sinh x].  *)
     val sinh     : rmode -> 'f float -> 'f float
 
-    (** [cosh m x] is the floating point number closest to [cosh x].  *)
+    (** [cosh m x] is the floating-point number closest to [cosh x].  *)
     val cosh     : rmode -> 'f float -> 'f float
 
-    (** [tanh m x] is the floating point number closest to [tanh x].  *)
+    (** [tanh m x] is the floating-point number closest to [tanh x].  *)
     val tanh     : rmode -> 'f float -> 'f float
 
-    (** [asinh m x] is the floating point number closest to [asinh x].  *)
+    (** [asinh m x] is the floating-point number closest to [asinh x].  *)
     val asinh    : rmode -> 'f float -> 'f float
 
-    (** [acosh m x] is the floating point number closest to [acosh x].  *)
+    (** [acosh m x] is the floating-point number closest to [acosh x].  *)
     val acosh    : rmode -> 'f float -> 'f float
 
-    (** [atanh m x] is the floating point number closest to [atanh x].  *)
+    (** [atanh m x] is the floating-point number closest to [atanh x].  *)
     val atanh    : rmode -> 'f float -> 'f float
   end
 
@@ -3216,7 +3224,7 @@ module Theory : sig
   (** The Core Theory signature.
 
       The Core Theory signature includes operations on booleans, bitvectors,
-      floating point numbers, and memories, as well as denotations of
+      floating-point numbers, and memories, as well as denotations of
       various control-flow and data-flow effects.
   *)
   module type Core = sig
@@ -3424,7 +3432,7 @@ module Theory : sig
   (** Sorts implementing IEEE754 formats.
 
       This module provides an infinite set of indexed sorts for
-      floating point numbers defined in the IEEE754 standard.
+      floating-point numbers defined in the IEEE754 standard.
 
       This sorts are not referenced in the Core Theory (or any other
       theory in this library) and provided for user convenience. Any
@@ -4256,10 +4264,10 @@ module Theory : sig
       end
 
 
-      (** Floating point expressions.  *)
+      (** floating-point expressions.  *)
       module type Float = sig
 
-        (** an abstract type denoting a Core Theory floating point term.  *)
+        (** an abstract type denoting a Core Theory floating-point term.  *)
         type t
 
         (** the type of expressions of the target language.    *)

@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Monads.Std
 open Format
 
@@ -62,7 +62,7 @@ module Type = struct
 
   let str = {
     parse = atom string_of_sexp;
-    pack = ident;
+    pack = Fn.id;
     typ = Str;
   }
 
@@ -845,7 +845,7 @@ module Make(B : Monad.S) = struct
   (*   foldm rows ~init:[] ~f:(fun xs row -> read row f >>| fun x -> x :: xs) >>| *)
   (*   Sequence.of_list *)
 
-  let collect q = foreach q ~f:ident
+  let collect q = foreach q ~f:Fn.id
 
   let require ?(that=fun _ -> true) attr : 'a t =
     let name = sprintf "required attribute %s" (Attribute.name attr) in

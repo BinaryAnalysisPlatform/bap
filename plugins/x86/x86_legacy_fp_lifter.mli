@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 module Bil = X86_legacy_bil
 module MC = Disasm_expert.Basic

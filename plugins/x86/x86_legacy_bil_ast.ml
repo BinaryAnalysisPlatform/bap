@@ -16,16 +16,18 @@ open Big_int_Z
 module Type = X86_legacy_bil_type
 module Var = X86_legacy_bil_var
 
+module Core = Core_kernel[@@warning "-D"]
+
 
 (* TODO: remove if Core.Std is opened in this file. *)
-let string_of_sexp = Core_kernel.string_of_sexp
-let sexp_of_string = Core_kernel.sexp_of_string
+let string_of_sexp = Core.string_of_sexp
+let sexp_of_string = Core.sexp_of_string
 
 (** Support for s-expressions *)
 let big_int_of_sexp sexp =
-  Core_kernel.String.t_of_sexp sexp |> Big_int_Z.big_int_of_string
+  Core.String.t_of_sexp sexp |> Big_int_Z.big_int_of_string
 let sexp_of_big_int bi =
-  Big_int_Z.string_of_big_int bi |> Core_kernel.String.sexp_of_t
+  Big_int_Z.string_of_big_int bi |> Core.String.sexp_of_t
 
 type var = Var.t [@@deriving sexp]
 

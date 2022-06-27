@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Bap_c.Std
 
@@ -54,7 +54,7 @@ module Define(Arch : sig val name : arch end) = struct
 
   let abi = C.Abi.{
       insert_args = args;
-      apply_attrs = fun _ -> ident
+      apply_attrs = fun _ -> Fn.id
     }
 
   let api size = C.Abi.create_api_processor size abi

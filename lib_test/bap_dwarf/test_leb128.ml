@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open OUnit2
 
 module Leb128 = Dwarf_leb128
@@ -77,7 +77,7 @@ let write ~expect value t ctxt =
   let buf = Bytes.create (Leb128.size leb) in
   Leb128.write leb buf ~pos:0;
   let buf = Bytes.to_string buf in
-  assert_equal ~ctxt ~printer:ident buf expect
+  assert_equal ~ctxt ~printer:Fn.id buf expect
 
 let size ~expect value t ctxt =
   let leb = t.enc value in

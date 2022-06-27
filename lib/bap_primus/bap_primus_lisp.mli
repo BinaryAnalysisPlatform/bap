@@ -1,10 +1,11 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Format
 open Bap_primus_types
 open Bap_core_theory
 
 type program
+type context
 type message
 
 
@@ -13,6 +14,11 @@ module Load : sig
   val program : ?paths:string list -> Project.t -> string list -> (program,error) result
   val pp_program : formatter -> program -> unit
   val pp_error : formatter -> error -> unit
+end
+
+module Context : sig
+  type t = context
+  val create : (string * string list) list -> context
 end
 
 module Doc : sig
@@ -152,6 +158,7 @@ module Semantics : sig
   type KB.conflict += Failed_primitive of KB.Name.t * string
 
   val program : (Theory.Source.cls, program) KB.slot
+  val context : (Theory.Unit.cls, context) KB.slot
   val definition : (Theory.program, Theory.Label.t option) KB.slot
   val name : (Theory.program, KB.Name.t option) KB.slot
   val args : (Theory.program, unit Theory.Value.t list option) KB.slot

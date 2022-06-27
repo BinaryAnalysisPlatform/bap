@@ -1,6 +1,6 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
-open Result
+open Result.Monad_infix
 open Bap.Std
 
 module Id = Bap_trace_id

@@ -28,7 +28,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *)
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 open Bitstring
 open Elf_types

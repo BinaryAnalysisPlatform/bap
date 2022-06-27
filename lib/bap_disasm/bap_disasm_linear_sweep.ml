@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_types.Std
 open Bap_image_std
 
@@ -23,7 +23,7 @@ let sweep ?(backend="llvm") arch mem : (mem * insn option) list Or_error.t =
       let dis = Dis.store_kinds dis in
       let lift = lifter_of_arch arch in
       Dis.run dis mem
-        ~init:[] ~return:ident ~stopped:(fun s _ ->
+        ~init:[] ~return:Fn.id ~stopped:(fun s _ ->
             Dis.stop s (Dis.insns s)) |>
       List.map ~f:(function
           | mem, None -> mem,None

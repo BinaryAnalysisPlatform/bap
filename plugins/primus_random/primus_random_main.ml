@@ -179,7 +179,7 @@ when the $(b,--primus-promiscuous-mode) is enabled.
 
 |}
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap_main
 open Bap.Std
@@ -337,7 +337,7 @@ module Generator = struct
         let max = Option.value_exn max
         let next i = i
         let value i = xs.(i mod Array.length xs)
-      end) 0 ~to_bitvec:ident ?width
+      end) 0 ~to_bitvec:Fn.id ?width
 
 
   let create ?seed ?width n ps = match n with

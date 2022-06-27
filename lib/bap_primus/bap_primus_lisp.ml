@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap.Std
 open Format
@@ -468,6 +468,7 @@ module type Primitives = Lisp.Def.Primitives
 module Primitive = Lisp.Def.Primitive
 type closure = Lisp.Def.closure
 type program = Lisp.Program.t
+type context = Lisp.Context.t
 module Load = Bap_primus_lisp_parse
 module Type = struct
   include Lisp.Program.Type
@@ -681,15 +682,7 @@ module Make(Machine : Machine) = struct
 
         let eval_ret r = match ret with
           | None -> Machine.return ()
-          | Some v -> match Arg.rhs v with
-            | Bil.Var reg -> Eval.set reg r
-            | Bil.(Cast (LOW, rsize, Var reg)) ->
-              let vsize = size_of_reg reg in
-              Eval.get reg >>= fun lhs ->
-              Eval.extract ~hi:(vsize-1) ~lo:rsize lhs >>= fun high ->
-              Eval.concat high r >>= fun r ->
-              Eval.set reg r
-            | e -> failf "an unsupported return semantics: %a" Exp.pps e ()
+          | Some v -> Eval.assign (Arg.rhs v) r
 
         let exec =
           eval_args >>= fun bs ->
@@ -931,3 +924,4 @@ end
 
 module Unit = Semantics.Unit
 module Attribute = Lisp.Attribute
+module Context = Lisp.Context

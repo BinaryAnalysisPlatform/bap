@@ -2,7 +2,7 @@
 (**
     The type used for variables and functions to create and use them.
 *)
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 module Type = X86_legacy_bil_type
 

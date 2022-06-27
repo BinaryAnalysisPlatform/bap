@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open OUnit2
 open Format
 open Bap.Std
@@ -77,8 +77,8 @@ let dominate cons size ctxt =
       let msg = sprintf "(%d,[%a,%a]) is not dominated by [%a,%a]" v
           Addr.pps (Memory.min_addr k)
           Addr.pps (Memory.max_addr k)
-          Addr.pps (uw (Memmap.min_addr map))
-          Addr.pps (uw (Memmap.max_addr map)) in
+          Addr.pps (Option.value_exn (Memmap.min_addr map))
+          Addr.pps (Option.value_exn (Memmap.max_addr map)) in
       assert_bool msg @@ Memmap.dominates map k)
 
 let contains k v =

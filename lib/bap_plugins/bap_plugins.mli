@@ -1,6 +1,6 @@
 (** Bap Plugin Library. *)
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_bundle.Std
 open Bap_future.Std
 

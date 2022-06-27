@@ -1,5 +1,5 @@
 (** LEB128 - Little Endian Base 128 encoding. *)
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 (** an encoded value  *)
 type t [@@deriving bin_io, compare, sexp]

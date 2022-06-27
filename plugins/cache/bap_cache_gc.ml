@@ -73,13 +73,14 @@
    select as many files as we need to remove requested size.
 *)
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 
 include Self ()
 
 module Cache = Bap_cache
 module CDF = Int.Map
+module Sys = Caml.Sys
 module Unix = Caml_unix
 
 type entry = {
@@ -117,7 +118,7 @@ let select entries total_size size_to_free =
     if freed < size_to_free then
       let u = Random.int total_size in
       let (_,i) =
-        Option.value_exn (CDF.closest_key cdf `Less_than u) in
+        Option.value_exn (CDF.closest_key cdf `Less_or_equal_to u) in
       if Set.mem indexes i
       then loop indexes freed
       else loop (Set.add indexes i) (freed + entries.(i).size)

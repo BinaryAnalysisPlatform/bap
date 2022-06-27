@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 
 (** [copy buf obj pos] is a method to copy object [obj] into a buffer

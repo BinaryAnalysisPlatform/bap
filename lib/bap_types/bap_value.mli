@@ -1,6 +1,6 @@
 open Bap_core_theory
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 
 type t [@@deriving bin_io, compare, sexp]

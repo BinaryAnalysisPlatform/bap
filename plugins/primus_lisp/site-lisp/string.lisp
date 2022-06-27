@@ -89,6 +89,10 @@
   (declare (external "strrchr" "rindex"))
   (memrchr p c (+ (strlen p) 1)))
 
+(defun strchrnul (p c)
+  (declare (external "strchrnul"))
+  (let ((p (strchr p c)))
+    (if p p (strchr p 0))))
 
 (defun strpbrk (str set)
   (declare (external "strpbrk"))

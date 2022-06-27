@@ -1,6 +1,6 @@
 open Bap_core_theory
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Graphlib.Std
 
 open Bap_types.Std
@@ -157,6 +157,17 @@ let belongs {parents} ~entry:parent addr =
   Addr.equal parent addr || match Solution.get parents addr with
   | Top -> false
   | Set parents -> Set.mem parents parent
+
+let entry {parents; entries} addr =
+  match Solution.get parents addr with
+  | Top -> addr
+  | Set parents ->
+    let entries = Set.inter parents entries in
+    match Set.to_list entries with
+    | [] -> addr
+    | [parent] -> parent
+    | _ -> assert false
+
 
 let siblings {parents} x y =
   Addr.equal x y ||

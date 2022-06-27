@@ -584,7 +584,7 @@ module Extension : sig
 
         Note, the examples below assume the following preamble:
         {[
-          open Core_kernel
+          open Core_kernel[@@warning "-D"]
           open Bap_main.Extension
         ]}
 
@@ -1035,7 +1035,7 @@ module Extension : sig
         Declaring a simple configuration parameter:
 
         {[
-          open Core_kernel
+          open Core_kernel[@@warning "-D"]
           open Bap_main.Extension
 
           let depth = Configuration.parameter Type.int "depth"
@@ -1051,7 +1051,7 @@ module Extension : sig
         example could be rewritten as:
 
         {[
-          open Core_kernel
+          open Core_kernel[@@warning "-D"]
           open Bap_main.Extension
           open Bap_main.Extension.Syntax
 

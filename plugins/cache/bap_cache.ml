@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Bap.Std
 open Bap_cache_types
@@ -7,6 +7,7 @@ include Self ()
 
 module Filename = Caml.Filename
 module Random = Caml.Random
+module Sys = Caml.Sys
 module Unix = Caml_unix
 module Utils = Bap_cache_utils
 

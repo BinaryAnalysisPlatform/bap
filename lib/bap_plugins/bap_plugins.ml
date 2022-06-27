@@ -1,10 +1,11 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_bundle.Std
 open Bap_future.Std
 open Or_error.Monad_infix
 
 module Units = Bap_plugins_units
 module Filename = Caml.Filename
+module Sys = Caml.Sys
 
 module Plugin = struct
 

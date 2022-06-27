@@ -1,6 +1,6 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
-open Result
+open Result.Monad_infix
 open OUnit2
 
 module Dis = Disasm_expert.Basic
@@ -70,7 +70,7 @@ let insn_of_mem arch data _ctxt =
       | mem,(Some insn),`finished ->
         assert_equal ~printer:(string_of_int)
           (String.length data) (Memory.length mem);
-        return (strings_of_insn insn))
+        Result.return (strings_of_insn insn))
 
 let assert_equal_regexp s s' =
   let pat = sprintf "%s.?" s in

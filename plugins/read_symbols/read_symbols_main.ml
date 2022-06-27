@@ -84,10 +84,11 @@ bap \\$binary --read-symbols-from=mv.scm --read-symbols-when-matches
 
 "
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_main
 open Bap_core_theory
 open KB.Syntax
+module Sys = Caml.Sys
 include Bap_main.Loggers()
 
 let anonymous_prefix = "__anonymous_sub%"

@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Graphlib.Std
 open Bap_disasm_std
 

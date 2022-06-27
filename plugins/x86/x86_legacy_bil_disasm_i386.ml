@@ -1,6 +1,7 @@
 (* Copyright (C) 2017 ForAllSecure, Inc. - All Rights Reserved. *)
 (** Native lifter of x86 instructions to the BAP IL *)
 module Bil = X86_legacy_bil
+module Core = Core_kernel[@@warning "-D"]
 
 open Big_int_Z
 open Bil
@@ -13,10 +14,10 @@ module Var_temp = X86_legacy_bil_var_temp
 open Big_int_convenience
 open X86_legacy_bil_convenience
 
-(* Note: remove these if we open Core_kernel here. *)
-module List = Core_kernel.List
-module Int = Core_kernel.Int
-module Option = Core_kernel.Option
+(* Note: remove these if we open Core_kernel[@@warning "-D"] here. *)
+module List = Core.List
+module Int = Core.Int
+module Option = Core.Option
 
 let compute_segment_bases = ref false
 
@@ -542,19 +543,19 @@ module ToIR = struct
       (X86_legacy_bil_convenience.exp_ite (cmp_pc 0b10) convert_10 convert_11)
 
   let get_x87_stack ~index =
-    Core_kernel.Array.foldi ~f:(
+    Core.Array.foldi ~f:(
       fun i acc st_exp ->
         X86_legacy_bil_convenience.exp_ite (x87_top_exp ==* X86_legacy_bil_convenience.it ((i - index) mod 8) (Reg 3)) st_exp acc
     ) ~init:st_exps.(0) st_exps
 
   let get_x87_tag ~index =
-    Core_kernel.Array.foldi ~f:(
+    Core.Array.foldi ~f:(
       fun i acc st_tag ->
         X86_legacy_bil_convenience.exp_ite (x87_top_exp ==* X86_legacy_bil_convenience.it ((i - index) mod 8) (Reg 3)) st_tag acc
     ) ~init:st_tag_exps.(0) st_tag_exps
 
   let set_x87_stack ~index value =
-    Core_kernel.Array.mapi ~f:(
+    Core.Array.mapi ~f:(
       fun i st_var ->
         let selector = x87_top_exp ==* X86_legacy_bil_convenience.it ((i - index) mod 8) (Reg 3) in
         let tag =
@@ -566,10 +567,10 @@ module ToIR = struct
           move st_tag.(i) (X86_legacy_bil_convenience.exp_ite selector tag st_tag_exps.(i));
           move st_var (X86_legacy_bil_convenience.exp_ite selector bv_value st_exps.(i));
         ]
-    ) st |> Array.to_list |> Core_kernel.List.concat
+    ) st |> Array.to_list |> Core.List.concat
 
   let empty_x87_stack ~index =
-    Core_kernel.Array.mapi ~f:(
+    Core.Array.mapi ~f:(
       fun i st_tag_var ->
         let selector = x87_top_exp ==* X86_legacy_bil_convenience.it i (Reg 3) in
         move st_tag_var (X86_legacy_bil_convenience.exp_ite selector fempty st_tag_exps.(i))

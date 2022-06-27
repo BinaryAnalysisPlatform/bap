@@ -9,4 +9,5 @@ B ../../lib/bap_abi
 B ../../lib/bap_api
 B ../../lib/x86_cpu
 B ../../lib/bap_c
+B ../../lib/bap_demangle
 REC
