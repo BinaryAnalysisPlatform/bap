@@ -1,6 +1,6 @@
 let package = "bap"
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap.Std
 open KB.Syntax
@@ -665,25 +665,40 @@ let guess_encoding interworking label target mode =
         | false -> !!llvm_a32
   else !!CT.Language.unknown
 
+(* our lowest supported llvm is 6.0 which supports up to v8.3a *)
+let max_v8a_version = 3
+
 let v8aversions =
-  List.init 6 ~f:(fun i ->
-      sprintf "+v8.%da" (i+1)) |>
+  List.init max_v8a_version ~f:(fun i ->
+      sprintf "+v8.%da" (i+1))
+
+let is_normal_feature s =
+  String.length s > 0 && match s.[0] with
+  | '+' | '-' -> true
+  | _ -> false
+
+let normalize_features xs =
+  List.map xs ~f:(fun x ->
+      if is_normal_feature x
+      then x
+      else "+" ^ x) |>
   String.concat ~sep:","
 
-let enable_llvm ?interworking () =
+let enable_llvm ?(features=[]) ?interworking () =
   let open KB.Syntax in
-  register llvm_a32 "armv7";
-  register llvm_t32 "thumbv7" ~attrs:"+thumb2";
-  register llvm_a64 "aarch64" ~attrs:v8aversions;
+  let features xs = normalize_features (xs@features) in
+  register llvm_a32 "armv7" ~attrs:(features []);
+  register llvm_t32 "thumbv7" ~attrs:(features ["thumb2"]);
+  register llvm_a64 "aarch64" ~attrs:(features v8aversions);
   KB.promise CT.Label.encoding @@ fun label ->
   let* target = CT.Label.target label in
   let* mode = KB.collect Mode.slot label in
   guess_encoding interworking label target mode
 
-let load ?interworking ?(backend="llvm") () =
+let load ?features ?interworking ?(backend="llvm") () =
   enable_loader ();
   enable_arch ();
   Encodings.provide ();
   if String.equal backend "llvm"
-  then enable_llvm ?interworking ()
+  then enable_llvm ?features ?interworking ()
   else enable_pcode ()

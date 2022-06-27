@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Caml.Format
 
 open Bap_knowledge
@@ -137,13 +137,13 @@ end
 
 
 
-  let forget = ident
+  let forget = Fn.id
   let refine witness t = match t with
     | App {name=Some name}
     | Sym name when [%compare.equal: name] name witness -> Some t
     | _ -> None
 
-  let forget : 'a t -> unit t = ident
+  let forget : 'a t -> unit t = Fn.id
 
   let same x y = Exp.compare x y = 0
 

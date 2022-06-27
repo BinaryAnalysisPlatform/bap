@@ -1,11 +1,12 @@
-open Core_kernel
-open Result
+open Core_kernel[@@warning "-D"]
+open Result.Monad_infix
 open Bap.Std
+module Sys = Caml.Sys
 include Self()
 
 module Configuration = Bap_main.Extension.Configuration
 
-let try_with f = match try_with f with
+let try_with f = match Result.try_with f with
   | Ok r -> Ok r
   | Error exn -> Error (`Fail exn)
 
@@ -39,7 +40,7 @@ module Api_path = struct
   let to_string = Path.string_of_filename
 
   let expand_home path =
-    Option.(value_map ~default:path ~f:ident
+    Option.(value_map ~default:path ~f:Fn.id
               (String.chop_prefix ~prefix:"~" (to_string path) >>= fun p ->
                getenv "HOME" >>= fun h ->
                Some Path.(filename_of_string h / filename_of_string p)))
@@ -116,7 +117,7 @@ module Api = struct
       Some {desc = {lang; name}; path;}
     else None
 
-  let ok_if_true2 f x ~error = f x >>= fun r -> ok_if_true r ~error
+  let ok_if_true2 f x ~error = f x >>= fun r -> Result.ok_if_true r ~error
 
   let cp api dest =
     ok_if_true2 Api_path.exists dest ~error:`No_dst >>= fun () ->

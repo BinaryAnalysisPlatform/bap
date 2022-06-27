@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap_main
 open KB.Syntax
@@ -13,21 +13,13 @@ let herbrand_provides = [
   "core:val";
   "lifter";
   "semantics";
-  "symbolizer";
 ]
 
-let decide_name_from_possible_name () : unit =
-  KB.Rule.(declare ~package "name-of-possible-names" |>
-           require Theory.Label.possible_name |>
-           provide Theory.Label.name |>
-           comment "resolves possible name");
-  KB.promise Theory.Label.name @@
-  KB.resolve Theory.Label.possible_name
 
 
 let domain = KB.Domain.optional "cst"
     ~equal:Sexp.equal
-    ~inspect:ident
+    ~inspect:Fn.id
 
 let eslot = KB.Class.property Theory.Semantics.cls "eff"
     ~package:"core"
@@ -196,7 +188,7 @@ module Herbrand : Theory.Core = struct
       | _ -> empty s
 
     let concat s xs =
-      List.map xs ~f:(fun x -> x >>|> fun _ -> ident) |>
+      List.map xs ~f:(fun x -> x >>|> fun _ -> Fn.id) |>
       KB.List.all >>| Option.all >>| function
       | None -> empty s
       | Some xs -> pure s @@ app "concat" xs
@@ -526,7 +518,6 @@ let enable_herbrand () =
     ~name:"syntax" (KB.return (module Herbrand : Theory.Core))
 
 let () = Extension.declare @@ fun ctxt ->
-  decide_name_from_possible_name ();
   if Extension.Configuration.get ctxt herbrand_enabled
   then enable_herbrand ();
   Ok ()

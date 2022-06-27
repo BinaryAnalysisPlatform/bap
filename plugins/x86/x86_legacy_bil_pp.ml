@@ -8,7 +8,8 @@ module Bil = X86_legacy_bil
 open Big_int_Z
 open Bil
 open Bil.Type
-open Core_kernel
+module Core = Core_kernel[@@warning "-D"]
+open Core
 
 module Arithmetic = X86_legacy_bil_arithmetic
 module Big_int_convenience = X86_legacy_bil_big_int_convenience

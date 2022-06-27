@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Bap_demangle.Std
 open Cxxfilt_config
@@ -30,5 +30,4 @@ let run name =
 
 let () =
   Config.when_ready @@ fun _ ->
-  let demangler = Demangler.create "c++filt" run in
-  Demanglers.register demangler
+  Demangler.declare ~package:"bap" "c++filt" run

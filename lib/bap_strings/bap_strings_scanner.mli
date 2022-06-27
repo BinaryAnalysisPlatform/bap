@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 
 (** [next ~is_stop ~read off] reads characters starting with the

@@ -7,9 +7,9 @@ module Make(CT : Theory.Core) = struct
   open Thumb_core.Make(CT)
   open Syntax
 
-  let sx rd rm =
-    rd <-? CT.signed s32 (var rm)
+  let sx s rd rm =
+    rd <-? CT.signed s32 (CT.low s (var rm))
 
-  let ux rd rm =
-    rd <-? CT.unsigned s32 (var rm)
+  let ux s rd rm =
+    rd <-? CT.unsigned s32 (CT.low s (var rm))
 end

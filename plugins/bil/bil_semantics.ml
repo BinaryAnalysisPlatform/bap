@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Bap_knowledge
 open Bap_core_theory
@@ -14,110 +14,7 @@ let bool = Theory.Bool.t
 let bits = Theory.Bitv.define
 let size = Theory.Bitv.size
 let sort = Theory.Value.sort
-(* we need to recurse intelligently, only if optimization
-   occured, that might open a new optimization opportunity,
-   and continue recursion only if we have progress.
-*)
-module Simpl = struct
-  open Bil.Types
-
-  let is0 = Word.is_zero and is1 = Word.is_one
-  let ism1 x = Word.is_zero (Word.lnot x)
-
-  let zero width = Bil.Int (Word.zero width)
-  let ones width = Bil.Int (Word.ones width)
-  let app2 = Bil.Apply.binop
-
-  let exp width =
-    let concat x y = match x, y with
-      | Int x, Int y -> Int (Word.concat x y)
-      | x,y -> Concat (x,y)
-
-    and cast t s x = match x with
-      | Cast (_,s',_) as x when s = s' -> x
-      | Cast (t',s',x) when [%compare.equal: cast] t t' && s' > s -> Cast (t,s,x)
-      | Int w -> Int (Bil.Apply.cast t s w)
-      | _ -> Cast (t,s,x)
-
-    and extract hi lo x = match x with
-      | Int w -> Int (Word.extract_exn ~hi ~lo w)
-      | x -> Extract (hi,lo,x)
-
-    and unop op x = match op,x with
-      | op,Int x -> Int (Bil.Apply.unop op x)
-      | op,UnOp(op',x) when [%compare.equal: unop] op op' -> x
-      | NOT,BinOp(LT,x,y) -> Bil.(x >= y)
-      | NOT,BinOp(LE,x,y) -> Bil.(x > y)
-      | NOT,BinOp(SLT,x,y) -> Bil.(x >=$ y)
-      | NOT,BinOp(SLE,x,y) -> Bil.(x >$ y)
-      | NOT,BinOp(EQ,x,y) -> Bil.(x <> y)
-      | NOT,BinOp(NEQ,x,y) -> Bil.(x = y)
-      | op,x -> UnOp(op, x)
-
-    and binop op x y =
-      let keep op x y = Bil.BinOp(op,x,y) in
-      let int f = function Bil.Int x -> f x | _ -> false in
-      let is0 = int is0 and is1 = int is1 and ism1 = int ism1 in
-      let (=) x y = compare_exp x y = 0 in
-      match op, x, y with
-      | op, Int x, Int y -> Int (app2 op x y)
-      | PLUS,BinOp(PLUS,x,Int y),Int z
-      | PLUS,BinOp(PLUS,Int y,x),Int z ->
-        BinOp(PLUS,x,Int (app2 PLUS y z))
-
-      | PLUS,x,y  when is0 x -> y
-      | PLUS,x,y  when is0 y -> x
-      | MINUS,x,y when is0 x -> UnOp(NEG,y)
-      | MINUS,x,y when is0 y -> x
-      | MINUS,x,y when x = y -> zero width
-      | MINUS,BinOp(MINUS,x,Int y), Int z ->
-        BinOp(MINUS,x,Int (app2 PLUS y z))
-      | MINUS,BinOp(PLUS,x,Int c1),Int c2
-      | MINUS,BinOp(PLUS,Int c1,x),Int c2 ->
-        BinOp(PLUS,x,Int (app2 MINUS c1 c2))
-
-      | TIMES,x,_ when is0 x -> x
-      | TIMES,_,y when is0 y -> y
-      | TIMES,x,y when is1 x -> y
-      | TIMES,x,y when is1 y -> x
-      | (DIVIDE|SDIVIDE),x,y when is1 y -> x
-      | (MOD|SMOD),_,y when is1 y -> zero width
-      | (LSHIFT|RSHIFT|ARSHIFT),x,y when is0 y -> x
-      | (LSHIFT|RSHIFT|ARSHIFT),x,_ when is0 x -> x
-      | ARSHIFT,x,_ when ism1 x -> x
-      | AND,x,_ when is0 x -> x
-      | AND,_,y when is0 y -> y
-      | AND,x,y when ism1 x -> y
-      | AND,x,y when ism1 y -> x
-      | AND,x,y when x = y -> x
-      | OR,x,y  when is0 x -> y
-      | OR,x,y  when is0 y -> x
-      | OR,x,_  when ism1 x -> x
-      | OR,_,y  when ism1 y -> y
-      | OR,x,y  when x = y -> x
-      | XOR,x,y when x = y -> zero width
-      | XOR,x,y when is0 x -> y
-      | XOR,x,y when is0 y -> x
-      | EQ,x,y  when x = y -> Int Word.b1
-      | NEQ,x,y when x = y -> Int Word.b0
-      | (LT|SLT), x, y when x = y -> Int Word.b0
-      | op,x,y -> keep op x y
-    and ite_ c x y = match c with
-      | Int c -> if Word.(c = b1) then x else y
-      | _ -> Ite(c,x,y) in
-
-    let run : exp -> exp = function
-      | BinOp (op,x,y) -> binop op x y
-      | UnOp (op,x) -> unop op x
-      | Cast (t,s,x) -> cast t s x
-      | Ite (x,y,z) -> ite_ x y z
-      | Extract (h,l,x) -> extract h l x
-      | Concat (x,y) -> concat x y
-      | Let _
-      | Var _ | Int _  | Unknown (_,_)
-      | Load _ | Store _ as x -> x in
-    run
-end
+let resort s x = KB.Value.refine x s
 
 module Basic : Theory.Basic = struct
   open Knowledge.Syntax
@@ -125,9 +22,6 @@ module Basic : Theory.Basic = struct
   module Base = struct
 
     let ret = Knowledge.return
-
-    let simpl = Simpl.exp
-
 
     let value x = KB.Value.get exp x
 
@@ -137,17 +31,9 @@ module Basic : Theory.Basic = struct
 
 
     let exp s x = ret @@ x %: s
-    let bit x = ret @@ simpl 1 x %: Theory.Bool.t
+    let bit x = ret @@ x %: Theory.Bool.t
     let mem s v = ret @@ v %: s
-    let vec s v = ret @@ simpl (Theory.Bitv.size s) v %: s
-
-    let gen s' v =
-      let s = Theory.Value.Sort.forget s' in
-      ret @@ match Theory.Bool.refine s with
-      | Some _ -> simpl 1 v %: s'
-      | None -> match Theory.Bitv.refine s with
-        | None -> v %:s'
-        | Some b -> simpl (Theory.Bitv.size b) v %: s'
+    let vec s v = ret @@ v %: s
 
     let unk s' =
       let s = Theory.Value.Sort.forget s' in
@@ -270,13 +156,12 @@ module Basic : Theory.Basic = struct
       vec xs @@
       if Exp.equal b (Bil.int Word.b0) then Bil.(x lsl y)
       else
-        let simpl = simpl (size xs) in
         let ones = Word.ones (size xs) in
-        let shifted = simpl Bil.(int ones lsl y)  in
-        let mask = simpl Bil.(lnot shifted) in
-        let lhs = simpl Bil.(x lsl y) in
-        let yes = simpl Bil.(lhs lor mask) in
-        let nay = simpl Bil.(x lsl y)  in
+        let shifted = Bil.(int ones lsl y)  in
+        let mask = Bil.(lnot shifted) in
+        let lhs = Bil.(x lsl y) in
+        let yes = Bil.(lhs lor mask) in
+        let nay = Bil.(x lsl y)  in
         Bil.(ite b yes nay)
 
     let app_bop lift op x y = lift (Bil.binop op) x y
@@ -291,12 +176,12 @@ module Basic : Theory.Basic = struct
       match yes,nay with
       | Bil.Int w, Bil.Int w' when Word.bitwidth w = 1 ->
         if Word.is_one w && Word.is_zero w'
-        then gen s cnd
+        then exp s cnd
         else if Word.is_zero w && Word.is_one w'
-        then gen s (Bil.lnot cnd)
-        else gen s (Bil.ite cnd yes nay)
+        then exp s (Bil.lnot cnd)
+        else exp s (Bil.ite cnd yes nay)
       | _ ->
-        gen s (Bil.ite cnd yes nay)
+        exp s (Bil.ite cnd yes nay)
 
     let (>>:=) v f = v >>= fun v -> f (effect v)
 
@@ -304,10 +189,10 @@ module Basic : Theory.Basic = struct
       cnd >>= fun cnd ->
       yes >>= fun yes ->
       nay >>:= fun nay ->
-      eff Bil.[If (bool_exp cnd,effect yes,nay)]
+      eff Bil.[if_ (bool_exp cnd) (effect yes) nay]
 
     let make_cast s t x =
-      x >>-> fun _ x -> vec s Bil.(cast t (size s) x)
+      x >>-> fun _ x -> vec s @@ Bil.cast t (size s) x
 
     let high s = make_cast s Bil.high
     let low s = make_cast s Bil.low
@@ -327,19 +212,19 @@ module Basic : Theory.Basic = struct
       let src = bitv_exp x in
       let fill = bool_exp b in
       let diff = size res - size sort in
-      let cast kind = vec res Bil.(Cast (kind,size res,src)) in
+      let cast kind = vec res @@ Bil.cast kind (size res) src in
       match compare diff 0,fill with
       | 0,_ -> vec res src
       | 1, Bil.Int b ->
-        if Word.(b = b0) then cast UNSIGNED
+        if Word.(b = b0) then cast Bil.unsigned
         else ite (msb !!x)
-            (cast SIGNED)
-            (logor (cast UNSIGNED) (mask_high res diff))
+            (cast Bil.signed)
+            (logor (cast Bil.unsigned) (mask_high res diff))
       | 1, _ ->
         ite !!b
-          (logor (cast UNSIGNED) (mask_high res diff))
-          (cast UNSIGNED)
-      | _ -> vec res (Cast (LOW,size res,src))
+          (logor (cast Bil.unsigned) (mask_high res diff))
+          (cast Bil.unsigned)
+      | _ -> vec res Bil.(cast low (size res) src)
 
     let append s ex ey =
       ex >>= fun ex ->
@@ -347,14 +232,14 @@ module Basic : Theory.Basic = struct
       let sx = sort ex and sy = sort ey in
       let x = bitv_exp ex and y = bitv_exp ey in
       match compare (size sx + size sy) (size s) with
-      | 0 -> vec s (Concat (x,y))
+      | 0 -> vec s (Bil.concat x y)
       | 1 ->
         let extra = size s - size sx - size sy in
-        vec s @@ Cast(UNSIGNED,extra,(Concat (x,y)))
+        vec s @@ Bil.(cast unsigned extra (concat x y))
       | _ ->
         if size s < size sx
-        then vec s (Cast (LOW,size s, x))
-        else vec s (Cast (LOW,size s, Concat (x,y)))
+        then vec s Bil.(cast low (size s) x)
+        else vec s Bil.(cast low (size s) (concat x y))
 
     let rec uncat acc : Bil.exp -> Bil.exp list = function
       | Concat ((Concat (x,y)), z) -> uncat (y::z::acc) x
@@ -367,7 +252,7 @@ module Basic : Theory.Basic = struct
         Knowledge.List.all vs >>= fun vs ->
         let sz = List.fold ~init:0 vs ~f:(fun sz x ->
             sz + size (sort x)) in
-        let x = List.reduce_exn ~f:(fun x y -> Bil.Concat (x,y)) @@
+        let x = List.reduce_exn ~f:Bil.concat @@
           List.map vs ~f:bitv_exp in
         cast s b0 (vec (bits sz) x)
 
@@ -416,20 +301,19 @@ module Basic : Theory.Basic = struct
       match rhs with
       | (Int _) as rhs ->
         exp bs @@ recursive_simpl @@ Let (v,rhs,body)
-      | _ -> gen bs @@ Let (v,rhs,body)
+      | _ -> exp bs @@ Bil.let_ v rhs body
 
-    let set var rhs =
+    let set lhs rhs =
       rhs >>-> fun _ rhs ->
-      let var = Var.reify var in
-      data [Bil.Move (var,rhs)]
+      data [Bil.(Var.reify lhs := rhs)]
 
     let repeat cnd body =
       cnd >>= fun cnd ->
       body >>:= fun body ->
-      data [Bil.While (bool_exp cnd, body)]
+      data [Bil.while_ (bool_exp cnd) body]
 
     let jmp dst =
-      dst >>= fun dst -> ctrl [Bil.Jmp (bitv_exp dst)]
+      dst >>= fun dst -> ctrl [Bil.jmp (bitv_exp dst)]
 
     let goto lbl = ctrl [
         Bil.(encode goto (Tid.to_string lbl))
@@ -449,8 +333,8 @@ module Basic : Theory.Basic = struct
       key >>= fun key ->
       mem >>-> fun _ mem ->
       let dir = bool_exp cnd and key = bitv_exp key in
-      let bel = vec rs @@ Load (mem,key,BigEndian,sz)
-      and lel = vec rs @@ Load (mem,key,LittleEndian,sz) in
+      let bel = vec rs @@ Bil.load mem key BigEndian sz
+      and lel = vec rs @@ Bil.load mem key LittleEndian sz in
       match dir with
       | Int dir -> if Word.(dir = b1) then bel else lel
       | _ -> ite !!cnd bel lel
@@ -463,8 +347,8 @@ module Basic : Theory.Basic = struct
       cnd >>| value >>= fun dir ->
       key >>| value >>= fun key ->
       mem >>-> fun sort mem ->
-      let bes = exp sort @@ Store (mem,key,e,BigEndian,sz)
-      and les = exp sort @@ Store (mem,key,e,LittleEndian,sz) in
+      let bes = exp sort @@ Bil.store mem key e BigEndian sz
+      and les = exp sort @@ Bil.store mem key e LittleEndian sz in
       match dir with
       | Int dir -> if Word.(dir = b1) then bes else les
       | _ -> ite (bit dir) bes les
@@ -503,14 +387,36 @@ module Basic : Theory.Basic = struct
     unk @@ Theory.Float.bits (sort x)
 end
 
-module Core : Theory.Core = struct
-  include Theory.Empty
-  include Basic
+module Rmode = struct
+  open KB.Syntax
+  let s = bits 8
+
+  let rmode n =
+    let+ n = Basic.int s (Bitvec.M8.int n) in
+    resort Theory.Rmode.t n
+
+  let rne = rmode 0
+  let rna = rmode 1
+  let rtp = rmode 2
+  let rtn = rmode 3
+  let rtz = rmode 4
+
+  let requal x y =
+    let* x = x >>| resort s in
+    let* y = y >>| resort s in
+    Basic.eq !!x !!y
+
 end
 
-module FBil = Bil_float.Make(Core)
+module CT : Theory.Core = struct
+  include Theory.Empty
+  include Basic
+  include Rmode
+end
 
-module FPEmulator = struct
+module Float = Bil_float.Make(CT)
+
+module Emulator = struct
   open Knowledge.Syntax
   type 'a t = 'a knowledge
 
@@ -526,14 +432,18 @@ module FPEmulator = struct
     List.find supported ~f:(fun p ->
         Theory.Value.Sort.same s (Theory.IEEE754.Sort.define p))
 
-  let resort s x = KB.Value.refine x s
-
   let fbits x =
     x >>| fun x -> resort (Theory.Float.bits (sort x)) x
 
   let float s x =
     x >>| fun x -> resort s x
 
+
+  let with_fsort ~unk_s s f =
+    match ieee754_of_sort s with
+    | None -> CT.unk unk_s
+    | Some ({Theory.IEEE754.k} as p) ->
+      f (bits k) (Theory.IEEE754.Sort.define p)
 
   let fop : type f.
     (_ -> _ -> _ Theory.bitv -> _ Theory.bitv -> _ Theory.bitv) ->
@@ -542,18 +452,14 @@ module FPEmulator = struct
     x >>= fun x ->
     y >>= fun y ->
     let xs = sort x in
-    match ieee754_of_sort xs with
-    | None -> Core.unk xs
-    | Some ({Theory.IEEE754.k} as p) ->
-      let bs = bits k in
-      let x = resort bs x and y = resort bs y in
-      let s = Theory.IEEE754.Sort.define p in
-      float xs (op s rm !!x !!y)
+    with_fsort xs ~unk_s:xs @@ fun bs s ->
+    let x = resort bs x and y = resort bs y in
+    float xs (op s rm !!x !!y)
 
-  let fadd rm = fop FBil.fadd rm
-  let fsub rm = fop FBil.fsub rm
-  let fmul rm = fop FBil.fmul rm
-  let fdiv rm = fop FBil.fdiv rm
+  let fadd rm = fop Float.fadd rm
+  let fsub rm = fop Float.fsub rm
+  let fmul rm = fop Float.fmul rm
+  let fdiv rm = fop Float.fdiv rm
 
   let fuop : type f.
     _ ->
@@ -561,17 +467,13 @@ module FPEmulator = struct
     fun op rm x ->
     x >>= fun x ->
     let xs = sort x in
-    match ieee754_of_sort xs with
-    | None -> Core.unk xs
-    | Some ({Theory.IEEE754.k} as p) ->
-      let bs = bits k in
-      let x = resort bs x in
-      let s = Theory.IEEE754.Sort.define p in
-      float xs (op s rm !!x)
+    with_fsort ~unk_s:xs xs @@ fun bs s ->
+    let x = resort bs x in
+    float xs (op s rm !!x)
 
-  let fsqrt rm x = fuop FBil.fsqrt rm x
+  let fsqrt rm x = fuop Float.fsqrt rm x
 
-  open Core
+  open CT
 
   let small s x =
     let m = Bitvec.modulus (size s) in
@@ -600,19 +502,38 @@ module FPEmulator = struct
 
   let make_cast_float cast s m v =
     match ieee754_of_sort s with
-    | None -> Core.unk s
+    | None -> CT.unk s
     | Some p ->
       cast (Theory.IEEE754.Sort.define p) m v >>| resort s
 
-  let cast_float s m v = make_cast_float FBil.cast_float s m v
-  let cast_sfloat s m v = make_cast_float FBil.cast_float_signed s m v
+  let cast_float s m v = make_cast_float Float.cast_float s m v
+  let cast_sfloat s m v = make_cast_float Float.cast_float_signed s m v
+
+  let cast_int ts _ v =
+    v >>= fun v ->
+    with_fsort ~unk_s:ts (sort v) @@ fun bs s ->
+    Float.cast_int s ts !!(resort bs v)
+
+  let cast_sint = cast_int
+
+  let case f x =
+    x >>= fun x ->
+    with_fsort (sort x) ~unk_s:bool @@ fun bs fs ->
+    f fs !!(resort bs x)
+
+  let is_finite x = case Float.is_finite x
+  let is_nan x = case Float.is_nan x
+  let is_inf x = case Float.is_inf x
+  let is_fzero x = case (fun _ -> Float.is_zero) x
+  let is_fpos x = case (fun _ -> Float.is_fpos) x
+  let is_fneg x = case (fun _ -> Float.is_fneg) x
 
   let forder x y =
     x >>= fun x ->
     y >>= fun y ->
     let xs = sort x in
     match ieee754_of_sort xs with
-    | None -> Core.unk bool
+    | None -> CT.unk bool
     | Some ({Theory.IEEE754.k; w; t}) ->
       let bs = bits k and ms = bits (k-1)in
       let x = resort bs x and y = resort bs y in
@@ -639,7 +560,8 @@ module FPEmulator = struct
       ]
 end
 
+module Core = CT
 module Core_with_fp_emulation = struct
   include Core
-  include FPEmulator
+  include Emulator
 end

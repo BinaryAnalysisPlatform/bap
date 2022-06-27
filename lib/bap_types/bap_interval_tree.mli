@@ -1,6 +1,6 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
-module type Interval = sig 
+module type Interval = sig
   type t [@@deriving compare, sexp_of]
   type point [@@deriving compare, sexp_of]
   val lower : t -> point
@@ -36,10 +36,10 @@ module type S = sig
   val remove_dominators : 'a t -> key -> 'a t
   val to_sequence : 'a t -> (key * 'a) Sequence.t
   include Container.S1 with type 'a t := 'a t
-end 
+end
 
-module Make(Interval : Interval) : S 
-  with type key := Interval.t 
+module Make(Interval : Interval) : S
+  with type key := Interval.t
    and type point := Interval.point
 
 module type Interval_binable = sig

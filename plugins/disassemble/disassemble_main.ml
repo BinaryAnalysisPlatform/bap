@@ -44,7 +44,7 @@ let man = {|
   with the following contents:
 
   ```
-  open Core_kernel
+  open Core_kernel[@@warning "-D"]
   open Bap_main
   open Bap.Std
 
@@ -83,13 +83,15 @@ let man = {|
 |}
 
 open Bap_knowledge
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Bap_core_theory
 open Regular.Std
 open Monads.Std
 open Format
 open Bap_plugins.Std
+
+module Sys = Caml.Sys
 
 include Self()
 open Bap_main
@@ -300,7 +302,7 @@ let old_style_passes =
   Extension.Command.switches
     ~doc:(sprintf "Enables the pass %s in the old style (DEPRECATED)")
     (Plugins.list () |> List.map ~f:Plugin.name)
-    ident
+    Fn.id
 
 let passes =
   Extension.Command.parameters
@@ -318,7 +320,7 @@ let outputs =
     "dump"
 
 let rw_file = Extension.Type.define
-    ~name:"<FILE>" ~print:ident ~parse:ident
+    ~name:"<FILE>" ~print:Fn.id ~parse:Fn.id
     ~digest:(fun path ->
         if Sys.file_exists path
         then Caml.Digest.file path
@@ -453,10 +455,8 @@ let setup_gc () =
   info "Setting GC parameters";
   Caml.Gc.set {
     opts with
-    window_size = 20;
-    minor_heap_size = 1024 * 1024;
+    minor_heap_size = 2 * 1024 * 1024;
     major_heap_increment = 64 * 1024 * 1024;
-    space_overhead = 200;
   }
 
 let has_env var = match Sys.getenv var with

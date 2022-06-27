@@ -1,6 +1,6 @@
 let package = "bap"
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap.Std
 open KB.Syntax
@@ -174,11 +174,12 @@ module Thumb(CT : Theory.Core) = struct
 
   let lift_bits opcode insn =
     let open Thumb_bits.Make(CT) in
+    let open Thumb_core in
     match opcode, (MC.Insn.ops insn : Op.t array) with
-    | `tSXTB, [|Reg rd; Reg rm; Imm c; _|] -> sx (reg rd) (reg rm) (cnd c)
-    | `tSXTH, [|Reg rd; Reg rm; Imm c; _|] -> sx (reg rd) (reg rm) (cnd c)
-    | `tUXTB, [|Reg rd; Reg rm; Imm c; _|] -> ux (reg rd) (reg rm) (cnd c)
-    | `tUXTH, [|Reg rd; Reg rm; Imm c; _|] -> ux (reg rd) (reg rm) (cnd c)
+    | `tSXTB, [|Reg rd; Reg rm; Imm c; _|] -> sx s8 (reg rd) (reg rm) (cnd c)
+    | `tSXTH, [|Reg rd; Reg rm; Imm c; _|] -> sx s16 (reg rd) (reg rm) (cnd c)
+    | `tUXTB, [|Reg rd; Reg rm; Imm c; _|] -> ux s8 (reg rd) (reg rm) (cnd c)
+    | `tUXTH, [|Reg rd; Reg rm; Imm c; _|] -> ux s16 (reg rd) (reg rm) (cnd c)
     | #opbit,_ as insn ->
       info "unhandled bit-wise instruction: %a" pp_insn insn;
       !!Insn.empty

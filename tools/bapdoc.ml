@@ -1,9 +1,10 @@
 (** Builds BAP Annotated Reference . *)
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Poly
 open Bap_plugins.Std
 
+module Sys = Caml.Sys
 module Unix = Caml_unix
 module Filename = Caml.Filename
 
@@ -133,7 +134,7 @@ type info = {
 }
 
 let program = {
-  man  = ident;
+  man  = Fn.id;
   help = sprintf "%s --help=groff"
 }
 

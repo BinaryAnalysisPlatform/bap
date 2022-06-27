@@ -1,6 +1,6 @@
 open Bap_core_theory
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Bap_types.Std
 open Image_internal_std
@@ -39,6 +39,7 @@ type t = {
   memory : fn Memmap.t;
   ecalls : string Addr.Map.t;
   icalls : string Addr.Map.t;
+  extern : Insn.t Map.M(Theory.Label).t;
 } [@@deriving sexp_of]
 
 
@@ -57,6 +58,7 @@ let empty = {
   memory = Memmap.empty;
   ecalls = Map.empty (module Addr);
   icalls = Map.empty (module Addr);
+  extern = Map.empty (module Theory.Label);
 }
 
 let merge m1 m2 =
@@ -75,6 +77,7 @@ let filter_calls name cfg calls =
 
 let remove t (name,entry,cfg) : t =
   if Map.mem t.addrs (Block.addr entry) then {
+    t with
     names = Map.remove t.names name;
     addrs = Map.remove t.addrs (Block.addr entry);
     memory = filter_mem t.memory name entry;
@@ -103,6 +106,7 @@ let dominators t mem = Memmap.dominators t.memory mem |> fns_of_seq
 let intersecting t mem = Memmap.intersections t.memory mem |> fns_of_seq
 let to_sequence t =
   Map.to_sequence t.addrs |> fns_of_seq |> Seq.of_list
+let externals t = Map.to_sequence t.extern
 let name_of_fn = fst
 let entry_of_fn = snd
 let span fn = span fn |> Memmap.map ~f:(fun _ -> ())
@@ -117,19 +121,32 @@ let insert_call ?(implicit=false) symtab block data =
     ecalls = Map.set symtab.ecalls ~key ~data
   }
 
-
 let explicit_callee {ecalls} = Map.find ecalls
 let implicit_callee {icalls} = Map.find icalls
+let callee tab src = match explicit_callee tab src with
+  | Some dst -> Some dst
+  | None -> implicit_callee tab src
 
+let update_graph calls graphs node f =
+  let addr = Block.addr node in
+  let entry = Callgraph.entry calls addr in
+  let start = Option.some_if (Addr.equal addr entry) node in
+  Map.update graphs entry ~f:(function
+      | None -> start,f Cfg.empty
+      | Some (entry,cfg) -> Option.first_some entry start, f cfg)
 
-let (<--) = fun g f -> match g with
-  | None -> None
-  | Some (e,g) -> Some (e, f g)
+let add_node calls graphs node =
+  update_graph calls graphs node @@
+  Cfg.Node.insert node
 
-let build_cfg disasm calls entry =
-  Disasm.explore disasm ~entry ~init:None
-    ~follow:(fun dst ->
-        KB.return (Callgraph.belongs calls ~entry dst))
+let add_edge calls graphs edge =
+  update_graph calls graphs (Cfg.Edge.src edge) @@
+  Cfg.Edge.insert edge
+
+let collect_graphs disasm calls =
+  Disasm.explore disasm
+    ~init:(empty,Map.empty (module Addr))
+    ~entries:(Set.to_sequence@@Disasm.subroutines disasm)
     ~block:(fun mem insns ->
         Disasm.execution_order insns >>= fun insns ->
         KB.List.filter_map insns ~f:(fun label ->
@@ -138,56 +155,40 @@ let build_cfg disasm calls entry =
             | None -> None
             | Some mem -> Some (mem, s)) >>| fun insns ->
         Block.create mem insns)
-    ~node:(fun n g ->
-        KB.return @@
-        if Addr.equal (Block.addr n) entry
-        then Some (n,Cfg.Node.insert n Cfg.empty)
-        else g <-- Cfg.Node.insert n)
-    ~edge:(fun src dst g ->
+    ~node:(fun n (tab,graphs) ->
+        KB.return (tab, add_node calls graphs n))
+    ~edge:(fun src dst (tab,graphs) ->
         let msrc = Block.memory src
-        and mdst = Block.memory dst in
+        and from = Block.addr src
+        and dest = Block.addr dst in
         let next = Addr.succ (Memory.max_addr msrc) in
-        let kind = if Addr.equal next (Memory.min_addr mdst)
-          then `Fall else `Jump in
-        let edge = Cfg.Edge.create src dst kind in
-        KB.return (g <-- Cfg.Edge.insert edge))
-
-
-let build_symbol disasm calls start =
-  build_cfg disasm calls start >>= function
-  | None -> failwith "Broken CFG, try bap --cache-clean"
-  | Some (entry,graph) ->
-    Symbolizer.get_name start >>| fun name ->
-    name,entry,graph
-
-let create_intra disasm calls =
-  Callgraph.entries calls |>
-  Set.to_sequence |>
-  KB.Seq.fold ~init:empty ~f:(fun symtab entry ->
-      build_symbol disasm calls entry >>| fun fn ->
-      add_symbol symtab fn)
-
-let create_inter disasm calls init =
-  Disasm.explore disasm
-    ~init
-    ~block:(fun mem _ -> KB.return mem)
-    ~node:(fun _ s -> KB.return s)
-    ~edge:(fun src dst s ->
-        let src = Memory.min_addr src
-        and dst = Memory.min_addr dst
-        and next = Addr.succ (Memory.max_addr src) in
-        if Callgraph.siblings calls src dst
-        then KB.return s
+        if Callgraph.siblings calls (Block.addr src) dest
+        then
+          let kind = if Addr.equal next dest then `Fall else `Jump in
+          let edge = Cfg.Edge.create src dst kind in
+          KB.return (tab,add_edge calls graphs edge)
         else
-          Symbolizer.get_name dst >>| fun name ->
-          if Addr.equal next dst
-          then {s with icalls = Map.set s.icalls src name}
-          else {s with ecalls = Map.set s.ecalls src name})
+          Symbolizer.get_name (Block.addr dst) >>| fun name ->
+          if Addr.equal next dest
+          then {tab with icalls = Map.set tab.icalls from name},graphs
+          else {tab with ecalls = Map.set tab.ecalls from name},graphs)
 
+let collect_externals disasm =
+  Disasm.externals disasm |>
+  Set.to_sequence |>
+  KB.Seq.fold ~init:(Map.empty (module Theory.Label)) ~f:(fun extern label ->
+      let+ insn = label-->Theory.Semantics.slot in
+      Map.set extern label insn)
 
 let create disasm calls =
-  create_intra disasm calls >>=
-  create_inter disasm calls
+  let* (init,graphs) = collect_graphs disasm calls in
+  let* extern = collect_externals disasm in
+  let init = {init with extern} in
+  Map.to_sequence graphs |>
+  KB.Seq.fold ~init ~f:(fun tab (addr,(entry,cfg)) ->
+      let+ name = Symbolizer.get_name addr in
+      let entry = Option.value_exn entry in
+      add_symbol tab (name,entry,cfg))
 
 let result = Toplevel.var "symtab"
 

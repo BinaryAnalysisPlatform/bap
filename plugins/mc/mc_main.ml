@@ -33,8 +33,7 @@ target support packages (plugins that implement support for the given
 architecture) do their best to guess the target and encoding that
 matches the provided name. Use the common names for the architecture
 and it should work. You can use the $(b,bits) and $(b,order) options
-to give more hints to the target support packages. They default to
-$(b,32) and $(b,little) correspondingly.
+to give more hints to the target support packages.
 
 The $(b,target) and $(b,encoding) provides precise control over the
 selection of the target and the encoding that is used to represent
@@ -75,7 +74,7 @@ raw code (i.e., no meta information), then use the $(b,raw) loader.
 ```
 |}
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Format
 open Regular.Std
 open Bap.Std
@@ -257,7 +256,7 @@ let prepend_slash_x x = "\\x" ^ x
 (** [to_binary ?escape s] make a binary string from ascii
     representation, (e.g., "\x01\x02..."). Apply optional
     escape function for each byte *)
-let to_binary ?(map=ident) s =
+let to_binary ?(map=Fn.id) s =
   let seps = [' '; ','; ';'] in
   let separated = List.exists seps ~f:(String.mem s) in
   let bytes = if separated
@@ -519,18 +518,21 @@ let compute_target provide =
   Toplevel.get result
 
 let target_of_arch arch bits order =
-  let bits = match bits with
-    | None -> 32L
-    | Some bits -> Int64.of_int bits in
-  let is_little = match order with
-    | Some BigEndian -> false
-    | _ -> true in
+  let provide_bits = match bits with
+    | None -> Ogre.return ()
+    | Some bits ->
+      Ogre.provide Image.Scheme.bits (Int64.of_int bits) in
+  let provide_order = match order with
+    | Some endian ->
+      Ogre.provide Image.Scheme.is_little_endian
+        Poly.(endian = LittleEndian)
+    | None -> Ogre.return () in
   let make_spec =
     let open Ogre.Syntax in
     Ogre.sequence [
       Ogre.provide Image.Scheme.arch arch;
-      Ogre.provide Image.Scheme.bits bits;
-      Ogre.provide Image.Scheme.is_little_endian is_little;
+      provide_bits;
+      provide_order;
     ] in
   let spec = match Ogre.exec make_spec Ogre.Doc.empty with
     | Error err ->

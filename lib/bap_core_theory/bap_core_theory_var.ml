@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 open Caml.Format
 open Bap_knowledge
@@ -124,16 +124,18 @@ module Ident = struct
       String.subo ~len:n s,
       Int.of_string (String.subo ~pos:(n+1) s)
 
+  let sub1 = String.subo ~pos:1
+
   let of_string x =
     let n = String.length x in
     if n = 0
     then invalid_arg "a variable identifier can't be empty";
-    Scanf.sscanf x "%c%s" @@ function
-    | '$' -> fun s -> Let {num = num s}
-    | '#'  -> fun s ->
-      let s,ver = split_version s in
+    match x.[0] with
+    | '$' -> Let {num = num (sub1 x)}
+    | '#' ->
+      let s,ver = split_version (sub1 x) in
       Var {num = num s; ver}
-    | _ -> fun _ ->
+    | _ ->
       let name,ver = split_version x in
       Reg {name; ver}
 

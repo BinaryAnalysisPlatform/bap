@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Word_size
 open Or_error
 open Binary_packing
@@ -61,11 +61,11 @@ let int = {
 
 let int32 = {
   of_int64 = ok_some Int64.to_int32;
-  of_int32 = ok_any ident
+  of_int32 = ok_any Fn.id
 }
 
 let int64 = {
-  of_int64 = ok_any ident;
+  of_int64 = ok_any Fn.id;
   of_int32 = ok_any Int64.of_int32;
 }
 

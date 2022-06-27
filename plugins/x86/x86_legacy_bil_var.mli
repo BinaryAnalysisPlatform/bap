@@ -3,7 +3,7 @@
 
     @author Ivan Jager
 *)
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 module Type = X86_legacy_bil_type
 

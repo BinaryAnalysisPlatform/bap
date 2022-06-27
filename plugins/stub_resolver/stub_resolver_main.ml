@@ -37,12 +37,13 @@ for more details on the format of accepted inputs):
 
 |}
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Bap_core_theory
 open Bap_knowledge
 open Bap_main
 open KB.Syntax
+module Sys = Caml.Sys
 
 include Loggers()
 

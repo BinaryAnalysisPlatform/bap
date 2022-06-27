@@ -148,7 +148,6 @@ public:
 
     void push_pred(bap_disasm_insn_p_type p) {
         preds.push_back(p);
-        sort(preds.begin(), preds.end());
     }
 
     void clear_preds() {

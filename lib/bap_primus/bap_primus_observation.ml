@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Bap_knowledge
 open Bap_future.Std
@@ -36,7 +36,7 @@ let provider ?desc ?(package="primus") name =
   let triggers,newtrigger = Stream.create () in
   let name = Name.create ~package name in
   let info = Info.create ?desc name in
-  let key = Univ_map.Key.create ~name:(Name.show name) ident in
+  let key = Univ_map.Key.create ~name:(Name.show name) Fn.id in
   {info; newdata; data; triggers; newtrigger; observers=0; key}
 
 let update_provider provider ~f =
@@ -59,11 +59,12 @@ let provide ?desc ?(inspect=sexp_of_opaque) ?package name =
 
 let inspect = Univ_map.Key.to_sexp
 let name = Univ_map.Key.name
-let of_statement = ident
+let of_statement = Fn.id
 
 module Key = struct
   type 'a t = 'a Type_equal.Id.t [@@deriving sexp_of]
-  let to_type_id = ident
+  let to_type_id = Fn.id
+  let type_id = Fn.id
 end
 
 module Map = Univ_map.Make1(Key)(struct
@@ -117,7 +118,7 @@ module Make(Machine : Monad.S) = struct
     let sexp = lazy (inspect key x) in
     if Stream.has_subscribers p.data
     then Signal.send p.newdata (Lazy.force sexp);
-    apply ident x os >>= fun () ->
+    apply Fn.id x os >>= fun () ->
     apply Lazy.force sexp ws
 
   let notify os key x =

@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Format
 
@@ -35,7 +35,7 @@ let next_num num : string =
 
 let symbols = ("a",next_sym)
 let numbers = ("0",next_num)
-let nothing = ("",ident)
+let nothing = ("",Fn.id)
 
 let create_scheme ~next init = init,next
 

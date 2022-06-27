@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Monads.Std
 open Bap_common
 open Bap_bil
@@ -112,158 +112,19 @@ let substitute_var x y ss =
   loop [] ss
 
 
-(* maps BIL expressions to Word operations *)
-module Apply = struct
-  open Bap_bil
-  open Binop
-  open Unop
-  let is_shift = function
-    | LSHIFT | RSHIFT | ARSHIFT -> true
-    | _ -> false
-
-  let unop op u = match op with
-    | NEG -> Word.neg u
-    | NOT -> Word.lnot u
-
-  let binop op u v =
-    let open Word in
-    let hi = Int.(max (bitwidth u) (bitwidth v) - 1)  in
-    let u = extract_exn ~hi u
-    and v = extract_exn ~hi v in
-    match op with
-    | PLUS -> u + v
-    | MINUS -> u - v
-    | TIMES -> u * v
-    | DIVIDE -> u / v
-    | SDIVIDE -> signed u / signed v
-    | MOD -> u mod v
-    | SMOD -> signed u mod signed v
-    | LSHIFT -> u lsl v
-    | RSHIFT -> u lsr v
-    | ARSHIFT -> u asr v
-    | AND -> u land v
-    | OR -> u lor v
-    | XOR -> u lxor v
-    | EQ -> Bitvector.(of_bool (u = v))
-    | NEQ -> Bitvector.(of_bool (u <> v))
-    | LT -> Bitvector.(of_bool (u < v))
-    | LE -> Bitvector.(of_bool (u <= v))
-    | SLT -> Bitvector.(of_bool (signed u < signed v))
-    | SLE  -> Bitvector.(of_bool (signed u <= signed v))
-
-  let cast ct sz u =
-    let ext = Bitvector.extract_exn in
-    match ct with
-    | Cast.UNSIGNED -> ext ~hi:Int.(sz - 1) u
-    | Cast.SIGNED   -> ext ~hi:Int.(sz - 1) (Bitvector.signed u)
-    | Cast.HIGH     -> ext ~lo:Int.(Bitvector.bitwidth u - sz) u
-    | Cast.LOW      -> ext ~hi:Int.(sz - 1) u
-
-end
+module Apply = Bap_exp.Apply
 
 module Type = struct
   open Bap_bil
-  open Binop
-  open Unop
-  open Exp
-  open Stmt
-  open Cast
   include Type
+  include Bap_exp.Type
 
-
-  let type_equal t t' = Type.compare t t' = 0
-
-  (** [infer x] infers the type of the expression [x].  Either returns
-      the inferred type, or terminates abnormally on the first type
-      error with the `Type_error.E` exception.  *)
-  let rec infer = function
-    | Var v -> Var.typ v
-    | Int x -> Type.Imm (Word.bitwidth x)
-    | Unknown (_,t) -> t
-    | Load (m,a,_,s) -> load m a s
-    | Cast (c,s,x) -> cast c s x
-    | Store (m,a,x,_,t) -> store m a x t
-    | BinOp (op,x,y) -> binop op x y
-    | UnOp (_,x) -> unop x
-    | Let (v,x,y) -> let_ v x y
-    | Ite (c,x,y) -> ite c x y
-    | Extract (hi,lo,x) -> extract hi lo x
-    | Concat (x,y) -> concat x y
-  and unify x y =
-    let t1 = infer x and t2 = infer y in
-    if type_equal t1 t2 then t1
-    else Type_error.expect t1 ~got:t2
-  and let_ v x y =
-    let t = Var.typ v and u = infer x in
-    if type_equal t u then infer y
-    else Type_error.expect t ~got:u
-  and ite c x y = match infer c with
-    | Type.Mem _ -> Type_error.expect_imm ()
-    | Type.Imm 1 -> unify x y
-    | t -> Type_error.expect (Type.Imm 1) ~got:t
-  and unop x = match infer x with
-    | Type.Mem _ -> Type_error.expect_imm ()
-    | t -> t
-  and binop op x y = match op with
-    | LSHIFT|RSHIFT|ARSHIFT -> shift x y
-    | _ -> match unify x y with
-      | Type.Mem _ | Type.Unk -> Type_error.expect_imm ()
-      | Type.Imm _ as t -> match op with
-        | LT|LE|EQ|NEQ|SLT|SLE -> Type.Imm 1
-        | _ -> t
-  and shift x y = match infer x, infer y with
-    | Type.Mem _,_ | _,Type.Mem _
-    | Type.Unk,_ | _,Type.Unk -> Type_error.expect_imm ()
-    | t, Type.Imm _ -> t
-  and load m a r = match infer m, infer a with
-    | (Type.Imm _|Unk),_ -> Type_error.expect_mem ()
-    | _,(Type.Mem _|Unk) -> Type_error.expect_imm ()
-    | Type.Mem (s,_),Type.Imm s' ->
-      let s = Size.in_bits s in
-      if s = s' then Type.Imm (Size.in_bits r)
-      else Type_error.expect (Type.Imm s) ~got:(Type.Imm s')
-  and store m a x _ =
-    match infer m, infer a, infer x with
-    | Type.Imm _,_,_ -> Type_error.expect_mem ()
-    | Type.Mem (s,_) as t, Type.Imm s', Type.Imm u ->
-      let s = Size.in_bits s in
-      if s <> s'
-      then Type_error.expect (Type.Imm s) ~got:(Type.Imm s')
-      else if is_error (Size.of_int u)
-      then Type_error.wrong_cast ()
-      else t
-    | _ -> Type_error.expect_imm ()
-  and cast c s x =
-    let t = Type.Imm s in
-    match c,infer x with
-    | _,(Type.Mem _|Unk) -> Type_error.expect_imm ()
-    | (UNSIGNED|SIGNED),_ -> t
-    | (HIGH|LOW), Type.Imm s' ->
-      if s' >= s then t else Type_error.wrong_cast ()
-  and extract hi lo x = match infer x with
-    | Type.Mem _ | Unk -> Type_error.expect_imm ()
-    | Type.Imm _ ->
-      (* we don't really need a type of x, as the extract operation
-         can both narrow and widen. Though it is a question whether it is
-         correct or not, especially wrt to the operational semantics, the
-         real life fact is that our lifters are (ab)using extract
-         instruction in both directions.  *)
-      if hi >= lo then Type.Imm (hi - lo + 1)
-      else Type_error.wrong_cast ()
-  and concat x y = match infer x, infer y with
-    | Type.Imm s, Type.Imm t -> Type.Imm (s+t)
-    | _ -> Type_error.expect_mem ()
-
-  let infer_exn = infer
-  let infer x =
-    try Ok (infer x) with
-    | Type_error.T err -> Error err
 
   let (&&&) = Option.first_some
 
 
   (** [check xs] verifies that [xs] is well-typed.  *)
-  let rec check bil =
+  let rec check : stmt list -> _ = fun bil ->
     List.find_map bil ~f:(function
         | Move (v,x) -> move v x
         | Jmp d -> jmp d
@@ -273,7 +134,7 @@ module Type = struct
   and move v x =
     let t = Var.typ v in
     match infer x with
-    | Ok u when type_equal t u -> None
+    | Ok u when equal_typ t u -> None
     | Ok u -> Some (Type_error.bad_type ~exp:t ~got:u)
     | Error err -> Some err
   and jmp x = match infer x with
@@ -1104,7 +965,7 @@ module Normalize = struct
     end) bil
 
   let bil ?normalize_exp:(ne=false) xs =
-    let normalize_exp = if ne then normalize_exp else ident in
+    let normalize_exp = if ne then normalize_exp else Fn.id in
     let rec run xs =
       List.concat_map ~f:hoist_non_generative_expressions xs |>
       normalize_conditionals |>

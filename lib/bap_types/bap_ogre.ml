@@ -1,6 +1,6 @@
 let package = "bap"
 open Bap_core_theory
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 type t = Ogre.Doc.t [@@deriving compare]
 

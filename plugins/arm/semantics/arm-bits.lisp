@@ -103,3 +103,16 @@
   (let ((bitv-length (word-width bitv)))
     (assert-msg (= 0 (mod n bitv-length)) "replicate-to-fill n not multiple of len(bitv)")
     (replicate bitv (/ n bitv-length))))
+
+(defun i-shift (r simm)
+  "(i-shift r simm) shifts r according to the encoded shift simm.
+   The first three bits of simm indicate the shift type, and the
+   remaining bits indicate the shift amount."
+  (let ((amt (rshift simm 3)))
+    (case (extract 2 0 simm)
+      0b000 r ; none
+      0b001 (arshift r amt) ; asr
+      0b010 (lshift r amt) ; lsl
+      0b011 (rshift r amt) ; lsr
+      0b100 (logor (rshift r amt) (lshift r (- 32 amt))) ; ror
+      0b101 (logor (lshift (cast-unsigned 32 CF) 31) (rshift r 1))))) ; rrx

@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Bap_primus_types
 
@@ -89,6 +89,7 @@ module Make (Machine : Machine) : sig
   val exp : exp -> value m
   val get : var -> value m
   val set : var -> value -> unit m
+  val assign : exp -> value -> unit m
   val binop : binop -> value -> value -> value m
   val unop : unop -> value -> value m
   val cast : cast -> int -> value -> value m

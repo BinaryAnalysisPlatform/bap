@@ -108,11 +108,12 @@ let doc = "
 
 "
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap.Std
 open Bap_main
 open Bap_primus.Std
+module Sys = Caml.Sys
 
 module Sigma = Primus.Lisp.Semantics
 module Lambda = Theory.Label
@@ -830,9 +831,9 @@ module Target = struct
       | _ -> fail Wrong_endianness in
     let variant = match List.hd rest with
       | None -> None
-      | Some var -> with_default var ident in
+      | Some var -> with_default var Fn.id in
     let compiler = match rest with
-      | [_;comp] -> with_default comp ident
+      | [_;comp] -> with_default comp Fn.id
       | _ -> None in
     Spec {arch; bits; order; variant; compiler}
 
@@ -1266,7 +1267,7 @@ end = struct
     KB.Seq.iter ~f:(fun (addr,actions) ->
         Set.to_sequence actions |>
         KB.Seq.iter ~f:(fun action ->
-            let* lbl = KB.Object.create Theory.Program.cls in
+            KB.Object.scoped Theory.Program.cls @@ fun lbl ->
             KB.sequence [
               KB.provide Lambda.unit lbl (Some unit);
               KB.provide Lambda.addr lbl (Some addr);
@@ -1297,11 +1298,18 @@ end = struct
     Option.some_if (Set.mem roots addr) true
 
 
+  let setup_context () =
+    KB.promise Primus.Lisp.Semantics.context @@ fun _ ->
+    KB.return @@
+    Primus.Lisp.Context.create [
+      "patterns", ["enabled"]
+    ]
 
   let enable () =
     promise_outcome ();
     promise_roots ();
-    declare_promise_root ()
+    declare_promise_root ();
+    setup_context ()
 
 end
 

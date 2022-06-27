@@ -175,3 +175,5 @@
 (defmacro cast (type x) (extract  (-1 (type)) 0 x))
 (defmacro bitwidth (type) (type))
 (defmacro sizeof (type) (/ (bitwidth type) 8))
+(defun coerce (type v)
+  (if (/= (word-width v) type) (extract (-1 type) 0 v) v))

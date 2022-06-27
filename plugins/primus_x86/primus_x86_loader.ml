@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap.Std
 open Bap_primus.Std
@@ -19,10 +19,19 @@ end
 module SetupPLT(Machine : Primus.Machine.S) = struct
   module Linker = Primus.Linker.Make(Machine)
   open Machine.Syntax
+  open Machine.Let
 
   module Value = Primus.Value.Make(Machine)
   module Interpreter = Primus.Interpreter.Make(Machine)
   module Env = Primus.Env.Make(Machine)
+
+  let intrinsics =
+    let+ prog = Machine.gets Project.program in
+    Term.enum sub_t prog |>
+    Seq.fold ~init:String.Set.empty ~f:(fun intrinsics sub ->
+        if Term.has_attr sub Sub.intrinsic
+        then Set.add intrinsics (Sub.name sub)
+        else intrinsics)
 
   let section_memory sec_name =
     Machine.get () >>| fun proj ->
@@ -53,25 +62,29 @@ module SetupPLT(Machine : Primus.Machine.S) = struct
     filter_plt >>=
     unlink
 
-  let correct_sp sp addend _ =
-    Env.get sp >>= fun x ->
-    Interpreter.binop Bil.plus x addend >>= Env.set sp
+  let correct_sp ignore sp addend (name,_) =
+    if Set.mem ignore name
+    then Machine.return ()
+    else
+      Env.get sp >>= fun x ->
+      Interpreter.binop Bil.plus x addend >>= Env.set sp
 
-  let correct_sp sp addend =
+  let correct_sp ignore sp addend =
     match Var.typ sp with
     | Unk | Mem _ -> Machine.return ()
     | Imm width ->
       Value.of_int ~width addend >>= fun addend ->
-      Primus.Linker.Trace.lisp_call_return >>> correct_sp sp addend
+      Primus.Linker.Trace.lisp_call_return >>> correct_sp ignore sp addend
 
   let run () =
+    let* ignore = intrinsics in
     Machine.gets Project.arch >>= function
     | `x86 -> Machine.sequence [
-        correct_sp IA32.sp 4;
+        correct_sp ignore IA32.sp 4;
         unresolve
       ]
     | `x86_64 -> Machine.sequence [
-        correct_sp AMD64.sp 8;
+        correct_sp ignore AMD64.sp 8;
         unresolve
       ]
     | _ -> Machine.return ()

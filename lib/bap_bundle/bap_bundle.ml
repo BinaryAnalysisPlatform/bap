@@ -1,6 +1,7 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 module Filename = Caml.Filename
+module Sys = Caml.Sys
 
 module Std = struct
   exception Not_a_bundle

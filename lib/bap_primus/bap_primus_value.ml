@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Bap.Std
 open Bap_strings.Std
@@ -17,7 +17,7 @@ end
 type id = Id.t [@@deriving bin_io, compare, sexp]
 
 
-let compare_value x y = Word.compare x.value y.value
+let compare_value x y = Word.Signed_value_order.compare x.value y.value
 type t = value [@@deriving bin_io, compare]
 
 

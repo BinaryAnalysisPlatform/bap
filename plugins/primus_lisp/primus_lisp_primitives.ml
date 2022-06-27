@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap.Std
 open Bap_primus.Std
@@ -25,6 +25,7 @@ module Closure(Machine : Primus.Machine.S) = struct
   type 'a m = 'a Machine.t
 
   open Machine.Syntax
+  open Machine.Let
 
   let failf = Lisp.failf
 
@@ -96,9 +97,10 @@ module Closure(Machine : Primus.Machine.S) = struct
 
   let word_width args =
     addr_width >>= fun width ->
-    match args with
-    | [] -> Value.of_int ~width width
-    | x :: _ -> Value.of_int ~width (Value.bitwidth x)
+    List.map args ~f:Value.bitwidth |>
+    List.max_elt ~compare:Int.compare |> function
+    | None -> Value.of_int ~width width
+    | Some x -> Value.of_int ~width x
 
   let exit_with _ =
     Eval.halt >>|
@@ -219,7 +221,6 @@ module Closure(Machine : Primus.Machine.S) = struct
     | Some Out -> true
     | _ -> false
 
-
   let eval_sub : value list -> 'x = function
     | [] -> failf "invoke-subroutine: requires at least one argument" ()
     | sub_addr :: sub_args ->
@@ -238,17 +239,7 @@ module Closure(Machine : Primus.Machine.S) = struct
         Machine.Seq.iter ~f:(fun (arg,x) ->
             let open Bil.Types in
             if not (is_out_intent arg)
-            then match Arg.rhs arg with
-              | Var v -> Eval.set v x
-              | Load (_,BinOp (op, Var sp, Int off),endian,size) ->
-                Eval.get sp  >>= fun sp ->
-                Eval.const off >>= fun off ->
-                Eval.binop op sp off >>= fun addr ->
-                Eval.store addr x endian size
-              | exp ->
-                failf "%s: can't pass argument %s - %s %a"
-                  "invoke-subroutine" (Arg.lhs arg |> Var.name)
-                  "unsupported ABI" Exp.pps exp ()
+            then Eval.assign (Arg.rhs arg) x
             else Machine.return ()) >>= fun () ->
         Linker.exec (`addr (Value.to_word sub_addr)) >>= fun () ->
         Machine.Seq.find_map args ~f:(fun arg ->
@@ -328,7 +319,7 @@ module Primitives(Machine : Primus.Machine.S) = struct
         "(is-positive X Y ...) returns true if all arguments are positive";
       def "is-negative" (all any @-> bool)
         "(is-negative X Y ...) returns true if all arguments are negative";
-      def "word-width" (unit @-> int)
+      def "word-width" (all int @-> int)
         "(word-width) returns machine word width in bits";
       def "exit-with" (one int @-> any)
         "(exit-with N) terminates program with the exit codeN";

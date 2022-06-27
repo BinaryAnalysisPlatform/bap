@@ -44,7 +44,7 @@ done
 # call setup twice so that it can capture the AB deps
 for pass in `seq 2`; do
     oasis setup
-    ocamlfind ocamlopt unix.cmxa setup.ml -o setup.exe
+    ocamlfind ocamlopt -package unix -linkpkg setup.ml -o setup.exe
     rm setup.cmx setup.cmi setup.o
     ./setup.exe -configure --prefix $(opam config var prefix) "$@"
 done

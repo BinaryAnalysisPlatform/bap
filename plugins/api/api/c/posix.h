@@ -248,6 +248,11 @@ char *strstr(const char *haystack, const char *needle)
 char *strtok(char *s, const char *delim)
     __attribute__((pure, nonnull(1,2), storage(1), storage(2)));
 
+char *strtok_r(char *str, const char *delim, char **saveptr)
+    __attribute__((nonnull(1,2,3), storage(1), storage(2), storage(3)));
+
+char *strcasestr(const char *haystack, const char *needle)
+    __attribute__((pure, nonnull(1,2), storage(1), storage(2)));
 
 size_t strxfrm(char * restrict dst, const char * restrict src, size_t n)
     __attribute__((nonnull(1,2), warn_unused_result, storage(dst,n), storage(src,n)))

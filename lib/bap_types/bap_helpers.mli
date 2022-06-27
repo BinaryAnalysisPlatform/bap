@@ -1,5 +1,5 @@
 (** BIL high level functions.   *)
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_common
 open Bap_bil
 open Bap_visitor
@@ -30,12 +30,7 @@ val fold_consts : bil -> bil
 val fixpoint : (bil -> bil) -> (bil -> bil)
 
 
-module Apply : sig
-  val binop : binop -> word -> word -> word
-  val unop : unop -> word -> word
-  val cast : cast -> int -> word -> word
-end
-
+module Apply = Bap_exp.Apply
 
 module Type : sig
   val check : stmt list -> (unit,Bap_type_error.t) Result.t

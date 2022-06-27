@@ -1,4 +1,6 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
+
+let ident = Fn.id
 
 module Monoid = Monads_monoid
 module Types = Monads_types
@@ -1004,7 +1006,7 @@ module State = struct
     s : 'b;
   }
 
-  type ('a,'e) state = State of ('e -> 'a) [@@unboxed]
+  type ('a,'e) state = State of ('e -> 'a)
 
 
   module Tp(T : T1)(M : Monad.S) = struct

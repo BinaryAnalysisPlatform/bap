@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap.Std
 
 open Bap_knowledge
@@ -283,6 +283,10 @@ module Make(B : Theory.Core) = struct
   let is_subnormal fsort x =
     unpack_raw fsort x @@ fun _ e _ -> B.is_zero e
 
+
+  let is_fpos = B.is_positive
+  let is_fneg = B.is_negative
+
   let is_zero x =
     let open B in
     x >>-> fun s x ->
@@ -336,7 +340,7 @@ module Make(B : Theory.Core) = struct
 
   let is_round_up rm sign last guard round sticky =
     let open B in
-    let case m t f = ite (requal rm m) t f and default = ident in
+    let case m t f = ite (requal rm m) t f and default = Fn.id in
     case rtn (inv sign) @@
     case rtz sign @@
     case rna guard @@

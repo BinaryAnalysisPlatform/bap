@@ -1,10 +1,11 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_future.Std
 open Bap_plugins.Std
 open Bap_bundle.Std
 open Format
 
 module Buffer = Caml.Buffer
+module Sys = Caml.Sys
 
 (* we're reusing [exn] type only because we want to use
    Printexc magic printer. It is not visible from outside,

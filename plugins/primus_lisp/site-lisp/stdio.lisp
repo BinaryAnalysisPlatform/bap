@@ -130,6 +130,21 @@
       (memory-write (+ ptr (min n i)) 0:8)
       ptr))))
 
+(defun gets (ptr)
+  (declare (external "gets"))
+  (let ((str *standard-input*)
+        (i 0)
+        (continue true))
+    (while continue
+      (let ((c (fgetc str)))
+        (if (= c -1)
+            (set continue false)
+          (memory-write (+ ptr i) (cast char c))
+          (set continue (/= c 0xA))
+          (incr i))))
+    (memory-write (+ ptr i) 0:8)
+    ptr))
+
 
 (defun getchar ()
   (declare (external "getchar" "getchar_unlocked"))

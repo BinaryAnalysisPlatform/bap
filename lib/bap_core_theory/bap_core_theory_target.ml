@@ -1,6 +1,6 @@
 let package = "core"
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_knowledge
 
 module KB = Knowledge
@@ -603,6 +603,8 @@ let matches t name =
   Option.is_some (matching t name)
 
 let nicknames t = (info t).names
+
+let hash = Self.hash
 
 type alias = Alias.t
 

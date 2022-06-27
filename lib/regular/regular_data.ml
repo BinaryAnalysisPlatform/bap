@@ -1,4 +1,4 @@
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Regular_data_types
 open Regular_data_intf
 
@@ -101,6 +101,7 @@ module Class = struct
 
   module Key = struct
     type 'a t = 'a key
+    let type_id {key} = key
     let to_type_id {key} = key
     let sexp_of_t _ {key} = Sexp.Atom (Type_equal.Id.name key)
   end

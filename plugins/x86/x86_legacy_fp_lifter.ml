@@ -5,7 +5,7 @@ module Bil = X86_legacy_bil
 open Bil
 open Bil.Ast
 open Bil.Type
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open X86_legacy_bil_convenience
 open X86_legacy_bil_disasm_i386
 
@@ -441,7 +441,7 @@ module Fp_lifter = struct
         [ToIR.dec_x87_stack;]
         @ ToIR.set_x87_stack ~index:0 value
       in
-      Core_kernel.Result.Ok stmts
+      Result.Ok stmts
     in
 
     let ild_fm mem ~typ ~seg ~base ~scale ~index ~disp =
@@ -461,7 +461,7 @@ module Fp_lifter = struct
         [ToIR.dec_x87_stack;]
         @ ToIR.set_x87_stack ~index:0 value
       in
-      Core_kernel.Result.Ok stmts
+      Result.Ok stmts
     in
 
     let ld_fprr mem src =
@@ -492,7 +492,7 @@ module Fp_lifter = struct
       ] @
         (if pop then ToIR.pop_x87_stack else [])
       in
-      Core_kernel.Result.Ok stmts
+      Result.Ok stmts
     in
 
     let ist_fm mem ~typ ~pop ~seg ~base ~scale ~index ~disp =
@@ -510,7 +510,7 @@ module Fp_lifter = struct
       ] @
         (if pop then ToIR.pop_x87_stack else [])
       in
-      Core_kernel.Result.Ok stmts
+      Result.Ok stmts
     in
 
     (* Converting integers to double precision FP *)
@@ -520,7 +520,7 @@ module Fp_lifter = struct
       let max_vl = Typecheck.bits_of_width (Var.typ dst) in
       let bv_size = 64 in
       let upper_part = extract (max_vl-1) bv_size (Var dst) in
-      Core_kernel.Result.Ok [
+      Result.Ok [
         ToIR.move dst (upper_part ++* fp_to_sse_bv ~bv_size double)
       ]
     in
@@ -544,7 +544,7 @@ module Fp_lifter = struct
       let max_vl = Typecheck.bits_of_width (Var.typ dst) in
       let bv_size = 32 in
       let upper_part = extract (max_vl-1) bv_size (Var dst) in
-      Core_kernel.Result.Ok [
+      Result.Ok [
         ToIR.move dst (upper_part ++* fp_to_sse_bv ~bv_size double)
       ]
     in
@@ -567,7 +567,7 @@ module Fp_lifter = struct
       let max_vl = Typecheck.bits_of_width (Var.typ dst) in
       let bv_size = 64 in
       let upper_part = extract (max_vl-1) bv_size (Var dst) in
-      Core_kernel.Result.Ok [
+      Result.Ok [
         ToIR.move dst (upper_part ++* fp_to_sse_bv ~bv_size double)
       ]
     in
@@ -587,7 +587,7 @@ module Fp_lifter = struct
     (* Converting double precision FP to signed integers *)
     let cvttsd2si dst exp =
       let integer = convert_double_precision_fp_to_int32 exp in
-      Core_kernel.Result.Ok [
+      Result.Ok [
         ToIR.move dst integer
       ]
     in
@@ -601,7 +601,7 @@ module Fp_lifter = struct
     (* Converting double precision FP to single precision *)
     let cvtsd2ss upper_part dst exp =
       let double = convert_double_precision_fp_to_single_precision_fp exp in
-      Core_kernel.Result.Ok [
+      Result.Ok [
         ToIR.move dst (upper_part ++* fp_to_sse_bv ~bv_size:32 double)
       ]
     in
@@ -627,7 +627,7 @@ module Fp_lifter = struct
       let stmts =
         [ToIR.move dst (upper_part ++* double)]
       in
-      Core_kernel.Result.Ok stmts
+      Result.Ok stmts
     in
 
     let sse_binopsd_rrr ~typ ~binop arch mem dst src1 src2 =
@@ -649,7 +649,7 @@ module Fp_lifter = struct
       let stmts =
         [ToIR.move dst (upper_part ++* double)]
       in
-      Core_kernel.Result.Ok stmts
+      Result.Ok stmts
     in
 
     let sse_binopsd_rrm ~typ ~binop arch mem dst src1
@@ -675,7 +675,7 @@ module Fp_lifter = struct
       let stmts =
         [ToIR.move dst (upper_part ++* double)]
       in
-      Core_kernel.Result.Ok stmts
+      Result.Ok stmts
     in
 
     let x87_binop style ~binop ?(reversed=false) mem sti =
@@ -735,7 +735,7 @@ module Fp_lifter = struct
           ToIR.move sf exp_false;
         ]
       in
-      Core_kernel.Result.Ok stmts
+      Result.Ok stmts
     in
     let ucomisx_rm ~typ arch mem src1 ~seg ~base ~scale ~index ~disp =
       let src1 = decode src1 |> value_exn |> exp_of_reg_t arch in
@@ -761,7 +761,7 @@ module Fp_lifter = struct
           ToIR.move sf exp_false;
         ]
       in
-      Core_kernel.Result.Ok stmts
+      Result.Ok stmts
     in
 
     let ucomfi_r ~pop mem sti =
@@ -781,7 +781,7 @@ module Fp_lifter = struct
         ToIR.move cf @@ exp_ite has_nan i1 (flt st0 sti);
       ] @ (if pop then ToIR.pop_x87_stack else [])
       in
-      Core_kernel.Result.Ok stmts
+      Result.Ok stmts
     in
 
     let fcom_r ~pop ?(pop2=false) ~unordered mem sti =
@@ -807,7 +807,7 @@ module Fp_lifter = struct
           | false, true -> assert false
         )
       in
-      Core_kernel.Result.Ok stmts
+      Result.Ok stmts
     in
 
     let fcom_m mem ~typ ~pop ~seg ~base ~scale ~index ~disp =
@@ -831,7 +831,7 @@ module Fp_lifter = struct
         ToIR.move x87_c3 @@ exp_ite has_nan i1 (feq st0 op);
       ] @ (if pop then ToIR.pop_x87_stack else [])
       in
-      Core_kernel.Result.Ok stmts
+      Result.Ok stmts
     in
 
     let fidiv mem ~typ ~seg ~base ~scale ~index ~disp =
@@ -863,7 +863,7 @@ module Fp_lifter = struct
       let stmts =
         [ ToIR.move dest (y1 ++* x1 ++* y0 ++* x0) ]
       in
-      Core_kernel.Result.Ok stmts
+      Result.Ok stmts
     in
 
     (** FXCH ST(i): Exchange the contents of ST(0) and ST(i). *)
@@ -927,7 +927,7 @@ module Fp_lifter = struct
         if max_vl = dst_size then !acc
         else Int(Big_int_convenience.bi0, Reg (max_vl - dst_size)) ++* !acc
       in
-      Core_kernel.Result.Ok [ ToIR.move dst acc ]
+      Result.Ok [ ToIR.move dst acc ]
     in
 
     let vinserti128_rrri arch mem dst src1 src2 imm =
@@ -950,7 +950,7 @@ module Fp_lifter = struct
           ToIR.move dst final_value
         ]
       in
-      Core_kernel.Result.Ok stmts
+      Result.Ok stmts
     in
 
     (* Pack with Unsigned Saturation *)

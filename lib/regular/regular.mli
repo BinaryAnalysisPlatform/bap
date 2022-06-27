@@ -1,6 +1,6 @@
 (** Regular Library.   *)
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 
 (** Interface that should support any regular data type.
 
@@ -148,7 +148,7 @@ module Std : sig
 
   (** Lazy sequence.
 
-      This is the extension of Core_kernel's [Sequence] module
+      This is the extension of Core_kernel[@@warning "-D"]'s [Sequence] module
 
       @see
       <https://ocaml.janestreet.com/ocaml-core/latest/doc/core_kernel/Std/Sequence.mod/>

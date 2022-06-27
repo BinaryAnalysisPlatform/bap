@@ -234,13 +234,13 @@
           that we can use a much more concrete (call-the-advised)).
 *)
 
-open Core_kernel
+open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap.Std
 
 module Attribute = Bap_primus_lisp_attribute
 
-type t
+type t [@@deriving bin_io]
 
 val t : t Attribute.t
 
@@ -257,3 +257,4 @@ val (<=) : t -> t -> bool
 val pp : Format.formatter -> t -> unit
 
 val merge : t -> t -> t
+val slot : (Theory.Unit.cls, t) KB.slot
