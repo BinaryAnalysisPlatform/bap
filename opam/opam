@@ -36,6 +36,7 @@ depends: [
   "conf-radare2"
   "yojson"
   "result"
+  "mmap"
 ]
 depopts: [
   "conf-ida"
