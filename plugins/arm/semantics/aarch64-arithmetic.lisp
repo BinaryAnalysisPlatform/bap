@@ -30,9 +30,6 @@
 (defun ADDSWrs (rd rn rm shift) 
   (add-with-carry set$ rd rn (shift-encoded rm shift) 0))
 
-(defun CMNWri (rn imm shift)
-  (ADDSWri 0b1111 rn imm shift) 
-
 ; add extended
 (defun ADDXrx (rd rn rm shift) 
   (set$ rd (+ rn (extended rm shift))))
@@ -105,3 +102,6 @@
 (defun SDIVXr (rd rn rm) (*DIV*r set$ s/ rd rn rm))
 (defun UDIVWr (rd rn rm) (*DIV*r setw /  rd rn rm))
 (defun UDIVXr (rd rn rm) (*DIV*r set$ /  rd rn rm))
+
+(defun ADR (rd label) 
+  (store-word rd (+ (get-program-counter) (cast-signed 64 label))))
