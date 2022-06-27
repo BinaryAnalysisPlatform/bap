@@ -1172,6 +1172,16 @@ let parse_instr mode mem addr =
           in
           (* XXX I should just have put in a binop *)
           (Ppackedbinop(prefix.mopsize, eltsize, Bil.(-), "psub", r, rm, rv), na)
+        | 0xfc | 0xfd | 0xfe | 0xd4 ->
+          let r, rm, rv, na = parse_modrm_vec None na in
+          let eltsize = match b2 with
+            | 0xfc -> reg8_t
+            | 0xfd -> reg16_t
+            | 0xfe -> reg32_t
+            | 0xd4 -> reg64_t
+            | _ -> disfailwith "impossible"
+          in
+          (Ppackedbinop(prefix.mopsize, eltsize, Bil.(+), "padd", r, rm, rv), na)
         | _ -> unimplemented
                  (Printf.sprintf "unuspported opcode: %02x %02x" b1 b2)
       )
