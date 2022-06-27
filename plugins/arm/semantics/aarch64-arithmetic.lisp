@@ -16,6 +16,37 @@
 (defun ADDWrs (rd rn rm off) (ADD*r* setw shift-encoded rd rn rm off))
 (defun ADDXrs (rd rn rm off) (ADD*r* set$ shift-encoded rd rn rm off))
 
+; adds immediate
+(defun ADDSXri (rd rn imm off) 
+  (add-with-carry set$ rd rn (lshift imm off) 0))
+
+(defun ADDSWri (rd rn imm off) 
+  (add-with-carry setw rd rn (lshift imm off) 0))
+
+; adds shifted
+(defun ADDSXrs (rd rn rm shift) 
+  (add-with-carry set$ rd rn (shift-encoded rm shift) 0))
+
+(defun ADDSWrs (rd rn rm shift) 
+  (add-with-carry set$ rd rn (shift-encoded rm shift) 0))
+
+(defun CMNWri (rn imm shift)
+  (ADDSWri 0b1111 rn imm shift) 
+
+; add extended
+(defun ADDXrx (rd rn rm shift) 
+  (set$ rd (+ rn (extended rm shift))))
+
+(defun ADDWrx (rd rn rm shift) 
+  (setw rd (+ rn (extended rm shift))))
+
+; add extend SXRX|UXTX
+(defun ADDXrx64 (rd rn rm shift) 
+  (set$ rd (+ rn (extended rm shift))))
+
+; endTODO 
+
+
 (defun ADRP (dst imm)
   (set$ dst (+
              (logand (get-program-counter) (lshift -1 12))
@@ -31,6 +62,13 @@
 (defun SUBWrs (rd rn rm off) (SUB*r* setw shift-encoded rd rn rm off))
 (defun SUBXrs (rd rn rm off) (SUB*r* set$ shift-encoded rd rn rm off))
 
+(defun SUBXrx (rd rn rm off)
+  (set$ rd (- rn (extended rm off))))
+
+(defun SUBXrw (rd rn rm off)
+  (setw rd (- rn (extended rm off))))
+
+
 (defun SUBXrx64 (rd rn rm off)
   (set$ rd (- rn (extended rm off))))
 
@@ -38,13 +76,13 @@
   (add-with-carry/clear-base rd rn (lnot (shift-encoded rm off)) 1))
 
 (defun SUBSXrs (rd rn rm off)
-  (add-with-carry rd rn (lnot (shift-encoded rm off)) 1))
+  (add-with-carry set$ rd rn (lnot (shift-encoded rm off)) 1))
 
 (defun SUBSWri (rd rn imm off)
   (add-with-carry/clear-base rd rn (lnot (lshift imm off)) 1))
 
 (defun SUBSXri (rd rn imm off)
-  (add-with-carry rd rn (lnot (lshift imm off)) 1))
+  (add-with-carry set$ rd rn (lnot (lshift imm off)) 1))
 
 (defmacro Mop*rrr (set op rd rn rm ra)
   "(Mop*rrr set op rd rn rm ra) implements multiply-add, multiply-subtract
