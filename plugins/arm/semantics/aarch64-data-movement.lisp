@@ -18,13 +18,25 @@
   (setw dst
         (cast-unsigned (word) (load-hword (+ reg (lshift off 2))))))
 
+(defun LDRBBpost (_ dst base simm)
+	(setw dst (cast-unsigned 32 (load-byte base)))
+	(set$ base (+ base simm)))
+
+(defun LDRBBpre (_ dst base simm)
+	(setw dst (cast-unsigned 32 (load-byte (+ base simm)))))
+
 (defun LDRBBui (dst reg off)
   (setw dst
         (cast-unsigned (word) (load-byte (+ reg off)))))
 
+(defun LDRBBroW (dst reg off signed shift)
+	(if (= signed 1)
+			(setw dst (cast-unsigned 32 (load-byte (+ reg (cast-signed 64 off)))))
+		(setw dst (cast-unsigned 32 (load-byte (+ reg (cast-unsigned 64 off)))))))
+
 (defun LDRBBroX (dst reg off _ _)
-  (set$ dst
-        (cast-unsigned (word) (load-byte (+ reg off)))))
+  (setw dst
+        (cast-unsigned (word) (load-byte (+ reg (cast-signed 64 off))))))
 
 (defun LDPXpost (dst r1 r2 base off)
   (let ((off (lshift off 3)))
@@ -36,6 +48,11 @@
   (let ((off (lshift off 3)))
     (set$ r1 (load-word (+ base off)))
     (set$ r2 (load-word (+ base off (sizeof word))))))
+
+(defun LDPWi (wn wm xn off)
+	(let ((off (lshift off 2)))
+		(setw wn (load-hword (+ xn off)))
+		(setw wm (load-hword (+ xn off 4)))))
 
 (defun LDRXroX (rt rn rm _ shift)
   (set$ rt (load-word (+ rn (lshift rm (* shift 3))))))

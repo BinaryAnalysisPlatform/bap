@@ -134,15 +134,19 @@
       (reverse-elems-in-all-containers container-size elem-size
         (cast-low (- (word-width x) container-size) x)))))
 
-(defun get-vector-size (width)
-  (case width
-    0x8	 0x0
-    0x10 0x1
-    0x20 0x2
-    0x40 0x3
-    0x4))
+(defun insert-element-into-vector (vd index element size)
+	"(insert-element-into-vector vd index element size) inserts element into vd[index], where size is in {8,16,32,64}"
+	(let ((highIndex (* size (+ index 1)))
+				(lowIndex (- (* size index) 1))
+				(topPart (rshift vd highIndex)))
+		(if (> index 0)
+				(let ((mask (replicate-to-fill (cast-low 1 0x1) lowIndex))
+							(bottomPart (logand vd mask)))
+					(set-symbol-value vd (extract 127 0 (concat topPart element bottomPart))))
+			(set$ vd (extract 127 0 (concat topPart element))))))
 
-(defun get-vector-element (index vn)
+(defun get-vector-S-element (index vn)
+	"(get-vector-S-element) returns the 32 bit element from vn[index]"
   (case index
     0x0 (extract 31 0 vn)
     0x1 (extract 63 32 vn)
