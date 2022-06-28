@@ -80,8 +80,25 @@
 
 ;; ST...
 
+; STRB (base)
 (defun STRBBui (src reg off)
   (store-byte (+ reg off) src))
+
+; post-indexed STRB
+(defun STRBBpost (_ rt base simm)
+  (store-byte base rt)
+  (set$ base (+ base simm)))
+
+(defun STRBBroW (rt rn rm option shift)
+  (let ((off
+    (if (= option 1)
+        (signed-extend 32 rm)         ; SXTW
+      (unsigned-extend 32 rm))))      ; UXTW
+    (store-byte (+ rn off) rt)))
+
+(defun STRBBroX (rt rn rm option shift)
+  (let ((off (signed-extend 64 rm)))  ; SXTX
+    (store-byte (+ rn off) rt)))
 
 (defun STPXpre (dst t1 t2 _ off)
   (let ((off (lshift off 3)))
@@ -133,6 +150,3 @@
 (defun STURDi (rn rt imm) (STUR*i rn rt imm 64))
 (defun STURQi (rn rt imm) (STUR*i rn rt imm 128)) 
 
-
-; post-indexed and pre-indexed addressing means that the sum of the address and 
-; the offset is written back to the base register (C1-231). 
