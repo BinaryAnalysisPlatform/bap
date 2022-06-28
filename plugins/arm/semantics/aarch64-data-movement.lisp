@@ -89,10 +89,21 @@
     (store-word (+ dst off (sizeof word)) t2)
     (set$ dst (+ dst off))))
 
+(defun STPWi (rt rt2 base imm) 
+  (let ((datasize 16) (off (* imm 4)))
+    (store-word (+ base off) rt)
+    (store-word (+ base off datasize) rt2)))
+
 (defun STPXi (t1 t2 base off)
-  (let ((off (lshift off 4)))
-    (store-word base (+ base off))
-    (store-word base (+ base off (sizeof word)))))
+  (let ((off (* off 8)))
+    (store-word (+ base off) t1)
+    (store-word (+ base off (sizeof word)) t2)))
+
+; signed offset STP (SIMD/FP)
+(defun STPQi (rt rt2 base imm) 
+  (let ((datasize 128) (off (* imm 16)))
+    (store-word (+ base off) rt)
+    (store-word (+ base off datasize) rt2)))
 
 (defun STRXui (src reg off)
   (let ((off (lshift off 3)))
