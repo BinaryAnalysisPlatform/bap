@@ -84,22 +84,22 @@
 
 (defun barrier-option-to-symbol (option)
   "(barrier-option-to-symbol option) converts the
-   4-bit optional value to a symbol.
-   This is to be used with the (special) primitive."
+   4-bit value to a symbol.
+   This is to be used with the (intrinsic) primitive."
   (case option
-    0b1111 :sy
-    0b1110 :st
-    0b1101 :ld
-    0b1011 :ish
-    0b1010 :ishst
-    0b1001 :ishld
-    0b0111 :nsh
-    0b0110 :nshst
-    0b0101 :nshld
-    0b0011 :osh
-    0b0010 :oshst
-    0b0001 :oshld
-    :unknown))
+    0b1111 'sy
+    0b1110 'st
+    0b1101 'ld
+    0b1011 'ish
+    0b1010 'ishst
+    0b1001 'ishld
+    0b0111 'nsh
+    0b0110 'nshst
+    0b0101 'nshld
+    0b0011 'osh
+    0b0010 'oshst
+    0b0001 'oshld
+    'unknown))
 
 (defun replace-bit-range (reg hi lo val)
   "(replace-bit-range reg hi lo val) returns reg with bits
