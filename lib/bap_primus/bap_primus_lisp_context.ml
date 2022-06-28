@@ -35,7 +35,9 @@ let of_project proj =
   let t = Project.target proj in
   let targets =
     t :: Theory.Target.parents t |>
-    List.map ~f:(fun t -> KB.Name.unqualified @@ Theory.Target.name t) in
+    List.concat_map ~f:(fun t ->
+        KB.Name.unqualified (Theory.Target.name t) ::
+        Set.to_list (Theory.Target.nicknames t)) in
   Name.Map.of_alist_exn [
     "arch", features @@ [
       Arch.to_string (Project.arch proj);
