@@ -105,6 +105,7 @@
 (defun STRXroX (rt rn rm _ shift)
   (store-word (+ rn (lshift rm (* shift 3))) rt))
 
+; addr + offset indexed STUR
 (defmacro STUR*i (src base off size)
   "Takes `size` bits from src and stores at base + off"
   (store-word (+ base off) (cast-low size src)))
@@ -116,3 +117,11 @@
 (defun STURHHi  (src base off) (STUR*i src base off 16))
 
 (defun STURBBi (src base off) (STUR*i src base off 8))
+
+
+(defun STURDi (rn rt imm) (STUR*i rn rt imm 64))
+(defun STURQi (rn rt imm) (STUR*i rn rt imm 128)) 
+
+
+; post-indexed and pre-indexed addressing means that the sum of the address and 
+; the offset is written back to the base register (C1-231). 
