@@ -57,6 +57,28 @@
 (defun LDRXroX (rt rn rm _ shift)
   (set$ rt (load-word (+ rn (lshift rm (* shift 3))))))
 
+(defmacro LDRHHro*i (wt xn xm extend s)
+	(if (= extend 1)
+			(let ((off (cast-signed 64 (lshift xm s))))
+				(setw wt (load-bits 16 (+ xn off))))
+		(let ((off (cast-unsigned 64 (lshift xm s))))
+			(setw wt (load-bits 16 (+ xn off))))))
+
+(defun LDRHHroX (wt xn xm extend s) (LDRHHro*i wt xn xm extend s))
+
+(defun LDRHHroW (wt xn wm extend s) (LDRHHro*i wt xn wm extend s))
+
+(defun LDRHHui (wt xn pimm)
+	(let ((off (lshift (cast-unsigned 64 pimm) 1)))
+		(setw wt (load-bits 16 (+ xn off)))))
+
+(defun LDRSroX (xt base index signed shift)
+  (if (= signed 1)
+			(let ((off (cast-signed 64 (lshift index shift))))
+				(set$ xt (load-hword (+ base off))))
+		(let ((off (cast-signed 64 (lshift index shift))))
+			(set$ xt (load-hword (+ base off))))))
+
 ;; MOV...
 
 (defmacro MOVZ*i (set dst imm off)
