@@ -137,9 +137,9 @@
 ; STRQui
 ; STRDui
 
-; STRH (base reg)
-; STRHHui
-
+; STRH (base reg), signed offset variant
+(defun STRHHui (rt rn off)
+  (store-word (+ rn off) (cast-low 16 rt)))
 
 ; post-indexed STRB
 (defun STRBBpost (_ rt base simm)
