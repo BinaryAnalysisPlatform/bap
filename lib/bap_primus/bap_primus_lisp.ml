@@ -17,8 +17,8 @@ module Lisp = struct
   module State = Bap_primus_state
   module Source = Bap_primus_lisp_source
   module Check = Bap_primus_lisp_type.Check
-  module Context = Bap_primus_lisp_context
   module Program = Bap_primus_lisp_program
+  module Context = Bap_primus_lisp_context
   module Type = Bap_primus_lisp_type
 end
 
@@ -924,4 +924,7 @@ end
 
 module Unit = Semantics.Unit
 module Attribute = Lisp.Attribute
-module Context = Lisp.Context
+module Context = struct
+  let of_program = Lisp.Program.context
+  include Lisp.Context
+end

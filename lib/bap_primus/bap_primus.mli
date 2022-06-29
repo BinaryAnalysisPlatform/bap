@@ -3708,6 +3708,17 @@ text ::= ?any atom that is not recognized as a <word>?
             The created context will have classes [c1,...,cN] defined
             with feature sets [f1,...,fN] correspondingly. *)
         val create : (string * string list) list -> context
+
+
+        (** [of_project program] the global program context.
+
+            @since 2.5.0 *)
+        val of_program : program -> context
+
+        (** Pretty-prints the context
+
+            @since 2.5.0 *)
+        val pp : Format.formatter -> context -> unit
       end
 
       module Doc : sig

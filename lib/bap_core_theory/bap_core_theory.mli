@@ -1481,6 +1481,14 @@ module Theory : sig
     val name : t -> KB.Name.t
 
 
+    (** [nicknames t] is the set of the target nicknames.
+
+        Note that the set is using caseless comparison.
+
+        @since 2.5.0 *)
+    val nicknames : t -> String.Caseless.Set.t
+
+
     (** [matching t name] the target that matches [name].
 
         [matching t name] is [Some r] where [r] is [t] or the closest
