@@ -103,6 +103,9 @@ end
 
 (** A monadic eDSL for argument passing semantics specification.
 
+    @since 2.5.0 see also the [Language] module for a higher-level
+    eDSL, built on top of the primitives described below.
+
     This DSL helps in defining the abi processor's [insert_args]
     function. The DSL describes the semantics of argument passing that
     is then reified to the [args] structure. The [DSL] is a choice
@@ -365,18 +368,28 @@ module Arg : sig
 
 
   (** [split_with_memory arena t] passes the low order part of the
-      value in a register (if available) and the rest in the memory.
+      value in a registers (if available) and the rest in the memory.
 
       The size of the part that is passed via the registers is equal
-      to the size of the register. The part that is passed via the
+      to the number of avaliable registers, but not greater than the
+      [limit] (if specified). The part that is passed via the
       stack is aligned to the stack boundary.
+
+      If [rev] is [true] then pass the object in the reversed order.
 
       Rejects the computation if the size of [t] is not known; if
       [arena] is empty; or if some other argument is already passed
       via memory.
 
+      @since 2.5.0 accepts the [rev] parameter.
+      @since 2.5.0 accepts the [limit] parameter.
+
+      @since 2.5.0 passes as much as possible (up to the limit) of the
+      object via registers.
+
+      @before 2.5.0 was passing at most one word via registers.
   *)
-  val split_with_memory : arena -> ctype -> unit t
+  val split_with_memory : ?rev:bool -> ?limit:int -> arena -> ctype -> unit t
 
 
   (** [push t] pushes the argument of type [t] via stack.
@@ -429,9 +442,210 @@ module Arg : sig
 
 
   (** [choice [o1 o2 ... oN]] tries options in order until the first
-      one that is not rejected.
-  *)
+      one that is not rejected.  *)
   val choice : 'a t list -> 'a t
+
+  (**  A high-level ABI-specification language.
+
+       This module makes it easier to describe various calling
+       conventions using high-level combinators, built on top
+       of the lower level primitives of the [Arg] language.
+
+       The idea is that you can open [Arg.Language] and have all
+       combinators available in the scope. To enable language
+       extension, we also provide the versioned modules,
+       [Arg.Language.V1], and so on. Every extension of the language,
+       i.e., an addition of a new operator or combinator, will
+       go into a separate module, so that if you are using
+       [Arg.Language.Vx] it is guaranteed that the language changes
+       will not break anything.
+
+
+       In [Arg.Language] we describe calling conventions declaratively
+       using a list of commands, where each command is a guarded
+       statement, i.e., a pair of a predicate and the statement. The
+       statement is using the [Arg] operators to describe argument
+       passing routine, and the predicate checks if this is applicable
+       to the given arguement. Various combinators combine commands
+       and predicates, into a final statement that fully describes the
+       argument passing procedure for the given subroutine.
+
+       @since 2.5.0
+  *)
+  module Language : sig
+
+    type predicate = ctype -> bool
+    type statement = ctype -> unit t
+    type predicates = predicate list
+    type statements = statement list
+    type command = predicate * statement
+    type commands = command list
+    type 'a cls = [>] as 'a
+
+    module type V1 = sig
+
+      (** [install target data_model specification]
+
+          The toplevel function that is used to install the calling
+          convention for the given target.  The general syntax follows
+          this structure,
+
+          {[
+            describe t data @@ fun declare ->
+            let* arena1 = <arena-specification> in
+            let* arenaN = <arena-specification> in
+            let return ~alignment x = <statement> in
+            let arg ~alignment x = <statement> in
+            let finish = <finalization-procedure> in
+            let* () = <initialization-procedure> in
+            declare ~finish ~return arg
+          ]}
+
+          For example, the following specification describes ARM
+          calling convention AAPCS32,
+
+          {[
+            let define t =
+              install t model @@ fun describe ->
+              let* iargs = Arg.Arena.iargs t in
+              let* irets = Arg.Arena.irets t in
+              let rev = Theory.Endianness.(Theory.Target.endianness t = le) in
+              let return ~alignment:_ size = select [
+                  C.Type.is_basic, select [
+                    is (size <= 32 * 2), Arg.registers ~rev  irets;
+                    otherwise, Arg.reference iargs;
+                  ];
+                  is (size <= 32), Arg.register irets;
+                  otherwise, Arg.reference iargs;
+                ] in
+              describe ~return @@ fun ~alignment _ ->
+              sequence [
+                is (alignment = 64), const (Arg.align_even iargs);
+                always, choose [
+                  Arg.split_with_memory ~rev iargs;
+                  Arg.memory
+                ];
+              ]
+          ]}
+      *)
+      val install : Theory.Target.t -> #Bap_c_size.base ->
+        ((?finish:(unit t) ->
+          return:(alignment:int -> int -> statement) ->
+          (alignment:int -> int -> statement) -> unit t) ->
+         unit t) ->
+        unit
+
+
+      (** [sequence cmd] executes a sequence of predicated statements.
+
+          Executes all commands in the specified order. A command's
+          statement is executed if the commands predicate is evaluates
+          to [true]. Otherwise the statement is skipped.
+
+          If an evaluated statement rejects a computation then the
+          whole sequence will be rejected. *)
+      val sequence : commands -> statement
+
+      (** [select t spec] selects the first applicable option to pass [t].
+
+          The form,
+          {[
+            select [
+              pred1, option1;
+              pred2, option2;
+              ...,...;
+              predN, optionN;
+            ]
+          ]}
+
+          Tries [pred1 arg], [pred2 arg], ..., [predN arg] in order until
+          the first one that returns [true] and uses the corresponding
+          option to pass the argument.
+
+          The computation is rejected if either the selected option
+          rejects the computation or none options were selected. *)
+      val select : commands -> statement
+
+      (** [case classifer commands] case analysis.
+
+          The case combinator first classfies the argument using the
+          [classfier] function, which shall return a polymoprhic
+          variant, and then selects a command that matches the
+          selected class.
+
+          Rejects the computation if there's no matching class.
+      *)
+      val case : (ctype -> 'a cls t) -> ('a cls * statement) list -> statement
+
+      (** [any ps] holds if any of [ps] holds. *)
+      val any : predicates -> predicate
+
+      (** [all ps] holds if all of [ps] hold.*)
+      val all : predicates -> predicate
+
+      (** [neither ps] holds if neither of [ps] hold. *)
+      val neither : predicates -> predicate
+
+
+      (** [is cnd] holds if [cnd] holds.
+
+          Example, {[[
+            is (size > 64), memory;
+            otherwise, registers;
+
+          ]]}
+      *)
+      val is : bool -> predicate
+
+      (** [otherwise] is a predicate that is always [true].
+
+          I.e., it is [is true].
+
+          This predicate is supposed to be used with the [select]
+          combinator as the last, catch-all, predicate, e.g.,
+
+          {[
+            select arg [
+              is_fundamental, pass_fundamental;
+              is_floating, pass_floating;
+              otherwise, pass_memory;
+            ]
+          ]} *)
+      val otherwise : predicate
+
+      (** [always] is a predicate that is always [true], i.e., [is true].  *)
+      val always : predicate
+
+      (** [never] is a predicate that never holds, i.e., [is false].  *)
+      val never : predicate
+
+      (** [choose options] tries options in order until the first on that
+          is not rejected.
+
+          This combinator is like [choice] but is supposed to be used
+          inside [select], e.g.,
+
+          {[
+            select arg [
+              p1, choose [o1, o2];
+              either [p2; p3], choose [o3,o4];
+            ]
+          ]} *)
+      val choose : statements -> statement
+
+      (** [combine xs] combines statements into a signle statement.
+
+          Evaluates statements in the order they are specified. If any
+          of the statements rejects then the whole statement will be
+          rejected. *)
+      val combine : statements -> statement
+
+      include Monad.Syntax.S with type 'a t := 'a t
+      include Monad.Syntax.Let.S with type 'a t := 'a t
+
+    end
+    include V1
+  end
 
 
   (** [reify t size args] compiles the argument passing specification.
@@ -441,6 +655,8 @@ module Arg : sig
 
   *)
   val reify : Theory.Target.t -> #Bap_c_size.base -> semantics t -> args option
+
+
 
   include Monad.S with type 'a t := 'a t
   include Monad.Choice.S with type 'a t := 'a t

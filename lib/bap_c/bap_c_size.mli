@@ -21,6 +21,15 @@ val next_multitude_of : n:int -> int -> int
     @since 2.5.0 *)
 val padding : Size.t -> int -> int
 
+
+
+(** [max_enum_elt enum] returns the maximum element in the enum
+    specification.
+
+    @since 2.5.0
+*)
+val max_enum_elt : (string * int64 option) list -> int64
+
 (** The base class for computing sizes and aligments of C data types.
 
     The algorithm is implemented as a class to allow
