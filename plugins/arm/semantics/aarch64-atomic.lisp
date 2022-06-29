@@ -11,7 +11,7 @@
    load and store are functions to load/store to/from the size of rs and rt.
    acquire and release are booleans indicating whether load-acquire and
    store-release ordering is to be enforced."
-   (let ((data (load rn)))
+  (let ((data (load rn)))
     (when acquire (intrinsic 'load-acquire))
     (when (= data rs)
       (when release (intrinsic 'store-release))
@@ -61,6 +61,15 @@
 (defun CASLH  (rs _ rt rn) (CASordH rs rt rn false true))
 (defun CASALH (rs _ rt rn) (CASordH rs rt rn true  true))
 
+(defun first  (x y) (declare (visibility :private)) x)
+(defun second (x y) (declare (visibility :private)) y)
+
+(defun CASPX (rs_pair _ rt_pair rn)
+  (let ((data (load-dword rn)))
+    (when (= data (register-pair-concat rs_pair))
+      (store-word rn (register-pair-concat rt_pair)))
+    (set$ (register-pair-first rs_pair)  (endian first  (cast-high 64 data) (cast-low 64 data)))
+    (set$ (register-pair-second rs_pair) (endian second (cast-high 64 data) (cast-low 64 data)))))
 
 (defmacro CSop*r (set op rd rn rm cnd)
   "(CSop*r set op rd rn rm cnd) implements the conditional select
