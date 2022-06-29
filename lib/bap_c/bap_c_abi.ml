@@ -119,6 +119,7 @@ let create_arg size i intent name t (data,exp) sub =
 
 let registry = Hashtbl.create (module String)
 let register name abi = Hashtbl.set registry ~key:name ~data:abi
+let register_abi = register
 let get_processor name = Hashtbl.find registry name
 
 
@@ -479,6 +480,10 @@ module Arg = struct
     | None -> Arg.reject ()
     | Some x -> Arg.return x
 
+  let alignment t =
+    let+ s = Arg.get () in
+    Size.in_bits (s.ruler#alignment t)
+
   let require cnd = if cnd then Arg.return () else Arg.reject ()
 
   let push_arg t exp = Arg.update @@ fun s ->
@@ -525,16 +530,17 @@ module Arg = struct
   let registers_needed file bits =
     needs_some @@ registers_for_bits file bits
 
-  let concat = List.reduce_exn ~f:Bil.concat
+  let concat ?(rev=false) xs =
+    List.reduce_exn ~f:Bil.concat (if rev then List.rev xs else xs)
 
-  let registers ?(rev=false) ?limit file t =
+  let registers ?rev ?limit file t =
     let* s = Arg.get () in
     let* bits = size t in
     let* regs_needed = registers_needed file bits in
     let limit = Option.value limit ~default:regs_needed in
     require (regs_needed <= limit) >>= fun () ->
     let* args = Arena.popn ~n:regs_needed s file in
-    push_arg t @@ concat (if rev then List.rev args else args)
+    push_arg t @@ concat ?rev args
 
   let align_even file =
     let* s = Arg.get () in
@@ -616,18 +622,26 @@ module Arg = struct
     | None -> Arg.reject ()
     | Some stack -> Arg.return stack
 
-  let split_with_memory file typ =
+  let split_with_memory ?rev ?limit file typ =
     let* s = Arg.get () in
     let* bits = size typ in
-    let* reg = Arena.pop s file in
-    let* t = target in
-    let* stack = stack in
+    let* needed = registers_needed file bits in
     let regs = Arena.get s file in
-    let base = Stack.base stack in
-    require (Stack.is_empty stack && bits > File.bits regs) >>= fun () ->
-    let mbits = bits - File.bits regs in
-    skip_memory mbits >>= fun () ->
-    push_arg typ @@ Bil.concat reg (load t mbits base 0)
+    let limit = Option.value limit ~default:(File.available regs) in
+    let available = min limit (File.available regs) in
+    if available >= needed
+    then
+      let* args = Arena.popn ~n:needed s file in
+      push_arg typ @@ concat  ?rev args
+    else
+      let* stk = stack in
+      let* t = target in
+      let base = Stack.base stk in
+      let mbits = bits - available * File.bits regs in
+      require (Stack.is_empty stk && available > 0) >>= fun () ->
+      let* regs = Arena.popn ~n:available s file in
+      skip_memory mbits >>= fun () ->
+      push_arg typ @@ concat ?rev (regs@[load t mbits base 0])
 
   let popn_bits arena bits =
     let* s = Arg.get () in
@@ -644,13 +658,13 @@ module Arg = struct
     push_arg typ @@ concat (regs1@regs2)
 
   let either op1 op2 = Arg.catch op1 (fun _ -> op2)
-
   let (<|>) = either
 
   let choice options =
     match List.reduce ~f:either options with
     | Some option -> option
     | None -> Arg.reject ()
+
 
   let define ?(return=Arg.return ()) inputs = Arg.sequence [
       switch `Return;
@@ -693,24 +707,136 @@ module Arg = struct
   let accept = Arg.return
   let pure = Arg.return
   let zero = Arg.reject
+
+  let install target ruler pass =
+    let open Bap_core_theory in
+    let abi = Theory.Target.abi target in
+    let abi_name = Format.asprintf "%s"
+        (KB.Name.unqualified (Theory.Abi.name abi)) in
+    let abi_processor = {
+      apply_attrs = (fun _ x -> x);
+      insert_args = fun _ attrs proto ->
+        reify target ruler (pass attrs proto)
+    } in
+    register_abi abi_name abi_processor;
+    Bap_abi.register_pass @@ fun proj ->
+    if Theory.Target.equal (Project.target proj) target
+    then begin
+      Bap_api.process (create_api_processor ruler abi_processor);
+      Project.set proj Bap_abi.name abi_name
+    end
+    else proj
+
+  module Language = struct
+    type predicate = ctype -> bool
+    type statement = ctype -> unit Arg.t
+    type predicates = predicate list
+    type statements = statement list
+    type command = predicate * statement
+    type commands = command list
+    type 'a cls = [>] as 'a
+
+    module type V1 = sig
+      val install : Theory.Target.t -> #Bap_c_size.base ->
+        ((?finish:(unit Arg.t) ->
+          return:(alignment:int -> int -> statement) ->
+          (alignment:int -> int -> statement) -> unit Arg.t) ->
+         unit Arg.t) ->
+        unit
+
+      val sequence : commands -> statement
+      val select : commands -> statement
+      val case : (ctype -> 'a cls Arg.t) -> ('a cls * statement) list -> statement
+      val any : predicates -> predicate
+      val all : predicates -> predicate
+      val neither : predicates -> predicate
+
+      val is : bool -> predicate
+      val otherwise : predicate
+      val always : predicate
+      val never : predicate
+      val choose : statements -> statement
+      val combine : statements -> statement
+
+      include Monad.Syntax.S with type 'a t := 'a Arg.t
+      include Monad.Syntax.Let.S with type 'a t := 'a Arg.t
+
+    end
+    module V1 : V1 = struct
+
+      let sequence cmds arg =
+        Arg.List.iter cmds ~f:(fun (cnd,action) ->
+            if cnd arg then action arg else Arg.return ())
+
+      let select options arg =
+        List.find_map options ~f:(fun (cnd,action) ->
+            if cnd arg then Some (action arg) else None) |> function
+        | Some action -> action
+        | None -> Arg.reject ()
+
+
+      let case
+        : (ctype -> 'a cls Arg.t) -> ('a cls * statement) list -> statement
+        = fun classify cmds arg ->
+          let* cls = classify arg in
+          List.find_map cmds ~f:(fun (case,cmd) ->
+              Option.some_if (Poly.equal cls case) cmd) |> function
+          | None -> Arg.reject ()
+          | Some cmd -> cmd arg
+
+      let is cnd = const cnd
+      let otherwise = is true
+      let any ps x = List.exists ps ~f:(fun p -> p x)
+      let all ps x = List.for_all ps ~f:(fun p -> p x)
+      let neither ps x = List.for_all ps ~f:(fun p -> not (p x))
+
+      let choose options arg =
+        choice (List.map options ~f:(fun f -> f arg))
+
+      let otherwise = Fn.const true
+      let always = Fn.const true
+      let never = Fn.const false
+
+      let combine xs arg = Arg.List.iter xs ~f:(fun x -> x arg)
+
+
+      let install
+        : Theory.Target.t -> #Bap_c_size.base ->
+          ((?finish:unit Arg.t ->
+            return:(alignment:int -> int -> statement) ->
+            (alignment:int -> int -> statement) -> unit Arg.t) ->
+           unit Arg.t) ->
+          unit =
+        fun target data k ->
+        install target data @@ fun _ {Bap_c_type.Proto.return=r; args=xs} ->
+        k @@ fun ?(finish=Arg.return ()) ~return args ->
+        let return = match r with
+          | `Void -> Arg.return ()
+          | _ ->
+            let* size = size r in
+            let* alignment = alignment r in
+            return ~alignment size r in
+        let inputs = Arg.List.iter xs ~f:(fun (_,t) ->
+            let* size = size t in
+            let* alignment = alignment t in
+            args ~alignment size t) in
+        Arg.sequence [
+          switch `Return;
+          return;
+          switch `Inputs;
+          inputs;
+          finish;
+        ]
+
+
+      include Arg.Syntax
+      include Arg.Let
+    end
+
+    include V1
+  end
   include Arg
+  let reject = Arg.reject
 end
 
-let define target ruler pass =
-  let open Bap_core_theory in
-  let abi = Theory.Target.abi target in
-  let abi_name = Format.asprintf "%s"
-      (KB.Name.unqualified (Theory.Abi.name abi)) in
-  let abi_processor = {
-    apply_attrs = (fun _ x -> x);
-    insert_args = fun _ attrs proto ->
-      Arg.reify target ruler (pass attrs proto)
-  } in
-  register abi_name abi_processor;
-  Bap_abi.register_pass @@ fun proj ->
-  if Theory.Target.equal (Project.target proj) target
-  then begin
-    Bap_api.process (create_api_processor ruler abi_processor);
-    Project.set proj Bap_abi.name abi_name
-  end
-  else proj
+let define = Arg.install
