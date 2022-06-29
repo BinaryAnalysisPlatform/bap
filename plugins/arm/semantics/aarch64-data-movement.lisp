@@ -84,6 +84,63 @@
 (defun STRBBui (src reg off)
   (store-byte (+ reg off) src))
 
+; STR (register) (base):
+; doesn't account for signed/unsigned  extension
+(defun str-reg (rt rn rm signed shift)
+  (assert (< signed 2))
+  (store-word (+ rn 
+     (if (= signed 1) 
+       (cast-signed 64 (lshift rm shift))
+       (cast-unsigned 64 (lshift rm shift)))) 
+      rt))
+
+; option encodes the extend type which is not relevant here
+(defun STRWroX  (rt rn rm option shift)
+ (str-reg rt rn rm option (* shift 2)))
+
+(defun STRXroX (rt rn rm option shift)
+ (str-reg rt rn rm option (* shift 3)))
+
+(defun STRQroX (rt rn rm option shift)
+  (str-reg rt rn rm option (* shift 4)))
+
+; STRHHroX
+(defun STRHHroX (rt rn rm option shift)
+  (str-reg rt rn rm option shift))
+
+; STR (immediate) (base registers):
+(defun str-post (xreg src off)
+  "stores all of src to xreg, and post-indexes reg (reg += off)."
+  (store-word xreg src)
+  (set$ xreg (+ xreg off)))
+
+(defun STRWpost (_ rt rn simm)
+  (str-post rn rt simm))
+
+(defun STRXpost (_ rt rn simm)
+  (str-post rn rt simm))
+
+; STR (SIMD registers)
+(defun STRQpost (_ rt rn simm)
+  (str-post rn rt simm))
+
+(defun STRDpost (_ rt rn simm)
+  (str-post rn rt simm))
+
+(defun STRSpost (_ rt rn simm)
+  (str-post rn (extract 31 0 rt) simm))
+
+(defun STRHpost (_ rt rn simm)
+  (str-post rn (extract 15 0 rt) simm))
+
+
+; STRQui
+; STRDui
+
+; STRH (base reg)
+; STRHHui
+
+
 ; post-indexed STRB
 (defun STRBBpost (_ rt base simm)
   (store-byte base rt)
@@ -130,9 +187,6 @@
   (let ((off (lshift off 2)))
     (store-word (+ reg off) (cast-low 32 src))))
 
-(defun STRXroX (rt rn rm _ shift)
-  (store-word (+ rn (lshift rm (* shift 3))) rt))
-
 ; addr + offset indexed STUR
 (defmacro STUR*i (src base off size)
   "Takes `size` bits from src and stores at base + off"
@@ -146,7 +200,7 @@
 
 (defun STURBBi (src base off) (STUR*i src base off 8))
 
-
 (defun STURDi (rn rt imm) (STUR*i rn rt imm 64))
+
 (defun STURQi (rn rt imm) (STUR*i rn rt imm 128)) 
 
