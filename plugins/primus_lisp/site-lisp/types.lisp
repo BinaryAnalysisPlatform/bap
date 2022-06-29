@@ -47,6 +47,12 @@
 (defun long ()  (declare (context (abi eabi))) (model-ilp32 'long))
 (defun ptr_t () (declare (context (abi eabi))) (model-ilp32 'ptr))
 
+(defun char ()  (declare (context (abi gnueabi))) (model-ilp32 'char))
+(defun short () (declare (context (abi gnueabi))) (model-ilp32 'short))
+(defun int ()   (declare (context (abi gnueabi))) (model-ilp32 'int))
+(defun long ()  (declare (context (abi gnueabi))) (model-ilp32 'long))
+(defun ptr_t () (declare (context (abi gnueabi))) (model-ilp32 'ptr))
+
 (defun char ()  (declare (context (abi mips32))) (model-ilp32 'char))
 (defun short () (declare (context (abi mips32))) (model-ilp32 'short))
 (defun int ()   (declare (context (abi mips32))) (model-ilp32 'int))

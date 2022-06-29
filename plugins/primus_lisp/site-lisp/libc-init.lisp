@@ -12,7 +12,7 @@
 (defun init (main argc argv auxv)
   "GNU libc initialization stub"
   (declare (external "__libc_start_main")
-           (context (abi "eabi")))
+           (context (abi "gnueabi")))
   (exit-with (invoke-subroutine
               (logand main 0xfffffffe) ; to handle thumb jumps
               argc argv)))
