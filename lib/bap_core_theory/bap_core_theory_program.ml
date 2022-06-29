@@ -54,7 +54,14 @@ let string_property ?(domain=name) ~desc cls name =
     ~public:true
     ~desc
 
-module Language = Knowledge.Enum.Make()
+module Language = struct
+  include Knowledge.Enum.Make()
+  let c = declare ~package "c"
+  let cxx = declare ~package "cxx"
+  let ada = declare ~package "ada"
+  let fortran = declare ~package "fortran"
+  let pascal = declare ~package "pascal"
+end
 type language = Language.t
 
 module Source = struct
