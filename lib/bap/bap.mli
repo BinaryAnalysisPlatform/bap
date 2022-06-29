@@ -10524,10 +10524,17 @@ module Std : sig
           and the information from the is merged, otherwise only the
           selected loaded is used. See {!Image.available_backend}.
 
-          The [target] could be used to specialize the target
-          information retrieved from the file. If it is less specific,
-          then it will be ignored, if it contradicts the information
-          in the file then the project creation will fail.
+          The [target] could be used to override the target
+          information derived from the input file.
+
+          @since 2.5.0 if [target] is specified then it is used
+          instead of the derived target, and the derivation itself is
+          not performed.
+
+          @before 2.5.0 if [target] is specified and is less specific,
+          then the derived target it will be ignored, if it
+          contradicts the information in the file then the project
+          creation will fail.
 
           @since 2.2.0 *)
       val load : ?target:Theory.Target.t -> ?loader:string -> string -> t
