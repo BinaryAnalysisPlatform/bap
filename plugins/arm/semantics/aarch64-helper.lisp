@@ -159,11 +159,11 @@
 ;;    for c in "XW":
 ;;        for i in range(30//2):
 ;;            print(f"'{c}{2*i}_{c}{2*i+1} '{c}{2*i}")
-(defun register-pair-first (r_pair)
-  "(register-pair-first r_pair) returns the first register in the
+(defun register-pair-first (r-pair)
+  "(register-pair-first r-pair) returns the first register in the
    register pair Xi_X(i+1) or similar, returned by LLVM.
    This is used in specific instructions like the CASP family and LD2."
-  (case (symbol r_pair)
+  (case (symbol r-pair)
     'X0_X1   'X0
     'X2_X3   'X2
     'X4_X5   'X4
@@ -195,11 +195,11 @@
     'W26_W27 'W26
     'W28_W29 'W28))
 
-(defun register-pair-second (r_pair)
-  "(register-pair-first r_pair) returns the second register in the
+(defun register-pair-second (r-pair)
+  "(register-pair-first r-pair) returns the second register in the
    register pair Xi_X(i+1) or similar, returned by LLVM.
    This is used in specific instructions like the CASP family and LD2."
-  (case (symbol r_pair)
+  (case (symbol r-pair)
     'X0_X1   'X1
     'X2_X3   'X3
     'X4_X5   'X5
@@ -231,11 +231,11 @@
     'W26_W27 'W27
     'W28_W29 'W29))
 
-(defun register-pair-concat (r_pair)
-  "(register-pair-concat r_pair) returns the concatenated form
-   of the register pair returned by LLVM, taking into account
+(defun register-pair-concat (r-pair)
+  "(register-pair-concat r-pair) returns the concatenated values of
+   the register pair returned by LLVM, taking into account
    the endianness."
-  (case (symbol r_pair)
+  (case (symbol r-pair)
     'X0_X1   (endian concat X0 X1)
     'X2_X3   (endian concat X2 X3)
     'X4_X5   (endian concat X4 X5)

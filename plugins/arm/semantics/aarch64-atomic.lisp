@@ -64,12 +64,22 @@
 (defun first  (x y) (declare (visibility :private)) x)
 (defun second (x y) (declare (visibility :private)) y)
 
-(defun CASPX (rs_pair _ rt_pair rn)
-  (let ((data (load-dword rn)))
-    (when (= data (register-pair-concat rs_pair))
-      (store-word rn (register-pair-concat rt_pair)))
-    (set$ (register-pair-first rs_pair)  (endian first  (cast-high 64 data) (cast-low 64 data)))
-    (set$ (register-pair-second rs_pair) (endian second (cast-high 64 data) (cast-low 64 data)))))
+(defmacro CASP* (set load rs-pair rt-pair rn register-width)
+  "(CASP* set load store rs-pair rt-pair rn register-width)
+   implements a compare-and-swap-pair instruction for W and X registers.
+   set is the functions to set to a register in the pair.
+   register-width is 64 or 32, depending on the size of register used.
+   load either loads 128 bits or 64 (the size of the whole pair)."
+  (let ((data (load rn))
+        (lower (cast-low  register-width data))
+        (upper (cast-high register-width data)))
+    (when (= data (register-pair-concat rs-pair))
+      (store-word rn (register-pair-concat rt-pair)))
+    (set (register-pair-first  rs-pair) (endian first  upper lower))
+    (set (register-pair-second rs-pair) (endian second upper lower))))
+
+(defun CASPX (rs-pair _ rt-pair rn) (CASP* set$ load-dword rs-pair rt-pair rn 64))
+(defun CASPW (rs-pair _ rt-pair rn) (CASP* setw load-word rs-pair rt-pair rn 32))
 
 (defmacro CSop*r (set op rd rn rm cnd)
   "(CSop*r set op rd rn rm cnd) implements the conditional select
