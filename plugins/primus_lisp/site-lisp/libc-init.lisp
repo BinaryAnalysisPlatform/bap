@@ -62,7 +62,7 @@
 
 (defun init (argc argv ubpev auxvec fini stinfo stack_on_entry)
   (declare (external "__libc_start_main")
-           (context (abi "ppc32")))
+           (context (target "powerpc") (abi "gnu")))
   (set R2 (+ stack_on_entry 0x7008))
   (let ((argc (read-word ptr_t stack_on_entry))
         (argv (ptr+1 ptr_t stack_on_entry))

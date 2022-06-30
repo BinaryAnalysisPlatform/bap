@@ -1,89 +1,52 @@
 open Core_kernel[@@warning "-D"]
+open Bap_core_theory
 open Bap.Std
 open Bap_c.Std
+module Arg = C.Abi.Arg
+open Arg.Language
 
-include Self()
+let arena t name ~from len =
+  Arg.Arena.create @@
+  List.init len ~f:(fun i ->
+      let name = sprintf "%s%d" name (from+i) in
+      match Theory.Target.var t name with
+      | Some v -> v
+      | None -> failwithf "Target %s doesn't have a register named %s"
+                  (Theory.Target.to_string t) name ())
 
-module Stack = C.Abi.Stack
 
-type pos =
-  | Ret_0
-  | Ret_1
-  | Arg of int
+let sysv32 t =
+  let rev = Theory.Endianness.(equal le) (Theory.Target.endianness t) in
+  install t (new C.Size.base `ILP32) @@ fun declare ->
+  let* iargs = arena t ~from:3 "R" 8 in
+  let* fargs = arena t ~from:1 "F" 8 in
+  let* irets = Arg.Arena.irets t in
+  let* frets = Arg.Arena.frets t in
+  let return ~alignment:_ _ = select [
+      C.Type.is_floating, Arg.registers ~rev frets;
+      otherwise, choose [
+        Arg.registers ~rev irets;
+        Arg.reference iargs;
+      ]
+    ] in
+  declare ~return @@ fun ~alignment:_ size -> select [
+    C.Type.is_floating, choose [
+      Arg.register fargs;
+      Arg.memory;
+    ];
+    is (size > 32), choose [
+      Arg.pointer iargs;
+      Arg.memory;
+    ];
+    otherwise, choose [
+      Arg.pointer iargs;
+      Arg.memory;
+    ]
+  ]
 
-module type abi = sig
-  val name : string
-  val size : C.Size.base
-  val arg  : pos -> exp
-end
 
-type abi = (module abi)
-
-exception Unsupported
-
-module Abi32 = struct
-  open Powerpc.Std
-  open PowerPC_32
-
-  let reg i = Int.Map.find_exn gpri i |> Bil.var
-  let name = "ppc32"
-  let size = object
-    inherit C.Size.base `ILP32
-  end
-  let arg = function
-    | Ret_0 -> reg 3
-    | Ret_1 -> reg 4
-    | Arg n -> reg (n + 3)
-end
-
-let supported_api (module Abi : abi) {C.Type.Proto.return; args} =
-  let word = Arch.addr_size (`ppc :> arch) |> Size.in_bits in
-  let return = match Abi.size#bits return with
-    | None -> None
-    | Some width -> match Size.of_int_opt width with
-      | None ->
-        warning "size of return object doesn't fit into word sizes";
-        raise Unsupported
-      | Some sz ->
-        let data = C.Abi.data Abi.size return in
-        if width > word && width <= word * 2
-        then Some (data, Bil.(Abi.arg Ret_0 ^ Abi.arg Ret_1))
-        else if width <= word
-        then Some (data, Abi.arg Ret_0)
-        else
-          (warning "size of return object doesn't fit into double word\n";
-           raise Unsupported) in
-  let params = List.mapi args ~f:(fun i (n,t) ->
-      match Abi.size#bits t with
-      | None ->
-        warning "size of %a parameter is unknown" C.Type.pp t;
-        raise Unsupported
-      | Some size -> match Size.of_int_opt size with
-        | Some sz when size <= word ->
-          C.Abi.data Abi.size t, Abi.arg (Arg i)
-        | _ ->
-          warning "argument %d doesn't fit into word" i;
-          raise Unsupported) in
-  C.Abi.{return; params; hidden=[]}
-
-let api abi proto =
-  try Some (supported_api abi proto) with Unsupported ->
-    warning "skipped function due to unsupported abi";
-    None
-
-let dispatch abi sub attrs proto = api abi proto
-
-let main proj = match Project.arch proj with
-  | `ppc ->
-    info "using powerpc ABI";
-    let abi = C.Abi.{
-        insert_args = dispatch (module Abi32);
-        apply_attrs = fun _ -> Fn.id
-      } in
-    C.Abi.register Abi32.name abi;
-    let api = C.Abi.create_api_processor Abi32.size abi in
-    Bap_api.process api;
-    Project.set proj Bap_abi.name Abi32.name
-  | _ -> proj
-
-let setup () = Bap_abi.register_pass main
+let setup () =
+  Theory.Target.family Bap_powerpc_target.parent |>
+  List.iter ~f:(fun t ->
+      if Theory.Target.bits t = 32 &&
+         Theory.Abi.(Theory.Target.abi t = gnu) then sysv32 t)
