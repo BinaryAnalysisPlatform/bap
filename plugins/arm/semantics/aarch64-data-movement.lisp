@@ -80,21 +80,19 @@
 
 ;; ST...
 
-; STRB (base)
+; STRB
 (defun STRBBui (src reg off)
   (store-byte (+ reg off) src))
 
-; STR (register) (base):
-; doesn't account for signed/unsigned  extension
+; STR (register)
 (defun str-reg (rt rn rm signed shift)
   (assert (< signed 2))
   (store-word (+ rn 
      (if (= signed 1) 
-       (cast-signed 64 (lshift rm shift))
-       (cast-unsigned 64 (lshift rm shift)))) 
+       (signed-extend   (word-width rm) (lshift rm shift))
+       (unsigned-extend (word-width rm) (lshift rm shift)))) 
       rt))
 
-; option encodes the extend type which is not relevant here
 (defun STRWroX  (rt rn rm option shift)
  (str-reg rt rn rm option (* shift 2)))
 
@@ -128,11 +126,13 @@
   (str-post rn rt simm))
 
 (defun STRSpost (_ rt rn simm)
-  (str-post rn (extract 31 0 rt) simm))
+  (str-post rn (cast-low 32 rt) simm))
 
 (defun STRHpost (_ rt rn simm)
-  (str-post rn (extract 15 0 rt) simm))
+  (str-post rn (cast-low 16 rt) simm))
 
+(defun STRBpost (_ rt rn simm)
+  (str-post rn (cast-low 8 rt) simm))
 
 (defun STR*ui (scale src reg off) 
   "Stores a register of size (8 << scale) to the memory address 
@@ -160,7 +160,6 @@
 (defun STRXui (src reg off)
   (STR*ui 3 src reg off))
 
-; note this will not work with src = 'W0 since (word-width 'w0) = 64 .
 (defun STRWui (src reg off)
   (STR*ui 2 src reg off))
 
@@ -168,11 +167,10 @@
 (defun STRHHui (rt rn off)
   (store-word (+ rn off) (cast-low 16 rt)))
 
-; post-indexed STRB
+; STRB post-indexed
 (defun STRBBpost (_ rt base simm)
   (store-byte base rt)
   (set$ base (+ base simm)))
-
 
 (defun STRBBroW (rt rn rm option shift)
   (let ((off
@@ -188,27 +186,78 @@
       (unsigned-extend 64 rm))))      ; LSL
     (store-byte (+ rn off) rt)))
 
-(defun STPXpre (dst t1 t2 _ off)
-  (let ((off (lshift off 3)))
-    (store-word (+ dst off) t1)
-    (store-word (+ dst off (sizeof word)) t2)
-    (set$ dst (+ dst off))))
+; STP
 
+(defun store-pair (scale indexing t1 t2 dst off) 
+  "store the pair t1,t2 of size (8 << scale)at the register dst plus an offset, 
+  using the specified indexing."
+  (assert-msg (and (= (word-width t1) (lshift 8 scale)) 
+      (= (word-width t2) (lshift 8 scale)))
+      "(aarch64-data-movement.lisp) scale must match size of register ") 
+  (let ((off (lshift off scale)) (datasize (lshift 8 scale))
+      (addr (case indexing
+              'post dst
+              'pre  (+ dst off)
+              'offset (+ dst off)
+              (assert-msg (= 1 0) 
+      "(aarch64-data-movement.lisp) invalid indexing scheme.")))
+            )
+    (store-word addr t1)
+    (store-word (+ addr datasize) t2)
+    (case indexing
+       'post (set$ dst (+ addr off))
+       'pre  (set$ dst addr)
+       'offset )
+    ))
+
+; post-indexed
+(defun STPWpost (_ t1 t2 dst off)
+  (store-pair 2 'post t1 t2 dst off))
+
+(defun STPXpost (_ t1 t2 dst off)
+    (store-pair 3 'post t1 t2 dst off))
+
+(defun STPSpost (_ t1 t2 dst off)
+  (store-pair 2 'post t1 t2 dst off))
+
+(defun STPDpost (_ t1 t2 dst off)
+  (store-pair 3 'post t1 t2 dst off))
+
+(defun STPQpost (_ t1 t2 dst off)
+  (store-pair 4 'post t1 t2 dst off))
+
+; pre-indexed
+(defun STPXpre (_ t1 t2 dst off)
+    (store-pair 3 'pre t1 t2 dst off))
+
+(defun STPWpre (_ t1 t2 dst off)
+  (store-pair 2 'pre t1 t2 dst off))
+
+(defun STPSpre (_ t1 t2 dst off)
+  (store-pair 2 'pre t1 t2 dst off))
+
+(defun STPDpre (_ t1 t2 dst off)
+  (store-pair 3 'pre t1 t2 dst off))
+
+(defun STPQpre (_ t1 t2 dst off)
+  (store-pair 4 'pre t1 t2 dst off))
+
+; signed-offset
 (defun STPWi (rt rt2 base imm) 
-  (let ((datasize 16) (off (* imm 4)))
-    (store-word (+ base off) rt)
-    (store-word (+ base off datasize) rt2)))
+  (store-pair 2 'offset rt rt2 base imm))
 
-(defun STPXi (t1 t2 base off)
-  (let ((off (* off 8)))
-    (store-word (+ base off) t1)
-    (store-word (+ base off (sizeof word)) t2)))
+(defun STPXi (rt rt2 base imm)
+  (store-pair 3 'offset rt rt2 base imm))
 
-; signed offset STP (SIMD/FP)
+(defun STPSi (rt rt2 base imm) 
+  (store-pair 2 'offset rt rt2 base imm))
+
+(defun STPDi (rt rt2 base imm) 
+  (store-pair 3 'offset rt rt2 base imm))
+
 (defun STPQi (rt rt2 base imm) 
-  (let ((datasize 128) (off (* imm 16)))
-    (store-word (+ base off) rt)
-    (store-word (+ base off datasize) rt2)))
+  (store-pair 4 'offset rt rt2 base imm))
+
 
 ; addr + offset indexed STUR
 (defmacro STUR*i (src base off size)
