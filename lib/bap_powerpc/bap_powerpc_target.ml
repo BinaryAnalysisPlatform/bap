@@ -19,18 +19,14 @@ let bool = Theory.Bool.t
 
 let reg t n = Theory.Var.define t n
 
-let array t fmt size =
+let array ?(from=0) t fmt size =
   let fmt = Scanf.format_from_string fmt "%d" in
-  List.init size ~f:(fun i -> reg t (sprintf fmt i))
+  List.init size ~f:(fun i -> reg t (sprintf fmt (i+from)))
 
 let untyped = List.map ~f:Theory.Var.forget
 let (@<) xs ys = untyped xs @ untyped ys
 
-let name size order  =
-  let order = Theory.Endianness.name order in
-  sprintf "powerpc%d+%s" size (KB.Name.unqualified order)
-
-let parent = Theory.Target.declare ~package "powerpc"
+let parent = Theory.Target.declare ~package "powerpc-family"
 
 let crflags =
   List.concat @@ List.init 8 ~f:(fun group ->
@@ -43,7 +39,7 @@ let flags = List.map ~f:(reg bool) [
     "C"; "FL"; "FE"; "FG"; "FU"
   ] @ crflags
 
-let define ?(parent=parent) ?nicknames bits endianness =
+let define ?(parent=parent) ?nicknames name bits endianness =
   let size = Theory.Bitv.size bits in
   let mems = Theory.Mem.define bits r8 in
   let data = Theory.Var.define mems "mem" in
@@ -53,7 +49,7 @@ let define ?(parent=parent) ?nicknames bits endianness =
              flags @<
              [reg bits "CTR"; reg bits "LR"; reg bits "TAR" ] @<
              [data] in
-  Theory.Target.declare ~package (name size endianness)
+  Theory.Target.declare ~package name
     ~parent
     ?nicknames
     ~bits:size
@@ -74,36 +70,48 @@ let define ?(parent=parent) ?nicknames bits endianness =
         [carry_flag], untyped@@[reg bool "CA"; reg bool "CA32"];
         [overflow_flag], untyped@@List.(["SO"; "OV"; "OV32"] >>| reg bool);
         [status; floating], untyped@@List.(["FL"; "FE"; "FG"; "FU"] >>| reg bool);
+        [caller_saved], untyped [reg bits "R0"] @
+                        untyped (array bits ~from:3 "R%d" 10) @
+                        untyped (array r64 "F%d" 14);
+        [callee_saved], untyped [reg bits "R1"] @
+                        untyped (array bits ~from:14 "R%d" 18) @
+                        untyped (array r64  ~from:14 "F%d" 18);
+        [function_argument; integer], untyped (array bits ~from:3 "R%d" 8);
+        [function_argument; floating], untyped (array bits ~from:1 "F%d" 8);
+        [function_return; integer], untyped [reg bits "R3"; reg bits "R4"];
+        [function_return; floating], untyped [reg r64 "F0"];
+        [reserved], untyped@@[reg bits "R2"];
       ]
 
-let powerpc32bi = define r32 Theory.Endianness.bi
-    ~nicknames:["powerpc32bi"; "ppc32bi"]
+let powerpc32bi = define "powerpcbi" r32 Theory.Endianness.bi
+    ~nicknames:["powerpc32bi"; "ppc32bi"; "powerpc32+bi"]
 
-let powerpc32eb = define r32 Theory.Endianness.eb
+let powerpc32eb = define "powerpc" r32 Theory.Endianness.eb
     ~nicknames:[
-      "powerpc"; "ppc"; "powerpc32"; "ppc32";
+      "powerpc32+eb"; "ppc"; "powerpc32"; "ppc32";
       "powerpc32eb"; "powerpc32be"; "ppc32eb"; "ppc32be";
       "power"; "power32";
     ]
-let powerpc32le = define r32 Theory.Endianness.le
+let powerpc32le = define "powerpcle" r32 Theory.Endianness.le
     ~nicknames:[
-      "powerpcle"; "ppcle"; "ppcel";
+      "powerpc32+le"; "ppcle"; "ppcel";
       "powerpc32le"; "powerpc32el";
       "ppc32le"; "ppc32el"
     ]
 
-let powerpc64bi = define r64 Theory.Endianness.bi
-    ~nicknames:["powerpc64bi"; "power64bi"]
-let powerpc64eb = define r64 Theory.Endianness.eb
+let powerpc64bi = define "powerpc64bi" r64 Theory.Endianness.bi
+    ~nicknames:["powerpc64+bi"; "power64bi"]
+
+let powerpc64eb = define "powerpc64" r64 Theory.Endianness.eb
     ~nicknames:[
-      "powerpc64"; "ppc64"; "power64";
+      "powerpc64+bi"; "ppc64"; "power64";
       "powerpc64eb"; "powerpc64be";
       "ppc64eb"; "ppc64be";
       "power64eb"; "power64be"
     ]
-let powerpc64le = define r64 Theory.Endianness.le
+let powerpc64le = define "powerpc64le" r64 Theory.Endianness.le
     ~nicknames:[
-      "powerpc64el"; "powerpc64le";
+      "powerpc64el"; "powerpc64+le";
       "ppc64el"; "ppc64le";
       "power64el"; "power64le"
     ]
@@ -115,35 +123,47 @@ let enable_loader () =
     let request =
       Ogre.request Image.Scheme.arch >>= fun arch ->
       Ogre.request Image.Scheme.is_little_endian >>= fun little ->
-      Ogre.return (arch,little) in
+      Ogre.request Image.Scheme.format >>= fun format ->
+      Ogre.return (arch,little,format) in
     match Ogre.eval request doc with
-    | Error _ -> None,None
+    | Error _ -> None,None,None
     | Ok info -> info in
   KB.promise Theory.Unit.target @@ fun unit ->
-  KB.collect Image.Spec.slot unit >>|
-  request_info >>| function
-  | Some "powerpc", None -> powerpc32bi
-  | Some "powerpc64",None -> powerpc64bi
-  | Some "powerpc",Some true -> powerpc32le
-  | Some "powerpc64",Some true -> powerpc64le
-  | Some "powerpc",Some false -> powerpc32eb
-  | Some "powerpc64",Some false -> powerpc64eb
-  | _ -> Theory.Target.unknown
+  KB.collect Image.Spec.slot unit >>| request_info >>| fun (arch,is_little,format) ->
+  let (abi,filetype) = match format with
+    | Some "elf" -> Theory.Abi.gnu, Theory.Filetype.elf
+    | Some "macho" -> Theory.Abi.gnu, Theory.Filetype.macho
+    | _ -> Theory.Abi.unknown, Theory.Filetype.unknown  in
+  let parent = match arch, is_little with
+    | Some "powerpc", (None|Some false) -> powerpc32eb
+    | Some "powerpc64",(None|Some false) -> powerpc64eb
+    | Some "powerpc",Some true -> powerpc32le
+    | Some "powerpc64",Some true -> powerpc64le
+    | _ -> Theory.Target.unknown in
+  if Theory.Target.is_unknown parent then parent
+  else Theory.Target.select ~strict:true ~parent ~filetype ~abi ()
 
 
-let mapped_powerpc = Map.of_alist_exn (module Theory.Target) [
-    powerpc32eb, `ppc;
-    powerpc64eb, `ppc64;
-    powerpc64le, `ppc64le;
-  ]
+let register_subtargets () =
+  [powerpc32eb; powerpc32le; powerpc64eb; powerpc64le] |>
+  List.iter ~f:(fun parent ->
+      Theory.Target.register parent
+        ~abis:Theory.Abi.[unknown; gnu]
+        ~systems:Theory.System.[unknown; linux; freebsd; openbsd; vxworks]
+        ~filetypes:Theory.Filetype.[unknown; elf; macho])
+
 
 let map_powerpc () =
   let open KB.Syntax in
   KB.promise Arch.unit_slot @@ fun unit ->
-  KB.collect Theory.Unit.target unit >>|
-  Map.find mapped_powerpc >>| function
-  | Some arch -> arch
-  | None -> `unknown
+  KB.collect Theory.Unit.target unit >>| fun t ->
+  if Theory.Target.belongs parent t then
+    match Theory.Target.bits t, Theory.Endianness.(Theory.Target.endianness t = le) with
+    | 32,false -> `ppc
+    | 64,false -> `ppc64
+    | 64,true -> `ppc64le
+    | _ -> `unknown
+  else `unknown
 
 module Dis = Disasm_expert.Basic
 
@@ -186,6 +206,7 @@ let enable_pcode_decoder () =
   end
 
 let load ?(backend="llvm") () =
+  register_subtargets ();
   enable_loader ();
   map_powerpc ();
   match backend with
