@@ -77,15 +77,15 @@
 (defun init (main argc argv auxv)
   "GNU libc initialization stub"
   (declare (external "__libc_start_main")
-           (context (arch "mips")))
-  (set T9 main)
-  (set RA @__libc_csu_fini)
+           (context (target "mips") (abi "gnu")))
+  (set R25 main)
+  (set R31 @__libc_csu_fini)
   (exit-with (invoke-subroutine main argc argv)))
 
 (defun init (main argc argv auxv)
   "GNU libc initialization stub"
   (declare (external "__libc_start_main")
-           (context (arch "mips64") (abi "mips64")))
-  (set T9 main)
-  (set RA @__libc_csu_fini)
+           (context (target "mips64") (abi "gnu")))
+  (set R25 main)
+  (set R31 @__libc_csu_fini)
   (exit-with (invoke-subroutine main argc argv)))
