@@ -134,8 +134,35 @@
   (str-post rn (extract 15 0 rt) simm))
 
 
-; STRQui
-; STRDui
+(defun STR*ui (scale src reg off) 
+  "Stores a register of size (8 << scale) to the memory address 
+  (reg + (off << scale))."
+  (assert-msg (= (word-width src) (lshift 8 scale))
+      "(aarch64-data-movement.lisp) scale must match size of register ") 
+  (store-word (+ reg (lshift off scale)) 
+    (cast-unsigned (lshift 8 scale) src)))
+
+(defun STRQui (src reg off)
+  (STR*ui 4 src reg off))
+
+(defun STRDui (src reg off)
+  (STR*ui 3 src reg off))
+
+(defun STRSui (src reg off)
+  (STR*ui 2 src reg off))
+
+(defun STRHui (src reg off)
+  (STR*ui 1 src reg off))
+
+(defun STRBui (src reg off)
+  (STR*ui 0 src reg off))
+
+(defun STRXui (src reg off)
+  (STR*ui 3 src reg off))
+
+; note this will not work with src = 'W0 since (word-width 'w0) = 64 .
+(defun STRWui (src reg off)
+  (STR*ui 2 src reg off))
 
 ; STRH (base reg), signed offset variant
 (defun STRHHui (rt rn off)
@@ -146,6 +173,7 @@
   (store-byte base rt)
   (set$ base (+ base simm)))
 
+
 (defun STRBBroW (rt rn rm option shift)
   (let ((off
     (if (= option 1)
@@ -154,7 +182,10 @@
     (store-byte (+ rn off) rt)))
 
 (defun STRBBroX (rt rn rm option shift)
-  (let ((off (signed-extend 64 rm)))  ; SXTX
+  (let ((off 
+    (if (= option 1)
+        (signed-extend 64 rm)         ; SXTX
+      (unsigned-extend 64 rm))))      ; LSL
     (store-byte (+ rn off) rt)))
 
 (defun STPXpre (dst t1 t2 _ off)
@@ -178,14 +209,6 @@
   (let ((datasize 128) (off (* imm 16)))
     (store-word (+ base off) rt)
     (store-word (+ base off datasize) rt2)))
-
-(defun STRXui (src reg off)
-  (let ((off (lshift off 3)))
-    (store-word (+ reg off) src)))
-
-(defun STRWui (src reg off)
-  (let ((off (lshift off 2)))
-    (store-word (+ reg off) (cast-low 32 src))))
 
 ; addr + offset indexed STUR
 (defmacro STUR*i (src base off size)
