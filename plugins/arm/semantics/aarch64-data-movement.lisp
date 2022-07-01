@@ -229,13 +229,13 @@
 
 ; STP
 
-(defun store-pair (scale indexing t1 t2 dst off) 
-  "store the pair t1,t2 of size (8 << scale)at the register dst plus an offset, 
+(defun store-pair (scale indexing t1 t2 dst imm) 
+  "store the pair t1,t2 of size (8 << scale) at the register dst plus an offset, 
   using the specified indexing."
   (assert-msg (and (= (word-width t1) (lshift 8 scale)) 
       (= (word-width t2) (lshift 8 scale)))
       "(aarch64-data-movement.lisp) scale must match size of register ") 
-  (let ((off (lshift off scale)) (datasize (lshift 8 scale))
+  (let ((off (lshift (cast-signed 64 imm) scale)) (datasize (lshift 8 scale))
       (addr (case indexing
               'post dst
               'pre  (+ dst off)
@@ -244,7 +244,7 @@
       "(aarch64-data-movement.lisp) invalid indexing scheme.")))
             )
     (store-word addr t1)
-    (store-word (+ addr datasize) t2)
+    (store-word (+ addr (/ datasize 8)) t2)
     (case indexing
        'post (set$ dst (+ addr off))
        'pre  (set$ dst addr)
