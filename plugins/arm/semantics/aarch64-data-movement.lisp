@@ -110,7 +110,7 @@
  (str-reg 0 rt rn rm option shift))
 
 (defun STRHroX  (rt rn rm option shift)
- (str-reg 1 rt rn rm option shift))
+ (str-reg 1 (cast-low 16 rt) rn rm option shift))
 
 (defun STRSroX  (rt rn rm option shift)
  (str-reg 2 rt rn rm option shift))
@@ -132,7 +132,7 @@
  (str-reg 0 rt rn rm option shift))
 
 (defun STRHroW  (rt rn rm option shift)
- (str-reg 1 rt rn rm option shift))
+ (str-reg 1 (cast-low 16 rt) rn rm option shift))
 
 (defun STRSroW  (rt rn rm option shift)
  (str-reg 2 rt rn rm option shift))
@@ -145,7 +145,7 @@
 
 ; STRHHroX
 (defun STRHHroX (rt rn rm option shift)
-  (str-reg 0 rt rn rm option shift))
+  (str-reg 1 (cast-low 16 rt) rn rm option shift))
 
 ; STR (immediate) (base registers):
 (defun str-post (xreg src off)
@@ -206,7 +206,7 @@
 
 ; STRH (base reg), signed offset variant
 (defun STRHHui (rt rn off)
-  (store-word (+ rn off) (cast-low 16 rt)))
+  (store-word (+ rn (lshift off 1)) (cast-low 16 rt)))
 
 ; STRB post-indexed
 (defun STRBBpost (_ rt base simm)
