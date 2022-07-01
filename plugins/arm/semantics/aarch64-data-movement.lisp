@@ -85,26 +85,67 @@
   (store-byte (+ reg off) src))
 
 ; STR (register)
-(defun str-reg (rt rn rm signed shift)
+(defun str-reg (scale rt rn rm signed shift)
+  "stores rt to (rn + rm << (shift * scale)) with signed or unsigned extension 
+  of rm, where rt is a register of size (8 << scale). Note that rm can be an X 
+  or W register and it chooses the appropriate extend mode implicitly. rn must 
+  be an X register."
   (assert (< signed 2))
+  (assert-msg (= (word-width rt) (lshift 8 scale))
+      "(aarch64-data-movement.lisp:str-reg) scale must match size of rt") 
   (store-word (+ rn 
      (if (= signed 1) 
-       (signed-extend   (word-width rm) (lshift rm shift))
-       (unsigned-extend (word-width rm) (lshift rm shift)))) 
+       (signed-extend   (word-width rm) (lshift rm (* shift scale)))
+       (unsigned-extend (word-width rm) (lshift rm (* shift scale))))) 
       rt))
 
+; rm is an X register
 (defun STRWroX  (rt rn rm option shift)
- (str-reg rt rn rm option (* shift 2)))
+ (str-reg 2 rt rn rm option shift))
 
 (defun STRXroX (rt rn rm option shift)
- (str-reg rt rn rm option (* shift 3)))
+ (str-reg 3 rt rn rm option shift))
+
+(defun STRBroX  (rt rn rm option shift)
+ (str-reg 0 rt rn rm option shift))
+
+(defun STRHroX  (rt rn rm option shift)
+ (str-reg 1 rt rn rm option shift))
+
+(defun STRSroX  (rt rn rm option shift)
+ (str-reg 2 rt rn rm option shift))
+
+(defun STRDroX (rt rn rm option shift)
+  (str-reg 3 rt rn rm option shift))
 
 (defun STRQroX (rt rn rm option shift)
-  (str-reg rt rn rm option (* shift 4)))
+  (str-reg 4 rt rn rm option shift))
+
+; rm is a W register
+(defun STRWroW  (rt rn rm option shift)
+ (str-reg 2 rt rn rm option shift))
+
+(defun STRXroW (rt rn rm option shift)
+ (str-reg 3 rt rn rm option shift))
+
+(defun STRBroW  (rt rn rm option shift)
+ (str-reg 0 rt rn rm option shift))
+
+(defun STRHroW  (rt rn rm option shift)
+ (str-reg 1 rt rn rm option shift))
+
+(defun STRSroW  (rt rn rm option shift)
+ (str-reg 2 rt rn rm option shift))
+
+(defun STRDroW (rt rn rm option shift)
+  (str-reg 3 rt rn rm option shift))
+
+(defun STRQroW (rt rn rm option shift)
+  (str-reg 4 rt rn rm option shift))
 
 ; STRHHroX
 (defun STRHHroX (rt rn rm option shift)
-  (str-reg rt rn rm option shift))
+  (str-reg 0 rt rn rm option shift))
 
 ; STR (immediate) (base registers):
 (defun str-post (xreg src off)
@@ -138,7 +179,7 @@
   "Stores a register of size (8 << scale) to the memory address 
   (reg + (off << scale))."
   (assert-msg (= (word-width src) (lshift 8 scale))
-      "(aarch64-data-movement.lisp) scale must match size of register ") 
+      "(aarch64-data-movement.lisp:STR*ui) scale must match size of register") 
   (store-word (+ reg (lshift off scale)) 
     (cast-unsigned (lshift 8 scale) src)))
 
