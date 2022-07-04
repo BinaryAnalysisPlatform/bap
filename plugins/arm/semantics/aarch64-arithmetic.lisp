@@ -96,6 +96,8 @@
 (defun MSUBWrrr (rd rn rm ra) (Mop*rrr setw - rd rn rm ra))
 (defun MSUBXrrr (rd rn rm ra) (Mop*rrr set$ - rd rn rm ra))
 
+(defun UMADDLrrr (rd rn rm ra) (set$ rd (cast-low 64 (+ ra (* rn rm)))))
+
 (defmacro *DIV*r (set div rd rn rm)
   "(*DIV*r set div rd rn rm) implements the SDIV or UDIV instructions
    on W or X registers, with div set to s/ or / respectively."
