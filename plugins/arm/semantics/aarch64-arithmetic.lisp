@@ -51,7 +51,7 @@
 
 (defmacro SUB*r* (set shift-function rd rn imm-or-rm off)
   "Implements SUB*ri and SUB*rs by specifying the shift function."
-  (set rd (- rn (shift-function imm-or-rm off))))
+  (set rd (cast-low (word-width rd) (- rn (shift-function imm-or-rm off)))))
 
 ;; see ADD*ri vs ADD*rs
 (defun SUBWri (rd rn rm off) (SUB*r* setw lshift rd rn rm off))
