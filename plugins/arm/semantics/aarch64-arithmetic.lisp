@@ -62,15 +62,20 @@
 (defun SUBXrx (rd rn rm off)
   (set$ rd (- rn (extended rm off))))
 
-(defun SUBXrw (rd rn rm off)
-  (setw rd (- rn (extended rm off))))
-
-
 (defun SUBXrx64 (rd rn rm off)
   (set$ rd (- rn (extended rm off))))
 
+(defun SUBXrw (rd rn rm off)
+  (setw rd (- rn (extended rm off))))
+
 (defun SUBSWrs (rd rn rm off)
   (add-with-carry/clear-base rd rn (lnot (shift-encoded rm off)) 1))
+
+(defun SUBSXrx (rd rn rm off)
+  (add-with-carry set$ rd rn (lnot (shift-encoded rm off)) 1))
+
+(defun SUBSXrx64 (rd rn rm off)
+  (add-with-carry set$ rd rn (lnot (shift-encoded rm off)) 1))
 
 (defun SUBSXrs (rd rn rm off)
   (add-with-carry set$ rd rn (lnot (shift-encoded rm off)) 1))
