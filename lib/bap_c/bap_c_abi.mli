@@ -322,17 +322,29 @@ module Arg : sig
       @since 2.5.0  *)
   val discard : ?n:int -> arena -> unit t
 
-  (** [reference arena t] passes the argument of type [t] as a pointer
-      to [t] via the first available register in [arena].
+  (** [reference arena t] passes a hidden pointer to [t] via
+      the first available register in [arena].
 
       Rejects the computation if there are no available registers in
-      [arena] or if the target doesn't have a register with the stack
-      pointer role. The size of [t] is not required. *)
+      [arena]. The size of [t] is not required.
+
+      Note, that [reference] and [hidden] are increasing the number of
+      hidden arguments of a subroutine, but do not add the actual
+      arguments.  *)
   val reference : arena -> ctype -> unit t
 
 
-  (** [hidden t] passes the argument of type [t] as a pointer
-      to [t] via the first available stack slot.
+  (** [pointer arena t] passes argument [t] as a pointer.
+
+      Rejects the computation if [arena] is empty. The size of [t] is
+      not required.
+
+      @since 2.5.0  *)
+  val pointer : arena -> ctype -> unit t
+
+
+  (** [hidden t] inserts a hidden pointer to [t] into the next
+      available stack slot.
 
       The computation is rejected if the target doesn't have a stack.
 
