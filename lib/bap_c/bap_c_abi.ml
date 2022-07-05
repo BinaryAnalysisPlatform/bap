@@ -169,14 +169,12 @@ let coerce ltyp rtyp exp = match ltyp,rtyp with
 
 
 let create_arg size i intent name t (data,exp) sub =
-  let ltyp = match size#bits t with
-    | None -> Type.imm (Size.in_bits size#pointer)
-    | Some m -> Type.imm m in
   let layout = match data with
     | Data.Ptr _ ->
       if Bap_c_type.is_pointer t then layout size t
       else layout size (Bap_c_type.pointer t)
     | _ -> layout size t in
+  let ltyp = Type.imm (size_of_layout size layout) in
   let rtyp = Type.infer_exn exp in
   let name = if String.is_empty name then sprintf "arg%d" (i+1) else name in
   let var = Var.create (Sub.name sub ^ "_" ^ name) ltyp in
@@ -631,6 +629,9 @@ module Arg = struct
 
   let reference file t =
     with_hidden @@ fun () ->
+    register file (C.Type.pointer t)
+
+  let pointer file t =
     register file (C.Type.pointer t)
 
   let update_stack f =
