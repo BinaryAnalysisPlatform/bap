@@ -15,27 +15,6 @@
 
 ;;; LDs..
 
-;; opcde = 1000, rpt = 1, selem = 2
-;; L = 1, MEMOP_LOAD
-;; T = 16B, imm = #32, Q = 1, size = 00
-;; datasize = 128, esize = 8
-;; elements = 16
-;; address = xn
-;; offs = Zeroes(64)
-;; pseudocode:
-;; offs(64) = 0
-
-;; for r = 0 to r = 0
-;; for e = 0 to e = 15
-;; tt = (UInt(Rt) + 0) MOD 32 = a;   --- this is getting the vector reg from the instruction Rt field, which in this case will just be a
-;; for s = 0 to s = 1
-;; rval = V(tt) = _Z[tt]<127:0> = qa
-;; Elem[rval, e, 8] = rval<(e+1)*size-1:e*size> = Mem[address+offs, 1, AccType_VEC] = load-byte (+ xn imm)
-;; V[tt] = rval
-;; offs = offs + 1
-;; tt = (tt + 1) MOD 32 = (a + 1) MOD 32 = b;
-;; if xn given, offs = X[n]
-;; set if address/X reg given
 (defun LD2Twov16b_POST (_ qa_qb xn xm) 
   "(LD2Twov16b_POST redundant qa_qb xn imm) loads multiple 2-element structures from memory at address xn with offset imm and stores it in qa and qb with de-interleaving. NOTE: does not encode Security state & Exception level"
 	(let ((qa (get-first-128b-reg qa_qb))
@@ -44,13 +23,11 @@
 		(set$ xn (+ xn xm))))
 
 (defun insert-a (qa qb address e)
-	(msg "insert-a: $0" e)
 	(when (< e 16)
 		(insert-element-into-vector qa e (load-byte address) 8)
 		(insert-b qa qb (+ address 1) e)))
 
 (defun insert-b (qa qb address e)
-	(msg "insert-b: $0" e)
 	(insert-element-into-vector qb e (load-byte address) 8)
 	(insert-a qa qb (+ address 1) (+ e 1)))
 
