@@ -71,8 +71,18 @@ val create_api_processor : #Bap_c_size.base -> t -> Bap_api.t
 
 (** [data size t] creates an abstraction of data that is represented
     by type [t]. The [size] parameter defines a data model, e.g.,
-    sizes of primitive types, padding and alignment restrictions, etc.*)
+    sizes of primitive types, padding and alignment restrictions, etc.
+
+    The abstraction includes inner and trailing paddings, when
+    necessary. *)
 val data : #Bap_c_size.base -> Bap_c_type.t -> Bap_c_data.t
+
+
+(** [layout size t] computes the c data type layout.
+
+    @since 2.5.0 *)
+val layout : #Bap_c_size.base -> Bap_c_type.t -> Bap_c_data.layout
+
 
 (** [arg_intent t] infers argument intention based on its C type.  If
     an argument is passed by value, i.e., it is a c basic type, then

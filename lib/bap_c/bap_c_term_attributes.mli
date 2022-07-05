@@ -12,6 +12,12 @@ val data : Bap_c_data.t tag
     annotated function. *)
 val proto : proto tag
 
+
+(** [layout] describes the layout of a C object.
+
+    @since 2.5.0  *)
+val layout : Bap_c_data.layout tag
+
 (** A c type associated with a term. This attribute is attached to
     each inserted arg term, but maybe propagated by further by other
     passes. *)
