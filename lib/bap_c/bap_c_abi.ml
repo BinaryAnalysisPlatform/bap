@@ -6,7 +6,7 @@ open Monads.Std
 include Self()
 
 module Attrs = Bap_c_term_attributes
-
+module Data = Bap_c_data
 type ctype = t
 
 let is_const p = p.Spec.qualifier.Qualifier.const
@@ -40,7 +40,7 @@ type error = [
 ] [@@deriving sexp_of]
 
 let sexp_of_exp exp = Sexp.Atom (Exp.to_string exp)
-type param = Bap_c_data.t * exp [@@deriving sexp]
+type param = Data.t * exp [@@deriving sexp]
 
 type args = {
   return : param option;
@@ -58,32 +58,95 @@ exception Failed of error [@@deriving sexp_of]
 let fail x = raise (Failed x)
 
 let data (size : #Bap_c_size.base) (t : Bap_c_type.t) =
-  let open Bap_c_data in
+  let open Data in
+  let sizeof t = match size#bits t with
+    | None -> Size.in_bits size#pointer
+    | Some s -> s in
+  let padding pad : Data.t =
+    match Size.of_int_opt pad with
+    | Some pad -> Imm (pad,Set [])
+    | None ->
+      let data : Data.t = Imm (`r8,Set []) in
+      Seq (List.init (pad/8) ~f:(Fn.const data)) in
   let rec data = function
     | `Void -> Seq []
     | `Basic {Spec.t} -> Imm (size#basic t, Top)
     | `Pointer {Spec.t} -> Ptr (data t)
     | `Array {Spec.t={Array.element=t; size=None}} -> Ptr (data t)
     | `Array {Spec.t={Array.element=t; size=Some n}} ->
-      let et = data t in
-      Ptr (Seq (List.init n ~f:(fun _ -> et)))
+      Ptr (Seq (List.init n ~f:(Fn.const (data t))))
     | `Structure {Spec.t={Compound.fields=fs}} ->
-      let _,ss =
-        List.fold fs ~init:(0,[]) ~f:(fun (off,seq) (_,t) ->
-            let off' = match size#bits t with
-              | None -> off + Size.in_bits size#pointer (* or assert false *)
-              | Some sz -> off + sz in
-            match size#padding t off with
-            | None ->  off', data t :: seq
-            | Some pad -> off, data t :: Imm (pad,Set []) :: seq) in
+      List.fold fs ~init:(0,0,[]) ~f:(fun (off,total,seq) (_,t) ->
+          let fsize = sizeof t in
+          let pad = Bap_c_size.padding (size#alignment t) off in
+          off + fsize + pad, total + fsize + pad, match pad with
+          | 0 -> data t :: seq
+          | _ -> data t :: padding pad :: seq) |> fun (_,total,ss) ->
+      let fullsize = sizeof t in
+      let pad = max 0 (fullsize - total) in
+      let ss = if pad = 0 then ss else padding (fullsize-total) :: ss in
       Seq (List.rev ss)
-    | `Union {Spec.t=_} ->
-      let sz = match size#bits t with
-        | None -> Size.in_bits size#pointer
-        | Some sz -> sz in
-      Seq (List.init (sz/8) ~f:(fun _ -> Imm (`r8,Set [])))
+    | `Union _ ->
+      let sz = sizeof t in
+      Seq (List.init (sz/8) ~f:(fun _ -> Imm (`r8,Top)))
     | `Function _ -> Ptr (Imm ((size#pointer :> size),Top)) in
   data t
+
+let layout (size : #Bap_c_size.base) (t : Bap_c_type.t) =
+  let open Data in
+  let sizeof t = match size#bits t with
+    | None -> Size.in_bits size#pointer
+    | Some s -> s in
+  let imm size obj : Data.layout = {layout=Imm(size,obj)}
+  and ptr {layout=data} : Data.layout = {layout=Ptr data}
+  and seq layouts : Data.layout = {
+    layout = Seq (List.map layouts ~f:(fun {layout} -> layout))
+  } in
+  let padding pad : Data.layout = imm pad Undef in
+  let rec layout t : Data.layout = match t with
+    | `Void -> imm 8 Undef
+    | `Basic {Spec.t} -> imm (Size.in_bits (size#basic t)) (Basic t)
+    | `Pointer {Spec.t} -> ptr (layout t)
+    | `Array {Spec.t={Array.element=t; size=None}} -> ptr (layout t)
+    | `Array {Spec.t={Array.element=t; size=Some n}} ->
+      ptr (seq (List.init n ~f:(Fn.const (layout t))))
+    | `Structure {Spec.t={Compound.fields=fs}} ->
+      List.fold fs ~init:(0,0,[]) ~f:(fun (off,total,seq) (name,t) ->
+          let fsize = sizeof t in
+          let pad = Bap_c_size.padding (size#alignment t) off in
+          off + fsize + pad, total + fsize + pad,
+          imm fsize (Field (name,layout t)) ::
+          match pad with
+          | 0 -> seq
+          | _ -> padding pad :: seq) |> fun (_,total,ss) ->
+      let fullsize = sizeof t in
+      let pad = max 0 (fullsize - total) in
+      let ss = if pad = 0 then ss else padding (fullsize-total) :: ss in
+      seq (List.rev ss)
+    | `Union {Spec.t={Compound.fields=fs}} ->
+      let total = sizeof t in
+      let variants = List.map fs ~f:(fun (name,t) ->
+          let fsize = sizeof t in
+          let pad = max 0 (total - fsize) in
+          let field = imm fsize @@ Field (name, layout t) in
+          match pad with
+          | 0 -> field
+          | _ -> seq [field; padding pad]) in
+      imm total (Union variants)
+    | `Function _ -> ptr (imm (Size.in_bits (size#pointer)) Undef) in
+  layout t
+
+let rec size_of_data size : Data.t -> int = function
+  | Imm (size,_) -> Size.in_bits size
+  | Seq xs -> List.sum (module Int) ~f:(size_of_data size) xs
+  | Ptr _ -> Size.in_bits (size#pointer)
+
+let rec size_of_layout size : Data.layout -> int =
+  fun {layout} -> size_of_datum size layout
+and size_of_datum size : _ Data.datum -> int = function
+  | Imm (size,_) -> size
+  | Seq xs -> List.sum (module Int) ~f:(size_of_datum size) xs
+  | Ptr _ -> Size.in_bits (size#pointer)
 
 let array_to_pointer (t : ctype) : ctype =
   match t with
@@ -109,12 +172,18 @@ let create_arg size i intent name t (data,exp) sub =
   let ltyp = match size#bits t with
     | None -> Type.imm (Size.in_bits size#pointer)
     | Some m -> Type.imm m in
+  let layout = match data with
+    | Data.Ptr _ ->
+      if Bap_c_type.is_pointer t then layout size t
+      else layout size (Bap_c_type.pointer t)
+    | _ -> layout size t in
   let rtyp = Type.infer_exn exp in
   let name = if String.is_empty name then sprintf "arg%d" (i+1) else name in
   let var = Var.create (Sub.name sub ^ "_" ^ name) ltyp in
   let arg = Arg.create ~intent var @@ coerce ltyp rtyp exp in
   let arg = Term.set_attr arg Attrs.data data in
   let arg = Term.set_attr arg Attrs.t t in
+  let arg = Term.set_attr arg Attrs.layout layout in
   arg
 
 let registry = Hashtbl.create (module String)
@@ -242,7 +311,7 @@ module Arg = struct
   module C = struct
     module Size = Bap_c_size
     module Type = Bap_c_type
-    module Data = Bap_c_data
+    module Data = Data
   end
 
   module Stack : sig
