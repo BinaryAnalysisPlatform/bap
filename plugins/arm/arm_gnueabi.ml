@@ -1,30 +1,26 @@
 open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Bap_c.Std
+open Bap_core_theory
 
-include Self()
+module Arg = C.Abi.Arg
+open Arg.Language
+
+let data model = object(self)
+  inherit C.Size.base model
+  method! enum elts =
+    if Int64.(C.Size.max_enum_elt elts < (1L lsl 32))
+    then self#integer `uint
+    else self#integer `ulong_long
+  method! real = function
+    | `float -> `r32
+    | `double | `long_double -> `r64
+end
 
 module Aapcs32 = struct
-  open Bap_core_theory
-  open Bap_c.Std
-  open Bap.Std
-
-  module Arg = C.Abi.Arg
-  open Arg.Language
-
-  let model = object(self)
-    inherit C.Size.base `ILP32
-    method! enum elts =
-      if Int64.(C.Size.max_enum_elt elts < (1L lsl 32))
-      then self#integer `uint
-      else self#integer `ulong_long
-    method! real = function
-      | `float -> `r32
-      | `double | `long_double -> `r64
-  end
 
   let define t =
-    install t model @@ fun describe ->
+    install t (data `ILP32) @@ fun describe ->
     let* iargs = Arg.Arena.iargs t in
     let* irets = Arg.Arena.irets t in
     let rev = Theory.Endianness.(Theory.Target.endianness t = le) in
@@ -44,41 +40,15 @@ module Aapcs32 = struct
         Arg.memory
       ];
     ]
-
-  let supported_abis = Theory.Abi.[unknown; gnueabi; eabi]
-  let is_our_abi abi = List.exists supported_abis ~f:(Theory.Abi.equal abi)
-
-
-  let install () =
-    Theory.Target.family Arm_target.parent |>
-    List.iter ~f:(fun t ->
-        if Theory.Target.bits t = 32 &&
-           is_our_abi (Theory.Target.abi t)
-        then define t)
 end
 
-
 module Aapcs64 = struct
-  open Bap_core_theory
-  open Bap_c.Std
-  open Bap.Std
-
-  let name = "aapcs64"
-
-  module Arg = C.Abi.Arg
-  open Arg.Language
-
-  let data_model t =
-    let bits = Theory.Target.bits t in
-    new C.Size.base (if bits = 32 then `ILP32 else `LP64)
-
   let is_composite t =
     C.Type.(is_structure t || is_union t)
 
   let define t =
-    let model = data_model t in
+    let model = data `LP64 in
     let rev = Theory.Endianness.(Theory.Target.endianness t = le) in
-
     install t model @@ fun describe ->
     let* iargs = Arg.Arena.iargs t in
     let* irets = Arg.Arena.irets t in
@@ -126,20 +96,17 @@ module Aapcs64 = struct
         ]
       ]
     ]
-
-  let is_our_abi abi = List.exists ~f:(Theory.Abi.equal abi) Theory.Abi.[
-      unknown; gnu; eabi;
-    ]
-
-  let install () =
-    Theory.Target.family Arm_target.parent |>
-    List.iter ~f:(fun t ->
-        if Theory.Target.bits t = 64 && is_our_abi (Theory.Target.abi t)
-        then define t)
-
-
 end
 
+let is_our_abi abi = List.exists ~f:(Theory.Abi.equal abi) Theory.Abi.[
+    unknown; gnu; eabi; gnueabi;
+  ]
+
 let setup () =
-  Aapcs32.install ();
-  Aapcs64.install ();
+  Theory.Target.family Arm_target.parent |>
+  List.iter ~f:(fun t ->
+      if is_our_abi (Theory.Target.abi t)
+      then match Theory.Target.bits t with
+        | 64 -> Aapcs64.define t
+        | 32 -> Aapcs32.define t
+        | _ -> ())

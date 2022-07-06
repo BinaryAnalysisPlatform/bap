@@ -544,14 +544,14 @@ module Abi = struct
 
   let calling_conventions = [
     (* 16-bit ABI *)
-    [i286], [
+    i286, [
       Abi.cdecl, cdecl16;
       Abi.pascal, pascal16;
       Abi.fortran, pascal16;
     ];
 
     (* 32-bit ABI  *)
-    [i386; i486; i586; i686], [
+    i386, [
       Abi.sysv, cdecl;
       Abi.cdecl, cdecl;
       Abi.pascal, pascal;
@@ -561,7 +561,7 @@ module Abi = struct
     ];
 
     (* 64-bit ABI *)
-    [amd64], [
+    amd64, [
       Abi.ms, ms64;
       Abi.sysv, sysv;
     ]
@@ -579,9 +579,8 @@ module Abi = struct
   ]
 
   let install_calling_conventions () =
-    List.iter calling_conventions ~f:(fun (targets,args) ->
-        List.cartesian_product targets args |>
-        List.iter ~f:(fun (parent,(abi,install)) ->
+    List.iter calling_conventions ~f:(fun (parent,abis) ->
+        List.iter abis ~f:(fun (abi,install) ->
             Theory.Target.filter ~parent ~abi () |>
             List.iter ~f:(fun t ->
                 if Theory.Target.bits t = Theory.Target.bits parent
