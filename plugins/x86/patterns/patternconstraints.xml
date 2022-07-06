@@ -1,0 +1,5 @@
+<patternconstraints>
+  <language id="x86_64">
+    <patternfile>cet.xml</patternfile>
+  </language>
+</patternconstraints>
