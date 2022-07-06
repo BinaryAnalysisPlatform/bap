@@ -258,7 +258,7 @@ module Family (Order : Endianness) = struct
         ~vars:vars32
         ~regs:regs32
 
-  let v4t = def "v4t" ~parent:v4 ~code_alignment:16
+  let v4t = def "armv4t" ~parent:v4 ~code_alignment:16
   let v5    = v4 <: "armv5"
   let v5t   = v5 <: "armv5t"
   let v5te  = v5t <: "armv5te"
