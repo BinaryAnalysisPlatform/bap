@@ -74,7 +74,8 @@ Library x86_plugin
                    X86_legacy_fp_lifter,
                    X86_legacy_bil_register,
                    X86_legacy_operands
- DataFiles:        semantics/*.lisp ($datadir/bap/primus/semantics)
+ DataFiles:        semantics/*.lisp ($datadir/bap/primus/semantics),
+                   patterns/*.xml ($datadir/bap/signatures/x86)
  XMETAExtraLines:  tags="disassembler, lifter, x86, abi"
 
 Library x86_test
