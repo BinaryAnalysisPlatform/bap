@@ -135,20 +135,20 @@
         (cast-low (- (word-width x) container-size) x)))))
 
 (defun insert-element-into-vector (vd index element size)
-	"(insert-element-into-vector vd index element size) inserts element into vd[index], where size is in {8,16,32,64}"
-	(let ((highIndex (- (* size (+ index 1) 1)))
-				(lowIndex (* size index)))
-		(set$ vd (replace-bit-range vd highIndex lowIndex element))))
-;;				(mask (concat () () ()))
-;;				(topPart (rshift vd highIndex)))
-;;		(if (> index 0)
-;;				(let ((mask (replicate-to-fill (cast-low 1 0x1) lowIndex))
-;;							(bottomPart (logand vd mask)))
-;;					(set$ vd (extract 127 0 (concat topPart element bottomPart))))
-;;			(set$ vd (extract 127 0 (concat topPart element))))))
+  "(insert-element-into-vector vd index element size) inserts element into vd[index], where size is in {8,16,32,64}"
+  (let ((highIndex (- (* size (+ index 1) 1)))
+        (lowIndex (* size index)))
+    (set$ vd (replace-bit-range vd highIndex lowIndex element))))
+;;        (mask (concat () () ()))
+;;        (topPart (rshift vd highIndex)))
+;;    (if (> index 0)
+;;        (let ((mask (replicate-to-fill (cast-low 1 0x1) lowIndex))
+;;              (bottomPart (logand vd mask)))
+;;          (set$ vd (extract 127 0 (concat topPart element bottomPart))))
+;;      (set$ vd (extract 127 0 (concat topPart element))))))
 
 (defun get-vector-S-element (index vn)
-	"(get-vector-S-element) returns the 32 bit element from vn[index]"
+  "(get-vector-S-element) returns the 32 bit element from vn[index]"
   (case index
     0x0 (extract 31 0 vn)
     0x1 (extract 63 32 vn)
@@ -157,78 +157,78 @@
     0x0))
 
 (defun load-dbyte (address) 
-	"(load-dbyte address) loads two bytes from memory."
-	(load-bits 16 address))
+  "(load-dbyte address) loads two bytes from memory."
+  (load-bits 16 address))
 
 (defun get-first-128b-reg (qa_qb)
-	"(get-first-128b-reg qa_qb) returns the first register of a pair of vector registers."
-	(case (symbol qa_qb)
-		'Q0_Q1	'Q0
-		'Q1_Q2	'Q1
-		'Q2_Q3	'Q2
-		'Q3_Q4	'Q3
-		'Q4_Q5	'Q4
-		'Q5_Q6	'Q5
-		'Q6_Q7	'Q6
-		'Q7_Q8	'Q7
-		'Q8_Q9	'Q8
-		'Q9_Q10	'Q9
-		'Q10_Q11	'Q10
-		'Q11_Q12	'Q11
-		'Q12_Q13	'Q12
-		'Q13_Q14	'Q13
-		'Q14_Q15	'Q14
-		'Q15_Q16	'Q15
-		'Q16_Q17	'Q16
-		'Q17_Q18	'Q17
-		'Q18_Q19	'Q18
-		'Q19_Q20	'Q19
-		'Q20_Q21	'Q20
-		'Q21_Q22	'Q21
-		'Q22_Q23	'Q22
-		'Q23_Q24	'Q23
-		'Q24_Q25	'Q24
-		'Q25_Q26	'Q25
-		'Q26_Q27	'Q26
-		'Q27_Q28	'Q27
-		'Q28_Q29	'Q28
-		'Q29_Q30	'Q29
-		'Q30_Q31	'Q30
-		'Q0))
+  "(get-first-128b-reg qa_qb) returns the first register of a pair of vector registers."
+  (case (symbol qa_qb)
+    'Q0_Q1    'Q0
+    'Q1_Q2    'Q1
+    'Q2_Q3    'Q2
+    'Q3_Q4    'Q3
+    'Q4_Q5    'Q4
+    'Q5_Q6    'Q5
+    'Q6_Q7    'Q6
+    'Q7_Q8    'Q7
+    'Q8_Q9    'Q8
+    'Q9_Q10   'Q9
+    'Q10_Q11  'Q10
+    'Q11_Q12  'Q11
+    'Q12_Q13  'Q12
+    'Q13_Q14  'Q13
+    'Q14_Q15  'Q14
+    'Q15_Q16  'Q15
+    'Q16_Q17  'Q16
+    'Q17_Q18  'Q17
+    'Q18_Q19  'Q18
+    'Q19_Q20  'Q19
+    'Q20_Q21  'Q20
+    'Q21_Q22  'Q21
+    'Q22_Q23  'Q22
+    'Q23_Q24  'Q23
+    'Q24_Q25  'Q24
+    'Q25_Q26  'Q25
+    'Q26_Q27  'Q26
+    'Q27_Q28  'Q27
+    'Q28_Q29  'Q28
+    'Q29_Q30  'Q29
+    'Q30_Q31  'Q30
+    'Q0))
 
 (defun get-second-128b-reg (qa_qb)
-	"(get-second-128b-reg qa_qb) returns the first register of a pair of vector registers."
-	(case (symbol qa_qb)
-		'Q0_Q1	'Q1
-		'Q1_Q2	'Q2
-		'Q2_Q3	'Q3
-		'Q3_Q4	'Q4
-		'Q4_Q5	'Q5
-		'Q5_Q6	'Q6
-		'Q6_Q7	'Q7
-		'Q7_Q8	'Q8
-		'Q8_Q9	'Q9
-		'Q9_Q10	'Q10
-		'Q10_Q11	'Q11
-		'Q11_Q12	'Q12
-		'Q12_Q13	'Q13
-		'Q13_Q14	'Q14
-		'Q14_Q15	'Q15
-		'Q15_Q16	'Q16
-		'Q16_Q17	'Q17
-		'Q17_Q18	'Q18
-		'Q18_Q19	'Q19
-		'Q19_Q20	'Q20
-		'Q20_Q21	'Q21
-		'Q21_Q22	'Q22
-		'Q22_Q23	'Q23
-		'Q23_Q24	'Q24
-		'Q24_Q25	'Q25
-		'Q25_Q26	'Q26
-		'Q26_Q27	'Q27
-		'Q27_Q28	'Q28
-		'Q28_Q29	'Q29
-		'Q29_Q30	'Q30
-		'Q30_Q31	'Q31
-		'Q0))
+  "(get-second-128b-reg qa_qb) returns the first register of a pair of vector registers."
+  (case (symbol qa_qb)
+    'Q0_Q1    'Q1
+    'Q1_Q2    'Q2
+    'Q2_Q3    'Q3
+    'Q3_Q4    'Q4
+    'Q4_Q5    'Q5
+    'Q5_Q6    'Q6
+    'Q6_Q7    'Q7
+    'Q7_Q8    'Q8
+    'Q8_Q9    'Q9
+    'Q9_Q10   'Q10
+    'Q10_Q11  'Q11
+    'Q11_Q12  'Q12
+    'Q12_Q13  'Q13
+    'Q13_Q14  'Q14
+    'Q14_Q15  'Q15
+    'Q15_Q16  'Q16
+    'Q16_Q17  'Q17
+    'Q17_Q18  'Q18
+    'Q18_Q19  'Q19
+    'Q19_Q20  'Q20
+    'Q20_Q21  'Q21
+    'Q21_Q22  'Q22
+    'Q22_Q23  'Q23
+    'Q23_Q24  'Q24
+    'Q24_Q25  'Q25
+    'Q25_Q26  'Q26
+    'Q26_Q27  'Q27
+    'Q27_Q28  'Q28
+    'Q28_Q29  'Q29
+    'Q29_Q30  'Q30
+    'Q30_Q31  'Q31
+    'Q0))
 
