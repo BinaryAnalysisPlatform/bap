@@ -73,7 +73,7 @@ B lib/bap_llvm
 B lib/regular
 B lib/text_tags
 B lib/knowledge
-
+B lib/bap_powerpc
 
 S lib/bap
 S lib/bap_main

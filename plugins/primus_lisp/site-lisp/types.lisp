@@ -65,11 +65,11 @@
 (defun long ()  (declare (context (target mips64))) (model-ilp64 'long))
 (defun ptr_t () (declare (context (target mips64))) (model-ilp64 'ptr))
 
-(defun char ()  (declare (context (abi ppc32))) (model-ilp32 'char))
-(defun short () (declare (context (abi ppc32))) (model-ilp32 'short))
-(defun int ()   (declare (context (abi ppc32))) (model-ilp32 'int))
-(defun long ()  (declare (context (abi ppc32))) (model-ilp32 'long))
-(defun ptr_t () (declare (context (abi ppc32))) (model-ilp32 'ptr))
+(defun char ()  (declare (context (target powerpc) (bits 32))) (model-ilp32 'char))
+(defun short () (declare (context (target powerpc) (bits 32))) (model-ilp32 'short))
+(defun int ()   (declare (context (target powerpc) (bits 32))) (model-ilp32 'int))
+(defun long ()  (declare (context (target powerpc) (bits 32))) (model-ilp32 'long))
+(defun ptr_t () (declare (context (target powerpc) (bits 32))) (model-ilp32 'ptr))
 
 (defun char ()  (declare (context (arch x86_64 sysv))) (model-lp64 'char))
 (defun short () (declare (context (arch x86_64 sysv))) (model-lp64 'short))
