@@ -6,37 +6,66 @@
 
 ;; LD...
 
+;; LDR (register) 
+
+(defmacro LDR*ro* (rt base index signed s scale setf mem-load)
+  "(LDR*ro* rt base index signed s scale setf mem-load) loads a register from memory at the address calculated from a base register and optionally shifted and extended offset value. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment()"
+  (let ((shift (* s scale))
+        (off (if (= signed 1)
+          (cast-signed 64 (lshift index shift))
+          (cast-unsigned 64 (lshift index shift)))))
+    (setf rt (mem-load (+ base off)))))
+
+(defmacro LDRWro* (wt base index signed s) (LDR*ro* wt base index signed s 2 setw load-hword))
+(defmacro LDRXro* (xt base index signed s) (LDR*ro* xt base index signed s 3 set$ load-word))
+
+(defun LDRWroW (wt base index signed s) (LDRWro* wt base index signed s))
+(defun LDRWroX (wt base index signed s) (LDRWro* wt base index signed s))
+(defun LDRXroW (xt base index signed s) (LDRXro* xt base index signed s))
+(defun LDRXroX (xt base index signed s) (LDRXro* xt base index signed s))
+
+;; LDR (immediate, unsigned offset) 
+
 (defun LDRXui (dst reg off)
   (set$ dst (load-word (+ reg (lshift off 3)))))
-
-(defun LDRSWui (dst base off)
-  (set$ dst (cast-signed
-             (word)
-             (load-hword (+ base (lshift off 2))))))
 
 (defun LDRWui (dst reg off)
   (setw dst
         (cast-unsigned (word) (load-hword (+ reg (lshift off 2))))))
 
+;; LDRB (immediate, post-index)
+
 (defun LDRBBpost (_ dst base simm)
-	(setw dst (cast-unsigned 32 (load-byte base)))
-	(set$ base (+ base simm)))
+  "(LDRBBpost _ dst base simm) loads a byte from the base address and stores it in the 32 bit dst register, and increments the base register by simm. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment(), ConstrainUnpredictable()"
+  (setw dst (cast-unsigned 32 (load-byte base)))
+  (set$ base (+ base simm)))
+
+;; LDRB (immediate, pre-index)
 
 (defun LDRBBpre (_ dst base simm)
-	(setw dst (cast-unsigned 32 (load-byte (+ base simm)))))
+  "(LDRBBpre _ dst base simm) loads a byte from the base address and an offset simm and stores it in the 32 bit dst register. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment(), ConstrainUnpredictable()"
+  (setw dst (cast-unsigned 32 (load-byte (+ base simm)))))
+
+;; LDRB (immediate, unsigned offset)
 
 (defun LDRBBui (dst reg off)
+  "(LDRBBui _ dst base simm) loads a byte from a preindexed base address and an unsigned offset and stores it in the 32 bit dst register. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment(), ConstrainUnpredictable()"
   (setw dst
-        (cast-unsigned (word) (load-byte (+ reg off)))))
+        (cast-unsigned 32 (load-byte (+ reg off)))))
 
-(defun LDRBBroW (dst reg off signed shift)
-	(if (= signed 1)
-			(setw dst (cast-unsigned 32 (load-byte (+ reg (cast-signed 64 off)))))
-		(setw dst (cast-unsigned 32 (load-byte (+ reg (cast-unsigned 64 off)))))))
+;; LDRB (register)
 
-(defun LDRBBroX (dst reg off _ _)
-  (setw dst
-        (cast-unsigned (word) (load-byte (+ reg (cast-signed 64 off))))))
+(defmacro LDRBBro* (dst base index signed)
+  "(LDRBBro* dst base index signed) loads a byte from memory from a base address and index and stores it in a 32 bit destination register. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment()"
+  (let ((off (if (= signed 1)
+          (cast-signed 64 index)
+          (cast-unsigned 64 index))))
+    (setw dst (cast-unsigned 32 (load-byte (+ base off))))))
+
+(defun LDRBBroW (dst base index signed _) (LDRBBro* dst base index signed))
+(defun LDRBBroX (dst base index signed _) (LDRBBro* dst base index signed))
+
+;; LDP (post-index)
 
 (defun LDPXpost (dst r1 r2 base off)
   (let ((off (lshift off 3)))
@@ -44,18 +73,70 @@
     (set$ r2 (load-word (+ base (sizeof word))))
     (set$ dst (+ dst off))))
 
-(defun LDPXi (r1 r2 base off)
-  (let ((off (lshift off 3)))
-    (set$ r1 (load-word (+ base off)))
-    (set$ r2 (load-word (+ base off (sizeof word))))))
+;; LDP (signed offset)
 
-(defun LDPWi (wn wm xn off)
-	(let ((off (lshift off 2)))
-		(setw wn (load-hword (+ xn off)))
-		(setw wm (load-hword (+ xn off 4)))))
+(defmacro LDP*i (r1 r2 base imm scale datasize setf mem-load)
+  "(LDP*i r1 r2 base imm scale datasize setf mem-load) loads a pair of registers r1 and r2 from the address calculated from a base register value and immediate offset. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment()"
+  (let ((off (lshift (cast-signed 64 imm) scale)))
+    (setf r1 (mem-load (+ base off)))
+    (setf r2 (mem-load (+ base off (/ datasize 8))))))
 
-(defun LDRXroX (rt rn rm _ shift)
-  (set$ rt (load-word (+ rn (lshift rm (* shift 3))))))
+(defun LDPXi (r1 r2 base imm) (LDP*i r1 r2 base imm 3 64 set$ load-word))
+(defun LDPWi (w1 w2 base imm) (LDP*i w1 w2 base imm 2 32 setw load-hword))
+
+;; LDRH (register)
+
+(defmacro LDRHHro* (wt base index signed s)
+  "(LDRHHro* wt base index signed s) loads 2 bytes from the address calculated from a base register address and offset. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment()"
+  (let ((off (if (= signed 1)
+          (cast-signed 64 (lshift index s))
+          (cast-unsigned 64 (lshift index s)))))
+    (setw wt (load-dbyte (+ base off)))))
+
+(defun LDRHHroX (wt xn xm extend s) (LDRHHro* wt xn xm extend s))
+(defun LDRHHroW (wt xn wm extend s) (LDRHHro* wt xn wm extend s))
+
+;; LDRH (immediate, unsigned offset)
+
+(defun LDRHHui (wt xn pimm)
+  "(LDRHHui wt xn pimm) loads 2 bytes from the address calculated from a base register and unsigned immediate offset. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment()"
+  (let ((off (lshift (cast-unsigned 64 pimm) 1)))
+    (setw wt (load-dbyte (+ xn off)))))
+
+;; LDRSW (immediate, unsigned offset)
+
+(defun LDRSWui (dst base off)
+  (set$ dst (cast-signed
+             (word)
+             (load-hword (+ base (lshift off 2))))))
+
+;; LRDSW (register)
+
+(defmacro LDRSWro* (xt base index signed s)
+  "(LDRSWro* xt base index signed s) loads 32 bits from memory from a base address and offset and stores it in the destination register xt. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment()"
+  (let ((shift (* s 2))
+        (off (if (= signed 1)
+          (cast-signed 64 (lshift index shift))
+          (cast-unsigned 64 (lshift index shift)))))
+    (set$ xt (load-hword (+ base off)))))
+
+(defun LDRSWroX (xt base xm signed s) (LDRSWro* xt base xm signed s))
+(defun LDRSWroW (xt base wm signed s) (LDRSWro* xt base wm signed s))
+
+;; LDURB
+  
+(defun LDURBBi (wt base simm)
+  "(LDURBBi wt base simm) loads a byte from the address calculated from a base register and signed immediate offset and stores it in the 32 bit destination register. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment()"
+  (setw wt (load-byte (+ base simm))))
+
+;; LDUR
+
+(defmacro LDUR*i (rt base simm setf mem-load)
+  "(LDUR*i rt base simm setf mem-load) loads a register from the address calculated from a base register and signed immediate offset. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment()"
+  (setf rt (mem-load (+ base (cast-signed 64 simm)))))
+
+(defun LDURWi (wt base simm) (LDUR*i wt base simm setw load-hword))
+(defun LDURXi (xt base simm) (LDUR*i xt base simm set$ load-word))
 
 ;; MOV...
 

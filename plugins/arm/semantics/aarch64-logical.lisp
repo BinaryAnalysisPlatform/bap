@@ -80,7 +80,7 @@
 (defmacro BIC*r (setr rd rn rm is)
   "(BIC*r setr rd rn rm) stores the result of a logical and of rn with the complement of the contents of optionally shifted rm in rd"
   (let ((shift (shift-encoded rm is)) 
-	 (comp (lnot shift)))
+        (comp (lnot shift)))
     (setr rd (logand rn comp))))
 
 (defun BICWr (rd rn rm is) (BIC*r setw rd rn rm is))
@@ -88,11 +88,11 @@
 
 (defmacro BICS*rs (setr rd rn rm is)
   "(BICS*r setr rd rn rm) sets appropriate flags and stores the result of a logical and of rn with the complement of the contents of optionally shifted rm in rd"
- (let ((shift (shift-encoded rm is)) 
-	 (comp (lnot shift)) 
-	 (result (logand rn comp)))
+  (let ((shift (shift-encoded rm is)) 
+        (comp (lnot shift)) 
+        (result (logand rn comp)))
     (set-nzcv-after-logic-op result)
-  (setr rd result)))
+    (setr rd result)))
 
 (defun BICSWrs (rd rn rm is) (BICS*rs setw rd rn rm is))
 (defun BICSXrs (rd rn rm is) (BICS*rs set$ rd rn rm is))
@@ -109,6 +109,20 @@
 (defun REV16Xr (rd rn) (REVn*r setw 16 rd rn))
 (defun REV16Wr (rd rn) (REVn*r set$ 16 rd rn))
 (defun REV32Xr (rd rn) (REVn*r setw 32 rd rn))
+
+(defmacro LSLV*r (dest rn rm size setf)
+  "(LSLV*r dest rn rm size) logical shift lefts rn by the remainder of rm divided by the datasize and stores the result in the destination register."
+  (setf dest (lshift rn (mod rm size))))
+
+(defun LSLVWr (wd wn wm) (LSLV*r wd wn wm 32 setw))
+(defun LSLVXr (xd xn xm) (LSLV*r xd xn xm 64 set$))
+
+(defmacro LSRV*r (dest rn rm size setf)
+  "(LSRV*r dest rn rm size) logical shift rights rn by the remainder of rm divided by the datasize and stores the result in the destination register."
+  (setf dest (rshift rn (mod rm size))))
+
+(defun LSRVWr (wd wn wm) (LSRV*r wd wn wm 32 setw))
+(defun LSRVXr (xd xn xm) (LSRV*r xd xn xm 64 set$))
 
 ;; UBFM and SBFM
 ;; (bitfield moves)
