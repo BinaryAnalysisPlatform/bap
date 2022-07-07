@@ -34,8 +34,8 @@ let find_by_name prog name =
   Term.enum sub_t prog |> Seq.find ~f:(fun sub -> String.equal (Sub.name sub) name)
 
 let find_first_caller prog tid =
-  Term.enum sub_t prog |> Seq.find ~f:(fun sub ->
-      Term.enum blk_t sub |> Seq.exists ~f:(fun blk ->
+  Term.enum sub_t prog |> Seq.find_map ~f:(fun sub ->
+      Term.enum blk_t sub |> Seq.find ~f:(fun blk ->
           Term.enum jmp_t blk |> Seq.exists ~f:(fun jmp ->
               match Jmp.kind jmp with
               | Call c -> Label.equal (Call.target c) (Direct tid)
@@ -81,14 +81,12 @@ let find_libc_start_main prog =
 let detect_main_address prog =
   let open Option.Monad_infix in
   find_by_name prog "__libc_start_main" >>= fun start ->
-  find_first_caller prog (Term.tid start) >>= fun caller ->
-  Term.first blk_t caller >>= fun entry ->
+  find_first_caller prog (Term.tid start) >>= fun entry ->
   Term.first arg_t start >>= fun arg ->
   let defs = Term.enum def_t ~rev:true entry in
   match Arg.rhs arg with
-  | Bil.Var reg ->
-    Seq.find defs ~f:(fun def ->
-        Var.same (Def.lhs def) reg) >>| Def.rhs >>= proj_int
+  | Bil.Var reg -> Seq.find defs ~f:(fun def ->
+      Var.same (Def.lhs def) reg) >>| Def.rhs >>= proj_int
   | Bil.Load (_,addr,_,_) ->
     Seq.find_map defs ~f:(fun def -> match Def.rhs def with
         | Bil.Store (_,a,e,_,_) when Exp.equal addr a -> Some e
@@ -108,18 +106,14 @@ let rename_main abi prog =
   if is_sub_absent prog "main"
   then match detect_main_address prog with
     | None -> prog
-    | Some addr -> Term.map sub_t prog ~f:(fun sub ->
-        match Term.get_attr sub address with
-        | Some a when Addr.equal addr a ->
-          reinsert_args_for_new_name ~abi sub "main"
-        | _ -> sub)
+    | Some addr ->
+      info "the main subroutine address is %a" Addr.pp addr;
+      Term.map sub_t prog ~f:(fun sub ->
+          match Term.get_attr sub address with
+          | Some a when Addr.equal addr a ->
+            reinsert_args_for_new_name ~abi sub "main"
+          | _ -> sub)
   else prog
-
-let find_abi_processor proj =
-  let (let*) = Option.(>>=) in
-  let* name = Project.get proj Bap_abi.name in
-  let* proc = C.Abi.get_processor name in
-  Some proc
 
 let rename_libc_start_main prog =
   if is_sub_absent prog "__libc_start_main"
@@ -134,53 +128,21 @@ let rename_libc_start_main prog =
   else prog
 
 module Main = struct
-  let cv = C.Type.Qualifier.{
-      const = false;
-      volatile = false;
-      restrict = ();
-    }
-
-  let cvr = C.Type.Qualifier.{
-      const = false;
-      volatile = false;
-      restrict = false;
-    }
-
-  let basic t = `Basic C.Type.Spec.{t; attrs=[]; qualifier=cv}
-  let ptr t = `Pointer C.Type.Spec.{t; attrs=[]; qualifier=cvr}
-
-  let proto : C.Type.proto = C.Type.Proto.{
-      variadic = false;
-      return = basic `sint;
-      args = [
-        "argc", basic `sint;
-        "argv", ptr (ptr (basic `char));
-      ];
-    }
-
-  let var t (data : C.Data.t) name =
-    match data with
-    | Imm (sz,_) -> Var.create name (Type.Imm (Size.in_bits sz))
-    | Ptr _ ->
-      Var.create name (Type.Imm (Theory.Target.code_addr_size t))
-    | _ -> assert false
-
-  let arg intent t (data,exp) name =
-    Arg.create ~intent (var t data name) exp
+  let proto : C.Type.proto =
+    match C.Type.function_
+            ~return:(C.Type.basic `sint) [
+            "argc", C.Type.basic `sint;
+            "argv", C.Type.(pointer (pointer (basic `char)))
+          ]
+    with `Function {t=proto} -> proto
+       | _ -> assert false
 
   let abi proj main =
     let t = Project.target proj in
-    match find_abi_processor proj with
+    match C.Abi.lookup t with
     | None -> main
-    | Some {C.Abi.insert_args} ->
-      match insert_args main [] proto with
-      | Some {C.Abi.return=Some ret; params=[argc; argv]} ->
-        List.fold ~init:main ~f:(Term.append arg_t)[
-          arg In t argc "main_argc";
-          arg Both t argv "main_argv";
-          arg Out t ret "main_result";
-        ]
-      | _ -> main
+    | Some proc ->
+      C.Abi.apply proc (C.Abi.model t) [] proto main
 end
 
 let fix_main proj =
