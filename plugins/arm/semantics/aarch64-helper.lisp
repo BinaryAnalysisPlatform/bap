@@ -109,6 +109,15 @@
         (result (logor cleared (logand mask (lshift (cast-unsigned (word-width reg) val) lo)))))
     result))
 
+(defun replace-bit-range-v (reg hi lo val size)
+  "(replace-bit-range reg hi lo val) returns reg with bits
+   hi to lo inclusive set to the value stored in val."
+  (let ((mask (lshift (cast-unsigned size (ones (+ (- hi lo) 1))) lo))
+        (cleared (logand reg (lnot mask)))
+        (result (logor cleared (logand mask (lshift (cast-unsigned (word-width reg) val) lo)))))
+    result))
+
+
 (defun reverse-elems-in-one-container (elem-size c)
   "(reverse-elems-in-one-container elem-size c) reverses the order
    of each group of elem-size bits in c.
@@ -136,16 +145,10 @@
 
 (defun insert-element-into-vector (vd index element size)
 	"(insert-element-into-vector vd index element size) inserts element into vd[index], where size is in {8,16,32,64}"
-	(let ((highIndex (- (* size (+ index 1) 1)))
-				(lowIndex (* size index)))
-		(set$ vd (replace-bit-range vd highIndex lowIndex element))))
-;;				(mask (concat () () ()))
-;;				(topPart (rshift vd highIndex)))
-;;		(if (> index 0)
-;;				(let ((mask (replicate-to-fill (cast-low 1 0x1) lowIndex))
-;;							(bottomPart (logand vd mask)))
-;;					(set$ vd (extract 127 0 (concat topPart element bottomPart))))
-;;			(set$ vd (extract 127 0 (concat topPart element))))))
+	(let ((highIndex (- (* size (+ index 1)) 1))
+				(lowIndex (* size index))
+				(newVal (replace-bit-range-v v highIndex lowIndex element 128)))
+		(set$ vd newVal)))
 
 (defun get-vector-S-element (index vn)
 	"(get-vector-S-element) returns the 32 bit element from vn[index]"
@@ -232,3 +235,11 @@
 		'Q30_Q31	'Q31
 		'Q0))
 
+(defun mem-read (address size)
+	"(mem-read address size) loads size bytes from memory at address."
+	(case size
+		1		(load-byte address)
+		2		(load-dbyte address)
+		4		(load-hword	address)
+		8		(load-word	address)
+		16	(concat (load-word address) (load-word (+ address 8)))))
