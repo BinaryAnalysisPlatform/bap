@@ -440,7 +440,7 @@ module Abi = struct
         otherwise, pass Arg.register irets;
       ] in
     describe ~return @@ fun ~alignment:_ size -> select [
-      is (size > 64), pass Arg.reference iregs;
+      is (size > 64), pass Arg.pointer iregs;
       C.Type.is_floating, pass Arg.register vregs;
       otherwise, pass Arg.register iregs;
     ]
