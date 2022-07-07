@@ -1,4 +1,5 @@
 open Core_kernel[@@warning "-D"]
+open Bap_core_theory
 open Bap.Std
 open Bap_c_type
 open Monads.Std
@@ -184,10 +185,43 @@ let create_arg size i intent name t (data,exp) sub =
   let arg = Term.set_attr arg Attrs.layout layout in
   arg
 
-let registry = Hashtbl.create (module String)
-let register name abi = Hashtbl.set registry ~key:name ~data:abi
+
+
+let models = Hashtbl.create (module Theory.Target)
+
+let register_model target model =
+  if Hashtbl.mem models target
+  then invalid_argf "A data model for target %s is already set"
+      (Theory.Target.to_string target) ();
+  Hashtbl.add_exn models target (model :> Bap_c_size.base)
+
+let model target = match Hashtbl.find models target with
+  | Some m -> m
+  | None -> if Theory.Target.bits target = 32
+    then new Bap_c_size.base `LP32
+    else new Bap_c_size.base `LP64
+
+let registry = Hashtbl.create (module Theory.Target)
+
+let register name abi =
+  let target = match Theory.Target.lookup ~package:"bap" name with
+    | Some t -> t
+    | None -> invalid_argf
+                "The name of the abi should be a valid name. Got %s. \
+                 See `bap list targets` for the list valid names" name () in
+  Hashtbl.add registry ~key:target ~data:abi |> function
+  | `Ok -> ()
+  | `Duplicate ->
+    invalid_argf "The processor for ABI %s is already registered. \
+                  Please pick a unique name" name ()
 let register_abi = register
-let get_processor name = Hashtbl.find registry name
+
+let get_processor name =
+  match Theory.Target.lookup ~package:"bap" name with
+  | None -> None
+  | Some t -> Hashtbl.find registry t
+
+let lookup = Hashtbl.find registry
 
 
 let get_prototype gamma name = match gamma name with
@@ -212,6 +246,40 @@ let get_prototype gamma name = match gamma name with
         }
     }
 
+
+let apply_args abi size attrs t sub =
+  let t = decay_arrays t in
+  match abi.insert_args sub attrs t with
+  | None -> sub
+  | Some {return; hidden; params} ->
+    let params = List.mapi params ~f:(fun i a -> i,a) in
+    List.map2 params t.Bap_c_type.Proto.args ~f:(fun (i,a) (n,t) ->
+        create_arg size i (arg_intent t) n t a sub) |>
+    function
+    | Unequal_lengths ->
+      error "The ABI processor generated an incorrect number of \
+             argument terms for the subroutine %s: %d <> %d"
+        (Sub.name sub)
+        (List.length params)
+        (List.length t.args);
+      sub
+    | Ok args ->
+      let ret = match return with
+        | None -> []
+        | Some ret ->
+          let t = t.Bap_c_type.Proto.return in
+          [create_arg size 0 Out "result" t ret sub] in
+      let hid = List.mapi hidden ~f:(fun i (t,a) ->
+          let n = "hidden" ^ if i = 0 then "" else Int.to_string i in
+          create_arg size 0 Both n t a sub) in
+      List.fold (args@hid@ret) ~init:sub ~f:(Term.append arg_t)
+
+let apply abi size attrs t sub =
+  let sub = apply_args abi size attrs t sub in
+  let sub = Term.set_attr sub Attrs.proto t in
+  let sub = List.fold_right ~init:sub attrs ~f:Bap_c_attr.apply in
+  abi.apply_attrs attrs sub
+
 let create_api_processor size abi : Bap_api.t =
   let stage1 gamma = object(self)
     inherit Term.mapper as super
@@ -225,40 +293,7 @@ let create_api_processor size abi : Bap_api.t =
       else
         let name = Sub.name sub in
         let {Bap_c_type.Spec.t; attrs} = get_prototype gamma name in
-        let sub = self#apply_args sub attrs t in
-        let sub = Term.set_attr sub Attrs.proto t in
-        let sub = List.fold_right ~init:sub attrs ~f:Bap_c_attr.apply in
-        abi.apply_attrs attrs sub
-
-
-    method private apply_args sub attrs t =
-      let t = decay_arrays t in
-      match abi.insert_args sub attrs t with
-      | None ->
-        super#map_sub sub
-      | Some {return; hidden; params} ->
-        let params = List.mapi params ~f:(fun i a -> i,a) in
-        List.map2 params t.Bap_c_type.Proto.args ~f:(fun (i,a) (n,t) ->
-            create_arg size i (arg_intent t) n t a sub) |>
-        function
-        | Unequal_lengths ->
-          error "The ABI processor generated an incorrect number of \
-                 argument terms for the subroutine %s: %d <> %d"
-            (Sub.name sub)
-            (List.length params)
-            (List.length t.args);
-          sub
-        | Ok args ->
-          let ret = match return with
-            | None -> []
-            | Some ret ->
-              let t = t.Bap_c_type.Proto.return in
-              [create_arg size 0 Out "result" t ret sub] in
-          let hid = List.mapi hidden ~f:(fun i (t,a) ->
-              let n = "hidden" ^ if i = 0 then "" else Int.to_string i in
-              create_arg size 0 Both n t a sub) in
-          List.fold (args@hid@ret) ~init:sub ~f:(Term.append arg_t)
-
+        apply abi size attrs t sub
   end in
   let module Api = struct
     let language = "c"
@@ -780,15 +815,14 @@ module Arg = struct
 
   let install target ruler pass =
     let open Bap_core_theory in
-    let abi = Theory.Target.abi target in
-    let abi_name = Format.asprintf "%s"
-        (KB.Name.unqualified (Theory.Abi.name abi)) in
+    let abi_name = KB.Name.unqualified (Theory.Target.name target) in
     let abi_processor = {
       apply_attrs = (fun _ x -> x);
       insert_args = fun _ attrs proto ->
         reify target ruler (pass attrs proto)
     } in
     register_abi abi_name abi_processor;
+    register_model target ruler;
     Bap_abi.register_pass @@ fun proj ->
     if Theory.Target.equal (Project.target proj) target
     then begin

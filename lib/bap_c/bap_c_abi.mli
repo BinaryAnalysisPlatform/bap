@@ -84,6 +84,24 @@ val data : #Bap_c_size.base -> Bap_c_type.t -> Bap_c_data.t
 val layout : #Bap_c_size.base -> Bap_c_type.t -> Bap_c_data.layout
 
 
+(** [model target] returns the data model for the given target.
+
+    @since 2.5.0  *)
+val model : Theory.Target.t -> Bap_c_size.base
+
+
+(** [apply processor attrs proto sub] applies the abi processor to the
+    subroutine [sub].
+
+    The function inserts arguments and attaches appropriate arguments
+    to the function and its subterms, such as strores the type of each
+    argument, the provided C attributes, stores the prototype, computes
+    and attaches data layouts, etc.
+
+    @since 2.5.0 *)
+val apply : t -> #Bap_c_size.base ->  attr list -> proto -> sub term -> sub term
+
+
 (** [arg_intent t] infers argument intention based on its C type.  If
     an argument is passed by value, i.e., it is a c basic type, then
     it is an input argument. If an argument is a reference, but not a
@@ -95,12 +113,25 @@ val layout : #Bap_c_size.base -> Bap_c_type.t -> Bap_c_data.layout
 val arg_intent : Bap_c_type.t -> intent
 
 (** [register name t] registers an abi processor [t] named [name] that
-    may be used by subroutines in this project.*)
+    may be used by subroutines in this project.
+
+    @after 2.5.0 fails if there is already a processor for the given [name].
+    @after 2.5.0 the abi name should be a valid target name.
+*)
 val register : string -> t -> unit
+[@@deprecated "[since 2022-07] use the Arg module"]
 
 (** [get_processor name] is used to access an abi processor with its
     name.*)
 val get_processor : string -> t option
+[@@deprecated "[since 2022-07] use [lookup]"]
+
+
+(** [lookup t] the abi processor associated with the target [t].
+
+    @since 2.5.0
+*)
+val lookup : Theory.Target.t -> t option
 
 
 (** An abstraction of a stack, commonly used in C compilers.   *)
@@ -403,10 +434,10 @@ module Arg : sig
       [arena] is empty; or if some other argument is already passed
       via memory.
 
-      @since 2.5.0 accepts the [rev] parameter.
-      @since 2.5.0 accepts the [limit] parameter.
+      @after 2.5.0 accepts the [rev] parameter.
+      @after 2.5.0 accepts the [limit] parameter.
 
-      @since 2.5.0 passes as much as possible (up to the limit) of the
+      @after 2.5.0 passes as much as possible (up to the limit) of the
       object via registers.
 
       @before 2.5.0 was passing at most one word via registers.

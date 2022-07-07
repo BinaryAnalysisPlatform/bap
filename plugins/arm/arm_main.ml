@@ -47,7 +47,7 @@ let () = Bap_main.Extension.declare ~doc @@ fun ctxt ->
   let backend = ctxt-->backend in
   let features = List.concat (ctxt-->features) in
   Arm_target.load ~features ?backend ?interworking ();
+  Arm_gnueabi.setup ();
   List.iter all_of_arms ~f:(fun arch ->
-      register_target (arch :> arch) (module ARM);
-      Arm_gnueabi.setup ());
+      register_target (arch :> arch) (module ARM));
   Ok ()
