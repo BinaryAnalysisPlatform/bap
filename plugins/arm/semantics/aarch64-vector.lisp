@@ -21,10 +21,10 @@
         (result (replicate-to-fill val datasize)))
     (set$ vd result)))
 
-(defun MOVIv16b_ns (vd imm)
+(defun MOVIv8b_ns (vd imm)
   (MOVI* 64 8 vd imm 0))
 
-(defun MOVIv8b_ns (vd imm)
+(defun MOVIv16b_ns (vd imm)
   (MOVI* 128 8 vd imm 0))
 
 (defun MOVIv4i16 (vd imm shift)
