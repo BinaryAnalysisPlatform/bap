@@ -136,16 +136,9 @@
 
 (defun insert-element-into-vector (vd index element size)
   "(insert-element-into-vector vd index element size) inserts element into vd[index], where size is in {8,16,32,64}"
-  (let ((highIndex (- (* size (+ index 1) 1)))
+  (let ((highIndex (-1 (* size (+ index 1))))
         (lowIndex (* size index)))
     (set$ vd (replace-bit-range vd highIndex lowIndex element))))
-;;        (mask (concat () () ()))
-;;        (topPart (rshift vd highIndex)))
-;;    (if (> index 0)
-;;        (let ((mask (replicate-to-fill (cast-low 1 0x1) lowIndex))
-;;              (bottomPart (logand vd mask)))
-;;          (set$ vd (extract 127 0 (concat topPart element bottomPart))))
-;;      (set$ vd (extract 127 0 (concat topPart element))))))
 
 (defun get-vector-S-element (index vn)
   "(get-vector-S-element) returns the 32 bit element from vn[index]"
