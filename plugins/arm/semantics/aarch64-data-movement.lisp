@@ -84,11 +84,30 @@
 
 ;; LDP (post-index)
 
-(defun LDPXpost (dst r1 r2 base off)
+
+(defun LDPXpost (_ r1 r2 base off)
   (let ((off (lshift off 3)))
     (set$ r1 (load-word base))
     (set$ r2 (load-word (+ base (sizeof word))))
-    (set$ dst (+ dst off))))
+    (set$ base (+ base off))))
+
+(defun LDPXpre (_ r1 r2 base off)
+  (let ((off (lshift off 3)))
+    (set$ r1 (load-word (+ base off)))
+    (set$ r2 (load-word (+ base off (sizeof word))))
+    (set$ base (+ base off))))
+
+(defun LDPWpost (_ r1 r2 base off)
+  (let ((off (lshift off 2)))
+    (setw r1 (load-hword base))
+    (setw r2 (load-hword (+ base (sizeof word))))
+    (set$ base (+ base off))))
+
+(defun LDPWpre (_ r1 r2 base off)
+  (let ((off (lshift off 2)))
+    (setw r1 (load-hword base))
+    (setw r2 (load-hword (+ base (sizeof word))))
+    (set$ base (+ base off))))
 
 ;; LDP (signed offset)
 
@@ -113,12 +132,20 @@
 (defun LDRHHroX (wt xn xm extend s) (LDRHHro* wt xn xm extend s))
 (defun LDRHHroW (wt xn wm extend s) (LDRHHro* wt xn wm extend s))
 
-;; LDRH (immediate, unsigned offset)
+;; LDRH (immediate, unsigned offset, pre/post indexed)
 
 (defun LDRHHui (wt xn pimm)
   "(LDRHHui wt xn pimm) loads 2 bytes from the address calculated from a base register and unsigned immediate offset. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment()"
   (let ((off (lshift (cast-unsigned 64 pimm) 1)))
     (setw wt (load-dbyte (+ xn off)))))
+
+(defun LDRHHpost (_ rd rn off)
+  (setw rd (load-dbyte rn))
+  (set$ rn (+ rn off)))
+
+(defun LDRHHpre (_ rd rn off)
+  (setw rd (load-dbyte (+ rn off)))
+  (set$ rn (+ rn off)))
 
 ;; LDRSW (immediate, unsigned offset)
 
