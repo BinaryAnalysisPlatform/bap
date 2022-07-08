@@ -42,20 +42,23 @@
 ;;; LDs..
 
 (defun LD2Twov16b_POST (_ qa_qb xn xm) 
-  "(LD2Twov16b_POST redundant qa_qb xn imm) loads multiple 2-element structures from memory at address xn with offset imm and stores it in qa and qb with de-interleaving. NOTE: does not encode Security state & Exception level"
+  "(LD2Twov16b_POST _ qa_qb xn imm) loads multiple 2-element structures from memory at address xn with offset imm and stores it in qa and qb with de-interleaving. NOTE: does not encode Security state & Exception level"
   (let ((qa (get-first-128b-reg qa_qb))
         (qb (get-second-128b-reg qa_qb)))
-    (insert-a qa qb xn 0)
+    (insert-a qa qb xn 0 0 0)
     (set$ xn (+ xn xm))))
 
-(defun insert-a (qa qb address e)
-  (when (< e 16)
-    (insert-element-into-vector qa e (load-byte address) 8)
-    (insert-b qa qb (+ address 1) e)))
+(defun insert-a (qa qb addr e acc-a acc-b)
+  (if (< e 16)
+    (let ((temp (load-byte addr)))
+      (insert-b qa qb (+ addr 1) e (if (= e 0) temp (concat temp acc-a)) acc-b))
+    (prog
+      (set$ qa acc-a)
+      (set$ qb acc-b))))
 
-(defun insert-b (qa qb address e)
-  (insert-element-into-vector qb e (load-byte address) 8)
-  (insert-a qa qb (+ address 1) (+ e 1)))
+(defun insert-b (qa qb addr e acc-a acc-b)
+  (let ((temp (load-byte addr)))
+    (insert-a qa qb (+ addr 1) (+ e 1) acc-a (if (= e 0) temp (concat temp acc-b)))))
 
 (defmacro LDPvec*i (vn vm base imm size mem-load scale)
   "(LDP*i qn qm imm size mem-load scale) loads a pair of SIMD&FP registers from memory using the address base and an optional signed immediate offset. NOTE: does not CheckFPAdvSIMDEnabled64(), HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment(), Mem[... AccType_VEC]"
