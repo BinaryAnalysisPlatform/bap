@@ -98,6 +98,11 @@
 
 (defun UMADDLrrr (rd rn rm ra) (set$ rd (cast-low 64 (+ ra (* rn rm)))))
 
+(defun UMULHrr (rd rn rm)
+  "multiplies rn and rm together and stores the high 64 bits of the resulting 
+  128-bit value to the register rd"
+  (set$ rd (cast-high 64 (* (cast-unsigned 128 rn) (cast-unsigned 128 rm)))))
+
 (defmacro *DIV*r (set div rd rn rm)
   "(*DIV*r set div rd rn rm) implements the SDIV or UDIV instructions
    on W or X registers, with div set to s/ or / respectively."
