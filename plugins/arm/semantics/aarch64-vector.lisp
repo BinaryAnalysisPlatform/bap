@@ -13,6 +13,32 @@
    (let ((element (get-vector-S-element index2 vn)))
     (insert-element-into-vector vd index element 32)))
 
+
+(defun MOVI* (datasize channelsize vd val shift)
+  "Sets every channel of vd to have value. the size of val should be equal to
+  the channel width."
+  (let ((val (cast-low channelsize (lshift val shift)))
+        (result (replicate-to-fill val datasize)))
+    (set$ vd result)))
+
+(defun MOVIv8b_ns (vd imm)
+  (MOVI* 64 8 vd imm 0))
+
+(defun MOVIv16b_ns (vd imm)
+  (MOVI* 128 8 vd imm 0))
+
+(defun MOVIv4i16 (vd imm shift)
+  (MOVI* 64 16 vd imm shift))
+
+(defun MOVIv8i16 (vd imm shift)
+  (MOVI* 128 16 vd imm shift))
+
+(defun MOVIv2i32 (vd imm shift)
+  (MOVI* 64 32 vd imm shift))
+
+(defun MOVIv4i32 (vd imm shift)
+  (MOVI* 128 32 vd imm shift))
+
 ;;; LDs..
 
 (defun LD2Twov16b_POST (_ qa_qb xn xm) 
