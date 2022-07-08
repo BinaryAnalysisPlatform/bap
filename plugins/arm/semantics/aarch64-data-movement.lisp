@@ -24,14 +24,30 @@
 (defun LDRXroW (xt base index signed s) (LDRXro* xt base index signed s))
 (defun LDRXroX (xt base index signed s) (LDRXro* xt base index signed s))
 
-;; LDR (immediate, unsigned offset) 
+;; LDR (immediate, unsigned offset, post/pre indexed) 
 
 (defun LDRXui (dst reg off)
   (set$ dst (load-word (+ reg (lshift off 3)))))
 
+(defun LDRXpost (_ dst reg off) 
+  (set$ dst (load-word reg))
+  (set$ reg (+ reg off)))
+
+(defun LDRXpre (_ dst reg off) 
+  (set$ dst (load-word (+ reg off)))
+  (set$ reg (+ reg off)))
+
 (defun LDRWui (dst reg off)
   (setw dst
         (cast-unsigned (word) (load-hword (+ reg (lshift off 2))))))
+
+(defun LDRWpost (_ dst reg off) 
+  (setw dst (load-hword reg))
+  (set$ reg (+ reg off)))
+
+(defun LDRWpre (_ dst reg off) 
+  (setw dst (load-hword (+ reg off)))
+  (set$ reg (+ reg off)))
 
 ;; LDRB (immediate, post-index)
 
