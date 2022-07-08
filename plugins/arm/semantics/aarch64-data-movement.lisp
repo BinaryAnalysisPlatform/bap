@@ -44,7 +44,8 @@
 
 (defun LDRBBpre (_ dst base simm)
   "(LDRBBpre _ dst base simm) loads a byte from the base address and an offset simm and stores it in the 32 bit dst register. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment(), ConstrainUnpredictable()"
-  (setw dst (cast-unsigned 32 (load-byte (+ base simm)))))
+  (setw dst (cast-unsigned 32 (load-byte (+ base simm))))
+  (set$ base (+ base simm)))
 
 ;; LDRB (immediate, unsigned offset)
 
