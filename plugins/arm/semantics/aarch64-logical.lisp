@@ -92,7 +92,7 @@
 (defmacro REVn*r (setr container-size rd rn)
   "(REVn*r setr container-size rd rn) implements the non-vector REV#
    instructions with the given container-size."
-  (setr rd (reverse-elems-in-all-containers container-size 8 rn)))
+  (setr rd (reverse-in-containers container-size 8 rn)))
 
 (defun REVWr   (rd rn) (REVn*r setw 32 rd rn))
 (defun REVXr   (rd rn) (REVn*r set$ 64 rd rn))

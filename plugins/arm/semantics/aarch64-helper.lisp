@@ -109,31 +109,6 @@
         (result (logor cleared (logand mask (lshift (cast-unsigned (word-width reg) val) lo)))))
     result))
 
-(defun reverse-elems-in-one-container (elem-size c)
-  "(reverse-elems-in-one-container elem-size c) reverses the order
-   of each group of elem-size bits in c.
-   For non-vector instructions, elem-size = 8.
-   If c's width is not a multiple of elem-size, the remaining bits
-   get appended at the end."
-  (if (<= (word-width c) elem-size) c
-    (concat
-      (cast-low elem-size c)
-      (reverse-elems-in-one-container elem-size
-        (cast-high (- (word-width c) elem-size) c)))))
-
-(defun reverse-elems-in-all-containers (container-size elem-size x)
-  "(reverse-elems-in-all-containers container-size elem-size x) applies
-   reverse-elems-in-one-container to each group of container-size bits in x.
-   In other words, it reverses the order of groups of elem-size bits within
-   each group of container-size bits.
-   If x's width is not a multiple of container-size, the remaining bits
-   get appended at the end."
-  (if (< (word-width x) container-size) x
-    (concat
-      (reverse-elems-in-one-container elem-size (cast-high container-size x))
-      (reverse-elems-in-all-containers container-size elem-size
-        (cast-low (- (word-width x) container-size) x)))))
-
 (defun insert-element-into-vector (vd index element size)
   "(insert-element-into-vector vd index element size) inserts element into vd[index], where size is in {8,16,32,64}"
   (let ((highIndex (-1 (* size (+ index 1))))
