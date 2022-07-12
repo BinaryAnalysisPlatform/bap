@@ -2,6 +2,24 @@
 
 (in-package aarch64)
 
+;;; ARITHMETIC
+
+(defun vector-plus-on-elem (ecount esize va vb e)
+  (if (>= e (-1 ecount))
+    (+ (extract-elem va e esize) (extract-elem vb e esize))
+    (concat
+      (vector-plus-on-elem ecount esize va vb (+1 e))
+      (+ (extract-elem va e esize) (extract-elem vb e esize)))))
+
+(defun ADDv1i64 (vd va vb) (set$ vd (vector-plus-on-elem 1  64 va vb 0)))
+(defun ADDv2i64 (vd va vb) (set$ vd (vector-plus-on-elem 2  64 va vb 0)))
+(defun ADDv2i32 (vd va vb) (set$ vd (vector-plus-on-elem 2  32 va vb 0)))
+(defun ADDv4i32 (vd va vb) (set$ vd (vector-plus-on-elem 4  32 va vb 0)))
+(defun ADDv4i16 (vd va vb) (set$ vd (vector-plus-on-elem 4  16 va vb 0)))
+(defun ADDv8i16 (vd va vb) (set$ vd (vector-plus-on-elem 8  16 va vb 0)))
+(defun ADDv8i8  (vd va vb) (set$ vd (vector-plus-on-elem 8  8  va vb 0)))
+(defun ADDv16i8 (vd va vb) (set$ vd (vector-plus-on-elem 16 8  va vb 0)))
+
 ;;; INS
 
 (defun INSvi32gpr (vd _ index gpr)
