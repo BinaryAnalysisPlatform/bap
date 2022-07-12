@@ -8,8 +8,7 @@
   (case binop-sym
     'add (+ x y)
     'sub (- x y)
-    'mul (* x y)
-    'div (/ x y)))
+    'mul (* x y)))
 
 (defun vector-binop (sym ecount esize vn vm)
   "(vector-binop sym ecount esize vn vm e) returns the result
@@ -67,6 +66,28 @@
 (defun MULv8i16 (vd vn vm) (MULv*i* vd vn vm 8  16))
 (defun MULv8i8  (vd vn vm) (MULv*i* vd vn vm 8  8))
 (defun MULv16i8 (vd vn vm) (MULv*i* vd vn vm 16 8))
+
+;;; LOGICAL
+
+(defun ANDv8i8  (vd vn vm) (set$ vd (logand vn vm)))
+(defun ANDv16i8 (vd vn vm) (set$ vd (logand vn vm)))
+
+;; the ISA expresses (logxor vn vm) as
+;; (logxor vm (logand (logor (zeros (word-width vn)) vn) (ones (word-width vn))))
+;; I've simplified it to just this.
+(defun EORv8i8  (vd vn vm) (set$ vd (logxor vn vm)))
+(defun EORv16i8 (vd vn vm) (set$ vd (logxor vn vm)))
+
+;; the ISA says NOT acts element-wise, but this is
+;; equivalent to just (lognot vn). Not sure why it does this.
+(defun NOTv8i8  (vd vn)    (set$ vd (lognot vn)))
+(defun NOTv16i8 (vd vn)    (set$ vd (lognot vn)))
+
+(defun ORRv8i8  (vd vn vm) (set$ vd (logor  vn vm)))
+(defun ORRv16i8 (vd vn vm) (set$ vd (logor  vn vm)))
+
+(defun ORNv8i8  (vd vn vm) (set$ vd (logor  vn (lognot vm))))
+(defun ORNv16i8 (vd vn vm) (set$ vd (logor  vn (lognot vm))))
 
 ;;; INS
 
