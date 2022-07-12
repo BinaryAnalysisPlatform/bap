@@ -74,6 +74,11 @@
     (+ off (* esize e))
     x))
 
+(defun extract-elem (x e esize)
+  "(extract-elem x e esize) extracts the e-th bit range
+   of size esize of x."
+  (extract-elem x e esize 0))
+
 (defun reverse-in-containers (csize esize x)
   "(reverse-in-containers csize esize x) returns the result
    of reversing the order of elements of elem-size bits
