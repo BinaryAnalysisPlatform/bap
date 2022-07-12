@@ -194,3 +194,18 @@
 (defun LDURSi (st base simm) (LDURvec*i st base simm load-hword))
 (defun LDURDi (dt base simm) (LDURvec*i dt base simm load-word))
 (defun LDURQi (qt base simm) (LDURvec*i qt base simm load-dword))
+
+; EXT
+
+(defmacro EXTv* (datasize vd vn vm pos) 
+  "Extracts a vector from a pair of vectors. pos is the bit offset that will 
+  become the least significant bit of vd."
+  (let ((pos (lshift pos 3)))
+    (set$ vd (extract (+ pos (- datasize 1)) pos (concat vm vn)))))
+
+(defun EXTv16i8 (vd vn vm pos) 
+  (EXTv* 128 vd vn vm pos))
+
+(defun EXTv8i8 (vd vn vm pos) 
+  (EXTv* 64 vd vn vm pos))
+

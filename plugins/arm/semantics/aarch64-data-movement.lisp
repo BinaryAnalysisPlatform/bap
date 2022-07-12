@@ -474,3 +474,14 @@
 
 (defun STURQi (rn rt imm) (STUR*i rn rt imm 128)) 
 
+
+; EXTR
+
+(defun EXTRWrri (rd rn rm lsb) 
+  "Extracts a register from a pair of registers, datasize = 32"
+  (setw rd (extract (+ lsb 31) lsb (concat rn rm))))
+
+(defun EXTRXrri (rd rn rm lsb) 
+  "Extracts a register from a pair of registers, datasize = 64"
+  (set$ rd (extract (+ lsb 63) lsb (concat rn rm))))
+

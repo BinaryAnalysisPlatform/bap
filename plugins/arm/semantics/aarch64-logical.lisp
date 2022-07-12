@@ -100,20 +100,6 @@
 (defun REV16Wr (rd rn) (REVn*r set$ 16 rd rn))
 (defun REV32Xr (rd rn) (REVn*r setw 32 rd rn))
 
-(defmacro LSLV*r (dest rn rm size setf)
-  "(LSLV*r dest rn rm size) logical shift lefts rn by the remainder of rm divided by the datasize and stores the result in the destination register."
-  (setf dest (lshift rn (mod rm size))))
-
-(defun LSLVWr (wd wn wm) (LSLV*r wd wn wm 32 setw))
-(defun LSLVXr (xd xn xm) (LSLV*r xd xn xm 64 set$))
-
-(defmacro LSRV*r (dest rn rm size setf)
-  "(LSRV*r dest rn rm size) logical shift rights rn by the remainder of rm divided by the datasize and stores the result in the destination register."
-  (setf dest (rshift rn (mod rm size))))
-
-(defun LSRVWr (wd wn wm) (LSRV*r wd wn wm 32 setw))
-(defun LSRVXr (xd xn xm) (LSRV*r xd xn xm 64 set$))
-
 ;; UBFM and SBFM
 ;; (bitfield moves)
 
@@ -148,14 +134,15 @@
 (defmacro SHIFT*r (setr shift datasize rd rn rm)
   "(ASRV*r setr datasize rd rn rm) does an arithmetic shift right and stores it 
   in the destination register rd"
-  (let ((off (mod rm datasize)))
-    (setr rd (cast-low datasize (shift rn off)))))
+    (setr rd (cast-low datasize (shift rn  (mod rm datasize)))))
 
 (defun ASRVXr (rd rn rm) (SHIFT*r set$ arshift 64 rd rn rm))
 (defun ASRVWr (rd rn rm) (SHIFT*r setw arshift 32 rd rn rm))
+
 (defun LSRVXr (rd rn rm) (SHIFT*r set$ rshift 64 rd rn rm))
 (defun LSRVWr (rd rn rm) (SHIFT*r setw rshift 32 rd rn rm))
 (defun LSLVXr (rd rn rm) (SHIFT*r set$ lshift 64 rd rn rm))
 (defun LSLVWr (rd rn rm) (SHIFT*r setw lshift 32 rd rn rm))
+
 (defun RORVXr (rd rn rm) (SHIFT*r set$ rotate-right 64 rd rn rm))
 (defun RORVWr (rd rn rm) (SHIFT*r setw rotate-right 32 rd rn rm))
