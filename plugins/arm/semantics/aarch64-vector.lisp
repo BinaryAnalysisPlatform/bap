@@ -17,14 +17,14 @@
 
 ;; LD2 (multiple structures, no offset)
 
-(defmacro LD2Twov16b* (qa_qb xn) 
-  "(LD2Twov16b_POST redundant qa_qb xn imm) loads multiple 2-element structures from memory at address xn with offset imm and stores it in qa and qb with de-interleaving. NOTE: does not encode Security state & Exception level"
-  (let ((qa (get-first-128b-reg qa_qb))
-        (qb (get-second-128b-reg qa_qb)))
-    (insert-a qa qb xn 0)))
+;;(defmacro LD2Twov16b* (qa_qb xn) 
+;;  "(LD2Twov16b_POST redundant qa_qb xn imm) loads multiple 2-element structures from memory at address xn with offset imm and stores it in qa and qb with de-interleaving. NOTE: does not encode Security state & Exception level"
+;;  (let ((qa (get-first-128b-reg qa_qb))
+;;        (qb (get-second-128b-reg qa_qb)))
+;;    (insert-a qa qb xn 0)))
 
 ;;(defun LD2Twov8b (da_db xn) ())
-(defun LD2Twov16b (qa_qb xn) (LD2Twov16b* qa_qb xn))
+;;(defun LD2Twov16b (qa_qb xn) (LD2Twov16b* qa_qb xn))
 ;;(defun LD2Twov4h (da_db xn) ())
 ;;(defun LD2Twov8h (qa_qb xn) ())
 ;;(defun LD2Twov2s (da_db xn) ())
@@ -104,7 +104,6 @@
 (defun LDRSroX (st base index signed s) (LDR*roX st base index signed s 2 32))
 (defun LDRDroX (dt base index signed s) (LDR*roX dt base index signed s 3 64))
 (defun LDRQroX (qt base index signed s) (LDR*roX qt base index signed s 4 128))
-=======
 
 ;; LDUR
 

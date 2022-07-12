@@ -27,7 +27,8 @@
 ;; LDR (immediate, post-index)
 
 (defmacro LDR*post (dst base off setf)
-  (setf dst (mem-read base (/ (word-width dst) 8)))
+  ""
+;;  (setf dst (mem-read base (/ (word-width dst) 8)))
   (set$ base (+ base (cast-signed 64 off))))
 
 (defun LDRWpost (_ dst base off) (LDR*post dst base off setw))
@@ -38,7 +39,7 @@
 (defmacro LDR*pre (dst base off setf)
   (let ((address (+ base (cast-signed 64 off))))
     (setf dst (mem-read address (/ (word-width dst) 8)))
-    (set$ base address))
+    (set$ base address)))
 
 (defun LDRWpre (_ dst base off) (LDR*pre dst base off setw))
 (defun LDRXpre (_ dst base off) (LDR*pre dst base off set$))
@@ -107,6 +108,13 @@
 (defmacro LDRHHro* (wt base index signed s)
   "(LDRHHro* wt base index signed s) loads 2 bytes from the address calculated from a base register address and offset. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment()"
   (let ((off (if (= signed 1)
+            (cast-signed 64 (lshift index s))
+          (cast-unsigned 64 (lshift index s)))))
+    (setw wt (load-dbyte (+ base off)))))
+
+(defun LDRHHroX (wt xn xm extend s) (LDRHHro* wt xn xm extend s))
+(defun LDRHHroW (wt xn wm extend s) (LDRHHro* wt xn wm extend s))
+
 ;; LDRH (immediate, unsigned offset)
 
 (defun LDRHHui (wt xn pimm)
