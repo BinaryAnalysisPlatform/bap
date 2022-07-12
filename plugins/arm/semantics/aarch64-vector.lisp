@@ -33,19 +33,24 @@
 
 ;; LD2 (multiple structures, post index)
 
-(defun LD2Twov16b_POST (_ qa_qb xn xm) 
-  "(LD2Twov16b_POST redundant qa_qb xn imm) loads multiple 2-element structures from memory at address xn with offset imm and stores it in qa and qb with de-interleaving. NOTE: does not encode Security state & Exception level"
-  (LD2Twov16b* qa_qb xn)
-  (set$ xn (+ xn xm)))
+(defun LD2Twov16b_POST (_ qa_qb xn xm)
+  "(LD2Twov16b_POST _ qa_qb xn imm) loads multiple 2-element structures from memory at address xn with offset imm and stores it in qa and qb with de-interleaving. NOTE: does not encode Security state & Exception level"
+  (let ((qa (get-first-128b-reg qa_qb))
+        (qb (get-second-128b-reg qa_qb)))
+    (insert-a qa qb xn 0 0 0)
+    (set$ xn (+ xn xm))))
 
-(defun insert-a (qa qb address e)
-  (when (< e 16)
-    (insert-element-into-vector qa e (load-byte address) 8)
-    (insert-b qa qb (+ address 1) e)))
+(defun insert-a (qa qb addr e acc-a acc-b)
+  (if (< e 16)
+    (let ((temp (load-byte addr)))
+      (insert-b qa qb (+ addr 1) e (if (= e 0) temp (concat temp acc-a)) acc-b))
+    (prog
+      (set$ qa acc-a)
+      (set$ qb acc-b))))
 
-(defun insert-b (qa qb address e)
-  (insert-element-into-vector qb e (load-byte address) 8)
-  (insert-a qa qb (+ address 1) (+ e 1)))
+(defun insert-b (qa qb addr e acc-a acc-b)
+  (let ((temp (load-byte addr)))
+    (insert-a qa qb (+ addr 1) (+ e 1) acc-a (if (= e 0) temp (concat temp acc-b)))))
 
 ;; LD1 (multiple structures)
 
@@ -99,12 +104,13 @@
 (defun LDRSroX (st base index signed s) (LDR*roX st base index signed s 2 32))
 (defun LDRDroX (dt base index signed s) (LDR*roX dt base index signed s 3 64))
 (defun LDRQroX (qt base index signed s) (LDR*roX qt base index signed s 4 128))
+=======
 
 ;; LDUR
 
 (defmacro LDURvec*i (vt base simm size)
-	"(LDUR*i vt base simm mem-load) loads a SIMD&FP register from memory at the address calculated from a base register and optional immediate offset. NOTE: does not CheckFPAdvSIMDEnabled64(), HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment(), Mem[... AccType_VEC]"
-	(set$ vt (mem-read (+ base simm) (/ size 8))))
+  "(LDUR*i vt base simm mem-load) loads a SIMD&FP register from memory at the address calculated from a base register and optional immediate offset. NOTE: does not CheckFPAdvSIMDEnabled64(), HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment(), Mem[... AccType_VEC]"
+  (set$ vt (mem-read (+ base simm) (/ size 8))))
 
 (defun LDURBi (bt base simm) (LDURvec*i bt base simm 8))
 (defun LDURHi (ht base simm) (LDURvec*i ht base simm 16))
