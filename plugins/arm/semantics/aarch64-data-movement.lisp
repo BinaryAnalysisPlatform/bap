@@ -173,6 +173,37 @@
   "(LDURBBi wt base simm) loads a byte from the address calculated from a base register and signed immediate offset and stores it in the 32 bit destination register. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment()"
   (setw wt (load-byte (+ base simm))))
 
+;; LDURH
+
+(defun LDURHHi (rt rn simm)
+  (setw rt (cast-unsigned 32 (load-dbyte (+ rn simm)))))
+
+;; LDURSB
+
+(defun LDURSBWi (rt rn simm)
+  "LDURSBWi loads a byte from the address (rn + simm) and sign-extends it to write it to rt"
+  (setw rt (cast-signed 32 (load-byte (+ rn simm)))))
+
+(defun LDURSBXi (rt rn simm)
+  "LDURSBXi loads a byte from the address (rn + simm) and sign-extends it to write it to rt"
+  (set$ rt (cast-signed 64 (load-byte (+ rn simm)))))
+
+;; LDURSH
+
+(defun LDURSHWi (rt rn simm)
+  "LDURSBWi loads a halfword from the address (rn + simm) and sign-extends it to write it to rt"
+  (setw rt (cast-signed 32 (load-dbyte (+ rn simm)))))
+
+(defun LDURSHXi (rt rn simm)
+  "LDURSBXi loads a halfword from the address (rn + simm) and sign-extends it to write it to rt"
+  (set$ rt (cast-signed 64 (load-dbyte (+ rn simm)))))
+
+;; LDURSW
+
+(defun LDURSWi (rt rn simm)
+  "LDURSBXi loads a word from the address (rn + simm) and sign-extends it to write it to rt"
+  (set$ rt (cast-signed 64 (load-hword (+ rn simm)))))
+
 ;; LDUR
 
 (defmacro LDUR*i (rt base simm setf mem-load)
