@@ -80,7 +80,7 @@ gitclone() {
 # latest_version repo
 latest_version() {
     cd $1
-    git tag | sort -r | head -n1 | perl -n -e '/v?(.*)/ && print $1'
+    git describe --tags --abbrev=0 | perl -n -e '/v?(.*)/ && print $1'
     cd $OLDPWD
 }
 
