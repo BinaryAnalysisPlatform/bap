@@ -3,7 +3,7 @@
 
 ### Features
 - #1390 adds the flattening pass to the library interface
-- #1389 adds `insn-code` to the `Theory.Semantics` clas
+- #1389 adds `insn-code` to the `Theory.Semantics` class
 - #1394 adds the `Bitvec.modular` function
 - #1395 adds LLVM 13/14 compatibility
 - #1408 adds support for mips64el target
