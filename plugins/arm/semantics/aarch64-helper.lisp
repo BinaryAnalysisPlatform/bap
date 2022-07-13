@@ -9,6 +9,11 @@
 
 (defun word () (word-width))
 
+(defun reverse-bits (bits) 
+  (if (> (word-width bits) 1)
+      (concat (cast-low 1 bits) (reverse-bits (cast-high (- (word-width bits) 1) bits)))
+  bits))
+
 (defun shift-encoded (rm off)
   "(shift-encoded rm off) decodes the 8-bit shift value
    into its type and offset, and shifts rm accordingly."

@@ -102,7 +102,6 @@
 
 (defun UMSUBLrrr (rd rn rm ra) (set$ rd (cast-low 64 (- ra (* (cast-signed 64 rn) (cast-signed 64 rm))))))
 
-
 (defun SMSUBLrrr (rd rn rm ra) (set$ rd (cast-signed 64 (- ra (* (cast-signed 64 rn) (cast-signed 64 rm))))))
 
 (defun UMULHrr (rd rn rm)
