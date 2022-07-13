@@ -26,4 +26,4 @@
   (intrinsic 'undefined-instruction))
 
 (defun BRK (option)
-  (intrinsic (symbol-concat 'software-breakpoint- (bitvec-to-symbol option '0x))))
+  (intrinsic 'software-breakpoint option))
