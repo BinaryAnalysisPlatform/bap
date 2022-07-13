@@ -100,6 +100,8 @@
 
 (defun SMADDLrrr (rd rn rm ra) (set$ rd (cast-signed 64 (+ ra (* (cast-signed 64 rn) (cast-signed 64 rm))))))
 
+(defun UMSUBLrrr (rd rn rm ra) (set$ rd (cast-low 64 (- ra (* (cast-signed 64 rn) (cast-signed 64 rm))))))
+
 (defun UMULHrr (rd rn rm)
   "multiplies rn and rm together and stores the high 64 bits of the resulting 
   128-bit value to the register rd"
