@@ -79,15 +79,15 @@
 (defun EORv16i8 (vd vn vm) (set$ vd (logxor vn vm)))
 
 ;; the ISA says NOT acts element-wise, but this is
-;; equivalent to just (lognot vn). Not sure why it does this.
-(defun NOTv8i8  (vd vn)    (set$ vd (lognot vn)))
-(defun NOTv16i8 (vd vn)    (set$ vd (lognot vn)))
+;; equivalent to just (lnot vn). Not sure why it does this.
+(defun NOTv8i8  (vd vn)    (set$ vd (lnot vn)))
+(defun NOTv16i8 (vd vn)    (set$ vd (lnot vn)))
 
 (defun ORRv8i8  (vd vn vm) (set$ vd (logor  vn vm)))
 (defun ORRv16i8 (vd vn vm) (set$ vd (logor  vn vm)))
 
-(defun ORNv8i8  (vd vn vm) (set$ vd (logor  vn (lognot vm))))
-(defun ORNv16i8 (vd vn vm) (set$ vd (logor  vn (lognot vm))))
+(defun ORNv8i8  (vd vn vm) (set$ vd (logor  vn (lnot vm))))
+(defun ORNv16i8 (vd vn vm) (set$ vd (logor  vn (lnot vm))))
 
 ;;; INS
 
