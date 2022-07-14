@@ -142,11 +142,13 @@ module Std : sig
           representation of the object or a part of it. *)
       val direct : t
 
-
       (** Denotes the indirect relation between a value and the object
           that we track, e.g., a value is a pointer that points to a
           value that has the direct relation with the object.  *)
       val indirect : t
+
+      val compare : t -> t -> int
+      val equal : t -> t -> bool
     end
 
     (** Each taint represents an abstract object that we would like
