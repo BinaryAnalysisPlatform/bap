@@ -147,7 +147,19 @@ module Std : sig
           value that has the direct relation with the object.  *)
       val indirect : t
 
+      (** [compare x y] returns a total ordering between two relations
+          [x] and [y]. If [x < y] then the result is less than [0]. If
+          [x = y] then the result is [0]. Otherwise, the result is
+          greater than [0].
+
+          @since 2.6.0
+      *)
       val compare : t -> t -> int
+
+      (** [equal x y] is equivalent to [compare x y = 0].
+
+          @since 2.6.0
+      *)
       val equal : t -> t -> bool
     end
 
