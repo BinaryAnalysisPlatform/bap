@@ -310,7 +310,7 @@ let pp_enum_value ppf = function
 let pp_enum_field ppf (name,value) =
   Format.fprintf ppf "@,%s%a," name pp_enum_value value
 
-let rec pp_enum_fields ppf =
+let pp_enum_fields ppf =
   List.iter ~f:(pp_enum_field ppf)
 
 let string_of_basic t = match (t : basic) with

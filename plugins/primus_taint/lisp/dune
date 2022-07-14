@@ -1,0 +1,4 @@
+(install
+ (files sensitive-sinks.lisp taint.lisp taint-sources.lisp)
+ (package bap-primus-taint)
+ (section (site (bap-common site_lisp))))

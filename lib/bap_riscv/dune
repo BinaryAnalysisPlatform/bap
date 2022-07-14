@@ -1,0 +1,6 @@
+(library
+  (name bap_riscv)
+  (public_name bap-riscv)
+  (preprocess (pps ppx_bap))
+  (wrapped false)
+  (libraries bap-core-theory bap-knowledge core_kernel ))

@@ -1,0 +1,47 @@
+(executable
+ (name bap_frontend)
+ (public_name bap)
+ (package bap-frontend)
+ (modules bap_frontend)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   bap-core-theory
+   bap-knowledge
+   bap-main
+   core_kernel
+   findlib.dynload
+   regular
+   threads))
+
+(executable
+ (name bap_mc)
+ (public_name bap-mc)
+ (package bap-mc)
+ (modules bap_mc)
+ (libraries unix))
+
+(executable
+ (name bap_byteweight_main)
+ (public_name bap-byteweight)
+ (package bap-byteweight-frontend)
+ (modules bap_byteweight_main)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   bap-byteweight
+   cmdliner
+   curl
+   fileutils
+   re.posix
+   threads))
+
+(executable
+ (name baptop)
+ (public_name baptop)
+ (package bap-toplevel)
+ (modules baptop)
+ (modes byte)
+ (link_flags (-linkall))
+ (optional)
+ (libraries dune-site.plugins dune-site.toplevel utop threads findlib.dynload))

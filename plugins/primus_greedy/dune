@@ -1,0 +1,10 @@
+(library
+ (name bap_primus_greedy_plugin)
+ (public_name bap-primus-greedy-scheduler.plugin)
+ (libraries bap bap-primus monads core_kernel))
+
+(plugin
+ (name primus-greedy)
+ (package bap-primus-greedy-scheduler)
+ (libraries bap-primus-greedy-scheduler.plugin)
+ (site (bap-common plugins)))

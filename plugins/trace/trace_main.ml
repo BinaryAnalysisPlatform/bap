@@ -87,21 +87,24 @@ module Cmdline = struct
       err_formatter fmt
 
   let () =
-    Config.when_ready (fun {Config.get=(!)} ->
-        Future.upon Plugins.loaded (fun () ->
-            match main !dump !load with
-            | Ok `Done -> ()
-            | Ok `Exit -> exit 0
-            | Error e -> match e with
-              | `Protocol_error err ->
-                exitf "Protocol error: %a" Error.pp err
-              | `System_error err ->
-                exitf "System error: %s" @@ Unix.error_message err
-              | `No_provider ->
-                exitf "No provider for the given URI"
-              | `Ambiguous_uri ->
-                exitf "More than one provider for a given URI"
-              | exception Incompatibe_args ->
-                exitf "Incompatible arguments, see usage SYNOPSIS" ))
+    Config.declare_extension
+      ~doc:"manages execution traces"
+      ~provides:["dynamic"; "pass"; "printer"; "trace"]
+      (fun {Config.get=(!)} ->
+         Future.upon Plugins.loaded (fun () ->
+             match main !dump !load with
+             | Ok `Done -> ()
+             | Ok `Exit -> exit 0
+             | Error e -> match e with
+               | `Protocol_error err ->
+                 exitf "Protocol error: %a" Error.pp err
+               | `System_error err ->
+                 exitf "System error: %s" @@ Unix.error_message err
+               | `No_provider ->
+                 exitf "No provider for the given URI"
+               | `Ambiguous_uri ->
+                 exitf "More than one provider for a given URI"
+               | exception Incompatibe_args ->
+                 exitf "Incompatible arguments, see usage SYNOPSIS" ))
 
 end

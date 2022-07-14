@@ -80,8 +80,11 @@ let main _ctxt =
 let provides = [
   "systemz";
   "lifter";
+  "semantics";
 ]
+
 
 (* finally, let's register our extension and call the main function  *)
 let () = Bap_main.Extension.declare main
+    ~doc:"provides the systemz lifter"
     ~provides

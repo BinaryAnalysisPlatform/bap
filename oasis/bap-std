@@ -79,7 +79,7 @@ Library types
                    Bap_biri,
                    Bap_biri_types,
                    Bap_bitvector,
-                   Bap_common,
+                   Bap_common_types,
                    Bap_context,
                    Bap_core_theory_bil_parser,
                    Bap_eval,

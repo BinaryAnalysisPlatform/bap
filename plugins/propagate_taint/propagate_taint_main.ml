@@ -324,9 +324,12 @@ module Cmdline = struct
   let () =
     let reg = policy "reg" "registers" `Random in
     let mem = policy "mem" "memory locations" `Random in
-    Config.when_ready (fun {Config.get=(!)} ->
-        let args = create !max_trace !max_loop !deterministic
-            !random_seed !reg !mem !interesting !print_coverage in
-        Project.register_pass (main args))
+    Config.declare_extension
+      ~doc:"the legacy taint propagation pass"
+      ~provides:["taint"; "pass"]
+      (fun {Config.get=(!)} ->
+         let args = create !max_trace !max_loop !deterministic
+             !random_seed !reg !mem !interesting !print_coverage in
+         Project.register_pass (main args))
 
 end

@@ -148,6 +148,7 @@ let bvtosf ?(rm=RNE) ~float_size a = unop (FP(FBVTOSF float_size, rm)) a
 let ftof ?(rm=RNE) ~float_size a = unop (FP(FFTOF float_size, rm)) a
 let ieeebvtof ?(rm=RNE) ~float_size a = unop (FP(FIEEEBVTOF float_size, rm)) a
 let fnan ?(rm=RNE) ~float_size = unop (FP(FNAN float_size, rm)) (exp_false)
+[@@warning "-16"]
 
 let cast ct tnew = function
   | Int(i,t) -> let (i',t') = Arithmetic.cast ct (i,t) tnew in

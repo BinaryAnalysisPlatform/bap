@@ -1,0 +1,6 @@
+(library
+  (name knowledge)
+  (public_name bap-knowledge)
+  (wrapped false)
+  (preprocess (pps ppx_bap))
+  (libraries core_kernel core_kernel.caml_unix monads))

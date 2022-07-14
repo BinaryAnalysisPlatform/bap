@@ -1,0 +1,11 @@
+(library
+ (name bap_elf_loader_plugin)
+ (public_name bap-elf.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries bap bap-elf bap-dwarf core_kernel regular))
+
+(plugin
+ (name elf-loader)
+ (package bap-elf)
+ (libraries bap-elf.plugin)
+ (site (bap-common plugins)))

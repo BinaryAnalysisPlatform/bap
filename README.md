@@ -14,9 +14,9 @@
 
 ## Overview
 
-The Carnegie Mellon University Binary Analysis Platform (CMU BAP) is a suite of utilities and libraries that enables analysis of programs in the machine code representation. BAP supports x86, x86-64, ARM, MIPS, PowerPC and new architectures can be added as plugins. BAP includes various analyses, standard interpreter, microexecution interpreter, and symbolic executor. BAP features its own domain-specific language, [Primus Lisp][primus-lisp], that is used for implementing analyses, specifying verification conditions, modeling functions (writing stubs) and even interfacing with the SMT solver. The [toolkit][toolkit] repository includes various examples of program analysis tools that could be implemented with BAP and can be used as the starting point (in addition to the [tutorial][bap-tutorial]) for implementing custom analyses. BAP can be used as a framework with a single [bap][demo] utility that is [extended with plugins][extending] or it can be used as a library [embedded][embedding] in a user application, which could be written in OCaml or, in any other language, using [C bindings][bap-bindings]. We also provide some [minimal support for Python][bap-python] to make it easier to start learning BAP.
+The Carnegie Mellon University Binary Analysis Platform (CMU BAP) is a suite of utilities and libraries that enables analysis of binary programs. BAP supports x86, x86-64, ARM, MIPS, PowerPC and new architectures can be added using plugins. BAP includes various analyses, standard interpreter, microexecution interpreter, and a symbolic executor. BAP features its own domain-specific language, [Primus Lisp][primus-lisp], that is used for implementing analyses, specifying verification conditions, modeling functions (writing stubs), and even interfacing with the SMT solver. The [toolkit][toolkit] repository includes various examples of program analysis tools that could be implemented with BAP and can be used as the starting point (in addition to the [tutorial][bap-tutorial]) for implementing custom analyses. BAP can be used as a framework with a single [bap][demo] utility that is [extended with plugins][extending] or it can be used as a library [embedded][embedding] in a user application, which could be written in OCaml or, in any other language, using [C bindings][bap-bindings]. We also provide some [minimal support for Python][bap-python] to make it easier to start learning BAP.
 
-BAP is developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by grants from the United States Department of Defense, Siemens, Boeing, ForAllSecure, and the Korea government, see [sponsors](#Sponsors) for more information. BAP is used in various institutions and serves as a backbone for many interesting projects, some are highlighted below:
+BAP was developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by grants from the United States Department of Defense, Siemens, Boeing, ForAllSecure, and the Korea government, see [sponsors](#Sponsors) for more information. BAP is used in various institutions and serves as a backbone for many interesting projects, some are highlighted below:
 *   [The CGC winner][cgc] [ForAllSecure Mayhem][mayhem]
 *   [Draper's Laboratory CBAT Tools][cbat]
 *   [Fraunhofer FKIE CWE Checker][cwe-checker]
@@ -37,27 +37,42 @@ sudo dpkg -i {bap,libbap,libbap-dev}_2.5.0.deb
 Our binary packages do not include the OCaml development environment. If you are going to write an analysis in OCaml you need to install BAP from the source code using either [opam][opam-install] or by cloning and building this repository directly. The opam method is the recommended one. Once it is installed the following three commands should install the platform in a newly created switch.
 
 ```bash
-opam init --comp=4.12.1   # inits opam and install the OCaml compiler
-eval `opam config env`    # activates opam environment
-opam depext --install bap # installs bap and its dependencies
+opam init --comp=4.14.1   # inits opam and install the OCaml compiler
+opam install bap          # installs bap and its dependencies
+eval $(opam env)`         # activates opam environment
 ```
-The `opam depext --install bap` command will try to install the system dependencies of BAP. If it fails, try to install the system dependencies manually, using your operating system package manager, and then use the common `opam install bap` command, to install BAP. If it still doesn't work, do not hesitate to drop by our [chat][gitter] and seek help there. It is manned with friendly people that will be happy to help.
 
-The instruction above will get you the latest stable release of BAP. If you're interested in our rolling releases, which are automatically updated every time a commit to the master branch happens, then you can add our testing repository to opam, with the following command
+Or, if you already have a switch where you would like install bap, then just do
+```
+opam install bap
+```
+
+The `opam install bap` command will also try to install the system dependencies of BAP using your operating system package manager. If it fails due to a missing system dependency, try installing it manually and then repeat the `opam install bap` command. If it still doesn't work, do not hesitate to drop by our [chat][gitter] and seek help there. It is manned with friendly people that will be happy to help.
+
+The instruction above will get you the latest stable release of BAP. If you're interested in our rolling releases, which are automatically updated every time a commit to the master branch happens, then you can create a new switch that uses our testing repository
 ```bash
-opam repo add  bap-testing git+https://github.com/BinaryAnalysisPlatform/opam-repository#testing
+opam switch create bap-testing --repos \
+    default,bap=git+https://github.com/BinaryAnalysisPlatform/opam-repository#testing 4.14.1
+opam install bap
 ```
 
-After it is added, the `bap-testing` repository will take precedence over the stable repository and you will get the freshly picked BAP packages straight from the farm.
+After it is added, the `bap` repository will take precedence over the stable repository and you will get the freshly picked BAP packages straight from the farm.
 
-If you insist on building BAP manually or just want to tackle with BAP internals, then you can clone this repository and build it manually. You will need to start with a fresh environment without BAP being installed, to prevent clashes. You will obviously need to install the dependencies of BAP, our `configure` script will help you figure out the missing libraries. Once all the dependencies are satisfied, the following triplet will build and install the Platform:
+If you want to build BAP manually or just want to tackle with BAP internals, then you can clone this repository and build it manually. We suggest your starting with a fresh environment without BAP being installed, to prevent clashes, or even better to use a local switch, e.g.,
 ```bash
-./configure --enable-everything
-make
-make install
+git clone git@github.com:BinaryAnalysisPlatform/bap.git && cd bap
+opam switch create . --deps-only
+dune build && dune install
 ```
 
-The `configure` script lets you define a specific set of components that you need. We have nearly a hundred of components and naming them all will be too tedious, that's why we added the `--enable-everything` option. It plays nice with the `--disable-<feature>` component so that you can unselect components that are not relevant to your current task. For more tips and tricks see our [wiki][wiki] and do not hesitate to tip back. We encourage everyone to use our wiki for collaboration and information sharing. And as always, drop by [gitter][gitter] for a friendly chat.
+The snippet above will clone bap, create a fresh local switch, install the necessary dependencies, including the system one, and, finally, build and install bap with dune. Alternatively, if you already have a switch where you want to build and install bap, you can use
+```
+git clone git@github.com:BinaryAnalysisPlatform/bap.git && cd bap
+opam install . --deps-only
+dune build && dune install
+```
+
+to install bap and its dependencies into the currently selected switch.
 
 ## Using
 
@@ -131,6 +146,25 @@ bap /bin/echo --pass=jmp
 Let's briefly go through the code. The `counter` object is a visitor that has the state consisting of a pair of counters. The first counter keeps track of the number of jmp terms, and the second counter is incremented every time we enter any term.  The `main` function just runs the counter and prints the output. We declare our extension use the [Extension.declare][extension-declare] function from the [Bap_main][bap-main] library. An extension is just a function that receives the context (which could be used to obtain configuration parameters). In this function, we register our `main` function as a pass using the `Project.register_pass` function.
 
 A little bit more complex example, as well as an example that uses Python, can be found in our [tutorial][bap-tutorial].
+
+
+### Building a plugin with dune
+
+You can also build and install bap plugins using dune. For that, you need to define a library and use the `plugin` stanza that uses this library. Below is the template `dune` file,
+```
+(library
+ (name FOO)
+ (public_name OUR-FOO.plugin)
+ (libraries bap bap-main))
+
+(plugin
+ (name FOO)
+ (package OUR-FOO)
+ (libraries OUR-FOO.plugin)
+ (site (bap-common plugins)))
+```
+
+Eveything that is capitalized in the above snippet is a placeholder that you shall substitute with appropriate private and public names for your plugin. Notice, that the `.plugin` extension is not necessary, but is percieved as a good convention.
 
 ### Interactive REPL
 

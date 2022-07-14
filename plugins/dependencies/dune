@@ -1,0 +1,11 @@
+(library
+ (name bap_dependencies_plugin)
+ (public_name bap-dependencies.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries bap bap-main core_kernel ogre regular))
+
+(plugin
+ (name dependencies)
+ (package bap-dependencies)
+ (libraries bap-dependencies.plugin)
+ (site (bap-common plugins)))

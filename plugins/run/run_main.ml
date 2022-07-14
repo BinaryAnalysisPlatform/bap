@@ -353,9 +353,12 @@ let deps = [
 ]
 
 let () =
-  Config.when_ready (fun conf ->
-      Project.register_pass ~deps (main conf);
-      Primus.Machine.add_component (module Visited) [@warning "-D"];
-      Primus.Components.register_generic "records-visited" (module Visited)
-        ~internal:true
-        ~package:"run")
+  Config.declare_extension
+    ~doc:"emulates the program using Primus"
+    ~provides:["pass"; "primus"; "emulator"; "microexecution"]
+    (fun conf ->
+       Project.register_pass ~deps (main conf);
+       Primus.Machine.add_component (module Visited) [@warning "-D"];
+       Primus.Components.register_generic "records-visited" (module Visited)
+         ~internal:true
+         ~package:"run")

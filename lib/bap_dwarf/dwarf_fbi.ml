@@ -139,7 +139,7 @@ let read_scheme s str_sec action str ~pos_ref =
       loop (emit attr form :: acc) in
   loop []
 
-let rec create_table s str_sec str ~pos_ref =
+let create_table s str_sec str ~pos_ref =
   let abbrs : table = Table.create () in
   let rec fill () =
     Input.code str ~pos_ref >>= function
@@ -204,7 +204,7 @@ let create data : t Or_error.t =
     create_table s str_sec abbr ~pos_ref:abbr_pos >>= fun abbrs ->
     return (abbrs, cu_end) in
 
-  let rec read_unit () =
+  let read_unit () =
     read_header () >>| fun init ->
     Sequence.unfold_step ~init ~f:(fun (abbrs,cu_end) ->
         let open Sequence.Step in

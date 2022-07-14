@@ -7,7 +7,7 @@ Provides the $(b,bap:mark-visited) and $(b,bap:report-visited) components.
 open Bap_main
 open Bap.Std
 open Bap_primus.Std
-include Self()
+include Loggers()
 
 module ReportProgress(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
@@ -21,7 +21,9 @@ module ReportProgress(Machine : Primus.Machine.S) = struct
 end
 
 
-let () = Extension.declare @@ fun _ ->
+let () = Extension.declare
+    ~doc
+    ~provides:["primus"; "component"] @@ fun _ ->
   Bap_primus_track_visited.init ();
   Primus.Components.register_generic ~package:"bap" "report-visited"
     (module ReportProgress)

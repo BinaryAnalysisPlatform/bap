@@ -1,0 +1,19 @@
+(library
+ (name bap_byteweight_plugin)
+ (public_name bap-byteweight.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   bap-byteweight
+   bap-core-theory
+   bap-knowledge
+   bap-main
+   bitvec
+   bitvec-order
+   core_kernel))
+
+(plugin
+ (name byteweight)
+ (package bap-byteweight)
+ (libraries bap-byteweight.plugin)
+ (site (bap-common plugins)))

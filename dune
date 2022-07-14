@@ -1,0 +1,47 @@
+(env
+ (dev
+  (flags (:standard
+           -warn-error -A
+           -w -6-9-27-32..34-37-50-58))
+  (ocamlopt_flags (:standard -O3))))
+
+
+(rule
+ (target config.status.in)
+ (mode fallback)
+ (action (with-stdout-to %{target} (echo ""))))
+
+(rule
+ (alias config)
+ (target config.status)
+ (deps config.status.in)
+ (action
+  (with-stdin-from %{deps}
+   (with-stdout-to %{target}
+    (chdir %{workspace_root}
+     (run ./tools/rewrite.exe -init))))))
+
+
+(library
+ (name ppx_bap)
+ (public_name ppx_bap)
+ (kind ppx_rewriter)
+ (libraries
+   ppx_assert
+   ppx_bench
+   ppx_bin_prot
+   ppx_compare
+   ppx_enumerate
+   ppx_fields_conv
+   ppx_hash
+   ppx_here
+   ppxlib
+   ppx_optcomp
+   ppx_sexp_conv
+   ppx_sexp_value
+   ppx_variants_conv)
+ (preprocess no_preprocessing))
+
+(alias
+ (name default)
+ (deps (alias_rec install)))

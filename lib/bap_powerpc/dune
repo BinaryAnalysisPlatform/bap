@@ -1,0 +1,6 @@
+(library
+  (name bap_powerpc)
+  (public_name bap-powerpc)
+  (preprocess (pps ppx_bap))
+  (wrapped false)
+  (libraries bap bap-knowledge bap-core-theory core_kernel ogre))

@@ -282,7 +282,7 @@ let apply abi size attrs t sub =
 
 let create_api_processor size abi : Bap_api.t =
   let stage1 gamma = object(self)
-    inherit Term.mapper as super
+    inherit Term.mapper
     method! map_sub sub =
       if Term.has_attr sub Attrs.proto then sub
       else self#apply_proto sub

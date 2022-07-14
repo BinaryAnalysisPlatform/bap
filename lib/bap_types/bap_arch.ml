@@ -1,7 +1,7 @@
 open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Regular.Std
-open Bap_common
+open Bap_common_types
 
 module T = struct
   open Arch

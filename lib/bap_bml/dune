@@ -1,0 +1,6 @@
+(library
+  (name bap_bml)
+  (public_name bap-bml)
+  (preprocess (pps ppx_bap))
+  (wrapped false)
+  (libraries bap core_kernel))

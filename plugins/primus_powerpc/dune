@@ -1,0 +1,10 @@
+(library
+ (name bap_primus_powerpc_plugin)
+ (public_name bap-primus-powerpc.plugin)
+ (libraries bap bap-primus core_kernel))
+
+(plugin
+ (name primus-powerpc)
+ (package bap-primus-powerpc)
+ (libraries bap-primus-powerpc.plugin)
+ (site (bap-common plugins)))

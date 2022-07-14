@@ -1,0 +1,11 @@
+(library
+ (name bap_systemz_plugin)
+ (public_name bap-systemz.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries bap bap-core-theory bap-knowledge bap-main bap-systemz))
+
+(plugin
+ (name systemz)
+ (package bap-systemz)
+ (libraries bap-systemz.plugin)
+ (site (bap-common plugins)))

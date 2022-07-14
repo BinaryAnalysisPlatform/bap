@@ -1,7 +1,7 @@
 open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Graphlib.Std
-open Bap_common
+open Bap_common_types
 open Bap_bil
 open Bap_ir
 

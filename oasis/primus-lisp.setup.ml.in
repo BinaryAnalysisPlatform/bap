@@ -1,0 +1,16 @@
+let () =
+  add_variable ~doc:"additional sites for lisp files"
+    "site_lisp"
+    ~define:(function
+        | None -> ""
+        | Some xs -> xs);
+  add_variable ~doc:"additional sites for site-lisp files"
+    "site_site_lisp"
+    ~define:(function
+        | None -> ""
+        | Some xs -> xs);
+  add_variable ~doc:"additional sites for semantics files"
+    "site_semantics"
+    ~define:(function
+        | None -> ""
+        | Some xs -> xs)

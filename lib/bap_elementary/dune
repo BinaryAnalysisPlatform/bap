@@ -1,0 +1,5 @@
+(library
+  (name bap_elementary)
+  (public_name bap-elementary)
+  (wrapped false)
+  (libraries bap bap-core-theory bap-knowledge bitvec core_kernel))

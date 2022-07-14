@@ -4,6 +4,7 @@ open Bap_future.Std
 open Or_error.Monad_infix
 
 module Units = Bap_plugins_units.Make()
+module Package = Bap_plugins_package
 module Filename = Caml.Filename
 module Sys = Caml.Sys
 
@@ -15,15 +16,21 @@ module Plugin = struct
 
   let argv () = !args
 
+  type body =
+    | Bundle of {
+        path : string;
+        bundle : bundle;
+      }
+    | Package
+
   type t = {
-    path : string;
     name : string;
-    bundle : bundle;
+    body : body;
     loaded : unit future;
     finish : unit promise;
-  } [@@deriving fields]
+  }
 
-  let sexp_of_t {path} = sexp_of_string path
+  let sexp_of_t {name} = sexp_of_string name
 
   type system_event = [
     | `Opening  of string
@@ -37,10 +44,9 @@ module Plugin = struct
   let system_events,event = Stream.create ()
   let notify (value : system_event) = Signal.send event value
 
-  let load = ref Dynlink.loadfile
+  let load = Bap_plugins_loader_backend.load
+  let setup_dynamic_loader = Bap_plugins_loader_backend.install
 
-  let setup_dynamic_loader loader =
-    load := loader
 
   let init = lazy (Units.init ())
 
@@ -50,33 +56,33 @@ module Plugin = struct
       let bundle = Bundle.of_uri (Uri.of_string path) in
       let name = Bundle.manifest bundle |> Manifest.name in
       let loaded,finish = Future.create () in
-      {name; path; bundle; loaded; finish}
+      {name; body = Bundle {path; bundle}; loaded; finish}
     with exn ->
       let err = Error.of_exn exn in
       notify (`Errored (path,err));
       raise exn
 
-  let manifest p = Bundle.manifest p.bundle
-  let name p = manifest p |> Manifest.name
+  let is_bundled = function
+    | {body=Bundle _} -> true
+    | _ -> false
+
+  let of_package name =
+    let loaded,finish = Future.create () in
+    {name; body = Package; loaded; finish;}
+
+  let manifest p = match p.body with
+    | Bundle {bundle} -> Bundle.manifest bundle
+    | Package -> Manifest.create p.name
+
+  let name p = p.name
   let desc p = manifest p |> Manifest.desc
   let tags p = manifest p |> Manifest.tags
   let cons p = manifest p |> Manifest.cons
 
-  let find_library_exn name =
-    let dir = Findlib.package_directory name in
-    let nat = if Dynlink.is_native then "native" else "byte" in
-    let pre = ["plugin"; nat ] in
-    let cmx = Findlib.package_property pre name "archive" in
-    let file = Dynlink.adapt_filename cmx in
-    Findlib.resolve_path ~base:dir file
-
-  let find_library name =
-    try Some (find_library_exn name) with _ -> None
-
   let load_unit ~reason ~name pkg : unit or_error =
     try
       notify (`Linking name);
-      !load pkg;
+      load pkg;
       Units.record name reason;
       Ok ()
     with
@@ -87,6 +93,16 @@ module Plugin = struct
 
   let is_debugging () =
     try String.(Sys.getenv "BAP_DEBUG" <> "0") with Caml.Not_found -> false
+
+  let bundle = function {body=Bundle {bundle}} -> bundle
+                      | _ -> assert false
+
+  let path = function {body=Bundle {path}} -> path
+                    | {name} -> sprintf "package:%s" name
+
+
+  let loaded p = p.loaded
+
 
   let do_if_not_debugging f x =
     if is_debugging () then () else f x
@@ -123,13 +139,13 @@ module Plugin = struct
     let reason = if main
       then `Provided_by plugin.name
       else `Requested_by plugin.name in
-    Bundle.get_file ~name:dst plugin.bundle path |> function
+    Bundle.get_file ~name:dst (bundle plugin) path |> function
     | Some uri ->
       let path = Uri.to_string uri in
       let result = load_unit ~reason ~name path in
       do_if_not_debugging Sys.remove path;
       result
-    | None -> match find_library name with
+    | None -> match Package.resolve name with
       | Some lib ->
         let name = Filename.(basename name |> chop_extension) in
         load_unit ~reason ~name lib
@@ -160,25 +176,51 @@ module Plugin = struct
 
   let is_missing dep = Option.is_none (Units.lookup dep)
 
-  let try_load (plugin : t) =
-    if Future.is_decided plugin.loaded
-    then Ok ()
-    else
-      let lazy () = init in
-      notify (`Loading plugin);
-      let m = manifest plugin in
-      let mains = Manifest.provides m in
-      validate_provided plugin mains >>= fun () ->
-      let reqs = Manifest.requires m |> List.filter ~f:is_missing in
-      let main = Manifest.main m in
-      let old_bundle = main_bundle () in
-      set_main_bundle (bundle plugin);
-      load_entries plugin reqs >>= fun () ->
-      load_entry ~main:true plugin main >>| fun () ->
-      Promise.fulfill plugin.finish ();
-      notify (`Loaded plugin);
-      set_main_bundle old_bundle
+  type context = unit -> unit
+  let enter p = match p.body with
+    | Bundle {bundle} ->
+      let old = main_bundle () in
+      set_main_bundle bundle;
+      fun () -> set_main_bundle old
+    | Package ->
+      let old = Manifest.switch (Manifest.create p.name) in
+      fun () -> Manifest.update old
 
+  let leave f = f ()
+
+  let with_context p ~f =
+    let finally = enter p in
+    protect ~f ~finally
+
+
+  let try_load_bundled (plugin : t) =
+    let lazy () = init in
+    notify (`Loading plugin);
+    let m = manifest plugin in
+    let mains = Manifest.provides m in
+    validate_provided plugin mains >>= fun () ->
+    let reqs = Manifest.requires m |> List.filter ~f:is_missing in
+    let main = Manifest.main m in
+    let old_bundle = main_bundle () in
+    set_main_bundle (bundle plugin);
+    load_entries plugin reqs >>= fun () ->
+    load_entry ~main:true plugin main >>| fun () ->
+    Promise.fulfill plugin.finish ();
+    notify (`Loaded plugin);
+    set_main_bundle old_bundle
+
+  let try_load plugin = match plugin.body with
+    | Bundle _ -> try_load_bundled plugin
+    | Package ->
+      try
+        notify (`Loading plugin);
+        with_context plugin ~f:(fun () ->
+            Bap_common.Plugins.load plugin.name;
+            Promise.fulfill plugin.finish ();
+            notify (`Loaded plugin);
+            Ok ())
+      with exn ->
+        Or_error.of_exn exn
 
   let with_argv argv f = match argv with
     | None -> f ()
@@ -194,13 +236,15 @@ module Plugin = struct
         args := old;
         raise exn
 
-
   let do_load plugin =
-    match try_load plugin with
-    | Error err as result ->
-      notify (`Errored (plugin.name,err));
-      result
-    | result -> result
+    if Future.is_decided plugin.loaded
+    then Ok ()
+    else
+      match try_load plugin with
+      | Error err as result ->
+        notify (`Errored (plugin.name,err));
+        result
+      | result -> result
 
   let load ?argv plugin =
     with_argv argv (fun () -> do_load plugin)
@@ -237,7 +281,7 @@ module Plugins = struct
     | Ok p -> Plugin.name p
     | Error (name,_) -> name
 
-  let collect ?env ?provides ?(library=[]) () =
+  let collect_bundles ?env ?provides ?(library=[]) () =
     let (/) x y = x ^ "/" ^ y in
     let strset = Set.of_list (module String) in
     let provides = Option.map provides ~f:strset in
@@ -257,10 +301,22 @@ module Plugins = struct
         String.compare (plugin_name x) (plugin_name y))
 
 
-  let list ?env ?provides ?library () =
-    collect ?env ?provides ?library () |> List.filter_map ~f:(function
+  let list_bundles ?env ?provides ?library () =
+    collect_bundles ?env ?provides ?library () |> List.filter_map ~f:(function
         | Ok p -> Some p
         | Error _ -> None)
+
+  let list_packages () =
+    Bap_common.Plugins.list () |>
+    List.map ~f:Plugin.of_package
+
+  let list ?env ?provides ?library () =
+    list_bundles ?env ?provides ?library () @
+    list_packages ()
+
+  let collect ?env ?provides ?library () =
+    collect_bundles ?env ?provides ?library () @
+    List.map ~f:Result.return @@list_packages ()
 
   let loaded,finished = Future.create ()
 

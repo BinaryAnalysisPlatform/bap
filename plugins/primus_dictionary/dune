@@ -1,0 +1,10 @@
+(library
+ (name bap_primus_dictionary_plugin)
+ (public_name bap-primus-dictionary.plugin)
+ (libraries bap bap-primus bap-core-theory core_kernel))
+
+(plugin
+ (name primus-dictionary)
+ (package bap-primus-dictionary)
+ (libraries bap-primus-dictionary.plugin)
+ (site (bap-common plugins)))

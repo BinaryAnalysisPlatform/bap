@@ -1,0 +1,10 @@
+(library
+ (name bap_recipe_command_plugin)
+ (public_name bap-recipe-command.plugin)
+ (libraries bap-recipe bap-main base))
+
+(plugin
+ (name recipe-command)
+ (package bap-recipe-command)
+ (libraries bap-recipe-command.plugin)
+ (site (bap-common plugins)))

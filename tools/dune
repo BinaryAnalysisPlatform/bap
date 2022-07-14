@@ -1,0 +1,29 @@
+(executable
+ (name rewrite)
+ (preprocess (pps ppx_sexp_conv))
+ (modules rewrite)
+ (libraries bap-common base stdio sexplib dune-configurator dune-site))
+
+(executable
+ (name bapbuild)
+ (public_name bapbuild)
+ (package bap-build)
+ (preprocess (pps ppx_bap))
+ (modules bapbuild)
+ (libraries core_kernel ocamlbuild bap-build compiler-libs))
+
+(executable
+ (name bapbundle)
+ (public_name bapbundle)
+ (package bap-bundle)
+ (modules bapbundle)
+ (libraries core_kernel bap-bundle fileutils uri))
+
+(rule
+ (target bap_config)
+ (deps bap_config.ab (alias ../config))
+ (action
+  (with-stdin-from %{deps}
+   (with-stdout-to %{target}
+    (chdir %{workspace_root}
+     (run ./tools/rewrite.exe -filename %{deps}))))))

@@ -1,0 +1,19 @@
+(library
+ (name bap_analyze)
+ (public_name bap-analyze.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   bap-core-theory
+   bap-knowledge
+   bap-main
+   bitvec
+   core_kernel
+   linenoise
+   monads))
+
+(plugin
+ (name analyze)
+ (package bap-analyze)
+ (libraries bap-analyze.plugin)
+ (site (bap-common plugins)))

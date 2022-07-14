@@ -1,0 +1,11 @@
+(library
+ (name bap_taint_plugin)
+ (public_name bap-taint.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries bap core_kernel regular))
+
+(plugin
+ (name taint)
+ (package bap-taint)
+ (libraries bap-taint.plugin)
+ (site (bap-common plugins)))

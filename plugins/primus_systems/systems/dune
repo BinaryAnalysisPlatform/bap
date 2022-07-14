@@ -1,0 +1,4 @@
+(install
+ (files (core.asd as systems/core.asd))
+ (package bap-primus-systems)
+ (section (site (bap-common primus))))

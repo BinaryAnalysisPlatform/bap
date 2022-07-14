@@ -1,0 +1,10 @@
+(library
+ (name bap_strings_plugin)
+ (public_name bap-beagle-strings.plugin)
+ (libraries bap bap-strings bap-beagle core_kernel regular))
+
+(plugin
+ (name strings)
+ (package bap-beagle-strings)
+ (libraries bap-beagle-strings.plugin)
+ (site (bap-common plugins)))

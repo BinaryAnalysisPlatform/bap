@@ -1,0 +1,15 @@
+(library
+  (name bap_image)
+  (public_name bap-std.image)
+  (wrapped false)
+  (preprocess (pps ppx_bap))
+  (libraries
+    bap-core-theory
+    bap-knowledge
+    bap_types
+    core_kernel
+    core_kernel.caml_unix
+    mmap
+    monads
+    ogre
+    regular))

@@ -8,9 +8,7 @@ open Bap_future.Std
 (** Interface to the plugin subsystem.  *)
 module Std : sig
 
-
   type plugin
-
 
   (** Plugin - a loadable self-contained piece of code.
 
@@ -25,17 +23,49 @@ module Std : sig
     (** [of_path path] creates a plugin of a give [path]  *)
     val of_path : string -> t
 
-    (** [path plugin] is a plugin's path  *)
+    (** [of_package] creates a lightweight plugin from a package.
+
+        The created plugin doesn't bundle any dependencies and
+        corresponds to a META file that contains the required
+        libraries.
+
+        @since 2.6.0  *)
+    val of_package : string -> t
+
+
+    (** [is_bundled plugin] is [true] if the plugin was created of a bundle.
+
+        @since 2.6.0 *)
+    val is_bundled : t -> bool
+
+    (** [path plugin] is a plugin's path.
+
+
+        For plugins that represent packages, returns package:<name>.
+    *)
     val path : t -> string
 
     (** [name plugin] is a plugin's name  *)
     val name : t -> string
 
-    (** [desc plugin] returns plugin description  *)
+    (** [desc plugin] returns plugin description.*)
     val desc : t -> string
 
-    (** [bundle plugin] returns a plugin's bundle *)
+    (** [bundle p] returns the plugin [p] bundle.
+
+        @raises Invalid_arg if not [is_bundled p].
+        @since 2.6.0 raises an exception for packaged plugins
+    *)
     val bundle : t -> bundle
+
+    (** [manifest p] returns the embedded manifest.
+
+        @since 2.6.0  *)
+    val manifest : t -> manifest
+
+
+    (** []  *)
+    val with_context : t -> f:(unit -> 'a) -> 'a
 
     (** [load plugin] load all unsatisfied dependencies of a [plugin],
         and then load the [plugin] itself. If it is already

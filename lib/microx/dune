@@ -1,0 +1,6 @@
+(library
+  (name bap_microx)
+  (public_name bap-microx)
+  (preprocess (pps ppx_bap))
+  (wrapped false)
+  (libraries bap monads core_kernel))

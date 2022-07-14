@@ -65,28 +65,31 @@ let () =
            ~f:(fun (name, kind) ->
                Option.some_if (equal_kind kind default) name)) in
     Config.(param (enum kinds) "lifter" ~doc ~default) in
-  Config.when_ready (fun {Config.get=(!!)} ->
-      let open Bap_core_theory in
-      let open Bap_primus.Std in
+  Config.declare_extension
+    ~doc:"provides x86/x86-64 semantics"
+    ~provides:["disassembler"; "lifter"; "semantics"; "x86"; "abi"]
+  @@ fun {Config.get=(!!)} ->
+  let open Bap_core_theory in
+  let open Bap_primus.Std in
 
-      main !!backend !!kind !!abi;
-      if !!fp_lifter || !!legacy_lifter then begin
-        let open Bap_core_theory in
-        let open Bap_primus.Std in
-        if !!fp_lifter then Format.eprintf
-            "The --with-floating-points flag is deprecated \
-             and will be removed in the following versions of bap. \
-             This flag enables the legacy lifter that is incomplete \
-             and disables the new version that translates \
-             floating-point operations into the intrinsic calls. \
-             If you still need the legacy lifter use the \
-             --x86-with-legacy-floating-points option instead.@\n%!";
-        X86_legacy_bil_lifter.init ();
-        X86_legacy_bil_semantics.init ();
-      end else if not !!disable_intrinsics
-      then
-        KB.promise Primus.Lisp.Semantics.context @@ fun _ ->
-        KB.return @@
-        Primus.Lisp.Context.create [
-          "x86-floating-points", ["intrinsic-semantics"]
-        ])
+  main !!backend !!kind !!abi;
+  if !!fp_lifter || !!legacy_lifter then begin
+    let open Bap_core_theory in
+    let open Bap_primus.Std in
+    if !!fp_lifter then Format.eprintf
+        "The --with-floating-points flag is deprecated \
+         and will be removed in the following versions of bap. \
+         This flag enables the legacy lifter that is incomplete \
+         and disables the new version that translates \
+         floating-point operations into the intrinsic calls. \
+         If you still need the legacy lifter use the \
+         --x86-with-legacy-floating-points option instead.@\n%!";
+    X86_legacy_bil_lifter.init ();
+    X86_legacy_bil_semantics.init ();
+  end else if not !!disable_intrinsics
+  then
+    KB.promise Primus.Lisp.Semantics.context @@ fun _ ->
+    KB.return @@
+    Primus.Lisp.Context.create [
+      "x86-floating-points", ["intrinsic-semantics"]
+    ]

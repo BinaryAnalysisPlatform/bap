@@ -1,0 +1,10 @@
+(library
+ (name bap_ghidra_plugin)
+ (public_name bap-ghidra.plugin)
+ (libraries bap bap-ghidra bap-main core_kernel))
+
+(plugin
+ (name ghidra)
+ (package bap-ghidra)
+ (libraries bap-ghidra.plugin)
+ (site (bap-common plugins)))

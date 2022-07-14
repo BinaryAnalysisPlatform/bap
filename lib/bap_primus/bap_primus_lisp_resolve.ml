@@ -33,8 +33,6 @@ type ('t,'a,'b) one = ('t,'a,'t Def.t * 'b) resolver
 type ('t,'a,'b) many = ('t,'a,('t Def.t * 'b) list) resolver
 
 
-type exn += Failed of string * Context.t * resolution
-
 let has_name d name = String.equal (Def.name d) name
 
 (* all definitions with the given name *)

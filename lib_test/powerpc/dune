@@ -1,0 +1,4 @@
+(test
+ (name run_powerpc_tests)
+ (package bap)
+ (libraries bap bap-plugins ounit2 threads))

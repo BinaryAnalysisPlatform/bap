@@ -1,0 +1,29 @@
+(library
+ (name bap_llvm)
+ (public_name bap-llvm)
+ (wrapped false)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   core_kernel
+   core_kernel.caml_unix
+   mmap
+   monads
+   ogre)
+ (foreign_stubs
+  (language cxx)
+  (names llvm_disasm llvm_error_or llvm_primitives
+         llvm_loader llvm_loader_utils
+         llvm_coff_loader llvm_elf_loader
+         llvm_macho_loader llvm_pdb_loader)
+  (extra_deps (glob_files *.hpp))
+  (flags -I. :standard (:include cxx.flags)))
+ (foreign_stubs
+  (language c)
+  (names llvm_stubs llvm_loader_stubs))
+ (c_library_flags (:include link.flags)))
+
+(rule
+ (targets cxx.flags link.flags bap_llvm_config.ml)
+ (deps bap_llvm_config.ml.ab)
+ (action  (run ./config/llvm_configurator.exe -filename %{deps})))

@@ -3,4 +3,8 @@ let main () =
   UTop_main.main ()
 
 
-let () = main ()
+let () =
+  try main () with
+    Symtable.Error err ->
+    Format.eprintf "Internal error: %a@." Symtable.report_error err;
+    exit 1

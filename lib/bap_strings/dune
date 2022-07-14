@@ -1,0 +1,6 @@
+(library
+  (name bap_strings)
+  (public_name bap-strings)
+  (preprocess (pps ppx_bap))
+  (wrapped false)
+  (libraries core_kernel))

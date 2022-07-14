@@ -1,0 +1,4 @@
+(install
+ (files pcode-cpuid.lisp pcode.lisp)
+ (package bap-ghidra)
+ (section (site (bap-common semantics))))

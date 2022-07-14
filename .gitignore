@@ -76,3 +76,8 @@ bap_main_config.ml
 tools/postinstall.ml
 OMakefile
 /testsuite/
+/config.status
+/config.status.in
+/_opam/
+/plugins/api/api_sites.ml
+/plugins/stub_resolver/stub_resolver_sites.ml

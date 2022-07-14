@@ -1,0 +1,10 @@
+(library
+ (name bap_warn_unused_plugin)
+ (public_name bap-warn-unused.plugin)
+ (libraries bap core_kernel))
+
+(plugin
+ (name warn-unused)
+ (package bap-warn-unused)
+ (libraries bap-warn-unused.plugin)
+ (site (bap-common plugins)))

@@ -1,0 +1,5 @@
+(library
+  (name bitvec)
+  (public_name bitvec)
+  (wrapped false)
+  (libraries zarith))

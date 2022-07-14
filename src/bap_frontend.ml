@@ -169,7 +169,7 @@ let entity_desc : (entity * string) list = [
   `Collators, "project collators (comparators)";
 ]
 
-let () =
+let _list_command_declaration : unit =
   let what = Command.argument @@ Type.enum entities in
   let filter = Command.parameter Type.(list string) "filter"
       ~aliases:["f"]
@@ -315,6 +315,28 @@ let () =
                 (name m))
         | _ -> ());
     Ok ()
+
+let _config_command_declaration : unit =
+  let entities = Configuration.[
+      "datadir", datadir;
+      "cachedir", cachedir;
+      "sysdatadir", sysdatadir;
+      "libdir", libdir;
+      "confdir", confdir;
+    ] in
+  let entity = Command.argument @@ Type.(some (enum entities)) in
+  let doc = "prints BAP configuration" in
+  Command.declare ~doc "config" Command.(args $entity) @@
+  fun entity _ctxt -> match entity with
+  | Some entity ->
+    Format.printf "%s@." entity;
+    Ok ()
+  | None ->
+    List.iter entities ~f:(fun (name, value) ->
+        Format.printf "%s: %s@." name value);
+    Ok ()
+
+
 
 
 let () =

@@ -1,0 +1,8 @@
+(install
+ (files check-value.lisp
+        incident.lisp
+        memcheck.lisp
+        memcheck-malloc.lisp
+        warn-unused.lisp)
+ (package bap-primus-test)
+ (section (site (bap-common site_lisp))))

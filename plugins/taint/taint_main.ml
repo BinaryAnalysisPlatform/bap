@@ -97,7 +97,7 @@ module Marker = struct
 
   class main ~regs ~ptrs = object(self)
     inherit Term.mapper as super
-    method map_def def =
+    method! map_def def =
       super#map_def def |>
       mark Taint.reg regs |>
       mark Taint.ptr ptrs
@@ -165,6 +165,9 @@ language follows:";
     let reg = taints "reg" in
     let ptr = taints "ptr" in
     Config.manpage man;
-    Config.when_ready (fun {Config.get=(!)} -> main !reg !ptr)
+    Config.declare_extension
+      ~doc:"the legacy taint propagation engine"
+      ~provides:["taint"; "analysis"; "dataflow"]
+      (fun {Config.get=(!)} -> main !reg !ptr)
 
 end

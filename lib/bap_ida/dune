@@ -1,0 +1,6 @@
+(library
+  (name bap_ida)
+  (public_name bap-ida)
+  (preprocess (pps ppx_bap))
+  (wrapped false)
+  (libraries core_kernel fileutils re.posix))

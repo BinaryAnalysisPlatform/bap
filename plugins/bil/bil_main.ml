@@ -161,7 +161,7 @@ let () =
             all string comparisons are made case-insensitive. \
             Example, $(b,:unknown,:special,asm:addsd,llvm:trap)." in
 
-  declare ~provides:["bil"; "core-theory"; "lifter"] @@ fun ctxt ->
+  declare ~doc ~provides:["bil"; "core-theory"; "lifter"] @@ fun ctxt ->
   let open Syntax in
   if ctxt-->list_passes then print_passes ()
   else begin

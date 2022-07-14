@@ -1,0 +1,10 @@
+(library
+ (name bap_glibc_runtime_plugin)
+ (public_name bap-glibc-runtime.plugin)
+ (libraries bap bap-abi bap-c bap-core-theory bap-main core_kernel ogre))
+
+(plugin
+ (name glibc-runtime)
+ (package bap-glibc-runtime)
+ (libraries bap-glibc-runtime.plugin)
+ (site (bap-common plugins)))

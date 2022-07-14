@@ -1,4 +1,0 @@
-REC
-PKG cmdliner
-PKG bap-main
-B ../../_build/plugins/llvm

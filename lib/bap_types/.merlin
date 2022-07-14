@@ -1,6 +1,0 @@
-PKG zarith
-PKG uuidm
-REC
-
-B ../../_build/lib/bap_types
-B ../../_build/lib/knowledge

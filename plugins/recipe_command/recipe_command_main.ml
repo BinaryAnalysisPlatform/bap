@@ -181,3 +181,7 @@ let () = Extension.Error.register_printer @@ function
   | Recipe_error err ->
     Some (Stdlib.Format.asprintf "%a" Recipe.pp_error err)
   | _ -> None
+
+let () = Extension.declare ~doc:"provides the recipe command"
+    ~provides:["command"; "recipe"]
+    (fun _ -> Ok ())

@@ -63,6 +63,8 @@ let print {Config.get=(!!)} proj =
   Option.iter (Project.get proj Beagle_prey.statics)
     ~f:(print_str !!address)
 
-let () = Config.when_ready (fun cfg ->
-    Project.register_pass  ~name:"collect" (collect cfg);
-    Project.register_pass' ~deps:["strings-collect"] (print cfg))
+let () = Config.declare_extension
+    ~doc:"searches in binaries for string-like artifacts"
+    ~provides:["pass"; "strings"] @@ fun cfg ->
+  Project.register_pass  ~name:"collect" (collect cfg);
+  Project.register_pass' ~deps:["strings-collect"] (print cfg)

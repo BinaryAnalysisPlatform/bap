@@ -1,0 +1,15 @@
+(library
+ (name bap_ghidra)
+ (public_name bap-ghidra)
+ (wrapped false)
+ (preprocess (pps ppx_bap))
+ (libraries bap core_kernel mmap)
+ (foreign_stubs
+  (language cxx)
+  (names ghidra_disasm)
+  (extra_deps (glob_files *.hpp))
+  (flags :standard -fPIC))
+ (foreign_stubs
+  (language c)
+  (names ghidra_stubs))
+ (c_library_flags :standard -L/usr/lib/ghidra -ldecomp))

@@ -273,5 +273,8 @@ let cpp = Config.param Config.(some string)
     "preprocess"
     ~synonyms:["pp"]
 
-let () = Config.when_ready @@ fun {get} ->
+let () = Config.declare_extension
+    ~doc:"provides a C parser based on FrontC"
+    ~provides:["api"; "c"; "parser"]
+  @@ fun {get} ->
   C.Parser.provide (parser (get cpp))

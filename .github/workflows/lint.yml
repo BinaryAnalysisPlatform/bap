@@ -1,0 +1,28 @@
+name: lint
+run-name: Linting ${{ github.ref }}
+
+on:
+  - pull_request
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    env:
+      OPAMJOBS: 2
+      OPAMRETRES: 8
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup OCaml
+        uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: 4.14.x
+          opam-pin: false
+          opam-depext: false
+          dune-cache: true
+
+      - name: Check the Style
+        run: opam install -y ocp-indent && opam exec -- make check-style

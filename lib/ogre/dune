@@ -1,0 +1,6 @@
+(library
+  (name ogre)
+  (public_name ogre)
+  (wrapped false)
+  (preprocess (pps ppx_bap))
+  (libraries core_kernel monads))

@@ -1,0 +1,4 @@
+(install
+ (files powerpc.lisp)
+ (package bap-powerpc)
+ (section (site (bap-common semantics))))

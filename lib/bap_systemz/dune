@@ -1,0 +1,5 @@
+(library
+  (name bap_systemz)
+  (public_name bap-systemz)
+  (wrapped false)
+  (libraries bap-core-theory bap-knowledge core_kernel))

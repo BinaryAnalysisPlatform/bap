@@ -27,4 +27,7 @@ Config.manpage [
   all flag registers to zero."
 ];;
 
-Config.when_ready init
+Config.declare_extension
+  ~doc:"x86 Primus Support package"
+  ~provides:["abi"; "x86"; "primus"]
+  init

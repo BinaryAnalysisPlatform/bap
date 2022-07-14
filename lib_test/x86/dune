@@ -1,0 +1,4 @@
+(test
+ (name run_x86_tests)
+ (package bap)
+ (libraries bap bap-x86 bap-plugins ounit2 threads))

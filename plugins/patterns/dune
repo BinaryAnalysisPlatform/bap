@@ -1,0 +1,26 @@
+(library
+ (name bap_patterns_plugin)
+ (public_name bap-patterns.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   bap-core-theory
+   bap-knowledge
+   bap-main
+   bap-primus
+   bap-relation
+   bitvec
+   bitvec-binprot
+   bitvec-order
+   bitvec-sexp
+   core_kernel
+   fileutils
+   uri
+   xmlm
+   zarith))
+
+(plugin
+ (name patterns)
+ (package bap-patterns)
+ (libraries bap-patterns.plugin)
+ (site (bap-common plugins)))

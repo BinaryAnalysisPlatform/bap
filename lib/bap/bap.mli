@@ -11614,11 +11614,33 @@ module Std : sig
       (** A witness that can read configured params *)
       type reader = {get : 'a. 'a param -> 'a}
 
+      (** [declare_extension ~features ~provides ~doc when_ready]
+          declares a BAP extension.
+
+          This function is a wrapper for {!Bap_main.Extension.declare}
+          that simplifies transition from the old (this one)
+          configuration system to the modern {!Bap_main.Extension}.
+
+          It acts as {!when_ready} but you can also specify feature
+          tags and documentation, see {!Bap_main.Extension.declare} for more
+          information.
+
+          @since 2.6.0
+      *)
+      val declare_extension :
+        ?features:string list ->
+        ?provides:string list ->
+        ?doc:string ->
+        (reader -> unit) ->
+        unit
+
+
       (** [when_ready f] requests the system to call function [f] once
           configuration parameters are  established and stabilized. An
           access function will be passed to the function [f],  that can be
           used to safely dereference parameters.  *)
       val when_ready : (reader -> unit) -> unit
+      [@@deprecated "[since 2022-09] use declare_extension"]
 
 
       (** The type for a block of man page text.

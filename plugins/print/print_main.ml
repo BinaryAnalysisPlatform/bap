@@ -511,7 +511,7 @@ let main attrs ansi_colors demangle symbol_fmts subs secs patterns doms =
     ~desc:"print the file specification in the OGRE format" ~ver "ogre" pp_spec
 
 let () =
-  Config.when_ready @@ fun _ ->
+  Config.declare_extension @@ fun _ ->
   let open Adt in
   let desc = "Abstract Data Type pretty printing format" in
   let ver = Program.version and name = "adt" in
@@ -588,7 +588,10 @@ let () =
        printed." in
     Config.(param (some (list string)) ~as_flag:(Some [])
               ~doc ~docv:"SEMANTICS-LIST" "semantics") in
-  Config.when_ready (fun {Config.get=(!)} ->
-      main !bir_attr !ansi_colors !demangle !print_symbols !subs !secs
-        !patterns
-        !semantics)
+  Config.declare_extension
+    ~doc:"prints the project in various formats"
+    ~provides:["printer"]
+    (fun {Config.get=(!)} ->
+       main !bir_attr !ansi_colors !demangle !print_symbols !subs !secs
+         !patterns
+         !semantics)

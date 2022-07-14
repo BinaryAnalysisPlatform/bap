@@ -1,0 +1,21 @@
+(library
+  (name print)
+  (public_name bap-print.plugin)
+  (libraries
+    bap
+    bap-core-theory
+    bap-demangle
+    bap-knowledge
+    core_kernel
+    core_kernel.caml_unix
+    graphlib
+    ogre
+    regular
+    re.pcre
+    text-tags))
+
+(plugin
+  (name print)
+  (package bap-print)
+  (libraries bap-print.plugin)
+  (site (bap-common plugins)))

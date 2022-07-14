@@ -1,0 +1,5 @@
+(library
+  (name text_tags)
+  (public_name text-tags)
+  (wrapped false)
+  (libraries core_kernel core_kernel.caml_unix))

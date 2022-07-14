@@ -1,0 +1,6 @@
+let () =
+  add_variable ~doc:"additional sites for signatures"
+    "site_signatures"
+    ~define:(function
+        | None -> ""
+        | Some xs -> xs)

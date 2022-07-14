@@ -143,6 +143,8 @@ let () =
   let attrs = Config.(param_all string "attr"
                         ~doc: "Emit specified BIR attribute. Can be specified
                                multiple times.") in
-  Config.when_ready (fun {Config.get=(!)} ->
-      let main = main !dst !attrs in
-      Project.register_pass' main )
+  Config.declare_extension ~doc:"generates IDA Python scripts"
+    ~provides:["ida"; "python"; "pass"]
+    (fun {Config.get=(!)} ->
+       let main = main !dst !attrs in
+       Project.register_pass' main )

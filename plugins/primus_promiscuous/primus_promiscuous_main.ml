@@ -237,13 +237,16 @@ manpage [
 
 let enabled = flag "mode" ~doc:"(DEPRECATED) Enable the mode."
 
-let () = when_ready (fun {get=(!!)} ->
-    Primus.Components.register_generic "promiscuous-path-explorer"
-      (module Forker) ~package
-      ~desc:"Forces execution of all linearly independent paths \
-             by forcefully flipping the branch conditions.";
-    Primus.Components.register_generic "division-by-zero-handler"
-      (module EnableDivisionByZero) ~package
-      ~desc:"Disables division by zero errors.";
+let () = declare_extension
+    ~doc:"enables the promiscuous mode of execution"
+    ~provides:["primus"; "fuzzer"]
+    (fun {get=(!!)} ->
+       Primus.Components.register_generic "promiscuous-path-explorer"
+         (module Forker) ~package
+         ~desc:"Forces execution of all linearly independent paths \
+                by forcefully flipping the branch conditions.";
+       Primus.Components.register_generic "division-by-zero-handler"
+         (module EnableDivisionByZero) ~package
+         ~desc:"Disables division by zero errors.";
 
-    if !!enabled then enable_legacy_promiscuous_mode ());
+       if !!enabled then enable_legacy_promiscuous_mode ());

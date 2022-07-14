@@ -155,11 +155,14 @@ module Main(Machine : Primus.Machine.S) = struct
     ]
 end
 
-let () = Config.when_ready (fun {get} ->
-    if Option.is_some (get Cfg.max_length) ||
-       Option.is_some (get Cfg.max_visited)
-    then Primus.Machine.add_component (module Main) [@warning "-D"];
-    Primus.Components.register_generic "limit" (module Main)
-      ~package:"bap"
-      ~desc: "Enables program termination by limiting the maximum \
-              life time of each Primus Machine.")
+let () = Config.declare_extension
+    ~doc:"ensures termination by limiting Primus machines"
+    ~provides:["termination"; "primus"; "microexecution"; "microx"]
+  @@ fun {get} ->
+  if Option.is_some (get Cfg.max_length) ||
+     Option.is_some (get Cfg.max_visited)
+  then Primus.Machine.add_component (module Main) [@warning "-D"];
+  Primus.Components.register_generic "limit" (module Main)
+    ~package:"bap"
+    ~desc: "Enables program termination by limiting the maximum \
+            life time of each Primus Machine."

@@ -29,5 +29,7 @@ let run name =
 
 
 let () =
-  Config.when_ready @@ fun _ ->
+  Config.declare_extension
+    ~doc:"provides a demangler that uses c++filt"
+    ~provides:["c++"; "demangler"; "c++filt"] @@ fun _ ->
   Demangler.declare ~package:"bap" "c++filt" run

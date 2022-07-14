@@ -1,0 +1,5 @@
+(library
+  (name bap_build)
+  (public_name bap-build)
+  (wrapped false)
+  (libraries findlib ocamlbuild))

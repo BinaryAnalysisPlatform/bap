@@ -1,0 +1,10 @@
+(library
+ (name bap_ssa_plugin)
+ (public_name bap-ssa.plugin)
+ (libraries bap bap-main))
+
+(plugin
+ (name ssa)
+ (package bap-ssa)
+ (libraries bap-ssa.plugin)
+ (site (bap-common plugins)))

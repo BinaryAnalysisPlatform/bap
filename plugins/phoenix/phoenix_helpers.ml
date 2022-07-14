@@ -26,7 +26,7 @@ module Make(Env : sig
       | `r64 -> reg64_t in
     let make_var name =
       Bil.var (Var.create name jump_type) in
-    (object inherit Stmt.mapper as super
+    (object inherit Stmt.mapper
       method! map_int addr =
         Symtab.owners syms addr |> List.hd |> function
         | Some (sym,entry,_) ->

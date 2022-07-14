@@ -336,4 +336,7 @@ manpage [
 ];;
 
 
-when_ready (fun _ -> main ())
+declare_extension
+  ~doc:"provides primitives for Primus Testing and Verification Frameworkd"
+  ~provides:["primus"; "primus-lisp"; "primus-library"; "verification"]
+  (fun _ -> main ())

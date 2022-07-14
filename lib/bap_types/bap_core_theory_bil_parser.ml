@@ -7,7 +7,7 @@ include Bap_main.Loggers()
 module Exp = Bap_exp.Exp
 module Bil = Bap_bil
 module Word = Bap_bitvector
-module Type = Bap_common.Type
+module Type = Bap_common_types.Type
 module Size = Bap_size
 module Stmt = Bap_stmt.Stmt
 

@@ -1,0 +1,4 @@
+(library
+  (name bap_demangle)
+  (public_name bap-demangle)
+  (libraries bap-core-theory bap-knowledge core_kernel))

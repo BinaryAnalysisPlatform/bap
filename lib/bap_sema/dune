@@ -1,0 +1,15 @@
+(library
+  (name bap_sema)
+  (public_name bap-std.sema)
+  (wrapped false)
+  (preprocess (pps ppx_bap))
+  (libraries
+    bap-core-theory
+    bap_disasm
+    bap_image
+    bap-knowledge
+    bap_types
+    core_kernel
+    graphlib
+    monads
+    regular))

@@ -243,6 +243,9 @@ module Main = struct
         KB.return Insn.empty
 end
 
-let () = Bap_main.Extension.declare @@ fun _ctxt ->
+let () = Bap_main.Extension.declare
+    ~doc:"provides semantics for Thumb instructions"
+    ~provides:["lifter"; "semantics"; "thumb"; "arm"]
+  @@ fun _ctxt ->
   Main.load ();
   Ok ()

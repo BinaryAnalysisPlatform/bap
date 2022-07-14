@@ -1,0 +1,17 @@
+(install
+ (package bap-primus-lisp)
+ (section (site (bap-common semantics)))
+ (files
+   aarch64-arithmetic.lisp
+   aarch64-atomic.lisp
+   aarch64-branch.lisp
+   aarch64-data-movement.lisp
+   aarch64-helper.lisp
+   aarch64.lisp
+   aarch64-logical.lisp
+   aarch64-pstate.lisp
+   aarch64-special.lisp
+   arm-bits.lisp
+   arm.lisp
+   thumb.lisp
+   thumb-patterns.lisp))

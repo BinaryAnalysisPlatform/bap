@@ -356,3 +356,5 @@ let () =
 let () = Extension.Error.register_printer @@ function
   | Fail problem -> Some (string_of_problem problem)
   | _ -> None
+
+let () = Extension.declare ~doc @@ fun _ -> Ok ()

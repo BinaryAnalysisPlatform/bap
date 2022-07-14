@@ -1,0 +1,22 @@
+(library
+ (name bap_mips_plugin)
+ (public_name bap-mips.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   bap-abi
+   bap-api
+   bap-c
+   bap-core-theory
+   bap-knowledge
+   bap-main
+   bap-mips
+   core_kernel
+   regular
+   zarith))
+
+(plugin
+ (name mips)
+ (package bap-mips)
+ (libraries bap-mips.plugin)
+ (site (bap-common plugins)))

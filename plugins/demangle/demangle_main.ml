@@ -12,6 +12,8 @@ Performs ABI-specific name resolution and demangling.
 let provides = [
   "symbolizer";
   "demangling";
+  "demangler";
+  "symbolizer";
 ]
 
 let override = Extension.Configuration.parameter
@@ -84,7 +86,7 @@ let decide_name_from_possible_name ?override () : unit =
   Option.map name ~f:(Demangler.run demangler)
 
 
-let () = Extension.declare @@ fun ctxt ->
+let () = Extension.declare ~provides ~doc @@ fun ctxt ->
   let override = Extension.Configuration.get ctxt override in
   decide_name_from_possible_name ?override ();
   Internal.install ();

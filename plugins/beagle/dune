@@ -1,0 +1,20 @@
+(library
+ (name bap_beagle_plugin)
+ (public_name bap-beagle.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   bap-beagle
+   bap-future
+   bap-microx
+   bap-primus
+   bap-strings
+   core_kernel
+   monads
+   regular))
+
+(plugin
+ (name beagle)
+ (package bap-beagle)
+ (libraries bap-beagle.plugin)
+ (site (bap-common plugins)))

@@ -1,0 +1,6 @@
+(library
+  (name bap_taint)
+  (public_name bap-taint)
+  (preprocess (pps ppx_bap))
+  (wrapped false)
+  (libraries bap bap-primus bap-strings core_kernel monads regular))

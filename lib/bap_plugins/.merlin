@@ -1,6 +1,0 @@
-PKG findlib
-B ../../_build/lib/bap_config
-B ../bap_bundle
-B ../bap_future
-
-REC

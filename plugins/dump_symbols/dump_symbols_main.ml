@@ -35,6 +35,9 @@ let () =
     ] in
   let file = Config.(param (some string) "file" ~docv:"FILE"
                        ~doc:"Dump symbols to the specified $(docv)") in
-  Config.when_ready (fun {Config.get=(!)} ->
-      let main = main !file in
-      Project.register_pass' main)
+  Config.declare_extension
+    ~doc:"dumps functions as a sexp-list of blocks"
+    ~provides:["printer"; "pass"]
+    (fun {Config.get=(!)} ->
+       let main = main !file in
+       Project.register_pass' main)

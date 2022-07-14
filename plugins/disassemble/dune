@@ -1,0 +1,24 @@
+(library
+ (name disassemble)
+ (public_name bap-disassemble.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   bap-core-theory
+   bap-knowledge
+   bap-main
+   bap-relation
+   bitvec
+   bitvec-binprot
+   bitvec-order
+   bitvec-sexp
+   core_kernel
+   monads
+   ogre
+   regular))
+
+(plugin
+ (name disassemble)
+ (package bap-disassemble)
+ (libraries bap-disassemble.plugin)
+ (site (bap-common plugins)))

@@ -1,0 +1,24 @@
+(library
+ (name bap_relocatable_plugin)
+ (public_name bap-relocatable.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   bap-arm
+   bap-core-theory
+   bap-knowledge
+   bap-main
+   bap-powerpc
+   bap-x86
+   bitvec
+   bitvec-order
+   bitvec-sexp
+   core_kernel
+   monads
+   ogre))
+
+(plugin
+ (name relocatable)
+ (package bap-relocatable)
+ (libraries bap-relocatable.plugin)
+ (site (bap-common plugins)))

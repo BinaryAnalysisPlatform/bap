@@ -1,0 +1,19 @@
+(library
+ (name bap_primus_print_plugin)
+ (public_name bap-primus-print.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   bap-core-theory
+   bap-future
+   bap-knowledge
+   bap-primus
+   bare
+   core_kernel
+   monads))
+
+(plugin
+ (name primus-print)
+ (package bap-primus-print)
+ (libraries bap-primus-print.plugin)
+ (site (bap-common plugins)))
