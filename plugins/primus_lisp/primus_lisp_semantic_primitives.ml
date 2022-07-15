@@ -757,18 +757,18 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | None -> illformed "wrong"
     | Some sym ->
       let components = String.split sym ~on:'_' in
-      match (List.hd components) with
+      match (List.nth components n) with
       | None -> illformed "wrong"
-      | Some head ->
-        let size = (String.make 1 head.[0]) in
-        match (List.nth components n) with
-        | None -> illformed "wrong"
-        | Some nth ->
-          let reg_num = (String.make 1 nth.[1]) in
-          let reg = Theory.Origin.reg (size ^ reg_num) in          let name = Theory.Var.name reg in
-          forget @@
-          CT.var reg >>| fun v ->
-          KB.Value.put Primus.Lisp.Semantics.symbol reg (Some name)
+      | Some nth ->
+        let size = (String.make 1 nth.[0]) in
+        let reg_num = (String.make 1 nth.[1]) in
+        let name = size ^ reg_num in
+        let reg = possibly_register target name
+(*          let reg = Theory.Origin.reg (size ^ reg_num) in
+          let name = Theory.Var.name reg in *)
+        forget @@
+        CT.var reg >>| fun v ->
+        KB.Value.put Primus.Lisp.Semantics.symbol reg (Some name)
 (*          let reg = Theory.Target.var target (size ^ reg_num)
           match Theory.Target.var target v with
           | Some v -> !!v
@@ -1353,7 +1353,7 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | "empty",[] -> nop ()
     | "intrinsic",(dst::args) -> Intrinsic.call t dst args
     | "invoke-subroutine",[dst] -> ctrl@@invoke_subroutine dst
-    | "get-nth-register",[rs;n]-> pure@@get_nth_register t rs n
+(*    | "get-nth-register",[rs;n]-> pure@@get_nth_register t rs n*)
     | _ -> !!nothing
 end
 
