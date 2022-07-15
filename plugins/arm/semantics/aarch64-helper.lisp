@@ -151,7 +151,7 @@
     (set$ vd (replace-bit-range vd highIndex lowIndex element))))
 
 (defun get-vector-S-element (index vn)
-	"(get-vector-S-element index vn) returns the 32 bit element from vn[index]"
+  "(get-vector-S-element index vn) returns the 32 bit element from vn[index]"
   (case index
     0x0 (extract 31 0 vn)
     0x1 (extract 63 32 vn)
@@ -236,13 +236,13 @@
     'Q0))
 
 (defun mem-read (address size)
-	"(mem-read address size) loads size bytes from memory at address."
-	(case size
-		1		(load-byte address)
-		2		(load-dbyte address)
-		4		(load-hword	address)
-		8		(load-word	address)
-		16	(concat (load-word address) (load-word (+ address 8)))))
+  "(mem-read address size) loads size bytes from memory at address."
+  (case size
+    1   (load-byte  address)
+    2   (load-dbyte address)
+    4   (load-hword address)
+    8   (load-word  address)
+    16  (concat (load-word address) (load-word (+ address 8)))))
 
 ;; to generate these functions,
 ;; do something like the following python code
