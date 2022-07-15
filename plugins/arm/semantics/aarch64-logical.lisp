@@ -63,16 +63,6 @@
 (defun ANDSWrs (rd rn rm is) (ANDS*rs setw rd rn rm is))
 (defun ANDSXrs (rd rn rm is) (ANDS*rs set$ rd rn rm is))
 
-;; ASRV
-;; (bitfield moves)
-
-(defmacro ASRV*r (setr datasize rd rn rm)
-  "(ASRV*r setr datasize rd rn rm) does an arithmetic shift right and stores it in the destination register rd"
-  (let ((shift (mod rm datasize)))
-    (setr rd (arshift rn shift))))
-
-(defun ASRVWr (rd rn rm) (ASRV*r setw 32 rd rn rm))
-(defun ASRVXr (rd rn rm) (ASRV*r set$ 64 rd rn rm))
 
 ;; BIC
 
@@ -102,27 +92,13 @@
 (defmacro REVn*r (setr container-size rd rn)
   "(REVn*r setr container-size rd rn) implements the non-vector REV#
    instructions with the given container-size."
-  (setr rd (reverse-elems-in-all-containers container-size 8 rn)))
+  (setr rd (reverse-in-containers container-size 8 rn)))
 
 (defun REVWr   (rd rn) (REVn*r setw 32 rd rn))
 (defun REVXr   (rd rn) (REVn*r set$ 64 rd rn))
 (defun REV16Xr (rd rn) (REVn*r setw 16 rd rn))
 (defun REV16Wr (rd rn) (REVn*r set$ 16 rd rn))
 (defun REV32Xr (rd rn) (REVn*r setw 32 rd rn))
-
-(defmacro LSLV*r (dest rn rm size setf)
-  "(LSLV*r dest rn rm size) logical shift lefts rn by the remainder of rm divided by the datasize and stores the result in the destination register."
-  (setf dest (lshift rn (mod rm size))))
-
-(defun LSLVWr (wd wn wm) (LSLV*r wd wn wm 32 setw))
-(defun LSLVXr (xd xn xm) (LSLV*r xd xn xm 64 set$))
-
-(defmacro LSRV*r (dest rn rm size setf)
-  "(LSRV*r dest rn rm size) logical shift rights rn by the remainder of rm divided by the datasize and stores the result in the destination register."
-  (setf dest (rshift rn (mod rm size))))
-
-(defun LSRVWr (wd wn wm) (LSRV*r wd wn wm 32 setw))
-(defun LSRVXr (xd xn xm) (LSRV*r xd xn xm 64 set$))
 
 ;; UBFM and SBFM
 ;; (bitfield moves)
@@ -152,3 +128,21 @@
 
 (defun SBFMWri (xd xr ir is)
   (make-BFM setw cast-signed xd xr ir is))
+
+;; bitfield moves
+
+(defmacro SHIFT*r (setr shift datasize rd rn rm)
+  "(ASRV*r setr datasize rd rn rm) does an arithmetic shift right and stores it 
+  in the destination register rd"
+    (setr rd (cast-low datasize (shift rn  (mod rm datasize)))))
+
+(defun ASRVXr (rd rn rm) (SHIFT*r set$ arshift 64 rd rn rm))
+(defun ASRVWr (rd rn rm) (SHIFT*r setw arshift 32 rd rn rm))
+
+(defun LSRVXr (rd rn rm) (SHIFT*r set$ rshift 64 rd rn rm))
+(defun LSRVWr (rd rn rm) (SHIFT*r setw rshift 32 rd rn rm))
+(defun LSLVXr (rd rn rm) (SHIFT*r set$ lshift 64 rd rn rm))
+(defun LSLVWr (rd rn rm) (SHIFT*r setw lshift 32 rd rn rm))
+
+(defun RORVXr (rd rn rm) (SHIFT*r set$ rotate-right 64 rd rn rm))
+(defun RORVWr (rd rn rm) (SHIFT*r setw rotate-right 32 rd rn rm))

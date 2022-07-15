@@ -63,7 +63,8 @@
 
 (defun LDRBBpre (_ dst base simm)
   "(LDRBBpre _ dst base simm) loads a byte from the base address and an offset simm and stores it in the 32 bit dst register. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment(), ConstrainUnpredictable()"
-  (setw dst (cast-unsigned 32 (load-byte (+ base simm)))))
+  (setw dst (cast-unsigned 32 (load-byte (+ base simm))))
+  (set$ base (+ base simm)))
 
 ;; LDRB (immediate, unsigned offset)
 
@@ -86,11 +87,30 @@
 
 ;; LDP (post-index)
 
-(defun LDPXpost (dst r1 r2 base off)
+
+(defun LDPXpost (_ r1 r2 base off)
   (let ((off (lshift off 3)))
     (set$ r1 (load-word base))
     (set$ r2 (load-word (+ base (sizeof word))))
-    (set$ dst (+ dst off))))
+    (set$ base (+ base off))))
+
+(defun LDPXpre (_ r1 r2 base off)
+  (let ((off (lshift off 3)))
+    (set$ r1 (load-word (+ base off)))
+    (set$ r2 (load-word (+ base off (sizeof word))))
+    (set$ base (+ base off))))
+
+(defun LDPWpost (_ r1 r2 base off)
+  (let ((off (lshift off 2)))
+    (setw r1 (load-hword base))
+    (setw r2 (load-hword (+ base (sizeof word))))
+    (set$ base (+ base off))))
+
+(defun LDPWpre (_ r1 r2 base off)
+  (let ((off (lshift off 2)))
+    (setw r1 (load-hword base))
+    (setw r2 (load-hword (+ base (sizeof word))))
+    (set$ base (+ base off))))
 
 ;; LDP (signed offset)
 
@@ -115,12 +135,20 @@
 (defun LDRHHroX (wt xn xm extend s) (LDRHHro* wt xn xm extend s))
 (defun LDRHHroW (wt xn wm extend s) (LDRHHro* wt xn wm extend s))
 
-;; LDRH (immediate, unsigned offset)
+;; LDRH (immediate, unsigned offset, pre/post indexed)
 
 (defun LDRHHui (wt xn pimm)
   "(LDRHHui wt xn pimm) loads 2 bytes from the address calculated from a base register and unsigned immediate offset. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment()"
   (let ((off (lshift (cast-unsigned 64 pimm) 1)))
     (setw wt (load-dbyte (+ xn off)))))
+
+(defun LDRHHpost (_ rd rn off)
+  (setw rd (load-dbyte rn))
+  (set$ rn (+ rn off)))
+
+(defun LDRHHpre (_ rd rn off)
+  (setw rd (load-dbyte (+ rn off)))
+  (set$ rn (+ rn off)))
 
 ;; LDRSW (immediate, unsigned offset)
 
@@ -273,6 +301,33 @@
 (defun STRBpost (_ rt rn simm)
   (str-post rn (cast-low 8 rt) simm))
 
+(defun str-pre (xreg src off)
+  "stores all of src to xreg, and pre-indexes reg (reg += off)."
+  (store-word (+ xreg off) src)
+  (set$ xreg (+ xreg off)))
+
+(defun STRWpre (_ rt rn simm)
+  (str-pre rn rt simm))
+
+(defun STRXpre (_ rt rn simm)
+  (str-pre rn rt simm))
+
+; STR (SIMD registers)
+(defun STRQpre (_ rt rn simm)
+  (str-pre rn rt simm))
+
+(defun STRDpre (_ rt rn simm)
+  (str-pre rn rt simm))
+
+(defun STRSpre (_ rt rn simm)
+  (str-pre rn (cast-low 32 rt) simm))
+
+(defun STRHpre (_ rt rn simm)
+  (str-pre rn (cast-low 16 rt) simm))
+
+(defun STRBpre (_ rt rn simm)
+  (str-pre rn (cast-low 8 rt) simm))
+
 (defun STR*ui (scale src reg off) 
   "Stores a register of size (8 << scale) to the memory address 
   (reg + (off << scale))."
@@ -306,9 +361,13 @@
 (defun STRHHui (rt rn off)
   (store-word (+ rn (lshift off 1)) (cast-low 16 rt)))
 
-; STRB post-indexed
+; STRB 
 (defun STRBBpost (_ rt base simm)
   (store-byte base rt)
+  (set$ base (+ base simm)))
+
+(defun STRBBpre (_ rt base simm)
+  (store-byte (+ base simm) rt)
   (set$ base (+ base simm)))
 
 (defun STRBBroW (rt rn rm option shift)
@@ -324,6 +383,7 @@
         (signed-extend 64 rm)         ; SXTX
       (unsigned-extend 64 rm))))      ; LSL
     (store-byte (+ rn off) rt)))
+
 
 ; STP
 
@@ -414,4 +474,15 @@
 (defun STURDi (rn rt imm) (STUR*i rn rt imm 64))
 
 (defun STURQi (rn rt imm) (STUR*i rn rt imm 128)) 
+
+
+; EXTR
+
+(defun EXTRWrri (rd rn rm lsb) 
+  "Extracts a register from a pair of registers, datasize = 32"
+  (setw rd (extract (+ lsb 31) lsb (concat rn rm))))
+
+(defun EXTRXrri (rd rn rm lsb) 
+  "Extracts a register from a pair of registers, datasize = 64"
+  (set$ rd (extract (+ lsb 63) lsb (concat rn rm))))
 

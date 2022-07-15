@@ -101,6 +101,31 @@
     0b0001 'oshld
     'unknown))
 
+(defun bitvec-to-symbol (bv sym) 
+  (if (> (word-width bv) 0)
+    (bitvec-to-symbol
+      (cast-low (- (word-width bv) 4) bv) 
+      (symbol-concat 
+        sym
+        (case (cast-high 4 bv)
+            0x0 '0
+            0x1 '1
+            0x2 '2
+            0x3 '3
+            0x4 '4
+            0x5 '5
+            0x6 '6
+            0x7 '7
+            0x8 '8
+            0x9 '9
+            0xa 'a
+            0xb 'b
+            0xc 'c
+            0xd 'd
+            0xe 'e
+            0xf 'f)))
+   sym))
+
 (defun replace-bit-range (reg hi lo val size)
   "(replace-bit-range reg hi lo val) returns reg with bits
    hi to lo inclusive set to the value stored in val."
@@ -108,32 +133,6 @@
         (cleared (logand reg (lnot mask)))
         (result (logor cleared (logand mask (lshift (cast-unsigned size val) lo)))))
     result))
-
-
-(defun reverse-elems-in-one-container (elem-size c)
-  "(reverse-elems-in-one-container elem-size c) reverses the order
-   of each group of elem-size bits in c.
-   For non-vector instructions, elem-size = 8.
-   If c's width is not a multiple of elem-size, the remaining bits
-   get appended at the end."
-  (if (<= (word-width c) elem-size) c
-    (concat
-      (cast-low elem-size c)
-      (reverse-elems-in-one-container elem-size
-        (cast-high (- (word-width c) elem-size) c)))))
-
-(defun reverse-elems-in-all-containers (container-size elem-size x)
-  "(reverse-elems-in-all-containers container-size elem-size x) applies
-   reverse-elems-in-one-container to each group of container-size bits in x.
-   In other words, it reverses the order of groups of elem-size bits within
-   each group of container-size bits.
-   If x's width is not a multiple of container-size, the remaining bits
-   get appended at the end."
-  (if (< (word-width x) container-size) x
-    (concat
-      (reverse-elems-in-one-container elem-size (cast-high container-size x))
-      (reverse-elems-in-all-containers container-size elem-size
-        (cast-low (- (word-width x) container-size) x)))))
 
 (defun insert-element-into-vector (vd index element size)
   "(insert-element-into-vector vd index element size) inserts element into vd[index], where size is in {8,16,32,64}"
