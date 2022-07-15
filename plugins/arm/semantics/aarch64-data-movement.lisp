@@ -12,8 +12,8 @@
   "(LDR*ro* rt base index signed s scale setf mem-load) loads a register from memory at the address calculated from a base register and optionally shifted and extended offset value. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment()"
   (let ((shift (* s scale))
         (off (if (= signed 1)
-          (cast-signed 64 (lshift index shift))
-          (cast-unsigned 64 (lshift index shift)))))
+                  (cast-signed 64 (lshift index shift))
+               (cast-unsigned 64 (lshift index shift)))))
     (setf rt (mem-load (+ base off)))))
 
 (defmacro LDRWro* (wt base index signed s) (LDR*ro* wt base index signed s 2 setw load-hword))
@@ -24,30 +24,33 @@
 (defun LDRXroW (xt base index signed s) (LDRXro* xt base index signed s))
 (defun LDRXroX (xt base index signed s) (LDRXro* xt base index signed s))
 
-;; LDR (immediate, unsigned offset, post/pre indexed) 
+;; LDR (immediate, post-index)
 
-(defun LDRXui (dst reg off)
-  (set$ dst (load-word (+ reg (lshift off 3)))))
+(defmacro LDR*post (dst base off setf)
+  ""
+;;  (setf dst (mem-read base (/ (word-width dst) 8)))
+  (set$ base (+ base (cast-signed 64 off))))
 
-(defun LDRXpost (_ dst reg off) 
-  (set$ dst (load-word reg))
-  (set$ reg (+ reg off)))
+(defun LDRWpost (_ dst base off) (LDR*post dst base off setw))
+(defun LDRXpost (_ dst base off) (LDR*post dst base off set$))
 
-(defun LDRXpre (_ dst reg off) 
-  (set$ dst (load-word (+ reg off)))
-  (set$ reg (+ reg off)))
+;; LDR (immediate, pre-index)
 
-(defun LDRWui (dst reg off)
-  (setw dst
-        (cast-unsigned (word) (load-hword (+ reg (lshift off 2))))))
+(defmacro LDR*pre (dst base off setf)
+  (let ((address (+ base (cast-signed 64 off))))
+    (setf dst (mem-read address (/ (word-width dst) 8)))
+    (set$ base address)))
 
-(defun LDRWpost (_ dst reg off) 
-  (setw dst (load-hword reg))
-  (set$ reg (+ reg off)))
+(defun LDRWpre (_ dst base off) (LDR*pre dst base off setw))
+(defun LDRXpre (_ dst base off) (LDR*pre dst base off set$))
 
-(defun LDRWpre (_ dst reg off) 
-  (setw dst (load-hword (+ reg off)))
-  (set$ reg (+ reg off)))
+;; LDR (immediate, unsigned offset)
+
+(defmacro LDR*ui (dst reg off setf scale)
+  (setf dst (mem-read (+ reg (lshift off scale)) (/ (word-width dst) 8))))
+
+(defun LDRXui (dst reg off) (LDR*ui dst reg off set$ 3))
+(defun LDRWui (dst reg off) (LDR*ui dst reg off setw 2))
 
 ;; LDRB (immediate, post-index)
 
@@ -75,8 +78,8 @@
 (defmacro LDRBBro* (dst base index signed)
   "(LDRBBro* dst base index signed) loads a byte from memory from a base address and index and stores it in a 32 bit destination register. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment()"
   (let ((off (if (= signed 1)
-          (cast-signed 64 index)
-          (cast-unsigned 64 index))))
+                  (cast-signed 64 index)
+                (cast-unsigned 64 index))))
     (setw dst (cast-unsigned 32 (load-byte (+ base off))))))
 
 (defun LDRBBroW (dst base index signed _) (LDRBBro* dst base index signed))
@@ -125,7 +128,7 @@
 (defmacro LDRHHro* (wt base index signed s)
   "(LDRHHro* wt base index signed s) loads 2 bytes from the address calculated from a base register address and offset. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment()"
   (let ((off (if (= signed 1)
-          (cast-signed 64 (lshift index s))
+            (cast-signed 64 (lshift index s))
           (cast-unsigned 64 (lshift index s)))))
     (setw wt (load-dbyte (+ base off)))))
 
@@ -150,9 +153,7 @@
 ;; LDRSW (immediate, unsigned offset)
 
 (defun LDRSWui (dst base off)
-  (set$ dst (cast-signed
-             (word)
-             (load-hword (+ base (lshift off 2))))))
+  (set$ dst (cast-signed (word) (load-hword (+ base (lshift off 2))))))
 
 ;; LRDSW (register)
 
@@ -160,8 +161,8 @@
   "(LDRSWro* xt base index signed s) loads 32 bits from memory from a base address and offset and stores it in the destination register xt. NOTE: does not HaveMTE2Ext(), SetTagCheckedInstruction(), CheckSPAlignment()"
   (let ((shift (* s 2))
         (off (if (= signed 1)
-          (cast-signed 64 (lshift index shift))
-          (cast-unsigned 64 (lshift index shift)))))
+                  (cast-signed 64 (lshift index shift))
+                (cast-unsigned 64 (lshift index shift)))))
     (set$ xt (load-hword (+ base off)))))
 
 (defun LDRSWroX (xt base xm signed s) (LDRSWro* xt base xm signed s))
