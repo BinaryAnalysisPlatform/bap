@@ -2,6 +2,8 @@ open Core_kernel[@@warning "-D"]
 
 let name = "dynlink"
 
+let is_toplevel = Caml.Sys.interactive.contents
+
 type reason = [
   | `In_core
   | `Provided_by of string
@@ -22,7 +24,7 @@ let copy_units_from_dynlink () =
   Dynlink.all_units () |>
   List.iter ~f:(fun unit -> Hashtbl.add_exn units unit `In_core)
 
-let init () = copy_units_from_dynlink ()
+let init () = if not is_toplevel then copy_units_from_dynlink ()
 let list () = Hashtbl.keys units
 let record name reason = match Hashtbl.add units name reason with
   | `Ok -> ()
