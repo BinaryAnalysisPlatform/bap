@@ -49,8 +49,8 @@
 (defmacro LDR*ui (dst reg off setf scale)
   (setf dst (mem-read (+ reg (lshift off scale)) (/ (word-width dst) 8))))
 
-(defun LDRXui (dst reg off) (dst reg off set$ 3))
-(defun LDRWui (dst reg off) (dst reg off setw 2))
+(defun LDRXui (dst reg off) (LDR*ui dst reg off set$ 3))
+(defun LDRWui (dst reg off) (LDR*ui dst reg off setw 2))
 
 ;; LDRB (immediate, post-index)
 
