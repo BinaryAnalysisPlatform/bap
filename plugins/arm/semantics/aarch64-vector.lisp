@@ -19,8 +19,8 @@
 
 ;;(defmacro LD2Twov16b* (qa_qb xn) 
 ;;  "(LD2Twov16b_POST redundant qa_qb xn imm) loads multiple 2-element structures from memory at address xn with offset imm and stores it in qa and qb with de-interleaving. NOTE: does not encode Security state & Exception level"
-;;  (let ((qa (get-first-128b-reg qa_qb))
-;;        (qb (get-second-128b-reg qa_qb)))
+;;  (let ((qa (nth-reg-in-group qa_qb 0))
+;;        (qb (nth-reg-in-group qa_qb 1)))
 ;;    (insert-a qa qb xn 0)))
 
 ;;(defun LD2Twov8b (da_db xn) ())
@@ -35,8 +35,8 @@
 
 (defun LD2Twov16b_POST (_ qa_qb xn xm)
   "(LD2Twov16b_POST _ qa_qb xn imm) loads multiple 2-element structures from memory at address xn with offset imm and stores it in qa and qb with de-interleaving. NOTE: does not encode Security state & Exception level"
-  (let ((qa (get-first-128b-reg qa_qb))
-        (qb (get-second-128b-reg qa_qb)))
+  (let ((qa (nth-reg-in-group qa_qb 0))
+        (qb (nth-reg-in-group qa_qb 1)))
     (insert-a qa qb xn 0 0 0)
     (set$ xn (+ xn xm))))
 
@@ -56,8 +56,8 @@
 
 ;;(defun LD1Twov16b_POST (_ qa_qb xn xm) 
 ;;  "(LD2Twov16b_POST redundant qa_qb xn imm) loads multiple 2-element structures from memory at address xn with offset imm and stores it in qa and qb with de-interleaving. NOTE: does not encode Security state & Exception level"
-;;  (let ((qa (get-nth-register qa_qb 0))
-;;        (qb (get-nth-register qa_qb 1)))
+;;  (let ((qa (nth-reg-in-group qa_qb 0))
+;;        (qb (nth-reg-in-group qa_qb 1)))
 ;;    (insert-a qa qb xn 0)
 ;;    (set$ xn (+ xn xm))))
 
