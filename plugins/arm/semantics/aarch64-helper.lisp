@@ -124,7 +124,7 @@
             0xd 'd
             0xe 'e
             0xf 'f)))
-   sym))
+    sym))
 
 (defun replace-bit-range (reg hi lo val size)
   "(replace-bit-range reg hi lo val) returns reg with bits
@@ -135,10 +135,21 @@
     result))
 
 (defun insert-element-into-vector (vd index element size)
-  "(insert-element-into-vector vd index element size) inserts element into vd[index], where size is in {8,16,32,64}"
+  "(insert-element-into-vector vd index element size) inserts element into vd[index], 
+   where size is in {8,16,32,64}"
   (let ((highIndex (-1 (* size (+ index 1))))
         (lowIndex (* size index)))
     (set$ vd (replace-bit-range vd highIndex lowIndex element 128))))
+
+(defun replicate-and-insert (vd element esize dsize)
+  "(replicate-and-insert vd element esize dsize) replicates and concatenates 
+   an element of esize to dsize and sets the vector register vd"
+  (set$ vd (replicate-and-insert-helper element esize dsize 1)))
+
+(defun replicate-and-insert-helper (element esize dsize index)
+  (if (< (* index esize) dsize)
+    (concat element (replicate-and-insert-helper element esize dsize (+ index 1)))
+    element))
 
 (defun get-vector-S-element (index vn)
   "(get-vector-S-element index vn) returns the 32 bit element from vn[index]"
