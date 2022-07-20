@@ -146,3 +146,6 @@
 
 (defun RORVXr (rd rn rm) (SHIFT*r set$ rotate-right 64 rd rn rm))
 (defun RORVWr (rd rn rm) (SHIFT*r setw rotate-right 32 rd rn rm))
+
+(defun RBITXr (rd rn) (set$ rd (reverse-bits rn)))
+(defun RBITWr (rd rn) (setw rd (reverse-bits rn)))
