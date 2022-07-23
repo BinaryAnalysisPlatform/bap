@@ -1,6 +1,6 @@
 (declare (context (target arm armv8-a+le)))
 
-(defpackage aarch64 (:use core target arm))
+(defpackage aarch64 (:use core target arm aarch64-simd))
 (defpackage llvm-aarch64 (:use aarch64))
 
 (in-package aarch64)
