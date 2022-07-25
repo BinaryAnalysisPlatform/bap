@@ -181,11 +181,6 @@
     8   (load-word  address)
     16  (concat (load-word address) (load-word (+ address 8)))))
 
-;; to generate these functions,
-;; do something like the following python code
-;;    for c in "XW":
-;;        for i in range(30//2):
-;;            print(f"'{c}{2*i}_{c}{2*i+1} '{c}{2*i}")
 (defun register-pair-first (r-pair)
   "(register-pair-first r-pair) returns the first register in the
    register pair Xi_X(i+1) or similar, returned by LLVM.

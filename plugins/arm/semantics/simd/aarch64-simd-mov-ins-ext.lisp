@@ -2,11 +2,12 @@
 
 (in-package aarch64-simd)
 
-
 ;;; INS
 
 (defun INSvi32gpr (vd _ index gpr)
-  "(INSvi32gpr vd ts index gpr) inserts an element in the general purpose register gpr into vecter register vd at index. NOTE: does not encode Security state & Exception level"
+  "(INSvi32gpr vd ts index gpr) inserts an element in the general purpose register gpr
+   into vecter register vd at index.
+   NOTE: does not encode Security state & Exception level"
   (insert-element-into-vector vd index gpr 32))
 
 (defun INSvi32lane (vd _ index vn index2)

@@ -127,7 +127,9 @@
 (defun LD2Twov2d_POST (_ qa_qb xn xm) (LD2Twov._POST qa_qb xn xm 2 8))
 
 (defmacro LD2Twov._POST (va_vb xn xm elems bytes)
-  "(LD2Twov._POST va_vb xn elesms bytes) loads multiple 2-element structures from memory at address xn with offset xm and stores it in va and vb with de-interleaving. NOTE: does not encode Security state & Exception level"
+  "(LD2Twov._POST va_vb xn elesms bytes) loads multiple 2-element structures from
+   memory at address xn with offset xm and stores it in va and vb with de-interleaving.
+   NOTE: does not encode Security state & Exception level"
   (LD..v._POST 1 elems 2 bytes va_vb xn xm))
 
 ;; LD2 (multiple structures, no offset)
@@ -141,7 +143,9 @@
 (defun LD2Twov2d (qa_qb xn) (LD2Twov. qa_qb xn 2 8))
 
 (defmacro LD2Twov. (va_vb xn elems bytes)
-  "(LD2Twov. va_vb xn elesms bytes) loads multiple 2-element structures from memory at address xn and stores it in va and vb with de-interleaving. NOTE: does not encode Security state & Exception level"
+  "(LD2Twov. va_vb xn elesms bytes) loads multiple 2-element structures from
+   memory at address xn and stores it in va and vb with de-interleaving.
+   NOTE: does not encode Security state & Exception level"
     (LD 1 elems 2 xn bytes va_vb))
 
 ;; LD3 (multiple structures, post index)
@@ -155,7 +159,9 @@
 (defun LD3Threev2d_POST (_ qa_qb_qc xn xm) (LD3Threev._POST qa_qb_qc xn xm 2 8))
 
 (defmacro LD3Threev._POST (va_vb_vc xn xm elems bytes)
-  "(LD3Threev._POST va_vb_vc xn xm elems bytes) loads multiple 3-element structures from memory at address xn with offset xm and stores it in va, vb and vc with de-interleaving. NOTE: does not encode Security state & Exception level"
+  "(LD3Threev._POST va_vb_vc xn xm elems bytes) loads multiple 3-element structures
+   from memory at address xn with offset xm and stores it in va, vb and vc with de-interleaving.
+   NOTE: does not encode Security state & Exception level"
   (LD..v._POST 1 elems 3 bytes va_vb_vc xn xm))
 
 ;; LD3 (multiple structures, no offset)
@@ -169,7 +175,9 @@
 (defun LD3Threev2d (qa_qb_qc xn) (LD3Threev. qa_qb_qc xn 2 8))
 
 (defmacro LD3Threev. (va_vb_vc xn elems bytes)
-  "(LD3Threev. va_vb_vc xn elems bytes) loads multiple 3-element structures from memory at address xn and stores it in va, vb and vc with de-interleaving. NOTE: does not encode Security state & Exception level"
+  "(LD3Threev. va_vb_vc xn elems bytes) loads multiple 3-element structures from
+   memory at address xn and stores it in va, vb and vc with de-interleaving.
+   NOTE: does not encode Security state & Exception level"
     (LD 1 elems 3 xn bytes va_vb_vc))
 
 ;; LD4 (multiple structures, post index)
@@ -183,7 +191,9 @@
 (defun LD4Fourv2d_POST (_ qa_qb_qc_qd xn xm) (LD4Fourv._POST qa_qb_qc_qd xn xm 2 8))
 
 (defmacro LD4Fourv._POST (va_vb_vc xn xm elems bytes)
-  "(LD4Fourv._POST va_vb_vc xn xm elems bytes) loads multiple 4-element structures from memory at address xn with offset xm and stores it in va, vb, vc and vd with de-interleaving. NOTE: does not encode Security state & Exception level"
+  "(LD4Fourv._POST va_vb_vc xn xm elems bytes) loads multiple 4-element structures
+   from memory at address xn with offset xm and stores it in va, vb, vc and vd with de-interleaving.
+   NOTE: does not encode Security state & Exception level"
   (LD..v._POST 1 elems 4 bytes va_vb_vc xn xm))
 
 ;; LD4 (multiple structures, no offset)
@@ -197,13 +207,16 @@
 (defun LD4Fourv2d (qa_qb_qc_qd xn) (LD4Fourv. qa_qb_qc_qd xn 2 8))
 
 (defmacro LD4Fourv. (va_vb_vc xn elems bytes)
-  "(LD4Fourv. va_vb_vc xn elems bytes) loads multiple 4-element structures from memory at address xn and stores it in va, vb, vc and vd with de-interleaving. NOTE: does not encode Security state & Exception level"
+  "(LD4Fourv. va_vb_vc xn elems bytes) loads multiple 4-element structures from memory
+   at address xn and stores it in va, vb, vc and vd with de-interleaving.
+   NOTE: does not encode Security state & Exception level"
     (LD 1 elems 4 xn bytes va_vb_vc))
 
 ;; LD multiple struct algorithm
 
 (defmacro LD..v._POST (rpt elems selems bytes grp base off)
-  "(LD..v._POST rpt elems selems bytes grp base off) loads multiple selems-element structs from memory address base with offset off and stores them in the vector list grp."
+  "(LD..v._POST rpt elems selems bytes grp base off) loads multiple selems-element structs
+   from memory address base with offset off and stores them in the vector list grp."
   (prog
     (LD rpt elems selems base bytes grp)
     (if (= (symbol off) 'XZR)
