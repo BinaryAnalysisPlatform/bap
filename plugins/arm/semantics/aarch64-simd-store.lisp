@@ -84,9 +84,9 @@
 (defun STPSi (rt rt2 base imm) (store-pair 2 'offset rt rt2 base imm))
 
 ;;; STUR
-(defmacro STUR.i (src base off size)
-  "Takes `size` bits from src and stores at base + off"
-  (store-word (+ base off) (cast-low size src)))
 
-(defun STURQi (rn rt imm) (STUR.i rn rt imm 128)) 
-(defun STURDi (rn rt imm) (STUR.i rn rt imm 64))
+(defun STURQi (rn rt imm) (store-word (+ rt imm) rn))
+(defun STURDi (rn rt imm) (store-word (+ rt imm) rn))
+(defun STURSi (rn rt imm) (store-word (+ rt imm) rn))
+(defun STURHi (rn rt imm) (store-word (+ rt imm) rn))
+(defun STURBi (rn rt imm) (store-word (+ rt imm) rn))
