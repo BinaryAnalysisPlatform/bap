@@ -107,6 +107,15 @@
       (reverse-in-containers/helper csize esize x (+1 c))
       (reverse-in-containers/helper-elem csize esize x (* csize c) 0))))
 
+(defun reverse-bits (x) 
+  "(reverse-bits x) returns a bitvector with the bit order of x reversed."
+  (reverse-bits/helper x (-1 (word-width x))))
+
+(defun reverse-bits/helper (x i) 
+  (if (> i 0)
+    (concat (reverse-bits/helper x (-1 i)) (select i x))
+    (select i x)))
+
 (defun clz (x)
   "(clz X) counts leading zeros in X.
    The returned value is the number of consecutive zeros starting
