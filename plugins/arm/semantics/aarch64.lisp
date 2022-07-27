@@ -1,6 +1,6 @@
 (declare (context (target arm armv8-a+le)))
 
-(defpackage aarch64 (:use core target arm aarch64-simd))
+(defpackage aarch64 (:use core target arm))
 (defpackage llvm-aarch64 (:use aarch64))
 
 (in-package aarch64)
@@ -15,6 +15,13 @@
 (require aarch64-arithmetic)
 (require aarch64-atomic)
 (require aarch64-branch)
-(require aarch64-logical)
 (require aarch64-data-movement)
+(require aarch64-logical)
+(require aarch64-pstate)
 (require aarch64-special)
+
+(require aarch64-simd-arithmetic)
+(require aarch64-simd-load)
+(require aarch64-simd-logical)
+(require aarch64-simd-mov-ins-ext)
+(require aarch64-simd-store)

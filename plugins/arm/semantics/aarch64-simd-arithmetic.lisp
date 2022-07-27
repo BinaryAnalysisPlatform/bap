@@ -1,6 +1,6 @@
 (declare (context (target armv8-a+le)))
 
-(in-package aarch64-simd)
+(in-package aarch64)
 
 (defun sym-to-binop (binop-sym x y)
   (case binop-sym

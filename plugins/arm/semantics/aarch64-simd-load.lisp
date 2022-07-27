@@ -1,6 +1,6 @@
 (declare (context (target armv8-a+le)))
 
-(in-package aarch64-simd)
+(in-package aarch64)
 
 ;;; LDs..
 
