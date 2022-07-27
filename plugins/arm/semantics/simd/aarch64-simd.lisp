@@ -8,3 +8,4 @@
 (require aarch64-simd-load)
 (require aarch64-simd-logical)
 (require aarch64-simd-mov-ins-ext)
+(require aarch64-simd-store)

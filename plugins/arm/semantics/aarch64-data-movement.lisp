@@ -267,67 +267,28 @@
   (store-byte (+ reg off) src))
 
 ; STR (register)
-(defun str-reg (scale rt rn rm signed shift)
+(defun STR*ro* (scale rt rn rm signed shift)
   "stores rt to (rn + rm << (shift * scale)) with signed or unsigned extension 
-  of rm, where rt is a register of size (8 << scale). Note that rm can be an X 
-  or W register and it chooses the appropriate extend mode implicitly. rn must 
-  be an X register."
+   of rm, where rt is a register of size (8 << scale). Note that rm can be an X 
+   or W register and it chooses the appropriate extend mode implicitly. rn must 
+   be an X register."
   (assert (< signed 2))
   (assert-msg (= (word-width rt) (lshift 8 scale))
-      "(aarch64-data-movement.lisp:str-reg) scale must match size of rt") 
-  (store-word (+ rn 
-     (if (= signed 1) 
-       (signed-extend   (word-width rm) (lshift rm (* shift scale)))
-       (unsigned-extend (word-width rm) (lshift rm (* shift scale))))) 
-      rt))
+      "STR*ro*: scale must match size of rt") 
+  (store-word
+    (+ rn 
+      (if (= signed 1) 
+        (signed-extend   (word-width rm) (lshift rm (* shift scale)))
+        (unsigned-extend (word-width rm) (lshift rm (* shift scale))))) 
+    rt))
 
-; rm is an X register
-(defun STRWroX  (rt rn rm option shift)
- (str-reg 2 rt rn rm option shift))
+(defun STRWroX (rt rn rm option shift) (STR*ro* 2 rt rn rm option shift))
+(defun STRWroW (rt rn rm option shift) (STR*ro* 2 rt rn rm option shift))
+(defun STRXroX (rt rn rm option shift) (STR*ro* 3 rt rn rm option shift))
+(defun STRXroW (rt rn rm option shift) (STR*ro* 3 rt rn rm option shift))
 
-(defun STRXroX (rt rn rm option shift)
- (str-reg 3 rt rn rm option shift))
-
-(defun STRBroX  (rt rn rm option shift)
- (str-reg 0 rt rn rm option shift))
-
-(defun STRHroX  (rt rn rm option shift)
- (str-reg 1 (cast-low 16 rt) rn rm option shift))
-
-(defun STRSroX  (rt rn rm option shift)
- (str-reg 2 rt rn rm option shift))
-
-(defun STRDroX (rt rn rm option shift)
-  (str-reg 3 rt rn rm option shift))
-
-(defun STRQroX (rt rn rm option shift)
-  (str-reg 4 rt rn rm option shift))
-
-; rm is a W register
-(defun STRWroW  (rt rn rm option shift)
- (str-reg 2 rt rn rm option shift))
-
-(defun STRXroW (rt rn rm option shift)
- (str-reg 3 rt rn rm option shift))
-
-(defun STRBroW  (rt rn rm option shift)
- (str-reg 0 rt rn rm option shift))
-
-(defun STRHroW  (rt rn rm option shift)
- (str-reg 1 (cast-low 16 rt) rn rm option shift))
-
-(defun STRSroW  (rt rn rm option shift)
- (str-reg 2 rt rn rm option shift))
-
-(defun STRDroW (rt rn rm option shift)
-  (str-reg 3 rt rn rm option shift))
-
-(defun STRQroW (rt rn rm option shift)
-  (str-reg 4 rt rn rm option shift))
-
-; STRHHroX
 (defun STRHHroX (rt rn rm option shift)
-  (str-reg 1 (cast-low 16 rt) rn rm option shift))
+  (STR*ro* 1 (cast-low 16 rt) rn rm option shift))
 
 ; STR (immediate) (base registers):
 (defun str-post (xreg src off)
@@ -341,22 +302,6 @@
 (defun STRXpost (_ rt rn simm)
   (str-post rn rt simm))
 
-; STR (SIMD registers)
-(defun STRQpost (_ rt rn simm)
-  (str-post rn rt simm))
-
-(defun STRDpost (_ rt rn simm)
-  (str-post rn rt simm))
-
-(defun STRSpost (_ rt rn simm)
-  (str-post rn (cast-low 32 rt) simm))
-
-(defun STRHpost (_ rt rn simm)
-  (str-post rn (cast-low 16 rt) simm))
-
-(defun STRBpost (_ rt rn simm)
-  (str-post rn (cast-low 8 rt) simm))
-
 (defun str-pre (xreg src off)
   "stores all of src to xreg, and pre-indexes reg (reg += off)."
   (store-word (+ xreg off) src)
@@ -368,44 +313,13 @@
 (defun STRXpre (_ rt rn simm)
   (str-pre rn rt simm))
 
-; STR (SIMD registers)
-(defun STRQpre (_ rt rn simm)
-  (str-pre rn rt simm))
-
-(defun STRDpre (_ rt rn simm)
-  (str-pre rn rt simm))
-
-(defun STRSpre (_ rt rn simm)
-  (str-pre rn (cast-low 32 rt) simm))
-
-(defun STRHpre (_ rt rn simm)
-  (str-pre rn (cast-low 16 rt) simm))
-
-(defun STRBpre (_ rt rn simm)
-  (str-pre rn (cast-low 8 rt) simm))
-
 (defun STR*ui (scale src reg off) 
   "Stores a register of size (8 << scale) to the memory address 
   (reg + (off << scale))."
   (assert-msg (= (word-width src) (lshift 8 scale))
-      "(aarch64-data-movement.lisp:STR*ui) scale must match size of register") 
+      "STR*ui: scale must match size of register") 
   (store-word (+ reg (lshift off scale)) 
     (cast-unsigned (lshift 8 scale) src)))
-
-(defun STRQui (src reg off)
-  (STR*ui 4 src reg off))
-
-(defun STRDui (src reg off)
-  (STR*ui 3 src reg off))
-
-(defun STRSui (src reg off)
-  (STR*ui 2 src reg off))
-
-(defun STRHui (src reg off)
-  (STR*ui 1 src reg off))
-
-(defun STRBui (src reg off)
-  (STR*ui 0 src reg off))
 
 (defun STRXui (src reg off)
   (STR*ui 3 src reg off))
@@ -440,79 +354,16 @@
       (unsigned-extend 64 rm))))      ; LSL
     (store-byte (+ rn off) rt)))
 
-
 ; STP
 
-(defun store-pair (scale indexing t1 t2 dst imm) 
-  "store the pair t1,t2 of size (8 << scale) at the register dst plus an offset, 
-  using the specified indexing."
-  (assert-msg (and (= (word-width t1) (lshift 8 scale)) 
-      (= (word-width t2) (lshift 8 scale)))
-      "(aarch64-data-movement.lisp) scale must match size of register ") 
-  (let ((off (lshift (cast-signed 64 imm) scale)) (datasize (lshift 8 scale))
-      (addr (case indexing
-              'post dst
-              'pre  (+ dst off)
-              'offset (+ dst off)
-              (assert-msg (= 1 0) 
-      "(aarch64-data-movement.lisp) invalid indexing scheme.")))
-            )
-    (store-word addr t1)
-    (store-word (+ addr (/ datasize 8)) t2)
-    (case indexing
-       'post (set$ dst (+ addr off))
-       'pre  (set$ dst addr)
-       'offset )
-    ))
+(defun STPWpost (_ t1 t2 dst off) (store-pair 2 'post t1 t2 dst off))
+(defun STPXpost (_ t1 t2 dst off) (store-pair 3 'post t1 t2 dst off))
 
-; post-indexed
-(defun STPWpost (_ t1 t2 dst off)
-  (store-pair 2 'post t1 t2 dst off))
+(defun STPXpre (_ t1 t2 dst off) (store-pair 3 'pre t1 t2 dst off))
+(defun STPWpre (_ t1 t2 dst off) (store-pair 2 'pre t1 t2 dst off))
 
-(defun STPXpost (_ t1 t2 dst off)
-    (store-pair 3 'post t1 t2 dst off))
-
-(defun STPSpost (_ t1 t2 dst off)
-  (store-pair 2 'post t1 t2 dst off))
-
-(defun STPDpost (_ t1 t2 dst off)
-  (store-pair 3 'post t1 t2 dst off))
-
-(defun STPQpost (_ t1 t2 dst off)
-  (store-pair 4 'post t1 t2 dst off))
-
-; pre-indexed
-(defun STPXpre (_ t1 t2 dst off)
-    (store-pair 3 'pre t1 t2 dst off))
-
-(defun STPWpre (_ t1 t2 dst off)
-  (store-pair 2 'pre t1 t2 dst off))
-
-(defun STPSpre (_ t1 t2 dst off)
-  (store-pair 2 'pre t1 t2 dst off))
-
-(defun STPDpre (_ t1 t2 dst off)
-  (store-pair 3 'pre t1 t2 dst off))
-
-(defun STPQpre (_ t1 t2 dst off)
-  (store-pair 4 'pre t1 t2 dst off))
-
-; signed-offset
-(defun STPWi (rt rt2 base imm) 
-  (store-pair 2 'offset rt rt2 base imm))
-
-(defun STPXi (rt rt2 base imm)
-  (store-pair 3 'offset rt rt2 base imm))
-
-(defun STPSi (rt rt2 base imm) 
-  (store-pair 2 'offset rt rt2 base imm))
-
-(defun STPDi (rt rt2 base imm) 
-  (store-pair 3 'offset rt rt2 base imm))
-
-(defun STPQi (rt rt2 base imm) 
-  (store-pair 4 'offset rt rt2 base imm))
-
+(defun STPWi (rt rt2 base imm) (store-pair 2 'offset rt rt2 base imm))
+(defun STPXi (rt rt2 base imm) (store-pair 3 'offset rt rt2 base imm))
 
 ; addr + offset indexed STUR
 (defmacro STUR*i (src base off size)
@@ -520,16 +371,9 @@
   (store-word (+ base off) (cast-low size src)))
 
 (defun STURXi  (src base off) (STUR*i src base off 64))
-
 (defun STURWi  (src base off) (STUR*i src base off 32))
-
-(defun STURHHi  (src base off) (STUR*i src base off 16))
-
+(defun STURHHi (src base off) (STUR*i src base off 16))
 (defun STURBBi (src base off) (STUR*i src base off 8))
-
-(defun STURDi (rn rt imm) (STUR*i rn rt imm 64))
-
-(defun STURQi (rn rt imm) (STUR*i rn rt imm 128)) 
 
 
 ; EXTR

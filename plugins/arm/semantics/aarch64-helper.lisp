@@ -288,3 +288,25 @@
     'W24_W25 (endian concat W24 W25)
     'W26_W27 (endian concat W26 W27)
     'W28_W29 (endian concat W28 W29)))
+
+(defun store-pair (scale indexing t1 t2 dst imm) 
+  "(store-pair scale indexing t1 t2 dst imm)
+   stores the pair t1,t2 of size (8 << scale) at the register dst plus an offset, 
+   using the specified indexing (either 'post, 'pre or 'offset)."
+  (assert-msg (= (word-width t1) (word-width t2) (lshift 8 scale))
+    "store-pair: scale must match size of register ") 
+  (let ((off (lshift (cast-signed 64 imm) scale))
+        (datasize (lshift 8 scale))
+        (addr
+          (case indexing
+            'post dst
+            'pre (+ dst off)
+            'offset (+ dst off)
+            (assert-msg false "store-pair invalid indexing scheme"))))
+    (store-word addr t1)
+    (store-word (+ addr (/ datasize 8)) t2)
+    (case indexing
+       'post (set$ dst (+ addr off))
+       'pre  (set$ dst addr)
+       'offset )
+    ))
