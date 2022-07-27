@@ -101,13 +101,15 @@
     0b0001 'oshld
     'unknown))
 
-(defun bitvec-to-symbol (bv sym) 
-  (if (> (word-width bv) 0)
+(defun bitvec-to-symbol (x sym)
+  "(bitvec-to-symbol x sym) returns the symbol concatenation of
+   sym and the hexadecimal representation of x."
+  (if (> (word-width x) 0)
     (bitvec-to-symbol
-      (cast-low (- (word-width bv) 4) bv) 
+      (cast-low (- (word-width x) 4) x) 
       (symbol-concat 
         sym
-        (case (cast-high 4 bv)
+        (case (cast-high 4 x)
             0x0 '0
             0x1 '1
             0x2 '2
