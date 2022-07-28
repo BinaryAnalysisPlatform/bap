@@ -7685,7 +7685,6 @@ module Std : sig
       *)
       val subroutines : state -> Set.M(Addr).t
 
-
       (** [blocks state] is the set of addresses of instructions that
           start basic blocks.
           @since 2.2.0
@@ -7875,6 +7874,10 @@ module Std : sig
     (** empty symbol table  *)
     val empty : t
 
+    (** [create disasm calls] creates the symbol table given the
+        disassembly state [disasm] and callgraph [calls]. *)
+    val create : Disasm.Driver.state -> Disasm.Subroutines.t -> t KB.t
+
     (** [add_symbol table name entry blocks] extends [table] with a
         new symbol with a given [name], [entry] block and body
         [blocks].  *)
@@ -7883,7 +7886,7 @@ module Std : sig
     (** [remove table fn] removes symbol [fn] from [table]  *)
     val remove : t -> fn -> t
 
-    (** [find_by_name symbols name] finds a symbol with a given namem  *)
+    (** [find_by_name symbols name] finds a symbol with a given name.  *)
     val find_by_name  : t -> string -> fn option
 
     (** [find_by_start symbols addr] finds a symbol that starts from
