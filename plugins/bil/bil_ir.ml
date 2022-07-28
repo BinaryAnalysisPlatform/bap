@@ -85,12 +85,10 @@ module BIR = struct
       | Some tid when not (is_call x) -> Some tid
       | _ -> None
 
-
-  let is_sub {weak; keep} = keep && weak
-
   let can_contract refs b1 b2 =
     not (Tid.equal b1.name b2.name) &&
-    (not b2.keep || b2.weak) && match single_dst b1.jmps with
+    (not b1.keep || b1.weak) && (not b2.keep || b2.weak) &&
+    match single_dst b1.jmps with
     | None -> false
     | Some dst ->
       Tid.equal dst b2.name &&
