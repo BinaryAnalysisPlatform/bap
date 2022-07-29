@@ -38,7 +38,7 @@ let collect_externals package target units =
   let is_unit u =
     String.(u <> package) &&
     match units with
-    | [] -> false
+    | [] -> true
     | _ -> List.mem units u ~equal:String.equal in
   let result = Toplevel.var "syms" in
   Toplevel.put result begin
@@ -148,8 +148,16 @@ let main units proj =
 
 let () = Config.manpage [
     `S "DESCRIPTION";
-    `P "Resolves external functions in the BIR program \
-        by looking at other units in the Knowledge Base.";
+    `P "Resolves stub subroutines in the BIR program. It works as follows:";
+    `I ("1.", "The program is searched for stub subroutines.");
+    `I ("2.", "The available units in the Knowledge Base are collected.");
+    `I ("3.", "Each unit is lifted into its own BIR program.");
+    `I ("4.", "For each program, try to find subroutines that match the \
+               names of our stubs.");
+    `I ("5.", "If one and only one match is found, then all calls to the \
+               stub are replaced with calls to the matching subroutine. \
+               All subroutines from this unit are then merged into the \
+               main program.");
   ]
 
 let units =
