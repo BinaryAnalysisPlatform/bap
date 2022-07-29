@@ -150,7 +150,7 @@ let main proj =
 
 let () = Config.manpage [
     `S "DESCRIPTION";
-    `P "Resolves external functions in the BIR program with \
+    `P "Resolves external functions in the BIR program \
         by looking at other units in the Knowledge Base.";
   ]
 
