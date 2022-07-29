@@ -29,7 +29,7 @@ let stubs proj package =
         let name = Sub.name sub in
         if should_ignore name then None
         else begin
-          info "Found stub %s in %s\n%!" name package;
+          info "Found stub %s in %s%!" name package;
           Some (Term.tid sub)
         end
       else None) |> Tid.Set.of_sequence
