@@ -86,13 +86,6 @@ let resolve_stub exts stub =
       name (List.to_string ~f:Fn.id units);
     None
 
-let provide_name tid new_tid =
-  let name = Tid.name tid in
-  let name = match name.[0] with
-    | '@' -> String.drop_prefix name 1
-    | _ -> name in
-  Tid.set_name new_tid name
-
 let replace_calls_to_stub prog replace =
   Term.filter_map sub_t prog ~f:(fun sub ->
       if not @@ Map.mem replace @@ Term.tid sub then
@@ -104,7 +97,6 @@ let replace_calls_to_stub prog replace =
                   | First tid ->
                     Map.find replace tid |>
                     Option.value_map ~default:jmp ~f:(fun new_tid ->
-                        provide_name tid new_tid;
                         Jmp.(with_alt jmp @@ Some (resolved new_tid)))
                   | Second _ -> jmp))
       else None)
@@ -123,6 +115,7 @@ let resolve proj package stubs =
           match resolve_stub exts sub with
           | None -> acc
           | Some (new_tid, path) ->
+            Tid.set_name new_tid @@ Sub.name sub;
             Map.set r ~key:tid ~data:new_tid, Set.add l path
         else acc) in
   let prog = replace_calls_to_stub prog replace in
