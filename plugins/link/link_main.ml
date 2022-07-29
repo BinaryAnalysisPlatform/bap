@@ -34,7 +34,12 @@ let stubs proj package =
         end
       else None) |> Tid.Set.of_sequence
 
-let collect_externals package target =
+let collect_externals package target units =
+  let is_unit u =
+    String.(u <> package) &&
+    match units with
+    | [] -> false
+    | _ -> List.mem units u ~equal:String.equal in
   let result = Toplevel.var "syms" in
   Toplevel.put result begin
     KB.objects Theory.Unit.cls >>=
@@ -46,7 +51,7 @@ let collect_externals package target =
             warning "Unit for target %a with no path, skipping%!"
               Theory.Target.pp target;
             !!exts
-          | Some path when String.(package = path) -> !!exts
+          | Some path when not (is_unit path) -> !!exts
           | Some path ->
             KB.Symbol.set_package path >>= fun () ->
             let promise _ = !!(Some unit) in
@@ -73,15 +78,15 @@ let resolve_stub exts stub =
       Map.find subs name >>| fun sub ->
       Term.tid sub, path)) |> function
   | [] ->
-    info "Stub %s was not resolved because no unit exists \
-          with this name%!" name;
+    info "Stub %s was not resolved, couldn't find unit \
+          containing this symbol%!" name;
     None
   | [x] ->
     info "Stub %s was resolved in unit %s%!" name (snd x);
     Some x
   | x ->
     let units = List.map x ~f:snd in
-    warning "Stub %s was not resolved because it is ambiguous \
+    warning "Stub %s was not resolved, it is ambiguous \
              which unit it belongs to: %s%!"
       name (List.to_string ~f:Fn.id units);
     None
@@ -101,10 +106,10 @@ let replace_calls_to_stub prog replace =
                   | Second _ -> jmp))
       else None)
 
-let resolve proj package stubs =
+let resolve proj package stubs units =
   let prog = Project.program proj in
   let target = Project.target proj in
-  let exts = collect_externals package target in
+  let exts = collect_externals package target units in
   Toplevel.exec @@ KB.Symbol.set_package package;
   let replace, to_link =
     let init = Tid.Map.empty, String.Set.empty in
@@ -133,12 +138,12 @@ let post proj =
   List.filter ~f:Project.Pass.autorun |>
   List.fold ~init:proj ~f:(Fn.flip Project.Pass.run_exn)
 
-let main proj =
+let main units proj =
   let package = current_package () in
   let stubs = stubs proj package in
   if Set.is_empty stubs then proj
   else
-    let proj = resolve proj package stubs in
+    let proj = resolve proj package stubs units in
     post proj
 
 let () = Config.manpage [
@@ -147,4 +152,10 @@ let () = Config.manpage [
         by looking at other units in the Knowledge Base.";
   ]
 
-let () = Config.when_ready @@ fun _ -> Project.register_pass main
+let units =
+  let doc = "The specific units to link with. If none are specified then \
+             all available units will be searched." in
+  Config.(param (list string) ~default:[] ~doc "units")
+
+let () = Config.when_ready @@ fun {Config.get = (!)} ->
+  Project.register_pass (main !units)
