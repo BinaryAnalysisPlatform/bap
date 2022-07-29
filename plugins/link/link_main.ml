@@ -135,11 +135,18 @@ let resolve proj package stubs =
           Term.append sub_t prog sub)) |>
   Project.with_program proj
 
+let post proj =
+  Project.passes () |>
+  List.filter ~f:Project.Pass.autorun |>
+  List.fold ~init:proj ~f:(Fn.flip Project.Pass.run_exn)
+
 let main proj =
   let package = current_package () in
   let stubs = stubs proj package in
   if Set.is_empty stubs then proj
-  else resolve proj package stubs
+  else
+    let proj = resolve proj package stubs in
+    post proj
 
 let () = Config.manpage [
     `S "DESCRIPTION";
