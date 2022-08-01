@@ -101,7 +101,7 @@
   "Maps reverse-in-containers/helper-elem over all containers
    and concatenates the results."
   (declare (visibility :private))  
-  (if (= c (-1 (/ (word-width) csize)))
+  (if (= c (-1 (/ (word-width x) csize)))
     (reverse-in-containers/helper-elem csize esize x (* csize c) 0)
     (concat
       (reverse-in-containers/helper csize esize x (+1 c))

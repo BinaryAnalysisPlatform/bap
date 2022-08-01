@@ -78,8 +78,8 @@
     (when (= data (register-pair-concat rs-pair))
       (when release (intrinsic 'store-release))
       (store-word rn (register-pair-concat rt-pair)))
-    (set (register-pair-first  rs-pair) (endian first  upper lower))
-    (set (register-pair-second rs-pair) (endian second upper lower))))
+    (set$ (nth-reg-in-group rs-pair 0) (endian first  upper lower))
+    (set$ (nth-reg-in-group rs-pair 1) (endian second upper lower))))
 
 (defmacro CASPordX (rs-pair rt-pair rn acquire release)
   "Specialisation of CASPord* for X registers."
