@@ -16,11 +16,17 @@ let is_interrupt = String.is_prefix ~prefix:"interrupt:"
 let is_external  = String.is_suffix ~suffix:":external"
 let is_tid       = String.is_prefix ~prefix:"%"
 
+(* ARM-specific. *)
+let is_svc =
+  let re = Str.regexp {|__svc(0x[0-9A-F]+)|} in
+  fun name -> Str.string_match re name 0
+
 let should_ignore s =
   is_intrinsic s ||
   is_interrupt s ||
   is_external  s ||
-  is_tid       s
+  is_tid       s ||
+  is_svc       s
 
 let stubs proj package =
   Project.program proj |> Term.enum sub_t |>
@@ -48,7 +54,7 @@ let collect_externals package target units =
         if Theory.Target.(target <> target') then !!exts
         else KB.collect Theory.Unit.path unit >>= function
           | None ->
-            warning "Unit for target %a with no path, skipping%!"
+            warning "Unit for target %a with no path; skipping%!"
               Theory.Target.pp target;
             !!exts
           | Some path when not (is_unit path) -> !!exts
@@ -60,10 +66,9 @@ let collect_externals package target units =
             let disasm = Project.State.disassembly state in
             let calls = Project.State.subroutines state in
             info "Creating symtab for unit %s%!" path;
-            Symtab.create disasm calls >>| fun symtab ->
+            Symtab.create disasm calls >>= fun symtab ->
             info "Lifting program for unit %s%!" path;
-            Toplevel.exec @@ KB.Symbol.set_package path;
-            let prog = Program.lift symtab in
+            Program.KB.lift symtab >>| fun prog ->
             let subs =
               Term.enum sub_t prog |>
               Seq.map ~f:(fun sub -> Sub.name sub, sub) |>
@@ -75,21 +80,24 @@ let collect_externals package target units =
 let resolve_stub exts stub =
   let name = Sub.name stub in
   List.filter_map exts ~f:(fun (path, subs) -> Option.(
-      Map.find subs name >>| fun sub ->
-      Term.tid sub, path)) |> function
+      Map.find subs name >>= fun sub ->
+      let is_stub = Term.has_attr sub Sub.stub in
+      if is_stub then
+        warning "Stub %s was found in unit %s, but still has the stub \
+                 attribute; skipping%!" name path;
+      some_if (not is_stub) (Term.tid sub, path))) |> function
   | [] ->
-    info "Stub %s was not resolved, couldn't find unit \
-          containing this symbol%!" name;
+    warning "Stub %s was not resolved, couldn't find suitable unit \
+             containing this symbol%!" name;
     None
   | [x] ->
     info "Stub %s was resolved in unit %s%!" name (snd x);
     Some x
   | x ->
     let units = List.map x ~f:snd in
-    warning "Stub %s was not resolved, it is ambiguous \
-             which unit it belongs to: %s%!"
-      name (List.to_string ~f:Fn.id units);
-    None
+    failwithf "Stub %s was not resolved, multiple units were \
+               found containing this symbol: %s%!"
+      name (List.to_string ~f:Fn.id units) ()
 
 let replace_calls_to_stub prog replace =
   Term.filter_map sub_t prog ~f:(fun sub ->
