@@ -8639,6 +8639,11 @@ module Std : sig
       val result : t -> program term
     end
 
+    module KB : sig
+      (** @since 2.6.0 *)
+      val lift : symtab -> program term knowledge
+    end
+
     (** [pp_slots names] prints slots that are in [names].  *)
     val pp_slots : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
@@ -8835,6 +8840,14 @@ module Std : sig
 
       (** returns current result  *)
       val result : t -> sub term
+    end
+
+    module KB : sig
+      (** @since 2.6.0 *)
+      val lift : block -> cfg -> sub term knowledge
+
+      (** @since 2.6.0 *)
+      val flatten : t -> t knowledge
     end
 
     (** [pp_slots names] prints slots that are in [names].  *)
@@ -9395,6 +9408,24 @@ module Std : sig
 
       (** returns current result  *)
       val result  : t -> blk term
+    end
+
+    module KB : sig
+      (** @since 2.6.0 *)
+      val lift : cfg -> block -> blk term list knowledge
+
+      (** @since 2.6.0 *)
+      val from_insn : ?addr:addr -> insn -> blk term list knowledge
+
+      (** @since 2.6.0 *)
+      val from_insns :
+        ?fall:[`Inter of Jmp.dst | `Intra of Jmp.dst ] ->
+        ?addr:addr ->
+        insn list ->
+        blk term list knowledge
+
+      (** @since 2.6.0 *)
+      val flatten : t -> t knowledge
     end
 
     (** [pp_slots names] prints slots that are in [names].  *)
