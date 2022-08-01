@@ -128,15 +128,7 @@ let flatten_blk original_blk =
       | `Phi _phi -> flatten_elts tl blk in
   flatten_elts (Ir_blk.elts original_blk) original_blk
 
-let flatten_sub sub =
-  let attrs = Term.attrs sub in
-  Term.enum blk_t sub |> KB.Seq.map ~f:flatten_blk >>| fun blks ->
-  Term.with_attrs begin Ir_sub.create ()
-    ~args:(Term.enum arg_t sub |> Seq.to_list)
-    ~blks:(Seq.to_list blks)
-    ~name:(Ir_sub.name sub)
-    ~tid:(Term.tid sub)
-  end attrs
+let flatten_sub sub = Term.KB.map blk_t sub ~f:flatten_blk
 
 module KB = struct
   let flatten_blk = flatten_blk

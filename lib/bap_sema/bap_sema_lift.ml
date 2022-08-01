@@ -427,33 +427,15 @@ let program symtab =
       KB.provide Theory.Label.aliases sub_tid @@
       Set.singleton (module String) name >>| fun () ->
       let sub = Ir_sub.create () ~blks ~tid:sub_tid ~name in
-      let sub = Term.set_attr sub address addr in
-      Ir_program.Builder.add_sub b sub;
+      Ir_program.Builder.add_sub b @@ Term.set_attr sub address addr;
       Hashtbl.add_exn sub_of_blk ~key:blk_tid ~data:sub_tid) >>= fun () ->
-  let program = Ir_program.Builder.result b in
-  Term.enum sub_t program |> KB.Seq.map ~f:(fun sub ->
-      Term.enum blk_t sub |> KB.Seq.map ~f:(fun blk ->
+  Ir_program.Builder.result b |>
+  Term.KB.map sub_t ~f:(fun sub ->
+      Term.KB.map blk_t sub ~f:(fun blk ->
           let addr = Term.get_attr blk address in
-          Term.enum jmp_t blk |> KB.Seq.map ~f:(fun jmp ->
+          Term.KB.map jmp_t blk ~f:(fun jmp ->
               let jmp = alternate_nonlocal sub jmp in
-              link_call symtab addr sub_of_blk jmp) >>| fun jmps ->
-          let attrs = Term.attrs blk in
-          Term.with_attrs begin Ir_blk.create ()
-            ~phis:(Term.enum phi_t blk |> Seq.to_list)
-            ~defs:(Term.enum def_t blk |> Seq.to_list)
-            ~jmps:(Seq.to_list jmps)
-            ~tid:(Term.tid blk)
-          end attrs) >>| fun blks ->
-      let attrs = Term.attrs sub in
-      Term.with_attrs begin Ir_sub.create ()
-        ~args:(Term.enum arg_t sub |> Seq.to_list)
-        ~blks:(Seq.to_list blks)
-        ~tid:(Term.tid sub)
-        ~name:(Ir_sub.name sub)
-      end attrs) >>= fun subs ->
-  Ir_program.create ()
-    ~subs:(Seq.to_list subs)
-    ~tid:(Term.tid program) |>
+              link_call symtab addr sub_of_blk jmp))) >>=
   reify_externals symtab >>| insert_synthetic
 
 let sub blk cfg =

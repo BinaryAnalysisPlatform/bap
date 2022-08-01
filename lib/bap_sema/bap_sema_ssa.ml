@@ -17,6 +17,9 @@ open Bap_types.Std
 open Graphlib.Std
 open Format
 open Bap_ir
+open Bap_core_theory
+
+open KB.Syntax
 
 module Cfg = Bap_tid_graph
 
@@ -164,26 +167,27 @@ let has_phi_for_var blk x =
 
 (** [insert_phi_node ins blk x]   *)
 let insert_phi_node ins blk x =
-  if has_phi_for_var blk x then blk
-  else Seq.map ins ~f:(fun blk -> Term.tid blk, Bil.var x) |>
-       Seq.to_list_rev |> Ir_phi.of_list x |>
-       Term.append phi_t blk
+  if has_phi_for_var blk x then !!blk
+  else Theory.Label.fresh >>| fun tid ->
+    Seq.map ins ~f:(fun blk -> Term.tid blk, Bil.var x) |>
+    Seq.to_list_rev |> Ir_phi.of_list ~tid x |>
+    Term.append phi_t blk
 
 (** [insert_phi_nodes t] inserts dummy phi nodes of a form [x <-
     phi(x,x,..,x)] for each variable [x] in [t.vars] in each block
     that needs it. The algorithm computes an iterated dominance
     frontier for each variable as per section 8.11 of [1].*)
-let insert_phi_nodes t : sub term =
-  Set.fold t.vars ~init:t.sub ~f:(fun sub x ->
+let insert_phi_nodes t : sub term KB.t =
+  Set.to_sequence t.vars |> KB.Seq.fold ~init:t.sub ~f:(fun sub x ->
       let bs = blocks_that_define_var x sub in
       iterated_frontier t.frontier (Cfg.start :: bs) |>
-      Set.fold ~init:sub ~f:(fun sub tid ->
+      Set.to_sequence |> KB.Seq.fold ~init:sub ~f:(fun sub tid ->
           match blk_of_tid sub tid with
-          | None -> sub
+          | None -> !!sub
           | Some blk ->
             let ins = Cfg.Node.preds tid t.cfg |>
                       Seq.filter_map ~f:(blk_of_tid sub) in
-            Term.update blk_t sub (insert_phi_node ins blk x)))
+            insert_phi_node ins blk x >>| Term.update blk_t sub))
 
 let is_transformed sub = Term.has_attr sub ssa_form
 
@@ -195,6 +199,16 @@ let sub sub =
     let dom = Graphlib.dominators (module Cfg) cfg Cfg.start in
     let frontier = Graphlib.dom_frontier (module Cfg) cfg dom in
     let t = {dom; frontier; cfg; sub; vars} in
-    let sub = rename {t with sub = insert_phi_nodes t}  in
+    insert_phi_nodes t >>| fun sub ->
+    let sub = rename {t with sub}  in
     Term.set_attr sub ssa_form ()
-  else sub
+  else !!sub
+
+module KB = struct
+  let sub = sub
+end
+
+let sub sub =
+  let result = Toplevel.var "ssa" in
+  Toplevel.put result @@ KB.sub sub;
+  Toplevel.get result

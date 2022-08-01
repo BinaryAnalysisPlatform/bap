@@ -104,6 +104,12 @@ module Term : sig
   val has_attr : 'a t -> 'b tag -> bool
   val with_attrs : 'a t -> Dict.t -> 'a t
 
+  module KB : sig
+    val map : ('a,'b) cls -> 'a t -> f:('b t -> 'b t KB.t) -> 'a t KB.t
+    val filter_map : ('a,'b) cls -> 'a t -> f:('b t -> 'b t option KB.t) -> 'a t KB.t
+    val filter : ('a,'b) cls -> 'a t -> f:('b t -> bool KB.t) -> 'a t KB.t
+  end
+
   val origin : tid tag
   val synthetic : unit tag
   val live : unit tag

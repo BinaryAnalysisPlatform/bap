@@ -50,6 +50,7 @@ module Std = struct
     let flatten = Flatten.flatten_sub
     module KB = struct
       let lift = Ir_lift.KB.sub
+      let ssa = Ssa.KB.sub
       let flatten = Flatten.KB.flatten_sub
     end
   end

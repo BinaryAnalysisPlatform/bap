@@ -1186,6 +1186,18 @@ module Term = struct
 
   let length t p = Array.length (t.get p.self)
 
+  module KB = struct
+    open KB.Syntax
+
+    let apply f t p =
+      t.get p.self |> Array.to_sequence |> f >>| fun elems ->
+      {p with self = t.set p.self @@ Seq.to_array elems}
+
+    let map t p ~f : 'a term knowledge = apply (KB.Seq.map ~f) t p
+    let filter_map t p ~f : 'a term knowledge = apply (KB.Seq.filter_map ~f) t p
+    let filter t p ~f : 'a term knowledge = apply (KB.Seq.filter ~f) t p
+  end
+
   let origin = Bap_value.Tag.register (module Tid)
       ~package
       ~public:true

@@ -8419,6 +8419,17 @@ module Std : sig
         not a valid position number.  *)
     val nth_exn : ('a,'b) cls -> 'a t -> int -> 'b t
 
+    module KB : sig
+      (** @since @2.6.0 *)
+      val map : ('a,'b) cls -> 'a t -> f:('b t -> 'b t knowledge) -> 'a t knowledge
+
+      (** @since @2.6.0 *)
+      val filter_map : ('a,'b) cls -> 'a t -> f:('b t -> 'b t option knowledge) -> 'a t knowledge
+
+      (** @since @2.6.0 *)
+      val filter : ('a,'b) cls -> 'a t -> f:('b t -> bool knowledge) -> 'a t knowledge
+    end
+
     (** {2 Attributes}
 
         Terms attribute set can be extended, using {{!Value}universal
@@ -8845,6 +8856,9 @@ module Std : sig
     module KB : sig
       (** @since 2.6.0 *)
       val lift : block -> cfg -> sub term knowledge
+
+      (** @since 2.6.0 *)
+      val ssa : t -> t knowledge
 
       (** @since 2.6.0 *)
       val flatten : t -> t knowledge
