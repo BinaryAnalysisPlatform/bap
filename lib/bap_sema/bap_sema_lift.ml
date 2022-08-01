@@ -26,6 +26,20 @@ let intra_fall cfg block =
         Some (Ir_jmp.resolved tid)
       | _ -> !!None)
 
+let tid_for_name_or_addr symtab name =
+  match Symtab.find_by_name symtab name with
+  | None -> Theory.Label.for_name name
+  | Some (_, entry, _) ->
+    Theory.Label.for_addr @@ Word.to_bitvec @@ Block.addr entry
+
+let tid_for_addr = function
+  | None -> Theory.Label.fresh
+  | Some addr -> Theory.Label.for_addr @@ Word.to_bitvec addr
+
+let maybe_new_tid = function
+  | None -> Theory.Label.fresh
+  | Some tid -> !!tid
+
 (* a subroutine could be called implicitly via a fallthrough,
    therefore it will not be reified into jmp terms automatically,
    so we need to do some work here.
@@ -39,12 +53,9 @@ let inter_fall symtab block = match symtab with
   | Some symtab ->
     match Symtab.implicit_callee symtab (Block.addr block) with
     | None -> !!None
-    | Some name -> begin
-        match Symtab.find_by_name symtab name with
-        | None -> Theory.Label.for_name name
-        | Some (_, entry, _) ->
-          Theory.Label.for_addr @@ Word.to_bitvec @@ Block.addr entry
-      end >>| fun tid -> Some (Ir_jmp.resolved tid)
+    | Some name ->
+      tid_for_name_or_addr symtab name >>|
+      Fn.compose Option.some Ir_jmp.resolved
 
 let has_explicit_call symtab block =
   match symtab with
@@ -77,11 +88,12 @@ module IrBuilder = struct
      pre: the last block of [ys] is the exit block;
      post: the first block of [append xs ys] is the new exit block. *)
   let append xs ys = match xs, ys with
-    | [],xs | xs,[] -> xs
+    | [],xs | xs,[] -> !!xs
     | x :: xs, y :: ys when def_only x ->
-      List.rev_append ys (append_def_only x y :: xs)
+      !!(List.rev_append ys (append_def_only x y :: xs))
     | x::xs, y::_ ->
-      let jmp = Ir_jmp.reify ~dst:(Ir_jmp.resolved @@ Term.tid y) () in
+      Theory.Label.fresh >>| fun tid ->
+      let jmp = Ir_jmp.reify ~tid ~dst:(Ir_jmp.resolved @@ Term.tid y) () in
       let x = Term.append jmp_t x jmp in
       List.rev_append ys (x::xs)
 
@@ -146,7 +158,8 @@ module IrBuilder = struct
     | _ -> false
 
   let insert_inter_fall alt blk =
-    Term.append jmp_t blk @@ Ir_jmp.reify ~alt ()
+    Theory.Label.fresh >>| fun tid ->
+    Term.append jmp_t blk @@ Ir_jmp.reify ~tid ~alt ()
 
   let is_last_jump_unconditional blk =
     match Term.last jmp_t blk with
@@ -160,10 +173,10 @@ module IrBuilder = struct
 
   let fall_if_possible dst blk =
     if is_last_jump_unconditional blk
-    then blk
-    else
+    then !!blk
+    else Theory.Label.fresh >>| fun tid ->
       Term.append jmp_t blk @@
-      Ir_jmp.reify ~dst ()
+      Ir_jmp.reify ~tid ~dst ()
 
   let concat_map_fst_and_rev xs f =
     match xs with
@@ -175,6 +188,28 @@ module IrBuilder = struct
   let with_first_blk_optionally_addressed = function
     | None -> fun x -> x
     | Some addr -> with_first_blk_addressed addr
+
+  let maximize ?(is_call=false) ?(is_barrier=false) ?fall = function
+    | x when is_barrier -> !![x]
+    | x -> match fall with
+      | None ->
+        !![if is_call || has_call x then turn_into_call None x else x]
+      | Some (`Intra dst) ->
+        let blk =
+          if is_call || has_call x
+          then turn_into_call (Some dst) x
+          else x in
+        fall_if_possible dst blk >>| List.return
+      | Some (`Inter dst) ->
+        if is_call || has_call x then
+          Theory.Label.fresh >>= fun tid ->
+          let next = Ir_blk.create ~tid () in
+          let fall = Ir_jmp.resolved tid in
+          insert_inter_fall dst next >>= fun next ->
+          turn_into_call (Some fall) x |>
+          fall_if_possible fall >>| fun blk ->
+          [next; blk]
+        else insert_inter_fall dst x >>| List.return
 
   (* packs a list of IR blks that represent blks obtained from
    * the instructions of the same basic block into a set of maximal
@@ -204,63 +239,37 @@ module IrBuilder = struct
       blk term list -> blk term list KB.t =
     fun ?(is_call=false) ?(is_barrier=false) ?fall ?addr blks ->
     let blks = with_landing_pads fall blks in
-    begin concat_map_fst_and_rev blks @@ function
-      | x when is_barrier -> !![x]
-      | x -> match fall with
-        | None ->
-          !![if is_call || has_call x then turn_into_call None x else x]
-        | Some (`Intra dst) -> !![
-            fall_if_possible dst @@
-            if is_call || has_call x
-            then turn_into_call (Some dst) x
-            else x
-          ]
-        | Some (`Inter dst) ->
-          if is_call || has_call x then
-            Theory.Label.fresh >>= fun tid ->
-            let next = Ir_blk.create ~tid () in
-            let fall = Ir_jmp.resolved (Term.tid next) in
-            let next = insert_inter_fall dst next in !![
-              next;
-              fall_if_possible fall @@
-              turn_into_call (Some fall) x
-            ]
-          else !![insert_inter_fall dst x]
-    end >>| with_first_blk_optionally_addressed addr
+    maximize ~is_call ~is_barrier ?fall |>
+    concat_map_fst_and_rev blks >>|
+    with_first_blk_optionally_addressed addr
 
   let insns ?fall ?addr insns =
-    begin match addr with
-      | None -> Theory.Label.fresh
-      | Some addr ->
-        Theory.Label.for_addr @@ Word.to_bitvec addr
-    end >>= fun tid ->
-    let blks,termi = List.fold insns
-        ~init:([Ir_blk.create ~tid ()],None)
-        ~f:(fun (blks,_) insn ->
-            lift_insn insn blks,Some insn) in
-    match termi with
-    | None -> !!blks
-    | Some x ->
-      pack blks
-        ?fall
-        ?addr
+    tid_for_addr addr >>= fun tid ->
+    let init = [Ir_blk.create ~tid ()], None in
+    KB.List.fold insns ~init ~f:(fun (blks, _) insn ->
+        lift_insn insn blks >>| fun blks ->
+        blks, Some insn) >>= function
+    | blks, None -> !!blks
+    | blks, Some x ->
+      pack blks ?fall ?addr
         ~is_call:(Insn.(is call x))
         ~is_barrier:Insn.(is barrier x)
+
+  let fall_of_block symtab cfg block =
+    intra_fall cfg block >>= function
+    | Some dst -> !!(Some (`Intra dst))
+    | None -> inter_fall symtab block >>| function
+      | Some dst -> Some (`Inter dst)
+      | None -> None
 
   let blk ?symtab cfg block : blk term list KB.t =
     let addr = Block.addr block in
     Theory.Label.for_addr (Word.to_bitvec addr) >>= fun tid ->
-    let blks =
-      Block.insns block |>
-      List.fold ~init:[Ir_blk.create ~tid ()] ~f:(fun blks (mem,insn) ->
-          let addr = Memory.min_addr mem in
-          lift_insn ~addr insn blks) in
-    begin intra_fall cfg block >>= function
-      | Some dst -> !!(Some (`Intra dst))
-      | None -> inter_fall symtab block >>| function
-        | Some dst -> Some (`Inter dst)
-        | None -> None
-    end >>= fun fall ->
+    let init = [Ir_blk.create ~tid ()] in
+    Block.insns block |> KB.List.fold ~init ~f:(fun blks (mem,insn) ->
+        let addr = Memory.min_addr mem in
+        lift_insn ~addr insn blks) >>= fun blks ->
+    fall_of_block symtab cfg block >>= fun fall ->
     let x = Block.terminator block in
     pack blks
       ?fall
@@ -272,10 +281,7 @@ end
 let blk cfg block = IrBuilder.blk cfg block
 
 let lift_sub ?symtab ?tid entry cfg =
-  begin match tid with
-    | None -> Theory.Label.fresh
-    | Some tid -> !!tid
-  end >>= fun tid ->
+  maybe_new_tid tid >>= fun tid ->
   Graphlib.reverse_postorder_traverse (module Cfg) ~start:entry cfg |>
   Seq.to_list |> KB.List.map ~f:(IrBuilder.blk ?symtab cfg) >>| fun blks ->
   Block.addr entry, List.concat blks, tid
@@ -385,22 +391,19 @@ let insert_synthetic prog =
                     create_synthetic dst)))
 
 let lift_insn ?addr insn =
-  begin match addr with
-    | None -> Theory.Label.fresh
-    | Some addr ->
-      Theory.Label.for_addr @@ Word.to_bitvec addr
-  end >>| fun tid ->
-  List.rev @@ IrBuilder.lift_insn ?addr insn [Ir_blk.create ~tid ()]
+  tid_for_addr addr >>= fun tid ->
+  let init = [Ir_blk.create ~tid ()] in
+  IrBuilder.lift_insn ?addr insn init >>| List.rev
+
+let lift_insn_nonempty insn =
+  if KB.Value.is_empty insn then !!None
+  else lift_insn insn >>| Option.some
 
 let reify_externals symtab prog =
   Symtab.externals symtab |>
   KB.Seq.fold ~init:prog ~f:(fun prog (tid,insn) ->
       if has_sub prog tid then !!prog
-      else
-        begin if KB.Value.is_empty insn
-          then !!None
-          else lift_insn insn >>| Option.some
-        end >>| fun blks ->
+      else lift_insn_nonempty insn >>| fun blks ->
         let sub = create_synthetic ?blks tid in
         Term.append sub_t prog sub)
 
