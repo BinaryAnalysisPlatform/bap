@@ -133,23 +133,26 @@ module IrBuilder = struct
 
   let landing_pad return jmp =
     match Ir_jmp.kind jmp with
-    | Int (_,pad) ->
-      let pad = Ir_blk.create ~tid:pad () in
-      let pad = match return with
-        | Some (`Intra dst) -> Term.append jmp_t pad (Ir_jmp.reify ~dst ())
-        | _ -> pad in
-      Some pad
-    | _ -> None
+    | Int (_,pad) -> begin
+        let pad = Ir_blk.create ~tid:pad () in
+        match return with
+        | Some (`Intra dst) ->
+          Theory.Label.fresh >>| fun tid ->
+          let jmp = Ir_jmp.reify ~tid ~dst () in
+          Some (Term.append jmp_t pad jmp)
+        | _ -> !!(Some pad)
+      end
+    | _ -> !!None
 
   let with_landing_pads return bs = match bs with
-    | [] -> []
+    | [] -> !![]
     | b :: bs as blks ->
-      let pads = List.fold ~init:[] blks ~f:(fun pads b ->
+      KB.List.fold ~init:[] blks ~f:(fun pads b ->
           Term.enum jmp_t b |>
-          Seq.fold ~init:pads ~f:(fun pads jmp ->
-              match landing_pad return jmp with
+          KB.Seq.fold ~init:pads ~f:(fun pads jmp ->
+              landing_pad return jmp >>| function
               | Some pad -> pad :: pads
-              | None -> pads)) in
+              | None -> pads)) >>| fun pads ->
       b :: List.rev_append pads bs
 
   let resolves_equal x y =
@@ -238,7 +241,7 @@ module IrBuilder = struct
       ?addr:addr ->
       blk term list -> blk term list KB.t =
     fun ?(is_call=false) ?(is_barrier=false) ?fall ?addr blks ->
-    let blks = with_landing_pads fall blks in
+    with_landing_pads fall blks >>= fun blks ->
     maximize ~is_call ~is_barrier ?fall |>
     concat_map_fst_and_rev blks >>|
     with_first_blk_optionally_addressed addr
@@ -408,7 +411,8 @@ let reify_externals symtab prog =
         Term.append sub_t prog sub)
 
 let program symtab =
-  let b = Ir_program.Builder.create () in
+  Theory.Label.fresh >>= fun prog_tid ->
+  let b = Ir_program.Builder.create ~tid:prog_tid () in
   let sub_of_blk = Hashtbl.create (module Tid) in
   let tid_for_sub =
     let tids = Hash_set.create (module Tid) in
@@ -430,7 +434,8 @@ let program symtab =
       KB.provide Theory.Label.aliases sub_tid @@
       Set.singleton (module String) name >>| fun () ->
       let sub = Ir_sub.create () ~blks ~tid:sub_tid ~name in
-      Ir_program.Builder.add_sub b @@ Term.set_attr sub address addr;
+      let sub = Term.set_attr sub address addr in
+      Ir_program.Builder.add_sub b sub;
       Hashtbl.add_exn sub_of_blk ~key:blk_tid ~data:sub_tid) >>= fun () ->
   Ir_program.Builder.result b |>
   Term.KB.map sub_t ~f:(fun sub ->
