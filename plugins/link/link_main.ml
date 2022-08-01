@@ -71,8 +71,8 @@ let collect_externals package target units =
             Program.KB.lift symtab >>| fun prog ->
             let subs =
               Term.enum sub_t prog |>
-              Seq.map ~f:(fun sub -> Sub.name sub, sub) |>
-              String.Map.of_sequence_exn in
+              Seq.fold ~init:String.Map.empty ~f:(fun subs sub ->
+                  Map.add_exn subs ~key:(Sub.name sub) ~data:sub) in
             (path, subs) :: exts)
   end;
   Toplevel.get result
