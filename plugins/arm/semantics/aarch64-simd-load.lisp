@@ -3,6 +3,9 @@
 (in-package aarch64)
 
 ;;; LDs..
+;;; NOTE:
+;;;   encodings do not CheckFPAdvSIMDEnabled64(), HaveMTE2Ext(), 
+;;;   SetTagCheckedInstruction(), CheckSPAlignment()
 
 ;; LD1 (multiple structures, post index, four registers)
 
@@ -128,8 +131,7 @@
 
 (defmacro LD2Twov._POST (va_vb xn xm elems bytes)
   "(LD2Twov._POST va_vb xn elesms bytes) loads multiple 2-element structures from
-   memory at address xn with offset xm and stores it in va and vb with de-interleaving.
-   NOTE: does not encode Security state & Exception level"
+   memory at address xn with offset xm and stores it in va and vb with de-interleaving."
   (LD..v._POST 1 elems 2 bytes va_vb xn xm))
 
 ;; LD2 (multiple structures, no offset)
@@ -144,8 +146,7 @@
 
 (defmacro LD2Twov. (va_vb xn elems bytes)
   "(LD2Twov. va_vb xn elesms bytes) loads multiple 2-element structures from
-   memory at address xn and stores it in va and vb with de-interleaving.
-   NOTE: does not encode Security state & Exception level"
+   memory at address xn and stores it in va and vb with de-interleaving."
     (LD 1 elems 2 xn bytes va_vb))
 
 ;; LD3 (multiple structures, post index)
@@ -160,8 +161,7 @@
 
 (defmacro LD3Threev._POST (va_vb_vc xn xm elems bytes)
   "(LD3Threev._POST va_vb_vc xn xm elems bytes) loads multiple 3-element structures
-   from memory at address xn with offset xm and stores it in va, vb and vc with de-interleaving.
-   NOTE: does not encode Security state & Exception level"
+   from memory at address xn with offset xm and stores it in va, vb and vc with de-interleaving."
   (LD..v._POST 1 elems 3 bytes va_vb_vc xn xm))
 
 ;; LD3 (multiple structures, no offset)
@@ -176,8 +176,7 @@
 
 (defmacro LD3Threev. (va_vb_vc xn elems bytes)
   "(LD3Threev. va_vb_vc xn elems bytes) loads multiple 3-element structures from
-   memory at address xn and stores it in va, vb and vc with de-interleaving.
-   NOTE: does not encode Security state & Exception level"
+   memory at address xn and stores it in va, vb and vc with de-interleaving."
     (LD 1 elems 3 xn bytes va_vb_vc))
 
 ;; LD4 (multiple structures, post index)
@@ -192,8 +191,7 @@
 
 (defmacro LD4Fourv._POST (va_vb_vc xn xm elems bytes)
   "(LD4Fourv._POST va_vb_vc xn xm elems bytes) loads multiple 4-element structures
-   from memory at address xn with offset xm and stores it in va, vb, vc and vd with de-interleaving.
-   NOTE: does not encode Security state & Exception level"
+   from memory at address xn with offset xm and stores it in va, vb, vc and vd with de-interleaving."
   (LD..v._POST 1 elems 4 bytes va_vb_vc xn xm))
 
 ;; LD4 (multiple structures, no offset)
@@ -208,8 +206,7 @@
 
 (defmacro LD4Fourv. (va_vb_vc xn elems bytes)
   "(LD4Fourv. va_vb_vc xn elems bytes) loads multiple 4-element structures from memory
-   at address xn and stores it in va, vb, vc and vd with de-interleaving.
-   NOTE: does not encode Security state & Exception level"
+   at address xn and stores it in va, vb, vc and vd with de-interleaving."
     (LD 1 elems 4 xn bytes va_vb_vc))
 
 ;; LD multiple struct algorithm
@@ -506,29 +503,110 @@
 (defun LD4Rv1d_POST (_ va_vb_vc_vd xn xm) (LD4Rv._POST va_vb_vc_vd xn 64 64 xm))
 (defun LD4Rv2d_POST (_ va_vb_vc_vd xn xm) (LD4Rv._POST va_vb_vc_vd xn 64 128 xm))
 
+;; load register pair
+
+(defun load-register-pair (vn vm base imm size scale)
+  "(load-register-pair vn vm base imm size scale) loads a pair of registers 
+   from memory with an optional offset and immediate decoding."
+  (let ((off (lshift (cast-signed 64 imm) scale))
+        (dbytes (/ size 8)))
+    (set$ vn (mem-read (+ base off) dbytes))
+    (set$ vm (mem-read (+ base off dbytes) dbytes))))
+
+;; LDNP
+
+(defmacro LDNP.i (vn vm base imm size)
+  "(LDNP.i vn vm base imm) loads a pair of SIMD&FP registers from memory at
+   at address base with optional offset imm and stores them in vn and vm.
+   Issues a non-temporal hint."
+  (prog
+    (intrinsic 'non-temporal-hint base)
+    (load-register-pair vn vm base imm size 0)))
+
+(defun LDNPSi (sn sm base imm) (LDNP.i sn sm base imm 32))
+(defun LDNPDi (dn dm base imm) (LDNP.i dn dm base imm 64))
+(defun LDNPQi (qn qm base imm) (LDNP.i qn qm base imm 128))
+
+;; LDP (pre-index)
+
+(defmacro LDP.pre (vn vm base imm size scale)
+  "(LDP.i qn qm imm size mem-load scale) loads a pair of SIMD&FP registers from 
+   memory using the address base and an optional signed immediate offset."
+  (let ((off (lshift (cast-signed 64 imm) scale))
+        (dbytes (/ size 8))
+        (addr (+ base off)))
+    (set$ vn (mem-read addr (/ size 8)))
+    (set$ vm (mem-read (+ addr dbytes) (/ size 8)))
+    (set$ base addr)))
+
+(defun LDPQpre (_ qn qm base imm) (LDP.pre qn qm base imm 128 4))
+(defun LDPDpre (_ qn qm base imm) (LDP.pre qn qm base imm 64 3))
+(defun LDPSpre (_ qn qm base imm) (LDP.pre qn qm base imm 32 2))
+
+;; LDP (post-index)
+
+(defmacro LDP.post (vn vm base imm size scale)
+  "(LDP.i qn qm imm size mem-load scale) loads a pair of SIMD&FP registers from 
+   memory using the address base and an optional signed immediate offset."
+  (let ((off (lshift (cast-signed 64 imm) scale))
+        (dbytes (/ size 8)))
+    (set$ vn (mem-read base (/ size 8)))
+    (set$ vm (mem-read (+ base dbytes) (/ size 8)))
+    (set$ base (+ base off))))
+
+(defun LDPQpost (_ qn qm base imm) (LDP.post qn qm base imm 128 4))
+(defun LDPDpost (_ qn qm base imm) (LDP.post qn qm base imm 64 3))
+(defun LDPSpost (_ qn qm base imm) (LDP.post qn qm base imm 32 2))
+
 ;; LDP (signed offset)
 
 (defmacro LDP.i (vn vm base imm size scale)
   "(LDP.i qn qm imm size mem-load scale) loads a pair of SIMD&FP registers from 
-   memory using the address base and an optional signed immediate offset. NOTE: 
-   does not CheckFPAdvSIMDEnabled64(), HaveMTE2Ext(), SetTagCheckedInstruction(), 
-   CheckSPAlignment(), Mem[... AccType_VEC]"
-  (let ((off (lshift (cast-signed 64 imm) scale))
-        (dbytes (/ size 8)))
-    (set$ vn (mem-read (+ base off) (/ size 8)))
-    (set$ vm (mem-read (+ base off dbytes) (/ size 8)))))
+   memory using the address base and an optional signed immediate offset."
+  (load-register-pair vn vm base imm size scale))
 
 (defun LDPQi (qn qm base imm) (LDP.i qn qm base imm 128 4))
 (defun LDPDi (qn qm base imm) (LDP.i qn qm base imm 64 3))
 (defun LDPSi (qn qm base imm) (LDP.i qn qm base imm 32 2))
+
+;; LDR (immediate, post-index)
+
+(defmacro LDR.post (vt base off size)
+  "(LDR.post vt base imm mem-load scale) loads an element from memory from 
+   the post-index base address and unsigned immediate offset off and stores the result 
+   in vt."
+  (prog
+    (set$ vt (mem-read base (/ size 8)))
+    (set$ base (+ base off))))
+
+(defun LDRBpost (_ bt base imm) (LDR.post bt base imm 8))
+(defun LDRHpost (_ ht base imm) (LDR.post ht base imm 16))
+(defun LDRSpost (_ st base imm) (LDR.post st base imm 32))
+(defun LDRDpost (_ dt base imm) (LDR.post dt base imm 64))
+(defun LDRQpost (_ qt base imm) (LDR.post qt base imm 128))
+
+;; LDR (immediate, pre-index)
+
+(defmacro LDR.pre (vt base off size)
+  "(LDR.ui vt base imm mem-load scale) loads an element from memory from 
+   the pre-index base address and unsigned immediate offset off and stores the result 
+   in vt."
+  (let ((addr (+ base off)))
+    (set$ vt (mem-read addr (/ size 8)))
+    (set$ base addr)))
+
+(defun LDRBpre (_ bt base imm) (LDR.pre bt base imm 8))
+(defun LDRHpre (_ ht base imm) (LDR.pre ht base imm 16))
+(defun LDRSpre (_ st base imm) (LDR.pre st base imm 32))
+(defun LDRDpre (_ dt base imm) (LDR.pre dt base imm 64))
+(defun LDRQpre (_ qt base imm) (LDR.pre qt base imm 128))
 
 ;; LDR (immediate, unsigned offset)
 
 (defmacro LDR.ui (vt base imm size scale)
   "(LDR.ui vt base imm mem-load scale) loads an element from memory from 
    the base address and unsigned immediate offset imm and stores the result 
-   in vt. NOTE: does not CheckFPAdvSIMDEnabled64(), HaveMTE2Ext(), 
-   SetTagCheckedInstruction(), CheckSPAlignment(), Mem[... AccType_VEC]"
+   in vt."
   (let ((off (lshift (cast-unsigned 64 imm) scale)))
     (set$ vt (mem-read (+ base off) (/ size 8)))))
 
@@ -538,13 +616,23 @@
 (defun LDRDui (dt base imm) (LDR.ui dt base imm 64 3))
 (defun LDRQui (qt base imm) (LDR.ui qt base imm 128 4))
 
+;; LDR (literal)
+
+(defmacro LDR.l (vn label bytes)
+  "(LDR.l vn label bytes) loads a register from memory at an address 
+   relative to the program counter and a program label."
+  (let ((off (cast-signed 64 (lshift label 2))))
+    (set$ vn (mem-read (+ off (get-program-counter)) bytes))))
+
+(defun LDRSl (sn label) (LDR.l sn label 4))
+(defun LDRDl (dn label) (LDR.l dn label 8))
+(defun LDRQl (qn label) (LDR.l qn label 16))
+
 ;; LDR (register)
 
-(defmacro LDR.roX (vt base index signed s scale size)
-  "(LDR.roX vt base index signed s scale mem-load) loads a SIMD&FP register 
-   from address base and an optionally shifted and extended index. NOTE: 
-   does not CheckFPAdvSIMDEnabled64(), HaveMTE2Ext(), SetTagCheckedInstruction(), 
-   CheckSPAlignment(), Mem[... AccType_VEC]"
+(defmacro LDR.ro. (vt base index signed s scale size)
+  "(LDR.ro. vt base index signed s scale mem-load) loads a SIMD&FP register 
+   from address base and an optionally shifted and extended index."
   (let ((shift (if (= s 1)
           (+ scale 0)
           (+ 0 0)))
@@ -553,19 +641,23 @@
           (cast-unsigned 64 (lshift index shift)))))
     (set$ vt (mem-read (+ base off) (/ size 8)))))
 
-(defun LDRBroX (bt base index signed s) (LDR.roX bt base index signed s 0 8))
-(defun LDRHroX (ht base index signed s) (LDR.roX ht base index signed s 1 16))
-(defun LDRSroX (st base index signed s) (LDR.roX st base index signed s 2 32))
-(defun LDRDroX (dt base index signed s) (LDR.roX dt base index signed s 3 64))
-(defun LDRQroX (qt base index signed s) (LDR.roX qt base index signed s 4 128))
+(defun LDRBroX (bt base index signed s) (LDR.ro. bt base index signed s 0 8))
+(defun LDRHroX (ht base index signed s) (LDR.ro. ht base index signed s 1 16))
+(defun LDRSroX (st base index signed s) (LDR.ro. st base index signed s 2 32))
+(defun LDRDroX (dt base index signed s) (LDR.ro. dt base index signed s 3 64))
+(defun LDRQroX (qt base index signed s) (LDR.ro. qt base index signed s 4 128))
+
+(defun LDRBroW (bt base index signed s) (LDR.ro. bt base index signed s 0 8))
+(defun LDRHroW (ht base index signed s) (LDR.ro. ht base index signed s 1 16))
+(defun LDRSroW (st base index signed s) (LDR.ro. st base index signed s 2 32))
+(defun LDRDroW (dt base index signed s) (LDR.ro. dt base index signed s 3 64))
+(defun LDRQroW (qt base index signed s) (LDR.ro. qt base index signed s 4 128))
 
 ;; LDUR
 
 (defmacro LDUR.i (vt base simm size)
   "(LDUR.i vt base simm mem-load) loads a SIMD&FP register from memory at 
-   the address calculated from a base register and optional immediate offset. 
-   NOTE: does not CheckFPAdvSIMDEnabled64(), HaveMTE2Ext(), SetTagCheckedInstruction(), 
-   CheckSPAlignment(), Mem[... AccType_VEC]"
+   the address calculated from a base register and optional immediate offset."
   (set$ vt (mem-read (+ base simm) (/ size 8))))
 
 (defun LDURBi (bt base simm) (LDUR.i bt base simm 8))
