@@ -363,8 +363,17 @@ let is_intrinsic sub =
   | "intrinsic" -> true
   | _ -> false
 
+let make_name ?name tid = match name with
+  | Some name -> !!name
+  | None -> KB.collect Theory.Label.name tid >>= function
+    | Some name -> !!name
+    | None -> KB.collect Theory.Label.ivec tid >>| function
+      | None -> Tid.to_string tid
+      | Some ivec -> Format.asprintf "interrupt:#%d" ivec
+
 let create_synthetic ?blks ?name tid =
-  let sub = Ir_sub.create ?blks ?name ~tid () in
+  make_name ?name tid >>| fun name ->
+  let sub = Ir_sub.create ?blks ~name ~tid () in
   let tags = List.filter_opt [
       Some Term.synthetic;
       Option.some_if (is_intrinsic sub) Ir_sub.intrinsic;
@@ -377,21 +386,18 @@ let has_sub prog tid =
 
 let insert_synthetic prog =
   Term.enum sub_t prog |>
-  Seq.fold ~init:prog ~f:(fun prog sub ->
+  KB.Seq.fold ~init:prog ~f:(fun prog sub ->
       Term.enum blk_t sub |>
-      Seq.fold ~init:prog ~f:(fun prog blk ->
+      KB.Seq.fold ~init:prog ~f:(fun prog blk ->
           Term.enum jmp_t blk |>
-          Seq.fold ~init:prog ~f:(fun prog jmp ->
+          KB.Seq.fold ~init:prog ~f:(fun prog jmp ->
               match Ir_jmp.alt jmp with
-              | None -> prog
+              | None -> !!prog
               | Some dst -> match Ir_jmp.resolve dst with
-                | Second _ -> prog
+                | Second _ -> !!prog
                 | First dst ->
-                  if has_sub prog dst
-                  then prog
-                  else
-                    Term.append sub_t prog @@
-                    create_synthetic dst)))
+                  if has_sub prog dst then !!prog
+                  else create_synthetic dst >>| Term.append sub_t prog)))
 
 let lift_insn ?addr insn =
   tid_for_addr addr >>= fun tid ->
@@ -406,9 +412,54 @@ let reify_externals symtab prog =
   Symtab.externals symtab |>
   KB.Seq.fold ~init:prog ~f:(fun prog (tid,insn) ->
       if has_sub prog tid then !!prog
-      else lift_insn_nonempty insn >>| fun blks ->
-        let sub = create_synthetic ?blks tid in
-        Term.append sub_t prog sub)
+      else lift_insn_nonempty insn >>= fun blks ->
+        create_synthetic ?blks tid >>| Term.append sub_t prog)
+
+let add_name tid name =
+  KB.provide Theory.Label.aliases tid @@
+  Set.singleton (module String) name
+
+let set_name_if_possible tid name =
+  add_name tid name >>= fun () ->
+  KB.collect Theory.Label.name tid >>= function
+  | None -> KB.provide Theory.Label.name tid @@ Some name
+  | Some _ -> !!()
+
+let mangle_name addr tid name =
+  match addr with
+  | Some a ->
+    sprintf "%s@%s" name @@
+    Bap_bitvector.string_of_value ~hex:true a
+  | None -> sprintf "%s%%%s" name (Tid.to_string tid)
+
+let mangle_sub s =
+  let tid = Term.tid s in
+  let addr = Term.get_attr s address in
+  let name = mangle_name addr tid (Ir_sub.name s) in
+  set_name_if_possible tid name >>| fun () ->
+  Ir_sub.create () ~tid ~name
+    ~args:(Term.enum arg_t s |> Seq.to_list)
+    ~blks:(Term.enum blk_t s |> Seq.to_list)
+
+let fix_names prog =
+  let is_new tid name =
+    Theory.Label.for_name name >>| Fn.non (Tid.equal tid) in
+  let keep_name tids name tid = Map.set tids ~key:name ~data:tid in
+  let subs = Term.enum sub_t prog in
+  let len = Seq.length subs in
+  KB.Seq.fold subs ~init:String.Map.empty ~f:(fun tids sub ->
+      let tid = Term.tid sub in
+      let name = Ir_sub.name sub in
+      match Map.find tids name with
+      | None -> !!(keep_name tids name tid)
+      | Some _ -> is_new tid name >>| function
+        | false -> keep_name tids name tid
+        | true -> tids) >>= fun tids ->
+  if len = Map.length tids then !!prog
+  else Term.KB.map sub_t prog ~f:(fun sub ->
+      let tid' = Map.find_exn tids @@ Ir_sub.name sub in
+      if Tid.equal tid' @@ Term.tid sub then !!sub
+      else mangle_sub sub)
 
 let program symtab =
   Theory.Label.fresh >>= fun prog_tid ->
@@ -431,20 +482,19 @@ let program symtab =
       tid_for_sub name >>= fun sub_tid ->
       KB.provide Theory.Label.addr sub_tid (Some addr) >>= fun () ->
       lift_sub ~symtab ~tid:sub_tid entry cfg >>= fun (addr, blks, _) ->
-      KB.provide Theory.Label.aliases sub_tid @@
-      Set.singleton (module String) name >>| fun () ->
+      add_name sub_tid name >>| fun () ->
       let sub = Ir_sub.create () ~blks ~tid:sub_tid ~name in
       let sub = Term.set_attr sub address addr in
       Ir_program.Builder.add_sub b sub;
       Hashtbl.add_exn sub_of_blk ~key:blk_tid ~data:sub_tid) >>= fun () ->
-  Ir_program.Builder.result b |>
+  fix_names @@ Ir_program.Builder.result b >>=
   Term.KB.map sub_t ~f:(fun sub ->
       Term.KB.map blk_t sub ~f:(fun blk ->
           let addr = Term.get_attr blk address in
           Term.KB.map jmp_t blk ~f:(fun jmp ->
               let jmp = alternate_nonlocal sub jmp in
               link_call symtab addr sub_of_blk jmp))) >>=
-  reify_externals symtab >>| insert_synthetic
+  reify_externals symtab >>= insert_synthetic
 
 let sub blk cfg =
   lift_sub blk cfg >>| fun (addr, blks, tid) ->
