@@ -8633,7 +8633,7 @@ module Std : sig
         Creates a program from the given subs. If [tid] is not
         specified then a fresh tid is generated.
 
-        @since 2.3.0 has the optional [subs] paramater.
+        @since 2.3.0 has the optional [subs] parameter.
     *)
     val create : ?subs:sub term list -> ?tid:tid -> unit -> t
 
@@ -8686,7 +8686,12 @@ module Std : sig
   (** Subroutine.  *)
   module Sub : sig
     (** Subroutine is a set of blocks.  The first block of a function is
-        considered an entry block.  *)
+        considered an entry block.
+
+        @since 2.6.0 subroutines with duplicate names in a program are no
+        longer demangled every time the program is updated. It is done
+        only once when the program is lifted (see [Program.lift]).
+    *)
     type t = sub term
 
     (** [create ?name ()] creates a new subroutine.
