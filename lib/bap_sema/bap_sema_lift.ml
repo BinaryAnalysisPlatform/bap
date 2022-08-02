@@ -445,9 +445,8 @@ let fix_names prog =
   let is_new tid name =
     Theory.Label.for_name name >>| Fn.non (Tid.equal tid) in
   let keep_name tids name tid = Map.set tids ~key:name ~data:tid in
-  let subs = Term.enum sub_t prog in
-  let len = Seq.length subs in
-  KB.Seq.fold subs ~init:String.Map.empty ~f:(fun tids sub ->
+  Term.enum sub_t prog |>
+  KB.Seq.fold ~init:String.Map.empty ~f:(fun tids sub ->
       let tid = Term.tid sub in
       let name = Ir_sub.name sub in
       match Map.find tids name with
@@ -455,7 +454,7 @@ let fix_names prog =
       | Some _ -> is_new tid name >>| function
         | false -> keep_name tids name tid
         | true -> tids) >>= fun tids ->
-  if len = Map.length tids then !!prog
+  if Term.length sub_t prog = Map.length tids then !!prog
   else Term.KB.map sub_t prog ~f:(fun sub ->
       let tid' = Map.find_exn tids @@ Ir_sub.name sub in
       if Tid.equal tid' @@ Term.tid sub then !!sub
