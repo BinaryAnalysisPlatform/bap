@@ -8689,8 +8689,8 @@ module Std : sig
         considered an entry block.
 
         @since 2.6.0 subroutines with duplicate names in a program are no
-        longer demangled every time the program is updated. It is done
-        only once when the program is lifted (see [Program.lift]).
+        longer mangled every time the program is updated. It is done only
+        once when the program is lifted (see [Program.lift]).
     *)
     type t = sub term
 
