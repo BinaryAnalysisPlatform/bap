@@ -503,29 +503,22 @@
 (defun LD4Rv1d_POST (_ va_vb_vc_vd xn xm) (LD4Rv._POST va_vb_vc_vd xn 64 64 xm))
 (defun LD4Rv2d_POST (_ va_vb_vc_vd xn xm) (LD4Rv._POST va_vb_vc_vd xn 64 128 xm))
 
-;; load register pair
-
-(defun load-register-pair (vn vm base imm size scale)
-  "(load-register-pair vn vm base imm size scale) loads a pair of registers 
-   from memory with an optional offset and immediate decoding."
-  (let ((off (lshift (cast-signed 64 imm) scale))
-        (dbytes (/ size 8)))
-    (set$ vn (mem-read (+ base off) dbytes))
-    (set$ vm (mem-read (+ base off dbytes) dbytes))))
-
 ;; LDNP
 
-(defmacro LDNP.i (vn vm base imm size)
+(defmacro LDNP.i (vn vm base imm size scale)
   "(LDNP.i vn vm base imm) loads a pair of SIMD&FP registers from memory at
    at address base with optional offset imm and stores them in vn and vm.
    Issues a non-temporal hint."
-  (prog
-    (intrinsic 'non-temporal-hint base)
-    (load-register-pair vn vm base imm size 0)))
+  (let ((off (lshift (cast-signed 64 imm) scale))
+        (dbytes (/ size 8)))
+    (intrinsic 'non-temporal-hint (+ base off))
+    (set$ vn (mem-read (+ base off) dbytes))
+    (intrinsic 'non-temporal-hint (+ base off dbytes))
+    (set$ vm (mem-read (+ base off dbytes) dbytes))))
 
-(defun LDNPSi (sn sm base imm) (LDNP.i sn sm base imm 32))
-(defun LDNPDi (dn dm base imm) (LDNP.i dn dm base imm 64))
-(defun LDNPQi (qn qm base imm) (LDNP.i qn qm base imm 128))
+(defun LDNPSi (sn sm base imm) (LDNP.i sn sm base imm 32 2))
+(defun LDNPDi (dn dm base imm) (LDNP.i dn dm base imm 64 3))
+(defun LDNPQi (qn qm base imm) (LDNP.i qn qm base imm 128 4))
 
 ;; LDP (pre-index)
 
@@ -563,7 +556,10 @@
 (defmacro LDP.i (vn vm base imm size scale)
   "(LDP.i qn qm imm size mem-load scale) loads a pair of SIMD&FP registers from 
    memory using the address base and an optional signed immediate offset."
-  (load-register-pair vn vm base imm size scale))
+  (let ((off (lshift (cast-signed 64 imm) scale))
+        (dbytes (/ size 8)))
+    (set$ vn (mem-read (+ base off) dbytes))
+    (set$ vm (mem-read (+ base off dbytes) dbytes))))
 
 (defun LDPQi (qn qm base imm) (LDP.i qn qm base imm 128 4))
 (defun LDPDi (qn qm base imm) (LDP.i qn qm base imm 64 3))

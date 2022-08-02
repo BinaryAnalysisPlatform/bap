@@ -58,14 +58,8 @@
 (defun ANDSXri (rd rn imm) (ANDS*ri set$ 64 rd rn imm))
 
 (defmacro ANDS*rs (setf rd rn rm is)
-<<<<<<< HEAD
-  "(ANDS*rs set rd rn imm) implements the logical AND operation on 
-   either an X or W register with shifted immediate and sets the 
-   N, V, Z, C flags based on the result."
-=======
   "(ANDS*rs set rd rn imm) implements the logical AND operation on either an X or W register
    with shifted immediate and sets the N, V, Z, C flags based on the result."
->>>>>>> 3a007ab61a33952250de8031cea0ad4363ada325
   (let ((immOp (shift-encoded rm is)))
     (ANDS*r* setf rd rn immOp)))
 
@@ -76,13 +70,8 @@
 ;; BIC
 
 (defmacro BIC*rs (setr rd rn rm is)
-<<<<<<< HEAD
-  "(BIC*r setr rd rn rm) stores the result of a logical and of rn with 
-   the complement of the contents of optionally shifted rm in rd"
-=======
   "(BIC*r setr rd rn rm) stores the result of a logical and of rn with the complement of
    the contents of optionally shifted rm in rd"
->>>>>>> 3a007ab61a33952250de8031cea0ad4363ada325
   (let ((shift (shift-encoded rm is)) 
         (comp (lnot shift)))
     (setr rd (logand rn comp))))
