@@ -366,7 +366,7 @@
 (defun LD4i32_POST (_ _ qa_qb_qc_qd index xn xm) (LD4i._POST qa_qb_qc_qd index xn 32 xm))
 (defun LD4i64_POST (_ _ qa_qb_qc_qd index xn xm) (LD4i._POST qa_qb_qc_qd index xn 64 xm))
 
-;; LD1R
+;; LD.R algorithm
 
 (defmacro LD.Rv._POST (grp base esize dsize selems off)
   "(LD.Rv._POST grp base esize dsize selems off) loads an multiple element from a 
@@ -506,9 +506,10 @@
 ;; LDNP
 
 (defmacro LDNP.i (vn vm base imm size scale)
-  "(LDNP.i vn vm base imm) loads a pair of SIMD&FP registers from memory at
+  "(LDNP.i vn vm base imm) loads a pair of SIMD registers from memory at
    at address base with optional offset imm and stores them in vn and vm.
-   Issues a non-temporal hint."
+   Issues a non-temporal hint, in the form of an intrinsic for each memory
+   access."
   (let ((off (lshift (cast-signed 64 imm) scale))
         (dbytes (/ size 8)))
     (intrinsic 'non-temporal-hint (+ base off))
