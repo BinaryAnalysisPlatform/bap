@@ -7685,7 +7685,6 @@ module Std : sig
       *)
       val subroutines : state -> Set.M(Addr).t
 
-
       (** [blocks state] is the set of addresses of instructions that
           start basic blocks.
           @since 2.2.0
@@ -7875,6 +7874,13 @@ module Std : sig
     (** empty symbol table  *)
     val empty : t
 
+    (** [create disasm calls] creates the symbol table given the
+        disassembly state [disasm] and callgraph [calls].
+
+        @since 2.6.0
+    *)
+    val create : Disasm.Driver.state -> Disasm.Subroutines.t -> t KB.t
+
     (** [add_symbol table name entry blocks] extends [table] with a
         new symbol with a given [name], [entry] block and body
         [blocks].  *)
@@ -7883,7 +7889,7 @@ module Std : sig
     (** [remove table fn] removes symbol [fn] from [table]  *)
     val remove : t -> fn -> t
 
-    (** [find_by_name symbols name] finds a symbol with a given namem  *)
+    (** [find_by_name symbols name] finds a symbol with a given name.  *)
     val find_by_name  : t -> string -> fn option
 
     (** [find_by_start symbols addr] finds a symbol that starts from
@@ -8416,6 +8422,32 @@ module Std : sig
         not a valid position number.  *)
     val nth_exn : ('a,'b) cls -> 'a t -> int -> 'b t
 
+    (** @since 2.6.0 *)
+    module KB : sig
+      (** [map t p ~f] returns term [p] with all subterms of type [t]
+          mapped with function [f].
+
+          @since 2.6.0
+      *)
+      val map : ('a,'b) cls -> 'a t -> f:('b t -> 'b t knowledge) -> 'a t knowledge
+
+      (** [filter_map t p ~f] returns term [p] with all subterms of type
+          [t] filter_mapped with function [f], i.e., all terms for which
+          function [f] returned [Some thing] are substituted by the
+          [thing], otherwise they're removed from the parent term.
+
+          @since 2.6.0
+      *)
+      val filter_map : ('a,'b) cls -> 'a t -> f:('b t -> 'b t option knowledge) -> 'a t knowledge
+
+      (** [filter t p ~f] returns a term [p] with subterms [c] for which
+          [f c = false] removed.
+
+          @since 2.6.0
+      *)
+      val filter : ('a,'b) cls -> 'a t -> f:('b t -> bool knowledge) -> 'a t knowledge
+    end
+
     (** {2 Attributes}
 
         Terms attribute set can be extended, using {{!Value}universal
@@ -8601,7 +8633,7 @@ module Std : sig
         Creates a program from the given subs. If [tid] is not
         specified then a fresh tid is generated.
 
-        @since 2.3.0 has the optional [subs] paramater.
+        @since 2.3.0 has the optional [subs] parameter.
     *)
     val create : ?subs:sub term list -> ?tid:tid -> unit -> t
 
@@ -8636,6 +8668,16 @@ module Std : sig
       val result : t -> program term
     end
 
+    (** @since 2.6.0 *)
+    module KB : sig
+      (** [lift symbols] takes a table of functions and return a whole
+          program lifted into IR.
+
+          @since 2.6.0
+      *)
+      val lift : symtab -> program term knowledge
+    end
+
     (** [pp_slots names] prints slots that are in [names].  *)
     val pp_slots : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
@@ -8644,7 +8686,12 @@ module Std : sig
   (** Subroutine.  *)
   module Sub : sig
     (** Subroutine is a set of blocks.  The first block of a function is
-        considered an entry block.  *)
+        considered an entry block.
+
+        @since 2.6.0 subroutines with duplicate names in a program are no
+        longer mangled every time the program is updated. It is done only
+        once when the program is lifted (see [Program.lift]).
+    *)
     type t = sub term
 
     (** [create ?name ()] creates a new subroutine.
@@ -8832,6 +8879,36 @@ module Std : sig
 
       (** returns current result  *)
       val result : t -> sub term
+    end
+
+    (** @since 2.6.0 *)
+    module KB : sig
+      (** [lift entry] takes an basic block of assembler instructions,
+          as an entry and lifts it to the subroutine term.
+
+          @since 2.6.0
+      *)
+      val lift : block -> cfg -> sub term knowledge
+
+      (** [ssa sub] returns [sub] in SSA form. If program is already in
+          SSA, then do nothing (see also {!is_ssa}). The underlying
+          algorithm produces a semi-pruned SSA form. To represent
+          different versions of the same variable we use {{!Var}variable
+          versions}. Any definition of a variable increases its version
+          number. So, the zero version is reserved for variables that
+          weren't defined before the first use.
+
+          @since 2.6.0
+      *)
+      val ssa : t -> t knowledge
+
+      (** [flatten sub] returns [sub] in flattened form in which all
+          operands are trivial.
+          @see Blk.KB.flatten for more information about flattening.
+
+          @since 2.6.0
+      *)
+      val flatten : t -> t knowledge
     end
 
     (** [pp_slots names] prints slots that are in [names].  *)
@@ -9392,6 +9469,78 @@ module Std : sig
 
       (** returns current result  *)
       val result  : t -> blk term
+    end
+
+    module KB : sig
+      (** [lift block] takes a basic block of assembly instructions and
+          lifts it to a list of blk terms. The first term in the list
+          is the entry.
+
+          @since 2.6.0
+      *)
+      val lift : cfg -> block -> blk term list knowledge
+
+      (** [from_insn ?addr insn] creates an IR representation of a single
+          machine instruction [insn].
+
+          Uses the [Term.slot] to get the IR representation of an
+          instruction, trying to keep the number of basic blocks minimal
+          (by coalescing adjacent data operations).
+
+          If [addr] is specified then the term identifier of the first
+          block will be specific to that address and the [address]
+          attribute will be set to the passed value.
+
+          @since 2.6.0
+      *)
+      val from_insn : ?addr:addr -> insn -> blk term list knowledge
+
+      (** [from_insns block] translates a basic block of instructions
+          into IR.
+
+          Takes a list of instructions in the execution order and
+          translates them into a list of IR blks that are properly
+          connected. The instructions shall belong to a single basic
+          block.
+
+          The first element of the result is the entry block. If [addr]
+          is set then it will have the term identifier equal to
+          [Term.for_addr addr] and the [address] attribute will be set to
+          [addr].
+
+          The [fall] parameter designates the fallthrough destination of
+          the basic block. The destination could be either
+          interprocedural ([`Inter]) or intraprocedural ([`Intra]). In
+          the latter case it will be reified into a jump of the call
+          kind. If the last instruction (the basic block terminator) is a
+          barrier [Insn.(is barrier) is [true]], then the [fall]
+          destination is ignored, even if set.
+
+          @since 2.6.0
+      *)
+      val from_insns :
+        ?fall:[`Inter of Jmp.dst | `Intra of Jmp.dst ] ->
+        ?addr:addr ->
+        insn list ->
+        blk term list knowledge
+
+      (** [flatten blk] translates [blk] into the flattened form.
+          In the flattened form, all operations are applied to variables,
+          constants, or unknowns, i.e., the operands could not be compound
+          expressions. E.g.,
+          {v
+           #10 := 11 * (#9 + 13) - 17
+          v}
+          is translated to,
+          {v
+           #11 := #9 + 13
+           #12 := 11 * #11
+           #10 := #12 - 17
+          v}
+
+          @since 2.6.0
+      *)
+      val flatten : t -> t knowledge
     end
 
     (** [pp_slots names] prints slots that are in [names].  *)

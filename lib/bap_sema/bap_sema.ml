@@ -15,6 +15,9 @@ module Std = struct
     include Ir_program
     let lift = Ir_lift.program
     let to_graph = Bap_ir_callgraph.create
+    module KB = struct
+      let lift = Ir_lift.KB.program
+    end
   end
 
   module Arg = Ir_arg
@@ -27,6 +30,12 @@ module Std = struct
     let from_insn = Ir_lift.insn
     let from_insns = Ir_lift.insns
     let flatten = Flatten.flatten_blk
+    module KB = struct
+      let lift = Ir_lift.KB.blk
+      let from_insn = Ir_lift.KB.insn
+      let from_insns = Ir_lift.KB.insns
+      let flatten = Flatten.KB.flatten_blk
+    end
   end
   module Sub = struct
     include Ir_sub
@@ -39,6 +48,11 @@ module Std = struct
     let free_vars = FV.free_vars_of_sub
     let compute_liveness = FV.compute_liveness
     let flatten = Flatten.flatten_sub
+    module KB = struct
+      let lift = Ir_lift.KB.sub
+      let ssa = Ssa.KB.sub
+      let flatten = Flatten.KB.flatten_sub
+    end
   end
 
   module Live = FV.Live

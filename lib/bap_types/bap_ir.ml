@@ -307,45 +307,9 @@ end = struct
     paths : path Tid.Table.t;
   } [@@deriving bin_io, fields, sexp]
 
-  let mangle_name addr tid name =
-    match addr with
-    | Some a ->
-      sprintf "%s@%s" name @@
-      Bap_bitvector.string_of_value ~hex:true a
-    | None -> sprintf "%s%%%s" name (Tid.to_string tid)
-
-  let set_name_if_possible tid name =
-    try Tid.set_name tid name
-    with _ -> Tid.add_name tid name
-
-
-  let mangle_sub s =
-    let addr = Dict.find s.dict Bap_attributes.address in
-    let name = mangle_name addr s.tid s.self.name in
-    set_name_if_possible s.tid name;
-    let self = {s.self with name} in
-    {s with self}
-
-  let fix_names news =
-    let is_new sub =
-      not @@ Tid.equal sub.tid (Tid.for_name sub.self.name) in
-    let keep_name tids name tid = Map.set tids ~key:name ~data:tid in
-    let tids = Array.fold news ~init:String.Map.empty ~f:(fun tids sub ->
-        match Map.find tids sub.self.name with
-        | None -> keep_name tids sub.self.name sub.tid
-        | Some _ ->
-          if is_new sub then tids
-          else keep_name tids sub.self.name sub.tid) in
-    if Array.length news = Map.length tids then news
-    else
-      Array.map news ~f:(fun sub ->
-          let tid' = Map.find_exn tids sub.self.name in
-          if Tid.equal tid' sub.tid then sub
-          else mangle_sub sub)
-
   let empty () = {subs = [| |] ;  paths = Tid.Table.create () }
 
-  let update p subs = { p with subs = fix_names subs }
+  let update p subs = { p with subs }
 
   let compare x y =
     let compare x y = [%compare:sub term array] x y in
@@ -1185,6 +1149,18 @@ module Term = struct
   let with_attrs t dict = {t with dict}
 
   let length t p = Array.length (t.get p.self)
+
+  module KB = struct
+    open KB.Syntax
+
+    let apply f t p =
+      t.get p.self |> Array.to_sequence |> f >>| fun elems ->
+      {p with self = t.set p.self @@ Seq.to_array elems}
+
+    let map t p ~f : 'a term knowledge = apply (KB.Seq.map ~f) t p
+    let filter_map t p ~f : 'a term knowledge = apply (KB.Seq.filter_map ~f) t p
+    let filter t p ~f : 'a term knowledge = apply (KB.Seq.filter ~f) t p
+  end
 
   let origin = Bap_value.Tag.register (module Tid)
       ~package
