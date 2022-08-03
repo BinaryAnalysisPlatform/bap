@@ -376,7 +376,10 @@ let loader =
 let target =
   let t = Extension.Type.define Theory.Target.unknown
       ~name:"NAME"
-      ~digest:(fun t -> Caml.Digest.string@@Theory.Target.to_string t)
+      ~digest:(fun t ->
+          let r = Caml.Digest.string@@Theory.Target.to_string t in
+          Format.eprintf "target digest = %s@\n" (Caml.Digest.to_hex r);
+          r)
       ~parse:(fun s -> match Theory.Target.lookup ~package:"bap" s with
           | Some t -> t
           | None ->
@@ -385,10 +388,8 @@ let target =
                           of targets" s ())
       ~print:Theory.Target.to_string in
   Extension.Command.parameter t "target"
-    ~doc:"Refines the target architecture of the binary. \
-          See `bap list targets` for the full hierarchy of targets. \
-          The specified target must be a refinement of the actual \
-          target stored in the binary, otherwise an error is signaled."
+    ~doc:"Sets the target architecture of the binary. \
+          See `bap list targets` for the full hierarchy of targets."
 
 let validate_input file =
   Result.ok_if_true (Sys.file_exists file)
@@ -494,6 +495,7 @@ let create_and_process input outputs passes loader target update
   let digest = make_digest [
       Extension.Configuration.digest ctxt;
       Caml.Digest.file input;
+      Theory.Target.to_string target;
       if uses_file_loader then Caml.Digest.file loader else loader;
     ] in
   let had_knowledge = load_knowledge print_missing digest kb in

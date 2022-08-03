@@ -31,9 +31,7 @@ module Abi : sig
   val stdcall : Theory.abi
   val thiscall : Theory.abi
   val vectorcall : Theory.abi
-  val watcomstack : Theory.abi
-  val watcomregs : Theory.abi
-  val darwin : Theory.abi
+  val watcom : Theory.abi
   val ms : Theory.abi
   val sysv : Theory.abi
 end

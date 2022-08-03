@@ -23,7 +23,6 @@ module SetupPLT(Machine : Primus.Machine.S) = struct
 
   module Value = Primus.Value.Make(Machine)
   module Interpreter = Primus.Interpreter.Make(Machine)
-  module Env = Primus.Env.Make(Machine)
 
   let intrinsics =
     let+ prog = Machine.gets Project.program in
@@ -66,8 +65,9 @@ module SetupPLT(Machine : Primus.Machine.S) = struct
     if Set.mem ignore name
     then Machine.return ()
     else
-      Env.get sp >>= fun x ->
-      Interpreter.binop Bil.plus x addend >>= Env.set sp
+      Interpreter.get sp >>= fun x ->
+      Interpreter.binop Bil.plus x addend >>=
+      Interpreter.set sp
 
   let correct_sp ignore sp addend =
     match Var.typ sp with

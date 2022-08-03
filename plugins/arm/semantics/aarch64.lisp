@@ -1,4 +1,5 @@
-(declare (context (target arm armv8-a+le)))
+(declare (context (target arm-family)
+                  (bits 64)))
 
 (defpackage aarch64 (:use core target arm))
 (defpackage llvm-aarch64 (:use aarch64))

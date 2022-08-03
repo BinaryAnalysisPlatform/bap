@@ -1,4 +1,5 @@
-(declare (context (target arm armv8-a+le)))
+(declare (context (target arm-family)
+                  (bits 64)))
 
 (in-package aarch64)
 
@@ -107,33 +108,49 @@
 ;; UBFM and SBFM
 ;; (bitfield moves)
 
-(defmacro make-BFM (set cast xd xr ir is)
-  "(make-BFM set cast xd xr ir is) implements bitfield move instructions
+(defmacro make-eBFM (set cast xd xr ir is)
+  "(make-BFM  cast xd xr ir is) implements bitfield move instructions
    accepting either a W or X register, with cast being an unsigned or signed cast."
   (let ((rs (word)))
     (if (< is ir)
         (if (and (/= is (- rs 1)) (= (+ is 1) ir))
             (set xd (lshift xr (- rs ir)))
-            (set xd (lshift
-                      (cast rs (extract is 0 xr))
-                      (- rs ir))))
-        (if (= is (- rs 1))
-            (set xd (rshift xr ir))
-            (set xd (cast rs (extract is ir xr)))))))
+          (set xd (lshift
+                   (cast rs (extract is 0 xr))
+                   (- rs ir))))
+      (if (= is (- rs 1))
+          (set xd (rshift xr ir))
+        (set xd (cast rs (extract is ir xr)))))))
 
 (defun UBFMXri (xd xr ir is)
-  (make-BFM set$ cast-unsigned xd xr ir is))
+  (make-eBFM set$ cast-unsigned xd xr ir is))
 
 (defun UBFMWri (xd xr ir is)
-  (make-BFM setw cast-unsigned xd xr ir is))
+  (make-eBFM setw cast-unsigned xd xr ir is))
 
 (defun SBFMXri (xd xr ir is)
-  (make-BFM set$ cast-signed xd xr ir is))
+  (make-eBFM set$ cast-signed xd xr ir is))
 
 (defun SBFMWri (xd xr ir is)
-  (make-BFM setw cast-signed xd xr ir is))
+  (make-eBFM setw cast-signed xd xr ir is))
 
-;; bitfield moves
+(defmacro BFM (set rd rn r s)
+  (if (>= s r)
+      (set rd (concat (cast-high (+1 (- s r)) rd)
+                      (if (= r 0)
+                          (cast-low (+1 s) rn)
+                        (extract s r rn))))
+    (set rd (concat
+             (cast-low (+1 s) rn)
+             (cast-low r rd)))))
+
+(defun BFMXri (_ xd xr ir is)
+  (BFM set$ xd xr ir is))
+
+(defun BFMWri (_ xd xr ir is)
+  (BFM setw xd xr ir is))
+
+;; Shifts
 
 (defmacro SHIFT*r (setr shift datasize rd rn rm)
   "(ASRV*r setr datasize rd rn rm) does an arithmetic shift right and stores it 

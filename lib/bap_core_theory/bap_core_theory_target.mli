@@ -39,12 +39,42 @@ val declare :
   ?package:string ->
   string -> t
 
+val register :
+  ?systems:system list ->
+  ?abis:abi list ->
+  ?fabis:fabi list ->
+  ?filetypes:filetype list ->
+  ?options:options list ->
+  ?package:string ->
+  t -> unit
+
+val select :
+  ?unique:bool ->
+  ?strict:bool ->
+  ?parent:t ->
+  ?system:system ->
+  ?abi:abi ->
+  ?fabi:fabi ->
+  ?filetype:filetype ->
+  ?options:options -> unit -> t
+
+val filter :
+  ?strict:bool ->
+  ?parent:t ->
+  ?system:system ->
+  ?abi:abi ->
+  ?fabi:fabi ->
+  ?filetype:filetype ->
+  ?options:options -> unit -> t list
+
+
 val get : ?package:string -> string -> t
 val read : ?package:string -> string -> t
 val lookup : ?package:string -> string -> t option
 val unknown : t
 val is_unknown : t -> bool
 val name : t -> KB.Name.t
+val nicknames : t -> String.Caseless.Set.t
 val matches : t -> string -> bool
 val matching : t -> string -> t option
 val order : t -> t -> KB.Order.partial
@@ -125,10 +155,43 @@ module Role : sig
 end
 
 
-module System : KB.Enum.S with type t = system
-module Filetype : KB.Enum.S with type t = filetype
-module Abi : KB.Enum.S with type t = abi
-module Fabi : KB.Enum.S with type t = fabi
+
+module System : sig
+  include KB.Enum.S with type t = system
+  val linux : system
+  val darwin : system
+  val vxworks : system
+  val freebsd : system
+  val openbsd : system
+  val windows : system
+  val msdos : system
+  val uefi : system
+  val none : system
+end
+module Filetype : sig
+  include KB.Enum.S with type t = filetype
+  val elf : filetype
+  val coff : filetype
+  val macho : filetype
+  val aout : filetype
+end
+module Abi : sig
+  include KB.Enum.S with type t = abi
+  val gnu : abi
+  val eabi : abi
+  val gnueabi : abi
+  val cdecl : abi
+  val stdcall : abi
+  val fastcall : abi
+  val watcom : abi
+  val ms : abi
+end
+
+module Fabi : sig
+  include  KB.Enum.S with type t = fabi
+  val hard : fabi
+  val soft : fabi
+end
 
 module Alias : sig
   type t = alias

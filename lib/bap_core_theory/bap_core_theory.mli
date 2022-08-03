@@ -1437,6 +1437,37 @@ module Theory : sig
       ?package:string ->         (** defaults to ["user"] *)
       string -> t
 
+
+
+    (** [register <variants> t] generates and registers a list of targets.
+
+        For a list of possible target properties generate a set of
+        unique targets and declare them. To generate a unique name the
+        following scheme is used,
+
+        {v<name>-<system>-<abi><fabi>-<format>+<option>...v}
+
+        where if a property is [:unknown] then it is not listed in
+        the name (including the separator, if necessary).
+
+        E.g.,
+        {v
+        arm-linux-gnueabihf-elf
+        armv7-linux-gnueabihf+m3
+        v}
+
+        @since 2.5.0
+    *)
+
+    val register :
+      ?systems:system list ->
+      ?abis:abi list ->
+      ?fabis:fabi list ->
+      ?filetypes:filetype list ->
+      ?options:options list ->
+      ?package:string ->
+      t -> unit
+
     (** [lookup ?package name] lookups a target with the given [name].
 
         If [name] is unqualified then it is qualified with the
@@ -1446,6 +1477,77 @@ module Theory : sig
         Returns [None] if the target with the given name wasn't declared.
     *)
     val lookup : ?package:string -> string -> t option
+
+
+    (** [select <reqs> ()] selects a target that matches requirements.
+
+        Selects the least specific target that belongs to [parent] and
+        matches the specified requirements. If [unique] is [true] and
+        there is no single match then raises an exception, otherwise
+        returns the first in the family order match (i.e., the least
+        specific of the matches).
+
+        If there are no matching targets returns [parent] if [strict]
+        is [false], otherwise fails with an exception.
+
+        The matching procedure uses the [domain] structure of the
+        corresponding parameters. A target matches the constraint if
+        all properties of the target matches the corresponding
+        parameters. A property matches a parameter if the property is
+        greater or equal (in the domain order) than the parameter.
+
+        See also {!filter}.
+
+        @param parent defaults to [unknown]
+        @param unique defaults to [false]
+        @param strict defaults to [false]
+        @param system defaults to [System.unknown]
+        @param abi defaults to [Abi.unknown]
+        @param fabi defaults to [Fabi.unknown]
+        @param options defaults to [Options.empty]
+
+        @since 2.5.0 *)
+    val select :
+      ?unique:bool ->
+      ?strict:bool ->
+      ?parent:t ->
+      ?system:system ->
+      ?abi:abi ->
+      ?fabi:fabi ->
+      ?filetype:filetype ->
+      ?options:options -> unit -> t
+
+
+    (** [filter <reqs> ()] selects targets that matches requirements.
+
+        Filters targets that belong to [parent] and match the
+        specified requirements. The targets are returned in the family
+        order, i.e., the least specific target is comming first. This
+        is the same order in which [family] list targets.
+
+        The matching procedure uses the [domain] structure of the
+        corresponding parameters. A target matches the constraint if
+        all properties of the target matches the corresponding
+        parameters. A property matches a parameter if the property is
+        greater or equal (in the domain order) than the parameter.
+
+        See also {!select}.
+
+        @param parent defaults to [unknown]
+        @param system defaults to [System.unknown]
+        @param abi defaults to [Abi.unknown]
+        @param fabi defaults to [Fabi.unknown]
+        @param options defaults to [Options.empty]
+
+        @since 2.5.0 *)
+    val filter :
+      ?strict:bool ->
+      ?parent:t ->
+      ?system:system ->
+      ?abi:abi ->
+      ?fabi:fabi ->
+      ?filetype:filetype ->
+      ?options:options -> unit -> t list
 
     (** [get ?package name] returns the target with the given [name].
 
@@ -1479,6 +1581,14 @@ module Theory : sig
 
     (** [name target] is the unique name of the target.  *)
     val name : t -> KB.Name.t
+
+
+    (** [nicknames t] is the set of the target nicknames.
+
+        Note that the set is using caseless comparison.
+
+        @since 2.5.0 *)
+    val nicknames : t -> String.Caseless.Set.t
 
 
     (** [matching t name] the target that matches [name].
@@ -2300,7 +2410,19 @@ module Theory : sig
   (** The source code language.
 
       @since 2.2.0 *)
-  module Language : KB.Enum.S with type t = language
+  module Language : sig
+    include KB.Enum.S with type t = language
+
+
+    (** {3 Predefined languages}
+
+        @since 2.5.0 *)
+    val c : language
+    val cxx : language
+    val ada : language
+    val fortran : language
+    val pascal : language
+  end
 
   (** Defines how multibyte words are stored in the memory.
 
@@ -2329,19 +2451,94 @@ module Theory : sig
 
   (** The Operating System.
       @since 2.2.0  *)
-  module System : KB.Enum.S with type t = system
+  module System : sig
+    include KB.Enum.S with type t = system
+
+
+    (** {3 Predefined Operating System Interfaces}
+
+        @since 2.5.0 *)
+
+
+    (** Linux-based systems, including Android  *)
+    val linux : system
+
+    (** Darwin-based systems, including iOS, macOS *)
+    val darwin : system
+
+    (** VxWorks RTOS  *)
+    val vxworks : system
+
+    (** FreeBSD  *)
+    val freebsd : system
+
+    (** [OpenBSD]  *)
+    val openbsd : system
+
+    (** The MS Windows family of OSes  *)
+    val windows : system
+
+    (** MS-DOS and other DOSes  *)
+    val msdos : system
+
+    (** Unified Extensible Firmware Interface  *)
+    val uefi : system
+
+    (** standalone  *)
+    val none : system
+  end
 
   (** The Application Binary Interface name.
       @since 2.2.0 *)
-  module Abi : KB.Enum.S with type t = abi
+  module Abi : sig
+    include KB.Enum.S with type t = abi
+
+    (** {3 Predefined ABI}
+        @since 2.5.0 *)
+
+    (** GNU/SysV *)
+    val gnu : abi
+
+    (** ARM EABI (use gnu for linux targets)  *)
+    val eabi : abi
+
+    (** GNU ARM EABI  *)
+    val gnueabi : abi
+
+    val cdecl : abi
+    val stdcall : abi
+    val fastcall : abi
+    val watcom : abi
+    val ms : abi
+  end
 
   (** The Application Floating-point Binary Interface name.
       @since 2.2.0 *)
-  module Fabi : KB.Enum.S with type t = fabi
+  module Fabi : sig
+    include  KB.Enum.S with type t = fabi
+
+
+    (** {3 Predefined FABI}
+
+        @since 2.5.0 *)
+    val hard : fabi
+    val soft : fabi
+  end
 
   (** The file type that is used to pack the unit.
       @since 2.3.0 *)
-  module Filetype : KB.Enum.S with type t = filetype
+  module Filetype : sig
+    include KB.Enum.S with type t = filetype
+
+
+    (** {3 Predefined File Formats}
+
+        @since 2.5.0    *)
+    val elf : filetype
+    val coff : filetype
+    val macho : filetype
+    val aout : filetype
+  end
 
   (** Information about the compiler.
 

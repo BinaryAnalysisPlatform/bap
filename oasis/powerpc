@@ -16,7 +16,7 @@ Library powerpc_plugin
   Path:             plugins/powerpc
   Build$:           flag(everything) || flag(powerpc)
   BuildDepends:     bap, bap-abi, bap-c, zarith, monads, core_kernel,
-                    ppx_bap, regular, bap-api, bap-powerpc
+                    ppx_bap, regular, bap-api, bap-powerpc, bap-core-theory
   FindlibName:      bap-plugin-powerpc
   InternalModules:  Powerpc,
                     Powerpc_cpu,

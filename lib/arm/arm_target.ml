@@ -151,8 +151,8 @@ let regsv8 = Theory.Role.Register.[
     [general; floating], untyped xs;
     [stack_pointer], untyped [reg r64 "R31"];
     [frame_pointer], untyped [reg r64 "R29"];
-    [function_argument], array r64 "R" 8 @< array r64 "V" 8;
-    [function_return], [reg r64 "R0"] @< [reg r128 "V0"];
+    [function_argument; function_return],
+    array r64 "R" 8 @< array r64 "V" 8;
     [constant; zero; pseudo], untyped [reg r64 "XZR"; reg r64 "ZR"];
     [constant; zero; pseudo], untyped [reg r32 "WZR"];
     [link], untyped [reg r64 "R30"];
@@ -186,11 +186,17 @@ let aliasing = Theory.Alias.[
   ] |> List.concat
 
 
-let parent = CT.Target.declare ~package "arm"
+let parent = CT.Target.declare ~package "arm-family"
+let is_arm = CT.Target.belongs parent
+let is_64bit t = Theory.Target.bits t = 64
+let is_big t = Theory.Endianness.(equal eb (Theory.Target.endianness t))
+let is_little t = Theory.Target.endianness t = Theory.Endianness.le
 
 module type ARM = sig
   val endianness : CT.endianness
   val parent : CT.Target.t
+  val aarch32 : Theory.Target.t
+  val aarch64 : Theory.Target.t
   val v4 : CT.Target.t
   val v4t : CT.Target.t
   val v5 : CT.Target.t
@@ -220,6 +226,9 @@ module type Endianness =  sig val endianness : CT.endianness end
 module Family (Order : Endianness) = struct
   include Order
 
+  let is_little = Theory.Endianness.(equal endianness le)
+  let is_bi_endian = CT.Endianness.(equal bi) endianness
+
   let ordered name =
     let order = CT.Endianness.name endianness in
     name ^ "+" ^ KB.Name.unqualified order
@@ -233,7 +242,6 @@ module Family (Order : Endianness) = struct
 
   let (<:) parent name = def ~parent name
 
-  let is_bi_endian = CT.Endianness.(equal bi) endianness
 
   let v4 =
     if is_bi_endian
@@ -250,7 +258,7 @@ module Family (Order : Endianness) = struct
         ~vars:vars32
         ~regs:regs32
 
-  let v4t = def "v4t" ~parent:v4 ~code_alignment:16
+  let v4t = def "armv4t" ~parent:v4 ~code_alignment:16
   let v5    = v4 <: "armv5"
   let v5t   = v5 <: "armv5t"
   let v5te  = v5t <: "armv5te"
@@ -288,10 +296,24 @@ module Family (Order : Endianness) = struct
       ~vars:vars32_fp
       ~regs:(regs32@vfp3regs)
 
+  (* the generic final v7 incorporating all 32-bit targets *)
+  let aarch32 =
+    if is_bi_endian then Theory.Target.unknown
+    else
+      Theory.Target.declare ~package
+        (if is_little then "arm" else "armeb")
+        ~parent:v7afp
+        ~nicknames:[
+          if is_little
+          then "aarch32"
+          else "aarch32eb";
+        ]
 
-  let v8a =
-    CT.Target.declare ~package (ordered "armv8-a") ~parent:v7
-      ~nicknames:["armv8-a"; "aarch64"]
+
+  let v8 =
+    CT.Target.declare ~package (ordered "armv8")
+      ~parent:(if is_bi_endian then parent else aarch32)
+      ~nicknames:["aarch64"]
       ~aliasing
       ~code_alignment:32
       ~bits:64
@@ -299,6 +321,11 @@ module Family (Order : Endianness) = struct
       ~data:datav8
       ~vars:varsv8
       ~regs:regsv8
+
+
+  let v8a =
+    CT.Target.declare ~package (ordered "armv8-a") ~parent:v8
+      ~nicknames:["armv8-a"]
 
   let v8a32 =
     Theory.Target.declare ~package (ordered "armv8-a+aarch32")
@@ -321,6 +348,19 @@ module Family (Order : Endianness) = struct
   let v84a = v83a <: "armv8.4-a"
   let v85a = v84a <: "armv8.5-a"
   let v86a = v85a <: "armv8.6-a"
+
+  (* the generic final v8 incorporating all 32-bit targets *)
+  let aarch64 =
+    if is_bi_endian then Theory.Target.unknown
+    else
+      Theory.Target.declare ~package
+        (if is_little then "aarch64" else "aarch64_be")
+        ~parent:v86a
+        ~nicknames:[
+          if is_little
+          then "arm64"
+          else "arm64eb";
+        ]
 
   let v9a = v86a <: "armv9-a"
 
@@ -375,43 +415,39 @@ let enable_loader () =
       Ogre.request Image.Scheme.arch >>= fun arch ->
       Ogre.request Image.Scheme.subarch >>= fun sub ->
       Ogre.request Image.Scheme.is_little_endian >>= fun little ->
-      Ogre.return (arch,sub, little) in
+      Ogre.request Image.Scheme.format >>= fun filetype ->
+      Ogre.return (arch,sub,little,filetype) in
     match Ogre.eval request doc with
-    | Error _ -> None,None,None
+    | Error _ -> None,None,None,None
     | Ok info -> info in
   KB.promise CT.Unit.target @@ fun unit ->
   KB.collect Image.Spec.slot unit >>|
-  request_info >>| fun (arch,sub,is_little) ->
+  request_info >>| fun (arch,sub,is_little,filetype) ->
   if not (in_family arch) then CT.Target.unknown
   else
     let module Family = (val family_of_endian is_little) in
-    match normalize arch sub with
-    | "arm","v4"  -> Family.v4
-    | "arm","v4t" -> Family.v4t
-    | "arm","v5" -> Family.v5
-    | "arm","v5t" -> Family.v5t
-    | "arm","v5te" -> Family.v5te
-    | "arm","v5tej" -> Family.v5tej
-    | "arm","v6" -> Family.v6
-    | "arm","v6z" -> Family.v6z
-    | "arm","v6k" -> Family.v6k
-    | "arm","v6m" -> Family.v6m
-    | "arm","v6t2" -> Family.v6t2
-    | "arm","v7" -> Family.v7
-    | "arm","v7fp" -> Family.v7
-    | "arm","v7a" -> Family.v7a
-    | "arm","v7afp" -> Family.v7afp
-    | "arm","v8" -> Family.v8a
-    | "arm","v8a" -> Family.v8a
-    | "arm","v81a" -> Family.v81a
-    | "arm","v82a" -> Family.v82a
-    | "arm","v83a" -> Family.v83a
-    | "arm","v84a" -> Family.v84a
-    | "arm","v85a" -> Family.v85a
-    | "arm","v86a" -> Family.v86a
-    | "thumb",_     -> Family.v7m
-    | "aarch64",_   -> Family.v86a
-    | _ -> Family.v7
+    let parent = match normalize arch sub with
+      | "arm","v6m" -> Family.v6m
+      | "thumb",_   -> Family.v7m
+      | "arm",
+        ("v4"|"v4t"|
+         "v5"|"v5t"|"v5te"|"v5tej"|
+         "v6"|"v6z"|"v6k"|"v6t2"|
+         "v7"|"v7fp"|"v7a"|"v7afp") -> Family.aarch32
+      | "arm",
+        ("v8"|"v8a"|"v81a"|"v82a"|"v83a"|"v84a"|"v85a"|"v86a") ->
+        Family.aarch64
+      | "aarch64",_   -> Family.aarch64
+      | _ -> Family.v7 in
+    let is_64bit = Theory.Target.bits parent = 64 in
+    let filetype,system,abi = match filetype with
+      | Some "elf" -> Theory.Filetype.elf,
+                      Theory.System.linux,
+                      if is_64bit then Theory.Abi.gnu else Theory.Abi.gnueabi
+      | Some "coff" -> Theory.Filetype.coff,Theory.System.windows,Theory.Abi.eabi
+      | Some "macho" -> Theory.Filetype.macho, Theory.System.darwin,Theory.Abi.eabi
+      | _ -> Theory.Filetype.unknown,Theory.System.unknown,Theory.Abi.unknown in
+    Theory.Target.select ~strict:true ~system ~parent ~filetype ~abi ()
 
 
 type arms = [
@@ -424,6 +460,10 @@ type arms = [
 
 let arms : arms Map.M(CT.Target).t =
   Map.of_alist_exn (module CT.Target) [
+    LE.aarch32, `armv7;
+    EB.aarch32, `armv7eb;
+    LE.aarch64, `aarch64;
+    EB.aarch64, `aarch64_be;
     LE.v4, `armv4;
     LE.v4t, `armv4;
     LE.v5, `armv5;
@@ -475,6 +515,80 @@ let arms : arms Map.M(CT.Target).t =
   ]
 
 
+let smc = Theory.Abi.declare ~package:"arm" "smc"
+let hvc = Theory.Abi.declare ~package:"arm" "hvc"
+
+let subtargets = [
+  (*  32-bit targets *)
+
+  (* generic and standalone targets *)
+  [EB.aarch32; LE.aarch32],
+  Theory.System.[unknown; none],
+  Theory.Abi.[eabi],
+  Theory.Fabi.[unknown; hard],
+  Theory.Filetype.[unknown];
+
+  (* uefi  *)
+  [LE.aarch32],
+  Theory.System.[uefi],
+  Theory.Abi.[smc],
+  Theory.Fabi.[unknown],
+  Theory.Filetype.[unknown; coff];
+
+  (* linux targets *)
+  [EB.aarch32; LE.aarch32],
+  Theory.System.[linux],
+  Theory.Abi.[gnueabi; gnu],
+  Theory.Fabi.[unknown; hard],
+  Theory.Filetype.[unknown; elf];
+
+  (* darwin targets *)
+  [LE.aarch32],
+  Theory.System.[darwin],
+  Theory.Abi.[eabi],
+  Theory.Fabi.[unknown],
+  Theory.Filetype.[unknown; macho];
+
+  (* 64-bit targets  *)
+  [EB.aarch64; LE.aarch64],
+  Theory.System.[unknown; none],
+  Theory.Abi.[eabi],
+  Theory.Fabi.[unknown],
+  Theory.Filetype.[unknown];
+
+  (* uefi  *)
+  [LE.aarch64],
+  Theory.System.[uefi],
+  Theory.Abi.[smc],
+  Theory.Fabi.[unknown],
+  Theory.Filetype.[unknown; coff];
+
+  (* linux targets *)
+  [EB.aarch64; LE.aarch64],
+  Theory.System.[linux],
+  Theory.Abi.[gnu],
+  Theory.Fabi.[unknown],
+  Theory.Filetype.[unknown; elf];
+
+  (* darwin targets *)
+  [LE.aarch64],
+  Theory.System.[darwin],
+  Theory.Abi.[eabi],
+  Theory.Fabi.[unknown],
+  Theory.Filetype.[unknown; macho];
+
+  (* windows targets *)
+  [LE.aarch64],
+  Theory.System.[windows],
+  Theory.Abi.[eabi],
+  Theory.Fabi.[unknown],
+  Theory.Filetype.[unknown; coff];
+]
+
+let install_subtargets () =
+  List.iter subtargets ~f:(fun (family,systems,abis,fabis,filetypes) ->
+      List.iter family ~f:(Theory.Target.register ~systems ~abis ~fabis ~filetypes))
+
 let enable_arch () =
   let open KB.Syntax in
   KB.Rule.(declare ~package "arm-arch" |>
@@ -483,10 +597,15 @@ let enable_arch () =
            comment "computes Arch.t from the unit's target");
   KB.promise Arch.unit_slot @@ fun unit ->
   KB.collect CT.Unit.target unit >>| fun t ->
-  match Map.find arms t with
-  | Some arch -> (arch :> Arch.t)
-  | None -> `unknown
-
+  if is_arm t then match Map.find arms t with
+    | Some arch -> (arch :> Arch.t)
+    | None -> match is_64bit t,is_big t,is_little t with
+      | _,false,false -> `unknown
+      | true,true,_ -> `aarch64_be
+      | true,false,_ -> `aarch64
+      | false,true,_ -> `armv7eb
+      | false,false,_ -> `armv7
+  else `unknown
 
 let llvm_a32 = CT.Language.declare ~package "llvm-armv7"
 let llvm_t32 = CT.Language.declare ~package "llvm-thumb"
@@ -613,9 +732,6 @@ let compute_encoding_from_symbol_table label =
 let (>=) t p = CT.Target.belongs t p
 let (<) t p = t >= p && not (p >= t)
 let (<=) t p = t = p || t < p
-let is_arm = CT.Target.belongs parent
-
-let is_64bit t = LE.v8a <= t || EB.v8a <= t || Bi.v8a <= t
 
 let m_profiles = [
   LE.v7m; EB.v7m; Bi.v7m;
@@ -624,9 +740,6 @@ let m_profiles = [
 let is_thumb_only t =
   List.exists m_profiles ~f:(fun p -> p <= t)
 
-
-let is_big t = Theory.Target.endianness t = Theory.Endianness.eb
-let is_little t = Theory.Target.endianness t = Theory.Endianness.le
 
 let register_pcode () =
   Dis.register pcode @@ fun t ->
@@ -696,6 +809,7 @@ let enable_llvm ?(features=[]) ?interworking () =
   guess_encoding interworking label target mode
 
 let load ?features ?interworking ?(backend="llvm") () =
+  install_subtargets ();
   enable_loader ();
   enable_arch ();
   Encodings.provide ();

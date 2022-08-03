@@ -1,6 +1,6 @@
 ;; Helper functions specific to aarch64.
-
-(declare (context (target arm armv8-a+le)))
+(declare (context (target arm-family)
+                  (bits 64)))
 
 (in-package aarch64)
 

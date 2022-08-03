@@ -106,7 +106,7 @@ type tainter = {
   indirect : objects Primus.Value.Map.t;
 } [@@deriving fields]
 
-type relation_kind = Direct | Indirect [@@deriving sexp_of]
+type relation_kind = Direct | Indirect [@@deriving compare, sexp_of]
 
 (* generalized access to the tainter fields
  *
@@ -171,8 +171,14 @@ end
 
 module Rel = struct
   type t = relation
+
   let direct = direct
   let indirect = indirect
+
+  let compare (Rel {kind = x; _}) (Rel {kind = y; _}) =
+    compare_relation_kind x y
+
+  let equal x y = compare x y = 0
 end
 
 (* a set of live tainted objects *)

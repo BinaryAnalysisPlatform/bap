@@ -220,7 +220,7 @@ let mark_mips_stubs_as_functions () : unit =
   KB.promise Theory.Label.is_subroutine @@ fun label ->
   let* unit = label-->?Theory.Label.unit in
   let* target = unit-->Theory.Unit.target in
-  KB.guard (Theory.Target.matches target "mips") >>= fun () ->
+  KB.guard (Theory.Target.matches target "mips-family") >>= fun () ->
   let* addr = label-->?Theory.Label.addr in
   KB.collect References.slot unit >>| fun refs ->
   Option.(some_if (is_some (References.lookup refs addr))) true

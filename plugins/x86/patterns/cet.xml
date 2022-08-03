@@ -1,0 +1,16 @@
+<patternlist>
+  <pattern>
+    <data>0xf30f1efa 0x55</data>     <!--endbr64; push rbp-->
+    <funcstart/>
+  </pattern>
+
+  <pattern>
+    <data>0xf30f1efa 0x53</data>     <!--endbr64; push rbx-->
+    <funcstart/>
+  </pattern>
+
+  <pattern>
+    <data>0xf30f1efa 0x415.</data>     <!--endbr64; push rbx-->
+    <funcstart/>
+  </pattern>
+</patternlist>
