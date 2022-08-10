@@ -41,11 +41,10 @@ let stubs proj package =
       else None) |> Tid.Set.of_sequence
 
 let collect_externals package target units =
-  let is_unit u =
-    String.(u <> package) &&
-    match units with
-    | [] -> true
-    | _ -> List.mem units u ~equal:String.equal in
+  let is_unit u = String.(u <> package) && begin
+      List.is_empty units ||
+      List.mem units u ~equal:String.equal
+    end in
   let result = Toplevel.var "syms" in
   Toplevel.put result begin
     KB.objects Theory.Unit.cls >>=
@@ -118,6 +117,7 @@ let resolve proj package stubs units =
   let prog = Project.program proj in
   let target = Project.target proj in
   let exts = collect_externals package target units in
+  (* Reset the package. *)
   Toplevel.exec @@ KB.Symbol.set_package package;
   let replace, to_link =
     let init = Tid.Map.empty, String.Set.empty in
@@ -133,8 +133,7 @@ let resolve proj package stubs units =
         else acc) in
   let prog = replace_calls_to_stub prog replace in
   let find_ext p =
-    List.find_exn exts ~f:(fun (path, _) ->
-        String.(p = path)) in
+    List.find_exn exts ~f:(fun (path, _) -> String.(p = path)) in
   Set.fold to_link ~init:prog ~f:(fun prog path ->
       let _, subs = find_ext path in
       Map.fold subs ~init:prog ~f:(fun ~key:_ ~data:sub prog ->
