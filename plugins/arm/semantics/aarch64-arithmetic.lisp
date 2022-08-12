@@ -73,9 +73,9 @@
 
 ; SBC: sub with carry, setting flags
 (defun SBCSXr (rd rn rm)
-  (add-with-carry set$ rd CF (lnot (shift-encoded rm off)) rn))
+  (add-with-carry set$ rd CF (lnot rm) rn))
 (defun SBCSWr (rd rn rm)
-  (add-with-carry setw rd CF (lnot (shift-encoded rm off)) rn))
+  (add-with-carry setw rd CF (lnot rm) rn))
 
 ; SBCS: sub with carry, no flags
 (defun SBCXr (rd rn rm)
