@@ -24,9 +24,9 @@
 
 ; ADC: add with carry, no flags
 (defun ADCXr (rd rn rm)
-  (ADD*R* set$ rd CF rm rn))
+  (set$ rd (+ CF (+ rm (+ rn)))))
 (defun ADCWR (rd rn rm)
-  (ADD*R* setw rd CF rm rn))
+  (setw rd (+ CF (+ rm (+ rn)))))
 
 ; adds immediate
 (defun ADDSXri (rd rn imm off) 
