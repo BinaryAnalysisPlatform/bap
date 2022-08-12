@@ -16,6 +16,13 @@
 (defun ADDWrs (rd rn rm off) (ADD*r* setw shift-encoded rd rn rm off))
 (defun ADDXrs (rd rn rm off) (ADD*r* set$ shift-encoded rd rn rm off))
 
+; adds with carry
+(defun ADCXr (rd rn rm)
+  (add-with-carry set$ rd CF rm rn))
+
+(defun ADCWr (rd rn rm)
+  (add-with-carry setw rd CF rm rn))
+
 ; adds immediate
 (defun ADDSXri (rd rn imm off) 
   (add-with-carry set$ rd rn (lshift imm off) 0))
