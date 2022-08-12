@@ -25,7 +25,7 @@
 ; ADC: add with carry, no flags
 (defun ADCXr (rd rn rm)
   (set$ rd (+ CF (+ rm (+ rn)))))
-(defun ADCWR (rd rn rm)
+(defun ADCWr (rd rn rm)
   (setw rd (+ CF (+ rm (+ rn)))))
 
 ; adds immediate
@@ -70,6 +70,18 @@
 (defun SUBXri (rd rn rm off) (SUB*r* set$ lshift rd rn rm off))
 (defun SUBWrs (rd rn rm off) (SUB*r* setw shift-encoded rd rn rm off))
 (defun SUBXrs (rd rn rm off) (SUB*r* set$ shift-encoded rd rn rm off))
+
+; SBC: sub with carry, setting flags
+(defun SBCSXr (rd rn rm)
+  (add-with-carry set$ rd CF (lnot rm) rn))
+(defun SBCSWr (rd rn rm)
+  (add-with-carry setw rd CF (lnot rm) rn))
+
+; SBCS: sub with carry, no flags
+(defun SBCXr (rd rn rm)
+  (set$ rd (+ CF (+ (lnot rm) (+ rn)))))
+(defun SBCWr (rd rn rm)
+  (setw rd (+ CF (+ (lnot rm) (+ rn)))))
 
 (defun SUBXrx (rd rn rm off)
   (set$ rd (- rn (extended rm off))))
