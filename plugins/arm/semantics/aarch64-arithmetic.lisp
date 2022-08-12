@@ -79,9 +79,9 @@
 
 ; SBCS: sub with carry, no flags
 (defun SBCXr (rd rn rm)
-  (set$ rd (+ CF (- rm) (+ rn)))))
+  (set$ rd (+ CF (- rm (+ rn)))))
 (defun SBCWr (rd rn rm)
-  (setw rd (+ CF (- rm) (+ rn)))))
+  (setw rd (+ CF (- rm (+ rn)))))
 
 (defun SUBXrx (rd rn rm off)
   (set$ rd (- rn (extended rm off))))
