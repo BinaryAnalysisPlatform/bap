@@ -174,11 +174,13 @@ module Symbols = struct
           | Non_injective_fwd (addrs,name) ->
             info "the symbol %s has ambiguous addresses: %a@\n"
               name pp_addrs addrs;
-            t
+            List.fold addrs ~init:t ~f:(fun t addr ->
+                add_alias t addr name)
           | Non_injective_bwd (names,addr) ->
             info "the symbol at %a has ambiguous names: %a@\n"
               Bitvec.pp addr pp_names names;
-            t)
+            List.fold names ~init:t ~f:(fun t name ->
+                  add_alias t addr name))
 
   let build_table t spec = match Ogre.eval (from_spec t) spec with
     | Ok x -> x
