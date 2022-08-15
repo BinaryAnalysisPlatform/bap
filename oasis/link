@@ -8,6 +8,6 @@ Library link_plugin
   Path: plugins/link
   FindlibName: bap-plugin-link
   CompiledObject: best
-  BuildDepends: bap, bap-core-theory, bap-knowledge, core_kernel
+  BuildDepends: bap, bap-core-theory, bap-knowledge, core_kernel, graphlib, regular
   InternalModules: Link_main
   XMETAExtralines: tags="pass,analysis,link"
