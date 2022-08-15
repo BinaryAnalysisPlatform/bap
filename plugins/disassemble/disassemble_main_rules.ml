@@ -180,7 +180,7 @@ module Symbols = struct
             info "the symbol at %a has ambiguous names: %a@\n"
               Bitvec.pp addr pp_names names;
             List.fold names ~init:t ~f:(fun t name ->
-                  add_alias t addr name))
+                add_alias t addr name))
 
   let build_table t spec = match Ogre.eval (from_spec t) spec with
     | Ok x -> x
