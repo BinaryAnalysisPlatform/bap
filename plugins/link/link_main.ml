@@ -54,6 +54,24 @@ type ext = {
   cg : Graphs.Callgraph.t lazy_t;
 }
 
+let collect_subs prog =
+  let init = String.Map.empty, String.Map.empty, Tid.Set.empty in
+  Term.enum sub_t prog |> Seq.filter_map ~f:(fun sub ->
+      Term.get_attr sub address |> Option.map ~f:(fun addr ->
+          sub, Word.to_bitvec addr)) |>
+  KB.Seq.fold ~init ~f:(fun (subs, aliases, stubs) (sub, addr) ->
+      Theory.Label.for_addr addr >>= fun label ->
+      KB.collect Theory.Label.aliases label >>= fun a ->
+      let name = Sub.name sub in
+      let subs = Map.add_exn subs ~key:name ~data:sub in
+      let aliases =
+        Set.fold a ~init:aliases ~f:(fun m key ->
+            Map.add_multi m ~key ~data:sub) in
+      KB.collect (Value.Tag.slot Sub.stub) label >>| function
+      | Some () when not (should_ignore name) ->
+        subs, aliases, Set.add stubs @@ Term.tid sub
+      | Some () | None -> subs, aliases, stubs)
+
 let collect_externals package target units =
   let is_unit u = String.(u <> package) && begin
       List.is_empty units ||
@@ -83,29 +101,7 @@ let collect_externals package target units =
             info "Lifting program for unit %s%!" path;
             Program.KB.lift symtab >>= fun prog ->
             let cg = lazy (Program.to_graph prog) in
-            let init =
-              String.Map.empty,
-              String.Map.empty,
-              Tid.Set.empty in
-            Term.enum sub_t prog |>
-            KB.Seq.fold ~init ~f:(fun ((subs, aliases, stubs) as acc) sub ->
-                match Term.get_attr sub address with
-                | None -> !!acc
-                | Some addr ->
-                  let addr = Word.to_bitvec addr in
-                  Theory.Label.for_addr addr >>= fun label ->
-                  KB.collect Theory.Label.aliases label >>= fun a ->
-                  let name = Sub.name sub in
-                  let subs = Map.add_exn subs ~key:name ~data:sub in
-                  let aliases =
-                    Set.fold a ~init:aliases ~f:(fun m key ->
-                        Map.add_multi m ~key ~data:sub) in
-                  KB.collect (Value.Tag.slot Sub.stub) label >>| function
-                  | Some () when not (should_ignore name) ->
-                    let stubs = Set.add stubs @@ Term.tid sub in
-                    subs, aliases, stubs
-                  | Some () | None ->
-                    subs, aliases, stubs) >>| fun (subs, aliases, stubs) ->
+            collect_subs prog >>| fun (subs, aliases, stubs) ->
             {path; subs; aliases; stubs; cg} :: exts)
   end;
   let result = Toplevel.get result in
