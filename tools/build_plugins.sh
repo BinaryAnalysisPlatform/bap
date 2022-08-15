@@ -4,7 +4,7 @@ set -u
 
 . $(dirname $0)/bap_config
 
-MAX_JOBS=31
+MAX_JOBS=8
 md5sum=md5sum
 
 if [ $OS = "macosx" ]; then
