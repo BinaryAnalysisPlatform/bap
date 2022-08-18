@@ -54,12 +54,23 @@ let is_stub sub =
       | None -> KB.return false
       | Some () -> KB.return true
 
-let aliases_of_sub s = KB.collect Theory.Label.aliases (Term.tid s)
+let aliases_of_sub s =
+  KB.collect Theory.Label.aliases (Term.tid s) >>= fun aliases ->
+  match Term.(get_attr s address, get_attr s filename) with
+  | None, _ | _, None -> !!aliases
+  | Some addr, Some file ->
+    KB.Symbol.in_package file @@ fun () ->
+    Theory.Unit.for_file file >>= fun unit ->
+    let promise _ = !!(Some unit) in
+    KB.promising Theory.Label.unit ~promise @@ fun () ->
+    Theory.Label.for_addr (Word.to_bitvec addr) >>=
+    KB.collect Theory.Label.aliases >>| Set.union aliases
 
 let update_stubs t sub =
   is_stub sub >>| fun is_stub ->
-  if is_stub
-  then { t with stubs = Set.add t.stubs (Term.tid sub) }
+  if is_stub then
+    let tid = Term.tid sub in
+    {t with stubs = Set.add t.stubs tid}
   else t
 
 let find_groups names aliases =
@@ -93,20 +104,20 @@ let add t sub =
   | [] ->
     let groups = Map.add_exn t.groups (Term.tid sub) t.next in
     let names  = Map.add_exn t.names t.next aliases in
-    { t with groups; names; next = t.next + 1 }
+    {t with groups; names; next = t.next + 1}
   | [id] ->
     let groups = Map.add_exn t.groups (Term.tid sub) id in
     let names = Map.update t.names id ~f:(function
         | None -> assert false
         | Some als' -> Set.union aliases als') in
-    { t with names; groups }
+    {t with names; groups}
   | groups ->
     let grp = pick_representative groups in
     let aliases = Set.union aliases (unite_names t groups) in
     let names = List.fold groups ~init:t.names ~f:Map.remove in
     let names = Map.add_exn names grp aliases in
     let groups = redirect t ~from:groups ~to_:grp in
-    {t with names; groups;}
+    {t with names; groups}
 
 let collect_by_group_id groups =
   Map.fold groups ~init:Int.Map.empty
@@ -117,14 +128,17 @@ let collect_by_group_id groups =
 
 let unambiguous_pairs stubs xs =
   let is_stub tid = Set.mem stubs tid in
+  let add pairs x y =
+    info "Resolved stub %a to implementation %a" Tid.pp x Tid.pp y;
+    Map.add_exn pairs x y in
   Map.fold xs ~init:(Map.empty (module Tid))
     ~f:(fun ~key:_group_id ~data:tids pairs ->
         match tids with
         | [x; y] ->
           begin
             match is_stub x, is_stub y with
-            | true, false -> Map.add_exn pairs x y
-            | false, true -> Map.add_exn pairs y x
+            | true, false -> add pairs x y
+            | false, true -> add pairs y x
             | _ -> pairs
           end
         | _ -> pairs)

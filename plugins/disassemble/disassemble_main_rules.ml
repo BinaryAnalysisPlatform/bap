@@ -172,12 +172,12 @@ module Symbols = struct
           })
       ~unmatched:(fun reason t -> match reason with
           | Non_injective_fwd (addrs,name) ->
-            info "the symbol %s has ambiguous addresses: %a@\n"
+            info "the symbol %s has ambiguous addresses: %a@"
               name pp_addrs addrs;
             List.fold addrs ~init:t ~f:(fun t addr ->
                 add_alias t addr name)
           | Non_injective_bwd (names,addr) ->
-            info "the symbol at %a has ambiguous names: %a@\n"
+            info "the symbol at %a has ambiguous names: %a@"
               Bitvec.pp addr pp_names names;
             List.fold names ~init:t ~f:(fun t name ->
                 add_alias t addr name))

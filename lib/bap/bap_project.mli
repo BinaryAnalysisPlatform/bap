@@ -16,6 +16,7 @@ type state [@@deriving bin_io]
 type second = float
 
 val state : t -> state
+val state_of_lib : t -> Theory.Unit.t -> state option
 
 val empty : Theory.Target.t -> t
 
@@ -30,17 +31,23 @@ val create :
   input -> t Or_error.t
 
 val arch : t -> arch
+val arch_of_lib : t -> Theory.Unit.t -> arch option
 val target : t -> Theory.Target.t
+val target_of_lib : t -> Theory.Unit.t -> Theory.Target.t option
 val specification : t -> Ogre.doc
+val specification_of_lib : t -> Theory.Unit.t -> Ogre.doc option
 val program : t -> program term
 val with_program : t -> program term -> t
 val symbols : t -> symtab
+val symbols_of_lib : t -> Theory.Unit.t -> symtab option
 val with_symbols : t -> symtab -> t
 val storage : t -> dict
 val with_storage : t -> dict -> t
 val memory : t -> value memmap
+val memory_of_lib : t -> Theory.Unit.t -> value memmap option
 val memory_slot : (Theory.Unit.cls, value Memmap.t) KB.slot
 val disasm : t -> disasm
+val disasm_of_lib : t -> Theory.Unit.t -> disasm option
 val with_memory : t -> value memmap -> t
 val tag_memory : t -> mem -> 'a tag -> 'a -> t
 val substitute : t -> mem -> string tag  -> string -> t
@@ -74,7 +81,12 @@ end
 module Input : sig
   type t = input
 
-  val load : ?target:Theory.Target.t -> ?loader:string -> string -> t
+  val load :
+    ?target:Theory.Target.t ->
+    ?loader:string ->
+    ?libraries:string list ->
+    string -> t
+
   val custom :
     ?finish:(project -> project) ->
     ?filename:string ->
@@ -86,7 +98,7 @@ module Input : sig
   val from_string : ?base:addr -> Theory.Target.t -> string -> t
   val from_bigstring : ?base:addr -> Theory.Target.t -> Bigstring.t -> t
 
-  val file : ?loader:string -> filename:string -> t
+  val file : ?loader:string -> ?libraries:string list -> filename:string -> t
   val binary : ?base:addr -> arch -> filename:string -> t
 
   val create :

@@ -367,6 +367,7 @@ let ldconfig = Extension.Command.parameter
 
 let root = Extension.Command.parameter
     Extension.Type.(some string) "root"
+    ~aliases:["R"]
     ~doc: "Specify the default root directory. \
            All absolute paths (including those that are specified \
            on the command line) are prefixed with the specified root."
