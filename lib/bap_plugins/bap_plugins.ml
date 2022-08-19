@@ -3,7 +3,7 @@ open Bap_bundle.Std
 open Bap_future.Std
 open Or_error.Monad_infix
 
-module Units = Bap_plugins_units
+module Units = Bap_plugins_units.Make()
 module Filename = Caml.Filename
 module Sys = Caml.Sys
 
