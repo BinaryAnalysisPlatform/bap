@@ -16,6 +16,7 @@
 (defun ADDWrs (rd rn rm off) (ADD*r* setw shift-encoded rd rn rm off))
 (defun ADDXrs (rd rn rm off) (ADD*r* set$ shift-encoded rd rn rm off))
 
+
 ; ADCS: add with carry, setting flags
 (defun ADCSXr (rd rn rm)
   (add-with-carry set$ rd CF rm rn))
@@ -24,9 +25,9 @@
 
 ; ADC: add with carry, no flags
 (defun ADCXr (rd rn rm)
-  (set$ rd (+ CF (+ rm (+ rn)))))
+  (set$ rd (+ CF rm rn)))
 (defun ADCWr (rd rn rm)
-  (setw rd (+ CF (+ rm (+ rn)))))
+  (setw rd (+ CF rm rn)))
 
 ; adds immediate
 (defun ADDSXri (rd rn imm off) 
@@ -71,24 +72,22 @@
 (defun SUBWrs (rd rn rm off) (SUB*r* setw shift-encoded rd rn rm off))
 (defun SUBXrs (rd rn rm off) (SUB*r* set$ shift-encoded rd rn rm off))
 
-; SBC: sub with carry, setting flags
+(defun SUBXrx (rd rn rm off)
+  (set$ rd (- rn (extended rm off))))
+(defun SUBXrw (rd rn rm off)
+  (setw rd (- rn (extended rm off))))
+
+; SBCS: sub with carry, setting flags
 (defun SBCSXr (rd rn rm)
   (add-with-carry set$ rd CF (lnot rm) rn))
 (defun SBCSWr (rd rn rm)
   (add-with-carry setw rd CF (lnot rm) rn))
 
-; SBCS: sub with carry, no flags
+; SBC: sub with carry, no flags
 (defun SBCXr (rd rn rm)
-  (set$ rd (+ CF (- rm (+ rn)))))
+  (set$ rd (+ CF (lnot rm) rn)))
 (defun SBCWr (rd rn rm)
-  (setw rd (+ CF (- rm (+ rn)))))
-
-(defun SUBXrx (rd rn rm off)
-  (set$ rd (- rn (extended rm off))))
-
-(defun SUBXrw (rd rn rm off)
-  (setw rd (- rn (extended rm off))))
-
+  (setw rd (+ CF (lnot rm) rn)))
 
 (defun SUBXrx64 (rd rn rm off)
   (set$ rd (- rn (extended rm off))))
@@ -97,6 +96,10 @@
   (add-with-carry/clear-base rd rn (lnot (shift-encoded rm off)) 1))
 
 (defun SUBSXrs (rd rn rm off)
+  (add-with-carry set$ rd rn (lnot (shift-encoded rm off)) 1))
+
+; seems suspect but probably works
+(defun SUBSWrx (rd rn rm off)
   (add-with-carry set$ rd rn (lnot (shift-encoded rm off)) 1))
 
 (defun SUBSWri (rd rn imm off)
