@@ -10811,15 +10811,15 @@ module Std : sig
       *)
       val binary : ?base:addr -> arch -> filename:string -> t
 
-      (** [file ?target ?loader ?libraries ~filename] input data from a file,
-          using the specified loader. If [loader] is not specified, then some
-          existing loader will be used. If it is specified, then it is first
-          looked up in the [available_loaders] and if it is not found, then it
-          will be looked up in the {!Image.available_backends}.
+      (** [file ?target ?loader ~filename] input data from a file, using the
+          specified loader. If [loader] is not specified, then some existing
+          loader will be used. If it is specified, then it is first looked
+          up in the [available_loaders] and if it is not found, then it will
+          be looked up in the {!Image.available_backends}.
 
           @deprecated use [Input.load filename]
       *)
-      val file : ?loader:string -> ?libraries:string list -> filename:string -> t
+      val file : ?loader:string -> filename:string -> t
 
       (** [create arch filename ~code ~data] creates an input from a
           file, using two memory maps. The [code] memmap spans the code in

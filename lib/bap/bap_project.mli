@@ -98,7 +98,7 @@ module Input : sig
   val from_string : ?base:addr -> Theory.Target.t -> string -> t
   val from_bigstring : ?base:addr -> Theory.Target.t -> Bigstring.t -> t
 
-  val file : ?loader:string -> ?libraries:string list -> filename:string -> t
+  val file : ?loader:string -> filename:string -> t
   val binary : ?base:addr -> arch -> filename:string -> t
 
   val create :
