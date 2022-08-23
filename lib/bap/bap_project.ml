@@ -282,8 +282,7 @@ module Input = struct
       | Some load -> fun () ->
         List.bind (main :: libraries) ~f:(Fn.flip load ())
 
-  let file ?loader ~filename =
-    load ?loader filename
+  let file ?loader ~filename = load ?loader filename
 
   let raw ?(target=Theory.Target.unknown) ?(filename="") ?base arch big () =
     if Bigstring.length big = 0 then invalid_arg "file is empty";
