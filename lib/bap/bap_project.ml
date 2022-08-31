@@ -149,23 +149,31 @@ type unit_info = {
   symbols : symtab;
 } [@@deriving fields]
 
+type library = {
+  unit : Theory.Unit.t;
+  info : unit_info;
+}
+
 type t = {
-  main    : unit_info;
-  libs    : unit_info Map.M(Theory.Unit).t;
-  storage : dict;
-  program : program term;
-  passes  : string list;
+  main      : unit_info;
+  libraries : library list;
+  storage   : dict;
+  program   : program term;
+  passes    : string list;
 } [@@deriving fields]
 
-let of_lib {libs} u ~f = Map.find libs u |> Option.map ~f
+module Library = struct
+  type t = library
 
-let spec_of_lib = of_lib ~f:spec
-let arch_of_lib = of_lib ~f:arch
-let target_of_lib = of_lib ~f:target
-let state_of_lib = of_lib ~f:state
-let disasm_of_lib = of_lib ~f:disasm
-let memory_of_lib = of_lib ~f:memory
-let symbols_of_lib = of_lib ~f:symbols
+  let unit {unit} = unit
+  let specification {info} = spec info
+  let arch {info} = arch info
+  let target {info} = target info
+  let state {info} = state info
+  let disasm {info} = disasm info
+  let memory {info} = memory info
+  let symbols {info} = symbols info
+end
 
 let spec {main} = spec main
 let arch {main} = arch main
@@ -253,8 +261,10 @@ module Input = struct
     target = compute_target ~file ?target (Image.spec img);
   }
 
+  let dedup = List.dedup_and_sort ~compare:String.compare
+
   let of_image ?target ?loader ?(libraries = []) main =
-    List.map (main :: libraries) ~f:(fun filename ->
+    List.map (main :: dedup libraries) ~f:(fun filename ->
         Image.create ?backend:loader filename >>| fun (img,warns) ->
         List.iter warns ~f:(fun e -> warning "%a" Error.pp e);
         let spec = Image.spec img in
@@ -280,7 +290,7 @@ module Input = struct
     | Some name -> match Hashtbl.find loaders name with
       | None -> from_image ?target ?loader main ~libraries
       | Some load -> fun () ->
-        List.bind (main :: libraries) ~f:(Fn.flip load ())
+        List.bind (main :: dedup libraries) ~f:(Fn.flip load ())
 
   let file ?loader ~filename = load ?loader filename
 
@@ -380,7 +390,7 @@ let empty_unit target = {
 
 let empty target = {
   main = empty_unit target;
-  libs = Map.empty (module Theory.Unit);
+  libraries = [];
   storage = Dict.empty;
   program = Program.create ();
   passes = [];
@@ -435,10 +445,9 @@ let compute_units ?package ?state main libs =
   compute_unit main ?package ?state >>= fun (main, prog, _) ->
   KB.List.map libs ~f:compute_unit >>= fun libs ->
   let prog, libs =
-    let init = prog, Map.empty (module Theory.Unit) in
-    List.fold libs ~init ~f:(fun (p, u) (lib, prog, unit) ->
+    List.fold libs ~init:(prog, []) ~f:(fun (p, l) (info, prog, unit) ->
         Term.enum sub_t prog |> Seq.fold ~init:p ~f:(Term.append sub_t),
-        Map.set u ~key:unit ~data:lib) in
+        {unit; info} :: l) in
   set_package package >>| fun () ->
   main, libs, prog
 
@@ -464,10 +473,10 @@ let create
     | main_in :: libs_in ->
       let result = Toplevel.var "disassembly-result" in
       Toplevel.put result @@ compute_units main_in libs_in ?package ?state;
-      let main, libs, program = Toplevel.get result in
+      let main, libraries, program = Toplevel.get result in
       Result.return @@ main_in.finish {
         main;
-        libs;
+        libraries;
         program;
         storage = Dict.set Dict.empty filename main_in.file;
         passes=[];
@@ -482,7 +491,6 @@ let create
   | exn -> Or_error.of_exn ~backtrace:`Get exn
 
 let specification = spec
-let specification_of_lib = spec_of_lib
 
 let with_symbols p x = {p with main = {p.main with symbols = x}}
 let with_program p x = {p with program = x}

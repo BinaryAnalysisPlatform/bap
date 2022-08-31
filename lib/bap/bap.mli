@@ -10341,6 +10341,7 @@ module Std : sig
     type t = project
     type state [@@deriving bin_io]
     type input
+    type library
 
     (** IO interface to a project data structure.  *)
     include Data.S with type t := t
@@ -10471,60 +10472,23 @@ module Std : sig
     *)
     val arch : t -> arch
 
-    (** [arch_of_lib project unit] reveals the architecture of
-        a loaded library, if it exists.
-
-        @since 2.6.0
-        @deprecated use [target_of_lib project unit] instead.
-    *)
-    val arch_of_lib : t -> Theory.Unit.t -> arch option
-
     (** [target project] returns the target system of the project.
 
         @since 2.2.0
     *)
     val target : t -> Theory.Target.t
 
-    (** [target_of_lib project unit] returns the target system of
-        the library [unit], if it exists in the [project].
-
-        @since 2.6.0
-    *)
-    val target_of_lib : t -> Theory.Unit.t -> Theory.Target.t option
-
     (** [specification p] returns the specification of the binary.
 
         @since 2.2.0 *)
     val specification : t -> Ogre.doc
 
-    (** [specification_of_lib p u] returns the specification of the
-        library [u], if it exists in the project [p].
-
-        @since 2.6.0
-    *)
-    val specification_of_lib : t -> Theory.Unit.t -> Ogre.doc option
-
     (** [state project] returns the core state of the [project].
 
         @since 2.0.0 *)
     val state : t -> state
-
-    (** [state_of_lib project unit] returns the core state of the
-        library [unit], if it exists in the [project].
-
-        @since 2.6.0
-    *)
-    val state_of_lib : t -> Theory.Unit.t -> state option
-
     (** [disasm project] returns results of disassembling  *)
     val disasm : t -> disasm
-
-    (** [disasm_of_lib project unit] returns the results of disassembling
-        the library [unit], if it exists in the [project].
-
-        @since 2.6.0
-    *)
-    val disasm_of_lib : t -> Theory.Unit.t -> disasm option
 
     (** [program project] returns a program lifted into {{!sema}IR}  *)
     val program : t -> program term
@@ -10555,13 +10519,6 @@ module Std : sig
     (** [memory t] returns the memory as an interval tree marked with
         arbitrary values.   *)
     val memory : t -> value memmap
-
-    (** [memory_of_lib t u] returns the memory of the library [u], if
-        it exits in the project [t].
-
-        @since 2.6.0
-    *)
-    val memory_of_lib : t -> Theory.Unit.t -> value memmap option
 
     (** the memory of the unit in the knowledge base.
         @since 2.2.0  *)
@@ -10634,6 +10591,58 @@ module Std : sig
 
     (** [del project attr] removes an attribute from a project *)
     val del : t -> 'a tag -> t
+
+    (** [libraries project] returns the shared libraries that were loaded
+        with [project]. *)
+    val libraries : t -> library list
+
+    (** A library that was loaded alongside the main program.
+
+        @since 2.6.0
+    *)
+    module Library : sig
+      type t = library
+
+      (** [unit library] returns the unit associated with the library. *)
+      val unit : library -> Theory.Unit.t
+
+      (** [arch library] reveals the architecture of the library.
+
+          @since 2.6.0
+          @deprecated use [target library] instead.
+      *)
+      val arch : library -> arch
+
+      (** [target library] returns the target system of the library.
+
+          @since 2.6.0
+      *)
+      val target : library -> Theory.Target.t
+
+      (** [specification library] returns the specification of the library.
+
+          @since 2.6.0
+      *)
+      val specification : library -> Ogre.doc
+
+      (** [state library] returns the core state of the library.
+
+          @since 2.6.0
+      *)
+      val state : library -> state
+
+      (** [disasm library] returns the results of disassembling the library.
+
+          @since 2.6.0
+      *)
+      val disasm : library -> disasm
+
+      (** [memory library] returns the memory of the library.
+
+          @since 2.6.0
+      *)
+      val memory : library -> value memmap
+    end
 
     (** Information obtained during project reconstruction.
 

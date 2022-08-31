@@ -496,6 +496,7 @@ let create_and_process input link outputs passes loader target update
     kb print_missing ctxt =
   let uses_file_loader = Sys.file_exists loader &&
                          Fn.non Filename.is_implicit loader in
+  let link = List.dedup_and_sort link ~compare:String.compare in
   let package = input in
   let digest =
     let file   = Caml.Digest.file in
