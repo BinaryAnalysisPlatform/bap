@@ -30,17 +30,17 @@ let bigstring_to_bigstring ~dst ~src dst_pos =
 
 let copy_via_blit size blit ~dst x pos =
   let buf = Bigstring.create (size x) in
-  blit buf x;
+  blit buf x 0;
   bigstring_to_bytes ~dst ~src:buf pos
 
 let blit_via_copy size copy ~dst x pos =
   let str = Bytes.create (size x) in
-  copy str x;
+  copy str x 0;
   bytes_to_bigstring ~dst ~src:str pos
 
 let bytes_via_copy size copy x =
   let buf = Bytes.create (size x) in
-  copy buf x;
+  copy buf x 0;
   buf
 
 let bigstring_via_blit size blit x =
@@ -53,7 +53,7 @@ let pp_bytes f x = Format.asprintf "%a" f x |> Bytes.of_string
 let create
     ?to_bytes ?to_bigstring
     ?dump ?pp ?size
-    ?blit_to_string:copy ?blit_to_bigstring:blit () =
+    ?blit_to_string:copy ?blit_to_bigstring:(blit:('a,bigstring) copy option) () =
   let to_bytes = match to_bytes,to_bigstring,pp with
     | Some f,_,_ -> Some f
     | None,Some f,_ -> Some (fun x -> Bigstring.to_bytes (f x))
@@ -70,7 +70,7 @@ let create
     | _,Some f,_,_ -> fun dst x -> bytes_to_bytes ~dst ~src:(f x)
     | _,_,Some f,_ -> fun dst x -> copy_via_blit size f ~dst x
     | _,_,_,Some f -> fun dst x -> bigstring_to_bytes ~dst ~src:(f x) in
-  let blit = match blit,to_bytes,to_bigstring with
+  let blit : ('a,bigstring) copy = match blit,to_bytes,to_bigstring with
     | Some f,_,_ -> f
     | _,Some f,_ -> fun dst x -> bytes_to_bigstring ~dst ~src:(f x)
     | _,_,Some f -> fun dst x -> bigstring_to_bigstring ~dst ~src:(f x)
