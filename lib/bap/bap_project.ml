@@ -261,16 +261,11 @@ module Input = struct
     target = compute_target ~file ?target (Image.spec img);
   }
 
-  let dedup =
-    let equal = String.equal and compare = String.compare in
-    fun l ->
-      let rec loop res = function
-        | [] -> res
-        | x :: xs ->
-          let dups = List.find_all_dups (x :: xs) ~compare in
-          let res = if List.mem dups x ~equal then res else x :: res in
-          loop res xs in
-      loop [] (List.rev l)
+  let dedup xs =
+    List.rev @@ fst @@
+    List.fold xs ~init:([], String.Set.empty) ~f:(fun (xs, mems) x ->
+        if Set.mem mems x then (xs, mems)
+        else (x :: xs, Set.add mems x))
 
   let of_image ?target ?loader ?(libraries = []) main =
     List.map (main :: dedup libraries) ~f:(fun filename ->
