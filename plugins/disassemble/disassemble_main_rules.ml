@@ -172,12 +172,12 @@ module Symbols = struct
           })
       ~unmatched:(fun reason t -> match reason with
           | Non_injective_fwd (addrs,name) ->
-            info "the symbol %s has ambiguous addresses: %a@"
+            info "the symbol %s has ambiguous addresses: %a"
               name pp_addrs addrs;
             List.fold addrs ~init:t ~f:(fun t addr ->
                 add_alias t addr name)
           | Non_injective_bwd (names,addr) ->
-            info "the symbol at %a has ambiguous names: %a@"
+            info "the symbol at %a has ambiguous names: %a"
               Bitvec.pp addr pp_names names;
             List.fold names ~init:t ~f:(fun t name ->
                 add_alias t addr name))
@@ -232,7 +232,7 @@ module Symbols = struct
     KB.Rule.(begin
         declare "provides aliases" |>
         require Image.Spec.slot |>
-        provide Theory.Label.possible_name |>
+        provide Theory.Label.aliases |>
         comment "computes symbol aliases (names) from spec";
       end);
     KB.promise Theory.Label.aliases @@ fun obj ->
