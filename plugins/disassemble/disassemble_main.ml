@@ -355,10 +355,11 @@ let print_missing =
 let input = Extension.Command.argument
     ~doc:"The input file" Extension.Type.("FILE" %: string =? "a.out")
 
-let link = Extension.Command.parameter
+let libraries = Extension.Command.parameters
     ~doc:"The input libraries to link with"
+    ~aliases:["l"]
     Extension.Type.("FILES" %: list string)
-    "link"
+    "libraries"
 
 let loader =
   Extension.Command.parameter
@@ -492,22 +493,21 @@ let save_knowledge ~had_knowledge ~update digest = function
     Knowledge.save (Toplevel.current ()) path
   | Some _ -> ()
 
-let create_and_process input link outputs passes loader target update
+let create_and_process input libraries outputs passes loader target update
     kb print_missing ctxt =
   let uses_file_loader = Sys.file_exists loader &&
                          Fn.non Filename.is_implicit loader in
-  let link = List.dedup_and_sort link ~compare:String.compare in
   let package = input in
   let digest =
-    let file   = Caml.Digest.file in
-    let config = Extension.Configuration.digest ctxt in
-    let input  = file input in
-    let link   = List.map link ~f:file in
-    let target = Theory.Target.to_string target in
-    let loader = if uses_file_loader then file loader else loader in
-    make_digest (config :: input :: link @ [target; loader]) in
+    let file      = Caml.Digest.file in
+    let config    = Extension.Configuration.digest ctxt in
+    let input     = file input in
+    let libraries = List.map libraries ~f:file in
+    let target    = Theory.Target.to_string target in
+    let loader    = if uses_file_loader then file loader else loader in
+    make_digest (config :: input :: libraries @ [target; loader]) in
   let had_knowledge = load_knowledge print_missing digest kb in
-  let input = Project.Input.load ~target ~loader ~libraries:link package in
+  let input = Project.Input.load ~target ~loader ~libraries package in
   if print_missing then Missing.enable ();
   Project.create ~package
     input |> proj_error >>= fun proj ->
@@ -519,20 +519,21 @@ let create_and_process input link outputs passes loader target update
 let _disassemble_command_registered : unit =
   let args =
     let open Extension.Command in
-    args $input $link $outputs $old_style_passes $passes $loader $target
+    args $input $libraries $outputs $old_style_passes $passes $loader $target
     $update $knowledge $print_missing in
   Extension.Command.declare ~doc:man "disassemble"
     ~requires:features_used args @@
-  fun input link outputs old_style_passes passes loader target update
+  fun input libraries outputs old_style_passes passes loader target update
     kb print_missing ctxt ->
+  let libraries = List.concat libraries in
   setup_gc_unless_overriden ();
   validate_knowledge update kb >>= fun () ->
   validate_input input >>= fun () ->
-  Err.List.iter link ~f:validate_input >>= fun () ->
+  Err.List.iter libraries ~f:validate_input >>= fun () ->
   validate_passes_style old_style_passes (List.concat passes) >>=
   validate_passes >>= fun passes ->
   Dump_formats.parse outputs >>= fun outputs ->
-  create_and_process input link outputs passes loader target update kb
+  create_and_process input libraries outputs passes loader target update kb
     print_missing ctxt >>= fun _ ->
   Ok ()
 
