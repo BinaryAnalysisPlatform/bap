@@ -10738,6 +10738,7 @@ module Std : sig
 
           @since 2.6.0 a list of files [libraries] can be provided,
           which are libraries that will be linked with the main program.
+          It is presumed that they are specified in topological order.
 
           @since 2.2.0 *)
       val load :
