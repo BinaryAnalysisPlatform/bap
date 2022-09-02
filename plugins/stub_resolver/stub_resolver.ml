@@ -16,6 +16,7 @@ type state = {
   names  : names;
   next   : int;
   stubs  : Tid.Set.t;
+  units  : Theory.Unit.t Tid.Map.t;
 }
 
 module Class = struct
@@ -40,38 +41,47 @@ end
 let empty = {
   groups = Map.empty (module Tid);
   names  = Map.empty (module Int);
+  units  = Map.empty (module Tid);
   stubs  = Set.empty (module Tid);
   next   = 0;
 }
 
+let in_file file f =
+  KB.Symbol.in_package file @@ fun () ->
+  Theory.Unit.for_file file >>= fun unit ->
+  let promise _ = !!(Some unit) in
+  KB.promising Theory.Label.unit ~promise @@ fun () ->
+  f unit
+
 let is_stub sub =
-  if Term.has_attr sub Sub.stub then KB.return true
-  else match Term.get_attr sub address with
-    | None -> KB.return true
-    | Some addr ->
+  if Term.has_attr sub Sub.stub then !!true
+  else match Term.(get_attr sub address, get_attr sub filename) with
+    | None, _ | _, None -> !!true
+    | Some addr, Some file -> in_file file @@ fun _unit ->
       Theory.Label.for_addr (Word.to_bitvec addr) >>= fun sub ->
-      KB.collect (Value.Tag.slot Sub.stub) sub >>= function
-      | None -> KB.return false
-      | Some () -> KB.return true
+      KB.collect (Value.Tag.slot Sub.stub) sub >>| Option.is_some
 
 let aliases_of_sub s =
   KB.collect Theory.Label.aliases (Term.tid s) >>= fun aliases ->
   match Term.(get_attr s address, get_attr s filename) with
   | None, _ | _, None -> !!aliases
-  | Some addr, Some file ->
-    KB.Symbol.in_package file @@ fun () ->
-    Theory.Unit.for_file file >>= fun unit ->
-    let promise _ = !!(Some unit) in
-    KB.promising Theory.Label.unit ~promise @@ fun () ->
+  | Some addr, Some file -> in_file file @@ fun _unit ->
     Theory.Label.for_addr (Word.to_bitvec addr) >>=
     KB.collect Theory.Label.aliases >>| Set.union aliases
 
 let update_stubs t sub =
-  is_stub sub >>| fun is_stub ->
-  if is_stub then
+  is_stub sub >>| function
+  | false -> t
+  | true ->
     let tid = Term.tid sub in
     {t with stubs = Set.add t.stubs tid}
-  else t
+
+let update_units t sub =
+  match Term.get_attr sub filename with
+  | Some file -> in_file file @@ fun unit ->
+    let tid = Term.tid sub in
+    !!{t with units = Map.add_exn t.units tid unit}
+  | None -> !!t
 
 let find_groups names aliases =
   Map.fold names ~init:[]
@@ -99,6 +109,7 @@ let redirect t ~from ~to_ =
 
 let add t sub =
   update_stubs t sub >>= fun t ->
+  update_units t sub >>= fun t ->
   aliases_of_sub sub >>| fun aliases ->
   match find_groups t.names aliases with
   | [] ->
@@ -119,43 +130,56 @@ let add t sub =
     let groups = redirect t ~from:groups ~to_:grp in
     {t with names; groups}
 
-let collect_by_group_id groups =
+let collect_by_group_id stubs groups =
   Map.fold groups ~init:Int.Map.empty
     ~f:(fun ~key:tid ~data:id xs ->
         Map.update xs id ~f:(function
             | None -> [tid]
-            | Some tids -> tid :: tids ))
+            | Some tids -> tid :: tids )) |>
+  Map.map ~f:(List.partition_tf ~f:(Set.mem stubs))
 
-let unambiguous_pairs stubs xs =
-  let is_stub tid = Set.mem stubs tid in
-  let add pairs x y =
-    info "Resolved stub %a to implementation %a" Tid.pp x Tid.pp y;
-    Map.add_exn pairs x y in
+let unambiguous_pairs xs =
+  let add y pairs x =  Map.add_exn pairs x y in
   Map.fold xs ~init:(Map.empty (module Tid))
-    ~f:(fun ~key:_group_id ~data:tids pairs ->
-        match tids with
-        | [x; y] ->
-          begin
-            match is_stub x, is_stub y with
-            | true, false -> add pairs x y
-            | false, true -> add pairs y x
-            | _ -> pairs
-          end
-        | _ -> pairs)
+    ~f:(fun ~key:_group_id ~data:(stubs, impls) init ->
+        match impls with
+        | [y] -> List.fold stubs ~init ~f:(add y)
+        | _ -> init)
 
 let find_pairs t =
-  collect_by_group_id t.groups |>
-  unambiguous_pairs t.stubs
+  unambiguous_pairs @@ collect_by_group_id t.stubs t.groups
 
 let resolve prog =
   Term.to_sequence sub_t prog |>
   Knowledge.Seq.fold ~init:empty ~f:add >>| fun state ->
   state, find_pairs state
 
+let label_name x =
+  KB.collect Theory.Label.name x >>| function
+  | None -> "(none)"
+  | Some name -> name
+
+let unit_path units x = match Map.find units x with
+  | None -> !!"(none)"
+  | Some unit -> KB.collect Theory.Unit.path unit >>| function
+    | None -> "(none)"
+    | Some path -> path
+
+let log units links =
+  Map.to_sequence links |>
+  KB.Seq.iter ~f:(fun (x, y) ->
+      label_name x >>= fun xname ->
+      label_name y >>= fun yname ->
+      unit_path units x >>= fun xpath ->
+      unit_path units y >>| fun ypath ->
+      info "resolved stub %s in unit %s to implementation %s in unit %s%!"
+        xname xpath yname ypath)
+
 let provide prog =
   Knowledge.Object.create Class.t >>= fun obj ->
-  resolve prog >>= fun ({stubs},links) ->
+  resolve prog >>= fun ({stubs; units},links) ->
   KB.sequence [
+    log units links;
     KB.provide Class.links obj links;
     KB.provide Class.stubs obj stubs;
   ] >>= fun () ->
