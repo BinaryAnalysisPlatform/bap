@@ -261,7 +261,16 @@ module Input = struct
     target = compute_target ~file ?target (Image.spec img);
   }
 
-  let dedup = List.dedup_and_sort ~compare:String.compare
+  let dedup =
+    let equal = String.equal and compare = String.compare in
+    fun l ->
+      let rec loop res = function
+        | [] -> res
+        | x :: xs ->
+          let dups = List.find_all_dups (x :: xs) ~compare in
+          let res = if List.mem dups x ~equal then res else x :: res in
+          loop res xs in
+      loop [] (List.rev l)
 
   let of_image ?target ?loader ?(libraries = []) main =
     List.map (main :: dedup libraries) ~f:(fun filename ->
@@ -449,7 +458,7 @@ let compute_units ?package ?state main libs =
         Term.enum sub_t prog |> Seq.fold ~init:p ~f:(Term.append sub_t),
         {unit; info} :: l) in
   set_package package >>| fun () ->
-  main, libs, prog
+  main, List.rev libs, prog
 
 let create
     ?package
