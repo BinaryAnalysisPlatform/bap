@@ -5,9 +5,11 @@ functions (and adds the latter if it is absent).
 "
 open Core_kernel[@@warning "-D"]
 open Bap_main
-open Bap_core_theory
 open Bap.Std
 open Bap_c.Std
+open Bap_core_theory
+
+open KB.Syntax
 
 include Bap_main.Loggers()
 
@@ -161,7 +163,32 @@ let discover_libc_start_main ctxt proj =
   then Project.map_program proj ~f:rename_libc_start_main
   else proj
 
+let drop_glibc_internal s = String.drop_prefix s 5
+let is_glibc_internal s = String.is_prefix s ~prefix:"__GI_"
+
+let refine_glibc_internal_aliases () =
+  KB.Rule.(begin
+      declare ~package:"bap" "glibc-internal-aliases" |>
+      provide Theory.Label.aliases |>
+      comment "computes aliases for names starting with the __GI_ \
+               (Glibc Internal) prefix";
+    end);
+  KB.promise Theory.Label.aliases @@ fun label ->
+  KB.collect Theory.Label.name label >>= fun name ->
+  KB.collect Theory.Label.aliases label >>| fun aliases ->
+  let init = match name with
+    | Some name when is_glibc_internal name ->
+      String.Set.singleton @@ drop_glibc_internal name
+    | None | Some _ -> String.Set.empty in
+  Set.fold aliases ~init ~f:(fun acc s ->
+      if is_glibc_internal s then
+        Set.add acc @@ drop_glibc_internal s
+      else acc) |>
+  Set.filter ~f:(Fn.non String.is_empty) |>
+  Set.union aliases
+
 let () = Extension.declare ~doc ~provides:["abi"; "api"] @@ fun ctxt ->
+  refine_glibc_internal_aliases ();
   Bap_abi.register_pass (discover_libc_start_main ctxt);
   Project.register_pass ~autorun:true ~deps:["api"] (recover_main ctxt);
   Ok ()
