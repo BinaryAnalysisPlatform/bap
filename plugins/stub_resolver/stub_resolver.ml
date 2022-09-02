@@ -139,7 +139,7 @@ let collect_by_group_id stubs groups =
   Map.map ~f:(List.partition_tf ~f:(Set.mem stubs))
 
 let unambiguous_pairs xs =
-  let add y pairs x =  Map.add_exn pairs x y in
+  let add y pairs x = Map.add_exn pairs x y in
   Map.fold xs ~init:(Map.empty (module Tid))
     ~f:(fun ~key:_group_id ~data:(stubs, impls) init ->
         match impls with
