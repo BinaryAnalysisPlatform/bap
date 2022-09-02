@@ -342,20 +342,21 @@ let update prog =
   let resolver = Stub_resolver.run prog in
   let stubs = Stub_resolver.stubs resolver
   and links = Stub_resolver.links resolver in
-  (object inherit Term.mapper
+  (object inherit Term.mapper as super
     method! map_sub sub =
-      if Set.mem stubs (Term.tid sub)
-      then Term.set_attr sub Sub.stub ()
-      else sub
+      let sub =
+        if Set.mem stubs (Term.tid sub)
+        then Term.set_attr sub Sub.stub ()
+        else sub in
+      super#map_sub sub
     method! map_jmp jmp =
       match Jmp.alt jmp with
       | None -> jmp
       | Some alt -> match Jmp.resolve alt with
         | Second _ -> jmp
         | First tid -> match Map.find links tid with
-          | Some tid' ->
-            Jmp.with_alt jmp (Some (Jmp.resolved tid'))
-          | _ -> jmp
+          | Some tid' -> Jmp.with_alt jmp (Some (Jmp.resolved tid'))
+          | None -> jmp
   end)#run prog
 
 let abi_pass = Project.map_program ~f:update
