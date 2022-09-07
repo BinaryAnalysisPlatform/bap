@@ -19,5 +19,5 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           push: true
-          tags: binaryanalysisplatform/bap:2.4.0
-          file: docker/2.4.0/Dockerfile
+          tags: binaryanalysisplatform/bap:2.5.0
+          file: docker/2.5.0/Dockerfile
