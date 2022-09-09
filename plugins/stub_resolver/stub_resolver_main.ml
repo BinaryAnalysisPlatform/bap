@@ -338,15 +338,36 @@ let detect_stubs_by_signatures () : unit =
     Option.bind (find_mem target code addr) ~f:(fun mem ->
         Option.some_if (matches sigs mem) ())
 
+let mangle_name addr tid name =
+  match addr with
+  | Some a ->
+    sprintf "%s@%s" name @@
+    Word.string_of_value ~hex:true a
+  | None -> sprintf "%s%%%s" name (Tid.to_string tid)
+
 let update prog =
   let resolver = Stub_resolver.run prog in
   let stubs = Stub_resolver.stubs resolver
   and links = Stub_resolver.links resolver in
+  let impls = Map.data links |> Tid.Set.of_list in
+  let stub_names =
+    Term.enum sub_t prog |>
+    Seq.fold ~init:String.Set.empty ~f:(fun s sub ->
+        if Set.mem stubs @@ Term.tid sub
+        then Set.add s @@ Sub.name sub
+        else s) in
   (object inherit Term.mapper as super
     method! map_sub sub =
+      let tid = Term.tid sub in
       let sub =
-        if Set.mem stubs (Term.tid sub)
-        then Term.set_attr sub Sub.stub ()
+        if Set.mem stubs tid then
+          Term.set_attr sub Sub.stub ()
+        else if Set.mem impls tid then
+          let name = Sub.name sub in
+          if Set.mem stub_names name then
+            let addr = Term.get_attr sub address in
+            Sub.with_name sub @@ mangle_name addr tid name
+          else sub
         else sub in
       super#map_sub sub
     method! map_jmp jmp =
