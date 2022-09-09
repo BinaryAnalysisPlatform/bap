@@ -169,6 +169,8 @@ let is_glibc_internal s = String.is_prefix s ~prefix:"__GI_"
 let refine_glibc_internal_aliases () =
   KB.Rule.(begin
       declare ~package:"bap" "glibc-internal-aliases" |>
+      require Theory.Label.name |>
+      require Theory.Label.aliases |>
       provide Theory.Label.aliases |>
       comment "computes aliases for names starting with the __GI_ \
                (Glibc Internal) prefix";
