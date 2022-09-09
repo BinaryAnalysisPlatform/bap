@@ -6,6 +6,8 @@ open Bap_c.Std
 open Format
 open Bap_primus_types
 
+include Self()
+
 module Primus = struct
   module Env = Bap_primus_env
   module Linker = Bap_primus_linker
@@ -919,35 +921,51 @@ module LinkBinaryProgram(Machine : Machine) = struct
       | None -> Machine.return false
       | Some x -> Linker.is_linked (`addr x)
 
+  let collect name t tids =
+    is_linked name t >>= function
+    | true -> tids >>| fun tids -> Set.add tids @@ Term.tid t
+    | false -> tids
+
+  let collector = object
+    inherit [Tid.Set.t Machine.t] Term.visitor
+    method! enter_blk = collect Term.name
+    method! enter_sub = collect Sub.name
+  end
 
   let link name code t m =
-    m >>= fun () -> is_linked name t >>= function
-    | true -> Machine.return ()
-    | false ->
-      Linker.link
-        ~name:(name t)
-        ~tid:(Term.tid t)
-        ?addr:(Term.get_attr t address)
-        code
+    m >>= fun () -> Linker.link
+      ~name:(name t)
+      ~tid:(Term.tid t)
+      ?addr:(Term.get_attr t address)
+      code
 
-  let linker = object
+  let linker linked = object
     inherit [unit Machine.t] Term.visitor
-    method! enter_blk t =
-      let module Code(Machine : Machine) = struct
-        module Interp = Make(Machine)
-        let exec = Interp.blk t
-      end in
-      link Term.name (module Code) t
-    method! enter_sub t =
-      let module Code(Machine : Machine) = struct
-        module Interp = Make(Machine)
-        let exec = Interp.sub t
-      end in
-      link Sub.name (module Code) t
+    method! enter_blk t m =
+      if not @@ Set.mem linked @@ Term.tid t then
+        let module Code(Machine : Machine) = struct
+          module Interp = Make(Machine)
+          let exec = Interp.blk t
+        end in
+        link Term.name (module Code) t m
+      else m
+    method! enter_sub t m =
+      if not @@ Set.mem linked @@ Term.tid t then
+        let module Code(Machine : Machine) = struct
+          module Interp = Make(Machine)
+          let exec = Interp.sub t
+        end in
+        info "Linking subroutine %s%!" @@ Sub.name t;
+        link Sub.name (module Code) t m
+      else m
   end
 
 
   let init () =
     Machine.get () >>= fun proj ->
-    linker#run (Project.program proj) (Machine.return ())
+    let prog = Project.program proj in
+    info "Linking binary program%!";
+    collector#run prog !!Tid.Set.empty >>= fun linked ->
+    (linker linked)#run prog !!() >>| fun () ->
+    info "Finished linking binary program%!"
 end
