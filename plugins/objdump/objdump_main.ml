@@ -108,12 +108,23 @@ module Repository : sig
   type info
   val create : (string -> (info -> Bitvec.t -> string -> info) -> info -> info) -> t
   val name : t -> ?size:int -> ?bias:Bitvec.t -> path:string -> Bitvec.t -> string option
+  val aliases : t -> ?size:int -> ?bias:Bitvec.t -> path:string -> Bitvec.t -> Set.M(String).t option
 end = struct
   type info = (Bitvec.t, String.t) Bap_relation.t
 
+  type table = {
+    names   : string Map.M(Bitvec_order).t;
+    aliases : Set.M(String).t Map.M(Bitvec_order).t;
+  }
+
+  let empty_table = {
+    names   = Map.empty (module Bitvec_order);
+    aliases = Map.empty (module Bitvec_order);
+  }
+
   type t = {
     parse : string -> (info -> Bitvec.t -> string  -> info) -> info -> info;
-    files : (string, string Map.M(Bitvec_order).t) Hashtbl.t
+    files : (string, table) Hashtbl.t
   }
 
   let empty = Bap_relation.empty
@@ -131,22 +142,27 @@ end = struct
   let string_of_names names =
     String.concat ~sep:", " names
 
-  let pp_reason ppf = function
-    | Bap_relation.Non_injective_fwd (addrs,name) ->
-      Format.fprintf ppf "skipping addresses (%s) that has the same name %S"
-        (string_of_addrs addrs) name
-    | Bap_relation.Non_injective_bwd (names,addr) ->
-      Format.fprintf ppf "skipping names (%s) that has the same address %a"
-        (string_of_names names) Bitvec.pp addr
-
   let of_info symbols =
-    Bap_relation.matching symbols (Map.empty (module Bitvec_order))
-      ~saturated:(fun key data mapping ->
-          Map.add_exn mapping key data)
-      ~unmatched:(fun reason mapping ->
-          info "%a" pp_reason reason;
-          mapping)
-
+    let add_aliases names t addr = {
+      t with aliases = Map.update t.aliases addr ~f:(function
+        | Some s -> Set.union s names
+        | None -> names)
+    } in
+    Bap_relation.matching symbols empty_table
+      ~saturated:(fun key data t -> {
+            t with names = Map.add_exn t.names ~key ~data;
+          })
+      ~unmatched:(fun reason t -> match reason with
+          | Non_injective_fwd (addrs, name) ->
+            info "skipping addresses (%s) that has the same name %S"
+              (string_of_addrs addrs) name;
+            let names = Set.singleton (module String) name in
+            List.fold addrs ~init:t ~f:(add_aliases names)
+          | Non_injective_bwd (names, addr) ->
+            info "skipping names (%s) that has the same address %a"
+              (string_of_names names) Bitvec.pp addr;
+            let names = Set.of_list (module String) names in
+            add_aliases names t addr)
 
   let lookup {parse; files} path =
     match Hashtbl.find files path with
@@ -155,9 +171,9 @@ end = struct
       let info = parse path Bap_relation.add empty in
       if Bap_relation.is_empty info
       then warning "failed to obtain symbols";
-      let names = of_info info in
-      Hashtbl.set files path names;
-      names
+      let t = of_info info in
+      Hashtbl.set files path t;
+      t
 
   let to_real size = function
     | None -> Fn.id
@@ -170,14 +186,19 @@ end = struct
       Bitvec.((addr + bias) mod modulus size)
 
   let name repo ?(size=32) ?bias ~path addr =
-    Map.find (lookup repo path) (to_real size bias addr)
+    Map.find (lookup repo path).names (to_real size bias addr)
+
+  let aliases repo ?(size=32) ?bias ~path addr =
+    Map.find (lookup repo path).aliases (to_real size bias addr)
 end
 
-let provide_function_starts_and_names ctxt : unit =
+let create_repo ctxt =
   let demangler = Extension.Configuration.get ctxt demangler in
-  let repo = Repository.create (fun file accept init ->
+  Repository.create (fun file accept init ->
       with_objdump_output demangler ~file ~init
-        ~f:(fun info line -> parse_func_start line accept info)) in
+        ~f:(fun info line -> parse_func_start line accept info))
+
+let provide_function_starts_and_names repo =
   let declare name input output =
     KB.Rule.(declare ~package:"bap" name |>
              dynamic ["objdump"] |>
@@ -202,8 +223,35 @@ let provide_function_starts_and_names ctxt : unit =
   property KB.promise is_subroutine addr is_known;
   property (KB.propose agent) possible_name addr Fn.id
 
+let provide_aliases repo =
+  let open Theory.Label in
+  KB.Rule.(declare ~package:"bap" "aliases" |>
+           dynamic ["objdump"] |>
+           require addr |>
+           provide aliases |>
+           comment "extracts aliases from objdump");
+  let empty = Set.empty (module String) in
+  KB.promise aliases @@ fun label ->
+  KB.collect unit label >>= function
+  | None -> !!empty
+  | Some unit ->
+    KB.collect Theory.Unit.path unit >>= function
+    | None -> !!empty
+    | Some path ->
+      KB.collect Theory.Unit.bias unit >>= fun bias ->
+      KB.collect Theory.Unit.target unit >>|
+      Theory.Target.code_addr_size >>= fun size ->
+      KB.collect addr label >>| function
+      | None -> empty
+      | Some addr ->
+        Repository.aliases repo ~size ?bias ~path addr |> function
+        | Some aliases -> aliases
+        | None -> empty
+
 let main ctxt =
-  provide_function_starts_and_names ctxt;
+  let repo = create_repo ctxt in
+  provide_function_starts_and_names repo;
+  provide_aliases repo;
   Ok ()
 
 let () = Extension.declare main
