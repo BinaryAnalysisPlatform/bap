@@ -88,6 +88,13 @@ let signatures = Extension.Configuration.parameters
            folder, " ^ user_signatures_folder ^ ", and in " ^
           system_signatures_folder )
 
+let link_only = Extension.Configuration.parameter
+    Extension.Type.(list string) "link-only"
+    ~doc:"A list of subroutine names that are to be exclusively \
+          considered for redirecting calls to stubs to calls to \
+          the implementations. An empty list means that no stubs \
+          will be exclusively considered."
+
 module Stubs : sig
   type t
   val prepare : ctxt -> unit
@@ -345,8 +352,8 @@ let mangle_name addr tid name =
     Word.string_of_value ~hex:true a
   | None -> sprintf "%s%%%s" name (Tid.to_string tid)
 
-let update prog =
-  let resolver = Stub_resolver.run prog in
+let update ?(link_only = String.Set.empty) prog =
+  let resolver = Stub_resolver.run prog ~link_only in
   let stubs = Stub_resolver.stubs resolver
   and links = Stub_resolver.links resolver in
   let impls = Map.data links |> Tid.Set.of_list in
@@ -380,10 +387,14 @@ let update prog =
           | None -> jmp
   end)#run prog
 
-let abi_pass = Project.map_program ~f:update
+let abi_pass ctxt =
+  let link_only =
+    String.Set.of_list @@
+    Extension.Configuration.get ctxt link_only in
+  Project.map_program ~f:(update ~link_only)
 
 let () = Extension.declare ~doc @@ fun ctxt ->
-  Bap_abi.register_pass abi_pass;
+  Bap_abi.register_pass @@ abi_pass ctxt;
   mark_plt_as_stub ();
   detect_stubs_by_signatures ();
   Stubs.prepare ctxt;

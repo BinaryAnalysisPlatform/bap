@@ -126,7 +126,7 @@ let add t sub =
     let grp = pick_representative groups in
     let aliases = Set.union aliases (unite_names t groups) in
     let names = List.fold groups ~init:t.names ~f:Map.remove in
-    let names = Map.add_exn names grp aliases in
+    let names = Map.add_exn names ~key:grp ~data:aliases in
     let groups = redirect t ~from:groups ~to_:grp in
     {t with names; groups}
 
@@ -135,28 +135,36 @@ let collect_by_group_id stubs groups =
     ~f:(fun ~key:tid ~data:id xs ->
         Map.update xs id ~f:(function
             | None -> [tid]
-            | Some tids -> tid :: tids )) |>
+            | Some tids -> tid :: tids)) |>
   Map.map ~f:(List.partition_tf ~f:(Set.mem stubs))
 
-let unambiguous_pairs xs =
+let should_link id names ~link_only =
+  Set.is_empty link_only || begin
+    let names = Map.find_exn names id in
+    not Set.(is_empty @@ inter names link_only)
+  end
+
+let unambiguous_pairs names xs ~link_only =
   let add y pairs x = Map.add_exn pairs x y in
   Map.fold xs ~init:(Map.empty (module Tid))
-    ~f:(fun ~key:_group_id ~data:(stubs, impls) init ->
+    ~f:(fun ~key:id ~data:(stubs, impls) init ->
         match impls with
-        | [y] -> List.fold stubs ~init ~f:(add y)
+        | [y] when should_link id names ~link_only ->
+          List.fold stubs ~init ~f:(add y)
         | _ -> init)
 
-let find_pairs t =
-  unambiguous_pairs @@ collect_by_group_id t.stubs t.groups
+let find_pairs t ~link_only =
+  unambiguous_pairs t.names ~link_only @@
+  collect_by_group_id t.stubs t.groups
 
-let resolve prog =
+let resolve prog ~link_only =
   Term.to_sequence sub_t prog |>
   Knowledge.Seq.fold ~init:empty ~f:add >>| fun state ->
-  state, find_pairs state
+  state, find_pairs state ~link_only
 
 let label_name x =
   KB.collect Theory.Label.name x >>| function
-  | None -> "(none)"
+  | None -> Tid.to_string x
   | Some name -> name
 
 let unit_path units x = match Map.find units x with
@@ -165,7 +173,14 @@ let unit_path units x = match Map.find units x with
     | None -> "(none)"
     | Some path -> path
 
-let log units links =
+let log_stubs units stubs =
+  Set.to_sequence stubs |>
+  KB.Seq.iter ~f:(fun stub ->
+      label_name stub >>= fun name ->
+      unit_path units stub >>| fun path ->
+      info "identified stub %s in unit %s" name path)
+
+let log_links units links =
   Map.to_sequence links |>
   KB.Seq.iter ~f:(fun (x, y) ->
       label_name x >>= fun xname ->
@@ -175,18 +190,20 @@ let log units links =
       info "resolved stub %s in unit %s to implementation %s in unit %s%!"
         xname xpath yname ypath)
 
-let provide prog =
+let provide prog ~link_only =
   Knowledge.Object.create Class.t >>= fun obj ->
-  resolve prog >>= fun ({stubs; units},links) ->
+  resolve prog ~link_only >>= fun ({stubs; units},links) ->
   KB.sequence [
-    log units links;
+    log_stubs units stubs;
+    log_links units links;
     KB.provide Class.links obj links;
     KB.provide Class.stubs obj stubs;
   ] >>= fun () ->
   KB.return obj
 
-let run prog =
-  match Knowledge.run Class.t (provide prog) (Toplevel.current ()) with
+let run ?(link_only = String.Set.empty) prog =
+  Toplevel.current () |>
+  Knowledge.run Class.t (provide prog ~link_only) |> function
   | Ok (v,_) -> v
   | Error cnf ->
     error "%a\n" Knowledge.Conflict.pp cnf;
