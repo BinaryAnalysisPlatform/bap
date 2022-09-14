@@ -238,13 +238,17 @@ module Symbols = struct
     KB.promise Theory.Label.aliases @@ fun obj ->
     let* unit = KB.collect Theory.Label.unit obj in
     let* addr = KB.collect Theory.Label.addr obj in
+    let* name = KB.resolve Theory.Label.possible_name obj in
+    let init = match name with
+      | Some name -> Set.singleton (module String) name
+      | None -> Set.empty (module String) in
     match unit,addr with
-    | None,_|_,None -> KB.return (Set.empty (module String))
+    | None,_|_,None -> KB.return init
     | Some unit, Some addr ->
       let+ {aliases} = KB.collect slot unit in
       match Map.find aliases addr with
-      | None -> Set.empty (module String)
-      | Some aliases -> aliases
+      | Some aliases -> Set.union init aliases
+      | None -> init
 
   let init () =
     promise_table ();
