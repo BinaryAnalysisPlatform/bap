@@ -266,7 +266,7 @@ module Parse = struct
     let rec loop xs acc = match xs with
       | [] -> acc
       | {data=Atom x} as s :: xs when is_quoted x ->
-        let x = try Scanf.unescaped x
+        let x = try Scanf.unescaped @@ unquote x
           with Scanf.Scan_failure _ -> fail Bad_ascii s in
         String.fold x ~init:acc ~f:(fun acc x ->
             {data=x; id = s.id; eq = Eq.null} :: acc) |>
@@ -341,9 +341,9 @@ module Parse = struct
     | _ -> false
 
   let defsubst ?docs ?(attrs=[]) name body prog gattrs tree =
-    let syntax = match body with
-      | s :: _ when is_keyarg s -> Some s
-      | _ -> None in
+    let syntax, body = match body with
+      | s :: body when is_keyarg s -> Some s, body
+      | _ -> None, body in
     Program.add prog subst @@
     Def.Subst.create ?docs
       ~attrs:(parse_declarations prog gattrs attrs) name
