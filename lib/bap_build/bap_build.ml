@@ -15,7 +15,13 @@ module Plugin_rules = struct
     with Fl.No_such_package _ -> false
 
   let default_packages = List.filter ~f:is_installed [
-      "bap"; "core_kernel"; "ppx_bap"
+      "bap";
+      "bap-main";
+      "bap-core-theory";
+      "bap-knowledge";
+      "core_kernel";
+      "ppx_bap";
+      "regular"
     ]
   let default_predicates = [
   ]
