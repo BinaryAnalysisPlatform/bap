@@ -141,12 +141,10 @@ let collect_by_group_id stubs groups =
 let unambiguous_pairs names xs ~link_only ~no_link =
   let should_link id names =
     let names = Map.find_exn names id in
-    let names = Set.diff names no_link in
-    let names =
-      if not @@ Set.is_empty link_only
-      then Set.inter names link_only
-      else names in
-    not @@ Set.is_empty names in
+    Set.(is_empty @@ inter names no_link) && begin
+      Set.is_empty link_only ||
+      not Set.(is_empty @@ inter names link_only)
+    end in
   let add y pairs x = Map.add_exn pairs x y in
   Map.fold xs ~init:(Map.empty (module Tid))
     ~f:(fun ~key:id ~data:(stubs, impls) init ->
