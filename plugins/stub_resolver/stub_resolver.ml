@@ -138,29 +138,31 @@ let collect_by_group_id stubs groups =
             | Some tids -> tid :: tids)) |>
   Map.map ~f:(List.partition_tf ~f:(Set.mem stubs))
 
-let should_link id names ~link_only =
-  Set.is_empty link_only || begin
+let unambiguous_pairs names xs ~link_only ~no_link =
+  let should_link id names =
     let names = Map.find_exn names id in
-    not Set.(is_empty @@ inter names link_only)
-  end
-
-let unambiguous_pairs names xs ~link_only =
+    let names = Set.diff names no_link in
+    let names =
+      if not @@ Set.is_empty link_only
+      then Set.inter names link_only
+      else names in
+    not @@ Set.is_empty names in
   let add y pairs x = Map.add_exn pairs x y in
   Map.fold xs ~init:(Map.empty (module Tid))
     ~f:(fun ~key:id ~data:(stubs, impls) init ->
         match impls with
-        | [y] when should_link id names ~link_only ->
+        | [y] when should_link id names ->
           List.fold stubs ~init ~f:(add y)
         | _ -> init)
 
-let find_pairs t ~link_only =
-  unambiguous_pairs t.names ~link_only @@
+let find_pairs t ~link_only ~no_link =
+  unambiguous_pairs t.names ~link_only ~no_link @@
   collect_by_group_id t.stubs t.groups
 
-let resolve prog ~link_only =
+let resolve prog ~link_only ~no_link =
   Term.to_sequence sub_t prog |>
   Knowledge.Seq.fold ~init:empty ~f:add >>| fun state ->
-  state, find_pairs state ~link_only
+  state, find_pairs state ~link_only ~no_link
 
 let label_name x =
   KB.collect Theory.Label.name x >>| function
@@ -190,9 +192,9 @@ let log_links units links =
       info "resolved stub %s in unit %s to implementation %s in unit %s%!"
         xname xpath yname ypath)
 
-let provide prog ~link_only =
+let provide prog ~link_only ~no_link =
   Knowledge.Object.create Class.t >>= fun obj ->
-  resolve prog ~link_only >>= fun ({stubs; units},links) ->
+  resolve prog ~link_only ~no_link >>= fun ({stubs; units},links) ->
   KB.sequence [
     log_stubs units stubs;
     log_links units links;
@@ -201,9 +203,12 @@ let provide prog ~link_only =
   ] >>= fun () ->
   KB.return obj
 
-let run ?(link_only = String.Set.empty) prog =
+let run
+    ?(link_only = String.Set.empty)
+    ?(no_link = String.Set.empty)
+    prog =
   Toplevel.current () |>
-  Knowledge.run Class.t (provide prog ~link_only) |> function
+  Knowledge.run Class.t (provide prog ~link_only ~no_link) |> function
   | Ok (v,_) -> v
   | Error cnf ->
     error "%a\n" Knowledge.Conflict.pp cnf;

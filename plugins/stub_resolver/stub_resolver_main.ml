@@ -95,6 +95,11 @@ let link_only = Extension.Configuration.parameter
           the implementations. An empty list means that no stubs \
           will be exclusively considered."
 
+let no_link = Extension.Configuration.parameter
+    Extension.Type.(list string) "no-link"
+    ~doc:"A list of stub names that will not be linked to their \
+          implementations."
+
 module Stubs : sig
   type t
   val prepare : ctxt -> unit
@@ -352,8 +357,8 @@ let mangle_name addr tid name =
     Word.string_of_value ~hex:true a
   | None -> sprintf "%s%%%s" name (Tid.to_string tid)
 
-let update ?(link_only = String.Set.empty) prog =
-  let resolver = Stub_resolver.run prog ~link_only in
+let update prog ~link_only ~no_link =
+  let resolver = Stub_resolver.run prog ~link_only ~no_link in
   let stubs = Stub_resolver.stubs resolver
   and links = Stub_resolver.links resolver in
   let impls = Map.data links |> Tid.Set.of_list in
@@ -391,7 +396,10 @@ let abi_pass ctxt =
   let link_only =
     String.Set.of_list @@
     Extension.Configuration.get ctxt link_only in
-  Project.map_program ~f:(update ~link_only)
+  let no_link =
+    String.Set.of_list @@
+    Extension.Configuration.get ctxt no_link in
+  Project.map_program ~f:(update ~link_only ~no_link)
 
 let () = Extension.declare ~doc @@ fun ctxt ->
   Bap_abi.register_pass @@ abi_pass ctxt;
