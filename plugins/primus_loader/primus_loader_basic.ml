@@ -194,14 +194,16 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     save_word endian argc sp >>= fun _ ->
     set_word "posix:environ" envp_table_ptr
 
-
-  let names prog = (object
-    inherit [addr String.Map.t] Term.visitor
-    method! enter_term _ t env =
-      match Term.get_attr t address with
-      | None -> env
+  let names prog =
+    let add t env = match Term.get_attr t address with
       | Some addr -> Map.set env ~key:(Term.name t) ~data:addr
-  end)#run prog String.Map.empty
+      | None -> env in
+    let visitor = object
+      inherit [addr String.Map.t] Term.visitor
+      method! enter_blk = add
+      method! enter_sub = add
+    end in
+    visitor#run prog String.Map.empty
 
   let init_names () =
     Machine.get () >>= fun proj ->
