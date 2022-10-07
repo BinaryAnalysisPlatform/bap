@@ -10,6 +10,7 @@ open Bap_sema.Std
 
 type t
 type project = t
+type library
 type pass [@@deriving sexp_of]
 type input
 type state [@@deriving bin_io]
@@ -48,8 +49,20 @@ val set : t -> 'a tag -> 'a -> t
 val get : t -> 'a tag -> 'a option
 val has : t -> 'a tag -> bool
 val del : t -> 'a tag -> t
+val libraries : t -> library list
 
+module Library : sig
+  type t = library
 
+  val unit : t -> Theory.Unit.t
+  val arch : t -> arch
+  val target : t -> Theory.Target.t
+  val specification : t -> Ogre.doc
+  val symbols : t -> symtab
+  val memory : t -> value memmap
+  val disasm : t -> disasm
+  val state : t -> state
+end
 
 val map_program : t -> f:(program term -> program term) -> t
 
@@ -74,7 +87,12 @@ end
 module Input : sig
   type t = input
 
-  val load : ?target:Theory.Target.t -> ?loader:string -> string -> t
+  val load :
+    ?target:Theory.Target.t ->
+    ?loader:string ->
+    ?libraries:string list ->
+    string -> t
+
   val custom :
     ?finish:(project -> project) ->
     ?filename:string ->

@@ -5890,7 +5890,7 @@ module Std : sig
       val require : (string, (string -> 'a) -> 'a) Ogre.attribute
 
 
-      (** (is-little-endian FLAG)] is set for files with words encoded in the
+      (** [(is-little-endian FLAG)] is set for files with words encoded in the
           little-endian order.
 
           @since 2.2.0  *)
@@ -10341,12 +10341,12 @@ module Std : sig
     type t = project
     type state [@@deriving bin_io]
     type input
+    type library
 
     (** IO interface to a project data structure.  *)
     include Data.S with type t := t
 
-    (** [from_file filename] creates a project from the provided input
-        source.
+    (** [create input] creates a project from the provided input source.
 
         The input code regions are speculatively disassembled and the
         set of basic blocks is determined, using the algorithm
@@ -10444,8 +10444,13 @@ module Std : sig
         @since 2.0.0 the parameter [symbolizer] is unused
         @since 2.0.0 the parameter [rooter] is unused
         @since 2.0.0 the parameter [reconstructor] is unused
-        @since 2.2.0 the package parameter is added
+        @since 2.2.0 the parameter [package] is added
 
+        @since 2.6.0 if [input] consists of library files in addition
+        to the main binary, then the accessors to the state of the
+        project reflect that of the main binary, except for [program],
+        which contains the code of both the main program and the library
+        programs linked together.
     *)
     val create :
       ?package:string ->
@@ -10467,13 +10472,11 @@ module Std : sig
     *)
     val arch : t -> arch
 
-
     (** [target project] returns the target system of the project.
 
         @since 2.2.0
     *)
     val target : t -> Theory.Target.t
-
 
     (** [specification p] returns the specification of the binary.
 
@@ -10484,7 +10487,6 @@ module Std : sig
 
         @since 2.0.0 *)
     val state : t -> state
-
     (** [disasm project] returns results of disassembling  *)
     val disasm : t -> disasm
 
@@ -10498,10 +10500,7 @@ module Std : sig
     (** [map_program t ~f] maps the IR representation of the program
         with function [f].
 
-        Note: since the program is computed lazily this function
-        should be preferred to [program] composed [with_program] for
-        passes that transform the program representation so that they
-        are not run if the program is never ever used.
+        @since 2.6.0 the program is no longer lazily computed.
     *)
     val map_program : t -> f:(program term -> program term) -> t
 
@@ -10592,6 +10591,58 @@ module Std : sig
 
     (** [del project attr] removes an attribute from a project *)
     val del : t -> 'a tag -> t
+
+    (** [libraries project] returns the shared libraries that were loaded
+        with [project]. *)
+    val libraries : t -> library list
+
+    (** A library that was loaded alongside the main program.
+
+        @since 2.6.0
+    *)
+    module Library : sig
+      type t = library
+
+      (** [unit library] returns the unit associated with the library. *)
+      val unit : library -> Theory.Unit.t
+
+      (** [arch library] reveals the architecture of the library.
+
+          @since 2.6.0
+          @deprecated use [target library] instead.
+      *)
+      val arch : library -> arch
+
+      (** [target library] returns the target system of the library.
+
+          @since 2.6.0
+      *)
+      val target : library -> Theory.Target.t
+
+      (** [specification library] returns the specification of the library.
+
+          @since 2.6.0
+      *)
+      val specification : library -> Ogre.doc
+
+      (** [state library] returns the core state of the library.
+
+          @since 2.6.0
+      *)
+      val state : library -> state
+
+      (** [disasm library] returns the results of disassembling the library.
+
+          @since 2.6.0
+      *)
+      val disasm : library -> disasm
+
+      (** [memory library] returns the memory of the library.
+
+          @since 2.6.0
+      *)
+      val memory : library -> value memmap
+    end
 
     (** Information obtained during project reconstruction.
 
@@ -10685,8 +10736,16 @@ module Std : sig
           contradicts the information in the file then the project
           creation will fail.
 
+          @since 2.6.0 a list of files [libraries] can be provided,
+          which are libraries that will be linked with the main program.
+          It is presumed that they are specified in topological order.
+
           @since 2.2.0 *)
-      val load : ?target:Theory.Target.t -> ?loader:string -> string -> t
+      val load :
+        ?target:Theory.Target.t ->
+        ?loader:string ->
+        ?libraries:string list ->
+        string -> t
 
       (** [raw_file ?base target ~filename] creates an input from a binary
           file that is raw code for the given [target], i.e.,
@@ -10769,7 +10828,6 @@ module Std : sig
           be looked up in the {!Image.available_backends}.
 
           @deprecated use [Input.load filename]
-
       *)
       val file : ?loader:string -> filename:string -> t
 
@@ -10784,7 +10842,7 @@ module Std : sig
       *)
       val create :
         ?finish:(project -> project) ->
-        arch -> string -> code:value memmap -> data: value memmap -> t
+        arch -> string -> code:value memmap -> data:value memmap -> t
     end
 
     (** {3 Registering passes}

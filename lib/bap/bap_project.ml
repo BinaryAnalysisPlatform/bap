@@ -134,36 +134,54 @@ module State = struct
         KB.collect Theory.Unit.target unit
       end;
       Toplevel.get result
-
-    let run spec target ~code ~memory file k =
-      let result = Toplevel.var "disassembly-result" in
-      let compute_target = if Theory.Target.is_unknown target
-        then target_of_spec spec
-        else KB.return target in
-      Toplevel.put result begin
-        compute_target >>= fun target ->
-        with_filename spec target code memory file @@ fun () ->
-        k
-      end;
-      Toplevel.get result
   end
 end
 
 type state = State.t [@@deriving bin_io]
 
-type t = {
-  arch    : arch;
-  target  : Theory.Target.t;
+type unit_info = {
   spec    : Ogre.doc;
+  arch    : arch;
+  target  : Theory.target;
   state   : State.t;
-  disasm  : disasm Lazy.t;
+  disasm  : disasm;
   memory  : value memmap;
-  storage : dict;
-  program : program term Lazy.t;
-  symbols : Symtab.t Lazy.t;
-  passes  : string list;
+  symbols : symtab;
 } [@@deriving fields]
 
+type library = {
+  unit : Theory.Unit.t;
+  info : unit_info;
+}
+
+type t = {
+  main      : unit_info;
+  libraries : library list;
+  storage   : dict;
+  program   : program term;
+  passes    : string list;
+} [@@deriving fields]
+
+module Library = struct
+  type t = library
+
+  let unit {unit} = unit
+  let specification {info} = spec info
+  let arch {info} = arch info
+  let target {info} = target info
+  let state {info} = state info
+  let disasm {info} = disasm info
+  let memory {info} = memory info
+  let symbols {info} = symbols info
+end
+
+let spec {main} = spec main
+let arch {main} = arch main
+let target {main} = target main
+let state {main} = state main
+let disasm {main} = disasm main
+let memory {main} = memory main
+let symbols {main} = symbols main
 
 module Info = struct
   let file,got_file = Stream.create ()
@@ -189,7 +207,7 @@ module Input = struct
     target : Theory.Target.t;
   }
 
-  type t = unit -> result
+  type t = unit -> result list
 
 
   let custom
@@ -201,7 +219,7 @@ module Input = struct
     target;
     spec = Ogre.Doc.empty;
     memory = union_memory code data;
-  }
+  } |> List.return
 
   let create
       ?(finish=Fn.id) arch file ~code ~data () =
@@ -212,7 +230,7 @@ module Input = struct
       target = State.Toplevel.compute_target ~file spec;
       memory = union_memory code data;
       spec;
-    }
+    } |> List.return
 
   let loaders = String.Table.create ()
   let register_loader name loader =
@@ -243,32 +261,40 @@ module Input = struct
     target = compute_target ~file ?target (Image.spec img);
   }
 
-  let of_image ?target ?loader filename =
-    Image.create ?backend:loader filename >>| fun (img,warns) ->
-    List.iter warns ~f:(fun e -> warning "%a" Error.pp e);
-    let spec = Image.spec img in
-    Signal.send Info.got_img img;
-    let finish proj = {
-      proj with
-      storage = Dict.set proj.storage Image.specification spec;
-      program =
-        Lazy.map proj.program ~f:(fun prog ->
-            Term.map sub_t prog ~f:(fun sub ->
+  let dedup xs =
+    List.rev @@ fst @@
+    List.fold xs ~init:([], String.Set.empty) ~f:(fun (xs, mems) x ->
+        if Set.mem mems x then (xs, mems)
+        else (x :: xs, Set.add mems x))
+
+  let of_image ?target ?loader ?(libraries = []) main =
+    List.map (main :: dedup libraries) ~f:(fun filename ->
+        Image.create ?backend:loader filename >>| fun (img,warns) ->
+        List.iter warns ~f:(fun e -> warning "%a" Error.pp e);
+        let spec = Image.spec img in
+        Signal.send Info.got_img img;
+        let finish proj = {
+          proj with
+          storage = Dict.set proj.storage Image.specification spec;
+          program =
+            Term.map sub_t proj.program ~f:(fun sub ->
                 match Term.get_attr sub address with
                 | Some a when Addr.equal a (Image.entry_point img) ->
                   Term.set_attr sub Sub.entry_point ()
-                | _ -> sub))
-    } in
-    result_of_image ?target finish filename img
+                | _ -> sub)
+        } in
+        result_of_image ?target finish filename img) |>
+    Or_error.all
 
-  let from_image ?target ?loader filename () =
-    of_image ?target ?loader filename |> ok_exn
+  let from_image ?target ?loader ?(libraries = []) main () =
+    of_image ?target ?loader main ~libraries |> ok_exn
 
-  let load ?target ?loader filename = match loader with
-    | None -> from_image ?target filename
+  let load ?target ?loader ?(libraries = []) main = match loader with
+    | None -> from_image ?target main ~libraries
     | Some name -> match Hashtbl.find loaders name with
-      | None -> from_image ?target ?loader filename
-      | Some load -> load filename
+      | None -> from_image ?target ?loader main ~libraries
+      | Some load -> fun () ->
+        List.bind (main :: dedup libraries) ~f:(Fn.flip load ())
 
   let file ?loader ~filename = load ?loader filename
 
@@ -293,7 +319,7 @@ module Input = struct
       file = filename; finish = Fn.id; spec;
       target;
       memory = code
-    }
+    } |> List.return
 
   let binary ?base arch ~filename =
     raw ?base arch (Bap_fileutils.readfile filename)
@@ -350,28 +376,84 @@ let set_package package = match package with
   | None -> KB.return ()
   | Some pkg -> KB.Symbol.set_package pkg
 
-let state {state} = state
-
 let unused_options =
   List.iter ~f:(Option.iter ~f:(fun name ->
       warning "Project.create parameter %S is deprecated, \
                please consult the documentation for the proper \
                alternative" name))
 
-let empty target = {
+let empty_unit target = {
+  spec = Ogre.Doc.empty;
   arch = `unknown;
   target;
-  spec = Ogre.Doc.empty;
   state = State.empty;
+  disasm = Disasm.create Graphs.Cfg.empty;
   memory = Memmap.empty;
+  symbols = Symtab.empty;
+}
+
+let empty target = {
+  main = empty_unit target;
+  libraries = [];
   storage = Dict.empty;
-  program = lazy (Program.create ());
-  symbols = lazy Symtab.empty;
-  disasm = lazy (Disasm.create Graphs.Cfg.empty);
-  passes = []
+  program = Program.create ();
+  passes = [];
 }
 
 let (=?) name = Option.map ~f:(fun _ -> name)
+
+let compute_unit ?package ?state input =
+  let open KB.Syntax in
+  let compute_target target spec =
+    if Theory.Target.is_unknown target
+    then target_of_spec spec
+    else !!target in
+  let {Input.arch; data; code; file; spec; target; memory; _} = input in
+  Signal.send Info.got_file file;
+  Signal.send Info.got_arch arch;
+  Signal.send Info.got_data data;
+  Signal.send Info.got_code code;
+  Signal.send Info.got_spec spec;
+  let package = Option.value package ~default:file in
+  KB.Symbol.in_package package @@ fun () ->
+  Theory.instance () >>= fun theory ->
+  Theory.with_current theory @@ fun () ->
+  compute_target target spec >>= fun target ->
+  Theory.Unit.for_file file >>= fun unit ->
+  let* state = match state with
+    | Some state -> !!state
+    | None ->
+      with_filename spec target code memory file @@ fun () ->
+      KB.collect State.slot unit >>= fun state ->
+      if KB.Domain.is_empty (KB.Slot.domain State.slot) state
+      then
+        Memmap.to_sequence code |> Seq.to_list_rev |>
+        KB.List.fold ~init:State.empty ~f:(fun k (mem,_) ->
+            State.disassemble k mem) >>=
+        State.partition >>= fun state ->
+        KB.provide State.slot unit state >>| fun () ->
+        state
+      else !!state in
+  State.cfg state >>= fun cfg ->
+  State.symbols state >>= fun symbols ->
+  Program.KB.lift symbols >>| fun prog ->
+  let prog = Term.map sub_t prog ~f:(fun sub ->
+      if Term.has_attr sub Bap_attributes.address then
+        Term.set_attr sub Bap_attributes.filename file
+      else sub) in
+  let disasm = Disasm.create cfg in
+  {spec; arch; target; state; disasm; memory; symbols}, prog, unit
+
+let compute_units ?package ?state main libs =
+  let open KB.Syntax in
+  compute_unit main ?package ?state >>= fun (main, prog, _) ->
+  KB.List.map libs ~f:compute_unit >>= fun libs ->
+  let prog, libs =
+    List.fold libs ~init:(prog, []) ~f:(fun (p, l) (info, prog, unit) ->
+        Term.enum sub_t prog |> Seq.fold ~init:p ~f:(Term.append sub_t),
+        {unit; info} :: l) in
+  set_package package >>| fun () ->
+  main, List.rev libs, prog
 
 let create
     ?package
@@ -388,51 +470,21 @@ let create
       "brancher" =? p2;
       "symbolizer" =? p3;
       "rooter" =? p4;
-      "rooter" =? p5;
+      "reconstructor" =? p5;
     ];
-    let {Input.arch; data; code; file; spec; finish; target; memory} =
-      read () in
-    Signal.send Info.got_file file;
-    Signal.send Info.got_arch arch;
-    Signal.send Info.got_data data;
-    Signal.send Info.got_code code;
-    Signal.send Info.got_spec spec;
-    let run k =
-      let k = KB.(set_package package >>= fun () ->
-                  Theory.instance () >>= fun theory ->
-                  Theory.with_current theory @@ fun () ->
-                  k) in
-      State.Toplevel.run spec target ~code ~memory file k in
-    let state = match state with
-      | Some state -> state
-      | None ->
-        let compute_state =
-          let open KB.Syntax in
-          Theory.Unit.for_file file >>= fun unit ->
-          KB.collect State.slot unit >>= fun state ->
-          if KB.Domain.is_empty (KB.Slot.domain State.slot) state
-          then
-            Memmap.to_sequence code |> Seq.to_list_rev |>
-            KB.List.fold ~init:State.empty ~f:(fun k (mem,_) ->
-                State.disassemble k mem) >>=
-            State.partition >>= fun state ->
-            KB.provide State.slot unit state >>| fun () ->
-            state
-          else !!state in
-        run compute_state in
-    let cfg = lazy (run @@ State.cfg state) in
-    let symbols = lazy (run @@ State.symbols state) in
-    Result.return @@ finish {
-      state;
-      spec;
-      disasm = Lazy.(cfg >>| Disasm.create);
-      program = Lazy.(symbols >>| Program.lift) ;
-      symbols;
-      arch; memory;
-      storage = Dict.set Dict.empty filename file;
-      passes=[];
-      target;
-    }
+    match read () with
+    | [] -> assert false
+    | main_in :: libs_in ->
+      let result = Toplevel.var "disassembly-result" in
+      Toplevel.put result @@ compute_units main_in libs_in ?package ?state;
+      let main, libraries, program = Toplevel.get result in
+      Result.return @@ main_in.finish {
+        main;
+        libraries;
+        program;
+        storage = Dict.set Dict.empty filename main_in.file;
+        passes=[];
+      }
   with
   | Toplevel.Conflict err ->
     let open Error.Internal_repr in
@@ -444,15 +496,11 @@ let create
 
 let specification = spec
 
-let symbols {symbols} = Lazy.force symbols
-let disasm {disasm} = Lazy.force disasm
-let program {program} = Lazy.force program
+let with_symbols p x = {p with main = {p.main with symbols = x}}
+let with_program p x = {p with program = x}
+let map_program p ~f = {p with program = f p.program}
 
-let with_symbols p x = {p with symbols = lazy x}
-let with_program p x = {p with program = lazy x}
-let map_program p ~f = {p with program = Lazy.map p.program ~f}
-
-let with_memory = Field.fset Fields.memory
+let with_memory p memory = {p with main = {p.main with memory}}
 let with_storage = Field.fset Fields.storage
 
 let restore_state _ =
@@ -492,11 +540,14 @@ let addr which mem =
 
 let tag_memory project mem tag x =
   {project with
-   memory = Memmap.add project.memory mem (Value.create tag x) }
+   main = {
+     project.main with
+     memory = Memmap.add project.main.memory mem (Value.create tag x)
+   }}
 
 let substitute project mem tag value : t =
   let find_tag tag mem =
-    Memmap.dominators project.memory mem |>
+    Memmap.dominators (memory project) mem |>
     Seq.find_map ~f:(fun (mem,v) -> match Value.get tag v with
         | Some reg -> Some (mem,reg)
         | None -> None) in
@@ -523,7 +574,7 @@ let substitute project mem tag value : t =
   let bil insn = asprintf "%a" Bil.pp (Insn.bil insn) in
   let subst_disasm mem out =
     let inj = match out with `asm -> asm | `bil -> bil in
-    match Disasm.of_mem project.arch mem with
+    match Disasm.of_mem (arch project) mem with
     | Error _er -> "<failed to disassemble memory region>"
     | Ok dis ->
       Disasm.insns dis |>

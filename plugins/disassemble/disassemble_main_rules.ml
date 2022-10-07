@@ -172,13 +172,15 @@ module Symbols = struct
           })
       ~unmatched:(fun reason t -> match reason with
           | Non_injective_fwd (addrs,name) ->
-            info "the symbol %s has ambiguous addresses: %a@\n"
+            info "the symbol %s has ambiguous addresses: %a"
               name pp_addrs addrs;
-            t
+            List.fold addrs ~init:t ~f:(fun t addr ->
+                add_alias t addr name)
           | Non_injective_bwd (names,addr) ->
-            info "the symbol at %a has ambiguous names: %a@\n"
+            info "the symbol at %a has ambiguous names: %a"
               Bitvec.pp addr pp_names names;
-            t)
+            List.fold names ~init:t ~f:(fun t name ->
+                add_alias t addr name))
 
   let build_table t spec = match Ogre.eval (from_spec t) spec with
     | Ok x -> x
@@ -230,19 +232,23 @@ module Symbols = struct
     KB.Rule.(begin
         declare "provides aliases" |>
         require Image.Spec.slot |>
-        provide Theory.Label.possible_name |>
+        provide Theory.Label.aliases |>
         comment "computes symbol aliases (names) from spec";
       end);
     KB.promise Theory.Label.aliases @@ fun obj ->
     let* unit = KB.collect Theory.Label.unit obj in
     let* addr = KB.collect Theory.Label.addr obj in
+    let* name = KB.resolve Theory.Label.possible_name obj in
+    let init = match name with
+      | Some name -> Set.singleton (module String) name
+      | None -> Set.empty (module String) in
     match unit,addr with
-    | None,_|_,None -> KB.return (Set.empty (module String))
+    | None,_|_,None -> KB.return init
     | Some unit, Some addr ->
       let+ {aliases} = KB.collect slot unit in
       match Map.find aliases addr with
-      | None -> Set.empty (module String)
-      | Some aliases -> aliases
+      | Some aliases -> Set.union init aliases
+      | None -> init
 
   let init () =
     promise_table ();
