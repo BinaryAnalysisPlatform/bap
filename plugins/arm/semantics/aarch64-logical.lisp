@@ -70,14 +70,17 @@
   (make-eBFM setw cast-signed xd xr ir is))
 
 (defmacro BFM (set rd rn r s)
-  (if (>= s r)
-      (set rd (concat (cast-high (+1 (- s r)) rd)
-                      (if (= r 0)
-                          (cast-low (+1 s) rn)
-                        (extract s r rn))))
-    (set rd (concat
-             (cast-low (+1 s) rn)
-             (cast-low r rd)))))
+  (let ((size (word-width rd)))
+    (if (>= s r)
+      (set rd (concat 
+               (cast-high (- size (+1 (- s r))) rd)
+               (if (= r 0)
+                 (cast-low (+1 s) rn) 
+                 (extract s r rn))))
+      (set rd (concat
+               (cast-high (- r s) rd)
+               (cast-low (+1 s) rn)
+               (cast-low (-1 (- size r)) rd))))))
 
 (defun BFMXri (_ xd xr ir is)
   (BFM set$ xd xr ir is))
