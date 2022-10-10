@@ -46,16 +46,12 @@
 (defmacro make-eBFM (set cast xd xr ir is)
   "(make-BFM  cast xd xr ir is) implements bitfield move instructions
    accepting either a W or X register, with cast being an unsigned or signed cast."
-  (let ((rs (word)))
+  (let ((rs (word-width xd)))
     (if (< is ir)
-        (if (and (/= is (- rs 1)) (= (+ is 1) ir))
-            (set xd (lshift xr (- rs ir)))
-          (set xd (lshift
-                   (cast rs (extract is 0 xr))
-                   (- rs ir))))
-      (if (= is (- rs 1))
-          (set xd (rshift xr ir))
-        (set xd (cast rs (extract is ir xr)))))))
+        (set xd (lshift
+                 (cast rs (cast-low (+1 is) xr))
+                 (- rs ir)))
+      (set xd (cast rs (extract is ir xr))))))
 
 (defun UBFMXri (xd xr ir is)
   (make-eBFM set$ cast-unsigned xd xr ir is))
