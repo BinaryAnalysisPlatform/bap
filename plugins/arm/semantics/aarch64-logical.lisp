@@ -46,16 +46,12 @@
 (defmacro make-eBFM (set cast xd xr ir is)
   "(make-BFM  cast xd xr ir is) implements bitfield move instructions
    accepting either a W or X register, with cast being an unsigned or signed cast."
-  (let ((rs (word)))
+  (let ((rs (word-width xd)))
     (if (< is ir)
-        (if (and (/= is (- rs 1)) (= (+ is 1) ir))
-            (set xd (lshift xr (- rs ir)))
-          (set xd (lshift
-                   (cast rs (extract is 0 xr))
-                   (- rs ir))))
-      (if (= is (- rs 1))
-          (set xd (rshift xr ir))
-        (set xd (cast rs (extract is ir xr)))))))
+        (set xd (lshift
+                 (cast rs (cast-low (+1 is) xr))
+                 (- rs ir)))
+      (set xd (cast rs (extract is ir xr))))))
 
 (defun UBFMXri (xd xr ir is)
   (make-eBFM set$ cast-unsigned xd xr ir is))
@@ -70,14 +66,17 @@
   (make-eBFM setw cast-signed xd xr ir is))
 
 (defmacro BFM (set rd rn r s)
-  (if (>= s r)
-      (set rd (concat (cast-high (+1 (- s r)) rd)
-                      (if (= r 0)
-                          (cast-low (+1 s) rn)
-                        (extract s r rn))))
-    (set rd (concat
-             (cast-low (+1 s) rn)
-             (cast-low r rd)))))
+  (let ((size (word-width rd)))
+    (if (>= s r)
+      (set rd (concat 
+               (cast-high (- size (+1 (- s r))) rd)
+               (if (= r 0)
+                 (cast-low (+1 s) rn) 
+                 (extract s r rn))))
+      (set rd (concat
+               (cast-high (- r s) rd)
+               (cast-low (+1 s) rn)
+               (cast-low (-1 (- size r)) rd))))))
 
 (defun BFMXri (_ xd xr ir is)
   (BFM set$ xd xr ir is))
