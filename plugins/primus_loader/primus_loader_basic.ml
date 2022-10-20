@@ -168,7 +168,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     let total_size =
       bytes_in_addr +    (* argc *)
       table_size argv + table_size envp +
-      frame_size argv + table_size envp in
+      frame_size argv + frame_size envp in
     let argv_frame_ptr =
       bytes_in_addr +
       table_size  argv + table_size envp |>
