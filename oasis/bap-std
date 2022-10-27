@@ -119,7 +119,7 @@ Library bap_image
   Build$:        flag(everything) || flag(bap_std)
   FindlibParent: bap
   FindlibName:   image
-  BuildDepends:  bap.types, ogre, mmap, monads, core_kernel, regular,
+  BuildDepends:  bap.types, ogre, mmap, monads, core_kernel, regular, bitvec,
                  bap-core-theory, bap-knowledge, ppx_bap, core_kernel.caml_unix
 
   InternalModules:
