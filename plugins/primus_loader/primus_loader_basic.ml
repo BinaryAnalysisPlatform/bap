@@ -81,7 +81,11 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
   let get_segmentations proj =
     match Project.get proj Image.specification with
     | None -> Ok Seq.empty
-    | Some spec -> Ogre.eval segmentations spec
+    | Some spec ->
+      let libs = Project.libraries proj in
+      let specs = spec :: List.map libs ~f:Project.Library.specification in
+      List.map specs ~f:(Ogre.eval segmentations) |> Result.all |>
+      Result.map ~f:(Fn.compose Seq.concat Seq.of_list)
 
   let load_segments () =
     Machine.project >>= fun proj ->
@@ -95,31 +99,72 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
             make_word addr >>= fun lower ->
             make_word Int64.(size-1L) >>= fun diff ->
             let upper = Word.(lower + diff) in
+            info "loading segment [%a, %a]" Addr.pp lower Addr.pp upper;
             Mem.add_region () ~lower ~upper
               ~readonly:(not w)
               ~executable:x
               ~generator:(Generator.static 0) >>| fun () ->
             Addr.max endp Addr.(succ upper))
 
-  let map_segments () =
-    Machine.project >>= fun proj ->
-    make_word 0L >>= fun null ->
-    Memmap.to_sequence (Project.memory proj) |>
-    Machine.Seq.fold ~init:null ~f:(fun endp (mem,tag) ->
+  let one_memmap m ~init =
+    Memmap.to_sequence m |>
+    Machine.Seq.fold ~init ~f:(fun endp (mem,tag) ->
         match Value.get Image.segment tag with
         | None -> Machine.return endp
         | Some seg ->
           let alloc =
             if Image.Segment.is_executable seg
             then Mem.add_text else Mem.add_data in
-          let maddr = Memory.max_addr mem in
+          let lower = Memory.min_addr mem in
+          let upper = Memory.max_addr mem in
+          info "mapping segment [%a, %a]" Addr.pp lower Addr.pp upper;
           let update_ends = match Image.Segment.name seg with
-            | ".text" -> set_word "etext" maddr
-            | ".data" -> set_word "edata" maddr
+            | ".text" -> set_word "etext" upper
+            | ".data" -> set_word "edata" upper
             | _ -> Machine.return () in
           alloc mem >>= fun () ->
           update_ends >>| fun ()  ->
-          Addr.max endp maddr)
+          Addr.max endp upper)
+
+  let map_segments () =
+    Machine.project >>= fun proj ->
+    make_word 0L >>= fun null ->
+    one_memmap ~init:null (Project.memory proj) >>= fun init ->
+    Project.libraries proj |> List.map ~f:Project.Library.memory |>
+    Machine.List.fold ~init ~f:(fun init m -> one_memmap m ~init)
+
+  let save_word endian word ptr =
+    Word.enum_bytes word endian |>
+    Machine.Seq.fold ~init:ptr ~f:(fun ptr byte ->
+        Mem.store ptr byte >>| fun () ->
+        Word.succ ptr)
+
+  let relocations = Ogre.(collect Query.(begin
+      select @@ from Image.Scheme.relocation
+    end))
+
+  let endian_of_target target =
+    let endianness = Theory.Target.endianness target in
+    if Theory.Endianness.(endianness = eb)
+    then BigEndian else LittleEndian
+
+  let apply_relocs_one target doc =
+    match Ogre.eval relocations doc with
+    | Error _ -> !!() | Ok relocations ->
+      let endian = endian_of_target target in
+      let width = Theory.Target.code_addr_size target in
+      Machine.Seq.iter relocations ~f:(fun (fixup, addr) ->
+          let fixup = Addr.of_int64 ~width fixup in
+          let addr = Word.of_int64 ~width addr in
+          save_word endian addr fixup >>| ignore)
+
+  let apply_relocs () =
+    Machine.get () >>= fun project ->
+    let target = Project.target project in
+    let libs = Project.libraries project in
+    let spec = Project.specification project in
+    let specs = spec :: List.map libs ~f:Project.Library.specification in
+    Machine.List.iter specs ~f:(apply_relocs_one target)
 
   let bytes_in_array =
     Array.fold ~init:0 ~f:(fun sum str ->
@@ -141,12 +186,6 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
         (ptr,ptr'::ptrs)) >>| fun (ptr,ptrs) ->
     ptr, List.rev ptrs
 
-  let save_word endian word ptr =
-    Word.enum_bytes word endian |>
-    Machine.Seq.fold ~init:ptr ~f:(fun ptr byte ->
-        Mem.store ptr byte >>| fun () ->
-        Word.succ ptr)
-
   let save_table endian addrs ptr =
     Machine.List.fold addrs ~init:ptr ~f:(fun ptr addr ->
         save_word endian addr ptr)
@@ -156,8 +195,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     Machine.args >>= fun argv ->
     Machine.envp >>= fun envp ->
     make_word stack_base >>= fun sp ->
-    let endian = if Theory.Endianness.(Theory.Target.endianness target = le)
-      then LittleEndian else BigEndian in
+    let endian = endian_of_target target in
     let width = Theory.Target.code_addr_size target in
     let argc = Array.length argv |>
                Word.of_int ~width in
@@ -215,6 +253,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     setup_main_frame () >>= fun () ->
     load_segments () >>= fun e1 ->
     map_segments () >>= fun e2 ->
+    apply_relocs () >>= fun () ->
     let endp = Addr.max e1 e2 in
     set_word "posix:endp" endp >>= fun () ->
     set_word "posix:brk"  endp >>= fun () ->
