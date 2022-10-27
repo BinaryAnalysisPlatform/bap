@@ -5738,17 +5738,34 @@ module Std : sig
         - [Error err] - a file was corrupted, according to the loader.
     *)
     module type Loader = sig
-
       (** [from_file name] loads a file with the given [name]. *)
       val from_file : string -> Ogre.doc option Or_error.t
 
       (** [from_data data] loads image from the specified array of bytes.  *)
       val from_data : Bigstring.t -> Ogre.doc option Or_error.t
-
     end
 
     (** [register_loader ~name backend] registers new loader. *)
     val register_loader : name:string -> (module Loader) -> unit
+
+    (** Interfaces for working with the Knowledge Base.
+
+        @since 2.6.0
+    *)
+    module KB : sig
+      (** Same as [Loader], but parameterized with the Knowledge monad.  *)
+      module type Loader = sig
+        (** [from_file name] loads a file with the given [name]. *)
+        val from_file : string -> Ogre.doc option knowledge
+
+        (** [from_data data] loads image from the specified array of bytes.  *)
+        val from_data : Bigstring.t -> Ogre.doc option knowledge
+      end
+
+      (** [register_loader ~name backend] registers a new loader that is
+          parameterized with the Knowledge monad. *)
+      val register_loader : name:string -> (module Loader) -> unit
+    end
 
     (** [find_loader name] lookups the loader registered under the
         given [name].

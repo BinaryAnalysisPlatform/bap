@@ -81,6 +81,14 @@ val register_loader : name:string -> (module Loader) -> unit
 val find_loader : string -> (module Loader) option
 val available_backends : unit -> string list
 
+module KB : sig
+  module type Loader = sig
+    val from_file : string -> Ogre.doc option KB.t
+    val from_data : Bigstring.t -> Ogre.doc option KB.t
+  end
+
+  val register_loader : name:string -> (module Loader) -> unit
+end
 
 module Scheme : sig
   open Ogre.Type
