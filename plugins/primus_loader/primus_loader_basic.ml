@@ -148,7 +148,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     if Theory.Endianness.(endianness = eb)
     then BigEndian else LittleEndian
 
-  let apply_relocs_one target doc =
+  let fixup_relocs_one target doc =
     match Ogre.eval relocations doc with
     | Error _ -> !!() | Ok relocations ->
       let endian = endian_of_target target in
@@ -158,13 +158,13 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
           let addr = Word.of_int64 ~width addr in
           save_word endian addr fixup >>| ignore)
 
-  let apply_relocs () =
+  let fixup_relocs () =
     Machine.get () >>= fun project ->
     let target = Project.target project in
     let libs = Project.libraries project in
     let spec = Project.specification project in
     let specs = spec :: List.map libs ~f:Project.Library.specification in
-    Machine.List.iter specs ~f:(apply_relocs_one target)
+    Machine.List.iter specs ~f:(fixup_relocs_one target)
 
   let bytes_in_array =
     Array.fold ~init:0 ~f:(fun sum str ->
@@ -249,14 +249,21 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     Machine.Seq.iter ~f:(fun (name,addr) -> set_word name addr)
 
   let init () =
+    info "setting up stack";
     setup_stack () >>= fun () ->
+    info "setting up main frame";
     setup_main_frame () >>= fun () ->
+    info "loading segments";
     load_segments () >>= fun e1 ->
+    info "mapping segments";
     map_segments () >>= fun e2 ->
-    apply_relocs () >>= fun () ->
+    info "fixing up relocations";
+    fixup_relocs () >>= fun () ->
+    info "setting up registers";
     let endp = Addr.max e1 e2 in
     set_word "posix:endp" endp >>= fun () ->
     set_word "posix:brk"  endp >>= fun () ->
     setup_registers () >>= fun () ->
+    info "initializing names";
     init_names ()
 end
