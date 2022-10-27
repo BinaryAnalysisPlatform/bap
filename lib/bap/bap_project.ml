@@ -267,10 +267,47 @@ module Input = struct
         if Set.mem mems x then (xs, mems)
         else (x :: xs, Set.add mems x))
 
+  let provide_bias = Toplevel.var "provide-bias"
+  let provide_bias file = function
+    | None -> Ok ()
+    | Some bias -> try
+        let open KB.Syntax in
+        let bias = Word.to_bitvec bias in
+        Toplevel.put provide_bias begin
+          Theory.Unit.for_file file >>= fun unit ->
+          KB.collect Theory.Unit.bias unit >>= function
+          | Some _ -> !!()
+          | None ->
+            info "providing bias %a to unit %s" Bitvec.pp bias file;
+            KB.provide Theory.Unit.bias unit @@ Some bias
+        end;
+        Ok (Toplevel.get provide_bias)
+      with Toplevel.Conflict c ->
+        Or_error.errorf "%s: %s" file @@ KB.Conflict.to_string c
+
+  let page_align_up x =
+    let width = Addr.bitwidth x in
+    let align = Word.of_int ~width 0xFFF in
+    Addr.((x + align) land lnot align)
+
+  let next_bias ?bias img =
+    let memmap = Image.memory img in
+    match Memmap.(min_addr memmap, max_addr memmap) with
+    | None, _ | _, None -> bias
+    | Some lo, Some hi ->
+      Option.value_map bias ~default:hi ~f:(fun bias ->
+          let size = Addr.((hi - lo) ++ 1) in
+          Addr.(bias + size)) |>
+      page_align_up |> Option.some
+
   let of_image ?target ?loader ?(libraries = []) main =
-    List.map (main :: dedup libraries) ~f:(fun filename ->
-        Image.create ?backend:loader filename >>| fun (img,warns) ->
+    let rec aux ?bias acc = function
+      | [] -> Ok (List.rev acc)
+      | filename :: rest ->
+        provide_bias filename bias >>= fun () ->
+        Image.create ?backend:loader filename >>= fun (img,warns) ->
         List.iter warns ~f:(fun e -> warning "%a" Error.pp e);
+        let bias = next_bias img ?bias in
         let spec = Image.spec img in
         Signal.send Info.got_img img;
         let finish proj = {
@@ -283,8 +320,9 @@ module Input = struct
                   Term.set_attr sub Sub.entry_point ()
                 | _ -> sub)
         } in
-        result_of_image ?target finish filename img) |>
-    Or_error.all
+        let res = result_of_image ?target finish filename img in
+        aux (res :: acc) rest ?bias in
+    aux [] @@ dedup (main :: libraries)
 
   let from_image ?target ?loader ?(libraries = []) main () =
     of_image ?target ?loader main ~libraries |> ok_exn
