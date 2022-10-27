@@ -238,6 +238,7 @@ void emit_relocations(const ELFObjectFile<T> &obj, ogre_doc &s) {
             if (sym != prim::end_symbols(obj)) {
                 auto typ = prim::symbol_type(*sym);
                 if (typ && (*typ == SymbolRef::ST_Function ||
+                            *typ == SymbolRef::ST_Data ||
                             *typ == SymbolRef::ST_Unknown)) {
                     uint64_t raddr = prim::relocation_offset(rel);
                     if (auto addr = prim::symbol_address(*sym))
