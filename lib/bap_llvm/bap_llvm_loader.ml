@@ -142,7 +142,7 @@ let provide_if cond code =
 let unit_bias file =
   let open KB.Syntax in
   match file with
-  | None -> !!None
+  | None | Some "" -> !!None
   | Some file ->
     Theory.Unit.for_file file >>=
     KB.collect Theory.Unit.bias >>|
