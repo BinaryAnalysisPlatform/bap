@@ -245,7 +245,7 @@ void emit_relocations(const ELFObjectFile<T> &obj, ogre_doc &s) {
                             *typ == SymbolRef::ST_Data ||
                             *typ == SymbolRef::ST_Unknown)) {
                     if (auto addr = prim::symbol_address(*sym))
-                      if (*addr) s.entry("llvm:relocation") << raddr << *addr;
+                        if (*addr) s.entry("llvm:relocation") << raddr << *addr;
                     if (auto name = prim::symbol_name(*sym))
                         if (!name->empty())
                             s.entry("llvm:name-reference") << raddr << *name;
