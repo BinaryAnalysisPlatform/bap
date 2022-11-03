@@ -4,12 +4,14 @@
 #include <algorithm>
 #include <iostream>
 #include <iomanip>
+#include <regex>
 
 #include <llvm/Object/ELFObjectFile.h>
 
 #include "llvm_error_or.hpp"
 #include "llvm_loader_utils.hpp"
 #include "llvm_primitives.hpp"
+#include "llvm/Object/ELF.h"
 
 namespace loader {
 namespace elf_loader {
@@ -232,22 +234,25 @@ void emit_symbol_entries(const ELFObjectFile<T> &obj, ogre_doc &s) {
 
 template <typename T>
 void emit_relocations(const ELFObjectFile<T> &obj, ogre_doc &s) {
+    auto rel_reloc = obj.getELFFile()->getRelativeRelocationType();
     for (auto sec : obj.sections()) {
         for (auto rel : sec.relocations()) {
             auto sym = rel.getSymbol();
+            uint64_t raddr = prim::relocation_offset(rel);
             if (sym != prim::end_symbols(obj)) {
                 auto typ = prim::symbol_type(*sym);
                 if (typ && (*typ == SymbolRef::ST_Function ||
                             *typ == SymbolRef::ST_Data ||
                             *typ == SymbolRef::ST_Unknown)) {
-                    uint64_t raddr = prim::relocation_offset(rel);
                     if (auto addr = prim::symbol_address(*sym))
-                        if (*addr) s.entry("llvm:relocation") << raddr << *addr;
+                      if (*addr) s.entry("llvm:relocation") << raddr << *addr;
                     if (auto name = prim::symbol_name(*sym))
                         if (!name->empty())
                             s.entry("llvm:name-reference") << raddr << *name;
                 }
             }
+            auto typ = prim::relocation_type(rel);
+            if (typ == rel_reloc) s.entry("llvm:relative-relocation") << raddr;
         }
     }
 }

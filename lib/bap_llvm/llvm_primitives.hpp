@@ -43,6 +43,7 @@ error_or<uint64_t> symbol_size(const SymbolRef &s);
 
 // relocation
 uint64_t relocation_offset(const RelocationRef &rel);
+uint64_t relocation_type(const RelocationRef &rel);
 
 typedef std::vector<std::pair<SymbolRef, uint64_t>> symbols_sizes;
 

@@ -5963,6 +5963,13 @@ module Std : sig
       val relocation :
         (int64 * addr, (addr -> addr -> 'a) -> 'a) Ogre.attribute
 
+      (** [relative_relocation fixup] a value referenced at the code has
+          address [fixup] and refers to a pointer [p], which is relocated
+          to [p + base_address]. *)
+      val relative_relocation :
+        (addr, (addr -> 'a) -> 'a) Ogre.attribute
+
+
       (** [external_reference addr name] a piece of code at the
           specified address [addr] references an external symbol with
           the given [name]. *)

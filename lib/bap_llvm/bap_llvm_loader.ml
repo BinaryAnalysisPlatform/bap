@@ -56,6 +56,9 @@ module LLVM = struct
   let relocation () =
     Ogre.declare ~name:"llvm:relocation" (scheme at $ addr) Tuple.T2.create
 
+  let relative_relocation () =
+    Ogre.declare ~name:"llvm:relative-relocation" (scheme at) Fn.id
+
   (** an external symbols with the given name is referenced ad *)
   let name_reference () =
     Ogre.declare ~name:"llvm:name-reference" (scheme at $ name) Tuple.T2.create
@@ -196,6 +199,11 @@ let provide_generic_sections =
 let provide_relocations =
   iter_rows LLVM.relocation @@ fun bias (addr, dest) -> [
     Ogre.provide relocation Int64.(addr + bias) Int64.(dest + bias)
+  ]
+
+let provide_relative_relocations =
+  iter_rows LLVM.relative_relocation @@ fun bias addr -> [
+    Ogre.provide relative_relocation Int64.(addr + bias)
   ]
 
 let provide_name_references =
@@ -414,6 +422,7 @@ let translate ?file data user_base =
     ];
     provide_symbols;
     provide_relocations;
+    provide_relative_relocations;
     provide_name_references;
   ]
 

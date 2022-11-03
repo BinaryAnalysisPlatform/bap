@@ -139,24 +139,54 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
         Mem.store ptr byte >>| fun () ->
         Word.succ ptr)
 
-  let relocations = Ogre.(collect Query.(begin
+  let read_word endian ptr =
+    let rec aux a s =
+      Mem.load a >>= fun v ->
+      if s <= 8 then Machine.return v
+      else aux (Word.succ a) (s - 8) >>| fun u -> match endian with
+        | LittleEndian -> Word.concat u v
+        | BigEndian -> Word.concat v u in
+    aux ptr @@ Word.bitwidth ptr
+
+  let or_empty doc x =
+    Ogre.eval x doc |> Result.ok |> Option.value ~default:Seq.empty
+
+  let relocations doc = Ogre.(collect Query.(begin
       select @@ from Image.Scheme.relocation
-    end))
+    end)) |> or_empty doc
+
+  let base_address = Ogre.require Image.Scheme.base_address
+
+  let relative_relocations doc endian width =
+    match Ogre.eval base_address doc with
+    | Error _ -> !!Seq.empty
+    | Ok base ->
+      let rels = Ogre.(collect Query.(begin
+          select @@ from Image.Scheme.relative_relocation
+        end)) |> or_empty doc in
+      Machine.Seq.map rels ~f:(fun addr ->
+          read_word endian (Word.of_int64 ~width addr) >>| fun v ->
+          addr, Int64.(base + Word.to_int64_exn v))
 
   let endian_of_target target =
     let endianness = Theory.Target.endianness target in
     if Theory.Endianness.(endianness = eb)
     then BigEndian else LittleEndian
 
-  let fixup_relocs_one target doc =
-    match Ogre.eval relocations doc with
-    | Error _ -> !!() | Ok relocations ->
-      let endian = endian_of_target target in
-      let width = Theory.Target.code_addr_size target in
-      Machine.Seq.iter relocations ~f:(fun (fixup, addr) ->
-          let fixup = Addr.of_int64 ~width fixup in
-          let addr = Word.of_int64 ~width addr in
-          save_word endian addr fixup >>| ignore)
+  let fixup_one_reloc endian width (fixup, addr) =
+    let fixup = Addr.of_int64 ~width fixup in
+    let addr = Word.of_int64 ~width addr in
+    info "writing %a for relocation %a" Word.pp addr Addr.pp fixup;
+    save_word endian addr fixup >>| ignore
+
+  let fixup_relocs_of_doc target doc =
+    let endian = endian_of_target target in
+    let width = Theory.Target.code_addr_size target in
+    let rels = relocations doc in
+    relative_relocations doc endian width >>= fun rrels ->
+    let f = fixup_one_reloc endian width in
+    Machine.Seq.iter rels ~f >>= fun () ->
+    Machine.Seq.iter rrels ~f
 
   let fixup_relocs () =
     Machine.get () >>= fun project ->
@@ -164,7 +194,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     let libs = Project.libraries project in
     let spec = Project.specification project in
     let specs = spec :: List.map libs ~f:Project.Library.specification in
-    Machine.List.iter specs ~f:(fixup_relocs_one target)
+    Machine.List.iter specs ~f:(fixup_relocs_of_doc target)
 
   let bytes_in_array =
     Array.fold ~init:0 ~f:(fun sum str ->

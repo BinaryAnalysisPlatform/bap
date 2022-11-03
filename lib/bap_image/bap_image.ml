@@ -171,6 +171,8 @@ module Scheme = struct
 
   let relocation () =
     declare "relocation" (scheme fixup $ addr) Tuple.T2.create
+  let relative_relocation () =
+    declare "relative-relocation" (scheme fixup) Fn.id
   let external_reference () =
     declare "external-reference" (scheme addr $ name) Tuple.T2.create
   let base_address () = declare "base-address" (scheme addr) Fn.id

@@ -140,6 +140,9 @@ module Scheme : sig
   val relocation :
     (addr * addr, (addr -> addr -> 'a) -> 'a) Ogre.attribute
 
+  val relative_relocation :
+    (addr, (addr -> 'a) -> 'a) Ogre.attribute
+
   val external_reference :
     (addr * string, (addr -> string -> 'a) -> 'a) Ogre.attribute
 
