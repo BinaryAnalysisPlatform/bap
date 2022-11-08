@@ -163,7 +163,7 @@ module Main(Machine : Primus.Machine.S) = struct
         Returns nil if KEY was the last key in the dictionary.
         Could be used together with DICT-FIRST for iterating.|};
 
-      def "dict-length" (tuple [sym] @-> int) (module First)
+      def "dict-length" (tuple [sym] @-> int) (module Length)
         {|(dict-first DIC) is the total number of keys in DIC.|};
     ]
 end
