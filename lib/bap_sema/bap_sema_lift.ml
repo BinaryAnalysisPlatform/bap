@@ -434,12 +434,14 @@ let mangle_name addr tid name =
 
 let mangle_sub s =
   let tid = Term.tid s in
-  let addr = Term.get_attr s address in
+  let attrs = Term.attrs s in
+  let addr = Dict.find attrs address in
   let name = mangle_name addr tid (Ir_sub.name s) in
   set_name_if_possible tid name >>| fun () ->
-  Ir_sub.create () ~tid ~name
-    ~args:(Term.enum arg_t s |> Seq.to_list)
-    ~blks:(Term.enum blk_t s |> Seq.to_list)
+  let s = Ir_sub.create () ~tid ~name
+      ~args:(Term.enum arg_t s |> Seq.to_list)
+      ~blks:(Term.enum blk_t s |> Seq.to_list) in
+  Term.with_attrs s attrs
 
 let fix_names prog =
   let is_new tid name =
