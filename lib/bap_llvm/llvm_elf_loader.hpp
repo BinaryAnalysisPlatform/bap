@@ -250,9 +250,10 @@ void emit_relocations(const ELFObjectFile<T> &obj, ogre_doc &s) {
                         if (!name->empty())
                             s.entry("llvm:name-reference") << raddr << *name;
                 }
+            } else {
+                auto typ = prim::relocation_type(rel);
+                if (typ == rel_reloc) s.entry("llvm:relative-relocation") << raddr;
             }
-            auto typ = prim::relocation_type(rel);
-            if (typ == rel_reloc) s.entry("llvm:relative-relocation") << raddr;
         }
     }
 }
