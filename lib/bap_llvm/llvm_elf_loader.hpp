@@ -232,7 +232,11 @@ void emit_symbol_entries(const ELFObjectFile<T> &obj, ogre_doc &s) {
 
 template <typename T>
 void emit_relocations(const ELFObjectFile<T> &obj, ogre_doc &s) {
+#if LLVM_VERSION_MAJOR >= 12
+    auto rel_reloc = obj.getELFFile().getRelativeRelocationType();
+#else
     auto rel_reloc = obj.getELFFile()->getRelativeRelocationType();
+#endif
     for (auto sec : obj.sections()) {
         for (auto rel : sec.relocations()) {
             auto sym = rel.getSymbol();
