@@ -4,14 +4,12 @@
 #include <algorithm>
 #include <iostream>
 #include <iomanip>
-#include <regex>
 
 #include <llvm/Object/ELFObjectFile.h>
 
 #include "llvm_error_or.hpp"
 #include "llvm_loader_utils.hpp"
 #include "llvm_primitives.hpp"
-#include "llvm/Object/ELF.h"
 
 namespace loader {
 namespace elf_loader {
