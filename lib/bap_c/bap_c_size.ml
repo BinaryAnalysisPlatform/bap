@@ -16,6 +16,15 @@ let padding alignment offset =
   (align - offset mod align) mod align
 
 
+let max_enum_elt xs =
+  List.fold xs ~init:None ~f:(fun m (_,x) ->
+      match m,x with
+      | None,None -> Some 0L
+      | Some m, None -> Some Int64.(succ m)
+      | Some m, Some x -> Some Int64.(max m x)
+      | None,x -> x) |> function
+  | None -> 0L
+  | Some x -> x
 
 class base (m : model) = object(self)
   method integer (t : integer) : size =

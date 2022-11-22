@@ -18,10 +18,45 @@ module Endianness = struct
   let bi = declare ~package "bi"
 end
 
-module System = KB.Enum.Make()
-module Abi = KB.Enum.Make()
-module Fabi = KB.Enum.Make()
-module Filetype = KB.Enum.Make()
+module System = struct
+  include KB.Enum.Make()
+  let linux = declare ~package "linux"
+  let darwin = declare ~package "darwin"
+  let vxworks = declare ~package "vxworks"
+  let freebsd = declare ~package "freebsd"
+  let openbsd = declare ~package "openbsd"
+  let windows = declare ~package "windows"
+  let msdos = declare ~package "msdos"
+  let uefi = declare ~package "uefi"
+  let none = declare ~package "none"
+end
+
+module Abi = struct
+  include KB.Enum.Make()
+  let gnu = declare ~package "gnu"
+  let eabi = declare ~package "eabi"
+  let gnueabi = declare ~package "gnueabi"
+  let cdecl = declare ~package "cdecl"
+  let stdcall = declare ~package "stdcall"
+  let fastcall = declare ~package "fastcall"
+  let watcom = declare ~package "watcom"
+  let ms = declare ~package "ms"
+end
+
+module Fabi = struct
+  include KB.Enum.Make()
+  let hard = declare ~package "hf"
+  let soft = declare ~package "sf"
+end
+
+module Filetype = struct
+  include KB.Enum.Make()
+  let elf = declare ~package "elf"
+  let coff = declare ~package "coff"
+  let macho = declare ~package "macho"
+  let aout = declare ~package "aout"
+end
+
 module Role = struct
   include KB.Enum.Make()
   module Register = struct
@@ -65,23 +100,27 @@ end
 module Self = KB.Enum.Make()
 
 type t = Self.t [@@deriving bin_io, compare, sexp]
-type target = t
-type endianness = Endianness.t
+type target = t [@@deriving sexp_of]
+type endianness = Endianness.t [@@deriving sexp_of]
 type role = Role.t
-type system = System.t
-type abi = Abi.t
-type filetype = Filetype.t
-type fabi = Fabi.t
-type name = Name.t
+type system = System.t [@@deriving sexp_of]
+type abi = Abi.t [@@deriving sexp_of]
+type filetype = Filetype.t [@@deriving sexp_of]
+type fabi = Fabi.t [@@deriving sexp_of]
+type name = Name.t [@@deriving sexp_of]
 
-type options = Options.t and options_cls = Options.cls
+type options = Options.t [@@deriving sexp_of]
+type options_cls = Options.cls
 
 type mem = Var : ('a,'b) Mem.t Var.t -> mem
+
+let sexp_of_mem (Var v) =
+  Sexp.Atom (Format.sprintf "%s" (Var.name v))
 
 type alignment = {
   code : int;
   data : int;
-}
+} [@@deriving sexp_of]
 
 type aliases = {
   subs : (int * Var.Top.t) Map.M(Var.Top).t;
@@ -94,9 +133,9 @@ type info = {
   byte : int;
   data : mem;
   code : mem;
-  vars : Set.M(Var.Top).t;
-  regs : Set.M(Var.Top).t Map.M(Role).t;
-  aliasing : aliases;
+  vars : (Set.M(Var.Top).t [@sexp.opaque]);
+  regs : (Set.M(Var.Top).t Map.M(Role).t [@sexp.opaque]);
+  aliasing : (aliases [@sexp.opaque]);
   endianness : endianness;
   alignment : alignment;
   system : system;
@@ -105,7 +144,7 @@ type info = {
   filetype : filetype;
   options : options;
   names : String.Caseless.Set.t
-}
+} [@@deriving sexp_of]
 
 let unknown = Self.unknown
 
@@ -423,6 +462,7 @@ let declare
   Hashtbl.add_exn targets t info;
   t
 
+
 let lookup ?package name =
   try Some (Self.read ?package name)
   with _exn -> None
@@ -603,6 +643,168 @@ let matches t name =
   Option.is_some (matching t name)
 
 let nicknames t = (info t).names
+
+let is_greater_or_equal : KB.Order.partial -> bool = function
+  | EQ | GT -> true
+  | LT | NC -> false
+
+
+let pp_option pp ppf = function
+  | None -> Format.pp_print_string ppf ":unknown"
+  | Some x -> pp ppf x
+
+
+let print_constraints system abi fabi filetype options parent ppf =
+  Format.fprintf ppf "@[<v2>Constraints:@;\
+                      Family:   %a@;\
+                      System:   %a@;\
+                      Abi:      %a@;\
+                      Fabi:     %a@;\
+                      Filetype: %a@;\
+                      Options:  %a@;@]"
+    (pp_option Self.pp) parent
+    (pp_option System.pp) system
+    (pp_option Abi.pp) abi
+    (pp_option Fabi.pp) fabi
+    (pp_option Filetype.pp) filetype
+    (pp_option Options.pp) options
+
+let report_no_matches system abi fabi filetype options parent =
+  invalid_arg @@ Format.asprintf "Target.select - no matching target@\n%t"
+    (print_constraints system abi fabi filetype options parent)
+
+
+let report_non_unique system abi fabi filetype options parent targets =
+  let targets = String.concat ~sep:", " @@
+    List.map targets ~f:Self.to_string in
+  invalid_arg @@ Format.asprintf
+    "Target.select - more than one target matches the \
+     constraints: {%s}@\n%t" targets
+    (print_constraints system abi fabi filetype options parent)
+
+module type Orderable = sig
+  type t
+  val domain : t KB.Domain.t
+  val equal : t -> t -> bool
+end
+
+let filter
+    ?(strict=false)
+    ?(parent=Self.unknown)
+    ?(system=System.unknown)
+    ?(abi=Abi.unknown)
+    ?(fabi=Fabi.unknown)
+    ?(filetype=Filetype.unknown)
+    ?(options=Options.empty) () =
+  let order (type t) (module E : Orderable with type t = t)  x y =
+    if strict then E.equal x y
+    else is_greater_or_equal @@
+      KB.Domain.order E.domain x y in
+  let result =
+    family parent |> List.filter ~f:(fun t ->
+        let i = info t in
+        List.for_all ~f:Fn.id [
+          order (module System) i.system system;
+          order (module Abi) i.abi abi;
+          order (module Fabi) i.fabi fabi;
+          order (module Filetype) i.filetype filetype;
+          order (module Options) i.options options;
+        ]) in
+  result
+
+let select
+    ?(unique=false)
+    ?strict
+    ?parent
+    ?system
+    ?abi
+    ?fabi
+    ?filetype
+    ?options () =
+  filter ?strict ?parent ?system ?abi ?fabi ?filetype ?options () |> function
+  | [] -> report_no_matches system abi fabi filetype options parent
+  | [t] -> t
+  | ts when unique -> report_non_unique system abi fabi filetype options parent ts
+  | t :: _ -> t
+
+
+let list_options options =
+  match KB.Domain.inspect Options.domain options with
+  | List options -> options
+  | _ -> []
+
+let option_to_string = function
+  | Sexp.List [] -> ":unknown"
+  | Sexp.List [Atom slot; Atom value] -> "+"^slot^"="^value
+  | Sexp.List [Atom slot; List []] -> "+"^slot
+  | other -> string_of_sexp other
+
+let options_to_string options =
+  String.concat (List.map (list_options options) ~f:option_to_string)
+
+type component = F of string | S of string
+
+let is_unknown_field = function
+  | F s -> String.equal ":unknown" s
+  | S _ -> false
+
+let are_separators x y = match x,y with
+  | S _, S _ -> true
+  | _ -> false
+
+let string_of_component = function S s | F s -> s
+
+let generate_name components =
+  List.filter components ~f:(Fn.non is_unknown_field) |>
+  List.remove_consecutive_duplicates ~equal:are_separators |>
+  List.map ~f:string_of_component |>
+  String.concat
+
+let field name x =
+  F (KB.Name.unqualified (name x))
+
+let register
+    ?(systems=[System.unknown])
+    ?(abis=[Abi.unknown])
+    ?(fabis=[Fabi.unknown])
+    ?(filetypes=[Filetype.unknown])
+    ?(options=[Options.empty])
+    ?package
+    parent =
+  ignore @@
+  let (let*) = List.Monad_infix.(>>=) in
+  let* system = systems in
+  let* filetype = filetypes in
+  let* abi = abis in
+  let* fabi = fabis in
+  let* options = options in
+  if List.for_all ~f:Fn.id [
+      System.is_unknown system;
+      Abi.is_unknown abi;
+      Fabi.is_unknown fabi;
+      Filetype.is_unknown filetype;
+      KB.Value.is_empty options;
+    ]
+  then []
+  else
+    let package = Option.value package
+        ~default:(KB.Name.package (name parent)) in
+    let base = (KB.Name.unqualified (name parent)) in
+    let name = generate_name [
+        F base; S "-";
+        field System.name system; S "-";
+        field Abi.name abi; S "";
+        field Fabi.name fabi; S "-";
+        field Filetype.name filetype; S "";
+        F (options_to_string options);
+      ] in [
+      declare ~parent ~package name
+        ~system
+        ~filetype
+        ~abi
+        ~fabi
+        ~options
+    ]
 
 let hash = Self.hash
 

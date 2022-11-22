@@ -35,7 +35,14 @@ module Source : sig
   val file : (cls,string option) slot
 end
 
-module Language : Knowledge.Enum.S with type t = language
+module Language : sig
+  include Knowledge.Enum.S with type t = language
+  val c : language
+  val cxx : language
+  val ada : language
+  val fortran : language
+  val pascal : language
+end
 
 module Unit : sig
   open Knowledge

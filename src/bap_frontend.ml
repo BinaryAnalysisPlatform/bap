@@ -303,10 +303,16 @@ let () =
     let open Bap_core_theory in
     Theory.Target.families () |> List.iter ~f:(function
         | parent :: members ->
+          let package = KB.Name.package (Theory.Target.name parent) in
+          let name t =
+            let n = Theory.Target.name t in
+            if String.equal package (KB.Name.package n)
+            then KB.Name.unqualified n
+            else KB.Name.show n in
           Format.printf "  %s:@\n" (Theory.Target.to_string parent);
           List.iter members ~f:(fun m ->
               Format.printf "   - %s@\n"
-                (Theory.Target.to_string m))
+                (name m))
         | _ -> ());
     Ok ()
 

@@ -1,4 +1,4 @@
-(declare  (context (target arm)))
+(declare  (context (target arm-family)))
 (defpackage llvm-armv7 (:use arm))
 (in-package arm)
 

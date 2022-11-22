@@ -113,8 +113,8 @@ end
       let payload_size = 57
       let branching_size = 6
 
-      let branching_mask = of_int (-144115188075855872)  (* 0b1111110000....0 *)
-      let payload_mask = of_int 144115188075855871     (* 0b0000001111....1 *)
+      let branching_mask = of_int64_exn (-144115188075855872L)  (* 0b1111110000....0 *)
+      let payload_mask = of_int64_exn 144115188075855871L     (* 0b0000001111....1 *)
 
       let branching {key} =
         (key land branching_mask) lsr 57 [@@inline]

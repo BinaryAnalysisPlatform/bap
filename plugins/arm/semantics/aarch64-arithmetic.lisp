@@ -1,4 +1,6 @@
-(declare (context (target arm armv8-a+le)))
+(declare (context (target arm-family)
+                  (bits 64)))
+
 
 (in-package aarch64)
 
@@ -64,7 +66,7 @@
 
 (defmacro SUB*r* (set shift-function rd rn imm-or-rm off)
   "Implements SUB*ri and SUB*rs by specifying the shift function."
-  (set rd (- rn (shift-function imm-or-rm off))))
+  (set rd (cast-low (word-width rd) (- rn (shift-function imm-or-rm off)))))
 
 ;; see ADD*ri vs ADD*rs
 (defun SUBWri (rd rn rm off) (SUB*r* setw lshift rd rn rm off))
@@ -74,26 +76,33 @@
 
 (defun SUBXrx (rd rn rm off)
   (set$ rd (- rn (extended rm off))))
-(defun SUBXrw (rd rn rm off)
-  (setw rd (- rn (extended rm off))))
-
-; SBCS: sub with carry, setting flags
-(defun SBCSXr (rd rn rm)
-  (add-with-carry set$ rd CF (lnot rm) rn))
-(defun SBCSWr (rd rn rm)
-  (add-with-carry setw rd CF (lnot rm) rn))
-
-; SBC: sub with carry, no flags
-(defun SBCXr (rd rn rm)
-  (set$ rd (+ CF (lnot rm) rn)))
-(defun SBCWr (rd rn rm)
-  (setw rd (+ CF (lnot rm) rn)))
 
 (defun SUBXrx64 (rd rn rm off)
   (set$ rd (- rn (extended rm off))))
 
+(defun SUBXrw (rd rn rm off)
+  (setw rd (- rn (extended rm off))))
+
+(defun SBCSXr (rd rn rm)
+  (add-with-carry set$ rd CF (lnot rm) rn))
+  
+(defun SBCSWr (rd rn rm)
+  (add-with-carry setw rd CF (lnot rm) rn))
+
+(defun SBCXr (rd rn rm)
+  (set$ rd (+ CF (lnot rm) rn)))
+
+(defun SBCWr (rd rn rm)
+  (setw rd (+ CF (lnot rm) rn)))
+
 (defun SUBSWrs (rd rn rm off)
   (add-with-carry/clear-base rd rn (lnot (shift-encoded rm off)) 1))
+
+(defun SUBSXrx (rd rn rm off)
+  (add-with-carry set$ rd rn (lnot (shift-encoded rm off)) 1))
+
+(defun SUBSXrx64 (rd rn rm off)
+  (add-with-carry set$ rd rn (lnot (shift-encoded rm off)) 1))
 
 (defun SUBSXrs (rd rn rm off)
   (add-with-carry set$ rd rn (lnot (shift-encoded rm off)) 1))
@@ -117,6 +126,19 @@
 (defun MADDXrrr (rd rn rm ra) (Mop*rrr set$ + rd rn rm ra))
 (defun MSUBWrrr (rd rn rm ra) (Mop*rrr setw - rd rn rm ra))
 (defun MSUBXrrr (rd rn rm ra) (Mop*rrr set$ - rd rn rm ra))
+
+(defun UMADDLrrr (rd rn rm ra) (set$ rd (cast-low 64 (+ ra (* rn rm)))))
+
+(defun SMADDLrrr (rd rn rm ra) (set$ rd (cast-signed 64 (+ ra (* (cast-signed 64 rn) (cast-signed 64 rm))))))
+
+(defun UMSUBLrrr (rd rn rm ra) (set$ rd (cast-low 64 (- ra (* (cast-signed 64 rn) (cast-signed 64 rm))))))
+
+(defun SMSUBLrrr (rd rn rm ra) (set$ rd (cast-signed 64 (- ra (* (cast-signed 64 rn) (cast-signed 64 rm))))))
+
+(defun UMULHrr (rd rn rm)
+  "multiplies rn and rm together and stores the high 64 bits of the resulting 
+  128-bit value to the register rd"
+  (set$ rd (cast-high 64 (* (cast-unsigned 128 rn) (cast-unsigned 128 rm)))))
 
 (defmacro *DIV*r (set div rd rn rm)
   "(*DIV*r set div rd rn rm) implements the SDIV or UDIV instructions

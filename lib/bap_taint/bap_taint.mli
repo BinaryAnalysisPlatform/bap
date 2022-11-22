@@ -142,11 +142,25 @@ module Std : sig
           representation of the object or a part of it. *)
       val direct : t
 
-
       (** Denotes the indirect relation between a value and the object
           that we track, e.g., a value is a pointer that points to a
           value that has the direct relation with the object.  *)
       val indirect : t
+
+      (** [compare x y] returns a total ordering between two relations
+          [x] and [y]. If [x < y] then the result is less than [0]. If
+          [x = y] then the result is [0]. Otherwise, the result is
+          greater than [0].
+
+          @since 2.6.0
+      *)
+      val compare : t -> t -> int
+
+      (** [equal x y] is equivalent to [compare x y = 0].
+
+          @since 2.6.0
+      *)
+      val equal : t -> t -> bool
     end
 
     (** Each taint represents an abstract object that we would like

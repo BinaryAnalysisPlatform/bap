@@ -278,9 +278,9 @@ let i686 = Theory.Target.declare ~package "i686"
     ~regs:M32.i686regs
     ~aliasing:M32.aliasing
 
-let amd64 = Theory.Target.declare ~package "amd64"
+let amd64 = Theory.Target.declare ~package "x86_64"
     ~parent:i686
-    ~nicknames:["x64"; "x86_64"; "x86-64"; ]
+    ~nicknames:["amd64"; "x64"; "x86-64"; ]
     ~bits:64
     ~data:M64.data
     ~code:M64.data
@@ -289,43 +289,31 @@ let amd64 = Theory.Target.declare ~package "amd64"
     ~aliasing:M64.aliasing
 
 
-let family = [amd64; i686; i586; i486; i386; i186; i86]
-
-
 module Abi = struct
   open Bap_c.Std
 
   module Arg = C.Abi.Arg
-  open Arg.Let
-  open Arg.Syntax
+  open Arg.Language
 
   module Abi = struct
     let abi = Theory.Abi.declare ~package
-    let cdecl = abi "cdecl"
+    let cdecl = Theory.Abi.cdecl
     let pascal = abi "pascal"
     let fortran = abi "fortran"
-    let fastcall = abi "fastcall"
-    let stdcall = abi "stdcall"
+    let fastcall = Theory.Abi.fastcall
+    let stdcall = Theory.Abi.stdcall
     let thiscall = abi "thiscall"
     let vectorcall = abi "vectorcall"
-    let watcomstack = abi "watcom-stack"
-    let watcomregs = abi "watcom-regs"
-    let ms = abi "ms"
-    let sysv = abi "sysv"
-    let darwin = abi "darwin"
+    let watcom = Theory.Abi.watcom
+    let ms = Theory.Abi.ms
+    let sysv = Theory.Abi.gnu
   end
 
-  let either preds thing = List.exists preds ~f:(fun is -> is thing)
-  let choice options arg =
-    Arg.choice (List.map options ~f:(fun f -> f arg))
-
-  let otherwise = Fn.const true
-
   let is_integer =
-    either C.Type.[is_integer; is_pointer; is_function]
+    any C.Type.[is_integer; is_pointer; is_function]
 
-  let is_compound =
-    either C.Type.[is_structure; is_union]
+  let is_composite =
+    any C.Type.[is_structure; is_union]
 
   let is_sse : C.Type.t -> bool = function
     | `Basic {t=(`float|`double)} -> true
@@ -339,23 +327,13 @@ module Abi = struct
     | `Basic {t=`long_double} -> true
     | _ -> false
 
-
-  let select arg options =
-    List.find_map options ~f:(fun (cnd,action) ->
-        if cnd arg then Some (action arg) else None) |> function
-    | Some action -> action
-    | None -> Arg.reject ()
-
-  let seq xs arg = Arg.List.iter xs ~f:(fun x -> x arg)
-
   let skip _ = Arg.return ()
 
   let make_return t k = match t with
     | `Void -> Arg.return ()
     | t ->
       let* size = Arg.size t in
-      select t (k size)
-
+      select (k size) t
 
   let arena ?low t names = Arg.Arena.of_exps @@
     List.map names ~f:(fun name ->
@@ -369,44 +347,36 @@ module Abi = struct
 
   let ia16 memory t =
     let data = new C.Size.base `LP32 in
-    C.Abi.define t data @@ fun _ {C.Type.Proto.return=r; args} ->
+    install t data @@ fun declare ->
     let* irets = arena t ["AX"; "DX"] in
-    let return = match r with
-      | `Void -> Arg.return ()
-      | r -> Arg.choice [
-          Arg.registers irets r;
-          memory r;
-        ] in
-    Arg.define ~return @@
-    Arg.List.iter args ~f:(fun (_,arg) -> memory arg)
+    let return ~alignment:_ _ = choose [
+        Arg.registers irets;
+        memory;
+      ] in
+    declare ~return @@ fun ~alignment:_ _ -> memory
 
   let cdecl16 = ia16 Arg.memory
-
-  (* pascal or fortran *)
   let pascal16 = ia16 Arg.push
 
 
   let ia32 t k =
     let data = new C.Size.base `ILP32 in
-    let is_big size _ = size > 64 in
-    C.Abi.define t data @@ fun _ {C.Type.Proto.return=r; args} ->
+    install t data @@ fun describe ->
     let* irets = arena t ["EAX"; "EDX"] in
     let* frets = arena t ["ST0"] in
     let pass = Arg.memory in
-    let return r = make_return r @@ fun size -> [
+    let return ~alignment:_ size = select [
         C.Type.is_real, Arg.register frets;
-        is_big size, seq [
+        is (size > 64), combine [
           Arg.reference irets;
           Arg.hidden;
         ];
         otherwise, Arg.registers irets;
       ] in
+    let* () = Arg.rebase 1 in
     k @@ fun ?(return=return) ?(pass=pass) () ->
-    Arg.define ~return:(return r) @@ Arg.sequence [
-      Arg.rebase 1;
-      Arg.List.iter args ~f:(fun (_,arg) ->
-          pass arg)
-    ]
+    describe ~return @@ fun ~alignment:_ _ -> pass
+
 
   (* stdcall, cdecl, watcom-stack, or ms32 *)
   let cdecl t = ia32 t @@ fun accept -> accept ()
@@ -416,16 +386,16 @@ module Abi = struct
     let* iregs = arena t ["ECX"; "EDX"] in
     let pass arg =
       let* size = Arg.size arg in
-      select arg [
-        either [
+      select [
+        any [
           is_big size;
           C.Type.is_floating;
         ], Arg.memory;
-        otherwise, choice [
+        otherwise, choose [
           Arg.register iregs;
           Arg.memory;
         ]
-      ] in
+      ] arg in
     override ~pass ()
 
   let watcomregs t = ia32 t @@ fun override ->
@@ -439,17 +409,16 @@ module Abi = struct
   (* aka borland register *)
   let pascal t = ia32 t @@ fun override ->
     let* iregs = arena t ["eax"; "edx"; "ecx"] in
-    let pass arg = select arg [
-        either C.Type.[is_cint; is_char; is_pointer;],
-        choice Arg.[register iregs; memory];
-      ] in
+    let pass arg = select [
+        any C.Type.[is_cint; is_char; is_pointer],
+        choose Arg.[register iregs; memory];
+      ] arg in
     override ~pass ()
 
 
   let ms64 t =
     let data = new C.Size.base `LP64 in
-    let is_big size _ = size > 64 in
-    C.Abi.define t data @@ fun _ {C.Type.Proto.return=r; args} ->
+    install t data @@ fun describe ->
     let* iregs = arena t ["rcx"; "rdx"; "r8"; "r9"] in
     let* irets = arena t ["rax"; "rdx"] in
     let* vregs = arena t ~low:64 @@ List.init 4 ~f:(sprintf "ymm%d") in
@@ -460,25 +429,21 @@ module Abi = struct
         pass arena arg;
         Arg.List.iter coarena ~f:Arg.discard
       ] in
-    let pass how arena = choice [
+    let pass how arena = choose [
         use how arena;
         Arg.memory;
       ] in
-    let args = Arg.List.iter args ~f:(fun (_,t) ->
-        let* size = Arg.size t in
-        select t [
-          is_big size, pass Arg.reference iregs;
-          C.Type.is_floating, pass Arg.register vregs;
-          otherwise, pass Arg.register iregs;
-        ]) in
-    let return = make_return r @@ fun size -> [
+    let return ~alignment:_ size = select [
         is_x87, pass Arg.reference iregs;
         C.Type.is_floating, pass Arg.register vrets;
-        is_big size, pass Arg.reference iregs;
+        is (size > 64), pass Arg.reference iregs;
         otherwise, pass Arg.register irets;
       ] in
-    Arg.define ~return args
-
+    describe ~return @@ fun ~alignment:_ size -> select [
+      is (size > 64), pass Arg.pointer iregs;
+      C.Type.is_floating, pass Arg.register vregs;
+      otherwise, pass Arg.register iregs;
+    ]
 
   let merge_kinds k1 k2 = match k1,k2 with
     | `Nil, t | t, `Nil -> t
@@ -506,9 +471,7 @@ module Abi = struct
 
   let sysv t =
     let data = new C.Size.base `LP64 in
-    let is_large bits _ = bits > 128 in
-    C.Abi.define t data @@ fun _ {C.Type.Proto.return=r; args} ->
-
+    install t data @@ fun describe ->
     let* iregs = arena t ["rdi"; "rsi"; "rdx"; "rcx"; "r8"; "r9"] in
     let* vregs = arena t ~low:64 @@ List.init 8 ~f:(sprintf "ymm%d") in
     let* irets = arena t ["rax"; "rdx"] in
@@ -540,7 +503,7 @@ module Abi = struct
           | _ -> Arg.reject ()) >>| fun (_,acc) ->
       List.rev acc |> List.concat in
 
-    let compound_fields : C.Type.t -> _ list Arg.t = function
+    let composite_fields : C.Type.t -> _ list Arg.t = function
       | `Structure {t} -> fields t >>| partition
       | `Union {t={fields}} as s ->
         let* size = Arg.size s in
@@ -549,9 +512,9 @@ module Abi = struct
 
     let registers = Arg.registers ~rev:true ~limit:2 in
 
-    let pass_compound memory iregs vregs t =
+    let pass_composite memory iregs vregs t =
       Arg.choice [
-        compound_fields t >>= begin function
+        composite_fields t >>= begin function
           | [`Int] -> Arg.register iregs t
           | [`Sse] -> Arg.register vregs t
           | [`Int; `Int] -> registers iregs t
@@ -563,69 +526,51 @@ module Abi = struct
         memory t;
       ] in
 
-    let args = Arg.List.iter args ~f:(fun (_,arg) ->
-        let* bits = Arg.size arg in
-        select arg [
-          is_large bits, Arg.memory;
-          is_integer, Arg.register iregs;
-          is_sse, Arg.register vregs;
-          is_csse, registers vregs;
-          is_compound, pass_compound Arg.memory iregs vregs
-        ]) in
-
-    let return = make_return r @@ fun bits -> [
-        is_large bits, Arg.reference iregs;
+    let return ~alignment:_ bits = select [
+        is (bits > 128), Arg.reference iregs;
         is_integer, Arg.register irets;
         is_sse, Arg.register vrets;
         is_csse, registers vrets;
-        is_compound, pass_compound (Arg.reference iregs) irets vrets;
+        is_composite, pass_composite (Arg.reference iregs) irets vrets;
       ] in
-    Arg.define ~return args
+    describe ~return @@ fun ~alignment:_ bits -> select [
+      is (bits > 128), Arg.memory;
+      is_integer, Arg.register iregs;
+      is_sse, Arg.register vregs;
+      is_csse, registers vregs;
+      is_composite, pass_composite Arg.memory iregs vregs
+    ]
 
 
   let calling_conventions = [
     (* 16-bit ABI *)
-    [i86; i186; i286], [
+    i286, [
       Abi.cdecl, cdecl16;
       Abi.pascal, pascal16;
       Abi.fortran, pascal16;
     ];
 
     (* 32-bit ABI  *)
-    [i386; i486; i586; i686], [
+    i386, [
       Abi.sysv, cdecl;
-      Abi.darwin, cdecl;
       Abi.cdecl, cdecl;
       Abi.pascal, pascal;
       Abi.fastcall, fastcall;
       Abi.stdcall, cdecl;
-      Abi.watcomstack, cdecl;
       Abi.ms, cdecl;
     ];
 
     (* 64-bit ABI *)
-    [amd64], [
+    amd64, [
       Abi.ms, ms64;
       Abi.sysv, sysv;
-      Abi.darwin, sysv;
     ]
   ]
 
   let demanglers = Demangler.[
-      [amd64], Abi.darwin, strip_leading_underscore;
-      [i386; i486; i586; i686; amd64], Abi.ms, strip_leading_underscore;
+      Abi.sysv, Theory.Filetype.macho, strip_leading_underscore;
+      Abi.ms, Theory.Filetype.coff, strip_leading_underscore;
     ]
-
-  let name_with_abi target abi =
-    Format.asprintf "%s-%s"
-      (KB.Name.unqualified (Theory.Target.name target))
-      (KB.Name.unqualified (Theory.Abi.name abi))
-
-  let register_target parent abi install =
-    install @@ Theory.Target.declare ~package:"bap"
-      (name_with_abi parent abi)
-      ~parent ~abi
-
 
   let default_calling_conventions = [
     [i86], cdecl16;
@@ -634,28 +579,83 @@ module Abi = struct
   ]
 
   let install_calling_conventions () =
-    List.iter calling_conventions ~f:(fun (targets,args) ->
-        List.cartesian_product targets args |>
-        List.iter ~f:(fun (target,(abi,install)) ->
-            register_target target abi install));
+    List.iter calling_conventions ~f:(fun (parent,abis) ->
+        List.iter abis ~f:(fun (abi,install) ->
+            Theory.Target.filter ~parent ~abi () |>
+            List.iter ~f:(fun t ->
+                if Theory.Target.bits t = Theory.Target.bits parent
+                then install t)));
     List.iter default_calling_conventions ~f:(fun (targets,install) ->
         List.iter targets ~f:install)
 
   let install_demanglers () =
-    List.iter demanglers ~f:(fun (targets,abi,demangler) ->
-        List.iter targets ~f:(fun target ->
-            let name = name_with_abi target abi in
-            let target = Theory.Target.get ~package:"bap" name in
+    List.iter demanglers ~f:(fun (abi,filetype,demangler) ->
+        Theory.Target.filter ~parent ~abi ~filetype () |>
+        List.iter ~f:(fun target ->
             Demanglers.install target demangler))
 
   include Abi
 end
 
-let target_with_abi base name =
-  Theory.Target.get ~package:"bap" @@
-  if Theory.Abi.is_unknown name
-  then KB.Name.show (Theory.Target.name base)
-  else Abi.name_with_abi base name
+let subtargets = [
+  (* 16-bit targets *)
+  [i286],
+  Theory.System.[unknown; msdos],
+  Theory.Filetype.[unknown],
+  Theory.Abi.[cdecl; Abi.pascal; Abi.fortran;];
+
+  (* 32-bit generic targets  *)
+  [i686],
+  Theory.System.[unknown],
+  Theory.Filetype.[coff; aout; elf; macho],
+  Theory.Abi.[gnu; cdecl; stdcall; fastcall; watcom; ms];
+
+  (* 64-bit generic targets  *)
+  [amd64],
+  Theory.System.[unknown],
+  Theory.Filetype.[coff; aout; elf; macho],
+  Theory.Abi.[gnu; ms];
+
+  (* 32/64 linux/bsd targets  *)
+  [i686; amd64],
+  Theory.System.[linux; freebsd; openbsd],
+  Theory.Filetype.[unknown; aout; coff; elf],
+  Theory.Abi.[gnu; cdecl];
+
+  (* 32/64 darwin targets *)
+  [i686; amd64],
+  Theory.System.[darwin],
+  Theory.Filetype.[unknown; macho],
+  Theory.Abi.[gnu];
+
+  (* 32-bit windows targets  *)
+  [i686],
+  Theory.System.[windows],
+  Theory.Filetype.[unknown; coff],
+  Theory.Abi.[ms; cdecl; fastcall; Abi.pascal; Abi.fortran; watcom];
+
+  (* 64-bit windows targets  *)
+  [amd64],
+  Theory.System.[windows],
+  Theory.Filetype.[unknown; coff],
+  Theory.Abi.[ms];
+
+  (* x86 UEFI targets *)
+  [i686],
+  Theory.System.[uefi],
+  Theory.Filetype.[unknown; coff],
+  Theory.Abi.[cdecl];
+
+  [amd64],
+  Theory.System.[uefi],
+  Theory.Filetype.[unknown; coff],
+  Theory.Abi.[ms];
+]
+
+let register_subtargets () =
+  List.iter subtargets ~f:(fun (parents,systems,filetypes,abis) ->
+      List.iter parents ~f:(fun parent ->
+          Theory.Target.register parent ~systems ~filetypes ~abis))
 
 let enable_loader ~abi () =
   let open KB.Syntax in
@@ -664,9 +664,10 @@ let enable_loader ~abi () =
            provide Theory.Unit.target |>
            comment "computes target from the OGRE specification");
 
-  let make_target target abi' =
-    target_with_abi target @@
-    if Theory.Abi.is_unknown abi then abi' else abi in
+  let make_target parent abi' filetype =
+    let abi =
+      if Theory.Abi.is_unknown abi then abi' else abi in
+    Theory.Target.select ~strict:true ~parent ~abi ~filetype () in
 
   let request =
     let open Ogre.Syntax in
@@ -691,18 +692,20 @@ let enable_loader ~abi () =
   KB.collect Image.Spec.slot unit >>|
   get_info >>| fun (arch,bits,fmt) ->
 
+  let open Theory.Filetype in
+
   if is_x86 arch then match bits, fmt with
-    | Some 64L, Some "elf" -> make_target amd64 Abi.sysv
-    | Some 64L, Some "coff" -> make_target amd64 Abi.ms
-    | Some 64L, Some "macho" -> make_target amd64 Abi.darwin
-    | Some 32L, Some "elf" -> make_target i686 Abi.sysv
-    | Some 32L, Some "coff" -> make_target i686 Abi.ms
-    | Some 32L, Some "macho" -> make_target i686 Abi.darwin
-    | Some 16L, _ -> make_target i286 abi
-    | Some 32L, _ -> make_target i686 abi
-    | Some 64L, _ -> make_target amd64 abi
-    | _ when is_amd64 arch -> make_target amd64 abi
-    | _ -> make_target i686 abi
+    | Some 64L, Some "elf" -> make_target amd64 Abi.sysv elf
+    | Some 64L, Some "coff" -> make_target amd64 Abi.ms coff
+    | Some 64L, Some "macho" -> make_target amd64 Abi.sysv macho
+    | Some 32L, Some "elf" -> make_target i686 Abi.sysv elf
+    | Some 32L, Some "coff" -> make_target i686 Abi.ms coff
+    | Some 32L, Some "macho" -> make_target i686 Abi.sysv macho
+    | Some 16L, _ -> make_target i286 abi unknown
+    | Some 32L, _ -> make_target i686 abi unknown
+    | Some 64L, _ -> make_target amd64 abi unknown
+    | _ when is_amd64 arch -> make_target amd64 abi unknown
+    | _ -> make_target i686 abi unknown
   else Theory.Target.unknown
 
 let enable_arch () =
@@ -775,6 +778,7 @@ let enable_decoder backend =
   KB.collect unit_encoding unit
 
 let load ?(abi=Theory.Abi.unknown) ?(backend="llvm") () =
+  register_subtargets ();
   Abi.install_calling_conventions ();
   Abi.install_demanglers ();
   enable_loader ~abi ();

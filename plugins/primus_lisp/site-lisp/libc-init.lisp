@@ -12,7 +12,7 @@
 (defun init (main argc argv auxv)
   "GNU libc initialization stub"
   (declare (external "__libc_start_main")
-           (context (abi "eabi")))
+           (context (abi "gnueabi")))
   (exit-with (invoke-subroutine
               (logand main 0xfffffffe) ; to handle thumb jumps
               argc argv)))
@@ -62,7 +62,7 @@
 
 (defun init (argc argv ubpev auxvec fini stinfo stack_on_entry)
   (declare (external "__libc_start_main")
-           (context (abi "ppc32")))
+           (context (target "powerpc") (abi "gnu")))
   (set R2 (+ stack_on_entry 0x7008))
   (let ((argc (read-word ptr_t stack_on_entry))
         (argv (ptr+1 ptr_t stack_on_entry))
@@ -77,15 +77,15 @@
 (defun init (main argc argv auxv)
   "GNU libc initialization stub"
   (declare (external "__libc_start_main")
-           (context (arch "mips")))
-  (set T9 main)
-  (set RA @__libc_csu_fini)
+           (context (target "mips") (abi "gnu")))
+  (set R25 main)
+  (set R31 @__libc_csu_fini)
   (exit-with (invoke-subroutine main argc argv)))
 
 (defun init (main argc argv auxv)
   "GNU libc initialization stub"
   (declare (external "__libc_start_main")
-           (context (arch "mips64") (abi "mips64")))
-  (set T9 main)
-  (set RA @__libc_csu_fini)
+           (context (target "mips64") (abi "gnu")))
+  (set R25 main)
+  (set R31 @__libc_csu_fini)
   (exit-with (invoke-subroutine main argc argv)))

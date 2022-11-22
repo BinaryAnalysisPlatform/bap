@@ -31,6 +31,9 @@ let is_call jmp = Option.is_some (Jmp.alt jmp)
 let is_empty = function
   | {entry; blks=[]} -> is_null entry
   | _ -> false
+let is_unconditional jmp = match Jmp.cond jmp with
+  | Int w when Word.(w = b1) -> true
+  | _ -> false
 
 module BIR = struct
   type t = blk term list
@@ -82,15 +85,13 @@ module BIR = struct
   let single_dst = function
     | [] | _ :: _ :: _ -> None
     | [x] -> match dst x with
-      | Some tid when not (is_call x) -> Some tid
+      | Some tid when not (is_call x) && is_unconditional x -> Some tid
       | _ -> None
-
-
-  let is_sub {weak; keep} = keep && weak
 
   let can_contract refs b1 b2 =
     not (Tid.equal b1.name b2.name) &&
-    (not b2.keep || b2.weak) && match single_dst b1.jmps with
+    (not b2.keep || b2.weak) &&
+    match single_dst b1.jmps with
     | None -> false
     | Some dst ->
       Tid.equal dst b2.name &&
@@ -407,10 +408,6 @@ module IR = struct
       entry;
       blks = [blk entry ++ Jmp.reify ~tid ~dst:(Jmp.indirect dst) ()]
     }
-
-  let is_unconditional jmp = match Jmp.cond jmp with
-    | Int w when Word.(w = b1) -> true
-    | _ -> false
 
   let fall ~tid x dst = match x.jmps with
     | [jmp] when is_call jmp ->

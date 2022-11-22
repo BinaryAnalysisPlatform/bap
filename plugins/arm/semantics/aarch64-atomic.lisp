@@ -1,4 +1,5 @@
-(declare (context (target arm armv8-a+le)))
+(declare (context (target arm-family)
+                  (bits 64)))
 
 (in-package aarch64)
 
@@ -11,7 +12,7 @@
    load and store are functions to load/store to/from the size of rs and rt.
    acquire and release are booleans indicating whether load-acquire and
    store-release ordering is to be enforced."
-   (let ((data (load rn)))
+  (let ((data (load rn)))
     (when acquire (intrinsic 'load-acquire))
     (when (= data rs)
       (when release (intrinsic 'store-release))
@@ -61,6 +62,43 @@
 (defun CASLH  (rs _ rt rn) (CASordH rs rt rn false true))
 (defun CASALH (rs _ rt rn) (CASordH rs rt rn true  true))
 
+(defun first  (x y) (declare (visibility :private)) x)
+(defun second (x y) (declare (visibility :private)) y)
+
+(defmacro CASPord* (set load rs-pair rt-pair rn register-width acquire release)
+  "(CASP* set load store rs-pair rt-pair rn register-width acquire release)
+   implements a compare-and-swap-pair instruction for W and X registers.
+   set is the functions to set to a register in the pair.
+   register-width is 64 or 32, depending on the size of register used.
+   load either loads 128 bits or 64 (the size of the whole pair).
+   acquire and release are as in the CASord* macro."
+  (let ((data (load rn))
+        (lower (cast-low  register-width data))
+        (upper (cast-high register-width data)))
+    (when acquire (intrinsic 'load-acquire))
+    (when (= data (register-pair-concat rs-pair))
+      (when release (intrinsic 'store-release))
+      (store-word rn (register-pair-concat rt-pair)))
+    (set$ (nth-reg-in-group rs-pair 0) (endian first  upper lower))
+    (set$ (nth-reg-in-group rs-pair 1) (endian second upper lower))))
+
+(defmacro CASPordX (rs-pair rt-pair rn acquire release)
+  "Specialisation of CASPord* for X registers."
+  (CASPord* set$ load-dword rs-pair rt-pair rn 64 acquire release))
+
+(defmacro CASPordW (rs-pair rt-pair rn acquire release)
+  "Specialisation of CASPord* for W registers."
+  (CASPord* setw load-word rs-pair rt-pair rn 32 acquire release))
+
+(defun CASPX   (rs-pair _ rt-pair rn) (CASPordX rs-pair rt-pair rn false false))
+(defun CASPAX  (rs-pair _ rt-pair rn) (CASPordX rs-pair rt-pair rn true  false))
+(defun CASPLX  (rs-pair _ rt-pair rn) (CASPordX rs-pair rt-pair rn false true))
+(defun CASPALX (rs-pair _ rt-pair rn) (CASPordX rs-pair rt-pair rn true  true))
+
+(defun CASPW   (rs-pair _ rt-pair rn) (CASPordW rs-pair rt-pair rn false false))
+(defun CASPAW  (rs-pair _ rt-pair rn) (CASPordW rs-pair rt-pair rn true  false))
+(defun CASPLW  (rs-pair _ rt-pair rn) (CASPordW rs-pair rt-pair rn false true))
+(defun CASPALW (rs-pair _ rt-pair rn) (CASPordW rs-pair rt-pair rn true  true))
 
 (defmacro CSop*r (set op rd rn rm cnd)
   "(CSop*r set op rd rn rm cnd) implements the conditional select

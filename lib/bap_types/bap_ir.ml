@@ -314,11 +314,15 @@ end = struct
       Bap_bitvector.string_of_value ~hex:true a
     | None -> sprintf "%s%%%s" name (Tid.to_string tid)
 
+  let set_name_if_possible tid name =
+    try Tid.set_name tid name
+    with _ -> Tid.add_name tid name
+
+
   let mangle_sub s =
     let addr = Dict.find s.dict Bap_attributes.address in
     let name = mangle_name addr s.tid s.self.name in
-    Tid.add_name s.tid s.self.name;
-    Tid.set_name s.tid name;
+    set_name_if_possible s.tid name;
     let self = {s.self with name} in
     {s with self}
 

@@ -19,6 +19,8 @@ end
 module Context : sig
   type t = context
   val create : (string * string list) list -> context
+  val of_program : program -> t
+  val pp : Format.formatter -> t -> unit
 end
 
 module Doc : sig

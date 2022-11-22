@@ -65,7 +65,7 @@ module Make(CT : Theory.Core) = struct
       (seq [])
 
   let cbz pc rn dst =
-    CT.branch CT.(inv@@is_zero (var rn))
+    CT.branch CT.(is_zero (var rn))
       (goto (pc +> dst))
       (seq [])
 end

@@ -4,7 +4,7 @@
 
 ;; Note: page references are from ARM DDI 0403E.b
 
-(declare (context (target arm)))
+(declare (context (target arm-family)))
 
 (defpackage thumb (:use core target arm))
 (defpackage llvm-thumb (:use thumb))

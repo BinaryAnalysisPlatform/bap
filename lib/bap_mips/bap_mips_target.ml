@@ -20,104 +20,152 @@ let bool = Theory.Bool.t
 let reg t n = Theory.Var.define t n
 
 let gpr_names = [
-  "ZERO";
-  "AT";
-  "V0"; "V1";
-  "A0"; "A1"; "A2"; "A3";
-  "T0"; "T1"; "T2"; "T3"; "T4"; "T5"; "T6"; "T7";
-  "S0"; "S1"; "S2"; "S3"; "S4"; "S5"; "S6"; "S7";
-  "T8"; "T9";
-  "K0"; "K1";
-  "GP";
-  "SP";
-  "FP";
-  "RA"
+  (*  0 *) "ZERO";
+  (*  1 *) "AT";
+  (*  2 *) "V0"; "V1";
+  (*  4 *) "A0"; "A1"; "A2"; "A3";
+  (*  8 *) "T0"; "T1"; "T2"; "T3"; "T4"; "T5"; "T6"; "T7";
+  (* 16 *) "S0"; "S1"; "S2"; "S3"; "S4"; "S5"; "S6"; "S7";
+  (* 24 *) "T8"; "T9";
+  (* 26 *) "K0"; "K1";
+  (* 28 *) "GP";
+  (* 29 *) "SP";
+  (* 30 *) "FP";
+  (* 31 *) "RA"
 ]
 
 let untyped = List.map ~f:Theory.Var.forget
 let (@<) xs ys = untyped xs @ untyped ys
 
 let name size order  =
-  let order = Theory.Endianness.name order in
-  sprintf "mips%d+%s" size (KB.Name.unqualified order)
+  let ends = Theory.Endianness.name order in
+  let size = if size = 32 then "" else "64" in
+  sprintf "mips%s%s" size @@
+  if Theory.Endianness.(equal eb) order then ""
+  else if Theory.Endianness.(equal le) order then "el"
+  else KB.Name.unqualified ends
 
-let parent = Theory.Target.declare ~package "mips"
+let parent = Theory.Target.declare ~package "mips-family"
 
-let array bits pref n =
-  List.init n ~f:(fun i -> reg bits (sprintf "%s%d" pref i))
+let array ?(from=0) bits pref n =
+  List.init n ~f:(fun i -> reg bits (sprintf "%s%d" pref (i+from)))
+
 
 let define ?(parent=parent) ?nicknames bits endianness =
   let size = Theory.Bitv.size bits in
-  let gprs = List.map gpr_names ~f:(reg bits) in
-  let fprs = array bits "R" 32 in
+  let gprs = array bits "R" 32 in
+  let fprs = array bits "F" 32 in
   let mems = Theory.Mem.define bits r8 in
   let data = Theory.Var.define mems "mem" in
   let vars = gprs @< fprs @< [data] in
   let regs = List.map ~f:(fun name -> Theory.Var.forget (reg bits name)) in
+  let aliases = List.map gpr_names ~f:(reg bits) in
+  let args = if size = 32 then 4 else 8 in
+  let iargs = array bits "R" ~from:4 args in
+  let fargs = array bits "F" ~from:1 args in
+  let aliasing = List.map2_exn gprs aliases ~f:(fun r p ->
+      Theory.Alias.(def r [reg p])) in
   Theory.Target.declare ~package (name size endianness)
     ~parent
     ?nicknames
     ~bits:size
     ~endianness
+    ~aliasing
     ~code:data
     ~data:data
     ~vars
     ~regs:Theory.Role.Register.[
         [general; integer], regs gpr_names;
         [general; floating], untyped fprs;
-        [constant; zero; pseudo], regs ["ZERO"];
-        [stack_pointer], regs ["SP"];
-        [frame_pointer], regs ["FP"];
-        [link], regs ["RA"];
+        [constant; zero; pseudo], regs ["ZERO"; "R0 "];
+        [function_argument; integer],  untyped iargs;
+        [function_argument; floating], untyped fargs;
+        [function_return; integer],  regs ["R2"];
+        [function_return; floating], regs ["F0"];
+        [stack_pointer], regs ["R29"];
+        [frame_pointer], regs ["R30"];
+        [link], regs ["R31"];
+        [alias], untyped aliases;
       ]
 
 let mips32bi = define r32 Theory.Endianness.bi
+    ~parent
     ~nicknames:["mipsbi"; "mips32bi"]
+
 let mips32eb = define r32 Theory.Endianness.eb
+    ~parent
     ~nicknames:["mipseb"; "mips32eb"; "mipsbe"; "mips32be"]
+
 let mips32le = define r32 Theory.Endianness.le
+    ~parent
     ~nicknames:["mipsle"; "mipsel"; "mips32le"; "mips32el"]
 
 let mips64bi = define r64 Theory.Endianness.bi
+    ~parent
     ~nicknames:["mips64bi"]
 let mips64le = define r64 Theory.Endianness.le
+    ~parent
     ~nicknames:["misp64le"; "mips64el"]
+
 let mips64eb = define r64 Theory.Endianness.eb
+    ~parent
     ~nicknames:["mips64"; "mips64eb"; "mips64be"]
+
+let register_subtargets () =
+  List.iter [mips32eb; mips32le; mips64eb; mips64le] ~f:(fun parent ->
+      Theory.Target.register parent
+        ~abis:Theory.Abi.[unknown; gnu]
+        ~systems:Theory.System.[unknown; linux; freebsd; openbsd]
+        ~filetypes:Theory.Filetype.[unknown; elf])
+
+let is_mips arch =
+  match Option.map ~f:String.lowercase arch with
+  | None -> false
+  | Some name -> String.is_prefix ~prefix:"mips" name
+
+let is_32bit arch bits = match bits with
+  | Some 64L -> false
+  | Some 32L -> true
+  | _ -> match arch with
+    | None -> true
+    | Some name ->
+      not (String.is_substring ~substring:"64" name)
 
 let enable_loader () =
   KB.Rule.(declare ~package "mips-target" |>
            require Image.Spec.slot |>
            provide Theory.Unit.target |>
-           comment "computes target from the OGRE specification");
+           comment "computes a target from the OGRE specification");
   let open KB.Syntax in
   let request_info doc =
     let open Ogre.Syntax in
     let request =
-      Ogre.request Image.Scheme.arch >>= fun arch ->
+      Ogre.request Image.Scheme.arch >>|
+      Option.map ~f:String.lowercase >>= fun arch ->
       Ogre.request Image.Scheme.is_little_endian >>= fun little ->
-      Ogre.return (arch,little) in
+      Ogre.request Image.Scheme.bits >>= fun bits ->
+      Ogre.request Image.Scheme.format >>= fun format ->
+      Ogre.return (arch,little,bits,format) in
     match Ogre.eval request doc with
-    | Error _ -> None,None
+    | Error _ -> None,None,None,None
     | Ok info -> info in
   KB.promise Theory.Unit.target @@ fun unit ->
-  KB.collect Image.Spec.slot unit >>|
-  request_info >>| function
-  | Some "mips", None -> mips32bi
-  | Some "mips64",None -> mips64bi
-  | Some ("mips"|"mipsel"),Some true -> mips32le
-  | Some ("mips64"|"mips64el"),Some true -> mips64le
-  | Some "mips",Some false -> mips32eb
-  | Some "mips64",Some false -> mips64eb
-  | _ -> Theory.Target.unknown
-
-
-let mapped_mips = Map.of_alist_exn (module Theory.Target) [
-    mips32eb, `mips;
-    mips32le, `mipsel;
-    mips64eb, `mips64;
-    mips64le, `mips64el;
-  ]
+  KB.collect Image.Spec.slot unit >>| request_info >>|
+  fun (arch,is_little,bits,format) ->
+  if is_mips arch
+  then
+    let abi,filetype = match format with
+      | Some "elf" -> Theory.Abi.gnu, Theory.Filetype.elf
+      | _ -> Theory.Abi.unknown, Theory.Filetype.unknown in
+    let parent = match is_32bit arch bits, is_little with
+      | true,Some true -> mips32le
+      | true,Some false -> mips32eb
+      | false,Some true -> mips64le
+      | false,Some false -> mips64eb
+      | true,None -> mips32bi
+      | false,None -> mips64bi in
+    Theory.Target.select ~strict:true ~parent ~filetype ~abi ()
+  else Theory.Target.unknown
 
 let map_mips () =
   KB.Rule.(declare ~package "mips-arch" |>
@@ -126,10 +174,18 @@ let map_mips () =
            comment "computes Arch.t from the unit's target");
   let open KB.Syntax in
   KB.promise Arch.unit_slot @@ fun unit ->
-  KB.collect Theory.Unit.target unit >>|
-  Map.find mapped_mips >>| function
-  | Some arch -> arch
-  | None -> `unknown
+  KB.collect Theory.Unit.target unit >>| fun t ->
+  if Theory.Target.belongs parent t
+  then List.Assoc.find Theory.Endianness.[
+      (32,eb), `mips;
+      (32,le), `mipsel;
+      (64,eb), `mips64;
+      (64,le), `mips64el;
+    ] Theory.Target.(bits t, endianness t)
+      ~equal:[%equal: int * Theory.Endianness.t] |> function
+       | None -> `unknown
+       | Some r -> r
+  else `unknown
 
 module Dis = Disasm_expert.Basic
 
@@ -184,6 +240,7 @@ let enable_pcode_decoder () =
   else Theory.Language.unknown
 
 let load ?(backend="llvm") () =
+  register_subtargets ();
   enable_loader ();
   map_mips ();
   match backend with

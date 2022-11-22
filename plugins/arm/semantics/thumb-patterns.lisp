@@ -1,6 +1,6 @@
 (in-package bap)
 
-(declare (context (target arm)
+(declare (context (target arm-family)
                   (patterns enabled)))
 
 (defmethod bap:patterns-action (action addr attrs)
