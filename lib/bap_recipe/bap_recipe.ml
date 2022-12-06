@@ -110,7 +110,7 @@ let input file parse root =
   let path = root.path / file in
   if Sys.file_exists path
   then parse (In_channel.read_all path)
-  else Error (Missing_entry file)
+  else Error (Missing_entry path)
 
 let parse_recipe str =
   match Parsexp.Many.parse_string str with
@@ -195,8 +195,12 @@ let read t = match target_format t with
     let path = mkdtemp ~prefix:"recipe-" ~suffix:".unzipped" () in
     unzip t path;
     {path; temp=true; main="recipe.scm"}
-  | Raw -> {path=Filename.dirname t; temp=false; main=t}
   | Dir -> {path=t; temp=false; main="recipe.scm"}
+  | Raw -> {
+      path=Filename.dirname t;
+      temp=false;
+      main=Filename.basename t
+    }
 
 let check_vars env spec loads =
   let specs = spec :: List.map loads ~f:(fun s -> s.spec) in
