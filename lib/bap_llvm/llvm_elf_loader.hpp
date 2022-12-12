@@ -232,20 +232,29 @@ void emit_symbol_entries(const ELFObjectFile<T> &obj, ogre_doc &s) {
 
 template <typename T>
 void emit_relocations(const ELFObjectFile<T> &obj, ogre_doc &s) {
+#if LLVM_VERSION_MAJOR >= 12
+    auto rel_reloc = obj.getELFFile().getRelativeRelocationType();
+#else
+    auto rel_reloc = obj.getELFFile()->getRelativeRelocationType();
+#endif
     for (auto sec : obj.sections()) {
         for (auto rel : sec.relocations()) {
             auto sym = rel.getSymbol();
+            uint64_t raddr = prim::relocation_offset(rel);
             if (sym != prim::end_symbols(obj)) {
                 auto typ = prim::symbol_type(*sym);
                 if (typ && (*typ == SymbolRef::ST_Function ||
+                            *typ == SymbolRef::ST_Data ||
                             *typ == SymbolRef::ST_Unknown)) {
-                    uint64_t raddr = prim::relocation_offset(rel);
                     if (auto addr = prim::symbol_address(*sym))
                         if (*addr) s.entry("llvm:relocation") << raddr << *addr;
                     if (auto name = prim::symbol_name(*sym))
                         if (!name->empty())
                             s.entry("llvm:name-reference") << raddr << *name;
                 }
+            } else {
+                auto typ = prim::relocation_type(rel);
+                if (typ == rel_reloc) s.entry("llvm:relative-relocation") << raddr;
             }
         }
     }

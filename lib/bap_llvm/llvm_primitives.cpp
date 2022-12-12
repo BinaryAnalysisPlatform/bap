@@ -144,6 +144,7 @@ error_or<section_iterator> symbol_section(const ObjectFile &obj, const SymbolRef
 }
 
 uint64_t relocation_offset(const RelocationRef &rel) { return rel.getOffset(); }
+uint64_t relocation_type(const RelocationRef &rel) { return rel.getType(); }
 
 std::vector<RelocationRef> relocations(const SectionRef &sec) {
     auto r = sec.relocations();

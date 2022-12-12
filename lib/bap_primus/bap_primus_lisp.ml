@@ -6,6 +6,7 @@ open Bap_c.Std
 open Bap_primus_types
 open Bap_primus_sexp
 
+include Self()
 
 module Lisp = struct
   module Attribute = Bap_primus_lisp_attribute
@@ -699,6 +700,7 @@ module Make(Machine : Machine) = struct
           Interp.eval_advices Advice.After r fullname args >>= fun r ->
           eval_ret r
       end in
+      info "linking lisp def %s" name;
       Linker.link ?addr ?tid ~name (module Code)
 
   let link_features =

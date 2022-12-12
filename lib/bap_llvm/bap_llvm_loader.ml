@@ -1,10 +1,20 @@
 open Core_kernel[@@warning "-D"]
+open Bap_knowledge
+open Bap_core_theory
 open Bap.Std
 open Monads.Std
 open Or_error
 
+include Self()
+
 module Sys = Caml.Sys
 module Unix = Caml_unix
+
+module Ogre = struct
+  include Ogre
+  include Ogre.Make(KB)
+end
+
 
 module Primitive = struct
   (** [bap_llvm_load data pdb_path] analyzes [data] and builds an llvm
@@ -45,6 +55,9 @@ module LLVM = struct
   (** (llvm:relocation from to). *)
   let relocation () =
     Ogre.declare ~name:"llvm:relocation" (scheme at $ addr) Tuple.T2.create
+
+  let relative_relocation () =
+    Ogre.declare ~name:"llvm:relative-relocation" (scheme at) Fn.id
 
   (** an external symbols with the given name is referenced ad *)
   let name_reference () =
@@ -129,17 +142,33 @@ let iter_rows fieldname f =
 let provide_if cond code =
   if cond then code else []
 
-let provide_base_and_bias new_base =
+let unit_bias file =
+  let open KB.Syntax in
+  match file with
+  | None | Some "" -> !!None
+  | Some file ->
+    Theory.Unit.for_file file >>=
+    KB.collect Theory.Unit.bias >>|
+    Option.map ~f:Bitvec.to_int64
+
+let provide_base_and_bias ?file new_base =
   Ogre.require LLVM.base_address >>= fun real ->
-  Ogre.sequence @@ match new_base with
-  | None -> [
-      Ogre.provide bias 0L;
-      Ogre.provide base_address real;
+  Ogre.lift (unit_bias file) >>= function
+  | Some b ->
+    info "using provided bias 0x%Lx for file %s" b @@ Option.value_exn file;
+    Ogre.sequence [
+      Ogre.provide bias b;
+      Ogre.provide base_address Int64.(real + b)
     ]
-  | Some base -> [
-      Ogre.provide bias Int64.(base - real);
-      Ogre.provide base_address base;
-    ]
+  | None -> Ogre.sequence @@ match new_base with
+    | None -> [
+        Ogre.provide bias 0L;
+        Ogre.provide base_address real;
+      ]
+    | Some base -> [
+        Ogre.provide bias Int64.(base - real);
+        Ogre.provide base_address base;
+      ]
 
 let provide_entry =
   Ogre.require bias >>= fun bias ->
@@ -170,6 +199,11 @@ let provide_generic_sections =
 let provide_relocations =
   iter_rows LLVM.relocation @@ fun bias (addr, dest) -> [
     Ogre.provide relocation Int64.(addr + bias) Int64.(dest + bias)
+  ]
+
+let provide_relative_relocations =
+  iter_rows LLVM.relative_relocation @@ fun bias addr -> [
+    Ogre.provide relative_relocation Int64.(addr + bias)
   ]
 
 let provide_name_references =
@@ -377,9 +411,9 @@ let provide_elf_segmentation_and_libraries data =
   provide_elf_segmentation @ [ElfDyn.libraries data;]
 
 (** translates llvm-specific specification into the image specification  *)
-let translate data user_base =
+let translate ?file data user_base =
   Ogre.sequence [
-    provide_base_and_bias user_base;
+    provide_base_and_bias user_base ?file;
     provide_entry;
     Ogre.sequence [
       overload "elf"   @@ provide_elf_segmentation_and_libraries data;
@@ -388,6 +422,7 @@ let translate data user_base =
     ];
     provide_symbols;
     provide_relocations;
+    provide_relative_relocations;
     provide_name_references;
   ]
 
@@ -400,10 +435,20 @@ let pdb_path ~pdb filename =
     else pdb
   else ""
 
-let translate_to_image_spec data base doc =
-  match Ogre.exec (translate data base) doc with
-  | Ok doc -> Ok (Some doc)
-  | Error er -> Error er
+type KB.conflict += Loader_error of Error.t
+
+let () = KB.Conflict.register_printer @@ function
+  | Loader_error err ->
+    Some (Format.asprintf "llvm loader error: %a" Error.pp err)
+  | _ -> None
+
+let liftr = function
+  | Ok x -> KB.return x
+  | Error x -> KB.fail @@ Loader_error x
+
+let translate_to_image_spec data base doc file =
+  let open KB.Syntax in
+  Ogre.exec (translate data base ~file) doc >>= liftr
 
 let load_doc ~pdb filename data =
   try Ok (Primitive.llvm_load data (pdb_path ~pdb filename))
@@ -413,10 +458,10 @@ let load_doc ~pdb filename data =
     | n -> Or_error.errorf "fail with unexpected error code %d" n
 
 let from_data ~base ~pdb filename data =
-  let open Or_error.Monad_infix in
-  load_doc ~pdb filename data >>=
-  Ogre.Doc.from_string >>=
-  translate_to_image_spec data base
+  let open KB.Syntax in
+  liftr (load_doc ~pdb filename data) >>= fun s ->
+  liftr (Ogre.Doc.from_string s) >>= fun doc ->
+  translate_to_image_spec data base doc filename >>| Option.some
 
 let map_file path =
   let fd = Unix.(openfile path [O_RDONLY] 0o400) in
@@ -433,10 +478,11 @@ let map_file path =
 [@@warning "-D"]
 
 let from_file ~base ~pdb path =
-  Or_error.(map_file path >>= from_data ~base ~pdb path)
+  let open KB.Syntax in
+  liftr (map_file path) >>= from_data ~base ~pdb path
 
 let init ?base ?(pdb_path=Sys.getcwd ()) () =
-  Image.register_loader ~name:"llvm" (module struct
+  Image.KB.register_loader ~name:"llvm" (module struct
     let from_file = from_file ~base ~pdb:pdb_path
     let from_data = from_data ~base ~pdb:pdb_path ""
   end);

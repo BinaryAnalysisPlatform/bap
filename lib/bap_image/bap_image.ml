@@ -1,4 +1,5 @@
 open Core_kernel[@@warning "-D"]
+open Bap_knowledge
 open Bap_core_theory
 open Regular.Std
 open Bap_types.Std
@@ -21,6 +22,29 @@ end
 type loader = (module Loader)
 let backends : loader String.Table.t =
   String.Table.create ()
+
+module KB = struct
+  module type Loader = sig
+    val from_file : string -> doc option knowledge
+    val from_data : Bigstring.t -> doc option knowledge
+  end
+
+  let register_loader ~name (module Loader : Loader) =
+    let module Loader = struct
+      let result = Toplevel.var "load"
+      let from_file filename = try
+          Toplevel.put result @@ Loader.from_file filename;
+          Ok (Toplevel.get result)
+        with Toplevel.Conflict c ->
+          Or_error.errorf "%s" @@ KB.Conflict.to_string c
+      let from_data data = try
+          Toplevel.put result @@ Loader.from_data data;
+          Ok (Toplevel.get result)
+        with Toplevel.Conflict c ->
+          Or_error.errorf "%s" @@ KB.Conflict.to_string c
+    end in
+    Hashtbl.add_exn backends ~key:name ~data:(module Loader)
+end
 
 type location = {
   addr : addr;
@@ -147,6 +171,8 @@ module Scheme = struct
 
   let relocation () =
     declare "relocation" (scheme fixup $ addr) Tuple.T2.create
+  let relative_relocation () =
+    declare "relative-relocation" (scheme fixup) Fn.id
   let external_reference () =
     declare "external-reference" (scheme addr $ name) Tuple.T2.create
   let base_address () = declare "base-address" (scheme addr) Fn.id
@@ -682,7 +708,6 @@ let get_loader = function
         let from_file = fail
         let from_data = fail
       end)
-
 
 let invoke load data arg = match load arg with
   | Ok (Some doc) -> from_spec (data arg) doc

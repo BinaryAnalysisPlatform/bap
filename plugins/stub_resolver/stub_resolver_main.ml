@@ -378,7 +378,9 @@ let update prog ~link_only ~no_link =
           let name = Sub.name sub in
           if Set.mem stub_names name then
             let addr = Term.get_attr sub address in
-            Sub.with_name sub @@ mangle_name addr tid name
+            let new_name = mangle_name addr tid name in
+            info "mangling implementation %s to %s" name new_name;
+            Sub.with_name sub new_name
           else sub
         else sub in
       super#map_sub sub

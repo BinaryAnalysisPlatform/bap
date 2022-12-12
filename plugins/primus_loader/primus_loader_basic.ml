@@ -81,7 +81,11 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
   let get_segmentations proj =
     match Project.get proj Image.specification with
     | None -> Ok Seq.empty
-    | Some spec -> Ogre.eval segmentations spec
+    | Some spec ->
+      let libs = Project.libraries proj in
+      let specs = spec :: List.map libs ~f:Project.Library.specification in
+      List.map specs ~f:(Ogre.eval segmentations) |> Result.all |>
+      Result.map ~f:(Fn.compose Seq.concat Seq.of_list)
 
   let load_segments () =
     Machine.project >>= fun proj ->
@@ -95,31 +99,102 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
             make_word addr >>= fun lower ->
             make_word Int64.(size-1L) >>= fun diff ->
             let upper = Word.(lower + diff) in
+            info "loading segment [%a, %a]" Addr.pp lower Addr.pp upper;
             Mem.add_region () ~lower ~upper
               ~readonly:(not w)
               ~executable:x
               ~generator:(Generator.static 0) >>| fun () ->
             Addr.max endp Addr.(succ upper))
 
-  let map_segments () =
-    Machine.project >>= fun proj ->
-    make_word 0L >>= fun null ->
-    Memmap.to_sequence (Project.memory proj) |>
-    Machine.Seq.fold ~init:null ~f:(fun endp (mem,tag) ->
+  let one_memmap m ~init =
+    Memmap.to_sequence m |>
+    Machine.Seq.fold ~init ~f:(fun endp (mem,tag) ->
         match Value.get Image.segment tag with
         | None -> Machine.return endp
         | Some seg ->
           let alloc =
             if Image.Segment.is_executable seg
             then Mem.add_text else Mem.add_data in
-          let maddr = Memory.max_addr mem in
+          let lower = Memory.min_addr mem in
+          let upper = Memory.max_addr mem in
+          info "mapping segment [%a, %a]" Addr.pp lower Addr.pp upper;
           let update_ends = match Image.Segment.name seg with
-            | ".text" -> set_word "etext" maddr
-            | ".data" -> set_word "edata" maddr
+            | ".text" -> set_word "etext" upper
+            | ".data" -> set_word "edata" upper
             | _ -> Machine.return () in
           alloc mem >>= fun () ->
           update_ends >>| fun ()  ->
-          Addr.max endp maddr)
+          Addr.max endp upper)
+
+  let map_segments () =
+    Machine.project >>= fun proj ->
+    make_word 0L >>= fun null ->
+    one_memmap ~init:null (Project.memory proj) >>= fun init ->
+    Project.libraries proj |> List.map ~f:Project.Library.memory |>
+    Machine.List.fold ~init ~f:(fun init m -> one_memmap m ~init)
+
+  let save_word endian word ptr =
+    Word.enum_bytes word endian |>
+    Machine.Seq.fold ~init:ptr ~f:(fun ptr byte ->
+        Mem.store ptr byte >>| fun () ->
+        Word.succ ptr)
+
+  let read_word endian ptr =
+    let rec aux a s =
+      Mem.load a >>= fun v ->
+      if s <= 8 then Machine.return v
+      else aux (Word.succ a) (s - 8) >>| fun u -> match endian with
+        | LittleEndian -> Word.concat u v
+        | BigEndian -> Word.concat v u in
+    aux ptr @@ Word.bitwidth ptr
+
+  let or_empty doc x =
+    Ogre.eval x doc |> Result.ok |> Option.value ~default:Seq.empty
+
+  let relocations doc = Ogre.(collect Query.(begin
+      select @@ from Image.Scheme.relocation
+    end)) |> or_empty doc
+
+  let base_address = Ogre.require Image.Scheme.base_address
+
+  let relative_relocations doc endian width =
+    match Ogre.eval base_address doc with
+    | Error _ -> !!Seq.empty
+    | Ok base ->
+      let rels = Ogre.(collect Query.(begin
+          select @@ from Image.Scheme.relative_relocation
+        end)) |> or_empty doc in
+      Machine.Seq.map rels ~f:(fun addr ->
+          read_word endian (Word.of_int64 ~width addr) >>| fun v ->
+          addr, Int64.(base + Word.to_int64_exn v))
+
+  let endian_of_target target =
+    let endianness = Theory.Target.endianness target in
+    if Theory.Endianness.(endianness = eb)
+    then BigEndian else LittleEndian
+
+  let fixup_one_reloc endian width (fixup, addr) =
+    let fixup = Addr.of_int64 ~width fixup in
+    let addr = Word.of_int64 ~width addr in
+    info "writing %a for relocation %a" Word.pp addr Addr.pp fixup;
+    save_word endian addr fixup >>| ignore
+
+  let fixup_relocs_of_doc target doc =
+    let endian = endian_of_target target in
+    let width = Theory.Target.code_addr_size target in
+    let rels = relocations doc in
+    relative_relocations doc endian width >>= fun rrels ->
+    let f = fixup_one_reloc endian width in
+    Machine.Seq.iter rels ~f >>= fun () ->
+    Machine.Seq.iter rrels ~f
+
+  let fixup_relocs () =
+    Machine.get () >>= fun project ->
+    let target = Project.target project in
+    let libs = Project.libraries project in
+    let spec = Project.specification project in
+    let specs = spec :: List.map libs ~f:Project.Library.specification in
+    Machine.List.iter specs ~f:(fixup_relocs_of_doc target)
 
   let bytes_in_array =
     Array.fold ~init:0 ~f:(fun sum str ->
@@ -141,12 +216,6 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
         (ptr,ptr'::ptrs)) >>| fun (ptr,ptrs) ->
     ptr, List.rev ptrs
 
-  let save_word endian word ptr =
-    Word.enum_bytes word endian |>
-    Machine.Seq.fold ~init:ptr ~f:(fun ptr byte ->
-        Mem.store ptr byte >>| fun () ->
-        Word.succ ptr)
-
   let save_table endian addrs ptr =
     Machine.List.fold addrs ~init:ptr ~f:(fun ptr addr ->
         save_word endian addr ptr)
@@ -156,8 +225,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     Machine.args >>= fun argv ->
     Machine.envp >>= fun envp ->
     make_word stack_base >>= fun sp ->
-    let endian = if Theory.Endianness.(Theory.Target.endianness target = le)
-      then LittleEndian else BigEndian in
+    let endian = endian_of_target target in
     let width = Theory.Target.code_addr_size target in
     let argc = Array.length argv |>
                Word.of_int ~width in
@@ -211,13 +279,21 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     Machine.Seq.iter ~f:(fun (name,addr) -> set_word name addr)
 
   let init () =
+    info "setting up stack";
     setup_stack () >>= fun () ->
+    info "setting up main frame";
     setup_main_frame () >>= fun () ->
+    info "loading segments";
     load_segments () >>= fun e1 ->
+    info "mapping segments";
     map_segments () >>= fun e2 ->
+    info "fixing up relocations";
+    fixup_relocs () >>= fun () ->
+    info "setting up registers";
     let endp = Addr.max e1 e2 in
     set_word "posix:endp" endp >>= fun () ->
     set_word "posix:brk"  endp >>= fun () ->
     setup_registers () >>= fun () ->
+    info "initializing names";
     init_names ()
 end
