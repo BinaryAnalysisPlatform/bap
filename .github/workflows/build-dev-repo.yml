@@ -8,14 +8,14 @@ jobs:
     strategy:
       matrix:
         os:
-          - ubuntu-latest
-          - macos-latest
+          - ubuntu-20.04
+          - macos-11
         ocaml-compiler:
           - 4.11.x
           - 4.08.x
 
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.os == 'macos-latest'}}
+    continue-on-error: ${{ matrix.os == 'macos-11'}}
 
     env:
       TMPDIR: /tmp
@@ -32,7 +32,7 @@ jobs:
         uses: ocaml/setup-ocaml@v2
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
-          dune-cache: ${{  matrix.os != 'macos-latest' }}
+          dune-cache: ${{  matrix.os != 'macos-11' }}
 
       - name: Add the testing Repository
         run: opam repo add bap git+https://github.com/BinaryAnalysisPlatform/opam-repository#testing
@@ -41,7 +41,7 @@ jobs:
         run: opam pin add bap . --no-action
 
       - name: Configure Homebrew LLVM
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-11'
         run: |
           rm -rf /usr/local/bin/2to3
           rm -f $(opam var lib)/ocaml/version

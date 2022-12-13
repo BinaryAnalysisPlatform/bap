@@ -305,7 +305,6 @@ depexts: [
     "libgmp-dev"
     "libzip-dev"
     "libcurl4-gnutls-dev"
-    "llvm-9-dev"
     "time"
     "clang"
     "m4"
