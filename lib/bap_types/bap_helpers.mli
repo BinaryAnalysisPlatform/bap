@@ -1,5 +1,6 @@
 (** BIL high level functions.   *)
 open Core_kernel[@@warning "-D"]
+open Bap_core_theory
 open Bap_common
 open Bap_bil
 open Bap_visitor
@@ -36,6 +37,7 @@ module Type : sig
   val check : stmt list -> (unit,Bap_type_error.t) Result.t
   val infer : exp -> (typ, Bap_type_error.t) Result.t
   val infer_exn : exp -> typ
+  val sort : typ -> unit Theory.Value.sort
 end
 
 module Eff : sig
