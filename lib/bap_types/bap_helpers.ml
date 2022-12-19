@@ -150,6 +150,8 @@ module Type = struct
   let check xs = match check xs with
     | None -> Ok ()
     | Some err -> Error err
+
+  let sort = Bap_var.sort_of_typ
 end
 
 (*

@@ -2806,6 +2806,12 @@ module Std : sig
     *)
     val check : bil -> (unit,error) Result.t
 
+    (** [sort t] translates the type [t] into a Core Theory sort.
+
+        @since 2.6.0
+    *)
+    val sort : t -> unit Theory.Value.sort
+
     (** BIL type errors.
 
         Not all syntactically correct expressions make sense. A
