@@ -177,13 +177,19 @@ let suite = "stub-resolver" >::: [
       real "h0" ["h1"; "h2"];
       stub "h1" [];
       stub "h2" [];
-    ] ~expected:[];
+    ] ~expected:[
+      "h1", "h0";
+      "h2", "h0";
+    ];
 
     test "ambiguous stubs" [
       real "i0" [];
       stub "i1" ["i0"];
       stub "i2" ["i0"];
-    ] ~expected:[];
+    ] ~expected:[
+      "i1", "i0";
+      "i2", "i0";
+    ];
 
     test "crossreference" [
       real "j0" ["j1"];
@@ -210,7 +216,11 @@ let suite = "stub-resolver" >::: [
       real "m6" ["m5"; "m9"];
       real "m9" ["m10"];
       stub "m10" [];
-    ] ~expected:["m0", "m1"; ];
+    ] ~expected:[
+      "m0", "m1";
+      "m10", "m9";
+      "m5", "m6";
+    ];
 
     test "several intersections 2" [
       stub "n0" ["n1"; "n2"; "n3"];
@@ -220,7 +230,7 @@ let suite = "stub-resolver" >::: [
       real "n6" [];
       stub "n7" ["n6"];
       real "n8" ["n1"; "n5"]
-    ] ~expected:["n7", "n6" ];
+    ] ~expected:["n7", "n6"];
 
     test "several intersections 3" [
       stub "p0" ["p1"; "p2"; "p3"];
@@ -228,6 +238,9 @@ let suite = "stub-resolver" >::: [
       real "p5" [];
       stub "p6" ["p8"; "p9"; "p10"; "p4"];
       real "p11" ["p12"; "p13"; "p1"];
-    ] ~expected:["p0", "p11" ];
+    ] ~expected:[
+      "p0", "p11";
+      "p4", "p5";
+    ];
 
   ]
