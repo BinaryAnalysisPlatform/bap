@@ -7,7 +7,7 @@ Library bap-plugin-stub_resolver
   Path:         plugins/stub_resolver/
   BuildDepends: bap, bap-abi, bap-knowledge, bap-core-theory, core_kernel,
                 bitvec, bitvec-order, bitvec-sexp,
-                bap-main, ppx_bap, ogre
+                bap-main, ppx_bap, ogre, graphlib, regular
   FindlibName:     bap-plugin-stub_resolver
   CompiledObject:  best
   Modules:         Stub_resolver
