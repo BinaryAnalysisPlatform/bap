@@ -2,17 +2,30 @@ open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Bap_core_theory
 open Bap_knowledge
+open Graphlib.Std
+open Regular.Std
 
 include Self ()
 let package = "bap"
 
 open KB.Syntax
 
+module Regular_string = struct
+  type t = string
+  include Regular.Make(struct
+      include String
+      let module_name = Some "String"
+      let version = "2.6.0"
+    end)
+end
+
+module G = Graphlib.Make(Regular_string)(Unit)
+
 type state = {
-  groups : (tid, tid) Bap_relation.t;
-  names  : (tid, string) Bap_relation.t;
-  stubs  : Tid.Set.t;
-  units  : Theory.Unit.t Tid.Map.t;
+  graph : G.t;
+  names : (tid, string) Bap_relation.t;
+  stubs : Tid.Set.t;
+  units : Theory.Unit.t Tid.Map.t;
 }
 
 module Class = struct
@@ -35,10 +48,10 @@ module Class = struct
 end
 
 let empty = {
-  groups = Bap_relation.empty Tid.compare Tid.compare;
-  names  = Bap_relation.empty Tid.compare String.compare;
-  stubs  = Set.empty (module Tid);
-  units  = Map.empty (module Tid);
+  graph = G.empty;
+  names = Bap_relation.empty Tid.compare String.compare;
+  stubs = Set.empty (module Tid);
+  units = Map.empty (module Tid);
 }
 
 let in_file file f =
@@ -84,25 +97,25 @@ let should_link aliases ~link_only ~no_link =
     not Set.(is_empty @@ inter aliases link_only)
   end
 
+let update_graph t name aliases =
+  let n = G.Node.create name in
+  let init = G.Node.insert n t.graph in
+  let graph = Set.fold aliases ~init ~f:(fun g alias ->
+      if String.(name <> alias) then
+        let a = G.Node.create alias in
+        let x = G.Edge.create n a () in
+        let y = G.Edge.create a n () in
+        G.Edge.(insert x (insert y g))
+      else g) in
+  {t with graph}
+
 let update_names t sub ~link_only ~no_link =
   aliases_of_sub sub >>| fun aliases ->
   if should_link aliases ~link_only ~no_link then
-    let groups, names =
-      let tid = Term.tid sub in
-      let stub = Set.mem t.stubs tid in
-      let init = t.groups, t.names in
-      Set.fold aliases ~init ~f:(fun (groups, names) name ->
-          let groups =
-            Bap_relation.findr names name |>
-            List.fold ~init:groups ~f:(fun groups x ->
-                if Tid.(x <> tid) then match stub, Set.mem t.stubs x with
-                  | true,  true  -> groups
-                  | true,  false -> Bap_relation.add groups tid x
-                  | false, true  -> Bap_relation.add groups x tid
-                  | false, false -> groups
-                else groups) in
-          groups, Bap_relation.add names tid name) in
-    {t with groups; names}
+    let tid = Term.tid sub in
+    let names = Set.fold aliases ~init:t.names ~f:(fun r n ->
+        Bap_relation.add r tid n) in
+    update_graph {t with names} (Sub.name sub) aliases
   else t
 
 let add t sub ~link_only ~no_link =
@@ -110,25 +123,34 @@ let add t sub ~link_only ~no_link =
   update_units t sub >>= fun t ->
   update_names t sub ~link_only ~no_link
 
+let partition_group t group =
+  Group.enum group |>
+  Seq.fold ~init:Tid.Set.empty ~f:(fun init name ->
+      Bap_relation.findr t.names name |>
+      List.fold ~init ~f:Set.add) |>
+  Set.partition_tf ~f:(Set.mem t.stubs)
+
 let find_pairs t =
-  let add stub impl links = Map.change links stub ~f:(function
-      | None -> Some impl
-      | Some i when Tid.(impl <> i) -> None
-      | Some _ as i -> i) in
-  Bap_relation.matching t.groups Tid.Map.empty
-    ~unmatched:(fun reason links -> match reason with
-        | Non_injective_bwd (_, stub) -> Map.remove links stub
-        | Non_injective_fwd (stubs, impl) ->
-          List.fold stubs ~init:links ~f:(fun links stub ->
-              match Bap_relation.findl t.groups stub with
-              | _ :: _ :: _ -> links
-              | _ -> add stub impl links))
-    ~saturated:add
+  let pp = Group.pp String.pp in
+  Graphlib.strong_components (module G) t.graph |>
+  Partition.groups |> Seq.fold ~init:Tid.Map.empty ~f:(fun init group ->
+      let stubs, reals = partition_group t group in
+      match Set.length reals with
+      | 1 ->
+        let impl = Set.min_elt_exn reals in
+        Set.fold stubs ~init ~f:(fun links stub ->
+            Map.add_exn links stub impl)
+      | 0 ->
+        info "no implementations found in group %a" pp group;
+        init
+      | n ->
+        info "ambiguous implementations (%d) found in group %a" n pp group;
+        init)
 
 let resolve prog ~link_only ~no_link =
+  let f = add ~link_only ~no_link in
   Term.to_sequence sub_t prog |>
-  Knowledge.Seq.fold ~init:empty
-    ~f:(add ~link_only ~no_link) >>| fun state ->
+  Knowledge.Seq.fold ~init:empty ~f >>| fun state ->
   state, find_pairs state
 
 let label_name x =

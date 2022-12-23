@@ -218,8 +218,6 @@ let suite = "stub-resolver" >::: [
       stub "m10" [];
     ] ~expected:[
       "m0", "m1";
-      "m10", "m9";
-      "m5", "m6";
     ];
 
     test "several intersections 2" [
@@ -241,6 +239,7 @@ let suite = "stub-resolver" >::: [
     ] ~expected:[
       "p0", "p11";
       "p4", "p5";
+      "p6", "p5";
     ];
 
   ]
