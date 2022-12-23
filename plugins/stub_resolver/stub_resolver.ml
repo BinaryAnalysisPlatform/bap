@@ -23,7 +23,7 @@ module G = Graphlib.Make(Regular_string)(Unit)
 
 type state = {
   graph : G.t;
-  names : (tid, string) Bap_relation.t;
+  names : Tid.Set.t String.Map.t;
   stubs : Tid.Set.t;
   units : Theory.Unit.t Tid.Map.t;
 }
@@ -49,9 +49,9 @@ end
 
 let empty = {
   graph = G.empty;
-  names = Bap_relation.empty Tid.compare String.compare;
-  stubs = Set.empty (module Tid);
-  units = Map.empty (module Tid);
+  names = String.Map.empty;
+  stubs = Tid.Set.empty;
+  units = Tid.Map.empty;
 }
 
 let in_file file f =
@@ -113,8 +113,10 @@ let update_names t sub ~link_only ~no_link =
   aliases_of_sub sub >>| fun aliases ->
   if should_link aliases ~link_only ~no_link then
     let tid = Term.tid sub in
-    let names = Set.fold aliases ~init:t.names ~f:(fun r n ->
-        Bap_relation.add r tid n) in
+    let names = Set.fold aliases ~init:t.names ~f:(fun m a ->
+        Map.update m a ~f:(function
+            | None -> Tid.Set.singleton tid
+            | Some s -> Set.add s tid)) in
     update_graph {t with names} (Sub.name sub) aliases
   else t
 
@@ -125,9 +127,9 @@ let add t sub ~link_only ~no_link =
 
 let partition_group t group =
   Group.enum group |>
-  Seq.fold ~init:Tid.Set.empty ~f:(fun init name ->
-      Bap_relation.findr t.names name |>
-      List.fold ~init ~f:Set.add) |>
+  Seq.fold ~init:Tid.Set.empty ~f:(fun default name ->
+      Map.find t.names name |>
+      Option.value_map ~default ~f:(Set.union default)) |>
   Set.partition_tf ~f:(Set.mem t.stubs)
 
 let find_pairs t =
