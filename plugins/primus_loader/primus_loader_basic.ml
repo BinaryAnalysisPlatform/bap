@@ -188,13 +188,22 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     Machine.Seq.iter rels ~f >>= fun () ->
     Machine.Seq.iter rrels ~f
 
+  let is_executable doc =
+    let open Image.Scheme in
+    match Ogre.(eval (require is_executable) doc) with
+    | Error _ -> false
+    | Ok b -> b
+
   let fixup_relocs () =
     Machine.get () >>= fun project ->
-    let target = Project.target project in
-    let libs = Project.libraries project in
     let spec = Project.specification project in
-    let specs = spec :: List.map libs ~f:Project.Library.specification in
-    Machine.List.iter specs ~f:(fixup_relocs_of_doc target)
+    if is_executable spec then
+      let target = Project.target project in
+      let libs = Project.libraries project in
+      let specs = spec :: List.map libs ~f:Project.Library.specification in
+      info "fixing up relocations";
+      Machine.List.iter specs ~f:(fixup_relocs_of_doc target)
+    else !!()
 
   let bytes_in_array =
     Array.fold ~init:0 ~f:(fun sum str ->
@@ -287,7 +296,6 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     load_segments () >>= fun e1 ->
     info "mapping segments";
     map_segments () >>= fun e2 ->
-    info "fixing up relocations";
     fixup_relocs () >>= fun () ->
     info "setting up registers";
     let endp = Addr.max e1 e2 in
