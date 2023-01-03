@@ -271,19 +271,19 @@ module Make(Machine : Machine) = struct
           Generate.word g (Generator.width g) >>=
           remembered {values; layers} addr
 
-  let set_value s addr value = {
+  let set_value addr value s = {
     s with
     values = Map.set s.values ~key:addr ~data:value
   }
 
   let write addr value s =
     if Map.mem s.values addr
-    then Machine.return @@ set_value s addr value
+    then Machine.return @@ set_value addr value s
     else match find_layer addr s.layers with
       | None -> pagefault addr
       | Some {perms={readonly=true}} -> pagefault addr
       | Some _ ->
-        Machine.return @@ set_value s addr value
+        Machine.return @@ set_value addr value s
 
   let add_layer layer t = {t with layers = layer :: t.layers}
   let (++) = add_layer
@@ -336,12 +336,20 @@ module Make(Machine : Machine) = struct
     write addr value >>=
     put_curr
 
+  let set_never_fail addr value =
+    get_curr >>|
+    set_value addr value >>=
+    put_curr
+
+
   let del addr = update @@ fun s -> {
       s with values = Map.remove s.values addr
     }
 
   let load addr = get addr >>| Value.to_word
   let store addr value = Value.of_word value >>= set addr
+  let store_never_fail addr value =
+    Value.of_word value >>= set_never_fail addr
 
   let is_mapped addr =
     get_curr >>| is_mapped addr
