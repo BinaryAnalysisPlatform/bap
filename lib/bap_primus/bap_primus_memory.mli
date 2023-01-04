@@ -26,9 +26,12 @@ module Make(Machine : Machine) : sig
 
   val load  : addr -> word Machine.t
   val store : addr -> word -> unit Machine.t
+  val store_never_fail : addr -> word -> unit Machine.t
 
   val get : addr -> value Machine.t
   val set : addr -> value -> unit Machine.t
+  val set_never_fail : addr -> value -> unit Machine.t
+
   val del : addr -> unit Machine.t
 
   val add_text : mem -> unit Machine.t

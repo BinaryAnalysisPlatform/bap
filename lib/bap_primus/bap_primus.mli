@@ -2573,7 +2573,7 @@ module Std : sig
         val get : addr -> value Machine.t
 
 
-        (** [set a x] stores the byte [x] at the address [a].
+        (** [set a x] stores [x] at the address [a].
 
             raises the [Pagefault] machine exception if [a] is not mapped,
             or not writable.
@@ -2583,6 +2583,19 @@ module Std : sig
         *)
         val set : addr -> value -> unit Machine.t
 
+
+        (** [set_never_fail a x] stores [x] at [a] bypassing any
+            checks.
+
+            Forcefully stores [x] at the address [a] without any
+            sanity checks, i.e., doesn't check if the memory is mapped or
+            is it writable.
+
+            Precondition: the size of the address and the size of the
+            datum match with the current [memory] sizes.
+
+            @since 2.6.0 *)
+        val set_never_fail : addr -> value -> unit Machine.t
 
         (** [del p] removes the value associated with the pointer [p].  *)
         val del : addr -> unit Machine.t
@@ -2597,9 +2610,24 @@ module Std : sig
 
             Same as [Value.of_word x >>= set a].
 
-            Precondition: [Value.bitwidth x = 8].
-        *)
+            Precondition: the size of the address and the size of the
+            datum match with the current [memory] sizes. *)
         val store : addr -> word -> unit Machine.t
+
+        (** [store_never_fail a x] stores [x] at [a] bypassing any
+            checks.
+
+            Forcefully stores [x] at the address [a] without any
+            sanity checks, i.e., doesn't check if the memory is mapped or
+            is it writable.
+
+            Same as [Value.of_word x >>= set_never_fail a].
+
+            Precondition: the size of the address and the size of the
+            datum match with the current [memory] sizes.
+
+            @since 2.6.0 *)
+        val store_never_fail : addr -> word -> unit Machine.t
 
         (** [add_text mem] maps a memory chunk [mem] as executable and
             readonly segment of machine memory.*)

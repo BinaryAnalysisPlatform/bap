@@ -133,10 +133,11 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     Project.libraries proj |> List.map ~f:Project.Library.memory |>
     Machine.List.fold ~init ~f:(fun init m -> one_memmap m ~init)
 
-  let save_word endian word ptr =
+  let save_word ?(force=false) endian word ptr =
+    let store = if force then Mem.store_never_fail else Mem.store in
     Word.enum_bytes word endian |>
     Machine.Seq.fold ~init:ptr ~f:(fun ptr byte ->
-        Mem.store ptr byte >>| fun () ->
+        store ptr byte >>| fun () ->
         Word.succ ptr)
 
   let read_word endian ptr =
@@ -176,8 +177,9 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
   let fixup_one_reloc endian width (fixup, addr) =
     let fixup = Addr.of_int64 ~width fixup in
     let addr = Word.of_int64 ~width addr in
-    info "writing %a for relocation %a" Word.pp addr Addr.pp fixup;
-    save_word endian addr fixup >>| ignore
+    debug "writing %a for relocation %a" Word.pp addr Addr.pp fixup;
+    Machine.ignore_m @@
+    save_word ~force:true endian addr fixup
 
   let fixup_relocs_of_doc target doc =
     let endian = endian_of_target target in
@@ -279,21 +281,21 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     Machine.Seq.iter ~f:(fun (name,addr) -> set_word name addr)
 
   let init () =
-    info "setting up stack";
+    debug "setting up stack";
     setup_stack () >>= fun () ->
-    info "setting up main frame";
+    debug "setting up main frame";
     setup_main_frame () >>= fun () ->
-    info "loading segments";
+    debug "loading segments";
     load_segments () >>= fun e1 ->
-    info "mapping segments";
+    debug "mapping segments";
     map_segments () >>= fun e2 ->
-    info "fixing up relocations";
+    debug "fixing up relocations";
     fixup_relocs () >>= fun () ->
-    info "setting up registers";
+    debug "setting up registers";
     let endp = Addr.max e1 e2 in
     set_word "posix:endp" endp >>= fun () ->
     set_word "posix:brk"  endp >>= fun () ->
     setup_registers () >>= fun () ->
-    info "initializing names";
+    debug "initializing names";
     init_names ()
 end
