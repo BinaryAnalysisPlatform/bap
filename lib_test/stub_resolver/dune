@@ -1,0 +1,4 @@
+(test
+ (name run_stub_resolver_tests)
+ (package bap-stub-resolver)
+ (libraries bap bap-main bap-core-theory bap-stub-resolver.plugin ounit2 threads))

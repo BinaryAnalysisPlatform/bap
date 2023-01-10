@@ -89,7 +89,7 @@ let blocks_that_define_var var sub : tid list =
     of the variable to a top value of a stack for this variable, if it
     is not empty *)
 let substitute vars = (object
-  inherit Exp.mapper as super
+  inherit Exp.mapper
   method! map_sym z =
     match Hashtbl.find vars z with
     | None | Some [] -> z

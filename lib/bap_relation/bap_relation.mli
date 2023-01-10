@@ -1,7 +1,7 @@
 (** A representation of relations between two sets.
 
     A relation between two sets is a set of pairs made from the
-    elements of these sets. The precise mathematical defition is given
+    elements of these sets. The precise mathematical definition is given
     below. This module implements a bidirectional mapping between two
     sets and computes their matching that defines bijections between
     the sets.

@@ -1,3 +1,10 @@
+let provides = [
+  "disassembler";
+  "loader";
+  "elf"; "macho"; "coff";
+  "llvm"
+]
+
 open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Bap_llvm.Std
@@ -60,7 +67,7 @@ let version =
 
 let () =
   let open Syntax in
-  Extension.declare @@ fun ctxt ->
+  Extension.declare ~doc ~provides @@ fun ctxt ->
   let (!) x = ctxt --> x in
   if !version then
     print_version();

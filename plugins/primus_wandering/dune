@@ -1,0 +1,10 @@
+(library
+ (name bap_primus_wandering_plugin)
+ (public_name bap-primus-wandering-scheduler.plugin)
+ (libraries bap bap-future bap-primus core_kernel monads))
+
+(plugin
+ (name primus-wandering)
+ (package bap-primus-wandering-scheduler)
+ (libraries bap-primus-wandering-scheduler.plugin)
+ (site (bap-common plugins)))

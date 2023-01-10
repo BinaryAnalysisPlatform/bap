@@ -276,9 +276,9 @@ let marking_disabled = flag "no-marks"
     attributes. The option is only valid when the $(b,run) option is
     specified. " ^ soft_deprecation_notice)
 
-;;
-
-when_ready begin fun {get=is} ->
+let () = declare_extension
+    ~doc:"compatibility layer for the old traint propagation framework"
+    ~provides:["dataflow"; "pass"; "analysis"; "taint"; "primus"] @@ fun {get=is} ->
   if is injection_enabled || is projection_enabled
   then if is enabled || is marking_disabled
     then invalid_arg "Incorrect mix of old and new parameters";
@@ -308,4 +308,3 @@ when_ready begin fun {get=is} ->
     if not (is marking_disabled) then
       enable_projection ();
   end
-end

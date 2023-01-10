@@ -1,0 +1,10 @@
+(library
+ (name bap_flatten_plugin)
+ (public_name bap-flatten.plugin)
+ (libraries bap bap-main))
+
+(plugin
+ (name flatten)
+ (package bap-flatten)
+ (libraries bap-flatten.plugin)
+ (site (bap-common plugins)))

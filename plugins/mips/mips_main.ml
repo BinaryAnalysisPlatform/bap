@@ -41,11 +41,14 @@ let backend = Config.param Config.(some string) "backend"
     ~doc:"Specify which backend to use"
 
 let () =
-  Config.when_ready (fun {get} ->
-      Bap_mips_target.load ?backend:(get backend) ();
-      register_target `mips (module MIPS32);
-      register_target `mipsel (module MIPS32_le);
-      register_target `mips64 (module MIPS64);
-      register_target `mips64el (module MIPS64_le);
-      Mips.promise_delay_slots ();
-      Mips_abi.setup ());
+  Config.declare_extension
+    ~doc:"provides MIPS semantics"
+    ~provides:["semantics"; "lifter"; "mips"]
+    (fun {get} ->
+       Bap_mips_target.load ?backend:(get backend) ();
+       register_target `mips (module MIPS32);
+       register_target `mipsel (module MIPS32_le);
+       register_target `mips64 (module MIPS64);
+       register_target `mips64el (module MIPS64_le);
+       Mips.promise_delay_slots ();
+       Mips_abi.setup ());

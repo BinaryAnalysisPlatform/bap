@@ -1,6 +1,6 @@
 open Core_kernel[@@warning "-D"]
 open Bap_result
-open Bap_common
+open Bap_common_types
 open Bap_bil
 
 class t : object('s)

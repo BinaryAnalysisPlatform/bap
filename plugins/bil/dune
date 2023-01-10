@@ -1,0 +1,21 @@
+(library
+  (name bap_bil_plugin)
+  (public_name bap-bil.plugin)
+  (preprocess (pps ppx_bap))
+  (libraries
+    bap
+    bap-core-theory
+    bap-future
+    bap-knowledge
+    bap-main
+    bitvec
+    bitvec-order
+    core_kernel
+    monads
+    ogre))
+
+(plugin
+  (name bil)
+  (package bap-bil)
+  (libraries bap-bil.plugin)
+  (site (bap-common plugins)))

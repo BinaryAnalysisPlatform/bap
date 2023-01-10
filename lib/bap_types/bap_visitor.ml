@@ -1,5 +1,5 @@
 open Core_kernel[@@warning "-D"]
-open Bap_common
+open Bap_common_types
 open Bap_bil
 
 
@@ -190,8 +190,6 @@ class ['a] bil_visitor = object (self : 's)
       | Stmt.CpuExn n -> self#visit_cpuexn n x in
     self#leave_stmt stmt x
 end
-
-exception Found
 
 class ['a] exp_finder = object(self)
   inherit ['a option return] exp_visitor

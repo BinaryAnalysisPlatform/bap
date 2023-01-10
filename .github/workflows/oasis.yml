@@ -1,0 +1,96 @@
+name: oasis
+run-name: Building ${{ github.ref }} with OASIS
+on:
+  - pull_request
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os:
+          - ubuntu-20.04
+          - macos-11
+        ocaml-compiler:
+          - 4.08.x
+          - 4.14.x
+        exclude:
+          - os: macos-11
+            ocaml-compiler: 4.08.x
+
+
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.os == 'macos-11'}}
+
+    env:
+      TMPDIR: /tmp
+      XDG_CACHE_HOME: /tmp/cache
+      BAP_LOG_DIR: /tmp/bap-log
+      OPAMJOBS: 2
+      OPAMRETRES: 8
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Prepare Ubuntu
+        if: matrix.os == 'ubuntu-20.04'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install dejagnu -y
+
+      - name: Prepare macOS
+        if: matrix.os == 'macos-11'
+        run: |
+          echo 'LLVM_CONFIG=/usr/local/opt/llvm@9/bin/llvm-config' >> $GITHUB_ENV
+          brew install deja-gnu
+
+      - name: Install OCaml ${{ matrix.ocaml-compiler }}
+        uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: ${{ matrix.ocaml-compiler }}
+          dune-cache: ${{  matrix.os != 'macos-11' }}
+          opam-disable-sandboxing: true
+          opam-repositories: |
+            default: git+https://github.com/ocaml/opam-repository.git
+            bap: git+https://github.com/BinaryAnalysisPlatform/opam-repository#testing
+
+      - name: Install OPAM dependencies
+        run: opam install . --deps-only
+
+      - name: Install dependencies requires for the OASIS build
+        run: opam install oasis ppx_bap conf-bap-llvm conf-binutils
+
+      - name: Configure BAP
+        run: >-
+          BAP_DEBUG=true
+          opam exec --
+          ./configure --enable-everything
+          --disable-ghidra
+          --disable-ida
+          --prefix=$(opam var prefix)
+          --with-llvm-config=$(opam var conf-bap-llvm:config)
+          --with-llvm-version=$(opam var conf-bap-llvm:package-version)
+          --objdump-paths="$(opam var conf-binutils:objdumps)"
+
+      - name: Build BAP
+        run: opam exec -- make
+
+      - name: Install BAP
+        run: opam exec -- make reinstall
+
+      - name: Run functional tests
+        run: opam exec -- make check
+
+      - uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: bap-log
+          path: ~/.local/state/bap
+
+      - uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: fun-tests-log
+          path: |
+            testsuite/*.log
+            testsuite/logs

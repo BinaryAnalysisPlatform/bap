@@ -1,0 +1,27 @@
+(library
+ (name bap_piqi)
+ (public_name bap-piqi)
+ (wrapped false)
+ (preprocess (pps ppx_bap))
+ (libraries bap piqirun.pb piqirun.ext)
+ (private_modules stmt_piqi stmt_piqi_ext ir_piqi ir_piqi_ext))
+
+(rule
+ (targets type__piqi.ml type__piqi_ext.ml)
+ (deps type.piqi)
+ (action (run piqic-ocaml --multi-format %{deps})))
+
+(rule
+ (targets stmt_piqi.ml stmt_piqi_ext.ml)
+ (deps stmt.piqi)
+ (action (run piqic-ocaml --multi-format %{deps})))
+
+(rule
+ (targets exp_piqi.ml exp_piqi_ext.ml)
+ (deps exp.piqi)
+ (action (run piqic-ocaml --multi-format %{deps})))
+
+(rule
+ (targets ir_piqi.ml ir_piqi_ext.ml)
+ (deps ir.piqi)
+ (action (run piqic-ocaml --multi-format %{deps})))

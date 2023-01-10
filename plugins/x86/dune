@@ -1,0 +1,27 @@
+(library
+  (name x86)
+  (public_name bap-x86.plugin)
+  (preprocess (pps ppx_bap))
+  (libraries
+    bap
+    bap-abi
+    bap-api
+    bap-c
+    bap-core-theory
+    bap-future
+    bap-knowledge
+    bap-llvm
+    bap-main
+    bap-primus
+    bap-x86
+    bitvec
+    core_kernel
+    ogre
+    str
+    zarith))
+
+(plugin
+  (name x86)
+  (package bap-x86)
+  (libraries bap-x86.plugin)
+  (site (bap-common plugins)))

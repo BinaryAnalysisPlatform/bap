@@ -1,0 +1,22 @@
+(library
+ (name bap_primus_propagate_taint_plugin)
+ (public_name bap-primus-propagate-taint.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   bap-core-theory
+   bap-future
+   bap-knowledge
+   bap-microx
+   bap-primus
+   bap-taint
+   core_kernel
+   graphlib
+   monads
+   regular))
+
+(plugin
+ (name primus-propagate-taint)
+ (package bap-primus-propagate-taint)
+ (libraries bap-primus-propagate-taint.plugin)
+ (site (bap-common plugins)))

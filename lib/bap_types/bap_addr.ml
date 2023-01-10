@@ -1,6 +1,6 @@
 open Core_kernel[@@warning "-D"]
 open Regular.Std
-open Bap_common
+open Bap_common_types
 
 
 let memref ?(disp=0) ?(index=0) ?(scale=`r8)  addr =

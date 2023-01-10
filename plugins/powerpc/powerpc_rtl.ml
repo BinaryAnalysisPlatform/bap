@@ -331,7 +331,7 @@ module Translate = struct
       3) [var1;var2; ...] := exp  - equivalent to 2)
       4) extract hi lo var := exp - change only certain bits of var
       5) extract hi lo (var1 ^ var2 ... varN) := exp *)
-  let rec move lhs rhs =
+  let move lhs rhs =
     match Exp.body lhs with
     | Vars (v, []) ->
       let rhs = Exp.(cast rhs (width lhs) (sign lhs)) in

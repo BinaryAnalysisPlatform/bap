@@ -1,0 +1,10 @@
+(library
+ (name bap_common)
+ (public_name bap-common)
+ (wrapped false)
+ (libraries dune-site dune-site.plugins))
+
+(generate_sites_module
+ (module bap_common_private_sites)
+ (sites bap-common)
+ (plugins (bap-common plugins)))

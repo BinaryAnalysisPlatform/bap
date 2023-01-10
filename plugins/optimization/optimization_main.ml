@@ -222,6 +222,9 @@ let () =
 
     Config.(param int ~default:0 ~doc "level") in
 
-  Config.when_ready (fun {Config.get=(!)} ->
-      if !level > 0
-      then Project.register_pass ~deps:["api"] ~autorun:true (run !level))
+  Config.declare_extension
+    ~doc:"removes dead code and propagates constants"
+    ~provides:["pass"; "optimization"; "analysis"; "simplification"]
+    (fun {Config.get=(!)} ->
+       if !level > 0
+       then Project.register_pass ~deps:["api"] ~autorun:true (run !level))

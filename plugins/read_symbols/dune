@@ -1,0 +1,16 @@
+(library
+ (name bap_read_symbols_plugin)
+ (public_name bap-symbol-reader.plugin)
+ (libraries
+   bap-core-theory
+   bap-knowledge
+   bap-main
+   bap-relation
+   bitvec
+   core_kernel))
+
+(plugin
+ (name read-symbols)
+ (package bap-symbol-reader)
+ (libraries bap-symbol-reader.plugin)
+ (site (bap-common plugins)))

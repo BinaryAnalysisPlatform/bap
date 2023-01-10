@@ -1,0 +1,21 @@
+(library
+ (name bap_powerpc_plugin)
+ (public_name bap-powerpc.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   bap-abi
+   bap-api
+   bap-c
+   bap-core-theory
+   bap-powerpc
+   core_kernel
+   monads
+   regular
+   zarith))
+
+(plugin
+ (name powerpc)
+ (package bap-powerpc)
+ (libraries bap-powerpc.plugin)
+ (site (bap-common plugins)))

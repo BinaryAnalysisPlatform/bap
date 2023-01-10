@@ -54,5 +54,7 @@ hoisted into the assignment section of a block.";
 ];;
 
 
-let () = when_ready (fun _ ->
-    Project.register_pass ~runonce:true main)
+let () = declare_extension
+    ~doc:"eliminates complex conditional on branches"
+    ~provides:["pass"; "simplification"] @@ fun _ ->
+  Project.register_pass ~runonce:true main

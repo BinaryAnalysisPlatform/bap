@@ -41,7 +41,7 @@ module Scheme = struct
     | Ok parse_arg -> try Ok (parse_arg v) with
       | Parse_error msg -> Error msg
 
-  let rec parse_exp nns uns = function
+  let parse_exp nns uns = function
     | List [Atom tag] -> parse_exp0 nns uns tag
     | List [Atom tag; Atom v] -> parse_exp1 nns uns tag v
     | list -> error "expected <exp> got %s" @@ Sexp.to_string list
@@ -105,7 +105,7 @@ class marker (patts : Scheme.t) = object(self)
 end
 
 let unmarker attr = object
-  inherit Term.mapper as super
+  inherit Term.mapper
 
   method! map_term cls t =
     let attrs =
@@ -321,7 +321,10 @@ module Cmdline = struct
 
   let () =
     Config.manpage man;
-    Config.when_ready (fun {Config.get=(!)} ->
-        try Project.register_pass (main !scheme !file) with
-        | Parse_error msg -> eprintf "Parsing error: %s\n%!" msg)
+    Config.declare_extension
+      ~doc:"transforms program terms using the BAP Mapping Language (BML)"
+      ~provides:["pass"; "transformation"; "bml"]
+      (fun {Config.get=(!)} ->
+         try Project.register_pass (main !scheme !file) with
+         | Parse_error msg -> eprintf "Parsing error: %s\n%!" msg)
 end

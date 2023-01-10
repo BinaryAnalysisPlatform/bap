@@ -65,4 +65,7 @@ module Bil = struct
 
 end
 
-let () = Config.when_ready @@ fun _ -> Bil.register ()
+let () = Config.declare_extension
+    ~doc:"provides piqi-based serialization for BIL and BIR"
+    ~provides:["printer"; "serialization"; "xml"; "json"; "protobuf"]
+  @@ fun _ -> Bil.register ()

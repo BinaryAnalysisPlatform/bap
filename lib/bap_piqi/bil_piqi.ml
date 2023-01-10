@@ -67,12 +67,12 @@ let binop_of_piqi = function
   | `slt -> SLT
   | `sle -> SLE
 
-let rec type_to_piqi : typ -> Stmt_piqi.typ = function
+let type_to_piqi : typ -> Stmt_piqi.typ = function
   | Imm s ->  `imm s
   | Mem (t, t') -> `mem {Stmt_piqi.Mem.index_type = t; element_type = t';}
   | Unk -> `unk
 
-let rec type_of_piqi = function
+let type_of_piqi = function
   | `imm n -> Imm n
   | `mem {P.Mem.index_type; element_type} -> Mem (index_type, element_type)
   | `unk -> Type.Unk

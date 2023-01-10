@@ -1,0 +1,6 @@
+(library
+  (name bap_mips)
+  (public_name bap-mips)
+  (preprocess (pps ppx_bap))
+  (wrapped false)
+  (libraries bap bap-core-theory bap-knowledge core_kernel ogre))

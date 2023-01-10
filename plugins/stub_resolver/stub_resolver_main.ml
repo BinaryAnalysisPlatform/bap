@@ -54,6 +54,8 @@ let known_stub_names = [
   ".MIPS.stubs";
 ]
 
+let sites = Stub_resolver_sites.paths
+
 let system_signatures_folder =
   Filename.concat Extension.Configuration.sysdatadir "signatures"
 
@@ -86,7 +88,8 @@ let signatures = Extension.Configuration.parameters
            inferred from the word, i.e., the leading zeros are not \
            discarded. By default we search in the current working \
            folder, " ^ user_signatures_folder ^ ", and in " ^
-          system_signatures_folder )
+          system_signatures_folder ^ ", and in the following sites:" ^
+          (String.concat ~sep:"; " sites))
 
 let link_only = Extension.Configuration.parameter
     Extension.Type.(list string) "link-only"

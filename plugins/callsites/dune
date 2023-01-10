@@ -1,0 +1,10 @@
+(library
+ (name bap_callsites_plugin)
+ (public_name bap-callsites.plugin)
+ (libraries bap core_kernel))
+
+(plugin
+ (name callsites)
+ (package bap-callsites)
+ (libraries bap-callsites.plugin)
+ (site (bap-common plugins)))

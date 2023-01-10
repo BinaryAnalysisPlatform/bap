@@ -1026,7 +1026,9 @@ module Primitives(Machine : Primus.Machine.S) = struct
     ]
 end
 
-let () = Extension.declare  @@ fun ctxt ->
+let () = Extension.declare
+    ~doc:"provides a Primus symbolic executor"
+    ~provides:["primus"; "symbolic-executor"] @@ fun ctxt ->
   let open Extension.Syntax in
   SMT.set_timeout (ctxt-->timeout);
   Primus.Components.register_generic "symbolic-computer"

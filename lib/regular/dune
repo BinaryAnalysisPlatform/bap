@@ -1,0 +1,16 @@
+(library
+  (name regular)
+  (public_name regular)
+  (wrapped false)
+  (preprocess (pps ppx_bap))
+  (private_modules
+    regular_bytes
+    regular_cache
+    regular_data
+    regular_data_intf
+    regular_data_types
+    regular_data_write
+    regular_data_read
+    regular_opaque
+    regular_seq)
+  (libraries core_kernel))

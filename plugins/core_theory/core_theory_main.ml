@@ -517,7 +517,9 @@ let enable_herbrand () =
     ~package:"core"
     ~name:"syntax" (KB.return (module Herbrand : Theory.Core))
 
-let () = Extension.declare @@ fun ctxt ->
+let () = Extension.declare
+    ~doc:"provides core theory rules"
+    ~provides:["semantics"; "core-theory"] @@ fun ctxt ->
   if Extension.Configuration.get ctxt herbrand_enabled
   then enable_herbrand ();
   Ok ()

@@ -1,5 +1,0 @@
-REC
-B ../../_build/lib/arm
-B ../../_build/lib/bap_c
-B ../../_build/lib/bap_api
-S ../../lib/bap_c

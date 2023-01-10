@@ -1,1 +1,2 @@
         , lib/bap_plugins/bap_plugins_config.ml.ab
+        , lib/bap_plugins/bap_common.ml.ab

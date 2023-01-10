@@ -1,0 +1,4 @@
+(install
+ (files riscv.lisp)
+ (package bap-riscv)
+ (section (site (bap-common semantics))))

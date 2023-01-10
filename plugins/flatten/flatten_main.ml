@@ -1,24 +1,33 @@
-open Bap.Std
-open Core_kernel[@@warning "-D"]
+let provides = [
+  "pass";
+  "analysis";
+  "flatten";
+  "tac"; "3ac";
+  "unroll"
+]
 
-include Self()
+let doc = {|
+# DESCRIPTION
 
-let main = Project.map_program ~f:(Term.map sub_t ~f:Sub.flatten)
+Flatten all BIR in the program.
 
-;;
-Config.manpage [
-  `S "DESCRIPTION";
-  `P "Flatten all AST in the program.";
-  `S "EXAMPLE";
-  `Pre {|
+# EXAMPLE
+
+```
   ;; input
   #10 := 11 * (#9 + 13) - 17
   ;; output
   #11 := #9 + 13
   #12 := 11 * #11
   #10 := #12 - 17
-  |}
+```
+|}
 
-]
 
-let () = Config.when_ready (fun _ -> Project.register_pass main);;
+open Bap.Std
+
+let main = Project.map_program ~f:(Term.map sub_t ~f:Sub.flatten)
+
+let () = Bap_main.Extension.declare ~doc ~provides @@ fun _ ->
+  Project.register_pass main;
+  Ok ()

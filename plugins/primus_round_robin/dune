@@ -1,0 +1,11 @@
+(library
+ (name bap_primus_round_robin_plugin)
+ (public_name bap-primus-round-robin-scheduler.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries bap bap-future bap-primus monads core_kernel))
+
+(plugin
+ (name primus-round-robin)
+ (package bap-primus-round-robin-scheduler)
+ (libraries bap-primus-round-robin-scheduler.plugin)
+ (site (bap-common plugins)))

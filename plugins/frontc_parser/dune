@@ -1,0 +1,11 @@
+(library
+ (name bap_frontc_parser_plugin)
+ (public_name bap-frontc.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries bap bap-c FrontC core_kernel core_kernel.caml_unix))
+
+(plugin
+ (name frontc-parser)
+ (package bap-frontc)
+ (libraries bap-frontc.plugin)
+ (site (bap-common plugins)))

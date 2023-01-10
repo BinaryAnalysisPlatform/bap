@@ -1,0 +1,19 @@
+(library
+ (name bap_cache_plugin)
+ (public_name bap-cache.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   bap-main
+   core_kernel
+   core_kernel.caml_unix
+   fileutils
+   mmap
+   regular
+   uuidm))
+
+(plugin
+ (name cache)
+ (package bap-cache)
+ (libraries bap-cache.plugin)
+ (site (bap-common plugins)))

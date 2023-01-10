@@ -1,0 +1,31 @@
+(library
+ (name bap_stub_resolver_plugin)
+ (public_name bap-stub-resolver.plugin)
+ (preprocess (pps ppx_bap))
+ (wrapped false)
+ (libraries
+   bap
+   bap-abi
+   bap-core-theory
+   bap-knowledge
+   bap-main
+   bitvec
+   bitvec-order
+   bitvec-sexp
+   core_kernel
+   ogre))
+
+(plugin
+ (name stub-resolver)
+ (package bap-stub-resolver)
+ (libraries bap-stub-resolver.plugin)
+ (site (bap-common plugins)))
+
+(rule
+ (target stub_resolver_sites.ml)
+ (deps stub_resolver_sites.ml.ab (alias ../../config))
+ (action
+  (with-stdin-from %{deps}
+   (with-stdout-to %{target}
+    (chdir %{workspace_root}
+     (run ./tools/rewrite.exe -filename %{deps}))))))

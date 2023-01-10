@@ -62,6 +62,14 @@ module Std = struct
 
     let of_string s = t_of_sexp (Sexp.of_string s)
 
+    let manifest =
+      let name = Filename.basename Sys.executable_name in
+      ref (create name)
+
+    let update m = manifest := m
+    let switch m = let old = !manifest in manifest := m; old
+    let current () = !manifest
+
   end
 
   type manifest = Manifest.t
@@ -233,6 +241,14 @@ module Std = struct
   end
   type bundle = Bundle.t
 
-  let set_main_bundle bundle = Bundle.main := bundle
+
+  let set_manifest_of_bundle bundle =
+    try Manifest.update (Bundle.manifest bundle)
+    with _ -> ()
+
+  let set_main_bundle bundle =
+    Bundle.main := bundle;
+    set_manifest_of_bundle bundle
+
   let main_bundle () = Bundle.main.contents
 end

@@ -69,7 +69,7 @@ module Rule = struct
   let empty = String.Map.empty
   let binding x rhs = String.Map.singleton x rhs
 
-  let rec sexp_fold_atoms ~get_pos ~init ~f sexp =
+  let sexp_fold_atoms ~get_pos ~init ~f sexp =
     let rec loop init s = match s with
       | Sexp.Atom x -> f init (get_pos s) x
       | Sexp.List xs -> List.fold ~init ~f:loop xs in

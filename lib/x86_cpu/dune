@@ -1,0 +1,10 @@
+(library
+ (name bap_x86)
+ (public_name bap-x86)
+ (wrapped false)
+ (preprocess (pps ppx_bap))
+ (libraries bap bap-c bap-demangle core_kernel))
+
+(deprecated_library_name
+ (old_public_name bap-x86-cpu)
+ (new_public_name bap-x86))

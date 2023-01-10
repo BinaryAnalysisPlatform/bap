@@ -1,0 +1,4 @@
+(install
+ (files pattern-actions.lisp)
+ (package bap-patterns)
+ (section (site (bap-common semantics))))

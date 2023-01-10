@@ -1,0 +1,11 @@
+(library
+ (name bap_primus_region_plugin)
+ (public_name bap-primus-region.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries bap bap-core-theory bap-primus monads core_kernel))
+
+(plugin
+ (name primus-region)
+ (package bap-primus-region)
+ (libraries bap-primus-region.plugin)
+ (site (bap-common plugins)))

@@ -1,0 +1,7 @@
+(library
+  (name bap_core_theory)
+  (public_name bap-core-theory)
+  (wrapped false)
+  (preprocess (pps ppx_bap))
+  (libraries bap-knowledge core_kernel core_kernel.caml_unix
+             bitvec bitvec-order bitvec-sexp bitvec-binprot))

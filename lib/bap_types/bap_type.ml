@@ -2,7 +2,7 @@ open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Format
 
-open Bap_common
+open Bap_common_types
 open Type
 
 module T = struct

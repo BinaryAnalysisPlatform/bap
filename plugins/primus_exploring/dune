@@ -1,0 +1,10 @@
+(library
+ (name bap_primus_exploring_plugin)
+ (public_name bap-primus-exploring-scheduler.plugin)
+ (libraries bap bap-primus monads core_kernel))
+
+(plugin
+ (name primus-exploring)
+ (package bap-primus-exploring-scheduler)
+ (libraries bap-primus-exploring-scheduler.plugin)
+ (site (bap-common plugins)))

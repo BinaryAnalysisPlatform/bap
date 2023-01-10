@@ -1,6 +1,6 @@
 open Core_kernel[@@warning "-D"]
 open Regular.Std
-open Bap_common
+open Bap_common_types
 
 
 type t = [

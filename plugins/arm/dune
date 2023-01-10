@@ -1,0 +1,20 @@
+(library
+ (name bap_arm_plugin)
+ (public_name bap-arm.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   bap-abi
+   bap-api
+   bap-arm
+   bap-c
+   bap-core-theory
+   bap-main
+   core_kernel
+   monads))
+
+(plugin
+ (name arm)
+ (package bap-arm)
+ (libraries bap-arm.plugin)
+ (site (bap-common plugins)))

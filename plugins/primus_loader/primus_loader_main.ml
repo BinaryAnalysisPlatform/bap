@@ -56,5 +56,8 @@ let stack_base =
             "stack-base"
             ~doc:"default address of the stack base")
 
-let () = Config.when_ready (fun {Config.get=(!!)} ->
-    init !!stack_size !!stack_base)
+let () = Config.declare_extension
+    ~doc:"generic Primus dynamic loader"
+    ~provides:["abi"; "loader"; "primus"; "emulator"]
+    (fun {Config.get=(!!)} ->
+       init !!stack_size !!stack_base)

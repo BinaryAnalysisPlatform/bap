@@ -7,7 +7,7 @@
 
 open Core_kernel[@@warning "-D"]
 open Regular.Std
-open Bap_common
+open Bap_common_types
 open Bap_knowledge
 
 (** This module is included into [Bap.Std], you need to open it
@@ -193,7 +193,7 @@ module Std = struct
   (** Byte endian. This is the only not first class type in a bap-types.
       Sorry, no maps and tables for this type.
   *)
-  type endian = Bap_common.endian = LittleEndian | BigEndian
+  type endian = Bap_common_types.endian = LittleEndian | BigEndian
   [@@deriving sexp, bin_io, compare]
 
   (** {2 Type abbreviations}
@@ -209,7 +209,7 @@ module Std = struct
 
   (** [addr_size] is a subset of sizes that contains only two
       instances [`r32] and [`r64]  *)
-  type nonrec addr_size = Bap_common.addr_size
+  type nonrec addr_size = Bap_common_types.addr_size
   [@@deriving bin_io, compare, sexp]
 
   type addr  = Addr.t      [@@deriving bin_io, compare, sexp]

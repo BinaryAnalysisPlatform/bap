@@ -82,21 +82,24 @@ let man = [
 
 let () =
   Config.manpage man;
-  Config.when_ready (fun {Config.get=(!)} ->
-      let cfg_format =
-        let deprecated_options =
-          [`with_name, !with_name;
-           `with_asm,  !with_asm;
-           `with_bil,  !with_bil] |>
-          List.filter ~f:snd |>
-          List.map ~f:fst in
-        deprecated_options @ !labels_with in
-      let options = create
-          !output_folder
-          cfg_format
-          !no_resolve
-          !keep_alive
-          !no_inline
-          !keep_consts
-          !no_optimizations in
-      Project.register_pass' (run options))
+  Config.declare_extension
+    ~doc:"outputs the project in a phoenix format"
+    ~provides:["printer"]
+    (fun {Config.get=(!)} ->
+       let cfg_format =
+         let deprecated_options =
+           [`with_name, !with_name;
+            `with_asm,  !with_asm;
+            `with_bil,  !with_bil] |>
+           List.filter ~f:snd |>
+           List.map ~f:fst in
+         deprecated_options @ !labels_with in
+       let options = create
+           !output_folder
+           cfg_format
+           !no_resolve
+           !keep_alive
+           !no_inline
+           !keep_consts
+           !no_optimizations in
+       Project.register_pass' (run options))

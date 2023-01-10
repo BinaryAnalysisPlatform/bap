@@ -13,6 +13,8 @@ module Dis = Disasm_expert.Basic
 type Extension.Error.t += Unknown_backend of string
 
 let provides = [
+  "semantics";
+  "lifter";
   "riscv";
   "riscv64";
   "riscv32";
@@ -144,4 +146,5 @@ let main ctxt =
   | Some s -> Error (Unknown_backend s)
 
 let () = Bap_main.Extension.declare main
+    ~doc:"provides RISCV semantics"
     ~provides

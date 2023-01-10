@@ -1,0 +1,11 @@
+(library
+ (name bap_callgraph_collator_plugin)
+ (public_name bap-callgraph-collator.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries bap bap-main core_kernel graphlib re.pcre))
+
+(plugin
+ (name callgraph-collator)
+ (package bap-callgraph-collator)
+ (libraries bap-callgraph-collator.plugin)
+ (site (bap-common plugins)))

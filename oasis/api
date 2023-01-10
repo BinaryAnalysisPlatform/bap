@@ -17,7 +17,7 @@ Library api_plugin
   FindlibName:      bap-plugin-api
   CompiledObject:   best
   BuildDepends:     bap, bap-main, bap-api, fileutils, core_kernel, ppx_bap, regular
-  InternalModules:  Api_main
+  InternalModules:  Api_main, Api_sites
   XMETADescription: add parameters to subroutines based on known API
   DataFiles:        api/c/*.h ($datadir/bap/api/c)
   XMETAExtraLines:  tags="api, pass"

@@ -1,0 +1,27 @@
+build: [
+  ["dune" "subst"] {dev}
+  [
+  "ocaml" "tools/configure.ml"
+  "--with-llvm-config=%{conf-bap-llvm:config}%"
+  ]
+  [
+    "dune"
+    "build"
+    "-p"
+    name
+    "-j"
+    jobs
+    "--promote-install-files=false"
+    "@install"
+    "@runtest" {with-test}
+    "@doc" {with-doc}
+  ]
+  ["dune" "install" "-p" name "--create-install-files" name]
+]
+
+depexts: [
+  ["clang" "libncurses5-dev"] {os-distribution = "ubuntu"}
+  ["clang"] {os-distribution = "debian"}
+  ["clang" "libxml2-dev"] {os-distribution = "alpine"}
+  ["clang"] {os-distribution = "fedora"}
+]

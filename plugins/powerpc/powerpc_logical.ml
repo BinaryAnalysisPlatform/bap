@@ -11,36 +11,22 @@ open Powerpc.Std
     Pages 92-98 of IBM Power ISATM Version 3.0 B
     examples:
     71 2a 00 20     andi.   r10,r9,32 *)
-let andi_dot cpu ops =
+let andi cpu ops =
   let ra = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
   let im = unsigned imm ops.(2) in
-  let tm = signed var cpu.word_width in
-  RTL.[
-    ra := rs land im;
-    tm := low cpu.word_width ra;
-    nth bit cpu.cr 0 := tm < zero;
-    nth bit cpu.cr 1 := tm > zero;
-    nth bit cpu.cr 2 := tm = zero
-  ]
+  RTL.[ra := rs land im;]
 
 (** Fixed-point AND Immediate Shifted
     Pages 92-98 of IBM Power ISATM Version 3.0 B
     examples:
     75 2a 08 00     andis.  r10,r9,2048 *)
-let andis_dot cpu ops =
+let andis cpu ops =
   let ra = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
   let im = unsigned imm ops.(2) in
   let sh = unsigned const byte 16 in
-  let tm = signed var cpu.word_width in
-  RTL.[
-    ra := rs land (im << sh);
-    tm := low cpu.word_width ra;
-    nth bit cpu.cr 0 := tm < zero;
-    nth bit cpu.cr 1 := tm > zero;
-    nth bit cpu.cr 2 := tm = zero;
-  ]
+  RTL.[ra := rs land (im << sh);]
 
 (** Fixed-point AND
     Pages 92-98 of IBM Power ISATM Version 3.0 B
@@ -410,8 +396,8 @@ let neg cpu ops =
   RTL.[ rt := lnot ra + one ]
 
 let init () =
-  "ANDIo"   >| andi_dot;
-  "ANDISo"  >| andis_dot;
+  "ANDIo"   >. andi;
+  "ANDISo"  >. andis;
   "AND"     >| and_;
   "ANDo"    >. and_;
   "ANDC"    >| andc;

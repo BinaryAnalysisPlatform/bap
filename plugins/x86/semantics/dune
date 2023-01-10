@@ -1,0 +1,7 @@
+(install
+ (section (site (bap-common semantics)))
+ (package bap-x86)
+ (files x86-32.lisp
+        x86-64.lisp
+        x86-64-sse-intrinsics.lisp
+        x86-common.lisp))

@@ -1,0 +1,6 @@
+(library
+  (name bap_primus_track_visited)
+  (public_name bap-primus-track-visited)
+  (preprocess (pps ppx_bap))
+  (wrapped false)
+  (libraries bap bap-primus core_kernel))

@@ -1,0 +1,10 @@
+(library
+ (name bap_primus_promiscuous_plugin)
+ (public_name bap-primus-promiscuous.plugin)
+ (libraries bap bap-primus core_kernel monads))
+
+(plugin
+ (name primus-promiscuous)
+ (package bap-primus-promiscuous)
+ (libraries bap-primus-promiscuous.plugin)
+ (site (bap-common plugins)))

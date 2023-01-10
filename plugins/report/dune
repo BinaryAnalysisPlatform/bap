@@ -1,0 +1,11 @@
+(library
+ (name bap_report_plugin)
+ (public_name bap-report.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries bap bap-future core_kernel core_kernel.caml_unix))
+
+(plugin
+ (name report)
+ (package bap-report)
+ (libraries bap-report.plugin)
+ (site (bap-common plugins)))

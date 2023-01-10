@@ -1,0 +1,19 @@
+(library
+ (name bap_thumb_plugin)
+ (public_name bap-thumb.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   bap-arm
+   bap-core-theory
+   bap-knowledge
+   bap-main
+   bitvec
+   core_kernel
+   ogre))
+
+(plugin
+ (name thumb)
+ (package bap-thumb)
+ (libraries bap-thumb.plugin)
+ (site (bap-common plugins)))

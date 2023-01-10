@@ -132,13 +132,13 @@ module Cmdline = struct
 
   let () =
     Config.manpage man;
-    Config.when_ready (fun {Config.get=(!)} ->
-        Project.register_pass ~deps:["callsites"] ~name:"taint" taint;
-        Project.register_pass' ~name:"print" (run print);
-        Project.register_pass  ~name:"mark" (run mark);
-        Project.register_pass'
-          ignore ~deps:[name^"-taint"; "propagate-taint";
-                        name^"-print"]
-      )
-
+    Config.declare_extension
+      ~doc:"the legacy warn-unused analysis"
+      ~provides:["pass"; "analysis"] @@ fun {Config.get=(!)} ->
+    Project.register_pass ~deps:["callsites"] ~name:"taint" taint;
+    Project.register_pass' ~name:"print" (run print);
+    Project.register_pass  ~name:"mark" (run mark);
+    Project.register_pass'
+      ignore ~deps:[name^"-taint"; "propagate-taint";
+                    name^"-print"]
 end

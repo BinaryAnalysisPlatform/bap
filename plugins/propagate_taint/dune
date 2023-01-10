@@ -1,0 +1,18 @@
+(library
+ (name bap_propagate_taint_plugin)
+ (public_name bap-taint-propagator.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   bap-core-theory
+   bap-microx
+   core_kernel
+   graphlib
+   monads
+   regular))
+
+(plugin
+ (name propagate-taint)
+ (package bap-taint-propagator)
+ (libraries bap-taint-propagator.plugin)
+ (site (bap-common plugins)))

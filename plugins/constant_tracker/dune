@@ -1,0 +1,11 @@
+(library
+ (name bap_constant_tracker_plugin)
+ (public_name bap-constant-tracker.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries bap bap-primus core_kernel))
+
+(plugin
+ (name constant-tracker)
+ (package bap-constant-tracker)
+ (libraries bap-constant-tracker.plugin)
+ (site (bap-common plugins)))

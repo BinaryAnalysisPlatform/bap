@@ -78,7 +78,6 @@ open Core_kernel[@@warning "-D"]
 open Format
 open Regular.Std
 open Bap.Std
-open Bap_plugins.Std
 open Bap_core_theory
 open Bap_main
 
@@ -696,3 +695,8 @@ let string_of_failure = function
 let () = Extension.Error.register_printer @@ function
   | Fail err -> Some (string_of_failure err)
   | _ -> None
+
+
+let () = Extension.declare
+    ~doc:"provides mc and objdump commands"
+    (fun _ -> Ok ())

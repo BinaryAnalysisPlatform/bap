@@ -125,4 +125,7 @@ let () =
     `S  "SEE ALSO";
     `P  "$(b,bap-plugin-objdump)(1)"
   ];
-  Config.when_ready (fun {get=_} -> main ())
+  Config.declare_extension
+    ~doc:"extracts symbols and function starts using radare2"
+    ~provides:["symbolizer"; "radare2"]
+    (fun {get=_} -> main ())

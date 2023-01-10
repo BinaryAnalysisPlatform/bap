@@ -1,0 +1,6 @@
+(library
+  (name bitvec_binprot)
+  (public_name bitvec-binprot)
+  (wrapped false)
+  (preprocess (pps ppx_bap))
+  (libraries bitvec bin_prot))

@@ -1,0 +1,19 @@
+(library
+ (name bap_cxxfilt_plugin)
+ (public_name bap-cxxfilt.plugin)
+ (libraries bap bap-demangle core_kernel core_kernel.caml_unix))
+
+(plugin
+ (name cxxfilt)
+ (package bap-cxxfilt)
+ (libraries bap-cxxfilt.plugin)
+ (site (bap-common plugins)))
+
+(rule
+ (target cxxfilt_config.ml)
+ (deps cxxfilt_config.ml.ab (alias ../../config))
+ (action
+  (with-stdin-from %{deps}
+   (with-stdout-to %{target}
+    (chdir %{workspace_root}
+     (run ./tools/rewrite.exe -filename %{deps}))))))

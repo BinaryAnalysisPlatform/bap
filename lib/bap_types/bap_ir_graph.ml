@@ -4,7 +4,7 @@ open Graphlib.Std
 open Option.Monad_infix
 
 open Bap_bil
-open Bap_common
+open Bap_common_types
 open Bap_ir
 module Jmp = Ir_jmp
 module Blk = Ir_blk

@@ -11,6 +11,7 @@ module Std : sig
       [Sys.executable_name] with a [bundle] extension.  *)
   val main_bundle : unit -> bundle
 
+
   (**/**)
 
   (* For internal usage only.
@@ -58,9 +59,14 @@ module Std : sig
       ?cons:string list -> string -> t
 
     include Stringable with type t := t
+
+    val current : unit -> t
+    val update : t -> unit
+    val switch : t -> t
   end
 
   type manifest = Manifest.t
+
 
 
   (** Program Bundle.

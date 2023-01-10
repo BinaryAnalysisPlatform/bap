@@ -1,0 +1,25 @@
+(library
+ (name bap_plugins)
+ (public_name bap-plugins)
+ (wrapped false)
+ (modules :standard \ bap_common)
+ (private_modules
+   bap_plugins_config
+   bap_plugins_loader_backend
+   bap_plugins_package
+   bap_plugins_units)
+ (preprocess (pps ppx_bap))
+ (libraries core_kernel dynlink fileutils findlib uri
+            bap-bundle bap-common bap-future
+            dune-site
+            dune-site.plugins
+            compiler-libs.common))
+
+(rule
+ (target bap_plugins_config.ml)
+ (deps bap_plugins_config.ml.ab (alias ../../config))
+ (action
+  (with-stdin-from %{deps}
+   (with-stdout-to %{target}
+    (chdir %{workspace_root}
+     (run ./tools/rewrite.exe -filename %{deps}))))))

@@ -3,7 +3,7 @@ let package = "bap"
 open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Regular.Std
-open Bap_common
+open Bap_common_types
 open Bap_bil
 open Bap_knowledge
 

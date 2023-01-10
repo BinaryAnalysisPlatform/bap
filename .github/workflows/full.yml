@@ -1,0 +1,53 @@
+# tests all packages, including bap-extra
+# it requires ghidra, so it works only on ubuntu-20.04
+name: full
+run-name: Testing everything in ${{ github.ref }}
+
+on:
+  - pull_request
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    env:
+      BAP_LOG_DIR: $HOME/log
+      OPAMRETRES: 8
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Ghidra and Dejagnu
+        run: |
+          sudo add-apt-repository ppa:ivg/ghidra -y
+          sudo apt-get update -y
+          sudo apt-get install libghidra-dev -y
+          sudo apt-get install libghidra-data -y
+          sudo apt-get install dejagnu -y
+
+      - name: Install OCaml
+        uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: 4.14.x
+          dune-cache: true
+          opam-disable-sandboxing: true
+
+      - name: Install BAP
+        run: opam install . --with-test
+
+      - name: Run Functional Tests
+        run: opam exec -- make check
+
+      - uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: bap-log
+          path: ~/.local/state/bap
+
+      - uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: fun-tests-log
+          path: |
+            testsuite/*.log
+            testsuite/logs

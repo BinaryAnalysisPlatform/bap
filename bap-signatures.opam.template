@@ -1,0 +1,13 @@
+
+build: []
+install: [
+  ["tar" "xvf" "sigs.tar.gz"]
+  ["mkdir" "-p" "%{share}%/bap/signatures/"]
+  ["cp" "data/sigs.zip" "%{share}%/bap/signatures/byteweight.zip"]
+  ["cp" "-r" "data/Ghidra" "%{share}%/bap/signatures/"]
+]
+extra-source "sigs.tar.gz" {
+  src:
+    "https://github.com/BinaryAnalysisPlatform/bap/releases/download/v2.4.0/sigs.tar.gz"
+  checksum: "md5=04e2ebb1b30d2d12bf2ceb240544044f"
+}

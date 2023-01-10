@@ -1,0 +1,15 @@
+(library
+  (name bap_bundle)
+  (public_name bap-bundle)
+  (wrapped false)
+  (preprocess (pps ppx_bap))
+  (libraries uri camlzip unix core_kernel core_kernel.caml_unix))
+
+(rule
+  (target bap_bundle_config.ml)
+  (deps bap_bundle_config.ml.ab (alias ../../config))
+  (action
+    (with-stdin-from %{deps}
+    (with-stdout-to %{target}
+      (chdir %{workspace_root}
+        (run ./tools/rewrite.exe -filename %{deps}))))))

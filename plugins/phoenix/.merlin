@@ -1,5 +1,0 @@
-B ../../_build/plugins/phoenix
-PKG cmdliner
-PKG ocamlgraph
-PKG ezjsonm
-REC

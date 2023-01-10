@@ -1,0 +1,10 @@
+(library
+ (name bap_primus_mark_visited_plugin)
+ (public_name bap-primus-mark-visited.plugin)
+ (libraries bap bap-core-theory bap-main bap-primus-track-visited))
+
+(plugin
+ (name primus-mark-visited)
+ (package bap-primus-mark-visited)
+ (libraries bap-primus-mark-visited.plugin)
+ (site (bap-common plugins)))

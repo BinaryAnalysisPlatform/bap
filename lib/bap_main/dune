@@ -1,0 +1,24 @@
+(library
+ (name bap_main)
+ (public_name bap-main)
+ (wrapped false)
+ (libraries stdlib-shims
+            base stdio
+            cmdliner
+            core_kernel
+            core_kernel.caml_unix
+            fileutils
+            bap-future
+            bap-bundle
+            bap-plugins
+            bap-recipe)
+ (private_modules bap_main_log))
+
+(rule
+ (target bap_main_config.ml)
+ (deps bap_main_config.ml.ab (alias ../../config))
+ (action
+  (with-stdin-from %{deps}
+   (with-stdout-to %{target}
+    (chdir %{workspace_root}
+     (run ./tools/rewrite.exe -filename %{deps}))))))

@@ -517,7 +517,7 @@ module Std = struct
       let rec drop n =
         if n < num then match Queue.peek q with
           | Some _ ->
-            Queue.dequeue_exn q;
+            ignore (Queue.dequeue_exn q);
             drop (n + 1)
           | _ -> n
         else n in

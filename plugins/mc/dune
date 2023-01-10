@@ -1,0 +1,19 @@
+(library
+ (name mc_plugin)
+ (public_name bap-mc.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   bap-core-theory
+   bap-knowledge
+   bap-main
+   bitvec
+   core_kernel
+   ogre
+   regular))
+
+(plugin
+ (name mc)
+ (package bap-mc)
+ (libraries bap-mc.plugin)
+ (site (bap-common plugins)))

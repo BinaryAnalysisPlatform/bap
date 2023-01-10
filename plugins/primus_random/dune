@@ -1,0 +1,19 @@
+(library
+ (name bap_primus_random_plugin)
+ (public_name bap-primus-random.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   bap-main
+   bap-primus
+   bitvec
+   bitvec-sexp
+   core_kernel
+   zarith
+   bap-core-theory))
+
+(plugin
+ (name primus-random)
+ (package bap-primus-random)
+ (libraries bap-primus-random.plugin)
+ (site (bap-common plugins)))

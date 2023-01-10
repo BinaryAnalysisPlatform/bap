@@ -299,11 +299,14 @@ module Cmdline = struct
     let mode =
       let doc = "Specify IDA mode." in
       Config.(param Mode.t "mode" ~default:None ~doc) in
-    Config.when_ready (fun {Config.get=(!)} ->
-        let is_headless = bool_of_headless !headless in
-        let ida_path = find_path !path in
-        match Info.create ida_path is_headless with
-        | Ok info -> Bap_ida_service.register info !mode; main ()
-        | Error e ->
-          warning "%S. Service not registered." (Error.to_string_hum e))
+    Config.declare_extension
+      ~doc:"uses IDA Pro to extract symbols and function starts"
+      ~provides:["ida"; "rooter"; "brancher"; "symbolizer"; "reconstuctor"]
+      (fun {Config.get=(!)} ->
+         let is_headless = bool_of_headless !headless in
+         let ida_path = find_path !path in
+         match Info.create ida_path is_headless with
+         | Ok info -> Bap_ida_service.register info !mode; main ()
+         | Error e ->
+           warning "%S. Service not registered." (Error.to_string_hum e))
 end

@@ -1,0 +1,11 @@
+(library
+ (name bap_primus_x86_plugin)
+ (public_name bap-primus-x86.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries bap bap-core-theory bap-primus bap-x86 regular))
+
+(plugin
+ (name primus-x86)
+ (package bap-primus-x86)
+ (libraries bap-primus-x86.plugin)
+ (site (bap-common plugins)))

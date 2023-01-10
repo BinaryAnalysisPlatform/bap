@@ -1,0 +1,24 @@
+(install
+ (files ascii.lisp
+        atoi.lisp
+        char.lisp
+        errno.lisp
+        floats.lisp
+        getopt.lisp
+        ieee754.lisp
+        libc-init.lisp
+        libintl.lisp
+        limit-malloc.lisp
+        llvm-x86-64-floats.lisp
+        locale.lisp
+        memory-allocator.lisp
+        posix.lisp
+        setjmp.lisp
+        simple-memory-allocator.lisp
+        stdio.lisp
+        stdlib.lisp
+        string.lisp
+        types.lisp
+        unistd.lisp)
+ (package bap-primus-lisp)
+ (section (site (bap-common lisp))))

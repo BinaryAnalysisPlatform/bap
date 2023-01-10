@@ -1,0 +1,6 @@
+let () =
+  add_variable ~doc:"additional sites for api files"
+    "site_api"
+    ~define:(function
+        | None -> ""
+        | Some xs -> xs)

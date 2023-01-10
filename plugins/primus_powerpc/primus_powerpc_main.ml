@@ -11,7 +11,9 @@ let () = Config.manpage [
   all flags and CTR register to zero."
   ]
 
-let () = Config.when_ready @@ fun _ ->
+let () = Config.declare_extension
+    ~doc:"provides PPC Primus support package"
+    ~provides:["primus"; "powerpc"; "ppc"] @@ fun _ ->
   let module Component(Machine : Primus.Machine.S) = struct
     open Machine.Syntax
     module Env = Primus.Env.Make(Machine)

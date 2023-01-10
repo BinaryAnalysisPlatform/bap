@@ -1,0 +1,18 @@
+(library
+ (name bap_primus_test_plugin)
+ (public_name bap-primus-test.plugin)
+ (libraries
+   bap
+   bap-primus
+   bitvec
+   bitvec-order
+   core_kernel
+   monads
+   regular
+   zarith))
+
+(plugin
+ (name primus-test)
+ (package bap-primus-test)
+ (libraries bap-primus-test.plugin)
+ (site (bap-common plugins)))

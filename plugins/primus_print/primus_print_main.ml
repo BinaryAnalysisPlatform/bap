@@ -192,4 +192,7 @@ let start_monitoring {Config.get=(!)} =
       Stream.observe (Primus.Observation.Provider.data m)
         (print_event out m))
 
-let () = Config.when_ready start_monitoring
+let () = Config.declare_extension
+    ~doc:"prints Primus states and observations"
+    ~provides:["primus"; "printer"; "observations"]
+    start_monitoring

@@ -195,7 +195,10 @@ let desc =
    another."
 
 let () = Config.manpage [`S "DESCRIPTION"; `P desc]
-let () = Config.when_ready @@ fun _ ->
+let () = Config.declare_extension
+    ~doc:"provides Primus Lisp library for manipulating program regions"
+    ~provides:["primus"; "primus-library"; "regions"; "interval-trees"]
+  @@ fun _ ->
   Primus.Machine.add_component (module Main) [@warning "-D"];
   Primus.Components.register_generic "lisp-regions" (module Main)
     ~package:"bap"

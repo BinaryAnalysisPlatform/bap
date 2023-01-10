@@ -1,6 +1,8 @@
 (* Base kills exn, so we have to do it before opening *)
 type error = exn = ..
 
+[@@@warning "-D"]
+
 open Base
 open Stdio
 open Bap_future.Std
@@ -873,8 +875,7 @@ end = struct
 
 
   let update_from_bundle info plugin =
-    let b = Plugin.bundle plugin in
-    let {Manifest.tags; cons; desc} = Bundle.manifest b in
+    let {Manifest.tags; cons; desc} = Plugin.manifest plugin in
     match info with
     | None -> {docs = desc; tags; cons}
     | Some info -> {
@@ -1004,11 +1005,8 @@ end = struct
     Caml.Filename.basename (Caml.Sys.executable_name)
 
 
-  let switch_bundle name =
-    let was = main_bundle () in
-    let now = Hashtbl.find_exn plugins name in
-    set_main_bundle (Plugin.bundle now);
-    was
+  let with_context name ~f =
+    Plugin.with_context (Hashtbl.find_exn plugins name) ~f
 
   let try_eval f x = try f x with
     | Invalid_argument s -> Error (Error.Invalid s)
@@ -1031,10 +1029,8 @@ end = struct
                | Ok () ->
                  if not (Set.mem disabled name)
                  then
-                   let old = switch_bundle name in
-                   let res = try_eval code ctxt in
-                   set_main_bundle old;
-                   res
+                   with_context name ~f:(fun () ->
+                       try_eval code ctxt)
                  else Ok ())
 
   let no_plugin_options plugins =

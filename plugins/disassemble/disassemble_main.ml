@@ -685,3 +685,9 @@ let string_of_failure = function
 let () = Extension.Error.register_printer @@ function
   | Fail err -> Some (string_of_failure err)
   | _ -> None
+
+
+let () = Extension.declare
+    ~doc:man
+    ~provides:["command"; "analysis"; "disassemble"]
+    (fun _ -> Ok ())

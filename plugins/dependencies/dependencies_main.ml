@@ -398,3 +398,9 @@ let () = Extension.Command.(begin
   let r = State.load ?root ?ldconfig ~recursive ~context paths input in
   Format.printf "%a@." (pp fmt) r;
   Ok ()
+
+
+let () = Extension.declare
+    ~doc
+    ~provides:["depedencies"; "command"]
+    (fun _ -> Ok ())

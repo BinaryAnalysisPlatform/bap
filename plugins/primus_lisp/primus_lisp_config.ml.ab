@@ -1,1 +1,5 @@
-let library = "$primus_lisp_library_path"
+module Sites = struct
+  let lisp = [${site_lisp}]
+  let site_lisp = [${site_site_lisp}]
+  let semantics = [${site_semantics}]
+end

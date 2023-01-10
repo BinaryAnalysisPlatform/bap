@@ -1,0 +1,11 @@
+(library
+ (name abi)
+ (public_name bap-abi.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries bap bap-abi bap-main))
+
+(plugin
+ (name abi)
+ (package bap-abi)
+ (libraries bap-abi.plugin)
+ (site (bap-common plugins)))

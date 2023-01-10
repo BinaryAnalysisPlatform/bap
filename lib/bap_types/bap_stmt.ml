@@ -2,7 +2,7 @@ open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap_knowledge
 open Regular.Std
-open Bap_common
+open Bap_common_types
 open Format
 open Bap_bil
 

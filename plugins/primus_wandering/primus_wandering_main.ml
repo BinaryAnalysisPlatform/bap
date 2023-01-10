@@ -102,4 +102,7 @@ let seed = param ~doc:"random generator seed" int "seed"
 
 
 
-let () = when_ready (fun {get=(!!)} -> register !!enabled !!seed)
+let () = declare_extension
+    ~doc:"schedules Primus machines in a random order"
+    ~provides:["primus"; "scheduler"]
+    (fun {get=(!!)} -> register !!enabled !!seed)

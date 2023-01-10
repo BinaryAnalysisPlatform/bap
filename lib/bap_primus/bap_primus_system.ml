@@ -39,8 +39,6 @@ type system = t
 module Repository = struct
   let self = Hashtbl.create (module Name)
 
-  exception Not_found
-
   let add sys =
     if Hashtbl.mem self sys.name
     then invalid_argf "System named %s is already present in the repository"

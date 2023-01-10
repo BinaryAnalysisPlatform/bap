@@ -112,6 +112,7 @@ module Monad = struct
       let expect ?(finally=Fn.nothing) ~f ~catch =
         let invoke f x = f x >>= fun x -> finally () >>= fun () -> return x in
         try invoke f () with exn -> invoke catch exn
+      [@@warning "-16"]
     end
 
 

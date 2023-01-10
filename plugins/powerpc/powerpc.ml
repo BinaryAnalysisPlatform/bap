@@ -46,7 +46,18 @@ module Std = struct
   let register name lifter =
     Hashtbl.change lifters name ~f:(fun _ -> Some lifter)
 
-  let register_dot name lifter = register name (dot lifter)
+
+  (* see https://reviews.llvm.org/D70758  *)
+  let rename_dot_to_rec old =
+    String.(chop_suffix_exn old ~suffix:"o" ^ "_rec")
+
+
+  let register_dot name lifter =
+    List.iter ~f:(fun name -> register name (dot lifter)) [
+      name;
+      rename_dot_to_rec name;
+    ]
+
 
   let (>|) = register
   let (>.) = register_dot

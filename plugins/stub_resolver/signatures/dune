@@ -1,0 +1,4 @@
+(install
+ (files powerpc.stubs)
+ (package bap-powerpc)
+ (section (site (bap-common signatures))))

@@ -1,0 +1,5 @@
+(library
+  (name bitvec_sexp)
+  (public_name bitvec-sexp)
+  (wrapped false)
+  (libraries bitvec sexplib0))

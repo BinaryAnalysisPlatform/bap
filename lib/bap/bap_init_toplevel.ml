@@ -15,9 +15,10 @@ let main () =
   let module Core_kernel_is_required = Core_kernel[@warning "-D"] in
   let loader = Topdirs.dir_load Format.err_formatter in
   setup_dynamic_loader loader;
-  install_printers ();
   match Bap_main.init ~argv: [|"baptop"|] () with
-  | Ok () -> ()
+  | Ok () ->
+    install_printers ();
+    ()
   | Error failed ->
     Format.eprintf "Failed to initialize BAP: %a@\n%!"
       Bap_main.Extension.Error.pp failed;

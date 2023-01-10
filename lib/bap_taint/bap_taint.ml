@@ -268,8 +268,6 @@ module Taint = struct
       Machine.Local.put tainter {s with indirect} >>| fun () ->
       taint
 
-    exception Bad_object of Primus.value
-
     let kill_objects kill =
       Map.filter_map ~f:(fun objects ->
           match Set.diff objects kill with

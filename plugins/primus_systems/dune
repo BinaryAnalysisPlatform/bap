@@ -1,0 +1,10 @@
+(library
+ (name bap_primus_systems_plugin)
+ (public_name bap-primus-systems.plugin)
+ (libraries bap-knowledge bap-main bap-primus core_kernel))
+
+(plugin
+ (name primus-systems)
+ (package bap-primus-systems)
+ (libraries bap-primus-systems.plugin)
+ (site (bap-common plugins)))

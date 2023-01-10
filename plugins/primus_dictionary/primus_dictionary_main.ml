@@ -179,7 +179,10 @@ let () = Config.manpage [
     `P desc;
   ]
 
-let () = Config.when_ready @@ fun _ ->
+let () = Config.declare_extension
+    ~doc:"provides a Primus Lisp key-value storage library"
+    ~provides:["primus"; "primus-library"; "dictionary"]
+  @@ fun _ ->
   Primus.Machine.add_component (module Main) [@warning "-D"];
   Primus.Components.register_generic "lisp-dictionary" (module Main)
     ~package:"bap"
