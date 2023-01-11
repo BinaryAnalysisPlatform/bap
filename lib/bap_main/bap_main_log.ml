@@ -107,9 +107,6 @@ let log_plugin_events () =
       | `Linking lib ->
         message Debug ~section "Linking library %s" lib)
 
-
-
-
 let process_events ppf =
   Stream.observe Event.stream (function
       | Event.Log.Message message -> print_message ppf message

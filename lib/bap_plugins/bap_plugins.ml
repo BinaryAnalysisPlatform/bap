@@ -359,13 +359,13 @@ module Plugins = struct
 
 
   let list ?env ?provides ?library () =
-    list_bundles ?env ?provides ?library () @
-    list_packages ()
+    list_packages () @
+    list_bundles ?env ?provides ?library ()
 
   let collect ?env ?provides ?library () =
-    collect_bundles ?env ?provides ?library () @
-    List.map ~f:Result.return @@
-    list_packages ()
+    let packs = list_packages () |> List.map ~f:Result.return in
+    let bunds = collect_bundles ?env ?provides ?library () in
+    packs @ bunds
 
   let loaded,finished = Future.create ()
 
