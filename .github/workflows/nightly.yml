@@ -26,6 +26,7 @@ jobs:
       - name: Install Extra System Dependencies
         run: |
           sudo add-apt-repository ppa:ivg/ghidra -y
+          sudo apt-get update -y
           sudo apt-get install libghidra-dev -y
           sudo apt-get install libghidra-data -y
           sudo apt-get install dejagnu -y

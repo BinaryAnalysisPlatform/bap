@@ -1,0 +1,1 @@
+(* rewrites configuration variables *)

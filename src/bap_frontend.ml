@@ -318,11 +318,15 @@ let _list_command_declaration : unit =
 
 let _config_command_declaration : unit =
   let entities = Configuration.[
+      "version", version;
+      "build_id", build_id;
       "datadir", datadir;
       "cachedir", cachedir;
       "sysdatadir", sysdatadir;
       "libdir", libdir;
       "confdir", confdir;
+      "bindir", bindir;
+      "plugindir", plugindir;
     ] in
   let entity = Command.argument @@ Type.(some (enum entities)) in
   let doc = "prints BAP configuration" in
@@ -335,9 +339,6 @@ let _config_command_declaration : unit =
     List.iter entities ~f:(fun (name, value) ->
         Format.printf "%s: %s@." name value);
     Ok ()
-
-
-
 
 let () =
   let _unused : (module unit) = (module Bap.Std) in

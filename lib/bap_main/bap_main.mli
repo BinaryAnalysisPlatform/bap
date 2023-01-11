@@ -1136,6 +1136,12 @@ module Extension : sig
     (** [version] is the preconfigured application version.*)
     val version : string
 
+    (** [build_id] if bap is built from dev repository, contains
+        the short SHA of the git commit.
+
+        @since 2.6.0   *)
+    val build_id : string
+
 
     (** [datadir] a directory for user-specific BAP readonly data.
 
@@ -1167,9 +1173,7 @@ module Extension : sig
 
     (** [sysdatadir] a directory for system-specific BAP readonly data
 
-        @since 2.3.0 before that version it was named [datadir]
-
-    *)
+        @since 2.3.0 before that version it was named [datadir]  *)
     val sysdatadir : string
 
     (** [libdir] a directory for BAP object files,
@@ -1180,6 +1184,18 @@ module Extension : sig
 
     (** [confdir] a directory for BAP specific configuration files *)
     val confdir : string
+
+
+    (** [bindir] the preconfigured directory for binaries.
+
+        @since 2.6.0  *)
+    val bindir : string
+
+
+    (** [plugindir] the preconfigured path where to store BAP plugins.
+
+        @since 2.6.0 *)
+    val plugindir : string
 
 
     (** [refine ~provides ~exclude ctxt] refines the context.
