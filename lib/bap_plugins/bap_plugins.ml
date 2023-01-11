@@ -306,9 +306,57 @@ module Plugins = struct
         | Ok p -> Some p
         | Error _ -> None)
 
+  (* returns a sorted deduplicated list of dune plugin names.
+
+     dune sites might have duplicating folders, so we have to be
+     careful that we do not try to load the same plugin twice. *)
   let list_packages () =
+    let require cnd k = if cnd then k () else None in
+
+    (* for each occurence of [name] in the search paths
+       returns its digest. The digest is the sum of md5 sums
+       of all files that comprise the plugin folder. *)
+    let digests name =
+      Bap_common.Plugins.paths |>
+      List.filter_map ~f:(fun dir ->
+          let path = Filename.concat dir name in
+          require (Sys.file_exists path) @@ fun () ->
+          require (Sys.is_directory path) @@ fun () ->
+          let contents =
+            Sys.readdir path |>
+            Array.map ~f:(Filename.concat path) in
+          require (Array.length contents > 0) @@ fun () ->
+          Option.return @@
+          Array.sum ~f:Md5.digest_file_blocking (module struct
+            type t = Md5.t
+            let zero = Md5.digest_string ""
+            let (+) x y =
+              Md5.digest_string (Md5.to_binary x ^ Md5.to_binary y)
+          end) contents) in
+
+    (* removes duplicating names provided that they have the same
+       implementation. The implementation is digested as the md5 sum
+       of files comprising the plugin folder.  *)
+    let deduplicate names =
+      let init = Map.empty (module String) in
+      List.fold names ~init ~f:(fun plugins name ->
+          Map.update plugins name ~f:(function
+              | None -> digests name
+              | Some ds -> ds @ digests name)) |>
+      Map.filteri ~f:(fun ~key:name ~data:digests ->
+          match digests with
+          | [] -> false
+          | d::ds when List.for_all ds ~f:(Md5.equal d) -> true
+          | _ ->
+            invalid_argf "The plugin %S has ambiguous implementations"
+              name ()) |>
+      Map.keys in
+
     Bap_common.Plugins.list () |>
+    deduplicate |>
     List.map ~f:Plugin.of_package
+
+
 
   let list ?env ?provides ?library () =
     list_bundles ?env ?provides ?library () @
@@ -316,7 +364,8 @@ module Plugins = struct
 
   let collect ?env ?provides ?library () =
     collect_bundles ?env ?provides ?library () @
-    List.map ~f:Result.return @@list_packages ()
+    List.map ~f:Result.return @@
+    list_packages ()
 
   let loaded,finished = Future.create ()
 
