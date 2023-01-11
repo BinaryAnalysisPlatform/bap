@@ -1,3 +1,7 @@
+(deprecated_library_name
+ (old_public_name bap)
+ (new_public_name bap-std))
+
 (library
  (name bap)
  (public_name bap-std)
