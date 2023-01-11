@@ -14,7 +14,27 @@ type cls =
   | With
   | Comp of bool
 
-type cfg = string Hashtbl.M(String).t [@@deriving sexp]
+module Key = struct
+  type t = string [@@deriving sexp]
+  let normalize =
+    String.map ~f:(function
+        | '_' | ' ' -> '-'
+        | c -> c)
+
+  let sexp_of_t x =
+    sexp_of_string @@ String.lowercase @@ normalize x
+
+  let hash x = String.Caseless.hash @@ normalize x
+  include Comparable.Make(struct
+      type t = string
+      let sexp_of_t = sexp_of_t
+      let compare x y = String.Caseless.compare
+          (normalize x)
+          (normalize y)
+    end)
+end
+
+type cfg = string Hashtbl.M(Key).t [@@deriving sexp]
 
 let filename = ref ""
 let init = ref false
@@ -39,7 +59,7 @@ let () = Cfg.main ~args ~name:"bap-configurator" @@ fun self ->
         "--quiet";
         "--short=7";
         "HEAD"
-      ]
+      ] |> String.strip
     with _ -> "" in
 
   let name = "bap-common" in
@@ -52,7 +72,7 @@ let () = Cfg.main ~args ~name:"bap-configurator" @@ fun self ->
     String.concat ~sep:"; " in
 
   if init.contents then begin
-    let vars = Hashtbl.of_alist_exn (module String) [
+    let vars = Hashtbl.of_alist_exn (module Key) [
         "pkg_name", name;
         "pkg_version", "2.6.0-alpha";
         "prefix", prefix;
@@ -74,7 +94,7 @@ let () = Cfg.main ~args ~name:"bap-configurator" @@ fun self ->
         "dvidir", "$docdir";
         "pdfdir", "$docdir";
         "psdir", "$docdir";
-        "plugindir", "$libdir/bap";
+        "plugindir", "$libdir/$pkg_name/plugins";
         "debug", "true";
         "profile", "false";
         "build_id", build_id;
