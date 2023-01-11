@@ -11,39 +11,39 @@ jobs:
           - 4.11.x
           - 4.08.x
 
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
 
     env:
       OPAMJOBS: 2
       OPAMRETRES: 8
 
     steps:
-      - name: Use OCaml ${{ matrix.ocaml-compiler }}
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install Ghidra and Dejagnu
+        run: |
+          sudo add-apt-repository ppa:ivg/ghidra -y
+          sudo apt-get update -y
+          sudo apt-get install libghidra-dev -y
+          sudo apt-get install libghidra-data -y
+          sudo apt-get install dejagnu -y
+
+      - name: Install OCaml ${{ matrix.ocaml-compiler }}
         uses: ocaml/setup-ocaml@v2
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
           dune-cache: true
+          opam-disable-sandboxing: true
+          opam-repositories: |
+            default: git+https://github.com/ocaml/opam-repository.git
+            bap: git+https://github.com/BinaryAnalysisPlatform/opam-repository#testing
 
-      - name: Install Ghidra
-        run: |
-          sudo add-apt-repository ppa:ivg/ghidra -y
-          sudo apt-get install libghidra-dev -y
-          sudo apt-get install libghidra-data -y
+      - name: Install bap-extra
+        run: opam install bap-extra
 
-      - name: Add the testing Repository
-        run: opam repo add bap git+https://github.com/BinaryAnalysisPlatform/opam-repository#testing
-
-      - name: Install system dependencies
-        run: opam depext -u bap-extra
-
-      - name: Cleanup the Caches
-        run: sudo apt clean --yes
-
-      - name: Check the Space
-        run: df -h
-
-      - name: Build and Install BAP Packages
-        run: opam clean -a; opam install bap-extra
+      - name: Run functional tests
+        run: opam exec -- make check
 
       - uses: actions/upload-artifact@v2
         if: ${{ always() }}
