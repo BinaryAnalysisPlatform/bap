@@ -11,6 +11,7 @@ Library bap_plugins
                    Bap_plugins_units,
                    Bap_plugins_units_intf,
                    Bap_common,
-                   Bap_plugins_loader_backend
+                   Bap_plugins_loader_backend,
+                   Bap_plugins_package
   BuildDepends:    core_kernel, dynlink, fileutils, findlib, bap-bundle, bap-future,
                    uri, ppx_bap
