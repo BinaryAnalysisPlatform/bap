@@ -383,11 +383,12 @@ let merge_encodings x y =
   | Ok coding -> KB.return {x with coding}
   | Error mismatch -> KB.fail mismatch
 
+let is_known {coding} = not (Theory.Language.is_unknown coding)
 
 let collect_dests source code =
   KB.collect Theory.Semantics.slot code >>= fun insn ->
   let init = {
-    encoding=source;
+    encoding={source with coding = Theory.Language.unknown};
     call = Insn.(is call insn);
     barrier = Insn.(is barrier insn);
     indirect = false;
@@ -395,7 +396,7 @@ let collect_dests source code =
     unresolved = Set.empty (module Theory.Label);
   } in
   KB.Value.get Insn.Slot.dests insn |> function
-  | None -> KB.return init
+  | None -> KB.return {init with encoding = source}
   | Some dests ->
     Set.to_sequence dests |>
     KB.Seq.fold ~init ~f:(fun dest label ->
@@ -417,7 +418,9 @@ let collect_dests source code =
             indirect=true;
             unresolved = Set.add dest.unresolved label;
             encoding;
-          })
+          }) >>| fun dest ->
+    if is_known dest.encoding then dest
+    else {dest with encoding = source}
 
 let pp_addr_opt ppf = function
   | None -> Format.fprintf ppf "Unk"
@@ -462,8 +465,6 @@ let switch encoding s =
   match create_disassembler encoding with
   | Error _ -> s
   | Ok dis -> Dis.switch s dis
-
-let is_known {coding} = not (Theory.Language.is_unknown coding)
 
 let disassemble ~code ~data ~funs debt base : Machine.state KB.t =
   unit_for_mem base >>= fun unit ->
