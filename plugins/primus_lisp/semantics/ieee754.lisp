@@ -29,7 +29,7 @@
   (set y0 (cast-float :rne 64 x0)))
 
 (defun cast_sint_rne_ieee754_binary_64 ()
-  (set y0 (cast-sfloat :rne 64 x0)))
+  (set y0 (cast-sint :rne 64 x0)))
 
 (defun cast_int_rne_ieee754_binary_64 ()
-  (set y0 (cast-float :rne 64 x0)))
+  (set y0 (cast-int :rne 64 x0)))
