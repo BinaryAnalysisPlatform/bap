@@ -98,7 +98,7 @@
 (defun t2ADDrs (rd rn rm simm cnd _ _)
   "add.w rd, rn, rm, simm"
   (when (condition-holds cnd)
-    (set$ rd (+ rn (i-shift rn simm)))))
+    (set$ rd (+ rn (i-shift rm simm)))))
 
 (defun tSBC (rd _ rn rm cnd _)
   (add-with-carry/it-block rd rn (lnot rm) CF cnd))
