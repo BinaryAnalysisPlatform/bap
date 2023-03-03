@@ -205,6 +205,9 @@ char *strcat(char * restrict dst, const char * restrict src)
 char *strchr(const char *s, int c)
     __attribute__((pure,nonnull(1),storage(1)));
 
+char *strchrnul(const char *s, int c)
+    __attribute__((pure,nonnull(1),storage(1)));
+
 int strcmp(const char *s1, const char *s2)
     __attribute__((pure, nonnull(1,2), storage(1), storage(2)));
 
