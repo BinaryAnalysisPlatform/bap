@@ -12,7 +12,7 @@
 (in-package thumb)
 
 (defun tCMPhir (rn rm cnd _)
-  "cmp rn, rn"
+  "cmp rn, rm"
   (when (condition-holds cnd)
     (let ((r (- rn rm)))
       (set-nzcv-from-registers r rn (- rm)))))
