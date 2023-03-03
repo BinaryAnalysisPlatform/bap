@@ -15,7 +15,7 @@
   "cmp rn, rn"
   (when (condition-holds cnd)
     (let ((r (- rn rm)))
-      (set-nzcv-from-registers r rn rm))))
+      (set-nzcv-from-registers r rn (- rm)))))
 
 (defun tADR (rd lbl cnd _)
   "adr rd, lbl"
