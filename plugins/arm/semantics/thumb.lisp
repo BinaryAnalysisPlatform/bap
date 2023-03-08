@@ -12,10 +12,10 @@
 (in-package thumb)
 
 (defun tCMPhir (rn rm cnd _)
-  "cmp rn, rn"
+  "cmp rn, rm"
   (when (condition-holds cnd)
     (let ((r (- rn rm)))
-      (set-nzcv-from-registers r rn rm))))
+      (set-nzcv-from-registers r rn (- rm)))))
 
 (defun tADR (rd lbl cnd _)
   "adr rd, lbl"
@@ -98,7 +98,7 @@
 (defun t2ADDrs (rd rn rm simm cnd _ _)
   "add.w rd, rn, rm, simm"
   (when (condition-holds cnd)
-    (set$ rd (+ rn (i-shift rn simm)))))
+    (set$ rd (+ rn (i-shift rm simm)))))
 
 (defun tSBC (rd _ rn rm cnd _)
   (add-with-carry/it-block rd rn (lnot rm) CF cnd))
