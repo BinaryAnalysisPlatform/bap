@@ -73,4 +73,4 @@
   "(array-set T P N W) sets to W the N-th element of the array of
    elements of type T, pointed by P. Returns a pointer to the next
    element"
-  (write-word t (ptr+ p n) w))
+  (write-word t (ptr+ t p n) w))
