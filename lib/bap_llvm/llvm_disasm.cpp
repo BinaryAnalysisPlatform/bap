@@ -3,6 +3,9 @@
 #include <llvm/MC/MCInstPrinter.h>
 #include <llvm/MC/MCInstrInfo.h>
 #include <llvm/MC/MCRegisterInfo.h>
+#if LLVM_VERSION_MAJOR >= 15
+#include <llvm/MC/MCSubtargetInfo.h>
+#endif
 #include <llvm/Support/DataTypes.h>
 #include <llvm/Support/FormattedStream.h>
 #include <llvm/Support/CommandLine.h>

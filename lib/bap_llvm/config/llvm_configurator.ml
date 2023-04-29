@@ -33,7 +33,7 @@ let () = C.main ~args ~name:"bap-llvm" @@ fun self ->
   C.Flags.write_sexp "link.flags" @@ List.concat [
     llvm self ["--link-static"; "--ldflags"];
     llvm self (["--link-static"; "--libs"] @ llvm_components);
-    ["-lstdc++"; "-lcurses"];
+    ["-lstdc++"; "-lcurses"; "-lzstd"];
   ];
   C.Flags.write_sexp "cxx.flags" @@ List.concat [
     ["-fPIC"];
