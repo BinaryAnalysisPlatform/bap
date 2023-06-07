@@ -53,10 +53,7 @@
   (set$ dst src))
 
 (defun C_LUI (dst imm)
-  (set$ dst (lshift (cast-signed
-                     (- (word-width) 12)
-                     (cast-low 6 imm))
-                    12)))
+  (set$ dst (lshift imm 12)))
 
 (defun AUIPC (dst off)
   (set$ dst (+ (get-program-counter) off)))
@@ -84,6 +81,9 @@
                   (load-bits (/ (word-width) part) (+ reg off)))))
 
 (defun LW (dst reg off)
+  (load-word cast-signed 2 dst reg off))
+
+(defun C_LW (dst reg off)
   (load-word cast-signed 2 dst reg off))
 
 (defun LH (dst reg off)
@@ -194,6 +194,9 @@
 (defun BNE (rs1 rs2 off)
   (conditional-jump (/= rs1 rs2) off))
 
+(defun BGE (rs1 rs2 off)
+  (conditional-jump (>= rs1 rs2) off))
+
 (defun C_BEQ (rs1 rs2 off)
   (conditional-jump (= rs1 rs2) off))
 
@@ -202,6 +205,9 @@
 
 (defun C_BNE (rs1 rs2 off)
   (conditional-jump (/= rs1 rs2) off))
+
+(defun C_BGE (rs1 rs2 off)
+  (conditional-jump (>= rs1 rs2) off))
 
 (defun BEQZ (rs1 off)
   (conditional-jump (is-zero rs1) off))
