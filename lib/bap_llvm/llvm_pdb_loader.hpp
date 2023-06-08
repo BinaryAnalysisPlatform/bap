@@ -50,6 +50,9 @@
 
 #include <llvm/Object/COFF.h>
 #include <llvm/Object/Binary.h>
+#if LLVM_VERSION_MAJOR >= 15
+#include "llvm/DebugInfo/MSF/MappedBlockStream.h"
+#endif
 #include "llvm/DebugInfo/PDB/PDB.h"
 #include "llvm/DebugInfo/PDB/PDBTypes.h"
 #include "llvm/DebugInfo/PDB/IPDBSession.h"
