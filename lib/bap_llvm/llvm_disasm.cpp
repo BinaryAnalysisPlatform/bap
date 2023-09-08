@@ -12,6 +12,9 @@
 #if LLVM_VERSION_MAJOR >= 12
 #include <llvm/Support/Process.h>
 #include <llvm/Support/StringSaver.h>
+#if LLVM_VERSION_MAJOR <= 16
+#include <llvm/ADT/Optional.h>
+#endif
 #endif
 #include <llvm-c/Target.h>
 
