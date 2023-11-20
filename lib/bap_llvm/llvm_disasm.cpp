@@ -652,7 +652,8 @@ struct create_llvm_disassembler : disasm_factory {
 
 static void parse_environment_options(const char *prog_name, const char *env_var) {
 #if LLVM_VERSION_MAJOR >= 12
-    llvm::Optional<std::string> env_value = llvm::sys::Process::GetEnv(llvm::StringRef(env_var));
+    // auto is llvm::Optional<std::string> or std::optional<std::string>
+    const auto& env_value = llvm::sys::Process::GetEnv(llvm::StringRef(env_var));
     if (!env_value)
         return;
 
