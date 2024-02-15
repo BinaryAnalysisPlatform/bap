@@ -1,6 +1,11 @@
 #include <iostream>
 
+#include <llvm/Config/llvm-config.h>
+#if LLVM_VERSION_MAJOR >= 17
+#include <llvm/TargetParser/Triple.h>
+#else
 #include <llvm/ADT/Triple.h>
+#endif
 
 #include "llvm_primitives.hpp"
 
