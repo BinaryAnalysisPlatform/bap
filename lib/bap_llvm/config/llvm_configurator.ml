@@ -30,9 +30,13 @@ let args = [
 
 
 let () = C.main ~args ~name:"bap-llvm" @@ fun self ->
+  let linkmode =
+    "--link-" ^
+    (String.strip @@
+     C.Process.run_capture_exn self llvm_config ["--shared-mode"]) in
   C.Flags.write_sexp "link.flags" @@ List.concat [
-    llvm self ["--link-static"; "--ldflags"];
-    llvm self (["--link-static"; "--libs"] @ llvm_components);
+    llvm self [linkmode; "--ldflags"];
+    llvm self ([linkmode; "--libs"] @ llvm_components);
     ["-lstdc++"; "-lcurses"; "-lzstd"];
   ];
   C.Flags.write_sexp "cxx.flags" @@ List.concat [
