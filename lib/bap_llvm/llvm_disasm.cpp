@@ -33,6 +33,9 @@
 #include <limits>
 #include <typeinfo>
 #include <iostream>
+#if LLVM_VERSION_MAJOR >= 16
+#include <optional>
+#endif
 
 #include "disasm.hpp"
 #include "llvm_disasm.h"
@@ -40,7 +43,11 @@
 #include <llvm/MC/MCDisassembler/MCDisassembler.h>
 
 #include <llvm/ADT/ArrayRef.h>
+#if LLVM_VERSION_MAJOR >= 17
+#include <llvm/TargetParser/Triple.h>
+#else
 #include <llvm/ADT/Triple.h>
+#endif
 #include <llvm/ADT/Twine.h>
 
 template <typename T>
@@ -467,7 +474,12 @@ public:
         } else if (p == is_true) {
             return true;
         } else {
+#if LLVM_VERSION_MAJOR >= 16
+            // MCInstrDesc needs to know its own address to access some implicit tables.
+            auto &d = ins_info->get(current.code);
+#else
             auto d = ins_info->get(current.code);
+#endif
             if (p == may_affect_control_flow) {
                 return d.mayAffectControlFlow(mcinst, *reg_info);
             } else if (auto check = fun_of_pred(p)) {
@@ -655,7 +667,11 @@ struct create_llvm_disassembler : disasm_factory {
 
 static void parse_environment_options(const char *prog_name, const char *env_var) {
 #if LLVM_VERSION_MAJOR >= 12
+#if LLVM_VERSION_MAJOR >= 16
+    std::optional<std::string> env_value = llvm::sys::Process::GetEnv(llvm::StringRef(env_var));
+#else
     llvm::Optional<std::string> env_value = llvm::sys::Process::GetEnv(llvm::StringRef(env_var));
+#endif
     if (!env_value)
         return;
 

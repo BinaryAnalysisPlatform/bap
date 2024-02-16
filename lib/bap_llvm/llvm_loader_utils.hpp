@@ -5,7 +5,11 @@
 #include <iomanip>
 #include <iostream>
 
+#if LLVM_VERSION_MAJOR >= 17
+#include <llvm/TargetParser/Triple.h>
+#else
 #include <llvm/ADT/Triple.h>
+#endif
 
 #include "llvm_error_or.hpp"
 
