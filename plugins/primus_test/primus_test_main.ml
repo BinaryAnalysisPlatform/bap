@@ -186,7 +186,7 @@ module Location = struct
       ~new_representative
       ~new_instance
       ~new_class =
-    let traces = List.filter_map ~f:(Map.find locations) traces in
+    let traces = List.map ~f:(Map.find_exn locations) traces in
     let points = List.map ~f:set_of_trace traces in
     let cls' = {points; traces} in
     match Map.find incidents name with
