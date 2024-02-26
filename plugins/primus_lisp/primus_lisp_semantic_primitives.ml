@@ -276,6 +276,12 @@ let export = Primus.Lisp.Type.Spec.[
     "(alias-base-register x) if X has a symbolic value that is an
      aliased register returns the base register";
 
+    "nth-reg-in-group", tuple [sym; int] @-> int,
+    "(nth-reg-in-group reg-group n) returns the nth register in the
+    symbolic register group reg-group. For example,
+    (nth-reg-in-group 'X0_X1 1) returns X1,
+    (nth-reg-in-group 'Q0_Q1_Q2 0) returns Q0.";
+
     "cast-low", tuple [int; a] @-> b,
     "(cast-low S X) extracts low S bits from X.";
 
@@ -751,6 +757,26 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
         forget @@
         CT.var reg >>| fun v ->
         KB.Value.put Primus.Lisp.Semantics.symbol v (Some name)
+
+  let nth_reg_in_group target args =
+    binary args @@ fun sym n ->
+    to_int n >>= fun n ->
+    match n with
+    | None -> illformed "index must be statically known"
+    | Some n ->
+      match symbol sym with
+      | None -> illformed "sym must be symbol"
+      | Some sym ->
+        let components = String.split sym ~on:'_' in
+        match List.nth components n with
+        | None -> illformed "symbol does not have component at index %d" n
+        | Some name ->
+          match Theory.Target.var target name with
+          | None -> illformed "%s is not a register" name
+          | Some var ->
+            forget @@
+            CT.var var >>| fun v ->
+            KB.Value.put Primus.Lisp.Semantics.symbol v (Some name)
 
   module Intrinsic = struct
     type param =
@@ -1320,6 +1346,7 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | "symbol",[x] ->  pure@@symbol s x
     | "is-symbol", [x] -> pure@@is_symbol x
     | "alias-base-register", [x] -> pure@@alias_base_register t x
+    | "nth-reg-in-group",_ -> pure@@nth_reg_in_group t args
     | "cast-low",xs -> pure@@low xs
     | "cast-high",xs -> pure@@high xs
     | "cast-signed",xs -> pure@@signed xs
