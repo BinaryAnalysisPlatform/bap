@@ -83,14 +83,14 @@ module Std : sig
       but only one will be active. A component that is responsible for
       selecting a machine fork that is currently active is called
       {i scheduler}. Since there are few different scheduling strategies
-      avaiable, there are also a few schedulers.
+      available, there are also a few schedulers.
 
       {2 Components and Systems}
 
       Components are the main building blocks of the Primus
       machine. Components subscribe to the observations provided by
       Primus libraries and other components. The attached callbacks
-      changes the behavior of the Machine thusaffecting its semantics.
+      changes the behavior of the Machine thus affecting its semantics.
       A particular composition of components is called a
       {i system}. Therefore a system is a Primus application that could
       be run. The Primus Framework provides an extenisble repository
@@ -136,8 +136,7 @@ module Std : sig
 
       To run the specified system, either use {!Primus.System.run} to
       run it in the Knowledge monad or use
-      {!Primus.System.Generic.run} to run the Machine in the monad
-      some other monad.
+      {!Primus.System.Generic.run} to run the Machine in some other monad.
 
       It is also possible to create a {!Primus.Job} and enqueue it in
       the Primus Jobs queue with the {!Primus.Jobs.enqueue}
