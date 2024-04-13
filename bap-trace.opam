@@ -15,7 +15,7 @@ depends: [
   "bap-plugins" {= version}
   "bap-std" {= version}
   "bap-traces" {= version}
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.16" & < "v0.17"}
   "ppx_bap" {= version}
   "regular" {= version}
   "uri"

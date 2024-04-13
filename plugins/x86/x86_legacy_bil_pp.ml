@@ -131,10 +131,10 @@ let var_to_string ?ctx (Var.V(id,name,t) as v) =
   | Some(vars,names) ->
     if (not !printed_varctx_warning) &&
        (Hashtbl.length names > reasonable_size_varctx ||
-        VH.length vars > reasonable_size_varctx) then (
+        Hashtbl.length vars > reasonable_size_varctx) then (
       printed_varctx_warning := true);
     (*        Logs.tbd_s "varctx is getting very large"); *)
-    match VH.find vars v with
+    match Hashtbl.find vars v with
     | Some s -> s
     | None ->
       let rec trystring (s, `F next) =
@@ -142,7 +142,7 @@ let var_to_string ?ctx (Var.V(id,name,t) as v) =
           trystring (next s)
         else (
           let s' = s ^":"^ typ_to_string t in
-          VH.add_exn vars ~key:v ~data:s';
+          Hashtbl.add_exn vars ~key:v ~data:s';
           Hashtbl.add_exn names ~key:s ~data:();
           s')
       in
@@ -438,8 +438,8 @@ class pp ft =
    pp2string be polymorphic *)
 let buf = Buffer.create 57
 let ft =
-  let out_string = Caml.Buffer.add_substring buf
-  and out_spaces _ = Caml.Buffer.add_char buf ' ' in
+  let out_string = Stdlib.Buffer.add_substring buf
+  and out_spaces _ = Stdlib.Buffer.add_char buf ' ' in
   let ft = Format.formatter_of_buffer buf in
   Format.pp_set_formatter_out_functions ft {
     Format.out_string; out_flush = ignore;

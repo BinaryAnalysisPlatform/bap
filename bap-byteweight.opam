@@ -13,7 +13,7 @@ depends: [
   "bap-signatures" {= version}
   "bap-std" {= version}
   "camlzip" {>= "1.0" & < "2.0"}
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.16" & < "v0.17"}
   "bap-common" {= version}
   "ppx_bap" {= version}
   "regular" {= version}

@@ -5,8 +5,8 @@ open Or_error.Monad_infix
 
 module Units = Bap_plugins_units.Make()
 module Package = Bap_plugins_package
-module Filename = Caml.Filename
-module Sys = Caml.Sys
+module Filename = Stdlib.Filename
+module Sys = Stdlib.Sys
 
 module Plugin = struct
 
@@ -92,7 +92,7 @@ module Plugin = struct
 
 
   let is_debugging () =
-    try String.(Sys.getenv "BAP_DEBUG" <> "0") with Caml.Not_found -> false
+    try String.(Sys.getenv "BAP_DEBUG" <> "0") with Stdlib.Not_found -> false
 
   let bundle = function {body=Bundle {bundle}} -> bundle
                       | _ -> assert false
@@ -254,7 +254,7 @@ end
 module Plugins = struct
   let paths_of_env () =
     try Sys.getenv "BAP_PLUGIN_PATH" |> String.split ~on:':'
-    with Caml.Not_found -> []
+    with Stdlib.Not_found -> []
 
   let path = Bap_plugins_config.plugindir
 

@@ -15,7 +15,7 @@ depends: [
   "bap-knowledge" {= version}
   "bap-std" {= version}
   "bitvec" {= version}
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.16" & < "v0.17"}
   "odoc" {with-doc}
 ]
 build: [

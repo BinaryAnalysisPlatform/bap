@@ -1471,7 +1471,7 @@ module Knowledge : sig
         return the least upper bound of [x] and [y], if it exists.
     *)
     val mapping :
-      ('a,'e) Map.comparator ->
+      ('a,'e) Comparator.Module.t ->
       ?inspect:('d -> Base.Sexp.t) ->
       ?join:('d -> 'd -> ('d, conflict) result) ->
       equal:('d -> 'd -> bool) ->
@@ -1485,7 +1485,7 @@ module Knowledge : sig
         operator is the set union, and the order operator is the
         [is_subset] function.
     *)
-    val powerset : ('a,'e) Set.comparator ->
+    val powerset : ('a,'e) Comparator.Module.t ->
       ?inspect:('a -> Sexp.t) ->
       string ->
       ('a,'e) Set.t domain
@@ -1595,11 +1595,11 @@ module Knowledge : sig
     val array : 'a persistent -> 'a array persistent
 
     (** [set order t] derives persistent for a set.  *)
-    val set : ('a,'c) Set.comparator -> 'a t -> ('a,'c) Set.t persistent
+    val set : ('a,'c) Comparator.Module.t -> 'a t -> ('a,'c) Set.t persistent
 
 
     (** [map order t] derives persistent for a map.  *)
-    val map : ('k,'c) Map.comparator -> 'k t -> 'd t -> ('k,'d,'c) Map.t persistent
+    val map : ('k,'c) Comparator.Module.t -> 'k t -> 'd t -> ('k,'d,'c) Map.t persistent
   end
 
   (** Conflicting information.

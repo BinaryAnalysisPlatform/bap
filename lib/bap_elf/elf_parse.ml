@@ -34,7 +34,7 @@ open Bitstring
 open Elf_types
 open Elf_internal_utils
 
-module Char = Caml.Char
+module Char = Stdlib.Char
 
 let elf_max_header_size = 64         (* no magick! *)
 
