@@ -2,9 +2,9 @@ open Base
 open Stdio
 
 module C = Configurator.V1
-module Buf = Caml.Buffer
-module Arg = Caml.Arg
-module Filename = Caml.Filename
+module Buf = Stdlib.Buffer
+module Arg = Stdlib.Arg
+module Filename = Stdlib.Filename
 open Llvm_config
 
 let llvm_components = [
@@ -47,7 +47,7 @@ let () = C.main ~args ~name:"bap-llvm" @@ fun self ->
     String.strip @@
     C.Process.run_capture_exn self llvm_config ["--version"] in
   let src = !filename in
-  let dst = Caml.Filename.chop_extension src in
+  let dst = Stdlib.Filename.chop_extension src in
   In_channel.with_file src ~f:(fun input ->
       Out_channel.with_file dst ~f:(fun output ->
           In_channel.iter_lines input ~f:(fun line ->

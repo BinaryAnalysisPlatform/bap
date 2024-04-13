@@ -112,7 +112,7 @@ let run t =
   let open Sequence.Step in
   Sequence.unfold_with ~init:t ~f:(fun t (x,c) ->
       let t = step t x c in
-      when_decided t (Skip t) ~f:(fun d -> Yield (d,t)))
+      when_decided t (Skip {state=t}) ~f:(fun d -> Yield {value=d;state=t}))
 
 
 let rev_zip_skip skip xs ys =

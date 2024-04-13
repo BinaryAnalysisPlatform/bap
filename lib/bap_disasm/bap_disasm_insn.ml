@@ -52,7 +52,7 @@ module Props = struct
   module T = struct
     type t = Z.t
     include Sexpable.Of_stringable(Bits)
-    include Binable.Of_stringable(Bits)
+    include Binable.Of_stringable_without_uuid(Bits)
     [@@warning "-D"]
   end
 
@@ -241,11 +241,11 @@ module Analyzer = struct
         | _ -> indirect jump jumps
       method! enter_stmt s (effs,jumps) = match Bil.(decode call s) with
         | None -> super#enter_stmt s (effs,jumps)
-        | Some _ -> Effects.add effs `Call, jumps
+        | Some _ -> Set.add effs `Call, jumps
     end
 
   let run bil =
-    let cons c = Fn.flip @@ if c then Effects.add else Fn.const in
+    let cons c = Fn.flip @@ if c then Set.add else Fn.const in
     let effs,jump = analyzer#run bil (Effects.empty,no_jumps) in
     if not jump.jump then effs
     else
@@ -260,7 +260,7 @@ let derive_props ?bil insn =
     | None -> Analyzer.Effects.empty in
   let is = Insn.is insn in
   let is_bil = if Option.is_some bil
-    then Analyzer.Effects.mem bil_effects else is in
+    then Set.mem bil_effects else is in
   let is_return = is `Return in
   let is_call = is_bil `Call || is `Call in
   let is_conditional_jump = is_bil `Conditional_branch in

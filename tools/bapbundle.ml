@@ -3,7 +3,7 @@ open Bap_bundle.Std
 open Format
 
 
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 
 open Manifest.Fields
 

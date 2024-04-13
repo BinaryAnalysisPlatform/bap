@@ -651,7 +651,7 @@ module ResultT = struct
 
     module type S = sig
       include S
-      val failf : ('a, Caml.Format.formatter, unit, unit -> 'b t) format4 -> 'a
+      val failf : ('a, Stdlib.Format.formatter, unit, unit -> 'b t) format4 -> 'a
     end
     module Make(M : Monad.S) : S
       with type 'a t := 'a T(M).t
@@ -662,7 +662,7 @@ module ResultT = struct
       include Make(struct type t = Error.t end)(M)
 
       let failf fmt =
-        let open Caml.Format in
+        let open Stdlib.Format in
         let buf = Buffer.create 512 in
         let ppf = formatter_of_buffer buf in
         let kon ppf () =

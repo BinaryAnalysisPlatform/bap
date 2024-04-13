@@ -14,7 +14,7 @@ depends: [
   "bap-std" {= version}
   "cmdliner"
   "cmdliner" {>= "1.0" & < "2.0"}
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.16" & < "v0.17"}
   "ezjsonm"
   "graphlib" {= version}
   "ppx_bap" {= version}

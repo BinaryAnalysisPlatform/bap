@@ -19,7 +19,7 @@ depends: [
   "bitvec-sexp" {= version}
   "bitvec" {= version}
   "conf-binutils" {>= "0.3"}
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.16" & < "v0.17"}
   "bap-common" {= version}
   "ppx_bap" {= version}
   "re" {>= "1.0" & < "2.0"}
