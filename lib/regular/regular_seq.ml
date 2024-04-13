@@ -35,7 +35,7 @@ let compare compare_a t1 t2 =
             then r.return c);
       0)
 
-module Binable = Bin_prot.Utils.Make_binable1(struct
+module Binable = Bin_prot.Utils.Make_binable1_without_uuid(struct
     module Binable = List
     type 'a t = 'a Sequence.t
     let to_binable = Sequence.to_list
