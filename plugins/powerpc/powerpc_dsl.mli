@@ -16,6 +16,7 @@ val bitwidth : int -> bitwidth
 val int_of_bitwidth : bitwidth -> int
 
 val imm : (op -> exp) ec
+val imm16 : (op -> exp) ec
 val var : (bitwidth -> exp) ec
 val reg : (reg -> exp) -> (op -> exp) ec
 val const : (bitwidth -> int -> exp) ec
