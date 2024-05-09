@@ -228,7 +228,7 @@ let ldx cpu ops =
 let ldu cpu ops =
   let rt = unsigned cpu.reg ops.(0) in
   let ra = signed cpu.reg ops.(1) in
-  let im = unsigned imm16 ops.(2) in
+  let im = signed imm16 ops.(2) in
   RTL.[
     rt := cpu.load (ra + im) doubleword;
     ra := ra + im;
