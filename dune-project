@@ -1212,6 +1212,23 @@ between the sets.")
   (ppx_bap (= :version))))
 
 (package
+ (name bap-msp430)
+ (synopsis "BAP MSP430 support package")
+ (tags (bap bap-plugin msp430))
+ (depends
+  (bap-abi (= :version))
+  (bap-api (= :version))
+  (bap-common (= :version))
+  (bap-core-theory (= :version))
+  (bap-c (= :version))
+  (bap-knowledge (= :version))
+  (bap-std (= :version))
+  (core_kernel (and (>= v0.14) (< v0.16)))
+  (monads (= :version))
+  (ogre (= :version))
+  (ppx_bap (= :version))))  
+
+(package
  (name bap-run)
  (synopsis "BAP Primus Framework frontend")
  (tags (bap bap-plugin))
