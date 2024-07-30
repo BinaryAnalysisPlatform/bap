@@ -283,7 +283,7 @@
  (depends
   (bap-signatures (= :version))
   (bap-std (= :version))
-  (camlzip (and (>= 1.12) (< 2.0)))
+  (camlzip (and (>= 1.0) (< 2.0)))
   (core_kernel (and (>= v0.14) (< v0.16)))
   (bap-common (= :version))
   (ppx_bap (= :version))
