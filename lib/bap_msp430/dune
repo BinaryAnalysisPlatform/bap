@@ -1,0 +1,6 @@
+(library
+  (name bap_msp430)
+  (public_name bap-msp430)
+  (preprocess (pps ppx_bap))
+  (wrapped false)
+  (libraries bap-core-theory bap-knowledge core_kernel ))
