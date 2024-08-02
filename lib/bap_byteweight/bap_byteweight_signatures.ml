@@ -109,7 +109,7 @@ let update_or_fail ?compiler target data payload path =
   let path = make_entry ?compiler target data in
   let data = Bytes.unsafe_to_string (data.save payload) in
   Zip.add_entry data zip path;
-  List.iter entries ~f:(fun ({Zip.filename; comment; mtime},data) ->
+  List.iter entries ~f:(fun ({Zip.filename; comment; mtime; _},data) ->
       Zip.add_entry data zip filename ~comment ~mtime)
 
 let copy input output =
