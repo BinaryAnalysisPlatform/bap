@@ -17,7 +17,7 @@ let find m reg =
   let (module M : MIPS) = m in
   let open M in
   let open E in
-  let find_reg regs reg = String.Map.find regs (Reg.name reg) in
+  let find_reg regs reg = Map.find regs (Reg.name reg) in
   let find_gpr = find_reg gpr in
   let find_fpr = find_reg fpr in
   let reg_searches = [find_gpr; find_fpr] in
@@ -47,7 +47,7 @@ let make_cpu addr_size endian memory =
     | `r64 -> jmp e in
   let find name regs n =
     try
-      Int.Map.find_exn regs n
+      Map.find_exn regs n
     with _ ->
       mips_fail "%s with number %d not found" name n in
   let gpr n = find "GPR" gpri n in

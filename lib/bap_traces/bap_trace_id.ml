@@ -2,7 +2,7 @@ open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Bap.Std
 
-module Bin = Bin_prot.Utils.Make_binable(struct
+module Bin = Bin_prot.Utils.Make_binable_without_uuid(struct
     module Binable = String
     type t = Uuidm.t
     let to_binable = Uuidm.to_bytes

@@ -91,7 +91,7 @@ open Monads.Std
 open Format
 open Bap_plugins.Std
 
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 
 include Self()
 open Bap_main
@@ -323,8 +323,8 @@ let rw_file = Extension.Type.define
     ~name:"<FILE>" ~print:Fn.id ~parse:Fn.id
     ~digest:(fun path ->
         if Sys.file_exists path
-        then Caml.Digest.file path
-        else Caml.Digest.string "empty")
+        then Stdlib.Digest.file path
+        else Stdlib.Digest.string "empty")
     ""
 
 let update =
@@ -383,8 +383,8 @@ let target =
   let t = Extension.Type.define Theory.Target.unknown
       ~name:"NAME"
       ~digest:(fun t ->
-          let r = Caml.Digest.string@@Theory.Target.to_string t in
-          Format.eprintf "target digest = %s@\n" (Caml.Digest.to_hex r);
+          let r = Stdlib.Digest.string@@Theory.Target.to_string t in
+          Format.eprintf "target digest = %s@\n" (Stdlib.Digest.to_hex r);
           r)
       ~parse:(fun s -> match Theory.Target.lookup ~package:"bap" s with
           | Some t -> t
@@ -458,9 +458,9 @@ module Dump_formats = struct
 end
 
 let setup_gc () =
-  let opts = Caml.Gc.get () in
+  let opts = Stdlib.Gc.get () in
   info "Setting GC parameters";
-  Caml.Gc.set {
+  Stdlib.Gc.set {
     opts with
     minor_heap_size = 2 * 1024 * 1024;
     major_heap_increment = 64 * 1024 * 1024;
@@ -499,7 +499,7 @@ let create_and_process input libraries outputs passes loader target update
                          Fn.non Filename.is_implicit loader in
   let package = input in
   let digest =
-    let file      = Caml.Digest.file in
+    let file      = Stdlib.Digest.file in
     let config    = Extension.Configuration.digest ctxt in
     let input     = file input in
     let libraries = List.map libraries ~f:file in

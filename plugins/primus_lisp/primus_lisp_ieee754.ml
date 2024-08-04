@@ -104,7 +104,7 @@ module Primitives(Machine : Primus.Machine.S) = struct
   let is_nan x =
     Float.Class.(compare Nan (Float.classify x) = 0)
 
-  let init () = Machine.sequence Caml.[
+  let init () = Machine.sequence Stdlib.[
       define inf "add" ( +. );
       define inf "sub" ( -. );
       define inf "div" ( /. );

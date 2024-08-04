@@ -7,7 +7,7 @@ open Or_error
 
 include Self()
 
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 module Unix = Caml_unix
 
 module Ogre = struct
@@ -122,7 +122,7 @@ module LLVM = struct
       (scheme name $ addr $ size) Tuple.T3.create
 end
 
-module Filename = Caml.Filename
+module Filename = Stdlib.Filename
 
 open Image.Scheme
 open Ogre.Syntax
