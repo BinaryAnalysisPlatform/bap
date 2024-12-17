@@ -32,6 +32,11 @@ let imm signed op =
   if signed then Exp.(signed @@ of_word w)
   else Exp.(unsigned @@ of_word w)
 
+let imm16 signed op =
+  let w = Word.of_int ~width:16 (int_of_imm op) in
+  if signed then Exp.(signed @@ of_word w)
+  else Exp.(unsigned @@ of_word w)
+
 let signed f = f true
 let unsigned f = f false
 
