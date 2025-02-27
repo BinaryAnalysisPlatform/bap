@@ -28,12 +28,16 @@ let m ~f mem insn =
 
 let rr ~f mem insn =
   match Insn.ops insn with
-  | [| Op.Reg reg1; Op.Reg reg2 |] -> f mem reg1 reg2
+  | [| _; Op.Reg reg1; Op.Reg reg2 |]
+  | [| Op.Reg reg1; Op.Reg reg2 |] ->
+    f mem reg1 reg2
   | _ -> invalid_operands ~here:[%here] insn
 
 let ri ~f mem insn =
   match Insn.ops insn with
-  | [| Op.Reg reg; Op.Imm imm |] -> f mem reg imm
+  | [| _; Op.Reg reg; Op.Imm imm |]
+  | [| Op.Reg reg; Op.Imm imm |] ->
+    f mem reg imm
   | _ -> invalid_operands ~here:[%here] insn
 
 let ir ~f mem insn =
