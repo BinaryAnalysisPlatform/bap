@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Install Ghidra and Dejagnu
         run: |
@@ -30,7 +30,7 @@ jobs:
           sudo apt-get install dejagnu -y
 
       - name: Install OCaml ${{ matrix.ocaml-compiler }}
-        uses: ocaml/setup-ocaml@v2
+        uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
           dune-cache: true
@@ -45,7 +45,7 @@ jobs:
       - name: Run functional tests
         run: opam exec -- make check
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
           name: opam-log-${{ matrix.ocaml-compiler }}

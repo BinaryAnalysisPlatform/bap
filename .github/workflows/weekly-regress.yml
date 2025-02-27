@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Use OCaml ${{ matrix.ocaml-compiler }}
-        uses: ocaml/setup-ocaml@v2
+        uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
           dune-cache: true
@@ -39,7 +39,7 @@ jobs:
         run: opam install bap bap-radare2
 
       - name: Checkout the Tests
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           repository: BinaryAnalysisPlatform/bap
           ref: v2.5.0
@@ -50,19 +50,19 @@ jobs:
       - name: Run Functional Tests
         run: opam exec -- make check
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
           name: opam-log-${{ matrix.ocaml-compiler }}
           path: ~/.opam/log
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
           name: bap-log-${{ matrix.ocaml-compiler }}
           path: ~/.local/state/bap
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
           name: fun-tests-log-${{ matrix.ocaml-compiler }}
