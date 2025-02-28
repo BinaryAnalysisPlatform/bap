@@ -13,8 +13,8 @@ bug-reports: "https://github.com/BinaryAnalysisPlatform/bap/issues"
 depends: [
   "dune" {>= "3.1"}
   "bap-common" {= version}
-  "parsexp" {>= "v0.14" & < "v0.16"}
-  "stdio" {>= "v0.14" & < "v0.16"}
+  "parsexp" {>= "v0.16" & < "v0.17"}
+  "stdio" {>= "v0.16" & < "v0.17"}
   "stdlib-shims"
   "uuidm" {>= "0.9.7"}
   "odoc" {with-doc}

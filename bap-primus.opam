@@ -20,10 +20,10 @@ depends: [
   "bap-strings" {= version}
   "bitvec-binprot" {= version}
   "bitvec" {= version}
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.16" & < "v0.17"}
   "graphlib" {= version}
   "monads" {= version}
-  "parsexp" {>= "v0.14" & < "v0.16"}
+  "parsexp" {>= "v0.16" & < "v0.17"}
   "ppx_bap" {= version}
   "regular" {= version}
   "uuidm" {>= "0.9.7"}

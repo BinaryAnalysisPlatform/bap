@@ -13,7 +13,7 @@ depends: [
   "bap-core-theory" {= version}
   "bap-knowledge" {= version}
   "bap-main" {= version}
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.16" & < "v0.17"}
   "bap-common" {= version}
   "odoc" {with-doc}
 ]
