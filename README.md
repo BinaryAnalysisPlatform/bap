@@ -71,8 +71,14 @@ git clone git@github.com:BinaryAnalysisPlatform/bap.git && cd bap
 opam install . --deps-only
 dune build && dune install
 ```
-
 to install bap and its dependencies into the currently selected switch.
+
+The above command will build all packages available in bap, including experimental packages like Ghidra or Radare (included in the bap-extra) meta-package. To prepare development envionment that excludes these packages (or any other packages) just remove corresponding .opam files (don't worry, opam will regenerate them later), before creating a switch e.g.,
+```
+rm bap-{extra,radare2,ghidra,primus-symbolic-executor,ida}.opam
+opam switch create . --deps-only
+dune build && dune install
+```
 
 ## Using
 

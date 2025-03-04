@@ -1,4 +1,5 @@
 (library
+ (optional)
  (name bap_radare2_plugin)
  (public_name bap-radare2.plugin)
  (libraries
@@ -17,6 +18,7 @@
    zarith))
 
 (plugin
+ (optional)
  (name radare2)
  (package bap-radare2)
  (libraries bap-radare2.plugin)

@@ -1,3 +1,6 @@
+(* -*- tuareg -*- *)
+
+let () = Format.kasprintf Jbuild_plugin.V1.send {|
 (library
  (name bap_ghidra)
  (public_name bap-ghidra)
@@ -12,4 +15,6 @@
  (foreign_stubs
   (language c)
   (names ghidra_stubs))
- (c_library_flags :standard -L/usr/lib/ghidra -ldecomp))
+ (c_library_flags :standard -L/usr/lib/ghidra -ldecomp)
+ (enabled_if %b))
+|} (Sys.file_exists "/usr/lib/ghidra")
