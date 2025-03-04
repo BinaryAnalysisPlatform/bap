@@ -61,19 +61,19 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
-          name: bap-log-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
+          name: bap-log-nightly-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
           path: ~/.local/state/bap
 
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
-          name: unit-tests-log-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
+          name: unit-tests-log-nightly-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
           path: _build/oUnit-*.log
 
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
-          name: fun-tests-log-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
+          name: fun-tests-log-nightly-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
           path: |
             testsuite/*.log
             testsuite/logs
