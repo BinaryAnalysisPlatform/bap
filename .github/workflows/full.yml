@@ -41,13 +41,13 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
-          name: bap-log
+          name: bap-log-full
           path: ~/.local/state/bap
 
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
-          name: fun-tests-log
+          name: fun-tests-log-full
           path: |
             testsuite/*.log
             testsuite/logs
