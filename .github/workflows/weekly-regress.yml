@@ -10,7 +10,7 @@ jobs:
     strategy:
       matrix:
         ocaml-compiler:
-          - 4.11.x
+          - 4.14.x
           - 4.08.x
 
     runs-on: ubuntu-latest
@@ -43,13 +43,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: BinaryAnalysisPlatform/bap
+          path: bap
           ref: v2.5.0
 
       - name: Install Extra System Dependencies
         run: sudo apt-get install dejagnu --yes
 
       - name: Run Functional Tests
-        run: opam exec -- make check
+        run: opam exec -- make -C bap check
 
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}
@@ -68,5 +69,5 @@ jobs:
         with:
           name: fun-tests-log-weekly-${{ matrix.ocaml-compiler }}
           path: |
-            testsuite/*.log
-            testsuite/logs
+            bap/testsuite/*.log
+            bap/testsuite/logs

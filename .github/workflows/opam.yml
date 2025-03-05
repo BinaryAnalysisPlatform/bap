@@ -8,7 +8,7 @@ jobs:
     strategy:
       matrix:
         ocaml-compiler:
-          - 4.11.x
+          - 4.14.x
           - 4.08.x
 
     runs-on: ubuntu-20.04
