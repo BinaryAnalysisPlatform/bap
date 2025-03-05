@@ -49,9 +49,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: BinaryAnalysisPlatform/bap
+          path: bap
 
       - name: Run Functional Tests
-        run: opam exec -- make check
+        run: opam exec -- make -C bap check
 
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}
@@ -68,13 +69,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
-          name: unit-tests-log-nightly-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
-          path: _build/oUnit-*.log
-
-      - uses: actions/upload-artifact@v4
-        if: ${{ always() }}
-        with:
           name: fun-tests-log-nightly-${{ matrix.os }}-${{ matrix.ocaml-compiler }}
           path: |
-            testsuite/*.log
-            testsuite/logs
+            bap/testsuite/*.log
+            bap/testsuite/logs

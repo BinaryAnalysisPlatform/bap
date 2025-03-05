@@ -21,7 +21,7 @@ jobs:
       - name: Install OCaml
         uses: ocaml/setup-ocaml@v3
         with:
-          ocaml-compiler: ocaml-variants.4.11.2+flambda
+          ocaml-compiler: ocaml-variants.4.14.2+flambda
           dune-cache: true
 
       - name: Install Ghidra
