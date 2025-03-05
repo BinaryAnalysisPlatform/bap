@@ -36,6 +36,7 @@ jobs:
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
           dune-cache: ${{  matrix.os != 'macos-11' }}
+          opam-pin: false
           opam-disable-sandboxing: true
           opam-repositories: |
             default: git+https://github.com/ocaml/opam-repository.git
