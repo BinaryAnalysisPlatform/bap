@@ -1,4 +1,4 @@
-FROM ocaml/opam:debian
+FROM ocaml/opam:debian-ocaml-4.14
 
 WORKDIR /home/opam
 

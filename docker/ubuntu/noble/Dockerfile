@@ -1,4 +1,4 @@
-FROM ocaml/opam:ubuntu-16.04-ocaml-4.14
+FROM ocaml/opam:ubuntu-24.04-ocaml-4.14
 
 WORKDIR /home/opam
 
