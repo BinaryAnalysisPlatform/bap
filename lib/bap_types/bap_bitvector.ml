@@ -135,7 +135,7 @@ end = struct
     let of_string s = {packed = Z.of_bits s}
   end
 
-  include Binable.Of_stringable(Stringable) [@@warning "-D"]
+  include Binable.Of_stringable_without_uuid(Stringable) [@@warning "-D"]
   include Sexpable.Of_stringable(Stringable)
 end
 
@@ -691,7 +691,7 @@ module V1 = struct
     end
     include Z
     include Sexpable.Of_stringable(Repr)
-    include Binable.Of_stringable(Repr) [@@warning "-D"]
+    include Binable.Of_stringable_without_uuid(Repr) [@@warning "-D"]
   end
 
   type t = {
@@ -717,7 +717,7 @@ module Stable = struct
         signed = is_signed x;
       }
 
-    include Binable.Of_binable(V1)(struct
+    include Binable.Of_binable_without_uuid(V1)(struct
         type t = Packed.t
         let to_binable = to_legacy
         let of_binable = of_legacy

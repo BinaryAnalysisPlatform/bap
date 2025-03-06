@@ -26,16 +26,16 @@ module Make(Key : Key) = struct
     let rec loop n {subs} =
       let c = Key.nth_token k n in
       if n + 1 = len then found subs c else find subs n c
-    and found parent c = Tokens.change parent c (function
+    and found parent c = Hashtbl.change parent c (function
         | None -> f None >>| init
         | Some t -> Some {t with data = f t.data})
-    and find parent n c = match Tokens.find parent c with
+    and find parent n c = match Hashtbl.find parent c with
       | Some s -> loop (n+1) s
       | None -> match f None with
         | None -> return ()
         | Some _ ->
           let sub = create () in
-          Tokens.add_exn parent c sub;
+          Hashtbl.add_exn parent c sub;
           loop (n+1) sub in
     if len > 0 then loop 0 trie
     else trie.data <- f trie.data
@@ -43,7 +43,7 @@ module Make(Key : Key) = struct
   let walk root k ~init ~f  =
     let len = Key.length k in
     let rec lookup best n trie =
-      match Tokens.find trie.subs (Key.nth_token k n) with
+      match Hashtbl.find trie.subs (Key.nth_token k n) with
       | None -> best
       | Some sub ->
         let best = f best sub.data in
@@ -54,7 +54,7 @@ module Make(Key : Key) = struct
   let length trie =
     let rec count trie =
       let n = if Option.is_none trie.data then 0 else 1 in
-      Tokens.fold ~init:n trie.subs
+      Hashtbl.fold ~init:n trie.subs
         ~f:(fun ~key:_ ~data:trie n -> n + count trie) in
     count trie
 
@@ -82,7 +82,7 @@ module Make(Key : Key) = struct
         | Some data -> f init (List.rev rprefix) data in
       fold_table init rprefix t.subs
     and fold_table init rprefix cs =
-      Tokens.fold cs ~init ~f:(fun ~key ~data init ->
+      Hashtbl.fold cs ~init ~f:(fun ~key ~data init ->
           let rprefix = key :: rprefix in
           fold init rprefix data) in
     fold init [] t
@@ -97,7 +97,7 @@ module Make(Key : Key) = struct
             pp_val data pp_prefix (List.rev rprefix));
       pp_table ppf rprefix t.subs
     and pp_table ppf rprefix cs =
-      Tokens.iteri cs (fun ~key ~data ->
+      Hashtbl.iteri cs (fun ~key ~data ->
           let rprefix = key :: rprefix in
           pp_trie ppf rprefix data) in
     pp_trie ppf [] t
