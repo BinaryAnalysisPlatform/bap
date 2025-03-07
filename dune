@@ -39,7 +39,9 @@
    ppx_optcomp
    ppx_sexp_conv
    ppx_sexp_value
-   ppx_variants_conv)
+   ppx_variants_conv
+   ppx_expect
+   ppx_inline_test)
  (preprocess no_preprocessing))
 
 (alias

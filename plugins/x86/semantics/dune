@@ -5,3 +5,13 @@
         x86-64.lisp
         x86-64-sse-intrinsics.lisp
         x86-common.lisp))
+
+(env
+  (_
+    (binaries (%{workspace_root}/src/bap_frontend.exe as run))))
+
+(cram
+  (deps
+    (package bap)
+    (glob_files *.lisp)
+    %{bin:run}))

@@ -9,17 +9,13 @@ jobs:
       matrix:
         os:
           - ubuntu-20.04
-          - macos-11
         ocaml-compiler:
           - 4.08.x
           - 4.14.x
-        exclude:
-          - os: macos-11
-            ocaml-compiler: 4.08.x
 
 
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.os == 'macos-11'}}
+    continue-on-error: ${{ matrix.os == 'macos-latest'}}
 
     env:
       TMPDIR: /tmp
@@ -39,16 +35,16 @@ jobs:
           sudo apt-get install dejagnu -y
 
       - name: Prepare macOS
-        if: matrix.os == 'macos-11'
+        if: matrix.os == 'macos-latest'
         run: |
           echo 'LLVM_CONFIG=/usr/local/opt/llvm@9/bin/llvm-config' >> $GITHUB_ENV
-          brew install deja-gnu
+          brew install deja-gnu zstd
 
       - name: Install OCaml
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
-          dune-cache: ${{  matrix.os != 'macos-11' }}
+          dune-cache: ${{  matrix.os != 'macos-latest' }}
           opam-disable-sandboxing: true
           opam-local-packages: |
             *.opam
@@ -62,7 +58,7 @@ jobs:
             bap: git+https://github.com/BinaryAnalysisPlatform/opam-repository#testing
 
       - name: Build BAP
-        run: opam install bap.dev --with-test
+        run: opam install bap.dev
 
       - name: Run MC Functional Tests
         run: |

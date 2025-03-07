@@ -3,6 +3,7 @@ open Bap_knowledge
 
 module KB = Knowledge
 module Bitv = Bap_core_theory_value.Bitv
+module Bool = Bap_core_theory_value.Bool
 module Var = Bap_core_theory_var
 module Mem = Bap_core_theory_value.Mem
 
@@ -137,7 +138,10 @@ module Role : sig
     val privileged : t
     val constant : t
     val zero : t
+    val one : t
     val status : t
+    val control : t
+    val system : t
     val zero_flag : t
     val sign_flag : t
     val carry_flag : t
@@ -198,6 +202,7 @@ module Alias : sig
   type 'a part
   val def : 'a Bitv.t Var.t -> 'b part list -> alias
   val reg : 'a Bitv.t Var.t -> 'a part
+  val bit : Bool.t Var.t -> Bool.t part
   val unk : 'a part
 end
 
@@ -205,14 +210,17 @@ module Origin : sig
   type ('s,'k) t = ('s,'k) origin
   type sub
   type sup
+  type set
 
   val cast_sub : ('a,unit) t -> ('a,sub) t option
   val cast_sup : ('a,unit) t -> ('a,sup) t option
+  val cast_set : ('a,unit) t -> (Bool.t,set) t option
   val reg : ('a,sub) t -> 'a Bitv.t Var.t
   val is_alias : ('a,sub) t -> bool
   val hi : ('a,sub) t -> int
   val lo : ('a,sub) t -> int
   val regs : ('a,sup) t -> 'a Bitv.t Var.t list
+  val bits : (Bool.t,set) t -> Bool.t Var.t list
 end
 
 module Options : sig

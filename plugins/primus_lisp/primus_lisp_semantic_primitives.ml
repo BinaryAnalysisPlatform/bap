@@ -230,7 +230,7 @@ let export = Primus.Lisp.Type.Spec.[
     "(load-word PTR) loads one word from the address PTR";
 
     "load-bits", tuple [any; int] @-> int,
-    "(load-word SIZE PTR) loads a SIZE-bit long word from the address PTR";
+    "(load-bits SIZE PTR) loads a SIZE-bit long word from the address PTR";
 
     "load-hword", one int @-> any,
     "(load-hword PTR) loads half-word from the address PTR";
@@ -263,6 +263,9 @@ let export = Primus.Lisp.Type.Spec.[
     "symbol", one any @-> sym,
     "(symbol X) returns a symbol representation of X.";
 
+    "unquote", one sym @-> any,
+    "(unquote 'X) evaluates to X";
+
     "is-symbol", one any @-> bool,
     "(is-symbol X) is true if X has a symbolic value.";
 
@@ -287,6 +290,12 @@ let export = Primus.Lisp.Type.Spec.[
 
     "cast-unsigned", tuple [int; a] @-> b,
     "(cast-unsigned S X) performs unsigned extension of X to the size of S bits";
+
+    "cast-saturate", tuple [sym; int; a] @-> b,
+    "(cast-saturate T S X) performs saturated downcasting
+    of X to the size of S bits. If X doesn't fit into lower or upper
+    bound of S then it is saturated to the coresponding value, the keyword
+    T shall be either :signed or :unsigned";
 
     "extract", tuple [any; any; any] @-> any,
     "(extract HI LO X) extracts bits from HI to LO (both ends
@@ -386,6 +395,119 @@ let bits x = size @@ sort x
 
 module type Target = sig
   val target : Theory.Target.t
+end
+
+module Saturate = struct
+  let max_value bits t =
+    let m = Bitvec.modulus bits in
+    let r = Bitvec.(ones mod m) in
+    match t with
+    | `unsigned -> r
+    | `signed -> Bitvec.(r lsr one mod m)
+
+  let show x = Format.printf "%a@." Bitvec.pp x
+
+  let%expect_test "max-value" =
+    show (max_value 8 `signed);
+    [%expect "0x7f"];
+    show (max_value 8 `unsigned);
+    [%expect "0xff"];
+    show (max_value 16 `signed);
+    [%expect "0x7fff"];
+    show (max_value 16 `unsigned);
+    [%expect "0xffff"];
+    show (max_value 32 `signed);
+    [%expect "0x7fffffff"];
+    show (max_value 32 `unsigned);
+    [%expect "0xffffffff"]
+
+  (* given a cast from width src to dst, where src>dst, returns x if
+     the upper src-dst+1 bits are all zeros or ones, otherwise retuns
+     u+msb(x), where u is the largest positive integer represented by
+     dst. Note that msb is encoded as (x lsr (src-1) & 1).
+
+     Note, the implementation doesn't use simple if/then/else as it
+     follows the non-static implementation. The generated code is more
+     efficient as it has less ite's and no inequality comparisons,
+     which makes it easier to (symbolically) analyze. *)
+
+  let static_signed src dst x =
+    assert (dst < src);
+    let module B = (val Bitvec.modular src) in
+    let ubits = B.(x asr int Int.(dst - 1)) in
+    if Bitvec.(ubits = zero || B.lnot ubits = zero)
+    then
+      let mask = B.(one lsl int dst - one) in
+      B.(x land mask)
+    else
+      let u = max_value dst `signed in
+      B.(u + ((x lsr int Int.(src-1)) land one))
+
+  let%expect_test "static-signed" =
+    show (static_signed 32 8 Bitvec.M32.(int 10000));
+    [%expect {| 0x7f |}];
+    show (static_signed 32 8 Bitvec.M32.(int 128));
+    [%expect {| 0x7f |}];
+    show (static_signed 32 8 Bitvec.M32.(int 127));
+    [%expect {| 0x7f |}];
+    show (static_signed 32 8 Bitvec.M32.(int 42));
+    [%expect {| 0x2a |}];
+    show (static_signed 32 8 Bitvec.M32.one);
+    [%expect {| 0x1 |}];
+    show (static_signed 32 8 Bitvec.M32.zero);
+    [%expect {| 0x0 |}];
+    show (static_signed 32 8 Bitvec.M32.(int (-1)));
+    [%expect {| 0xff |}];
+    show (static_signed 32 8 Bitvec.M32.(int (-42)));
+    [%expect {| 0xd6 |}];
+    show (static_signed 32 8 Bitvec.M32.(int (-127)));
+    [%expect {| 0x81 |}];
+    show (static_signed 32 8 Bitvec.M32.(int (-128)));
+    [%expect {| 0x80 |}];
+    show (static_signed 32 8 Bitvec.M32.(int (-129)));
+    [%expect {| 0x80 |}];
+    show (static_signed 32 8 Bitvec.M32.(int (-10000)));
+    [%expect {| 0x80 |}]
+
+  let static_unsigned src dst x =
+    let module B = (val Bitvec.modular src) in
+    let module D = (val Bitvec.modular dst) in
+    let ubits = B.(x asr int dst) in
+    if Bitvec.(ubits = zero)
+    then x
+    else
+      let u = max_value dst `unsigned in
+      let is_neg = B.((x lsr int Int.(src-1)) land one) in
+      D.(u + is_neg)
+
+  let%expect_test "static-unsigned" =
+    show (static_unsigned 32 8 Bitvec.M32.(int 10000));
+    [%expect {| 0xff |}];
+    show (static_unsigned 32 8 Bitvec.M32.(int 256));
+    [%expect {| 0xff |}];
+    show (static_unsigned 32 8 Bitvec.M32.(int 255));
+    [%expect {| 0xff |}];
+    show (static_unsigned 32 8 Bitvec.M32.(int 127));
+    [%expect {| 0x7f |}];
+    show (static_unsigned 32 8 Bitvec.M32.(int 42));
+    [%expect {| 0x2a |}];
+    show (static_unsigned 32 8 Bitvec.M32.one);
+    [%expect {| 0x1 |}];
+    show (static_unsigned 32 8 Bitvec.M32.zero);
+    [%expect {| 0x0 |}];
+    show (static_unsigned 32 8 Bitvec.M32.(int (-1)));
+    [%expect {| 0x0 |}];
+    show (static_unsigned 32 8 Bitvec.M32.(int (-42)));
+    [%expect {| 0x0 |}];
+    show (static_unsigned 32 8 Bitvec.M32.(int (-127)));
+    [%expect {| 0x0 |}];
+    show (static_unsigned 32 8 Bitvec.M32.(int (-128)));
+    [%expect {| 0x0 |}];
+    show (static_unsigned 32 8 Bitvec.M32.(int (-129)));
+    [%expect {| 0x0 |}];
+    show (static_unsigned 32 8 Bitvec.M32.(int (-10000)));
+    [%expect {| 0x0 |}]
+
 end
 
 module Primitives(CT : Theory.Core)(T : Target) = struct
@@ -735,6 +857,11 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     let x = KB.Value.refine x (Theory.Var.sort var) in
     CT.set var !!x
 
+  let unquote t v =
+    let* v = possibly_register t v in
+    forget @@
+    CT.var v
+
   let alias_base_register target v =
     let* r = possibly_register target v in
     match Theory.Target.unalias target r with
@@ -903,12 +1030,11 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
         | _ -> illformed ":sep must be last and followed by an argument" in
       make_symbol s (String.concat ~sep syms)
 
-  let symbol s v =
+  let mksymbol s v =
     match symbol v with
     | Some name -> make_symbol s name
     | None ->
       illformed "symbol requires a symbolic value"
-
 
   let is_symbol v =
     forget@@match KB.Value.get Primus.Lisp.Semantics.symbol v with
@@ -944,6 +1070,44 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
   let unsigned = mk_cast `lo CT.unsigned
   let low = mk_cast `lo CT.low
   let high = mk_cast `hi CT.high
+
+  module Saturate = struct
+    open Saturate
+    let get_type t =
+      match symbol t with
+      | Some ":signed" -> !!`signed
+      | Some ":unsigned" -> !!`unsigned
+      | _ -> illformed "expected :signed or :unsigned"
+
+    let cast xs =
+      ternary xs @@ fun t sz x ->
+      to_sort sz >>= fun ds ->
+      bitv x >>= fun x ->
+      let ss = sort x in
+      let* t = get_type t in
+      let upper = const_int ss @@ max_value (size ds) t in
+      let hibit = int ss (size ss - 1) in
+      let msbw = CT.(extract ss hibit hibit !!x) in
+      let bound = CT.(add upper msbw) in
+      match const x,t with
+      | None,`signed ->
+        let exp = Theory.Var.scoped ss @@ fun uv ->
+          let lowbits = int ss (size ds - 1) in
+          let ubits = CT.(arshift !!x lowbits) in
+          let cnd = CT.(or_ (is_zero (var uv)) (is_zero (not (var uv)))) in
+          CT.(let_ uv ubits (low ds @@ ite cnd !!x bound)) in
+        forget exp
+      | None,`unsigned ->
+        let bits = int ss (size ds) in
+        let ubits = CT.(arshift !!x bits) in
+        forget@@CT.(low ds @@ ite (is_zero ubits) !!x bound)
+      | Some x,`signed ->
+        forget@@const_int ds @@
+        static_signed (size ss) (size ds) x
+      | Some x,`unsigned ->
+        forget@@const_int ds @@
+        static_unsigned (size ss) (size ds) x
+  end
 
   let extract xs =
     ternary xs @@ fun hi lo x ->
@@ -1317,13 +1481,15 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | "get-current-program-counter",[] -> pure@@get_pc s lbl
     | "set-symbol-value",[sym;x] -> data@@set_symbol t sym x
     | "symbol-concat",syms -> pure@@symbol_concat s syms
-    | "symbol",[x] ->  pure@@symbol s x
+    | "symbol",[x] -> pure@@mksymbol s x
+    | "unquote",[x] -> pure@@unquote t x
     | "is-symbol", [x] -> pure@@is_symbol x
     | "alias-base-register", [x] -> pure@@alias_base_register t x
     | "cast-low",xs -> pure@@low xs
     | "cast-high",xs -> pure@@high xs
     | "cast-signed",xs -> pure@@signed xs
     | "cast-unsigned",xs -> pure@@unsigned xs
+    | "cast-saturate",xs -> pure@@Saturate.cast xs
     | "extract",xs -> pure@@extract xs
     | "concat", xs -> pure@@concat xs
     | ("select"|"nth"),xs -> pure@@select s xs

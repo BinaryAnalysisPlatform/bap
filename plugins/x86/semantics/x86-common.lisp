@@ -19,3 +19,17 @@
 
 (defun NOOPW (_ _ _ _ _)
   (empty))
+
+;; xchgb reg, off(base)
+;; Reference: Vol. 2D 6-32
+
+(defun XCHG8rm (_ reg base _ _ off _)
+  (let ((p (+ base off))
+        (x (load-byte p)))
+    (store-byte p reg)
+    (set$ reg x)))
+
+(defun XCHG8rr (dst src _ _)
+  (let ((x dst))
+    (set$ dst src)
+    (set$ src x)))

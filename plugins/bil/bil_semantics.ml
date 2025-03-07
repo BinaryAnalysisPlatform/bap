@@ -187,9 +187,12 @@ module Basic : Theory.Basic = struct
 
     let branch cnd yes nay =
       cnd >>= fun cnd ->
-      yes >>= fun yes ->
+      yes >>:= fun yes ->
       nay >>:= fun nay ->
-      eff Bil.[if_ (bool_exp cnd) (effect yes) nay]
+      match yes, nay with
+      | [],[] -> eff []
+      | _ ->
+        eff Bil.[if_ (bool_exp cnd) yes nay]
 
     let make_cast s t x =
       x >>-> fun _ x -> vec s @@ Bil.cast t (size s) x
