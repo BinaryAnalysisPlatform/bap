@@ -8,6 +8,7 @@ module Var = Bap_core_theory_var
 module Val = Bap_core_theory_value
 module Mem = Val.Mem
 module Bitv = Val.Bitv
+module Bool = Val.Bool
 module Sort = Val.Sort
 module Name = KB.Name
 
@@ -74,7 +75,10 @@ module Role = struct
     let privileged = declare ~package "privileged"
     let constant = declare ~package "constant"
     let zero = declare ~package "zero"
+    let one = declare ~package "one"
     let status = declare ~package "status"
+    let control = declare ~package "control"
+    let system = declare ~package "system"
     let hardware = declare ~package "hardware"
     let reserved = declare ~package "reserved"
     let zero_flag = declare ~package "zero-flag"
@@ -204,11 +208,15 @@ let collect_regs ?pred init roles =
 
 module Alias = struct
   type t = unit Var.t * (int * unit Var.t) list
-  type 'a part = 'a Bitv.t Var.t option
+  type 'a part = unit Var.t option
 
-  let regsize v = match Bitv.refine (Var.sort v) with
+  let regsize v =
+    let s = Var.sort v in
+    match Bitv.refine s with
     | Some s -> Bitv.size s
-    | None -> assert false
+    | None -> match Val.Bool.refine s with
+      | Some _ -> 1
+      | None -> assert false
 
   let init = {
     sups = Map.empty (module Var.Top);
@@ -297,7 +305,6 @@ module Alias = struct
     List.map ~f:Var.name |>
     String.concat ~sep:" "
 
-
   let solve regs spec =
     let aliases = match Map.find regs Role.Register.alias with
       | None -> Set.empty (module Var.Top)
@@ -345,7 +352,7 @@ module Alias = struct
       let total = Bitv.size (Var.sort var) in
       let width = total / List.length parts in
       List.iter parts ~f:(Option.iter ~f:(fun v ->
-          if Bitv.size (Var.sort v) <> width
+          if regsize v <> width
           then error var "the size of %s must be %d divided by %d"
               (Var.name v) total (List.length parts)))
 
@@ -360,19 +367,21 @@ module Alias = struct
         | Some reg ->
           Some (total - i * width - width, Var.forget reg))
 
-  let reg x = Some x
+  let reg x = Some (Var.forget x)
+  let bit x = Some (Var.forget x)
   let unk = None
 end
 
 module Origin = struct
   type sup = Sup
   type sub = Sub
-  type syn = Syn
+  type set = Set
 
   type ('a,'k) t =
     | Any : ('a,'k) t -> ('a,unit) t
     | Sup : 'a Bitv.t Var.t list -> ('a,sup) t
     | Sub : {hi : int; lo : int; base : 'a Bitv.t Var.t} -> ('a,sub) t
+    | Set : Val.Bool.t Var.t list -> ('a,set) t
 
   let forget : type k. ('a,k) t -> ('a,unit) t = function
     | Any _ as x -> x
@@ -386,13 +395,19 @@ module Origin = struct
     | Any (Sup _ as x) -> Some x
     | Any _ -> None
 
+  let cast_set = function
+    | Any (Set _ as x) -> Some x
+    | Any _ -> None
+
   let reg (Sub {base=v}) = v
+  let bit (Sub {base=v}) = v
   let hi (Sub {hi}) = hi
   let lo (Sub {lo}) = lo
   let is_alias (Sub {hi;lo;base}) =
     hi - lo + 1 = Bitv.size (Var.sort base)
 
   let regs (Sup regs) = regs
+  let bits (Set bits) = bits
 end
 
 type ('a,'k) origin = ('a,'k) Origin.t
@@ -539,24 +554,26 @@ let var t name =
 let unalias t reg : ('a,unit) origin option =
   let {sups; subs} = (info t).aliasing in
   let reg = Var.forget reg in
-  let refine v =
-    match Bitv.refine (Var.sort v) with
-    | None ->
-      failwithf "broken invariant: non-register in a file: %s"
-        (Var.name v) ()
-    | Some s -> Var.resort v s in
-  match Map.find sups reg with
-  | Some parts ->
-    let parts =
-      Map.to_alist parts ~key_order:`Decreasing |>
-      List.map ~f:(fun (_,v) -> refine v) in
-    Some Origin.(forget (Sup parts))
-  | None -> match Map.find subs reg with
+  let cast refine v =
+    Option.map (refine (Var.sort v)) ~f:(fun s -> Var.resort v s) in
+  match Map.find subs reg with
+  | Some (lo,v) ->
+    let hi = Alias.regsize reg - 1 + lo in
+    let base = Option.value_exn (cast Bitv.refine v) in
+    let origin = Origin.Sub {hi; lo; base} in
+    Some Origin.(forget origin)
+  | None -> match Map.find sups reg with
     | None -> None
-    | Some (lo,v) ->
-      let hi = Alias.regsize reg - 1 in
-      let origin = Origin.Sub {hi; lo; base=refine v} in
-      Some Origin.(forget origin)
+    | Some parts ->
+      let parts t =
+        Map.to_alist parts ~key_order:`Decreasing |>
+        List.map ~f:(fun (_,v) -> cast t v) |>
+        Option.all in
+      match parts Bitv.refine with
+      | Some parts -> Some Origin.(forget (Sup parts))
+      | None -> match parts Bool.refine with
+        | Some parts -> Some Origin.(forget (Set parts))
+        | None -> assert false
 
 let data_addr_size,
     code_addr_size =

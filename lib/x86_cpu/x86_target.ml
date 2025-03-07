@@ -7,7 +7,7 @@ let package = "bap"
 
 
 
-type r256 and r128 and r80 and r64 and r32 and r16 and r8
+type r256 and r128 and r80 and r64 and r32 and r16 and r8 and r2
 
 type 'a bitv = 'a Theory.Bitv.t Theory.Value.sort
 
@@ -18,6 +18,7 @@ let r64 : r64 bitv = Theory.Bitv.define 64
 let r32 : r32 bitv = Theory.Bitv.define 32
 let r16 : r16 bitv = Theory.Bitv.define 16
 let r8  : r8  bitv = Theory.Bitv.define 8
+let r2 : r2 bitv = Theory.Bitv.define 2
 let bool = Theory.Bool.t
 
 
@@ -30,10 +31,14 @@ let (@<) xs ys = untyped xs @ untyped ys
 let array ?(index=string_of_int) t pref size =
   List.init size ~f:(fun i -> reg t (pref ^ index i))
 
-let lower xs _ ys =
-  List.map2_exn xs ys ~f:Theory.Alias.(fun x y -> def x [unk; reg y])
+let alias_group how xs ys =
+  List.map2_exn xs ys ~f:Theory.Alias.(fun x y -> match how with
+      | `lo -> def x [unk; reg y]
+      | `hi -> def x [reg y; unk])
 
-let are f x y = f x y
+let are = `are
+let lo_bits_of xs `are ys = alias_group `lo xs ys
+let hi_bits_of xs `are ys = alias_group `hi xs ys
 
 module Role = struct
   let index = Theory.Role.declare ~package:"x86" "index"
@@ -48,11 +53,32 @@ module M16 = struct
     reg r16 "DX";
   ]
 
+  let lregs = [
+    reg r8 "AL";
+    reg r8 "BL";
+    reg r8 "CL";
+    reg r8 "DL";
+  ]
+
+  let hregs = [
+    reg r8 "AH";
+    reg r8 "BH";
+    reg r8 "CH";
+    reg r8 "DH";
+  ]
+
   let index = [
     reg r16 "SI";
     reg r16 "DI";
     reg r16 "BP";
     reg r16 "SP";
+  ]
+
+  let index8 = [
+    reg r8 "SIL";
+    reg r8 "DIL";
+    reg r8 "BPL";
+    reg r8 "SPL";
   ]
 
   let segment = [
@@ -62,32 +88,73 @@ module M16 = struct
     reg r16 "SS";
   ]
 
-  let flags = [
-    reg bool "CF";
-    reg bool "PF";
-    reg bool "AF";
-    reg bool "ZF";
-    reg bool "SF";
-    reg bool "TF";
-    reg bool "IF";
-    reg bool "DF";
-    reg bool "OF";
-  ]
+  let cf = reg bool "CF"
+  let pf = reg bool "PF"
+  let af = reg bool "AF"
+  let zf = reg bool "ZF"
+  let sf = reg bool "SF"
+  let tf = reg bool "TF"
+  let if_ = reg bool "IF"
+  let df = reg bool "DF"
+  let of_ = reg bool "OF"
+  let iopll = reg bool "IOPLL"
+  let ioplh = reg bool "IOPLH"
+  let nt = reg bool "NT"
+  let md = reg bool "MD"
+  let rf = reg bool "RF"
+  let vm = reg bool "VM"
+  let ac = reg bool "AC"
+  let vif = reg bool "VIF"
+  let vip = reg bool "VIP"
+  let id = reg bool "ID"
+  let id = reg bool "ID"
+  let aes = reg bool "AES"
+  let ai = reg bool "AI"
+
+  let flags =
+    let res i = reg bool ("EFLAGS_" ^ string_of_int i) in
+    [
+      cf;              (* 0 *)
+      res 1;           (* 1 *)
+      pf;              (* 2 *)
+      res 3;           (* 3 *)
+      af;              (* 4 *)
+      res 5;           (* 5 *)
+      zf;              (* 6 *)
+      sf;              (* 7 *)
+      tf;              (* 8 *)
+      if_;             (* 9 *)
+      df;              (* 10 *)
+      of_;             (* 11 *)
+      iopll;           (* 12 *)
+      ioplh;           (* 13 *)
+      nt;              (* 14 *)
+      md;              (* 15 *)
+      rf;              (* 16 *)
+      vm;              (* 17 *)
+      ac;              (* 18 *)
+      vif;             (* 19 *)
+      vip;             (* 20 *)
+      id;              (* 21 *)
+    ] @ List.init 8 (fun i -> res (i+22)) @ [
+      aes;             (* 30 *)
+      ai;              (* 31 *)
+    ]
+
+  let iopl = reg r2 "IOPL"
+  let eflags = reg r32 "EFLAGS"
 
   let mems = Theory.Mem.define r16 r8
   let data = Theory.Var.define mems "mem"
   let vars = main @< index @< segment @< flags @< [data]
-  let status_regs = Theory.Role.Register.[
-      [status], untyped flags;
-      [integer], untyped [
-        reg bool "CF";
-        reg bool "PF";
-        reg bool "AF";
-        reg bool "ZF";
-        reg bool "SF";
-        reg bool "OF";
-      ];
+  let flag_roles = Theory.Role.Register.[
+      [status], untyped [cf; pf; af; zf; sf; of_];
+      [control], untyped [tf; if_; df; md];
+      [integer], untyped [cf; pf; af; zf; sf; of_];
+      [system], untyped [iopll; ioplh; rf; vm; ac; vif; vip; id; aes; ai]
     ]
+
+  let aliases = hregs @< lregs @< [iopl] @< [eflags]
 
   let regs = Theory.Role.Register.[
       [general; integer], main @< index @< segment;
@@ -95,7 +162,14 @@ module M16 = struct
       [frame_pointer], untyped [reg r16 "BP"];
       [Role.index], untyped index;
       [Role.segment], untyped segment;
-    ] @ status_regs
+      [alias], aliases;
+    ] @ flag_roles
+
+  let aliasing = lo_bits_of main are lregs @
+                 hi_bits_of main are hregs @
+                 lo_bits_of index are index8 @
+                 Theory.Alias.[def iopl [bit ioplh; bit iopll]] @
+                 Theory.Alias.[def eflags (List.map flags ~f:bit)]
 end
 
 module M32 = struct
@@ -136,7 +210,7 @@ module M32 = struct
   let i586 = i486 @< mmx
   let i686 = i586 @< xmmx
 
-  let aliases = M16.main @< M16.index
+  let aliases = M16.main @< M16.index @< M16.aliases
 
   let i386regs = Theory.Role.Register.[
       [general; integer], main @< index @< segment;
@@ -145,7 +219,7 @@ module M32 = struct
       [Role.index], untyped index;
       [Role.segment], untyped segment;
       [alias], aliases;
-    ] @ M16.status_regs
+    ] @ M16.flag_roles
 
   let i486regs = i386regs @ Theory.Role.Register.[
       [general; floating], untyped stx;
@@ -159,9 +233,9 @@ module M32 = struct
       [general; floating], untyped xmmx;
     ]
 
-  let aliasing =
-    lower main are M16.main
-    @ lower index are M16.index
+  let aliasing = M16.aliasing @
+                 lo_bits_of main are M16.main @
+                 lo_bits_of index are M16.index
 end
 
 module M64 = struct
@@ -196,6 +270,7 @@ module M64 = struct
   let mxsr = reg r32 "MXCSR"
 
   let flags = M32.flags
+  let rflags = reg r64 "RFLAGS"
   let mems = Theory.Mem.define r64 r8
   let data = Theory.Var.define mems "mem"
 
@@ -213,13 +288,13 @@ module M64 = struct
       [Role.segment], untyped segment;
       [status], untyped [mxsr];
       [alias], aliases;
-    ] @ M16.status_regs
+    ] @ M16.flag_roles
 
-  let aliasing =
-    M32.aliasing
-    @ lower main are M32.main
-    @ lower index are M32.index
-    @ lower ymmx are xmmx
+  let aliasing = M32.aliasing @
+                 lo_bits_of main are M32.main @
+                 lo_bits_of index are M32.index @
+                 lo_bits_of ymmx are xmmx @
+                 lo_bits_of [rflags] are [M16.eflags]
 end
 
 let parent = Theory.Target.declare ~package "x86"

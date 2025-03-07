@@ -2,3 +2,5 @@
 # OASIS_STOP
 true: debug
 true: warn(+a-4-6-7-9-27-29-32..42-44-45-48-50-60)
+<plugins/**/*.ml{,i}>: predicate(ppx_driver)
+<plugins/**/*.ml{,i}>: pp(ppx-bap -dump-ast -inline-test-lib bap)

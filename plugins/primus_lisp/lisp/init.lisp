@@ -156,6 +156,12 @@
   (f a x))
 (defmacro fold (f a x xs) (fold f (f a x) xs))
 
+(defmacro dolist (f x)
+  "(dolist F X Y ...) expands to (F X) (F Y) ..."
+  (f x))
+
+(defmacro dolist (f x xs) (prog (f x) (dolist f xs)))
+
 (defmacro min (x)
   "(min X Y ...) returns the lower bound of the (X,Y,...) set"
       x)

@@ -2,6 +2,7 @@
   (name primus_lisp_library_plugin)
   (public_name bap-primus-lisp.plugin)
   (preprocess (pps ppx_bap))
+  (inline_tests)
   (libraries
     bap
     bap-core-theory

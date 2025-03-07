@@ -9,17 +9,12 @@ jobs:
       matrix:
         os:
           - ubuntu-20.04
-          - macos-11
         ocaml-compiler:
-          - 4.08.x
           - 4.14.x
-        exclude:
-          - os: macos-11
-            ocaml-compiler: 4.08.x
 
 
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.os == 'macos-11'}}
+    continue-on-error: ${{ matrix.os == 'macos-latest'}}
 
     env:
       TMPDIR: /tmp
@@ -39,7 +34,7 @@ jobs:
           sudo apt-get install dejagnu -y
 
       - name: Prepare macOS
-        if: matrix.os == 'macos-11'
+        if: matrix.os == 'macos-latest'
         run: |
           echo 'LLVM_CONFIG=/usr/local/opt/llvm@9/bin/llvm-config' >> $GITHUB_ENV
           brew install deja-gnu
@@ -48,17 +43,22 @@ jobs:
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
-          dune-cache: ${{  matrix.os != 'macos-11' }}
+          dune-cache: ${{  matrix.os != 'macos-latest' }}
           opam-disable-sandboxing: true
           opam-repositories: |
             default: git+https://github.com/ocaml/opam-repository.git
             bap: git+https://github.com/BinaryAnalysisPlatform/opam-repository#testing
+          opam-local-packages: |
+            *.opam
+            !ppx_bap.opam
+            !bap-ghidra.opam
+            !bap-primus-symbolic-executor.opam
 
       - name: Install OPAM dependencies
         run: opam install . --deps-only
 
       - name: Install dependencies requires for the OASIS build
-        run: opam install oasis ppx_bap conf-bap-llvm conf-binutils
+        run: opam install oasis ppx_bap.master conf-bap-llvm conf-binutils
 
       - name: Configure BAP
         run: >-

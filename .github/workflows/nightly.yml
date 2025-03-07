@@ -35,7 +35,7 @@ jobs:
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
-          dune-cache: ${{  matrix.os != 'macos-11' }}
+          dune-cache: ${{  matrix.os != 'macos-latest' }}
           opam-pin: false
           opam-disable-sandboxing: true
           opam-repositories: |

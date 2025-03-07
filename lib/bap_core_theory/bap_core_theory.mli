@@ -2140,6 +2140,10 @@ module Theory : sig
     (** [reg x] defines [x] as a part.   *)
     val reg : 'a Bitv.t Var.t -> 'a part
 
+    (** [bit x] defines a boolean register [x] as a part.
+        @since 2.5.0 *)
+    val bit : Bool.t Var.t -> Bool.t part
+
     (** [unk] defines an unnamed part of the register.   *)
     val unk : 'a part
   end
@@ -2156,13 +2160,16 @@ module Theory : sig
       origin register(s) and ['k] denotes the kind of relationship
       between the alias and its origin.
 
-      Currently, we recognize two kinds of relationships. The [sub]
+      Currently, we recognize three kinds of relationships. The [sub]
       kind defines the alias as a subset of the origin register, i.e.,
       a contiguous sequnce of bits that are fully enclosed in the
       origin register. The [sup] kind defines an alias as a superset
       of a number of origin registers, i.e., it is a contiguous
       sequence of bits formed as a concatenation of the origin
-      registers.
+      registers. Finally, the [set] register defines an alias as
+      superset of a numbero of origin register, where each origin
+      register is a boolean flag, i.e., an alias is a contiguous
+      sequence of one-bit flags.
 
       More kinds of relationships could be added later.
 
@@ -2193,12 +2200,17 @@ module Theory : sig
     (** the type index for the super-registers  *)
     type sup
 
+    (** the type index for a set of bits registers *)
+    type set
+
     (** [cast_sub origin] recovers the kind of the origin.  *)
     val cast_sub : ('a,unit) t -> ('a,sub) t option
 
     (** [cast_sup origin] recovers the kind of the origin.  *)
     val cast_sup : ('a,unit) t -> ('a,sup) t option
 
+    (** [cast_set origin] recovers the kind of the origin.  *)
+    val cast_set : ('a,unit) t -> (Bool.t,set) t option
 
     (** [reg origin] is the base register.
 
@@ -2218,7 +2230,7 @@ module Theory : sig
         register. *)
     val hi : ('a,sub) t -> int
 
-    (** [lo origin] returns the inclusive upper bound of the origin register
+    (** [lo origin] returns the inclusive lowe bound of the origin register
         to which an alias belongs. *)
     val lo : ('a,sub) t -> int
 
@@ -2229,9 +2241,20 @@ module Theory : sig
         first element of the list corresponds to the most significant
         part of the base register. This is the same order, in which
         the aliasing was specified, e.g., if the aliasing was defined
-        as, [def x [reg hix; reg lox], then [regs] will
+        as, [def x [reg hix; reg lox]], then [regs] will
         return [hix; lox].*)
     val regs : ('a,sup) t -> 'a Bitv.t Var.t list
+
+
+    (** [bits origin] an list of flags that comprise the register.
+        The bits are sorted in the big endian order, i.e., the first
+        element of the list is the most significant part of the
+        alias. This is the same order, in which the aliasing was
+        specified, e.g., if the aliasing was defined as,
+        [def status [bit cf; bit zf]], then [regs] will return [cf; zf].
+
+        @since 2.5.0 *)
+    val bits : (Bool.t,set) t -> Bool.t Var.t list
 
   end
 
@@ -2305,7 +2328,7 @@ module Theory : sig
       (** the register is used by the integer arithmetic unit
 
           This role can be assigned both to general and special
-          purpose registers. E.g., to get integer arithemtic status
+          purpose registers. E.g., to get integer arithmetic status
           control registers use [[special; integer]].  *)
       val integer : t
 
@@ -2347,9 +2370,19 @@ module Theory : sig
       (** the constant register that always holds zero.  *)
       val zero : t
 
+      (** the constant register that always holds one.
+          @since 2.5.0 *)
+      val one : t
 
-      (** the program status register  *)
+      (** the program status register.  *)
       val status : t
+
+      (** a register for controlling operating system.  *)
+      val system : t
+
+      (** a register that controls CPU or other device.
+          @since 2.5.0 *)
+      val control : t
 
       (** the zero flag register
 

@@ -88,7 +88,6 @@ module Desugar(CT : Core) : Core = struct
 
     let pass = Effect.empty Effect.Sort.bot
 
-
     let take what bits x =
       what (Val.Bitv.define bits) (CT.var x)
 
@@ -112,24 +111,24 @@ module Desugar(CT : Core) : Core = struct
       let module Pos = Bitvec.M32 in
       CT.int (Val.Bitv.define 32) (Pos.int x)
 
-    let assign_regs lhs rhs =
+    let assign_multi size cast lhs rhs =
       rhs >>= fun rhs ->
       let total = Val.(Bitv.size (sort rhs)) in
-      fst@@List.fold lhs ~init:(!!pass,total+1) ~f:(fun (data,hi) lhs ->
+      fst@@List.fold lhs ~init:(!!pass,total+1) ~f: (fun (data,hi) lhs ->
           let s = Var.sort lhs in
-          let bits = Val.Bitv.size s in
+          let bits = size s in
           let lo = hi - bits in
-          let rhs = CT.extract s (pos hi) (pos lo) !!rhs in
+          let s' = Val.Bitv.define bits in
+          let rhs = cast (CT.extract s' (pos hi) (pos lo) !!rhs) in
           CT.(seq data (set lhs rhs),hi - bits))
 
+    let assign_regs lhs rhs = assign_multi Val.Bitv.size Fn.id lhs rhs
+    let assign_bits lhs rhs =
+      assign_multi (Fn.const 1) CT.(fun v ->ite (is_zero v) b0 b1) lhs rhs
 
     (* module Alias ensures that only bitvec registers
        are involved in aliasing *)
-    let cast_var v =
-      match Val.Bitv.refine @@ Val.Sort.forget @@ Var.sort v with
-      | None -> assert false
-      | Some s -> Var.resort v s
-    and cast_val v = v >>| fun v ->
+    let cast_val v = v >>| fun v ->
       match Val.resort Val.Bitv.refine (Val.forget v) with
       | None -> assert false
       | Some v -> v
@@ -150,22 +149,35 @@ module Desugar(CT : Core) : Core = struct
               CT.set (Origin.reg s) x
             | Some s -> assign_sub (Origin.reg s) x (Origin.lo s)
             | None -> match Origin.cast_sup origin with
-              | None -> !!pass
               | Some s -> assign_regs (Origin.regs s) x
+              | None -> match Origin.cast_set origin with
+                | Some s -> assign_bits (Origin.bits s) x
+                | None -> !!pass
 
-    let var r =
+
+    let const role value ret t r s =
+      if Target.has_roles t [role] r
+      then match Val.Bitv.refine (Val.Sort.forget s) with
+        | None -> Some (CT.unk s)
+        | Some s' -> Some (ret@@CT.int s' value)
+      else None
+
+    let consts = [
+      Target.Role.Register.zero, Bitvec.zero;
+      Target.Role.Register.one, Bitvec.one;
+    ]
+
+    let var (type a) r  =
       Scope.mem r >>= function
       | true -> CT.var r
       | false ->
         let* t = target in
         let s = Var.sort r in
         let ret x = x >>| fun x -> KB.Value.refine x s in
-        if Target.has_roles t [Target.Role.Register.zero] r
-        then match Val.Bitv.refine (Val.Sort.forget s) with
-          | None -> CT.unk s
-          | Some s' ->
-            ret@@CT.int s' Bitvec.zero
-        else
+        List.find_map consts ~f:(fun (role,value) ->
+            const role value ret t r s) |> function
+        | Some v -> v
+        | None ->
           match Target.unalias t r with
           | None -> CT.var r
           | Some origin ->
@@ -178,13 +190,25 @@ module Desugar(CT : Core) : Core = struct
               ret @@
               CT.extract bs (pos hi) (pos lo) (CT.var (Origin.reg sub))
             | None -> match Origin.cast_sup origin with
-              | None -> CT.unk s
               | Some sup ->
                 let regs = Origin.regs sup in
                 let total = List.sum (module Int) regs ~f:(fun r ->
                     Val.Bitv.size (Var.sort r)) in
                 let bs = Val.Bitv.define total in
                 ret @@ CT.concat bs (List.map regs ~f:CT.var)
+              | None ->
+                match Origin.cast_set origin with
+                | Some set ->
+                  let bits = Origin.bits set in
+                  let n = List.length bits in
+                  let bs = Val.Bitv.define n in
+                  let us = Val.Bitv.define 1 in
+                  let m0 = CT.int us Bitvec.zero
+                  and m1 = CT.int us Bitvec.one in
+                  ret @@ CT.concat bs (List.map bits ~f:(fun v ->
+                      CT.(ite (var v) m1 m0)))
+                | none -> CT.unk s
+
 
     let let_ v x y =
       x >>= fun x ->

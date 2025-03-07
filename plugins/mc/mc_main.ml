@@ -449,7 +449,6 @@ let validate_formats formats =
 
 
 let print_invalid _pos =
-
   Format.printf "<invalid>@\n"
 
 let run ?(only_one=false) ?(stop_on_error=false) dis arch mem formats =
@@ -499,8 +498,6 @@ let bits_must_not_be_set x =
 
 let order_must_not_be_set x =
   check Option.is_none x Order_must_not_be_set
-
-
 
 let compute_target provide =
   let extract_target =
@@ -695,7 +692,6 @@ let string_of_failure = function
 let () = Extension.Error.register_printer @@ function
   | Fail err -> Some (string_of_failure err)
   | _ -> None
-
 
 let () = Extension.declare
     ~doc:"provides mc and objdump commands"

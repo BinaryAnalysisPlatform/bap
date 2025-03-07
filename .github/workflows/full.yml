@@ -32,8 +32,20 @@ jobs:
           dune-cache: true
           opam-disable-sandboxing: true
 
+      - name: Install BAP Dependencies
+        run: opam install . --deps-only
+
+      - name: Configure BAP
+        run: opam exec -- ocaml tools/configure.ml --with-llvm-config=$(opam var conf-bap-llvm:config)
+
+      - name: Build BAP
+        run: opam exec -- dune build
+
       - name: Install BAP
-        run: opam install . --with-test
+        run: opam exec -- dune install
+
+      - name: Run Unit Tests
+        run: opam exec -- dune test --display=short
 
       - name: Run Functional Tests
         run: opam exec -- make check
