@@ -9,12 +9,12 @@ module Program = Bap_core_theory_program
 module Label = Program.Label
 
 type 'a value = 'a Value.t
-type 'a effect = 'a Effect.t
+type 'a effect_ = 'a Effect.t
 type program = Program.cls
 
 
 type 'a pure = 'a value knowledge
-type 'a eff = 'a effect knowledge
+type 'a eff = 'a effect_ knowledge
 
 type bool = Bool.t pure
 type 'a bitv = 'a Bitv.t pure

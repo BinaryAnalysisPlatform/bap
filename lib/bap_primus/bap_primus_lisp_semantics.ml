@@ -42,7 +42,7 @@ end
 
 
 type value = unit Theory.Value.t
-type effect = unit Theory.Effect.t
+type effect_ = unit Theory.Effect.t
 
 type KB.Conflict.t +=
   | Unresolved_definition of string
@@ -284,7 +284,7 @@ module Value = struct
 end
 
 module Effect = struct
-  type t = effect
+  type t = effect_
   let pure x : t = empty.$[Theory.Semantics.value] <- x
   let return x : t KB.t = KB.return@@pure x
 end

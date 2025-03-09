@@ -1,7 +1,7 @@
 open Base
 open Stdio
 open Result.Monad_infix
-open Caml.Format
+open Stdlib.Format
 
 module Filename = Stdlib.Filename
 module Buffer = Stdlib.Buffer
@@ -158,7 +158,7 @@ let apply_subst root pars vars opts =
   try Ok (apply_subst_exn root pars vars opts)
   with Bad_substitution s -> Error (Bad_subst s)
 
-let rng = Caml.Random.State.make_self_init ()
+let rng = Stdlib.Random.State.make_self_init ()
 
 let mkdtemp ?(mode=0o0700) ?tmp_dir ?(prefix="") ?(suffix="") () =
   let genname () = Uuidm.v4_gen rng () |> Uuidm.to_string in

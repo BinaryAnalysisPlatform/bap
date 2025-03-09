@@ -17,7 +17,7 @@ depends: [
   "bap-c" {= version}
   "bap-knowledge" {= version}
   "bap-std" {= version}
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.17"}
   "monads" {= version}
   "ogre" {= version}
   "ppx_bap" {= version}
