@@ -13,7 +13,7 @@ depends: [
   "bap-common" {= version}
   "bap-core-theory" {= version}
   "bap-microx" {= version}
-  "core_kernel" {>= "v0.16" & < "v0.17"}
+  "core_kernel" {>= "v0.17"}
   "graphlib" {= version}
   "monads" {= version}
   "regular" {= version}

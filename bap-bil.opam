@@ -17,7 +17,7 @@ depends: [
   "bap-std" {= version}
   "bitvec-order" {= version}
   "bitvec" {= version}
-  "core_kernel" {>= "v0.16" & < "v0.17"}
+  "core_kernel" {>= "v0.17"}
   "monads" {= version}
   "bap-common" {= version}
   "ogre" {= version}

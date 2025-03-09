@@ -491,7 +491,7 @@ let term_pp ?(no_cut=false) ?(box=horizontal) pp_self ppf t =
   let open Format in
   let attrs = Dict.data t.dict in
   Seq.iter attrs ~f:(fun attr ->
-      pp_open_tag ppf (asprintf "%a" pp_attr attr));
+      pp_open_stag ppf @@ String_tag (asprintf "%a" pp_attr attr));
   let pp_cut ppf = if not no_cut
     then Format.pp_print_break ppf 1 0
     else fprintf ppf " " in
@@ -500,7 +500,7 @@ let term_pp ?(no_cut=false) ?(box=horizontal) pp_self ppf t =
     pp_cut
     pp_self t.self;
   Format.pp_close_box ppf ();
-  Seq.iter attrs ~f:(fun _ -> pp_close_tag ppf ())
+  Seq.iter attrs ~f:(fun _ -> pp_close_stag ppf ())
 [@@warning "-D"] (* for open and close tag *)
 
 let pp_value slots ppf x =

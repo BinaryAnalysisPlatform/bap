@@ -17,7 +17,7 @@ depends: [
   "bap-knowledge" {= version}
   "bap-main" {= version}
   "bap-std" {= version}
-  "core_kernel" {>= "v0.16" & < "v0.17"}
+  "core_kernel" {>= "v0.17"}
   "bap-common" {= version}
   "ogre" {= version}
   "ppx_bap" {= version}

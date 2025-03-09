@@ -13,7 +13,7 @@ depends: [
   "bap-byteweight" {= version}
   "bap-std" {= version}
   "cmdliner" {>= "1.0" & < "2.0"}
-  "core_kernel" {>= "v0.16" & < "v0.17"}
+  "core_kernel" {>= "v0.17"}
   "fileutils"
   "bap-common" {= version}
   "ocurl" {>= "0.9.0"}

@@ -5,7 +5,7 @@ open KB.Syntax
 open Thumb_core
 open Thumb_opcodes
 
-type eff = cond -> unit Theory.effect KB.t
+type eff = cond -> unit Theory.effect_ KB.t
 
 module Make(CT : Theory.Core) = struct
   module T = Thumb_core.Make(CT)

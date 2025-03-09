@@ -13,7 +13,7 @@ depends: [
   "bap-demangle" {= version}
   "bap-std" {= version}
   "conf-binutils" {>= "0.3"}
-  "core_kernel" {>= "v0.16" & < "v0.17"}
+  "core_kernel" {>= "v0.17"}
   "bap-common" {= version}
   "odoc" {with-doc}
 ]

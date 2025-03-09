@@ -953,7 +953,7 @@ module Theory : sig
   end
 
   type 'a value = 'a Value.t
-  type 'a effect = 'a Effect.t
+  type 'a effect_ = 'a Effect.t
 
   (** The sort for boolean values.
 
@@ -1074,7 +1074,7 @@ module Theory : sig
   end
 
   type 'a pure = 'a value knowledge
-  type 'a eff = 'a effect knowledge
+  type 'a eff = 'a effect_ knowledge
   type ('r,'s) format = ('r,'s) Float.format
 
 
@@ -3788,7 +3788,7 @@ module Theory : sig
       - [bitv] - produces terms of type ['a bitv];
       - [bool] - produces terms of type [bool];
       - [mem] - produces terms of type [('k,'v) mem];
-      - [stmt] - produces terms of type ['a effect];
+      - [stmt] - produces terms of type ['a effect_];
       - [float] - produces terms of type [('f,'s) float];
       - [rmode] - produces terms of type [rmode].
 
