@@ -16,7 +16,7 @@ depends: [
   "bap-primus" {= version}
   "bap-std" {= version}
   "bare" {= version}
-  "core_kernel" {>= "v0.16" & < "v0.17"}
+  "core_kernel" {>= "v0.17"}
   "monads" {= version}
   "odoc" {with-doc}
 ]

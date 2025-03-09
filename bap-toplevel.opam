@@ -14,7 +14,7 @@ depends: [
   "dune" {>= "3.1"}
   "bap-common" {= version}
   "bap-std" {= version}
-  "core_kernel" {>= "v0.16" & < "v0.17"}
+  "core_kernel" {>= "v0.17"}
   "ocamlfind"
   "odoc" {with-doc}
 ]

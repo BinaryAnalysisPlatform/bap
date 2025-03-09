@@ -288,25 +288,25 @@ let (<--) slot value insn = KB.Value.put slot insn value
 let write init ops =
   List.fold ~init ops ~f:(fun init f -> f init)
 
-let set_basic effect insn : t =
-  write effect Slot.[
+let set_basic effect_ insn : t =
+  write effect_ Slot.[
       name <-- Insn.name insn;
       asm <-- Insn.asm insn;
       ops <-- Some (Insn.ops insn);
     ]
 
 let of_basic ?bil insn : t =
-  let effect =
+  let effect_ =
     KB.Value.put Bil.slot
       (KB.Value.empty Theory.Semantics.cls)
       (Option.value bil ~default:[]) in
-  write (set_basic effect insn) Slot.[
+  write (set_basic effect_ insn) Slot.[
       Props.slot <-- derive_props ?bil insn;
     ]
 
-let with_basic effect insn : t =
-  let bil = KB.Value.get Bil.slot effect in
-  write (set_basic effect insn) Slot.[
+let with_basic effect_ insn : t =
+  let bil = KB.Value.get Bil.slot effect_ in
+  write (set_basic effect_ insn) Slot.[
       Props.slot <-- derive_props ~bil insn
     ]
 

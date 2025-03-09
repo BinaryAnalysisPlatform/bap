@@ -16,7 +16,7 @@ depends: [
   "bap-std" {= version}
   "bitvec-sexp" {= version}
   "bitvec" {= version}
-  "core_kernel" {>= "v0.16" & < "v0.17"}
+  "core_kernel" {>= "v0.17"}
   "monads" {= version}
   "zarith"
   "odoc" {with-doc}

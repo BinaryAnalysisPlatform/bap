@@ -15,7 +15,7 @@ depends: [
   "bap-primus" {= version}
   "bap-std" {= version}
   "bap-strings" {= version}
-  "core_kernel" {>= "v0.16" & < "v0.17"}
+  "core_kernel" {>= "v0.17"}
   "monads" {= version}
   "bap-common" {= version}
   "ppx_bap" {= version}

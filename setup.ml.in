@@ -80,7 +80,4 @@ let () =
     "  Failed to find llvm library, consider using --with-llvm-version
      or --with-llvm-config command line options, to point me on a
      correct version of LLVM. ";
-
-    ["serialization", "true"], ["piqic"],
-    "Failed find piqic compiler";
   ];

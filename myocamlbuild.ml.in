@@ -19,7 +19,6 @@ let mark_tags () =
   List.iter mark_tag_used [
     "pkg_core_bench";
     "tests";
-    "pkg_piqirun";
     "pkg_core";
   ]
 

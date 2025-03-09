@@ -60,7 +60,7 @@ module Basic : Theory.Basic = struct
 
     let int s w = vec s @@ Bil.(int @@ Word.create w (size s))
 
-    let effect x = KB.Value.get effects x
+    let effect_ x = KB.Value.get effects x
 
     let (>>->) v f = v >>= fun v -> f (sort v) (value v)
 
@@ -183,13 +183,13 @@ module Basic : Theory.Basic = struct
       | _ ->
         exp s (Bil.ite cnd yes nay)
 
-    let (>>:=) v f = v >>= fun v -> f (effect v)
+    let (>>:=) v f = v >>= fun v -> f (effect_ v)
 
     let branch cnd yes nay =
       cnd >>= fun cnd ->
       yes >>= fun yes ->
       nay >>:= fun nay ->
-      eff Bil.[if_ (bool_exp cnd) (effect yes) nay]
+      eff Bil.[if_ (bool_exp cnd) (effect_ yes) nay]
 
     let make_cast s t x =
       x >>-> fun _ x -> vec s @@ Bil.cast t (size s) x
@@ -281,7 +281,7 @@ module Basic : Theory.Basic = struct
     let seq x y =
       x >>= fun x ->
       y >>= fun y ->
-      eff (effect x @ effect y)
+      eff (effect_ x @ effect_ y)
 
     let blk lbl x y =
       x >>:= fun x ->
