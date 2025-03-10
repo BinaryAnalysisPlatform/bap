@@ -18,6 +18,47 @@
 (defun ADDWrs (rd rn rm off) (ADD*r* setw shift-encoded rd rn rm off))
 (defun ADDXrs (rd rn rm off) (ADD*r* set$ shift-encoded rd rn rm off))
 
+
+; ADCS: add with carry, setting flags
+(defun ADCSXr (rd rn rm)
+  (add-with-carry set$ rd CF rm rn))
+(defun ADCSWr (rd rn rm)
+  (add-with-carry setw rd CF rm rn))
+
+; ADC: add with carry, no flags
+(defun ADCXr (rd rn rm)
+  (set$ rd (+ CF rm rn)))
+(defun ADCWr (rd rn rm)
+  (setw rd (+ CF rm rn)))
+
+; adds immediate
+(defun ADDSXri (rd rn imm off) 
+  (add-with-carry set$ rd rn (lshift imm off) 0))
+
+(defun ADDSWri (rd rn imm off) 
+  (add-with-carry setw rd rn (lshift imm off) 0))
+
+; adds shifted
+(defun ADDSXrs (rd rn rm shift) 
+  (add-with-carry set$ rd rn (shift-encoded rm shift) 0))
+
+(defun ADDSWrs (rd rn rm shift) 
+  (add-with-carry set$ rd rn (shift-encoded rm shift) 0))
+
+; add extended
+(defun ADDXrx (rd rn rm shift) 
+  (set$ rd (+ rn (extended rm shift))))
+
+(defun ADDWrx (rd rn rm shift) 
+  (setw rd (+ rn (extended rm shift))))
+
+; add extend SXRX|UXTX
+(defun ADDXrx64 (rd rn rm shift) 
+  (set$ rd (+ rn (extended rm shift))))
+
+; endTODO 
+
+
 (defun ADRP (dst imm)
   (set$ dst (+
              (logand (get-program-counter) (lshift -1 12))
@@ -25,7 +66,7 @@
 
 (defmacro SUB*r* (set shift-function rd rn imm-or-rm off)
   "Implements SUB*ri and SUB*rs by specifying the shift function."
-  (set rd (- rn (shift-function imm-or-rm off))))
+  (set rd (cast-low (word-width rd) (- rn (shift-function imm-or-rm off)))))
 
 ;; see ADD*ri vs ADD*rs
 (defun SUBWri (rd rn rm off) (SUB*r* setw lshift rd rn rm off))
@@ -33,20 +74,48 @@
 (defun SUBWrs (rd rn rm off) (SUB*r* setw shift-encoded rd rn rm off))
 (defun SUBXrs (rd rn rm off) (SUB*r* set$ shift-encoded rd rn rm off))
 
+(defun SUBXrx (rd rn rm off)
+  (set$ rd (- rn (extended rm off))))
+
 (defun SUBXrx64 (rd rn rm off)
   (set$ rd (- rn (extended rm off))))
+
+(defun SUBXrw (rd rn rm off)
+  (setw rd (- rn (extended rm off))))
+
+(defun SBCSXr (rd rn rm)
+  (add-with-carry set$ rd CF (lnot rm) rn))
+  
+(defun SBCSWr (rd rn rm)
+  (add-with-carry setw rd CF (lnot rm) rn))
+
+(defun SBCXr (rd rn rm)
+  (set$ rd (+ CF (lnot rm) rn)))
+
+(defun SBCWr (rd rn rm)
+  (setw rd (+ CF (lnot rm) rn)))
 
 (defun SUBSWrs (rd rn rm off)
   (add-with-carry/clear-base rd rn (lnot (shift-encoded rm off)) 1))
 
+(defun SUBSXrx (rd rn rm off)
+  (add-with-carry set$ rd rn (lnot (shift-encoded rm off)) 1))
+
+(defun SUBSXrx64 (rd rn rm off)
+  (add-with-carry set$ rd rn (lnot (shift-encoded rm off)) 1))
+
 (defun SUBSXrs (rd rn rm off)
-  (add-with-carry rd rn (lnot (shift-encoded rm off)) 1))
+  (add-with-carry set$ rd rn (lnot (shift-encoded rm off)) 1))
+
+; seems suspect but probably works
+(defun SUBSWrx (rd rn rm off)
+  (add-with-carry set$ rd rn (lnot (shift-encoded rm off)) 1))
 
 (defun SUBSWri (rd rn imm off)
   (add-with-carry/clear-base rd rn (lnot (lshift imm off)) 1))
 
 (defun SUBSXri (rd rn imm off)
-  (add-with-carry rd rn (lnot (lshift imm off)) 1))
+  (add-with-carry set$ rd rn (lnot (lshift imm off)) 1))
 
 (defmacro Mop*rrr (set op rd rn rm ra)
   "(Mop*rrr set op rd rn rm ra) implements multiply-add, multiply-subtract
@@ -57,6 +126,19 @@
 (defun MADDXrrr (rd rn rm ra) (Mop*rrr set$ + rd rn rm ra))
 (defun MSUBWrrr (rd rn rm ra) (Mop*rrr setw - rd rn rm ra))
 (defun MSUBXrrr (rd rn rm ra) (Mop*rrr set$ - rd rn rm ra))
+
+(defun UMADDLrrr (rd rn rm ra) (set$ rd (cast-low 64 (+ ra (* rn rm)))))
+
+(defun SMADDLrrr (rd rn rm ra) (set$ rd (cast-signed 64 (+ ra (* (cast-signed 64 rn) (cast-signed 64 rm))))))
+
+(defun UMSUBLrrr (rd rn rm ra) (set$ rd (cast-low 64 (- ra (* (cast-signed 64 rn) (cast-signed 64 rm))))))
+
+(defun SMSUBLrrr (rd rn rm ra) (set$ rd (cast-signed 64 (- ra (* (cast-signed 64 rn) (cast-signed 64 rm))))))
+
+(defun UMULHrr (rd rn rm)
+  "multiplies rn and rm together and stores the high 64 bits of the resulting 
+  128-bit value to the register rd"
+  (set$ rd (cast-high 64 (* (cast-unsigned 128 rn) (cast-unsigned 128 rm)))))
 
 (defmacro *DIV*r (set div rd rn rm)
   "(*DIV*r set div rd rn rm) implements the SDIV or UDIV instructions
@@ -69,3 +151,6 @@
 (defun SDIVXr (rd rn rm) (*DIV*r set$ s/ rd rn rm))
 (defun UDIVWr (rd rn rm) (*DIV*r setw /  rd rn rm))
 (defun UDIVXr (rd rn rm) (*DIV*r set$ /  rd rn rm))
+
+(defun ADR (rd label) 
+  (store-word rd (+ (get-program-counter) (cast-signed 64 label))))
