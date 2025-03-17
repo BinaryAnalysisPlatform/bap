@@ -2230,7 +2230,7 @@ module Theory : sig
         register. *)
     val hi : ('a,sub) t -> int
 
-    (** [lo origin] returns the inclusive lowe bound of the origin register
+    (** [lo origin] returns the inclusive lower bound of the origin register
         to which an alias belongs. *)
     val lo : ('a,sub) t -> int
 
