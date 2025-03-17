@@ -4,10 +4,10 @@ open Bap.Std
 
 include Self ()
 
-module Buffer = Caml.Buffer
-module Filename = Caml.Filename
+module Buffer = Stdlib.Buffer
+module Filename = Stdlib.Filename
 module Unix = Caml_unix
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 
 module Info = Bap_ida_info
 
@@ -63,7 +63,7 @@ let setup_headless_env path =
   let old_path,new_path =
     try
       Unix.getenv var, lib ^ ":" ^ Unix.getenv var
-    with Caml.Not_found -> "", lib in
+    with Stdlib.Not_found -> "", lib in
   Unix.putenv var new_path;
   fun () ->
     try

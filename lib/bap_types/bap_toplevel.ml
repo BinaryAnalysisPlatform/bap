@@ -69,7 +69,7 @@ let get slot = eval slot this |> function
   | Some x -> x
 
 
-let () = Caml.Printexc.register_printer @@ function
+let () = Stdlib.Printexc.register_printer @@ function
   | Conflict err ->
     Some (Format.asprintf "%a" Knowledge.Conflict.pp err)
   | _ -> None

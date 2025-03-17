@@ -117,9 +117,9 @@ module Bytes = struct
   let t = Bap_byteweight_signatures.Data.declare "bytes"
       ~load:(fun bytes ->
           Binable.of_string (module Self)
-            (Caml.Bytes.unsafe_to_string bytes))
+            (Stdlib.Bytes.unsafe_to_string bytes))
       ~save:(fun data ->
-          Caml.Bytes.unsafe_of_string @@
+          Stdlib.Bytes.unsafe_of_string @@
           Binable.to_string (module Self) data)
 
   include Self

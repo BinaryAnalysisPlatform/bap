@@ -164,8 +164,8 @@ let supports t tag = supports_by_tool t tag && supports_by_proto t tag
 
 let read_events t : event seq =
   let map e = match t.mapper e with
-    | None -> Seq.Step.Skip ()
-    | Some e -> Seq.Step.Yield (e,()) in
+    | None -> Seq.Step.Skip {state=()}
+    | Some e -> Seq.Step.Yield {value=e;state=()} in
   Seq.unfold_step ~init:() ~f:(fun () ->
       match t.reader.next () with
       | None -> Seq.Step.Done
@@ -173,8 +173,8 @@ let read_events t : event seq =
       | Some Error e -> match t.monitor e with
         | `Stop -> Seq.Step.Done
         | `Fail -> Error.raise e
-        | `Skip -> Seq.Step.Skip ()
-        | `Make e -> Seq.Step.Yield (e,()))
+        | `Skip -> Seq.Step.Skip {state=()}
+        | `Make e -> Seq.Step.Yield {value=e;state=()})
 
 let read_all t tag =
   read_events t |> Seq.filter_map ~f:(Value.get tag)
