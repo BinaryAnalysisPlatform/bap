@@ -93,7 +93,7 @@ end
 
 module Parents = struct
   type t = (word,Parent.t) Solution.t
-  include Binable.Of_binable(struct
+  include Binable.Of_binable_without_uuid(struct
       type t = (word * Parent.t) Seq.t [@@deriving bin_io]
     end)(struct
       type t = (word,Parent.t) Solution.t

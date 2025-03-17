@@ -100,9 +100,9 @@ module Set = struct
 end
 
 
-let () = Caml.Printexc.register_printer (function
+let () = Stdlib.Printexc.register_printer (function
     | Failure (error,_) ->
       let msg = Format.asprintf "Attribute parse error: %s"
-          (Caml.Printexc.to_string error) in
+          (Stdlib.Printexc.to_string error) in
       Some msg
     | _ -> None)

@@ -11,7 +11,7 @@ bug-reports: "https://github.com/BinaryAnalysisPlatform/bap/issues"
 depends: [
   "dune" {>= "3.1"}
   "bap-std" {= version}
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.17"}
   "bap-common" {= version}
   "odoc" {with-doc}
 ]

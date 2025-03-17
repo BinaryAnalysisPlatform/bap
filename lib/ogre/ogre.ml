@@ -673,8 +673,9 @@ module Exp = struct
            Var {attr=x;field={Type.fname=n1}},
            Var {attr=y;field={Type.fname=n2}}) ->
       Var (fun row ->
-          bool String.(Map.find_exn row.(x).fields n1 =
-                       Map.find_exn row.(y).fields n2))
+          let s1 = Map.find_exn row.(x).fields n1 in
+          let s2 = Map.find_exn row.(y).fields n2 in
+          bool (String.equal s1 s2))
     | Bop (op,x,y) -> Bop (op,lambda x, lambda y)
     | Uop (op,x) -> Uop(op,lambda x)
     | Var n -> Var (get_indiced n)

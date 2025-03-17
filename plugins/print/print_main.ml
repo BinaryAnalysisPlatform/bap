@@ -529,9 +529,7 @@ let () =
       `S "DESCRIPTION";
       `P "Provides various formats for dumping the project data structure.";
       `S "SEE ALSO";
-      `P
-        "$(b,bap-plugin-phoenix)(1), $(b,bap-plugin-piqi-printers)(1),
-         $(b,bap-plugin-dump-symbols)(1)"
+      `P "$(b,bap-plugin-phoenix)(1), $(b,bap-plugin-dump-symbols)(1)"
 
     ] in
   let demangle : string option Config.param =

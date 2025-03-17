@@ -239,7 +239,7 @@ module Main = struct
         warning "failed to decode a thumb instruction: \
                  uncaught exception %s\nBacktrace:\n %s\n"
           (Exn.to_string uncaught)
-          (Caml.Printexc.get_backtrace ());
+          (Stdlib.Printexc.get_backtrace ());
         KB.return Insn.empty
 end
 

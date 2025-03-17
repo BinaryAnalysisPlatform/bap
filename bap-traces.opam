@@ -12,7 +12,7 @@ depends: [
   "dune" {>= "3.1"}
   "bap-common" {= version}
   "bap-std" {= version}
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.17"}
   "ppx_bap" {= version}
   "regular" {= version}
   "uri" {>= "1.9.0"}

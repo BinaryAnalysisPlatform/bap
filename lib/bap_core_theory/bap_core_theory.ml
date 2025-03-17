@@ -45,9 +45,9 @@ module Theory = struct
   type filetype = Filetype.t
 
   type 'a value = 'a Value.t
-  type 'a effect = 'a Effect.t
+  type 'a effect_ = 'a Effect.t
   type 'a pure = 'a value knowledge
-  type 'a eff = 'a effect knowledge
+  type 'a eff = 'a effect_ knowledge
 
 
   type bool = Bool.t pure

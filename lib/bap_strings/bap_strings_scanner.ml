@@ -25,7 +25,7 @@ let run ?is_stop ~read off =
       let str = next ?is_stop ~read off in
       let len = String.length str in
       if len <> 0
-      then Seq.Step.Yield ((off,str),(off+len))
+      then Seq.Step.Yield {value=(off,str);state=(off+len)}
       else match read off with
         | None -> Seq.Step.Done
-        | Some _ -> Seq.Step.Skip (off+1))
+        | Some _ -> Seq.Step.Skip {state=(off+1)})

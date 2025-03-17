@@ -1,6 +1,6 @@
 open Bin_prot.Std
 type t = Bitvec.t
-module Functions = Bin_prot.Utils.Make_binable(struct
+module Functions = Bin_prot.Utils.Make_binable_without_uuid(struct
     module Binable = struct
       type t = string [@@deriving bin_io]
     end
