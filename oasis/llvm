@@ -18,7 +18,7 @@ Library bap_llvm
                  Bap_llvm_config,
                  Bap_llvm_disasm
   CCOpt:         $cc_optimization
-  CCLib:         $llvm_lib $cxxlibs $llvm_ldflags -lcurses -lzstd
+  CCLib:         $llvm_lib $cxxlibs $llvm_ldflags -lncurses -lzstd
   CSources:      llvm_disasm.h,
                  llvm_disasm.c,
                  llvm_stubs.c,
