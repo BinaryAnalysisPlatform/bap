@@ -66,6 +66,56 @@
           (lshift bitv m)
           (rshift bitv (- bitv-length m)))))))
 
+(defun extract-elem (x e esize off)
+  "(extract-elem x e esize off) extracts the e-th bit range
+   of size esize of x, after adding the bit offset off."
+  (extract
+    (+ off (-1 (* esize (+1 e))))
+    (+ off (* esize e))
+    x))
+
+(defun extract-elem (x e esize)
+  "(extract-elem x e esize) extracts the e-th bit range
+   of size esize of x."
+  (extract-elem x e esize 0))
+
+(defun reverse-in-containers (csize esize x)
+  "(reverse-in-containers csize esize x) returns the result
+   of reversing the order of elements of elem-size bits
+   within each container of container-size bits.
+   It returns this as a concatenation of extracts of x."
+  (assert (= 0 (mod csize esize)))
+  (assert (= 0 (mod (word-width x) csize)))
+  (reverse-in-containers/helper csize esize x 0))
+
+(defun reverse-in-containers/helper-elem (csize esize x off e)
+  "Returns the result of reversing the elements in one container."
+  (declare (visibility :private))
+  (if (= e (-1 (/ csize esize)))
+    (extract-elem x e esize off)
+    (concat
+      (extract-elem x e esize off)
+      (reverse-in-containers/helper-elem csize esize x off (+1 e)))))
+
+(defun reverse-in-containers/helper (csize esize x c)
+  "Maps reverse-in-containers/helper-elem over all containers
+   and concatenates the results."
+  (declare (visibility :private))  
+  (if (= c (-1 (/ (word-width x) csize)))
+    (reverse-in-containers/helper-elem csize esize x (* csize c) 0)
+    (concat
+      (reverse-in-containers/helper csize esize x (+1 c))
+      (reverse-in-containers/helper-elem csize esize x (* csize c) 0))))
+
+(defun reverse-bits (x) 
+  "(reverse-bits x) returns a bitvector with the bit order of x reversed."
+  (reverse-bits/helper x (-1 (word-width x))))
+
+(defun reverse-bits/helper (x i) 
+  (if (> i 0)
+    (concat (reverse-bits/helper x (-1 i)) (select i x))
+    (select i x)))
+
 (defun clz (x)
   "(clz X) counts leading zeros in X.
    The returned value is the number of consecutive zeros starting
