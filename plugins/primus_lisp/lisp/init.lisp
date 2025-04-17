@@ -162,6 +162,10 @@
 
 (defmacro dolist (f x xs) (prog (f x) (dolist f xs)))
 
+(defun ident (x)
+  "(ident X) is X"
+  x)
+
 (defmacro min (x)
   "(min X Y ...) returns the lower bound of the (X,Y,...) set"
       x)

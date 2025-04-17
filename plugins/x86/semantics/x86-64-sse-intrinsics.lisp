@@ -175,12 +175,6 @@
 (defun MFENCE ()
   (intrinsic 'mfence))
 
-(defun ANDPDrr (rd rn rm)
-  (set-sse rd (logand rn rm)))
-
-(defun ANDPDrm (rd rn ptr _ _ off _)
-  (set-sse rd (logand rn (load-mem ptr off))))
-
 (defun sse-truncate (name rt rs rn)
   (intrinsic
    (symbol-concat name 'rtz *sse-format* :sep '_)

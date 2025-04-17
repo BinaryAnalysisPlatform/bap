@@ -1317,3 +1317,231 @@ and the same for a memory operand
   {
     mem := mem with [RDI + 0x10, el]:u256 <- YMM0
   }
+
+[v]andp{d,s}:
+  $ mc 0x0f,0x54,0xca
+  andps %xmm2, %xmm1
+  {
+    YMM1 := high:128[YMM1].127:0[YMM1] & 127:0[YMM2]
+  }
+  $ mc 0x66,0x0f,0x54,0xca
+  andpd %xmm2, %xmm1
+  {
+    YMM1 := high:128[YMM1].127:0[YMM1] & 127:0[YMM2]
+  }
+  $ mc 0xc5,0xf0,0x54,0xc2
+  vandps %xmm2, %xmm1, %xmm0
+  {
+    YMM0 := 0.127:0[YMM1] & 127:0[YMM2]
+  }
+  $ mc 0xc5,0xf1,0x54,0xc2
+  vandpd %xmm2, %xmm1, %xmm0
+  {
+    YMM0 := 0.127:0[YMM1] & 127:0[YMM2]
+  }
+  $ mc 0x0f,0x54,0x4e,0x2a
+  andps 0x2a(%rsi), %xmm1
+  {
+    YMM1 := high:128[YMM1].127:0[YMM1] & mem[RSI + 0x2A, el]:u128
+  }
+  $ mc 0x0f,0x54,0x4e,0x2a
+  andps 0x2a(%rsi), %xmm1
+  {
+    YMM1 := high:128[YMM1].127:0[YMM1] & mem[RSI + 0x2A, el]:u128
+  }
+  $ mc 0x66,0x0f,0x54,0x4e,0x2a
+  andpd 0x2a(%rsi), %xmm1
+  {
+    YMM1 := high:128[YMM1].127:0[YMM1] & mem[RSI + 0x2A, el]:u128
+  }
+  $ mc 0xc5,0xf0,0x54,0x46,0x2a
+  vandps 0x2a(%rsi), %xmm1, %xmm0
+  {
+    YMM0 := 0.127:0[YMM1] & mem[RSI + 0x2A, el]:u128
+  }
+  $ mc 0xc5,0xf1,0x54,0x46,0x2a
+  vandpd 0x2a(%rsi), %xmm1, %xmm0
+  {
+    YMM0 := 0.127:0[YMM1] & mem[RSI + 0x2A, el]:u128
+  }
+  $ mc 0xc5,0xf4,0x54,0x46,0x2a
+  vandps 0x2a(%rsi), %ymm1, %ymm0
+  {
+    YMM0 := YMM1 & mem[RSI + 0x2A, el]:u256
+  }
+  $ mc 0xc5,0xf5,0x54,0x46,0x2a
+  vandpd 0x2a(%rsi), %ymm1, %ymm0
+  {
+    YMM0 := YMM1 & mem[RSI + 0x2A, el]:u256
+  }
+
+[v]orp{d,s}:
+  $ mc 0x0f,0x56,0xca
+  orps %xmm2, %xmm1
+  {
+    YMM1 := high:128[YMM1].127:0[YMM1] | 127:0[YMM2]
+  }
+  $ mc 0x66,0x0f,0x56,0xca
+  orpd %xmm2, %xmm1
+  {
+    YMM1 := high:128[YMM1].127:0[YMM1] | 127:0[YMM2]
+  }
+  $ mc 0xc5,0xf0,0x56,0xc2
+  vorps %xmm2, %xmm1, %xmm0
+  {
+    YMM0 := 0.127:0[YMM1] | 127:0[YMM2]
+  }
+  $ mc 0xc5,0xf1,0x56,0xc2
+  vorpd %xmm2, %xmm1, %xmm0
+  {
+    YMM0 := 0.127:0[YMM1] | 127:0[YMM2]
+  }
+  $ mc 0x0f,0x56,0x4e,0x2a
+  orps 0x2a(%rsi), %xmm1
+  {
+    YMM1 := high:128[YMM1].127:0[YMM1] | mem[RSI + 0x2A, el]:u128
+  }
+  $ mc 0x0f,0x56,0x4e,0x2a
+  orps 0x2a(%rsi), %xmm1
+  {
+    YMM1 := high:128[YMM1].127:0[YMM1] | mem[RSI + 0x2A, el]:u128
+  }
+  $ mc 0x66,0x0f,0x56,0x4e,0x2a
+  orpd 0x2a(%rsi), %xmm1
+  {
+    YMM1 := high:128[YMM1].127:0[YMM1] | mem[RSI + 0x2A, el]:u128
+  }
+  $ mc 0xc5,0xf0,0x56,0x46,0x2a
+  vorps 0x2a(%rsi), %xmm1, %xmm0
+  {
+    YMM0 := 0.127:0[YMM1] | mem[RSI + 0x2A, el]:u128
+  }
+  $ mc 0xc5,0xf1,0x56,0x46,0x2a
+  vorpd 0x2a(%rsi), %xmm1, %xmm0
+  {
+    YMM0 := 0.127:0[YMM1] | mem[RSI + 0x2A, el]:u128
+  }
+  $ mc 0xc5,0xf4,0x56,0x46,0x2a
+  vorps 0x2a(%rsi), %ymm1, %ymm0
+  {
+    YMM0 := YMM1 | mem[RSI + 0x2A, el]:u256
+  }
+  $ mc 0xc5,0xf5,0x56,0x46,0x2a
+  vorpd 0x2a(%rsi), %ymm1, %ymm0
+  {
+    YMM0 := YMM1 | mem[RSI + 0x2A, el]:u256
+  }
+
+[v]xorp{d,s}:
+  $ mc 0x0f,0x57,0xca
+  xorps %xmm2, %xmm1
+  {
+    YMM1 := high:128[YMM1].127:0[YMM1] ^ 127:0[YMM2]
+  }
+  $ mc 0x66,0x0f,0x57,0xca
+  xorpd %xmm2, %xmm1
+  {
+    YMM1 := high:128[YMM1].127:0[YMM1] ^ 127:0[YMM2]
+  }
+  $ mc 0xc5,0xf0,0x57,0xc2
+  vxorps %xmm2, %xmm1, %xmm0
+  {
+    YMM0 := 0.127:0[YMM1] ^ 127:0[YMM2]
+  }
+  $ mc 0xc5,0xf1,0x57,0xc2
+  vxorpd %xmm2, %xmm1, %xmm0
+  {
+    YMM0 := 0.127:0[YMM1] ^ 127:0[YMM2]
+  }
+  $ mc 0x0f,0x57,0x4e,0x2a
+  xorps 0x2a(%rsi), %xmm1
+  {
+    YMM1 := high:128[YMM1].127:0[YMM1] ^ mem[RSI + 0x2A, el]:u128
+  }
+  $ mc 0x0f,0x57,0x4e,0x2a
+  xorps 0x2a(%rsi), %xmm1
+  {
+    YMM1 := high:128[YMM1].127:0[YMM1] ^ mem[RSI + 0x2A, el]:u128
+  }
+  $ mc 0x66,0x0f,0x57,0x4e,0x2a
+  xorpd 0x2a(%rsi), %xmm1
+  {
+    YMM1 := high:128[YMM1].127:0[YMM1] ^ mem[RSI + 0x2A, el]:u128
+  }
+  $ mc 0xc5,0xf0,0x57,0x46,0x2a
+  vxorps 0x2a(%rsi), %xmm1, %xmm0
+  {
+    YMM0 := 0.127:0[YMM1] ^ mem[RSI + 0x2A, el]:u128
+  }
+  $ mc 0xc5,0xf1,0x57,0x46,0x2a
+  vxorpd 0x2a(%rsi), %xmm1, %xmm0
+  {
+    YMM0 := 0.127:0[YMM1] ^ mem[RSI + 0x2A, el]:u128
+  }
+  $ mc 0xc5,0xf4,0x57,0x46,0x2a
+  vxorps 0x2a(%rsi), %ymm1, %ymm0
+  {
+    YMM0 := YMM1 ^ mem[RSI + 0x2A, el]:u256
+  }
+  $ mc 0xc5,0xf5,0x57,0x46,0x2a
+  vxorpd 0x2a(%rsi), %ymm1, %ymm0
+  {
+    YMM0 := YMM1 ^ mem[RSI + 0x2A, el]:u256
+  }
+
+[v]andnp{d,s}:
+  $ mc 0x0f,0x55,0xca
+  andnps %xmm2, %xmm1
+  {
+    YMM1 := high:128[YMM1].~(127:0[YMM1] & 127:0[YMM2])
+  }
+  $ mc 0x66,0x0f,0x55,0xca
+  andnpd %xmm2, %xmm1
+  {
+    YMM1 := high:128[YMM1].~(127:0[YMM1] & 127:0[YMM2])
+  }
+  $ mc 0xc5,0xf0,0x55,0xc2
+  vandnps %xmm2, %xmm1, %xmm0
+  {
+    YMM0 := 0.~(127:0[YMM1] & 127:0[YMM2])
+  }
+  $ mc 0xc5,0xf1,0x55,0xc2
+  vandnpd %xmm2, %xmm1, %xmm0
+  {
+    YMM0 := 0.~(127:0[YMM1] & 127:0[YMM2])
+  }
+  $ mc 0x0f,0x55,0x4e,0x2a
+  andnps 0x2a(%rsi), %xmm1
+  {
+    YMM1 := high:128[YMM1].~(127:0[YMM1] & mem[RSI + 0x2A, el]:u128)
+  }
+  $ mc 0x0f,0x55,0x4e,0x2a
+  andnps 0x2a(%rsi), %xmm1
+  {
+    YMM1 := high:128[YMM1].~(127:0[YMM1] & mem[RSI + 0x2A, el]:u128)
+  }
+  $ mc 0x66,0x0f,0x55,0x4e,0x2a
+  andnpd 0x2a(%rsi), %xmm1
+  {
+    YMM1 := high:128[YMM1].~(127:0[YMM1] & mem[RSI + 0x2A, el]:u128)
+  }
+  $ mc 0xc5,0xf0,0x55,0x46,0x2a
+  vandnps 0x2a(%rsi), %xmm1, %xmm0
+  {
+    YMM0 := 0.~(127:0[YMM1] & mem[RSI + 0x2A, el]:u128)
+  }
+  $ mc 0xc5,0xf1,0x55,0x46,0x2a
+  vandnpd 0x2a(%rsi), %xmm1, %xmm0
+  {
+    YMM0 := 0.~(127:0[YMM1] & mem[RSI + 0x2A, el]:u128)
+  }
+  $ mc 0xc5,0xf4,0x55,0x46,0x2a
+  vandnps 0x2a(%rsi), %ymm1, %ymm0
+  {
+    YMM0 := ~(YMM1 & mem[RSI + 0x2A, el]:u256)
+  }
+  $ mc 0xc5,0xf5,0x55,0x46,0x2a
+  vandnpd 0x2a(%rsi), %ymm1, %ymm0
+  {
+    YMM0 := ~(YMM1 & mem[RSI + 0x2A, el]:u256)
+  }

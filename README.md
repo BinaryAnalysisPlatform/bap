@@ -80,6 +80,12 @@ opam switch create . --deps-only
 dune build && dune install
 ```
 
+Note, if you don't have the `llvm-config` executable in the path, then run
+```
+ocaml tools/configure.ml --with-llvm-config=<path-to-you-llvm-config>
+```
+where `<path-to-your-llvm-config>` is usually `llvm-config-<ver>`, e.g., `llvm-config-11`.
+
 ## Using
 
 BAP, like Docker or Git, is driven by a single command-line utility called [bap][man-bap]. Just type `bap` in your shell and it will print a message which shows BAP capabilities. The `disassemble` command will take a binary program, disassemble it, lift it into the intermediate architecture agnostic representation, build a control flow graph, and finally apply staged user-defined analysis in a form of disassembling passes. Finally, the `--dump` option (`-d` in short) will output the resulting program in the specified format. This is the default command, so you don't even need to specify it, e.g., the following will disassembled and dump the `/bin/echo` binary on your machine:
