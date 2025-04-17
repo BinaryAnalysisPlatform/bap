@@ -1010,7 +1010,7 @@ be seen as a common denominator between Lwt and Async libraries.")
   (regular (= :version))
   (bitvec (= :version))
    zarith
-  (z3 (and (>= 4.8.8-1) (< 4.8.13)))))
+  (z3 (>= 4.8.8-1))))
 
 (package
  (name bap-primus-systems)

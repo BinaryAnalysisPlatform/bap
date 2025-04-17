@@ -20,7 +20,7 @@ depends: [
   "regular" {= version}
   "bitvec" {= version}
   "zarith"
-  "z3" {>= "4.8.8-1" & < "4.8.13"}
+  "z3" {>= "4.8.8-1"}
   "odoc" {with-doc}
 ]
 build: [

@@ -1,5 +1,5 @@
 # tests all packages, including bap-extra
-# it requires ghidra, so it works only on ubuntu-20.04
+# it requires ghidra, so it works only on ubuntu-latest
 name: full
 run-name: Testing everything in ${{ github.ref }}
 
@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     env:
       BAP_LOG_DIR: $HOME/log
       OPAMRETRES: 8
@@ -17,13 +17,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Install Ghidra and Dejagnu
+      - name: Install Dejagnu
         run: |
-          sudo add-apt-repository ppa:ivg/ghidra -y
           sudo apt-get update -y
-          sudo apt-get install libghidra-dev -y
-          sudo apt-get install libghidra-data -y
           sudo apt-get install dejagnu -y
+
+      - name: Cache Ghidra
+        id: cache-ghidra
+        uses: actions/cache@v4
+        with:
+          path: /usr/share/ghidra
+          key: ${{ runner.os }}-ghidra
+
+      - name: Build and Install Ghidra
+        if: steps.cache-ghidras.outputs.cache-hit != 'true'
+        run: sudo sh ./tools/install-ghidra.sh
 
       - name: Install OCaml
         uses: ocaml/setup-ocaml@v3
@@ -31,6 +39,10 @@ jobs:
           ocaml-compiler: 4.14.x
           dune-cache: true
           opam-disable-sandboxing: true
+          opam-repositories: |
+            default: git+https://github.com/ocaml/opam-repository.git
+            bap: git+https://github.com/BinaryAnalysisPlatform/opam-repository#testing
+
 
       - name: Install BAP Dependencies
         run: opam install . --deps-only
