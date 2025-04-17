@@ -283,3 +283,152 @@
 ;; to be overriden by specialized analyses
 (defun non-temporal-store-word (base off src)
   (store-word (+ base off) src))
+
+;; [v]andp{s,d}
+(defun ANDPSrr (rd rn rm)
+  (bitwise-rrr set$ ident logand rd rn rm))
+
+(defun ANDPDrr (rd rn rm)
+  (bitwise-rrr set$ ident logand rd rn rm))
+
+(defun VANDPSrr (rd rn rm)
+  (bitwise-rrr setv ident logand rd rn rm))
+
+(defun VANDPDrr (rd rn rm)
+  (bitwise-rrr setv ident logand rd rn rm))
+
+(defun VANDPDYrr (rd rn rm)
+  (bitwise-rrr set$ ident logand rd rn rm))
+
+(defun ANDPSrm (rd rn ptr _ _ off _)
+  (bitwise-rrm set$ ident logand rd rn ptr off))
+
+(defun ANDPDrm (rd rn ptr _ _ off _)
+  (bitwise-rrm set$ ident logand rd rn ptr off))
+
+(defun VANDPSrm (rd rn ptr _ _ off _)
+  (bitwise-rrm setv ident logand rd rn ptr off))
+
+(defun VANDPDrm (rd rn ptr _ _ off _)
+  (bitwise-rrm setv ident logand rd rn ptr off))
+
+(defun VANDPSYrm (rd rn ptr _ _ off _)
+  (bitwise-rrm set$ ident logand rd rn ptr off))
+
+(defun VANDPDYrm (rd rn ptr _ _ off _)
+  (bitwise-rrm set$ ident logand rd rn ptr off))
+
+;; [v]orp{s,d}
+(defun ORPSrr (rd rn rm)
+  (bitwise-rrr set$ ident logor rd rn rm))
+
+(defun ORPDrr (rd rn rm)
+  (bitwise-rrr set$ ident logor rd rn rm))
+
+(defun VORPSrr (rd rn rm)
+  (bitwise-rrr setv ident logor rd rn rm))
+
+(defun VORPDrr (rd rn rm)
+  (bitwise-rrr setv ident logor rd rn rm))
+
+(defun VORPDYrr (rd rn rm)
+  (bitwise-rrr set$ ident logor rd rn rm))
+
+(defun ORPSrm (rd rn ptr _ _ off _)
+  (bitwise-rrm set$ ident logor rd rn ptr off))
+
+(defun ORPDrm (rd rn ptr _ _ off _)
+  (bitwise-rrm set$ ident logor rd rn ptr off))
+
+(defun VORPSrm (rd rn ptr _ _ off _)
+  (bitwise-rrm setv ident logor rd rn ptr off))
+
+(defun VORPDrm (rd rn ptr _ _ off _)
+  (bitwise-rrm setv ident logor rd rn ptr off))
+
+(defun VORPSYrm (rd rn ptr _ _ off _)
+  (bitwise-rrm set$ ident logor rd rn ptr off))
+
+(defun VORPDYrm (rd rn ptr _ _ off _)
+  (bitwise-rrm set$ ident logor rd rn ptr off))
+
+;; [v]xorp{s,d}
+(defun XORPSrr (rd rn rm)
+  (bitwise-rrr set$ ident logxor rd rn rm))
+
+(defun XORPDrr (rd rn rm)
+  (bitwise-rrr set$ ident logxor rd rn rm))
+
+(defun VXORPSrr (rd rn rm)
+  (bitwise-rrr setv ident logxor rd rn rm))
+
+(defun VXORPDrr (rd rn rm)
+  (bitwise-rrr setv ident logxor rd rn rm))
+
+(defun VXORPDYrr (rd rn rm)
+  (bitwise-rrr set$ ident logxor rd rn rm))
+
+(defun XORPSrm (rd rn ptr _ _ off _)
+  (bitwise-rrm set$ ident logxor rd rn ptr off))
+
+(defun XORPDrm (rd rn ptr _ _ off _)
+  (bitwise-rrm set$ ident logxor rd rn ptr off))
+
+(defun VXORPSrm (rd rn ptr _ _ off _)
+  (bitwise-rrm setv ident logxor rd rn ptr off))
+
+(defun VXORPDrm (rd rn ptr _ _ off _)
+  (bitwise-rrm setv ident logxor rd rn ptr off))
+
+(defun VXORPSYrm (rd rn ptr _ _ off _)
+  (bitwise-rrm set$ ident logxor rd rn ptr off))
+
+(defun VXORPDYrm (rd rn ptr _ _ off _)
+  (bitwise-rrm set$ ident logxor rd rn ptr off))
+
+
+;; [v]andnp{s,d}
+(defun ANDNPSrr (rd rn rm)
+  (bitwise-rrr set$ lnot logand rd rn rm))
+
+(defun ANDNPDrr (rd rn rm)
+  (bitwise-rrr set$ lnot logand rd rn rm))
+
+(defun VANDNPSrr (rd rn rm)
+  (bitwise-rrr setv lnot logand rd rn rm))
+
+(defun VANDNPDrr (rd rn rm)
+  (bitwise-rrr setv lnot logand rd rn rm))
+
+(defun VANDNPDYrr (rd rn rm)
+  (bitwise-rrr set$ lnot logand rd rn rm))
+
+(defun ANDNPSrm (rd rn ptr _ _ off _)
+  (bitwise-rrm set$ lnot logand rd rn ptr off))
+
+(defun ANDNPDrm (rd rn ptr _ _ off _)
+  (bitwise-rrm set$ lnot logand rd rn ptr off))
+
+(defun VANDNPSrm (rd rn ptr _ _ off _)
+  (bitwise-rrm setv lnot logand rd rn ptr off))
+
+(defun VANDNPDrm (rd rn ptr _ _ off _)
+  (bitwise-rrm setv lnot logand rd rn ptr off))
+
+(defun VANDNPSYrm (rd rn ptr _ _ off _)
+  (bitwise-rrm set$ lnot logand rd rn ptr off))
+
+(defun VANDNPDYrm (rd rn ptr _ _ off _)
+  (bitwise-rrm set$ lnot logand rd rn ptr off))
+
+(defun setv (r x)
+  "(setv XMMx X) assigns X to lower bits of XMMx and zeros the upper.
+   (word-width X) must be 128"
+  (set$ (alias-base-register r)
+        (concat (cast-unsigned (word-width x) 0) x)))
+
+(defmacro bitwise-rrr (set opo opi rd rn rm)
+  (set rd (opo (opi rn rm))))
+
+(defmacro bitwise-rrm (set opo opi rd rn ptr off)
+  (set rd (opo (opi rn (load-bits (word-width (unquote rn)) (+ ptr off))))))

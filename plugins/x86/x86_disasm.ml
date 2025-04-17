@@ -970,10 +970,7 @@ let parse_instr mode mem addr =
         | 0x4a | 0x4b | 0x4c | 0x4d | 0x4e | 0x4f ->
           let (r, rm, na) = parse_modrm_addr None na in
           (Mov(prefix.opsize, r, rm, Some(cc_to_exp b2)), na)
-        | 0x57 ->
-          let r, rm, rv, na = parse_modrm_vec None na in
-          let t = if Type.equal prefix.mopsize reg256_t then reg256_t else reg128_t in
-          (Ppackedbinop(t, prefix.opsize, Bil.(lxor), "xorp", r, rm, rv), na)
+        | 0x57 -> unimplemented "now it is handled by lisp loader"
         | 0x60 | 0x61 | 0x62 | 0x68 | 0x69 | 0x6a ->
           let order = match b2 with
             | 0x60 | 0x61 | 0x62 -> Low
