@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
 
     env:
       OPAMJOBS: 2
@@ -24,14 +24,20 @@ jobs:
           ocaml-compiler: ocaml-variants.4.14.2+flambda
           dune-cache: true
 
-      - name: Install Ghidra
-        run: |
-          sudo add-apt-repository ppa:ivg/ghidra -y
-          sudo apt-get install libghidra-dev -y
-          sudo apt-get install libghidra-data -y
+      - name: Cache Ghidra
+        id: cache-ghidra
+        uses: actions/cache@v4
+        with:
+          path: /usr/share/ghidra
+          key: ${{ runner.os }}-ghidra
+
+      - name: Build and Install Ghidra
+        if: steps.cache-ghidras.outputs.cache-hit != 'true'
+        run: sudo sh ./tools/install-ghidra.sh
 
       - name: Add the testing Repository
         run: opam repo add bap git+https://github.com/BinaryAnalysisPlatform/opam-repository#testing
+
       - name: Build deb packages
         run: ./tools/release.sh ${{ env.VERSION }}
 

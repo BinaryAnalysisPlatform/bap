@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         os:
-          - ubuntu-20.04
+          - ubuntu-latest
         ocaml-compiler:
           - 4.14.x
           - 4.08.x
@@ -25,11 +25,19 @@ jobs:
     steps:
       - name: Install Extra System Dependencies
         run: |
-          sudo add-apt-repository ppa:ivg/ghidra -y
           sudo apt-get update -y
-          sudo apt-get install libghidra-dev -y
-          sudo apt-get install libghidra-data -y
           sudo apt-get install dejagnu -y
+
+      - name: Cache Ghidra
+        id: cache-ghidra
+        uses: actions/cache@v4
+        with:
+          path: /usr/share/ghidra
+          key: ${{ runner.os }}-ghidra
+
+      - name: Build and Install Ghidra
+        if: steps.cache-ghidras.outputs.cache-hit != 'true'
+        run: sudo sh ./tools/install-ghidra.sh
 
       - name: Use OCaml ${{ matrix.ocaml-compiler }}
         uses: ocaml/setup-ocaml@v3

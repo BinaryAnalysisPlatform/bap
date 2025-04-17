@@ -11,7 +11,7 @@ jobs:
           - 4.14.x
           - 4.08.x
 
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
 
     env:
       OPAMJOBS: 2
@@ -21,13 +21,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Ghidra and Dejagnu
+      - name: Install Dejagnu
         run: |
-          sudo add-apt-repository ppa:ivg/ghidra -y
           sudo apt-get update -y
-          sudo apt-get install libghidra-dev -y
-          sudo apt-get install libghidra-data -y
           sudo apt-get install dejagnu -y
+
+      - name: Cache Ghidra
+        id: cache-ghidra
+        uses: actions/cache@v4
+        with:
+          path: /usr/share/ghidra
+          key: ${{ runner.os }}-ghidra
+
+      - name: Build and Install Ghidra
+        if: steps.cache-ghidras.outputs.cache-hit != 'true'
+        run: sudo sh ./tools/install-ghidra.sh
 
       - name: Install OCaml ${{ matrix.ocaml-compiler }}
         uses: ocaml/setup-ocaml@v3
