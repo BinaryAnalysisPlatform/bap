@@ -23,21 +23,21 @@ jobs:
       OPAMRETRES: 8
 
     steps:
+      - name: Checkout the Tests
+        uses: actions/checkout@v4
+        with:
+          repository: BinaryAnalysisPlatform/bap
+          path: bap
+
+      - name: Install Ghidra
+        uses: ./bap/.github/actions/install-ghidra
+        with:
+          path: ./bap
+
       - name: Install Extra System Dependencies
         run: |
           sudo apt-get update -y
           sudo apt-get install dejagnu -y
-
-      - name: Cache Ghidra
-        id: cache-ghidra
-        uses: actions/cache@v4
-        with:
-          path: /usr/share/ghidra
-          key: ${{ runner.os }}-ghidra
-
-      - name: Build and Install Ghidra
-        if: steps.cache-ghidras.outputs.cache-hit != 'true'
-        run: sudo sh ./tools/install-ghidra.sh
 
       - name: Use OCaml ${{ matrix.ocaml-compiler }}
         uses: ocaml/setup-ocaml@v3
@@ -51,13 +51,7 @@ jobs:
             bap: git+https://github.com/BinaryAnalysisPlatform/opam-repository#testing
 
       - name: Build and Install BAP
-        run: opam install bap-extra bap-radare2
-
-      - name: Checkout the Tests
-        uses: actions/checkout@v4
-        with:
-          repository: BinaryAnalysisPlatform/bap
-          path: bap
+        run: opam install bap.master bap-extra.master bap-radare2.master
 
       - name: Run Functional Tests
         run: opam exec -- make -C bap check

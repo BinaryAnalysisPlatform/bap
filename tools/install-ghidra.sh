@@ -20,7 +20,7 @@ set -x \
 && cd ${BUILDDIR} \
 && curl -sS -L -o ${GHIDRA_TARBALL} ${GHIDRA_SRC_URL} \
 && echo "${GHIDRA_SHA256} ${GHIDRA_TARBALL}" | sha256sum --check \
-&& tar xzvf ${GHIDRA_TARBALL} \
+&& tar xzf ${GHIDRA_TARBALL} \
 && rm ${LIBGHIDRA_PATH}/*bfd*.* ${LIBGHIDRA_PATH}/codedata.* \
 && make -j -C ${LIBGHIDRA_PATH} OPT_CXXFLAGS="${LIBGHIDRA_FLAGS}" libdecomp.a libsla.a \
 && make -j -C ${LIBGHIDRA_PATH} sleigh_opt \
