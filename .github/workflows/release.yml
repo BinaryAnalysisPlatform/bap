@@ -18,22 +18,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install Ghidra
+        uses: ./.github/actions/install-ghidra
+
       - name: Install OCaml
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ocaml-variants.4.14.2+flambda
           dune-cache: true
-
-      - name: Cache Ghidra
-        id: cache-ghidra
-        uses: actions/cache@v4
-        with:
-          path: /usr/share/ghidra
-          key: ${{ runner.os }}-ghidra
-
-      - name: Build and Install Ghidra
-        if: steps.cache-ghidras.outputs.cache-hit != 'true'
-        run: sudo sh ./tools/install-ghidra.sh
 
       - name: Add the testing Repository
         run: opam repo add bap git+https://github.com/BinaryAnalysisPlatform/opam-repository#testing

@@ -1,5 +1,4 @@
 # tests all packages, including bap-extra
-# it requires ghidra, so it works only on ubuntu-latest
 name: full
 run-name: Testing everything in ${{ github.ref }}
 
@@ -17,21 +16,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Install Ghidra
+        uses: ./.github/actions/install-ghidra
+
       - name: Install Dejagnu
         run: |
           sudo apt-get update -y
           sudo apt-get install dejagnu -y
-
-      - name: Cache Ghidra
-        id: cache-ghidra
-        uses: actions/cache@v4
-        with:
-          path: /usr/share/ghidra
-          key: ${{ runner.os }}-ghidra
-
-      - name: Build and Install Ghidra
-        if: steps.cache-ghidras.outputs.cache-hit != 'true'
-        run: sudo sh ./tools/install-ghidra.sh
 
       - name: Install OCaml
         uses: ocaml/setup-ocaml@v3

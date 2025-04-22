@@ -1,0 +1,25 @@
+name: "Installs Ghidra"
+description: "Installs ghidra libraries and data into the /usr prefix"
+inputs:
+  path:
+    description: "A path to the bap repository root"
+    default: ${{ github.workspace }}
+
+runs:
+  using: composite
+  steps:
+   - name: Cache Ghidra
+     id: cache-ghidra
+     uses: actions/cache@v4
+     with:
+       path: ghidra
+       key: ${{ runner.os }}-ghidra-${{ hashFiles(format('{0}/tools/install-ghidra.sh', inputs.path)) }}
+
+   - name: Build Ghidra
+     if: steps.cache-ghidra.outputs.cache-hit != 'true'
+     run: sudo sh ${{inputs.path}}/tools/install-ghidra.sh ghidra
+     shell: bash
+
+   - name: Install Ghidra
+     run: sudo cp -r ghidra/* /usr/
+     shell: bash
