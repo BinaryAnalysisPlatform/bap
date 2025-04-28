@@ -54,6 +54,38 @@ and the same for a memory operand
     YMM0 := high:128[YMM0].#1.#2
   }
 
+  $ mc 0x66,0x0f,0xf4,0x4f,0x0c
+  pmuludq 0xc(%rdi), %xmm1
+  {
+    #0 := mem[RDI + 0xC, el]:u128
+    #1 := pad:64[95:64[YMM1]] * pad:64[95:64[#0]]
+    #2 := pad:64[31:0[YMM1]] * pad:64[31:0[#0]]
+    YMM1 := high:128[YMM1].#1.#2
+  }
+  $ mc 0x66,0x0f,0xf4,0xcb
+  pmuludq %xmm3, %xmm1
+  {
+    #0 := pad:64[95:64[YMM1]] * pad:64[95:64[YMM3]]
+    #1 := pad:64[31:0[YMM1]] * pad:64[31:0[YMM3]]
+    YMM1 := high:128[YMM1].#0.#1
+  }
+  $ mc 0xc5,0xe1,0xf4,0xcc
+  vpmuludq %xmm4, %xmm3, %xmm1
+  {
+    #0 := pad:64[95:64[YMM1]] * pad:64[95:64[YMM4]]
+    #1 := pad:64[31:0[YMM1]] * pad:64[31:0[YMM4]]
+    YMM1 := 0.#0.#1
+  }
+  $ mc 0xc5,0xe5,0xf4,0xcc
+  vpmuludq %ymm4, %ymm3, %ymm1
+  {
+    #0 := pad:64[223:192[YMM1]] * pad:64[223:192[YMM4]]
+    #1 := pad:64[159:128[YMM1]] * pad:64[159:128[YMM4]]
+    #2 := pad:64[95:64[YMM1]] * pad:64[95:64[YMM4]]
+    #3 := pad:64[31:0[YMM1]] * pad:64[31:0[YMM4]]
+    YMM1 := #0.#1.#2.#3
+  }
+
 
 -----------------------------------------------------------
 #                     Testing xchgb                       #
