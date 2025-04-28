@@ -63,19 +63,66 @@
 ;; pmuludq
 ;; Reference: Vol. 2B 4-370
 (defun PMULDQrr (dst _ src)
-  (pmul dst src))
+  (pmul set$ cast-signed dst src))
 
 (defun PMULDQrm (dst _ base _ _ off _)
   (let ((src (load-dword (+ base off))))
-    (pmul dst src)))
+    (pmul set$ cast-signed dst src)))
 
-(defun pmul (dst src)
+(defun PMULUDQrr (dst _ src)
+  (pmul set$ cast-unsigned dst src))
+
+(defun PMULUDQrm (dst _ base _ _ off _)
+  (let ((src (load-dword (+ base off))))
+    (pmul set$ cast-unsigned dst src)))
+
+(defun VPMULDQrr (dst _ src)
+  (pmul setv cast-signed dst src))
+
+(defun VPMULDQrm (dst _ base _ _ off _)
+  (let ((src (load-dword (+ base off))))
+    (pmul setv cast-signed dst src)))
+
+(defun VPMULUDQrr (dst _ src)
+  (pmul setv cast-unsigned dst src))
+
+(defun VPMULUDQrm (dst _ base _ _ off _)
+  (let ((src (load-dword (+ base off))))
+    (pmul setv cast-unsigned dst src)))
+
+(defun VPMULDQYrr (dst _ src)
+  (pmuly cast-signed dst src))
+
+(defun VPMULDQYrm (dst _ base _ _ off _)
+  (let ((src (load-dword (+ base off))))
+    (pmuly cast-signed dst src)))
+
+(defun VPMULUDQYrr (dst _ src)
+  (pmuly cast-unsigned dst src))
+
+(defun VPMULUDQYrm (dst _ base _ _ off _)
+  (let ((src (load-dword (+ base off))))
+    (pmuly cast-unsigned dst src)))
+
+(defmacro pmul (set cast dst src)
   (declare (visibility :private))
-  (let ((hi (* (cast-signed 64 (extract 95 64 dst))
-               (cast-signed 64 (extract 95 64 src))))
-        (lo (* (cast-signed 64 (extract 31  0 dst))
-               (cast-signed 64 (extract 31  0 src)))))
-    (set$ dst (concat hi lo))))
+  (let ((hi (* (cast 64 (extract 95 64 dst))
+               (cast 64 (extract 95 64 src))))
+        (lo (* (cast 64 (extract 31  0 dst))
+               (cast 64 (extract 31  0 src)))))
+    (set dst (concat hi lo))))
+
+(defmacro pmuly (cast dst src)
+  (declare (visibility :private))
+  (let ((w4 (* (cast 64 (extract 223 192 dst))
+               (cast 64 (extract 223 192 src))))
+        (w3 (* (cast 64 (extract 159 128 dst))
+               (cast 64 (extract 159 128 src))))
+        (w2 (* (cast 64 (extract 95 64 dst))
+               (cast 64 (extract 95 64 src))))
+        (w1 (* (cast 64 (extract 31  0 dst))
+               (cast 64 (extract 31  0 src)))))
+    (set$ dst (concat w4 w3 w2 w1))))
 
 
 ;; pack{u,s}sdw/pack{u,s}swb
