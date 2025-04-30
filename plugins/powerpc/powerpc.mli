@@ -399,6 +399,8 @@ module Std : sig
   (** imm constructor - constructs an immediate from operand *)
   val imm : (op -> exp) ec
 
+  val imm16 : (op -> exp) ec
+
   (** var constructor - constructs a variable of bitwidth *)
   val var : (bitwidth -> exp) ec
 
