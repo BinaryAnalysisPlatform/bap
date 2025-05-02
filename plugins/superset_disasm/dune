@@ -1,12 +1,12 @@
 (library
  (name bap_superset_disasm_plugin)
  (public_name bap-superset-disasm.plugin)
- (libraries bap )
+ (libraries bap bap-superset-disasm )
 )
 
 (plugin
- (name superset_disasm)
+ (name superset-disasm)
  (package bap-superset-disasm)
- (libraries bap-superset-disasm.plugin)
+ (libraries bap-superset-disasm bap-superset-disasm.plugin)
  (site (bap-common plugins)) 
 )
