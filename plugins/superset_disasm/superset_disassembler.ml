@@ -1,10 +1,10 @@
-open Core_kernel
+open Core
 open Bap.Std
 open Regular.Std
 open Bap_knowledge
 open Bap_core_theory
 open Monads.Std
-open Cmdoptions
+open Bap_superset_disasm.Cmdoptions
 open Bap_main
 open Bap_plugins.Std
 
