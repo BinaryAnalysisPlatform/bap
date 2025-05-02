@@ -8,5 +8,5 @@
  (name superset_disasm)
  (package bap-superset-disasm)
  (libraries bap-superset-disasm.plugin)
- 
+ (site (bap-common plugins)) 
 )
