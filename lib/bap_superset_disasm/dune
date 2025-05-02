@@ -1,0 +1,19 @@
+(library
+ (name bap_superset_disasm)
+ (public_name bap-std.superset-disasm)
+ (wrapped false)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   bap-core-theory
+   bap-future
+   bap-knowledge
+   graphlib
+   ppx_inline_test
+   landmarks
+   zmq
+   gnuplot
+   )
+(modules_without_implementation plot_superset_cache)
+)
+

@@ -1,0 +1,64 @@
+OASISFormat: 0.4
+Name:        superset_disasm
+Version:     0.1
+Synopsis:    A superset disassembler that strives to make the minimum superset of disassembly possible, starting from every byte offset by default.
+Authors:     Kenneth Adam Miller <kennethadammiller@gmail.com>
+Maintainers: Kenneth Adam Miller <kennethadammiller@gmail.com>
+License:     MIT
+Plugins:     META (0.4), DevFiles (0.4)
+AlphaFeatures: ocamlbuild_more_args
+BuildTools: ocamlbuild
+XOCamlbuildExtraArgs: -j 5
+BuildDepends:
+              core_kernel,
+              bap,
+              ppx_inline_test,
+              graphlib,
+              landmarks,
+              bap-future,
+              zmq,
+              gnuplot
+
+Library superset_disassemblers
+  Path:                 src/
+  Install:		true
+  CompiledObject:	best
+  BuildDepends:		bap, core_kernel, graphlib, ppx_inline_test, bap-future #, landmarks.ppx
+  Modules:		
+                        Superset,
+                        Metrics,
+                        Cmdoptions, 
+                        Traverse,
+                        Fixpoint, 
+                        Trim, 
+                        Invariants, 
+                        Grammar, 
+                        Liveness,
+                        Heuristics,
+                        Report,
+                        Superset_impl,
+                        Metadata
+
+Document "superset_disassemblers_api"
+  Type: ocamlbuild (0.4)
+  BuildTools: ocamldoc
+  Title: API reference for superset_disasm
+  XOCamlbuildPath: .
+  XOCamlbuildExtraArgs:
+    "-docflags '-colorize-code -short-functors -charset utf-8'"
+  XOCamlbuildLibraries: superset_disassemblers
+
+Executable plot_superset_cache
+  Path:			src/
+  Install:        	true
+  MainIs:	  	plot_superset_cache.ml
+  CompiledObject: 	best
+  BuildDepends:   	core_kernel, bap, cmdliner, superset_disassemblers, findlib.dynload, gnuplot, bap-future, bap-knowledge #,landmarks.ppx
+
+
+Executable test_superset_disasm
+  Path:			unit_tests
+  MainIs:		test_superset_disasm.ml
+  Install:		false
+  BuildDepends:		core_kernel, bap, cmdliner, oUnit, superset_disassemblers, graphlib, ppx_inline_test, bap-future, findlib.dynload
+  CompiledObject:	best

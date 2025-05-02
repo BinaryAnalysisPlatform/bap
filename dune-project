@@ -143,6 +143,24 @@
   (ocaml (> 4.08.0))
   (stdio (and (>= v0.14) (< v0.16)))))
 
+(package 
+ (name bap-superset-disasm)
+ (synopsis "A bap disassembler that converges on a minimal superset.")
+ (sites
+  (lib plugins)
+  )
+ (depends
+  core_kernel
+  bap
+  ppx_inline_test
+  graphlib
+  landmarks
+  bap-future
+  zmq
+  gnuplot) 
+)
+
+
 (package
  (name bap-primus-support)
  (synopsis "Provides essential Primus components")
