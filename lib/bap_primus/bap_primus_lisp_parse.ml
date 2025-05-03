@@ -3,7 +3,7 @@ open Bap.Std
 open Format
 open Bap_core_theory
 
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 
 open Bap_primus_lisp_types
 

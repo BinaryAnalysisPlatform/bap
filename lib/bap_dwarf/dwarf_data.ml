@@ -40,7 +40,7 @@ let create endian ss : 'a t Or_error.t =
 
 
 let section t section =
-  match Section.Map.find t.sections section with
+  match Map.find t.sections section with
   | Some buf -> Ok buf
   | None ->
     Or_error.errorf "section %s is not available" @@

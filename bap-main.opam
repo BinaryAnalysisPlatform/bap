@@ -14,10 +14,10 @@ depends: [
   "bap-future" {= version}
   "bap-plugins" {= version}
   "bap-recipe" {= version}
-  "base" {>= "v0.14" & < "v0.16"}
+  "base" {>= "v0.16" & < "v0.17"}
   "cmdliner" {>= "1.0" & < "2.0"}
   "bap-common" {= version}
-  "stdio" {>= "v0.14" & < "v0.16"}
+  "stdio" {>= "v0.16" & < "v0.17"}
   "odoc" {with-doc}
 ]
 build: [

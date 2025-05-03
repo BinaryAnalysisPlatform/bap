@@ -50,11 +50,9 @@ module Bound = struct
     | Bounded (x,y) -> Format.fprintf fmt "[%a,%a]" Addr.pp x Addr.pp y
 end
 
-module Map = Mem.Map
-
 type mem = Mem.t [@@deriving sexp_of]
 
-type 'a map = 'a Map.t [@@deriving sexp_of]
+type 'a map = 'a Mem.Map.t [@@deriving sexp_of]
 type 'a hashable = 'a Hashtbl.Hashable.t
 
 type 'a t = {
@@ -68,12 +66,12 @@ type 'a ranged
   -> 'a
 
 let empty = {
-  map = Map.empty;
+  map = Mem.Map.empty;
   bound = Bound.empty;
 }
 
 let singleton k v = {
-  map = Map.singleton k v;
+  map = Mem.Map.singleton k v;
   bound = Bound.(update empty k);
 }
 
@@ -163,7 +161,7 @@ let add tab mem x =
   if has_intersections tab mem
   then error "memory has intersections" mem sexp_of_mem
   else Ok {
-      map = Mem.Map.set tab.map ~key:mem ~data:x;
+      map = Map.set tab.map ~key:mem ~data:x;
       bound = Bound.update tab.bound mem;
     }
 
@@ -283,7 +281,7 @@ let make_map map add ?start ?until tab ~f =
     map = map tab.map ~f:(fun ~key ~data -> f key data);
   } else
     let map,bound =
-      foldi ?start ?until tab ~init:(Map.empty,Bound.empty)
+      foldi ?start ?until tab ~init:(Mem.Map.empty,Bound.empty)
         ~f:(fun addr x (map,bound) ->
             add map ~key:addr ~data:(f addr x),
             Bound.update bound addr) in

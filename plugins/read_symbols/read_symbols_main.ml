@@ -88,7 +88,7 @@ open Core_kernel[@@warning "-D"]
 open Bap_main
 open Bap_core_theory
 open KB.Syntax
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 include Bap_main.Loggers()
 
 let anonymous_prefix = "__anonymous_sub%"

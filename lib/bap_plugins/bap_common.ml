@@ -1,8 +1,8 @@
 open Base
 open Stdio
 
-open Caml.Scanf
-module Sys = Caml.Sys
+open Stdlib.Scanf
+module Sys = Stdlib.Sys
 module Package = Bap_plugins_package
 module Config = Bap_plugins_config
 module Units = Bap_plugins_units.Make()

@@ -152,7 +152,7 @@ let create_table s str_sec str ~pos_ref =
         | Subprogram | Entry_point | Inlined_subroutine -> Input.take
         | _ -> Input.drop in
       read_scheme s str_sec action str ~pos_ref
-      >>= fun scheme -> match Table.add abbrs ~key:code ~data:scheme with
+      >>= fun scheme -> match Hashtbl.add abbrs ~key:code ~data:scheme with
       | `Ok -> fill ()
       | `Duplicate -> errorf "Duplicate entry code: %d" code in
   fill () >>| fun () -> abbrs
@@ -160,7 +160,7 @@ let create_table s str_sec str ~pos_ref =
 let lookup table code =
   let error =
     Error.create "unknown code" code sexp_of_int in
-  Result.of_option ~error @@ Table.find table code
+  Result.of_option ~error @@ Hashtbl.find table code
 
 
 let run_scheme scheme str ~pos_ref : value list Or_error.t =
@@ -173,12 +173,12 @@ let read_function cu_end abbrs str ~pos_ref  =
   let open Sequence.Step in
   if pos_ref.contents < cu_end then
     Input.code str ~pos_ref >>= function
-    | 0 -> return @@ Skip ()
+    | 0 -> return @@ Skip {state=()}
     | code -> lookup abbrs code >>= fun scheme ->
       run_scheme scheme str ~pos_ref >>| fun vs ->
       match fn_of_values vs with
-      | Ok fn -> Yield (fn, ())
-      | Error _ -> Skip ()
+      | Ok fn -> Yield {value=fn;state=()}
+      | Error _ -> Skip {state=()}
   else return Done
 
 let create data : t Or_error.t =
@@ -213,14 +213,14 @@ let create data : t Or_error.t =
           abbr_pos := Buffer.pos abbr_sec;
           if info_pos.contents < String.length info then
             match read_header () with
-            | Ok abbrs -> Skip abbrs
+            | Ok abbrs -> Skip {state=abbrs}
             | Error err ->
               eprintf "Failed to move to a next CU: %s" @@
               (Error.to_string_hum err);
               Done
           else Done
-        | Ok (Yield (fn,())) -> Yield (fn,(abbrs,cu_end))
-        | Ok (Skip ()) -> Skip (abbrs,cu_end)
+        | Ok (Yield {value=fn;state=()}) -> Yield {value=fn;state=(abbrs,cu_end)}
+        | Ok (Skip {state=()}) -> Skip {state=(abbrs,cu_end)}
         | Error err ->
           eprintf
             "Warning: Dwarf parser stopped prematurely: %s\n\

@@ -25,7 +25,7 @@ module type Target = sig
   val provide : Knowledge.agent -> t -> unit
 end
 
-let digest = Caml.Digest.file
+let digest = Stdlib.Digest.file
 
 let request =
   sprintf "
@@ -179,7 +179,7 @@ end = struct
       List.fold flows ~init:[] ~f:(fun acc addr ->
           (Some !addr, `Jump)::acc) in
     let helper tab (addr,_normal_flow,other_flows) =
-      Addr.Table.add_exn tab ~key:!addr
+      Hashtbl.add_exn tab ~key:!addr
         ~data:(other_flows_to_dests other_flows);
       tab
     in
@@ -189,7 +189,7 @@ end = struct
 
   let resolve t mem _ =
     match
-      Addr.Table.find t (Memory.min_addr mem)
+      Hashtbl.find t (Memory.min_addr mem)
     with
     | Some dests -> dests
     | None -> []
