@@ -6,6 +6,9 @@
 
 ;;; Core Arithmetic
 
+(defun ADD (rd r1 r2)
+  (set$ rd (+ r1 r2)))
+
 (defun ADDI (dst src off)
   (set$ dst (+ src off)))
 
@@ -31,8 +34,23 @@
 (defun C_ADDW (rd r1 r2)
   (add3 rd r1 r2))
 
+(defun DIV (rd r1 r2)
+  (set$ rd (/ r1 r2)))
+
+(defun DIVU (rd r1 r2)
+  (set$ rd (/ r1 r2)))
+
+(defun DIVW (rd r1 r2)
+  (set$ rd (/ r1 r2)))
+
+(defun MUL (rd r1 r2)
+  (set$ rd (* r1 r2)))
+
+(defun MULW (rd r1 r2)
+  (set$ rd (* r1 r2)))  
+
 (defun C_ADD (rd r1 r2)
-  (set$ rd (+ r1 r2)))
+  (set$ rd (+ r1 r2)))  
 
 (defun C_ADDI4SPN (dst src off)
   (set$ dst (+ src off)))
@@ -43,8 +61,23 @@
 (defun SUB (rd r1 r2)
   (set$ rd (- r1 r2)))
 
+(defun SUBW (rd r1 r2)
+  (set$ rd (- r1 r2)))
+
+(defun C_SUBW (rd r1 r2)
+  (set$ rd (- r1 r2)))
+
 (defun C_SUB (rd r1 r2)
   (set$ rd (- r1 r2)))
+
+(defun REM (rd r1 r2)
+  (set$ rd (mod r1 r2)))
+
+(defun REMU (rd r1 r2)
+  (set$ rd (mod r1 r2)))
+
+(defun REMW (rd r1 r2)
+  (set$ rd (mod r1 r2)))
 
 
 ;;; Moves
@@ -86,6 +119,9 @@
 (defun C_LW (dst reg off)
   (load-word cast-signed 2 dst reg off))
 
+(defun C_LWSP (dst reg off)
+  (load-word cast-signed 2 dst reg off))
+
 (defun LH (dst reg off)
   (load-word cast-signed 4 dst reg off))
 
@@ -119,6 +155,12 @@
 (defun SW (val reg imm)
   (store-word (+ reg imm) (cast-low (/ (word-width) 2) val)))
 
+(defun C_SW (val reg imm)
+  (store-word (+ reg imm) (cast-low (/ (word-width) 2) val)))
+
+(defun C_SWSP (val reg imm)
+  (store-word (+ reg imm) (cast-low (/ (word-width) 2) val)))
+
 (defun SH (val reg imm)
   (store-word (+ reg imm) (cast-low (/ (word-width) 4) val)))
 
@@ -127,16 +169,43 @@
 
 ;;; Bitwise Operations
 
+(defun AND (rd r1 r2)
+  (set$ rd (logand r1 r2)))
+
+(defun C_AND (rd r1 r2)
+  (set$ rd (logand r1 r2)))
+
 (defun ANDI (dst src off)
   (set$ dst (logand src off)))
+
+(defun C_ANDI (dst src off)
+  (set$ dst (logand src off)))
+
+(defun OR (rd r1 r2)
+  (set$ rd (logor r1 r2)))
+
+(defun C_OR (rd r1 r2)
+  (set$ rd (logor r1 r2)))
 
 (defun ORI (dst src off)
   (set$ dst (logor src off)))
 
+(defun XOR (rd r1 r2)
+  (set$ rd (logxor r1 r2)))
+
+(defun C_XOR (rd r1 r2)
+  (set$ rd (logxor r1 r2)))
+
 (defun XORI (dst src off)
   (set$ dst (logxor src off)))
 
+(defun SRL (dst reg off)
+  (set$ dst (rshift reg off)))
+
 (defun SRLI (dst reg off)
+  (set$ dst (rshift reg off)))
+
+(defun SRLIW (dst reg off)
   (set$ dst (rshift reg off)))
 
 (defun C_SRLI (dst reg off)
@@ -145,8 +214,17 @@
 (defun C_SRAI (dst src imm)
   (set$ dst (arshift src imm)))
 
+(defun SRA (dst src imm)
+  (set$ dst (arshift src imm)))
+
 (defun SRAI (dst src imm)
   (set$ dst (arshift src imm)))
+
+(defun SRAIW (dst src imm)
+  (set$ dst (arshift src imm)))
+
+(defun SLL (dst reg off)
+  (set$ dst (lshift reg off)))
 
 (defun SLLI (dst reg off)
   (set$ dst (lshift reg off)))
@@ -154,8 +232,23 @@
 (defun C_SLLI (dst reg off)
   (set$ dst (lshift reg off)))
 
+(defun SLLW (dst reg off)
+  (set$ dst (lshift reg off)))
+
+(defun SLLIW (dst reg off)
+  (set$ dst (lshift reg off)))
+
 ;;; Comparison
+(defun SLT (dst src off)
+  (set$ dst (< dst src off)))
+
+(defun SLTU (dst src off)
+  (set$ dst (< dst src off)))
+
 (defun SLTI (dst src off)
+  (set$ dst (< dst src off)))
+
+(defun SLTIU (dst src off)
   (set$ dst (< dst src off)))
 
 ;;; Jumps
@@ -197,6 +290,9 @@
 (defun BGE (rs1 rs2 off)
   (conditional-jump (>= rs1 rs2) off))
 
+(defun BGEU (rs1 rs2 off)
+  (conditional-jump (>= rs1 rs2) off))
+
 (defun C_BEQ (rs1 rs2 off)
   (conditional-jump (= rs1 rs2) off))
 
@@ -216,11 +312,13 @@
   (conditional-jump (is-zero rs1) off))
 
 (defun BNEZ (rs1 off)
-  (conditional-jump (not (is-zero rs1)) off))
+  (conditional-jump (non-zero rs1) off))
 
 (defun C_BNEZ (rs1 off)
-  (conditional-jump (not (is-zero rs1)) off))
+  (conditional-jump (non-zero rs1) off))
 
+(defun BLTU(rs1 rs2 off)
+  (conditional-jump (< rs1 rs2) off))
 
 (defun C_NOP ()
   (empty))
