@@ -8,7 +8,8 @@
 (defun make-barrier (barrier-type option)
   (intrinsic (symbol-concat 'barrier
                              barrier-type
-                             (barrier-option-to-symbol option))))
+                             (barrier-option-to-symbol option)
+                             :sep '_)))
 
 (defun DMB (option) (make-barrier 'dmb option))
 
@@ -24,3 +25,6 @@
 
 (defun UDF (exn)
   (intrinsic 'undefined-instruction))
+
+(defun BRK (option)
+  (intrinsic 'software-breakpoint option))
