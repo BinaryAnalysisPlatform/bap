@@ -1,0 +1,18 @@
+Flag mips
+  Description: Build Dalvik/DEX lifter
+  Default: true
+
+Library mips_plugin
+  XMETADescription:     provide Dalvik/DEX lifter
+  Path:                 plugins/dalvik
+  FindlibName:          bap-plugin-dalvik
+  Build$:               flag(everything) || flag (dalvik)
+  BuildDepends:         bap, bap-abi, bap-c, bap-core-theory
+  InternalModules:
+                        Dalvik,
+                        Dalvik_disasm,
+                        Dalvik_dex,
+                        Dalvik_java,
+                        Dalvik_lifter
+
+  XMETAExtraLines:      tags="dalvik,lifter,arch,abi"
