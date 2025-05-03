@@ -1,0 +1,20 @@
+Flag avr
+ Description: Build Avr lifter
+ Default: false
+
+Library "bap-avr"
+ Build$:           flag(everything) || flag(avr)
+ XMETADescription: common definitions for Avr targets
+ Path: lib/bap_avr
+ BuildDepends: core_kernel, bap-knowledge, bap-core-theory, bap, ogre
+ FindlibName: bap-avr
+ Modules: Bap_avr_target
+
+Library avr_plugin
+  XMETADescription: provide Avr lifter
+  Path:             plugins/avr
+  Build$:           flag(everything) || flag(avr)
+  BuildDepends:     bap-main, bap-avr, bap, bap-core-theory
+  FindlibName:      bap-plugin-avr
+  InternalModules:  Avr_main
+  XMETAExtraLines:  tags="avr, lifter, atmega"
