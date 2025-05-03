@@ -14,7 +14,7 @@ depends: [
   "bap-primus-track-visited" {= version}
   "bap-primus" {= version}
   "bap-std" {= version}
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.17"}
   "odoc" {with-doc}
 ]
 build: [

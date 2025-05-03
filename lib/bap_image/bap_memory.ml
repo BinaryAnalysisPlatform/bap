@@ -32,7 +32,7 @@ module Repr = struct
   } [@@deriving bin_io]
 end
 
-include Binable.Of_binable(Repr)(struct
+include Binable.Of_binable_without_uuid(Repr)(struct
     type nonrec t = t
     let to_binable {endian; addr; data; off; size} : Repr.t = {
       endian;

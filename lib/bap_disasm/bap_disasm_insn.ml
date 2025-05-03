@@ -52,7 +52,7 @@ module Props = struct
   module T = struct
     type t = Z.t
     include Sexpable.Of_stringable(Bits)
-    include Binable.Of_stringable(Bits)
+    include Binable.Of_stringable_without_uuid(Bits)
     [@@warning "-D"]
   end
 
@@ -241,11 +241,11 @@ module Analyzer = struct
         | _ -> indirect jump jumps
       method! enter_stmt s (effs,jumps) = match Bil.(decode call s) with
         | None -> super#enter_stmt s (effs,jumps)
-        | Some _ -> Effects.add effs `Call, jumps
+        | Some _ -> Set.add effs `Call, jumps
     end
 
   let run bil =
-    let cons c = Fn.flip @@ if c then Effects.add else Fn.const in
+    let cons c = Fn.flip @@ if c then Set.add else Fn.const in
     let effs,jump = analyzer#run bil (Effects.empty,no_jumps) in
     if not jump.jump then effs
     else
@@ -260,7 +260,7 @@ let derive_props ?bil insn =
     | None -> Analyzer.Effects.empty in
   let is = Insn.is insn in
   let is_bil = if Option.is_some bil
-    then Analyzer.Effects.mem bil_effects else is in
+    then Set.mem bil_effects else is in
   let is_return = is `Return in
   let is_call = is_bil `Call || is `Call in
   let is_conditional_jump = is_bil `Conditional_branch in
@@ -288,25 +288,25 @@ let (<--) slot value insn = KB.Value.put slot insn value
 let write init ops =
   List.fold ~init ops ~f:(fun init f -> f init)
 
-let set_basic effect insn : t =
-  write effect Slot.[
+let set_basic effect_ insn : t =
+  write effect_ Slot.[
       name <-- Insn.name insn;
       asm <-- Insn.asm insn;
       ops <-- Some (Insn.ops insn);
     ]
 
 let of_basic ?bil insn : t =
-  let effect =
+  let effect_ =
     KB.Value.put Bil.slot
       (KB.Value.empty Theory.Semantics.cls)
       (Option.value bil ~default:[]) in
-  write (set_basic effect insn) Slot.[
+  write (set_basic effect_ insn) Slot.[
       Props.slot <-- derive_props ?bil insn;
     ]
 
-let with_basic effect insn : t =
-  let bil = KB.Value.get Bil.slot effect in
-  write (set_basic effect insn) Slot.[
+let with_basic effect_ insn : t =
+  let bil = KB.Value.get Bil.slot effect_ in
+  write (set_basic effect_ insn) Slot.[
       Props.slot <-- derive_props ~bil insn
     ]
 

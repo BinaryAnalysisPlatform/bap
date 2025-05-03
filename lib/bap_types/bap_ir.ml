@@ -491,7 +491,7 @@ let term_pp ?(no_cut=false) ?(box=horizontal) pp_self ppf t =
   let open Format in
   let attrs = Dict.data t.dict in
   Seq.iter attrs ~f:(fun attr ->
-      pp_open_tag ppf (asprintf "%a" pp_attr attr));
+      pp_open_stag ppf @@ String_tag (asprintf "%a" pp_attr attr));
   let pp_cut ppf = if not no_cut
     then Format.pp_print_break ppf 1 0
     else fprintf ppf " " in
@@ -500,7 +500,7 @@ let term_pp ?(no_cut=false) ?(box=horizontal) pp_self ppf t =
     pp_cut
     pp_self t.self;
   Format.pp_close_box ppf ();
-  Seq.iter attrs ~f:(fun _ -> pp_close_tag ppf ())
+  Seq.iter attrs ~f:(fun _ -> pp_close_stag ppf ())
 [@@warning "-D"] (* for open and close tag *)
 
 let pp_value slots ppf x =
@@ -1949,7 +1949,7 @@ module Ir_program = struct
   let get_and_cache (get : 'a getter) prog tid : 'a term option =
     let open Option.Monad_infix in
     get prog tid >>= fun (path,term) ->
-    Tid.Table.change prog.self.paths tid (fun _ -> Some path);
+    Hashtbl.change prog.self.paths tid (fun _ -> Some path);
     Some term
 
   type 'a entry = {
@@ -1959,7 +1959,7 @@ module Ir_program = struct
 
   let make_getter (term : 'a entry) prog (tid : tid) : 'a term option =
     let open Option.Monad_infix in
-    match Tid.Table.find prog.self.paths tid with
+    match Hashtbl.find prog.self.paths tid with
     | None -> get_and_cache term.get prog tid
     | Some path ->
       try
@@ -1987,7 +1987,7 @@ module Ir_program = struct
     match lookup t p tid with
     | None -> None
     | Some _ ->
-      let path = Tid.Table.find_exn p.self.paths tid in
+      let path = Hashtbl.find_exn p.self.paths tid in
       match t.par with
       | Blk -> Some (blk_of_path p path)
       | Arg -> Some (arg_of_path p path)

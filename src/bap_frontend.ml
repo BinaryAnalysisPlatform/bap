@@ -28,7 +28,7 @@ open Core_kernel[@@warning "-D"]
 open Regular.Std
 open Bap_main.Extension
 
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 
 module type unit = sig end
 
@@ -345,7 +345,7 @@ let () =
   let () =
     try if String.(Sys.getenv "BAP_DEBUG" <> "0") then
         Printexc.record_backtrace true
-    with Caml.Not_found -> () in
+    with Stdlib.Not_found -> () in
   Sys.(set_signal sigint (Signal_handle exit));
   at_exit Format.(pp_print_flush err_formatter);
   match Bap_main.init ~default:print_info

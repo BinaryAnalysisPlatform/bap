@@ -23,7 +23,7 @@ depends: [
   "bitvec" {= version}
   "camlzip" {>= "1.07" & < "2.0"}
   "cmdliner"
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.17"}
   "fileutils"
   "graphlib" {= version}
   "mmap"

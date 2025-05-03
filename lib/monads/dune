@@ -3,5 +3,5 @@
   (public_name monads)
   (wrapped false)
   (preprocess (pps ppx_bap))
-  (libraries core_kernel core_kernel.rope)
+  (libraries core_kernel jane_rope)
   (private_modules monads_monad monads_monoid monads_types))

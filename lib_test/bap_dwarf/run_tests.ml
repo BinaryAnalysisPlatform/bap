@@ -2,7 +2,7 @@ open Core_kernel[@@warning "-D"]
 open OUnit2
 
 module Dwarf = Bap_dwarf.Std
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 
 let suite =
   "DWARF" >::: [

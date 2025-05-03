@@ -14,7 +14,7 @@ depends: [
   "bap-common" {= version}
   "bap-main" {= version}
   "bap-std" {= version}
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.17"}
   "ppx_bap" {= version}
   "regular" {= version}
   "odoc" {with-doc}

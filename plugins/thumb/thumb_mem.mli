@@ -3,7 +3,7 @@ open Theory
 open Thumb_core
 open Thumb_opcodes
 
-type eff = cond -> unit effect KB.t
+type eff = cond -> unit effect_ KB.t
 
 module Make(Core : Theory.Core) : sig
 
