@@ -543,7 +543,7 @@ let _distribution_command : unit =
                            let r = Str.regexp @@ sprintf "%%%d" v in
                            let opts =
                              List.to_string (Map.keys metric_vals)
-                               ~f:ident in
+                               ~f:Fn.id in
                            let default =
                              sprintf
                                "\"%s\" is not a metric, opts: %s" s opts in
@@ -603,7 +603,7 @@ let _cache_command : unit =
         List.iter l ~f:(fun s ->
             let path = cachedir ^ "/" ^ s ^ "/" ^ path in
             try
-              Sys.remove path;
+              Stdlib.Sys.remove path;
             with _ -> ()
           );
       else () in
