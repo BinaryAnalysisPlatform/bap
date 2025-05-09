@@ -1,7 +1,7 @@
 (library
  (name bap_superset_disasm_plugin)
  (public_name bap-superset-disasm.plugin)
- (libraries bap bap-superset-disasm )
+ (libraries bap bap_superset_disasm )
 )
 
 (plugin
