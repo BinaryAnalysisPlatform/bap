@@ -1,6 +1,7 @@
 (library
  (name bap_superset_disasm_plugin)
  (public_name bap-superset-disasm.plugin)
+ (preprocess (pps ppx_bap))
  (libraries bap bap_superset_disasm )
 )
 
