@@ -65,7 +65,7 @@ let load_knowledge digest p =
   let digest = digest ~namespace:"knowledge" in
   match p with
   | None -> import_knowledge_from_cache digest
-  | Some path when not (Sys.file_exists path) ->
+  | Some path when not (Stdlib.Sys.file_exists path) ->
     import_knowledge_from_cache digest
   | Some path ->
     Toplevel.set @@ Knowledge.load path;

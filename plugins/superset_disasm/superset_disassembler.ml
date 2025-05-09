@@ -4,7 +4,7 @@ open Regular.Std
 open Bap_knowledge
 open Bap_core_theory
 open Monads.Std
-open Bap_superset_disasm.Cmdoptions
+open Cmdoptions
 open Bap_main
 open Bap_plugins.Std
 
@@ -75,11 +75,11 @@ let superset_disasm options =
     With_options(struct
         let options = options
       end) in
-  let t = Sys.time() in
+  let t = Stdlib.Sys.time() in
   let open KB.Syntax in
   With_options.with_options () >>= fun superset ->
   KB.promise Metrics.Cache.time (fun o ->
-      KB.return (Some (int_of_float (Sys.time() -. t))));
+      KB.return (Some (int_of_float (Stdlib.Sys.time() -. t))));
   (* Provide the is_valid label as a check on whether a given
          address is in the superset after trimming *)
   KB.promise Theory.Label.is_valid @@ (fun label ->
@@ -159,7 +159,7 @@ let store_knowledge_in_cache digest =
 
 let load_knowledge digest = function
   | None -> import_knowledge_from_cache digest
-  | Some path when not (Sys.file_exists path) ->
+  | Some path when not (Stdlib.Sys.file_exists path) ->
     import_knowledge_from_cache digest
   | Some path ->
     info "importing knowledge from %S" path;
@@ -184,9 +184,9 @@ let outputs =
     "dump"
 
 let rw_file = Extension.Type.define
-    ~name:"<FILE>" ~print:ident ~parse:ident
+    ~name:"<FILE>" ~print:Fn.id ~parse:Fn.id
     ~digest:(fun path ->
-        if Sys.file_exists path
+        if Stdlib.Sys.file_exists path
         then Caml.Digest.file path
         else Caml.Digest.string "empty")
     ""
@@ -233,7 +233,7 @@ let target =
           target stored in the binary, otherwise an error is signaled."
 
 let validate_input file =
-  Result.ok_if_true (Sys.file_exists file)
+  Result.ok_if_true (Stdlib.Sys.file_exists file)
     ~error:(Fail (Expects_a_regular_file file))
 
 let validate_knowledge update kb = match kb with
@@ -242,7 +242,7 @@ let validate_knowledge update kb = match kb with
   | Some path ->
      let error =
        Fail (No_knowledge "No initial knowledge to update") in
-    Result.ok_if_true (Sys.file_exists path || update) ~error
+    Result.ok_if_true (Stdlib.Sys.file_exists path || update) ~error
 
 let option_digest f = function
   | None -> "none"
