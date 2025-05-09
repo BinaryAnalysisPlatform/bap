@@ -1,6 +1,6 @@
 (library
  (name bap_superset_disasm)
- (public_name bap-std.superset-disasm)
+ (public_name bap-superset-disasm)
  (wrapped false)
  (preprocess (pps ppx_bap))
  (libraries
