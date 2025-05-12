@@ -324,14 +324,14 @@ let ground_truth_bin =
                " from debug symbols of an unstripped binary") in
   Extension.Command.parameter
     ~doc Extension.Type.("<FILE>" %: (some string) =? None)
-    "ground_truth_bin"
+    "ground-truth-bin"
 
 let analyses =
   let deflt = ["Strongly Connected Component Data"] in
   Extension.Command.parameter
     Extension.Type.(list string =? deflt) "analyses"
 
-let save_dot = Extension.Command.flag "save_dot"
+let save_dot = Extension.Command.flag "save-dot"
 
 let converge =
   Extension.Command.flag "converge"
