@@ -94,10 +94,21 @@ let import_knowledge_from_cache digest =
   let cache = knowledge_cache () in
   load_cache_with_digest cache digest
 
-let summaries_of_files fs =
+let make_digest inputs =
+  let inputs = String.concat inputs in
+  fun ~namespace ->
+    let d = Data.Cache.Digest.create ~namespace in
+    Data.Cache.Digest.add d "%s" inputs
+
+let compute_digest target disasm =
+  make_digest [
+      Caml.Digest.file target;
+      disasm;
+    ] ~namespace:"knowledge"
+
+let summaries_of_files tgt fs =
   List.fold fs ~init:[] ~f:(fun ls lf ->
-      let ds = Caml.Digest.file lf in
-      let digest = Data.Cache.Digest.of_string ds in
+      let digest = compute_digest lf tgt  in
       if import_knowledge_from_cache digest then
         Metrics.get_summary () :: ls
       else (
@@ -112,8 +123,9 @@ let plot_summaries summaries =
     transform_summaries summaries in
   let tot_fns = List.fold fns ~init:0 ~f:(+) in
   let tot_occ = List.fold occ ~init:0 ~f:(+) in
-  let tot_occ_space = List.fold fns ~init:0 ~f:(+) in
+  let tot_occ_space = List.fold occ_space ~init:0 ~f:(+) in
   let avg_occ =
     (float_of_int tot_occ) /. (float_of_int tot_occ_space) in
-  printf "fns: %d, avg occ: %f" tot_fns avg_occ
+  printf "fns: %d, total occ space %d, avg occ: %f\n"
+    tot_fns tot_occ_space avg_occ
 

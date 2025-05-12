@@ -293,7 +293,9 @@ let create_and_process kb options =
   let ro = Metrics.Cache.reduced_occlusion in
   let _ = Toplevel.eval ro Metrics.Cache.sym_label in
   let _ = Toplevel.eval Metrics.Cache.size Metrics.Cache.sym_label in
-  store_knowledge_in_cache digest
+  let summary = Metrics.get_summary () in
+  print_endline @@ Sexp.to_string @@ Metrics.sexp_of_t summary;
+  store_knowledge_in_cache (superset_digest options)
   
 let rounds =
   let doc = "Number of analysis cycles" in
@@ -372,7 +374,7 @@ exception Missing_file of string
 let _graph_metrics : unit =
   let args =
     let open Extension.Command in
-    args $inputs
+    args $inputs $loader
   in
   let cmdname = "supersetd-graph-metrics" in
   let doc = sprintf
@@ -383,7 +385,7 @@ let _graph_metrics : unit =
               cmdname in
   Extension.Command.declare ~doc cmdname
     ~requires:features_used args @@
-    fun inputs ctxt ->
+    fun inputs tgt ctxt ->
     let is_missing x =
       not (Stdlib.Sys.file_exists x) in
     let missing = List.find inputs ~f:is_missing in
@@ -394,7 +396,7 @@ let _graph_metrics : unit =
          print_endline @@ sprintf "%s is missing" f;
          raise (Missing_file f);
     in
-    let summaries = Plot_superset_cache.summaries_of_files inputs in
+    let summaries = Plot_superset_cache.summaries_of_files tgt inputs in
     Ok (Plot_superset_cache.plot_summaries summaries)
 
 let metrics =
