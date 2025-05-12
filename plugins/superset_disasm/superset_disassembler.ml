@@ -18,9 +18,9 @@ let man = {|
   byte offset within the executable region of a binary is initially
   treated as being potentially compiler intended output. However,
   after applying several rounds of heuristics the true positives, or
-  the actually intended instructions, can be distinguished from the
+  the compiler intended instructions, can be distinguished from the
   noise. It is an alternate disassembly method from linear sweep or
-  recursive descent, the two (probably most) populate mainstream
+  recursive descent, the two (probably most) popular mainstream
   disassembly methods. This approach exchanges the possibility of
   some small portion of the final output including some occlusive
   unintended sequences being incorrectly kept (a superset) for the
@@ -28,14 +28,14 @@ let man = {|
   intended.
 
   Heuristics are broken into three main groups: invariants, analyses,
-  and features. Invariants are ideally lawful characteristics of
+  and heuristics. Invariants are ideally lawful characteristics of
   binary code, where disobedience is illegal for any well formed
   assembler, and run with a limited scope/visibility of just
   instructions. Analyses are typically processes that identify less
   visible violations of well-formed assembler rules or other lawful
   assembler characteristics that require global visibility. Heuristics
   are data traits that may be dirty and require some iterative
-  convergence to recognize the subset within the initial superset that
+  convergence to recognize a subset within the initial superset that
   can be guaranteeably cleansed. Once convergence occurs, the bodies
   of lineages with sufficient evidence are cleansed of occlusion, and
   any lineage that does not have enough features to support being kept
@@ -148,7 +148,7 @@ let import_knowledge_from_cache digest =
     Data.Cache.Digest.pp digest;
   let cache = knowledge_cache () in
   load_cache_with_digest cache digest
-    
+
 let store_knowledge_in_cache digest =
   let digest = digest ~namespace:"knowledge" in
   info "caching knowledge with digest %a"
@@ -165,14 +165,6 @@ let load_knowledge digest = function
     info "importing knowledge from %S" path;
     Toplevel.set @@ Knowledge.load path;
     true
-
-let save_knowledge ~had_knowledge ~update digest = function
-  | None ->
-    store_knowledge_in_cache digest
-  | Some path when update ->
-    info "storing knowledge base to %S" path;
-    Knowledge.save (Toplevel.current ()) path
-  | Some _ -> ()
 
 let outputs =
   Extension.Command.parameters
@@ -289,29 +281,10 @@ let superset_digest options =
   let open Cmdoptions in
   compute_digest options.target options.disassembler
 
-let save_metadata options =
-  let digest = superset_digest options ~namespace:"knowledge"  in
-  Metadata.with_digests (fun metadata ->
-      let c = Option.value metadata
-                ~default:Metadata.Cache_metadata.empty in
-      KB.promise Metadata.digests (fun o ->
-          let d = Data.Cache.Digest.(to_string digest) in
-          KB.return @@ (Some
-                          (Metadata.Cache_metadata.set c
-                             ~key:options.target ~data:d))
-        );
-      Metadata.save ()
-    )
-  
-let create_and_process
-      input outputs loader update kb options =
-  (*let () = save_metadata options in*)
+let create_and_process kb options =
   let digest = superset_digest options in
-  let had_knowledge = load_knowledge digest kb in
-  let () = Toplevel.exec @@
-    if not had_knowledge then
-      superset_disasm options
-    else KB.return () in
+  let _ = load_knowledge digest kb in
+  let () = Toplevel.exec @@ superset_disasm options in
   (match options.ground_truth_bin with
    | Some bin ->
       KB.promise Metrics.Cache.ground_truth_source
@@ -321,7 +294,6 @@ let create_and_process
   let _ = Toplevel.eval ro Metrics.Cache.sym_label in
   let _ = Toplevel.eval Metrics.Cache.size Metrics.Cache.sym_label in
   store_knowledge_in_cache digest
-  (*save_knowledge ~had_knowledge ~update digest kb*)
   
 let rounds =
   let doc = "Number of analysis cycles" in
@@ -372,7 +344,7 @@ let _superset_disassemble_command : unit =
     $ground_truth_bin $invariants $analyses $tp_threshold $heuristics
     $save_dot $rounds $converge $protect
   in
-  Extension.Command.declare ~doc:man "superset_disasm"
+  Extension.Command.declare ~doc:man "superset-disasm"
     ~requires:features_used args @@
     fun input outputs loader update kb
         ground_truth_bin invariants analyses tp_threshold heuristics
@@ -387,86 +359,43 @@ let _superset_disassemble_command : unit =
     validate_knowledge update kb >>= fun () ->
     validate_input input >>= fun () ->
     Dump_formats.parse outputs >>= fun outputs ->
-    Ok (create_and_process input outputs loader
-          update kb options)
+    Ok (create_and_process kb options)
 
-let destination =
-  Extension.Command.parameter Extension.Type.string "destination"
+let inputs =
+  Extension.Command.argument
+    ~doc:"The input files"
+    Extension.Type.("FILES" %: list string =? ["a.out"]
+  )
 
-let cache_digest =
-  Extension.Command.parameter Extension.Type.string "cache_digest"
+exception Missing_file of string
 
-type cache_msg = {
-    digest : string;
-    state  : bigstring;
-  } [@@deriving sexp]
-
-exception Cache_not_present
-let _send_cache : unit =
+let _graph_metrics : unit =
   let args =
     let open Extension.Command in
-    args $input $outputs $loader $update $knowledge
-    $destination $cache_digest
+    args $inputs
   in
-  let man =
-    "Send a cache state to a designated address. Ex: tcp://host:port"
-  in 
-  Extension.Command.declare ~doc:man "send_cache"
+  let cmdname = "supersetd-graph-metrics" in
+  let doc = sprintf
+              {| The %s command iterates over the list of input files to
+               disassemble and accesses the cache for each file to
+               collect important metrics. These metrics are then
+               graphed with gnuplot, and saved in the current directory. |}
+              cmdname in
+  Extension.Command.declare ~doc cmdname
     ~requires:features_used args @@
-    fun input outputs loader update kb
-        destination cache_digest ctxt ->
-    let cache = knowledge_cache () in
-    let d = Data.Cache.Digest.of_string cache_digest in
-    let had = load_cache_with_digest cache d in
+    fun inputs ctxt ->
+    let is_missing x =
+      not (Stdlib.Sys.file_exists x) in
+    let missing = List.find inputs ~f:is_missing in
     let () = 
-      if had then
-        let state = Toplevel.current () in
-        let msg = {
-            digest = cache_digest;
-            state = Knowledge.to_bigstring state;
-          } in
-        let msg = Sexp.to_string @@ sexp_of_cache_msg msg in
-        let zmq_ctxt = Zmq.Context.create ()  in
-        let socket = Zmq.Socket.create zmq_ctxt Zmq.Socket.push in
-        let () = Zmq.Socket.connect socket destination in
-        Zmq.Socket.send socket msg
-      else
-        raise Cache_not_present in
-    Ok()
-
-let bind_addr =
-  Extension.Command.parameter Extension.Type.string "bind_addr"
-
-let perpetuate =
-  Extension.Command.flag "perpetuate"
-
-let _recv_cache : unit =
-  let args =
-    let open Extension.Command in
-    args $outputs $loader $update $knowledge
-    $bind_addr $perpetuate
-  in
-  let man =
-    "Receive a cache state on the given address bound to. Ex:" ^
-      "tcp://*:<port>" in 
-  Extension.Command.declare ~doc:man "recv_cache" 
-    ~requires:features_used args @@
-    fun outputs loader update kb
-        bind_addr perpetuate ctxt ->
-    let zmq_ctxt = Zmq.Context.create ()  in
-    let socket = Zmq.Socket.create zmq_ctxt Zmq.Socket.pull in
-    let () = Zmq.Socket.bind socket bind_addr in
-    let ran = ref false in
-    Ok (while perpetuate || (not !ran) do
-      let s = cache_msg_of_sexp @@ Sexp.of_string
-              @@ Zmq.Socket.recv socket in
-      let { digest; state; } = s in
-      let state = Knowledge.of_bigstring state in
-      let cache = knowledge_cache () in
-      let d = Data.Cache.Digest.of_string digest in
-      Data.Cache.save cache d state;
-      ran := true;
-    done)
+      match missing with
+      | None -> ()
+      | Some f ->
+         print_endline @@ sprintf "%s is missing" f;
+         raise (Missing_file f);
+    in
+    let summaries = Plot_superset_cache.summaries_of_files inputs in
+    Ok (Plot_superset_cache.plot_summaries summaries)
 
 let metrics =
   let doc =
@@ -478,7 +407,7 @@ let metrics =
   Extension.Command.parameter ~doc
     Extension.Type.(some (list string)) "metrics"
 
-let _distribution_command : unit =
+let _print_metrics_command : unit =
   let args =
     let open Extension.Command in
     args $input $outputs $loader $update $knowledge
@@ -486,7 +415,7 @@ let _distribution_command : unit =
     $tp_threshold $heuristics $rounds
     $converge $metrics in
   let man = "Perform computational operations on the cache" in
-  Extension.Command.declare ~doc:man "superset_distribution"
+  Extension.Command.declare ~doc:man "supersetd-print-metrics"
     ~requires:features_used args @@
     fun input outputs loader update kb
         ground_truth_bin invariants
@@ -575,7 +504,7 @@ let _cache_command : unit =
     $show_cache_digest $reset_cache $is_present
   in
   let man = "Apply operations to the superset cache" in
-  Extension.Command.declare ~doc:man "superset_cache"
+  Extension.Command.declare ~doc:man "superset-cache"
     ~requires:features_used args @@
     fun input outputs loader update kb
         show_cache_digest reset_cache verify_cache

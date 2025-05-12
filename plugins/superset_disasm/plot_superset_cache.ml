@@ -4,13 +4,6 @@ open Regular.Std
 open Bap_knowledge
 open Bap_core_theory
 open Monads.Std
-   
-let () = match Bap_main.init () with
-  | Ok () -> ()
-  | Error err -> 
-     let open Bap_main in
-     Bap_main.Extension.Error.pp Format.std_formatter err;
-     exit 1
 
 let transform_summaries summaries = 
   let open Metrics in
@@ -79,9 +72,41 @@ let make_plots summaries =
   make_plot "Size" "Time" "size_time.png" sizes time;
   ()
 
-let () =
-  let summaries =
-    Metadata.with_digests Metadata.cache_corpus_metrics in
+let knowledge_reader = Data.Read.create
+    ~of_bigstring:Knowledge.of_bigstring ()
+
+let knowledge_writer = Data.Write.create
+    ~to_bigstring:Knowledge.to_bigstring ()
+
+let knowledge_cache () =
+  Data.Cache.Service.request
+    knowledge_reader
+    knowledge_writer
+
+let load_cache_with_digest cache digest =
+  match Data.Cache.load cache digest with
+  | None -> false
+  | Some state ->
+     Toplevel.set state;
+     true
+
+let import_knowledge_from_cache digest =
+  let cache = knowledge_cache () in
+  load_cache_with_digest cache digest
+
+let summaries_of_files fs =
+  List.fold fs ~init:[] ~f:(fun ls lf ->
+      let ds = Caml.Digest.file lf in
+      let digest = Data.Cache.Digest.of_string ds in
+      if import_knowledge_from_cache digest then
+        Metrics.get_summary () :: ls
+      else (
+        print_endline @@ sprintf "%s not present in cache" lf;
+        ls
+      )
+    )
+
+let plot_summaries summaries =
   make_plots summaries;
   let sizes,occ,occ_space,fe,clean,fns,fps,tps,time =
     transform_summaries summaries in
