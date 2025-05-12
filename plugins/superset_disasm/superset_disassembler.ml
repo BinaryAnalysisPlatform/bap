@@ -366,7 +366,7 @@ let _superset_disassemble_command : unit =
 let inputs =
   Extension.Command.argument
     ~doc:"The input files"
-    Extension.Type.("FILES" %: list string =? ["a.out"]
+    Extension.Type.("FILES" %: string =? "files.txt"
   )
 
 exception Missing_file of string
@@ -385,7 +385,9 @@ let _graph_metrics : unit =
               cmdname in
   Extension.Command.declare ~doc cmdname
     ~requires:features_used args @@
-    fun inputs tgt ctxt ->
+    fun files_list tgt ctxt ->
+    let inputs = Stdlib.In_channel.with_open_text files_list
+                   In_channel.input_lines in
     let is_missing x =
       not (Stdlib.Sys.file_exists x) in
     let missing = List.find inputs ~f:is_missing in
