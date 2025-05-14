@@ -14,6 +14,5 @@
    zmq
    gnuplot
    )
-(modules_without_implementation cmdoptions)
 )
 

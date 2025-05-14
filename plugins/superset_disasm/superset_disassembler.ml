@@ -66,7 +66,7 @@ let man = {|
   which case the project will be dumped in several formats.
 
   ```
-  bap superset_disasm /bin/echo -dasm:out.asm
+  bap superset-disasm /bin/echo -dasm:out.asm
   ```
   |}
 
@@ -285,11 +285,6 @@ let create_and_process kb options =
   let digest = superset_digest options in
   let _ = load_knowledge digest kb in
   let () = Toplevel.exec @@ superset_disasm options in
-  (match options.ground_truth_bin with
-   | Some bin ->
-      KB.promise Metrics.Cache.ground_truth_source
-        (fun _ -> KB.return bin);
-   | None -> ());
   let ro = Metrics.Cache.reduced_occlusion in
   let _ = Toplevel.eval ro Metrics.Cache.sym_label in
   let _ = Toplevel.eval Metrics.Cache.size Metrics.Cache.sym_label in
@@ -339,29 +334,32 @@ let converge =
 let protect =
   Extension.Command.flag "protect"
 
+let find_fn_culprit = Extension.Command.flag "find-fn-culprit"
+
 let _superset_disassemble_command : unit =
   let args =
     let open Extension.Command in
     args $input $outputs $loader $update $knowledge
     $ground_truth_bin $invariants $analyses $tp_threshold $heuristics
-    $save_dot $rounds $converge $protect
+    $save_dot $rounds $converge $protect $find_fn_culprit
   in
   Extension.Command.declare ~doc:man "superset-disasm"
     ~requires:features_used args @@
     fun input outputs loader update kb
         ground_truth_bin invariants analyses tp_threshold heuristics
-        save_dot rounds converge protect ctxt  ->
+        save_dot rounds converge protect find_fn_culprit ctxt  ->
     let converge = not converge in
     let protect = not protect in
     let options =
       Fields.create ~disassembler:loader
         ~ground_truth_bin ~target:input ~save_dot ~tp_threshold
         ~rounds ~heuristics ~analyses
-        ~converge ~protect ~invariants in
+        ~converge ~protect ~invariants ~find_fn_culprit in
     validate_knowledge update kb >>= fun () ->
     validate_input input >>= fun () ->
     Dump_formats.parse outputs >>= fun outputs ->
     Ok (create_and_process kb options)
+
 
 let inputs =
   Extension.Command.argument
@@ -417,14 +415,14 @@ let _print_metrics_command : unit =
     args $input $outputs $loader $update $knowledge
     $ground_truth_bin $invariants $analyses
     $tp_threshold $heuristics $rounds
-    $converge $metrics in
+    $converge $metrics $find_fn_culprit in
   let man = "Perform computational operations on the cache" in
   Extension.Command.declare ~doc:man "supersetd-print-metrics"
     ~requires:features_used args @@
     fun input outputs loader update kb
         ground_truth_bin invariants
         analyses tp_threshold heuristics rounds 
-        converge metrics
+        converge metrics find_fn_culprit
         ctxt ->
     validate_knowledge update kb >>= fun () ->
     validate_input input >>= fun () ->
@@ -433,7 +431,7 @@ let _print_metrics_command : unit =
       Fields.create ~disassembler:loader
         ~ground_truth_bin ~target:input ~save_dot:false ~tp_threshold
         ~rounds ~heuristics ~analyses ~converge:false ~protect:false
-        ~invariants in
+        ~invariants ~find_fn_culprit in
     let digest = superset_digest options in
     let _ = load_knowledge digest kb in
     let map_opt =
@@ -491,7 +489,7 @@ let _print_metrics_command : unit =
        | None -> KB.return ()
       );
     Ok ()
-
+    
 let show_cache_digest =
   Extension.Command.flag "show_cache_digest"
 
@@ -508,7 +506,7 @@ let _cache_command : unit =
     $show_cache_digest $reset_cache $is_present
   in
   let man = "Apply operations to the superset cache" in
-  Extension.Command.declare ~doc:man "superset-cache"
+  Extension.Command.declare ~doc:man "supersetd-cache"
     ~requires:features_used args @@
     fun input outputs loader update kb
         show_cache_digest reset_cache verify_cache

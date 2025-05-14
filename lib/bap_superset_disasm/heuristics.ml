@@ -18,11 +18,12 @@ module HeurismSet(H : Heurism) = struct
     let package = "superset-heuristics"
     let addrs_t =
       Knowledge.Domain.optional
-        ~inspect:Addr.Set.sexp_of_t ~equal:Addr.Set.equal "addr.set"
+        ~inspect:Addr.Hash_set.sexp_of_t
+        ~equal:Addr.Hash_set.equal "addr.set"
 
     let addrs_persistent =
       Knowledge.Persistent.of_binable
-        (module struct type t = Addr.Set.t option [@@deriving bin_io] end)
+        (module struct type t = Addr.Hash_set.t option [@@deriving bin_io] end)
       
     let attr ty persistent desc =
       let open Theory.Program in
@@ -80,7 +81,7 @@ let get_callsites ?(threshold=6) superset =
     callers *)
 let tag_callsites visited ?callsites superset =
   let callsites = Option.value callsites 
-      ~default:(get_callsites ~threshold:6 superset) in
+      ~default:(get_callsites superset) in
   Hash_set.iter callsites ~f:(fun callsite ->
       Traverse.with_descendents_at ~visited
         ?post:None ?pre:None superset callsite;

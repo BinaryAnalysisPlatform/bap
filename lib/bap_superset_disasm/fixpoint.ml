@@ -6,7 +6,6 @@ let iterate rounds f superset =
   let rec do_analysis round superset = 
     if round = rounds then superset else
       let (superset) = f superset in
-      let superset = Trim.run superset in
       do_analysis (round+1) superset in
   do_analysis 1 superset
 
