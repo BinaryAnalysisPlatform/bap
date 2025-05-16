@@ -72,8 +72,8 @@ let tag_success superset mem insn targets =
         Superset.ISG.link superset target src
       | None -> superset)
 
-let default_tags = ["Tag non insn", tag_non_insn;
-                    "Tag target not in mem", tag_target_not_in_mem;
+let default_tags = [(*"Tag non insn", tag_non_insn;*)
+                    (*"Tag target not in mem", tag_target_not_in_mem;*)
                     "Tag target is bad", tag_target_is_bad;
                     "Tag target in body", tag_target_in_body;
                     (*tag_success;*)]
