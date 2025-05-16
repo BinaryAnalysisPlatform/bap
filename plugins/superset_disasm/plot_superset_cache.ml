@@ -106,11 +106,15 @@ let compute_digest target disasm =
       disasm;
     ] ~namespace:"knowledge"
 
-let summaries_of_files tgt fs =
+let summaries_of_files print_fn_bins tgt fs =
   List.fold fs ~init:[] ~f:(fun ls lf ->
       let digest = compute_digest lf tgt  in
       if import_knowledge_from_cache digest then
-        Metrics.get_summary () :: ls
+        let sum = Metrics.get_summary () in
+        let fns = Option.value sum.fns ~default:0 in
+        if print_fn_bins && fns > 0 then
+          print_endline lf;
+        sum :: ls
       else (
         print_endline @@ sprintf "%s not present in cache" lf;
         ls

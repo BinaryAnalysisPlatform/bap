@@ -289,7 +289,9 @@ let create_and_process kb options =
   let _ = Toplevel.eval ro Metrics.Cache.sym_label in
   let _ = Toplevel.eval Metrics.Cache.size Metrics.Cache.sym_label in
   let summary = Metrics.get_summary () in
-  print_endline @@ Sexp.to_string @@ Metrics.sexp_of_t summary;
+  print_endline @@
+    sprintf "%s %s" options.target @@
+      Sexp.to_string @@ Metrics.sexp_of_t summary;
   store_knowledge_in_cache (superset_digest options)
   
 let rounds =
@@ -367,12 +369,15 @@ let inputs =
     Extension.Type.("FILES" %: string =? "files.txt"
   )
 
+let print_fn_bins =
+  Extension.Command.flag "print-fn-bins"
+
 exception Missing_file of string
 
 let _graph_metrics : unit =
   let args =
     let open Extension.Command in
-    args $inputs $loader
+    args $inputs $print_fn_bins $loader
   in
   let cmdname = "supersetd-graph-metrics" in
   let doc = sprintf
@@ -383,7 +388,7 @@ let _graph_metrics : unit =
               cmdname in
   Extension.Command.declare ~doc cmdname
     ~requires:features_used args @@
-    fun files_list tgt ctxt ->
+    fun files_list print_fn_bins tgt ctxt ->
     let inputs = Stdlib.In_channel.with_open_text files_list
                    In_channel.input_lines in
     let is_missing x =
@@ -396,7 +401,8 @@ let _graph_metrics : unit =
          print_endline @@ sprintf "%s is missing" f;
          raise (Missing_file f);
     in
-    let summaries = Plot_superset_cache.summaries_of_files tgt inputs in
+    let summaries = Plot_superset_cache.summaries_of_files
+                      print_fn_bins tgt inputs in
     Ok (Plot_superset_cache.plot_summaries summaries)
 
 let metrics =
