@@ -45,16 +45,16 @@ let find_free_insns superset =
   let mem = Superset.Core.mem superset in
   let conflict_free_addrs =
     Superset.Core.fold superset ~init:([])
-      ~f:(fun ~key ~data to_clamp ->
+      ~f:(fun ~key ~data free_insns ->
           let (addr,(memory,_)) = key, data in
           let len = Memory.length memory in
           let conflicts = Superset.Occlusion.range_seq_of_conflicts
               ~mem addr len in
           let no_conflicts = Seq.is_empty conflicts in
           if no_conflicts then
-            addr :: to_clamp
+            addr :: free_insns
           else (
-            to_clamp
+            free_insns
           )
         ) in
   let conflict_free_addrs = Addr.Set.of_list conflict_free_addrs in
@@ -62,10 +62,10 @@ let find_free_insns superset =
     Superset.Occlusion.find_all_conflicts superset
   
 let extract_trim_interpretation_depth superset = 
-  let to_clamp = find_free_insns superset in
+  let free_insns = find_free_insns superset in
   let visited = Addr.Hash_set.create () in
   let datas   = Addr.Hash_set.create () in
-  Set.iter to_clamp ~f:(fun c -> 
+  Set.iter free_insns ~f:(fun c -> 
       if not Hash_set.(mem visited c) then
         if Superset.Core.mem superset c then (
           Traverse.mark_descendent_bodies_at
@@ -73,9 +73,17 @@ let extract_trim_interpretation_depth superset =
         )
     );
   Superset.Core.clear_each superset visited;
-  Set.iter to_clamp ~f:(Superset.Core.clear_bad superset);
+  Set.iter free_insns ~f:(Superset.Core.clear_bad superset);
   superset
 
+(** Interpretation depth is a heuristics that recognizes that true *)
+(** positive compiler intended instructions are the only kind of *)
+(** instruction that can occur where the body of the instruction is *)
+(** completely free of occlusion, aside from random false positives *)
+(** that happen to be free. These false positives should not affect *)
+(** the convergence on the true positive set. It is called *)
+(** interpretation depth one because, without noise in the body, *)
+(** there is a single instruction that can be interpreted. *)
 let extract_trim_protected_interpretation_depth superset =
   let protection = Addr.Hash_set.create () in
   let callsites = get_callsites ~threshold:0 superset in
