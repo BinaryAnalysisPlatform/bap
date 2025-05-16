@@ -84,13 +84,13 @@ let tag_callsites visited ?callsites superset =
       ~default:(get_callsites superset) in
   Hash_set.iter callsites ~f:(fun callsite ->
       Traverse.with_descendents_at ~visited
+        (* TODO ~pre should mark insn bodies as data *)
         ?post:None ?pre:None superset callsite;
     );
   superset
 
 let find_free_insns superset = 
   let mem = Superset.Core.mem superset in
-  let all_conflicts = Addr.Hash_set.create () in
   let to_clamp =
     Superset.Core.fold superset ~init:([])
       ~f:(fun ~key ~data to_clamp ->
@@ -99,14 +99,15 @@ let find_free_insns superset =
           let conflicts = Superset.Occlusion.range_seq_of_conflicts
               ~mem addr len in
           let no_conflicts = Seq.is_empty conflicts in
-          Seq.iter conflicts ~f:(fun c -> Hash_set.add all_conflicts c);
-          if no_conflicts && not Hash_set.(mem all_conflicts addr) then
+          if no_conflicts then
             addr :: to_clamp
           else (
             to_clamp
           )
         ) in
-  to_clamp
+  let to_clamp = Addr.Set.of_list to_clamp in
+  Set.diff to_clamp @@
+    Superset.Occlusion.find_all_conflicts superset
 
 let restricted_clamp superset = 
   let entries = Superset.entries_of_isg superset in
@@ -127,7 +128,7 @@ let restricted_clamp superset =
 
 let extended_clamp superset = 
   let to_clamp = find_free_insns superset in
-  List.fold to_clamp ~init:Addr.Set.empty ~f:(fun to_clamp clamp -> 
+  Set.fold to_clamp ~init:Addr.Set.empty ~f:(fun to_clamp clamp -> 
       let _, to_clamp =
         Superset.ISG.dfs_fold superset
           ~pre:(fun (struck,to_clamp) addr ->
@@ -219,7 +220,7 @@ let extract_trim_clamped superset =
   let to_clamp = find_free_insns superset in
   let visited = Addr.Hash_set.create () in
   let datas   = Addr.Hash_set.create () in
-  List.iter to_clamp ~f:(fun c -> 
+  Set.iter to_clamp ~f:(fun c -> 
       if not Hash_set.(mem visited c) then
         if Superset.Core.mem superset c then (
           Traverse.mark_descendent_bodies_at
@@ -227,16 +228,13 @@ let extract_trim_clamped superset =
         )
     );
   Superset.Core.clear_each superset visited;
-  List.iter to_clamp ~f:(Superset.Core.clear_bad superset);
+  Set.iter to_clamp ~f:(Superset.Core.clear_bad superset);
   superset
 
 let extract_trim_limited_clamped superset =
   let protection = Addr.Hash_set.create () in
-  let superset = 
-    if Hash_set.length protection = 0 then (
-      let callsites = get_callsites ~threshold:0 superset in
-      tag_callsites protection ~callsites superset
-    ) else superset in
+  let callsites = get_callsites ~threshold:0 superset in
+  let superset = tag_callsites protection ~callsites superset in
   Superset.Core.clear_all_bad superset;
   let superset = extract_trim_clamped superset in
   Superset.Core.clear_each superset protection; superset
@@ -407,7 +405,7 @@ let _exfiltset = [
    ((fun x -> transform (get_callsites
                            ~threshold:6 x)), unfiltered));
   ("Clamped",
-   ((fun s -> Addr.Set.of_list @@ find_free_insns s), unfiltered));
+   ((fun s -> find_free_insns s), unfiltered));
   ("RestrictedClamped", (restricted_clamp, unfiltered));
   ("ExtendedClamped", (extended_clamp, unfiltered));
   ("UnfilteredSCC", (extract_loops_to_set,unfiltered));
