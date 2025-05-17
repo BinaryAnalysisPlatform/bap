@@ -10,8 +10,8 @@ let tag_loop_contradictions =
 let tag_grammar  = 
   Grammar.tag_by_traversal ?threshold:None
 let list_analyses = [
-    "Strongly Connected Component Data", tag_loop_contradictions;
-    "Grammar convergent", tag_grammar;
+    "StronglyConnectedComponentData", tag_loop_contradictions;
+    "Grammar-convergent", tag_grammar;
   ]
   
 type t = {
