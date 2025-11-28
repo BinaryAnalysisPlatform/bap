@@ -1,5 +1,4 @@
-(lang dune 3.1)
-(cram enable)
+(lang dune 3.20)
 (using dune_site 0.1)
 
 (name bap)
@@ -130,12 +129,7 @@
   (share signatures)
   (share site_lisp))
  (depends
-  base
-  dune
-  dune-configurator
-  dune-site
-  ocaml
-  stdio))
+  dune-site))
 
 (package
  (name bap-primus-support)
@@ -292,9 +286,9 @@
  (depends
   (bap-byteweight (= :version))
   (bap-std (= :version))
-  (cmdliner (and (>= 1.0) (< 2.0)))
+  cmdliner
   core
-   fileutils
+  fileutils
   (bap-common (= :version))
   (ocurl (>= 0.9.0))
   (ppx_bap (= :version))
@@ -307,8 +301,6 @@
  (depends
   core
   (bap-common (= :version))
-   ocamlbuild
-   ocamlfind
   (ppx_bap (= :version))))
 
 (package
@@ -316,7 +308,7 @@
  (synopsis "A bundler for BAP plugins")
  (tags (bap bap-tool))
  (depends
-  (camlzip (and (>= 1.0) (< 2.0)))
+  camlzip
   core
   core_kernel
    fileutils
@@ -531,7 +523,6 @@ details of the program behavior.")
   (bap-std (= :version))
   core
   (bap-common (= :version))
-   ocamlfind
   (regular (= :version))))
 
 (package
@@ -639,7 +630,7 @@ be seen as a common denominator between Lwt and Async libraries.")
   (bap-recipe (= :version))
   base
   core_kernel
-  (cmdliner (and (>= 1.0) (< 2.0)))
+  cmdliner
   (bap-common (= :version))
   stdio))
 
@@ -749,8 +740,7 @@ be seen as a common denominator between Lwt and Async libraries.")
  (depends
   (bap-common (= :version))
   (bap-std (= :version))
-   cmdliner
-  (cmdliner (and (>= 1.0) (< 2.0)))
+  cmdliner
   core
    ezjsonm
   (graphlib (= :version))
@@ -778,7 +768,6 @@ be seen as a common denominator between Lwt and Async libraries.")
   (bap-future (= :version))
   core
    fileutils
-   ocamlfind
   (ppx_bap (= :version))
    uri))
 
@@ -1263,13 +1252,12 @@ between the sets.")
   (bitvec-order (= :version))
   (bitvec (= :version))
   (camlzip (and (>= 1.07) (< 2.0)))
-   cmdliner
+  cmdliner
   core
    fileutils
   (graphlib (= :version))
    mmap
   (monads (= :version))
-  (ocamlfind (and (>= 1.5.6) (< 2.0.0)))
   (ogre (= :version))
   ounit
   (ppx_bap (= :version))
@@ -1428,8 +1416,7 @@ as the interpreter for your BAP scripts, e.g., `baptop myprog.ml`")
  (depends
   (bap-common (= :version))
   (bap-std (= :version))
-  core
-  ocamlfind))
+  core))
 
 (package
  (name bap-trace)
