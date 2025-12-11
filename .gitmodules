@@ -1,0 +1,3 @@
+[submodule "plugins/primus_symbolic_executor/z3"]
+	path = plugins/primus_symbolic_executor/z3
+	url = https://github.com/Z3Prover/z3.git

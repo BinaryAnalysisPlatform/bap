@@ -6,6 +6,5 @@
 
 (generate_sites_module
  (module bap_common_private_sites)
- (sites bap-common)
  (plugins
   (bap-common plugins)))

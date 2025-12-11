@@ -8,6 +8,8 @@
 (maintainers "Ivan Gotovchits <ivg@ieee.org>")
 (source (github BinaryAnalysisPlatform/bap))
 
+(generate_opam_files)
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;                          Package Descriptions                  ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -994,8 +996,7 @@ be seen as a common denominator between Lwt and Async libraries.")
   (monads (= :version))
   (regular (= :version))
   (bitvec (= :version))
-  zarith
-  z3))
+  zarith))
 
 (package
  (name bap-primus-systems)
@@ -1627,3 +1628,12 @@ In particular, the library includes: \
   core
   core_kernel
   (bap-common (= :version))))
+
+(pin
+  (url git+https://github.com/xguerin/bitstring.git)
+  (package
+    (name bitstring)))
+(pin
+  (url git+https://github.com/xguerin/bitstring.git)
+  (package
+    (name ppx_bitstring)))

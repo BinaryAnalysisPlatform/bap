@@ -13,8 +13,8 @@
   core
   monads
   regular
-  z3
   zarith
+  z3
   bap-core-theory))
 
 (plugin
@@ -24,3 +24,24 @@
  (libraries bap-primus-symbolic-executor.plugin)
  (site
   (bap-common plugins)))
+
+(rule
+  (action (chdir z3 (run python scripts/mk_make.py --ml --staticlib)))
+  (deps (source_tree z3))
+  (alias z3_mk_make))
+
+(rule
+  (action
+    (chdir z3
+      (run make -C build -j4)))
+  (deps
+    (alias z3_mk_make)
+    (package zarith))
+  (alias z3_make))
+
+(rule
+  (action
+    (chdir z3
+      (run ocamlfind install z3 build/api/ml/* build/libz3-static.a)))
+  (deps (alias z3_make))
+  (alias z3_install))
