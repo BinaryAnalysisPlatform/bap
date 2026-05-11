@@ -9,19 +9,19 @@ open Powerpc.Std
     91 28 ff d4     stw r9,-44(r8) *)
 let stb cpu ops =
   let rs = unsigned cpu.reg ops.(0) in
-  let im = signed imm ops.(1) in
+  let im = signed imm16 ops.(1) in
   let ra = signed cpu.reg ops.(2) in
   RTL.[ cpu.store (ra + im) rs byte; ]
 
 let sth cpu ops =
   let rs = unsigned cpu.reg ops.(0) in
-  let im = signed imm ops.(1) in
+  let im = signed imm16 ops.(1) in
   let ra = signed cpu.reg ops.(2) in
   RTL.[ cpu.store (ra + im) rs halfword; ]
 
 let stw cpu ops =
   let rs = unsigned cpu.reg ops.(0) in
-  let im = signed imm ops.(1) in
+  let im = signed imm16 ops.(1) in
   let ra = signed cpu.reg ops.(2) in
   RTL.[ cpu.store (ra + im) rs word; ]
 
@@ -64,7 +64,7 @@ let stdx cpu ops =
     94 21 ff f0     stwu r1,-16(r1)  *)
 let stbu cpu ops =
   let rs = unsigned cpu.reg ops.(1) in
-  let im = signed imm ops.(2) in
+  let im = signed imm16 ops.(2) in
   let ra = signed cpu.reg ops.(3) in
   RTL.[
     cpu.store (ra + im) rs byte;
@@ -73,7 +73,7 @@ let stbu cpu ops =
 
 let sthu cpu ops =
   let rs = unsigned cpu.reg ops.(1) in
-  let im = signed imm ops.(2) in
+  let im = signed imm16 ops.(2) in
   let ra = signed cpu.reg ops.(3) in
   RTL.[
     cpu.store (ra + im) rs halfword;
@@ -82,7 +82,7 @@ let sthu cpu ops =
 
 let stwu cpu ops =
   let rs = unsigned cpu.reg ops.(1) in
-  let im = signed imm ops.(2) in
+  let im = signed imm16 ops.(2) in
   let ra = signed cpu.reg ops.(3) in
   RTL.[
     cpu.store (ra + im) rs word;
@@ -138,7 +138,7 @@ let stdux cpu ops =
     f8 29 00 08   std r1, 8(r9) *)
 let std cpu ops =
   let rs = unsigned cpu.reg ops.(0) in
-  let im = signed imm ops.(1) in
+  let im = signed imm16 ops.(1) in
   let ra = signed cpu.reg ops.(2) in
   RTL.[
     cpu.store (ra + im) rs doubleword;
@@ -150,7 +150,7 @@ let std cpu ops =
     f8 29 00 09   stdu r1, 8(r9) *)
 let stdu cpu ops =
   let rs = unsigned cpu.reg ops.(1) in
-  let im = signed imm ops.(2) in
+  let im = signed imm16 ops.(2) in
   let ra = signed cpu.reg ops.(3) in
   let ea = unsigned var doubleword in
   RTL.[

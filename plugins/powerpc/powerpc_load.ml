@@ -9,19 +9,19 @@ open Powerpc.Std
     83 eb ff fc - lwz r31, -4(r11) *)
 let lbz cpu ops =
   let rt = unsigned cpu.reg ops.(0) in
-  let im = signed imm ops.(1) in
+  let im = signed imm16 ops.(1) in
   let ra = signed cpu.reg ops.(2) in
   RTL.[ rt := cpu.load (ra + im) byte; ]
 
 let lhz cpu ops =
   let rt = unsigned cpu.reg ops.(0) in
-  let im = signed imm ops.(1) in
+  let im = signed imm16 ops.(1) in
   let ra = signed cpu.reg ops.(2) in
   RTL.[ rt := cpu.load (ra + im) halfword; ]
 
 let lwz cpu ops =
   let rt = unsigned cpu.reg ops.(0) in
-  let im = signed imm ops.(1) in
+  let im = signed imm16 ops.(1) in
   let ra = signed cpu.reg ops.(2) in
   RTL.[ rt := cpu.load (ra + im) word; ]
 
@@ -57,7 +57,7 @@ let lwzx cpu ops =
     85 3f ff fc  lwzu r9, -4(r31)  *)
 let lbzu cpu ops =
   let rt = unsigned cpu.reg ops.(0) in
-  let im = signed imm ops.(2) in
+  let im = signed imm16 ops.(2) in
   let ra = signed cpu.reg ops.(3) in
   RTL.[
     rt := cpu.load (ra + im) byte;
@@ -66,7 +66,7 @@ let lbzu cpu ops =
 
 let lhzu cpu ops =
   let rt = unsigned cpu.reg ops.(0) in
-  let im = signed imm ops.(2) in
+  let im = signed imm16 ops.(2) in
   let ra = signed cpu.reg ops.(3) in
   RTL.[
     rt := cpu.load (ra + im) halfword;
@@ -75,7 +75,7 @@ let lhzu cpu ops =
 
 let lwzu cpu ops =
   let rt = unsigned cpu.reg ops.(0) in
-  let im = signed imm ops.(2) in
+  let im = signed imm16 ops.(2) in
   let ra = signed cpu.reg ops.(3) in
   RTL.[
     rt := cpu.load (ra + im) word;
@@ -122,7 +122,7 @@ let lwzux cpu ops =
     a8 29 00 05    lha r1, 5(r9) *)
 let lha cpu ops =
   let rt = signed cpu.reg ops.(0) in
-  let im = signed imm ops.(1) in
+  let im = signed imm16 ops.(1) in
   let ra = signed cpu.reg ops.(2) in
   RTL.[
     rt := cpu.load (ra + im) halfword;
@@ -134,7 +134,7 @@ let lha cpu ops =
     eb eb 01 16    lwa r31, 276(r11)  *)
 let lwa cpu ops =
   let rt = signed cpu.reg ops.(0) in
-  let im = signed imm ops.(1) in
+  let im = signed imm16 ops.(1) in
   let ra = signed cpu.reg ops.(2) in
   RTL.[
     rt := cpu.load (ra + im) word;
@@ -168,7 +168,7 @@ let lwax cpu ops =
 let lhau cpu ops =
   let rt = signed cpu.reg ops.(0) in
   let ra = signed cpu.reg ops.(1) in
-  let im = signed imm ops.(2) in
+  let im = signed imm16 ops.(2) in
   RTL.[
     rt := cpu.load (ra + im) halfword;
     ra := ra + im
@@ -203,7 +203,7 @@ let lwaux cpu ops =
     e8 29 00 08    ld r1, 8(r9) *)
 let ld cpu ops =
   let rt = unsigned cpu.reg ops.(0) in
-  let im = signed imm ops.(1) in
+  let im = signed imm16 ops.(1) in
   let ra = signed cpu.reg ops.(2) in
   RTL.[
     rt := cpu.load (ra + im) doubleword;
@@ -228,7 +228,7 @@ let ldx cpu ops =
 let ldu cpu ops =
   let rt = unsigned cpu.reg ops.(0) in
   let ra = signed cpu.reg ops.(1) in
-  let im = unsigned imm ops.(2) in
+  let im = signed imm16 ops.(2) in
   RTL.[
     rt := cpu.load (ra + im) doubleword;
     ra := ra + im;
