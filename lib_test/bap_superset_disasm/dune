@@ -1,0 +1,5 @@
+(library
+  (name test_superset_disasm)
+  (preprocess (pps ppx_bap))
+  (wrapped false)
+  (libraries bap core_kernel ounit2 str))
