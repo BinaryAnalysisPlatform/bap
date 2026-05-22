@@ -9,12 +9,12 @@ tags: ["bap" "meta"]
 homepage: "https://github.com/BinaryAnalysisPlatform/bap"
 bug-reports: "https://github.com/BinaryAnalysisPlatform/bap/issues"
 depends: [
-  "base" {>= "v0.14" & < "v0.16"}
+  "base" {>= "v0.16" & < "v0.17"}
   "dune" {>= "3.1"}
   "dune-configurator"
   "dune-site"
-  "ocaml" {> "4.08.0"}
-  "stdio" {>= "v0.14" & < "v0.16"}
+  "ocaml" {>= "4.14.0"}
+  "stdio" {>= "v0.16" & < "v0.17"}
   "odoc" {with-doc}
 ]
 build: [

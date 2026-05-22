@@ -12,7 +12,7 @@ depends: [
   "dune" {>= "3.1"}
   "bap-main" {= version}
   "bap-std" {= version}
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.16" & < "v0.17"}
   "graphlib" {= version}
   "bap-common" {= version}
   "ppx_bap" {= version}

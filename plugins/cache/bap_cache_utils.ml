@@ -1,8 +1,8 @@
 open Core_kernel[@@warning "-D"]
 open Regular.Std
 
-module Filename = Caml.Filename
-module Sys = Caml.Sys
+module Filename = Stdlib.Filename
+module Sys = Stdlib.Sys
 module Unix = Caml_unix
 
 let ( / ) = Filename.concat

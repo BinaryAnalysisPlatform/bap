@@ -13,7 +13,7 @@ open Format
 
 module Driver = Bap_disasm_driver
 
-module Buffer = Caml.Buffer
+module Buffer = Stdlib.Buffer
 include Bap_self.Create()
 
 let query doc attr =
@@ -713,7 +713,7 @@ module Pass = struct
   let fail = function
     | Unsat_dep _ as err -> raise (Failed err)
     | Runtime_error (pass,exn) ->
-      let backtrace = Caml.Printexc.get_backtrace () in
+      let backtrace = Stdlib.Printexc.get_backtrace () in
       raise (Failed (Runtime_error (pass, Exn.Reraised (backtrace, exn))))
 
   let is_evaled pass proj =

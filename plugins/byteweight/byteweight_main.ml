@@ -45,7 +45,7 @@ open Core_kernel[@@warning "-D"]
 open Bap_main
 open Bap_core_theory
 open Bap.Std
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 
 open KB.Syntax
 include Loggers()

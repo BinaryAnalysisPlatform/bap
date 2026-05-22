@@ -3,7 +3,7 @@ open Bap_plugins.Std
 
 open OUnit2
 
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 
 let suite () =
   "BAP" >::: [

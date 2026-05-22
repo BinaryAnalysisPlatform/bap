@@ -78,7 +78,7 @@ module Make(B : Theory.Core) = struct
     let smin x y = ite (x <$ y) x y
 
     let leading_one sort =
-      one sort lsl (of_int sort Caml.(Theory.Bitv.size sort - 1))
+      one sort lsl (of_int sort Stdlib.(Theory.Bitv.size sort - 1))
 
   end
 
@@ -125,7 +125,7 @@ module Make(B : Theory.Core) = struct
     let open IEEE754 in
     let bits = Sort.bits fsort in
     let bit  = Bits.define 1 in
-    let bits_1 = Bits.define Caml.(Bits.size bits - 1) in
+    let bits_1 = Bits.define Stdlib.(Bits.size bits - 1) in
     let sign = ite sign (B.one bit) (B.zero bit) in
     B.append bits sign (B.append bits_1 expn coef)
 
@@ -134,7 +134,7 @@ module Make(B : Theory.Core) = struct
     let {IEEE754.p; t} = IEEE754.Sort.spec fsort in
     let is_subnormal = (inv (msb coef)) && (is_one expn) in
     ite is_subnormal (pred expn) expn >>>= fun expn ->
-    if Caml.(p = t) then pack_raw fsort sign expn coef
+    if Stdlib.(p = t) then pack_raw fsort sign expn coef
     else
       B.low (Bits.define t) coef >>>= fun coef ->
       pack_raw fsort sign expn coef >>= fun r -> !!r
@@ -172,7 +172,7 @@ module Make(B : Theory.Core) = struct
   let with_sign sign bitv =
     let open B in
     bitv >>-> fun s bitv ->
-    let s' = Bits.define Caml.(Bits.size s - 1) in
+    let s' = Bits.define Stdlib.(Bits.size s - 1) in
     let bit = Bits.define 1 in
     ite sign ((append s (one bit) (zero s')) lor !!bitv)
       ((append s (zero bit) (ones s')) land !!bitv)
@@ -388,11 +388,11 @@ module Make(B : Theory.Core) = struct
     let size = Bits.size sort in
     let pow, num = nearest_pow2 size in
     let sort' = Bits.define num in
-    let shifts = List.init pow ~f:(fun p -> Caml.(num / (2 lsl p))) in
+    let shifts = List.init pow ~f:(fun p -> Stdlib.(num / (2 lsl p))) in
     let shifts,_ =
       List.fold shifts ~init:([],0)
         ~f:(fun (acc,prev) curr ->
-            let total = Caml.(curr + prev) in
+            let total = Stdlib.(curr + prev) in
             (total, curr) :: acc, total) in
     let shifts = List.rev shifts in
     let rec loop lets x = function
@@ -403,7 +403,7 @@ module Make(B : Theory.Core) = struct
         ite (is_zero (x land mask)) (of_int sort shf) (zero sort) >>>= fun nextn ->
         loop (nextn :: lets) nextx shifts in
     loop [] (B.unsigned sort' !!x) shifts >>>= fun n ->
-    of_int sort Caml.(num - size) >>>= fun dif ->
+    of_int sort Stdlib.(num - size) >>>= fun dif ->
     ite (is_zero !!x) (of_int sort size) (n - dif)
 
   let possible_lshift expn coef =
@@ -677,7 +677,7 @@ module Make(B : Theory.Core) = struct
     let lost_afew = b0, b0, b1 in
     nomin >>-> fun sort nomin ->
     let rec loop i bits nomin =
-      if Caml.(i < 0) then
+      if Stdlib.(i < 0) then
         List.fold bits ~f:(lor) ~init:(zero sort) >>>= fun coef ->
         match_ [
           (nomin > denom) --> f coef lost_alot;
@@ -690,8 +690,8 @@ module Make(B : Theory.Core) = struct
         ite (nomin > denom) (nomin - denom) nomin >>>= fun next_nomin ->
         next_nomin lsl one sort >>>= fun next_nomin ->
         bind next_nomin (fun next_nomin ->
-            loop Caml.(i - 1) (bit :: bits) next_nomin) in
-    loop Caml.(prec - 1) [] !!nomin
+            loop Stdlib.(i - 1) (bit :: bits) next_nomin) in
+    loop Stdlib.(prec - 1) [] !!nomin
 
   let fdiv_finite fsort rm x y  =
     let open B in
@@ -774,7 +774,7 @@ module Make(B : Theory.Core) = struct
   let truncate fsort x rm fsort' =
     let open B in
     let sigs_sh = Bits.size (sigs fsort') in
-    let d_bias = Caml.(bias fsort - bias fsort') in
+    let d_bias = Stdlib.(bias fsort - bias fsort') in
     let dst_maxe = max_exponent' (Bits.size @@ exps fsort') in
     unpack fsort x @@ fun sign expn coef ->
     if_ (is_all_ones expn || is_zero expn)
@@ -806,8 +806,8 @@ module Make(B : Theory.Core) = struct
   (* pre: fsort "<=" fsort' *)
   let extend fsort x fsort' =
     let open B in
-    let d_sigs = Caml.(Bits.size (sigs fsort') - Bits.size (sigs fsort)) in
-    let d_bias = Caml.(bias fsort' - bias fsort) in
+    let d_sigs = Stdlib.(Bits.size (sigs fsort') - Bits.size (sigs fsort)) in
+    let d_bias = Stdlib.(bias fsort' - bias fsort) in
     unpack fsort x @@ fun sign expn coef ->
     match_ [
       is_all_ones expn --> ones (exps fsort');
@@ -840,7 +840,7 @@ module Make(B : Theory.Core) = struct
     let exps = exps fsort in
     let sigs = Bits.define p in
     bitv >>-> fun inps bitv ->
-    of_int exps Caml.(bias + p - 1) >>>= fun expn ->
+    of_int exps Stdlib.(bias + p - 1) >>>= fun expn ->
     of_int sigs p >>>= fun prec ->
     clz !!bitv >>>= fun clz ->
     unsigned sigs clz >>>= fun clz ->
@@ -886,8 +886,8 @@ module Make(B : Theory.Core) = struct
   let range_reduction fsort x f =
     let open B in
     let bias = bias fsort in
-    let low = of_int (exps fsort) Caml.(bias - 0) in
-    let top = of_int (exps fsort) Caml.(bias + 1) in
+    let low = of_int (exps fsort) Stdlib.(bias - 0) in
+    let top = of_int (exps fsort) Stdlib.(bias + 1) in
     unpack_raw fsort x @@ fun sign expn coef ->
     match_ [
       (expn = top && non_zero coef) --> (expn - low);

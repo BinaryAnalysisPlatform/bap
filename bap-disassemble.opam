@@ -19,7 +19,7 @@ depends: [
   "bitvec-order" {= version}
   "bitvec-sexp" {= version}
   "bitvec" {= version}
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.16" & < "v0.17"}
   "monads" {= version}
   "bap-common" {= version}
   "ogre" {= version}

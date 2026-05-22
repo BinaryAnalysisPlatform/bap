@@ -39,7 +39,7 @@ let data ?(base=0) ?(gap=0) f ss asize name =
       let data = f data in
       let addr = !addr_ref in
       let len = Bytes.length data in
-      let dst = String.Table.find_or_add files name
+      let dst = Hashtbl.find_or_add files name
           ~default:create_file in
       let off = addr - base in
       Bytes.blit
@@ -99,7 +99,7 @@ let print_list r =
   Or_error.sexp_of_t sexp_of_addr_list r
 
 let to_list ~word_size backend ~expect ctxt =
-  let data = String.Table.find_exn files backend |> Bytes.to_string in
+  let data = Hashtbl.find_exn files backend |> Bytes.to_string in
   let r = Image.of_string ~backend data >>| fun (img,warns) ->
     assert_bool "to_list: no warning" (List.is_empty warns);
     Table.to_sequence (Image.words img word_size) |>
@@ -109,7 +109,7 @@ let to_list ~word_size backend ~expect ctxt =
   assert_equal ~ctxt ~printer:print_list (Ok expect) r
 
 let check ?(base=0) backend ~f ctxt =
-  let data = String.Table.find_exn files backend in
+  let data = Hashtbl.find_exn files backend in
   let data = Bytes.to_string data in
   let r = Image.of_string ~backend data
     >>= fun (img,warns) ->

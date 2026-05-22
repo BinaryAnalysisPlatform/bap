@@ -156,7 +156,7 @@ module Vars (B : Bitwidth) = struct
     bits
 
   let crn =
-    Int.Map.fold cri ~init:String.Map.empty
+    Map.fold cri ~init:String.Map.empty
       ~f:(fun ~key:_ ~data:var acc ->
           Map.set acc (Var.name var) var)
 
@@ -211,7 +211,7 @@ module Exps(B : Bitwidth) = struct
   let cri = Map.map cri ~f:(fun v -> Exp.of_var v)
 
   let crn =
-    Int.Map.fold Vars.cri ~init:String.Map.empty
+    Map.fold Vars.cri ~init:String.Map.empty
       ~f:(fun ~key:_ ~data:var acc ->
           Map.set acc (Var.name var) (Exp.of_var var))
 
@@ -286,9 +286,9 @@ module Make_cpu(P : PowerPC) : CPU = struct
   let gpr =
     let data = Map.data gpr in
     List.fold data ~init:Var.Set.empty
-      ~f:(fun regs v -> Var.Set.add regs v)
+      ~f:(fun regs v -> Set.add regs v)
 
-  let sp = Var.Set.find_exn gpr ~f:(fun v -> String.equal (Var.name v) "R1")
+  let sp = Set.find_exn gpr ~f:(fun v -> String.equal (Var.name v) "R1")
   let vf = ov
   let cf = ca
   let nf = Map.find_exn cri 0
