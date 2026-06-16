@@ -24,12 +24,20 @@
   (set CF (select 1 nzcv))
   (set VF (select 0 nzcv)))
 
-(defun add-with-carry (rd x y c)
+(defun set-nzcv-after-logic-op (result)
+  "sets the flags after an AND operation i.e. sets the carry and overflow flags to zero and the negative and zero flags based on the result"
+  (set NF (msb result))
+  (set ZF (is-zero result))
+  (set CF 0)
+  (set VF 0))
+
+
+(defmacro add-with-carry (set rd x y c)
   "(add-with-carry rd x y c) sets rd to the result of adding x and y
    with carry bit c, and sets processor flags."
   (let ((r (+ c y x)))
     (set-nzcv-from-registers r x y)
-    (set$ rd r)))
+    (set rd r)))
 
 (defun add-with-carry/clear-base (rd x y c)
   "(add-with-carry/clear-base rd x y c) sets rd to the result of adding x and y
