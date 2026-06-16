@@ -34,7 +34,7 @@ let deref mem =
   Seq.unfold_step ~init:(Memory.min_addr mem)
     ~f:(fun addr ->
         match Memory.get ~addr mem with
-        | Ok word -> Seq.Step.Yield (word, Word.succ addr)
+        | Ok word -> Seq.Step.Yield {value=word; state=Word.succ addr}
         | Error _ -> Seq.Step.Done)
 
 let get memory =

@@ -1,7 +1,7 @@
 open Core_kernel[@@warning "-D"]
 open Result.Monad_infix
 open Bap.Std
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 include Self()
 
 module Configuration = Bap_main.Extension.Configuration
@@ -16,7 +16,7 @@ let try_with_default ~default f = match try_with f with
 
 let getenv v =
   try Some (Sys.getenv v)
-  with Caml.Not_found -> None
+  with Stdlib.Not_found -> None
 
 module Path = FilePath.DefaultPath.Abstract
 type path = Path.filename

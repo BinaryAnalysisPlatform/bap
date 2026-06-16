@@ -84,7 +84,7 @@ module Make(B : Bitwidth) = struct
     bits
 
   let crn =
-    Int.Map.fold cri ~init:String.Map.empty
+    Map.fold cri ~init:String.Map.empty
       ~f:(fun ~key:_ ~data:var acc ->
           Map.set acc (Var.name var) var)
 
@@ -133,7 +133,7 @@ let raise_arch () =
   failwith "powerpc arch is the only expected"
 
 let cr_bit n =
-  Int.Map.find_exn Any_ppc.cri n
+  Map.find_exn Any_ppc.cri n
 
 let nf = cr_bit 0
 let pf = cr_bit 1
@@ -219,8 +219,8 @@ let lookup_var c var = match c#lookup var with
 let find_gpr arch name =
   try
     match arch with
-    | `ppc -> String.Map.find_exn P32.gpr name
-    | _ -> String.Map.find_exn P64.gpr name
+    | `ppc -> Map.find_exn P32.gpr name
+    | _ -> Map.find_exn P64.gpr name
   with _ ->
     sprintf "gpr %s not" name |> failwith
 

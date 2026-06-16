@@ -1,14 +1,14 @@
 open Core_kernel[@@warning "-D"]
 
-module Filename = Caml.Filename
-module Sys = Caml.Sys
+module Filename = Stdlib.Filename
+module Sys = Stdlib.Sys
 
 module Std = struct
   exception Not_a_bundle
 
 
   module Manifest = struct
-    let getenv key = try Sys.getenv key with Caml.Not_found -> "unknown"
+    let getenv key = try Sys.getenv key with Stdlib.Not_found -> "unknown"
 
     type t = {
       name : string;
@@ -165,12 +165,12 @@ module Std = struct
         let name = Option.value name ~default:path in
         Zip.copy_entry_to_file zip entry name;
         Some (Uri.of_string name)
-      with Caml.Not_found -> None
+      with Stdlib.Not_found -> None
 
     let get_data b name =
       b >>> fun zip ->
       try Some Zip.(read_entry zip (find_entry zip name))
-      with Caml.Not_found -> None
+      with Stdlib.Not_found -> None
 
     let list b =
       b >>> fun zip ->

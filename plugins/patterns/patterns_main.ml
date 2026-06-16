@@ -113,7 +113,7 @@ open Bap_core_theory
 open Bap.Std
 open Bap_main
 open Bap_primus.Std
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 
 module Sigma = Primus.Lisp.Semantics
 module Lambda = Theory.Label
@@ -1125,7 +1125,7 @@ end = struct
   let dedup selected =
     let empty = Set.empty (module String) in
     List.fold selected ~init:(empty,empty) ~f:(fun (digests,files) file ->
-        let digest = Caml.Digest.file file in
+        let digest = Stdlib.Digest.file file in
         if Set.mem digests digest ||
            Set.mem files file then digests,files
         else Set.add digests digest,

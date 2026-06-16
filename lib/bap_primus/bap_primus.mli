@@ -189,7 +189,7 @@ module Std : sig
         Machine run. That type is left abstract, and has no
         operations, as its purpose is to disallow running machine
         directly with a properly initialized system. *)
-    type 'a effect
+    type 'a effect_
 
     (** value generator  *)
     type generator
@@ -575,7 +575,7 @@ module Std : sig
                                            ?boot:unit t ->
                                            ?init:unit t ->
                                            ?fini:unit t ->
-                                           (exit_status * project) m effect
+                                           (exit_status * project) m effect_
 
         (** Local state of the machine.  *)
         module Local  : State with type 'a m := 'a t

@@ -12,7 +12,7 @@ open Bap_main
 open Core_kernel[@@warning "-D"]
 open Extension.Syntax
 
-module Buffer = Caml.Buffer
+module Buffer = Stdlib.Buffer
 module Unix = Caml_unix
 
 module Spec = struct

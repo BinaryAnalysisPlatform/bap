@@ -84,7 +84,7 @@ module Make(M : Monad.S) = struct
     ?boot:unit t ->
     ?init:unit t ->
     ?fini:unit t ->
-    (exit_status * project) m effect
+    (exit_status * project) m effect_
 
   type _ error = exn
 

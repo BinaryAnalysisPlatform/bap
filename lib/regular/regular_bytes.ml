@@ -2,7 +2,7 @@ module Std_bytes = Bytes
 
 open Core_kernel[@@warning "-D"]
 
-module Binable = Bin_prot.Utils.Make_binable(struct
+module Binable = Bin_prot.Utils.Make_binable_without_uuid(struct
     module Binable = String
     type t = Std_bytes.t
     let to_binable = Std_bytes.unsafe_to_string

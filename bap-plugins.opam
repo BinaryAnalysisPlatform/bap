@@ -13,7 +13,7 @@ depends: [
   "bap-common" {= version}
   "bap-bundle" {= version}
   "bap-future" {= version}
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.17"}
   "fileutils"
   "ocamlfind"
   "ppx_bap" {= version}

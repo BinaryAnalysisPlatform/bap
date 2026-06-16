@@ -4,7 +4,7 @@ open KB.Syntax
 
 open Thumb_core
 
-type eff = unit Theory.effect KB.t
+type eff = unit Theory.effect_ KB.t
 
 let mask = W32.int32 0xffff_fffel
 

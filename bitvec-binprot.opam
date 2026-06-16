@@ -10,7 +10,7 @@ homepage: "https://github.com/BinaryAnalysisPlatform/bap"
 bug-reports: "https://github.com/BinaryAnalysisPlatform/bap/issues"
 depends: [
   "dune" {>= "3.1"}
-  "bin_prot" {>= "v0.14" & < "v0.16"}
+  "bin_prot" {>= "v0.17"}
   "bitvec" {= version}
   "ppx_bap" {= version}
   "odoc" {with-doc}

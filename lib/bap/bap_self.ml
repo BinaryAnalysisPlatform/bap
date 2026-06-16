@@ -6,8 +6,8 @@ open Format
 open Cmdliner
 
 module Event = Bap_main_event
-module Buffer = Caml.Buffer
-module Sys = Caml.Sys
+module Buffer = Stdlib.Buffer
+module Sys = Stdlib.Sys
 
 module Create() = struct
   let main =
@@ -50,7 +50,7 @@ module Create() = struct
     else filter_args name
 
   let has_var v = match Sys.getenv ("BAP_" ^ String.uppercase v) with
-    | exception Caml.Not_found -> false
+    | exception Stdlib.Not_found -> false
     | "false" | "0" -> false
     | _ -> true
 
@@ -123,7 +123,7 @@ module Create() = struct
       try Ok (f {get = fun x -> Future.peek_exn x}) with
       | Invalid_argument s -> Error (Error.Invalid s)
       | exn ->
-        let backtrace = Caml.Printexc.get_backtrace () in
+        let backtrace = Stdlib.Printexc.get_backtrace () in
         Error (Error.Bug (exn,backtrace))
     let when_ready f = declare_extension f
 

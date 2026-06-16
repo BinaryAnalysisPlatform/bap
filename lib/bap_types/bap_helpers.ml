@@ -460,7 +460,7 @@ module Trie = struct
       method! map_sym var =
         let name = Bap_var.name var in
         let ty = Bap_var.typ var in
-        String.Table.find_or_add vars name
+        Hashtbl.find_or_add vars name
           ~default:(fun () -> Bap_var.create name ty)
       method! map_int w =
         let ty = Type.Imm (Word.bitwidth w) in
@@ -1046,11 +1046,11 @@ module Stmt = struct
 
   let bil_free_vars bil =
     let update news vars kill =
-      VS.union vars (VS.diff news kill) in
+      Set.union vars (Set.diff news kill) in
     fst @@ List.fold bil ~init:(VS.empty,VS.empty)
       ~f:(fun (vars,kill) -> function
           | Stmt.Move (v,e) ->
-            update (Exp.free_vars e) vars kill, VS.add kill v
+            update (Exp.free_vars e) vars kill, Set.add kill v
           | stmt -> update (free_vars stmt) vars kill, kill)
 
   class constant_folder = Constant_folder.main

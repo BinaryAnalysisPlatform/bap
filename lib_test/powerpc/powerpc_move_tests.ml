@@ -61,7 +61,7 @@ let mtcrf arch _ctxt =
           j*4 <= i && i < (j + 1) * 4) then
         let expected =
           if r1_bits.(i) then Word.b1 else Word.b0 in
-        let cr_bit = Int.Map.find_exn cri i in
+        let cr_bit = Map.find_exn cri i in
         let value = lookup_var ctxt cr_bit in
         let err = sprintf "mtcrf assign to bit %d failed\n" i in
         assert_bool err (is_equal_words expected value))

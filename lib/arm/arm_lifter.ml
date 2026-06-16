@@ -1073,7 +1073,7 @@ module CPU = struct
       pc; spsr; cpsr; itstate;
     ]
 
-  let gpr = Var.Set.diff regs non_gpr
+  let gpr = Set.diff regs non_gpr
 
   let perms = Var.Set.of_list [
       r4; r5; r6; r7; r8; r9; r10; r11;

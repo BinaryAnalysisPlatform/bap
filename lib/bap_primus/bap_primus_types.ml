@@ -18,7 +18,7 @@ type exit_status =
   | Normal
   | Exn of exn
 
-type 'a effect =
+type 'a effect_ =
   ?envp:string array ->
   ?args:string array ->
   string ->
@@ -67,7 +67,7 @@ module type Machine = sig
                                      ?boot:unit t ->
                                      ?init:unit t ->
                                      ?fini:unit t ->
-                                     (exit_status * project) m effect
+                                     (exit_status * project) m effect_
   module Local  : State with type 'a m := 'a t
                          and type 'a t := 'a state
 
