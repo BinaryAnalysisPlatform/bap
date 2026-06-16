@@ -39,6 +39,7 @@ let libraries = [
     "bap-mips", "Bap_mips_target", "", "MIPS definitions";
     "bap-powerpc", "Bap_powerpc_target", "", "PowerPC definitions";
     "bap-riscv", "Bap_riscv_target", "", "RISCV definitions";
+    "bap-msp430", "Bap_msp430_target", "", "MSP430 definitions";
     "bap-systemz", "Bap_systemz_target", "", "SystemZ definitions";
   ];
 

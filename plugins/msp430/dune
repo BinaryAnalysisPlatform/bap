@@ -1,0 +1,22 @@
+(library
+ (name bap_msp430_plugin)
+ (public_name bap-msp430.plugin)
+ (preprocess (pps ppx_bap))
+ (libraries
+   bap
+   bap-abi
+   bap-api
+   bap-c
+   bap-core-theory
+   bap-knowledge
+   bap-main
+   bap-msp430
+   core_kernel
+   monads
+   ogre))
+
+(plugin
+ (name msp430)
+ (package bap-msp430)
+ (libraries bap-msp430.plugin)
+ (site (bap-common plugins)))

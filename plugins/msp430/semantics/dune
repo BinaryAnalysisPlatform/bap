@@ -1,0 +1,4 @@
+(install
+ (files msp430.lisp)
+ (package bap-msp430)
+ (section (site (bap-common semantics))))
