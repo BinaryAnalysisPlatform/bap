@@ -24,7 +24,7 @@
 
 (defun reg# (reg)
   (if (is-rip reg)
-      (+ (get-program-counter) 8)
+      (+ (get-program-counter) (get-instruction-length))
     reg))
 
 (defun load-mem (reg off)
@@ -478,4 +478,4 @@
   (set rd (opo (opi rn rm))))
 
 (defmacro bitwise-rrm (set opo opi rd rn ptr off)
-  (set rd (opo (opi rn (load-bits (word-width (unquote rn)) (+ ptr off))))))
+  (set rd (opo (opi rn (load-bits (word-width (unquote rn)) (+ (reg# ptr) off))))))
