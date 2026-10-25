@@ -32,6 +32,14 @@ val run :
   ?brancher:brancher ->
   ?rooter:rooter -> arch -> mem -> t Or_error.t
 
+(** [run_in_scope ?brancher ?rooter arch mem] is [run] as a knowledge
+    computation: the scan runs in the caller's machine, so dynamic
+    scopes the caller establishes (the current theory, in particular)
+    hold while the instructions reify. *)
+val run_in_scope :
+  ?brancher:brancher ->
+  ?rooter:rooter -> arch -> mem -> t Or_error.t knowledge
+
 val cfg : t -> Cfg.t
 
 val errors : t -> error list

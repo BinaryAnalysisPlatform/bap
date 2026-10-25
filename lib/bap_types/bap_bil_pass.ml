@@ -9,7 +9,7 @@ type t = {
 }
 type pass = t
 
-let passes : t String.Table.t = String.Table.create ()
+let passes : t String.Table.t = Hashtbl.create (module String)
 let selected : (bil -> bil) list ref = ref []
 
 let register_pass ?(desc="No description provided") name body =

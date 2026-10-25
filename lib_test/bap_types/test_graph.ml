@@ -54,7 +54,7 @@ module Test_algo(Gl : Graph_for_algo) = struct
      Note: time is incremented by any of the following events:
      enter_node, leave_node. Edges events are ignored. *)
   let timestamps ty gr : int * ('n,node_info,_) Map.t =
-    Graphlib.depth_first_search ty gr ~init:(0,Node.Map.empty)
+    Graphlib.depth_first_search ty gr ~init:(0,Map.empty (module Node))
       ~enter_node:(fun pre node (time,stamps) ->
           time + 1, Map.change stamps node ~f:(function
               | None -> Some {empty with pre; enter = time}
@@ -74,13 +74,13 @@ module Test_algo(Gl : Graph_for_algo) = struct
     }
 
     let empty = {
-      children = Node.Map.empty;
-      iparents = Node.Map.empty;
+      children = (Map.empty (module Node));
+      iparents = (Map.empty (module Node));
     }
 
     let add_relation t ~parent ~child = {
       children = Map.change t.children parent( function
-          | None -> Some (Node.Set.singleton child)
+          | None -> Some (Set.singleton (module Node) child)
           | Some cs when Set.mem cs child ->
             assert_failure "Child was already adopted"
           | Some cs -> Some (Set.add cs child));
@@ -90,7 +90,7 @@ module Test_algo(Gl : Graph_for_algo) = struct
     }
 
     let children t parent = match Map.find t.children parent with
-      | None -> Node.Set.empty
+      | None -> (Set.empty (module Node))
       | Some children -> children
 
     let parent t child = Map.find t.iparents child
@@ -99,7 +99,7 @@ module Test_algo(Gl : Graph_for_algo) = struct
        (transitive closure) *)
     let rec descendants t parent =
       (* according to [1] each node is descendant of itself. *)
-      let init = Node.Set.singleton parent in
+      let init = Set.singleton (module Node) parent in
       Set.fold (children t parent) ~init ~f:(fun ds parent ->
           Set.union ds (descendants t parent))
 
@@ -108,7 +108,7 @@ module Test_algo(Gl : Graph_for_algo) = struct
       let rec loop parents child = match parent t child with
         | None -> parents
         | Some parent -> loop (Set.add parents parent) parent in
-      loop Node.Set.empty child
+      loop (Set.empty (module Node)) child
   end
 
   let build_tree g =
@@ -222,9 +222,9 @@ module Test_algo(Gl : Graph_for_algo) = struct
                             Seq.to_list_rev in
     Seq.range 0 (Gl.number_of_nodes gr) |>
     Seq.map ~f:node |>  Seq.iter ~f:(fun n ->
-        let exp = Node.Set.of_list (exp_dfrt n) in
-        let got = Node.Set.of_list (set_of_frontier n) in
-        assert_equal ~ctxt  ~cmp:Node.Set.equal exp got)
+        let exp = Set.of_list (module Node) (exp_dfrt n) in
+        let got = Set.of_list (module Node) (set_of_frontier n) in
+        assert_equal ~ctxt  ~cmp:Set.equal exp got)
 
   let compare_scc gr ctxt =
     let scc = Graphlib.strong_components (module Gl) gr in
@@ -248,10 +248,10 @@ module Test_algo(Gl : Graph_for_algo) = struct
       ])
 
   let nodes g =
-    Gl.nodes g |> Seq.fold ~init:Gl.Node.Set.empty ~f:Set.add
+    Gl.nodes g |> Seq.fold ~init:(Set.empty (module Gl.Node)) ~f:(fun s x -> Set.add s x)
 
   let edges g =
-    Gl.edges g |> Seq.fold ~init:Gl.Edge.Set.empty ~f:Set.add
+    Gl.edges g |> Seq.fold ~init:(Set.empty (module Gl.Edge)) ~f:(fun s x -> Set.add s x)
 
   let equal_sets s1 s2 ctxt =
     assert_equal ~ctxt ~cmp:Set.equal s1 s2
@@ -310,7 +310,7 @@ module Construction(Factory : Factory) = struct
                          and type Edge.label = unit) g =
     G.edges g |> Seq.map ~f:(fun e ->
         G.Edge.src e, G.Edge.dst e, G.Edge.src e) |>
-    Seq.fold ~init:Edges.empty ~f:Set.add
+    Seq.fold ~init:Edges.empty ~f:(fun s x -> Set.add s x)
 
   let compare e g : int =
     let ees = make_edges (module E) e in
@@ -319,7 +319,7 @@ module Construction(Factory : Factory) = struct
     | 0 -> 0
     | n ->
       let set enum g =
-        enum g |> Seq.fold ~init:Nodes.empty ~f:Set.add in
+        enum g |> Seq.fold ~init:Nodes.empty ~f:(fun s x -> Set.add s x) in
       Nodes.compare (set E.nodes e) (set G.nodes g)
 
   let random_elt number enum e =
@@ -570,7 +570,7 @@ module Test_partition = struct
 
   let add x s = Set.add s x
 
-  let s = Set.empty (module Int)
+  let s = (Set.empty (module Int))
           |> add 0
           |> add 1
           |> add 2

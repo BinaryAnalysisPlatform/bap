@@ -200,8 +200,16 @@ end = struct
   include (val KB.Value.derive cls)
 end
 
-
 let to_var v = Theory.Var.create (Var.sort v) (Var.ident v)
+
+let rip_relative_addr =
+  let bool_domain = Knowledge.Domain.flat ~inspect:Bool.sexp_of_t
+      ~equal:Bool.equal ~empty:false "bool" in
+  Knowledge.Class.property ~package
+    Theory.Value.cls "rip-relative-addr" bool_domain
+    ~public:true
+    ~desc:"this value is a RIP-relative address"
+
 
 module Def : sig
   type t = {
@@ -307,7 +315,7 @@ end = struct
     paths : path Tid.Table.t;
   } [@@deriving bin_io, fields, sexp]
 
-  let empty () = {subs = [| |] ;  paths = Tid.Table.create () }
+  let empty () = {subs = [| |] ;  paths = Hashtbl.create (module Tid) }
 
   let update p subs = { p with subs }
 
@@ -453,7 +461,7 @@ let nil_def : def term = empty Def.{
 
 let nil_phi : phi term = empty Phi.{
     var = undefined_variable;
-    map = Map.empty (module Tid);
+    map = (Map.empty (module Tid));
   }
 
 let nil_jmp : jmp term = empty Jmp.{
@@ -491,7 +499,7 @@ let term_pp ?(no_cut=false) ?(box=horizontal) pp_self ppf t =
   let open Format in
   let attrs = Dict.data t.dict in
   Seq.iter attrs ~f:(fun attr ->
-      pp_open_tag ppf (asprintf "%a" pp_attr attr));
+      pp_open_stag ppf (String_tag (asprintf "%a" pp_attr attr)));
   let pp_cut ppf = if not no_cut
     then Format.pp_print_break ppf 1 0
     else fprintf ppf " " in
@@ -500,7 +508,7 @@ let term_pp ?(no_cut=false) ?(box=horizontal) pp_self ppf t =
     pp_cut
     pp_self t.self;
   Format.pp_close_box ppf ();
-  Seq.iter attrs ~f:(fun _ -> pp_close_tag ppf ())
+  Seq.iter attrs ~f:(fun _ -> pp_close_stag ppf ())
 [@@warning "-D"] (* for open and close tag *)
 
 let pp_value slots ppf x =
@@ -706,6 +714,13 @@ module Ir_def = struct
     }
   }
 
+  let with_value ({self={Def.var}} as t) v = {
+    t with self = Def.{
+      var;
+      rhs = Rhs.of_value v
+    }
+  }
+
   let map_exp def ~f : def term =
     with_rhs def (f (rhs def))
 
@@ -809,7 +824,7 @@ module Ir_phi = struct
   let substitute phi x y = map_exp phi ~f:(Exp.substitute x y)
 
   let free_vars phi =
-    values phi |> Seq.fold ~init:Bap_var.Set.empty ~f:(fun vars (_,e) ->
+    values phi |> Seq.fold ~init:(Set.empty (module Bap_var)) ~f:(fun vars (_,e) ->
         Set.union vars (Exp.free_vars e))
 
   let pp_self ppf {Phi.var; map} =
@@ -859,6 +874,8 @@ module Ir_jmp = struct
     | Direct tid -> Some (Resolved tid)
     | Indirect exp -> match Bap_helpers.Type.infer_exn exp with
       | Imm len -> Some (Indirect {vec = Rhs.of_exp exp; len})
+      | Mem (addr, _) ->
+        Some (Indirect {vec = Rhs.of_exp exp; len = Bap_size.in_bits addr})
       | _ -> None
 
   let lbl_of_dst : Jmp.dst -> label = function
@@ -986,7 +1003,7 @@ module Ir_jmp = struct
   let substitute jmp x y = map_exp jmp ~f:(Exp.substitute x y)
 
   let free_vars jmp =
-    exps jmp |> Seq.fold ~init:Bap_var.Set.empty ~f:(fun vars e ->
+    exps jmp |> Seq.fold ~init:(Set.empty (module Bap_var)) ~f:(fun vars e ->
         Set.union vars (Exp.free_vars e))
 
   let eval jmp bili =
@@ -1642,7 +1659,7 @@ module Ir_blk = struct
 
   let free_vars blk =
     let (++) = Set.union and (--) = Set.diff in
-    let init = Bap_var.Set.empty,Bap_var.Set.empty in
+    let init = (Set.empty (module Bap_var)),(Set.empty (module Bap_var)) in
     fst @@ Seq.fold (elts blk) ~init ~f:(fun (vars,kill) -> function
         | `Phi _ -> vars, kill
         | `Def def ->
@@ -1949,7 +1966,7 @@ module Ir_program = struct
   let get_and_cache (get : 'a getter) prog tid : 'a term option =
     let open Option.Monad_infix in
     get prog tid >>= fun (path,term) ->
-    Tid.Table.change prog.self.paths tid (fun _ -> Some path);
+    Hashtbl.change prog.self.paths tid (fun _ -> Some path);
     Some term
 
   type 'a entry = {
@@ -1959,7 +1976,7 @@ module Ir_program = struct
 
   let make_getter (term : 'a entry) prog (tid : tid) : 'a term option =
     let open Option.Monad_infix in
-    match Tid.Table.find prog.self.paths tid with
+    match Hashtbl.find prog.self.paths tid with
     | None -> get_and_cache term.get prog tid
     | Some path ->
       try
@@ -1987,7 +2004,7 @@ module Ir_program = struct
     match lookup t p tid with
     | None -> None
     | Some _ ->
-      let path = Tid.Table.find_exn p.self.paths tid in
+      let path = Hashtbl.find_exn p.self.paths tid in
       match t.par with
       | Blk -> Some (blk_of_path p path)
       | Arg -> Some (arg_of_path p path)

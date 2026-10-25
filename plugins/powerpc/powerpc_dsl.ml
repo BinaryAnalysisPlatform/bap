@@ -27,8 +27,26 @@ let int_of_imm = function
     | Some x -> x
     | None -> ppc_fail "failed to convert imm operand to int"
 
+(* [imm signed op] creates an immediate expression, trusting the value
+   reported by the disassembler backend. *)
 let imm signed op =
   let w = Word.of_int ~width:32 (int_of_imm op) in
+  if signed then Exp.(signed @@ of_word w)
+  else Exp.(unsigned @@ of_word w)
+
+(* [immw width signed op] is like [imm], but [width] is the
+   ISA-documented width of the underlying operand field. Some LLVM
+   backends (PowerPC since ~LLVM 15) report raw zero-extended fields
+   instead of sign-decoded values, so when the value falls into the
+   upper half of the field and [signed] is requested, we re-extend the
+   sign from [width]. *)
+let immw width signed op =
+  let v = int_of_imm op in
+  let v =
+    if width < 32 && v >= (1 lsl (width - 1)) && v < (1 lsl width)
+    then v - (1 lsl width)
+    else v in
+  let w = Word.of_int ~width:32 v in
   if signed then Exp.(signed @@ of_word w)
   else Exp.(unsigned @@ of_word w)
 

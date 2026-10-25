@@ -112,7 +112,7 @@ let concat streams =
    facts or another derived fact.  *)
 let process_rule rule =
   let module Prov = Primus.Observation.Provider in
-  let observing = String.Set.of_list (rule_providers rule) in
+  let observing = Set.of_list (module String) (rule_providers rule) in
   let facts,to_facts =
     Primus.Observation.list_providers () |>
     List.filter ~f:(fun p -> Set.mem observing (Prov.name p)) |>

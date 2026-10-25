@@ -203,8 +203,8 @@ let resolver lookup = object(self)
 end
 
 let parse (size : C.Size.base) parse lexbuf =
-  let env = String.Table.create () in
-  let tags = String.Table.create () in
+  let env = Hashtbl.create (module String) in
+  let tags = Hashtbl.create (module String) in
   let gamma name = match Hashtbl.find env name with
     | Some t -> t
     | None -> `Void in

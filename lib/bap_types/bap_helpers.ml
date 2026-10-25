@@ -451,7 +451,7 @@ let substitute x y = (new rewriter x y)#run
 module Trie = struct
   type normalized_bil = bil
 
-  let vars = String.Table.create ()
+  let vars = Hashtbl.create (module String)
 
   let pruned ty = Exp.Unknown ("<pruned>", ty)
 
@@ -460,7 +460,7 @@ module Trie = struct
       method! map_sym var =
         let name = Bap_var.name var in
         let ty = Bap_var.typ var in
-        String.Table.find_or_add vars name
+        Hashtbl.find_or_add vars name
           ~default:(fun () -> Bap_var.create name ty)
       method! map_int w =
         let ty = Type.Imm (Word.bitwidth w) in
@@ -1002,7 +1002,7 @@ module Exp = struct
   let normalize = Normalize.normalize_exp
   let substitute x y = map (new rewriter x y)
 
-  let free_vars exp = fst @@ fold ~init:(VS.empty,[]) (object
+  let free_vars exp = fst @@ fold ~init:((Set.empty (module Bap_var)),[]) (object
       inherit [VS.t * var list] visitor
 
       method! enter_var var (vars,stack) =
@@ -1038,19 +1038,19 @@ module Stmt = struct
     | Stmt.Move (_,e)
     | Stmt.Jmp e -> Exp.free_vars e
     | Stmt.While (e,ss) ->
-      VS.union_list @@ Exp.free_vars e :: List.map ss ~f:free_vars
+      Set.union_list (module Bap_var) @@ (Exp.free_vars e :: List.map ss ~f:free_vars)
     | Stmt.If (e,s1,s2) ->
-      VS.union_list @@ Exp.free_vars e :: List.map (s1@s2) ~f:free_vars
+      Set.union_list (module Bap_var) @@ (Exp.free_vars e :: List.map (s1@s2) ~f:free_vars)
     | Stmt.Special _
-    | Stmt.CpuExn _ -> VS.empty
+    | Stmt.CpuExn _ -> (Set.empty (module Bap_var))
 
   let bil_free_vars bil =
     let update news vars kill =
-      VS.union vars (VS.diff news kill) in
-    fst @@ List.fold bil ~init:(VS.empty,VS.empty)
+      Set.union vars (Set.diff news kill) in
+    fst @@ List.fold bil ~init:((Set.empty (module Bap_var)),(Set.empty (module Bap_var)))
       ~f:(fun (vars,kill) -> function
           | Stmt.Move (v,e) ->
-            update (Exp.free_vars e) vars kill, VS.add kill v
+            update (Exp.free_vars e) vars kill, Set.add kill v
           | stmt -> update (free_vars stmt) vars kill, kill)
 
   class constant_folder = Constant_folder.main

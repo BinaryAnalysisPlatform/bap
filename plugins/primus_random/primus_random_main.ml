@@ -407,7 +407,7 @@ let main ctxt =
       ~name:"generators-for-arguments" @@ fun proj ->
     let prog = Project.program proj in
     Term.enum sub_t prog |>
-    Seq.fold ~init:{args=Var.Map.empty} ~f:(fun init sub ->
+    Seq.fold ~init:{args=(Map.empty (module Var))} ~f:(fun init sub ->
         Term.enum arg_t sub |>
         Seq.fold ~init ~f:(fun {args} arg ->
             if Poly.(Arg.intent arg = Some In) then {args}
@@ -430,7 +430,7 @@ let main ctxt =
 
     let randomize_vars _ =
       Machine.get () >>= fun proj ->
-      vars_collector#run (Project.program proj) Var.Set.empty |>
+      vars_collector#run (Project.program proj) (Set.empty (module Var)) |>
       Set.to_sequence |>
       Machine.Seq.iter ~f:(fun var -> match Var.typ var with
           | Mem _ | Unk -> Machine.return ()

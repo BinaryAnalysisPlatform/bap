@@ -651,7 +651,7 @@ module ResultT = struct
 
     module type S = sig
       include S
-      val failf : ('a, Caml.Format.formatter, unit, unit -> 'b t) format4 -> 'a
+      val failf : ('a, Stdlib.Format.formatter, unit, unit -> 'b t) format4 -> 'a
     end
     module Make(M : Monad.S) : S
       with type 'a t := 'a T(M).t
@@ -662,7 +662,7 @@ module ResultT = struct
       include Make(struct type t = Error.t end)(M)
 
       let failf fmt =
-        let open Caml.Format in
+        let open Stdlib.Format in
         let buf = Buffer.create 512 in
         let ppf = formatter_of_buffer buf in
         let kon ppf () =
@@ -1175,9 +1175,9 @@ module State = struct
         init = ctxt;
         created = global;
         current = global;
-        parents = Id.Map.empty;
-        children = Id.Map.empty;
-        forks = Id.Map.empty;
+        parents = (Map.empty (module Id));
+        children = (Map.empty (module Id));
+        forks = (Map.empty (module Id));
       }
 
       let rec alive_parent k child =
@@ -1204,7 +1204,7 @@ module State = struct
       let siblings () =
         SM.gets (fun k ->
             match Map.find k.children (alive_parent k k.current) with
-            | None -> Id.Set.empty
+            | None -> (Set.empty (module Id))
             | Some cs -> Set.filter cs ~f:(Map.mem k.forks))
 
       let context k =
@@ -1237,7 +1237,7 @@ module State = struct
 
       let remove_dead_parents k =
         let parents =
-          Map.fold k.forks ~init:Id.Map.empty ~f:(fun ~key ~data:_ ps ->
+          Map.fold k.forks ~init:(Map.empty (module Id)) ~f:(fun ~key ~data:_ ps ->
               Map.set ps ~key ~data:(alive_parent k key)) in
         let children = Map.filter_keys k.children ~f:(Map.mem parents) in
         {k with children; parents}

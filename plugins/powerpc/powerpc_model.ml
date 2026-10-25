@@ -59,7 +59,7 @@ let make_name prefix i = sprintf "%s%d" prefix i
 let make_var_i typ prefix i = Var.create (make_name prefix i) typ
 
 let make_regs typ ?alias prefix range =
-  List.fold ~init:String.Map.empty ~f:(fun regs i ->
+  List.fold ~init:(Map.empty (module String)) ~f:(fun regs i ->
       let var = make_var_i typ prefix i in
       let name = Var.name var in
       let regs = Map.set regs name var in
@@ -71,7 +71,7 @@ let make_regs typ ?alias prefix range =
 
 
 let make_regs_i typ prefix range =
-  List.fold ~init:Int.Map.empty ~f:(fun regs i ->
+  List.fold ~init:(Map.empty (module Int)) ~f:(fun regs i ->
       Map.set regs i (make_var_i typ prefix i)) range
 
 let flag name = Var.create name (Type.imm 1)
@@ -150,13 +150,13 @@ module Vars (B : Bitwidth) = struct
 
   let cri =
     let _, bits =
-      List.fold (List.rev cr_bits) ~init:(0,Int.Map.empty)
+      List.fold (List.rev cr_bits) ~init:(0,Map.empty (module Int))
         ~f:(fun (num, bits) bit ->
             num + 1, Map.set bits ~key:num ~data:bit) in
     bits
 
   let crn =
-    Int.Map.fold cri ~init:String.Map.empty
+    Map.fold cri ~init:(Map.empty (module String))
       ~f:(fun ~key:_ ~data:var acc ->
           Map.set acc (Var.name var) var)
 
@@ -172,11 +172,11 @@ module Vars (B : Bitwidth) = struct
   ]
 
   let cr_fields =
-    List.fold fields ~init:String.Map.empty ~f:(fun fs (name, _, fd) ->
+    List.fold fields ~init:(Map.empty (module String)) ~f:(fun fs (name, _, fd) ->
         Map.set fs name fd)
 
   let cri_fields =
-    List.fold fields ~init:Int.Map.empty ~f:(fun fs (_, index, fd) ->
+    List.fold fields ~init:(Map.empty (module Int)) ~f:(fun fs (_, index, fd) ->
         Map.set fs index fd)
 
   (** fixed precision flags  *)
@@ -211,7 +211,7 @@ module Exps(B : Bitwidth) = struct
   let cri = Map.map cri ~f:(fun v -> Exp.of_var v)
 
   let crn =
-    Int.Map.fold Vars.cri ~init:String.Map.empty
+    Map.fold Vars.cri ~init:(Map.empty (module String))
       ~f:(fun ~key:_ ~data:var acc ->
           Map.set acc (Var.name var) (Exp.of_var var))
 
@@ -256,7 +256,7 @@ module Make_ppc(S : Spec) : PowerPC = struct
 
   let mem = Var.create "mem" (Type.mem S.addr_size `r8)
 
-  let flags = Var.Set.of_list [
+  let flags = Set.of_list (module Var) [
       so; ca; ca32; ov; ov32;
       Map.find_exn cri 0;
       Map.find_exn cri 1;
@@ -285,16 +285,16 @@ module Make_cpu(P : PowerPC) : CPU = struct
 
   let gpr =
     let data = Map.data gpr in
-    List.fold data ~init:Var.Set.empty
-      ~f:(fun regs v -> Var.Set.add regs v)
+    List.fold data ~init:(Set.empty (module Var))
+      ~f:(fun regs v -> Set.add regs v)
 
-  let sp = Var.Set.find_exn gpr ~f:(fun v -> String.equal (Var.name v) "R1")
+  let sp = Set.find_exn gpr ~f:(fun v -> String.equal (Var.name v) "R1")
   let vf = ov
   let cf = ca
   let nf = Map.find_exn cri 0
   let zf = Map.find_exn cri 1
 
-  let flags = Var.Set.of_list [
+  let flags = Set.of_list (module Var) [
       so; ca; ov; cf; nf; zf; ca32; ov32;
     ]
 

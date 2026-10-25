@@ -26,7 +26,7 @@ type memory = {
 let memories = Primus.Machine.State.declare
     ~uuid:"15dbb89a-3bfb-421c-8b19-16605425c3f5"
     ~name:"symbolic-memories" @@ fun _ ->
-  String.Map.empty
+  (Map.empty (module String))
 
 module Bank = Primus.Memory.Descriptor
 module Id = Monad.State.Multi.Id
@@ -367,8 +367,8 @@ type executor = {
 let executor = Primus.Machine.State.declare
     ~uuid:"e21aa0fe-bc37-48e3-b398-ce7e764843c8"
     ~name:"symbolic-executor-formulae" @@ fun _ -> {
-    values = Primus.Value.Id.Map.empty;
-    inputs = Set.empty (module Input);
+    values = (Map.empty (module Primus.Value.Id));
+    inputs = (Set.empty (module Input));
   }
 
 
@@ -400,7 +400,7 @@ end = struct
   let context = Primus.Machine.State.declare
       ~uuid:"9538b1fa-b6c0-464a-b11e-22377a10b0b6"
       ~name:"symbolic-context" @@ fun _ -> {
-      assertions = Map.empty (module String);
+      assertions = (Map.empty (module String));
     }
 
 
@@ -430,7 +430,7 @@ end = struct
     let get scope =
       Machine.Local.get context >>| fun s ->
       match Map.find s.assertions scope with
-      | None -> Set.empty (module SMT.Formula)
+      | None -> (Set.empty (module SMT.Formula))
       | Some xs -> xs
   end
 end
@@ -579,8 +579,8 @@ let master = Primus.Machine.State.declare
     ~uuid:"8d2b41d4-4852-40e9-917a-33f1f5af01a1"
     ~name:"symbolic-executor-master" @@ fun _ -> {
     self = None;
-    tasks = Int.Map.empty;
-    tries = Tid.Map.empty;      (* queued or finished forks *)
+    tasks = (Map.empty (module Int));
+    tries = (Map.empty (module Tid));      (* queued or finished forks *)
     ready = 0;
   }
 
@@ -593,8 +593,8 @@ let worker = Primus.Machine.State.declare
     task = {
       id = null;
       edge = None;
-      constraints = Set.empty (module SMT.Formula);
-      inputs = Set.empty (module Input);
+      constraints = (Set.empty (module SMT.Formula));
+      inputs = (Set.empty (module Input));
     };
   }
 
@@ -689,7 +689,7 @@ let forker ctxt : Primus.component =
           Set.add (cs ++ self.task.constraints) constr in
         Executor.inputs >>= fun inputs ->
         let inputs =
-          Seq.fold inputs ~init:self.task.inputs ~f:Set.add in
+          Seq.fold inputs ~init:self.task.inputs ~f:(fun s x -> Set.add s x) in
         let task = {inputs; constraints; edge; id=self.tid} in
         Machine.Global.update master ~f:(push_task task)
 
@@ -733,7 +733,7 @@ let forker ctxt : Primus.component =
         let ready = s.ready + Map.length s.tasks in
         report_progress ~stage:(ready-1) ~total:ready ();
         Machine.Global.put master {
-          s with tasks = Int.Map.empty
+          s with tasks = (Map.empty (module Int))
         } >>| fun () -> None
       | Some (m,t,ts) ->
         let queued = Map.length s.tasks in

@@ -14,7 +14,7 @@ type t = {
 let state = Primus.Machine.State.declare
     ~uuid:"99883d0e-94b2-41a4-bce6-1e4a949fd919"
     ~name:"wandering-scheduler"
-    (fun _ -> {pending = Int.Map.empty})
+    (fun _ -> {pending = (Map.empty (module Int))})
 
 module Make
     (Random : sig val generator : Primus.generator end)
@@ -55,7 +55,7 @@ module Make
         | _ -> Machine.switch id >>| fun () -> drop i t
     else
       Machine.forks () >>| fun fs -> {
-        pending = Seq.foldi fs ~init:Int.Map.empty ~f:(fun i cs id ->
+        pending = Seq.foldi fs ~init:(Map.empty (module Int)) ~f:(fun i cs id ->
             Map.set cs ~key:i ~data:id);
       }
 

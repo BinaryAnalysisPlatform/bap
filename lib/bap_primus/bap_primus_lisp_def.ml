@@ -121,7 +121,7 @@ module Sema = struct
       meta = {
         name = KB.Name.show name;
         docs;
-        attrs=Attribute.Set.empty};
+        attrs=(Attribute.Set.empty)};
       code = {apply; types};
     };
     id = Source.Id.null;
@@ -140,7 +140,7 @@ module Signal = struct
       meta = {
         name;
         docs;
-        attrs=Attribute.Set.empty};
+        attrs=(Attribute.Set.empty)};
       code = types;
     };
     id = Source.Id.null;
@@ -245,7 +245,7 @@ module Primitive = struct
       meta = {
         name = KB.Name.show@@KB.Name.read ?package name;
         docs;
-        attrs = Attribute.Set.empty
+        attrs = (Attribute.Set.empty)
       };
       code;
     };
@@ -263,7 +263,7 @@ module Place = struct
       meta = {
         name = KB.Name.show@@KB.Name.read ?package name;
         docs = "";
-        attrs = Attribute.Set.empty;
+        attrs = (Attribute.Set.empty);
       };
       code = Theory.Var.forget var;
     };
@@ -292,7 +292,7 @@ module Closure = struct
       meta = {
         name = KB.Name.show@@KB.Name.read ~package name;
         docs;
-        attrs=Attribute.Set.empty};
+        attrs=(Attribute.Set.empty)};
       code = {
         types;
         lambda;

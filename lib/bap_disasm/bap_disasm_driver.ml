@@ -203,7 +203,7 @@ end = struct
   let rec step s = match s.work with
     | [] when Set.is_empty s.usat -> {
         s with stop = true;
-               code = Map.empty (module Addr);
+               code = (Map.empty (module Addr));
       }
     | [] -> restart s
     | Dest {dst=next; encoding} as curr :: work
@@ -356,10 +356,10 @@ end = struct
       debt = [];
       curr = Dest {dst = start; parent = None; encoding=unknown};
       stop = false;
-      dels = Set.empty (module Addr);
-      begs = Map.empty (module Addr);
-      jmps = Map.empty (module Addr);
-      code = Map.empty (module Addr);
+      dels = (Set.empty (module Addr));
+      begs = (Map.empty (module Addr));
+      jmps = (Map.empty (module Addr));
+      code = (Map.empty (module Addr));
     } mem
 end
 
@@ -392,8 +392,8 @@ let collect_dests source code =
     call = Insn.(is call insn);
     barrier = Insn.(is barrier insn);
     indirect = false;
-    resolved = Set.empty (module Addr);
-    unresolved = Set.empty (module Theory.Label);
+    resolved = (Set.empty (module Addr));
+    unresolved = (Set.empty (module Theory.Label));
   } in
   KB.Value.get Insn.Slot.dests insn |> function
   | None -> KB.return {init with encoding = source}
@@ -439,7 +439,7 @@ let unit_for_mem mem =
   KB.collect Theory.Label.unit label
 
 let classify mem =
-  let empty = Set.empty (module Addr) in
+  let empty = (Set.empty (module Addr)) in
   let base = Memory.min_addr mem in
   unit_for_mem mem >>= fun unit ->
   Seq.range 0 (Memory.length mem) |>
@@ -551,13 +551,13 @@ type state = {
 } [@@deriving bin_io]
 
 let init = {
-  funs = Set.empty (module Addr);
-  begs = Set.empty (module Addr);
-  jmps = Map.empty (module Addr);
-  data = Set.empty (module Addr);
+  funs = (Set.empty (module Addr));
+  begs = (Set.empty (module Addr));
+  jmps = (Map.empty (module Addr));
+  data = (Set.empty (module Addr));
   mems = [];
   debt = [];
-  exts = Set.empty (module Theory.Label);
+  exts = (Set.empty (module Theory.Label));
 }
 
 let forget_debt s = {s with debt=[]}
@@ -593,7 +593,7 @@ let fold_calls field ~f ~init jmps  =
 
 
 let commit_calls = fold_calls resolved
-    ~init:Addr.Set.empty
+    ~init:(Set.empty (module Addr))
     ~f:(fun calls addr ->
         Theory.Label.for_addr (Word.to_bitvec addr) >>= fun dst ->
         KB.provide Theory.Label.is_valid dst (Some true) >>= fun () ->
@@ -613,7 +613,7 @@ let owns mem s =
       | Machine.Dest {dst} -> Memory.contains mem dst
       | _ -> false)
 
-let empty = Addr.Set.empty
+let empty = (Set.empty (module Addr))
 
 let merge_dests d1 d2 = {
   encoding = d1.encoding;
@@ -633,7 +633,7 @@ let valid_dsts data dsts =
   then None
   else Some {dsts with resolved}
 
-let scan_step ?(code=empty) ?(data=empty) ?(funs=empty) s mem =
+let scan_step ?(record=true) ?(code=empty) ?(data=empty) ?(funs=empty) s mem =
   disassemble ~code ~data ~funs s.debt mem >>=
   fun {Machine.begs; jmps; data; debt; dels} ->
   let data = Set.union s.data data in
@@ -644,8 +644,12 @@ let scan_step ?(code=empty) ?(data=empty) ?(funs=empty) s mem =
       | `Left dsts -> valid_dsts data dsts
       | `Right dsts -> Some dsts
       | `Both (d1,d2) -> valid_dsts data (merge_dests d1 d2)) in
-  let begs = Set.of_map_keys begs -- data in
-  let funs = s.funs ++ funs ++ funs' -- data -- dels in
+  let begs =
+    if record then Set.of_map_keys begs -- data
+    else Set.of_map_keys begs -- data -- funs in
+  let funs =
+    if record then s.funs ++ funs ++ funs' -- data -- dels
+    else s.funs ++ funs' -- data -- dels in
   let begs = Set.union s.begs begs -- dels in
   {funs; begs; data; jmps; mems = s.mems; debt; exts = s.exts ++ exts}
 
@@ -667,6 +671,9 @@ let scan mem s =
           else !!s)
       ~init:{s with mems = mem :: s.mems}
 
+
+let resume ?(record=false) starts mem s =
+  scan_step ~record ~data:s.data ~funs:starts s mem
 
 let merge t1 t2 = {
   funs = Set.union t1.funs t2.funs;
@@ -768,7 +775,7 @@ let explore
     | Some beg,None -> Seq.singleton beg
     | None, Some begs -> begs
     | Some beg, Some begs -> Seq.cons beg begs in
-  let empty = Map.empty (module Addr) in
+  let empty = (Map.empty (module Addr)) in
   KB.Seq.fold entries ~init:(empty,init) ~f:(fun (blocks,cfg) beg ->
       build blocks cfg beg >>| fun (blocks,cfg,_) ->
       blocks,cfg) >>| snd

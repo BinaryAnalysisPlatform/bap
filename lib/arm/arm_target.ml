@@ -643,7 +643,7 @@ module Encodings = struct
   module Lambda = Primus.Lisp
   module Sigma = Lambda.Semantics
 
-  let empty = Map.empty (module Bitvec_order)
+  let empty = (Map.empty (module Bitvec_order))
 
   let lsb x = Int64.(x land 1L)
   let is_thumb x = Int64.equal (lsb x) 1L

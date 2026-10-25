@@ -25,9 +25,9 @@ let mapper = Primus.Machine.State.declare
     ~name:"primus-taint-mapper"
     ~uuid:"12511d75-e626-4b0d-8dcd-2a3b597992cf"
     (fun _ ->  {
-         regs = Tid.Map.empty;
-         ptrs = Tid.Map.empty;
-         tids = Taint.Object.Map.empty;
+         regs = (Map.empty (module Tid));
+         ptrs = (Map.empty (module Tid));
+         tids = (Map.empty (module Taint.Object));
        })
 
 let is_mem v = match Var.typ v with
@@ -64,7 +64,7 @@ module Intro(Machine : Primus.Machine.S) = struct
     kind t >>= fun k ->
     Object.create k >>= fun taint ->
     connect t taint >>| fun () ->
-    Taint.Object.Set.singleton taint
+    Set.singleton (module Taint.Object) taint
 
   let introduces def =
     List.find_map translation ~f:(fun (k,s,r) ->
@@ -126,7 +126,7 @@ module Mapper(Machine : Primus.Machine.S) = struct
   ]
 
   let remap tids objs =
-    Tid.Set.filter_map objs ~f:(Map.find tids)
+    Set.filter_map (module Tid) objs ~f:(Base.Map.find tids)
 
   let update vars term =
     Machine.List.iter relations ~f:(fun (rel,fld) ->
@@ -139,7 +139,7 @@ module Mapper(Machine : Primus.Machine.S) = struct
             else
               Field.fset fld s @@
               Map.update (Field.get fld s) (Term.tid term) ~f:(function
-                  | None -> Var.Map.singleton var taints
+                  | None -> Map.singleton (module Var) var taints
                   | Some taints' ->
                     Map.update taints' var ~f:(function
                         | None -> taints

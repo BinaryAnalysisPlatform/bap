@@ -66,8 +66,8 @@ module Rule = struct
 
   let reset {rule} = {rule; work = [rule]}
 
-  let empty = String.Map.empty
-  let binding x rhs = String.Map.singleton x rhs
+  let empty = (Map.empty (module String))
+  let binding x rhs = Map.singleton (module String) x rhs
 
   let sexp_fold_atoms ~get_pos ~init ~f sexp =
     let rec loop init s = match s with
@@ -84,7 +84,7 @@ module Rule = struct
         else atoms)
 
   let collect_free_vars ~get_pos xs =
-    List.fold ~init:String.Map.empty ~f:(vars_of_sexp ~get_pos) xs
+    List.fold ~init:(Map.empty (module String)) ~f:(vars_of_sexp ~get_pos) xs
 
   let check_rule ~get_pos lhs rhs =
     let def = collect_free_vars ~get_pos lhs

@@ -12,7 +12,7 @@ open Bap_main
 open Core_kernel[@@warning "-D"]
 open Extension.Syntax
 
-module Buffer = Caml.Buffer
+module Buffer = Stdlib.Buffer
 module Unix = Caml_unix
 
 module Spec = struct
@@ -98,7 +98,7 @@ let register_loader ctxt =
           "length", Int64.to_string @@ match ctxt-->length with
           | None -> Int64.(measure input - (ctxt-->offset))
           | Some n -> n;
-        ] |> String.Map.of_alist_exn in
+        ] |> Map.of_alist_exn (module String) in
       let buf = Buffer.create 128 in
       let ppf = Format.formatter_of_buffer buf in
       doc_template |>

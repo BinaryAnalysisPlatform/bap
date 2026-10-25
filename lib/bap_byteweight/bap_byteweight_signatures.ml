@@ -1,7 +1,7 @@
 open Core_kernel[@@warning "-D"]
 open Bap_core_theory
 open Bap.Std
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 
 module Config = Bap_main.Extension.Configuration
 
@@ -122,7 +122,7 @@ let copy input output =
   loop ()
 
 let temporary_copy file =
-  let tmp,output = Caml.Filename.open_temp_file "byteweight" "copy" in
+  let tmp,output = Stdlib.Filename.open_temp_file "byteweight" "copy" in
   In_channel.with_file file ~f:(fun input -> copy input output);
   Out_channel.close output;
   tmp
@@ -169,8 +169,8 @@ let load_exn ?comp ?path ~mode arch =
   let entry_path = entry ?comp ~mode arch in
   let r = try
       let entry = Zip.find_entry zip entry_path in
-      Ok (Zip.read_entry zip entry |> Caml.Bytes.unsafe_of_string)
-    with Caml.Not_found -> fail (`No_entry entry_path)
+      Ok (Zip.read_entry zip entry |> Stdlib.Bytes.unsafe_of_string)
+    with Stdlib.Not_found -> fail (`No_entry entry_path)
        | Zip.Error (_,ent,err) -> zip_error ent err in
   Zip.close_in zip;
   r

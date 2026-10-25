@@ -1,6 +1,6 @@
 open Core_kernel[@@warning "-D"]
 
-open Caml.Format
+open Stdlib.Format
 open Bap_knowledge
 open Bap_core_theory_value
 open Knowledge.Syntax

@@ -40,7 +40,7 @@ module Rel_info = struct
     open Fact.Syntax
 
     let of_aseq s =
-      Seq.fold s ~init:Addr.Map.empty ~f:(fun m (key,data) ->
+      Seq.fold s ~init:(Map.empty (module Addr)) ~f:(fun m (key,data) ->
           Map.set m ~key ~data)
 
     let arch_width =
@@ -58,13 +58,13 @@ module Rel_info = struct
       Fact.collect Ogre.Query.(
           select (from external_reference)) >>= fun s ->
       Fact.return
-        (Seq.fold s ~init:Addr.Set.empty ~f:(fun addrs (addr, _) ->
+        (Seq.fold s ~init:(Set.empty (module Addr)) ~f:(fun addrs (addr, _) ->
              Set.add addrs (Addr.of_int64 ~width addr)))
   end
 
   let relocations = Fact.eval Request.relocations
   let external_symbols = Fact.eval Request.external_symbols
-  let empty = {rels = Addr.Map.empty; exts = Addr.Set.empty}
+  let empty = {rels = (Map.empty (module Addr)); exts = (Set.empty (module Addr))}
 
   let of_spec spec =
     match relocations spec, external_symbols spec with
@@ -173,7 +173,7 @@ let (>>=?) x f = x >>= function
   | Some x -> f x
 
 let provide_brancher brancher label =
-  let init = Set.empty (module Theory.Label) in
+  let init = (Set.empty (module Theory.Label)) in
   KB.collect Memory.slot label >>=? fun mem ->
   KB.collect Dis.Insn.slot label >>=? fun insn ->
   Context.for_label label >>= fun ctxt ->

@@ -7,7 +7,7 @@ let registers = Primus.Machine.State.declare
     ~uuid:"3dd2b905-c019-4466-800f-95b13d7da85e"
     ~name:"backend-registers" @@ fun proj ->
   Project.disasm proj |> Disasm.insns |>
-  Seq.fold ~init:Int.Map.empty ~f:(fun regs (_,insn) ->
+  Seq.fold ~init:(Map.empty (module Int)) ~f:(fun regs (_,insn) ->
       Insn.ops insn |>
       Array.fold ~init:regs ~f:(fun regs -> function
           | Op.Reg r ->

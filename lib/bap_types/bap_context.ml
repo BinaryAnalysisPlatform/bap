@@ -6,7 +6,7 @@ open Bap_bil
 type delta = result Bap_var.Map.t
 
 class t = object
-  val delta : delta = Bap_var.Map.empty
+  val delta : delta = (Map.empty (module Bap_var))
   method lookup = Map.find delta
   method update key data = {< delta = Map.set delta ~key ~data >}
   method bindings = Map.to_sequence delta

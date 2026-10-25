@@ -27,10 +27,14 @@ type fn = string * block * cfg [@@deriving compare]
 let sexp_of_fn (name,block,_cfg) =
   Sexp.List [sexp_of_string name; sexp_of_addr (Block.addr block)]
 
-module Fn = Opaque.Make(struct
-    type t = fn [@@deriving compare]
-    let hash x = String.hash (fst3 x)
-  end)
+module Fn = struct
+  type t = fn [@@deriving compare]
+  let hash x = String.hash (fst3 x)
+  include Opaque.Make(struct
+      type nonrec t = t [@@deriving compare]
+      let hash x = String.hash (fst3 x)
+    end)
+end
 
 
 type t = {
@@ -44,7 +48,7 @@ type t = {
 
 
 let compare t1 t2 =
-  Addr.Map.compare Fn.compare t1.addrs t2.addrs
+  Base.Map.compare_direct Poly.compare t1.addrs t2.addrs
 
 type symtab = t [@@deriving compare, sexp_of]
 
@@ -53,12 +57,12 @@ let span ((_name,_entry,cfg) as fn) =
       Memmap.add map (Block.memory blk) fn)
 
 let empty = {
-  addrs = Addr.Map.empty;
-  names = String.Map.empty;
+  addrs = (Map.empty (module Addr));
+  names = (Map.empty (module String));
   memory = Memmap.empty;
-  ecalls = Map.empty (module Addr);
-  icalls = Map.empty (module Addr);
-  extern = Map.empty (module Theory.Label);
+  ecalls = (Map.empty (module Addr));
+  icalls = (Map.empty (module Addr));
+  extern = (Map.empty (module Theory.Label));
 }
 
 let merge m1 m2 =
@@ -98,7 +102,7 @@ let find_by_start tab = Map.find tab.addrs
 let find_by_name tab = Map.find tab.names
 
 let fns_of_seq seq =
-  Seq.map seq ~f:snd |> Seq.to_list |> Fn.Set.of_list |>
+  Seq.map seq ~f:snd |> Seq.to_list |> Set.of_list (module Fn) |>
   Set.to_list
 
 let owners t addr = Memmap.lookup t.memory addr |> fns_of_seq

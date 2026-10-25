@@ -99,6 +99,19 @@ module IrBuilder = struct
 
   let ir_of_insn insn = KB.Value.get Term.slot insn
 
+  let mark_rip_relative blks =
+    let mark_def def =
+      let v = KB.Value.put rip_relative_addr (Ir_def.value def) true in
+      Ir_def.with_value def v in
+    List.map blks ~f:(fun blk ->
+      Term.map def_t blk ~f:(fun def ->
+        match Ir_def.rhs def with
+        | Load _ | Store _ -> mark_def def
+        | Int _ -> mark_def def (* RIP-relative lea: RAX := 0x404030 *)
+        | Cast (_, _, (Load _ | Store _)) -> mark_def def
+          (* RIP-relative movzx/movsx: RDX := pad:64[mem[0x401C, el]:u32] *)
+        | _ -> def))
+
   let set_attributes ?addr insn blks =
     let set_attributes k b =
       Term.map k b ~f:(fun t ->
@@ -113,8 +126,17 @@ module IrBuilder = struct
      pre: the first block of [blks] is the exit block;
      post: the first block of [lift_insn insn blks] is the new exit block. *)
   let lift_insn ?addr insn blks =
-    append blks @@
-    set_attributes ?addr insn (ir_of_insn insn)
+    let insn_blks = set_attributes ?addr insn (ir_of_insn insn) in
+    let mark_rip_relative_if_needed insn_blks =
+      match addr with
+      | None -> !!insn_blks
+      | Some addr ->
+        Theory.Label.for_addr (Word.to_bitvec addr) >>= fun label ->
+        KB.collect Theory.Label.is_rip_relative label >>= function
+        | Some true -> KB.return (mark_rip_relative insn_blks)
+        | _ -> KB.return insn_blks in
+    mark_rip_relative_if_needed insn_blks >>= fun insn_blks ->
+    append blks insn_blks
 
   let with_first_blk_addressed addr = function
     | [] -> []
@@ -448,7 +470,7 @@ let fix_names prog =
     Theory.Label.for_name name >>| Fn.non (Tid.equal tid) in
   let keep_name tids name tid = Map.set tids ~key:name ~data:tid in
   Term.enum sub_t prog |>
-  KB.Seq.fold ~init:String.Map.empty ~f:(fun tids sub ->
+  KB.Seq.fold ~init:(Map.empty (module String)) ~f:(fun tids sub ->
       let tid = Term.tid sub in
       let name = Ir_sub.name sub in
       match Map.find tids name with

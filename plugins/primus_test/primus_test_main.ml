@@ -135,8 +135,8 @@ module Location = struct
   let state = Primus.Machine.State.declare
       ~uuid:"22d66ae9-82ad-4185-a1f8-5eb99f5569df"
       ~name:"incident-locations" @@ fun _ -> {
-      incidents = String.Map.empty;
-      locations = Primus.Value.Map.empty;
+      incidents = (Map.empty (module String));
+      locations = (Map.empty (module Primus.Value));
     }
 
   let push pc machine t =
@@ -177,7 +177,7 @@ module Location = struct
 
   let set_cls name id cls s = {
     s with incidents = Map.update s.incidents name ~f:(function
-      | None -> Primus.Value.Map.singleton id cls
+      | None -> Map.singleton (module Primus.Value) id cls
       | Some classes -> Map.set classes id cls)
   }
 

@@ -22,7 +22,7 @@ type tasks = slot String.Table.t
 
 let ping_frames = "|/-\\|/-\\"
 
-let tasks = String.Table.create ()
+let tasks = Hashtbl.create (module String)
 
 let startup = Unix.gettimeofday ()
 

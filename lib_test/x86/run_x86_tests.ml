@@ -3,6 +3,7 @@ open OUnit2
 open Bap_plugins.Std
 
 let suite = "X86" >::: [
+    Test_atomic.suite;
     Test_pshufb.suite;
     Test_pcmp.suite;
   ]

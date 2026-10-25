@@ -7,13 +7,13 @@ module Make_CPU(Env : ModeVars) = struct
   include X86_env
   include Env
   (* we do not include pc into a set of gpr *)
-  let gpr = Var.Set.of_list @@ [
+  let gpr = Set.of_list (module Var) @@ [
       rax; rcx; rdx; rsi; rdi;
       rbx; rbp; rsp;
     ] @ Array.to_list r
       @ Array.to_list ymms
 
-  let flags = Var.Set.of_list [
+  let flags = Set.of_list (module Var) [
       cf; pf; af; zf; sf; oF; df
     ]
 

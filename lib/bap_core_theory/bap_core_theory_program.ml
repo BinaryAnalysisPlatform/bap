@@ -101,7 +101,7 @@ module Compiler = struct
 
   let create ?(specs=[]) ?(version=[]) ?(options=[]) name = {
     name; version; options;
-    specs = String.Map.of_alist_exn specs;
+    specs = Map.of_alist_exn (module String) specs;
   }
 
   let pp ppf x = Sexp.pp_hum ppf (sexp_of_t x)
@@ -211,6 +211,8 @@ module Label = struct
       "is the program valid or not"
   let is_subroutine = attr "is-subroutine"
       "is the program a subroutine entry point"
+  let is_rip_relative = attr "is-rip-relative"
+      "the instruction uses RIP-relative addressing"
 
   let encoding = Knowledge.Class.property ~package cls "encoding"
       Language.domain

@@ -24,7 +24,7 @@
 
 (defun reg-val (reg)
   (case (reg-name reg)
-    'RIP (+ (get-current-program-counter) 8)
+    'RIP (+ (get-current-program-counter) (get-instruction-length))
     'RSP RSP
     'RBP RBP
     (error "unknown register")))

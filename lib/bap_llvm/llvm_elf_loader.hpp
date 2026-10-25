@@ -115,6 +115,7 @@ void emit_program_headers(const ELFObjectFile<T> &obj, ogre_doc &s) {
         auto filesz = it->p_filesz;
         auto name = name_of_index(it - hdrs.begin());
         s.entry("llvm:elf-program-header") << name << off << filesz;
+        s.entry("llvm:elf-program-header-type") << name << it->p_type << it->p_align;
         s.entry("llvm:elf-virtual-program-header") << name << it->p_vaddr << it->p_memsz;
         s.entry("llvm:elf-program-header-flags") << name << ld << r << w << x;
     }
@@ -254,7 +255,12 @@ void emit_relocations(const ELFObjectFile<T> &obj, ogre_doc &s) {
                 }
             } else {
                 auto typ = prim::relocation_type(rel);
-                if (typ == rel_reloc) s.entry("llvm:relative-relocation") << raddr;
+                if (typ == rel_reloc) {
+                    s.entry("llvm:relative-relocation") << raddr;
+                    if (auto addend = ELFRelocationRef(rel).getAddend())
+                        s.entry("llvm:relative-relocation-addend") << raddr
+                            << *addend;
+                }
             }
         }
     }

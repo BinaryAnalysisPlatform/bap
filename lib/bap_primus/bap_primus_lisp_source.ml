@@ -35,18 +35,18 @@ type t = {
 let empty = {
   lastid = Id.null;
   lasteq = Eq.null;
-  hashed = Sexp.Map.empty;
-  equivs = Id.Map.empty;
-  origin = Id.Map.empty;
-  ranges = Id.Map.empty;
-  source = String.Map.empty;
-  inputs = String.Map.empty;
-  rclass = Id.Map.empty;
+  hashed = (Map.empty (module Sexp));
+  equivs = (Map.empty (module Id));
+  origin = (Map.empty (module Id));
+  ranges = (Map.empty (module Id));
+  source = (Map.empty (module String));
+  inputs = (Map.empty (module String));
+  rclass = (Map.empty (module Id));
 }
 
 let is_empty {lastid} = Id.equal Id.null lastid
 
-let equal_inputs = String.Map.equal String.equal
+let equal_inputs = Map.equal String.equal
 
 let equal x y = phys_equal x y ||
                 equal_inputs x.inputs y.inputs

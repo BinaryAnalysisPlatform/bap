@@ -172,11 +172,11 @@ let unknown = {
   alignment = {code=8; data=8};
   data = pack@@mem "mem" 32 8;
   code = pack@@mem "mem" 32 8;
-  vars = Set.empty (module Var.Top);
-  regs = Map.empty (module Role);
+  vars = (Set.empty (module Var.Top));
+  regs = (Map.empty (module Role));
   aliasing = {
-    subs = Map.empty (module Var.Top);
-    sups = Map.empty (module Var.Top);
+    subs = (Map.empty (module Var.Top));
+    sups = (Map.empty (module Var.Top));
   };
   endianness = Endianness.eb;
   system = System.unknown;
@@ -184,7 +184,7 @@ let unknown = {
   fabi = Fabi.unknown;
   filetype = Filetype.unknown;
   options = Options.empty;
-  names = String.Caseless.Set.empty;
+  names = (Set.empty (module String.Caseless));
 }
 
 let targets = Hashtbl.of_alist_exn (module Self) [
@@ -219,8 +219,8 @@ module Alias = struct
       | None -> assert false
 
   let init = {
-    sups = Map.empty (module Var.Top);
-    subs = Map.empty (module Var.Top);
+    sups = (Map.empty (module Var.Top));
+    subs = (Map.empty (module Var.Top));
   }
 
   let is_solved {subs; sups} v = (Map.mem subs v || Map.mem sups v)
@@ -307,7 +307,7 @@ module Alias = struct
 
   let solve regs spec =
     let aliases = match Map.find regs Role.Register.alias with
-      | None -> Set.empty (module Var.Top)
+      | None -> (Set.empty (module Var.Top))
       | Some vars -> vars in
     let is_alias = Set.mem aliases in
     let is_base = Fn.non is_alias in
@@ -453,7 +453,7 @@ let extend parent
     };
     names = Option.value_map nicknames
         ~default:parent.names
-        ~f:String.Caseless.Set.of_list;
+        ~f:(Set.of_list (module String.Caseless));
   }
 
 let declare
@@ -632,7 +632,7 @@ let family t =
   sort_family_by_order
 
 let partition xs =
-  let families = Map.empty (module Self) in
+  let families = (Map.empty (module Self)) in
   let universe = Set.of_list (module Self) xs in
   let rec grandest t =
     let p = parent t in

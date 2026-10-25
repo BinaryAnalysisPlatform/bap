@@ -50,7 +50,7 @@ open Core_kernel[@@warning "-D"]
 open Bap_main
 open Bap_knowledge
 open Bap.Std
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 
 include Loggers()
 
@@ -87,7 +87,7 @@ let initial_ctxt ~history directives path = {
   commands = collect_commands ();
   history;
   directives = List.fold directives
-      ~init:String.Map.empty
+      ~init:(Map.empty (module String))
       ~f:(fun dirs (name,_,desc) ->
           Map.add_exn dirs name desc)
 }

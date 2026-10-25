@@ -15,7 +15,7 @@ let state = Primus.Machine.State.declare
     ~name:"exploring-scheduler"
     (fun _ -> {
          pending=Fqueue.empty;
-         explored=Tid.Map.empty;
+         explored=(Map.empty (module Tid));
 
        })
 module Scheduler(Machine : Primus.Machine.S) = struct

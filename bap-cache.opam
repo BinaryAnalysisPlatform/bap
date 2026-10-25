@@ -9,10 +9,10 @@ tags: ["bap" "bap-plugin"]
 homepage: "https://github.com/BinaryAnalysisPlatform/bap"
 bug-reports: "https://github.com/BinaryAnalysisPlatform/bap/issues"
 depends: [
-  "dune" {>= "3.1"}
+  "dune" {>= "3.8"}
   "bap-main" {= version}
   "bap-std" {= version}
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.17" & < "v0.18"}
   "fileutils"
   "mmap"
   "bap-common" {= version}

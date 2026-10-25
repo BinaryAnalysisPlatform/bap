@@ -68,7 +68,7 @@ module BIR = struct
     List.filter_map blk.jmps ~f:dst
 
   let references blks =
-    List.fold ~init:Tid.Map.empty ~f:(fun refs {jmps} ->
+    List.fold ~init:(Map.empty (module Tid)) ~f:(fun refs {jmps} ->
         List.fold jmps ~init:refs ~f:(fun refs jmp ->
             match dst jmp with
             | Some tid when Map.mem blks tid ->
@@ -78,7 +78,7 @@ module BIR = struct
             | _ -> refs))
 
   let build_graph = List.fold
-      ~init:Tid.Map.empty
+      ~init:(Map.empty (module Tid))
       ~f:(fun blks blk ->
           Map.add_exn blks blk.name blk)
 

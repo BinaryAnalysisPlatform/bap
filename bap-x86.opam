@@ -9,7 +9,7 @@ tags: ["bap" "bap-plugin" "bap-library" "x86" "x86-64"]
 homepage: "https://github.com/BinaryAnalysisPlatform/bap"
 bug-reports: "https://github.com/BinaryAnalysisPlatform/bap/issues"
 depends: [
-  "dune" {>= "3.1"}
+  "dune" {>= "3.8"}
   "bap-abi" {= version}
   "bap-api" {= version}
   "bap-common" {= version}
@@ -23,7 +23,7 @@ depends: [
   "bap-primus" {= version}
   "bap-std" {= version}
   "bitvec" {= version}
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.17" & < "v0.18"}
   "ogre" {= version}
   "ppx_bap" {= version}
   "regular" {= version}

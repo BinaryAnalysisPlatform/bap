@@ -6,7 +6,7 @@ open Bap_types.Std
 open Monads.Std
 open Format
 open Image_internal_std
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 
 module Fact = Ogre.Make(Monad.Ident)
 module Result = Monad.Result.Error
@@ -21,7 +21,7 @@ end
 
 type loader = (module Loader)
 let backends : loader String.Table.t =
-  String.Table.create ()
+  Hashtbl.create (module String)
 
 module KB = struct
   module type Loader = sig
@@ -373,15 +373,15 @@ let create_words secs = {
 let available_backends () = Hashtbl.keys backends
 
 let create_segment_of_symbol_table syms secs =
-  let tab = Symbol.Table.create ()
+  let tab = Hashtbl.create (module Symbol)
       ~growth_allowed:false
       ~size:(Table.length syms) in
   Table.iteri syms ~f:(fun mem sym ->
       match Table.find_addr secs (Memory.min_addr mem) with
       | None -> ()
       | Some (_,sec) ->
-        Symbol.Table.add_exn tab ~key:sym ~data:sec);
-  Symbol.Table.find_exn tab
+        Hashtbl.add_exn tab ~key:sym ~data:sec);
+  Hashtbl.find_exn tab
 
 let from_spec query base doc =
   Fact.eval query doc >>= function

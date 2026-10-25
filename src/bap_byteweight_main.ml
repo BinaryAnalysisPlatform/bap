@@ -71,9 +71,9 @@ open Bap_main
 
 module BW = Bap_byteweight.Bytes
 module Sigs = Bap_byteweight_signatures
-module Digest = Caml.Digest
+module Digest = Stdlib.Digest
 module Config = Extension.Configuration
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 
 (* we still have to update this tool to support modern bap *)
 let sigs_load = Sigs.load[@warning "-D"]
@@ -160,7 +160,7 @@ let add_path files path =
 
 let train loader operation length comp db paths _ctxt =
   let db = Option.value db ~default:"sigs.zip" in
-  let init = Map.empty (module String) in
+  let init = (Map.empty (module String)) in
   let files = List.fold ~init paths ~f:add_path in
   let total = Map.length files in
   let errors = ref 0 in
@@ -242,10 +242,10 @@ let dump loader comp info min_length max_length threshold path input _ctxt =
       else BW.find_using_threshold bw threshold
           ~min_length ~max_length in
 
-    SymIO.write_addrs stdout @@ Addr.Set.to_list @@
+    SymIO.write_addrs stdout @@ Set.to_list @@
     Seq.fold (code_of_image img)
-      ~init:Addr.Set.empty ~f:(fun starts mem ->
-          List.fold (find mem) ~init:starts ~f:Set.add)
+      ~init:(Set.empty (module Addr)) ~f:(fun starts mem ->
+          List.fold (find mem) ~init:starts ~f:(fun s x -> Set.add s x))
   | `SymTbl ->
     let syms = Image.symbols img in
     let mems = Table.regions syms in

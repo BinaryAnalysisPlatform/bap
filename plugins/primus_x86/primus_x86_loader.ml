@@ -27,7 +27,7 @@ module SetupPLT(Machine : Primus.Machine.S) = struct
   let intrinsics =
     let+ prog = Machine.gets Project.program in
     Term.enum sub_t prog |>
-    Seq.fold ~init:String.Set.empty ~f:(fun intrinsics sub ->
+    Seq.fold ~init:(Set.empty (module String)) ~f:(fun intrinsics sub ->
         if Term.has_attr sub Sub.intrinsic
         then Set.add intrinsics (Sub.name sub)
         else intrinsics)

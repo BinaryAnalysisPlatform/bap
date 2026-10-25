@@ -135,7 +135,7 @@ let state = Bap_primus_machine.State.declare
     ~uuid:"4b94186d-3ae9-48e0-8a93-8c83c747bdbb"
     ~inspect:inspect_memory
     ~name:"memory" @@ fun p -> {
-    mems = Descriptor.Map.empty;
+    mems = (Map.empty (module Descriptor));
     curr = virtual_memory (Project.target p);
   }
 
@@ -153,7 +153,7 @@ let is_mapped addr {layers; values} =
   Option.is_some @@ find_layer addr layers
 
 let empty_state = {
-  values = Addr.Map.empty;
+  values = (Map.empty (module Addr));
   layers = [];
 }
 

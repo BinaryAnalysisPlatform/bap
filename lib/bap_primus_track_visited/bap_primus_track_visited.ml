@@ -19,7 +19,7 @@ let init_visited prog =
       if Term.has_attr blk Term.visited
       then Set.add visited (Term.tid blk)
       else visited
-  end)#run prog Tid.Set.empty
+  end)#run prog (Set.empty (module Tid))
 
 let state = Primus.Machine.State.declare
     ~name:"primus-track-visited"

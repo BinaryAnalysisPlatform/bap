@@ -57,15 +57,15 @@ let state = Bap_primus_machine.State.declare
     ~inspect:sexp_of_env
     ~uuid:"44b24ea4-48fa-47e8-927e-f7ba65202743"
     ~name:"environment" (fun _ -> {
-          values = Var.Map.empty;
-          random = Var.Map.empty;
+          values = (Map.empty (module Var));
+          random = (Map.empty (module Var));
         })
 
 let inspect_environment {values;random} =
   let keys =
     Set.union
-      (Var.Set.of_list (Map.keys values))
-      (Var.Set.of_list (Map.keys random)) in
+      (Set.of_list (module Var) (Map.keys values))
+      (Set.of_list (module Var) (Map.keys random)) in
   let sexp_of_var sexp_of_value var value = Sexp.(List [
       Atom (Var.name var);
       sexp_of_value value;

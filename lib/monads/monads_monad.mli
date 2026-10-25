@@ -99,7 +99,7 @@ module Result : sig
   module Error : sig
     module type S = sig
       include S
-      val failf : ('a, Caml.Format.formatter, unit, unit -> 'b t) format4 -> 'a
+      val failf : ('a, Stdlib.Format.formatter, unit, unit -> 'b t) format4 -> 'a
     end
 
 
@@ -313,7 +313,7 @@ module State : sig
       include Identifiable.S with type t = id
       val zero : t
       val succ : t -> t
-      val pp : Caml.Format.formatter -> id -> unit
+      val pp : Stdlib.Format.formatter -> id -> unit
     end
 
     module T1(T : T)(M : Monad) : sig

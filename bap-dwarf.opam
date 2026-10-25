@@ -9,9 +9,9 @@ tags: ["bap" "bap-library" "dwarf"]
 homepage: "https://github.com/BinaryAnalysisPlatform/bap"
 bug-reports: "https://github.com/BinaryAnalysisPlatform/bap/issues"
 depends: [
-  "dune" {>= "3.1"}
+  "dune" {>= "3.8"}
   "bap-std" {= version}
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.17" & < "v0.18"}
   "bap-common" {= version}
   "ppx_bap" {= version}
   "regular" {= version}

@@ -109,9 +109,9 @@ module Symbols = struct
   } [@@deriving compare, equal, bin_io, sexp]
 
   let empty = {
-    roots = Set.empty (module Addr);
-    names = Map.empty (module Addr);
-    aliases = Map.empty (module Addr);
+    roots = (Set.empty (module Addr));
+    names = (Map.empty (module Addr));
+    aliases = (Map.empty (module Addr));
   }
 
   let slot = KB.Class.property Theory.Unit.cls
@@ -241,7 +241,7 @@ module Symbols = struct
     let* name = KB.resolve Theory.Label.possible_name obj in
     let init = match name with
       | Some name -> Set.singleton (module String) name
-      | None -> Set.empty (module String) in
+      | None -> (Set.empty (module String)) in
     match unit,addr with
     | None,_|_,None -> KB.return init
     | Some unit, Some addr ->

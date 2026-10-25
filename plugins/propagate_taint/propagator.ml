@@ -24,9 +24,9 @@ module Result = struct
 
 
   let empty = {
-    visited = Tid.Map.empty;
-    tainted_regs = Tid.Map.empty;
-    tainted_ptrs = Tid.Map.empty;
+    visited = (Map.empty (module Tid));
+    tainted_regs = (Map.empty (module Tid));
+    tainted_ptrs = (Map.empty (module Tid));
   }
 
   let of_context ctxt = {
@@ -37,7 +37,7 @@ module Result = struct
 
   let taints_of_tid taints tid : Taint.map =
     Map.find taints tid |> function
-    | None -> Var.Map.empty
+    | None -> (Map.empty (module Var))
     | Some ts -> ts
 
   let tainted_regs t = taints_of_tid t.tainted_regs
@@ -79,7 +79,7 @@ let propagate taints vars tid v r : taints =
   let ts = taints r in
   Map.change vars tid (function
       | None when Set.is_empty ts -> None
-      | None -> Some (Var.Map.of_alist_exn [v, ts])
+      | None -> Some (Map.of_alist_exn (module Var) [v, ts])
       | Some vs -> Option.some @@ Map.change vs v (function
           | None when Set.is_empty ts -> None
           | None -> Some ts
@@ -90,8 +90,8 @@ class context ?max_steps ?max_loop p  = object(self : 's)
   inherit Taint.context as taints
   inherit Conqueror.context ?max_steps ?max_loop p as super
 
-  val tvs : taints = Tid.Map.empty
-  val tms : taints = Tid.Map.empty
+  val tvs : taints = (Map.empty (module Tid))
+  val tms : taints = (Map.empty (module Tid))
 
   method tvs = tvs
   method tms = tms
@@ -116,13 +116,13 @@ class context ?max_steps ?max_loop p  = object(self : 's)
 end
 
 let taint_reg ctxt x seed =
-  ctxt#taint_reg x (Tid.Set.singleton seed)
+  ctxt#taint_reg x (Set.singleton (module Tid) seed)
 
 let taint_ptr ctxt x seed =
   match Bil.Result.value x with
   | Bil.Mem _ | Bil.Bot -> ctxt
   | Bil.Imm a ->
-    ctxt#taint_ptr a `r8 (Tid.Set.singleton seed)
+    ctxt#taint_ptr a `r8 (Set.singleton (module Tid) seed)
 
 let taint_result t ctxt v =
   match Term.get_attr t Taint.reg, Term.get_attr t Taint.ptr with

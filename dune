@@ -3,6 +3,8 @@
   (flags (:standard
            -warn-error -A
            -w -6-9-27-32..34-37-50-58))
+  (ocamlopt_flags (:standard -O3)))
+ (release
   (ocamlopt_flags (:standard -O3))))
 
 

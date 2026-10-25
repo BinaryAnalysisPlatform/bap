@@ -63,7 +63,7 @@ let toshift shiftedt v =
   if i <=% max_bi then
     int_of_big_int i
   else
-    let error_str = Caml.Printf.sprintf "shifting %d-bit value by %s" max (string_of_big_int i) in
+    let error_str = Stdlib.Printf.sprintf "shifting %d-bit value by %s" max (string_of_big_int i) in
     let () = failwith error_str
     in max
 

@@ -299,7 +299,7 @@ let create_api_processor size abi : Bap_api.t =
     let language = "c"
     type t = Term.mapper
     let parse_exn get_api intfs : t =
-      let gamma = String.Table.create () in
+      let gamma = Hashtbl.create (module String) in
       List.iter intfs ~f:(fun api ->
           match get_api api with
           | None -> fail (`Unknown_interface api)
@@ -400,7 +400,7 @@ module Arg = struct
       | None -> None
       | Some sp -> Some {
           base = Var.reify sp;
-          data = Map.empty (module Int);
+          data = (Map.empty (module Int));
           align;
         }
 
@@ -442,7 +442,7 @@ module Arg = struct
 
     let bits self = self.bits
 
-    let deplet self = {self with args = Map.empty (module Int)}
+    let deplet self = {self with args = (Map.empty (module Int))}
 
     let pop self = match Map.min_elt self.args with
       | None -> None
@@ -471,7 +471,7 @@ module Arg = struct
 
     let of_list =
       List.foldi ~f:(fun pos regs reg -> Map.add_exn regs pos reg)
-        ~init:Int.Map.empty
+        ~init:(Map.empty (module Int))
 
 
     let of_exps args = {
@@ -783,7 +783,7 @@ module Arg = struct
     let init = {
       stack = Stack.create ruler target;
       ruler;
-      files = Map.empty (module Int);
+      files = (Map.empty (module Int));
       where = `Inputs;
       return = None;
       inputs = [];

@@ -41,11 +41,11 @@ module Html = struct
   let install fmt =
     pp_set_mark_tags  fmt true;
     pp_set_print_tags fmt true;
-    pp_set_formatter_tag_functions fmt {
-      mark_open_tag;
-      mark_close_tag;
-      print_open_tag = print_open_tag fmt;
-      print_close_tag = print_close_tag fmt;
+    pp_set_formatter_stag_functions fmt {
+      mark_open_stag = (function String_tag s -> mark_open_tag s | _ -> "");
+      mark_close_stag = (function String_tag s -> mark_close_tag s | _ -> "");
+      print_open_stag = (fun stag -> print_open_tag fmt (match stag with String_tag s -> s | _ -> ""));
+      print_close_stag = (fun stag -> print_close_tag fmt (match stag with String_tag s -> s | _ -> ""));
     }
   [@@warning "-D"]
 end
@@ -91,11 +91,11 @@ module Blocks = struct
   let install fmt =
     pp_set_mark_tags fmt true;
     pp_set_print_tags fmt true;
-    pp_set_formatter_tag_functions fmt {
-      mark_open_tag;
-      mark_close_tag;
-      print_open_tag = print_open_tag fmt;
-      print_close_tag = print_close_tag fmt;
+    pp_set_formatter_stag_functions fmt {
+      mark_open_stag = (function String_tag s -> mark_open_tag s | _ -> "");
+      mark_close_stag = (function String_tag s -> mark_close_tag s | _ -> "");
+      print_open_stag = (fun stag -> print_open_tag fmt (match stag with String_tag s -> s | _ -> ""));
+      print_close_stag = (fun stag -> print_close_tag fmt (match stag with String_tag s -> s | _ -> ""));
     }
   [@@warning "-D"]
 end
@@ -148,10 +148,10 @@ module Attr = struct
 
   let install ppf =
     pp_set_print_tags ppf true;
-    let tags = pp_get_formatter_tag_functions ppf () in
-    pp_set_formatter_tag_functions ppf {
+    let tags = pp_get_formatter_stag_functions ppf () in
+    pp_set_formatter_stag_functions ppf {
       tags with
-      print_open_tag = print_open_tag ppf;
+      print_open_stag = (fun stag -> print_open_tag ppf (match stag with String_tag s -> s | _ -> ""));
     };
     let out = pp_get_formatter_out_functions ppf () in
     pp_set_formatter_out_functions ppf {
@@ -183,13 +183,13 @@ let install fmt mode =
   | None -> raise (Unknown_mode mode)
 
 let with_mode fmt mode =
-  let g = pp_get_formatter_tag_functions fmt () in
+  let g = pp_get_formatter_stag_functions fmt () in
   let mark = pp_get_mark_tags fmt () in
   let print = pp_get_print_tags fmt () in
   let finally () =
     pp_set_mark_tags fmt mark;
     pp_set_print_tags fmt print;
-    pp_set_formatter_tag_functions fmt g in
+    pp_set_formatter_stag_functions fmt g in
   install fmt mode;
   Exn.protect ~finally
 [@@warning "-D"]

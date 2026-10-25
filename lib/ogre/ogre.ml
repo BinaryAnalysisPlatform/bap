@@ -87,7 +87,7 @@ module Type = struct
     fields = Map.set fields ~key:name ~data:(t.pack x)
   }
 
-  let empty = {fields = String.Map.empty}
+  let empty = {fields = (Map.empty (module String))}
 
   let scheme field = {
     signature = [{fname = field.name; ftype = field.t.typ}];
@@ -179,8 +179,8 @@ module Doc = struct
   } [@@deriving bin_io, compare]
 
   let empty = {
-    scheme = String.Map.empty;
-    entries = String.Map.empty;
+    scheme = (Map.empty (module String));
+    entries = (Map.empty (module String));
   }
 
   let is_empty {scheme}= Map.is_empty scheme
@@ -189,7 +189,7 @@ module Doc = struct
 
   let declarations {scheme} = Map.length scheme
   let definitions {entries} = Map.length entries
-  let clear doc = {doc with entries = String.Map.empty}
+  let clear doc = {doc with entries = (Map.empty (module String))}
 
   let update_scheme name sign doc =
     match Map.find doc.scheme name with
@@ -319,7 +319,7 @@ module Doc = struct
       Error.List.map (tabulate values) ~f:(function
           | pos, `Positional x -> positional header pos x
           | _, `Named (fnam,x) -> named header fnam x) >>=
-      String.Map.of_alist_or_error
+      Map.of_alist_or_error (module String)
 
   let parse_entry doc = function
     | Sexp.List (Sexp.Atom "declare" :: Sexp.Atom name :: flds) ->
@@ -649,7 +649,7 @@ module Exp = struct
     | Var n -> sub n
 
   let offsets names =
-    List.foldi names ~init:String.Map.empty ~f:(fun pos offs name ->
+    List.foldi names ~init:(Map.empty (module String)) ~f:(fun pos offs name ->
         Map.set offs ~key:name ~data:pos)
 
   let names_index names =
@@ -673,8 +673,9 @@ module Exp = struct
            Var {attr=x;field={Type.fname=n1}},
            Var {attr=y;field={Type.fname=n2}}) ->
       Var (fun row ->
-          bool String.(Map.find_exn row.(x).fields n1 =
-                       Map.find_exn row.(y).fields n2))
+          bool (let v1 = Base.Map.find_exn row.(x).fields n1 in
+                let v2 = Base.Map.find_exn row.(y).fields n2 in
+                String.equal v1 v2))
     | Bop (op,x,y) -> Bop (op,lambda x, lambda y)
     | Uop (op,x) -> Uop(op,lambda x)
     | Var n -> Var (get_indiced n)

@@ -46,7 +46,7 @@ let demangler = Extension.Configuration.parameter
 
 
 let objdump_cmds demangler=
-  String.Set.stable_dedup_list objdumps|>
+  Set.stable_dedup_list (module String) objdumps |>
   List.map ~f:(fun cmd ->
       sprintf "%s %s %s" cmd default_objdump_opts @@
       match demangler with
@@ -118,8 +118,8 @@ end = struct
   }
 
   let empty_table = {
-    names   = Map.empty (module Bitvec_order);
-    aliases = Map.empty (module Bitvec_order);
+    names   = (Map.empty (module Bitvec_order));
+    aliases = (Map.empty (module Bitvec_order));
   }
 
   type t = {
@@ -230,7 +230,7 @@ let provide_aliases repo =
            require addr |>
            provide aliases |>
            comment "extracts aliases from objdump");
-  let empty = Set.empty (module String) in
+  let empty = (Set.empty (module String)) in
   KB.promise aliases @@ fun label ->
   KB.collect unit label >>= function
   | None -> !!empty

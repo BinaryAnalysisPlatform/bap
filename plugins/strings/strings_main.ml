@@ -22,7 +22,7 @@ let scan (mem,value) =
       | Error _ -> assert false
       | Ok n -> Some (Char.of_int_exn n) in
   Strings.Scanner.run ~read 0 |>
-  Seq.fold ~init:Addr.Map.empty ~f:(fun strs (off,str) ->
+  Seq.fold ~init:(Map.empty (module Addr)) ~f:(fun strs (off,str) ->
       Map.set strs
         ~key:(Addr.nsucc (Memory.min_addr mem) off)
         ~data:str)
@@ -38,7 +38,7 @@ let union = Map.merge ~f:(fun ~key -> function
 let collect ~min_length proj =
   let ms = Project.memory proj |> Memmap.to_sequence in
   Seq.(ms >>| scan |> reduce ~f:union) |> function
-  | None -> Addr.Map.empty
+  | None -> (Map.empty (module Addr))
   | Some strs -> Map.filteri strs ~f:(fun ~key ~data ->
       String.length data >= min_length)
 

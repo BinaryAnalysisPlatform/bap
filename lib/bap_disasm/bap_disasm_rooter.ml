@@ -47,7 +47,7 @@ let of_image img = {
 }
 
 let of_blocks blocks =
-  let roots = String.Table.create () in
+  let roots = Hashtbl.create (module String) in
   Seq.iter blocks ~f:(fun (name,sa,_) ->
       Hashtbl.change roots name (function
           | Some a when Addr.(a < sa) -> Some a
@@ -55,10 +55,10 @@ let of_blocks blocks =
   create (Hashtbl.data roots |> Seq.of_list)
 
 let make_provider rooter =
-  let init = Set.empty (module Word) in
+  let init = (Set.empty (module Word)) in
   let roots =
     roots rooter |>
-    Seq.fold ~init ~f:Set.add in
+    Seq.fold ~init ~f:(fun s x -> Set.add s x) in
   fun label ->
     KB.collect Theory.Label.addr label >>=? fun addr ->
     Context.for_label label >>| fun ctxt ->

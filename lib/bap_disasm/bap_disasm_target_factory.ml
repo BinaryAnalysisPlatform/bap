@@ -9,7 +9,7 @@ let create_stub_target arch =
     let addr_size = Arch.addr_size arch
 
     module CPU = struct
-      let gpr = Var.Set.empty
+      let gpr = (Set.empty (module Var))
       let nil = Var.create "nil" (Type.imm (Size.in_bits addr_size))
       let mem = Var.create "mem" (Type.mem addr_size `r8)
       let pc = nil
@@ -35,7 +35,7 @@ let create_stub_target arch =
   end in
   (module Lifter : Target)
 
-let targets = Arch.Table.create ()
+let targets = Hashtbl.create (module Arch)
 
 let target_of_arch =
   let get arch = match Hashtbl.find targets arch with

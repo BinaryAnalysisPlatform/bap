@@ -2,7 +2,7 @@ open Core_kernel[@@warning "-D"]
 
 module Trace = Bap_trace
 
-let traces = Trace.Id.Table.create ()
+let traces = Hashtbl.create (module Trace.Id)
 
 let add t = Hashtbl.set traces ~key:(Trace.id t) ~data:t
 let remove t = Hashtbl.remove traces (Trace.id t)

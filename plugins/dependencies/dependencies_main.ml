@@ -58,7 +58,7 @@ open Core_kernel[@@warning "-D"]
 open Bap.Std
 open Regular.Std
 open Bap_main
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 
 include Loggers()
 
@@ -91,7 +91,7 @@ end = struct
             | None -> cache
             | Some path ->
               Map.set cache (Filename.basename path) path)
-          ~init:String.Map.empty)
+          ~init:(Map.empty (module String)))
       ~finally:(fun () ->
           match UnixLabels.close_process_in ldconfig with
           | WEXITED 0 -> ()
@@ -122,7 +122,7 @@ module Spec = struct
   let libraries = Ogre.collect Ogre.Query.(select (from require))
 
   let set_of_seq =
-    Seq.fold ~f:Set.add ~init:(Set.empty (module String))
+    Seq.fold ~f:(fun s x -> Set.add s x) ~init:(Set.empty (module String))
 
   let build name =
     imports >>| set_of_seq >>= fun imports ->
@@ -146,8 +146,8 @@ module Unit = struct
 
   let empty name = {
     name;
-    imports = Set.empty (module String);
-    exports = Set.empty (module String);
+    imports = (Set.empty (module String));
+    exports = (Set.empty (module String));
     libraries = [];
   }
 

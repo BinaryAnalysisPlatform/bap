@@ -16,6 +16,7 @@ type operand =
   | Ovec of int
   | Oseg of int
   | Oaddr of Exp.t
+  | Oaddr_rip_relative of Exp.t
   | Oimm of addr
 [@@deriving compare]
 
@@ -105,7 +106,7 @@ type opcode =
   | Movdq of typ * operand * typ * operand * bool (** dst type, dst op, src type, src op, aligned *)
   | Movoffset of (typ * operand) * offsetinfo list
   (** dest type, dest, (src copy length, src type, src, src src offset, src dest offset)* *)
-  | Lea of typ * operand * Exp.t
+  | Lea of typ * operand * Exp.t * bool
   | Call of operand * addr (** addr is RA *)
   | Shift of binop * typ * operand * operand
   | Shiftd of binop * typ * operand * operand * operand

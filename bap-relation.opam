@@ -11,7 +11,7 @@ tags: ["bap" "data-structure"]
 homepage: "https://github.com/BinaryAnalysisPlatform/bap"
 bug-reports: "https://github.com/BinaryAnalysisPlatform/bap/issues"
 depends: [
-  "dune" {>= "3.1"}
+  "dune" {>= "3.8"}
   "bap-common" {= version}
   "odoc" {with-doc}
 ]

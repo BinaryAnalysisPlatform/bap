@@ -63,7 +63,7 @@ let report_broken = function
 
 let of_image img =
   let symtab = Image.symbols img in
-  let names = Addr.Table.create () in
+  let names = Hashtbl.create (module Addr) in
   let init = Bap_relation.empty Addr.compare String.compare in
   Table.foldi symtab ~init ~f:(fun mem sym rels ->
       let name = Image.Symbol.name sym
@@ -79,14 +79,14 @@ let of_image img =
 let of_blocks seq =
   let names =
     let empty_rel = Bap_relation.empty Addr.compare String.compare in
-    Seq.fold seq ~init:String.Map.empty ~f:(fun addrs (name,addr,_) ->
+    Seq.fold seq ~init:(Map.empty (module String)) ~f:(fun addrs (name,addr,_) ->
         Map.update addrs name (function
             | Some addr' -> Addr.min addr addr'
             | None -> addr)) |>
     Map.to_sequence |>
     Seq.fold ~init:empty_rel ~f:(fun rels (name,entry) ->
         Bap_relation.add rels entry name) |> fun rels ->
-    Bap_relation.matching rels Addr.Map.empty
+    Bap_relation.matching rels (Map.empty (module Addr))
       ~saturated:(fun addr name names -> Map.add_exn names addr name)
       ~unmatched:(fun reason names -> report_broken reason; names) in
   create @@ Map.find names

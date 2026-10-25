@@ -78,14 +78,14 @@ let collect_taints =
       Set.union ts ts')
 
 class context = object(self)
-  val tvs : set values = Values.empty
-  val tas : set Addr.Map.t = Addr.Map.empty
+  val tvs : set values = Base.(Map.empty (module Bil.Result.Id))
+  val tas : set Addr.Map.t = (Map.empty (module Addr))
 
   method taint_reg r ts =
     let key = Bil.Result.id r in
     if Set.is_empty ts
-    then {< tvs = Values.remove tvs key >}
-    else {< tvs = Values.set tvs ~key ~data:ts >}
+    then {< tvs = Base.Map.remove tvs key >}
+    else {< tvs = Base.Map.set tvs ~key ~data:ts >}
 
   method taint_ptr a (s : size) ts =
     if Set.is_empty ts then self

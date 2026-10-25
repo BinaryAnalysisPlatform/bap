@@ -17,9 +17,9 @@ type conflict = exn = ..
 
 module Conflict = struct
   type t = conflict = ..
-  let to_string = Caml.Printexc.to_string
+  let to_string = Stdlib.Printexc.to_string
   let pp ppf err = Format.fprintf ppf "%s" (to_string err)
-  let register_printer = Caml.Printexc.register_printer
+  let register_printer = Stdlib.Printexc.register_printer
   let sexp_of_t err = Sexp.Atom (to_string err)
 end
 
@@ -159,21 +159,21 @@ end
     let branching_bit a b = highest_bit (a lxor b)
 
     let rec find_exn t k = match t with
-      | Nil -> raise Caml.Not_found
+      | Nil -> raise Stdlib.Not_found
       | Tip (k', v) when k = k' -> v
-      | Tip _ -> raise Caml.Not_found
+      | Tip _ -> raise Stdlib.Not_found
       | Bin (k', l, r) -> match Key.compare k' k with
-        | NA -> raise Caml.Not_found
+        | NA -> raise Stdlib.Not_found
         | LB -> find_exn l k
         | RB -> find_exn r k
 
     let find t k =
       try Some (find_exn t k)
-      with Caml.Not_found -> None
+      with Stdlib.Not_found -> None
 
     let mem k t =
       try ignore (find_exn k t); true
-      with Caml.Not_found -> false
+      with Stdlib.Not_found -> false
 
     let node payload branching l r = match l, r with
       | Nil, o | o, Nil -> o
@@ -364,7 +364,7 @@ end = struct
 
   let unescaped_exists_so_escape ?(skip_pos=(-1)) s =
     let buf = Buffer.create (String.length s + 1) in
-    Caml.StringLabels.iteri s ~f:(fun p c ->
+    Stdlib.StringLabels.iteri s ~f:(fun p c ->
         if p <> skip_pos && is_separator_unescaped s p c
         then Buffer.add_char buf escape_char;
         Buffer.add_char buf c);
@@ -594,7 +594,7 @@ end = struct
       ?package
       ?(reliability=trustworthy) name =
     let name = Name.create ?package name in
-    let agent = Caml.Digest.string (Name.show name) in
+    let agent = Stdlib.Digest.string (Name.show name) in
     if Hashtbl.mem agents agent then
       failwithf "An agent with name `%a' already exists, \
                  please choose another name" Name.str name ();
@@ -775,7 +775,7 @@ module Domain = struct
       (module S : Comparator.S with type t = t
                                 and type comparator_witness = o)
       ?(inspect=S.comparator.sexp_of_t) name =
-    let empty = Set.empty (module S) in
+    let empty = (Set.empty (module S)) in
     let order x y : Order.partial =
       if Set.equal x y then EQ else
       if Set.is_subset x y then LT else
@@ -801,7 +801,7 @@ module Domain = struct
       ?join
       ~equal
       name =
-    let empty = Map.empty (module K) in
+    let empty = (Map.empty (module K)) in
     let join = match join with
       | Some join -> join
       | None -> fun x y ->
@@ -2121,7 +2121,7 @@ module Record = struct
       end
     }
 
-  include Binable.Of_binable(Repr)(struct
+  include Binable.Of_binable_without_uuid(Repr)(struct
       type t = record
       let to_binable s =
         Dict.foreach s ~init:[] {
@@ -2265,8 +2265,8 @@ module Knowledge = struct
     let empty_class = {
       last = Oid.first;
       vals = Oid.Tree.empty;
-      objs = Map.empty (module Name.Full);
-      pubs = Map.empty (module String);
+      objs = (Map.empty (module Name.Full));
+      pubs = (Map.empty (module String));
     }
 
     type t = {
@@ -2281,13 +2281,13 @@ module Knowledge = struct
 
   let empty : Env.t = {
     package = user_package;
-    classes = Map.empty (module Name);
+    classes = (Map.empty (module Name));
     context = Dict.empty;
   }
 
   let noinfo : Env.info = {
     data = Record.empty;
-    comp = Map.empty (module Name);
+    comp = (Map.empty (module Name));
     name = None;
   }
 
@@ -2472,7 +2472,7 @@ module Knowledge = struct
         let t_of_sexp = opaque_of_sexp
         let empty = empty cls
 
-        include Binable.Of_binable(Record)(struct
+        include Binable.Of_binable_without_uuid(Record)(struct
             type t = (a,b) cls value
             let to_binable : 'a value -> Record.t =
               fun {data} -> data
@@ -2700,7 +2700,7 @@ module Knowledge = struct
       end in
       let module R = struct
         include Comparator
-        include Binable.Of_binable(Oid)(struct
+        include Binable.Of_binable_without_uuid(Oid)(struct
             type t = a obj
             let to_binable = Fn.id
             let of_binable = Fn.id
@@ -2714,7 +2714,7 @@ module Knowledge = struct
       slot : Name.t;
       repr : string;
       error : Conflict.t;
-      trace : Caml.Printexc.raw_backtrace;
+      trace : Stdlib.Printexc.raw_backtrace;
     }
 
   let () = Conflict.register_printer (function
@@ -2724,7 +2724,7 @@ module Knowledge = struct
           "Unable to update the slot %a of %s,\n%a\n\
            Backtrace:\n%s"
           Name.pp slot repr Conflict.pp error
-          (Caml.Printexc.raw_backtrace_to_string trace)
+          (Stdlib.Printexc.raw_backtrace_to_string trace)
       | _ -> None)
 
 
@@ -2755,7 +2755,7 @@ module Knowledge = struct
                   | Error err -> raise (Record.Merge_conflict err))}}
       with Record.Merge_conflict err ->
         non_monotonic slot obj err @@
-        Caml.Printexc.get_raw_backtrace ()
+        Stdlib.Printexc.get_raw_backtrace ()
 
   let notify {Slot.watchers} obj data =
     Hashtbl.data watchers |>
@@ -2852,7 +2852,7 @@ module Knowledge = struct
     fun slot obj ->
     objects slot.cls >>| fun {vals} ->
     match Oid.Tree.find_exn vals obj with
-    | exception Caml.Not_found -> Sleep
+    | exception Stdlib.Not_found -> Sleep
     | {data; comp=slots} -> match Map.find slots (uid slot) with
       | Some Work _ -> Awoke
       | other -> match other,Record.is_empty data with
@@ -2933,7 +2933,7 @@ module Knowledge = struct
     fun slot id ->
     objects slot.cls >>| fun {Env.vals} ->
     match Oid.Tree.find_exn vals id with
-    | exception Caml.Not_found -> slot.dom.empty
+    | exception Stdlib.Not_found -> slot.dom.empty
     | {data} -> Record.get slot.key slot.dom data
 
   let rec collect_inner
@@ -3213,7 +3213,7 @@ module Knowledge = struct
     compute_value cls obj >>= fun () ->
     objects cls >>| fun {Env.vals} ->
     match Oid.Tree.find_exn vals obj with
-    | exception Caml.Not_found -> Value.empty cls
+    | exception Stdlib.Not_found -> Value.empty cls
     | {data=x} -> Value.create cls x
 
   let run cls obj s = (obj >>= get_value cls).run s
@@ -3368,7 +3368,7 @@ module Knowledge = struct
       }
 
     let of_canonical_v1 {payload} =
-      let init = Map.empty (module Name) in
+      let init = (Map.empty (module Name)) in
       let classes =
         List.fold payload ~init ~f:(fun state (cid,objs) ->
             Map.add_exn state ~key:cid
@@ -3377,7 +3377,7 @@ module Knowledge = struct
       init_last {empty with classes}
 
     let of_canonical_v2 {payload} =
-      let init = Map.empty (module Name) in
+      let init = (Map.empty (module Name)) in
       let classes =
         List.fold payload ~init ~f:(fun state (cid,(last,objs)) ->
             let init = {

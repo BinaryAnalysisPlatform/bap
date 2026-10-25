@@ -43,7 +43,7 @@ open Bap_core_theory
 open Bap_knowledge
 open Bap_main
 open KB.Syntax
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 
 include Loggers()
 
@@ -161,7 +161,7 @@ end = struct
   let stubs ctxt =
     List.fold (Extension.Configuration.get ctxt names)
       ~init:(Set.of_list (module String) known_stub_names)
-      ~f:(fun init -> List.fold ~init ~f:Set.add)
+      ~f:(fun init -> List.fold ~init ~f:(fun s x -> Set.add s x))
 
   let create ctxt t doc = match Ogre.eval (collect t (stubs ctxt)) doc with
     | Ok plt -> plt
@@ -232,7 +232,7 @@ end = struct
 
   let parse_file file =
     In_channel.read_lines file |>
-    List.foldi ~init:Word.Set.empty ~f:(fun number words line ->
+    List.foldi ~init:(Set.empty (module Word)) ~f:(fun number words line ->
         match parse_line line with
         | Empty | Comment -> words
         | Success word -> Set.add words word
@@ -266,7 +266,7 @@ end = struct
       try Array.fold ~init:sigs (Sys.readdir folder) ~f:(fun sigs path ->
           add_file sigs (Filename.concat folder path))
       with _ -> sigs in
-    List.fold ~init:Word.Set.empty paths ~f:(fun sigs path ->
+    List.fold ~init:(Set.empty (module Word)) paths ~f:(fun sigs path ->
         if Sys.file_exists path && Sys.is_directory path
         then add_files sigs path
         else add_file sigs path)
@@ -364,10 +364,10 @@ let update prog ~link_only ~no_link =
   let resolver = Stub_resolver.run prog ~link_only ~no_link in
   let stubs = Stub_resolver.stubs resolver
   and links = Stub_resolver.links resolver in
-  let impls = Map.data links |> Tid.Set.of_list in
+  let impls = Map.data links |> Set.of_list (module Tid) in
   let stub_names =
     Term.enum sub_t prog |>
-    Seq.fold ~init:String.Set.empty ~f:(fun s sub ->
+    Seq.fold ~init:(Set.empty (module String)) ~f:(fun s sub ->
         if Set.mem stubs @@ Term.tid sub
         then Set.add s @@ Sub.name sub
         else s) in
@@ -399,10 +399,10 @@ let update prog ~link_only ~no_link =
 
 let abi_pass ctxt =
   let link_only =
-    String.Set.of_list @@
+    Set.of_list (module String) @@
     Extension.Configuration.get ctxt link_only in
   let no_link =
-    String.Set.of_list @@
+    Set.of_list (module String) @@
     Extension.Configuration.get ctxt no_link in
   Project.map_program ~f:(update ~link_only ~no_link)
 

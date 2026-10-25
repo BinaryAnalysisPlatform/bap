@@ -7,6 +7,8 @@ module type S = sig
   type t
   include Comparable with type t := t
   include Hashable   with type t := t
+  val sexp_of_t : t -> Sexp.t
+  val t_of_sexp : Sexp.t -> t
 end
 
 module Make(M : sig
@@ -20,4 +22,6 @@ module Make(M : sig
   end
   include Comparable.Make(M)
   include Hashable.Make_and_derive_hash_fold_t(M)
+  let sexp_of_t = M.sexp_of_t
+  let t_of_sexp = M.t_of_sexp
 end

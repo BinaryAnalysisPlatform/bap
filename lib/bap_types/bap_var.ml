@@ -115,7 +115,7 @@ module T = struct
       let of_sexpable = Repr.to_var
     end)
 
-  include Binable.Of_binable(Repr)(struct
+  include Binable.Of_binable_without_uuid(Repr)(struct
       type t = var
       let to_binable = Repr.of_var
       let of_binable = Repr.to_var

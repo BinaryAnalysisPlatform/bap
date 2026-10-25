@@ -14,7 +14,7 @@ end
 
 module Registry(T : T) = struct
   type t = T.t
-  let registered : t String.Table.t = String.Table.create ()
+  let registered : t String.Table.t = Hashtbl.create (module String)
   let register name v = Hashtbl.set registered ~key:name ~data:v
   let find = Hashtbl.find registered
   let list () = Hashtbl.to_alist registered

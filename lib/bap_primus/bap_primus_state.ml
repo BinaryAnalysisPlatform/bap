@@ -37,7 +37,7 @@ module Bag = struct
 
   let empty = {
     dict = Dict.empty;
-    uids = String.Map.empty;
+    uids = (Map.empty (module String));
   }
 
   let check_invariant t state =

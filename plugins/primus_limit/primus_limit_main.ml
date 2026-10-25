@@ -83,7 +83,7 @@ let state = Primus.Machine.State.declare
     ~name:"primus-limiter"
     ~uuid:"b1b58dff-54de-4611-abf8-88ff8f6c7481"
     (fun _ -> {
-         visited = Name.Map.empty;
+         visited = (Map.empty (module Name));
          length = 0;
        })
 

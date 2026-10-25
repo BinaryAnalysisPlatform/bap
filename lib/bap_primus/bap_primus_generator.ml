@@ -24,7 +24,7 @@ type iterators = {
 let iterators = Bap_primus_machine.State.declare
     ~name:"iterators"
     ~uuid:"9927004d-fe57-4de9-8705-c3d6862238cf" @@ fun _ -> {
-    iterators = Int.Map.empty;
+    iterators = (Map.empty (module Int));
     salt = 1;
   }
 

@@ -30,7 +30,7 @@ module Pred = struct
         | Some xs -> Some (Set.add xs src))
 
   let insert dst preds =
-    Map.set preds ~key:dst ~data:Tid.Set.empty
+    Map.set preds ~key:dst ~data:(Set.empty (module Tid))
 end
 
 (* internal representation of a graph:
@@ -82,7 +82,7 @@ type difference_kind =
 [@@deriving variants, sexp]
 
 let jmp_set b = Term.enum jmp_t b |> Seq.map ~f:Term.tid |>
-                Seq.fold ~init:Tid.Set.empty ~f:Set.add
+                Seq.fold ~init:(Set.empty (module Tid)) ~f:(fun s x -> Set.add s x)
 
 (** [control_flow_difference bx by] computes a changes in control flow
     produced by blocks [bx] and [by]. Only changes, that affects graph
@@ -338,7 +338,7 @@ end
 
 let empty = {
   sub = Sub.create ();
-  preds = Tid.Map.empty;
+  preds = (Map.empty (module Tid));
 }
 
 let create ?tid ?name () = {
@@ -360,17 +360,17 @@ let number_of_nodes t = Term.length blk_t t.sub
 
 let preds_of_sub sub : Tid.Set.t Tid.Map.t =
   Term.enum blk_t sub |>
-  Seq.fold ~init:Tid.Map.empty ~f:(fun ins src ->
+  Seq.fold ~init:(Map.empty (module Tid)) ~f:(fun ins src ->
       let src_id = Term.tid src in
       let ins = Map.change ins src_id (function
-          | None -> Some Tid.Set.empty
+          | None -> Some (Set.empty (module Tid))
           | other -> other) in
       Term.enum jmp_t src |>
       Seq.fold ~init:ins ~f:(fun ins jmp ->
           match succ_tid_of_jmp jmp with
           | None -> ins
           | Some tid -> Map.change ins tid (function
-              | None -> Some (Tid.Set.singleton src_id)
+              | None -> Some (Set.singleton (module Tid) src_id)
               | Some set -> Some (Set.add set src_id))))
 
 let of_sub sub = {

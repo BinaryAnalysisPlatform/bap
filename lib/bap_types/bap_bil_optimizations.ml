@@ -49,7 +49,7 @@ module Propagate(SM : Monad.State.S2) = struct
   type ctxt = const Var.Map.t
   type 'a r = ('a, ctxt) SM.t
 
-  let new_ctxt = Var.Map.empty
+  let new_ctxt = (Map.empty (module Var))
   let find = Map.find
   let update = Map.set
 
@@ -247,4 +247,4 @@ let prune_dead_virtuals bil =
                 ~f:(fun live s -> live ++ Stmt_helpers.free_vars s) in
             let live = free cond ++ live' in
             s :: bil, live) in
-  fst (loop Var.Set.empty bil)
+  fst (loop (Set.empty (module Var)) bil)

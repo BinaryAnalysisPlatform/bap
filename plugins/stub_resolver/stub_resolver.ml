@@ -49,9 +49,9 @@ end
 
 let empty = {
   graph = G.empty;
-  names = String.Map.empty;
-  stubs = Tid.Set.empty;
-  units = Tid.Map.empty;
+  names = (Map.empty (module String));
+  stubs = (Set.empty (module Tid));
+  units = (Map.empty (module Tid));
 }
 
 let in_file file f =
@@ -115,7 +115,7 @@ let update_names t sub ~link_only ~no_link =
     let tid = Term.tid sub in
     let names = Set.fold aliases ~init:t.names ~f:(fun m a ->
         Map.update m a ~f:(function
-            | None -> Tid.Set.singleton tid
+            | None -> Set.singleton (module Tid) tid
             | Some s -> Set.add s tid)) in
     update_graph {t with names} (Sub.name sub) aliases
   else t
@@ -127,7 +127,7 @@ let add t sub ~link_only ~no_link =
 
 let partition_group t group =
   Group.enum group |>
-  Seq.fold ~init:Tid.Set.empty ~f:(fun default name ->
+  Seq.fold ~init:(Set.empty (module Tid)) ~f:(fun default name ->
       Map.find t.names name |>
       Option.value_map ~default ~f:(Set.union default)) |>
   Set.partition_tf ~f:(Set.mem t.stubs)
@@ -135,7 +135,7 @@ let partition_group t group =
 let find_pairs t =
   let pp = Group.pp String.pp in
   Graphlib.strong_components (module G) t.graph |>
-  Partition.groups |> Seq.fold ~init:Tid.Map.empty ~f:(fun init group ->
+  Partition.groups |> Seq.fold ~init:(Map.empty (module Tid)) ~f:(fun init group ->
       let stubs, reals = partition_group t group in
       match Set.length reals with
       | 1 ->
@@ -195,8 +195,8 @@ let provide prog ~link_only ~no_link =
   KB.return obj
 
 let run
-    ?(link_only = String.Set.empty)
-    ?(no_link = String.Set.empty)
+    ?(link_only = Set.empty (module String))
+    ?(no_link = Set.empty (module String))
     prog =
   Toplevel.current () |>
   Knowledge.run Class.t (provide prog ~link_only ~no_link) |> function

@@ -3,7 +3,7 @@ open Bap.Std
 open Format
 open Bap_core_theory
 
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 
 open Bap_primus_lisp_types
 
@@ -368,7 +368,7 @@ module Parse = struct
           Program.update_package_documentation prog name (unquote docs)
         | s -> fail (Bad_def Defpkg) s)
 
-  let toplevels = String.Set.of_list [
+  let toplevels = Set.of_list (module String) [
       "declare";
       "defconstant";
       "defparameter";
@@ -649,7 +649,7 @@ module Load = struct
     | _ -> None
 
   let required paths p =
-    Source.fold p ~init:String.Map.empty ~f:(fun _ trees required ->
+    Source.fold p ~init:(Map.empty (module String)) ~f:(fun _ trees required ->
         List.fold trees ~init:required ~f:(fun required tree ->
             match parse_require tree with
             | None -> required
@@ -671,7 +671,7 @@ module Load = struct
     fixpoint p
 
   let features_of_list =
-    List.fold ~init:String.Map.empty ~f:(fun fs f ->
+    List.fold ~init:(Map.empty (module String)) ~f:(fun fs f ->
         Map.set fs ~key:f ~data:Cmdline)
 
   let features ?(paths=[Filename.current_dir_name]) proj fs =

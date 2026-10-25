@@ -17,7 +17,7 @@ let state = Primus.Machine.State.declare
     ~name:"round-robin-scheduler"
     (fun _ -> {
          pending = Fqueue.empty;
-         finished = Mid.Set.empty;
+         finished = (Set.empty (module Mid));
        })
 
 

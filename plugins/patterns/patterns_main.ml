@@ -113,7 +113,7 @@ open Bap_core_theory
 open Bap.Std
 open Bap_main
 open Bap_primus.Std
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 
 module Sigma = Primus.Lisp.Semantics
 module Lambda = Theory.Label
@@ -999,7 +999,7 @@ module Rules = struct
 
   let empty = {
     cases = [];
-    known = Set.empty (module Action);
+    known = (Set.empty (module Action));
   }
 
   let slot = KB.Class.property Theory.Unit.cls "pattern-rules"
@@ -1029,7 +1029,7 @@ module Rules = struct
 
   let empty = {
     cases = [];
-    known = Set.empty (module Action);
+    known = (Set.empty (module Action));
   }
 
   let concat x y = {
@@ -1123,9 +1123,9 @@ end = struct
             Filename.concat folder file))
 
   let dedup selected =
-    let empty = Set.empty (module String) in
+    let empty = (Set.empty (module String)) in
     List.fold selected ~init:(empty,empty) ~f:(fun (digests,files) file ->
-        let digest = Caml.Digest.file file in
+        let digest = Stdlib.Digest.file file in
         if Set.mem digests digest ||
            Set.mem files file then digests,files
         else Set.add digests digest,
@@ -1169,7 +1169,7 @@ end = struct
     include Bitvec_binprot
   end
 
-  let empty_roots = Set.empty (module Addr)
+  let empty_roots = (Set.empty (module Addr))
   let empty_names = Bap_relation.empty Addr.compare String.compare
 
   type outcome = {
@@ -1178,8 +1178,8 @@ end = struct
   } [@@deriving bin_io, compare, sexp, equal]
 
   let empty = {
-    roots = Set.empty (module Addr);
-    names = Map.empty (module Addr);
+    roots = (Set.empty (module Addr));
+    names = (Map.empty (module Addr));
   }
 
   let slot = KB.Class.property Theory.Unit.cls "patterns-outcome"

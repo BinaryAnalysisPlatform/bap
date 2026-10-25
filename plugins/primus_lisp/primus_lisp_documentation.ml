@@ -22,7 +22,7 @@ let fail prob = Error (Failed prob)
 
 let build_library index =
   let (%:) k v = Map.singleton (module String) k v in
-  let init = Map.empty (module String) in
+  let init = (Map.empty (module String)) in
   List.fold index ~init ~f:(fun library (cat,elts) ->
       let cat = Format.asprintf "%a" Doc.Category.pp cat in
       List.fold ~init:library elts ~f:(fun library (name,desc) ->

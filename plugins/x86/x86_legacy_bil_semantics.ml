@@ -196,7 +196,7 @@ module Semantics = struct
       exp s @@ Bil.Int (Bitvec.to_bigint w, Type.Reg (size s))
 
     let vsort x = sort x
-    let effect x = KB.Value.get effects x
+    let get_eff x = KB.Value.get effects x
     let esort _ = Theory.Effect.sort
 
     let (>>->) v f = v >>= fun v -> f (vsort v) (value v)
@@ -310,7 +310,7 @@ module Semantics = struct
       | Some yes, Some nay -> exp s (Bil.Ite (bool_exp cnd,yes,nay))
       | _ -> unk s
 
-    let (>>:=) v f = v >>= fun v -> f (effect v)
+    let (>>:=) v f = v >>= fun v -> f (get_eff v)
 
     let branch cnd yes nay =
       cnd >>= fun cnd ->
@@ -322,7 +322,7 @@ module Semantics = struct
       eff begin Bil.[
           CJmp (bool_exp cnd, Lab lhs,[]);
           Jmp (Lab rhs,[]);
-          Label (Name lhs,[])] @ effect yes @ Bil.[
+          Label (Name lhs,[])] @ get_eff yes @ Bil.[
           Jmp (Lab bot,[]);
           Label (Name rhs, []);
         ] @ nay @ Bil.[
@@ -419,7 +419,7 @@ module Semantics = struct
     let seq x y =
       x >>= fun x ->
       y >>= fun y ->
-      eff (effect x @ effect y)
+      eff (get_eff x @ get_eff y)
 
     let blk lbl x y =
       x >>:= fun x ->
@@ -459,7 +459,7 @@ module Semantics = struct
           Label (Name head,[]);
           Jmp (Lab tail,[]);
           Label (Name loop,[]);
-        ] @ effect body @ Bil.[
+        ] @ get_eff body @ Bil.[
           Label (Name tail,[]);
           CJmp (bool_exp cnd, Lab head,[]);
         ]

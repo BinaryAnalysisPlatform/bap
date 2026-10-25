@@ -36,23 +36,23 @@ let make_regs_list typ prefix size =
   Array.init ~f:(fun i -> make_var_i typ prefix i) size
 
 let reglist_to_map regs =
-  List.fold ~init:String.Map.empty ~f:(fun regs var ->
-      String.Map.set regs (Var.name var) var) regs
+  List.fold ~init:(Map.empty (module String)) ~f:(fun regs var ->
+      Map.set regs (Var.name var) var) regs
 
 let make_regs typ ?alias prefix range =
-  List.fold ~init:String.Map.empty ~f:(fun regs i ->
+  List.fold ~init:(Map.empty (module String)) ~f:(fun regs i ->
       let var = make_var_i typ prefix i in
       let name = Var.name var in
-      let regs = String.Map.set regs name var in
+      let regs = Map.set regs name var in
       match alias with
       | None -> regs
       | Some a ->
         let name = make_name a i in
-        String.Map.set regs name var) range
+        Map.set regs name var) range
 
 let make_regs_i typ prefix range =
-  List.fold ~init:Int.Map.empty ~f:(fun regs i ->
-      Int.Map.set regs i (make_var_i typ prefix i)) range
+  List.fold ~init:(Map.empty (module Int)) ~f:(fun regs i ->
+      Map.set regs i (make_var_i typ prefix i)) range
 
 let make_reg typ name = Var.create name typ
 let flag name = Var.create name (Type.imm 1)
@@ -72,10 +72,10 @@ module Vars = struct
 end
 
 let of_vars vars =
-  String.Map.map vars ~f:(fun v -> Exp.of_var v)
+  Map.map vars ~f:(fun v -> Exp.of_var v)
 
 let of_vars_i vars =
-  Int.Map.map vars ~f:(fun v -> Exp.of_var v)
+  Map.map vars ~f:(fun v -> Exp.of_var v)
 
 module Exps = struct
   open Vars
@@ -134,7 +134,7 @@ module Make_MIPS(S: Spec) : MIPS = struct
   ]
 
   let gpr =
-    List.fold gprs ~init:String.Map.empty ~f:(fun init (reg, alias) ->
+    List.fold gprs ~init:(Map.empty (module String)) ~f:(fun init (reg, alias) ->
         let name = Var.name reg in
         let names = [name; alias] in
         let names =
@@ -142,7 +142,7 @@ module Make_MIPS(S: Spec) : MIPS = struct
           else names in
         List.fold names ~init ~f:(fun regs name -> Map.set regs name reg))
 
-  let gpri = List.foldi ~init:Int.Map.empty ~f:(fun n regs (reg,_) ->
+  let gpri = List.foldi ~init:(Map.empty (module Int)) ~f:(fun n regs (reg,_) ->
       Map.set regs n reg) gprs
 
   let hi = make_reg (Type.imm gpr_bitwidth) "HI"
@@ -179,11 +179,11 @@ module Make_cpu(M : MIPS) : CPU = struct
 
   let gpr =
     let data = Map.data gpr in
-    List.fold data ~init:Var.Set.empty
-      ~f:(fun regs v -> Var.Set.add regs v)
+    List.fold data ~init:(Set.empty (module Var))
+      ~f:(fun regs v -> Set.add regs v)
 
-  let sp = Var.Set.find_exn gpr ~f:(fun v -> String.is_prefix ~prefix:"SP" (Var.name v))
-  let fp = Var.Set.find_exn gpr ~f:(fun v -> String.is_prefix ~prefix:"FP" (Var.name v))
+  let sp = Set.find_exn gpr ~f:(fun v -> String.is_prefix ~prefix:"SP" (Var.name v))
+  let fp = Set.find_exn gpr ~f:(fun v -> String.is_prefix ~prefix:"FP" (Var.name v))
 
   (* MIPS doesn't have flags, but structure requires them
    * We just make a stubs here *)
@@ -193,7 +193,7 @@ module Make_cpu(M : MIPS) : CPU = struct
   let vf = flag "undefined"
   let nf = flag "undefined"
 
-  let flags = Var.Set.of_list [
+  let flags = Set.of_list (module Var) [
     ]
 
   let is = Var.same

@@ -4,8 +4,8 @@ open Bap_plugins.Std
 open Bap_bundle.Std
 open Format
 
-module Buffer = Caml.Buffer
-module Sys = Caml.Sys
+module Buffer = Stdlib.Buffer
+module Sys = Stdlib.Sys
 
 (* we're reusing [exn] type only because we want to use
    Printexc magic printer. It is not visible from outside,
@@ -16,10 +16,10 @@ module Sys = Caml.Sys
 type t = exn = ..
 type event = t = ..
 
-let register_printer = Caml.Printexc.register_printer
+let register_printer = Stdlib.Printexc.register_printer
 let stream,new_event = Stream.create ()
 let send (ev : t) = Signal.send new_event ev
-let string_of_event = Caml.Printexc.to_string
+let string_of_event = Stdlib.Printexc.to_string
 let pp ppf e =
   pp_print_string ppf (string_of_event e)
 
@@ -98,7 +98,7 @@ module Log = struct
       progress ?note ?stage ?total task
 
     let has_var v = match Sys.getenv ("BAP_" ^ String.uppercase v) with
-      | exception Caml.Not_found -> false
+      | exception Stdlib.Not_found -> false
       | "false" | "0" -> false
       | _ -> true
 

@@ -51,8 +51,8 @@ let is_call b = Insn.(is call) (Block.terminator b)
 
 let entries_of_block cfg roots blk =
   let entries =
-    if is_start roots cfg blk then Block.Set.singleton blk
-    else Block.Set.empty in
+    if is_start roots cfg blk then Set.singleton (module Block) blk
+    else (Set.empty (module Block)) in
   if is_call blk then
     Seq.fold ~init:entries (Cfg.Node.outputs blk cfg)
       ~f:(fun entries e ->
@@ -79,7 +79,7 @@ let add_unresolved syms name cfg blk =
   else syms
 
 let collect name cfg roots =
-  Seq.fold (Cfg.nodes cfg) ~init:(Block.Set.empty, Symtab.empty)
+  Seq.fold (Cfg.nodes cfg) ~init:(Set.empty (module Block), Symtab.empty)
     ~f:(fun (entries, syms) blk ->
         let entries' = entries_of_block cfg roots blk in
         Set.union entries entries', add_unresolved syms name cfg blk)
@@ -91,12 +91,12 @@ let reachable cfg from =
       ~f:(fun nodes edge ->
           if Set.mem nodes ( Cfg.Edge.dst edge) then nodes
           else loop nodes (Cfg.Edge.dst edge)) in
-  loop Block.Set.empty from
+  loop (Set.empty (module Block)) from
 
 let sub roots prog start =
   let is_call e = Set.mem roots (Cfg.Edge.dst e) in
   let update_inputs node init =
-    Seq.fold ~init (Cfg.Node.inputs node prog) ~f:Set.add in
+    Seq.fold ~init (Cfg.Node.inputs node prog) ~f:(fun s x -> Set.add s x) in
   let rec loop cfg inputs node =
     Seq.fold (Cfg.Node.outputs node prog)
       ~init:(cfg, update_inputs node inputs)
@@ -107,9 +107,9 @@ let sub roots prog start =
             if Cfg.Node.mem (Cfg.Edge.dst edge) cfg then cfg',inputs
             else loop cfg' inputs (Cfg.Edge.dst edge)) in
   let cfg = Cfg.Node.insert start Cfg.empty in
-  loop cfg Cfg.Edge.Set.empty start
+  loop cfg (Set.empty (module Cfg.Edge)) start
 
-let edges_of_seq s = Seq.fold s ~init:Cfg.Edge.Set.empty ~f:Set.add
+let edges_of_seq s = Seq.fold s ~init:(Set.empty (module Cfg.Edge)) ~f:(fun s x -> Set.add s x)
 
 let reconstruct name initial_roots prog =
   let (--) = Set.diff in
@@ -125,7 +125,7 @@ let reconstruct name initial_roots prog =
     let cfg = Set.fold reachable ~init:cfg ~f:remove_node in
     remove_node cfg from in
   let collect_destinations edges =
-    Set.fold edges ~init:Block.Set.empty ~f:(fun bs e ->
+    Set.fold edges ~init:(Set.empty (module Block)) ~f:(fun bs e ->
         Set.add bs (Cfg.Edge.dst e)) in
   let rec loop known_roots syms = function
     | [] -> syms,known_roots
@@ -139,14 +139,14 @@ let reconstruct name initial_roots prog =
       let syms  = update_symtab syms cfg root self_inputs  in
       let syms,known = loop known syms (Set.to_list calls) in
       loop known syms roots in
-  let initial_roots = Addr.Set.of_list initial_roots in
+  let initial_roots = Set.of_list (module Addr) initial_roots in
   let roots,syms = collect name prog initial_roots in
   fst @@ loop roots syms (Set.to_list roots)
 
 let of_blocks syms =
   let reconstruct (cfg : cfg) =
-    let blocks = Addr.Table.create () in
-    let symtab = String.Table.create () in
+    let blocks = Hashtbl.create (module Addr) in
+    let symtab = Hashtbl.create (module String) in
     Seq.iter (Cfg.nodes cfg) ~f:(fun blk ->
         Hashtbl.set blocks ~key:(Block.addr blk) ~data:blk);
     Seq.iter syms ~f:(fun (name,b,_) -> match Hashtbl.find blocks b with

@@ -13,6 +13,7 @@ type jump
 val init : state
 val equal : state -> state -> bool
 val scan : mem -> state -> state knowledge
+val resume : ?record:bool -> Set.M(Addr).t -> mem -> state -> state knowledge
 val merge : state -> state -> state
 
 val subroutines : state -> Set.M(Addr).t

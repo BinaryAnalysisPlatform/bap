@@ -57,7 +57,7 @@ module Storage = struct
   end
 
   class sparse : storage = object
-    val storage = Bitvector.Map.empty
+    val storage = (Map.empty (module Bitvector))
     method save x u = {< storage = Map.set storage ~key:x ~data:u >}
     method load x = Map.find storage x
   end

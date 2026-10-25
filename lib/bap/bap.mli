@@ -164,7 +164,7 @@ module Std : sig
       contains all functions and types related to type [exp]. For
       example, to create a hashtable of statements, just type:
 
-      [let table = Exp.Table.create ()]
+      [let table = Hashtbl.create (module Exp) ()]
 
       If a type is a variant type (i.e., it defines constructors) then
       for each constructor named [Name], there exists a corresponding
@@ -2061,6 +2061,9 @@ module Std : sig
 
         @since 2.3.0 *)
     val code : (Theory.program, stmt list) KB.slot
+
+    (** RIP-relative addressing is used in the semantics.  *)
+    val rip_relative : (Theory.Program.Semantics.cls, bool) Knowledge.slot
 
     (** [printf "%a" pp_binop op] prints a binary operation [op].  *)
     val pp_binop : Format.formatter -> binop -> unit
@@ -6949,6 +6952,14 @@ module Std : sig
         ?brancher:brancher ->
         ?rooter:rooter -> arch -> mem -> t Or_error.t
 
+      (** [run_in_scope ?brancher ?rooter arch mem] is [run] as a
+          knowledge computation: the scan runs in the caller's machine,
+          so dynamic scopes the caller establishes (the current
+          theory, in particular) hold while the instructions reify. *)
+      val run_in_scope :
+        ?brancher:brancher ->
+        ?rooter:rooter -> arch -> mem -> t Or_error.t knowledge
+
       (** [cfg t] returns a control flow graph, representing the code
           in the input region of memory. Note, this is not a subroutine CFG,
           is is a whole segment graph.  *)
@@ -6958,6 +6969,13 @@ module Std : sig
           happened during the disassembly (e.g., unknown opcodes and
           unlifted instructions.  *)
       val errors : t -> error list
+
+      (** [global_cfg state] reconstructs the whole-program CFG from a
+          grown driver [state] — the same CFG the [run] entry points
+          produce, for callers that drive [Driver.scan] themselves (a
+          re-decode loop that feeds the scanner discovered roots and
+          destinations). *)
+      val global_cfg : Bap_disasm_driver.state -> cfg knowledge
     end
   end
 
@@ -7642,6 +7660,8 @@ module Std : sig
           algorithm.
       *)
       val scan : mem -> state -> state knowledge
+
+      val resume : ?record:bool -> Set.M(Addr).t -> mem -> state -> state knowledge
 
 
       (** [explore ~block ~node ~edge ~init state] builds a
@@ -8982,6 +9002,11 @@ module Std : sig
     (** updates the right hand side of a definition  *)
     val with_rhs : t -> exp -> t
 
+    (** [with_value def v] replaces the RHS with a Core Theory value [v],
+        preserving the BIL expression inside. Useful for attaching KB
+        properties to the def's value. *)
+    val with_value : t -> unit Theory.value -> t
+
     (** [map_exp def f] applies [f] to a [rhs] of [def] and returns
         an updated definition. *)
     val map_exp : t -> f:(exp -> exp) -> t
@@ -9000,6 +9025,11 @@ module Std : sig
 
     include Regular.S with type t := t
   end
+
+  (** [rip_relative_addr] marks a Core Theory value as a RIP-relative
+      address. Set on the RHS value of defs whose assigned address is
+      RIP-relative (e.g., Load/Store from RIP-relative instructions). *)
+  val rip_relative_addr : (Theory.Value.cls, bool) Knowledge.slot
 
   (** A control transfer operation.  *)
   module Jmp : sig

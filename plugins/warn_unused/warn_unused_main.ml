@@ -35,7 +35,7 @@ let collect_seeds prog = (object
     match Term.get_attr t Taint.reg with
     | Some seed when Term.has_attr t Term.visited -> Set.add seeds seed
     | _ -> seeds
-end)#run prog Tid.Set.empty
+end)#run prog (Set.empty (module Tid))
 
 
 let sanitize t seeds =

@@ -15,7 +15,7 @@ type state = {
   channels : channel Int.Map.t;
 }
 
-let default_channels = Int.Map.of_alist_exn [
+let default_channels = Map.of_alist_exn (module Int) [
     0, {
       input = Some In_channel.stdin;
       output = Some Out_channel.stdout;
@@ -59,7 +59,7 @@ let init_channels =
         Map.set chans ~key:fd ~data:chan)
 
 let init_redirections =
-  List.fold ~init:String.Map.empty ~f:(fun redirs (oldname,newname) ->
+  List.fold ~init:(Map.empty (module String)) ~f:(fun redirs (oldname,newname) ->
       match fd_of_name oldname with
       | Some _ -> redirs
       | None -> Map.set redirs ~key:oldname ~data:newname)
@@ -90,8 +90,8 @@ let state = Primus.Machine.State.declare
     ~name:"io-channels"
     ~uuid:"f326a07d-16ed-42ec-958d-76ef584cb341"
     (fun _ -> {
-         redirections = String.Map.empty;
-         channels = Int.Map.empty;
+         redirections = (Map.empty (module String));
+         channels = (Map.empty (module Int));
        })
 
 

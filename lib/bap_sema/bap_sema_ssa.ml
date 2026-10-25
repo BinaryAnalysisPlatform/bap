@@ -48,13 +48,13 @@ let ssa_form = Value.Tag.register
     [k] is a fixpoint, i.e., such value that [IDF_k = IDF_{k-1}].  See
     section 8.11 of [1].*)
 let iterated_frontier f blks =
-  let df = Set.fold ~init:Tid.Set.empty ~f:(fun dfs b ->
-      Seq.fold (Frontier.enum f b) ~init:dfs ~f:Set.add) in
-  let blks = List.fold blks ~init:Tid.Set.empty ~f:Set.add in
+  let df = Set.fold ~init:(Set.empty (module Tid)) ~f:(fun dfs b ->
+      Seq.fold (Frontier.enum f b) ~init:dfs ~f:(fun s x -> Set.add s x)) in
+  let blks = List.fold blks ~init:(Set.empty (module Tid)) ~f:(fun s x -> Set.add s x) in
   let rec fixpoint idf =
     let idf' = df (Set.union idf blks) in
     if Set.equal idf idf' then idf' else fixpoint idf' in
-  fixpoint Tid.Set.empty
+  fixpoint (Set.empty (module Tid))
 
 let blk_of_tid sub tid = match Term.find blk_t sub tid with
   | Some blk -> Some blk
@@ -74,7 +74,7 @@ let succs cfg sub tid =
     variables, that are live across multiple blocks. *)
 let collect_vars sub =
   Term.enum blk_t sub |>
-  Seq.fold ~init:Var.Set.empty ~f:(fun vars blk ->
+  Seq.fold ~init:(Set.empty (module Var)) ~f:(fun vars blk ->
       Set.union vars @@ Ir_blk.free_vars blk)
 
 (** returns a list of blocks that contains [def] terms with lhs equal
@@ -106,8 +106,8 @@ end)#map_exp
     of a variable. And works well with our API to resolve input/output
     parameters.*)
 let rename t =
-  let vars : var list Var.Table.t = Var.Table.create () in
-  let nums : int Var.Table.t = Var.Table.create () in
+  let vars : var list Var.Table.t = Hashtbl.create (module Var) in
+  let nums : int Var.Table.t = Hashtbl.create (module Var) in
   let top v = match Hashtbl.find vars v with
     | None | Some [] -> v
     | Some (v :: _) -> v in

@@ -11,8 +11,8 @@ type t = {
   dicts : dict Primus.Value.Map.t;
 }
 
-let pair key data = {dict = Primus.Value.Map.singleton key data}
-let add key data s = {dict = Primus.Value.Map.set s.dict ~key ~data}
+let pair key data = {dict = Map.singleton (module Primus.Value) key data}
+let add key data s = {dict = Map.set s.dict ~key ~data}
 
 (* idea: initialize the dictionary with initial
    properties of a project and terms.
@@ -21,7 +21,7 @@ let state = Primus.Machine.State.declare
     ~uuid:"F050079C-7FDB-4A8F-8A59-72C9693ADBCE"
     ~name:"lisp-dictionaries"
     (fun _  ->
-       {dicts = Primus.Value.Map.empty})
+       {dicts = (Map.empty (module Primus.Value))})
 
 module Pre(Machine : Primus.Machine.S) = struct
   include Machine.Syntax

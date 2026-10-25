@@ -84,7 +84,7 @@ module Make(M : Monad.S) = struct
     ?boot:unit t ->
     ?init:unit t ->
     ?fini:unit t ->
-    (exit_status * project) m effect
+    (exit_status * project) m eff
 
   type _ error = exn
 
@@ -429,9 +429,9 @@ module Make(M : Monad.S) = struct
     args;
     envp;
     self = global;
-    conts = Map.empty (module Id);
-    local = Map.empty (module Id);
-    parent = Map.empty (module Id);
+    conts = (Map.empty (module Id));
+    local = (Map.empty (module Id));
+    parent = (Map.empty (module Id));
     global = State.Bag.empty;
     observations = Bap_primus_observation.empty;
     deathrow = [];

@@ -52,14 +52,14 @@ let contains_seed sub =
 let seeded callgraph subs =
   let callers sub =
     Graphlib.fold_reachable (module Graphs.Callgraph) callgraph
-      ~rev:true ~init:Tid.Set.empty ~f:Set.add (Term.tid sub) in
+      ~rev:true ~init:(Set.empty (module Tid)) ~f:(fun s x -> Set.add s x) (Term.tid sub) in
   Seq.filter subs ~f:contains_seed |>
-  Seq.fold ~init:Tid.Set.empty ~f:(fun subs sub ->
+  Seq.fold ~init:(Set.empty (module Tid)) ~f:(fun subs sub ->
       Set.add (Set.union subs @@ callers sub) (Term.tid sub))
 
 let tids_of_sub sub =
   let terms t p =
-    Term.enum t p |> Seq.fold ~init:Tid.Set.empty ~f:(fun set t ->
+    Term.enum t p |> Seq.fold ~init:(Set.empty (module Tid)) ~f:(fun set t ->
         Set.add set (Term.tid t)) in
   let (++) = Set.union in
   let init = terms arg_t sub in
@@ -81,12 +81,12 @@ module State = struct
   let create sub_total = {
     sub_count = 0;
     sub_total;
-    visited = Tid.Set.empty;
-    terms = Tid.Set.empty;
+    visited = (Set.empty (module Tid));
+    terms = (Set.empty (module Tid));
     taints = Taints.empty;
   }
 
-  let keys = Map.fold ~init:Tid.Set.empty ~f:(fun ~key ~data set ->
+  let keys = Map.fold ~init:(Set.empty (module Tid)) ~f:(fun ~key ~data set ->
       Set.add set key)
 
   let update_taints t taints = {

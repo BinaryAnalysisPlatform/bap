@@ -47,7 +47,7 @@ type program = t
 
 let default_package = "user"
 
-let nodefs = Map.empty (module String)
+let nodefs = (Map.empty (module String))
 let empty_package = {
   semas = nodefs;
   codes = nodefs;
@@ -65,9 +65,9 @@ let empty = {
   context = Lisp.Context.empty;
   sources = Source.empty;
   package = default_package;
-  exports = Map.empty (module String);
-  library = Map.empty (module String);
-  pkgdocs = Map.empty (module String);
+  exports = (Map.empty (module String));
+  library = (Map.empty (module String));
+  pkgdocs = (Map.empty (module String));
 }
 
 let with_package program package = {program with package}
@@ -111,7 +111,7 @@ let get_package ?(public=false) program package =
     if public then filter_package pkg {visit = is_public} else pkg
 
 let targets {exports} package = match Map.find exports package with
-  | None -> Set.empty (module String)
+  | None -> (Set.empty (module String))
   | Some packs -> packs
 
 (* [transitive_closure p] is the set of packages in which
@@ -144,7 +144,7 @@ let (++) : 'a defs -> 'a defs -> 'a defs = fun xs ys ->
     List.fold defs ~init ~f:(fun (set,defs) def ->
         if is_presented set def then set,defs
         else remember set def, Map.add_multi defs name def) in
-  let init = Map.empty (module String),nodefs in
+  let init = (Map.empty (module String)),nodefs in
   snd@@Map.fold ys ~f:add ~init:(Map.fold ~init xs ~f:add)
 
 let pp_defs ppf =
@@ -396,7 +396,7 @@ module Callgraph = struct
         end)
     end)(Unit)
 
-  let empty = Set.empty (module KB.Name)
+  let empty = (Set.empty (module KB.Name))
   let (++) = Set.union
   let call = Set.singleton (module KB.Name)
   let union xs ~f =
@@ -413,7 +413,7 @@ module Callgraph = struct
 
   (** computes a mapping from name to id of definitions  *)
   let compute_ids (defs : library) =
-    let init = Map.empty (module KB.Name) in
+    let init = (Map.empty (module KB.Name)) in
     fold_library defs ~init ~f:(fun ~package {defs} ids ->
         fold_multi ~init:ids defs ~f:(fun ids def ->
             let name = KB.Name.create ~package (Def.name def) in
@@ -581,7 +581,7 @@ let pp ppf prog =
 let pp_ast ppf ast = Ast.pp ppf ast
 
 module Use = struct
-  let empty = Map.empty (module KB.Name)
+  let empty = (Map.empty (module KB.Name))
   let union = union empty
   let use = Map.singleton (module KB.Name)
 
@@ -613,7 +613,7 @@ module Use = struct
     | {data=Set (_,x)} -> calls x
 
   let collect {defs} =
-    let init = {calls = Id.Map.empty; vars = Id.Map.empty} in
+    let init = {calls = (Map.empty (module Id)); vars = (Map.empty (module Id))} in
     fold_multi ~init defs ~f:(fun s def ->
         let body = Def.Func.body def in
         let bound = Def.Func.args def |>
@@ -652,26 +652,26 @@ end = struct
   type 'a m = 'a Monad.State.T1(Source)(Monad.Ident).t
 
   let rec ids_of_trees trees =
-    List.fold trees ~init:Id.Set.empty ~f:(fun xs t -> match t with
+    List.fold trees ~init:(Set.empty (module Id)) ~f:(fun xs t -> match t with
         | {data=Atom _; id} -> Set.add xs id
         | {data=List ts;id} ->
           Set.union (Set.add xs id) (ids_of_trees ts))
 
   let ids_of_defs defs map reduce =
-    Id.Set.union_list [
-      Id.Set.of_list @@ List.map (items defs) ~f:(fun d -> d.id);
+    Set.union_list (module Id) [
+      Set.of_list (module Id) @@ List.map (items defs) ~f:(fun d -> d.id);
       map (items defs) ~f:reduce |> ids_of_trees
     ]
 
   let macro_ids prog =
     fold_library prog ~f:(fun ~package:_ p macros ->
-        Id.Set.union_list [
+        Set.union_list (module Id) [
           macros;
           ids_of_defs p.macros List.map Def.Macro.body;
           ids_of_defs p.consts List.map Def.Const.value;
           ids_of_defs p.substs List.concat_map Def.Subst.body;
         ])
-      ~init:Id.Set.empty
+      ~init:(Set.empty (module Id))
 
   let derive from  =
     State.get () >>= fun src ->
@@ -871,9 +871,12 @@ module Typing = struct
     | Tvar of Id.t
   [@@deriving compare, sexp_of]
 
-  module Tvar = Comparable.Make_plain(struct
-      type t = tvar [@@deriving compare, sexp_of]
-    end)
+  module Tvar = struct
+    type t = tvar [@@deriving compare, sexp_of]
+    include Comparable.Make_plain(struct
+        type nonrec t = t [@@deriving compare, sexp_of]
+      end)
+  end
 
   (** Typing environment.
 
@@ -990,8 +993,8 @@ module Typing = struct
     }
 
     let empty = {
-      vars = Id.Map.empty;
-      vals = Tvar.Map.empty;
+      vars = (Map.empty (module Id));
+      vals = (Map.empty (module Tvar));
     }
 
     let get g x = match Map.find g.vars x with
@@ -1123,7 +1126,7 @@ module Typing = struct
       | Type n -> constr_grnd id (Grnd n) g
 
     let join_vars vars =
-      let init = Tvar.Map.empty in
+      let init = (Map.empty (module Tvar)) in
       Map.fold vars ~init ~f:(fun ~key:x ~data:u joined ->
           Map.add_multi joined u x)
 
@@ -1131,7 +1134,7 @@ module Typing = struct
       join_vars vars |>
       Map.fold ~init:[] ~f:(fun ~key ~data xs -> {
             var = key;
-            elements=Id.Set.of_list data;
+            elements=Set.of_list (module Id) data;
             values = Map.find vals key;
           } :: xs)
 
@@ -1390,14 +1393,14 @@ module Typing = struct
       | None -> gamma
       | Some f ->
         let args = Def.Func.args f in
-        let init = Map.empty (module KB.Name) in
+        let init = (Map.empty (module KB.Name)) in
         let vars = List.fold args ~init ~f:push in
         let gamma = List.fold args ~init:gamma ~f:(fun gamma v ->
             Gamma.constr v.id v.data.typ gamma) in
         let gamma = infer_ast glob vars (Def.Func.body f) gamma in
         gamma
 
-  let empty_names = Map.empty (module KB.Name)
+  let empty_names = (Map.empty (module KB.Name))
 
 
   let collect_prims program item signature init =
@@ -1467,7 +1470,7 @@ module Typing = struct
                 let problem = Unresolved_signal (met.id,name,Some pars) in
                 Gamma.fail met.id problem g
               | Some g ->
-                let init = Map.empty (module KB.Name) in
+                let init = (Map.empty (module KB.Name)) in
                 let vars = List.fold args ~init ~f:push in
                 let g = List.fold args ~init:g ~f:(fun g v ->
                     Gamma.constr v.id v.data.typ g) in
@@ -1505,7 +1508,7 @@ module Typing = struct
       paras = make_paras p;
     } in
     let g = Callgraph.build library in
-    let init = Solution.create Callgraph.Node.Map.empty Gamma.empty in
+    let init = Solution.create (Map.empty (module Callgraph.Node)) Gamma.empty in
     let equal = gamma_equal in
     let fp =
       Graphlib.fixpoint (module Callgraph) ~rev:true ~start:Exit

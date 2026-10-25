@@ -212,6 +212,14 @@ let slot = Knowledge.Class.property ~package:"bap"
     ~public:true
     ~desc:"semantics of statements in BIL"
 
+let bool_domain = Knowledge.Domain.flat "bool"
+    ~inspect:sexp_of_bool ~equal:Bool.equal ~empty:false
+
+let rip_relative = Knowledge.Class.property ~package:"bap"
+    Theory.Semantics.cls "rip-relative" bool_domain
+    ~public:true
+    ~desc:"RIP-relative addressing is used in the semantics"
+
 let code = KB.Class.property ~package:"bap"
     ~persistent Theory.Program.cls "bil-code" domain
     ~public:true

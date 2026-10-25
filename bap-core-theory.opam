@@ -11,14 +11,14 @@ tags: ["bap" "bap-library"]
 homepage: "https://github.com/BinaryAnalysisPlatform/bap"
 bug-reports: "https://github.com/BinaryAnalysisPlatform/bap/issues"
 depends: [
-  "dune" {>= "3.1"}
+  "dune" {>= "3.8"}
   "bap-knowledge" {= version}
   "bap-main" {= version}
   "bitvec" {= version}
   "bitvec-binprot" {= version}
   "bitvec-order" {= version}
   "bitvec-sexp" {= version}
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.17" & < "v0.18"}
   "bap-common" {= version}
   "ppx_bap" {= version}
   "odoc" {with-doc}

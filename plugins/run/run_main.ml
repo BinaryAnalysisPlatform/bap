@@ -145,10 +145,10 @@ let callgraph start prog =
 let all_subroutines ?(marked=false) prog =
   let entries = entry_points prog in
   let start = Tid.create () in
-  let roots = Tid.Set.of_list (start :: entries) in
-  let unmarked = if not marked then Tid.Set.empty else
+  let roots = Set.of_list (module Tid) (start :: entries) in
+  let unmarked = if not marked then (Set.empty (module Tid)) else
       Term.enum sub_t prog |>
-      Seq.fold ~init:Tid.Set.empty ~f:(fun unmarked sub ->
+      Seq.fold ~init:(Set.empty (module Tid)) ~f:(fun unmarked sub ->
           if Term.has_attr sub mark then unmarked
           else Set.add unmarked (Term.tid sub)) in
   let marked_non_root_to_entry t =

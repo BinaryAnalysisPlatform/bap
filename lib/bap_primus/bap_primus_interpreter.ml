@@ -285,7 +285,7 @@ let null proj =
 
 let empty_scope = {
   stack = [];
-  bound = Var.Map.empty;
+  bound = (Map.empty (module Var));
 }
 
 let state = Primus.Machine.State.declare
@@ -965,7 +965,7 @@ module LinkBinaryProgram(Machine : Machine) = struct
     Machine.get () >>= fun proj ->
     let prog = Project.program proj in
     info "Linking binary program%!";
-    collector#run prog !!Tid.Set.empty >>= fun linked ->
+    collector#run prog !!(Set.empty (module Tid)) >>= fun linked ->
     (linker linked)#run prog !!() >>| fun () ->
     info "Finished linking binary program%!"
 end

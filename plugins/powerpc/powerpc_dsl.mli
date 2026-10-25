@@ -16,6 +16,11 @@ val bitwidth : int -> bitwidth
 val int_of_bitwidth : bitwidth -> int
 
 val imm : (op -> exp) ec
+
+(** [immw width] is like [imm], but re-extends the sign from the
+    ISA-documented operand field [width], for backends that report raw
+    zero-extended fields. *)
+val immw : bitwidth -> (op -> exp) ec
 val var : (bitwidth -> exp) ec
 val reg : (reg -> exp) -> (op -> exp) ec
 val const : (bitwidth -> int -> exp) ec

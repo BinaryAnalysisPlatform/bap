@@ -102,8 +102,8 @@ module Make(L : Minimal) = struct
     let needed = size data_t and chunk_len = size chunks in
     let nth stored =
       let shift_amount = ite dir
-          (small data_t stored)
-          (small data_t (needed - stored)) in
+          (small data_t (needed - chunk_len - stored))
+          (small data_t stored) in
       cast chunks b0 (shiftr b0 !!data shift_amount) in
     let rec loop key stored mem =
       if stored < needed then

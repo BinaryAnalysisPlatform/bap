@@ -42,14 +42,18 @@ module String = struct
     val run : t -> string
   end = struct
     module Base = struct
-      type t = Rope.t
-      let zero = Rope.of_string ""
-      let plus = Rope.(^)
+      type t = Buffer.t
+      let zero = Buffer.create 16
+      let plus a b =
+        let c = Buffer.create (Buffer.length a + Buffer.length b) in
+        Buffer.add_buffer c a;
+        Buffer.add_buffer c b;
+        c
     end
     include Base
     include Make(Base)
-    let add t x = Rope.(t ^ of_string x)
-    let run = Rope.to_string
+    let add t x = Buffer.add_string t x; t
+    let run = Buffer.contents
   end
 
   type t = string

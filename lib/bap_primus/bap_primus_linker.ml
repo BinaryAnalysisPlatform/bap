@@ -36,11 +36,11 @@ type t = {
 }
 
 let empty = {
-  codes = Int.Map.empty;
-  terms = Tid.Map.empty;
-  names = String.Map.empty;
-  addrs = Addr.Map.empty;
-  alias = Int.Map.empty;
+  codes = (Map.empty (module Int));
+  terms = (Map.empty (module Tid));
+  names = (Map.empty (module String));
+  addrs = (Map.empty (module Addr));
+  alias = (Map.empty (module Int));
 }
 
 

@@ -273,7 +273,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
       method! enter_blk = add
       method! enter_sub = add
     end in
-    visitor#run prog String.Map.empty
+    visitor#run prog (Map.empty (module String))
 
   let init_names () =
     Machine.get () >>= fun proj ->

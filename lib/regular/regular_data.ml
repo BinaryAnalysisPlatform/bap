@@ -54,19 +54,15 @@ let pretty_writer (type t)
     (module T : Pretty_printer.S with type t = t) =
   Write.create ~pp:T.pp ()
 
-module Ver = Comparable.Make(struct
-    type t = string [@@deriving sexp]
-    let sep = '.'
-    type strings = string list [@@deriving compare]
-    let compare x y =
-      let x = String.split ~on:sep x in
-      let y = String.split ~on:sep y in
-      compare_strings x y
-  end)
-
+module Ver = String
 module Id = String
 
-type 'a table = 'a Ver.Map.t Id.Map.t
+type 'a with_desc = {
+  cls : 'a;
+  desc : string option;
+}
+
+type 'a table = (String.t, (String.t, 'a with_desc, String.comparator_witness) Map.t, String.comparator_witness) Map.t
 
 type 'a with_info = {
   serializer : 'a;
@@ -75,10 +71,6 @@ type 'a with_info = {
   desc : string option;
 }
 
-type 'a with_desc = {
-  cls : 'a;
-  desc : string option;
-}
 
 
 type 'a definition = {
@@ -86,8 +78,8 @@ type 'a definition = {
   default_printer : 'a writer with_info option;
   default_reader : 'a reader with_info;
   default_writer : 'a writer with_info;
-  writers : 'a writer with_desc table;
-  readers : 'a reader with_desc table;
+  writers : 'a writer table;
+  readers : 'a reader table;
 }
 
 
@@ -132,16 +124,16 @@ module Class = struct
 
   let add_method field cls ?desc ~ver name met : unit =
     update field cls ~f:(fun mets -> Map.change mets name ~f:(function
-        | None -> Some (Ver.Map.singleton ver {cls=met; desc})
-        | Some vs -> Some (Ver.Map.set vs ver {cls=met; desc})))
+        | None -> Some (Map.singleton (module String) ver {cls=met; desc})
+        | Some vs -> Some (Map.set vs ~key:ver ~data:{cls=met; desc})))
 
 
-  let find_with_ver (table : 'a table) ?ver name : (string * 'a) option =
-    match Map.find table name with
+  let find_with_ver (table : 'a table) ?ver name =
+    match Base.Map.find table name with
     | None -> None
     | Some vs -> match ver with
-      | Some ver -> Option.(Map.find vs ver >>| fun x -> ver,x)
-      | None -> Map.max_elt vs
+      | Some ver -> Option.(Base.Map.find vs ver >>| fun x -> ver,x)
+      | None -> Base.Map.max_elt vs
 
   let find_with_info from ?ver name =
     match find_with_ver from ?ver name with
@@ -151,7 +143,7 @@ module Class = struct
         desc;
       }
 
-  let find (table : 'a table) ?ver name : 'a option =
+  let find (table : 'a table) ?ver name =
     Option.(find_with_ver table ?ver name >>| snd)
 
   let find_info (table : 'a table) ?ver name =
@@ -202,18 +194,19 @@ module Class = struct
   let writers cls = get writer_field cls
   let readers cls = get reader_field cls
 
+  type collector = {
+    collect : 'a. 'a definition -> string * info list
+  }
+
+
   let collect_info (get,_) def =
     let name = match def.module_name with
       | None -> "unknown"
       | Some name -> name in
     name,
-    Map.fold (get def) ~init:[] ~f:(fun ~key:name ~data:vers acc ->
-        Map.fold vers ~init:acc ~f:(fun ~key:ver ~data:{desc} acc ->
-            (name, `Ver ver, desc) :: acc))
-
-  type collector = {
-    collect : 'a. 'a definition -> string * info list
-  }
+    List.fold (Base.Map.to_alist (get def)) ~init:[] ~f:(fun acc (fname,vers) ->
+        Base.Map.fold vers ~init:acc ~f:(fun ~key:ver ~data:(vd : _ with_desc) acc ->
+            (fname, `Ver ver, vd.desc) :: acc))
 
   let writers_collector = {
     collect = fun def -> collect_info writer_field def
@@ -268,8 +261,8 @@ module New(T : Versioned.S) : Instance with type t = T.t = struct
       default_printer = None;
       default_writer;
       default_reader;
-      writers = Id.Map.empty;
-      readers = Id.Map.empty;
+      writers = (Map.empty (module Id));
+      readers = (Map.empty (module Id));
     }
 end
 
@@ -291,9 +284,9 @@ module Extend(T : sig
   let find_writer = Class.get_method writer_field cls
 
   let enum_info (table : 'a table) : info list =
-    Map.fold table ~init:[] ~f:(fun ~key:name ~data:vers acc ->
-        Map.fold vers ~init:acc ~f:(fun ~key:ver ~data:{desc} acc ->
-            (name, `Ver ver, desc) :: acc))
+    List.fold (Base.Map.to_alist table) ~init:[] ~f:(fun acc (_name,vers) ->
+        Base.Map.fold vers ~init:acc ~f:(fun ~key:ver ~data:vd acc ->
+            (_name, `Ver ver, vd.desc) :: acc))
 
   let available_readers () = enum_info (Class.readers cls)
   let available_writers () = enum_info (Class.writers cls)

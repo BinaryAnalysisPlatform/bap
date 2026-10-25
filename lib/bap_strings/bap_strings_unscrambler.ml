@@ -56,7 +56,7 @@ module Make(Alpha : Alphabet) = struct
     Array.init Alpha.length ~f:(fun i ->
         String.count word ~f:(fun c -> Alpha.index c = i))
 
-  let empty = {dict = Int.Map.empty; data=[]}
+  let empty = {dict = (Map.empty (module Int)); data=[]}
 
 
   let add_word dict word =

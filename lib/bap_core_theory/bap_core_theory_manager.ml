@@ -323,7 +323,7 @@ let theories () =
   KB.Context.get theories >>= function
   | Some theories -> !!theories
   | None ->
-    let init = Map.empty (module Theory) in
+    let init = (Map.empty (module Theory)) in
     Hashtbl.to_alist known_theories |>
     Knowledge.List.fold ~init ~f:(fun theories (name,def) ->
         Knowledge.Symbol.intern (Name.unqualified name) theory
@@ -385,7 +385,7 @@ let is_instantiated id =
    thus it will drop it from the final structure.
 
    [1]: Leroy, Xavier."A proposal for recursive modules in Objective
-   Caml." Available from the author’s website (2003).
+   Stdlib." Available from the author’s website (2003).
 *)
 let instantiate t =
   theory_for_id t.id >>= fun id ->

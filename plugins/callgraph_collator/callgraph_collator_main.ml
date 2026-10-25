@@ -87,14 +87,14 @@ let () = Extension.declare ~provides:["collator"] ~doc @@ fun ctxt ->
       match name_of_dst jmp with
       | Some dst when filter src && filter dst ->
         src,Map.update calls src ~f:(function
-            | None -> String.Set.singleton dst
+            | None -> Set.singleton (module String) dst
             | Some dsts -> Set.add dsts dst)
       | _ -> src,calls
   end in
 
   let calls_of_project proj =
     let prog = Project.program proj in
-    snd @@ call_collector#run prog ("",String.Map.empty) in
+    snd @@ call_collector#run prog ("",Map.empty (module String)) in
 
   let prepare proj =
     calls_of_project proj,0 in
@@ -105,7 +105,7 @@ let () = Extension.declare ~provides:["collator"] ~doc @@ fun ctxt ->
   let collate ver (base,diffs) proj =
     let alt = calls_of_project proj in
     let diff = Map.symmetric_diff base alt
-        ~data_equal:String.Set.equal in
+        ~data_equal:Set.equal in
     let is_different = not (Seq.is_empty diff) in
     if is_different
     then fprintf ppf "Version %d differs:@\n%!" ver

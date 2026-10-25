@@ -399,6 +399,11 @@ module Std : sig
   (** imm constructor - constructs an immediate from operand *)
   val imm : (op -> exp) ec
 
+  (** [immw width] is like [imm], but re-extends the sign from the
+      ISA-documented operand field [width], for backends that report
+      raw zero-extended fields (LLVM >= 15 PowerPC) *)
+  val immw : bitwidth -> (op -> exp) ec
+
   (** var constructor - constructs a variable of bitwidth *)
   val var : (bitwidth -> exp) ec
 

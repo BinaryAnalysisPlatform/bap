@@ -34,7 +34,7 @@ module Persistent = struct
 
     let empty = {
       strings = Index.empty;
-      keys = String.Map.empty;
+      keys = (Map.empty (module String));
     }
 
     let string {strings} key =

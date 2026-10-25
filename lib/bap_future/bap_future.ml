@@ -232,7 +232,7 @@ module Std = struct
 
     let create () =
       let stream = {
-        subs = Id.Table.create ();
+        subs = Hashtbl.create (module Id);
         last_id = Id.zero;
         on_subs = [];
         on_unsubs = [];

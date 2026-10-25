@@ -77,6 +77,7 @@ type operand =
   | Ovec of int
   | Oseg of int
   | Oaddr of Ast.exp
+  | Oaddr_rip_relative of Ast.exp
   | Oimm of big_int
 
 type jumptarget =

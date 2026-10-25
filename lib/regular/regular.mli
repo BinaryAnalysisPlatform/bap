@@ -818,6 +818,8 @@ module Std : sig
       type t
       include Comparable.S with type t := t
       include Hashable.S   with type t := t
+      val sexp_of_t : t -> Sexp.t
+      val t_of_sexp : Sexp.t -> t
     end
 
     (** creates a module implementing [Opaque] interface.   *)

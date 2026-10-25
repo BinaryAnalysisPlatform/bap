@@ -3,18 +3,22 @@
 --------------------------------------------------------------------------------
 #                            Testing SHUFPS                                    #
 
-The control is zero so we take the first word and spread it over the destination
+SHUFPS takes the two low dwords from the destination and the two high
+dwords from the source (Vol. 2A: DEST[31:0] and DEST[63:32] are
+SELECT4(SRC1) with SRC1 = DEST).
+
+The control is zero so both low dwords are the first words of each operand
   $ mc 0x0f,0xc6,0xc1,0x00
   shufps $0x0, %xmm1, %xmm0
   {
-    YMM0 := high:128[YMM0].31:0[YMM1].31:0[YMM1].31:0[YMM1].31:0[YMM1]
+    YMM0 := high:128[YMM0].31:0[YMM1].31:0[YMM1].31:0[YMM0].31:0[YMM0]
   }
 
-In this case the control is all ones so we spread the last word of xmm1 over xmm0
+The control is all ones so both high dwords are the last words of each operand
   $ mc 0x0f,0xc6,0xc1,0xff
   shufps $0xff, %xmm1, %xmm0
   {
-    YMM0 := high:128[YMM0].127:96[YMM1].127:96[YMM1].127:96[YMM1].127:96[YMM1]
+    YMM0 := high:128[YMM0].127:96[YMM1].127:96[YMM1].127:96[YMM0].127:96[YMM0]
   }
 
 Now let's reverse the xmm0 register, the control is {0,1,2,3}=0b_00_01_10_11=0x1b
@@ -29,7 +33,43 @@ Let's try the above with a memory argument
   shufps $0x1b, 0x10(%rax), %xmm0
   {
     #0 := mem[RAX + 0x10, el]:u128
-    YMM0 := high:128[YMM0].31:0[#0].63:32[#0].95:64[#0].127:96[#0]
+    YMM0 := high:128[YMM0].31:0[#0].63:32[#0].95:64[YMM0].127:96[YMM0]
+  }
+
+----------------------------------------------------------------------------------
+#                            Testing PSHUFLW/PSHUFHW                             #
+
+PSHUFLW shuffles the four low words of the source into the low quadword of
+the destination and keeps the source's high quadword.
+PSHUFHW shuffles the four high words into the low quadword and keeps the
+source's high quadword.
+
+The control is zero so the low word of xmm1 fills the low quadword
+  $ mc 0xf2,0x0f,0x70,0xc1,0x00
+  pshuflw $0x0, %xmm1, %xmm0
+  {
+    YMM0 := high:128[YMM0].127:64[YMM1].15:0[YMM1].15:0[YMM1].15:0[YMM1].15:0[YMM1]
+  }
+
+The control 0x1b selects the words in reverse order
+  $ mc 0xf2,0x0f,0x70,0xc1,0x1b
+  pshuflw $0x1b, %xmm1, %xmm0
+  {
+    YMM0 := high:128[YMM0].127:64[YMM1].15:0[YMM1].31:16[YMM1].47:32[YMM1].63:48[YMM1]
+  }
+
+PSHUFHW selects from the high words
+  $ mc 0xf3,0x0f,0x70,0xc1,0x00
+  pshufhw $0x0, %xmm1, %xmm0
+  {
+    YMM0 := high:128[YMM0].127:64[YMM1].79:64[YMM1].79:64[YMM1].79:64[YMM1].79:64[YMM1]
+  }
+
+The control 0x1b selects the high words in reverse order
+  $ mc 0xf3,0x0f,0x70,0xc1,0x1b
+  pshufhw $0x1b, %xmm1, %xmm0
+  {
+    YMM0 := high:128[YMM0].127:64[YMM1].79:64[YMM1].95:80[YMM1].111:96[YMM1].127:112[YMM1]
   }
 
 ----------------------------------------------------------------------------------

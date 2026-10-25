@@ -12,7 +12,7 @@ let create program =
       let init = G.Node.insert src g in
       Term.enum blk_t sub |> Seq.fold ~init ~f:(fun g blk ->
           Term.enum jmp_t blk |>
-          Seq.fold ~init:Tid.Map.empty ~f:(fun dsts jmp ->
+          Seq.fold ~init:(Map.empty (module Tid)) ~f:(fun dsts jmp ->
               match Ir_jmp.kind jmp with
               | Goto _ | Ret _ | Int _ -> dsts
               | Call call -> match Call.target call with

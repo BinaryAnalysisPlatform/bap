@@ -1043,7 +1043,7 @@ module Std : sig
         [rev] is true, then the graph is reversed.
 
         For example, the following will build a set of reachable nodes:
-        [fold_reachable (module G) ~init:G.Node.Set.empty ~f:Set.add]
+        [fold_reachable (module G) ~init:(Set.empty (module G.Node)) ~f:Set.add]
     *)
     val fold_reachable :
       (module Graph with type t = 'c

@@ -86,7 +86,7 @@ module Param = struct
 end
 
 let make_alphabet (module A : Alphabet) =
-  Seq.range 0 256 |> Seq.fold ~init:Char.Set.empty ~f:(fun alpha c ->
+  Seq.range 0 256 |> Seq.fold ~init:(Set.empty (module Char)) ~f:(fun alpha c ->
       let c = Char.of_int_exn c in
       let i = A.index c in
       if i < 0 || i >= A.length then alpha
@@ -115,9 +115,9 @@ let hunters_club =
     ~uuid:"1fa35cfe-f720-473c-a5ac-50fa8fa9f1fd"
     ~name:"beagle-hunters-club"
     (fun _ -> {
-         addrs = Addr.Set.empty;
-         checked = Bil.Result.Id.Set.empty;
-         cache  = String.Map.empty;
+         addrs = (Set.empty (module Addr));
+         checked = (Set.empty (module Bil.Result.Id));
+         cache  = (Map.empty (module String));
        })
 
 
@@ -147,7 +147,7 @@ let hunter =
            ~f:Unscrambler.add_word ~init:dict in
        let build input =
          Unscrambler.build dict input |>
-         Seq.fold ~init:String.Set.empty ~f:Set.add in
+         Seq.fold ~init:(Set.empty (module String)) ~f:(fun s x -> Set.add s x) in
        Hunter (build))
 
 

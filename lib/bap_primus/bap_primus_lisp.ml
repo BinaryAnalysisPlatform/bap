@@ -62,14 +62,14 @@ let state = Bap_primus_state.declare ~inspect
     (fun proj -> {
          env = {
            stack = [];
-           vars = Var.Map.empty;
+           vars = (Map.empty (module Var));
          };
          cur = Id.null;
          program = Lisp.Program.empty;
          typeenv = Lisp.Program.Type.empty;
-         advices = Map.empty (module KB.Name);
-         places = Map.empty (module KB.Name);
-         signals = Map.empty (module KB.Name);
+         advices = (Map.empty (module KB.Name));
+         places = (Map.empty (module KB.Name));
+         signals = (Map.empty (module KB.Name));
          width = width_of_ctxt proj;
        })
 
@@ -81,7 +81,7 @@ let lisp_primitive,primitive_called = Bap_primus_observation.provide
 let show = KB.Name.show
 
 let make_advisors cmethod name =
-  let empty = Set.empty (module KB.Name) in
+  let empty = (Set.empty (module KB.Name)) in
   let names = Set.add empty name in
   match cmethod with
   | Advice.Before -> {before = names; after = empty}
@@ -599,7 +599,7 @@ module Make(Machine : Machine) = struct
   let collect_program_vars prog =
     (object inherit [Var.Set.t] Term.visitor
       method! enter_var v vs = Set.add vs v
-    end)#run prog Var.Set.empty |> Set.to_sequence
+    end)#run prog (Set.empty (module Var)) |> Set.to_sequence
 
 
   let add_places =

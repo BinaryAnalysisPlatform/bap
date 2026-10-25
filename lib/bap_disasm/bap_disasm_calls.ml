@@ -61,7 +61,7 @@ end
 *)
 module Parent = struct
   type t = Top | Set of Word.Set.t [@@deriving compare, bin_io]
-  let none = Set Word.Set.empty
+  let none = Set (Set.empty (module Word))
   let unknown = Top
   let equal x y = match x,y with
     | Top,Top -> true
@@ -93,7 +93,7 @@ end
 
 module Parents = struct
   type t = (word,Parent.t) Solution.t
-  include Binable.Of_binable(struct
+  include Binable.Of_binable_without_uuid(struct
       type t = (word * Parent.t) Seq.t [@@deriving bin_io]
     end)(struct
       type t = (word,Parent.t) Solution.t
@@ -150,7 +150,7 @@ let empty =
   let root =
     Map.singleton (module Addr) Callgraph.entry Parent.none in {
     parents = Solution.create root Parent.unknown;
-    entries = Set.empty (module Addr);
+    entries = (Set.empty (module Addr));
   }
 
 let belongs {parents} ~entry:parent addr =
@@ -179,7 +179,7 @@ let siblings {parents} x y =
       not @@ Set.is_empty (Set.inter p1 p2)
 
 let entries graph parents =
-  let init = Set.empty (module Addr) in
+  let init = (Set.empty (module Addr)) in
   Callgraph.nodes graph |> Seq.fold ~init ~f:(fun entries n ->
       if Word.equal n Callgraph.entry then entries
       else match Solution.get parents n with

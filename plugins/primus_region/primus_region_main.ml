@@ -24,7 +24,7 @@ let state = Primus.Machine.State.declare
     ~uuid:"0FC4AF7F-7237-4CE1-874A-4971801C6D67"
     ~name:"region"
     (fun _ -> {
-         regions = Primus.Value.Map.empty;
+         regions = (Map.empty (module Primus.Value));
        })
 
 module Pre(Machine : Primus.Machine.S) = struct

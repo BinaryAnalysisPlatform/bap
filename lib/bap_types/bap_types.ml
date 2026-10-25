@@ -106,6 +106,7 @@ module Std = struct
     end
     let slot = Bap_stmt.slot
     let code = Bap_stmt.code
+    let rip_relative = Bap_stmt.rip_relative
     let domain = Bap_stmt.domain
     let persistent = Bap_stmt.persistent
   end

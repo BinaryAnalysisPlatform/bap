@@ -38,7 +38,7 @@ let updates_of_sub sub =
     Map.set updates (Term.tid j) data in
   let add_if add updates t =
     if is_updated t then add updates t else updates in
-  fold sub blk_t Tid.Map.empty ~f:(fun updates b ->
+  fold sub blk_t (Map.empty (module Tid)) ~f:(fun updates b ->
       fold b def_t updates ~f:(add_if update_rhs) |>
       fold b jmp_t ~f:(add_if update_jmp))
 

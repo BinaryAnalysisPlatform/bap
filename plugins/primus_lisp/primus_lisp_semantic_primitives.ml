@@ -256,6 +256,10 @@ let export = Primus.Lisp.Type.Spec.[
     "get-current-program-counter", unit @-> int,
     "(get-current-program-counter) is an alias to (get-program-counter)";
 
+    "get-instruction-length", unit @-> int,
+    "(get-instruction-length) returns the length of the current instruction \
+     in bytes.";
+
     "set-symbol-value", tuple [any; a] @-> a,
     "(set-symbol-value S X) sets the value of the symbol S to X.
          Returns X";
@@ -838,6 +842,12 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     KB.collect Theory.Label.addr lbl >>= function
     | None -> !!(empty s)
     | Some addr -> forget@@const_int s addr
+
+  let get_instruction_length s lbl =
+    let open Bap.Std in
+    KB.collect Memory.slot lbl >>= function
+    | None -> !!(empty s)
+    | Some mem -> forget@@int s (Memory.length mem)
 
   let require_symbol v k =
     match symbol v with
@@ -1479,6 +1489,7 @@ module Primitives(CT : Theory.Core)(T : Target) = struct
     | "store-word",_-> data@@store_word t args
     | "get-program-counter",[]
     | "get-current-program-counter",[] -> pure@@get_pc s lbl
+    | "get-instruction-length",[] -> pure@@get_instruction_length s lbl
     | "set-symbol-value",[sym;x] -> data@@set_symbol t sym x
     | "symbol-concat",syms -> pure@@symbol_concat s syms
     | "symbol",[x] -> pure@@mksymbol s x

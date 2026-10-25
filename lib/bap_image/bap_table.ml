@@ -68,12 +68,12 @@ type 'a ranged
   -> 'a
 
 let empty = {
-  map = Map.empty;
+  map = (Base.Map.empty (module Mem));
   bound = Bound.empty;
 }
 
 let singleton k v = {
-  map = Map.singleton k v;
+  map = Base.Map.singleton (module Mem) k v;
   bound = Bound.(update empty k);
 }
 
@@ -84,12 +84,12 @@ let pp_elt f fmt = function
 (** @pre [x <= y] *)
 let intersects x y = Addr.(Mem.max_addr x >= Mem.min_addr y)
 
-let prev_key map key = Map.closest_key map `Less_than key
-let next_key map key = Map.closest_key map `Greater_than key
+let prev_key map key = Base.Map.closest_key map `Less_than key
+let next_key map key = Base.Map.closest_key map `Greater_than key
 
 let has_intersections tab (x : mem) : bool =
   Bound.is_bound tab.bound x &&
-  match Map.find tab.map x with
+  match Base.Map.find tab.map x with
   | Some _ -> true
   | None -> match prev_key tab.map x with
     | Some (p,_) when intersects p x -> true
@@ -117,7 +117,7 @@ let left_bound tab x =
     | _  -> p in
   if has_intersections tab x then match prev_key tab.map x with
     | Some (p,_) when intersects p x -> Some (search_left p)
-    | _ when Map.mem tab.map x -> Some x (* see note above*)
+    | _ when Base.Map.mem tab.map x -> Some x (* see note above*)
     | _ -> next_key tab.map x |> Option.map ~f:fst
   else None
 
@@ -129,7 +129,7 @@ let fold_intersections tab x ~init ~f =
     | _ -> init in
   match left_bound tab x with
   | None -> init
-  | Some p -> match Map.find tab.map p with
+  | Some p -> match Base.Map.find tab.map p with
     | Some d -> loop (p,d) init
     | None -> assert false
 
@@ -146,16 +146,16 @@ let change tab mem ~f =
   | `ignore -> tab
   | `update _ | `rebind _  | `remove as cmd ->
     let map =
-      Seq.fold ins ~init:tab.map ~f:(fun m (k,_) -> Map.remove m k) in
+      Seq.fold ins ~init:tab.map ~f:(fun m (k,_) -> Base.Map.remove m k) in
     let map, bound = match cmd with
       | `remove -> map, tab.bound
       | `update f ->
         Seq.fold ins ~init:(map, tab.bound)
           ~f:(fun (map,bnd) (mem,x) ->
-              Map.set map ~key:mem ~data:(f (mem,x)),
+              Base.Map.set map ~key:mem ~data:(f (mem,x)),
               Bound.update bnd mem)
       | `rebind (mem,data) ->
-        Map.set map ~key:mem ~data,
+        Base.Map.set map ~key:mem ~data,
         Bound.update tab.bound mem in
     { map; bound }
 
@@ -163,28 +163,28 @@ let add tab mem x =
   if has_intersections tab mem
   then error "memory has intersections" mem sexp_of_mem
   else Ok {
-      map = Mem.Map.set tab.map ~key:mem ~data:x;
+      map = Base.Map.set tab.map ~key:mem ~data:x;
       bound = Bound.update tab.bound mem;
     }
 
 let remove tab x =
   (* we shouldn't invalidate our cache if nothing changes *)
-  if Map.mem tab.map x
+  if Base.Map.mem tab.map x
   then {
     tab with
-    map = Map.remove tab.map x;
+    map = Base.Map.remove tab.map x;
   } else tab
 
-let length tab = Map.length tab.map
+let length tab = Base.Map.length tab.map
 
-let find tab mem = Map.find tab.map mem
-let mem  tab mem  = Map.mem tab.map mem
+let find tab mem = Base.Map.find tab.map mem
+let mem  tab mem  = Base.Map.mem tab.map mem
 
 let next tab = next_key tab.map
 let prev tab = prev_key tab.map
 
-let min tab = Map.min_elt tab.map
-let max tab = Map.max_elt tab.map
+let min tab = Base.Map.min_elt tab.map
+let max tab = Base.Map.max_elt tab.map
 
 let first_some user our =
   Option.first_some user (Option.map ~f:fst our)
@@ -192,19 +192,19 @@ let first_some user our =
 let foldi ?start ?until (tab : 'a t) ~(init : 'b) ~f : 'b =
   let f_labeled = fun ~key ~data s -> f key data s in
   if Option.is_none start && Option.is_none until
-  then Map.fold tab.map ~init:init ~f:f_labeled
+  then Base.Map.fold tab.map ~init:init ~f:f_labeled
   else
-    let from = first_some start (Map.min_elt tab.map) in
-    let last = first_some until (Map.max_elt tab.map) in
+    let from = first_some start (Base.Map.min_elt tab.map) in
+    let last = first_some until (Base.Map.max_elt tab.map) in
     match from,last with
     | Some from, Some last ->
       if Mem.(from <= last)
-      then Map.fold_range_inclusive tab.map
+      then Base.Map.fold_range_inclusive tab.map
           ~init ~min:from ~max:last ~f:f_labeled
       else
         let last,from = from,last in
         let seq =
-          Map.to_sequence tab.map
+          Base.Map.to_sequence tab.map
             ~order:`Decreasing_key
             ~keys_less_or_equal_to:from |>
           Seq.take_while ~f:(fun (m,_) -> Mem.(m >= last)) in
@@ -283,14 +283,14 @@ let make_map map add ?start ?until tab ~f =
     map = map tab.map ~f:(fun ~key ~data -> f key data);
   } else
     let map,bound =
-      foldi ?start ?until tab ~init:(Map.empty,Bound.empty)
+      foldi ?start ?until tab ~init:((Base.Map.empty (module Mem)),Bound.empty)
         ~f:(fun addr x (map,bound) ->
             add map ~key:addr ~data:(f addr x),
             Bound.update bound addr) in
     { map; bound}
 
 let mapi ?start ?until tab ~f =
-  make_map Map.mapi Map.set ?start ?until tab ~f
+  make_map Base.Map.mapi Base.Map.set ?start ?until tab ~f
 
 let map ?start ?until tab ~f =
   mapi ?start ?until tab ~f:(fun _ x -> f x)
@@ -298,8 +298,8 @@ let map ?start ?until tab ~f =
 let filter_mapi ?start ?until tab ~f =
   let add map ~key ~data = match data with
     | None -> map
-    | Some data -> Map.set map ~key ~data in
-  make_map Map.filter_mapi add ?start ?until tab ~f
+    | Some data -> Base.Map.set map ~key ~data in
+  make_map Base.Map.filter_mapi add ?start ?until tab ~f
 
 let filter_map ?start ?until tab ~f =
   filter_mapi ?start ?until tab ~f:(fun _ v -> f v)
@@ -312,16 +312,16 @@ let filter ?start ?until tab ~f =
   filteri ?start ?until tab ~f:(fun _ x -> f x)
 
 let make_mapping t map =
-  let size = Map.length map in
+  let size = Base.Map.length map in
   let table =
     Hashtbl.Using_hashable.create ~growth_allowed:false ~size ~hashable:t () in
-  Map.iteri map ~f:(fun ~key:_ ~data:(v1,v2) ->
+  Base.Map.iteri map ~f:(fun ~key:_ ~data:(v1,v2) ->
       Hashtbl.add_exn table ~key:v1 ~data:v2);
   table
 
 let link_maybe_one t (t1 : 'a t) (t2 : 'b t) : 'a -> 'b option =
   let mapping =
-    Map.merge t1.map t2.map ~f:(fun ~key -> function
+    Base.Map.merge t1.map t2.map ~f:(fun ~key -> function
         | `Both (v1,v2) -> Some (v1,v2)
         | `Left  _ | `Right _ -> None) |>
     make_mapping t in
@@ -339,10 +339,10 @@ let link_one t t1 t2 =
       Error.raise err
 
 let link_many t t1 t2 =
-  let size = Map.length t1.map in
+  let size = Base.Map.length t1.map in
   let table =
     Hashtbl.Using_hashable.create ~growth_allowed:false ~size ~hashable:t () in
-  Map.iteri t1.map ~f:(fun ~key:mem ~data:x ->
+  Base.Map.iteri t1.map ~f:(fun ~key:mem ~data:x ->
       let data = intersections t2 mem |> Seq.map ~f:snd in
       Hashtbl.add_exn table ~key:x ~data);
   fun x -> match Hashtbl.find table x with
@@ -383,10 +383,10 @@ let link : type b c . one_to:((b,c) r) ->
 
 (* reverse injective mapping   *)
 let make_rev_map add find t tab =
-  let size = Map.length tab.map in
+  let size = Base.Map.length tab.map in
   let table =
     Hashtbl.Using_hashable.create ~growth_allowed:false ~hashable:t ~size () in
-  Map.iteri tab.map ~f:(fun ~key:mem ~data:x ->
+  Base.Map.iteri tab.map ~f:(fun ~key:mem ~data:x ->
       add t table ~key:x ~data:mem);
   find t table
 

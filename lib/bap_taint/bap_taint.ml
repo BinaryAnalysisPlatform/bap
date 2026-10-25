@@ -36,7 +36,7 @@ type kinds = {
 let kinds = Primus.Machine.State.declare
     ~name:"tainter-object-kinds"
     ~uuid:"a97f9cf6-541a-4127-9eb6-6c24f67ed8b9"
-    (fun _ -> {objects = Primus.Value.Map.empty})
+    (fun _ -> {objects = (Map.empty (module Primus.Value))})
 
 module Object = struct
   type Primus.exn += Bad_object of Primus.value
@@ -130,8 +130,8 @@ type gc_local = {
 }
 
 let empty_tainter = {
-  direct = Vid.Map.empty;
-  indirect = Primus.Value.Map.empty;
+  direct = (Map.empty (module Vid));
+  indirect = (Map.empty (module Primus.Value));
 }
 
 let tainter = Primus.Machine.State.declare
@@ -186,7 +186,7 @@ let objects {direct; indirect} : objects =
   let to_set m : objects =
     Map.to_sequence m |>
     Seq.map ~f:snd |>
-    Seq.fold ~init:Object.Set.empty ~f:Set.union in
+    Seq.fold ~init:(Set.empty (module Object)) ~f:Set.union in
   Set.union (to_set direct) (to_set indirect)
 
 module Taint = struct
@@ -233,7 +233,7 @@ module Taint = struct
     let lookup v (Rel {field; key}) =
       Machine.Local.get tainter >>| fun t ->
       match Map.find (Field.get field t) (key v) with
-      | None -> Object.Set.empty
+      | None -> (Set.empty (module Object))
       | Some s -> s
 
 
@@ -248,7 +248,7 @@ module Taint = struct
             s with
             direct = Map.update s.direct
                 (Primus.Value.id value) ~f:(function
-                    | None -> Object.Set.singleton taint
+                    | None -> Set.singleton (module Object) taint
                     | Some taints -> Set.add taints taint)
           }) >>= fun () ->
       report_attached Rel.direct taint value >>| fun () ->
@@ -263,7 +263,7 @@ module Taint = struct
           Value.nsucc addr off >>= fun addr ->
           report_attached Rel.indirect taint addr >>| fun () ->
           Map.update indirect addr ~f:(function
-              | None -> Object.Set.singleton taint
+              | None -> Set.singleton (module Object) taint
               | Some taints -> Set.add taints taint)) >>= fun indirect ->
       Machine.Local.put tainter {s with indirect} >>| fun () ->
       taint
@@ -303,7 +303,7 @@ module Propagation = struct
       ~name:"taint-policies"
       ~uuid:"4c370c33-ef1b-4e10-be27-ee751a4d6cf3"
       (fun _ -> {
-           servers = Kind.Map.empty;
+           servers = (Map.empty (module Kind));
            default = None;
          })
 
@@ -344,7 +344,7 @@ module Propagation = struct
         Machine.Global.get kinds >>= fun kinds ->
         Machine.Local.get policies >>| fun policies ->
         let filter = select_objects kinds policies ~policy:p in
-        List.fold srcs ~init:Object.Set.empty ~f:(fun objs src ->
+        List.fold srcs ~init:(Set.empty (module Object)) ~f:(fun objs src ->
             match Map.find (Field.get ms.field s) (ms.key src) with
             | None -> objs
             | Some objs' -> Set.union (filter objs') objs)
@@ -405,7 +405,7 @@ module Gc = struct
     let collect_direct =
       Machine.Local.get tainter >>= fun s ->
       Env.all >>= fun vars ->
-      Machine.Seq.fold vars ~init:Vid.Set.empty ~f:(fun live var ->
+      Machine.Seq.fold vars ~init:(Set.empty (module Vid)) ~f:(fun live var ->
           Env.is_set var >>= function
           | false -> !!live
           | true ->

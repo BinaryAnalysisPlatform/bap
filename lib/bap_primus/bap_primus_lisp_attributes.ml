@@ -28,7 +28,7 @@ module Variables = struct
       | Error err -> fail (Var_error err) [t]
 
   let parse ~package xs = List.map xs ~f:(var package) |>
-                          Var.Set.of_list
+                          Set.of_list (module Var)
 
   let global = Attribute.declare "global"
       ~package
@@ -63,7 +63,7 @@ module External = struct
   let domain = KB.Domain.powerset (module String) "names"
 
   let parse ~package:_ xs = List.map xs ~f:parse_name |>
-                            String.Set.of_list
+                            Set.of_list (module String)
 
   let t = Attribute.declare "external"
       ~package
@@ -137,13 +137,13 @@ module Advice = struct
   let domain = KB.Domain.define "methods"
       ~join ~order ~empty
 
-  let methods = String.Map.of_alist_exn [
+  let methods = Map.of_alist_exn (module String) [
       ":before", Before;
       ":after",  After;
     ]
 
   let targets {methods} m = match Map.find methods m with
-    | None -> Set.empty (module KB.Name)
+    | None -> (Set.empty (module KB.Name))
     | Some targets -> targets
 
 

@@ -402,7 +402,7 @@ module To_ocamlgraph(G : Graph) = struct
 
   let find_edge g x y = match G.Node.edge x y g with
     | Some e -> e
-    | None -> raise Caml.Not_found
+    | None -> raise Stdlib.Not_found
 
   let find_all_edges g x y = G.Node.edge x y g |> function
     | None -> []
@@ -482,7 +482,7 @@ module Of_ocamlgraph(G : Graph.Sig.P) = struct
     let remove n g = G.remove_vertex g n
     let has_edge x y g = G.mem_edge g x y
     let edge x y g =
-      try Some (G.find_edge g x y) with Caml.Not_found -> None
+      try Some (G.find_edge g x y) with Stdlib.Not_found -> None
 
     let degree ?dir n g =
       try match dir with
@@ -568,8 +568,8 @@ module Of_ocamlgraph(G : Graph.Sig.P) = struct
 
       let cmp (type t)
           (module C : Comparable with type t = t) enum x y =
-        let set x = Seq.fold (enum x) ~f:Set.add ~init:C.Set.empty in
-        C.Set.compare (set x) (set  y)
+        let set x = Seq.fold (enum x) ~f:(fun s x -> Set.add s x) ~init:(Set.empty (module C)) in
+        Poly.compare (Set.to_list (set x)) (Set.to_list (set y))
 
       (* complexity: O(e*log(e) + n*log(n)), where [e] is a number of
          edges and [n] is a number of nodes. See a note above for the
@@ -605,7 +605,7 @@ let compare (type e) (type g) (type n)
       let t_of_sexp = opaque_of_sexp
     end) in
   let module Nodes = E.Node.Set in
-  let set empty x = Seq.fold x ~f:Set.add ~init:empty in
+  let set empty x = Seq.fold x ~f:(fun s x -> Set.add s x) ~init:empty in
   let edges edges src dst empty g =
     edges g |> Seq.map ~f:(fun e -> src e, dst e) |> set empty in
   let e_edges = edges E.edges E.Edge.src E.Edge.dst Edges.empty e in
@@ -627,7 +627,7 @@ module Ordering(G : Graph) = struct
   }
 
   let init g = {
-    numbers = G.Node.Map.empty;
+    numbers = (Map.empty (module G.Node));
     nodes_left = G.number_of_nodes g;
     nodes_entered = 0;
   }
@@ -755,7 +755,7 @@ let postorder_traverse graph ?rev ?start g =
 let create_namer (type t) (type n)
     (module G : Graph with type t = t and type node = n) g =
   let namer =
-    depth_first_search (module G) g ~init:G.Node.Map.empty
+    depth_first_search (module G) g ~init:(Map.empty (module G.Node))
       ~leave_node:(fun rpost n names ->
           Map.set names ~key:n ~data:(Int.to_string rpost)) in
   Map.find_exn namer
@@ -829,10 +829,10 @@ let idom (type t) (type n) (type e)
         ~start_tree:(fun _ len -> if len <> 0 then return len else len)
         ~enter_node:(fun _ _ len -> len + 1)) in
   let node = Array.create ~len entry in
-  let pnums = G.Node.Table.create ~size:len () in
+  let pnums : (n, int) Hashtbl.Poly.t = Hashtbl.Poly.create ~size:len () in
   let doms = Array.create ~len ~-1 in
   let pnum =
-    Hashtbl.find_and_call pnums
+    Hashtbl.Poly.find_and_call pnums
       ~if_found:Fn.id
       ~if_not_found:(fun _ -> raise Unreachable) in
   if len > 0 then doms.(len - 1) <- len - 1;
@@ -882,12 +882,12 @@ let dominators (type t) (type n) (type e)
        and type edge = e
        and type node = n) ?rev g entry =
   let `idom parent = idom ?rev (module G) g entry in
-  let init = G.nodes g |> Seq.fold ~init:G.Node.Map.empty ~f:(fun t n ->
+  let init = G.nodes g |> Seq.fold ~init:(Map.empty (module G.Node)) ~f:(fun t n ->
       Map.set t ~key:n ~data:[]) in
   let children = G.nodes g |> Seq.fold ~init ~f:(fun tree n ->
       match parent n with
       | Some p -> Map.add_multi tree ~key:p ~data:n
-      | None -> tree) |> Map.map ~f:G.Node.Set.of_list in
+      | None -> tree) |> Map.map ~f:(Set.of_list (module G.Node)) in
   create_tree parent children
 
 module type Dom_frontier_algo = functor (G : Graph) -> sig
@@ -903,13 +903,13 @@ module Dom_frontier_cooper(G:Graph) = struct
       else match idom r with
         | None   -> Set.add dfs r
         | Some p -> walk top (Set.add dfs r) p in
-    G.nodes g |> Seq.fold ~init:G.Node.Map.empty ~f:(fun dfs n ->
+    G.nodes g |> Seq.fold ~init:(Map.empty (module G.Node)) ~f:(fun dfs n ->
         let adj = adj n g in
         let dom = idom n in
-        Seq.fold adj ~init:G.Node.Set.empty ~f:(walk dom) |>
+        Seq.fold adj ~init:(Set.empty (module G.Node)) ~f:(walk dom) |>
         Set.fold ~init:dfs ~f:(fun dfs visited ->
             Map.change dfs visited (function
-                | None -> Some (G.Node.Set.singleton n)
+                | None -> Some (Set.singleton (module G.Node) n)
                 | Some set -> Some (Set.add set n))))
 end
 
@@ -934,8 +934,8 @@ let strong_components
     (module G : Graph with type t = t
                        and type node = n
                        and type edge = e) g =
-  let roots = G.Node.Table.create () in
-  let comps = G.Node.Table.create ~size:(G.number_of_nodes g) () in
+  let roots = Hashtbl.create (module G.Node) in
+  let comps = Hashtbl.create (module G.Node) ~size:(G.number_of_nodes g) in
   let root = Hashtbl.find_exn roots in
   let spill_comp root stack =
     List.drop_while stack ~f:(fun c ->
@@ -995,7 +995,7 @@ let shortest_path
   let adj = if rev then G.Node.inputs else G.Node.outputs in
   let dst = if rev then G.Edge.src else G.Edge.dst in
   let visited = G.Node.Hash_set.create () in
-  let dist = G.Node.Table.create  () in
+  let dist = Hashtbl.create (module G.Node) in
   let q = Heap.create ~cmp () in
   let rec loop () = match Heap.pop q with
     | None -> None
@@ -1358,11 +1358,11 @@ module Fixpoint = struct
       reverse_postorder_traverse (module G) ~rev ?start g |>
       Sequence.to_array in
     let rnodes =
-      Array.foldi nodes ~init:G.Node.Map.empty ~f:(fun i rnodes n ->
+      Array.foldi nodes ~init:(Map.empty (module G.Node)) ~f:(fun i rnodes n ->
           Map.set rnodes ~key:n ~data:i) in
     let succs = Array.map nodes ~f:(fun n ->
         let succs = if rev then G.Node.preds else G.Node.succs in
-        succs n g |> Sequence.fold ~init:Int.Set.empty ~f:(fun ns n ->
+        succs n g |> Sequence.fold ~init:(Set.empty (module Int)) ~f:(fun ns n ->
             match Map.find rnodes n with
             | None -> ns
             | Some i -> Set.add ns i)) in
@@ -1410,12 +1410,12 @@ module Fixpoint = struct
         | Step (visits,works,approx) -> loop visits (iters+1) works approx
       else make_solution iters approx in
     let works = List.init (Array.length nodes) Fn.id in
-    let approx = Map.fold init ~init:Int.Map.empty
+    let approx = Map.fold init ~init:(Map.empty (module Int))
         ~f:(fun ~key:node ~data approx ->
             match Map.find rnodes node with
             | None -> approx
             | Some n -> Map.set approx ~key:n ~data) in
-    loop Int.Map.empty iters (Int.Set.of_list works) approx
+    loop (Map.empty (module Int)) iters (Set.of_list (module Int) works) approx
 end
 
 let fixpoint = Fixpoint.compute

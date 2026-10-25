@@ -135,6 +135,12 @@ let run ?backend:_ ?(brancher=Brancher.empty) ?(rooter=Rooter.empty) arch mem =
   with_unit arch mem @@ fun () ->
   Driver.scan mem Driver.init >>= global_cfg
 
+let run_in_scope ?(brancher=Brancher.empty) ?(rooter=Rooter.empty) arch mem =
+  Brancher.providing brancher @@ fun () ->
+  Rooter.providing rooter @@ fun () ->
+  with_unit arch mem @@ fun () ->
+  Driver.scan mem Driver.init >>= global_cfg >>| Result.return
+
 let cfg = Fn.id
 let errors _ = []
 let create = KB.return

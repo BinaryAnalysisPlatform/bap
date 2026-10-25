@@ -10,7 +10,7 @@ let (++) = Set.union and (--) = Set.diff
 
 let ssa_free_vars sub =
   let is_undefined v = Var.index v = 0 in
-  Term.enum blk_t sub |> Seq.fold ~init:Var.Set.empty ~f:(fun vars blk ->
+  Term.enum blk_t sub |> Seq.fold ~init:(Set.empty (module Var)) ~f:(fun vars blk ->
       vars ++ Set.filter (Ir_blk.free_vars blk) ~f:is_undefined)
 
 module Live = struct
@@ -36,16 +36,16 @@ module Live = struct
 
   let blk_defs blk =
     Term.enum def_t blk |>
-    Seq.fold ~init:Var.Set.empty  ~f:(fun defs def ->
+    Seq.fold ~init:(Set.empty (module Var))  ~f:(fun defs def ->
         Set.add defs (Ir_def.lhs def))
 
   let update blk trans ~f = Map.update trans blk ~f:(function
-      | None -> f {defs=Var.Set.empty; uses=Var.Set.empty}
+      | None -> f {defs=(Set.empty (module Var)); uses=(Set.empty (module Var))}
       | Some had -> f had)
 
   let block_transitions sub =
     Term.enum blk_t sub |>
-    Seq.fold ~init:Tid.Map.empty ~f:(fun fs blk ->
+    Seq.fold ~init:(Map.empty (module Tid)) ~f:(fun fs blk ->
         Map.add_exn fs (Term.tid blk) {
           defs = blk_defs blk;
           uses = Ir_blk.free_vars blk;
@@ -62,7 +62,7 @@ module Live = struct
                     }))))
 
   let lookup blks n = match Map.find blks n with
-    | None -> {defs = Var.Set.empty; uses = Var.Set.empty}
+    | None -> {defs = (Set.empty (module Var)); uses = (Set.empty (module Var))}
     | Some t -> t
 
   let is_pseudo n = Tid.equal n G.exit || Tid.equal n G.start
@@ -71,8 +71,8 @@ module Live = struct
     if is_pseudo n then vars
     else apply (lookup blks n) vars
 
-  let initialize ?(init=Var.Set.empty) sub =
-    Tid.Map.singleton G.exit @@
+  let initialize ?(init=Set.empty (module Var)) sub =
+    Map.singleton (module Tid) G.exit @@
     Seq.fold (Term.enum arg_t sub) ~init ~f:(fun vars arg ->
         match Ir_arg.intent arg with
         | None | Some In -> vars
@@ -81,12 +81,12 @@ module Live = struct
 
   let compute ?keep:init sub =
     let g = G.create sub in
-    let init = Solution.create (initialize ?init sub) Var.Set.empty in
+    let init = Solution.create (initialize ?init sub) (Set.empty (module Var)) in
     let blks = block_transitions sub in {
       blks;
       outs = Graphlib.fixpoint (module G) ~init ~start:G.exit ~rev:true g
           ~merge:Set.union
-          ~equal:Var.Set.equal
+          ~equal:Set.equal
           ~f:(transfer blks)
     }
 
@@ -103,7 +103,7 @@ module Live = struct
         f init blk (apply trans outs))
 
   let blks live var =
-    fold live ~init:Tid.Set.empty ~f:(fun blks blk ins ->
+    fold live ~init:(Set.empty (module Tid)) ~f:(fun blks blk ins ->
         if Set.mem ins var
         then Set.add blks blk
         else blks)

@@ -10,7 +10,7 @@ module Feature = String
 module Name = String
 
 type t = Feature.Set.t Name.Map.t [@@deriving bin_io, compare, equal, sexp]
-let empty = Name.Map.empty
+let empty = (Map.empty (module Name))
 
 type Attribute.error += Unterminated_quote
 
@@ -29,7 +29,7 @@ let endian proj = Project.arch proj |>
                   Arch.endian |> function
                   | LittleEndian -> "little"
                   | BigEndian -> "big"
-let features = Feature.Set.of_list
+let features = Set.of_list (module Feature)
 
 let enum (type t) (module E : KB.Enum.S with type t = t) v =
   KB.Name.unqualified (E.name v)
@@ -41,7 +41,7 @@ let of_project proj =
     List.concat_map ~f:(fun t ->
         KB.Name.unqualified (Theory.Target.name t) ::
         Set.to_list (Theory.Target.nicknames t)) in
-  Name.Map.of_alist_exn [
+  Map.of_alist_exn (module Name) [
     "arch", features @@ [
       Arch.to_string (Project.arch proj);
     ] @ attr proj Bap_abi.name;
@@ -72,7 +72,7 @@ let of_project proj =
 
 let create descs =
   List.map descs ~f:(fun (name,xs) -> name,features xs) |>
-  Name.Map.of_alist_reduce ~f:Set.union
+  Map.of_alist_reduce (module Name) ~f:Set.union
 
 let sexp_of_context (name,values) =
   Sexp.List (List.map (name :: Set.to_list values)
@@ -100,7 +100,7 @@ let parse_name = function
 
 let context_of_tree = function
   | {data=List (x :: xs)} ->
-    parse_name x, Feature.Set.of_list (List.map xs ~f:parse_name)
+    parse_name x, Set.of_list (module Feature) (List.map xs ~f:parse_name)
   | s -> expect_list s
 
 
@@ -111,7 +111,7 @@ let push cs name vs =
 
 
 let parse ~package:_ : tree list -> t =
-  List.fold ~init:Name.Map.empty ~f:(fun cs tree ->
+  List.fold ~init:(Map.empty (module Name)) ~f:(fun cs tree ->
       let (name,vs) = context_of_tree tree in
       push cs name vs)
 
@@ -149,7 +149,7 @@ let pp ppf ctxt =
 
 let (<=) xs ys =
   Map.fold_symmetric_diff xs ys
-    ~data_equal:String.Set.equal
+    ~data_equal:Set.equal
     ~init:true
     ~f:(fun matches (_,diff) -> matches && match diff with
       | `Left xs -> Set.is_empty xs
@@ -166,7 +166,7 @@ let order c1 c2 : KB.Order.partial =
 
 let merge xs ys : t = Map.merge xs ys ~f:(fun ~key:_ -> function
     | `Left v | `Right v -> Some v
-    | `Both (x,y) -> Some (Feature.Set.union x y) )
+    | `Both (x,y) -> Some (Set.union x y) )
 
 let join xs ys = Ok (merge xs ys)
 

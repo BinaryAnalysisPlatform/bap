@@ -57,16 +57,9 @@ module Make (Tools : X86_tools.S) (Backend : X86_backend.S) = struct
         Ok bil)
 
   let cmpxchg (op:cmpxchg) =
-    let open Or_error in
-    let lift =
-      match op with
-      | #cmpxchg_rr as op -> cmpxchg_rr op
-      | #cmpxchg_rm as op -> cmpxchg_rm op in
-    fun mem insn ->
-      lift mem insn >>= fun bil ->
-      match op with
-      | #cmpxchg_rm when X86_prefix.exists `xF0 mem -> Ok (PR.lock bil)
-      | _ -> Ok bil
+    match op with
+    | #cmpxchg_rr as op -> cmpxchg_rr op
+    | #cmpxchg_rm as op -> cmpxchg_rm op
 
   let register what =
     let name op =

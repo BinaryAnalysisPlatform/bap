@@ -13,7 +13,7 @@ let visit vis tid = Map.change vis tid ~f:(function
     | Some n -> Some (n+1))
 
 let create_mapping prog =
-  let addrs = Addr.Table.create () in
+  let addrs = Hashtbl.create (module Addr) in
   let add t a = Hashtbl.set addrs ~key:a ~data:(Term.tid t) in
   Term.enum sub_t prog |> Seq.iter ~f:(fun sub ->
       Term.enum blk_t sub |> Seq.iter  ~f:(fun blk ->
@@ -41,8 +41,8 @@ class context
   val blk : blk term option = None
   val callstack : sub term list = []
   val steps_left = max_steps
-  val vis : int Tid.Map.t = Tid.Map.empty (* visited *)
-  val cps : 's Tid.Map.t Tid.Map.t = Tid.Map.empty
+  val vis : int Tid.Map.t = (Map.empty (module Tid)) (* visited *)
+  val cps : 's Tid.Map.t Tid.Map.t = (Map.empty (module Tid))
   val rets : tid list = []
 
   method visited = vis
@@ -71,7 +71,7 @@ class context
       if Map.mem vis p then self
       else {<
         cps = Map.update cps key ~f:(function
-            | None -> Tid.Map.singleton p self
+            | None -> Map.singleton (module Tid) p self
             | Some ps -> Map.set ps p self)
       >}
 

@@ -1,5 +1,5 @@
 open Core_kernel[@@warning "-D"]
-open Caml.Format
+open Stdlib.Format
 
 open Bap_knowledge
 module KB = Knowledge
@@ -158,7 +158,7 @@ end
         let of_sexpable x = x
       end)
 
-    include Binable.Of_binable(Exp)(struct
+    include Binable.Of_binable_without_uuid(Exp)(struct
         type t = top
         let to_binable x = x
         let of_binable x = x

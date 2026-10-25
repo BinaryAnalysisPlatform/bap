@@ -9,7 +9,7 @@ tags: ["bap" "bap-library"]
 homepage: "https://github.com/BinaryAnalysisPlatform/bap"
 bug-reports: "https://github.com/BinaryAnalysisPlatform/bap/issues"
 depends: [
-  "dune" {>= "3.1"}
+  "dune" {>= "3.8"}
   "bap-common" {= version}
   "bap-bundle" {= version}
   "bap-core-theory" {= version}
@@ -23,12 +23,12 @@ depends: [
   "bitvec" {= version}
   "camlzip" {>= "1.07" & < "2.0"}
   "cmdliner"
-  "core_kernel" {>= "v0.14" & < "v0.16"}
+  "core_kernel" {>= "v0.17" & < "v0.18"}
   "fileutils"
   "graphlib" {= version}
   "mmap"
   "monads" {= version}
-  "ocamlfind" {>= "1.5.6" & < "2.0.0"}
+  "ocamlfind" {>= "1.9.0" & < "2.0.0"}
   "ogre" {= version}
   "ounit"
   "ppx_bap" {= version}

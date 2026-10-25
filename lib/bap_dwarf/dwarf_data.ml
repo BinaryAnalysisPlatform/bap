@@ -35,12 +35,12 @@ type 'a t = {
 
 let create endian ss : 'a t Or_error.t =
   let open Or_error.Monad_infix in
-  Section.Map.of_alist_or_error ss >>|
+  Map.of_alist_or_error (module Section) ss >>|
   fun sections -> {sections; endian}
 
 
 let section t section =
-  match Section.Map.find t.sections section with
+  match Map.find t.sections section with
   | Some buf -> Ok buf
   | None ->
     Or_error.errorf "section %s is not available" @@

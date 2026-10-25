@@ -5,10 +5,66 @@ open Option.Monad_infix
 open Bap_trie_intf
 
 module Make(Key : Key) = struct
-  module Tokens = Hashtbl.Make_binable(struct
-      type t = Key.token [@@deriving bin_io, compare, sexp]
-      let hash = Key.token_hash
-    end)
+  module Token_key = struct
+    type t = Key.token [@@deriving bin_io, compare, sexp]
+    let hash = Key.token_hash
+  end
+
+  (* Simple assoc-list based table (v0.17 compat) *)
+  module Tokens = struct
+    type 'a t = (Token_key.t * 'a) list ref
+
+    let create () : 'a t = ref []
+
+    let find t k =
+      let rec loop = function
+        | [] -> None
+        | (k',v) :: rest ->
+          if Base.Poly.equal k k' then Some v else loop rest in
+      loop !t
+
+    let change t k ~f =
+      let rec loop acc = function
+        | [] -> (match f None with
+            | Some v -> List.rev ((k,v) :: acc)
+            | None -> List.rev acc)
+        | (k',v) :: rest ->
+          if Base.Poly.equal k k'
+          then (match f (Some v) with
+              | Some v' -> List.rev acc @ [(k',v')] @ rest
+              | None -> List.rev acc @ rest)
+          else loop ((k',v) :: acc) rest in
+      t := loop [] !t
+
+    let add_exn t ~key ~data = t := (key,data) :: !t
+
+    let fold t ~init ~f = List.fold !t ~init ~f:(fun acc (k,v) -> f ~key:k ~data:v acc)
+
+    let iteri t ~f = List.iter !t ~f:(fun (k,v) -> f ~key:k ~data:v)
+
+    let sexp_of_t sa t =
+      Sexp.List (List.map !t ~f:(fun (k,v) -> Sexp.List [Token_key.sexp_of_t k; sa v]))
+
+    let t_of_sexp sa = function
+      | Sexp.List items ->
+        ref (List.map items ~f:(function
+            | Sexp.List [k;v] -> (Token_key.t_of_sexp k, sa v)
+            | _ -> failwith "Trie.Sexp: bad pair"))
+      | _ -> failwith "Trie.Sexp: expected list"
+
+    module A = struct
+      type 'a t = (Token_key.t * 'a) list [@@deriving bin_io]
+    end
+
+    let bin_shape_t sa = A.bin_shape_t sa
+    let bin_size_t sa (t : 'a t) = A.bin_size_t sa !t
+    let bin_write_t wa (buf : Bin_prot.Common.buf) ~(pos:int) (t : 'a t) = A.bin_write_t wa buf ~pos !t
+    let bin_read_t ra buf ~pos_ref = ref (A.bin_read_t ra buf ~pos_ref)
+    let __bin_read_t__ ra buf ~pos_ref = ref (A.__bin_read_t__ ra buf ~pos_ref)
+    let bin_writer_t wa = A.bin_writer_t wa
+    let bin_reader_t ra = A.bin_reader_t ra
+    let bin_t tc = A.bin_t tc
+  end
 
   type key = Key.t
   type token = Key.token
@@ -26,7 +82,7 @@ module Make(Key : Key) = struct
     let rec loop n {subs} =
       let c = Key.nth_token k n in
       if n + 1 = len then found subs c else find subs n c
-    and found parent c = Tokens.change parent c (function
+    and found parent c = Tokens.change parent c ~f:(function
         | None -> f None >>| init
         | Some t -> Some {t with data = f t.data})
     and find parent n c = match Tokens.find parent c with
@@ -35,7 +91,7 @@ module Make(Key : Key) = struct
         | None -> return ()
         | Some _ ->
           let sub = create () in
-          Tokens.add_exn parent c sub;
+          ignore (Tokens.add_exn parent ~key:c ~data:sub);
           loop (n+1) sub in
     if len > 0 then loop 0 trie
     else trie.data <- f trie.data
@@ -97,7 +153,7 @@ module Make(Key : Key) = struct
             pp_val data pp_prefix (List.rev rprefix));
       pp_table ppf rprefix t.subs
     and pp_table ppf rprefix cs =
-      Tokens.iteri cs (fun ~key ~data ->
+      Tokens.iteri cs ~f:(fun ~key ~data ->
           let rprefix = key :: rprefix in
           pp_trie ppf rprefix data) in
     pp_trie ppf [] t

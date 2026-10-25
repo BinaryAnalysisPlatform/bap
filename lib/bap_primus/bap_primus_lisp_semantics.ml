@@ -26,9 +26,9 @@ module State = struct
   }
 
   let empty = {
-    binds = Map.empty (module Theory.Var.Top);
+    binds = (Map.empty (module Theory.Var.Top));
     arith = (module Bitvec.M32);
-    scope = Map.empty (module Theory.Var.Top);
+    scope = (Map.empty (module Theory.Var.Top));
   }
 
   let var = KB.Context.declare ~package:"bap" "lisp-interpter-state"
@@ -42,7 +42,7 @@ end
 
 
 type value = unit Theory.Value.t
-type effect = unit Theory.Effect.t
+type effect0 = unit Theory.Effect.t
 
 type KB.Conflict.t +=
   | Unresolved_definition of string
@@ -284,7 +284,7 @@ module Value = struct
 end
 
 module Effect = struct
-  type t = effect
+  type t = effect0
   let pure x : t = empty.$[Theory.Semantics.value] <- x
   let return x : t KB.t = KB.return@@pure x
 end
@@ -400,7 +400,7 @@ module Scope = struct
   let clear =
     let* s = State.get in
     let+ () = State.set {
-        s with scope = Map.empty (module Theory.Var.Top)
+        s with scope = (Map.empty (module Theory.Var.Top))
       } in
     s.scope
 
@@ -741,7 +741,7 @@ let collect_names kind key prog =
 let merge_names names =
   List.reduce names ~f:(Map.merge_skewed
                           ~combine:(fun ~key:_ _ v -> v)) |>
-  function None -> Map.empty (module KB.Name)
+  function None -> (Map.empty (module KB.Name))
          | Some r -> r
 
 
@@ -811,8 +811,8 @@ let provide_semantics ?(stdout=Format.std_formatter) () =
   let* target = KB.collect Theory.Unit.target unit in
   let bits = Theory.Target.bits target in
   KB.Context.set State.var State.{
-      binds = Map.empty (module Theory.Var.Top);
-      scope = Map.empty (module Theory.Var.Top);
+      binds = (Map.empty (module Theory.Var.Top));
+      scope = (Map.empty (module Theory.Var.Top));
       arith = (module (Bitvec.Make(struct
                          let modulus = Bitvec.modulus bits
                        end)));

@@ -4,7 +4,7 @@ open Bap_plugins_units_intf
 
 module Findlib = struct
   let name = "findlib"
-  let units : reason String.Table.t = String.Table.create ()
+  let units : reason String.Table.t = Hashtbl.create (module String)
 
   let has_meta_information pkg =
     try ignore (Findlib.package_meta_file pkg : string); true
@@ -67,7 +67,7 @@ end
 module Dynlink = struct
   let name = "dynlink"
 
-  let units : reason String.Table.t = String.Table.create ()
+  let units : reason String.Table.t = Hashtbl.create (module String)
 
   (* see https://github.com/ocaml/ocaml/issues/9338
      this ugly clutch could only be removed after we phase out
@@ -99,7 +99,7 @@ module Dynlink = struct
 end
 
 
-let is_toplevel = Caml.Sys.interactive.contents
+let is_toplevel = Stdlib.Sys.interactive.contents
 
 module Make() =
   (val if is_toplevel

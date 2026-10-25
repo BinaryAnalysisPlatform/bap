@@ -11,7 +11,7 @@ type state = {
 let state = Primus.Machine.State.declare
     ~uuid:"caf680aa-ef54-4468-9a24-4a125de6ace9"
     ~name:"constant-tracker"
-    (fun _ -> {consts = Primus.Value.Id.Set.empty})
+    (fun _ -> {consts = (Set.empty (module Primus.Value.Id))})
 
 let is_const x {consts} =
   Set.mem consts (Primus.Value.id x)

@@ -31,7 +31,7 @@ module Make(Node : Opaque.S)(Label : T) = struct
   type graph = node_info Node.Map.t
   [@@deriving compare]
 
-  let empty_node = {inc = Node.Map.empty; out = Node.Map.empty}
+  let empty_node = {inc = (Map.empty (module Node)); out = (Map.empty (module Node))}
 
   module Node = struct
     type nonrec edge = edge
@@ -134,7 +134,7 @@ module Make(Node : Opaque.S)(Label : T) = struct
       Map.change g (src e) (function
           | None ->
             Some (Field.fset field empty_node
-                    (Node.Map.singleton (dst e) e.data))
+                    (Map.singleton (module Node) (dst e) e.data))
           | Some ns ->
             let map = Field.get field ns in
             Some (Field.fset field ns
@@ -168,7 +168,7 @@ module Make(Node : Opaque.S)(Label : T) = struct
 
   let is_directed = true
 
-  let empty = Node.Map.empty
+  let empty = (Map.empty (module Node))
 
   let nodes g = Map.keys g |> Seq.of_list
 

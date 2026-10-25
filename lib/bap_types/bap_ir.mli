@@ -316,6 +316,7 @@ module Ir_def : sig
   val rhs : t -> exp
   val with_lhs : t -> var -> t
   val with_rhs : t -> exp -> t
+  val with_value : t -> unit Theory.value -> t
   val map_exp : t -> f:(exp -> exp) -> t
   val substitute : t -> exp -> exp -> t
   val free_vars : t -> Bap_var.Set.t
@@ -430,6 +431,8 @@ module Call : sig
 
   include Regular.S with type t := t
 end
+
+val rip_relative_addr : (Theory.Value.cls, bool) KB.slot
 
 module Label : sig
   type t = label

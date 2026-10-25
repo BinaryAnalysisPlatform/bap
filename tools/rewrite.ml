@@ -3,11 +3,11 @@ open Base
 open Stdio
 open Sexplib
 
-module Buf = Caml.Buffer
-module Arg = Caml.Arg
+module Buf = Stdlib.Buffer
+module Arg = Stdlib.Arg
 module Cfg = Configurator.V1
-module Sys = Caml.Sys
-module Format = Caml.Format
+module Sys = Stdlib.Sys
+module Format = Stdlib.Format
 
 type cls =
   | Help
@@ -140,7 +140,7 @@ let () = Cfg.main ~args ~name:"bap-configurator" @@ fun self ->
 
     Arg.read_arg "config.status.in" |> Array.iter ~f:(fun arg ->
         match classify arg with
-        | Some (_,Help) -> Caml.exit 0
+        | Some (_,Help) -> Stdlib.exit 0
         | Some (_,Comp _) -> ()
         | Some (pref,With) ->
           add_variable (String.subo arg ~pos:(String.length pref))
@@ -149,7 +149,7 @@ let () = Cfg.main ~args ~name:"bap-configurator" @@ fun self ->
         | None ->
           eprintf "Invalid ./configure argument %S\n" arg);
     Format.printf "%a@." Sexp.pp_hum (sexp_of_cfg vars);
-    Caml.exit 0;
+    Stdlib.exit 0;
   end;
 
   let vars =

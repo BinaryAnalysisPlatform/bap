@@ -180,8 +180,8 @@ let refine_glibc_internal_aliases () =
   KB.collect Theory.Label.aliases label >>| fun aliases ->
   let init = match name with
     | Some name when is_glibc_internal name ->
-      String.Set.singleton @@ drop_glibc_internal name
-    | None | Some _ -> String.Set.empty in
+      Set.singleton (module String) @@ drop_glibc_internal name
+    | None | Some _ -> (Set.empty (module String)) in
   Set.fold aliases ~init ~f:(fun acc s ->
       if is_glibc_internal s then
         Set.add acc @@ drop_glibc_internal s

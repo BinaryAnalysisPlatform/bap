@@ -58,7 +58,7 @@ module Relocations = struct
 
   let relocations = Fact.eval Request.relocations
   let external_symbols = Fact.eval Request.external_symbols
-  let empty = {rels = Int64.Map.empty; exts = Int64.Map.empty}
+  let empty = {rels = (Map.empty (module Int64)); exts = (Map.empty (module Int64))}
 
 
   let of_spec spec =
@@ -85,7 +85,7 @@ module Relocations = struct
 
   let references bil = snd @@
     reference_analyzer#run bil
-      (Var.Map.empty, Addr.Set.empty)
+      (Map.empty (module Var), Set.empty (module Addr))
 
   let addresses bil mem =
     let start = Memory.min_addr mem in

@@ -1060,7 +1060,7 @@ module CPU = struct
   let sp = sp
 
 
-  let regs = Var.Set.of_list [
+  let regs = Set.of_list (module Var) [
       r0; r1; r2; r3; r4;
       r5; r6; r7; r8; r9;
       r10; r11; r12;
@@ -1069,17 +1069,17 @@ module CPU = struct
     ]
 
   (* although PC is stricly speaking is GPR we will rule it out *)
-  let non_gpr = Var.Set.of_list [
+  let non_gpr = Set.of_list (module Var) [
       pc; spsr; cpsr; itstate;
     ]
 
-  let gpr = Var.Set.diff regs non_gpr
+  let gpr = Set.diff regs non_gpr
 
-  let perms = Var.Set.of_list [
+  let perms = Set.of_list (module Var) [
       r4; r5; r6; r7; r8; r9; r10; r11;
     ]
 
-  let flags = Var.Set.of_list @@ [
+  let flags = Set.of_list (module Var) @@ [
       nf; zf; cf; qf; vf;
     ] @ Array.to_list ge
 

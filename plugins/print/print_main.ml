@@ -349,8 +349,8 @@ let setup_tabs ppf =
   pp_set_tab ppf ()
 
 let sorted_blocks nodes =
-  let init = Set.empty (module Block) in
-  Seq.fold nodes ~init ~f:Set.add |>
+  let init = (Set.empty (module Block)) in
+  Seq.fold nodes ~init ~f:(fun s x -> Set.add s x) |>
   Set.to_sequence
 
 let sort_fns fns =

@@ -41,7 +41,7 @@ module Std = struct
       nth bit cpu.cr 2 := x = zero;
     ]
 
-  let lifters = String.Table.create ()
+  let lifters = Hashtbl.create (module String)
 
   let register name lifter =
     Hashtbl.change lifters name ~f:(fun _ -> Some lifter)

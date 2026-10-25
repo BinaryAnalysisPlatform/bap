@@ -137,7 +137,7 @@ let overload_primitive s3 = List.map s3 ~f:(fun s -> s,())
 let locs prog defs =
   let src = Program.sources prog in
   List.map defs ~f:(fun def ->
-      Source.loc src def.id) |> Loc.Set.of_list
+      Source.loc src def.id) |> Set.of_list (module Loc)
 
 type _ arity =
   | One : ('a list -> 'a option) arity

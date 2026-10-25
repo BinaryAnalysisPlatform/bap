@@ -45,7 +45,7 @@ open Core_kernel[@@warning "-D"]
 open Bap_main
 open Bap_core_theory
 open Bap.Std
-module Sys = Caml.Sys
+module Sys = Stdlib.Sys
 
 open KB.Syntax
 include Loggers()
@@ -59,7 +59,7 @@ and p0 m n = float n /. float (m + n)
 let roots = KB.Class.property Theory.Unit.cls "byteweight-roots"
     ~package:"bap" @@ KB.Domain.powerset (module Bitvec_order) "roots"
 
-let no_roots = Set.empty (module Bitvec_order)
+let no_roots = (Set.empty (module Bitvec_order))
 let of_addrs =
   List.fold ~init:no_roots ~f:(fun roots addr ->
       Set.add roots (Addr.to_bitvec addr))

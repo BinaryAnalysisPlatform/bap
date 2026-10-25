@@ -63,8 +63,8 @@ module Exception : sig
 end
 = struct
   type t = exn = ..
-  let to_string err = Caml.Printexc.to_string err
-  let add_printer pr = Caml.Printexc.register_printer pr
+  let to_string err = Stdlib.Printexc.to_string err
+  let add_printer pr = Stdlib.Printexc.register_printer pr
 end
 
 
@@ -205,7 +205,7 @@ module Primus = struct
     open Observation
 
     let declare = Observation.declare
-    let empty = Set.empty (module Int)
+    let empty = (Set.empty (module Int))
 
     let observations {observer} : _ observer list m =
       lifts @@ SM.gets @@ fun s ->
@@ -429,7 +429,7 @@ module Primus = struct
     global = Univ_map.empty;
     local = Univ_map.empty;
     observations = Univ_map.empty;
-    inspectors = Map.empty (module String);
+    inspectors = (Map.empty (module String));
     key = 0;
     deathrow = [];
   }

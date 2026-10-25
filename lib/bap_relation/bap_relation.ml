@@ -23,8 +23,8 @@ let empty (type key) (type data) compare_key compare_data =
       end)
   end in
   Rel {
-    vals = Map.empty (module K);
-    keys = Map.empty (module D);
+    vals = (Map.empty (module K));
+    keys = (Map.empty (module D));
   }
 
 let add (Rel {vals; keys}) key value = Rel {

@@ -92,7 +92,6 @@ end
 module type PR = sig
   type t = X86_prefix.t
 
-  val lock  : bil -> bil
   val rep   : mem -> bil -> bil
   val repe  : mem -> bil -> bil
   val repne : mem -> bil -> bil
