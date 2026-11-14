@@ -1006,7 +1006,11 @@ let parse_instr mode mem addr =
         | 0x70 when Type.equal prefix.opsize reg16_t ->
           let r, rm, rv, na = parse_modrm_vec (Some reg8_t) na in
           let i, na = parse_imm8 na in
-          (Pshufd(prefix.mopsize, r, rm, rv, i), na)
+          (* VPSHUFD encodes no third register operand: the VEX vvvv
+             field is 1111b. Binding the ModRM.reg destination register
+             keeps the lifter from writing to vvvv's (unused) register,
+             which decodes to YMM0. *)
+          (Pshufd(prefix.mopsize, r, rm, None, i), na)
         | 0x71 | 0x72 | 0x73 ->
           let t = prefix.mopsize in
           let r, rm, rv, na = parse_modrm_vec (Some reg8_t) na in
