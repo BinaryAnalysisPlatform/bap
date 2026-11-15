@@ -33,6 +33,23 @@ Let's try the above with a memory argument
   }
 
 ----------------------------------------------------------------------------------
+#                                Testing VPSHUFD                                 #
+
+VPSHUFD with a memory operand writes the destination ModRM.reg field (not YMM0)
+
+  $ mc 0xc5,0xfd,0x70,0x35,0x4a,0x13,0x98,0x0e,0x26
+  vpshufd $0x26, 0xe98134a(%rip), %ymm6
+  {
+    YMM6 := low:32[mem[0xE981353, el]:u256 >>
+      0x80].low:32[mem[0xE981353, el]:u256 >>
+      0xC0].low:32[mem[0xE981353, el]:u256 >>
+      0xA0].low:32[mem[0xE981353, el]:u256 >>
+      0xC0].low:32[mem[0xE981353, el]:u256].low:32[mem[0xE981353, el]:u256 >>
+      0x40].low:32[mem[0xE981353, el]:u256 >>
+      0x20].low:32[mem[0xE981353, el]:u256 >> 0x40]
+  }
+
+----------------------------------------------------------------------------------
 #                                Testing PMULDQ                                  #
 
 multiply two registers
